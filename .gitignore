@@ -1,0 +1,13 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+
+# VULYK runtime artifacts that should stay local
+memory/snapshots/*
+!memory/snapshots/.gitkeep
+memory/map/.stale
+
+# Local-only Claude Code settings (commit settings.json, not local overrides)
+.claude/settings.local.json
+CLAUDE.local.md

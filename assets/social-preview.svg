@@ -1,0 +1,80 @@
+<svg viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="VULYK — hive orchestration for Claude Code">
+  <defs>
+    <pattern id="hexgrid2" width="56" height="97" patternUnits="userSpaceOnUse" patternTransform="translate(8,4)">
+      <g fill="none" stroke="#16120C" stroke-width="1">
+        <path d="M28 0 L56 16.2 L56 48.5 L28 64.7 L0 48.5 L0 16.2 Z"/>
+        <path d="M28 64.7 L56 80.9 L56 113.2 L28 129.4 L0 113.2 L0 80.9 Z" transform="translate(28,-16.2)"/>
+      </g>
+    </pattern>
+    <linearGradient id="honey2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F5B82E"/>
+      <stop offset="1" stop-color="#C8861A"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="#0C0A07"/>
+  <rect width="1280" height="640" fill="url(#hexgrid2)"/>
+
+  <!-- right: cascade comb, larger -->
+  <g transform="translate(1010,128)" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" text-anchor="middle">
+    <g stroke="#5C5546" stroke-width="1.2">
+      <line x1="0" y1="56" x2="-62" y2="112"/>
+      <line x1="0" y1="56" x2="62" y2="112"/>
+      <line x1="-62" y1="156" x2="-108" y2="208"/>
+      <line x1="62" y1="156" x2="108" y2="208"/>
+      <line x1="-62" y1="156" x2="0" y2="208"/>
+      <line x1="62" y1="156" x2="0" y2="208"/>
+    </g>
+    <g>
+      <path d="M0 0 L48 28 L48 84 L0 112 L-48 84 L-48 28 Z" fill="url(#honey2)"/>
+      <text x="0" y="68" font-size="36" font-weight="bold" fill="#0C0A07">F</text>
+    </g>
+    <g transform="translate(-62,112)">
+      <path d="M0 0 L37 21 L37 64 L0 86 L-37 64 L-37 21 Z" fill="none" stroke="#F5B82E" stroke-width="3"/>
+      <text x="0" y="54" font-size="28" font-weight="bold" fill="#F5B82E">O</text>
+    </g>
+    <g transform="translate(62,112)">
+      <path d="M0 0 L37 21 L37 64 L0 86 L-37 64 L-37 21 Z" fill="none" stroke="#F5B82E" stroke-width="3"/>
+      <text x="0" y="54" font-size="28" font-weight="bold" fill="#F5B82E">O</text>
+    </g>
+    <g transform="translate(-108,208)">
+      <path d="M0 0 L28 16 L28 50 L0 66 L-28 50 L-28 16 Z" fill="none" stroke="#C8861A" stroke-width="2.2"/>
+      <text x="0" y="42" font-size="22" fill="#C8861A">S</text>
+    </g>
+    <g transform="translate(0,208)">
+      <path d="M0 0 L28 16 L28 50 L0 66 L-28 50 L-28 16 Z" fill="none" stroke="#C8861A" stroke-width="2.2"/>
+      <text x="0" y="42" font-size="22" fill="#C8861A">S</text>
+    </g>
+    <g transform="translate(108,208)">
+      <path d="M0 0 L28 16 L28 50 L0 66 L-28 50 L-28 16 Z" fill="none" stroke="#C8861A" stroke-width="2.2"/>
+      <text x="0" y="42" font-size="22" fill="#C8861A">S</text>
+    </g>
+    <g transform="translate(0,288)">
+      <g stroke="#5C5546" stroke-width="1.6" fill="none">
+        <path transform="translate(-140,14)" d="M0 0 L18 10 L18 32 L0 42 L-18 32 L-18 10 Z"/>
+        <path transform="translate(-70,14)" d="M0 0 L18 10 L18 32 L0 42 L-18 32 L-18 10 Z"/>
+        <path transform="translate(0,14)" d="M0 0 L18 10 L18 32 L0 42 L-18 32 L-18 10 Z"/>
+        <path transform="translate(70,14)" d="M0 0 L18 10 L18 32 L0 42 L-18 32 L-18 10 Z"/>
+        <path transform="translate(140,14)" d="M0 0 L18 10 L18 32 L0 42 L-18 32 L-18 10 Z"/>
+      </g>
+      <g font-size="16" fill="#5C5546">
+        <text x="-140" y="41">H</text>
+        <text x="-70" y="41">H</text>
+        <text x="0" y="41">H</text>
+        <text x="70" y="41">H</text>
+        <text x="140" y="41">H</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- left: wordmark -->
+  <g transform="translate(96,0)">
+    <text x="0" y="186" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="18" fill="#5C5546" letter-spacing="7">ВУЛИК · BEEHIVE</text>
+    <text x="-8" y="318" font-family="DejaVu Sans, Arial, sans-serif" font-size="136" font-weight="bold" fill="#E8DFCB" letter-spacing="18">V<tspan fill="url(#honey2)">U</tspan>LYK</text>
+    <text x="0" y="380" font-family="DejaVu Sans, Arial, sans-serif" font-size="27" fill="#9A917D">Hive orchestration for Claude Code</text>
+    <text x="0" y="416" font-family="DejaVu Sans, Arial, sans-serif" font-size="20" fill="#5C5546">Cascade the models · Externalize the memory · Evolve the colony</text>
+    <line x1="0" y1="456" x2="760" y2="456" stroke="#1A1610" stroke-width="1"/>
+    <text x="0" y="494" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="19" fill="#F5B82E">$ /vulyk-plan <tspan fill="#9A917D">"ship the feature"</tspan></text>
+    <text x="0" y="540" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="15" fill="#5C5546">8 agents · 8 commands · 4 hooks · self-evolving skills · subscription-safe · MIT</text>
+  </g>
+</svg>

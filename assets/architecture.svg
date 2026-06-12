@@ -1,0 +1,143 @@
+<svg viewBox="0 0 1180 700" xmlns="http://www.w3.org/2000/svg" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" role="img" aria-label="VULYK architecture: castes and the memory plane">
+  <rect width="1180" height="700" fill="#0C0A07"/>
+
+  <!-- ====== left margin: tier ladder ====== -->
+  <g font-size="12" fill="#5C5546" letter-spacing="2">
+    <text x="36" y="118">PLAN</text>
+    <text x="36" y="124" dy="14" fill="#3A3528">top model</text>
+    <text x="36" y="268">JUDGE</text>
+    <text x="36" y="274" dy="14" fill="#3A3528">opus</text>
+    <text x="36" y="418">BUILD</text>
+    <text x="36" y="424" dy="14" fill="#3A3528">sonnet</text>
+    <text x="36" y="568">SENSE</text>
+    <text x="36" y="574" dy="14" fill="#3A3528">haiku</text>
+  </g>
+  <line x1="120" y1="60" x2="120" y2="640" stroke="#1A1610" stroke-width="1"/>
+
+  <!-- ====== QUEEN ====== -->
+  <g transform="translate(470,80)">
+    <rect x="0" y="0" width="300" height="84" rx="10" fill="none" stroke="#F5B82E" stroke-width="2.5"/>
+    <path d="M150 -16 L168 -6 L168 14 L150 24 L132 14 L132 -6 Z" fill="#F5B82E"/>
+    <text x="150" y="38" text-anchor="middle" font-size="19" font-weight="bold" fill="#E8DFCB">QUEEN</text>
+    <text x="150" y="60" text-anchor="middle" font-size="12.5" fill="#9A917D">main session · plans, routes, integrates</text>
+    <text x="150" y="76" text-anchor="middle" font-size="11.5" fill="#C8861A">never reads source — consumes reports + memory</text>
+  </g>
+
+  <!-- queen -> leads -->
+  <g stroke="#5C5546" stroke-width="1.3" fill="none">
+    <path d="M560 164 L460 230"/>
+    <path d="M680 164 L780 230"/>
+  </g>
+
+  <!-- ====== LEADS ====== -->
+  <g transform="translate(300,230)">
+    <rect width="250" height="76" rx="10" fill="none" stroke="#F5B82E" stroke-width="1.8"/>
+    <text x="125" y="30" text-anchor="middle" font-size="15" font-weight="bold" fill="#E8DFCB">lead-architect</text>
+    <text x="125" y="50" text-anchor="middle" font-size="11.5" fill="#9A917D">design forks → ADRs · opus</text>
+    <text x="125" y="66" text-anchor="middle" font-size="11" fill="#5C5546">consulted on Tier 4</text>
+  </g>
+  <g transform="translate(690,230)">
+    <rect width="250" height="76" rx="10" fill="none" stroke="#F5B82E" stroke-width="1.8"/>
+    <text x="125" y="30" text-anchor="middle" font-size="15" font-weight="bold" fill="#E8DFCB">lead-review</text>
+    <text x="125" y="50" text-anchor="middle" font-size="11.5" fill="#9A917D">adversarial gate · opus</text>
+    <text x="125" y="66" text-anchor="middle" font-size="11" fill="#5C5546">PASS / BLOCK → fix stories</text>
+  </g>
+
+  <!-- queen -> workers fan-out -->
+  <g stroke="#5C5546" stroke-width="1.3" fill="none" stroke-dasharray="1 0">
+    <path d="M620 164 C 620 270, 380 300, 372 376"/>
+    <path d="M620 164 C 620 286, 620 300, 620 376"/>
+    <path d="M620 164 C 620 270, 860 300, 868 376"/>
+  </g>
+  <text x="620" y="356" text-anchor="middle" font-size="11.5" fill="#C8861A">fan-out: one story per worker · parallel where independent · cap by posture</text>
+
+  <!-- ====== WORKERS ====== -->
+  <g transform="translate(252,380)">
+    <rect width="240" height="72" rx="10" fill="none" stroke="#C8861A" stroke-width="1.6"/>
+    <text x="120" y="28" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#E8DFCB">worker-code</text>
+    <text x="120" y="47" text-anchor="middle" font-size="11.5" fill="#9A917D">implements one story · sonnet</text>
+    <text x="120" y="62" text-anchor="middle" font-size="10.5" fill="#5C5546">scoped files only · walls → Findings</text>
+  </g>
+  <g transform="translate(500,380)">
+    <rect width="240" height="72" rx="10" fill="none" stroke="#C8861A" stroke-width="1.6"/>
+    <text x="120" y="28" text-anchor="middle" font-size="14.5" font-weight="bold" fill="#E8DFCB">worker-test</text>
+    <text x="120" y="47" text-anchor="middle" font-size="11.5" fill="#9A917D">tests one story · sonnet</text>
+    <text x="120" y="62" text-anchor="middle" font-size="10.5" fill="#5C5546">behavior, not implementation</text>
+  </g>
+  <g transform="translate(748,380)">
+    <rect width="240" height="72" rx="10" fill="none" stroke="#C8861A" stroke-width="1.2" stroke-dasharray="5 4"/>
+    <text x="120" y="28" text-anchor="middle" font-size="14.5" fill="#9A917D">worker-code ×N</text>
+    <text x="120" y="47" text-anchor="middle" font-size="11.5" fill="#5C5546">more stories, same contract</text>
+    <text x="120" y="62" text-anchor="middle" font-size="10.5" fill="#3A3528">70–80% of tokens live here — cheaply</text>
+  </g>
+
+  <!-- ====== DRONES ====== -->
+  <g transform="translate(252,530)">
+    <rect width="226" height="68" rx="10" fill="none" stroke="#5C5546" stroke-width="1.4"/>
+    <text x="113" y="27" text-anchor="middle" font-size="14" font-weight="bold" fill="#E8DFCB">drone-scout</text>
+    <text x="113" y="45" text-anchor="middle" font-size="11" fill="#9A917D">recon → map-format reports</text>
+    <text x="113" y="60" text-anchor="middle" font-size="10.5" fill="#5C5546">haiku · reads code so opus never has to</text>
+  </g>
+  <g transform="translate(498,530)">
+    <rect width="226" height="68" rx="10" fill="none" stroke="#5C5546" stroke-width="1.4"/>
+    <text x="113" y="27" text-anchor="middle" font-size="14" font-weight="bold" fill="#E8DFCB">drone-docs</text>
+    <text x="113" y="45" text-anchor="middle" font-size="11" fill="#9A917D">refreshes map + wiki from diffs</text>
+    <text x="113" y="60" text-anchor="middle" font-size="10.5" fill="#5C5546">haiku · keeps memory truthful</text>
+  </g>
+  <g transform="translate(744,530)">
+    <rect width="226" height="68" rx="10" fill="none" stroke="#5C5546" stroke-width="1.4"/>
+    <text x="113" y="27" text-anchor="middle" font-size="14" font-weight="bold" fill="#E8DFCB">librarian</text>
+    <text x="113" y="45" text-anchor="middle" font-size="11" fill="#9A917D">consolidates learnings · gc</text>
+    <text x="113" y="60" text-anchor="middle" font-size="10.5" fill="#5C5546">haiku · the single memory writer</text>
+  </g>
+
+  <!-- ====== MEMORY PLANE (right rail) ====== -->
+  <g transform="translate(1006,80)">
+    <rect x="0" y="0" width="150" height="518" rx="10" fill="#110E09" stroke="#1A1610"/>
+    <text x="75" y="30" text-anchor="middle" font-size="13" font-weight="bold" fill="#F5B82E" letter-spacing="2">MEMORY</text>
+    <text x="75" y="46" text-anchor="middle" font-size="10.5" fill="#5C5546">lives in git</text>
+    <g font-size="11" fill="#9A917D" text-anchor="middle">
+      <text x="75" y="84">CLAUDE.md</text>
+      <text x="75" y="99" fill="#5C5546" font-size="9.5">constitution</text>
+      <text x="75" y="134">.claude/rules/</text>
+      <text x="75" y="149" fill="#5C5546" font-size="9.5">path-scoped</text>
+      <text x="75" y="184">memory.md</text>
+      <text x="75" y="199" fill="#5C5546" font-size="9.5">pointer index</text>
+      <text x="75" y="234">memory/map/</text>
+      <text x="75" y="249" fill="#5C5546" font-size="9.5">codebase map</text>
+      <text x="75" y="284">docs/wiki/</text>
+      <text x="75" y="299" fill="#5C5546" font-size="9.5">LLM wiki</text>
+      <text x="75" y="334">docs/specs/</text>
+      <text x="75" y="349" fill="#5C5546" font-size="9.5">plans + stories</text>
+      <text x="75" y="384">docs/adr/</text>
+      <text x="75" y="399" fill="#5C5546" font-size="9.5">decisions</text>
+      <text x="75" y="434">learnings/</text>
+      <text x="75" y="449" fill="#5C5546" font-size="9.5">evolve fuel</text>
+      <text x="75" y="484">stats/</text>
+      <text x="75" y="499" fill="#5C5546" font-size="9.5">skill counters</text>
+    </g>
+  </g>
+  <!-- memory exchange arrows -->
+  <g stroke="#3A3528" stroke-width="1.2" fill="none">
+    <path d="M770 122 H1006"/>
+    <path d="M940 268 H1006"/>
+    <path d="M988 416 H1006"/>
+    <path d="M970 564 H1006"/>
+  </g>
+  <g fill="#3A3528" font-size="9.5">
+    <text x="980" y="116">read</text>
+    <text x="958" y="262">read</text>
+    <text x="956" y="410">append</text>
+    <text x="952" y="558">write</text>
+  </g>
+
+  <!-- ====== bottom: evolution loop ====== -->
+  <g transform="translate(120,648)">
+    <line x1="0" y1="0" x2="1036" y2="0" stroke="#1A1610"/>
+    <text x="0" y="28" font-size="12" fill="#C8861A">↻ /vulyk-evolve</text>
+    <text x="136" y="28" font-size="11.5" fill="#5C5546">learnings + skill stats → friction patterns → config diffs on a branch → human review → the colony adapts. Nothing self-applies.</text>
+  </g>
+
+  <!-- title -->
+  <text x="120" y="42" font-size="14" fill="#5C5546" letter-spacing="3">VULYK · ARCHITECTURE</text>
+</svg>

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Sample git hook: flag the codebase map as stale after merges so /vulyk-status surfaces it.
+# Install: cp scripts/git-hooks/post-merge .git/hooks/post-merge && chmod +x .git/hooks/post-merge
+set -u
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -d "$ROOT/memory/map" ] && date +%Y-%m-%dT%H:%M:%S > "$ROOT/memory/map/.stale"
+exit 0
