@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use VULYK, please cite it using the metadata below."
+title: "VULYK: Hive Orchestration for Claude Code"
+abstract: >-
+  VULYK is a model-cascade, memory-first, self-evolving framework for running
+  multi-agent coding at scale on Anthropic's Claude Code, built entirely on
+  native Claude Code primitives (subagents, slash commands, skills, hooks,
+  rules). It routes each task to the cheapest capable model tier (queen, leads,
+  workers, drones), keeps shared state in a git-based external memory plane
+  instead of the context window, and turns session learnings into reviewable
+  configuration pull requests.
+type: software
+authors:
+  - name: "Black-coffe"
+    alias: "Black-coffe"
+    website: "https://github.com/Black-coffe"
+repository-code: "https://github.com/Black-coffe/vulyk"
+url: "https://github.com/Black-coffe/vulyk"
+license: MIT
+version: "0.1.0"
+date-released: "2026-06-12"
+keywords:
+  - claude-code
+  - multi-agent
+  - agentic-coding
+  - orchestration
+  - context-engineering
+  - model-cascade
+  - llm
+  - anthropic
