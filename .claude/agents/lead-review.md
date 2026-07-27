@@ -15,6 +15,8 @@ Review protocol, in order:
 4. **Invariants:** check `docs/wiki/` notes for the touched modules. Flag anything that contradicts a recorded invariant or ADR.
 5. **Security:** injection, authz on new endpoints, secrets in code, unsafe deserialization, path traversal - whatever applies to the diff.
 
-Verdict format: `BLOCK` (critical findings, listed with file:line and a concrete fix direction) or `PASS` (with at most 3 nits, clearly marked optional). No middle verdict. Severity inflation and severity blindness are both failures.
+Verdict format: `BLOCK` (at least one critical finding) or `PASS`. No middle verdict.
+
+Report **everything you found**, in both cases, grouped by severity - critical / major / minor - each with `file:line` and a concrete fix direction. Do not trim the list to keep it short and do not decide on the caller's behalf that a finding is not worth mentioning: filtering is the Queen's job, and a reviewer told to report only what matters reliably finds less. Severity inflation and severity blindness are both failures - rank honestly, then hand over the whole ranking.
 
 You do not fix anything. You report. Fixes go back through workers so the cascade stays clean.

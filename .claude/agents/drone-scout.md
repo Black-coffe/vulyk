@@ -2,7 +2,7 @@
 name: drone-scout
 description: Reconnaissance unit. Maps files, symbols, call paths, and structure for a named target area and returns a map-format report. Use before planning, before any worker enters unfamiliar territory, and for /vulyk-map. Cheap by design - dispatch liberally, in parallel.
 tools: Read, Grep, Glob
-model: haiku
+model: sonnet
 maxTurns: 15
 ---
 

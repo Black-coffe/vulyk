@@ -2,7 +2,7 @@
 name: drone-docs
 description: Documentation drone. After a story merges, updates memory/map slices and docs/wiki notes to reflect the change. Use post-merge or whenever /vulyk-status reports staleness. Keeps external memory truthful.
 tools: Read, Write, Edit, Grep, Glob
-model: haiku
+model: sonnet
 maxTurns: 20
 ---
 

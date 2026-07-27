@@ -20,10 +20,10 @@ A model-cascade, memory-first, self-evolving framework for running multi-agent c
 
 - **Queen** — your main Claude Code session on the strongest model. Plans, decomposes, integrates. Never reads source code directly.
 - **Leads** — Opus-class subagents for architecture decisions and adversarial review.
-- **Workers** — Sonnet-class subagents that implement and test individual stories. This is where 70–80 % of tokens are spent — at roughly a fraction of top-model cost.
-- **Drones** — Haiku-class subagents for reconnaissance, documentation updates, and memory upkeep.
+- **Workers** — Sonnet-class subagents that implement and test individual stories. This is where most tokens are spent.
+- **Drones** — cheap subagents for reconnaissance, documentation updates, and memory upkeep.
 
-The result: more parallel agents, larger codebases, dramatically less token burn on your 5-hour and weekly limits — with quality protected by an Opus "bookend" (plan and review on the strong model, execute on the efficient one).
+The result: more parallel agents, larger codebases, and — the point of the whole exercise — **a strong model that stays inside the task it was given**. Every story names the files it may touch, and a deterministic gate reports the ones it touched anyway.
 
 <p align="center">
   <img src="assets/architecture.svg" alt="VULYK architecture: queen, leads, workers, drones and the external memory plane" width="92%" />
@@ -68,7 +68,7 @@ claude
 > /vulyk-bootstrap
 ```
 
-`/vulyk-bootstrap` runs a short interview (stack, size, conventions, risk tolerance, token budget), then tailors the constitution, prunes the agent roster, builds an initial codebase map with Haiku drones, and seeds the wiki. **From that point on you work through three commands:**
+`/vulyk-bootstrap` runs a short interview (stack, size, conventions, risk tolerance, token budget), then tailors the constitution, prunes the agent roster, builds an initial codebase map with scout drones, and seeds the wiki. **From that point on you work through three commands:**
 
 ```text
 /vulyk-plan  "add OAuth login with refresh tokens"   # Queen plans, scouts recon, stories written
@@ -85,16 +85,19 @@ Every subagent declares its model in YAML frontmatter — the cascade is enforce
 
 | Caste | Agent | Model | Job | Reads source? |
 |---|---|---|---|---|
-| 👑 Queen | *(main session)* + `queen-planner` | top model¹ / `opus` | Decompose goals, integrate results, own the roadmap | **Never** — consumes scout reports & memory only |
+| 👑 Queen | *(main session)* + `queen-planner` | `opus` | Decompose goals, integrate results, own the roadmap | **Never** — consumes scout reports & memory only |
 | 🛡 Lead | `lead-architect` | `opus` | Design decisions, ADRs, tradeoff analysis | Targeted excerpts only |
 | 🛡 Lead | `lead-review` | `opus` | Adversarial review gate: correctness, security, invariants | Diffs + tests |
+| 🛡 Lead | *second reviewer, Tier 4, opt-in* | `claude-fable-5` | Recall complement — an ensemble, not a duplicate | Diffs |
 | 🐝 Worker | `worker-code` | `sonnet` | Implement exactly one story | Scoped slice via map |
 | 🐝 Worker | `worker-test` | `sonnet` | Write/repair tests for one story | Scoped slice |
-| 🔍 Drone | `drone-scout` | `haiku` | Recon: files, symbols, structure → map-format report | Yes — that's the point |
-| 🔍 Drone | `drone-docs` | `haiku` | Update wiki & map notes after changes | Diffs |
-| 🔍 Drone | `librarian` | `haiku` | Memory consolidation & garbage collection | Memory files only |
+| 🔍 Drone | `drone-scout` | `sonnet` | Recon: files, symbols, structure → map-format report | Yes — that's the point |
+| 🔍 Drone | `drone-docs` | `sonnet` | Update wiki & map notes after changes | Diffs |
+| 🔍 Drone | `librarian` | `sonnet` | Memory consolidation & garbage collection | Memory files only |
 
-¹ The top model is whatever your plan currently makes economical. Set once in `CLAUDE.md` (`TOP_MODEL`). As of June 2026 that's `claude-fable-5` while it is included in subscription plans, falling back to `claude-opus-4-8` afterwards — one line to change, the rest of the hive is model-agnostic.
+**Aliases, not pinned IDs.** `opus` and `sonnet` resolve to the current model in each tier — as of July 2026, Opus 5 and Sonnet 5. That is why the 4.8 → 5 transition cost this framework a three-line diff instead of a rewrite. Pin a full ID only to freeze behaviour deliberately.
+
+**Effort is a session setting, not a per-agent one.** `effortLevel` in `.claude/settings.json` works and ships set to `medium`; `effort:` in agent frontmatter is silently ignored. Both were measured — see [docs/model-cascade.md](docs/model-cascade.md) for the numbers and the escalation table.
 
 ### The routing matrix
 
@@ -106,9 +109,11 @@ Routing happens **before** any work starts. The Queen classifies every request i
 | 1 | One module, clear task | 1 × `worker-code` (+ scout) | cheap |
 | 2 | Feature within a module | 2–4 workers, architect consulted | plan is expensive, body is cheap |
 | 3 | Cross-cutting, multi-module | Full pipeline: plan → fan-out → review | bookend |
-| 4 | Architecture / migration / 200k+ LOC touched | Tier 3 + adversarial review + max effort | deliberately expensive |
+| 4 | Architecture / migration / 200k+ LOC touched | Tier 3 + a second reviewer on a *different* model | deliberately expensive |
 
-**Bookend rule:** spend top-model tokens at the two points where they change everything downstream — planning and final review. Everything in between runs on Sonnet and Haiku.
+**Bookend rule:** spend top-model tokens at the two points where they change everything downstream — planning and final review. Everything in between runs on the cheaper tier.
+
+What changed with Opus 5 is the *reason* for the bookend, not its shape. The binding problem is no longer that a frontier model is unaffordable — it is that a frontier model does more than it was asked. Anthropic's system card attributes the dip in coding scores at high effort to the model making more changes than the task required. The cascade now earns its keep by holding scope; the savings are a side effect.
 
 ## Command reference
 
@@ -118,7 +123,7 @@ Routing happens **before** any work starts. The Queen classifies every request i
 | `/vulyk-plan <goal>` | Queen mode: scouts recon, plan + story files written to `docs/specs/`, tier assigned, approval requested |
 | `/vulyk-build [story]` | Execute approved stories with cascade-routed workers, parallel where independent |
 | `/vulyk-review [scope]` | Adversarial `lead-review` pass; blocks on critical findings |
-| `/vulyk-map [path]` | (Re)build the codebase map for a path using Haiku scout batches |
+| `/vulyk-map [path]` | (Re)build the codebase map for a path using parallel scout batches |
 | `/vulyk-evolve` | Weekly self-evolution: mine learnings & usage stats → propose config diffs as a reviewable changeset |
 | `/vulyk-gc` | Memory garbage collection: consolidate learnings, prune stale map entries, archive dead skills |
 | `/vulyk-status` | Open stories, memory freshness, skill usage stats, budget posture |
@@ -159,11 +164,23 @@ Each cycle is a ratchet: the colony clicks forward and never slips back.
 | Hook | Event | Effect |
 |---|---|---|
 | `session-start-brief.sh` | SessionStart | Injects memory freshness + pending-learnings line into context |
-| `session-end-learnings.sh` | SessionEnd | Captures a structured learnings stub (optional Haiku auto-distill with `VULYK_AUTOLEARN=1`) |
+| `session-end-learnings.sh` | SessionEnd | Captures a structured learnings stub (optional auto-distill with `VULYK_AUTOLEARN=1`) |
 | `skill-usage-counter.sh` | PostToolUse (Skill) | Increments per-skill counters → fuel for `skill-gardener` |
 | `context-guard.sh` | PreCompact | Snapshots memory & task state before compaction |
 
 A sample `scripts/git-hooks/post-merge` flags the map as stale after merges so `/vulyk-status` reminds you to re-map.
+
+## What is measured, and what is not
+
+Most agent frameworks — this one included, until now — ship claims nobody checked. Here is the honest split.
+
+**Measured on this repository.** Where `effort` actually applies (session yes, agent frontmatter no) and what each level costs in output tokens. The numbers and the method are in [docs/model-cascade.md](docs/model-cascade.md); the raw finding is in `memory/learnings/`.
+
+**Measured from now on, by `scripts/scope-check.sh`.** Two numbers per story, appended to `memory/stats/scope.jsonl`: how many files the story declared, and how many files the diff touched that it never named. Deterministic, no model involved, zero tokens. `/vulyk-review` runs it. The second number is what keeps the first honest — a story that lists half the repository scores a perfect zero and is caught by its own declaration count.
+
+**Not measured.** Whether the cascade beats an all-Opus baseline on output quality. Whether the memory plane beats simply letting a 1M-token window read the repository. Whether moving recon off Haiku helped or just cost more. Whether `/vulyk-evolve` improves anything — it has never been run against real data, which is why it is being rebuilt around the scope metric rather than shipped as-is.
+
+Claims of the form "N× cheaper" or "near-parity quality" have been removed from this README. They may well be true; nobody here has measured them. When `scope.jsonl` has data from real projects, this section gets numbers instead of prose.
 
 ## FAQ
 
