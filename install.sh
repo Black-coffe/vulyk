@@ -27,7 +27,9 @@ copy_tree() { # copy_tree <rel> - file-by-file, skip anything that already exist
 
 echo "VULYK -> $DEST ${CHECK:+(dry run)}"
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr; do copy_tree "$tree"; done
-mkdir -p "$DEST/memory/learnings" "$DEST/memory/snapshots" "$DEST/docs/wiki" "$DEST/docs/specs" "$DEST/docs/adr" 2>/dev/null || true
+if [ "$CHECK" != "--check" ]; then
+  mkdir -p "$DEST/memory/learnings" "$DEST/memory/snapshots" "$DEST/docs/wiki" "$DEST/docs/specs" "$DEST/docs/adr" 2>/dev/null || true
+fi
 [ -f "$DEST/memory/stats/skills.json" ] || { [ "$CHECK" = "--check" ] || { mkdir -p "$DEST/memory/stats"; echo '{}' > "$DEST/memory/stats/skills.json"; }; }
 
 # Constitution: never overwrite

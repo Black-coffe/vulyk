@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    name: Shell lint & syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck (real bugs only)
+        uses: ludeeus/action-shellcheck@master
+        env:
+          # Hooks favour portable one-liners (ls|head, etc.); fail only on genuine
+          # bugs (severity=error), not style/info nits.
+          SHELLCHECK_OPTS: --severity=error
+        with:
+          scandir: '.'
+          additional_files: 'post-merge'
+
+      - name: bash -n (parse check, all scripts)
+        run: |
+          fail=0
+          while IFS= read -r -d '' f; do
+            bash -n "$f" || { echo "::error file=$f::syntax error"; fail=1; }
+          done < <(find . -type f \( -name '*.sh' -o -path './scripts/git-hooks/*' \) -print0)
+          exit $fail
+
+  install-smoke:
+    name: install.sh dry-run smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install --check into a clean dir is non-destructive and well-formed
+        run: |
+          target="$(mktemp -d)"
+          out="$(./install.sh "$target" --check)"
+          echo "$out"
+          # dry run must touch nothing
+          if [ -n "$(ls -A "$target")" ]; then
+            echo "::error::--check wrote files into target (should be dry run)"; exit 1
+          fi
+          # and must plan to copy the load-bearing pieces
+          for needle in ".claude/commands/vulyk-plan.md" ".claude/agents/queen-planner.md" "memory/memory.md"; do
+            echo "$out" | grep -q "$needle" || { echo "::error::--check did not plan to copy $needle"; exit 1; }
+          done
+
+      - name: real install into a clean dir produces a runnable hive
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          test -f "$target/CLAUDE.md"                          || { echo "::error::CLAUDE.md missing"; exit 1; }
+          test -x "$target/.claude/hooks/session-start-brief.sh" || { echo "::error::hooks not executable"; exit 1; }
+          test -f "$target/memory/stats/skills.json"           || { echo "::error::skills.json not seeded"; exit 1; }
+
+      - name: re-install is idempotent (never overwrites existing files)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          out="$(./install.sh "$target")"
+          echo "$out" | grep -q "skip (exists)" || { echo "::error::second install did not skip existing files"; exit 1; }
+          echo "$out" | grep -q "CLAUDE.vulyk.md instead" || { echo "::error::existing CLAUDE.md was not preserved"; exit 1; }
