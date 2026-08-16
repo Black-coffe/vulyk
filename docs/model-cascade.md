@@ -17,6 +17,18 @@ by holding scope, and the savings are a side effect.
 2. **The routing matrix** in `CLAUDE.md` — tier decided before work starts and announced.
 3. **`TOP_MODEL`** — one line in `CLAUDE.md` for the Queen's own model.
 
+## Route with frontmatter, never with `/model`
+
+The cascade is expressed in agent frontmatter for a reason beyond tidiness. A subagent runs in its
+own context window with its own cache; dispatching to `model: sonnet` leaves the main session's
+cached prefix untouched. Typing `/model sonnet` in the main session does the opposite: the model is
+part of the cache key, so the entire conversation re-prefills at full input price on the next turn,
+and every subsequent turn runs on the wrong model until you switch back — paying the re-prefill a
+second time. The same holds for `/effort` and the fast-mode toggle.
+
+This is what makes the Tier 4 "second reviewer on a different model" affordable: it is a second
+subagent, not a session-level switch. See [token-economy.md](token-economy.md).
+
 ## Use aliases, not pinned IDs
 Write `opus`, `sonnet`, `haiku` — not `claude-opus-5`. An alias resolves to the current model in
 that tier, so the next generation is absorbed without editing a single file. That property is the

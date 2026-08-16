@@ -170,7 +170,7 @@ Each cycle is a ratchet: the colony clicks forward and never slips back.
 | `context-guard.sh` | PreCompact | Snapshots memory & task state before compaction |
 | `handoff.sh` → `handoff.py` | Stop, UserPromptSubmit, PreCompact, SessionEnd, SessionStart | Context-budget guard + session handoff: measures real context size from the transcript, warns at thresholds, dumps session state to `.claude/handoff/` on `/clear`/exit/compaction, restores it at the next session start |
 
-Claude Code hooks receive no token counter — `handoff.py` recovers it from the transcript JSONL (`message.usage` of the last non-sidechain assistant entry), which is what makes proactive warnings and pre-`/clear` dumps possible at all. Needs Python 3 on PATH; fails open without it. Details: [docs/hooks-reference.md](docs/hooks-reference.md)
+Claude Code hooks receive no token counter — `handoff.py` recovers it from the transcript JSONL (`message.usage` of the last non-sidechain assistant entry), which is what makes proactive warnings and pre-`/clear` dumps possible at all. The same entry's `timestamp` gives the age of the prompt cache, so the warning also tells you how long checkpointing stays cheap: re-reading the conversation is a cache hit inside the TTL and a full-price re-prefill after it. Needs Python 3 on PATH; fails open without it. Details: [docs/hooks-reference.md](docs/hooks-reference.md)
 
 A sample `scripts/git-hooks/post-merge` flags the map as stale after merges so `/vulyk-status` reminds you to re-map.
 
@@ -200,7 +200,7 @@ Claims of the form "N× cheaper" or "near-parity quality" have been removed from
 
 ## Documentation
 
-[Getting started](docs/getting-started.md) · [Architecture](docs/architecture.md) · [Model cascade](docs/model-cascade.md) · [Memory system](docs/memory-system.md) · [Self-evolution](docs/self-evolution.md) · [Command reference](docs/command-reference.md) · [Hooks reference](docs/hooks-reference.md) · [FAQ](docs/faq.md)
+[Getting started](docs/getting-started.md) · [Architecture](docs/architecture.md) · [Model cascade](docs/model-cascade.md) · [Token economy](docs/token-economy.md) · [Memory system](docs/memory-system.md) · [Self-evolution](docs/self-evolution.md) · [Command reference](docs/command-reference.md) · [Hooks reference](docs/hooks-reference.md) · [FAQ](docs/faq.md)
 
 ## Roadmap
 

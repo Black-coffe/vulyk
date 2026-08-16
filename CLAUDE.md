@@ -65,11 +65,40 @@ more than the effort change saves; prefer setting it once at the start of a sess
 
 ## Token economy (non-negotiable)
 
+Every rule here has a price behind it — see [docs/token-economy.md](docs/token-economy.md).
+
 - **Queen never reads source code.** Request `drone-scout` reports; consume `memory/map/` and `memory/memory.md`.
 - **Bookend:** top model for planning and final review only. Implementation runs on Sonnet; recon, docs, and memory upkeep on Haiku.
 - **Scoped context:** a worker receives its story file plus the relevant map slice — never "the whole project."
-- **`/clear` between tiers.** Stale conversation history is resent on every turn; clear it when switching tasks.
+- **Route models with agent frontmatter, never `/model`.** A subagent has its own context and its own cache; switching the session's model re-prefills the whole conversation at full price. The Tier 4 second reviewer is a second subagent, not a model switch. Same for `/effort` and fast mode: set them once, at the start.
+- **Paths, not descriptions.** "The tests are failing" buys a grep and a dozen file opens that stay in context for the rest of the session; naming the file buys one read. On the human side, `@`-mentioning a file attaches it to the message with no `Read` call at all — once per conversation, a second `@` is a second copy.
+- **Command output is permanent.** Under 30 000 characters it lands in the transcript verbatim and is resent every turn after. Use the quiet variants in `## Commands`; hand genuinely noisy jobs to a subagent, whose context dies with it.
+- **`/clear` between tiers.** Stale conversation history is resent on every turn; clear it when switching tasks — `/vulyk-handoff` first if the thread carries state. Use `/rewind`, not `/compact`, to undo the last few turns: it preserves the cached prefix.
 - **Session budget:** if a debugging loop exceeds ~10 turns without progress, stop, write findings to the story file, and re-plan. Do not re-suggest previously rejected fixes.
+
+## Commands
+
+Quiet variants only: everything these print is resent on every subsequent turn. `/vulyk-bootstrap`
+fills this table in for the project, and a story's `## Verification` line must name one of them.
+
+| Purpose | Command |
+|---|---|
+| Single test file | `<e.g. npx vitest run <file> --reporter=dot>` |
+| Full test suite | `<fill in>` |
+| Lint | `<fill in>` |
+| Build / typecheck | `<fill in>` |
+
+## Compact instructions
+
+When compacting a VULYK session, preserve in this order:
+
+1. The declared tier and the goal of the task in flight.
+2. The active spec slug and every story's `status:` line.
+3. Decisions taken **with their reasons**, and the options rejected.
+4. Walls — what was tried and failed — so no one retries them.
+5. Open pointers: `memory/memory.md`, map slices in play, unanswered questions to the human.
+
+Drop file contents, diffs, command output and scout reports: they are on disk and can be re-read.
 
 ## Memory protocol
 

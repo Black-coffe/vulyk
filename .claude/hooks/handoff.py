@@ -54,6 +54,10 @@ DEFAULTS = {
     "thresholds": [110000, 140000, 165000],
     # below this, a session is too small to be worth dumping
     "min_dump_tokens": 25000,
+    # prompt-cache TTL: 60 min on subscription plans, 5 on an API key
+    # (unless ENABLE_PROMPT_CACHING_1H=1). Checkpointing inside this window
+    # re-reads the conversation at cache price; outside it, at full price.
+    "cache_ttl_minutes": 60,
     # SessionStart(startup) only restores a handoff younger than this
     "restore_max_age_hours": 12,
     # how much transcript tail to parse for a dump (bytes)
@@ -167,10 +171,57 @@ def parse_entries(path, max_bytes):
     return out
 
 
+def parse_ts(value):
+    """Claude Code stamps entries with ISO-8601 UTC ('...Z'). Never raise on a surprise."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def minutes_since(ts):
+    if ts is None:
+        return None
+    try:
+        delta = (datetime.now(timezone.utc) - ts.astimezone(timezone.utc)).total_seconds() / 60.0
+    except Exception:
+        return None
+    return delta if delta >= 0 else 0.0
+
+
+def cache_note(ts, cfg):
+    """One clause about the prompt cache, or '' when the age is unknown.
+
+    Compacting or checkpointing re-reads the conversation. Inside the TTL that read is a
+    cache hit (~0.1x input); once the prefix has expired it is a full-price re-prefill.
+    So the cheapest moment to check out is *now*, not after the break.
+    """
+    age = minutes_since(ts)
+    ttl = cfg.get("cache_ttl_minutes") or 0
+    if age is None or ttl <= 0:
+        return ""
+    left = ttl - age
+    if left <= 0:
+        return (" The cached prefix (%d min TTL) has expired, so the next turn re-prefills at "
+                "full price either way - no reason to delay the checkpoint." % ttl)
+    if left <= 10:
+        return (" Cached prefix expires in ~%d min: checkpoint now, while re-reading the "
+                "conversation is still a cache hit." % round(left))
+    return (" Cached prefix stays warm for ~%d more min - checkpointing inside that window is "
+            "far cheaper than after it." % round(left))
+
+
 def context_tokens(transcript_path):
-    """(tokens, model) of the last main-thread assistant message. Sidechains excluded."""
+    """(tokens, model, timestamp) of the last main-thread assistant message.
+
+    Sidechains (subagents) are excluded: they run in their own context window and
+    counting them skews the number. The timestamp is when that turn was written -
+    i.e. how long the prompt cache has been sitting idle.
+    """
     if not transcript_path or not os.path.exists(transcript_path):
-        return 0, None
+        return 0, None, None
     # 2 MB of tail is far more than one assistant entry; widen once if we miss.
     for budget in (2 * 1024 * 1024, 24 * 1024 * 1024):
         for entry in reversed(parse_entries(transcript_path, budget)):
@@ -187,8 +238,8 @@ def context_tokens(transcript_path):
                 + (usage.get("output_tokens") or 0)
             )
             if total:
-                return total, msg.get("model")
-    return 0, None
+                return total, msg.get("model"), parse_ts(entry.get("timestamp"))
+    return 0, None, None
 
 
 def newest_transcript_for_cwd(cwd):
@@ -334,7 +385,7 @@ def write_handoff(payload, cfg, reason):
     cwd = payload.get("cwd") or root
     session_id = payload.get("session_id") or "unknown"
     transcript = payload.get("transcript_path") or newest_transcript_for_cwd(cwd)
-    tokens, model = context_tokens(transcript)
+    tokens, model, _ = context_tokens(transcript)
     entries = parse_entries(transcript, cfg["dump_tail_bytes"]) if transcript else []
     data = harvest(entries, cfg)
     git = git_info(root)
@@ -424,7 +475,7 @@ def write_handoff(payload, cfg, reason):
 
 # ------------------------------------------------------------------------- modes
 
-def banner(tokens, level, cfg):
+def banner(tokens, level, cfg, ts=None):
     limit = cfg["context_limit"]
     pct = (tokens * 100.0 / limit) if limit else 0
     head = "[VULYK] Context %s / %s (%.0f%%)" % (human(tokens), human(limit), pct)
@@ -434,16 +485,16 @@ def banner(tokens, level, cfg):
     if level == 2:
         return ("🟠 %s. Time to wrap up. Run `/vulyk-handoff` to save session state to "
                 ".claude/handoff/, then `/clear` (or exit + restart): the next session "
-                "picks the handoff up automatically." % head)
+                "picks the handoff up automatically.%s" % (head, cache_note(ts, cfg)))
     return ("🔴 %s. Do not start new multi-step work - context rot is real at this size. "
-            "`/vulyk-handoff` -> `/clear`." % head)
+            "`/vulyk-handoff` -> `/clear`.%s" % (head, cache_note(ts, cfg)))
 
 
 def mode_stop(payload, cfg, root):
     if payload.get("agent_id"):  # subagent stop, not the main loop
         emit(None)
     session_id = payload.get("session_id")
-    tokens, _ = context_tokens(payload.get("transcript_path"))
+    tokens, _, ts = context_tokens(payload.get("transcript_path"))
     level = level_for(tokens, cfg["thresholds"])
     if level == 0:
         emit(None)
@@ -453,12 +504,12 @@ def mode_stop(payload, cfg, root):
     state["stop_level"] = level
     state["last_tokens"] = tokens
     save_state(root, session_id, state)
-    emit({"systemMessage": banner(tokens, level, cfg), "suppressOutput": True})
+    emit({"systemMessage": banner(tokens, level, cfg, ts), "suppressOutput": True})
 
 
 def mode_prompt(payload, cfg, root):
     session_id = payload.get("session_id")
-    tokens, _ = context_tokens(payload.get("transcript_path"))
+    tokens, _, ts = context_tokens(payload.get("transcript_path"))
     level = level_for(tokens, cfg["thresholds"])
     if level < 2:
         emit(None)
@@ -476,16 +527,15 @@ def mode_prompt(payload, cfg, root):
         "%s suggest that the user checkpoint now: run `/vulyk-handoff` (saves "
         ".claude/handoff/*.md), then `/clear` or restart - the next session restores the "
         "handoff automatically. Suggest it ONCE, briefly, at the end of your reply. "
-        "If the user asks to continue, continue without repeating the reminder. "
-        "%s"
-        % (human(tokens), pct, human(limit), urgency,
+        "If the user asks to continue, continue without repeating the reminder.%s %s"
+        % (human(tokens), pct, human(limit), urgency, cache_note(ts, cfg),
            "Do not start new large multi-step tasks in this session." if level >= 3 else "")
-    )
+    ).rstrip()
     emit({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": ctx}})
 
 
 def mode_dump_hook(payload, cfg, reason, min_tokens_check=True):
-    tokens, _ = context_tokens(payload.get("transcript_path"))
+    tokens, _, _ = context_tokens(payload.get("transcript_path"))
     if min_tokens_check and tokens < cfg["min_dump_tokens"]:
         emit(None)
     try:
@@ -548,8 +598,9 @@ def mode_sessionstart(payload, cfg, root):
 def mode_status(payload, cfg, root):
     cwd = payload.get("cwd") or os.getcwd()
     transcript = payload.get("transcript_path") or newest_transcript_for_cwd(cwd)
-    tokens, model = context_tokens(transcript)
+    tokens, model, ts = context_tokens(transcript)
     limit = cfg["context_limit"]
+    age = minutes_since(ts)
     print("root       : %s" % root)
     print("transcript : %s" % transcript)
     print("model      : %s" % model)
@@ -557,6 +608,12 @@ def mode_status(payload, cfg, root):
                                              tokens * 100.0 / limit if limit else 0))
     print("thresholds : %s" % cfg["thresholds"])
     print("level      : %d" % level_for(tokens, cfg["thresholds"]))
+    print("last turn  : %s" % ("%.0f min ago" % age if age is not None else "unknown"))
+    print("cache      : %s (ttl %s min)" % (
+        "unknown" if age is None
+        else ("warm, ~%.0f min left" % (cfg["cache_ttl_minutes"] - age)
+              if age < cfg["cache_ttl_minutes"] else "expired"),
+        cfg["cache_ttl_minutes"]))
     sys.exit(0)
 
 

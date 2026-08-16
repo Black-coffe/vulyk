@@ -23,6 +23,15 @@ claude
 ```
 For large repos the initial mapping runs on Haiku drones in batches - cheap by design. A 1000-file repo maps breadth-first: the 8-12 load-bearing modules now, the rest recorded as unmapped territory.
 
+## Context hygiene (once, then rarely)
+
+Run `/context` in a fresh session before typing anything: that is what every turn of every session
+re-sends. Switch off MCP servers this project never calls (`/mcp`) — their tool definitions are pure
+overhead — and keep `CLAUDE.md` to standing instructions, pushing anything workflow-specific into
+`.claude/rules/` or a skill. Set `/model` and `/effort` at the start of a session rather than
+mid-flight: both are part of the prompt-cache key, and changing them re-prefills the whole
+conversation. The reasoning is in [token-economy.md](token-economy.md).
+
 ## The working loop
 ```text
 /vulyk-plan "add CSV export to the reports module"

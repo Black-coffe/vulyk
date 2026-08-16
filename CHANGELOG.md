@@ -2,6 +2,59 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.4.0] - 2026-08-16
+
+The price list behind the rules. VULYK's token economy was a set of good habits with no stated
+mechanism; this release writes the mechanism down and closes the gaps it exposes. **Additive:
+nothing was removed.** Grounded in Anthropic's
+[Maximizing the value of your Claude Code sessions](https://claude.com/blog/maximizing-the-value-of-your-claude-code-sessions).
+
+### Added
+- `docs/token-economy.md` — what actually decides the price of a token: which model burns it, input
+  vs output (decode is priced at roughly 5× prefill, and thinking tokens are output tokens), and
+  cache state (a hit costs ~0.1× input, a write up to 2×). Then the cache key and everything that
+  invalidates it — `/model`, `/effort`, fast mode, `/compact`, the TTL, resuming an old session —
+  and the four levers ranked by what they actually cost: session length, context size, model and
+  effort, cache breaks.
+- `## Commands` in `CLAUDE.md` — a table of the project's verification commands **in quiet form**.
+  Command output under 30 000 characters is appended to the transcript verbatim and re-sent on
+  every subsequent turn, so a chatty test reporter can outweigh the code it verifies.
+  `/vulyk-bootstrap` now fills this table in, and `templates/story.md` requires `## Verification` to
+  name one of its entries.
+- `## Compact instructions` in `CLAUDE.md` — what a compaction of a hive session must preserve
+  (tier, story statuses, decisions *with reasons*, walls, open pointers) and what it should drop
+  (file contents, diffs, command output, scout reports — all of it re-readable from disk). Claude
+  Code honours this section; it is the model-side counterpart to what `context-guard.sh` snapshots
+  to disk.
+- Cache-warmth awareness in `handoff.py`. The transcript entry that yields the token count also
+  carries its `timestamp`, so the age of the cached prefix is free to compute — and it decides the
+  *price* of acting on the warning, since compacting and checkpointing both re-read the
+  conversation. From level 2 the banner and the prompt injection now close with "warm for ~55 more
+  min", "expires in ~5 min — checkpoint now", or "expired anyway — no reason to delay". New
+  `cache_ttl_minutes` config key, default 60 (subscription); set `5` on an API key without
+  `ENABLE_PROMPT_CACHING_1H=1`. Transcripts without a parseable timestamp drop the clause silently.
+
+### Changed
+- `## Token economy` in `CLAUDE.md` gains three rules that were previously only implied: route
+  models with agent frontmatter and never `/model` (a subagent has its own context *and its own
+  cache*, while a session-level switch re-prefills the whole conversation at full price — which is
+  also what makes the Tier 4 second reviewer affordable); name paths instead of describing
+  symptoms, since a vague request buys a grep and a dozen file opens that stay in context for the
+  rest of the session; and prefer `/rewind` over `/compact` when undoing the last few turns,
+  because it cuts only the end and leaves the cached prefix intact.
+- `/vulyk-status` gains a context-hygiene step — `/context` and `/mcp` — that fires only on a fresh
+  session, where the advice can still be acted on.
+- Docs: new "Route with frontmatter, never with `/model`" section in `model-cascade.md`; a
+  context-hygiene section in `getting-started.md`; cache-warmth details in `hooks-reference.md`;
+  `command-reference.md` and README updated.
+
+### Notes
+- No behaviour change for anyone who never hits a warning threshold: the hook's contract (never
+  crash, never block, one warning per level per session) is untouched, and the new clause is
+  additive text on warnings that already fired.
+- The `## Commands` table ships with placeholders. Existing projects should fill it in — or re-run
+  the relevant part of `/vulyk-bootstrap` — otherwise story templates point at an empty table.
+
 ## [0.3.0] - 2026-08-16
 
 Session continuity. The token economy already mandates `/clear` between tiers — this release makes

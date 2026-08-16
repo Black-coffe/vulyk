@@ -46,6 +46,12 @@ goal is under-specified, not that the section is useless.
 - [ ] <...>
 
 ## Verification
+<!--
+The QUIET form of the command - `--reporter=dot`, `-q`, `--silent`. Output under 30 000
+characters is pasted into the worker's context verbatim and resent on every turn that
+follows, so a chatty reporter can cost more than the code it verifies. Take the variant
+from `## Commands` in CLAUDE.md.
+-->
 `<exact command the worker runs to prove the criteria>`
 
 ## Tracer
