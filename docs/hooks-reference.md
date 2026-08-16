@@ -8,6 +8,20 @@ Wired in `.claude/settings.json`; scripts in `.claude/hooks/`. All scripts fail 
 | `session-end-learnings.sh` | SessionEnd | Writes `memory/learnings/<timestamp>.md`. Default: an editable stub. With `VULYK_AUTOLEARN=1` + `claude` CLI available: distills the transcript tail via one headless Haiku call; writes nothing if the session was routine. |
 | `skill-usage-counter.sh` | PostToolUse, matcher `Skill` | Increments `{count, last_used}` per skill in `memory/stats/skills.json` (requires `jq`; silently no-ops without it). Fuel for `skill-gardener`. |
 | `context-guard.sh` | PreCompact | Snapshots `memory/memory.md` + all spec `status:` lines to `memory/snapshots/<timestamp>/` so compaction never destroys orchestration state. Librarian prunes snapshots >14 days. |
+| `handoff.sh` → `handoff.py` | Stop · UserPromptSubmit · PreCompact · SessionEnd · SessionStart | Context-budget guard + session handoff. Warns as context grows, auto-dumps session state to `.claude/handoff/` on `/clear`, exit and before compaction, and restores the freshest handoff into the next session. Details below. |
+
+## Session handoff (`handoff.py`)
+
+Claude Code hooks receive **no token counter** — but every hook gets `transcript_path`, and each assistant entry in that JSONL carries `message.usage`. The true context size is `input + cache_read + cache_creation + output` of the last **non-sidechain** assistant entry (sidechain = subagent; counting those skews the number). That measurement drives everything:
+
+- **Escalating warnings** (Stop → banner to the user; UserPromptSubmit → context injected to the model) at 110k / 140k / 165k tokens by default. Each level fires **once per session** — a noisy hook is worse than no hook.
+- **Auto-dump** of a mechanical handoff (`git` state, last TodoWrite, touched files, recent prompts, last reply) on SessionEnd (`/clear`, exit) and PreCompact. Sessions under 25k tokens are not worth dumping and are skipped (PreCompact always dumps).
+- **`/vulyk-handoff`** writes the same skeleton on demand, then the model enriches its `## Summary` section — decisions, dead ends, next step. See the command reference.
+- **Restore** on SessionStart: after `/clear` or compaction — always; on plain startup — only if the handoff is younger than 12 h and not already consumed; on `resume`/`fork` — never (the context is still there).
+
+Storage is project-local and gitignored: documents in `.claude/handoff/`, pointer in `.claude/handoff/index.json`, per-session anti-spam state in `.claude/handoff/state/` (self-pruned after 7 days). Override defaults (thresholds, `context_limit` — set `1000000` on a 1M-context model, `enabled`) in `.claude/handoff.config.json`.
+
+Requires Python 3 on PATH (`python3`, `python` or `py`); the `handoff.sh` wrapper fails open without it, per the VULYK contract. Diagnose with `bash .claude/hooks/handoff.sh status`.
 
 Plus one **git** hook sample (not a Claude Code hook): `scripts/git-hooks/post-merge` touches `memory/map/.stale` after merges; `/vulyk-status` and the session brief surface it. Install per the comment in the file.
 

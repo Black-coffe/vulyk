@@ -126,6 +126,7 @@ What changed with Opus 5 is the *reason* for the bookend, not its shape. The bin
 | `/vulyk-map [path]` | (Re)build the codebase map for a path using parallel scout batches |
 | `/vulyk-evolve` | Weekly self-evolution: mine learnings & usage stats → propose config diffs as a reviewable changeset |
 | `/vulyk-gc` | Memory garbage collection: consolidate learnings, prune stale map entries, archive dead skills |
+| `/vulyk-handoff` | Save an enriched session handoff to `.claude/handoff/` before `/clear` or a restart — the next session resumes from it automatically |
 | `/vulyk-status` | Open stories, memory freshness, skill usage stats, budget posture |
 
 Full details: [docs/command-reference.md](docs/command-reference.md)
@@ -167,6 +168,9 @@ Each cycle is a ratchet: the colony clicks forward and never slips back.
 | `session-end-learnings.sh` | SessionEnd | Captures a structured learnings stub (optional auto-distill with `VULYK_AUTOLEARN=1`) |
 | `skill-usage-counter.sh` | PostToolUse (Skill) | Increments per-skill counters → fuel for `skill-gardener` |
 | `context-guard.sh` | PreCompact | Snapshots memory & task state before compaction |
+| `handoff.sh` → `handoff.py` | Stop, UserPromptSubmit, PreCompact, SessionEnd, SessionStart | Context-budget guard + session handoff: measures real context size from the transcript, warns at thresholds, dumps session state to `.claude/handoff/` on `/clear`/exit/compaction, restores it at the next session start |
+
+Claude Code hooks receive no token counter — `handoff.py` recovers it from the transcript JSONL (`message.usage` of the last non-sidechain assistant entry), which is what makes proactive warnings and pre-`/clear` dumps possible at all. Needs Python 3 on PATH; fails open without it. Details: [docs/hooks-reference.md](docs/hooks-reference.md)
 
 A sample `scripts/git-hooks/post-merge` flags the map as stale after merges so `/vulyk-status` reminds you to re-map.
 

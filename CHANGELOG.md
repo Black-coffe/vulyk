@@ -2,6 +2,50 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.3.0] - 2026-08-16
+
+Session continuity. The token economy already mandates `/clear` between tiers — this release makes
+that hygiene cheap by adding the layer that survives it. **Additive: nothing was removed.** Ported
+from a battle-tested private Windows setup (in daily use since 2026-07-27), translated and
+re-rooted into the project.
+
+### Added
+- `.claude/hooks/handoff.py` — context-budget guard + session handoff. The key mechanism: Claude
+  Code hooks receive **no token counter**, but every hook gets `transcript_path`, and the
+  `message.usage` block of the last *non-sidechain* assistant entry in that JSONL (input +
+  cache_read + cache_creation + output) is the true current context size. Everything else hangs off
+  that measurement:
+  - escalating warnings at 110k / 140k / 165k tokens (Stop banner to the human, UserPromptSubmit
+    injection to the model), each level firing **once per session** — a noisy hook is worse than no
+    hook;
+  - mechanical auto-dump (git state, last TodoWrite, touched files, recent prompts, last reply) to
+    `.claude/handoff/` on SessionEnd (`/clear`, exit) and PreCompact; sessions under 25k tokens are
+    skipped as not worth dumping;
+  - restore on SessionStart: always after `clear`/`compact`, on plain `startup` only if younger
+    than 12 h and not already consumed, never on `resume`/`fork`. The injected preamble instructs
+    the model to confirm the resume point with the user before doing any work;
+  - contract: **never crash, never block** — any failure is `exit 0` with no stdout.
+- `.claude/hooks/handoff.sh` — fail-open wrapper: tries `python3`/`python`/`py`, silently no-ops
+  when no Python 3 is on PATH, per the same contract the other hooks follow for `jq`.
+- `/vulyk-handoff` — two-phase checkpoint: the script writes the mechanical skeleton, the model
+  rewrites its `## Summary` (goal, current state, next step, decisions *with reasons*, dead ends,
+  needed resources) and flips `enriched: true`. The reasoning behind decisions is the part no
+  mechanical dump can recover — that is why the command exists on top of the auto-dumps.
+- Hook wiring in `.claude/settings.json` (Stop and UserPromptSubmit are new events for VULYK;
+  handoff entries appended to the existing SessionStart / SessionEnd / PreCompact groups).
+- `.claude/handoff/` gitignored — handoffs, their index and anti-spam state are per-machine session
+  state, deliberately outside the git-tracked memory plane.
+- Optional `.claude/handoff.config.json` for overrides (`thresholds`, `context_limit` — set
+  `1000000` on a 1M-context model, `enabled`, dump limits).
+- Docs: session-handoff sections in `hooks-reference.md`, `command-reference.md`,
+  `memory-system.md`, README hook/command tables.
+
+### Notes
+- Requires Python 3 for the handoff feature only; without it every handoff hook exits silently and
+  the rest of VULYK is unaffected.
+- The `/vulyk-evolve` rebuild around the scope metric, previously earmarked for v0.3.0, moves to a
+  later release — it is still blocked on real `scope.jsonl` data.
+
 ## [0.2.0] - 2026-07-27
 
 Recalibration for Claude Opus 5 (released 2026-07-24). **Additive: nothing was removed.** The

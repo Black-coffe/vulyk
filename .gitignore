@@ -8,6 +8,12 @@ memory/snapshots/*
 !memory/snapshots/.gitkeep
 memory/map/.stale
 
+# Session handoffs are per-machine session state, never committed
+.claude/handoff/
+
 # Local-only Claude Code settings (commit settings.json, not local overrides)
 .claude/settings.local.json
 CLAUDE.local.md
+
+# Python bytecode (handoff.py)
+__pycache__/

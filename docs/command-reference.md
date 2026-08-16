@@ -23,5 +23,8 @@ The weekly cycle - see [self-evolution.md](self-evolution.md). `--dry-run` stops
 ## /vulyk-gc
 Librarian pass: consolidate learnings (cap 40), flag stale maps, prune snapshots >14 days, verify pointer index. Main session then offers concrete follow-ups.
 
+## /vulyk-handoff
+Two-phase session checkpoint before `/clear` or a restart. Phase 1 (deterministic): `handoff.py dump` writes a mechanical skeleton to `.claude/handoff/` — git state, last TodoWrite, touched files, recent prompts, measured context size. Phase 2 (model): rewrites the skeleton's `## Summary` from what actually happened — goal, current state, next step, decisions *with reasons*, dead ends, needed resources — and flips `enriched: true`. The next session in the project restores the handoff automatically via the SessionStart hook. Unenriched dumps also happen automatically on `/clear`/exit/compaction; see [hooks-reference.md](hooks-reference.md).
+
 ## /vulyk-status
 Cheap metadata-only dashboard: story table, map freshness vs git churn, learnings buffer depth, skill counters, budget posture. Ends with the single most useful next action.
