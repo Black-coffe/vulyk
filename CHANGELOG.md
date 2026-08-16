@@ -2,6 +2,18 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.5.1] - 2026-08-16
+
+First battle-test of `--upgrade` (a real pre-0.5.0 install) caught three leaks in the
+installer - all three are VULYK's own working content shipped into the user's project.
+
+### Fixed
+- `install.sh` no longer ships: `__pycache__/`/`*.pyc` (the installer copies from disk,
+  not from git, so the maintainer's compiled Python rode along), VULYK's own session
+  learnings (`memory/learnings/*` except `README.md`), and VULYK's own dev specs
+  (`docs/specs/*`; the directory itself is still created). New `shippable()` filter with
+  the rule stated: the skeleton ships, the hive's own honey does not.
+
 ## [0.5.0] - 2026-08-16
 
 First release of the Autopilot merge: parallel build made safe and cheap. Design decisions,

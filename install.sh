@@ -34,9 +34,23 @@ DEST="$(cd "$DEST" && pwd)"
 OWNED=".claude/agents .claude/commands .claude/hooks .claude/skills/_meta bootstrap templates scripts"
 owned() { local f="$1" t; for t in $OWNED; do case "$f" in "$t"/*) return 0 ;; esac; done; return 1; }
 
+# VULYK's own working content never ships: its session learnings, its dev specs, and
+# anything Python compiled on the maintainer's machine. What DOES ship from these trees
+# is the skeleton - the READMEs that explain what goes where.
+shippable() { # shippable <rel-file> - 1 (false) for vulyk-own content
+  local f="$1"
+  case "$f" in
+    */__pycache__/*|*.pyc)        return 1 ;;
+    docs/specs/*)                 return 1 ;;   # vulyk's own dev specs (dir is still created)
+    memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
+  esac
+  return 0
+}
+
 copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading a framework-owned file
   local rel="$1"
   ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' -print0 ) | while IFS= read -r -d '' f; do
+    shippable "$f" || continue
     if [ -e "$DEST/$f" ]; then
       if [ -n "$UPGRADE" ] && owned "$f" && ! cmp -s "$SRC/$f" "$DEST/$f"; then
         if [ "$CHECK" = "--check" ]; then echo "  would update   $f"
