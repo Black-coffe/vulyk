@@ -78,15 +78,28 @@ Every rule here has a price behind it — see [docs/token-economy.md](docs/token
 
 ## Commands
 
-Quiet variants only: everything these print is resent on every subsequent turn. `/vulyk-bootstrap`
-fills this table in for the project, and a story's `## Verification` line must name one of them.
+Quiet variants only: everything these print is resent on every subsequent turn. A story's
+`## Verification` line must name one of them.
+
+> **Installed VULYK into your own project? These rows are wrong for you.** They are VULYK's own,
+> correct for this repository — a shell + Python + markdown toolkit with no compiler and no test
+> runner — and `/vulyk-bootstrap` replaces every one of them with your project's commands. Until it
+> does, treat a green result here as meaningless: a command that verifies nothing still exits 0.
 
 | Purpose | Command |
 |---|---|
-| Single test file | `<e.g. npx vitest run <file> --reporter=dot>` |
-| Full test suite | `<fill in>` |
-| Lint | `<fill in>` |
-| Build / typecheck | `<fill in>` |
+| Shell syntax, all scripts | `git ls-files '*.sh' \| xargs -n1 bash -n` |
+| Python syntax, hooks | `python -m py_compile .claude/hooks/*.py` |
+| JSON validity | `git ls-files '*.json' \| xargs -n1 jq -e . > /dev/null` |
+| Hook self-diagnosis | `bash .claude/hooks/handoff.sh status` |
+| Scope gate, per story | `bash scripts/scope-check.sh <story-file>` |
+| Full suite / build | none exists — VULYK has no test runner and no build step |
+
+All five are silent on success and non-zero on failure; run the first four together as the closest
+thing this repo has to a suite. `py_compile` writes a gitignored `__pycache__/` — do not commit it.
+The absent sixth row is deliberate: VULYK's shipped behaviour is verified by running the hooks
+against real transcripts, not by a suite. Say so plainly rather than inventing a command that
+proves nothing.
 
 ## Compact instructions
 

@@ -2,6 +2,23 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.4.1] - 2026-08-16
+
+Fills in the `## Commands` table v0.4.0 shipped empty — for VULYK itself.
+
+### Changed
+- `## Commands` in `CLAUDE.md` now carries this repository's real verification commands: `bash -n`
+  over every tracked shell script, `py_compile` over the hooks, `jq -e` over every tracked JSON
+  file, the `handoff.sh status` self-diagnosis, and the per-story scope gate. Each was run in both
+  directions before being written down — silent and zero on success, non-zero on a deliberately
+  broken input. The "full suite / build" row says **none exists** rather than naming a plausible
+  command: VULYK has no test runner and no compiler, and a verification that always exits 0 is
+  worse than an admitted gap.
+- Because `install.sh` copies `CLAUDE.md` verbatim, the table now carries a blockquote saying in
+  as many words that these rows are VULYK's own and wrong for any other project. `/vulyk-bootstrap`
+  is correspondingly stricter: **replace every row** (and delete the blockquote), verify each
+  command actually runs, and write "none" where the project genuinely lacks one.
+
 ## [0.4.0] - 2026-08-16
 
 The price list behind the rules. VULYK's token economy was a set of good habits with no stated
