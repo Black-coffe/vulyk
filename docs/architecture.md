@@ -21,8 +21,10 @@ goal -> Queen classifies tier
      -> drone-scouts (parallel, haiku) ------ reports ------+
      -> memory/map + wiki pointers --------------------------+-> queen-planner (opus)
                                                              -> docs/specs/<slug>/plan.md + stories
+     -> wave-check.sh: waves dispatchable? (file collisions, blocker order - deterministic)
 human approves
-     -> Queen fans out worker-code / worker-test (sonnet, parallel per story DAG)
+     -> Queen dispatches wave by wave (sonnet workers, one message per wave, disjoint files)
+     -> each story closes alone: <=25-line return -> scope-check -> quiet verify -> own commit
      -> workers append Implementation notes / Findings to their story files
      -> lead-review (opus) gate: PASS | BLOCK(-> fix stories -> /vulyk-build)
 merge

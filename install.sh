@@ -1,26 +1,52 @@
 #!/usr/bin/env bash
 # VULYK installer: copy the hive into an existing project. Never overwrites your files.
-# Usage: ./install.sh /path/to/your/project [--check]
+#
+#   Install:  ./install.sh /path/to/your/project [--check]
+#   Upgrade:  ./install.sh /path/to/your/project --upgrade [--check]
+#
+# Install copies file-by-file and skips anything that already exists.
+# Upgrade additionally REPLACES framework-owned files that changed between versions
+# (agents, commands, hooks, meta-skills, bootstrap, templates, scripts) - and still
+# never touches what is yours: CLAUDE.md, memory/, docs/specs|adr|wiki, .claude/rules.
+# The installed version is stamped into .claude/vulyk-version so an upgrade knows,
+# and shows, what it is upgrading from.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEST="${1:-}"
-[ -n "$DEST" ] || { echo "Usage: $0 /path/to/your/project [--check]"; exit 1; }
+VER="$(cat "$SRC/VERSION" 2>/dev/null || echo unknown)"
+
+DEST=""; CHECK=""; UPGRADE=""
+for arg in "$@"; do
+  case "$arg" in
+    --check)   CHECK="--check" ;;
+    --upgrade) UPGRADE=1 ;;
+    -*)        echo "error: unknown flag $arg"; echo "Usage: $0 /path/to/project [--upgrade] [--check]"; exit 1 ;;
+    *)         DEST="$arg" ;;
+  esac
+done
+[ -n "$DEST" ] || { echo "Usage: $0 /path/to/your/project [--upgrade] [--check]"; exit 1; }
 [ -d "$DEST" ] || { echo "error: $DEST is not a directory"; exit 1; }
 DEST="$(cd "$DEST" && pwd)"
 [ "$DEST" != "$SRC" ] || { echo "error: source and destination are the same"; exit 1; }
-CHECK="${2:-}"
 
-copied=0; skipped=0
-copy_tree() { # copy_tree <rel> - file-by-file, skip anything that already exists
+# Framework-owned trees: on --upgrade these are synced to the new version (changed files
+# replaced). Everything else keeps install semantics: new files copied, existing kept.
+OWNED=".claude/agents .claude/commands .claude/hooks .claude/skills/_meta bootstrap templates scripts"
+owned() { local f="$1" t; for t in $OWNED; do case "$f" in "$t"/*) return 0 ;; esac; done; return 1; }
+
+copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading a framework-owned file
   local rel="$1"
   ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' -print0 ) | while IFS= read -r -d '' f; do
     if [ -e "$DEST/$f" ]; then
-      echo "  skip (exists)  $f"; skipped=$((skipped+1))
+      if [ -n "$UPGRADE" ] && owned "$f" && ! cmp -s "$SRC/$f" "$DEST/$f"; then
+        if [ "$CHECK" = "--check" ]; then echo "  would update   $f"
+        else cp -p "$SRC/$f" "$DEST/$f"; echo "  update         $f"; fi
+      else
+        echo "  skip (exists)  $f"
+      fi
     else
       if [ "$CHECK" = "--check" ]; then echo "  would copy     $f"
       else mkdir -p "$DEST/$(dirname "$f")"; cp -p "$SRC/$f" "$DEST/$f"; echo "  copy           $f"; fi
-      copied=$((copied+1))
     fi
   done
 }
@@ -67,23 +93,54 @@ reset_commands_table() { # reset_commands_table <constitution-file>
   echo "  reset          $name '## Commands' table -> placeholders"
 }
 
-echo "VULYK -> $DEST ${CHECK:+(dry run)}"
+PREV="$(cat "$DEST/.claude/vulyk-version" 2>/dev/null || echo none)"
+if [ -n "$UPGRADE" ]; then
+  echo "VULYK upgrade -> $DEST  ($PREV -> $VER) ${CHECK:+(dry run)}"
+  [ "$PREV" = "none" ] && echo "  note: no .claude/vulyk-version found - upgrading a pre-0.5.0 install; review the output below with extra care."
+else
+  echo "VULYK $VER -> $DEST ${CHECK:+(dry run)}"
+fi
+
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr; do copy_tree "$tree"; done
 mkdir -p "$DEST/memory/learnings" "$DEST/memory/snapshots" "$DEST/docs/wiki" "$DEST/docs/specs" "$DEST/docs/adr" 2>/dev/null || true
 [ -f "$DEST/memory/stats/skills.json" ] || { [ "$CHECK" = "--check" ] || { mkdir -p "$DEST/memory/stats"; echo '{}' > "$DEST/memory/stats/skills.json"; }; }
 
-# Constitution: never overwrite
+# Constitution: never overwritten - not on install, not on upgrade. A bootstrapped
+# constitution is the user's tailored law; merging framework-side changes into it is a
+# reading decision, not a copying one.
 if [ -f "$DEST/CLAUDE.md" ]; then
-  if [ "$CHECK" != "--check" ]; then
-    cp -p "$SRC/CLAUDE.md" "$DEST/CLAUDE.vulyk.md"
-    reset_commands_table "$DEST/CLAUDE.vulyk.md"
+  if head -3 "$DEST/CLAUDE.md" 2>/dev/null | grep -q '^# VULYK Constitution' || \
+     grep -q 'VULYK:COMMANDS:START' "$DEST/CLAUDE.md" 2>/dev/null; then
+    # The project's CLAUDE.md IS a vulyk constitution (installed earlier, possibly edited;
+    # note the COMMANDS markers are eaten by reset_commands_table on install, so the title
+    # is the durable fingerprint). Writing CLAUDE.vulyk.md next to it would create a
+    # second, conflicting constitution.
+    echo ""
+    echo "  CLAUDE.md is already a VULYK constitution - left untouched."
+    if ! cmp -s "$SRC/CLAUDE.md" "$DEST/CLAUDE.md"; then
+      echo "  The framework constitution changed in $VER. See what, then merge what you want:"
+      echo "      diff \"$DEST/CLAUDE.md\" \"$SRC/CLAUDE.md\""
+    fi
+  elif [ -e "$DEST/CLAUDE.vulyk.md" ]; then
+    echo ""
+    echo "  CLAUDE.vulyk.md exists - left untouched."
+    if ! cmp -s "$SRC/CLAUDE.md" "$DEST/CLAUDE.vulyk.md"; then
+      echo "  The framework constitution changed in $VER. See what, then merge what you want:"
+      echo "      git -C \"$SRC\" log --oneline -- CLAUDE.md   # or simply:"
+      echo "      diff \"$DEST/CLAUDE.vulyk.md\" \"$SRC/CLAUDE.md\""
+    fi
   else
-    reset_commands_table "$SRC/CLAUDE.md"   # dry run: inspect the source, touch nothing
+    if [ "$CHECK" != "--check" ]; then
+      cp -p "$SRC/CLAUDE.md" "$DEST/CLAUDE.vulyk.md"
+      reset_commands_table "$DEST/CLAUDE.vulyk.md"
+    else
+      reset_commands_table "$SRC/CLAUDE.md"   # dry run: inspect the source, touch nothing
+    fi
+    echo ""
+    echo "  CLAUDE.md exists - wrote CLAUDE.vulyk.md instead."
+    echo "  Add this line to your CLAUDE.md to activate VULYK:"
+    echo "      @CLAUDE.vulyk.md"
   fi
-  echo ""
-  echo "  CLAUDE.md exists - wrote CLAUDE.vulyk.md instead."
-  echo "  Add this line to your CLAUDE.md to activate VULYK:"
-  echo "      @CLAUDE.vulyk.md"
 else
   if [ "$CHECK" = "--check" ]; then
     reset_commands_table "$SRC/CLAUDE.md"   # dry run: inspect the source, touch nothing
@@ -95,9 +152,24 @@ else
 fi
 [ -f "$DEST/AGENTS.md" ] || { [ "$CHECK" = "--check" ] || cp -p "$SRC/AGENTS.md" "$DEST/AGENTS.md"; }
 
+# Version stamp - what a future --upgrade reads as "from".
+if [ "$CHECK" = "--check" ]; then
+  echo "  would stamp    .claude/vulyk-version = $VER"
+else
+  mkdir -p "$DEST/.claude"
+  printf '%s\n' "$VER" > "$DEST/.claude/vulyk-version"
+  echo "  stamp          .claude/vulyk-version = $VER"
+fi
+
 chmod +x "$DEST"/.claude/hooks/*.sh 2>/dev/null || true
+chmod +x "$DEST"/scripts/*.sh 2>/dev/null || true
 chmod +x "$DEST"/scripts/git-hooks/post-merge 2>/dev/null || true
 
 echo ""
-echo "Done. Next: cd $DEST && claude  ->  /vulyk-bootstrap"
-echo "Optional: cp scripts/git-hooks/post-merge .git/hooks/post-merge && chmod +x .git/hooks/post-merge"
+if [ -n "$UPGRADE" ]; then
+  echo "Done. Upgraded framework files only; your CLAUDE.md, memory/, specs, ADRs and wiki were not touched."
+  echo "If the constitution changed this release, merge those edits by hand (see note above)."
+else
+  echo "Done. Next: cd $DEST && claude  ->  /vulyk-bootstrap"
+  echo "Optional: cp scripts/git-hooks/post-merge .git/hooks/post-merge && chmod +x .git/hooks/post-merge"
+fi

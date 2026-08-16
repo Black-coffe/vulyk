@@ -37,9 +37,9 @@ conversation. The reasoning is in [token-economy.md](token-economy.md).
 ## The working loop
 ```text
 /vulyk-plan "add CSV export to the reports module"
-  -> tier announced, scouts dispatched, stories written, approval requested
+  -> tier announced, scouts dispatched, stories cut into waves, wave-check, approval requested
 /vulyk-build
-  -> workers implement stories on Sonnet, parallel where independent
+  -> wave by wave: parallel Sonnet workers on disjoint files, one commit per story
 /vulyk-review
   -> adversarial Opus gate; BLOCK findings loop back as fix stories
 ```

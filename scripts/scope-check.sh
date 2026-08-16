@@ -9,8 +9,11 @@
 #          scripts/scope-check.sh docs/specs/oauth/oauth-01.md
 #          scripts/scope-check.sh docs/specs/oauth/oauth-01.md main...HEAD
 #
-# Default range is the working tree (staged + unstaged) against HEAD, because VULYK's
-# build loop does not commit per story - measure where the event actually happens.
+# Default range is the working tree (staged + unstaged) against HEAD. Since v0.5.0 the
+# build loop commits per story, so at the moment /vulyk-build runs this - after a worker
+# returns, before its story is committed - the default range is exactly that story's
+# diff. Earlier stories are already behind HEAD and no longer contaminate the numbers.
+# To re-measure a story after its commit, pass its range: `scope-check.sh <story> HEAD~1..HEAD`.
 #
 # Two numbers are recorded, and the second one is what stops the first from being gamed:
 #   out_of_scope  - files changed that the story never named   (lower is better)

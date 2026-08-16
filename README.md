@@ -68,6 +68,15 @@ claude
 > /vulyk-bootstrap
 ```
 
+**Upgrading an existing install**
+
+```bash
+git -C /tmp/vulyk pull
+/tmp/vulyk/install.sh /path/to/your/project --upgrade   # add --check to preview
+```
+
+`--upgrade` replaces changed framework-owned files (agents, commands, hooks, templates, scripts) and touches nothing of yours — not your constitution, memory, specs, ADRs or wiki. The installed version is stamped in `.claude/vulyk-version`; constitution changes are pointed out for you to merge by hand.
+
 `/vulyk-bootstrap` runs a short interview (stack, size, conventions, risk tolerance, token budget), then tailors the constitution, prunes the agent roster, builds an initial codebase map with scout drones, and seeds the wiki. **From that point on you work through three commands:**
 
 ```text
@@ -113,6 +122,16 @@ Routing happens **before** any work starts. The Queen classifies every request i
 
 **Bookend rule:** spend top-model tokens at the two points where they change everything downstream — planning and final review. Everything in between runs on the cheaper tier.
 
+## The build discipline
+
+Since v0.5.0, the middle of the pipeline — where the tokens are spent and where parallel agents historically eat each other's work — runs under rules absorbed from [Autopilot](https://github.com/nick-vels/skills) (MIT, © Nick Vels), re-grounded in VULYK's deterministic-gates philosophy:
+
+- **Waves.** Every story carries `wave:` and `blocked_by:` frontmatter. One wave = one message, all its workers genuinely concurrent. Stories in a wave must declare **disjoint `## Files`** — `scripts/wave-check.sh` verifies that (plus blocker order and dangling references) before anything is dispatched. Zero tokens, zero model: two concurrent workers on one file silently overwrite each other, and this is the check that makes it impossible to miss.
+- **One story, one commit.** Each returning story is closed individually: scope gate → quiet verification → its own commit. That gives every story a rollback point, and it fixes the scope metric itself — the diff being measured is now exactly that story's, not the pileup of everything before it.
+- **Bounded returns.** A worker's final message is a ≤25-line report (`STATUS` / `FILES` / `TESTS` / `INTERFACES` / `CONCERNS` / `BLOCKERS`) — never a diff, never raw test output. Worker returns live in the Queen's context until the end of the run; this contract is what keeps a 12-story build from drowning the one context that is never refreshed.
+- **Repair with a ceiling.** `NEEDS_CONTEXT` means the *story* was defective — fix the plan, not the worker. A wall gets one fresh worker with the findings attached as conditions to satisfy. The third attempt does not exist: the story goes `blocked` and returns to planning.
+- **The Queen's hands stay off story code** (Law 5). From the moment a story file exists, every edit to its files — the two-line fix included — travels through a worker. Descoping mid-build is recorded in `## Descoped`, never silent.
+
 What changed with Opus 5 is the *reason* for the bookend, not its shape. The binding problem is no longer that a frontier model is unaffordable — it is that a frontier model does more than it was asked. Anthropic's system card attributes the dip in coding scores at high effort to the model making more changes than the task required. The cascade now earns its keep by holding scope; the savings are a side effect.
 
 ## Command reference
@@ -121,7 +140,7 @@ What changed with Opus 5 is the *reason* for the bookend, not its shape. The bin
 |---|---|
 | `/vulyk-bootstrap` | Interview → tailored constitution, pruned roster, initial map & wiki seed |
 | `/vulyk-plan <goal>` | Queen mode: scouts recon, plan + story files written to `docs/specs/`, tier assigned, approval requested |
-| `/vulyk-build [story]` | Execute approved stories with cascade-routed workers, parallel where independent |
+| `/vulyk-build [story]` | Execute the plan wave by wave: parallel workers on disjoint files, one commit per story |
 | `/vulyk-review [scope]` | Adversarial `lead-review` pass; blocks on critical findings |
 | `/vulyk-map [path]` | (Re)build the codebase map for a path using parallel scout batches |
 | `/vulyk-evolve` | Weekly self-evolution: mine learnings & usage stats → propose config diffs as a reviewable changeset |
@@ -180,7 +199,9 @@ Most agent frameworks — this one included, until now — ship claims nobody ch
 
 **Measured on this repository.** Where `effort` actually applies (session yes, agent frontmatter no) and what each level costs in output tokens. The numbers and the method are in [docs/model-cascade.md](docs/model-cascade.md); the raw finding is in `memory/learnings/`.
 
-**Measured from now on, by `scripts/scope-check.sh`.** Two numbers per story, appended to `memory/stats/scope.jsonl`: how many files the story declared, and how many files the diff touched that it never named. Deterministic, no model involved, zero tokens. `/vulyk-review` runs it. The second number is what keeps the first honest — a story that lists half the repository scores a perfect zero and is caught by its own declaration count.
+**Measured from now on, by `scripts/scope-check.sh`.** Two numbers per story, appended to `memory/stats/scope.jsonl`: how many files the story declared, and how many files the diff touched that it never named. Deterministic, no model involved, zero tokens. `/vulyk-review` runs it. The second number is what keeps the first honest — a story that lists half the repository scores a perfect zero and is caught by its own declaration count. Since v0.5.0 the build commits per story, so each measurement covers exactly one story's diff instead of the pileup of everything before it.
+
+**Checked before every dispatch, by `scripts/wave-check.sh`.** File collisions between concurrently-dispatched stories, blocker ordering, dangling `blocked_by` references — the defects that silently destroy parallel work. Same currency: deterministic, model-free, free.
 
 **Not measured.** Whether the cascade beats an all-Opus baseline on output quality. Whether the memory plane beats simply letting a 1M-token window read the repository. Whether moving recon off Haiku helped or just cost more. Whether `/vulyk-evolve` improves anything — it has never been run against real data, which is why it is being rebuilt around the scope metric rather than shipped as-is.
 
@@ -202,12 +223,17 @@ Claims of the form "N× cheaper" or "near-parity quality" have been removed from
 
 [Getting started](docs/getting-started.md) · [Architecture](docs/architecture.md) · [Model cascade](docs/model-cascade.md) · [Token economy](docs/token-economy.md) · [Memory system](docs/memory-system.md) · [Self-evolution](docs/self-evolution.md) · [Command reference](docs/command-reference.md) · [Hooks reference](docs/hooks-reference.md) · [FAQ](docs/faq.md)
 
-## Roadmap
+## Roadmap — the road to 1.0.0
 
-- [ ] Deterministic pipelines on the Claude Code Workflows API once it stabilizes (example shape in `.claude/workflows/`)
-- [ ] Plugin-marketplace packaging (`/plugin install vulyk`)
-- [ ] Worktree fan-out preset for issue-driven parallelism
-- [ ] Public eval harness: cascade vs. single-model baselines on open tasks
+VULYK is absorbing the best of [Autopilot](https://github.com/nick-vels/skills) — the discipline that a user's request survives, verbatim and traceable, from idea to running code. The full 40-agent analysis behind this plan lives in [`docs/specs/autopilot-merge/`](docs/specs/autopilot-merge/plan.md). Each minor is battle-tested on real projects before the next ships:
+
+- [x] **v0.5.0 — parallel build made safe.** Waves, per-story commits, bounded worker returns, repair ceiling, `wave-check.sh`, `install.sh --upgrade`.
+- [ ] **v0.6.0 — secrets & claims hygiene.** Redaction piped into learnings/handoff writers, irreversible-action rule in every Bash-holding agent, every doc claim re-verified on the current client.
+- [ ] **v0.7.0 — traceability spine.** Verbatim `brief.md` per spec, requirement quotes in stories, deterministic `trace-check.sh` (forward + backward), briefing question discipline.
+- [ ] **v0.8.0 — independence gates.** Blind coverage check (brief + plan only) before approval; blind acceptance (brief + running repo only) after build — the checker that can disagree with the framework's own account of itself.
+- [ ] **v0.9.x — memory hardening & optional instruments.** Diff-sourced docs drone, ADR harvest from plan deltas, optional `state.json` build dashboard derived from story frontmatter.
+- [ ] **1.0.0** when: ten real Tier 2–4 specs with clean scope/trace/acceptance series, `--upgrade` proven across two minors, zero unverified claims in the docs, zero known silent-loss paths.
+- [ ] After 1.0.0: plugin-marketplace packaging, worktree fan-out preset, public eval harness.
 
 ## Contributing
 

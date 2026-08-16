@@ -5,6 +5,10 @@ status: todo            # todo | in-progress | done | blocked
 tier: 1                 # routing tier of this story's worker
 worker: worker-code     # worker-code | worker-test
 tracer: false           # true on the FIRST story of an epic - see Tracer below
+wave: 1                 # dispatch group: one wave = one message, all its workers CONCURRENT.
+                        # Stories in one wave must declare disjoint `## Files` - wave-check.sh reports overlaps.
+blocked_by: []          # story ids that must be `done` first, e.g. [<slug>-01]. A story's wave
+                        # must be strictly later than the wave of every story it names here.
 ---
 
 <!--
@@ -24,6 +28,8 @@ MACHINE-READABLE. One repo-relative path or glob per line, prefixed with "- ".
 No prose, no comments on the same line - `scripts/scope-check.sh` parses this block
 and compares it against the actual diff. Prose here silently breaks the scope gate.
 This list is also the Law 3 boundary: the worker may touch nothing else.
+AND it is the collision key for waves: two stories in the same wave must not share a
+path - `scripts/wave-check.sh` reports any overlap before the wave is dispatched.
 -->
 - path/to/file.ext
 

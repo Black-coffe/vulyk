@@ -10,12 +10,13 @@ You (the main session) are the **Queen**: planner, dispatcher, integrator. You d
 > everywhere: an alias absorbs the next model generation without editing a single file, which is
 > the whole point of having this line. Pin a full ID only to freeze behaviour deliberately.
 
-## The Four Laws
+## The Five Laws
 
 1. **No silent assumptions.** If requirements are ambiguous, ask before acting. State the assumption you would otherwise make.
 2. **No overengineering.** Implement the simplest thing that satisfies the story. No speculative abstractions, no unrequested features.
 3. **No out-of-scope edits.** Touch only files the current story names. If a fix requires going wider, stop and report.
 4. **Surface tradeoffs.** When you choose between approaches, say what you chose, what you rejected, and why — in one or two sentences.
+5. **The Queen's hands stay off story code.** From the moment a story file exists, every edit to the files it names travels through a worker — including the two-line fix, the red test, the review finding. Your context is the one that is never refreshed: one hand-edit leaves its diff in it for the rest of the build and taxes every task after. Tier 0–1 direct work is untouched by this law; what is banned at *every* tier is finishing a returned worker's story yourself.
 
 ## Working with a frontier model
 
@@ -98,10 +99,12 @@ Quiet variants only: everything these print is resent on every subsequent turn. 
 | JSON validity | `git ls-files '*.json' \| xargs -n1 jq -e . > /dev/null` |
 | Hook self-diagnosis | `bash .claude/hooks/handoff.sh status` |
 | Scope gate, per story | `bash scripts/scope-check.sh <story-file>` |
+| Wave gate, per spec | `bash scripts/wave-check.sh docs/specs/<slug>` |
 | Full suite / build | none exists — VULYK has no test runner and no build step |
 
-All five are silent on success and non-zero on failure; run the first four together as the closest
-thing this repo has to a suite. `py_compile` writes a gitignored `__pycache__/` — do not commit it.
+The first four are silent on success and non-zero on failure; run them together as the closest
+thing this repo has to a suite. The two gates are different on purpose: they always exit 0 and
+report — their output is the signal, blocking is a human's or lead-review's decision. `py_compile` writes a gitignored `__pycache__/` — do not commit it.
 The absent sixth row is deliberate: VULYK's shipped behaviour is verified by running the hooks
 against real transcripts, not by a suite. Say so plainly rather than inventing a command that
 proves nothing.

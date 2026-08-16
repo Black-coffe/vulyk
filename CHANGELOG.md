@@ -2,6 +2,62 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.5.0] - 2026-08-16
+
+First release of the Autopilot merge: parallel build made safe and cheap. Design decisions,
+resolved conflicts and the roadmap to 1.0.0 are in `docs/specs/autopilot-merge/plan.md` — the
+synthesis of a 40-agent analysis (9 lenses × opus/sonnet/haiku panel + 3 adversarial judges)
+of VULYK v0.4.2 against [Autopilot](https://github.com/nick-vels/skills) (MIT, © Nick Vels).
+
+### Added
+- **Waves.** `templates/story.md` frontmatter gains `wave:` and `blocked_by:`. Stories in one
+  wave are dispatched concurrently and must declare disjoint `## Files` — the file list is now
+  also the collision key. `queen-planner` decides the boundaries at plan time, in the one
+  context that has seen the whole plan.
+- **`scripts/wave-check.sh`** — second deterministic gate alongside scope-check: reports file
+  collisions within a wave, blocker-order violations, dangling `blocked_by` ids and empty
+  `## Files` blocks. Model-free, token-free, always exits 0; `/vulyk-plan` runs it before the
+  approval stop and `/vulyk-build` re-runs it before dispatching.
+- **Bounded worker returns.** `worker-code` and `worker-test` end with a ≤25-line report
+  (`STATUS`/`FILES`/`TESTS`/`INTERFACES`/`CONCERNS`/`BLOCKERS`) — never diffs or raw logs.
+  New `NEEDS_CONTEXT` status separates a defective story (a plan bug) from a worker failure.
+- **Law 5 — the Queen's hands stay off story code.** From the moment a story file exists,
+  every edit to its files travels through a worker; at every tier, a returned worker's story
+  is never finished by hand. Tier 0–1 direct work is explicitly untouched.
+- **`install.sh --upgrade`** (pulled forward from the v0.6.0 plan): syncs framework-owned
+  files (agents, commands, hooks, meta-skills, bootstrap, templates, scripts) to the new
+  version, never touches the constitution, memory, specs, ADRs or wiki, and points out
+  constitution changes to merge by hand. `.claude/vulyk-version` stamp records the installed
+  version; a `VERSION` file at the repo root is its source. An installed (marker-eaten,
+  possibly edited) constitution is recognized by its title, so an upgrade no longer offers a
+  second, conflicting `CLAUDE.vulyk.md`.
+
+### Changed
+- **`/vulyk-build` rewritten around the wave loop.** One message per wave (that is what makes
+  workers actually concurrent); each returning story closed individually: scope-check → quiet
+  verification → **one commit per story** (`story(<slug>-NN): <title>`) → status. Repair is
+  capped at two rounds, findings attached as conditions, third attempt = `blocked` + re-plan.
+  Mid-build narrowing is recorded in `## Descoped` in plan.md, never silent. The final full
+  verification runs outside the main context (subagent or `tail -30`).
+- **`scope-check.sh` measures per story now.** With per-story commits, the default
+  working-tree range at close time is exactly the closing story's diff — the numbers in
+  `memory/stats/scope.jsonl` stop being contaminated by earlier stories in the same build.
+- `/vulyk-review` on `BLOCK` converts every finding worth acting on — not only criticals —
+  into fix stories routed through the cascade (Law 5: no hand-patching).
+- `queen-planner` right-sizing table extended: Tier 3 ≈ 4–8 stories, Tier 4 up to ~16,
+  past that the goal splits into separate specs. Calibration, not targets.
+
+### Notes
+- Adopted from Autopilot by decision of the panel: waves, bounded returns, repair ceiling,
+  per-story commits, the orchestrator-keyboard law, descope records. Explicitly refused, with
+  reasons recorded in the plan: modes/depth/polish dials, the R##/A##/D## manifest ledger,
+  `.autopilot/` as a second storage root, persistent reviewers (experimental-flag-bound),
+  per-story model review, the dashboard as a source of truth.
+- `wave-check.sh` verified against synthetic specs covering all four defect classes plus
+  glob-vs-path and directory-prefix collisions; `install.sh` fresh/reinstall/upgrade paths
+  verified on throwaway projects, including user-file immunity and the no-duplicate-
+  constitution case.
+
 ## [0.4.2] - 2026-08-16
 
 Stops v0.4.1's filled-in `## Commands` table from reaching other people's projects.

@@ -1,0 +1,6 @@
+# Shell and Python must check out with LF everywhere: install.sh runs on Linux/macOS/Git Bash,
+# and a CRLF shebang line breaks all three in different ways.
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+scripts/git-hooks/* text eol=lf
