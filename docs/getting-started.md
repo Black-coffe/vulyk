@@ -15,6 +15,8 @@ git clone https://github.com/Black-coffe/vulyk /tmp/vulyk
 ```
 The installer copies `.claude/`, `memory/`, `docs/wiki/`, `templates/`, `bootstrap/`, and the constitution. It never overwrites an existing `CLAUDE.md` - it writes `CLAUDE.vulyk.md` and prints the one-line import to add.
 
+One thing it deliberately does *not* copy verbatim: the `## Commands` table. Those rows are VULYK's own verification commands, and a wrong command that still exits 0 reads as a passing check. The installer blanks the table back to placeholders for `/vulyk-bootstrap` to fill, and says so in its output - or warns loudly if it cannot find the markers it anchors to.
+
 ## First session
 ```bash
 cd your-project

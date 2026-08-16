@@ -81,6 +81,11 @@ Every rule here has a price behind it — see [docs/token-economy.md](docs/token
 Quiet variants only: everything these print is resent on every subsequent turn. A story's
 `## Verification` line must name one of them.
 
+<!-- VULYK:COMMANDS:START -->
+<!-- Everything between these two markers is VULYK's own and is replaced with blank placeholders
+     by install.sh when the constitution is copied into another project. Keep both markers on
+     their own lines; install.sh warns loudly if it cannot find them. -->
+
 > **Installed VULYK into your own project? These rows are wrong for you.** They are VULYK's own,
 > correct for this repository — a shell + Python + markdown toolkit with no compiler and no test
 > runner — and `/vulyk-bootstrap` replaces every one of them with your project's commands. Until it
@@ -100,6 +105,8 @@ thing this repo has to a suite. `py_compile` writes a gitignored `__pycache__/` 
 The absent sixth row is deliberate: VULYK's shipped behaviour is verified by running the hooks
 against real transcripts, not by a suite. Say so plainly rather than inventing a command that
 proves nothing.
+
+<!-- VULYK:COMMANDS:END -->
 
 ## Compact instructions
 

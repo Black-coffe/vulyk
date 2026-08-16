@@ -2,6 +2,28 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.4.2] - 2026-08-16
+
+Stops v0.4.1's filled-in `## Commands` table from reaching other people's projects.
+
+### Added
+- `install.sh` now blanks the `## Commands` table back to placeholders when it copies the
+  constitution (into `CLAUDE.md` or `CLAUDE.vulyk.md` alike). Those rows are VULYK's own shell and
+  Python syntax checks: harmless-looking, and they exit 0 on any repository, which is exactly what
+  makes them dangerous elsewhere — a false green is worse than a visible placeholder.
+- `VULYK:COMMANDS:START` / `VULYK:COMMANDS:END` markers in `CLAUDE.md` for the installer to anchor
+  to. When they are missing — an edited constitution, an older copy — the installer prints a
+  **warning** and leaves the table alone rather than quietly matching nothing. A silent no-op is
+  the failure mode the whole mechanism exists to prevent, so it is the one outcome ruled out.
+  `CONTRIBUTING.md` now tells contributors to keep the markers.
+
+### Notes
+- Verified with a 20-check suite over real installs: fresh directory, directory with an existing
+  `CLAUDE.md` (untouched, byte for byte), `--check` dry run (announces, writes nothing), a source
+  with the markers stripped (warns, still exits 0), and two installs producing byte-identical
+  output. The surrounding constitution survives intact — heading, following section, and file tail.
+- `CONTRIBUTING.md` gains the real dev-verification block, replacing a stale one-liner.
+
 ## [0.4.1] - 2026-08-16
 
 Fills in the `## Commands` table v0.4.0 shipped empty — for VULYK itself.
