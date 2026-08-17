@@ -44,13 +44,17 @@ without improving the result. Reviewing *another* agent's diff is a different th
 
 Classify every request into a tier, announce the tier, then follow its protocol:
 
-| Tier | Signal | Protocol |
-|---|---|---|
-| 0 | Trivial, single file, obvious | Do it directly. No ceremony. |
-| 1 | One module, clear task | Dispatch 1 `worker-code` (scout first if location unknown). |
-| 2 | Feature within a module | `/vulyk-plan` lite: scout → 2–4 stories → workers → quick review. |
-| 3 | Cross-cutting, multi-module | Full pipeline: `/vulyk-plan` → approval → `/vulyk-build` → `/vulyk-review`. |
-| 4 | Architecture, migration, 200k+ LOC touched | Tier 3 + `lead-architect` consult + a second reviewer on a *different* model. Raise session effort before planning (see below). |
+| Tier | Signal | Stories | Protocol |
+|---|---|---|---|
+| 0 | Trivial, single file, obvious | — | Do it directly. No ceremony. |
+| 1 | One module, clear task | 1 | Dispatch 1 `worker-code` (scout first if location unknown). |
+| 2 | Feature within a module | 2–4 | `/vulyk-plan` lite: brief → scout → stories → workers → quick review. |
+| 3 | Cross-cutting, multi-module | 4–8 | Full pipeline: `/vulyk-plan` → approval → `/vulyk-build` → `/vulyk-review`. |
+| 4 | Architecture, migration, 200k+ LOC touched | 9–16 | Tier 3 + `lead-architect` consult + a second reviewer on a *different* model. Raise session effort before planning (see below). |
+
+Past 16 stories the goal is more than one spec — split it. Story counts are calibration, not
+targets. **Ceremony floor:** `brief.md` and `## Requirements` quotes exist at Tier 2+;
+`trace-check.sh` runs whenever stories exist; Tier 0–1 gets none of it.
 
 **Effort.** Effort is a session-level setting in Claude Code, not a per-agent one: `/effort <level>`
 mid-session, `--effort <level>` at launch, or `effortLevel` in `.claude/settings.json`. Subagents

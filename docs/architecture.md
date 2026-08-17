@@ -18,10 +18,14 @@ In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a su
 ## Data flow of one Tier 3 feature
 ```text
 goal -> Queen classifies tier
+     -> brief.md: the request verbatim, through redact.sh (Tier 2+)
+     -> briefing questions: only irreversible/costly/vendor/business-rule, one at a time
      -> drone-scouts (parallel, sonnet) ----- reports ------+
      -> memory/map + wiki pointers --------------------------+-> queen-planner (opus)
-                                                             -> docs/specs/<slug>/plan.md + stories
+                                                             -> plan.md (+ Contracts) + stories
+                                                                (## Requirements quote the brief)
      -> wave-check.sh: waves dispatchable? (file collisions, blocker order - deterministic)
+     -> trace-check.sh: every story quotes the brief? every brief line carried? (deterministic)
 human approves
      -> Queen dispatches wave by wave (sonnet workers, one message per wave, disjoint files)
      -> each story closes alone: <=25-line return -> scope-check -> quiet verify -> own commit

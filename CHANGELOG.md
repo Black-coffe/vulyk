@@ -2,6 +2,55 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.7.0] - 2026-08-17
+
+Traceability spine — the v0.7.0 slice of the Autopilot merge: the discipline that a
+human's request survives, verbatim and traceable, from idea to approved plan.
+
+### Added
+- **`docs/specs/<slug>/brief.md`** — `/vulyk-plan` now opens by writing the request
+  VERBATIM as a blockquote, piped through `redact.sh` (briefs are committed; secrets are
+  not), plus an `## Answers` section for briefing answers, also verbatim.
+- **Briefing discipline** as a `/vulyk-plan` step: look facts up first; only
+  irreversible / costly / vendor-choice / business-rule questions reach the human, one at
+  a time, each with a recommended default so silence has a safe meaning.
+- **`## Requirements` in `templates/story.md`** — verbatim quotes from brief.md, one `> `
+  line per fragment, explicitly EXEMPT from the ~1500-token story budget (user words are
+  never trimmed to fit). Tier 2+ only, per the ceremony floor.
+- **`templates/plan.md`** — the plan file gets a template at last: assumptions,
+  story-by-wave index, `## Contracts` (interfaces crossing story boundaries, pinned at
+  plan time by the one context that saw the whole plan), integration gate, `## Descoped`,
+  `## Plan deltas`, and the approval line `/vulyk-build` refuses without.
+- **`scripts/trace-check.sh`** — third deterministic gate, beside scope-check and
+  wave-check; report-only, exit 0, zero tokens. Backward: every story quote must appear
+  verbatim (whitespace-normalized) in brief.md — or in plan.md's `## Plan deltas` for
+  stories cut after approval, reported as `~` — so an invented or paraphrased requirement
+  and a quoteless story are both caught before the human approves. Forward: brief lines
+  no story quotes are listed; deciding "context, not requirement" belongs to the human.
+  Loud cannot-run branch on specs that predate the brief.
+- **Merge pass in `queen-planner`** — after decomposition, every story faces the
+  *payback test* (a story that will not pay back its own dispatch overhead folds into its
+  neighbour) and the *neighbour test* (if the adjacent story's worker would do this work
+  at marginal cost, the boundary is imaginary). Shipped as heuristics by name — the
+  analysis's re-orientation token figure was an estimate nobody measured, so per the
+  judges' verdict the number is not shipped as if it were.
+
+### Changed
+- `/vulyk-plan` is now 8 steps: tier → brief → briefing questions → recon → plan →
+  stories → wave-check + trace-check → approval stop (which now also presents uncovered
+  brief lines and both gate verdicts).
+- Routing matrix in CLAUDE.md gains a **Stories** column (0: —, 1: 1, 2: 2–4, 3: 4–8,
+  4: 9–16; past 16 = split into separate specs) and states the **ceremony floor**:
+  brief.md + requirement quotes at Tier 2+, trace-check whenever stories exist, Tier 0–1
+  exempt from all of it.
+- `queen-planner` receives the brief as a first-class input and must tie every story to
+  a verbatim quote — a story it cannot tie is speculative and gets cut or surfaced as an
+  assumption.
+- README, architecture flow, command reference updated; battle-test of the backward
+  trace (invented story, delta-sourced story, quoteless story, uncovered brief line —
+  all caught) ran against a synthetic spec; the two real Tier-3 plans the roadmap asks
+  for accrue on the next planning sessions.
+
 ## [0.6.0] - 2026-08-17
 
 Secrets & claims hygiene — the v0.6.0 slice of the Autopilot merge

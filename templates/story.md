@@ -15,12 +15,26 @@ blocked_by: []          # story ids that must be `done` first, e.g. [<slug>-01].
 Size budget: keep this file under ~1500 tokens (~6 KB). A story that does not fit is
 an epic wearing a disguise - split it. The budget is the mechanism: it forces the
 planner to decide what matters instead of pasting everything it read.
+The `## Requirements` quotes are EXEMPT from the budget - verbatim user words are never
+trimmed to fit.
 -->
 
 # <Story title>
 
 ## Goal
 <one paragraph - what exists after this story that does not exist now>
+
+## Requirements
+<!--
+Tier 2+ only; Tier 0-1 stories skip this section (ceremony floor). VERBATIM quotes from
+the spec's brief.md - the user's words, not a paraphrase - one `> ` blockquote line per
+quoted fragment. Quote the shortest fragment that justifies this story; a story that
+cannot quote any requirement is speculative work (cut it, or surface it as an assumption
+at the approval stop). `scripts/trace-check.sh` matches these lines against brief.md
+(and `## Plan deltas` in plan.md for stories cut after approval) whitespace-normalized
+and VERBATIM - do not fix the user's grammar inside a quote.
+-->
+> <verbatim fragment from brief.md>
 
 ## Files
 <!--

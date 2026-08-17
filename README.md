@@ -131,6 +131,7 @@ Since v0.5.0, the middle of the pipeline — where the tokens are spent and wher
 - **Bounded returns.** A worker's final message is a ≤25-line report (`STATUS` / `FILES` / `TESTS` / `INTERFACES` / `CONCERNS` / `BLOCKERS`) — never a diff, never raw test output. Worker returns live in the Queen's context until the end of the run; this contract is what keeps a 12-story build from drowning the one context that is never refreshed.
 - **Repair with a ceiling.** `NEEDS_CONTEXT` means the *story* was defective — fix the plan, not the worker. A wall gets one fresh worker with the findings attached as conditions to satisfy. The third attempt does not exist: the story goes `blocked` and returns to planning.
 - **The Queen's hands stay off story code** (Law 5). From the moment a story file exists, every edit to its files — the two-line fix included — travels through a worker. Descoping mid-build is recorded in `## Descoped`, never silent.
+- **The request survives verbatim.** Every Tier 2+ spec starts with `brief.md` — the human's words as a blockquote, passed through `redact.sh`, never paraphrased. Stories quote their `## Requirements` from it word-for-word, contracts between concurrent stories are pinned in plan.md at plan time, and `scripts/trace-check.sh` walks the chain both ways before approval: a story that cannot produce its quote is invented work; a brief line nobody quotes is a requirement about to be dropped. Deterministic, model-free, free.
 
 What changed with Opus 5 is the *reason* for the bookend, not its shape. The binding problem is no longer that a frontier model is unaffordable — it is that a frontier model does more than it was asked. Anthropic's system card attributes the dip in coding scores at high effort to the model making more changes than the task required. The cascade now earns its keep by holding scope; the savings are a side effect.
 
@@ -203,6 +204,8 @@ Most agent frameworks — this one included, until now — ship claims nobody ch
 
 **Checked before every dispatch, by `scripts/wave-check.sh`.** File collisions between concurrently-dispatched stories, blocker ordering, dangling `blocked_by` references — the defects that silently destroy parallel work. Same currency: deterministic, model-free, free.
 
+**Checked before every approval, by `scripts/trace-check.sh`.** Backward: every `## Requirements` quote in every story must appear *verbatim* in the spec's `brief.md` (or its recorded plan deltas) — a quote found nowhere is an invented or paraphrased requirement, and a story with no quotes is speculative work. Forward: brief lines no story quotes are listed for the human, who alone decides "that's context, not a requirement". Same currency again: deterministic, model-free, free.
+
 **Not measured.** Whether the cascade beats an all-Opus baseline on output quality. Whether the memory plane beats simply letting a 1M-token window read the repository. Whether moving recon off Haiku helped or just cost more. Whether `/vulyk-evolve` improves anything — it has never been run against real data, which is why it is being rebuilt around the scope metric rather than shipped as-is.
 
 Claims of the form "N× cheaper" or "near-parity quality" have been removed from this README. They may well be true; nobody here has measured them. When `scope.jsonl` has data from real projects, this section gets numbers instead of prose.
@@ -229,7 +232,7 @@ VULYK is absorbing the best of [Autopilot](https://github.com/nick-vels/skills) 
 
 - [x] **v0.5.0 — parallel build made safe.** Waves, per-story commits, bounded worker returns, repair ceiling, `wave-check.sh`, `install.sh --upgrade`.
 - [x] **v0.6.0 — secrets & claims hygiene.** Redaction piped into learnings/handoff writers, irreversible-action rule in every Bash-holding agent, every doc claim re-verified on the current client.
-- [ ] **v0.7.0 — traceability spine.** Verbatim `brief.md` per spec, requirement quotes in stories, deterministic `trace-check.sh` (forward + backward), briefing question discipline.
+- [x] **v0.7.0 — traceability spine.** Verbatim `brief.md` per spec, requirement quotes in stories, deterministic `trace-check.sh` (forward + backward), briefing question discipline.
 - [ ] **v0.8.0 — independence gates.** Blind coverage check (brief + plan only) before approval; blind acceptance (brief + running repo only) after build — the checker that can disagree with the framework's own account of itself.
 - [ ] **v0.9.x — memory hardening & optional instruments.** Diff-sourced docs drone, ADR harvest from plan deltas, optional `state.json` build dashboard derived from story frontmatter.
 - [ ] **1.0.0** when: ten real Tier 2–4 specs with clean scope/trace/acceptance series, `--upgrade` proven across two minors, zero unverified claims in the docs, zero known silent-loss paths.
