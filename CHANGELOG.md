@@ -2,6 +2,19 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.5.2] - 2026-08-17
+
+First battle-test of the v0.5.x build loop on a real Tier-3 pack (8 stories, 4 waves,
+katan/skervik S2.1.7b) passed: waves dispatched with no file collisions, one commit per
+story, NEEDS_CONTEXT and Law 5 both fired and held. The test surfaced one metric leak:
+
+### Fixed
+- `scope-check.sh` counted the story file itself as out-of-scope. The build loop commits
+  the story alongside its code (the `status:` line changes, one commit per story), so every
+  scope.jsonl entry carried a constant `out_of_scope: 1` of noise and a clean scope report
+  was unreachable by construction. The story file is now dropped from the measurement
+  (both `changed` and `out_of_scope`); paths are normalized against a leading `./`.
+
 ## [0.5.1] - 2026-08-16
 
 First battle-test of `--upgrade` (a real pre-0.5.0 install) caught three leaks in the

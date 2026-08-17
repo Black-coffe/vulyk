@@ -20,6 +20,9 @@
 #   declared      - how many paths the story named             (a story that lists half
 #                   the repo scores a perfect zero and is caught by this number)
 #
+# The story file itself is never counted: the build loop commits it alongside the code
+# (status line, one-commit-per-story), so it is bookkeeping, not scope.
+#
 # Exit status is always 0: this reports, it does not block. Blocking is lead-review's job.
 
 set -u
@@ -61,7 +64,10 @@ if [ -n "$RANGE" ]; then
 else
   CHANGED="$(git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null)"
 fi
-CHANGED="$(printf '%s\n' "$CHANGED" | grep -v '^$' | sort -u)"
+# The story file rides along with every per-story commit (its status line changes) -
+# drop it from the measurement entirely so each entry reflects code, not bookkeeping.
+STORY_REL="${STORY#./}"
+CHANGED="$(printf '%s\n' "$CHANGED" | grep -v '^$' | grep -Fxv "$STORY_REL" | sort -u)"
 
 CHANGED_N=0
 [ -n "$CHANGED" ] && CHANGED_N="$(printf '%s\n' "$CHANGED" | grep -c .)"
