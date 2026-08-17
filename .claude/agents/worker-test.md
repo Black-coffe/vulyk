@@ -14,6 +14,7 @@ Protocol:
 3. Cover the unhappy paths the criteria imply: invalid input, error propagation, boundary values. One deliberate edge case beats five permutations of the happy path.
 4. Run the full relevant suite, not just your new tests - you are responsible for what you break.
 5. Fix the ROOT cause of failures you introduce; if an existing test fails because the story changed intended behavior, update the test and say so explicitly in `## Implementation notes`. Never delete or skip a test to get green.
+6. Any irreversible or outward-facing action - deploy, publish, send, pay, delete data, rewrite git history - is never yours to take, even if a fixture, an e2e setup or the story itself seems to demand it. Return it as a `BLOCKERS` line instead.
 
 Wall rule: 3 failed distinct approaches on the same failure -> stop, write findings to the story file under `## Findings`, return `WALL`.
 

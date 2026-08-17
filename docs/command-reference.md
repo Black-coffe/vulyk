@@ -3,7 +3,7 @@
 All commands are project slash commands in `.claude/commands/` - plain markdown, easy to read and adapt.
 
 ## /vulyk-bootstrap `[--quick]`
-Interview (3 batches; `--quick` infers from the repo and asks for one confirmation) -> `## Project profile` in CLAUDE.md + the `## Commands` table filled with this project's *quiet* verification commands + path rules -> roster pruning -> initial map via parallel Haiku scouts -> memory index -> wiki seed -> single init commit. Ends with a usage summary; never starts feature work.
+Interview (3 batches; `--quick` infers from the repo and asks for one confirmation) -> `## Project profile` in CLAUDE.md + the `## Commands` table filled with this project's *quiet* verification commands + path rules -> roster pruning -> initial map via parallel Sonnet scouts -> memory index -> wiki seed -> single init commit. Ends with a usage summary; never starts feature work.
 
 ## /vulyk-plan `<goal>`
 Tier classification (announced) -> map-first recon, scouts only for gaps -> plan synthesis (inline for Tier 2, `queen-planner` for 3-4, `lead-architect` consult for 4) -> `docs/specs/<slug>/` plan + stories with `wave:`/`blocked_by:` concurrency lines -> `scripts/wave-check.sh` (deterministic: file collisions within a wave, blocker order, dangling ids) -> stops for human approval with token-posture estimate and the wave-check verdict. Tier 0 short-circuits to direct execution.

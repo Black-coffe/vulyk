@@ -2,6 +2,44 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.6.0] - 2026-08-17
+
+Secrets & claims hygiene — the v0.6.0 slice of the Autopilot merge
+(`docs/specs/autopilot-merge/plan.md` §4). Distribution (`--upgrade` + version stamp) was
+pulled forward into v0.5.0/0.5.1 and battle-tested there; the effort claim was re-measured
+and restated back in v0.4.0. What remained ships here.
+
+### Added
+- **`scripts/redact.sh`** — deterministic stdin→stdout secret mask (AWS/GitHub/Slack/
+  Google/`sk-*` tokens, JWTs, Bearer headers, URL credentials, PEM private-key blocks,
+  `password=`/`api_key:`-style assignments). The only VULYK script that transforms instead
+  of reports; still never blocks — if the sed dialect rejects the expressions it degrades
+  to `cat`, because eating a handoff would be a silent-loss path of its own.
+- **`CLAUDE.md` `## Secrets`** — secrets never enter the paperwork (env-var names, not
+  values); redaction is a seatbelt, not permission; a secret that reaches git is rotated,
+  not deleted.
+
+### Changed
+- `session-end-learnings.sh` pipes distilled learnings through `redact.sh` —
+  `memory/learnings/` is committed to git.
+- `handoff.py` passes the whole dump through `redact.sh` before writing (subprocess with a
+  minimal built-in regex fallback for bash-less environments) — handoffs are gitignored
+  but re-injected into future sessions and routinely shared.
+- Irreversible-action rule now stated in **every** Bash-holding agent: `worker-code`
+  already had it (v0.5.0); `worker-test` and `lead-review` (which gained Bash later) now
+  carry it too — the plan's "both Bash-holding agents" predates lead-review holding Bash.
+- Haiku→Sonnet drift fixed where docs still claimed drones run on Haiku:
+  `docs/architecture.md` (caste table + flow diagram), `docs/command-reference.md`,
+  `docs/getting-started.md`, `/vulyk-map`'s description, and CLAUDE.md's own Bookend rule.
+  Frontmatter (`model: sonnet` since v0.2.0) is the truth; the honest "not measured"
+  caveat stays in `docs/model-cascade.md`. Remaining Haiku mentions (autolearn distiller,
+  alias examples) are accurate and stand.
+
+### Removed
+- `.claude/workflows/` (experimental README + example JS). VULYK's pipelines ship as slash
+  commands; the sketch referenced a roadmap line that no longer exists. Existing installs
+  keep their copy — `--upgrade` never deletes; remove it by hand if you never enabled it.
+
 ## [0.5.2] - 2026-08-17
 
 First battle-test of the v0.5.x build loop on a real Tier-3 pack (8 stories, 4 waves,

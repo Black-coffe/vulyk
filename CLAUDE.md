@@ -69,13 +69,25 @@ more than the effort change saves; prefer setting it once at the start of a sess
 Every rule here has a price behind it — see [docs/token-economy.md](docs/token-economy.md).
 
 - **Queen never reads source code.** Request `drone-scout` reports; consume `memory/map/` and `memory/memory.md`.
-- **Bookend:** top model for planning and final review only. Implementation runs on Sonnet; recon, docs, and memory upkeep on Haiku.
+- **Bookend:** top model for planning and final review only. Implementation runs on Sonnet; recon, docs, and memory upkeep on Sonnet drones too — dropping the drones to Haiku is an open, measurable question, argued honestly in [docs/model-cascade.md](docs/model-cascade.md).
 - **Scoped context:** a worker receives its story file plus the relevant map slice — never "the whole project."
 - **Route models with agent frontmatter, never `/model`.** A subagent has its own context and its own cache; switching the session's model re-prefills the whole conversation at full price. The Tier 4 second reviewer is a second subagent, not a model switch. Same for `/effort` and fast mode: set them once, at the start.
 - **Paths, not descriptions.** "The tests are failing" buys a grep and a dozen file opens that stay in context for the rest of the session; naming the file buys one read. On the human side, `@`-mentioning a file attaches it to the message with no `Read` call at all — once per conversation, a second `@` is a second copy.
 - **Command output is permanent.** Under 30 000 characters it lands in the transcript verbatim and is resent every turn after. Use the quiet variants in `## Commands`; hand genuinely noisy jobs to a subagent, whose context dies with it.
 - **`/clear` between tiers.** Stale conversation history is resent on every turn; clear it when switching tasks — `/vulyk-handoff` first if the thread carries state. Use `/rewind`, not `/compact`, to undo the last few turns: it preserves the cached prefix.
 - **Session budget:** if a debugging loop exceeds ~10 turns without progress, stop, write findings to the story file, and re-plan. Do not re-suggest previously rejected fixes.
+
+## Secrets
+
+- **Secrets never enter the paperwork.** Specs, stories, briefs, wiki notes, learnings and
+  handoffs quote requirements and record decisions — never tokens, passwords, keys or
+  connection strings. Name a secret by its env var (`STRIPE_KEY`), never by value.
+- The two writers that persist transcript-derived text — the learnings hook and the handoff
+  dump — pipe through `scripts/redact.sh`, a deterministic mask for well-known credential
+  shapes. It is a seatbelt, not permission: text a human pastes into chat is already in the
+  transcript, which VULYK does not control.
+- A secret that reaches git is **rotated, not deleted**. History keeps what the working tree
+  forgets, and a public repo has been crawled by the time anyone notices.
 
 ## Commands
 

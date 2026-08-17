@@ -1,5 +1,5 @@
 ---
-description: Build or refresh the codebase map for a path using Haiku scout batches
+description: Build or refresh the codebase map for a path using Sonnet scout batches
 argument-hint: <path or module name; "." for full breadth-first pass>
 ---
 

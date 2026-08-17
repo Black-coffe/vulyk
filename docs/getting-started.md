@@ -23,7 +23,7 @@ cd your-project
 claude
 > /vulyk-bootstrap        # ~10 minutes: interview -> tailored config -> initial map -> wiki seed
 ```
-For large repos the initial mapping runs on Haiku drones in batches - cheap by design. A 1000-file repo maps breadth-first: the 8-12 load-bearing modules now, the rest recorded as unmapped territory.
+For large repos the initial mapping runs on Sonnet drones in batches - cheap by design. A 1000-file repo maps breadth-first: the 8-12 load-bearing modules now, the rest recorded as unmapped territory.
 
 ## Context hygiene (once, then rarely)
 

@@ -13,12 +13,12 @@ In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a su
 | Queen | main session, `queen-planner` | top / opus | owns plan & integration; consumes reports, never source |
 | Leads | `lead-architect`, `lead-review` | opus | judgment at the two highest-leverage points: design and gate |
 | Workers | `worker-code`, `worker-test` | sonnet | one story, scoped files, structured handback |
-| Drones | `drone-scout`, `drone-docs`, `librarian` | haiku | recon, memory truth, hygiene - high volume, low cost |
+| Drones | `drone-scout`, `drone-docs`, `librarian` | sonnet | recon, memory truth, hygiene - high volume; the Haiku question is weighed in [model-cascade.md](model-cascade.md) |
 
 ## Data flow of one Tier 3 feature
 ```text
 goal -> Queen classifies tier
-     -> drone-scouts (parallel, haiku) ------ reports ------+
+     -> drone-scouts (parallel, sonnet) ----- reports ------+
      -> memory/map + wiki pointers --------------------------+-> queen-planner (opus)
                                                              -> docs/specs/<slug>/plan.md + stories
      -> wave-check.sh: waves dispatchable? (file collisions, blocker order - deterministic)

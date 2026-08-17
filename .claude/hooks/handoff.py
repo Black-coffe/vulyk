@@ -380,6 +380,52 @@ def harvest(entries, cfg):
     }
 
 
+# Minimal mirror of scripts/redact.sh for environments without bash - that script is
+# the single source of truth for the pattern list; extend both together.
+_REDACT_FALLBACK = [
+    re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"),
+    re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"github_pat_[A-Za-z0-9_]{22,}"),
+    re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
+    re.compile(r"sk-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"AIza[0-9A-Za-z_-]{35}"),
+    re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"),
+    re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?"
+               r"(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)", re.S),
+    re.compile(r"([\"']?[A-Za-z0-9_-]*(?:password|passwd|secret|api[_-]?key|access[_-]?key"
+               r"|auth[_-]?token|client[_-]?secret|private[_-]?key)[A-Za-z0-9_-]*[\"']?"
+               r"\s*[=:]\s*)[\"']?[^\"'\s]{6,}[\"']?", re.I),
+]
+
+
+def redact_text(root, text):
+    """Pass transcript-derived text through scripts/redact.sh before writing it.
+
+    Handoffs are gitignored but get re-injected into future sessions and are routinely
+    shared - a pasted secret must not survive into either. Contract holds: never crash,
+    never block; on total failure the text passes through unredacted rather than the
+    handoff being eaten (that would be a silent-loss path of its own)."""
+    if not text:
+        return text
+    script = os.path.join(root, "scripts", "redact.sh")
+    if os.path.isfile(script):
+        try:
+            p = subprocess.run(
+                ["bash", script], input=text.encode("utf-8"),
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15)
+            if p.returncode == 0 and p.stdout:
+                return p.stdout.decode("utf-8", "replace")
+        except Exception:
+            pass
+    try:
+        for pat in _REDACT_FALLBACK:
+            text = pat.sub(
+                lambda m: (m.group(1) if m.groups() else "") + "[VULYK:REDACTED]", text)
+    except Exception:
+        pass
+    return text
+
+
 def write_handoff(payload, cfg, reason):
     root = project_root(payload)
     cwd = payload.get("cwd") or root
@@ -453,8 +499,9 @@ def write_handoff(payload, cfg, reason):
     os.makedirs(target_dir, exist_ok=True)
     fname = "%s-%s.md" % (stamp.strftime("%Y%m%d-%H%M%S"), str(session_id)[:8])
     path = os.path.join(target_dir, fname)
+    doc = redact_text(root, "\n".join(lines))
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines))
+        fh.write(doc)
 
     try:
         with open(index_path(root), "w", encoding="utf-8") as fh:

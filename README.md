@@ -228,7 +228,7 @@ Claims of the form "N× cheaper" or "near-parity quality" have been removed from
 VULYK is absorbing the best of [Autopilot](https://github.com/nick-vels/skills) — the discipline that a user's request survives, verbatim and traceable, from idea to running code. The full 40-agent analysis behind this plan lives in [`docs/specs/autopilot-merge/`](docs/specs/autopilot-merge/plan.md). Each minor is battle-tested on real projects before the next ships:
 
 - [x] **v0.5.0 — parallel build made safe.** Waves, per-story commits, bounded worker returns, repair ceiling, `wave-check.sh`, `install.sh --upgrade`.
-- [ ] **v0.6.0 — secrets & claims hygiene.** Redaction piped into learnings/handoff writers, irreversible-action rule in every Bash-holding agent, every doc claim re-verified on the current client.
+- [x] **v0.6.0 — secrets & claims hygiene.** Redaction piped into learnings/handoff writers, irreversible-action rule in every Bash-holding agent, every doc claim re-verified on the current client.
 - [ ] **v0.7.0 — traceability spine.** Verbatim `brief.md` per spec, requirement quotes in stories, deterministic `trace-check.sh` (forward + backward), briefing question discipline.
 - [ ] **v0.8.0 — independence gates.** Blind coverage check (brief + plan only) before approval; blind acceptance (brief + running repo only) after build — the checker that can disagree with the framework's own account of itself.
 - [ ] **v0.9.x — memory hardening & optional instruments.** Diff-sourced docs drone, ADR harvest from plan deltas, optional `state.json` build dashboard derived from story frontmatter.

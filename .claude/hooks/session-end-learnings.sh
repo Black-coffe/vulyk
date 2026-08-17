@@ -5,6 +5,12 @@ set -uo pipefail
 ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 OUT_DIR="$ROOT/memory/learnings"
 [ -d "$OUT_DIR" ] || exit 0
+
+# memory/learnings/ is committed to git - transcript-derived text passes through the
+# secret filter first. redact.sh degrades to cat on its own, but guard its absence too.
+redact() {
+  if [ -f "$ROOT/scripts/redact.sh" ]; then bash "$ROOT/scripts/redact.sh"; else cat; fi
+}
 TS=$(date +%Y-%m-%d_%H%M%S)
 OUT="$OUT_DIR/$TS.md"
 
@@ -19,7 +25,7 @@ if [ "${VULYK_AUTOLEARN:-0}" = "1" ] && [ -n "$transcript" ] && [ -f "$transcrip
     "From this Claude Code session transcript, extract ONLY project-specific learnings worth remembering: gotchas hit, expensive dead ends, conventions discovered, decisions made. Output 1-6 terse markdown bullets, or exactly NOTHING_NOTEWORTHY if the session was routine." \
     > "$OUT.tmp" 2>/dev/null
   if [ -s "$OUT.tmp" ] && ! grep -q "NOTHING_NOTEWORTHY" "$OUT.tmp"; then
-    { echo "# Session $TS (auto-distilled)"; cat "$OUT.tmp"; } > "$OUT"
+    { echo "# Session $TS (auto-distilled)"; cat "$OUT.tmp"; } | redact > "$OUT"
   fi
   rm -f "$OUT.tmp"
 else
