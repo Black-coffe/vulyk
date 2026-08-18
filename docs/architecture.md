@@ -35,6 +35,7 @@ human approves
      -> lead-review (opus) gate: PASS | BLOCK(-> fix stories -> /vulyk-build)
         + drone-acceptance (sonnet), same message: brief + repo + run command, never the
           specs - ACCEPTED | REJECTED | CANNOT_RUN -> acceptance-log.sh records the drift
+                                                      + the pack judged; --check before merge
 merge
      -> drone-docs refreshes map + wiki; post-merge git hook flags staleness as backup
 session end

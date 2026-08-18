@@ -2,6 +2,39 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.8.2] - 2026-08-18
+
+The first v0.8.x battle test came back, and the thing it broke was the metric.
+
+### Fixed
+- **An acceptance verdict now names the pack it judged.** `scripts/acceptance-log.sh` recorded
+  the pack's *size* and not its *identity*, so the one series built to contradict the hive is
+  falsifiable by ordinary process: run the gate, let review carve out repair stories, ship.
+  The record then reads `ACCEPTED`, `drift: false` about a pack the drone never saw. That is
+  not hypothetical - it is what the first real run did (katan `S2.6.5a`: accepted at six
+  stories, shipped at nine, gate never re-run). Every entry now carries `head` (the commit)
+  and `pack` (a fingerprint over the story filenames; adding, removing or renaming a story
+  changes it, editing a story's body does not - a verdict is about which work was judged).
+  New `--check <spec-dir>` recomputes it and answers `CURRENT`, `STALE` or
+  `NO VERDICT RECORDED`, report-only and exit 0 like every other deterministic check.
+  Degrades to the plain story count where no `sha256sum`/`shasum` exists, which still catches
+  the case that actually happened.
+- **`/vulyk-review` closes the hole on both sides.** Step 5: cutting a repair story invalidates
+  the verdict, and the gate is re-dispatched when that repair round closes - a verdict
+  inherited across a changed pack is the drift number quietly lying, which is worse than no
+  number. New step 6: no merge is proposed until `--check` says the accepted pack is the
+  shipped pack, and `NO VERDICT RECORDED` is reported out loud rather than passed over.
+
+### Changed
+- **`acceptance-log.sh` stops overselling its own series.** Its header called a long run of
+  `drift: false` "the closest thing to proof that the pipeline delivers what was asked". The
+  same battle test showed why that reads too far: the blind gate accepted a pack `lead-review`
+  then blocked twice, on coverage holes that were entirely real - the e2e no longer proved the
+  GDPR route abandoned a paused match, and nothing failed if the erasure handler reverted to a
+  read-then-write. Both gates were right at once, because one asks whether the asks got built
+  and the other asks whether the proof is real. `drift` is evidence about delivery and never
+  about proof, and the header now says so.
+
 ## [0.8.1] - 2026-08-18
 
 A one-line release, and the line matters: in 0.8.0 the update check wired itself into

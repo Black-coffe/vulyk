@@ -145,6 +145,43 @@ The merged framework keeps VULYK's identity whole — hive castes, Tier 0–4 ro
 > does it decline honestly on a library-only spec? Until both are answered on a real spec,
 > v0.9.x stays blocked — the same rule every minor before this one obeyed.
 
+> **v0.8.x battle test — FIRST RUN IN, HALF THE ANSWER (katan `S2.6.5a-paused-at-and-resume-tails`,
+> merged `d066825`, 2026-08-18).** Both gates ran on a real Tier-3 pack.
+>
+> **Question 1 — does the blind gate disagree with the story statuses?** Not on this run, and
+> the record is weaker than it looks. `acceptance.jsonl` reads `ACCEPTED`, `6/6 done`,
+> `drift: false`. The pack **shipped with nine stories**: `lead-review` blocked, three repair
+> stories were cut, and nothing re-ran the gate. So the one series that exists to contradict
+> the hive recorded a clean verdict about a pack that is not the pack that shipped. It did not
+> lie — nobody asked it again, and nothing required them to. **That is this run's real finding,
+> and it is a hole in the metric itself** (closed in v0.8.2 below).
+>
+> **The two gates proved orthogonal, which the drift number cannot express.** Acceptance
+> ACCEPTED — every ask observed by running it — while `lead-review` blocked twice on findings
+> that were entirely real: the e2e no longer proved the GDPR route abandons a paused match,
+> and nothing failed if the erasure handler reverted to read-then-write. Both were true at
+> once, because acceptance asks *does the software do what was asked* and review asks *is the
+> proof real*. A `drift: false` therefore carries less than `acceptance-log.sh`'s own header
+> claimed for it: it is evidence about delivery, never about proof.
+>
+> **Question 2 — does it decline honestly on a library-only spec?** Still unanswered. S2.6.5a
+> has a runnable surface, so the `CANNOT RUN HERE` branch never fired. Until a spec with no
+> runnable surface is put in front of it, 1.0.0 criterion (5) is unproven for this gate, and
+> v0.9.x stays blocked on that half alone.
+
+**v0.8.2 — The acceptance verdict names the pack it judged.** Straight out of the first
+v0.8.x battle test, and not a candidate held for a later minor: the gate's verdict was
+recorded with the pack's *size* and not its *identity*, so a spec that grows repair stories
+after the drone ran keeps a clean record about work that never shipped. `acceptance-log.sh`
+now writes `head` (the commit) and `pack` (a fingerprint over the story filenames, degrading
+to the count where no sha256 tool exists) into every entry, and gains
+`--check <spec-dir>`, which recomputes the fingerprint and answers `CURRENT`, `STALE`, or
+`NO VERDICT RECORDED`. `/vulyk-review` gains the obligation on both sides: cutting a repair
+story invalidates the verdict and the gate is re-dispatched when that round closes, and no
+merge is proposed until `--check` says the accepted pack is the shipped pack. The script's
+own header stops overselling the series - `drift` is evidence about delivery, never about
+proof, which is what the same battle test demonstrated by having both gates be right at once.
+
 **v0.9.x — Memory hardening and optional instruments.** drone-docs sources from diff + verify-before-write checklist; `VULYK:PROFILE` markers with `install.sh` reset support; ADR harvest from `## Plan deltas` on the review PASS path via `librarian`. Optional `state.json` derived from frontmatter, read by `/vulyk-status` and named in the handoff dump. `docs/pipeline.md`; README gains the fourth failure mode and a second measured item.
 
 **1.0.0 criteria.** (1) Ten real specs across Tiers 2–4 with clean scope.jsonl, trace-check and acceptance.jsonl series. (2) `--upgrade` proven across two minors. (3) No documented claim unverified on the current client — effort, drone models, measured-vs-not section current. (4) Zero known silent-loss paths: no concurrent file collision, no unrecorded descope, no secret path into git. (5) Every new gate has a loud cannot-run branch.
