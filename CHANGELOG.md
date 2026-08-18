@@ -2,6 +2,47 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.8.3] - 2026-08-18
+
+The second v0.8.x battle-test question came back and indicted the caste rather than the
+gate. Plus two silent-loss paths and one stale claim, found by auditing 1.0.0 criteria (3)
+and (4) against the repository rather than against the roadmap's memory of it.
+
+### Fixed
+- **`drone-acceptance` was told a library cannot be run.** Its cannot-run branch listed
+  "a library" as an example of work with no runnable surface. That is false: a library's
+  surface is a caller, and writing one is the gate's job. The sentence licensed a lazy
+  `CANNOT_RUN`, which is the exact mirror of the false green the branch exists to prevent -
+  both are a verdict the gate did not earn. Found by running the battle test that question
+  was waiting on: given a genuinely library-only spec (`@skervik/core`'s adaptive-duration
+  calculator, seven asks, no user-reachable surface), the drone ignored the instruction,
+  wrote a caller against the built package, mapped every ask to an executable observable and
+  ran them - negatives included. It was better than its own definition. The branch is now
+  reserved for behaviour with no entry point or an environment missing what reaching it
+  needs, a library / CLI flag / schema / pure function are named as reachable, and a decline
+  must state what was tried - so one that made no attempt is visible as such.
+- **The acceptance note reaches git unredacted.** `scripts/redact.sh` was wired into the
+  three writers that persist free text - `session-end-learnings.sh`, `handoff.py`, and
+  `brief.md` via `/vulyk-plan` - but not into `acceptance-log.sh`, whose `note` is free text
+  a model wrote while summarising a drone's report and whose output file,
+  `memory/stats/acceptance.jsonl`, is committed. A drone that quotes a command line with a
+  token in it put that token in the repository. The note now goes through the same filter,
+  degrading to unfiltered text only where `redact.sh` is absent, exactly as the other writers
+  do. Verified: `ghp_...` and `sk-ant-api03-...` in a note now land as `[VULYK:REDACTED]`.
+- **A repair round is dispatched against a wave-check nobody re-ran.** `/vulyk-build` runs
+  the story gate at step 2, against the pack as approved - and then a repair round changes
+  that pack. The rule for ad-hoc repairs said to intersect file sets *by hand*, which is the
+  one job this repo already has a deterministic script for. It now says to re-run
+  `wave-check.sh` on the spec, because when the pack moves, whatever judged it is re-run -
+  the same rule v0.8.2 gave the acceptance verdict, for the same reason.
+
+### Changed
+- **README no longer says the acceptance series "starts empty, as it should".** It did when
+  that sentence was written; the first real entries are in, and the sentence now says which
+  claim it is making about a fresh install and points at what the first run showed. Criterion
+  (3) is that no documented claim goes unverified on the current client - `effort` and the
+  ten agents' models were re-checked against the files this release and both hold.
+
 ## [0.8.2] - 2026-08-18
 
 The first v0.8.x battle test came back, and the thing it broke was the metric.

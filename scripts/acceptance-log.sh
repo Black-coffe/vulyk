@@ -125,10 +125,18 @@ if [ "$TOTAL" -gt 0 ] && [ "$DONE" -eq "$TOTAL" ] && [ "$VERDICT" != "ACCEPTED" 
   DRIFT=true
 fi
 
-# Keep the free-text note JSON-safe the blunt way: double quotes become apostrophes,
-# backslashes and newlines are dropped. The note is a human hint sitting next to the
-# numbers, not data anything parses - losing a character beats emitting a broken line.
-ESCAPED="$(printf '%s' "$NOTE" | tr -d '\n' | tr -d '\\' | tr '"' "'")"
+# The note is free text a model wrote while summarising a drone's report, and it lands in
+# memory/stats/acceptance.jsonl, which is committed. Same exposure as a learning or a
+# handoff, so it gets the same filter first - redact.sh degrades to cat on its own, but
+# guard its absence too. Then keep it JSON-safe the blunt way: double quotes become
+# apostrophes, backslashes and newlines are dropped. Losing a character beats emitting a
+# broken line, and a note is a hint sitting beside the numbers, not data anything parses.
+if [ -f "$ROOT/scripts/redact.sh" ]; then
+  SAFE_NOTE="$(printf '%s' "$NOTE" | bash "$ROOT/scripts/redact.sh")"
+else
+  SAFE_NOTE="$NOTE"
+fi
+ESCAPED="$(printf '%s' "$SAFE_NOTE" | tr -d '\n' | tr -d '\\' | tr '"' "'")"
 
 mkdir -p "$ROOT/memory/stats"
 STATS="$ROOT/memory/stats/acceptance.jsonl"

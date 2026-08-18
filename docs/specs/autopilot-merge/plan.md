@@ -164,10 +164,41 @@ The merged framework keeps VULYK's identity whole — hive castes, Tier 0–4 ro
 > proof real*. A `drift: false` therefore carries less than `acceptance-log.sh`'s own header
 > claimed for it: it is evidence about delivery, never about proof.
 >
-> **Question 2 — does it decline honestly on a library-only spec?** Still unanswered. S2.6.5a
-> has a runnable surface, so the `CANNOT RUN HERE` branch never fired. Until a spec with no
-> runnable surface is put in front of it, 1.0.0 criterion (5) is unproven for this gate, and
-> v0.9.x stays blocked on that half alone.
+> **Question 2 — does it decline honestly on a library-only spec? ANSWERED 2026-08-18, and the
+> answer indicted the question.** Setup: a brief written as the owner's ask (seven numbered
+> asks — estimate, lower the VP lever, never below 8, say so honestly when 8 still doesn't
+> fit, report what changed, codes not English, refuse an unseatable player count) over real
+> shipped code, `@skervik/core`'s adaptive-duration calculator — a pure module with zero
+> runtime dependencies and no user-reachable surface. The gate got exactly its four inputs:
+> brief, repository, `pnpm -s --filter @skervik/core test`, and the milestone ledger.
+>
+> **It did not decline. It wrote a caller.** It located the built package, wrote a scratch
+> script importing `computeAdaptiveDuration`/`estimateMatchMinutes`, mapped each of the seven
+> asks to an executable observable, and ran them — including the negative ones, five invalid
+> player counts one at a time. Re-running its harness independently reproduces the result:
+> classic×4 fits at 58 min with no adjustment; classic×6 lowers `vpToWin` 10→8, reports the
+> `from`/`to`, stays at 67.6 min and returns `warningCode: exceeds_ceiling_at_vp_floor`
+> rather than going below the floor; the code matches `/^[a-z_]+$/`, so no English reached
+> the engine; every out-of-range seat count throws. Seven asks, seven observations.
+>
+> **The finding is against the caste, not the gate.** Its own definition listed "a library"
+> as an example of work with *no runnable surface*, which is false — a library's surface is a
+> caller, and writing one is the job. That sentence licensed a lazy `CANNOT_RUN`, which is
+> the exact mirror of the false green the branch exists to prevent: both are a verdict the
+> gate did not earn. **The drone was better than its instructions**, and the instructions are
+> now corrected — a library, a CLI flag, a schema and a pure function are all reachable; the
+> branch is reserved for behaviour with no entry point or an environment missing what
+> reaching it needs, and a decline must now name what was tried, so one that made no attempt
+> is visible as such.
+>
+> **Residual, stated rather than glossed:** the `CANNOT RUN HERE` branch has still never
+> fired on a case that earns it. What this run proves is the half that was actually at risk —
+> the gate does not fake a green, and does not take the easy decline. Criterion (5)'s "loud
+> cannot-run branch" is proven present and correctly *not* taken; it is unproven in the act.
+> **Limits of a synthetic test, on the record:** the brief was written after the code shipped,
+> so it cannot catch a missing feature the author already knew about; and the gate's blindness
+> to `docs/specs/**` was enforced by instruction rather than by tool restriction, as it is in
+> a project-scoped dispatch.
 
 **v0.8.2 — The acceptance verdict names the pack it judged.** Straight out of the first
 v0.8.x battle test, and not a candidate held for a later minor: the gate's verdict was
