@@ -29,7 +29,9 @@
 #
 # Limits, stated rather than hidden: a verification command that names NO path (a whole
 # suite) cannot be judged here, and a path that resolves but is simply the wrong file
-# passes. `missing` is a question about existence, never about correctness.
+# passes. `missing` is a question about existence, never about correctness. A command
+# token counts as a path only when the tree agrees - it exists, or it is a glob - so a
+# package name like `@scope/pkg`, a branch name or a URL is not mistaken for one.
 #
 # Overlap matching mirrors scope-check.sh: exact path, glob, and directory prefix
 # ("src/auth/" covers everything beneath it). Globs are compared both ways.
@@ -162,7 +164,19 @@ PATHS_EOF
       esac
     fi
     if [ -n "$declared" ]; then
-      cmd_paths="$(printf '%s\n' "$verify" | grep -v '^repeat:' | tr ' \t' '\n\n' | grep '/' | grep -v '^-' | tr -d "\"'" | grep -v '^$' || true)"
+      # A token is a PATH only if the tree agrees: it exists, or it is a glob. Plenty of
+      # command tokens carry a slash and mean nothing of the sort - `@scope/package`,
+      # `feat/branch`, a URL - and treating those as paths reported every story in a
+      # pnpm/npm monorepo as a verify-gap (found by the S2.6.5a battle test, 2026-08-18).
+      cmd_paths=""
+      for tok in $(printf '%s\n' "$verify" | grep -v '^repeat:' | tr ' \t' '\n\n' | grep '/' | grep -v '^-' | tr -d "\"'" | grep -v '^$'); do
+        case "$tok" in
+          *[*?[]*) cmd_paths="${cmd_paths}${tok}
+" ;;
+          *) [ -e "$tok" ] && cmd_paths="${cmd_paths}${tok}
+" ;;
+        esac
+      done
       if [ -n "$cmd_paths" ]; then
         hit=0
         while IFS= read -r cp; do

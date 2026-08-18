@@ -34,7 +34,10 @@ be contradicted by something other than itself?
   `no-verify` — a story with no verification command, whose green cannot mean anything;
   `verify-gap` — a verification command whose named paths do not intersect the story's
   `## Files`, the shape that made one battle-test story's green vacuous; `repeat` — a
-  malformed repeat count. The script's own limits are stated in its header instead of being
+  malformed repeat count. A command token counts as a path only when the tree agrees - it
+  exists, or it is a glob - so `@scope/package`, a branch name or a URL is not mistaken for
+  one (caught by this release's own battle test, which otherwise flagged every story in a
+  pnpm monorepo). The script's own limits are stated in its header instead of being
   discovered later: a whole-suite command that names no path cannot be judged, and a path
   that resolves but is the wrong file passes.
 - **Optional `repeat: N` under a story's `## Verification`** — for a surface with a measured
