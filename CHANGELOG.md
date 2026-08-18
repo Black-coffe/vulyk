@@ -2,6 +2,28 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.9.1] - 2026-08-18
+
+The last instrument v0.9.x owed, built to the constraint the judge panel set for it when
+Autopilot's version was rejected: derive a view, never duplicate the truth.
+
+### Added
+- **`scripts/state.sh` -> `.claude/state.json`.** A derived view of every spec's story
+  frontmatter: per-status counts, per-story rows, and a `stale` flag set when a story file is
+  newer than the snapshot. Deterministic, model-free, free. `/vulyk-status` regenerates it
+  before reading it and `/vulyk-handoff` regenerates it before dumping, so neither ever reads
+  a snapshot from an unknown moment.
+  **It is gitignored, deliberately.** A derived artifact committed beside its source becomes a
+  second account of the same fact and the two diverge the first time someone edits one - which
+  is this framework's fourth failure mode, built by hand. Regenerating costs nothing, so a
+  stale copy has no reason to exist. If a number disagrees with a story file, the story file
+  wins.
+- **`unrecognised` is its own count.** Statuses outside `todo|in-progress|done|blocked` are
+  reported as themselves rather than folded into `todo`. Found on the first real run: a
+  repository whose older specs predate the convention - `status: DONE + merged to main ...`,
+  `status: ready-for-dispatch` - was reported as 0 of 28 done. A derived view that miscounts
+  quietly is worse than no view, and the bucket that made it quiet was the default one.
+
 ## [0.9.0] - 2026-08-18
 
 Memory hardening. Three of the four records this framework keeps were written by parties

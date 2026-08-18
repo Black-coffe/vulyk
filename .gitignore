@@ -11,6 +11,11 @@ memory/map/.stale
 # Session handoffs are per-machine session state, never committed
 .claude/handoff/
 
+# The build-state view is DERIVED from story frontmatter and regenerated for free.
+# Committing it would make it a second account of the same fact - the exact thing
+# scripts/state.sh exists to avoid being.
+.claude/state.json
+
 # Update-check polling state (when we last asked GitHub, and what it said)
 .claude/.vulyk-update-cache
 # Installer backup taken before wiring a hook into your settings

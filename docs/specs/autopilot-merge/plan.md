@@ -234,8 +234,16 @@ proof, which is what the same battle test demonstrated by having both gates be r
 > forbidden from inventing options a delta never recorded; `drone-docs` moved off worker prose
 > onto the diff, with a verify-before-write checklist and an obligation to retire what a change
 > falsified; and the fourth failure mode in the README.
-> **Still open in v0.9.x:** the optional `state.json` dashboard derived from story frontmatter,
-> and the second *measured* item for the README — deliberately not manufactured. Nothing new
+> **v0.9.1 SHIPPED 2026-08-18 — `state.json` closed.** Built to the judges' own constraint from
+> the day Autopilot's `state.js` was rejected: derive a view, never duplicate the truth. It is
+> gitignored, because a derived artifact committed beside its source is failure mode four built
+> by hand. Its first real run found the defect that made it worth writing carefully: a
+> repository whose older specs predate the `todo|in-progress|done|blocked` convention was
+> reported as 0 of 28 done, because every unrecognised status fell into the `todo` default.
+> `unrecognised` is now its own count and is reported as such.
+>
+> **Still open in v0.9.x:** nothing except
+> the second *measured* item for the README — deliberately not manufactured. Nothing new
 > was measured on this repository this cycle; the battle-test results are observations, and
 > calling them measurements is the overclaim v0.8.2 just finished removing from one script.
 

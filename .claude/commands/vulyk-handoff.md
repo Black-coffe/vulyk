@@ -1,7 +1,12 @@
 ---
 description: Save session state to .claude/handoff/ before /clear or a restart
-allowed-tools: Bash(bash .claude/hooks/handoff.sh:*), Read, Edit
+allowed-tools: Bash(bash .claude/hooks/handoff.sh:*), Bash(bash scripts/state.sh:*), Read, Edit
 ---
+
+The build-state view, regenerated first so the handoff sits beside a current one rather than
+whatever was last written:
+
+!`bash scripts/state.sh`
 
 The mechanical handoff skeleton has already been written to disk:
 
