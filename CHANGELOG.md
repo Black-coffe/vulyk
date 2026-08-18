@@ -2,6 +2,23 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.8.1] - 2026-08-18
+
+A one-line release, and the line matters: in 0.8.0 the update check wired itself into
+Windows projects in a form that never runs.
+
+### Fixed
+- **`install.sh` now mirrors the project's own hook-launcher convention when wiring.**
+  Claude Code executes a hook command through the system shell, so a Windows install wraps
+  every hook as `"C:\Program Files\Git\usr\bin\bash.exe" "$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh"` - a bare `.sh` path there is not executable and silently
+  does nothing. 0.8.0's `wire_session_hook` always wrote the bare path, so on exactly the
+  platform the author runs, the update notice was installed and then never fired. The wiring
+  now reads how the sibling hooks in that file are invoked and reproduces it, prefix and
+  quoting alike, falling back to the bare path when the siblings use one. Idempotence matches
+  on script name under any spelling, so a project wired by 0.8.0 is not given a second entry.
+  Found by reading the settings file after a real upgrade rather than the installer's own
+  report of success - the report said `wire`, truthfully, and was useless.
+
 ## [0.8.0] - 2026-08-18
 
 Independence gates — the v0.8.0 slice of the Autopilot merge. Two checks that are useful
