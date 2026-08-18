@@ -139,9 +139,9 @@ wire_session_hook() { # wire_session_hook <hook-script-name>
   fi
   cp -p "$file" "$file.vulyk-bak" 2>/dev/null || true
   if "$py" - "$file" "$script" <<'PYWIRE'
-import json, sys
+import json, re, sys
 path, script = sys.argv[1], sys.argv[2]
-cmd = '$CLAUDE_PROJECT_DIR/.claude/hooks/' + script
+REL = '$CLAUDE_PROJECT_DIR/.claude/hooks/'
 try:
     with open(path, encoding='utf-8') as fh:
         data = json.load(fh)
@@ -149,14 +149,32 @@ except Exception:
     sys.exit(4)                                  # unparseable: leave it entirely alone
 if not isinstance(data, dict):
     sys.exit(4)
+# How does THIS project invoke its shell hooks? On Windows a bare `.sh` path is not
+# executable, so vulyk installs there wrap every hook in an explicit bash launcher. Copy
+# whatever convention the siblings already use, or the entry we add is one that never runs.
+prefix, quoted = '', False
+for groups_any in (data.get('hooks') or {}).values():
+    if not isinstance(groups_any, list):
+        continue
+    for group in groups_any:
+        if not isinstance(group, dict):
+            continue
+        for hook in group.get('hooks', []) or []:
+            if not isinstance(hook, dict):
+                continue
+            found = re.match(r'^(.*?)("?)' + re.escape(REL) + r'[^"\s]+\.sh"?', str(hook.get('command', '')))
+            if found and not prefix:
+                prefix, quoted = found.group(1), found.group(2) == '"'
+cmd = prefix + ('"' if quoted else '') + REL + script + ('"' if quoted else '')
+
 groups = data.setdefault('hooks', {}).setdefault('SessionStart', [])
 if not isinstance(groups, list):
     sys.exit(4)
 for group in groups:
     if isinstance(group, dict):
         for hook in group.get('hooks', []) or []:
-            if isinstance(hook, dict) and str(hook.get('command', '')).endswith(script):
-                sys.exit(3)                      # already there under another spelling
+            if isinstance(hook, dict) and script in str(hook.get('command', '')):
+                sys.exit(3)                      # already there under any spelling
 entry = {'type': 'command', 'command': cmd}
 if groups and isinstance(groups[0], dict):
     groups[0].setdefault('hooks', []).append(entry)
