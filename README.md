@@ -150,6 +150,7 @@ What changed with Opus 5 is the *reason* for the bookend, not its shape. The bin
 | `/vulyk-gc` | Memory garbage collection: consolidate learnings, prune stale map entries, archive dead skills |
 | `/vulyk-handoff` | Save an enriched session handoff to `.claude/handoff/` before `/clear` or a restart — the next session resumes from it automatically |
 | `/vulyk-status` | Open stories, memory freshness, skill usage stats, budget posture |
+| `/vulyk-update [version]` | Show what a newer release would replace, ask, then upgrade the framework files — never your CLAUDE.md, memory or specs |
 
 Full details: [docs/command-reference.md](docs/command-reference.md)
 
@@ -190,6 +191,7 @@ Each cycle is a ratchet: the colony clicks forward and never slips back.
 | `session-end-learnings.sh` | SessionEnd | Captures a structured learnings stub (optional auto-distill with `VULYK_AUTOLEARN=1`) |
 | `skill-usage-counter.sh` | PostToolUse (Skill) | Increments per-skill counters → fuel for `skill-gardener` |
 | `context-guard.sh` | PreCompact | Snapshots memory & task state before compaction |
+| `vulyk-update-check.sh` | SessionStart | Compares `.claude/vulyk-version` against the newest tag on the origin (once a day, cached) and asks the model to raise an upgrade with you — never to apply one |
 | `handoff.sh` → `handoff.py` | Stop, UserPromptSubmit, PreCompact, SessionEnd, SessionStart | Context-budget guard + session handoff: measures real context size from the transcript, warns at thresholds, dumps session state to `.claude/handoff/` on `/clear`/exit/compaction, restores it at the next session start |
 
 Claude Code hooks receive no token counter — `handoff.py` recovers it from the transcript JSONL (`message.usage` of the last non-sidechain assistant entry), which is what makes proactive warnings and pre-`/clear` dumps possible at all. The same entry's `timestamp` gives the age of the prompt cache, so the warning also tells you how long checkpointing stays cheap: re-reading the conversation is a cache hit inside the TTL and a full-price re-prefill after it. Needs Python 3 on PATH; fails open without it. Details: [docs/hooks-reference.md](docs/hooks-reference.md)

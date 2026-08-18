@@ -115,7 +115,74 @@ else
   echo "VULYK $VER -> $DEST ${CHECK:+(dry run)}"
 fi
 
+# `.claude/settings.json` is NOT framework-owned: it carries the owner's permissions and any
+# hooks of their own, so a release must never replace it. But a hook script that ships without
+# being wired is a hook that silently does nothing - which is how an upgrade notice would fail
+# to reach exactly the people who most need it. So: append the one missing entry, in place,
+# after taking a backup, and say out loud what was done. Idempotent by inspection of the file.
+wire_session_hook() { # wire_session_hook <hook-script-name>
+  local script="$1" file="$DEST/.claude/settings.json" py=""
+  [ -f "$file" ] || return 0                                   # fresh install: ours was copied whole
+  grep -q "$script" "$file" 2>/dev/null && return 0            # already wired
+  if [ "$CHECK" = "--check" ]; then
+    echo "  would wire     .claude/settings.json -> SessionStart: $script"
+    return 0
+  fi
+  py="$(command -v python3 || command -v python || true)"
+  if [ -z "$py" ]; then
+    echo ""
+    echo "  NOTE: .claude/hooks/$script was installed but could NOT be wired -"
+    echo "  no python on PATH to edit .claude/settings.json safely. Add this to your"
+    echo "  SessionStart hooks by hand, or the update check will never run:"
+    echo "      { \"type\": \"command\", \"command\": \"\$CLAUDE_PROJECT_DIR/.claude/hooks/$script\" }"
+    return 0
+  fi
+  cp -p "$file" "$file.vulyk-bak" 2>/dev/null || true
+  if "$py" - "$file" "$script" <<'PYWIRE'
+import json, sys
+path, script = sys.argv[1], sys.argv[2]
+cmd = '$CLAUDE_PROJECT_DIR/.claude/hooks/' + script
+try:
+    with open(path, encoding='utf-8') as fh:
+        data = json.load(fh)
+except Exception:
+    sys.exit(4)                                  # unparseable: leave it entirely alone
+if not isinstance(data, dict):
+    sys.exit(4)
+groups = data.setdefault('hooks', {}).setdefault('SessionStart', [])
+if not isinstance(groups, list):
+    sys.exit(4)
+for group in groups:
+    if isinstance(group, dict):
+        for hook in group.get('hooks', []) or []:
+            if isinstance(hook, dict) and str(hook.get('command', '')).endswith(script):
+                sys.exit(3)                      # already there under another spelling
+entry = {'type': 'command', 'command': cmd}
+if groups and isinstance(groups[0], dict):
+    groups[0].setdefault('hooks', []).append(entry)
+else:
+    groups.append({'hooks': [entry]})
+with open(path, 'w', encoding='utf-8') as fh:
+    json.dump(data, fh, indent=2)
+    fh.write('\n')
+PYWIRE
+  then
+    echo "  wire           .claude/settings.json -> SessionStart: $script"
+    echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
+  else
+    case "$?" in
+      3) rm -f "$file.vulyk-bak" 2>/dev/null || true ;;   # already wired; nothing happened
+      *) rm -f "$file.vulyk-bak" 2>/dev/null || true
+         echo ""
+         echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
+         echo "  Wire the update check by hand into your SessionStart hooks:"
+         echo "      { \"type\": \"command\", \"command\": \"\$CLAUDE_PROJECT_DIR/.claude/hooks/$script\" }" ;;
+    esac
+  fi
+}
+
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr; do copy_tree "$tree"; done
+wire_session_hook vulyk-update-check.sh
 mkdir -p "$DEST/memory/learnings" "$DEST/memory/snapshots" "$DEST/docs/wiki" "$DEST/docs/specs" "$DEST/docs/adr" 2>/dev/null || true
 [ -f "$DEST/memory/stats/skills.json" ] || { [ "$CHECK" = "--check" ] || { mkdir -p "$DEST/memory/stats"; echo '{}' > "$DEST/memory/stats/skills.json"; }; }
 

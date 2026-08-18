@@ -44,6 +44,33 @@ be contradicted by something other than itself?
   flake rate, honoured by both workers and by the build loop. The template carries the
   arithmetic that makes the number honest: five runs catch a 1-in-5 flake about two times in
   three and a 1-in-25 flake fewer than one time in five.
+- **`.claude/hooks/vulyk-update-check.sh` + `scripts/vulyk-update.sh` + `/vulyk-update`** — a
+  colony that can be told a newer version of itself exists. The hook compares the installed
+  stamp in `.claude/vulyk-version` against the newest `v*` tag on the origin at most once a
+  day (cached in a gitignored `.claude/.vulyk-update-cache`), and on a genuine difference
+  prints one line whose entire content is an instruction to **ask the owner** — it applies
+  nothing, and it says so to the model in as many words, because a hook's output is not
+  consent. It fails open on every axis that could otherwise cost a session: no stamp, no
+  `curl`, no network, a rate-limited API, an unparseable cache, or an owner running ahead of
+  the tags all exit silently. `scripts/vulyk-update.sh` is the applier, and it deliberately
+  contains **no copying logic of its own**: it fetches the requested tag into a cache outside
+  your project and hands the work to *that release's* `install.sh --upgrade`, so an upgrade
+  can never mean something the release did not document. `/vulyk-update` puts the decision
+  where it belongs — dry run first, CHANGELOG summarised, then one question — and names the
+  constitution edits that did NOT land, since `CLAUDE.md` is yours and stays a manual merge.
+  Forks point it elsewhere with `VULYK_REPO` or a `.claude/vulyk-origin` file; `VULYK_UPDATE_CHECK=0`
+  switches the whole thing off.
+- **`install.sh` now wires a shipped hook into an existing `.claude/settings.json`** —
+  `wire_session_hook`. Found while testing the above, and it is the difference between the
+  feature working and appearing to: `settings.json` is deliberately NOT framework-owned (it
+  holds the owner's permissions and their own hooks), so `--upgrade` skipped it and every
+  existing install would have received the update-check script without ever running it — the
+  notice failing to reach precisely the people furthest behind. The installer now appends the
+  single missing entry in place, after writing `.claude/settings.json.vulyk-bak`, and prints
+  what it did including that the edit re-indents the file. Idempotent (the entry is matched by
+  script name, so a second upgrade is a no-op), honest under `--check` (`would wire`), and it
+  refuses rather than guesses when there is no python on PATH or the JSON does not parse — in
+  both cases printing the exact line to paste. Nothing else in `settings.json` is read or moved.
 
 ### Changed
 - **`lead-review`** gains three categories — **Reinvention** (the repo already has this),

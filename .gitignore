@@ -11,6 +11,11 @@ memory/map/.stale
 # Session handoffs are per-machine session state, never committed
 .claude/handoff/
 
+# Update-check polling state (when we last asked GitHub, and what it said)
+.claude/.vulyk-update-cache
+# Installer backup taken before wiring a hook into your settings
+.claude/settings.json.vulyk-bak
+
 # Local-only Claude Code settings (commit settings.json, not local overrides)
 .claude/settings.local.json
 CLAUDE.local.md
