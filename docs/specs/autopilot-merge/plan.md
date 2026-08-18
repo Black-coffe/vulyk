@@ -191,6 +191,17 @@ The merged framework keeps VULYK's identity whole — hive castes, Tier 0–4 ro
 > reaching it needs, and a decline must now name what was tried, so one that made no attempt
 > is visible as such.
 >
+> **Its verdict, verbatim: `ACCEPTED`, seven WORKS lines, each naming the observation.**
+> Two things in that report are worth more than the verdict. First, the `ASSUMED CONFIG`
+> slot did its job: it judged the module *as a library API*, naming from the ledger that the
+> lobby wiring is a later seam — exactly the deferred-configuration discipline candidate 7
+> of the v0.7.0 pack argued for, working on its first outing. Second, **the `UNASKED` slot
+> fired**: blitz×6, already at `vpToWin: 8` natively, reports the warning with an empty
+> `adjustments` array — correct under the honesty rule, and a combination the brief never
+> asked for. A gate that only ever answers the questions it was handed cannot surface that.
+> It also self-reported the blindness rule kept: no `docs/specs/` file opened besides
+> `brief.md` and the named ledger.
+>
 > **Residual, stated rather than glossed:** the `CANNOT RUN HERE` branch has still never
 > fired on a case that earns it. What this run proves is the half that was actually at risk —
 > the gate does not fake a green, and does not take the easy decline. Criterion (5)'s "loud
