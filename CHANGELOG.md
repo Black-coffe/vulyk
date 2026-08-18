@@ -2,6 +2,28 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.9.5] - 2026-08-18
+
+### Fixed
+- **`--check` was advertised as a dry run and created seven directories.** One unguarded
+  `mkdir -p` seeded `memory/learnings`, `memory/snapshots`, `docs/wiki`, `docs/specs` and
+  `docs/adr` in the target whether or not the run was meant to touch it - so the one command
+  offered to someone who only wants to know what VULYK *would* do to their repository was the
+  command that quietly changed it. The line next to it had carried the `--check` guard all
+  along; this one never did. It now prints `would create` and writes nothing, and the fix was
+  verified by result rather than by report: a dry run against an empty target leaves **0**
+  objects, and a real install still produces the full hive (22 directories, 56 files,
+  constitution + wired hook + seeded `skills.json`). Every other writer on that path
+  (`ensure_gitignore`, `wire_session_hook`) was already guarded and was re-checked here - a
+  dry run against a populated target leaves `.gitignore` and `.claude/settings.json`
+  byte-identical.
+
+  **Found by [@chizhseo](https://github.com/chizhseo) in [PR #1](https://github.com/Black-coffe/vulyk/pull/1)**
+  (2026-06-15), while writing an installer smoke test - which is the whole point: the defect
+  was invisible to reading the code and obvious to anyone who checked the result. It survived
+  nine releases because nothing in this repository ran the installer and then looked at what it
+  had done. That is the same gap the framework spends its gates on, and it existed at home.
+
 ## [0.9.4] - 2026-08-18
 
 ### Fixed

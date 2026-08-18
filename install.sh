@@ -256,7 +256,14 @@ ensure_gitignore() {
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr; do copy_tree "$tree"; done
 ensure_gitignore
 wire_session_hook vulyk-update-check.sh
-mkdir -p "$DEST/memory/learnings" "$DEST/memory/snapshots" "$DEST/docs/wiki" "$DEST/docs/specs" "$DEST/docs/adr" 2>/dev/null || true
+# The empty trees a fresh hive needs. Guarded like every other write: a dry run that
+# creates directories is not a dry run, and this one had been leaving seven of them in
+# repositories whose owners were only asking what the installer would do.
+if [ "$CHECK" = "--check" ]; then
+  echo "  would create   memory/ and docs/ trees"
+else
+  mkdir -p "$DEST/memory/learnings" "$DEST/memory/snapshots" "$DEST/docs/wiki" "$DEST/docs/specs" "$DEST/docs/adr" 2>/dev/null || true
+fi
 [ -f "$DEST/memory/stats/skills.json" ] || { [ "$CHECK" = "--check" ] || { mkdir -p "$DEST/memory/stats"; echo '{}' > "$DEST/memory/stats/skills.json"; }; }
 
 # Constitution: never overwritten - not on install, not on upgrade. A bootstrapped
