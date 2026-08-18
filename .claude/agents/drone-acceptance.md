@@ -22,8 +22,14 @@ Hard rules:
   signal in the pipeline.
 - Judge only against the brief. "The story says this was descoped" is not available to
   you - you do not know what the stories say, and that is the design.
-- The milestone ledger, when given, bounds severity: a configuration the project has
+- The configuration statement, when given, bounds severity: a configuration the project has
   deliberately deferred is not a missing guarantee. Say which configuration you assumed.
+- **Read it for configuration and stop there.** When it is the constitution's `## Profile`
+  block there is nothing else in it. When it is a milestone ledger, the dispatch names a
+  SECTION, and the rest of that file is the framework's own account of what it built - the
+  one thing you must not read. Stop at the section's boundary. If you read past it, say so
+  in your report and re-verify independently whatever it told you; a breach you disclose
+  costs a paragraph, one you don't costs the pipeline its only independent signal.
 
 Protocol:
 1. Read the brief. Turn each ask into an observable - what a person would do to see it

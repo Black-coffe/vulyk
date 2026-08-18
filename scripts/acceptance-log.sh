@@ -108,7 +108,7 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   exit 0
 }
 
-TOTAL=0; DONE=0; BLOCKED=0
+TOTAL=0; DONE=0; BLOCKED=0; UNRECOGNISED=0
 for f in "$SPEC"/*.md; do
   [ -f "$f" ] || continue
   grep -q '^story:' "$f" 2>/dev/null || continue
@@ -116,12 +116,22 @@ for f in "$SPEC"/*.md; do
   st="$(awk -F': *' '$1 == "status" { sub(/[[:space:]]*#.*$/, "", $2); gsub(/[[:space:]]/, "", $2); print $2; exit }' "$f")"
   case "$st" in
     done)    DONE=$((DONE+1)) ;;
-    blocked) BLOCKED=$((BLOCKED+1)) ;;
+    blocked)          BLOCKED=$((BLOCKED+1)) ;;
+    todo|in-progress) ;;
+    *)                UNRECOGNISED=$((UNRECOGNISED+1)) ;;
   esac
 done
 
+# Drift is "every story says done and the blind gate did not accept". A story whose status
+# is not one of the four the template defines can be read as neither done nor not-done, so
+# the comparison is unavailable - and `false` there is the reassuring answer, not the true
+# one. A whole merged spec written before the convention scores DONE=0, which makes drift
+# structurally unable to fire: the one metric built to contradict the hive, switched off
+# by a spelling. It now records `unknown`, and says why.
 DRIFT=false
-if [ "$TOTAL" -gt 0 ] && [ "$DONE" -eq "$TOTAL" ] && [ "$VERDICT" != "ACCEPTED" ]; then
+if [ "$UNRECOGNISED" -gt 0 ]; then
+  DRIFT=unknown
+elif [ "$TOTAL" -gt 0 ] && [ "$DONE" -eq "$TOTAL" ] && [ "$VERDICT" != "ACCEPTED" ]; then
   DRIFT=true
 fi
 
@@ -144,12 +154,21 @@ STATS="$ROOT/memory/stats/acceptance.jsonl"
 HEAD_SHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 PACK="$(pack_fingerprint "$SPEC")"
 
-printf '{"ts":"%s","spec":"%s","verdict":"%s","stories":%s,"done":%s,"blocked":%s,"drift":%s,"head":"%s","pack":"%s","note":"%s"}\n' \
+# `drift` is a JSON boolean when it could be computed and the string "unknown" when it
+# could not. A reader treating "unknown" as false makes the exact mistake this prevents.
+DRIFT_JSON="$DRIFT"
+[ "$DRIFT" = "unknown" ] && DRIFT_JSON='"unknown"'
+
+printf '{"ts":"%s","spec":"%s","verdict":"%s","stories":%s,"done":%s,"blocked":%s,"unrecognised":%s,"drift":%s,"head":"%s","pack":"%s","note":"%s"}\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$SPEC")" "$VERDICT" \
-  "$TOTAL" "$DONE" "$BLOCKED" "$DRIFT" "$HEAD_SHA" "$PACK" "$ESCAPED" >> "$STATS"
+  "$TOTAL" "$DONE" "$BLOCKED" "$UNRECOGNISED" "$DRIFT_JSON" "$HEAD_SHA" "$PACK" "$ESCAPED" >> "$STATS"
 
 echo "acceptance-log: $(basename "$SPEC") - verdict $VERDICT, stories $DONE/$TOTAL done, $BLOCKED blocked, drift $DRIFT"
 echo "  pack $PACK at $HEAD_SHA - this verdict is about THAT pack; re-check with --check before merging."
+if [ "$DRIFT" = unknown ]; then
+  echo "  ! $UNRECOGNISED of $TOTAL stories carry a status outside todo|in-progress|done|blocked,"
+  echo "    so 'every story says done' cannot be evaluated. Drift is unknown here, not false."
+fi
 if [ "$DRIFT" = true ]; then
   echo "  ! Every story reports done and the blind gate did not accept. One of the two accounts"
   echo "    is wrong, and the story statuses are the one written by the party with an interest."

@@ -56,6 +56,23 @@ is re-run.** It is written down here because relying on remembering it is what p
 failure it exists to prevent — an acceptance verdict recorded against six stories for a pack
 that shipped with nine, and a repair round sent against a collision check nobody re-ran.
 
+## Only one gate at a time may run the suite
+
+`lead-review` and `drone-acceptance` are dispatched in one message because they are
+independent *in information* — one sees everything, the other almost nothing. They are not
+independent in **machine resources**, and only one of them runs anything: acceptance does.
+
+That pairing is therefore safe. What is not safe is dispatching several acceptance gates at
+once — catching up on a backlog of specs, say. A project whose test suite binds fixed ports
+will hand you `EADDRINUSE` in one gate because another gate's server is up, and the failure
+looks exactly like a defect in the code under test. Observed: two of three concurrent gates
+lost their first runs to it, and only the drone's own honesty about *what it ran* made the
+cause visible at all.
+
+Run acceptance gates one at a time, or give the suite ephemeral ports. And when a gate
+reports an environmental failure, believe it before you believe the code is broken — a gate
+that names its own interference is doing the job.
+
 ## Reading a decline
 
 Two verdicts look like caution and are not:

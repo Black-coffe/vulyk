@@ -2,6 +2,35 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.9.3] - 2026-08-18
+
+Three specs went through the blind gate in one sitting - the first time the acceptance series
+had more than one entry - and the sitting found three defects in the machinery that produced
+it. None were in the code under test.
+
+### Fixed
+- **`drift` could not fire on a spec whose stories predate the status convention.** It asks
+  "does every story say done while the gate did not accept", and a status outside
+  `todo|in-progress|done|blocked` is neither done nor not-done - so a fully merged
+  twelve-story spec scored `done: 0`, the comparison never held, and the record said
+  `drift: false`. The reassuring answer, not the true one: the one metric built to contradict
+  the hive, switched off by a spelling. It now records `"unknown"` with the count of
+  unrecognised statuses and says out loud why the comparison was unavailable.
+- **The milestone-ledger exception leaked the framework's own account.** `drone-acceptance`
+  is handed a configuration statement so it does not demand guarantees for deployments nobody
+  has. Where that statement is a section of a milestone plan, the rest of that file is exactly
+  what the gate must never read - and handing over the whole file invites reading past it.
+  Observed once, and disclosed by the drone itself, which then re-verified independently: the
+  disclosure rule worked and the dispatch that made it necessary should not be repeated.
+  `/vulyk-review` now prefers the `## Profile` block, which holds configuration and nothing
+  else, and falls back to a ledger only by **naming the section, not the file**; the caste is
+  told to stop at that boundary and to report a breach rather than absorb it.
+- **Concurrent acceptance gates collide on fixed test ports.** `lead-review` and
+  `drone-acceptance` are dispatched together because they are independent *in information*,
+  and that pairing is safe - only acceptance runs anything. Several acceptance gates at once
+  are not: two of three lost their first runs to `EADDRINUSE`, which reads exactly like a
+  defect in the code under test. Documented in `docs/pipeline.md` and in the dispatch step.
+
 ## [0.9.2] - 2026-08-18
 
 The 1.0.0 bar stops being a thing anyone remembers.
