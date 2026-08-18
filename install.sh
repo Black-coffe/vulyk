@@ -71,40 +71,61 @@ copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading 
 # /vulyk-bootstrap fill it. If the markers are gone (edited constitution, older copy), say so
 # loudly rather than silently shipping the wrong commands - a silent no-op is the failure mode
 # this whole function exists to prevent.
-reset_commands_table() { # reset_commands_table <constitution-file>
-  local file="$1" name; name="$(basename "$file")"
-  if ! grep -q 'VULYK:COMMANDS:START' "$file" 2>/dev/null || \
-     ! grep -q 'VULYK:COMMANDS:END' "$file" 2>/dev/null; then
+# Reset a marker-delimited block in the constitution back to placeholders.
+#
+# The markers are KEPT. The first version of this ate them, which made the reset a one-shot:
+# a later `--upgrade` found no markers, printed a warning, and left whatever was there. A
+# block that can only be reset once is a block that cannot be re-reset when the framework's
+# placeholders change - so `:START` and `:END` now survive every pass.
+#
+#   Usage: reset_marked_block <file> <MARKER> <human label>   # replacement text on stdin
+reset_marked_block() {
+  local file="$1" marker="$2" label="$3" name repl
+  name="$(basename "$file")"
+  repl="$(cat)"
+  if ! grep -q "${marker}:START" "$file" 2>/dev/null ||      ! grep -q "${marker}:END" "$file" 2>/dev/null; then
     echo ""
-    echo "  WARNING: no VULYK:COMMANDS markers found in $name."
-    echo "  Its '## Commands' table was left as-is and may still hold VULYK's own commands"
-    echo "  (shell/Python syntax checks), which are wrong for this project. Clear it by hand,"
-    echo "  or run /vulyk-bootstrap, which replaces the table."
+    echo "  WARNING: no ${marker} markers found in $name."
+    echo "  Its '$label' was left as-is and may still hold VULYK's own values, which are"
+    echo "  wrong for this project. Clear it by hand, or run /vulyk-bootstrap, which fills it."
     echo ""
     return 0
   fi
   if [ "$CHECK" = "--check" ]; then
-    echo "  would reset    $name '## Commands' table -> placeholders"
+    echo "  would reset    $name '$label' -> placeholders"
     return 0
   fi
-  awk '
-    index($0, "VULYK:COMMANDS:START") {
-      print "| Purpose | Command |"
-      print "|---|---|"
-      print "| Single test file | `<fill in - the quiet variant>` |"
-      print "| Full test suite | `<fill in>` |"
-      print "| Lint | `<fill in>` |"
-      print "| Build / typecheck | `<fill in>` |"
-      print ""
-      print "Filled in by `/vulyk-bootstrap`. Verify each command actually runs before writing it"
-      print "down, and write \"none\" where this project genuinely lacks one - a verification that"
-      print "always exits 0 is worse than an admitted gap."
-      skip = 1; next
-    }
-    index($0, "VULYK:COMMANDS:END") { skip = 0; next }
+  awk -v m="$marker" -v repl="$repl" '
+    index($0, m ":START") { print; print repl; skip = 1; next }
+    index($0, m ":END")   { skip = 0; print; next }
     !skip
   ' "$file" > "$file.vulyktmp" && mv "$file.vulyktmp" "$file"
-  echo "  reset          $name '## Commands' table -> placeholders"
+  echo "  reset          $name '$label' -> placeholders"
+}
+
+reset_commands_table() { # reset_commands_table <constitution-file>
+  reset_marked_block "$1" "VULYK:COMMANDS" "## Commands table" <<'PLACEHOLDER'
+| Purpose | Command |
+|---|---|
+| Single test file | `<fill in - the quiet variant>` |
+| Full test suite | `<fill in>` |
+| Lint | `<fill in>` |
+| Build / typecheck | `<fill in>` |
+
+Filled in by `/vulyk-bootstrap`. Verify each command actually runs before writing it
+down, and write "none" where this project genuinely lacks one - a verification that
+always exits 0 is worse than an admitted gap.
+PLACEHOLDER
+  reset_marked_block "$1" "VULYK:PROFILE" "## Profile block" <<'PLACEHOLDER'
+| Field | Value |
+|---|---|
+| Stack | `<fill in>` |
+| Package manager / runner | `<fill in>` |
+| Where source lives | `<fill in>` |
+| Test framework | `<fill in>` |
+| Commit convention | `<fill in>` |
+| **Configurations that exist today** | `<fill in - single node? multi-process? a database at all? what is deferred and to when>` |
+PLACEHOLDER
 }
 
 PREV="$(cat "$DEST/.claude/vulyk-version" 2>/dev/null || echo none)"

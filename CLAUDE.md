@@ -93,6 +93,29 @@ Every rule here has a price behind it — see [docs/token-economy.md](docs/token
 - A secret that reaches git is **rotated, not deleted**. History keeps what the working tree
   forgets, and a public repo has been crawled by the time anyone notices.
 
+## Profile
+
+What this project IS. Every caste reads it, and every line of it is wrong by default: it
+arrives blank from the installer and `/vulyk-bootstrap` fills it, because a profile copied
+from another repository is a confident lie. Keep it short - this is the frame each agent
+starts from, not documentation.
+
+The last line is load-bearing beyond its size. A reviewer that does not know which
+configurations exist will demand guarantees for ones that do not, and a blind acceptance
+gate cannot state the shape it judged against. Both cost real rounds before this block
+existed.
+
+<!-- VULYK:PROFILE:START -->
+| Field | Value |
+|---|---|
+| Stack | `<fill in>` |
+| Package manager / runner | `<fill in>` |
+| Where source lives | `<fill in>` |
+| Test framework | `<fill in>` |
+| Commit convention | `<fill in>` |
+| **Configurations that exist today** | `<fill in - single node? multi-process? a database at all? what is deferred and to when>` |
+<!-- VULYK:PROFILE:END -->
+
 ## Commands
 
 Quiet variants only: everything these print is resent on every subsequent turn. A story's

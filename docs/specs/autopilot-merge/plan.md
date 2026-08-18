@@ -226,6 +226,19 @@ proof, which is what the same battle test demonstrated by having both gates be r
 
 **v0.9.x — Memory hardening and optional instruments.** drone-docs sources from diff + verify-before-write checklist; `VULYK:PROFILE` markers with `install.sh` reset support; ADR harvest from `## Plan deltas` on the review PASS path via `librarian`. Optional `state.json` derived from frontmatter, read by `/vulyk-status` and named in the handoff dump. `docs/pipeline.md`; README gains the fourth failure mode and a second measured item.
 
+> **v0.9.0 SHIPPED 2026-08-18.** Landed: `docs/pipeline.md` (written as the gates' blind-spot
+> and staleness reference rather than a second pipeline drawing, which `architecture.md`
+> already is); the `VULYK:PROFILE` block with a repeatable installer reset — and the fix that
+> made it repeatable, since `reset_commands_table` had been eating the very markers it needed
+> to find next time; the ADR harvest on the review PASS path, at `status: proposed` only and
+> forbidden from inventing options a delta never recorded; `drone-docs` moved off worker prose
+> onto the diff, with a verify-before-write checklist and an obligation to retire what a change
+> falsified; and the fourth failure mode in the README.
+> **Still open in v0.9.x:** the optional `state.json` dashboard derived from story frontmatter,
+> and the second *measured* item for the README — deliberately not manufactured. Nothing new
+> was measured on this repository this cycle; the battle-test results are observations, and
+> calling them measurements is the overclaim v0.8.2 just finished removing from one script.
+
 **1.0.0 criteria.** (1) Ten real specs across Tiers 2–4 with clean scope.jsonl, trace-check and acceptance.jsonl series. (2) `--upgrade` proven across two minors. (3) No documented claim unverified on the current client — effort, drone models, measured-vs-not section current. (4) Zero known silent-loss paths: no concurrent file collision, no unrecorded descope, no secret path into git. (5) Every new gate has a loud cannot-run branch.
 
 ## 5. Open questions for you

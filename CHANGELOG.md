@@ -2,6 +2,59 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.9.0] - 2026-08-18
+
+Memory hardening. Three of the four records this framework keeps were written by parties
+with an interest in them, and this release moves each one onto evidence.
+
+### Added
+- **`docs/pipeline.md` - the gates reference.** Deliberately not a second drawing of the
+  pipeline; `architecture.md` has one. It answers the two questions documented nowhere: what
+  each of the seven gates *structurally cannot see*, and what invalidates it. Acceptance
+  cannot see whether the proof is real. `lead-review` cannot see the human's ask
+  independently, because it reads the plan. Coverage and acceptance both sit outside the
+  build, so neither observes one. Plus the staleness table and the sentence underneath every
+  row of it: **when the pack moves, whatever judged it is re-run.**
+- **A `## Profile` block in `CLAUDE.md`, between `VULYK:PROFILE` markers.** Stack, runner,
+  source layout, test framework, commit convention - and the row that pays for itself:
+  *which configurations exist today*, and what is deferred until when. A reviewer without
+  that demands guarantees for deployments nobody has, and the blind acceptance gate cannot
+  state the shape it judged against; both have cost real review rounds. It ships blank,
+  because a profile copied from another repository is a confident lie. `/vulyk-bootstrap`
+  fills it from what it verified, and `/vulyk-review` hands it to `drone-acceptance`.
+- **ADR harvest, dispatched to `librarian` on the review PASS path.** A build makes decisions
+  the plan did not anticipate and writes them down exactly once, in `## Plan deltas`, inside
+  a directory nobody opens again. The librarian reads only those deltas and `docs/adr/`, and
+  proposes an ADR for each decision that meets all three tests: a future story would have to
+  re-decide it, it constrains code that does not exist yet, and its reason was recorded.
+  Status is **`proposed`, always** - `accepted` is a word only the human writes. The delta is
+  quoted verbatim, the same discipline `## Requirements` obey. And it may **not invent the
+  options**: where a delta records no alternatives, `## Options` says "none recorded" rather
+  than manufacturing a comparison nobody made - which is the defect `lead-review` calls an
+  invented fact.
+
+### Changed
+- **`drone-docs` now sources from the diff; an implementation note is a lead, never a fact.**
+  A worker's `## Implementation notes` is that worker's account, written by the party with an
+  interest - the same reason `drone-acceptance` is kept away from the specs. A map built from
+  prose inherits the prose's errors and then outlives them, and a wrong map is worse than an
+  absent one because it is consulted with confidence. It gains a **verify-before-write
+  checklist** (the path exists, the symbol is exported, the enforcing line is found rather
+  than a mentioning one, a test claim's assertion would fail without the rule, every number
+  re-derived) and an obligation to **retire what the change falsified** - the defect that
+  produced both critical findings on the S2.6.5a pack that motivated this release.
+- **README names a fourth failure mode.** Gates go stale where nobody looks: a check runs,
+  reports green, the thing it checked moves, and nothing re-runs it. Not a bug in any gate -
+  the gap between *a check ran* and *a check ran against this*. Hit twice in one day of real
+  use.
+
+### Fixed
+- **A constitution block could only be reset once.** `install.sh` deleted the `VULYK:COMMANDS`
+  markers while resetting the table they delimited, so a later `--upgrade` found no markers,
+  warned, and left whatever was there. Both blocks now go through one `reset_marked_block`
+  helper that keeps `:START` and `:END`, making the reset repeatable - which is the only way
+  a framework can change its own placeholders after the first install.
+
 ## [0.8.3] - 2026-08-18
 
 The second v0.8.x battle-test question came back and indicted the caste rather than the
