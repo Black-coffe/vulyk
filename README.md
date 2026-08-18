@@ -31,13 +31,14 @@ The result: more parallel agents, larger codebases, and — the point of the who
 
 ## Why VULYK exists
 
-Three failure modes show up in every serious Claude Code setup:
+Four failure modes show up in every serious Claude Code setup:
 
 1. **Token burn.** Running every task on the top model exhausts session and weekly limits long before the work is done. Routing is the single biggest cost lever in Claude Code — most setups never touch it.
 2. **Large codebases make agents dumber.** Past ~100k LOC, stuffing context windows stops working. A 1M-token window is a trap, not a solution: quality degrades while costs explode. The fix is external memory — maps, wikis, and pointer indexes the agent consults instead of re-reading the world.
 3. **Static configs rot.** Skills, rules, and agent prompts written in week one are stale by week six. Without a feedback loop, your setup never learns from its own mistakes.
+4. **Gates go stale where nobody looks.** A check runs, reports green, and then the thing it checked moves — a repair story is cut, a file list changes, the pack grows — and nothing re-runs it. The green is still on the record, now describing work that never shipped. This is not a bug in any gate; each one did its job at the moment it was asked. It is the gap between *a check ran* and *a check ran against this*, and it is invisible precisely because the artifact looks finished. VULYK hit it twice in one day of real use: an acceptance verdict recorded against a six-story pack that shipped with nine, and a repair round dispatched against a collision check nobody re-ran. Both were caught by reading the artifact afterwards, which is not a mechanism.
 
-VULYK answers all three with one coherent system: a **complexity-routing matrix** that picks the model tier *before* work starts, a **memory plane** (pointer index → codebase map → LLM wiki → learnings) that lives in git instead of in the context window, and an **evolution cycle** (`/vulyk-evolve`) that turns session learnings into reviewable pull requests against your own configuration — skills are born, updated, and retired with full git audit history.
+VULYK answers all four with one coherent system: a **complexity-routing matrix** that picks the model tier *before* work starts, a **memory plane** (pointer index → codebase map → LLM wiki → learnings) that lives in git instead of in the context window, and an **evolution cycle** (`/vulyk-evolve`) that turns session learnings into reviewable pull requests against your own configuration — skills are born, updated, and retired with full git audit history. Against the fourth it holds one rule, made deterministic rather than remembered: **when the pack moves, whatever judged it is re-run.** Every acceptance verdict records a fingerprint of the stories it judged, `acceptance-log.sh --check` answers `CURRENT` / `STALE` / `NO VERDICT RECORDED` before a merge is proposed, and a repair round re-runs the story gate instead of intersecting file lists by hand.
 
 ### Built on native primitives only
 
@@ -230,7 +231,7 @@ Claims of the form "N× cheaper" or "near-parity quality" have been removed from
 
 ## Documentation
 
-[Getting started](docs/getting-started.md) · [Architecture](docs/architecture.md) · [Model cascade](docs/model-cascade.md) · [Token economy](docs/token-economy.md) · [Memory system](docs/memory-system.md) · [Self-evolution](docs/self-evolution.md) · [Command reference](docs/command-reference.md) · [Hooks reference](docs/hooks-reference.md) · [FAQ](docs/faq.md)
+[Getting started](docs/getting-started.md) · [Architecture](docs/architecture.md) · [The gates](docs/pipeline.md) · [Model cascade](docs/model-cascade.md) · [Token economy](docs/token-economy.md) · [Memory system](docs/memory-system.md) · [Self-evolution](docs/self-evolution.md) · [Command reference](docs/command-reference.md) · [Hooks reference](docs/hooks-reference.md) · [FAQ](docs/faq.md)
 
 ## Roadmap — the road to 1.0.0
 
@@ -240,8 +241,9 @@ VULYK is absorbing the best of [Autopilot](https://github.com/nick-vels/skills) 
 - [x] **v0.6.0 — secrets & claims hygiene.** Redaction piped into learnings/handoff writers, irreversible-action rule in every Bash-holding agent, every doc claim re-verified on the current client.
 - [x] **v0.7.0 — traceability spine.** Verbatim `brief.md` per spec, requirement quotes in stories, deterministic `trace-check.sh` (forward + backward), briefing question discipline.
 - [x] **v0.8.0 — independence gates.** Blind coverage check (brief + plan only) before approval; blind acceptance (brief + running repo only) after build — the checker that can disagree with the framework's own account of itself, its verdict recorded in `acceptance.jsonl`. Plus three deterministic checks the v0.7.0 battle tests earned: declared paths must resolve, a story's verification must be able to fail, and a flaky surface may name its repeat count.
-- [ ] **v0.9.x — memory hardening & optional instruments.** Diff-sourced docs drone, ADR harvest from plan deltas, optional `state.json` build dashboard derived from story frontmatter.
-- [ ] **1.0.0** when: ten real Tier 2–4 specs with clean scope/trace/acceptance series, `--upgrade` proven across two minors, zero unverified claims in the docs, zero known silent-loss paths.
+- [x] **v0.8.1–v0.8.3 — what the v0.8.x battle test cost.** Both of its questions are answered, and each one found a defect rather than confirming a design. The acceptance verdict now records a fingerprint of the pack it judged, because it had recorded a clean result for a six-story pack that shipped with nine. The blind gate's cannot-run branch no longer calls a library unrunnable — given a genuinely library-only spec it wrote a caller and exercised it, and was better than its own instructions. The self-update check ships alongside: a hive that notices a newer version of itself and asks.
+- [ ] **v0.9.x — memory hardening & optional instruments.** Diff-sourced docs drone, ADR harvest from plan deltas, optional `state.json` build dashboard derived from story frontmatter. Landed so far: [the gates reference](docs/pipeline.md) — what each gate structurally cannot see, and when it stops being true.
+- [ ] **1.0.0** when: ten real Tier 2–4 specs with clean scope/trace/acceptance series (about five so far — this one closes by using the framework, not by building it), `--upgrade` proven across two minors (done, four), zero unverified claims in the docs (audited 2026-08-18), zero known silent-loss paths (two closed 2026-08-18: the acceptance note reaching git unredacted, and a repair round dispatched against a stale collision check).
 - [ ] After 1.0.0: plugin-marketplace packaging, worktree fan-out preset, public eval harness.
 
 ## Contributing

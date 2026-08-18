@@ -42,5 +42,8 @@ session end
      -> hook captures learnings -> /vulyk-gc consolidates -> /vulyk-evolve turns them into config diffs
 ```
 
+For what each gate structurally cannot see, and when a gate stops being true, see
+[The gates](pipeline.md).
+
 ## Why state lives in git, not in context
 Context windows are ephemeral and expensive; git is durable and free. Plans, stories, maps, wiki notes, learnings, ADRs, and even the framework's own evolution (changesets on `vulyk/evolve-*` branches) are files. Any session can die at any moment and the hive loses nothing but the last few turns. This is the same conclusion the strongest 2026 orchestration systems converged on independently.
