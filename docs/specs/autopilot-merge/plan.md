@@ -78,6 +78,44 @@ The merged framework keeps VULYK's identity whole — hive castes, Tier 0–4 ro
 
 **v0.7.0 — Traceability spine.** `/vulyk-plan` step 1 writes redacted `brief.md`. `templates/story.md` gains `## Requirements` (verbatim quotes, exempt from the token budget). New `templates/plan.md` carrying `## Contracts` and `## Plan deltas`. `scripts/trace-check.sh`, called before the approval stop. Briefing discipline as a new `/vulyk-plan` step; payback/neighbour tests and the merge pass in `queen-planner.md`; story-count column in the routing matrix. **Battle-test:** two Tier-3 plans; does backward trace catch an invented story?
 
+> **v0.7.0 battle-tests: BOTH PASSED — v0.8.0 is unblocked (2026-08-18).**
+> **#1 — katan `m2-gate`** (merged `ee9d3bf`, 2026-08-17): 12 stories over 8 waves, six
+> `NEEDS_CONTEXT` rounds all resolved through plan deltas with zero Queen hand-patches,
+> trace-check backward-clean on 43 quotes with deltas working as a quote source,
+> `lead-review` BLOCK → BLOCK → PASS.
+> **#2 — katan `S2.6.5-solo-save-resume`** (merged `52b1d2f`, 2026-08-18): 7 stories, 22
+> commits, 20 plan deltas, 1334 tests green post-merge. Five review rounds, four BLOCK.
+> The backward trace answered its own question — a story cut AFTER approval (`s265-07`,
+> from a review finding) traced cleanly through `## Plan deltas`, and no invented
+> requirement survived: backward 0 unfound, 0 storyless, across 22 quotes.
+>
+> **Seven candidate changes this pack argues for**, ordered by the evidence behind them:
+> 1. **Resolve `## Files` paths against the tree** — before the approval stop AND at
+>    dispatch. Six of seven stories needed a file-list correction; twice the plan named a
+>    path that does not exist. `wave-check.sh` already parses the lists.
+> 2. **Check that a `## Verification` command can fail at all.** One story's named command
+>    could not: `.prettierignore` excluded every file it touched, so the green was vacuous.
+>    A cheap test is whether the command's scope intersects the story's `## Files`.
+> 3. **Let a story name a repeat count in `## Verification`**, derived from measured
+>    frequency rather than habit. A 1-in-5 flake is caught by five runs; a 1-in-25 one is
+>    not (five runs give ~18%), and this repo's own pre-existing e2e flake is the latter.
+> 4. **Extend the `## Files` intersection check to ad-hoc repair dispatches**, not just to
+>    stories within a wave. Two dispatches landed in one file minutes apart and their
+>    changes could no longer be split by path — one story, two commits, recorded as a
+>    deliberate break of the one-commit rule.
+> 5. **Warn the Queen that `git checkout <path>` is unsafe during a build**, when
+>    uncommitted worker output is the normal state of the tree. Mutation testing needs a
+>    commit as its restore point; an inverse edit is the only safe restore otherwise.
+> 6. **A coverage claim that overstates is worse than none.** The reviewer spot-checked
+>    five repair claims and two were false — not the code, the account of how well the code
+>    was checked. Claims like "kill either guard ⇒ red" must be true of *each*, not the pair.
+> 7. **Before accepting a finding whose severity rests on a deployment shape, verify that
+>    shape exists.** Two review rounds and three repairs hardened a lock for multi-process
+>    FS — a configuration this project's own milestone ledger had already deferred. The
+>    Queen holds the milestone context; the reviewer, by design, does not. **Consequence
+>    for v0.8.0 below: `drone-acceptance` should see the milestone ledger, or it will
+>    demand guarantees for configurations that do not exist.**
+
 **v0.8.0 — Independence gates.** `.claude/agents/drone-coverage.md` (sonnet, Read, maxTurns 5) receiving exactly brief + plan, dispatched before approval. `.claude/agents/drone-acceptance.md` (sonnet, Read/Grep/Glob/Bash) receiving brief + repo + run command, never `docs/specs/**`, with a loud "cannot be run here" branch. Drift comparison logged to `memory/stats/acceptance.jsonl`. `lead-review.md`: Reinvention / Silent narrowing / Invented fact, expected-value provenance, the "could the worker have known?" routing line, findings as one-sentence conditions — report-everything unchanged. **Battle-test:** does G4 ever disagree with the story statuses, and does it decline honestly on a library-only spec?
 
 **v0.9.x — Memory hardening and optional instruments.** drone-docs sources from diff + verify-before-write checklist; `VULYK:PROFILE` markers with `install.sh` reset support; ADR harvest from `## Plan deltas` on the review PASS path via `librarian`. Optional `state.json` derived from frontmatter, read by `/vulyk-status` and named in the handoff dump. `docs/pipeline.md`; README gains the fourth failure mode and a second measured item.
