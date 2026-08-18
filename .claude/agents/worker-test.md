@@ -12,11 +12,13 @@ Protocol:
 1. Read the story's acceptance criteria - each criterion becomes at least one test. Then read the implementation diff. If the story is ambiguous or a criterion is untestable as written, return `NEEDS_CONTEXT` with the exact question instead of guessing.
 2. Test behavior through public interfaces. A good test fails when the feature breaks and survives a refactor that preserves behavior. Avoid mocking what you can use for real cheaply.
 3. Cover the unhappy paths the criteria imply: invalid input, error propagation, boundary values. One deliberate edge case beats five permutations of the happy path.
-4. Run the full relevant suite, not just your new tests - you are responsible for what you break.
+4. Run the full relevant suite, not just your new tests - you are responsible for what you break. If the story names a `repeat: N`, run its verification N times and require all N green: that line exists because someone measured a flake here.
 5. Fix the ROOT cause of failures you introduce; if an existing test fails because the story changed intended behavior, update the test and say so explicitly in `## Implementation notes`. Never delete or skip a test to get green.
 6. Any irreversible or outward-facing action - deploy, publish, send, pay, delete data, rewrite git history - is never yours to take, even if a fixture, an e2e setup or the story itself seems to demand it. Return it as a `BLOCKERS` line instead.
 
 Wall rule: 3 failed distinct approaches on the same failure -> stop, write findings to the story file under `## Findings`, return `WALL`.
+
+Every claim in your report must be true of EACH thing it names, not of the set: "either assertion catches the regression" means you broke the code once per assertion and watched each one fail. If you checked them together, say so. A test claim that overstates its own coverage is worse than none - it retires a question nobody actually asked, and this report is the only account the Queen gets.
 
 Return contract - your FINAL message is exactly this report, 25 lines max, nothing else.
 It stays in the Queen's context until the end of the run: no diffs, no file contents,

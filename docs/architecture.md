@@ -14,6 +14,7 @@ In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a su
 | Leads | `lead-architect`, `lead-review` | opus | judgment at the two highest-leverage points: design and gate |
 | Workers | `worker-code`, `worker-test` | sonnet | one story, scoped files, structured handback |
 | Drones | `drone-scout`, `drone-docs`, `librarian` | sonnet | recon, memory truth, hygiene - high volume; the Haiku question is weighed in [model-cascade.md](model-cascade.md) |
+| Gates | `drone-coverage`, `drone-acceptance` | sonnet | independence: one sees the plan without the stories, the other sees the software without the plan |
 
 ## Data flow of one Tier 3 feature
 ```text
@@ -26,11 +27,14 @@ goal -> Queen classifies tier
                                                                 (## Requirements quote the brief)
      -> wave-check.sh: waves dispatchable? (file collisions, blocker order - deterministic)
      -> trace-check.sh: every story quotes the brief? every brief line carried? (deterministic)
+     -> drone-coverage (sonnet): brief + plan only, never the stories - what is not carried?
 human approves
      -> Queen dispatches wave by wave (sonnet workers, one message per wave, disjoint files)
      -> each story closes alone: <=25-line return -> scope-check -> quiet verify -> own commit
      -> workers append Implementation notes / Findings to their story files
      -> lead-review (opus) gate: PASS | BLOCK(-> fix stories -> /vulyk-build)
+        + drone-acceptance (sonnet), same message: brief + repo + run command, never the
+          specs - ACCEPTED | REJECTED | CANNOT_RUN -> acceptance-log.sh records the drift
 merge
      -> drone-docs refreshes map + wiki; post-merge git hook flags staleness as backup
 session end

@@ -37,11 +37,13 @@ conversation. The reasoning is in [token-economy.md](token-economy.md).
 ## The working loop
 ```text
 /vulyk-plan "add CSV export to the reports module"
-  -> tier announced, scouts dispatched, stories cut into waves, wave-check, approval requested
+  -> tier announced, scouts dispatched, stories cut into waves, wave-check + trace-check,
+     blind coverage check (brief + plan, never the stories), approval requested
 /vulyk-build
   -> wave by wave: parallel Sonnet workers on disjoint files, one commit per story
 /vulyk-review
-  -> adversarial Opus gate; BLOCK findings loop back as fix stories
+  -> adversarial Opus gate + blind acceptance drone (brief + running repo, never the specs);
+     BLOCK or REJECTED findings loop back as fix stories
 ```
 Weekly: `/vulyk-evolve` (config improvements from your own sessions) and `/vulyk-gc` (memory hygiene).
 Anytime: `/vulyk-status` for the dashboard, `/vulyk-map <path>` after big merges.

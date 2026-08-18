@@ -115,7 +115,7 @@ Quiet variants only: everything these print is resent on every subsequent turn. 
 | JSON validity | `git ls-files '*.json' \| xargs -n1 jq -e . > /dev/null` |
 | Hook self-diagnosis | `bash .claude/hooks/handoff.sh status` |
 | Scope gate, per story | `bash scripts/scope-check.sh <story-file>` |
-| Wave gate, per spec | `bash scripts/wave-check.sh docs/specs/<slug>` |
+| Story gate, per spec | `bash scripts/wave-check.sh docs/specs/<slug>` |
 | Full suite / build | none exists — VULYK has no test runner and no build step |
 
 The first four are silent on success and non-zero on failure; run them together as the closest
@@ -150,7 +150,7 @@ Drop file contents, diffs, command output and scout reports: they are on disk an
 
 - Path-scoped rules: `.claude/rules/` (loaded only where relevant — keep this file lean).
 - Plans & stories: `docs/specs/` · Decisions: `docs/adr/` · Domain knowledge: `docs/wiki/`.
-- Codebase map: `memory/map/` · Session learnings: `memory/learnings/` · Skill stats: `memory/stats/`.
+- Codebase map: `memory/map/` · Session learnings: `memory/learnings/` · Stats series: `memory/stats/` (`scope.jsonl`, `acceptance.jsonl`, `skills.json`).
 
 ## Evolution
 

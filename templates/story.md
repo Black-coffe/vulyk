@@ -71,6 +71,20 @@ The QUIET form of the command - `--reporter=dot`, `-q`, `--silent`. Output under
 characters is pasted into the worker's context verbatim and resent on every turn that
 follows, so a chatty reporter can cost more than the code it verifies. Take the variant
 from `## Commands` in CLAUDE.md.
+
+The command must be able to FAIL for this story: its scope has to reach the paths under
+`## Files`. `wave-check.sh` reports the obvious case (`verify-gap`) when the command names
+paths that miss them, but it cannot see the quieter one - an ignore file (`.prettierignore`,
+`testPathIgnorePatterns`, a lint excludes list) that removes exactly the files this story
+touches and turns green into a statement about nothing. When the tool has such a list,
+check it here, at plan time.
+
+Optional `repeat: N` on its own line, when the surface under test is known to be flaky:
+the Queen and the worker run the command N times and all N must pass. Derive N from the
+measured frequency, never from habit - five runs catch a 1-in-5 flake about two times in
+three, and a 1-in-25 flake fewer than one time in five (that one needs ~75 runs to be
+worth calling evidence). If you do not know the rate, say so in `## Acceptance criteria`
+rather than inventing a count.
 -->
 `<exact command the worker runs to prove the criteria>`
 

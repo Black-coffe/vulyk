@@ -118,6 +118,33 @@ The merged framework keeps VULYK's identity whole — hive castes, Tier 0–4 ro
 
 **v0.8.0 — Independence gates.** `.claude/agents/drone-coverage.md` (sonnet, Read, maxTurns 5) receiving exactly brief + plan, dispatched before approval. `.claude/agents/drone-acceptance.md` (sonnet, Read/Grep/Glob/Bash) receiving brief + repo + run command, never `docs/specs/**`, with a loud "cannot be run here" branch. Drift comparison logged to `memory/stats/acceptance.jsonl`. `lead-review.md`: Reinvention / Silent narrowing / Invented fact, expected-value provenance, the "could the worker have known?" routing line, findings as one-sentence conditions — report-everything unchanged. **Battle-test:** does G4 ever disagree with the story statuses, and does it decline honestly on a library-only spec?
 
+> **v0.8.0 SHIPPED 2026-08-18 — battle test still owed.** `drone-coverage` (sonnet, Read,
+> `maxTurns: 5`, brief + plan.md only) dispatched at `/vulyk-plan` step 8, before the approval
+> stop. `drone-acceptance` (sonnet, Read/Grep/Glob/Bash, brief + repo + run command + the
+> milestone ledger, never `docs/specs/**` beyond the brief) dispatched from `/vulyk-review`
+> in the same message as `lead-review`, with a loud `CANNOT RUN HERE` branch.
+> `scripts/acceptance-log.sh` records the verdict beside the story statuses in
+> `memory/stats/acceptance.jsonl` and computes the one number no other gate can produce:
+> every story `done` while the blind gate did not accept. `lead-review` gained Reinvention,
+> Silent narrowing and Invented fact, the claim-provenance rule, the deployment-shape rule,
+> the `plan`/`worker` routing word, and findings written as conditions.
+>
+> **All seven candidates above were pulled into this release** rather than a separate
+> v0.7.1 (owner's call, 2026-08-18) — each is either a deterministic check or a single
+> prompt rule, and they came from one body of evidence: 1 and 2 became wave-check's
+> `missing` / `empty-glob` / `no-verify` / `verify-gap` classes (the script is now the story
+> gate, not just the wave gate); 3 became the optional `repeat: N` line in `## Verification`,
+> honoured by both workers and by the build loop; 4 became the rule that a repair dispatch
+> intersects its files against everything in flight; 5 became the standing ban on
+> `git checkout <path>` / `restore` / `stash` during a build, in `/vulyk-build` and in
+> `lead-review`; 6 became the claim-provenance rule in `lead-review` and in both workers; 7
+> became the milestone ledger reaching `drone-acceptance` plus `lead-review`'s obligation to
+> name the configuration a severity assumes.
+>
+> **Battle test to run:** does the acceptance gate ever disagree with the story statuses, and
+> does it decline honestly on a library-only spec? Until both are answered on a real spec,
+> v0.9.x stays blocked — the same rule every minor before this one obeyed.
+
 **v0.9.x — Memory hardening and optional instruments.** drone-docs sources from diff + verify-before-write checklist; `VULYK:PROFILE` markers with `install.sh` reset support; ADR harvest from `## Plan deltas` on the review PASS path via `librarian`. Optional `state.json` derived from frontmatter, read by `/vulyk-status` and named in the handoff dump. `docs/pipeline.md`; README gains the fourth failure mode and a second measured item.
 
 **1.0.0 criteria.** (1) Ten real specs across Tiers 2–4 with clean scope.jsonl, trace-check and acceptance.jsonl series. (2) `--upgrade` proven across two minors. (3) No documented claim unverified on the current client — effort, drone models, measured-vs-not section current. (4) Zero known silent-loss paths: no concurrent file collision, no unrecorded descope, no secret path into git. (5) Every new gate has a loud cannot-run branch.

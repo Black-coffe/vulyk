@@ -103,6 +103,8 @@ Every subagent declares its model in YAML frontmatter — the cascade is enforce
 | 🔍 Drone | `drone-scout` | `sonnet` | Recon: files, symbols, structure → map-format report | Yes — that's the point |
 | 🔍 Drone | `drone-docs` | `sonnet` | Update wiki & map notes after changes | Diffs |
 | 🔍 Drone | `librarian` | `sonnet` | Memory consolidation & garbage collection | Memory files only |
+| 🔍 Drone | `drone-coverage` | `sonnet` | Plan-time coverage check: brief vs plan, blind to the stories | **Never** — brief + plan only |
+| 🔍 Drone | `drone-acceptance` | `sonnet` | Blind acceptance: does the built thing do what was asked? | Repo + brief, never `docs/specs/**` |
 
 **Aliases, not pinned IDs.** `opus` and `sonnet` resolve to the current model in each tier — as of July 2026, Opus 5 and Sonnet 5. That is why the 4.8 → 5 transition cost this framework a three-line diff instead of a rewrite. Pin a full ID only to freeze behaviour deliberately.
 
@@ -202,13 +204,15 @@ Most agent frameworks — this one included, until now — ship claims nobody ch
 
 **Measured from now on, by `scripts/scope-check.sh`.** Two numbers per story, appended to `memory/stats/scope.jsonl`: how many files the story declared, and how many files the diff touched that it never named. Deterministic, no model involved, zero tokens. `/vulyk-review` runs it. The second number is what keeps the first honest — a story that lists half the repository scores a perfect zero and is caught by its own declaration count. Since v0.5.0 the build commits per story, so each measurement covers exactly one story's diff instead of the pileup of everything before it.
 
-**Checked before every dispatch, by `scripts/wave-check.sh`.** File collisions between concurrently-dispatched stories, blocker ordering, dangling `blocked_by` references — the defects that silently destroy parallel work. Same currency: deterministic, model-free, free.
+**Checked before every dispatch, by `scripts/wave-check.sh`.** File collisions between concurrently-dispatched stories, blocker ordering, dangling `blocked_by` references — the defects that silently destroy parallel work — plus, since v0.8.0, declared paths that do not exist in the tree and stories whose verification command cannot fail for the files they touch. Same currency: deterministic, model-free, free.
 
 **Checked before every approval, by `scripts/trace-check.sh`.** Backward: every `## Requirements` quote in every story must appear *verbatim* in the spec's `brief.md` (or its recorded plan deltas) — a quote found nowhere is an invented or paraphrased requirement, and a story with no quotes is speculative work. Forward: brief lines no story quotes are listed for the human, who alone decides "that's context, not a requirement". Same currency again: deterministic, model-free, free.
 
+**Recorded on every review, by `scripts/acceptance-log.sh`.** The verdict of `drone-acceptance` — which reads the human's brief and the repository, never the plan or the stories — next to what the stories claim about themselves, appended to `memory/stats/acceptance.jsonl`. The number worth having is the disagreement: every story `done` while the blind gate did not accept. It is the only series in this framework capable of contradicting the framework's own account of itself, and it starts empty, as it should.
+
 **Not measured.** Whether the cascade beats an all-Opus baseline on output quality. Whether the memory plane beats simply letting a 1M-token window read the repository. Whether moving recon off Haiku helped or just cost more. Whether `/vulyk-evolve` improves anything — it has never been run against real data, which is why it is being rebuilt around the scope metric rather than shipped as-is.
 
-Claims of the form "N× cheaper" or "near-parity quality" have been removed from this README. They may well be true; nobody here has measured them. When `scope.jsonl` has data from real projects, this section gets numbers instead of prose.
+Claims of the form "N× cheaper" or "near-parity quality" have been removed from this README. They may well be true; nobody here has measured them. When `scope.jsonl` and `acceptance.jsonl` have data from real projects, this section gets numbers instead of prose.
 
 ## FAQ
 
@@ -233,7 +237,7 @@ VULYK is absorbing the best of [Autopilot](https://github.com/nick-vels/skills) 
 - [x] **v0.5.0 — parallel build made safe.** Waves, per-story commits, bounded worker returns, repair ceiling, `wave-check.sh`, `install.sh --upgrade`.
 - [x] **v0.6.0 — secrets & claims hygiene.** Redaction piped into learnings/handoff writers, irreversible-action rule in every Bash-holding agent, every doc claim re-verified on the current client.
 - [x] **v0.7.0 — traceability spine.** Verbatim `brief.md` per spec, requirement quotes in stories, deterministic `trace-check.sh` (forward + backward), briefing question discipline.
-- [ ] **v0.8.0 — independence gates.** Blind coverage check (brief + plan only) before approval; blind acceptance (brief + running repo only) after build — the checker that can disagree with the framework's own account of itself.
+- [x] **v0.8.0 — independence gates.** Blind coverage check (brief + plan only) before approval; blind acceptance (brief + running repo only) after build — the checker that can disagree with the framework's own account of itself, its verdict recorded in `acceptance.jsonl`. Plus three deterministic checks the v0.7.0 battle tests earned: declared paths must resolve, a story's verification must be able to fail, and a flaky surface may name its repeat count.
 - [ ] **v0.9.x — memory hardening & optional instruments.** Diff-sourced docs drone, ADR harvest from plan deltas, optional `state.json` build dashboard derived from story frontmatter.
 - [ ] **1.0.0** when: ten real Tier 2–4 specs with clean scope/trace/acceptance series, `--upgrade` proven across two minors, zero unverified claims in the docs, zero known silent-loss paths.
 - [ ] After 1.0.0: plugin-marketplace packaging, worktree fan-out preset, public eval harness.

@@ -2,6 +2,72 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.8.0] - 2026-08-18
+
+Independence gates — the v0.8.0 slice of the Autopilot merge. Two checks that are useful
+precisely because of what they are not allowed to read, plus the deterministic checks the
+v0.7.0 battle tests earned. Every mechanism here answers one question: can this framework
+be contradicted by something other than itself?
+
+### Added
+- **`.claude/agents/drone-coverage.md`** (sonnet, `Read`, `maxTurns: 5`) — receives exactly
+  `brief.md` and `plan.md`, never a story file, and reports which of the human's asks the
+  plan does not visibly carry: absent, partial, plan work with no ask behind it, and asks
+  the plan answers by assuming them away. Dispatched at `/vulyk-plan` step 8, *before* the
+  approval stop — after it the check is theatre. Quotes the brief verbatim so its fragments
+  reconcile with `trace-check.sh`; one-line `CANNOT RUN` when there is no brief.
+- **`.claude/agents/drone-acceptance.md`** (sonnet, `Read/Grep/Glob/Bash`) — receives the
+  brief, the repository, one run command and the project's milestone ledger, and is
+  forbidden everything else under `docs/specs/`. It judges the software against the request,
+  not against the framework's account of what it built, and it can only do that while it has
+  not read that account. Verdict `ACCEPTED | REJECTED | CANNOT_RUN`, one line per ask with
+  the evidence, plus `UNASKED` for behaviour nobody requested. The `CANNOT RUN HERE` branch
+  is loud and is a respectable outcome: a gate that quietly says "looks fine" without running
+  anything is the failure this caste exists to prevent.
+- **`scripts/acceptance-log.sh`** — fourth deterministic record, beside scope/wave/trace.
+  Reads the story statuses itself, takes the verdict from the caller, appends to
+  `memory/stats/acceptance.jsonl`, and computes **drift**: every story `done` while the blind
+  gate did not accept. That series is the only one in VULYK capable of contradicting VULYK.
+- **Story-gate checks in `scripts/wave-check.sh`** (candidates 1–3 from the v0.7.0 battle
+  tests, pulled into this release rather than a v0.7.1): `missing` — a declared path whose
+  parent directory does not exist; `empty-glob` — a declared glob matching nothing;
+  `no-verify` — a story with no verification command, whose green cannot mean anything;
+  `verify-gap` — a verification command whose named paths do not intersect the story's
+  `## Files`, the shape that made one battle-test story's green vacuous; `repeat` — a
+  malformed repeat count. The script's own limits are stated in its header instead of being
+  discovered later: a whole-suite command that names no path cannot be judged, and a path
+  that resolves but is the wrong file passes.
+- **Optional `repeat: N` under a story's `## Verification`** — for a surface with a measured
+  flake rate, honoured by both workers and by the build loop. The template carries the
+  arithmetic that makes the number honest: five runs catch a 1-in-5 flake about two times in
+  three and a 1-in-25 flake fewer than one time in five.
+
+### Changed
+- **`lead-review`** gains three categories — **Reinvention** (the repo already has this),
+  **Silent narrowing** (delivered less than asked, with nothing in `## Descoped` or
+  `## Plan deltas`), **Invented fact** (a claim about the repo, a library or an interface
+  that nobody verified) — plus three rules: a coverage claim must hold for *each* thing it
+  names rather than the set; a severity resting on a deployment shape must name the
+  configuration it assumes, because the Queen holds the milestone context and the reviewer
+  does not; and every finding carries a routing word, `plan` or `worker`, answering "could a
+  worker holding only its story have known?". Findings are written as one-sentence
+  conditions, since the repair goes to a fresh worker that never saw the review.
+- **`worker-code` / `worker-test`** — a claim in the return report must be true of each thing
+  it names, not of the pair; both honour `repeat: N`.
+- **`/vulyk-plan`** is now 9 steps (coverage check inserted before the approval stop, which
+  now presents three verdicts). **`/vulyk-review`** dispatches `lead-review` and
+  `drone-acceptance` in one message — independent, so concurrent — and records the verdict
+  through `acceptance-log.sh`; an acceptance `BROKEN` outranks a review minor, because it is
+  the human's own request failing while being run.
+- **`/vulyk-build`** re-runs the story gate after approval (the tree moved since planning),
+  applies the wave file-intersection rule to ad-hoc **repair** dispatches, and bans
+  `git checkout <path>` / `git restore` / `git stash` during a build: uncommitted worker
+  output is the normal state of the tree and there is no diff to recover it from. Mutation
+  testing waits for the story's commit as its restore point. Same ban stated in `lead-review`.
+- README, architecture flow, model cascade, command reference and getting-started updated for
+  the two new castes; `memory/stats/acceptance.jsonl` named in the measured section, where it
+  starts empty as it should.
+
 ## [0.7.0] - 2026-08-17
 
 Traceability spine — the v0.7.0 slice of the Autopilot merge: the discipline that a

@@ -42,6 +42,7 @@ rewrite. Pin a full ID only when you deliberately want to freeze behaviour.
 | Queen, `queen-planner`, `lead-architect`, `lead-review` | `opus` → Opus 5 | Frontier reasoning at half of Fable's price; default on Max plans |
 | `worker-code`, `worker-test` | `sonnet` → Sonnet 5 | Implementation against an explicit story does not need frontier reasoning |
 | `drone-scout`, `drone-docs`, `librarian` | `sonnet` → Sonnet 5 | See the caveat below — this one is a judgment call, not a measurement |
+| `drone-coverage`, `drone-acceptance` | `sonnet` → Sonnet 5 | Bounded jobs against a fixed input: coverage reads two files at `maxTurns: 5`, acceptance runs the thing and reports |
 | Second reviewer, Tier 4 only, opt-in | `claude-fable-5` | Ensemble, not duplication — see below |
 
 ### Caveat on the recon tier
