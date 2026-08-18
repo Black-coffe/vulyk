@@ -2,6 +2,32 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.9.2] - 2026-08-18
+
+The 1.0.0 bar stops being a thing anyone remembers.
+
+### Added
+- **`scripts/release-check.sh`** - counts criterion (1) instead of recalling it. A spec counts
+  only when all three series exist for it: a `brief.md` for trace-check to walk, at least one
+  `scope.jsonl` entry, and an `acceptance.jsonl` verdict whose `pack` fingerprint still matches
+  the spec as it stands. Criteria (2)-(5) are audits rather than counts, and the script says so
+  rather than guessing at them - including refusing to count version tags for (2), which is a
+  fact about VULYK's releases and not about the project being measured.
+  It was written because the bar had been answered from memory, wrongly, more than once. On its
+  first run against a real repository the true figure was **0 of 10**, against an estimate of
+  five: three specs carry brief and scope but have never been put in front of the blind gate,
+  and the one acceptance record that exists predates v0.8.2's pinning, so it cannot be shown to
+  describe the pack that shipped.
+
+### Fixed
+- **Two of the four deterministic records could not be joined.** A story file carries
+  `story: s265a-08`; `scope-check.sh` writes the basename it was invoked with,
+  `s265a-08-abandon-is-one-guarded-write`. Neither is wrong and nothing had ever needed both at
+  once, so the mismatch sat unnoticed until something tried to count across them - and the
+  first version of this script silently reported `scope: no` for every spec in a repository
+  with thirty-seven scope entries. It now matches on both spellings. A silent `no` from a meter
+  is the same defect class as a silent green from a gate.
+
 ## [0.9.1] - 2026-08-18
 
 The last instrument v0.9.x owed, built to the constraint the judge panel set for it when
