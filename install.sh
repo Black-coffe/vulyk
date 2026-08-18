@@ -220,7 +220,41 @@ PYWIRE
   fi
 }
 
+# VULYK ships runtime artifacts - handoffs, snapshots, the update-check cache, the derived
+# state view, the installer's own settings backup - and until now shipped no rule for
+# ignoring any of them. `.gitignore` is the project's file and is not framework-owned, so it
+# is never copied and never replaced; the result was that every installed project committed
+# whatever the framework left lying around, or did not, by luck. Same treatment as the hook
+# wiring: append only what is missing, in a marked block, and say what was added.
+ensure_gitignore() {
+  local file="$DEST/.gitignore" missing=0 line
+  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/"
+
+  for line in $wanted; do
+    grep -qxF "$line" "$file" 2>/dev/null || missing=$((missing + 1))
+  done
+  [ "$missing" -gt 0 ] || return 0
+
+  if [ "$CHECK" = "--check" ]; then
+    echo "  would add      $missing VULYK runtime entries to .gitignore"
+    return 0
+  fi
+
+  {
+    [ -s "$file" ] && echo ""
+    echo "# --- VULYK runtime artifacts (added by install.sh; safe to reorder or annotate) ---"
+    echo "# Per-machine or derived. Committing any of them creates a second account of"
+    echo "# something the repository already holds, which is the failure mode the framework"
+    echo "# spends most of its checks preventing."
+    for line in $wanted; do
+      grep -qxF "$line" "$file" 2>/dev/null || echo "$line"
+    done
+  } >> "$file"
+  echo "  gitignore      added $missing VULYK runtime entries"
+}
+
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr; do copy_tree "$tree"; done
+ensure_gitignore
 wire_session_hook vulyk-update-check.sh
 mkdir -p "$DEST/memory/learnings" "$DEST/memory/snapshots" "$DEST/docs/wiki" "$DEST/docs/specs" "$DEST/docs/adr" 2>/dev/null || true
 [ -f "$DEST/memory/stats/skills.json" ] || { [ "$CHECK" = "--check" ] || { mkdir -p "$DEST/memory/stats"; echo '{}' > "$DEST/memory/stats/skills.json"; }; }

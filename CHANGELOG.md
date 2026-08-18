@@ -2,6 +2,21 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.9.4] - 2026-08-18
+
+### Fixed
+- **The installer shipped runtime artifacts and no rule for ignoring them.** Handoffs,
+  snapshots, the update-check cache, the derived state view, the installer's own settings
+  backup - VULYK creates all of them inside your repository, and `.gitignore` is not in any
+  tree `install.sh` copies, because it is the project's file and must never be replaced. The
+  result: an installed project committed whatever the framework left lying around, or did
+  not, by luck. Found by watching `.claude/state.json` turn up untracked in a real project one
+  release after v0.9.1 declared it gitignored - true of this repository, and of nowhere else.
+  `ensure_gitignore` now appends only the missing entries, in a marked block, and says how
+  many it added. Idempotent, never rewrites what is already there, and honest under `--check`.
+  Same doctrine as the hook wiring in v0.8.0: a rule that does not reach existing installs is
+  a rule the framework only believes about itself.
+
 ## [0.9.3] - 2026-08-18
 
 Three specs went through the blind gate in one sitting - the first time the acceptance series
