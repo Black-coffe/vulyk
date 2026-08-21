@@ -8,6 +8,7 @@
 A model-cascade, memory-first, self-evolving framework for running multi-agent coding at scale — built entirely on native Claude Code primitives.</p>
 
 <p align="center">
+  <a href="https://github.com/Black-coffe/vulyk/actions/workflows/ci.yml"><img src="https://github.com/Black-coffe/vulyk/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-F5B82E?labelColor=0C0A07" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/Claude%20Code-2.x-F5B82E?labelColor=0C0A07" alt="Claude Code 2.x">
   <img src="https://img.shields.io/badge/subscription-safe-F5B82E?labelColor=0C0A07" alt="Subscription safe">
@@ -47,6 +48,17 @@ VULYK uses **only** official Claude Code mechanisms: subagents, slash commands, 
 - ✅ Fully compatible with Pro / Max **subscription plans** under Anthropic's third-party tooling policy (effective April 4, 2026) — every API call is made by the official Claude Code client.
 - ✅ Survives ecosystem policy changes — there is nothing here that can be cut off.
 - ✅ Zero installation beyond copying files into your repo.
+
+## How VULYK compares
+
+| Approach | Model usage | Memory at scale | Learns over time | Runtime dependency |
+|---|---|---|---|---|
+| **Single top model, one session** | Everything on the strongest model — burns limits fastest | Context window only — degrades past ~100k LOC | No | None |
+| **SDK / proxy orchestrators** | Programmable, but routing is your code to write | Whatever you build | Whatever you build | Custom runtime — breaks when the ecosystem shifts; often outside subscription policy |
+| **Generic subagent prompts** | Mixed; tiering is ad-hoc and easy to drift | Usually none | No | None |
+| **VULYK** | Routing-matrix cascade: queen/leads/workers/drones by tier, enforced in config | Git-based external memory plane (index → map → wiki → learnings) | Yes — `/vulyk-evolve` proposes config diffs as reviewable PRs | **None** — native Claude Code primitives only, subscription-safe |
+
+**When VULYK is overkill:** a small repo (< ~20k LOC), a one-off script, or a throwaway prototype. The cascade earns its keep when token limits, codebase size, or config drift actually hurt — typically a real, growing codebase you return to week after week.
 
 ## Quickstart
 
