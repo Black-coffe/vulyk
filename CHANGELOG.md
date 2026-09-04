@@ -2,6 +2,34 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.10.1] - 2026-09-04
+
+### Fixed
+- **The handoff guard divided by the wrong window.** `context_limit` was a hardcoded `200000`
+  with a comment telling you to raise it by hand on a 1M-context model, and the escalation
+  thresholds were absolute tokens (`110000 / 140000 / 165000`) meant to be 55% / 70% / 82% of
+  it. On `opus[1m]` that read 150k of a 1M window as **75% full** and injected exactly that
+  into the model's context, which then repeated it to the owner and recommended a checkpoint
+  at 15% used. Worse than the wrong number: level 2 fired at 14% of the window, so every
+  session was nagged from its first turns, and a warning you have ignored all day is not a
+  warning when the window really does run out.
+  - The window is now detected per session and the thresholds are a share of it
+    (`thresholds_pct`, default `[55, 70, 82]`), so one config is right on a 200k model and on
+    a 1M one. Sources, strictest first: a `context_limit` pin; `CLAUDE_CODE_AUTO_COMPACT_WINDOW`
+    and `CLAUDE_CODE_DISABLE_1M_CONTEXT`; the statusLine JSON `claude-statusbar` caches on disk;
+    the window already seen this session; the measurement itself (past 200k tokens the window
+    cannot be the stock one). Absolute `thresholds` and a pinned `context_limit` keep working.
+  - Hook payloads carry no window size - the field exists only in statusLine input - hence the
+    statusbar cache. Its global file is shared by every Claude Code window, so an entry is used
+    only when it belongs to this session, the per-session copy is preferred, and the reading is
+    remembered in the session state: one missed tick must not escalate a level that the
+    anti-spam state would then keep silencing for the rest of the session.
+  - Where the statusbar could answer but this tick could not, the hook stays quiet rather than
+    divide by a guess. Machines without it keep the previous 200k behaviour unchanged.
+  - `handoff.sh status` prints the resolved window and its source. CI covers the matrix in
+    `tests/handoff-window.test.py`: both cache shapes, a foreign session, no statusbar, both env
+    knobs, a config pin, legacy absolute thresholds, and the escalation floor.
+
 ## [0.10.0] - 2026-09-04
 
 ### Added

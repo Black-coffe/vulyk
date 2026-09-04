@@ -86,6 +86,15 @@ jobs:
           [ -z "$(CLAUDE_PROJECT_DIR="$t/proj" bash .claude/hooks/top-model-brief.sh)" ] || { echo "::error::hook spoke without a resolver"; fail=1; }
           exit $fail
 
+  handoff-window:
+    name: handoff.py resolves the context window
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: synthetic windows -> right denominator, right silence
+        run: python3 tests/handoff-window.test.py .claude/hooks/handoff.py
+
   install-smoke:
     name: install.sh dry-run smoke test
     runs-on: ubuntu-latest
