@@ -2,6 +2,63 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.10.0] - 2026-09-04
+
+### Added
+- **The top model follows the plan.** Fable 5.1 shipped, and whether it should be the king of
+  planning is a question about the subscription, not about the model. Anthropic's plan terms
+  draw the line in money: on Max 5x / 20x and on premium Team/Enterprise seats, up to half the
+  weekly limit is Fable at no extra cost; on Pro and on standard seats Fable is not inside the
+  plan at all - every token bills to usage credits on top of the subscription. So VULYK now
+  resolves `TOP_MODEL` from the plan: **`fable` on Max and premium seats, `opus` on Pro,
+  standard seats, API keys and anything unrecognised.**
+  - `scripts/top-model.sh` does the reading, from the account profile Claude Code caches in
+    `~/.claude.json` (`oauthAccount.organizationType`, `.organizationRateLimitTier`,
+    `.seatTier`) - a cache of the signed-in account, not a credential; the credentials file is
+    never opened. grep and sed only, so it runs where neither `jq` nor Python is installed.
+    `--explain` shows the plan, the signal and the reason; `--apply` pins the alias as `"model"`
+    in the gitignored `.claude/settings.local.json` so the Queen's own session starts on it;
+    `--check` reports drift. Resolution order: `VULYK_TOP_MODEL`, then a non-`auto` pin in
+    `CLAUDE.md`, then the plan, then `opus`. Every failure resolves to `opus` and says why.
+  - `.claude/hooks/top-model-brief.sh` prints one `[VULYK] top model:` line at SessionStart -
+    the alias, the plan, the Tier 4 second-reviewer pairing, and whether the session is pinned.
+    It reads and never writes: pinning is a decision, and a hook that edits settings behind
+    the owner's back is the failure mode the update check exists to prevent. Wired by
+    `install.sh` on install and on `--upgrade`, through the same `wire_session_hook` the
+    update check uses.
+  - `/vulyk-plan` and `/vulyk-review` pass the resolved alias as the **per-invocation
+    `model:`** when dispatching `queen-planner`, `lead-architect` and `lead-review`; the
+    parameter takes precedence over frontmatter. `/vulyk-status` and `/vulyk-bootstrap` show
+    the resolution; bootstrap runs `--apply`.
+  - CI runs synthetic profiles for every plan shape - Max 20x, Max 5x, Pro, standard and
+    premium seats, no profile, unparseable profile, env override, constitution pin - plus
+    `--apply` into a file that already holds permissions, and the hook's silence without a
+    resolver.
+
+### Changed
+- **`TOP_MODEL = auto`** in the constitution. An alias in its place overrules the plan
+  (`opus` on a closed codebase to stay outside the 30-day retention Fable carries; `fable` on
+  Pro for someone who has decided to spend credits). The three top-caste agent files keep
+  `model: opus` as their floor: frontmatter cannot be conditional and ships to every install,
+  so `fable` there would bill a Pro owner from the first plan without asking, and `inherit`
+  would drag the planner down to the session default - Sonnet 5 on Pro. The native `best`
+  alias was weighed and rejected for the same reason: it resolves to Fable wherever Fable is
+  *available*, and on Pro it is available, for credits.
+- The Tier 4 second reviewer is now named by the resolver rather than fixed to `claude-fable-5`:
+  `opus` beside a Fable gate; beside an Opus gate, `fable` where the plan carries it and
+  `sonnet` where it would bill to credits.
+- The field names for Max were read off a real profile. The Pro and seat-tier spellings follow
+  the same pattern and are matched loosely (`*pro*`, `*premium*`) - the honest amount of
+  confidence to encode, and the first thing to check if a Pro owner's brief says `fable`.
+
+### Upgrading
+- `install.sh --upgrade` ships the resolver and wires the hook (verified from a real 0.9.5
+  install: hook copied, `settings.json` gains one entry and stays valid, the constitution is
+  untouched). **Untouched is the catch:** a pre-0.10.0 constitution pins `TOP_MODEL = opus`,
+  and the resolver honours a pin over the plan, so an upgraded hive on Max keeps planning on
+  Opus until you change that line to `TOP_MODEL = auto`. The installer says so when it sees
+  the old pin; the session brief reports `by constitution` until it changes.
+
 ## [0.9.5] - 2026-08-18
 
 ### Fixed

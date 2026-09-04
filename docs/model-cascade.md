@@ -15,7 +15,66 @@ by holding scope, and the savings are a side effect.
 1. **Agent frontmatter** — every `.claude/agents/*.md` declares `model:`. Committed to the repo:
    routing by configuration, not willpower.
 2. **The routing matrix** in `CLAUDE.md` — tier decided before work starts and announced.
-3. **`TOP_MODEL`** — one line in `CLAUDE.md` for the Queen's own model.
+3. **`TOP_MODEL`** — one line in `CLAUDE.md`. Since v0.10.0 it reads `auto` and the plan decides;
+   see the next section.
+
+## The top model follows the plan (v0.10.0)
+
+Fable 5.1 is the strongest planner there is, and whether it is the *right* planner is a question
+about money, not capability. Anthropic's plan terms (September 2026, [support article][fable-plan])
+draw the line: on **Max** plans and on premium Team/Enterprise seats, up to half of the weekly
+limit may be spent on Fable at no extra cost; on **Pro** and on standard seats, Fable is not inside
+the plan at all — every token bills to usage credits on top of the subscription. So the rule VULYK
+applies is:
+
+| Plan | Read from | King of planning & orchestration | Tier 4 second reviewer |
+|---|---|---|---|
+| Max 5x, Max 20x | `organizationType: claude_max` | `fable` → Fable 5.1 | `opus` |
+| Team / Enterprise, premium seat | `organizationType` + `seatTier: premium` | `fable` | `opus` |
+| Pro, standard seats | `organizationType: claude_pro` / seat tier | `opus` → Opus 5 | `sonnet` (Fable would bill to credits) |
+| API key, unknown, not signed in | `ANTHROPIC_API_KEY` / nothing | `opus` — the floor | `sonnet` |
+
+The half-of-the-limit cap is the bookend pattern's own shape: Fable on planning and the gate,
+Sonnet on the workers, and the cap is never reached by design.
+
+`scripts/top-model.sh` does the reading. Its source is the account profile Claude Code caches in
+`~/.claude.json` (`oauthAccount.organizationType`, `.organizationRateLimitTier`, `.seatTier`) — the
+one local place the plan is written down, and a cache of the signed-in account rather than a
+credential. The credentials file is never opened; the resolver is grep and sed, so it runs on a
+machine with neither `jq` nor Python. Every failure mode — no profile, an unrecognised
+`organizationType`, an unreadable file — resolves to `opus` and says why under `--explain`.
+
+Resolution order: `VULYK_TOP_MODEL` in the shell, then a non-`auto` pin in `CLAUDE.md`, then the
+plan, then `opus`. The field names for Max were read off a real profile; the Pro and seat-tier
+spellings follow the same pattern and are matched loosely (`*pro*`, `*premium*`), which is the
+honest amount of confidence to encode.
+
+**How the resolved alias reaches the work.** Three places, none of them willpower:
+
+- `.claude/hooks/top-model-brief.sh` prints one `[VULYK] top model: ...` line at SessionStart
+  naming the alias, the plan, the Tier 4 pairing, and whether the Queen's own session is pinned
+  to it.
+- `/vulyk-plan` and `/vulyk-review` pass it as the **per-invocation `model:` parameter** when
+  they dispatch `queen-planner`, `lead-architect` and `lead-review`. That parameter takes
+  precedence over the agent file's frontmatter ([sub-agents docs][subagents]).
+- `scripts/top-model.sh --apply` pins the alias as `"model"` in the gitignored
+  `.claude/settings.local.json`, so the Queen's session — the orchestrator itself — starts on it
+  from the next launch. It merges one key and touches nothing else. The hook never writes this;
+  it reports drift and leaves the decision to you.
+
+**Why the three top-caste files still say `model: opus`.** Frontmatter cannot be conditional, and
+it ships to every install. `fable` there would bill a Pro owner's usage credits from the first plan
+without asking; `inherit` would drag the planner down to whatever the session happens to run on —
+Sonnet 5 by default on Pro, per Anthropic's own [defaults table][model-config]. `opus` is right on
+every plan and wrong on none; the dispatch parameter is the upgrade. Two native alternatives were
+weighed and rejected: the `best` alias resolves to Fable "where available to you", and on Pro it
+*is* available — for credits — so it implements exactly the rule this framework exists to avoid;
+`CLAUDE_CODE_SUBAGENT_MODEL` only applies to agents with no `model:` of their own, which is none of
+VULYK's.
+
+[fable-plan]: https://support.claude.com/en/articles/15424964-claude-fable-models-on-your-plan
+[subagents]: https://code.claude.com/docs/en/sub-agents
+[model-config]: https://code.claude.com/docs/en/model-config
 
 ## Route with frontmatter, never with `/model`
 
@@ -35,15 +94,15 @@ that tier, so the next generation is absorbed without editing a single file. Tha
 main reason this framework survived the 4.8 → 5 transition with a three-line diff instead of a
 rewrite. Pin a full ID only when you deliberately want to freeze behaviour.
 
-## Current assignment (July 2026)
+## Current assignment (September 2026)
 
 | Caste | Model | Why |
 |---|---|---|
-| Queen, `queen-planner`, `lead-architect`, `lead-review` | `opus` → Opus 5 | Frontier reasoning at half of Fable's price; default on Max plans |
+| Queen, `queen-planner`, `lead-architect`, `lead-review` | `TOP_MODEL` — `fable` → Fable 5.1 on Max and premium seats, `opus` → Opus 5 on Pro, standard seats and API | Frontier reasoning where the plan includes it at no extra cost; the frontmatter floor is `opus`, the dispatch parameter carries the upgrade |
 | `worker-code`, `worker-test` | `sonnet` → Sonnet 5 | Implementation against an explicit story does not need frontier reasoning |
 | `drone-scout`, `drone-docs`, `librarian` | `sonnet` → Sonnet 5 | See the caveat below — this one is a judgment call, not a measurement |
 | `drone-coverage`, `drone-acceptance` | `sonnet` → Sonnet 5 | Bounded jobs against a fixed input: coverage reads two files at `maxTurns: 5`, acceptance runs the thing and reports |
-| Second reviewer, Tier 4 only, opt-in | `claude-fable-5` | Ensemble, not duplication — see below |
+| Second reviewer, Tier 4 only | the *other* one: `opus` beside a Fable gate, `fable` or `sonnet` beside an Opus gate (the brief says which) | Ensemble, not duplication — see below |
 
 ### Caveat on the recon tier
 Moving the drones off Haiku is **not backed by evidence**, and the honest case runs the other way:
@@ -62,10 +121,14 @@ It finds fewer real problems but is more often right about the ones it reports. 
 model are blind in the same places, and adversarial framing does not fix that — so the Tier 4 pair
 should not be two Opus 5 instances.
 
-Two things to weigh before enabling it. Fable 5 costs about twice as much. More importantly, Fable
-and Mythos are subject to the 30-day data-retention requirement and Opus is not — and the reviewer
-sees the entire diff. On a closed codebase that is a deliberate decision, not a default. It ships
-off by default for that reason.
+Two things to weigh. On plans where Fable bills to credits, the pairing is `sonnet` rather than
+`fable` — the resolver already picks that. More importantly, Fable and Mythos are subject to the
+30-day data-retention requirement and Opus is not ([anthropic.com/claude/fable][fable-page]) — and
+on Max plans, where Fable is now the gate *and* the planner, the reviewer sees the entire diff and
+the planner sees every brief. On a closed codebase that is a deliberate decision: pin
+`TOP_MODEL = opus` in `CLAUDE.md` to opt out, and the resolver honours the pin over the plan.
+
+[fable-page]: https://www.anthropic.com/claude/fable
 
 *(That Fable specifically has better recall is an inference, not a measurement. What is supported
 is only that an ensemble of different models beats a duplicate.)*

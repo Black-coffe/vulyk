@@ -256,6 +256,7 @@ ensure_gitignore() {
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr; do copy_tree "$tree"; done
 ensure_gitignore
 wire_session_hook vulyk-update-check.sh
+wire_session_hook top-model-brief.sh
 # The empty trees a fresh hive needs. Guarded like every other write: a dry run that
 # creates directories is not a dry run, and this one had been leaving seven of them in
 # repositories whose owners were only asking what the installer would do.
@@ -281,6 +282,15 @@ if [ -f "$DEST/CLAUDE.md" ]; then
     if ! cmp -s "$SRC/CLAUDE.md" "$DEST/CLAUDE.md"; then
       echo "  The framework constitution changed in $VER. See what, then merge what you want:"
       echo "      diff \"$DEST/CLAUDE.md\" \"$SRC/CLAUDE.md\""
+    fi
+    # Pre-0.10.0 constitutions pin `TOP_MODEL = opus` by default, and the resolver honours a
+    # pin over the plan - so an upgraded hive on Max stays on Opus until this line changes.
+    # Say so here, once, rather than letting the session brief report "by constitution"
+    # forever to an owner who never chose it.
+    if grep -q 'TOP_MODEL = opus' "$DEST/CLAUDE.md" 2>/dev/null; then
+      echo "  Since 0.10.0 the top model follows the plan (Fable 5.1 on Max, Opus 5 on Pro)."
+      echo "  Your constitution still pins \`TOP_MODEL = opus\`; change it to \`TOP_MODEL = auto\` to"
+      echo "  enable that, or keep the pin deliberately. \`scripts/top-model.sh --explain\` shows the pick."
     fi
   elif [ -e "$DEST/CLAUDE.vulyk.md" ]; then
     echo ""

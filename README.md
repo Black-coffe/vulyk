@@ -19,8 +19,8 @@ A model-cascade, memory-first, self-evolving framework for running multi-agent c
 
 **Vulyk** (Ukrainian: *вулик*) means **beehive**. A hive does not send the queen to gather pollen. It routes every job to the cheapest unit that can do it well, keeps shared memory outside any single bee, and continuously adapts the colony to the season. VULYK applies the same economics to AI-assisted software development:
 
-- **Queen** — your main Claude Code session on the strongest model. Plans, decomposes, integrates. Never reads source code directly.
-- **Leads** — Opus-class subagents for architecture decisions and adversarial review.
+- **Queen** — your main Claude Code session on the strongest model your plan carries: Fable 5.1 on Max, Opus 5 on Pro, resolved from the account, not remembered. Plans, decomposes, integrates. Never reads source code directly.
+- **Leads** — frontier-class subagents on the same model for architecture decisions and adversarial review.
 - **Workers** — Sonnet-class subagents that implement and test individual stories. This is where most tokens are spent.
 - **Drones** — cheap subagents for reconnaissance, documentation updates, and memory upkeep.
 
@@ -95,7 +95,7 @@ git -C /tmp/vulyk pull
 ```text
 /vulyk-plan  "add OAuth login with refresh tokens"   # Queen plans, scouts recon, stories written
 /vulyk-build                                          # Workers implement stories on Sonnet, in parallel
-/vulyk-review                                         # Adversarial Opus review gate before merge
+/vulyk-review                                         # Adversarial top-model review gate before merge
 ```
 
 > **Tip:** enable Anthropic's experimental Agent Teams for collaborative Tier 3–4 work:
@@ -107,10 +107,10 @@ Every subagent declares its model in YAML frontmatter — the cascade is enforce
 
 | Caste | Agent | Model | Job | Reads source? |
 |---|---|---|---|---|
-| 👑 Queen | *(main session)* + `queen-planner` | `opus` | Decompose goals, integrate results, own the roadmap | **Never** — consumes scout reports & memory only |
-| 🛡 Lead | `lead-architect` | `opus` | Design decisions, ADRs, tradeoff analysis | Targeted excerpts only |
-| 🛡 Lead | `lead-review` | `opus` | Adversarial review gate: correctness, security, invariants | Diffs + tests |
-| 🛡 Lead | *second reviewer, Tier 4, opt-in* | `claude-fable-5` | Recall complement — an ensemble, not a duplicate | Diffs |
+| 👑 Queen | *(main session)* + `queen-planner` | `TOP_MODEL` — `fable` on Max, `opus` on Pro | Decompose goals, integrate results, own the roadmap | **Never** — consumes scout reports & memory only |
+| 🛡 Lead | `lead-architect` | `TOP_MODEL` | Design decisions, ADRs, tradeoff analysis | Targeted excerpts only |
+| 🛡 Lead | `lead-review` | `TOP_MODEL` | Adversarial review gate: correctness, security, invariants | Diffs + tests |
+| 🛡 Lead | *second reviewer, Tier 4* | the other one: `opus` beside Fable, `sonnet` beside Opus on Pro | Recall complement — an ensemble, not a duplicate | Diffs |
 | 🐝 Worker | `worker-code` | `sonnet` | Implement exactly one story | Scoped slice via map |
 | 🐝 Worker | `worker-test` | `sonnet` | Write/repair tests for one story | Scoped slice |
 | 🔍 Drone | `drone-scout` | `sonnet` | Recon: files, symbols, structure → map-format report | Yes — that's the point |
@@ -119,7 +119,9 @@ Every subagent declares its model in YAML frontmatter — the cascade is enforce
 | 🔍 Drone | `drone-coverage` | `sonnet` | Plan-time coverage check: brief vs plan, blind to the stories | **Never** — brief + plan only |
 | 🔍 Drone | `drone-acceptance` | `sonnet` | Blind acceptance: does the built thing do what was asked? | Repo + brief, never `docs/specs/**` |
 
-**Aliases, not pinned IDs.** `opus` and `sonnet` resolve to the current model in each tier — as of July 2026, Opus 5 and Sonnet 5. That is why the 4.8 → 5 transition cost this framework a three-line diff instead of a rewrite. Pin a full ID only to freeze behaviour deliberately.
+**The top model follows the plan.** `TOP_MODEL = auto` in the constitution, and `scripts/top-model.sh` reads the account profile Claude Code keeps in `~/.claude.json`: Max 5x / 20x and premium seats resolve to `fable` — Fable 5.1, which those plans carry at no extra cost up to half the weekly limit; Pro, standard seats and API keys resolve to `opus` — on those, every Fable token bills to usage credits on top of the subscription. A SessionStart hook announces the result, `/vulyk-plan` and `/vulyk-review` pass it as the dispatch `model:` for the three top castes, and `--apply` pins the Queen's own session to it. The three agent files keep `opus` as their floor because frontmatter cannot be conditional and must be right on every plan. Pin an alias in place of `auto` to overrule the plan. Why not the native `best` alias: it resolves to Fable wherever it is *available*, and on Pro it is available — for credits. [docs/model-cascade.md](docs/model-cascade.md) has the table and the rejected alternatives.
+
+**Aliases, not pinned IDs.** `fable`, `opus` and `sonnet` resolve to the current model in each tier — as of September 2026, Fable 5.1, Opus 5 and Sonnet 5. That is why the 4.8 → 5 transition cost this framework a three-line diff instead of a rewrite. Pin a full ID only to freeze behaviour deliberately.
 
 **Effort is a session setting, not a per-agent one.** `effortLevel` in `.claude/settings.json` works and ships set to `medium`; `effort:` in agent frontmatter is silently ignored. Both were measured — see [docs/model-cascade.md](docs/model-cascade.md) for the numbers and the escalation table.
 
@@ -201,6 +203,7 @@ Each cycle is a ratchet: the colony clicks forward and never slips back.
 | Hook | Event | Effect |
 |---|---|---|
 | `session-start-brief.sh` | SessionStart | Injects memory freshness + pending-learnings line into context |
+| `top-model-brief.sh` | SessionStart | Announces the top model the plan resolved to (`fable` on Max, `opus` on Pro), the Tier 4 pairing, and whether your session is pinned to it — reads only, never writes |
 | `session-end-learnings.sh` | SessionEnd | Captures a structured learnings stub (optional auto-distill with `VULYK_AUTOLEARN=1`) |
 | `skill-usage-counter.sh` | PostToolUse (Skill) | Increments per-skill counters → fuel for `skill-gardener` |
 | `context-guard.sh` | PreCompact | Snapshots memory & task state before compaction |
@@ -259,6 +262,7 @@ VULYK is absorbing the best of [Autopilot](https://github.com/nick-vels/skills) 
 - [x] **v0.9.2 — the 1.0.0 bar is counted, not recalled.** [`scripts/release-check.sh`](scripts/release-check.sh) counts criterion (1) instead of remembering it: a spec counts only when all three deterministic series exist for it — a `brief.md` for trace-check to walk, a `scope.jsonl` entry, and an acceptance verdict whose `pack` fingerprint still matches the spec as it stands. On its first run against a real repository the true figure was **0 of 10**, against an estimate of five. Two of the four records could not even be joined — a story file's `story:` key against the basename `scope-check.sh` was invoked with — so the first version of the meter reported `scope: no` for a repository holding thirty-seven scope entries. A silent `no` from a meter is the same defect class as a silent green from a gate.
 - [x] **v0.9.3 — what the first real acceptance sitting found in its own machinery.** Three specs through the blind gate in one sitting, three defects, none of them in the code under test. `drift` could not fire on a spec whose stories predate the status convention: a status outside `todo|in-progress|done|blocked` is neither done nor not-done, so a fully merged twelve-story spec scored `done: 0`, the comparison never held, and the record said the reassuring `false` — the one metric built to contradict the hive, switched off by a spelling. It now records `"unknown"` with the count and the reason. The milestone-ledger exception leaked the framework's own account into the blind gate — disclosed by the drone itself, which then re-verified independently; `/vulyk-review` now prefers the `## Profile` block and hands over a ledger by **naming the section, not the file**. And concurrent acceptance gates collide on fixed test ports, which reads exactly like a defect in the code under test.
 - [x] **v0.9.4 — the ignore rules finally reach installed projects.** VULYK writes handoffs, snapshots, an update-check cache, a derived state view and its own settings backup into your repository, and `.gitignore` is in no tree the installer copies, because it is the project's file and must never be replaced. So every install committed whatever the framework left lying around, or did not, by luck. Noticed when `.claude/state.json` turned up untracked in a real project one release after v0.9.1 declared it gitignored — true of this repository, and of nowhere else. `ensure_gitignore` appends only the missing entries, in a marked block, idempotently. Same doctrine as the v0.8.0 hook wiring: a rule that does not reach existing installs is a rule the framework only believes about itself.
+- [x] **v0.10.0 — the top model follows the plan.** Fable 5.1 shipped, and whether it should plan is a question about the subscription, not the model: Max carries it inside the weekly limit, Pro bills every token to credits. `scripts/top-model.sh` reads the plan off the account profile Claude Code already caches locally — never the credentials — and resolves `fable` or `opus`; a SessionStart brief announces it, the plan and review commands pass it as the dispatch `model:` for the three top castes, and `--apply` pins the Queen's own session. `TOP_MODEL = auto` in the constitution; an alias in its place overrules the plan. Synthetic profiles for every plan shape run in CI.
 - [x] **v0.9.5 — the dry run stops writing.** `install.sh --check` created seven directories in the target: one unguarded `mkdir -p` seeded the `memory/` and `docs/` trees whether or not the run was meant to touch anything, so the command offered to someone who only wants to see what VULYK *would* do to their repository was the command that quietly changed it. Found by [@chizhseo](https://github.com/chizhseo) in [PR #1](https://github.com/Black-coffe/vulyk/pull/1) while writing an installer smoke test — invisible to reading the code, obvious to anyone who checked the result. It survived nine releases because nothing here ran the installer and then looked at what it had done: the very gap this framework spends its gates on, at home. Verified by result — dry run against an empty target leaves 0 objects, a real install still produces the full hive.
 - [ ] **1.0.0** when: ten real Tier 2–4 specs with clean scope/trace/acceptance series (**3 of 10**, counted by [`scripts/release-check.sh`](scripts/release-check.sh) rather than recalled — this one closes by using the framework, not by building it), `--upgrade` proven across two minors (done, four), zero unverified claims in the docs (audited 2026-08-18), zero known silent-loss paths (two closed 2026-08-18: the acceptance note reaching git unredacted, and a repair round dispatched against a stale collision check).
 - [ ] After 1.0.0: plugin-marketplace packaging, worktree fan-out preset, public eval harness.

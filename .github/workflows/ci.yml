@@ -34,6 +34,58 @@ jobs:
           done < <(find . -type f \( -name '*.sh' -o -path './scripts/git-hooks/*' \) -print0)
           exit $fail
 
+  top-model:
+    name: top-model.sh resolves every plan shape
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: synthetic profiles -> expected alias
+        run: |
+          t="$(mktemp -d)"; mkdir -p "$t/proj/.claude"
+          printf '> Top model policy: `TOP_MODEL = auto`\n' > "$t/proj/CLAUDE.md"
+          mk() { printf '{"numStartups":1,"oauthAccount":{"emailAddress":"x@y","organizationType":"%s","organizationRateLimitTier":"%s","seatTier":%s}}\n' "$1" "$2" "$3" > "$t/$4.json"; }
+          mk claude_max        default_claude_max_20x   null        max20
+          mk claude_max        default_claude_max_5x    null        max5
+          mk claude_pro        default_claude_pro       null        pro
+          mk claude_team       default_claude_team      '"standard"' teamstd
+          mk claude_enterprise default_claude_enterprise '"premium"' entprem
+          printf '{"numStartups":1}\n' > "$t/none.json"
+          printf 'not json at all\n'   > "$t/garbage.json"
+          fail=0
+          expect() { # expect <profile> <alias> [env...]
+            got="$(env "${@:3}" CLAUDE_PROJECT_DIR="$t/proj" VULYK_CLAUDE_CONFIG="$t/$1.json" bash scripts/top-model.sh)"
+            if [ "$got" = "$2" ]; then echo "  ok    $1 -> $got"; else echo "::error::$1 resolved to '$got', expected '$2'"; fail=1; fi
+          }
+          expect max20   fable
+          expect max5    fable
+          expect pro     opus
+          expect teamstd opus
+          expect entprem fable
+          expect none    opus
+          expect garbage opus
+          expect max20   opus  VULYK_TOP_MODEL=opus
+          expect pro     fable VULYK_TOP_MODEL=fable
+          # the constitution pin beats the plan; `auto` defers to it
+          printf '> Top model policy: `TOP_MODEL = opus`\n' > "$t/proj/CLAUDE.md"
+          expect max20 opus
+          printf '> Top model policy: `TOP_MODEL = auto`\n' > "$t/proj/CLAUDE.md"
+          expect max20 fable
+          # --check is red before --apply and green after; --apply merges into an existing file
+          CLAUDE_PROJECT_DIR="$t/proj" VULYK_CLAUDE_CONFIG="$t/max20.json" bash scripts/top-model.sh --check && { echo "::error::--check passed with no pin"; fail=1; }
+          printf '{"permissions":{"allow":["Bash(ls:*)"]}}\n' > "$t/proj/.claude/settings.local.json"
+          CLAUDE_PROJECT_DIR="$t/proj" VULYK_CLAUDE_CONFIG="$t/max20.json" bash scripts/top-model.sh --apply
+          CLAUDE_PROJECT_DIR="$t/proj" VULYK_CLAUDE_CONFIG="$t/max20.json" bash scripts/top-model.sh --check || { echo "::error::--check failed after --apply"; fail=1; }
+          grep -q '"Bash(ls:\*)"' "$t/proj/.claude/settings.local.json" || { echo "::error::--apply lost the owner's permissions"; fail=1; }
+          grep -q '"model": "fable"' "$t/proj/.claude/settings.local.json" || { echo "::error::--apply did not pin fable"; fail=1; }
+          # the hook says the same thing in one line, and says nothing where the resolver is absent
+          mkdir -p "$t/proj/scripts" && cp scripts/top-model.sh "$t/proj/scripts/"
+          line="$(CLAUDE_PROJECT_DIR="$t/proj" VULYK_CLAUDE_CONFIG="$t/pro.json" bash .claude/hooks/top-model-brief.sh)"
+          echo "$line" | grep -q '^\[VULYK\] top model: opus' || { echo "::error::hook line wrong: $line"; fail=1; }
+          rm "$t/proj/scripts/top-model.sh"
+          [ -z "$(CLAUDE_PROJECT_DIR="$t/proj" bash .claude/hooks/top-model-brief.sh)" ] || { echo "::error::hook spoke without a resolver"; fail=1; }
+          exit $fail
+
   install-smoke:
     name: install.sh dry-run smoke test
     runs-on: ubuntu-latest
@@ -60,6 +112,8 @@ jobs:
           ./install.sh "$target" >/dev/null
           test -f "$target/CLAUDE.md"                          || { echo "::error::CLAUDE.md missing"; exit 1; }
           test -x "$target/.claude/hooks/session-start-brief.sh" || { echo "::error::hooks not executable"; exit 1; }
+          test -x "$target/.claude/hooks/top-model-brief.sh"    || { echo "::error::top-model hook missing or not executable"; exit 1; }
+          grep -q 'top-model-brief.sh' "$target/.claude/settings.json" || { echo "::error::top-model hook not wired"; exit 1; }
           test -f "$target/memory/stats/skills.json"           || { echo "::error::skills.json not seeded"; exit 1; }
 
       - name: re-install is idempotent (never overwrites existing files)

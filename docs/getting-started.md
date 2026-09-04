@@ -23,6 +23,8 @@ cd your-project
 claude
 > /vulyk-bootstrap        # ~10 minutes: interview -> tailored config -> initial map -> wiki seed
 ```
+The first line of every session is the `[VULYK] top model:` brief: which model plans on this account - Fable 5.1 where the plan carries it (Max, premium seats), Opus 5 where it would bill to credits (Pro, standard seats) - and whether your own session is pinned to it. `bash scripts/top-model.sh --apply` pins it; bootstrap does that for you.
+
 For large repos the initial mapping runs on Sonnet drones in batches - cheap by design. A 1000-file repo maps breadth-first: the 8-12 load-bearing modules now, the rest recorded as unmapped territory.
 
 ## Context hygiene (once, then rarely)
@@ -42,7 +44,7 @@ conversation. The reasoning is in [token-economy.md](token-economy.md).
 /vulyk-build
   -> wave by wave: parallel Sonnet workers on disjoint files, one commit per story
 /vulyk-review
-  -> adversarial Opus gate + blind acceptance drone (brief + running repo, never the specs);
+  -> adversarial top-model gate (Fable 5.1 on Max, Opus 5 on Pro) + blind acceptance drone (brief + running repo, never the specs);
      BLOCK or REJECTED findings loop back as fix stories
 ```
 Weekly: `/vulyk-evolve` (config improvements from your own sessions) and `/vulyk-gc` (memory hygiene).

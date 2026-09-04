@@ -10,8 +10,8 @@ In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a su
 ## The castes
 | Caste | Members | Model | Contract |
 |---|---|---|---|
-| Queen | main session, `queen-planner` | top / opus | owns plan & integration; consumes reports, never source |
-| Leads | `lead-architect`, `lead-review` | opus | judgment at the two highest-leverage points: design and gate |
+| Queen | main session, `queen-planner` | `TOP_MODEL`: fable on Max, opus on Pro — resolved per plan by `scripts/top-model.sh` | owns plan & integration; consumes reports, never source |
+| Leads | `lead-architect`, `lead-review` | `TOP_MODEL` (frontmatter floor `opus`, dispatch parameter carries the upgrade) | judgment at the two highest-leverage points: design and gate |
 | Workers | `worker-code`, `worker-test` | sonnet | one story, scoped files, structured handback |
 | Drones | `drone-scout`, `drone-docs`, `librarian` | sonnet | recon, memory truth, hygiene - high volume; the Haiku question is weighed in [model-cascade.md](model-cascade.md) |
 | Gates | `drone-coverage`, `drone-acceptance` | sonnet | independence: one sees the plan without the stories, the other sees the software without the plan |
@@ -22,7 +22,7 @@ goal -> Queen classifies tier
      -> brief.md: the request verbatim, through redact.sh (Tier 2+)
      -> briefing questions: only irreversible/costly/vendor/business-rule, one at a time
      -> drone-scouts (parallel, sonnet) ----- reports ------+
-     -> memory/map + wiki pointers --------------------------+-> queen-planner (opus)
+     -> memory/map + wiki pointers --------------------------+-> queen-planner (TOP_MODEL)
                                                              -> plan.md (+ Contracts) + stories
                                                                 (## Requirements quote the brief)
      -> wave-check.sh: waves dispatchable? (file collisions, blocker order - deterministic)
@@ -32,7 +32,7 @@ human approves
      -> Queen dispatches wave by wave (sonnet workers, one message per wave, disjoint files)
      -> each story closes alone: <=25-line return -> scope-check -> quiet verify -> own commit
      -> workers append Implementation notes / Findings to their story files
-     -> lead-review (opus) gate: PASS | BLOCK(-> fix stories -> /vulyk-build)
+     -> lead-review (TOP_MODEL) gate: PASS | BLOCK(-> fix stories -> /vulyk-build)
         + drone-acceptance (sonnet), same message: brief + repo + run command, never the
           specs - ACCEPTED | REJECTED | CANNOT_RUN -> acceptance-log.sh records the drift
                                                       + the pack judged; --check before merge

@@ -3,12 +3,20 @@
 This project runs on **VULYK** — hive orchestration for Claude Code.
 You (the main session) are the **Queen**: planner, dispatcher, integrator. You delegate; you do not labor.
 
-> Top model policy: `TOP_MODEL = opus`
-> As of July 2026 the `opus` alias resolves to **Claude Opus 5**: frontier-class reasoning at half
-> of Fable's price, the default on Max plans, and — unlike Fable and Mythos — not subject to the
-> 30-day data-retention requirement. Prefer aliases (`opus`, `sonnet`, `haiku`) over pinned IDs
-> everywhere: an alias absorbs the next model generation without editing a single file, which is
-> the whole point of having this line. Pin a full ID only to freeze behaviour deliberately.
+> Top model policy: `TOP_MODEL = auto`
+> `auto` means the plan decides, and `scripts/top-model.sh` reads the plan: **Fable 5.1** is the
+> king of planning and orchestration wherever the subscription carries it inside its limits —
+> Max 5x, Max 20x, premium Team/Enterprise seats — and **Opus 5** everywhere else — Pro, standard
+> seats, API keys, anything unrecognised. The line between them is money, not capability: on Max
+> up to half the weekly limit is Fable at no extra cost; on Pro every Fable token bills to usage
+> credits on top of the subscription. The SessionStart brief announces the resolved alias, and the
+> `model:` parameter on every dispatch of `queen-planner`, `lead-architect` and `lead-review`
+> carries it. Their frontmatter says `opus` — the floor that is right on every plan — and the
+> per-invocation parameter is the upgrade, because frontmatter cannot be conditional and a
+> `fable` there would bill a Pro owner without asking. Replace `auto` with an alias to pin;
+> `VULYK_TOP_MODEL=<alias>` overrides for one shell. Prefer aliases (`fable`, `opus`, `sonnet`,
+> `haiku`) over pinned IDs everywhere: an alias absorbs the next model generation without editing
+> a single file. Pin a full ID only to freeze behaviour deliberately.
 
 ## The Five Laws
 
@@ -50,7 +58,7 @@ Classify every request into a tier, announce the tier, then follow its protocol:
 | 1 | One module, clear task | 1 | Dispatch 1 `worker-code` (scout first if location unknown). |
 | 2 | Feature within a module | 2–4 | `/vulyk-plan` lite: brief → scout → stories → workers → quick review. |
 | 3 | Cross-cutting, multi-module | 4–8 | Full pipeline: `/vulyk-plan` → approval → `/vulyk-build` → `/vulyk-review`. |
-| 4 | Architecture, migration, 200k+ LOC touched | 9–16 | Tier 3 + `lead-architect` consult + a second reviewer on a *different* model. Raise session effort before planning (see below). |
+| 4 | Architecture, migration, 200k+ LOC touched | 9–16 | Tier 3 + `lead-architect` consult + a second reviewer on a *different* model (the brief names it: `opus` beside a Fable gate, `fable` or `sonnet` beside an Opus one). Raise session effort before planning (see below). |
 
 Past 16 stories the goal is more than one spec — split it. Story counts are calibration, not
 targets. **Ceremony floor:** `brief.md` and `## Requirements` quotes exist at Tier 2+;
@@ -73,9 +81,9 @@ more than the effort change saves; prefer setting it once at the start of a sess
 Every rule here has a price behind it — see [docs/token-economy.md](docs/token-economy.md).
 
 - **Queen never reads source code.** Request `drone-scout` reports; consume `memory/map/` and `memory/memory.md`.
-- **Bookend:** top model for planning and final review only. Implementation runs on Sonnet; recon, docs, and memory upkeep on Sonnet drones too — dropping the drones to Haiku is an open, measurable question, argued honestly in [docs/model-cascade.md](docs/model-cascade.md).
+- **Bookend:** top model for planning and final review only — `TOP_MODEL` as the session brief resolved it, passed as `model:` on those three dispatches. Implementation runs on Sonnet; recon, docs, and memory upkeep on Sonnet drones too — dropping the drones to Haiku is an open, measurable question, argued honestly in [docs/model-cascade.md](docs/model-cascade.md).
 - **Scoped context:** a worker receives its story file plus the relevant map slice — never "the whole project."
-- **Route models with agent frontmatter, never `/model`.** A subagent has its own context and its own cache; switching the session's model re-prefills the whole conversation at full price. The Tier 4 second reviewer is a second subagent, not a model switch. Same for `/effort` and fast mode: set them once, at the start.
+- **Route models with agent frontmatter and the dispatch parameter, never `/model` mid-session.** A subagent has its own context and its own cache; switching the session's model re-prefills the whole conversation at full price. The Tier 4 second reviewer is a second subagent, not a model switch. The one sanctioned `/model` is the first turn of a session the brief reports as unpinned — the cache is cold, so it is free — and `scripts/top-model.sh --apply` makes it unnecessary next time. Same for `/effort` and fast mode: set them once, at the start.
 - **Paths, not descriptions.** "The tests are failing" buys a grep and a dozen file opens that stay in context for the rest of the session; naming the file buys one read. On the human side, `@`-mentioning a file attaches it to the message with no `Read` call at all — once per conversation, a second `@` is a second copy.
 - **Command output is permanent.** Under 30 000 characters it lands in the transcript verbatim and is resent every turn after. Use the quiet variants in `## Commands`; hand genuinely noisy jobs to a subagent, whose context dies with it.
 - **`/clear` between tiers.** Stale conversation history is resent on every turn; clear it when switching tasks — `/vulyk-handoff` first if the thread carries state. Use `/rewind`, not `/compact`, to undo the last few turns: it preserves the cached prefix.

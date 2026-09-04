@@ -19,7 +19,7 @@ green on the record that describes work nobody shipped.
 | `scope-check.sh` | one story's declared files against its own commit's diff | whether the change inside those files is correct | deterministic, free |
 | `drone-coverage` | `brief.md` + `plan.md` — **never a story file** | whether the plan was built; it runs before anything exists | sonnet, `maxTurns: 5` |
 | `drone-acceptance` | `brief.md` + the repository + one run command + the milestone ledger — **never `docs/specs/` beyond those** | whether the proof is real. It observes that the asks work; it cannot tell a suite that would catch a regression from one that would not | sonnet |
-| `lead-review` | everything: diff, stories, notes, plan, wiki, ADRs | the human's ask *independently* — it reads the plan, so it inherits the plan's framing of what was wanted | opus |
+| `lead-review` | everything: diff, stories, notes, plan, wiki, ADRs | the human's ask *independently* — it reads the plan, so it inherits the plan's framing of what was wanted | `TOP_MODEL` (fable on Max, opus on Pro) |
 | `acceptance-log.sh` | the story statuses, the caller's verdict, the pack's identity | anything about quality; it is a ledger, not a judge | deterministic, free |
 
 ## The two blind spots that matter

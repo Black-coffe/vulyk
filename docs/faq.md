@@ -6,8 +6,14 @@ No. It is configuration: agents, commands, skills, hooks, rules, templates, and 
 **Does it work on Pro/Max subscriptions after Anthropic's April 4, 2026 third-party policy?**
 Yes - by design. The policy restricts subscription OAuth to official clients; VULYK lives entirely inside the official client. (Independent of policy: parallel agents consume limits faster - the cascade exists to make that affordable.)
 
-**Fable 5 disappeared from my plan - is VULYK broken?**
-No. Change `TOP_MODEL` in CLAUDE.md (e.g. to `claude-opus-4-8`). The cascade is model-agnostic everywhere else.
+**Which model plans - Fable 5.1 or Opus 5?**
+Whichever your plan carries inside its limits. `scripts/top-model.sh` reads the account profile Claude Code caches in `~/.claude.json`: Max 5x / 20x and premium seats get `fable` (up to half the weekly limit is Fable at no extra cost); Pro, standard seats and API keys get `opus` (Fable would bill to usage credits on top of the subscription). The SessionStart brief announces it; `/vulyk-plan` and `/vulyk-review` pass it as the dispatch `model:`. Details and the rejected alternatives in [model-cascade.md](model-cascade.md).
+
+**I want Fable on Pro anyway / Opus on Max anyway.**
+Replace `auto` in the `TOP_MODEL = auto` line of CLAUDE.md with the alias you want; the pin beats the plan. `VULYK_TOP_MODEL=<alias>` does the same for one shell. The cascade is model-agnostic everywhere else.
+
+**The brief says my session is "not pinned".**
+The Queen's own session starts on the account default (Sonnet 5 on Pro, Opus 5 on Max) unless something pins it. `bash scripts/top-model.sh --apply` writes one `"model"` key into the gitignored `.claude/settings.local.json` and the next launch starts on the resolved model; `/model <alias>` on the first turn does it for the current session, free, because the cache is still cold.
 
 **Why can't my lead-build agent spawn workers?**
 Claude Code subagents cannot use the Task tool - a platform constraint. VULYK's answer: fan-out lives in the main session's commands; subagents stay single-purpose. See [architecture.md](architecture.md).
