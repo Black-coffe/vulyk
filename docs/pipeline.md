@@ -1,6 +1,6 @@
 # The gates
 
-Seven checks stand between a request and a merge. This page is not a description of the
+Nine checks stand between a request and a published version. This page is not a description of the
 pipeline — [architecture.md](architecture.md) draws that. It answers the two questions that
 turn out to matter in practice and are documented nowhere else:
 
@@ -21,6 +21,8 @@ green on the record that describes work nobody shipped.
 | `drone-acceptance` | `brief.md` + the repository + one run command + the milestone ledger — **never `docs/specs/` beyond those** | whether the proof is real. It observes that the asks work; it cannot tell a suite that would catch a regression from one that would not | sonnet |
 | `lead-review` | everything: diff, stories, notes, plan, wiki, ADRs | the human's ask *independently* — it reads the plan, so it inherits the plan's framing of what was wanted | `TOP_MODEL` (fable on Max, opus on Pro) |
 | `acceptance-log.sh` | the story statuses, the caller's verdict, the pack's identity | anything about quality; it is a ledger, not a judge | deterministic, free |
+| `human-check.sh` | the owner's verdict in their own words, pinned to the commit and the pack | anything at all about the software - it is a signature, not a judge; `--check` only says whether the signature is still about what ships | deterministic, free |
+| `ship-check.sh` | all six confirmation artifacts of [the cycle](cycle.md) at once, and whether each is about *this* pack at *this* commit | quality; it counts confirmations, it does not weigh them | deterministic, free |
 
 ## The two blind spots that matter
 
@@ -50,6 +52,8 @@ and the evidence does not transfer — it just stops being about anything.
 | A plan delta adds or rewords a requirement | `trace-check` backward | re-run `bash scripts/trace-check.sh docs/specs/<slug>` |
 | The tree moved since planning | `wave-check`'s `missing` and `empty-glob` classes | `/vulyk-build` step 2 re-runs it for exactly this reason |
 | Anything at all, before proposing a merge | possibly the acceptance verdict | `bash scripts/acceptance-log.sh --check docs/specs/<slug>` → `CURRENT`, `STALE`, or `NO VERDICT RECORDED` |
+| Any commit after the owner looked | the human check | `bash scripts/human-check.sh --check docs/specs/<slug>` reports `STALE (commit)`; the owner looks again at the new HEAD |
+| The owner rejects at stage 05 | the acceptance verdict, once fix stories are cut; the check itself | fix stories → `/vulyk-build` → both gates → a second look; `ship-check.sh` stays `NOT READY` until then |
 
 The rule underneath all five rows is one sentence: **when the pack moves, whatever judged it
 is re-run.** It is written down here because relying on remembering it is what produced the
@@ -93,7 +97,9 @@ that declines honestly costs nothing. A counterfeit costs the only signal there 
 Named so it is a known gap rather than an assumed guarantee:
 
 - **Whether the request was the right request.** Every gate below the brief is answerable to
-  the brief. If the brief asks for the wrong thing, the pipeline builds it correctly.
+  the brief. If the brief asks for the wrong thing, the pipeline builds it correctly. Stage 05
+  of [the cycle](cycle.md) exists for exactly this, and it is why that stage is a human and
+  not a gate.
 - **Cross-spec regressions.** Each gate is scoped to one spec. The integration gate (build,
   typecheck, lint, full suite) is what stands between specs, and it is the project's, not
   VULYK's.

@@ -17,10 +17,13 @@ In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a su
 | Gates | `drone-coverage`, `drone-acceptance` | sonnet | independence: one sees the plan without the stories, the other sees the software without the plan |
 
 ## Data flow of one Tier 3 feature
+The shape is the six-stage cycle in [cycle.md](cycle.md) - spec, plan, code, tests, human,
+ship - each closed by a file on disk. This is the machinery inside it:
 ```text
 goal -> Queen classifies tier
      -> brief.md: the request verbatim, through redact.sh (Tier 2+)
      -> briefing questions: only irreversible/costly/vendor/business-rule, one at a time
+     -> the owner confirms the spec text (stage 01; a stop at Tier 3-4, shown-and-continue at Tier 2)
      -> drone-scouts (parallel, sonnet) ----- reports ------+
      -> memory/map + wiki pointers --------------------------+-> queen-planner (TOP_MODEL)
                                                              -> plan.md (+ Contracts) + stories
@@ -28,16 +31,26 @@ goal -> Queen classifies tier
      -> wave-check.sh: waves dispatchable? (file collisions, blocker order - deterministic)
      -> trace-check.sh: every story quotes the brief? every brief line carried? (deterministic)
      -> drone-coverage (sonnet): brief + plan only, never the stories - what is not carried?
-human approves
+human approves -> **Approved:** line in plan.md (stage 02)
+     -> /vulyk-build puts the spec on its own branch, vulyk/<slug>, and records it (stage 03)
      -> Queen dispatches wave by wave (sonnet workers, one message per wave, disjoint files)
      -> each story closes alone: <=25-line return -> scope-check -> quiet verify -> own commit
      -> workers append Implementation notes / Findings to their story files
      -> lead-review (TOP_MODEL) gate: PASS | BLOCK(-> fix stories -> /vulyk-build)
-        + drone-acceptance (sonnet), same message: brief + repo + run command, never the
-          specs - ACCEPTED | REJECTED | CANNOT_RUN -> acceptance-log.sh records the drift
-                                                      + the pack judged; --check before merge
-merge
-     -> drone-docs refreshes map + wiki; post-merge git hook flags staleness as backup
+        + drone-acceptance (sonnet), same message: brief + repo + run command + client path,
+          never the specs - walks the path as a client would (stage 04)
+          ACCEPTED | REJECTED | CANNOT_RUN -> acceptance-log.sh records the drift
+                                              + the pack judged; --check before merge
+the owner looks (stage 05 - mandatory, and never an agent's)
+     -> check card: branch + client path + one line per ask -> the owner answers
+     -> human-check.sh writes their words into plan.md + human.jsonl, pinned to the commit
+     -> REJECTED: fix stories -> /vulyk-build; both gates and the look are re-earned
+/vulyk-ship (stage 06)
+     -> ship-check.sh: all six confirmations present, and about THIS pack at THIS commit
+     -> version + CHANGELOG commit on the spec branch -> merge -> the human publishes
+     -> ship-check.sh --record: **Shipped:** line + ship.jsonl
+     -> drone-docs refreshes map + wiki; librarian harvests ADRs; post-merge hook flags staleness
+     -> leftovers (UNASKED, ## Descoped, unfixed CONCERNS) handed over as the next brief's draft
 session end
      -> hook captures learnings -> /vulyk-gc consolidates -> /vulyk-evolve turns them into config diffs
 ```

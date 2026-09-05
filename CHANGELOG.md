@@ -2,6 +2,60 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.11.0] - 2026-09-05
+
+### Added
+- **The cycle closes with a person.** VULYK had four of the six stages a delivery loop needs
+  and stopped at *merge*: the request was verbatim, the plan was approved, the code was built
+  and gated, and then a `PASS` said "propose a merge" and nothing on disk said who looked, on
+  what, or whether anything was published. The pipeline is now the six-stage loop in
+  [docs/cycle.md](docs/cycle.md) - **spec → plan → code → tests → human → ship** - and a stage
+  is closed by a confirmation artifact on disk, never by a chat turn: `brief.md`,
+  `**Approved:**`, `**Branch:**`, `acceptance.jsonl`, `**Checked:**`, `**Shipped:**`. The two
+  stages that were missing are the two an agent cannot take.
+  - **Stage 05, the owner's own look, is mandatory and recorded.** `/vulyk-review` no longer
+    ends at `PASS`: it hands the owner a check card - the branch, where to look (the new
+    *Client path* Profile row), one line per ask from the drone's `WORKS` lines - and waits.
+    `scripts/human-check.sh <spec> ACCEPTED|REJECTED "<their words>"` then writes a
+    `**Checked:**` line into plan.md beside `**Approved:**` and a row in
+    `memory/stats/human.jsonl`, pinned to the commit and the pack fingerprint. It is a
+    signature, not a judge: it has no cannot-run branch (if you could not look, you have not
+    checked), and the Queen runs it only after the owner has answered. `--check` says whether
+    the signature still describes what ships: `STALE (commit)` when code landed after the look,
+    `STALE (pack)` when a story was cut. Committing the record itself does not stale it - a
+    commit touching only the cycle's own ledgers is paperwork, and both scripts know the
+    difference.
+  - **Stage 06, `/vulyk-ship`.** Runs `scripts/ship-check.sh <spec>` first - all six
+    confirmations at once, deterministic, free - and refuses on `NOT READY` the way
+    `/vulyk-build` refuses without approval. Then one release-paperwork commit (version +
+    CHANGELOG; story commits are never squashed), the merge as the *Release / deploy* row
+    prescribes, and the publish step printed for **the human to press** - no agent deploys.
+    `ship-check.sh --record <spec> <version> "<where>"` writes `**Shipped:**` and
+    `memory/stats/ship.jsonl`. The docs refresh and the ADR harvest moved here from the review
+    PASS path - after the human, not before - and the circle's leftovers (`UNASKED`,
+    `## Descoped`, unfixed `CONCERNS`) are handed over verbatim as the draft of the next brief.
+  - **Stage 03 has a branch.** `/vulyk-build` puts every spec on `vulyk/<slug>` (or the
+    scheme the Profile names) before wave 1 and records it as `**Branch:**`; story commits
+    never land on the default branch, and `ship-check.sh` reads the line.
+  - **Stage 04 walks the client's path.** `drone-acceptance` receives the *Client path* row
+    when it is filled and goes through the flow the way a client would - URL, CLI, or the
+    browser runner's quiet command - before reading code; a green suite proves the parts, the
+    path proves the whole. Its report gains a `PATH:` line.
+  - **Stage 01 is confirmed before recon is spent.** `/vulyk-plan` shows the brief back and
+    stops for one word at Tier 3-4 (shown-and-continue at Tier 2); a bug report is a spec too,
+    error text and reproduction verbatim.
+  - Two new Profile rows, `Client path` and `Release / deploy`, asked by the bootstrap
+    interview (now 15 questions). `templates/plan.md` carries the four marker lines.
+    `scripts/state.sh` derives a `stage` per spec for `/vulyk-status`. `tests/cycle.test.sh`
+    drives both new gates through every stage in CI, including the paperwork-vs-code
+    distinction and a pack that moves after the look.
+
+### Changed
+- `/vulyk-review` prefers the Profile's *Configurations that exist today* row by name, since it
+  is no longer the block's last row. [docs/pipeline.md](docs/pipeline.md) lists nine checks and
+  the two new invalidation rows; [docs/architecture.md](docs/architecture.md) draws the loop
+  through stage 06.
+
 ## [0.10.1] - 2026-09-04
 
 ### Fixed

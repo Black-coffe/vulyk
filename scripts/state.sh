@@ -110,6 +110,26 @@ for dir in $( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirn
   stale=false
   [ "$snap_epoch" -gt 0 ] && [ "$newest" -gt "$snap_epoch" ] && stale=true
 
+  # Which of the six confirmations (docs/cycle.md) the spec has reached - read off plan.md's
+  # marker lines and the two verdict ledgers, the same files ship-check.sh reads. A marker
+  # still carrying the template's `<...>` placeholder is absent. Coarse on purpose: this is
+  # a dashboard column, and the gate that decides anything is ship-check.sh.
+  plan="$dir/plan.md"; slug="$(basename "$dir")"
+  mark() { grep -m1 "^\*\*$2:\*\*" "$1" 2>/dev/null | sed "s/^\*\*$2:\*\*[[:space:]]*//" | grep -v '^<' | grep -v '^$'; }
+  last_checked="$(grep '^\*\*Checked:\*\*' "$plan" 2>/dev/null | grep -v '^\*\*Checked:\*\* <' | tail -1)"
+  stage="01-spec"
+  [ -f "$plan" ] && stage="02-planned"
+  [ -f "$plan" ] && [ -n "$(mark "$plan" Approved)" ] && stage="02-approved"
+  [ -f "$plan" ] && [ -n "$(mark "$plan" Branch)" ] && stage="03-building"
+  if [ "$stage" = "03-building" ] && [ "$todo_n" -eq 0 ] && [ "$progress_n" -eq 0 ] && [ "$unknown_n" -eq 0 ]; then stage="03-built"; fi
+  acc_v="$(grep -F "\"spec\":\"$slug\"" memory/stats/acceptance.jsonl 2>/dev/null | tail -1 | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')"
+  [ -n "$acc_v" ] && stage="04-tested:$acc_v"
+  case "$last_checked" in
+    *ACCEPTED*) stage="05-checked" ;;
+    *REJECTED*) stage="05-rejected" ;;
+  esac
+  [ -f "$plan" ] && [ -n "$(mark "$plan" Shipped)" ] && stage="06-shipped"
+
   [ "$first_spec" -eq 1 ] || printf ',\n' >> "$TMP"
   first_spec=0
   {
@@ -119,6 +139,7 @@ for dir in $( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirn
     printf '      "stories": %s, "done": %s, "in_progress": %s, "blocked": %s, "todo": %s, "unrecognised": %s,\n' \
       "$total" "$done_n" "$progress_n" "$blocked_n" "$todo_n" "$unknown_n"
     printf '      "stale": %s,\n' "$stale"
+    printf '      "stage": "%s",\n' "$(j "$stage")"
     printf '      "story_list": [\n'
     printf '%s' "$(printf '%s' "$rows" | sed '$ s/,$//')"
     printf '\n      ]\n'

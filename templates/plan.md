@@ -51,4 +51,12 @@ when it happens. trace-check.sh accepts these entries as a quote source for stor
 born after approval - a delta is requirement change on the record.
 -->
 
-**Approved:** <owner, date - the unconditional gate. /vulyk-build refuses without this line.>
+<!--
+The four lines below are the cycle's confirmation artifacts (docs/cycle.md): one per stage
+whose command refuses without the one before it. Each placeholder is replaced by the
+command or script that owns the line; `scripts/ship-check.sh` reads all four.
+-->
+**Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
+**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
+**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05. /vulyk-ship refuses without it.>
+**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>

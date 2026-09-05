@@ -44,9 +44,14 @@ conversation. The reasoning is in [token-economy.md](token-economy.md).
 /vulyk-build
   -> wave by wave: parallel Sonnet workers on disjoint files, one commit per story
 /vulyk-review
-  -> adversarial top-model gate (Fable 5.1 on Max, Opus 5 on Pro) + blind acceptance drone (brief + running repo, never the specs);
-     BLOCK or REJECTED findings loop back as fix stories
+  -> adversarial top-model gate (Fable 5.1 on Max, Opus 5 on Pro) + blind acceptance drone (brief + running repo
+     + the client's path, never the specs); BLOCK or REJECTED findings loop back as fix stories
+  -> PASS hands YOU a check card: the branch, where to look, one line per ask - you look, it records your words
+/vulyk-ship
+  -> ship-check (all six confirmations, free) -> version + CHANGELOG -> merge -> you publish -> recorded
+  -> map/wiki refresh, ADR harvest, and the circle's leftovers handed over as the next brief's draft
 ```
+The shape behind the four commands is [the cycle](cycle.md): spec, plan, code, tests, human, ship - each stage closed by a file on disk, and stage 05 always a person.
 Weekly: `/vulyk-evolve` (config improvements from your own sessions) and `/vulyk-gc` (memory hygiene).
 Anytime: `/vulyk-status` for the dashboard, `/vulyk-map <path>` after big merges.
 

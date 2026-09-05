@@ -56,8 +56,8 @@ Classify every request into a tier, announce the tier, then follow its protocol:
 |---|---|---|---|
 | 0 | Trivial, single file, obvious | — | Do it directly. No ceremony. |
 | 1 | One module, clear task | 1 | Dispatch 1 `worker-code` (scout first if location unknown). |
-| 2 | Feature within a module | 2–4 | `/vulyk-plan` lite: brief → scout → stories → workers → quick review. |
-| 3 | Cross-cutting, multi-module | 4–8 | Full pipeline: `/vulyk-plan` → approval → `/vulyk-build` → `/vulyk-review`. |
+| 2 | Feature within a module | 2–4 | `/vulyk-plan` lite: brief → scout → stories → workers → quick review → your look → `/vulyk-ship`. |
+| 3 | Cross-cutting, multi-module | 4–8 | Full cycle: `/vulyk-plan` → approval → `/vulyk-build` → `/vulyk-review` → your look → `/vulyk-ship`. |
 | 4 | Architecture, migration, 200k+ LOC touched | 9–16 | Tier 3 + `lead-architect` consult + a second reviewer on a *different* model (the brief names it: `opus` beside a Fable gate, `fable` or `sonnet` beside an Opus one). Raise session effort before planning (see below). |
 
 Past 16 stories the goal is more than one spec — split it. Story counts are calibration, not
@@ -75,6 +75,24 @@ real failure, and treat `max` as something a falling test earns rather than a de
 from `high` to `max` nearly doubles the bill for about two points of benchmark index. Note also
 that changing effort mid-session re-renders the prompt and drops the cached prefix, which can cost
 more than the effort change saves; prefer setting it once at the start of a session.
+
+## The cycle
+
+Every Tier 2+ spec travels one loop, and a stage is closed by a file on disk, not by a chat
+turn - [docs/cycle.md](docs/cycle.md) says what each stage cannot skip and what reopens it:
+
+| # | Stage | Confirmation on disk | Command |
+|---|---|---|---|
+| 01 | Spec - what and why, verbatim (a bug report is a spec too) | `brief.md` | `/vulyk-plan` |
+| 02 | Plan - who, what, in which files | `**Approved:**` in plan.md | `/vulyk-plan` → approval |
+| 03 | Code - agents work, in their own branch | `**Branch:**` + one commit per story | `/vulyk-build` |
+| 04 | Tests - the suite, then the client's path, actually run | `acceptance.jsonl` | `/vulyk-review` |
+| 05 | **Human** - the owner looks, on a test or live version | `**Checked:**` via `scripts/human-check.sh` | `/vulyk-review` PASS path |
+| 06 | Ship - history fixed, version published, next circle opened | `**Shipped:**` via `scripts/ship-check.sh --record` | `/vulyk-ship` |
+
+Stage 05 is the one mandatory human control after approval, and it does not shrink with
+tier: an agent can prove the software does what the words said; only the person who wrote
+the words can say the words said what they meant. `/vulyk-ship` refuses without it.
 
 ## Token economy (non-negotiable)
 
@@ -108,10 +126,12 @@ arrives blank from the installer and `/vulyk-bootstrap` fills it, because a prof
 from another repository is a confident lie. Keep it short - this is the frame each agent
 starts from, not documentation.
 
-The last line is load-bearing beyond its size. A reviewer that does not know which
+The configurations row is load-bearing beyond its size. A reviewer that does not know which
 configurations exist will demand guarantees for ones that do not, and a blind acceptance
 gate cannot state the shape it judged against. Both cost real rounds before this block
-existed.
+existed. The two rows under it belong to the cycle: *Client path* is what the blind gate
+walks at stage 04 and what the owner is pointed at in stage 05; *Release / deploy* is what
+`/vulyk-ship` prints and refuses to press.
 
 <!-- VULYK:PROFILE:START -->
 | Field | Value |
@@ -122,6 +142,8 @@ existed.
 | Test framework | `<fill in>` |
 | Commit convention | `<fill in>` |
 | **Configurations that exist today** | `<fill in - single node? multi-process? a database at all? what is deferred and to when>` |
+| Client path | `<fill in - how a person reaches the running thing: URL + a test login, a CLI entry point, or a browser runner's quiet command; "none: library only" is an honest answer>` |
+| Release / deploy | `<fill in - default branch; how a version is published (tag + push? npm publish? CI on merge?) and who presses the button>` |
 <!-- VULYK:PROFILE:END -->
 
 ## Commands
@@ -147,12 +169,13 @@ Quiet variants only: everything these print is resent on every subsequent turn. 
 | Hook self-diagnosis | `bash .claude/hooks/handoff.sh status` |
 | Scope gate, per story | `bash scripts/scope-check.sh <story-file>` |
 | Story gate, per spec | `bash scripts/wave-check.sh docs/specs/<slug>` |
+| Ship gate, per spec | `bash scripts/ship-check.sh docs/specs/<slug>` |
 | Full suite / build | none exists — VULYK has no test runner and no build step |
 
 The first four are silent on success and non-zero on failure; run them together as the closest
-thing this repo has to a suite. The two gates are different on purpose: they always exit 0 and
+thing this repo has to a suite. The three gates are different on purpose: they always exit 0 and
 report — their output is the signal, blocking is a human's or lead-review's decision. `py_compile` writes a gitignored `__pycache__/` — do not commit it.
-The absent sixth row is deliberate: VULYK's shipped behaviour is verified by running the hooks
+The absent last row is deliberate: VULYK's shipped behaviour is verified by running the hooks
 against real transcripts, not by a suite. Say so plainly rather than inventing a command that
 proves nothing.
 
@@ -181,7 +204,7 @@ Drop file contents, diffs, command output and scout reports: they are on disk an
 
 - Path-scoped rules: `.claude/rules/` (loaded only where relevant — keep this file lean).
 - Plans & stories: `docs/specs/` · Decisions: `docs/adr/` · Domain knowledge: `docs/wiki/`.
-- Codebase map: `memory/map/` · Session learnings: `memory/learnings/` · Stats series: `memory/stats/` (`scope.jsonl`, `acceptance.jsonl`, `skills.json`).
+- Codebase map: `memory/map/` · Session learnings: `memory/learnings/` · Stats series: `memory/stats/` (`scope.jsonl`, `acceptance.jsonl`, `human.jsonl`, `ship.jsonl`, `skills.json`).
 
 ## Evolution
 
