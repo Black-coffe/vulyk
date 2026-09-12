@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-16
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -43,6 +43,10 @@ A fresh hive gets the same Profile table `CLAUDE.md` documents — all rows, sam
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `install.sh` reset placeholder: appended Client path, Browser MCP, Release / deploy rows verbatim from `CLAUDE.md`'s current Profile block (9 field rows total, not 8 - the story text undercounted; matched the live source instead of the stated number, per the count-based acceptance criteria).
+- Surprise: the Browser MCP row's escaped `\|` (markdown pipe-in-cell) got silently unescaped by `reset_marked_block`'s `awk -v repl=...` (awk treats unrecognized backslash-escapes as the bare character + a stderr warning). Fixed by doubling to `\\|` in the heredoc so awk's own escape processing yields the correct single `\|` in the written file - verified byte-for-byte against source with a diff of a fresh install target.
+- `.github/workflows/ci.yml`: added the row-count assertion to the existing "real install into a clean dir produces a runnable hive" step (counts `^| ` lines between the PROFILE markers in source vs target, no hardcoded number) and a new step "--upgrade never touches an already-filled Profile block" asserting the pre-existing untouched-on-upgrade behavior.
+- Confirmed unrelated to this story: `wire_permissions()`, `shippable()`, `OWNED`, `ensure_gitignore()`, the `--apply` call, and the `VULYK:COMMANDS` block were all left as found.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

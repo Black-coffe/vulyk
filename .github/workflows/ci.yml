@@ -157,6 +157,13 @@ jobs:
           test -x "$target/.claude/hooks/top-model-brief.sh"    || { echo "::error::top-model hook missing or not executable"; exit 1; }
           grep -q 'top-model-brief.sh' "$target/.claude/settings.json" || { echo "::error::top-model hook not wired"; exit 1; }
           test -f "$target/memory/stats/skills.json"           || { echo "::error::skills.json not seeded"; exit 1; }
+          # the blanked Profile placeholder must carry every row the source constitution
+          # documents (story 16) - count instead of hardcoding a number, so a row added to
+          # CLAUDE.md but not to install.sh's placeholder turns this red.
+          count_profile_rows() { awk '/<!-- VULYK:PROFILE:START -->/{f=1;next}/<!-- VULYK:PROFILE:END -->/{f=0}f' "$1" | grep -c '^| '; }
+          src_rows="$(count_profile_rows CLAUDE.md)"
+          tgt_rows="$(count_profile_rows "$target/CLAUDE.md")"
+          [ "$src_rows" = "$tgt_rows" ] || { echo "::error::Profile block row count mismatch: source=$src_rows target=$tgt_rows"; exit 1; }
           # never ships the maintainer's own gitignored runtime artifacts. settings.local.json
           # is checked by content, not by absence: top-model.sh --apply (story 07) legitimately
           # writes the target's OWN pin file later in this same install, so the path existing
@@ -181,6 +188,16 @@ jobs:
           test ! -e "$target/.claude/state.json"          || { echo "::error::--upgrade shipped state.json"; exit 1; }
           test ! -e "$target/memory/snapshots/2026/x.md"  || { echo "::error::--upgrade shipped a snapshot"; exit 1; }
           grep -qx "$(cat VERSION)" "$target/.claude/vulyk-version" || { echo "::error::--upgrade vulyk-version is not install.sh's own stamp"; exit 1; }
+
+      - name: --upgrade never touches an already-filled Profile block
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          sed -i 's/| Stack | `<fill in>` |/| Stack | `filled-in-value` |/' "$target/CLAUDE.md"
+          before="$(cat "$target/CLAUDE.md")"
+          ./install.sh "$target" --upgrade >/dev/null
+          after="$(cat "$target/CLAUDE.md")"
+          [ "$before" = "$after" ] || { echo "::error::--upgrade modified an already-filled Profile block"; exit 1; }
 
       - name: re-install is idempotent (never overwrites existing files)
         run: |
