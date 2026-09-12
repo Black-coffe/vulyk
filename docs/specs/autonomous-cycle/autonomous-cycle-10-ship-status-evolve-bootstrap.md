@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-10
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -51,6 +51,12 @@ blocked_by: [autonomous-cycle-02]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `vulyk-ship.md`: since publish is never waited for, `--record` now runs right after the local merge with a generic note ("merged to <default>, publish pending") instead of the owner's after-the-fact "where it was published" - that provenance detail is a casualty of not waiting, not an oversight.
+- `vulyk-ship.md` step 2: "skip the bump" is keyed on `VERSION`/`CHANGELOG.md` already showing the target version verbatim (the case story 13 creates for this very spec), not on any new script - purely a command-prose instruction.
+- `vulyk-status.md`/`vulyk-evolve.md`: the council numbers (specs/median/escalations) are one `awk` pass each, escaped defects are a `grep` over `docs/specs/*/brief.md` `**Escaped from:**` headers cross-checked against `council.jsonl` for a GREEN row - all four inline blocks tested against a synthetic `council.jsonl`/`human.jsonl`/brief fixture in scratch before being written into the files (median, escalation count, 7-day date filter via `date -u -d '-7 days'`, and the escaped-defect cross-check all matched hand-computed expected values).
+- `vulyk-status.md` step 1 driver line: "Workflow in your own tool list" is the check (per plan.md Assumptions), with the CLI-version fallback message reusing the same `claude --version` / `sort -V` / `2.1.154` idiom `top-model-brief.sh` already uses, for consistency rather than inventing a second detector.
+- `vulyk-bootstrap.md`: also reworded two stale "blind acceptance gate" mentions near the caveat to "blind council" (drone-acceptance.md is already deleted on this branch, per story 05) - small in-file consistency fix, not a scope change.
+- Working tree had `core.autocrlf=true`; `vulyk-bootstrap.md` picked up CRLF via Edit and was stripped back to LF with `sed -i 's/\r$//'` before finishing - the other three files (written fresh via Write) were already LF-only.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
