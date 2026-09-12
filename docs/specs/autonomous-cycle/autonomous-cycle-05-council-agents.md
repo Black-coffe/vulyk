@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-05
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -58,6 +58,10 @@ Three seat agents with three angles, read-only, blind by construction, each retu
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- Each seat is told to read `COURT/CLAUDE.md`'s `## Profile` block itself (per plan C11: "a seat reads brief.md and the Profile from `<court>/` itself") rather than having rows injected by the dispatcher; the suite-command/Browser-MCP exclusivity (C10/D5) is enforced two ways - structurally via `tools:` (only haiku carries the MCP servers) and by prompt discipline (only sonnet's protocol names the suite command; haiku/opus explicitly told not to touch it).
+- Kept the C5 `ASK` line's full `run:|url:|why:` token set identical across all three seat files (not narrowed per-seat) since D3/`record-seat` validates evidence tokens generically, not per seat.
+- `drone-coverage.md`: added a fallback path - use `## Asks` (C8 numbering, verbatim fragments) when present, else split the brief's blockquotes as before; `Absent`/`Partial`/`Assumed away` lines now prefix `Ask <n>:`.
+- `drone-docs.md:14` still name-drops `drone-acceptance` as an analogy for "kept blind from the specs" - out of scope for this story (not in `## Files`), left untouched; flagging for a follow-up doc pass.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
