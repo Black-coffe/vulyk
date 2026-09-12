@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-06
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -48,6 +48,11 @@ One script that loops over `cycle.sh status --json` through a Haiku clerk, perfo
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `clerk(cmd)` throws a `BadLine` on a non-JSON last line; caught once at the top of the `for(;;)` loop, ending the run and returning that raw line - covers every verb uniformly, not just `status`.
+- `build:<wave>` always dispatches `agentType: 'worker-code'` - `status --json` (C3) carries no per-story `worker:` field, so the driver cannot route to `worker-test` without reading the story file, which Non-goals forbids. Every story in this spec today uses `worker: worker-code`, so this is currently a no-op gap; flagged in INTERFACES below.
+- `open-round` and `dispatch:` both call `phase('Round')` since a resumed run can reach `dispatch:` without this run ever calling `open-round`.
+- `meta.description` is C11's exact literal `'build → council → repair, ceiling 3'`, which contains the word "ceiling" outside a comment - unavoidable given the contract mandates that literal text verbatim; the acceptance criterion's forbidden-string grep otherwise passes clean.
+- `node --check .claude/workflows/vulyk-cycle.js` passes (node v22.23.1 present on this machine); not wired as a repo gate command.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
