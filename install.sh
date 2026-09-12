@@ -37,20 +37,41 @@ owned() { local f="$1" t; for t in $OWNED; do case "$f" in "$t"/*) return 0 ;; e
 # VULYK's own working content never ships: its session learnings, its dev specs, and
 # anything Python compiled on the maintainer's machine. What DOES ship from these trees
 # is the skeleton - the READMEs that explain what goes where.
-shippable() { # shippable <rel-file> - 1 (false) for vulyk-own content
+#
+# It also never ships anything VULYK's OWN .gitignore keeps out of git for being
+# per-machine or derived on the maintainer's box - the pinned-model file above all. A
+# target hive's .gitignore is not vulyk's, so this list is kept explicit here instead of
+# read from .gitignore at runtime; keep the two lists in sync by hand when either changes.
+# `.claude/vulyk-version` is the one entry with no .gitignore line of its own (a real hive
+# DOES commit its stamp) - it is refused anyway because the version stamp below always
+# overwrites it with the target's own value right after the copy loop, so shipping the
+# maintainer's here would only leak it in the interim.
+shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev content,
+              # 2 = gitignored runtime artifact (copy_tree tells the two apart in --check)
   local f="$1"
   case "$f" in
     */__pycache__/*|*.pyc)        return 1 ;;
     docs/specs/*)                 return 1 ;;   # vulyk's own dev specs (dir is still created)
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
+    .claude/settings.local.json|.claude/settings.json.vulyk-bak)
+                                   return 2 ;;
+    .claude/state.json|.claude/.vulyk-update-cache|.claude/vulyk-version)
+                                   return 2 ;;
+    .claude/handoff/*|memory/map/.stale|CLAUDE.local.md)
+                                   return 2 ;;
+    memory/snapshots/*)           case "$f" in */.gitkeep) return 0 ;; esac; return 2 ;;
   esac
   return 0
 }
 
 copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading a framework-owned file
-  local rel="$1"
+  local rel="$1" sc
   ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' -print0 ) | while IFS= read -r -d '' f; do
-    shippable "$f" || continue
+    shippable "$f" && sc=0 || sc=$?
+    if [ "$sc" -ne 0 ]; then
+      [ "$sc" -eq 2 ] && [ "$CHECK" = "--check" ] && echo "  would skip (runtime) $f"
+      continue
+    fi
     if [ -e "$DEST/$f" ]; then
       if [ -n "$UPGRADE" ] && owned "$f" && ! cmp -s "$SRC/$f" "$DEST/$f"; then
         if [ "$CHECK" = "--check" ]; then echo "  would update   $f"
