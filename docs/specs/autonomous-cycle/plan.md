@@ -63,6 +63,7 @@ Design assumptions not decided by any input (veto here):
 **Wave 4**
 - `autonomous-cycle-11-docs-constitution-and-cycle` — `CLAUDE.md` (cycle table, routing matrix, Profile row `Browser MCP`), `docs/cycle.md`, `docs/pipeline.md`, `bootstrap/interview.md`.
 - `autonomous-cycle-12-docs-guides` — `docs/architecture.md`, `docs/command-reference.md`, `docs/getting-started.md`, `docs/model-cascade.md`, `docs/token-economy.md` (honest cost line), `README.md`.
+- `autonomous-cycle-15-status-carries-the-worker` — plan delta 2026-09-12 (2): `status --json` `wave_stories` become `{file, story, worker, repeat}` objects; the driver routes `agentType` from `worker` (blocked_by 04, 06)
 
 **Wave 5**
 - `autonomous-cycle-13-release-0-12-0` — `CHANGELOG.md` `## [0.12.0]`, `VERSION`, `CITATION.cff` sync, `memory/memory.md` pointer.
@@ -126,6 +127,7 @@ born after approval - a delta is requirement change on the record.
 -->
 
 - **2026-09-12 · trigger:** worker-07 return report, CONCERNS line — `shippable()` in `install.sh` has no exclusion for gitignored runtime files, so `copy_tree ".claude"` copies the maintainer's `.claude/settings.local.json` (the pinned model) and other runtime artifacts into every install/upgrade target. **Decision:** cut story `autonomous-cycle-14-install-shippable-runtime-files` (wave 3, blocked_by 07, files: `install.sh` only): the installer must never ship a file that its own `.gitignore` ignores — `.claude/settings.local.json`, `.claude/handoff/`, `.claude/state.json`, `.claude/.vulyk-update-cache`, `.claude/settings.json.vulyk-bak`, `memory/snapshots/*`, `memory/map/.stale`, `__pycache__` — and the install-smoke CI job proves it. **Rejected:** leaving it for the next circle — story 07 makes `--apply` pin the *target*, and shipping the maintainer's pin alongside would silently undo that on every upgrade.
+- **2026-09-12 · trigger:** worker-06 return report, CONCERNS line — C3's `status --json` lists `wave_stories` as file paths only, with no per-story `worker:`; the Workflow driver may not read story files, so it dispatches every build story to `worker-code`. **Decision:** contract change to C3 — `wave_stories` becomes a list of objects `{"file": "<path>", "story": "<id>", "worker": "worker-code|worker-test", "repeat": <n|1>}` read from story frontmatter and `## Verification`; cut story `autonomous-cycle-15-status-carries-the-worker` (wave 4, blocked_by 04 and 06, files: `scripts/cycle.sh`, `tests/council.test.sh`, `.claude/workflows/vulyk-cycle.js`): `status` emits the objects, the driver routes `agentType` from `worker` and passes `repeat` to `close-story`, the test proves a `worker: worker-test` story is routed. **Rejected:** letting the driver read the story file (breaks "the script never parses prose" and the no-filesystem runtime); keeping the hardcode (silently wrong for every future spec with a `worker-test` story).
 
 <!--
 The four lines below are the cycle's confirmation artifacts (docs/cycle.md): one per stage
