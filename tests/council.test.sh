@@ -57,6 +57,24 @@ mk_round() { # mk_round <slug> <round-n> [ceiling] -> prints the round dir path
   printf '%s' "$rd"
 }
 
+mk_open_round() { # mk_open_round <slug> <round-n> [ceiling] -> like mk_round, but head=the
+  # ACTUAL current HEAD, not the fixed $HEAD7. judge never checks a round's head against
+  # current HEAD, so mk_round's fixed value is fine for it; record-seat does (D2), and by
+  # the time record-seat's own tests run, many commits separate current HEAD from $HEAD7.
+  local slug="$1" n="$2" ceiling="${3:-3}" rd nowhead
+  nowhead="$(git rev-parse --short HEAD)"
+  rd="docs/specs/$slug/council/round-$n"
+  mkdir -p "$rd"
+  {
+    printf 'head=%s\n'   "$nowhead"
+    printf 'pack=demo-pack\n'
+    printf 'opened=2020-01-01T00:00:00Z\n'
+    printf 'court=%s/court/%s/round-%s\n' "$T" "$slug" "$n"
+    printf 'ceiling=%s\n' "$ceiling"
+  } > "$rd/ROUND"
+  printf '%s' "$rd"
+}
+
 seat_report() { # seat_report <seat> <round-n> <pattern> - a C5-shaped report body
   # pattern chars: G=evidenced GREEN, R=evidenced RED, N=N/A (why:), ?=unevidenced RED
   local seat="$1" n="$2" pattern="$3" overall
@@ -68,8 +86,13 @@ seat_report() { # seat_report <seat> <round-n> <pattern> - a C5-shaped report bo
   printf 'COUNCIL: demo \xc2\xb7 round %s \xc2\xb7 seat %s\n' "$n" "$seat"
   printf 'MODEL: test-model\nCOURT: %s/court\nVERDICT: %s\n' "$T" "$overall"
   printf 'ASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
-  printf '%s' "$pattern" | fold -w1 | { i=0; while IFS= read -r c; do
-    i=$((i+1))
+  # `fold -w1 | while read` silently drops the pattern's last char when it has no trailing
+  # newline (GNU fold does not add one) - harmless for judge (it never checks ASK coverage
+  # against A) but fatal for record-seat's D3 coverage check, so index by position instead.
+  local plen=${#pattern} j c i
+  for ((j=0; j<plen; j++)); do
+    i=$((j+1))
+    c="${pattern:j:1}"
     case "$c" in
       N)   printf 'ASK %d: N/A - ask %d - why: not applicable in this configuration\n' "$i" "$i" ;;
       G)   printf 'ASK %d: GREEN - ask %d - run: check-%d saw: ok\n' "$i" "$i" "$i" ;;
@@ -77,7 +100,7 @@ seat_report() { # seat_report <seat> <round-n> <pattern> - a C5-shaped report bo
       '?') printf 'ASK %d: RED - ask %d - why: could not verify\n' "$i" "$i" ;;
       *)   printf 'ASK %d: GREEN - ask %d - run: check-%d saw: ok\n' "$i" "$i" "$i" ;;
     esac
-  done; }
+  done
   printf 'UNASKED: none\nBREACH: none\n'
 }
 
@@ -321,5 +344,314 @@ head -1 docs/specs/jtest/journal.md | expect "header line" "# Journal: jtest"
 grep -qF '· 03-building · wave 1 dispatched · next: close stories' docs/specs/jtest/journal.md \
   && echo "  ok    journal.md carries the C9 line" || { echo "::error::journal.md: $(cat docs/specs/jtest/journal.md)"; fail=1; }
 printf '%s' "$jout" | expect "the same line reaches stdout" '· 03-building · wave 1 dispatched · next: close stories'
+
+# --- briefed --------------------------------------------------------------------------------
+
+echo "briefed: missing ## Asks section -> exit 2, no Briefed line written"
+mk_spec briefnoask 3
+sed -i '/^## Asks$/,$d' docs/specs/briefnoask/brief.md
+out="$(council briefed docs/specs/briefnoask 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'Asks' && echo "  ok    missing ## Asks -> exit 2" \
+  || { echo "::error::missing Asks: exit=$ex out=$out"; fail=1; }
+grep -qE '^\*\*Briefed:\*\* via ' docs/specs/briefnoask/plan.md && { echo "::error::Briefed line written despite missing ## Asks"; fail=1; } \
+  || echo "  ok    no Briefed line written"
+
+echo "briefed: empty ## Asks section (present, zero items) -> exit 2"
+mk_spec briefempty 0
+out="$(council briefed docs/specs/briefempty 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] || { echo "::error::empty Asks: exit=$ex out=$out"; fail=1; }
+[ "$ex" -eq 2 ] && echo "  ok    empty ## Asks -> exit 2"
+
+echo "briefed: writes **Briefed:** via grill, <owner>, <date>, journals, next branch"
+mk_spec brief1 3
+out="$(council briefed docs/specs/brief1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"branch"' && echo "  ok    briefed exits 0, next branch" \
+  || { echo "::error::briefed: exit=$ex out=$out"; fail=1; }
+grep -qE '^\*\*Briefed:\*\* via grill, .+, [0-9]{4}-[0-9]{2}-[0-9]{2}$' docs/specs/brief1/plan.md \
+  && echo "  ok    Briefed line has the C7 shape" || { echo "::error::plan.md: $(grep '^\*\*Briefed:\*\*' docs/specs/brief1/plan.md)"; fail=1; }
+grep -qF '02-approved' docs/specs/brief1/journal.md && echo "  ok    journal records the briefed event" \
+  || { echo "::error::journal.md: $(cat docs/specs/brief1/journal.md)"; fail=1; }
+
+echo "briefed: --mode mini-brief / assumed select the C7 variant"
+mk_spec brief2 1
+council briefed docs/specs/brief2 --mode mini-brief >/dev/null
+grep -qF '**Briefed:** via mini-brief,' docs/specs/brief2/plan.md && echo "  ok    --mode mini-brief writes 'via mini-brief'" \
+  || { echo "::error::$(grep '^\*\*Briefed:\*\*' docs/specs/brief2/plan.md)"; fail=1; }
+
+mk_spec brief3 1
+council briefed docs/specs/brief3 --mode assumed >/dev/null
+grep -qF '**Briefed:** via grill (assumed),' docs/specs/brief3/plan.md && echo "  ok    --mode assumed writes 'via grill (assumed)'" \
+  || { echo "::error::$(grep '^\*\*Briefed:\*\*' docs/specs/brief3/plan.md)"; fail=1; }
+
+echo "briefed --commit: commits as vulyk(<slug>): briefed"
+mk_spec brief4 1
+council briefed docs/specs/brief4 --commit >/dev/null
+git log -1 --format=%s | grep -qF 'vulyk(brief4): briefed' && echo "  ok    --commit creates the paperwork commit" \
+  || { echo "::error::$(git log -1 --format=%s)"; fail=1; }
+
+# --- branch -----------------------------------------------------------------------------------
+
+echo "branch: exits 2 without Briefed or Approved"
+mk_spec branchnobrief 2
+out="$(council branch docs/specs/branchnobrief 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && echo "  ok    branch without Briefed/Approved exits 2" || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "branch: creates/checks out vulyk/<slug>, writes **Branch:**, journal, next build:1"
+mk_spec branch1 2
+council briefed docs/specs/branch1 >/dev/null
+out="$(council branch docs/specs/branch1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"build:1"' && echo "  ok    branch exits 0, next build:1" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -qF '**Branch:** vulyk/branch1' docs/specs/branch1/plan.md && echo "  ok    Branch line written" \
+  || { echo "::error::$(grep '^\*\*Branch:\*\*' docs/specs/branch1/plan.md)"; fail=1; }
+[ "$(git rev-parse --abbrev-ref HEAD)" = "vulyk/branch1" ] && echo "  ok    checked out vulyk/branch1" \
+  || { echo "::error::current branch: $(git rev-parse --abbrev-ref HEAD)"; fail=1; }
+grep -qF 'build:1' docs/specs/branch1/journal.md && echo "  ok    journal records the branch event" \
+  || { echo "::error::journal.md: $(cat docs/specs/branch1/journal.md)"; fail=1; }
+git checkout -q main
+
+echo "branch --commit: commits as vulyk(<slug>): branch vulyk/<slug>"
+mk_spec branch2 1
+council briefed docs/specs/branch2 >/dev/null
+council branch docs/specs/branch2 --commit >/dev/null
+git log -1 --format=%s | grep -qF 'vulyk(branch2): branch vulyk/branch2' && echo "  ok    --commit creates the paperwork commit" \
+  || { echo "::error::$(git log -1 --format=%s)"; fail=1; }
+git checkout -q main
+
+# --- record-seat: preconditions (open round, HEAD match) -------------------------------------
+
+echo "record-seat: no open round -> exit 2"
+mk_spec rseat1 3
+out="$(seat_report haiku 1 GGG | council record-seat docs/specs/rseat1 1 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && echo "  ok    no open round -> exit 2" || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "record-seat: a valid C5 report writes <seat>.md with the C4 header, attempt 1, exit 0"
+rd_rs1="$(mk_open_round rseat1 1)"
+out="$(seat_report haiku 1 GGG | council record-seat docs/specs/rseat1 1 haiku)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qE '"next":"dispatch:' && echo "  ok    valid report recorded, exit 0" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+head -1 "$rd_rs1/haiku.md" | grep -qE '^<!-- seat: haiku .* attempt: 1 .* -->$' && echo "  ok    C4 header, attempt 1" \
+  || { echo "::error::header: $(head -1 "$rd_rs1/haiku.md")"; fail=1; }
+
+echo "record-seat: stale round (HEAD moved since ROUND.head) -> exit 5"
+mk_spec rseat2 2
+mk_open_round rseat2 1 >/dev/null
+git commit --allow-empty -qm "advance head" >/dev/null
+out="$(seat_report sonnet 1 GG | council record-seat docs/specs/rseat2 1 sonnet 2>&1)"; ex=$?
+[ "$ex" -eq 5 ] && printf '%s' "$out" | grep -qF '"next":"stale"' && echo "  ok    stale round -> exit 5" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+# --- record-seat: D3 MALFORMED cases (exit 4, kept as attempt-1.md, never <seat>.md) ----------
+
+echo "record-seat: a missing label -> exit 4 MALFORMED, kept as attempt-1.md"
+mk_spec rseat3 2
+rd_rs3="$(mk_open_round rseat3 1)"
+report_missing_label() {
+  printf 'MODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: GREEN - a - run: c saw: ok\nASK 2: GREEN - a - run: c saw: ok\n'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+out="$(report_missing_label | council record-seat docs/specs/rseat3 1 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF '"error":"MALFORMED:' && echo "  ok    missing label -> exit 4" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -f "$rd_rs3/haiku.attempt-1.md" ] && [ ! -f "$rd_rs3/haiku.md" ] && echo "  ok    kept as attempt-1.md, not haiku.md" \
+  || { echo "::error::files: $(ls "$rd_rs3")"; fail=1; }
+
+echo "record-seat: ASK numbers not exactly 1..A -> exit 4"
+mk_spec rseat4 3
+mk_open_round rseat4 1 >/dev/null
+report_bad_numbers() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: GREEN - a - run: c saw: ok\nASK 3: GREEN - a - run: c saw: ok\nASK 4: GREEN - a - run: c saw: ok\n'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+out="$(report_bad_numbers | council record-seat docs/specs/rseat4 1 sonnet 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'ASK numbers' && echo "  ok    bad ASK numbering -> exit 4" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "record-seat: N/A without why: -> exit 4"
+mk_spec rseat5 2
+mk_open_round rseat5 1 >/dev/null
+report_na_no_why() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: N/A\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: N/A - a - no reason given\nASK 2: N/A - a - why: not applicable\n'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+out="$(report_na_no_why | council record-seat docs/specs/rseat5 1 opus 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'without why' && echo "  ok    N/A without why: -> exit 4" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "record-seat: VERDICT inconsistent with ASK lines -> exit 4"
+mk_spec rseat6 2
+mk_open_round rseat6 1 >/dev/null
+report_verdict_mismatch() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: GREEN - a - run: c saw: ok\nASK 2: RED - a - run: c saw: fail\n'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+out="$(report_verdict_mismatch | council record-seat docs/specs/rseat6 1 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'inconsistent' && echo "  ok    VERDICT inconsistent -> exit 4" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "record-seat: a body naming <slug>-NN, plan.md, journal.md or council/ -> tainted"
+mk_spec demo 2
+rd_demo1="$(mk_open_round demo 1)"
+report_taint() { # report_taint <phrase>
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: GREEN - %s - run: c saw: ok\nASK 2: GREEN - a - run: c saw: ok\n' "$1"
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+out="$(report_taint 'looked at demo-01' | council record-seat docs/specs/demo 1 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    <slug>-NN (demo-01) in body -> tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(report_taint 'checked plan.md' | council record-seat docs/specs/demo 1 sonnet 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    plan.md in body -> tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(report_taint 'checked journal.md' | council record-seat docs/specs/demo 1 opus 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    journal.md in body -> tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+rd_demo2="$(mk_open_round demo 2)"
+out="$(report_taint 'looked under council/' | council record-seat docs/specs/demo 2 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    council/ in body -> tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+# --- record-seat: GREEN/RED without evidence - attempt 1 rejects, attempt 2's leniency --------
+
+echo "record-seat: unevidenced RED -> exit 4 on attempt 1, accepted on attempt 2, excluded from half"
+mk_spec runev 3
+rd_runev="$(mk_open_round runev 1)"
+out="$(seat_report haiku 1 'G?G' | council record-seat docs/specs/runev 1 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && echo "  ok    attempt 1: unevidenced RED rejected" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -f "$rd_runev/haiku.attempt-1.md" ] && echo "  ok    kept as attempt-1.md" || { echo "::error::no attempt-1.md"; fail=1; }
+out2="$(seat_report haiku 1 'G?G' | council record-seat docs/specs/runev 1 haiku)"; ex2=$?
+[ "$ex2" -eq 0 ] && echo "  ok    attempt 2: unevidenced RED accepted" || { echo "::error::exit=$ex2 out=$out2"; fail=1; }
+grep -qF 'unevidenced: 2' "$rd_runev/haiku.md" && echo "  ok    header carries unevidenced: 2" \
+  || { echo "::error::header: $(head -1 "$rd_runev/haiku.md")"; fail=1; }
+seat_report sonnet 1 GGG | council record-seat docs/specs/runev 1 sonnet >/dev/null
+seat_report opus 1 GGG | council record-seat docs/specs/runev 1 opus >/dev/null
+printf 'Reviewed.\nPASS\n' | council record-seat docs/specs/runev 1 review >/dev/null
+jout="$(council judge docs/specs/runev)"; jex=$?
+[ "$jex" -eq 4 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    judge: RED (not escalated by an unevidenced-only red)" \
+  || { echo "::error::jex=$jex jout=$jout"; fail=1; }
+row="$(grep '"spec":"runev"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"red":[]' && printf '%s' "$row" | grep -qF '"red_unevidenced":[2]' \
+  && echo "  ok    row: red:[], red_unevidenced:[2]" || { echo "::error::row: $row"; fail=1; }
+
+echo "record-seat: unevidenced GREEN -> rewritten N/A - why: unevidenced on attempt 2"
+mk_spec rgreen 2
+rd_rgreen="$(mk_open_round rgreen 1)"
+report_green_noeq() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: GREEN - ask one - run: c saw: ok\nASK 2: GREEN - ask two - looked fine\n'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+report_green_noeq | council record-seat docs/specs/rgreen 1 sonnet >/dev/null; ex1=$?
+[ "$ex1" -eq 4 ] || { echo "::error::attempt1 exit=$ex1, expected 4"; fail=1; }
+report_green_noeq | council record-seat docs/specs/rgreen 1 sonnet >/dev/null; ex2=$?
+[ "$ex2" -eq 0 ] || { echo "::error::attempt2 exit=$ex2, expected 0"; fail=1; }
+grep -qF 'ASK 2: N/A - ask two - why: unevidenced on attempt 2' "$rd_rgreen/sonnet.md" \
+  && echo "  ok    unevidenced GREEN rewritten to N/A" || { echo "::error::sonnet.md: $(cat "$rd_rgreen/sonnet.md")"; fail=1; }
+
+echo "record-seat: a third attempt exits 2 - the seat is ABSENT"
+mk_spec rabsent 2
+rd_rabsent="$(mk_open_round rabsent 1)"
+printf 'garbage\n'  | council record-seat docs/specs/rabsent 1 haiku >/dev/null 2>&1
+printf 'garbage2\n' | council record-seat docs/specs/rabsent 1 haiku >/dev/null 2>&1
+out="$(printf 'garbage3\n' | council record-seat docs/specs/rabsent 1 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'ABSENT' && echo "  ok    third attempt -> exit 2, ABSENT" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -f "$rd_rabsent/haiku.md" ] && [ -f "$rd_rabsent/haiku.attempt-2.md" ] && echo "  ok    no final haiku.md, attempt-2.md remains" \
+  || { echo "::error::files: $(ls "$rd_rabsent")"; fail=1; }
+
+# --- record-seat: review seat, any shape, PASS/BLOCK extracted -------------------------------
+
+echo "record-seat review: any shape accepted, PASS/BLOCK extracted into header verdict:"
+mk_spec rrev 2
+rd_rrev="$(mk_open_round rrev 1)"
+out="$(printf 'Looked at everything.\nBLOCK - missing a guard on line 40.\n' | council record-seat docs/specs/rrev 1 review)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    review with BLOCK anywhere -> exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -qF 'verdict: BLOCK' "$rd_rrev/review.md" && echo "  ok    header carries verdict: BLOCK" \
+  || { echo "::error::$(head -1 "$rd_rrev/review.md")"; fail=1; }
+
+echo "record-seat review: neither PASS nor BLOCK -> exit 4"
+mk_spec rrev2 2
+mk_open_round rrev2 1 >/dev/null
+out="$(printf 'Just some prose, no verdict token.\n' | council record-seat docs/specs/rrev2 1 review 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'MALFORMED' && echo "  ok    review without PASS/BLOCK -> exit 4" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+# --- record-seat: model resolution (--model > report's MODEL: > unknown) ----------------------
+
+echo "record-seat: --model overrides the report's MODEL: line; falls back to unknown"
+mk_spec rmodel 1
+rd_rmodel="$(mk_open_round rmodel 1)"
+seat_report haiku 1 G | council record-seat docs/specs/rmodel 1 haiku --model claude-opus-5 >/dev/null
+grep -qF 'model: claude-opus-5' "$rd_rmodel/haiku.md" && echo "  ok    --model overrides the report's MODEL: line" \
+  || { echo "::error::header: $(head -1 "$rd_rmodel/haiku.md")"; fail=1; }
+
+mk_spec rmodel2 1
+rd_rmodel2="$(mk_open_round rmodel2 1)"
+printf 'COUNCIL: x\nMODEL: \nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\nASK 1: GREEN - a - run: c saw: ok\nUNASKED: none\nBREACH: none\n' \
+  | council record-seat docs/specs/rmodel2 1 sonnet >/dev/null
+grep -qF 'model: unknown' "$rd_rmodel2/sonnet.md" && echo "  ok    falls back to unknown when neither is given" \
+  || { echo "::error::header: $(head -1 "$rd_rmodel2/sonnet.md")"; fail=1; }
+
+# --- PAUSE guard: every mutating verb refuses before touching anything ------------------------
+
+echo "PAUSE: briefed, branch, record-seat, close-story, open-round, reopen all exit 3"
+mk_spec pauseall 2
+printf 'Test Owner \xc2\xb7 blocking \xc2\xb7 %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > docs/specs/pauseall/PAUSE
+out="$(council briefed docs/specs/pauseall 2>&1)"; ex=$?
+[ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    briefed paused" \
+  || { echo "::error::briefed: exit=$ex out=$out"; fail=1; }
+out="$(council branch docs/specs/pauseall 2>&1)"; ex=$?
+[ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    branch paused" \
+  || { echo "::error::branch: exit=$ex out=$out"; fail=1; }
+out="$(printf 'x\n' | council record-seat docs/specs/pauseall 1 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    record-seat paused" \
+  || { echo "::error::record-seat: exit=$ex out=$out"; fail=1; }
+for v in close-story open-round reopen; do
+  out="$(council "$v" docs/specs/pauseall 2>&1)"; ex=$?
+  [ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    $v paused" \
+    || { echo "::error::$v: exit=$ex out=$out"; fail=1; }
+done
+grep -qE '^\*\*Briefed:\*\* via ' docs/specs/pauseall/plan.md && { echo "::error::Briefed line written despite PAUSE"; fail=1; } \
+  || echo "  ok    PAUSE stopped every verb before it touched anything"
+
+# --- pause / resume ----------------------------------------------------------------------------
+
+echo "pause: creates PAUSE (who · why · ts as its first line) and journals"
+mk_spec pz1 2
+out="$(council pause docs/specs/pz1 "taking it back")"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    pause exits 0, next paused" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -f docs/specs/pz1/PAUSE ] && head -1 docs/specs/pz1/PAUSE | grep -qF 'taking it back' && echo "  ok    PAUSE file's first line carries the reason" \
+  || { echo "::error::PAUSE: $(cat docs/specs/pz1/PAUSE 2>&1)"; fail=1; }
+grep -qF 'paused' docs/specs/pz1/journal.md && echo "  ok    journal records paused" \
+  || { echo "::error::journal.md missing"; fail=1; }
+
+echo "resume: removes PAUSE, journals, stale:true when HEAD moved while paused"
+git commit --allow-empty -qm "moved while paused" >/dev/null
+out="$(council resume docs/specs/pz1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"stale":true' && echo "  ok    resume reports stale:true after HEAD moved" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -f docs/specs/pz1/PAUSE ] && echo "  ok    PAUSE removed" || { echo "::error::PAUSE still present"; fail=1; }
+grep -qF 'resumed' docs/specs/pz1/journal.md && echo "  ok    journal records resumed" \
+  || { echo "::error::journal.md missing resumed"; fail=1; }
+
+echo "resume: stale:false when HEAD is unchanged since pause"
+mk_spec pz2 2
+council pause docs/specs/pz2 "brb" >/dev/null
+out="$(council resume docs/specs/pz2)"
+printf '%s' "$out" | grep -qF '"stale":false' && echo "  ok    resume reports stale:false when HEAD is unchanged" \
+  || { echo "::error::$out"; fail=1; }
+
+echo "pause / resume are themselves exempt from the PAUSE guard"
+mk_spec pz3 2
+council pause docs/specs/pz3 "first" >/dev/null
+out="$(council pause docs/specs/pz3 "second" 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    pause while already paused still succeeds" || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(council resume docs/specs/pz3 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    resume succeeds while paused" || { echo "::error::exit=$ex out=$out"; fail=1; }
 
 exit $fail
