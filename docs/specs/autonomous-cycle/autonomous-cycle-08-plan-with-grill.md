@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-08
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -53,6 +53,10 @@ blocked_by: [autonomous-cycle-03]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `cycle.sh briefed` requires `plan.md` to already exist (exit 2 otherwise), so the intake order is brief -> recon -> grill -> plan -> stories -> gates -> `cycle.sh briefed`, not grill -> briefed -> plan; Tier 1 also gets a minimal plan.md for this reason, a small scope increase over the pre-0.12 Tier-1 path that skipped plan.md entirely.
+- Two-stop opt-out skips `cycle.sh briefed` after approval (it would only no-op once `**Approved:**` is set - `cmd_branch` already accepts either marker) and instead journals the approval directly, to keep the "every terminal line is journal.sh output" acceptance criterion true on that path too.
+- `(Рекомендую)` is kept as a literal, non-localized label in `templates/grill.md` because C14 fixes it verbatim; every other player-facing sentence in the grill stays in the owner's language.
+- Verified against the actual script (not just the plan.md contract text): `scripts/cycle.sh briefed <spec-dir> [--commit] [--mode mini-brief|assumed]` matches exactly (`scripts/cycle.sh:541,978-987`).
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
