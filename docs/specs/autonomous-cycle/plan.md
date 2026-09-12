@@ -131,7 +131,7 @@ command or script that owns the line; `scripts/ship-check.sh` reads all four.
 -->
 **Approved:** Andrei, 2026-09-12 — "Одобряю с предложенными правками" (coverage findings a-f resolved in ## Assumptions; ADR-001 accepted as the contract, status stays proposed until it ships)
 **Briefed:** <written by scripts/cycle.sh briefed at grill close - stage 01+02 in autonomous mode; /vulyk-build and ship-check.sh accept this or Approved>
-**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
+**Branch:** vulyk/autonomous-cycle
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05. /vulyk-ship refuses without it.>
 **Council:** <appended by scripts/cycle.sh judge, one line per round - stage 04+05 in autonomous mode; ship-check.sh reads the newest memory/stats/council.jsonl row>
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
