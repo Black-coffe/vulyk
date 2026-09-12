@@ -8,8 +8,9 @@ in service of; [architecture.md](architecture.md) draws the machinery inside it 
    01 Spec ───► 02 Plan ───► 03 Code
     ▲                           │
     │ next circle               ▼
-   06 Ship ◄─── 05 Human ◄─── 04 Tests
-                (mandatory)
+   06 Ship ◄─── 05 Council ◄─── 04 Tests
+                    ▲
+        Human ------┘   (override, any stage: /vulyk-pause, human-check.sh)
 ```
 
 A stage is not finished when the work is done. It is finished when its **confirmation
@@ -23,23 +24,40 @@ that opens the next stage refuses when the previous stage's artifact is missing.
 | 01 | **Spec** — what and why: the message, the error report, the user's ask | human writes, Queen records | the spec text, verbatim | `docs/specs/<slug>/brief.md` (+ `## Answers`) | `/vulyk-plan` |
 | 02 | **Plan** — who does what in which files; the plan can be handed to an agent whole | Queen / `queen-planner` | the list of steps, approved | `plan.md` + story files; `**Approved:**` line | `/vulyk-plan`, stop for approval |
 | 03 | **Code** — an agent or a person works; changes live in their own branch | workers | the branch, one commit per story | `**Branch:**` line in plan.md; git | `/vulyk-build` |
-| 04 | **Tests** — automatic: the agent runs the suite and walks the client's path | `worker-test`, `drone-acceptance` | a passed run | story `## Verification` greens; `memory/stats/acceptance.jsonl` | `/vulyk-build` step 4, `/vulyk-review` |
-| 05 | **Human** — the owner looks with their own eyes, on a test or live version | **the human, nobody else** | your check, recorded | `**Checked:**` line in plan.md; `memory/stats/human.jsonl` | `/vulyk-review` PASS path |
-| 06 | **Ship** — history fixed, version published, next circle opened | Queen prepares, human presses | the published version | `**Shipped:**` line in plan.md; tag / release | `/vulyk-ship` |
+| 04 | **Tests** — automatic: each story's own `## Verification` command, run and repeated as the story asks | `worker-code` / `worker-test`, via `cycle.sh close-story` | every story's verification green | story `## Verification` greens | `/vulyk-build` |
+| 05 | **Council** — three blind seats judge the brief's own `## Asks` from a court that cannot see the hive's stories; `lead-review` judges the code in parallel | `council-haiku`, `council-sonnet`, `council-opus`, `lead-review` | unanimous green, or an evidenced verdict on every ask | `**Council:**` line in plan.md; `memory/stats/council.jsonl` | `/vulyk-build` (driver) or `/vulyk-review` (one round) |
+| 06 | **Ship** — history fixed, branch merged locally, publish command printed and never pressed, next circle opened | Queen merges and prints; human presses when ready | the local merge, recorded | `**Shipped:**` line in plan.md; git (local merge) | `/vulyk-ship` |
 
 ## Why 05 is red
 
 Every gate before it is answerable to the brief, and the brief can ask for the wrong
-thing. The blind acceptance drone can tell you the software does what the words said;
-only the person who wrote the words can tell whether the words said what they meant.
-That is not a check any agent can run, so it is not a check any agent is allowed to skip:
-`/vulyk-ship` refuses without a `**Checked:**` line the same way `/vulyk-build` refuses
-without `**Approved:**`. Overriding it is possible — the record then says the owner shipped
-unchecked, in their own words — and it is never silent.
+thing — that is still true, and it is still what makes 05 the one stage that cannot be
+skipped. What changed is who does the asking. `memory/stats/human.jsonl` across three hives
+over one week (10 rows) recorded zero `REJECTED` verdicts, two of them stamped the same
+second as the commit they were meant to be reading — evidence a mandatory human look had
+drifted into ceremony, not substance. Over the same period `memory/stats/acceptance.jsonl`
+across five hives (42 rows) recorded five `REJECTED` verdicts, every one substantive: an
+interactive session dying after the first search, a brief requirement delivered nowhere, a
+central ask left empty twice including after a repair round. The gate actually catching
+things was the blind agent, not the human standing beside it.
 
-The check is cheap to do and cheap to record: `scripts/human-check.sh docs/specs/<slug>
-ACCEPTED "<where you looked>"` writes one line in two places. What it buys is that the ship
-stage, the release ledger and the next circle all rest on something a person actually saw.
+Stage 05 is now the **council**: three blind seats (`council-haiku`, `council-sonnet`,
+`council-opus`), one model and one angle each, working in a worktree with
+`docs/specs/<slug>/` reduced to `brief.md` so none of them can see the hive's own account of
+what it built — the same blindness stage 05 used to buy from a human who had not read the
+stories either. Green requires unanimity: every seat `GREEN` or `N/A`, and `lead-review`
+(which does see the code, in parallel, unchanged) `PASS`. A round with an evidenced RED on
+half the asks or more escalates immediately rather than burning further rounds on a plan
+that is wrong; three RED rounds without unanimity escalate on the ceiling. Either way
+`cycle.sh escalate` writes `## Needs a human` into `plan.md` and stops — this is the
+emergency exit, not the routine path.
+
+The owner is never locked out: `/vulyk-pause` hands the tree back at any stage, and
+`scripts/human-check.sh` still writes `**Checked:** ACCEPTED` or `REJECTED`, which outranks
+the council's verdict whichever way it points — `scripts/human-check.sh docs/specs/<slug>
+ACCEPTED "<where you looked>"` writes one line in two places. `/vulyk-ship` refuses without
+either a GREEN `**Council:**` row or a `**Checked:**` line, exactly as it refused without a
+human look before.
 
 ## What invalidates a confirmation
 
@@ -48,28 +66,34 @@ something else — same rule as every gate in [pipeline.md](pipeline.md).
 
 | Event | Stage(s) it reopens | Artifact that goes stale |
 |---|---|---|
-| The brief gains an `## Answers` line that changes an ask | 02 onward | `**Approved:**` — re-present the plan |
-| A story is cut, merged or re-waved after approval | 04, 05 | acceptance verdict (`--check` says STALE); the human check (`human-check.sh --check`) |
-| A code commit lands on the spec branch after the owner looked | 05 | `**Checked:**` — it names the commit it was given against. A commit touching only the cycle's own ledgers (plan.md marker lines, `memory/stats/*.jsonl`) is paperwork and does not count |
-| The owner rejects at 05 | 02–04 | findings become fix stories, back through `/vulyk-build`; both verdicts are re-earned |
+| The brief gains an `## Answers` line that changes an ask after the grill closed | 02 onward | `**Briefed:**` (or `**Approved:**` in two-stop mode) — re-present the plan |
+| A code commit lands on the branch while a council round is open | 05 | the open round: `cycle.sh open-round` re-stamps it in place if no seat has reported yet, or writes a `STALE` row and opens round N+1 if one already has — either way the ceiling still counts it |
+| A code commit lands after a round already judged GREEN | that `**Council:**` row | `ship-check.sh` reads it as `STALE (commit)` unless only paperwork landed since (`paperwork_only`); a fresh round is needed |
+| A round is RED for half the asks or more, or the ceiling (3, `+3` per `reopen`) is reached | 05 | `ESCALATE` — `cycle.sh escalate` writes `## Needs a human` into `plan.md`; the loop stops instead of opening a round nobody asked for |
+| The owner pauses, at any stage | any | `PAUSE` semaphore — the loop stops at its next safe point; `/vulyk-resume` clears it and relaunches fresh, never resuming a cached run |
+| An `ESCALATE` is on the record | 05 | three exits, all on the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen "<decision>"` (three more rounds), or leaving the spec open |
+| The owner records `**Checked:** REJECTED` after a GREEN council row | 05, then 03–04 via repair | the council verdict — treated as RED regardless of what the seats said; fix stories go through `/vulyk-build`, then a fresh round |
 
 `scripts/ship-check.sh docs/specs/<slug>` reads all of it at once and says which stage is
 open. It is what `/vulyk-ship` runs first, and it is free.
 
 ## Tiers and the cycle
 
-The cycle is the shape of every Tier 2+ spec. Tier 0–1 work skips the paperwork by
-design — there is no brief to confirm and no branch to record — but **stage 05 does not
-scale with tier**: a one-file change that reaches a user still gets looked at by the owner
-before it is published. What shrinks is the record, not the look.
+The cycle is the shape of every Tier 1+ spec. Tier 0 work skips it entirely by design —
+there is no brief, so there is nothing for a court to judge blind. Tier 1 gets the smallest
+version that still counts: a mini-brief (the task phrase itself, verbatim, no grill) and one
+council round. **The council does not scale down with tier past that point**: what shrinks
+is the size of the record — a one-line `## Asks` instead of a grill's 3-7, one story instead
+of many — never whether the council runs once a brief exists.
 
 ## The next circle
 
 Stage 06 does not end at the tag. Three things carry over, and `/vulyk-ship` writes them
 down before recommending `/clear`:
 
-- `UNASKED` lines from the acceptance report — behaviour nobody asked for that is now on
-  the record, and either a bug or the seed of the next brief;
+- `UNASKED` lines from the council's seat reports (`docs/specs/<slug>/council/round-N/{haiku,sonnet,opus}.md`)
+  — behaviour nobody asked for that is now on the record, and either a bug or the seed of
+  the next brief;
 - `## Descoped` lines from plan.md — requirements the human agreed to drop *for now*;
 - `CONCERNS` from worker returns that review ranked minor and nobody fixed.
 

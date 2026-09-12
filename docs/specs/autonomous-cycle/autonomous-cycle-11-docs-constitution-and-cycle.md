@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-11
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -53,6 +53,15 @@ The documents that define the cycle say what v0.12.0 does: stage 05 is the counc
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- CLAUDE.md: merged cycle-table rows into `01+02` and `04+05` (per acceptance criteria's own phrasing), left docs/cycle.md's six rows intact per its non-goal.
+- CLAUDE.md/docs/cycle.md: Tier 0-1 language fixed to "Tier 0" only, since Tier 1 now gets a mini-brief + one council round (Decision 13) - was stale even before this story touched it (vulyk-plan.md already said "Tier 0" only).
+- docs/cycle.md "Why 05 is red": cited brief.md's own `## Evidence` section (human.jsonl: 3 hives/10 rows/0 REJECTED/2 same-second stamps; acceptance.jsonl: 5 hives/42 rows/5 REJECTED substantive) - not in my named map slice but directly required by the story's own Non-goals clause ("citing the human.jsonl / acceptance.jsonl evidence lines from brief.md"), so I read just that one section.
+- docs/pipeline.md: dropped the `drone-acceptance` gate row (agent file confirmed deleted from `.claude/agents/`) rather than describing a gate that no longer exists; kept `acceptance-log.sh` row, labelled "(pre-council specs only)" per plan.md's assumption that it stays for pre-0.12 specs.
+- docs/pipeline.md: updated "Only one gate at a time" section's drone-acceptance/EADDRINUSE anecdote to `council-sonnet` terminology, keeping the historical incident dated to "when this was drone-acceptance."
+- docs/pipeline.md: gate count in the opening line went 9 -> 11 (added record-seat/judge/court rows, removed drone-acceptance); staleness-table "five rows" note corrected to "nine rows" after expansion.
+- bootstrap/interview.md: inserted new Q10 (Browser MCP, closed-choice, `none` recommended) after Q9, renumbered Q10-15 -> Q11-16; no new batch, no other question content touched.
+- CLAUDE.md Commands table: added 3 rows (status --json, cycle.test.sh, council.test.sh) though the story's Non-goals line said "two test rows" - the story's own Acceptance criteria explicitly lists all three, which I treated as authoritative over the shorthand in Non-goals.
+- CONCERN carried to CONCERNS line below (not fixed, not in my `## Files`): `install.sh`'s `VULYK:PROFILE` placeholder (reset_marked_block, ~line 140) already omitted *Client path*/*Release-deploy* before this story; the new *Browser MCP* row extends that pre-existing gap for fresh installs.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

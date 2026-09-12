@@ -1,6 +1,6 @@
 # The gates
 
-Nine checks stand between a request and a published version. This page is not a description of the
+Eleven checks stand between a request and a published version. This page is not a description of the
 pipeline — [architecture.md](architecture.md) draws that. It answers the two questions that
 turn out to matter in practice and are documented nowhere else:
 
@@ -18,10 +18,12 @@ green on the record that describes work nobody shipped.
 | `trace-check.sh` | every story's `## Requirements` quotes, `brief.md`, `## Plan deltas` | whether a quoted requirement was actually implemented | deterministic, free |
 | `scope-check.sh` | one story's declared files against its own commit's diff | whether the change inside those files is correct | deterministic, free |
 | `drone-coverage` | `brief.md` + `plan.md` — **never a story file** | whether the plan was built; it runs before anything exists | sonnet, `maxTurns: 5` |
-| `drone-acceptance` | `brief.md` + the repository + one run command + the milestone ledger — **never `docs/specs/` beyond those** | whether the proof is real. It observes that the asks work; it cannot tell a suite that would catch a regression from one that would not | sonnet |
+| `cycle.sh record-seat` | one seat's report against the C5 label contract (`VERDICT`, one `ASK` line per item of `## Asks`, evidence, taint) | whether the report is honest — only whether it is *well-formed*: it rejects (exit 4) a missing label, an uncovered or extra ask number, `GREEN`/`RED` without `run:`+`saw:` or `url:`+`saw:`, `N/A` without `why:`, a `VERDICT` inconsistent with its own `ASK` lines, or a taint (a story id, `plan.md`, `journal.md`, `council/` named anywhere in the body) | deterministic, free |
+| `cycle.sh judge` | every recorded seat file for the round, plus the newest `**Checked:**` line | whether a seat's evidence is real — only whether the round's recorded verdicts, read together, mean GREEN, RED or ESCALATE (ADR-001 D4, first match wins: `PAUSE` → stop; `**Checked:** REJECTED` newer than the round → RED; three seats ABSENT → ESCALATE `env`; RED on half the asks or more → ESCALATE `half`; a `review` BLOCK or any RED → RED, ESCALATE `ceiling` past round 3; every seat GREEN/N/A and `review` PASS → GREEN) | deterministic, free — the model cost is in producing the seat reports, not in judging them |
+| the court (`.vulyk/court/<slug>/round-N/`) | a git worktree at the pack commit, for the three blind seats to work inside | anything under `docs/specs/<slug>/` except `brief.md` - no stories, no `plan.md`, no `journal.md`, no `council/` directory; `Read`/`Grep` stay in a seat's toolset, there is just nothing left there to find | free - one `git worktree add --detach`, removed by `judge` |
 | `lead-review` | everything: diff, stories, notes, plan, wiki, ADRs | the human's ask *independently* — it reads the plan, so it inherits the plan's framing of what was wanted | `TOP_MODEL` (fable on Max, opus on Pro) |
-| `acceptance-log.sh` | the story statuses, the caller's verdict, the pack's identity | anything about quality; it is a ledger, not a judge | deterministic, free |
-| `human-check.sh` | the owner's verdict in their own words, pinned to the commit and the pack | anything at all about the software - it is a signature, not a judge; `--check` only says whether the signature is still about what ships | deterministic, free |
+| `acceptance-log.sh` (pre-council specs only) | the story statuses, the caller's verdict, the pack's identity | anything about quality; it is a ledger, not a judge | deterministic, free |
+| `human-check.sh` (override, not a stage) | the owner's verdict in their own words, pinned to the commit and the pack | anything at all about the software - it is a signature, not a judge; `--check` only says whether the signature is still about what ships | deterministic, free |
 | `ship-check.sh` | all six confirmation artifacts of [the cycle](cycle.md) at once, and whether each is about *this* pack at *this* commit | quality; it counts confirmations, it does not weigh them | deterministic, free |
 
 ## The two blind spots that matter
@@ -47,42 +49,51 @@ and the evidence does not transfer — it just stops being about anything.
 
 | Event | What it invalidates | What to do |
 |---|---|---|
-| A repair story is cut after review | the acceptance verdict, `wave-check` | re-dispatch `drone-acceptance` when the repair round closes; re-run `bash scripts/wave-check.sh docs/specs/<slug>` before dispatching it |
+| A repair story is cut after a council round | the round's verdict, `wave-check` | for specs with a council row, `cycle.sh open-round` once the repair story closes (it re-stamps or opens N+1 per the crash rules below); pre-council specs re-dispatch through `acceptance-log.sh` as before; re-run `bash scripts/wave-check.sh docs/specs/<slug>` before dispatching it |
 | A story's `## Files` changes | `wave-check`, and any concurrency assumption resting on it | re-run `wave-check` before the next dispatch |
 | A plan delta adds or rewords a requirement | `trace-check` backward | re-run `bash scripts/trace-check.sh docs/specs/<slug>` |
 | The tree moved since planning | `wave-check`'s `missing` and `empty-glob` classes | `/vulyk-build` step 2 re-runs it for exactly this reason |
-| Anything at all, before proposing a merge | possibly the acceptance verdict | `bash scripts/acceptance-log.sh --check docs/specs/<slug>` → `CURRENT`, `STALE`, or `NO VERDICT RECORDED` |
+| A code commit lands while a council round is open | the open round | `cycle.sh open-round` re-stamps it in place with no seat file yet, or writes a `STALE` row and opens round N+1 once one exists — either way the ceiling still counts it |
+| A round is RED for half the asks or more, or the ceiling (3) is reached | readiness to ship | `cycle.sh escalate` writes `## Needs a human`; the owner's three exits are `human-check.sh ACCEPTED`, `cycle.sh reopen "<decision>"`, or leaving the spec open — never a round nobody asked for |
+| Anything at all, before proposing a merge (pre-council specs) | possibly the acceptance verdict | `bash scripts/acceptance-log.sh --check docs/specs/<slug>` → `CURRENT`, `STALE`, or `NO VERDICT RECORDED` |
 | Any commit after the owner looked | the human check | `bash scripts/human-check.sh --check docs/specs/<slug>` reports `STALE (commit)`; the owner looks again at the new HEAD |
-| The owner rejects at stage 05 | the acceptance verdict, once fix stories are cut; the check itself | fix stories → `/vulyk-build` → both gates → a second look; `ship-check.sh` stays `NOT READY` until then |
+| The owner records `**Checked:** REJECTED` after a GREEN council row | that `**Council:**` row | it is read as RED regardless of what the seats said; fix stories → `/vulyk-build` → a fresh round; `ship-check.sh` stays `NOT READY` until it goes GREEN again |
 
-The rule underneath all five rows is one sentence: **when the pack moves, whatever judged it
+The rule underneath all nine rows is one sentence: **when the pack moves, whatever judged it
 is re-run.** It is written down here because relying on remembering it is what produced the
 failure it exists to prevent — an acceptance verdict recorded against six stories for a pack
 that shipped with nine, and a repair round sent against a collision check nobody re-ran.
 
 ## Only one gate at a time may run the suite
 
-`lead-review` and `drone-acceptance` are dispatched in one message because they are
-independent *in information* — one sees everything, the other almost nothing. They are not
-independent in **machine resources**, and only one of them runs anything: acceptance does.
+`lead-review` and the three council seats are dispatched in one message because they are
+independent *in information* — one sees everything, the rest almost nothing. They are not
+independent in **machine resources**, and only one of the four runs anything: `council-sonnet`
+does — it is the only seat given the full-suite command from the Profile's `## Commands` table
+(C10); `council-haiku` walks the *Client path* instead, `council-opus` probes ad hoc, and
+`lead-review` only reads.
 
-That pairing is therefore safe. What is not safe is dispatching several acceptance gates at
-once — catching up on a backlog of specs, say. A project whose test suite binds fixed ports
-will hand you `EADDRINUSE` in one gate because another gate's server is up, and the failure
-looks exactly like a defect in the code under test. Observed: two of three concurrent gates
+That pairing is therefore safe. What is not safe is judging several specs at once — opening a
+council round for a backlog of specs in parallel. A project whose test suite binds fixed ports
+will hand you `EADDRINUSE` in one round because another round's `council-sonnet` seat has a
+server up, and the failure looks exactly like a defect in the code under test. Observed, back
+when this was `drone-acceptance` rather than `council-sonnet`: two of three concurrent gates
 lost their first runs to it, and only the drone's own honesty about *what it ran* made the
 cause visible at all.
 
-Run acceptance gates one at a time, or give the suite ephemeral ports. And when a gate
-reports an environmental failure, believe it before you believe the code is broken — a gate
-that names its own interference is doing the job.
+Run council rounds one at a time, or give the suite ephemeral ports. And when a gate reports
+an environmental failure, believe it before you believe the code is broken — a gate that
+names its own interference is doing the job.
 
 ## Reading a decline
 
 Two verdicts look like caution and are not:
 
-- **A `CANNOT_RUN` that names no attempt.** The branch is for behaviour with no reachable
-  entry point, or an environment missing what reaching it needs. A library is *not* that: its
+- **A `CANNOT_RUN` (pre-council specs) or an unevidenced `N/A` (a council seat) that names no
+  attempt.** The branch is for behaviour with no reachable entry point, or an environment
+  missing what reaching it needs — a council seat's contract writes this as `N/A - why:
+  environment: <what failed>`, never `RED` (the environmental-failure sentence under "Only one
+  gate at a time" above is the same rule, from the seat's side). A library is *not* that: its
   surface is a caller, and writing one is the gate's job. A decline must say what was tried,
   so one that tried nothing is visible as such.
 - **A coverage claim that overstates.** "Remove either guard and it goes red" must be true of
@@ -98,8 +109,9 @@ Named so it is a known gap rather than an assumed guarantee:
 
 - **Whether the request was the right request.** Every gate below the brief is answerable to
   the brief. If the brief asks for the wrong thing, the pipeline builds it correctly. Stage 05
-  of [the cycle](cycle.md) exists for exactly this, and it is why that stage is a human and
-  not a gate.
+  of [the cycle](cycle.md) exists for exactly this — the council judges only the brief's own
+  words, blind to the plan's framing of them; the human sits beneath it as an override
+  (`/vulyk-pause`, `human-check.sh`), never waited on.
 - **Cross-spec regressions.** Each gate is scoped to one spec. The integration gate (build,
   typecheck, lint, full suite) is what stands between specs, and it is the project's, not
   VULYK's.
