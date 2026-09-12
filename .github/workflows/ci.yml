@@ -95,6 +95,15 @@ jobs:
       - name: synthetic spec -> six confirmations, stale on code, current on paperwork
         run: bash tests/cycle.test.sh
 
+  council:
+    name: the council's verdict machinery - cycle.sh judge/escalate over hand-written fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: fixture rounds -> GREEN, RED, ESCALATE (ceiling/half/env), N/A, owner override
+        run: bash tests/council.test.sh
+
   handoff-window:
     name: handoff.py resolves the context window
     runs-on: ubuntu-latest

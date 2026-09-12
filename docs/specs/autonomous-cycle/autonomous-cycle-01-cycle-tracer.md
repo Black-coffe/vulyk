@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-01
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: true
@@ -67,6 +67,13 @@ Layers this slice must touch: shared library (`lib.sh`) -> state derivation from
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `lib.sh`: the three functions copied verbatim from `ship-check.sh`; `paperwork_only`'s whitelist extended per C1 on one line, matching the original's style.
+- `cycle.sh judge`'s "current round" is always the highest-numbered `council/round-N` dir; a round with a `council.jsonl` row already is re-judged idempotently (recomputes the same verdict from the same seat files, then fills in only whichever of row/plan-line/journal-line is missing) rather than tracked by a separate "which round is open" pointer.
+- `judge` reads `red_e`/`red_u` (evidenced vs. unevidenced RED) directly from each seat's `ASK <n>:` lines (run:/saw: or url:/saw: = evidenced) - full D3 validation (MALFORMED, taint, re-ask) stays out of scope for `record-seat` (story 03) as the non-goals say; an ask RED without evidence still counts toward the round's RED verdict but not toward the `half` escalation threshold.
+- exit code 4 ("malformed / red verification" per C2's legend) is used for both `record-seat`'s future MALFORMED and `judge`'s RED verdict - the story text names both under one code and no acceptance criterion states judge's RED exit code explicitly, so this is a reading, not a given.
+- `escalate` is implemented as an alias of `judge`'s full computation (same function, different label in the JSON `"verb"` field) since the one place it would differ - `open-round` exiting 6 before any round is judged - needs `open-round` (story 04). Flagging per the story's Tracer note.
+- `cmd_status`'s `build:<wave>`/`close-story:<file>` split (build wins when a wave still has a ready `todo`; close-story only when a wave's `todo` is exhausted but an `in-progress` story remains) is a reading of C3's prose, which lists them without spelling out precedence - not exercised by this story's acceptance criteria (all fixtures use `status: done` stories) but present so story 03/04 status calls don't regress on it. Same for `compute_stage`: a best-effort mirror of `state.sh`'s ladder plus the council/paused stages, not read by anything else yet and not covered by an acceptance criterion.
+- `.github/workflows/ci.yml`: added job `council` immediately after `cycle`, same shape (checkout, one `run: bash tests/...`).
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
