@@ -2,6 +2,129 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.12.0] - 2026-09-13
+
+Stage 05 stops being a person and becomes a council: three blind agent seats judge the
+owner's own words against the code, the loop between plan and merge runs mostly without the
+Queen, and the human moves to one stop at the start plus an override anywhere after.
+
+### Added
+- **The council replaces the mandatory owner look.** Three blind seats - `council-haiku`
+  (black box: walks the *Client path* like a client, reads no source), `council-sonnet`
+  (line by line: runs the suite from `## Commands` once, then proves every `brief.md`
+  `## Asks` item with its own `run:`/`saw:`), `council-opus` (intent and edge cases: what the
+  owner meant but did not write) - each a clean-context subagent working inside a detached
+  git worktree (`.vulyk/court/<slug>/round-N/`) reduced to `brief.md`, so none of them can see
+  the hive's own stories, implementation notes or worker reports. `lead-review` sits beside
+  them unchanged, judging code rather than intent. `scripts/cycle.sh judge` - never a model -
+  computes the round verdict from the four labelled reports: GREEN needs every seat GREEN or
+  N/A (with a reason) and `lead-review` PASS; RED fires on one evidenced RED ask (a `## Asks`
+  item that fails, with a command/output or a URL) or a `lead-review` BLOCK; three ABSENT
+  seats escalate as `env`; half the asks RED escalates early as `half`. Ceiling three rounds,
+  then `## Needs a human` in plan.md and a stop. Every round's verdict, the asks judged, the
+  red count and the models used land in `memory/stats/council.jsonl` - the metric the
+  rollback decision reads.
+  - `scripts/cycle.sh` (`status --json`, `open-round`, `record-seat`, `judge`, `escalate`,
+    `reopen`, `close-story`, `briefed`, `branch`, `pause`, `resume`) is the one state machine
+    both drivers below read and write; every mutating verb refuses under a `PAUSE` semaphore
+    file. `scripts/journal.sh` writes the one-line-per-state-change log at
+    `docs/specs/<slug>/journal.md`; `scripts/lib.sh` holds `pack_fingerprint`,
+    `paperwork_only` and `marker`, shared by every gate.
+  - **The Workflow driver**, `.claude/workflows/vulyk-cycle.js`, loops over
+    `cycle.sh status --json` through a Haiku `cycle-clerk` and performs whatever `next`
+    names - dispatch a wave, open a round, dispatch a seat, judge, cut a repair story - with
+    no verdict or prose-parsing logic of its own. Where the Workflow tool is unavailable
+    (Claude Code < 2.1.154, or Pro without the flag), `/vulyk-build` runs the identical loop
+    in the session through the same scripts. The Queen wakes twice: the final report or an
+    escalation.
+  - **`/vulyk-pause <slug> ["why"]` and `/vulyk-resume <slug>`** let a human step in at any
+    stage without waiting to be asked; resume always relaunches the driver fresh, never a
+    cached run.
+  - **The mini-grill**, folded into `/vulyk-plan` after recon: one round, 3-7 questions,
+    `AskUserQuestion` one at a time, the recommended option first with a reason grounded in
+    the recon, silence always a safe answer (`templates/grill.md`). It closes into `## Asks`
+    in `brief.md` (the checklist the council judges) and `cycle.sh briefed --commit` writes
+    `**Briefed:**` - the plan is shown in the terminal as a log, not asked as a question.
+    Tier 1 gets the task phrase verbatim as its one ask and a single council round, no grill;
+    `claude -p` answers its own questions and marks them `(assumed)`.
+  - The Profile gains an optional **`Browser MCP: chrome-devtools | claude-in-chrome | none`**
+    row, read only by `council-haiku`, for a client-path walk that needs a real browser on a
+    separate test profile.
+  - `tests/council.test.sh` drives the verdict table, the git-worktree rounds and the intake
+    validation through fixtures in CI, alongside `tests/cycle.test.sh`.
+
+### Changed
+- Stage 05 is now the council's verdict, not a human's; `scripts/human-check.sh` stays, but
+  as an override either direction can invoke (`ACCEPTED` over RED, `REJECTED` over GREEN)
+  rather than a mandatory stop. `scripts/ship-check.sh` closes stage 02 on `**Briefed:**` or
+  `**Approved:**` and stages 04+05 on the newest `memory/stats/council.jsonl` row (falling
+  back to the old acceptance/human ledgers for specs recorded before v0.12.0).
+  `scripts/state.sh` reports `04-council:<verdict>` and `paused`.
+- **`/vulyk-ship` merges `vulyk/<slug>` into the default branch locally, updates CHANGELOG
+  and version, and prints the publish command without waiting for it** - push, tag and
+  deploy stay a human's to press, on their own schedule.
+- `install.sh` now owns `.claude/workflows` like every other framework tree, wires the two
+  `Bash(...)` allow rules the clerk needs into the target's `settings.json`, and pins the
+  Queen's session with `scripts/top-model.sh --apply` on install and upgrade; the
+  SessionStart brief reports whether the Workflow driver's CLI gate (`>= 2.1.154`) is met.
+- `paperwork_only()`, `pack_fingerprint()` and `marker()` now live once, in `scripts/lib.sh`,
+  sourced by `ship-check.sh`, `human-check.sh`, `acceptance-log.sh` and `release-check.sh` -
+  one whitelist instead of four copies that could silently drift apart.
+
+### Removed
+- `.claude/agents/drone-acceptance.md` - superseded by the three council seats.
+- The mandatory owner look (stage 05) and the plan-approval stop in autonomous mode; a human
+  who wants either back still has `/vulyk-pause` and `human-check.sh`, on their own
+  initiative.
+
+### Fixed
+- **`install.sh` shipped the maintainer's own runtime files into every target.**
+  `shippable()` had no exclusion for what VULYK's own `.gitignore` ignores, so
+  `copy_tree ".claude"` carried `.claude/settings.local.json` (the pinned top model),
+  `.claude/state.json`, `.claude/.vulyk-update-cache` and `.claude/handoff/*` into every
+  install and upgrade - found while wiring this release's own session pin
+  (`autonomous-cycle-07`). `shippable()` now refuses any path the framework's `.gitignore`
+  ignores, and the `install-smoke` CI job plants dummies and asserts none survive a fresh
+  install or an `--upgrade`.
+- **The Workflow driver could not route a story to `worker-test`.** `status --json`'s
+  `wave_stories` were bare file paths, and the driver may not open a story file to read its
+  `worker:` line - so every build story dispatched to `worker-code` regardless. `wave_stories`
+  now carries `{file, story, worker, repeat}` objects read from story frontmatter, and both
+  drivers route from the object.
+- **A fresh install's Profile had five rows where `CLAUDE.md` documents eight.** The
+  `VULYK:PROFILE` reset placeholder in `install.sh` already omitted *Client path* and
+  *Release / deploy* before this spec, and now the new *Browser MCP* row too - so
+  `/vulyk-bootstrap` and the council's client-path lookup had no row to fill on a fresh hive.
+  The placeholder now carries every row `CLAUDE.md` does, same order and hints, and
+  `install-smoke` asserts the two blocks' row counts match so they cannot drift apart again.
+
+### Notes
+- The evidence the redesign rests on (`brief.md` `## Evidence`, 2026-09-12): the mandatory
+  human gate returned **0 REJECTED across 10 rows in one week, three hives** - it stopped
+  nothing; the existing blind gate it replaces caught real defects, **5 of 42 acceptance
+  verdicts REJECTED, all substantive** (an interactive path dying after the first search, a
+  brief requirement delivered nowhere, a central ask - `BANK_TARGETS` - left empty twice,
+  once after a repair round). The rollback signal is `memory/stats/council.jsonl`: rounds to
+  green, escalations, and escaped defects (a bug brief carrying `**Escaped from:** <slug>`
+  against a `GREEN` row), printed weekly by `/vulyk-evolve`.
+- **Cost, estimated, not yet measured** (`docs/token-economy.md` "The cost of the council"):
+  roughly 2-3x the v0.11 gate (one `lead-review` + one `drone-acceptance`) per round at the
+  target of <= 2 rounds to green - three cold-cache seats plus `lead-review` plus five Haiku
+  clerk calls, one more `queen-planner` dispatch on a RED round. The session fallback (no
+  Workflow) is the most expensive path: the same dispatches, plus roughly 120 lines of seat
+  reports per round carried through the pinned top-model session itself.
+- Design record: [ADR-001](docs/adr/001-cycle-state-contract.md) (proposed - the mechanics),
+  the 13-question grill and its adversarial review, both linked from
+  `docs/specs/autonomous-cycle/brief.md`.
+
+### Upgrading
+- `install.sh --upgrade` (or `/vulyk-update`) ships the council agents, `cycle.sh` and the
+  Workflow script, adds the two `Bash(bash scripts/cycle.sh:*)` /
+  `Bash(bash scripts/journal.sh:*)` allow rules to the target's `settings.json`, and pins the
+  session via `top-model.sh --apply` - all verified from a real pre-0.12 install. Specs
+  recorded under v0.11.0 keep shipping through the acceptance-ledger fallback in
+  `ship-check.sh`; nothing is required of them.
+
 ## [0.11.0] - 2026-09-05
 
 ### Added
