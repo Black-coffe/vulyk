@@ -58,6 +58,7 @@ Design assumptions not decided by any input (veto here):
 - `autonomous-cycle-08-plan-with-grill` — `/vulyk-plan`: grill after recon per `templates/grill.md` (new), `## Asks`, `cycle.sh briefed`, Tier 1 mini-brief, launches the driver.
 - `autonomous-cycle-09-build-review-pause-resume` — `/vulyk-build` (driver + mode detection), `/vulyk-review` (one round, no stage-05 stop), `/vulyk-pause`, `/vulyk-resume` (new).
 - `autonomous-cycle-10-ship-status-evolve-bootstrap` — `/vulyk-ship` (council row, local merge, publish printed), `/vulyk-status` (council stats, driver mode, unpushed merges), `/vulyk-evolve` (three weekly numbers), `/vulyk-bootstrap` (`--apply`, council wording).
+- `autonomous-cycle-14-install-shippable-runtime-files` — plan delta 2026-09-12: `shippable()` refuses every path VULYK's own `.gitignore` ignores; install-smoke proves it (blocked_by 07)
 
 **Wave 4**
 - `autonomous-cycle-11-docs-constitution-and-cycle` — `CLAUDE.md` (cycle table, routing matrix, Profile row `Browser MCP`), `docs/cycle.md`, `docs/pipeline.md`, `bootstrap/interview.md`.
@@ -123,6 +124,8 @@ Each entry: date, trigger, decision, what was rejected. One-line notice to the h
 when it happens. trace-check.sh accepts these entries as a quote source for stories
 born after approval - a delta is requirement change on the record.
 -->
+
+- **2026-09-12 · trigger:** worker-07 return report, CONCERNS line — `shippable()` in `install.sh` has no exclusion for gitignored runtime files, so `copy_tree ".claude"` copies the maintainer's `.claude/settings.local.json` (the pinned model) and other runtime artifacts into every install/upgrade target. **Decision:** cut story `autonomous-cycle-14-install-shippable-runtime-files` (wave 3, blocked_by 07, files: `install.sh` only): the installer must never ship a file that its own `.gitignore` ignores — `.claude/settings.local.json`, `.claude/handoff/`, `.claude/state.json`, `.claude/.vulyk-update-cache`, `.claude/settings.json.vulyk-bak`, `memory/snapshots/*`, `memory/map/.stale`, `__pycache__` — and the install-smoke CI job proves it. **Rejected:** leaving it for the next circle — story 07 makes `--apply` pin the *target*, and shipping the maintainer's pin alongside would silently undo that on every upgrade.
 
 <!--
 The four lines below are the cycle's confirmation artifacts (docs/cycle.md): one per stage
