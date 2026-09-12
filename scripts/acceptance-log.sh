@@ -34,27 +34,12 @@
 
 set -u
 
-# The identity of a pack: its story files, by name, in a stable order. Adding, removing or
-# renaming a story changes it; editing a story's body does not - a verdict is about which
-# work was judged, not about later wording. Degrades to the plain count where no sha256 tool
-# exists, which still catches the case that actually happened.
-pack_fingerprint() { # pack_fingerprint <spec-dir>
-  local dir="$1" names hasher=""
-  names="$(
-    for f in "$dir"/*.md; do
-      [ -f "$f" ] || continue
-      grep -q '^story:' "$f" 2>/dev/null || continue
-      basename "$f"
-    done | LC_ALL=C sort | tr '\n' ' '
-  )"
-  if command -v sha256sum >/dev/null 2>&1; then hasher="sha256sum"
-  elif command -v shasum >/dev/null 2>&1; then hasher="shasum -a 256"; fi
-  if [ -n "$hasher" ]; then
-    printf '%s' "$names" | $hasher | cut -c1-12
-  else
-    printf 'n%s' "$(printf '%s' "$names" | wc -w | tr -d ' ')"
-  fi
-}
+# pack_fingerprint() now lives in scripts/lib.sh, shared with ship-check.sh, human-check.sh,
+# release-check.sh and cycle.sh (ADR-001 C1) - one implementation instead of several that
+# had to agree by hand.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/lib.sh
+. "$HERE/lib.sh"
 
 # --- `--check`: does the newest recorded verdict still describe this pack? -------------
 if [ "${1:-}" = "--check" ]; then

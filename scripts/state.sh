@@ -124,11 +124,18 @@ for dir in $( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirn
   if [ "$stage" = "03-building" ] && [ "$todo_n" -eq 0 ] && [ "$progress_n" -eq 0 ] && [ "$unknown_n" -eq 0 ]; then stage="03-built"; fi
   acc_v="$(grep -F "\"spec\":\"$slug\"" memory/stats/acceptance.jsonl 2>/dev/null | tail -1 | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')"
   [ -n "$acc_v" ] && stage="04-tested:$acc_v"
+  # The council's newest verdict for this spec supersedes the pre-0.12 acceptance reading
+  # above when one exists (ADR-001 D1/D4) - same dashboard column, newer source.
+  council_v="$(grep -F "\"spec\":\"$slug\"" memory/stats/council.jsonl 2>/dev/null | tail -1 | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')"
+  [ -n "$council_v" ] && stage="04-council:$council_v"
   case "$last_checked" in
     *ACCEPTED*) stage="05-checked" ;;
     *REJECTED*) stage="05-rejected" ;;
   esac
   [ -f "$plan" ] && [ -n "$(mark "$plan" Shipped)" ] && stage="06-shipped"
+  # PAUSE only matters below 06-shipped: a shipped spec that later gets paused (e.g. for a
+  # follow-up round) should not read as un-shipped.
+  [ "$stage" != "06-shipped" ] && [ -f "$dir/PAUSE" ] && stage="paused"
 
   [ "$first_spec" -eq 1 ] || printf ',\n' >> "$TMP"
   first_spec=0

@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-02
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -57,6 +57,13 @@ blocked_by: [autonomous-cycle-01]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `ship-check.sh`, `human-check.sh`, `acceptance-log.sh`, `release-check.sh` now `source "$(dirname "$0")/lib.sh"` (var `HERE`, `# shellcheck source=scripts/lib.sh`); all local `pack_fingerprint`/`paperwork_only`/`marker` bodies removed, comments repointed at lib.sh.
+- `ship-check.sh` stage 02: `**Briefed:**` checked before `**Approved:**`, either closes the stage (ADR D1).
+- `ship-check.sh` stages 04+05 merged into one block: with a `council.jsonl` row for the spec, verdict = GREEN+current-pack+(HEAD or paperwork-only-since) unless a newer `**Checked:**` row overrides in either direction (string `ts` compare, `[ "$a" \> "$b" ]`); with no council row, falls through unchanged to the old acceptance.jsonl/human.jsonl logic (same variable names, same messages) - verified no existing assertion's wording changed.
+- `state.sh`: added `04-council:<verdict>` (overwrites the acceptance-derived `04-tested:<verdict>` when a council row exists, itself overwritable by `05-checked`/`05-rejected` - same chain position ship-check.sh gives it) and `paused` (only when stage isn't already `06-shipped`, per the "below shipped only" requirement).
+- `templates/plan.md`: `**Briefed:**` placeholder added after `**Approved:**`, `**Council:**` after `**Checked:**`; header comment now says six lines and explains the two override pairs.
+- `tests/cycle.test.sh`: copies+sources `lib.sh` (for `pack_fingerprint` in fixture rows); one new assertion in the existing `demo` walkthrough (a `*/council/*` paperwork commit keeps `human-check.sh --check` CURRENT); a second synthetic spec `council-demo` (hand-written `council.jsonl`/`human.jsonl` rows at fixed timestamps, no reliance on `cycle.sh record-seat`/`judge` which are other stories' work) exercising all four required scenarios: Briefed+GREEN READY, RED NOT READY, RED+Checked:ACCEPTED READY, GREEN+Checked:REJECTED NOT READY.
+- Surprising: the Edit tool wrote these 7 files back with CRLF line endings (nearly every line), silently violating `.gitattributes`' `*.sh text eol=lf` and the "write LF" instruction; `git add` did not auto-normalize either (confirmed via `git show :<file>`). Ran `sed -i 's/\r$//'` on all 7 touched files before finishing; re-ran syntax check and the full test suite after, both clean. Worth a general note for other workers on this Windows/Git-Bash environment.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
