@@ -21,3 +21,4 @@
 
 ## Learnings
 - Consolidated: memory/learnings/CONSOLIDATED.md (run /vulyk-gc to refresh)
+- Human gates rework (2026-09-12): memory/learnings/2026-09-12-human-gates-rework.md — один стоп в начале, дальше агентный совет; «owner looks» как обязательную стадию не возвращать
