@@ -113,6 +113,19 @@ jobs:
       - name: synthetic windows -> right denominator, right silence
         run: python3 tests/handoff-window.test.py .claude/hooks/handoff.py
 
+  driver:
+    name: the Workflow driver executes for real against stubbed agent/parallel/clerk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: real parse, real foldReviews, stubbed loop scenarios
+        run: bash tests/driver.test.sh
+
   install-smoke:
     name: install.sh dry-run smoke test
     runs-on: ubuntu-latest

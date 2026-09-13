@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-02
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-test
 tracer: true
@@ -51,6 +51,12 @@ Parse -> compile -> stub loop -> one `build:` iteration -> terminal. Everything 
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `tests/driver.test.sh` already existed on disk (untracked) matching K4's shape (compile step, garbage rejection, `foldReviews` harness, `run(args, script)` stubs, three baseline scenarios); it was not written from scratch this pass.
+- Found and fixed a real bug in that file: the six bottom-level `expect` calls used `echo "$out" | expect "label" "needle"` (2 args over a pipe) against a 3-arg, non-stdin `expect(label, needle, haystack)` function - under `set -u` this made `$3` unbound inside a subshell (the comment above the function already explains why a pipe is wrong here), so `fail` was never set and every assertion was silently vacuous regardless of driver output. Changed all six calls to pass `"$out"` as the third positional argument directly, matching the function's own signature. Verified by intentionally disabling the driver's `stamp` guard (`.claude/workflows/vulyk-cycle.js`, reverted after): before the fix `bash tests/driver.test.sh` still exited 0; after the fix it exits 1 with the failing scenarios named, then restored to exit 0 clean.
+- Added CLAUDE.md `## Commands` row `| Driver contract tests | \`bash tests/driver.test.sh\` |` after the council row - diff is a single added line, nothing else in the file touched.
+- Added `.github/workflows/ci.yml` job `driver` (checkout, `actions/setup-node@v4` `node-version: 22`, `bash tests/driver.test.sh`) after `handoff-window`; diff is a pure 13-line insertion, every existing job byte-identical.
+- Tracer confirmed: the driver's entry shape matches the plan's assumed async body (bare top-level statements/returns, no `export default`) - no adaptation needed to the compile step.
+- Ran `bash tests/driver.test.sh` 3x locally (all green, no flake), `PATH=/nonexistent <absolute bash> tests/driver.test.sh` (prints `skipped: node not found`, exit 0), and `tests/cycle.test.sh`/`tests/council.test.sh` (unaffected, both exit 0) alongside the four syntax gates.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
