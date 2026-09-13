@@ -22,10 +22,11 @@ export const meta = {
 const TERMINAL = ['green', 'escalated', 'paused', 'shipped']
 const SEAT_AGENT = { haiku: 'council-haiku', sonnet: 'council-sonnet', opus: 'council-opus', review: 'lead-review' }
 
-const spec = args.spec
-const TOP = args.top_model
-const SECOND = args.second_model
-const stamp = args.stamp // a per-run random value the seat is never told - only used to build the record-seat delimiter (R11/R31); never compared, parsed or shown to a seat
+const A = args ?? {} // a missing args object reaches this guard instead of throwing on args.spec
+const spec = A.spec
+const TOP = A.top_model
+const SECOND = A.second_model
+const stamp = A.stamp // a per-run random value the seat is never told - only used to build the record-seat delimiter (R11/R31); never compared, parsed or shown to a seat
 if (typeof stamp !== 'string' || stamp.length < 12) {
   return { stop: { verb: 'launch', error: 'args.stamp missing: launch with the 16-hex random stamp of /vulyk-build step 1' } }
 }
@@ -40,6 +41,10 @@ class BadLine extends Error {
 class Stop extends Error {
   constructor(result) { super('driver stop'); this.result = result }
 }
+// exit:3 (PAUSE) is a terminal on its own, from any verb - no stop shape, just next:'paused'.
+class Paused extends Error {
+  constructor(next) { super('paused'); this.next = next }
+}
 const fail = (st, stop) => { throw new Stop({ ...st, stop }) }
 const asStop = (res) => ({ verb: res.verb, exit: res.exit, error: res.error })
 
@@ -50,7 +55,10 @@ const clerk = (cmd) => agent(
   { agentType: 'cycle-clerk', effort: 'low' },
 ).then((out) => {
   const line = String(out).trim().split('\n').pop()
-  try { return JSON.parse(line) } catch { throw new BadLine(line) }
+  let parsed
+  try { parsed = JSON.parse(line) } catch { throw new BadLine(line) }
+  if (parsed.exit === 3) throw new Paused(parsed.next)
+  return parsed
 })
 
 // A blind seat gets slug/round/court only (R9) - round_dir would let it name the very
@@ -94,6 +102,7 @@ const dispatchSeat = (seat, st, note) => (seat === 'review' && st.tier === 4)
     })
 
 const attempts = new Map() // story file -> misses this run: red close-story or empty worker report, together (R6/R29, per-run only - nothing on disk depends on it)
+const lastError = new Map() // story file -> the most recent miss's own reason, carried into the two-miss stop (M2/X-M1)
 const repaired = new Set() // round numbers already sent to queen-planner this run (R30, per-run only)
 
 try {
@@ -102,7 +111,17 @@ try {
     log(`${st.slug} · ${st.stage} · next: ${st.next}`)
     if (TERMINAL.includes(st.next)) return st
 
-    if (st.next === 'briefed' || st.next === 'branch') {
+    // second_model missing or equal to top_model on a Tier 4 spec refuses at launch, before
+    // any non-clerk agent() is dispatched (X-M4) - checked every poll since tier is unknown
+    // before the first status.
+    if (st.tier === 4 && (!SECOND || SECOND === TOP)) {
+      fail(st, { verb: 'launch', error: 'second_model missing or equal to top_model on a Tier 4 spec' })
+    }
+
+    if (st.next === 'briefed') {
+      // r2m15: the driver refuses instead of stamping - it never runs briefed --commit itself.
+      fail(st, { verb: 'briefed', error: 'spec not briefed: run /vulyk-plan' })
+    } else if (st.next === 'branch') {
       const res = await clerk(`${st.next} ${spec} --commit`)
       if (!res.ok) fail(st, asStop(res))
     } else if (st.next.startsWith('build:')) {
@@ -110,24 +129,34 @@ try {
       const stories = st.wave_stories
       // status --json now carries "worker" and "repeat" per story (autonomous-cycle-15) -
       // route agentType from the object; the driver still never opens a story file itself.
-      const reports = await parallel(stories.map((story) => () => agent(
-        `Your story: ${story.file}. Read it fully, including the map slice it names, and implement it per your protocol.`,
-        { agentType: story.worker, phase: 'Build' },
-      )))
+      // A story on its second dispatch (one miss already counted) gets one extra sentence:
+      // a previous attempt may have left an uncommitted diff behind.
+      const reports = await parallel(stories.map((story) => () => {
+        const retry = (attempts.get(story.file) || 0) >= 1
+        const prompt = `Your story: ${story.file}. Read it fully, including the map slice it names, and implement it per your protocol.`
+          + (retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
+        return agent(prompt, { agentType: story.worker, phase: 'Build' })
+          .catch((e) => { log(`worker threw: ${e && e.message ? e.message : e}`); return null })
+      }))
       for (let i = 0; i < stories.length; i++) {
         const file = stories[i].file
-        // an empty/null worker report is a miss on the same bound a red close-story is
-        // (R29) - close-story never runs on one, and either failure trips the same count.
-        if (reports[i]) {
+        const report = reports[i]
+        // an empty/null/whitespace-only worker report is a miss on the same bound a red
+        // close-story is (R29) - close-story never runs on one, and either failure trips
+        // the same count; lastError carries the failing verb's own reason into the stop.
+        if (typeof report === 'string' && report.trim() !== '') {
           // close-story derives `repeat: N` itself from the story's own ## Verification block
           // (cycle.sh's cmd_close_story) and takes no --repeat flag, so it is not passed here.
           const res = await clerk(`close-story ${file} --commit`)
           if (res.ok) continue
           if (res.exit !== 4) fail(st, asStop(res))
+          lastError.set(file, res.error)
+        } else {
+          lastError.set(file, 'worker returned no report')
         }
         const n = (attempts.get(file) || 0) + 1
         attempts.set(file, n)
-        if (n >= 2) fail(st, { verb: 'build', file, error: 'worker returned no report' })
+        if (n >= 2) fail(st, { verb: 'build', file, error: lastError.get(file) })
         // first miss for this file: continue - it stays open, the next status poll re-routes it
       }
     } else if (st.next === 'open-round') {
@@ -183,6 +212,7 @@ try {
   }
 } catch (e) {
   if (e instanceof BadLine) return e.line
+  if (e instanceof Paused) return { next: e.next }
   if (e instanceof Stop) return e.result
   throw e
 }

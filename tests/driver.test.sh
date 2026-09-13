@@ -103,6 +103,9 @@ function run(args, script) {
     }
     calls.push({ agentType: opts && opts.agentType, model: opts && opts.model, prompt });
     const entry = agentsQueue.shift();
+    // a dead subagent: an { throw: '<message>' } queue entry rejects instead of resolving,
+    // so the driver's own per-thunk catch (not parallel's) is what the scenario proves.
+    if (entry && typeof entry === 'object' && 'throw' in entry) return Promise.reject(new Error(entry.throw));
     return Promise.resolve(entry === undefined ? null : entry);
   };
 
@@ -178,6 +181,213 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     }
   });
 })
+// --- scenario (d): two red close-story misses on the same file -> stop carries the
+// verification line's own error, not a generic message
+.then(() => {
+  const file = 'docs/specs/demo/demo-02-x.md';
+  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-02', worker: 'worker-test' }] };
+  const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
+  return run(
+    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+    { clerk: [wave, redLine, wave, redLine], agents: ['report 1', 'report 2'] },
+  ).then(({ result }) => {
+    if (result && result.stop && result.stop.verb === 'build' && result.stop.file === file && result.stop.error === 'red: verification failed') {
+      console.log('ok two-miss stop: red+red carries the verification error');
+    } else {
+      console.log('FAIL two-miss stop: red+red carries the verification error - got ' + JSON.stringify(result));
+    }
+  });
+})
+// --- scenario (e): empty report then a red close-story -> the second (verification) error wins
+.then(() => {
+  const file = 'docs/specs/demo/demo-03-x.md';
+  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-03', worker: 'worker-test' }] };
+  const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
+  return run(
+    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+    { clerk: [wave, wave, redLine], agents: [null, 'report 2'] },
+  ).then(({ result }) => {
+    if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'red: verification failed') {
+      console.log('ok two-miss stop: empty+red carries the verification error');
+    } else {
+      console.log('FAIL two-miss stop: empty+red carries the verification error - got ' + JSON.stringify(result));
+    }
+  });
+})
+// --- scenario (f): a red close-story then an empty report -> "worker returned no report" wins
+.then(() => {
+  const file = 'docs/specs/demo/demo-04-x.md';
+  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-04', worker: 'worker-test' }] };
+  const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
+  return run(
+    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+    { clerk: [wave, redLine, wave], agents: ['report 1', null] },
+  ).then(({ result }) => {
+    if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'worker returned no report') {
+      console.log('ok two-miss stop: red+empty ends "worker returned no report"');
+    } else {
+      console.log('FAIL two-miss stop: red+empty ends "worker returned no report" - got ' + JSON.stringify(result));
+    }
+  });
+})
+// --- scenario (g): a whitespace-only report is a miss - close-story is never called for it
+.then(() => {
+  const file = 'docs/specs/demo/demo-05-x.md';
+  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-05', worker: 'worker-test' }] };
+  return run(
+    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+    { clerk: [wave, wave], agents: ['   ', '   '] },
+  ).then(({ result, calls }) => {
+    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story');
+    if (result && result.stop && result.stop.error === 'worker returned no report' && closeStoryCalls.length === 0) {
+      console.log('ok whitespace report: a miss, close-story never called');
+    } else {
+      console.log('FAIL whitespace report: a miss, close-story never called - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+    }
+  });
+})
+// --- scenario (h): args undefined -> launch stop, zero clerk calls, no TypeError
+.then(() => run(undefined, { clerk: [], agents: [] }).then(({ result, calls }) => {
+  const clerkCalls = calls.filter((c) => 'verb' in c);
+  if (result && result.stop && result.stop.verb === 'launch' && clerkCalls.length === 0) {
+    console.log('ok launch guard: args undefined');
+  } else {
+    console.log('FAIL launch guard: args undefined - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+  }
+}))
+// --- scenario (i): Tier 4 with no second_model refuses at launch, before any worker dispatch
+.then(() => run(
+  { spec: 'demo', top_model: 'opus', stamp: '0123456789abcdef' },
+  { clerk: [{ next: 'build:1', tier: 4, wave_stories: [{ file: 'docs/specs/demo/demo-06-x.md', story: 'demo-06', worker: 'worker-test' }] }], agents: ['report'] },
+).then(({ result, calls }) => {
+  const dispatches = calls.filter((c) => !('verb' in c));
+  if (result && result.stop && result.stop.verb === 'launch' && /second_model/.test(result.stop.error) && dispatches.length === 0) {
+    console.log('ok tier4 guard: second_model missing');
+  } else {
+    console.log('FAIL tier4 guard: second_model missing - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+  }
+}))
+// --- scenario (j): Tier 4 with second_model equal to top_model also refuses
+.then(() => run(
+  { spec: 'demo', top_model: 'opus', second_model: 'opus', stamp: '0123456789abcdef' },
+  { clerk: [{ next: 'build:1', tier: 4, wave_stories: [] }], agents: [] },
+).then(({ result }) => {
+  if (result && result.stop && result.stop.verb === 'launch' && /second_model/.test(result.stop.error)) {
+    console.log('ok tier4 guard: second_model equal to top_model');
+  } else {
+    console.log('FAIL tier4 guard: second_model equal to top_model - got ' + JSON.stringify(result));
+  }
+}))
+// --- scenario (k): a Tier 3 run with no second_model proceeds (the guard is Tier-4-only)
+.then(() => {
+  const file = 'docs/specs/demo/demo-07-x.md';
+  return run(
+    { spec: 'demo', top_model: 'opus', stamp: '0123456789abcdef' },
+    {
+      clerk: [
+        { next: 'build:1', tier: 3, wave_stories: [{ file, story: 'demo-07', worker: 'worker-test' }] },
+        { ok: true },
+        { next: 'green' },
+      ],
+      agents: ['a worker report'],
+    },
+  ).then(({ result }) => {
+    if (result && result.next === 'green') {
+      console.log('ok tier3: no second_model needed, run proceeds');
+    } else {
+      console.log('FAIL tier3: no second_model needed, run proceeds - got ' + JSON.stringify(result));
+    }
+  });
+})
+// --- scenario (l): any clerk line with exit:3 ends the run paused, no stop shape
+.then(() => run(
+  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+  {
+    clerk: [
+      { next: 'dispatch:sonnet', tier: 2, round: 1, round_dir: 'docs/specs/demo/council/round-1' },
+      { ok: false, exit: 3, next: 'paused', error: 'paused: owner requested a pause' },
+    ],
+    agents: ['a seat report'],
+  },
+).then(({ result }) => {
+  if (result && result.next === 'paused' && !result.stop) {
+    console.log('ok record-seat exit 3: ends the run paused, no stop');
+  } else {
+    console.log('FAIL record-seat exit 3: ends the run paused, no stop - got ' + JSON.stringify(result));
+  }
+}))
+// --- scenario (m): next:"briefed" -> the driver refuses, never runs briefed --commit itself
+.then(() => run(
+  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+  { clerk: [{ next: 'briefed' }], agents: [] },
+).then(({ result, calls }) => {
+  const briefedCommit = calls.some((c) => c.cmd && c.cmd.includes('briefed --commit'));
+  if (result && result.stop && result.stop.verb === 'briefed' && !briefedCommit) {
+    console.log('ok briefed refusal: stop, never runs briefed --commit');
+  } else {
+    console.log('FAIL briefed refusal: stop, never runs briefed --commit - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+  }
+}))
+// --- scenario (n): an ok:true exit:6 line (escalated) is followed by a status poll
+.then(() => run(
+  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+  {
+    clerk: [
+      { next: 'open-round' },
+      { ok: true, verb: 'open-round', exit: 6, next: 'escalated' },
+      { next: 'escalated' },
+    ],
+    agents: [],
+  },
+).then(({ result }) => {
+  if (result && result.next === 'escalated' && !result.stop) {
+    console.log('ok exit 6: ok:true is followed by a status poll, ends escalated');
+  } else {
+    console.log('FAIL exit 6: ok:true is followed by a status poll, ends escalated - got ' + JSON.stringify(result));
+  }
+}))
+// --- scenario (o): a thrown worker agent() is caught by its own build thunk, logged, and
+// counted as the same miss a null report would be - the dead subagent's reason survives
+// in the run journal even though the two-miss stop still says "worker returned no report"
+.then(() => {
+  const file = 'docs/specs/demo/demo-08-x.md';
+  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-08', worker: 'worker-test' }] };
+  return run(
+    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+    { clerk: [wave, wave], agents: [{ throw: 'subagent died' }, { throw: 'subagent died again' }] },
+  ).then(({ result, logs }) => {
+    const threw = logs.some((l) => l.startsWith('worker threw:'));
+    if (result && result.stop && result.stop.error === 'worker returned no report' && threw) {
+      console.log('ok worker threw: caught by the build thunk, logged, counted as a miss');
+    } else {
+      console.log('FAIL worker threw: caught by the build thunk, logged, counted as a miss - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
+    }
+  });
+})
+// --- scenario (p): the second dispatch of the same story carries the uncommitted-diff
+// sentence; the first dispatch does not
+.then(() => {
+  const file = 'docs/specs/demo/demo-09-x.md';
+  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-09', worker: 'worker-test' }] };
+  const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
+  const sentence = 'a previous attempt may have left uncommitted edits in your files; `git diff` them first';
+  return run(
+    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+    { clerk: [wave, redLine, wave, { ok: true }, { next: 'green' }], agents: ['report 1', 'report 2'] },
+  ).then(({ result, calls }) => {
+    const workerCalls = calls.filter((c) => c.agentType === 'worker-test');
+    if (
+      result && result.next === 'green'
+      && workerCalls.length === 2
+      && !workerCalls[0].prompt.includes(sentence)
+      && workerCalls[1].prompt.includes(sentence)
+    ) {
+      console.log('ok retry prompt: only the second dispatch mentions uncommitted edits');
+    } else {
+      console.log('FAIL retry prompt: only the second dispatch mentions uncommitted edits - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+    }
+  });
+})
 .catch((e) => { console.log('FAIL harness threw: ' + (e && e.stack || e)); process.exitCode = 1; });
 NODE_EOF
 )"
@@ -190,5 +400,18 @@ expect "fold: foldReviews harness from story 26"         "fold ok"              
 expect "run: launch guard on missing args.stamp"         "ok launch guard: missing stamp"                        "$out"
 expect "run: status green is terminal, no dispatch"      "ok status green: terminal, no dispatch"                "$out"
 expect "run: build wave dispatches worker, closes story" "ok build wave: worker dispatched, close-story called once" "$out"
+expect "run: two-miss stop names the red verification (M2/X-M1)" "ok two-miss stop: red+red carries the verification error" "$out"
+expect "run: two-miss stop, empty then red"                      "ok two-miss stop: empty+red carries the verification error" "$out"
+expect "run: two-miss stop, red then empty"                      "ok two-miss stop: red+empty ends \"worker returned no report\"" "$out"
+expect "run: whitespace-only report is a miss"                   "ok whitespace report: a miss, close-story never called" "$out"
+expect "run: launch guard on args undefined"                     "ok launch guard: args undefined" "$out"
+expect "run: Tier 4 without second_model refuses at launch"      "ok tier4 guard: second_model missing" "$out"
+expect "run: Tier 4 with second_model == top_model refuses"      "ok tier4 guard: second_model equal to top_model" "$out"
+expect "run: Tier 3 with no second_model proceeds"               "ok tier3: no second_model needed, run proceeds" "$out"
+expect "run: record-seat exit 3 ends the run paused"              "ok record-seat exit 3: ends the run paused, no stop" "$out"
+expect "run: next:briefed refuses instead of stamping"           "ok briefed refusal: stop, never runs briefed --commit" "$out"
+expect "run: exit 6 ok:true is followed by a status poll"        "ok exit 6: ok:true is followed by a status poll, ends escalated" "$out"
+expect "run: a thrown worker agent() is caught and logged"       "ok worker threw: caught by the build thunk, logged, counted as a miss" "$out"
+expect "run: the retry prompt names the uncommitted-diff note"   "ok retry prompt: only the second dispatch mentions uncommitted edits" "$out"
 
 exit $fail

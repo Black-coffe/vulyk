@@ -37,3 +37,5 @@
 {"ts":"2026-09-13T16:50:35Z","story":"v0-12-0-remainders-04-gates-drop-drone-acceptance","declared":4,"changed":7,"out_of_scope":3}
 {"ts":"2026-09-13T17:05:20Z","story":"v0-12-0-remainders-02-driver-test-harness","declared":3,"changed":7,"out_of_scope":4}
 {"ts":"2026-09-13T17:23:07Z","story":"v0-12-0-remainders-01-cycle-judge-ledger","declared":2,"changed":4,"out_of_scope":2}
+{"ts":"2026-09-13T17:33:15Z","story":"v0-12-0-remainders-06-driver-stops-tell-the-truth","declared":2,"changed":6,"out_of_scope":4}
+{"ts":"2026-09-13T17:35:20Z","story":"v0-12-0-remainders-06-driver-stops-tell-the-truth","declared":2,"changed":8,"out_of_scope":6}
