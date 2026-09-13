@@ -80,11 +80,19 @@ open. It is what `/vulyk-ship` runs first, and it is free.
 ## Tiers and the cycle
 
 The cycle is the shape of every Tier 1+ spec. Tier 0 work skips it entirely by design —
-there is no brief, so there is nothing for a court to judge blind. Tier 1 gets the smallest
-version that still counts: a mini-brief (the task phrase itself, verbatim, no grill) and one
-council round. **The council does not scale down with tier past that point**: what shrinks
-is the size of the record — a one-line `## Asks` instead of a grill's 3-7, one story instead
-of many — never whether the council runs once a brief exists.
+there is no brief, so there is nothing for a court to judge blind. Past that, the tier the
+Queen already assigned before any work started is the cycle's one scaling decision:
+`cycle.sh` reads it from plan.md's `**Tier:**` line and requires only the seats that tier
+calls for (C15) — the council shrinks by seat count with the tier, but never to zero.
+
+| Tier | Required seats | Agents |
+|---|---|---|
+| 1 | `sonnet` | 1 worker + 1 seat |
+| 2 | `sonnet`, `opus`, `review` | 2-4 workers + 2 seats + `lead-review` |
+| 3-4 | `haiku`, `sonnet`, `opus`, `review` | 4-8 workers (+ `lead-architect` and a second reviewer at Tier 4) |
+
+What still shrinks below that floor is the size of the record — a one-line `## Asks` instead
+of a grill's 3-7, one story instead of many — never whether a seat the tier requires runs.
 
 ## The next circle
 

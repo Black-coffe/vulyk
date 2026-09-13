@@ -46,6 +46,24 @@ mk_spec() { # mk_spec <slug> <n-asks> - brief.md with an N-item ## Asks, plan.md
   git add -A && git commit -qm "spec($slug): fixture" >/dev/null
 }
 
+set_tier() { # set_tier <slug> <n> - overwrites plan.md's template <2|3|4> placeholder with a
+  # concrete tier digit and commits (autonomous-cycle-18, C15 fixtures)
+  local slug="$1" n="$2" plan
+  plan="docs/specs/$slug/plan.md"
+  sed -i "s/^\(\*\*Tier:\*\* \)<2|3|4>/\1$n/" "$plan"
+  git add -A && git commit -qm "$slug: tier $n" >/dev/null
+}
+
+mk_open_spec() { # mk_open_spec <slug> <n-asks> - mk_spec plus **Approved:**/**Branch:** filled
+  # (mirrors the status1 fixture below) so status --json's `next` reaches the open-round
+  # branch instead of stopping at "briefed"/"branch"
+  local slug="$1" n="$2"
+  mk_spec "$slug" "$n"
+  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' "docs/specs/$slug/plan.md"
+  sed -i "s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/$slug#" "docs/specs/$slug/plan.md"
+  git add -A && git commit -qm "$slug: approved+branch" >/dev/null
+}
+
 mk_round() { # mk_round <slug> <round-n> [ceiling] -> prints the round dir path
   local slug="$1" n="$2" ceiling="${3:-3}" rd
   rd="docs/specs/$slug/council/round-$n"
@@ -198,6 +216,60 @@ write_seat "$rd1" sonnet GGG
 write_seat "$rd1" opus GGG
 write_review "$rd1" PASS
 printf '%s' "$(council status docs/specs/status1 --json)" | jq -r .next | expect "next is judge" "judge"
+
+# --- C15: the council scales with tier (autonomous-cycle-18) ---------------------------------
+
+echo "C15: Tier 1 requires sonnet only - status missing/next, judge reaches GREEN on one report"
+mk_open_spec tier1a 3
+set_tier tier1a 1
+rdt1="$(mk_round tier1a 1)"
+out="$(council status docs/specs/tier1a --json)"
+printf '%s' "$out" | jq -r '.missing | join(",")' | expect "tier 1: missing lists only sonnet" "sonnet"
+printf '%s' "$out" | jq -r .next | expect "tier 1: next is dispatch:sonnet" "dispatch:sonnet"
+write_seat "$rdt1" sonnet NNN
+out="$(council status docs/specs/tier1a --json)"
+printf '%s' "$out" | jq -r .next | expect "tier 1: next is judge after the one required seat" "judge"
+jout="$(council judge docs/specs/tier1a)"; jex=$?
+[ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"green"' && echo "  ok    tier 1: judge GREEN on sonnet alone" \
+  || { echo "::error::tier1a judge: exit=$jex out=$jout"; fail=1; }
+row="$(grep '"spec":"tier1a"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -q '"na":1' && printf '%s' "$row" | grep -q '"verdict":"GREEN"' \
+  && echo "  ok    tier 1: row verdict GREEN, na:1 (one seat, not na:3)" || { echo "::error::row: $row"; fail=1; }
+
+echo "C15: Tier 2 requires sonnet, opus, review - no haiku seat needed"
+mk_open_spec tier2a 3
+set_tier tier2a 2
+rdt2="$(mk_round tier2a 1)"
+out="$(council status docs/specs/tier2a --json)"
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "tier 2: missing lists opus,review,sonnet - not haiku" "opus,review,sonnet"
+write_seat "$rdt2" sonnet GGG
+write_seat "$rdt2" opus GGG
+write_review "$rdt2" PASS
+out="$(council status docs/specs/tier2a --json)"
+printf '%s' "$out" | jq -r .next | expect "tier 2: next is judge without a haiku seat" "judge"
+jout="$(council judge docs/specs/tier2a)"; jex=$?
+[ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"green"' && echo "  ok    tier 2: judge GREEN without haiku" \
+  || { echo "::error::tier2a judge: exit=$jex out=$jout"; fail=1; }
+
+echo "C15: Tier 3 requires all four seats"
+mk_open_spec tier3a 3
+set_tier tier3a 3
+mk_round tier3a 1 >/dev/null
+out="$(council status docs/specs/tier3a --json)"
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "tier 3: missing lists all four seats" "haiku,opus,review,sonnet"
+
+echo "C15: a plan.md without a parsable **Tier:** line behaves as tier 4 and journals it once"
+mk_open_spec tierdefault 3
+mk_round tierdefault 1 >/dev/null
+out="$(council status docs/specs/tierdefault --json)"
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "no Tier line: behaves as tier 4 (all four seats)" "haiku,opus,review,sonnet"
+grep -qF $' \xc2\xb7 tier:default \xc2\xb7 ' docs/specs/tierdefault/journal.md && echo "  ok    unparsable tier journaled once as a warning" \
+  || { echo "::error::journal.md: $(cat docs/specs/tierdefault/journal.md 2>&1)"; fail=1; }
+before="$(grep -c 'tier:default' docs/specs/tierdefault/journal.md)"
+council status docs/specs/tierdefault --json >/dev/null
+after="$(grep -c 'tier:default' docs/specs/tierdefault/journal.md)"
+[ "$before" -eq 1 ] && [ "$after" -eq 1 ] && echo "  ok    the tier:default warning is not repeated on later calls" \
+  || { echo "::error::tier:default count before=$before after=$after"; fail=1; }
 
 # --- judge: unanimous green -------------------------------------------------------------------
 
@@ -800,6 +872,8 @@ out="$(council open-round docs/specs/oround1 --commit)"; ex=$?
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 rd1o="docs/specs/oround1/council/round-1"
 [ -f "$rd1o/ROUND" ] && grep -q '^ceiling=3$' "$rd1o/ROUND" && echo "  ok    ROUND file written, ceiling=3 (default)" \
+  || { echo "::error::ROUND: $(cat "$rd1o/ROUND" 2>&1)"; fail=1; }
+grep -q '^tier=4$' "$rd1o/ROUND" && echo "  ok    ROUND file freezes tier=4 (no parsable Tier line -> default)" \
   || { echo "::error::ROUND: $(cat "$rd1o/ROUND" 2>&1)"; fail=1; }
 court1="$(sed -n 's/^court=//p' "$rd1o/ROUND")"
 [ -d "$court1" ] && echo "  ok    court worktree exists on disk" || { echo "::error::no court at $court1"; fail=1; }

@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-18
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -49,6 +49,13 @@ The number of agents a task costs follows the tier the Queen assigned it, once, 
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `scripts/cycle.sh`: added `tier_of` (parses plan.md's `**Tier:**` line, defaults to 4, journals the default once via an idempotency grep), `round_tier` (ROUND's frozen `tier=`, falling back to `tier_of` for a pre-story round), `required_seats_for_tier` (C15 mapping), `is_required_seat`, `missing_required_seats`.
+- `build_round` now writes a 6th `tier=<n>` line to ROUND and derives its `dispatch:` seat list from `required_seats_for_tier` instead of the hardcoded four; `cmd_status`, `cmd_open_round`'s resume branch, and both `record-seat` seat handlers now compute `missing`/`next` the same tier-scoped way, so all four call sites agree.
+- `cmd_judge`: presence-pass, the per-seat ABSENT/sentinel assignment, the "env" escalation (generalized from a hardcoded 3-seat AND to "every required seat among haiku/sonnet/opus is ABSENT"), and the final GREEN check all gate on `REQUIRED`; a non-required unrecorded seat gets `v=""` (never `ABSENT`) and is skipped by both the GREEN-eligibility loop and the escalation check - "counted if recorded, never ABSENT" per the acceptance criteria.
+- Surprise: a plain `grep -qF '...\xc2\xb7...'` pattern does not interpret `\xcNN` hex escapes the way `printf` does - only `$'...'` (ANSI-C quoting) does. The first pass of `tier_of`'s own idempotency check used the plain form and silently re-journaled the default warning on every call; caught by a self-test (`before`/`after` journal line count) and fixed with `$'...'` in both `cycle.sh` and the test.
+- `tests/council.test.sh`: added `set_tier` and `mk_open_spec` fixture helpers, four new C15 scenarios (Tier 1/2/3/no-parsable-tier), and one assertion that a real `open-round` freezes `tier=4` into ROUND. 136 pre-existing checks plus 13 new ones, all green (149 total, exit 0).
+- `CLAUDE.md`: added an "Agents (C15)" column to the routing matrix; rewrote the `## The cycle` paragraph's seat description (was "does not shrink with tier", now scales 1/3/4 seats by tier, never to zero) - both edits confined to the two permitted spots; marker-line count still 4.
+- `docs/cycle.md`: rewrote "Tiers and the cycle" with a 3-row table naming required seats per tier and stated the tier call as the Queen's one scaling decision, replacing the old "does not scale down with tier" claim.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

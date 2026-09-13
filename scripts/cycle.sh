@@ -104,6 +104,55 @@ round_field() { # round_field <round-dir> <key> - a ROUND file's "key=value" lin
   sed -n "s/^$2=//p" "$1/ROUND" 2>/dev/null | head -1
 }
 
+tier_of() { # tier_of <spec> -> the spec's tier 1-4, from plan.md's first "**Tier:**" line
+  # (autonomous-cycle-18, C15). That line is "**Tier:** 4 \xc2\xb7 **Spec slug:** ..." on one
+  # line, so this parses only the leading digit - never marker(), which would return the
+  # whole rest of the line as the value. Absent or unparsable defaults to 4, the safe floor,
+  # journaled once (idempotent, like judge's own row/line/journal writes) so a spec's
+  # paperwork bug is visible without failing the read.
+  local spec="$1" plan v
+  plan="$spec/plan.md"
+  v="$(grep -m1 '^\*\*Tier:\*\*' "$plan" 2>/dev/null | sed -n 's/^\*\*Tier:\*\* *\([1-4]\).*/\1/p')"
+  if [ -n "$v" ]; then printf '%s' "$v"; return; fi
+  if [ -f "$plan" ] && { [ ! -f "$spec/journal.md" ] || ! grep -qF $' \xc2\xb7 tier:default \xc2\xb7 ' "$spec/journal.md"; }; then
+    bash "$HERE/journal.sh" "$spec" "tier:default" "plan.md has no parsable **Tier:** line" "defaulting to tier 4" >/dev/null 2>&1 || true
+  fi
+  printf '4'
+}
+
+round_tier() { # round_tier <spec> <round-dir> -> the round's frozen tier= (open-round writes
+  # it at open time, C15); tier_of() as a fallback for a round opened before this story.
+  local spec="$1" rd="$2" t
+  t="$(round_field "$rd" tier)"
+  case "$t" in [1-4]) printf '%s' "$t"; return ;; esac
+  tier_of "$spec"
+}
+
+required_seats_for_tier() { # required_seats_for_tier <tier> -> the space-separated seats a
+  # round of this tier must have before judge will run (C15). 3 and 4 (and any value outside
+  # 1-4, which tier_of never produces) share the full court - Tier 4's extra reviewer is a
+  # second `lead-review` dispatch, not a fifth seat here.
+  case "$1" in
+    1) printf 'sonnet' ;;
+    2) printf 'sonnet opus review' ;;
+    *) printf 'haiku sonnet opus review' ;;
+  esac
+}
+
+is_required_seat() { # is_required_seat <seat> <required-list> -> 0 iff seat is in the list
+  case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+
+missing_required_seats() { # missing_required_seats <round-dir> <required-list> -> space-sep
+  # required seats with no accepted report yet, in canonical haiku/sonnet/opus/review order.
+  local rd="$1" required="$2" seat out=""
+  for seat in haiku sonnet opus review; do
+    [ -f "$rd/$seat.md" ] && continue
+    is_required_seat "$seat" "$required" && out="$out $seat"
+  done
+  printf '%s' "${out# }"
+}
+
 round_is_stale() { # round_is_stale <spec> <n> - the one staleness rule (autonomous-cycle-17):
   # a round is stale iff its ROUND file's recorded head differs from current HEAD AND the
   # commits between them are not paperwork_only() (lib.sh, C1) - so a round's own open-round/
@@ -248,14 +297,13 @@ cmd_status() {
     [ -n "$RCOURT" ] && COURT_JSON="\"$RCOURT\""
     if ! row_exists "$SLUG" "$ROUND_N"; then
       OPEN_B=true
-      local seat has_any=0
-      for seat in haiku sonnet opus review; do
-        if [ -f "$RD/$seat.md" ]; then has_any=1; else MISSING="$MISSING $seat"; fi
-      done
+      local seat has_any=0 REQUIRED
+      REQUIRED="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
+      for seat in haiku sonnet opus review; do [ -f "$RD/$seat.md" ] && has_any=1; done
+      MISSING="$(missing_required_seats "$RD" "$REQUIRED")"
       if [ "$has_any" -eq 1 ] && round_is_stale "$SPEC" "$ROUND_N"; then STALE_B=true; fi
     fi
   fi
-  MISSING="$(printf '%s' "$MISSING" | sed 's/^ *//')"
 
   # --- newest council.jsonl row for this spec -----------------------------------------------
   local NEWEST NEWEST_VERDICT="" NEWEST_ROUND="" NEWEST_PACK="" NEWEST_HEAD="" RED_LIST=""
@@ -405,10 +453,13 @@ cmd_judge() { # cmd_judge <spec> <commit:0|1> [<verb-label>]
   RPACK="$(round_field "$RD" pack)"
   ROPENED="$(round_field "$RD" opened)"
   RCEILING="$(round_field "$RD" ceiling)"; [ -n "$RCEILING" ] || RCEILING=3
+  local REQUIRED; REQUIRED="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
 
-  # --- presence pass: every seat must be present or ABSENT, in order -----------------------
+  # --- presence pass: every REQUIRED seat must be present or ABSENT, in order (C15: a seat
+  # this round's tier does not call for simply may never have been dispatched) --------------
   local seat pres
   for seat in haiku sonnet opus review; do
+    is_required_seat "$seat" "$REQUIRED" || continue
     pres="$(seat_presence "$RD" "$seat")"
     if [ "$pres" = missing ]; then
       echo "cycle: $VERBLABEL - seat '$seat' has no report and no attempt-2 in $RD" >&2
@@ -439,8 +490,10 @@ cmd_judge() { # cmd_judge <spec> <commit:0|1> [<verb-label>]
       done <<ASKS
 $(seat_ask_lines "$f")
 ASKS
-    else
+    elif is_required_seat "$seat" "$REQUIRED"; then
       v="ABSENT"; model="unknown"
+    else
+      v=""; model="unknown" # C15: not required and never recorded - optional, not ABSENT
     fi
     case "$seat" in
       haiku)  haiku_v="$v";  haiku_model="$model" ;;
@@ -448,6 +501,18 @@ ASKS
       opus)   opus_v="$v";   opus_model="$model" ;;
     esac
   done
+
+  # --- env escalation is "every REQUIRED advisory seat is ABSENT" (C15), not a hardcoded 3 --
+  local all_req_absent=1
+  for seat in haiku sonnet opus; do
+    is_required_seat "$seat" "$REQUIRED" || continue
+    case "$seat" in
+      haiku)  [ "$haiku_v" = ABSENT ]  || all_req_absent=0 ;;
+      sonnet) [ "$sonnet_v" = ABSENT ] || all_req_absent=0 ;;
+      opus)   [ "$opus_v" = ABSENT ]   || all_req_absent=0 ;;
+    esac
+  done
+
   # evidenced wins over unevidenced for the same ask number
   local cleaned="" u
   for u in $red_u; do case " $red_e " in *" $u "*) ;; *) cleaned="$cleaned $u" ;; esac; done
@@ -461,8 +526,10 @@ ASKS
   local rf="$RD/review.md"
   if [ -f "$rf" ]; then
     review_v="$(review_verdict_of "$rf")"; [ -n "$review_v" ] || review_v="BLOCK"
-  else
+  elif is_required_seat review "$REQUIRED"; then
     review_v="ABSENT"
+  else
+    review_v="" # C15: review not required at this tier and never recorded - not ABSENT
   fi
 
   local na_count=0 v
@@ -487,7 +554,7 @@ ASKS
   local half=$(( (A+1)/2 ))
   if [ "$override_red" -eq 1 ]; then
     overall="RED"; next_val="repair"
-  elif [ "$haiku_v" = ABSENT ] && [ "$sonnet_v" = ABSENT ] && [ "$opus_v" = ABSENT ]; then
+  elif [ "$all_req_absent" -eq 1 ]; then
     overall="ESCALATE"; escalate_reason="env"; next_val="escalated"
   elif [ "$red_e_count" -gt 0 ] && [ "$red_e_count" -ge "$half" ]; then
     overall="ESCALATE"; escalate_reason="half"; next_val="escalated"
@@ -499,8 +566,8 @@ ASKS
     fi
   else
     local ok=1
-    for v in "$haiku_v" "$sonnet_v" "$opus_v"; do case "$v" in GREEN|N/A) ;; *) ok=0 ;; esac; done
-    if [ "$ok" -eq 1 ] && [ "$review_v" = "PASS" ]; then
+    for v in "$haiku_v" "$sonnet_v" "$opus_v"; do case "$v" in ""|GREEN|N/A) ;; *) ok=0 ;; esac; done
+    if [ "$ok" -eq 1 ] && { [ "$review_v" = "PASS" ] || [ -z "$review_v" ]; }; then
       overall="GREEN"; next_val="green"
     else
       overall="RED"; next_val="repair" # not reached by any story-01 fixture; conservative default
@@ -738,9 +805,9 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
   local extra; extra="$(printf ' \xc2\xb7 verdict: %s' "$verdict")"
   write_seat_file "$RD/review.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$extra" "$REPORT"
   echo "cycle: record-seat - review recorded for round $N (verdict $verdict)"
-  local seat missing=""
-  for seat in haiku sonnet opus review; do [ -f "$RD/$seat.md" ] || missing="$missing $seat"; done
-  missing="$(printf '%s' "$missing" | sed 's/^ *//')"
+  local missing required
+  required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
+  missing="$(missing_required_seats "$RD" "$required")"
   local next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
   emit true record-seat 0 "$next_val"
   exit 0
@@ -855,9 +922,9 @@ REPORTEOF
   write_seat_file "$RD/$SEAT.md" "$SEAT" "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$extra" "$FINAL_REPORT"
   echo "cycle: record-seat - $SEAT recorded for round $N (attempt $ATTEMPT)$( [ -n "$red_u_list" ] && printf ', unevidenced: %s' "$(json_num_csv "$red_u_list")" )"
 
-  local seat missing=""
-  for seat in haiku sonnet opus review; do [ -f "$RD/$seat.md" ] || missing="$missing $seat"; done
-  missing="$(printf '%s' "$missing" | sed 's/^ *//')"
+  local missing required
+  required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
+  missing="$(missing_required_seats "$RD" "$required")"
   local next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
   emit true record-seat 0 "$next_val"
   exit 0
@@ -1091,15 +1158,23 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   local court_spec="$court_abs/$spec"
   [ -d "$court_spec" ] && find "$court_spec" -mindepth 1 -maxdepth 1 ! -name 'brief.md' -exec rm -rf {} +
 
+  # C15: the tier is derived once, here, and frozen into the round - a plan.md edit mid-round
+  # (or a stale re-stamp) never changes what this round already requires.
+  local tier required
+  tier="$(tier_of "$spec")"
+  required="$(required_seats_for_tier "$tier")"
+
   {
     printf 'head=%s\n' "$head"
     printf 'pack=%s\n' "$pack"
     printf 'opened=%s\n' "$(now_ts)"
     printf 'court=%s\n' "$court_abs"
     printf 'ceiling=%s\n' "$ceiling"
+    printf 'tier=%s\n' "$tier"
   } > "$rd/ROUND"
 
-  bash "$HERE/journal.sh" "$spec" "04-council:open" "round $n opened, court at $court_abs" "dispatch:haiku,sonnet,opus,review" >/dev/null
+  local dispatch_val; dispatch_val="dispatch:$(printf '%s' "$required" | tr ' ' ',')"
+  bash "$HERE/journal.sh" "$spec" "04-council:open" "round $n opened, court at $court_abs" "$dispatch_val" >/dev/null
 
   if [ "$docommit" = "1" ] && [ -n "$(git status --porcelain -- "$spec" 2>/dev/null)" ]; then
     git add -A -- "$spec" >/dev/null 2>&1
@@ -1107,7 +1182,7 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   fi
 
   echo "cycle: $slug - round $n opened, court at $court_abs"
-  emit true open-round 0 "dispatch:haiku,sonnet,opus,review"
+  emit true open-round 0 "$dispatch_val"
   exit 0
 }
 
@@ -1225,9 +1300,9 @@ EOF
     # paperwork since then (round_is_stale, C1), or every round would read itself as stale on
     # the very next call.
     if ! round_is_stale "$SPEC" "$N"; then
-      local seat missing=""
-      for seat in haiku sonnet opus review; do [ -f "$RD/$seat.md" ] || missing="$missing $seat"; done
-      missing="$(printf '%s' "$missing" | sed 's/^ *//')"
+      local missing required
+      required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
+      missing="$(missing_required_seats "$RD" "$required")"
       local next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
       echo "cycle: $SLUG - round $N already open at current HEAD, no-op"
       emit true open-round 0 "$next_val"

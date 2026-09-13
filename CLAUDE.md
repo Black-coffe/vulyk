@@ -52,13 +52,13 @@ without improving the result. Reviewing *another* agent's diff is a different th
 
 Classify every request into a tier, announce the tier, then follow its protocol:
 
-| Tier | Signal | Stories | Protocol |
-|---|---|---|---|
-| 0 | Trivial, single file, obvious | — | Do it directly - no brief, no council. No ceremony. |
-| 1 | One module, clear task | 1 | Mini-brief (`## Asks` = the task phrase, verbatim, no grill) → dispatch 1 `worker-code` (scout first if location unknown) → one council round → `/vulyk-ship`. |
-| 2 | Feature within a module | 2–4 | `/vulyk-plan` (grill) → driver (`/vulyk-build`: build → council → repair) → `/vulyk-ship`. |
-| 3 | Cross-cutting, multi-module | 4–8 | `/vulyk-plan` (grill) → driver (`/vulyk-build`) → `/vulyk-ship`; `/vulyk-review` runs one more council round on demand first if you want a second look before shipping. |
-| 4 | Architecture, migration, 200k+ LOC touched | 9–16 | Tier 3 + `lead-architect` consult + a second reviewer on a *different* model (the brief names it: `opus` beside a Fable gate, `fable` or `sonnet` beside an Opus one). Raise session effort before planning (see below). |
+| Tier | Signal | Stories | Agents (C15) | Protocol |
+|---|---|---|---|---|
+| 0 | Trivial, single file, obvious | — | none | Do it directly - no brief, no council. No ceremony. |
+| 1 | One module, clear task | 1 | 1 worker + 1 seat | Mini-brief (`## Asks` = the task phrase, verbatim, no grill) → dispatch 1 `worker-code` (scout first if location unknown) → one council round → `/vulyk-ship`. |
+| 2 | Feature within a module | 2–4 | 2-4 workers + 2 seats + `lead-review` | `/vulyk-plan` (grill) → driver (`/vulyk-build`: build → council → repair) → `/vulyk-ship`. |
+| 3 | Cross-cutting, multi-module | 4–8 | 4-8 workers + 3 seats + `lead-review` | `/vulyk-plan` (grill) → driver (`/vulyk-build`) → `/vulyk-ship`; `/vulyk-review` runs one more council round on demand first if you want a second look before shipping. |
+| 4 | Architecture, migration, 200k+ LOC touched | 9–16 | Tier 3, + `lead-architect` + a second reviewer | Tier 3 + `lead-architect` consult + a second reviewer on a *different* model (the brief names it: `opus` beside a Fable gate, `fable` or `sonnet` beside an Opus one). Raise session effort before planning (see below). |
 
 Past 16 stories the goal is more than one spec — split it. Story counts are calibration, not
 targets. **Ceremony floor:** `brief.md` and `## Requirements` quotes exist at Tier 2+; `## Asks`
@@ -89,12 +89,17 @@ turn - [docs/cycle.md](docs/cycle.md) says what each stage cannot skip and what 
 | 04+05 | **Council** - three blind seats + `lead-review` judge the brief's own `## Asks` | `**Council:** GREEN` + `memory/stats/council.jsonl` | `/vulyk-build` (driver) or `/vulyk-review` (one round) |
 | 06 | Ship - branch merged locally, publish command printed, next circle opened | `**Shipped:**` via `scripts/ship-check.sh --record` | `/vulyk-ship` |
 
-The council is the one mandatory control after the plan closes, and it does not shrink with
-tier: three blind seats (`council-haiku`, `council-sonnet`, `council-opus` - one model, one
-angle each) plus `lead-review` in parallel judge only the brief's own words, from a court that
-cannot see the hive's stories - the same blindness stage 05 used to buy from a human who had
-not read them either. Green needs unanimity; a round RED on half the asks or more, or three
-RED rounds running, escalates instead of burning a fourth - `plan.md` gains `## Needs a human`
+The council is the one mandatory control after the plan closes, and it shrinks by seat count
+with the tier, never to zero (C15): `council-sonnet` alone at Tier 1, `council-sonnet` +
+`council-opus` + `lead-review` at Tier 2, and the full court - `council-haiku`,
+`council-sonnet`, `council-opus` (one model, one angle each) plus `lead-review` - at Tier 3-4.
+The tier is the Queen's own call, made once before any work, in the routing matrix above; a
+spec's `plan.md` `**Tier:**` line is what `cycle.sh` reads to size the court, and it is frozen
+into the round at `open-round` so a later edit never reshapes a round in flight. Every seat
+still judges only the brief's own words, in parallel, from a court that cannot see the hive's
+stories - the same blindness stage 05 used to buy from a human who had not read them either.
+Green needs unanimity; a round RED on half the asks or more, or three RED rounds running,
+escalates instead of burning a fourth - `plan.md` gains `## Needs a human`
 and the loop stops. Human is never a mandatory stage: the owner may step in at any point via
 `/vulyk-pause`, and `scripts/human-check.sh` remains an override that outranks the council's
 verdict either way (`ACCEPTED` over a RED/ESCALATE, `REJECTED` over a GREEN) - but nothing in

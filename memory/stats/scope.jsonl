@@ -18,3 +18,4 @@
 {"ts":"2026-09-13T09:08:12Z","story":"autonomous-cycle-04-cycle-rounds-in-git","declared":2,"changed":3,"out_of_scope":1}
 {"ts":"2026-09-13T09:16:52Z","story":"autonomous-cycle-15-status-carries-the-worker","declared":3,"changed":5,"out_of_scope":2}
 {"ts":"2026-09-13T10:14:04Z","story":"autonomous-cycle-17-stale-means-code-moved","declared":2,"changed":2,"out_of_scope":0}
+{"ts":"2026-09-13T10:42:22Z","story":"autonomous-cycle-18-council-scales-with-tier","declared":4,"changed":4,"out_of_scope":0}
