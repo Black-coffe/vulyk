@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-04
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
