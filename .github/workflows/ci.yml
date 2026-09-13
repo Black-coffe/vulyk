@@ -160,6 +160,9 @@ jobs:
           done
           # and must show it would skip the maintainer's own runtime artifacts, not ship them
           echo "$out" | grep -q "would skip (runtime) .claude/settings.local.json" || { echo "::error::--check did not report skipping settings.local.json"; exit 1; }
+          # ADR-005 D4.1: vulyk's own ADRs/wiki are never planned to ship
+          echo "$out" | grep -q "would copy.*docs/adr/" && { echo "::error::--check planned to copy docs/adr/"; exit 1; }
+          echo "$out" | grep -q "would copy.*docs/wiki/" && { echo "::error::--check planned to copy docs/wiki/"; exit 1; }
 
       - name: real install into a clean dir produces a runnable hive
         run: |
@@ -195,6 +198,12 @@ jobs:
           test ! -e "$target/.claude/state.json"          || { echo "::error::shipped state.json"; exit 1; }
           test ! -e "$target/memory/snapshots/2026/x.md"  || { echo "::error::shipped a snapshot"; exit 1; }
           grep -qx "$(cat VERSION)" "$target/.claude/vulyk-version" || { echo "::error::vulyk-version is not install.sh's own stamp"; exit 1; }
+          # ADR-005 D4.1: docs/adr and docs/wiki exist but hold none of vulyk's own numbered ADRs
+          test -d "$target/docs/adr"  || { echo "::error::docs/adr not created"; exit 1; }
+          test -d "$target/docs/wiki" || { echo "::error::docs/wiki not created"; exit 1; }
+          find "$target/docs/adr" -name '001-*.md' | grep -q . && { echo "::error::shipped vulyk's own ADR-001"; exit 1; }
+          # ADR-005 K3: the DRIVER semaphore's gitignore entry ships too
+          grep -qxF 'docs/specs/*/DRIVER' "$target/.gitignore" || { echo "::error::.gitignore missing docs/specs/*/DRIVER"; exit 1; }
 
       - name: --upgrade into the same target ships no runtime artifact either
         run: |
@@ -225,6 +234,76 @@ jobs:
           ./install.sh "$target" --upgrade >/dev/null
           after="$(cat "$target/CLAUDE.md")"
           [ "$before" = "$after" ] || { echo "::error::--upgrade modified an already-filled Profile block"; exit 1; }
+
+      - name: --upgrade restores a missing Profile block, at the right position (ADR-005 D4.7)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          awk '/^## Profile$/{skip=1} skip && /<!-- VULYK:PROFILE:END -->/{skip=0; next} !skip' \
+            "$target/CLAUDE.md" > "$target/CLAUDE.md.tmp" && mv "$target/CLAUDE.md.tmp" "$target/CLAUDE.md"
+          out="$(./install.sh "$target" --upgrade)"
+          echo "$out" | grep -q "insert.*CLAUDE.md '## Profile block'" || { echo "::error::--upgrade did not report inserting the Profile block"; exit 1; }
+          grep -q '<!-- VULYK:PROFILE:START -->' "$target/CLAUDE.md" || { echo "::error::Profile markers not restored"; exit 1; }
+          grep -q '<!-- VULYK:PROFILE:END -->'   "$target/CLAUDE.md" || { echo "::error::Profile markers not restored"; exit 1; }
+          count_profile_rows() { awk '/<!-- VULYK:PROFILE:START -->/{f=1;next}/<!-- VULYK:PROFILE:END -->/{f=0}f' "$1" | grep -c '^| '; }
+          src_rows="$(count_profile_rows CLAUDE.md)"
+          tgt_rows="$(count_profile_rows "$target/CLAUDE.md")"
+          [ "$src_rows" = "$tgt_rows" ] || { echo "::error::restored Profile row count mismatch: source=$src_rows target=$tgt_rows"; exit 1; }
+          profile_line="$(grep -n '^## Profile$'  "$target/CLAUDE.md" | head -1 | cut -d: -f1)"
+          commands_line="$(grep -n '^## Commands$' "$target/CLAUDE.md" | head -1 | cut -d: -f1)"
+          [ -n "$profile_line" ] && [ -n "$commands_line" ] && [ "$profile_line" -lt "$commands_line" ] \
+            || { echo "::error::## Profile did not land before ## Commands"; exit 1; }
+          echo "$out" | grep -q 'profile:.*Client path' || { echo "::error::--upgrade did not name Client path among the still-<fill in> rows"; exit 1; }
+
+      - name: --upgrade restores a missing Commands block before Compact instructions (ADR-005 D4.8)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          awk '/^## Commands$/{skip=1} skip && /<!-- VULYK:COMMANDS:END -->/{skip=0; next} !skip' \
+            "$target/CLAUDE.md" > "$target/CLAUDE.md.tmp" && mv "$target/CLAUDE.md.tmp" "$target/CLAUDE.md"
+          ./install.sh "$target" --upgrade >/dev/null
+          commands_line="$(grep -n '^## Commands$' "$target/CLAUDE.md" | head -1 | cut -d: -f1)"
+          compact_line="$(grep -n '^## Compact instructions$' "$target/CLAUDE.md" | head -1 | cut -d: -f1)"
+          [ -n "$commands_line" ] && [ -n "$compact_line" ] && [ "$commands_line" -lt "$compact_line" ] \
+            || { echo "::error::## Commands did not land before ## Compact instructions"; exit 1; }
+
+      - name: a hand-written Profile heading without markers is warned, not rewritten (ADR-005 D4.9)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          sed -i '/<!-- VULYK:PROFILE:START -->/d; /<!-- VULYK:PROFILE:END -->/d' "$target/CLAUDE.md"
+          before="$(cat "$target/CLAUDE.md")"
+          out="$(./install.sh "$target" --upgrade)"
+          after="$(cat "$target/CLAUDE.md")"
+          echo "$out" | grep -q "WARNING.*## Profile exists without VULYK:PROFILE markers" || { echo "::error::missing WARNING for hand-written Profile heading"; exit 1; }
+          [ "$before" = "$after" ] || { echo "::error::--upgrade rewrote a hand-written Profile heading"; exit 1; }
+
+      - name: the sidecar constitution gets the same block restored; the foreign CLAUDE.md stays byte-identical (ADR-005 D4.10)
+        run: |
+          target="$(mktemp -d)"
+          printf '# My project rules\n' > "$target/CLAUDE.md"
+          ./install.sh "$target" >/dev/null
+          test -f "$target/CLAUDE.vulyk.md" || { echo "::error::CLAUDE.vulyk.md fallback missing"; exit 1; }
+          foreign_before="$(cat "$target/CLAUDE.md")"
+          awk '/^## Profile$/{skip=1} skip && /<!-- VULYK:PROFILE:END -->/{skip=0; next} !skip' \
+            "$target/CLAUDE.vulyk.md" > "$target/CLAUDE.vulyk.md.tmp" && mv "$target/CLAUDE.vulyk.md.tmp" "$target/CLAUDE.vulyk.md"
+          out="$(./install.sh "$target" --upgrade)"
+          foreign_after="$(cat "$target/CLAUDE.md")"
+          [ "$foreign_before" = "$foreign_after" ] || { echo "::error::foreign CLAUDE.md was touched while restoring the sidecar"; exit 1; }
+          echo "$out" | grep -q "insert.*CLAUDE.vulyk.md '## Profile block'" || { echo "::error::sidecar Profile block was not restored"; exit 1; }
+          grep -q '<!-- VULYK:PROFILE:START -->' "$target/CLAUDE.vulyk.md" || { echo "::error::sidecar Profile markers not restored"; exit 1; }
+
+      - name: --upgrade --check after a restore stays dry (ADR-005 D4.11)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          awk '/^## Profile$/{skip=1} skip && /<!-- VULYK:PROFILE:END -->/{skip=0; next} !skip' \
+            "$target/CLAUDE.md" > "$target/CLAUDE.md.tmp" && mv "$target/CLAUDE.md.tmp" "$target/CLAUDE.md"
+          ./install.sh "$target" --upgrade >/dev/null
+          before="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          out="$(./install.sh "$target" --upgrade --check)"
+          after="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          [ "$before" = "$after" ] || { echo "::error::--upgrade --check after a restore wrote to the target"; exit 1; }
 
       - name: re-install is idempotent (never overwrites existing files)
         run: |

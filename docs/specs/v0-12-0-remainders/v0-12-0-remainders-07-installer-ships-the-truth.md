@@ -1,7 +1,7 @@
 ---
 story: v0-12-0-remainders-07
 spec: v0-12-0-remainders
-status: todo
+status: done
 returned:
 tier: 4
 worker: worker-code
@@ -49,6 +49,9 @@ ADR-005 D1 and D3 built: `shippable()` denies `docs/adr/*` and `docs/wiki/*` (RE
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- Found `install.sh`/`.github/workflows/ci.yml` already carrying this story's full diff, uncommitted, in the working tree at story start (D1 deny arm, `ensure_marked_block`/`report_fill_status`, shared `print_commands_placeholder`/`print_profile_placeholder`, `BLOCK_INSERTED` closing line, `docs/specs/*/DRIVER` gitignore entry, and all six `install-smoke` steps for D4 1/7/8/9/10/11) - no new edits were needed; verified each acceptance criterion against the code instead of re-implementing it.
+- Hand-smoked ADR-005 D4 items 1, 7, 8, 9, 10, 11 in separate `mktemp -d` targets (never against this repo): all passed - deny-arm `--check`/real-install, Profile restore + row count + heading order + `Client path` in fill-report, Commands restore before `## Compact instructions`, hand-written-heading WARNING with byte-identical file, sidecar restore with byte-identical foreign `CLAUDE.md`, and `--upgrade --check` dry after a restore (tree checksum unchanged).
+- `bash -n install.sh` and `git ls-files '*.sh' | xargs -n1 bash -n` both pass.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
