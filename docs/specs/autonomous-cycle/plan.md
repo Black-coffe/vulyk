@@ -257,3 +257,4 @@ command or script that owns the line; `scripts/ship-check.sh` reads all four.
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 **Council:** RED round 1, 2026-09-13, at f0d206b, pack f455a9c64779
 **Council:** RED round 2, 2026-09-13, at 19667a3, pack ab62eb9de683
+**Council:** GREEN round 3, 2026-09-13, at 7bc6f7b, pack c0a97d497e2a
