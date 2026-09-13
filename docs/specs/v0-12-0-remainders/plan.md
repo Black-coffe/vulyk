@@ -27,33 +27,42 @@ Close what v0.12.0 shipped with known holes, runtime first: the Workflow driver 
 
 ## Stories
 
-<!-- Re-cut 2026-09-13 after the first Workflow run (see ## Plan deltas): story 14 born, 05/08/11/13 each one wave later. -->
+<!-- Index regenerated 2026-09-13 from the story frontmatter after the 01/05/08/11 recuts (## Plan deltas); 17 stories, 9 waves. -->
 
-**Wave 1** - four disjoint file sets; the driver test harness and the ledger fixes start here
-- `v0-12-0-remainders-01-cycle-judge-ledger` - code only, attempt 3 on the kept diff (delta 2026-09-13): `scripts/cycle.sh` + the fixture `cp` line in `tests/council.test.sh`: LR19 attempts, LR21/r2m1 exact round match, LR25 `**Council:**` by C7, m-10 atomic append, m-4 same-second override, N-m7 note through redact.
-- `v0-12-0-remainders-02-driver-test-harness` - `tests/driver.test.sh` (new), `CLAUDE.md` `## Commands` row, `ci.yml` job `driver`: the real parse, the fold harness, the stub loop, `skipped` without node.
-- `v0-12-0-remainders-03-records-describe-the-driver` - story 22 R14 note and ADR-001 D2 paragraph (`:174-187`, `:296`) describe the driver as it is (X-M2, X-M3, minor 1, M1's ADR sentence); ADR-001 D2 exit-code line gains ADR-006's `returned:` clause.
-- `v0-12-0-remainders-04-gates-drop-drone-acceptance` - `ship-check.sh:190` same-second override, `ship-check.sh:227` / `acceptance-log.sh:72` / `drone-docs.md:14` stop naming `drone-acceptance`; `tests/cycle.test.sh` scenario.
+**Wave 1**
+- `v0-12-0-remainders-01-cycle-judge-ledger` - code only, attempt 3 on the kept diff (delta 2026-09-13): `scripts/cycle.sh` + the fixture `cp` line in `tests/council.test.sh`: LR19 attempts, LR21/r2m1 exact round match, LR25 `**Council:**` by C7, m-10 atomic append, m-4 same-second override, N-m7 note through redact. · done
+- `v0-12-0-remainders-02-driver-test-harness` - `tests/driver.test.sh` (new), `CLAUDE.md` `## Commands` row, `ci.yml` job `driver`: the real parse, the fold harness, the stub loop, `skipped` without node. · done
+- `v0-12-0-remainders-03-records-describe-the-driver` - story 22 R14 note and ADR-001 D2 paragraph (`:174-187`, `:296`) describe the driver as it is (X-M2, X-M3, minor 1, M1's ADR sentence); ADR-001 D2 exit-code line gains ADR-006's `returned:` clause. · done
+- `v0-12-0-remainders-04-gates-drop-drone-acceptance` - `ship-check.sh:190` same-second override, `ship-check.sh:227` / `acceptance-log.sh:72` / `drone-docs.md:14` stop naming `drone-acceptance`; `tests/cycle.test.sh` scenario. · done
 
 **Wave 2**
-- `v0-12-0-remainders-06-driver-stops-tell-the-truth` - `vulyk-cycle.js` + driver suite: M2/X-M1, X-M4, no-`args` guard, whitespace report, r2m17, r2m15, exit-6 scenario. blocked_by 02.
-- `v0-12-0-remainders-07-installer-ships-the-truth` - `install.sh` + `ci.yml` install-smoke: asks 5 and 7 per ADR-005 D1 (ship set), D3 (`ensure_marked_block`, sidecar, warnings, shared placeholder printers), D4 assertions 1, 7-11; the `docs/specs/*/DRIVER` gitignore entry. blocked_by 02 (ci.yml).
-- `v0-12-0-remainders-14-council-suite-ledger-scenarios` - `tests/council.test.sh` only (worker-test, blocked_by 01): six scenarios, one per story 01 criterion, each shown failing against `3e200bb`'s `cycle.sh`.
+- `v0-12-0-remainders-06-driver-stops-tell-the-truth` - `vulyk-cycle.js` + driver suite: M2/X-M1, X-M4, no-`args` guard, whitespace report, r2m17, r2m15, exit-6 scenario. blocked_by 02. · done · blocked_by 02
+- `v0-12-0-remainders-07-installer-ships-the-truth` - `install.sh` + `ci.yml` install-smoke: asks 5 and 7 per ADR-005 D1 (ship set), D3 (`ensure_marked_block`, sidecar, warnings, shared placeholder printers), D4 assertions 1, 7-11; the `docs/specs/*/DRIVER` gitignore entry. blocked_by 02 (ci.yml). · done · blocked_by 02
+- `v0-12-0-remainders-14-council-suite-ledger-scenarios` - `tests/council.test.sh` only (worker-test, blocked_by 01): six scenarios, one per story 01 criterion, each shown failing against `3e200bb`'s `cycle.sh`. · done · blocked_by 01
 
 **Wave 3**
-- `v0-12-0-remainders-05-cycle-open-round-honest-stops` - `cycle.sh` + suite: r2m3, r2m16, r2m5, r2m6, N-m3, r2m7/N-m2, r2m4/N-m1 (every `ok:false` names its error; exit 6 uniform). blocked_by 01. (blocked_by 01, 14)
-- `v0-12-0-remainders-09-workers-record-their-outcome` - `worker-code.md`, `worker-test.md`, `templates/story.md`, `/vulyk-build` `build:<wave>` row, three driver-suite scenarios proving the driver never read the prose (ADR-006). blocked_by 06.
-- `v0-12-0-remainders-10-installer-manifest` - `install.sh` + `ci.yml`: ask 6 per ADR-005 D2 (manifest, removal rule, `leave (yours)`, `unlisted (kept)`), D1's manifest arm, D4 assertions 2-6, 11. blocked_by 07.
+- `v0-12-0-remainders-05-cycle-open-round-honest-stops` - `cycle.sh` + suite: r2m3, r2m16, r2m5, r2m6, N-m3, r2m7/N-m2, r2m4/N-m1 (every `ok:false` names its error; exit 6 uniform). blocked_by 01. · todo · blocked_by 01, 14
+- `v0-12-0-remainders-09-workers-record-their-outcome` - `worker-code.md`, `worker-test.md`, `templates/story.md`, `/vulyk-build` `build:<wave>` row, three driver-suite scenarios proving the driver never read the prose (ADR-006). blocked_by 06. · done · blocked_by 06
+- `v0-12-0-remainders-10-installer-manifest` - `install.sh` + `ci.yml`: ask 6 per ADR-005 D2 (manifest, removal rule, `leave (yours)`, `unlisted (kept)`), D1's manifest arm, D4 assertions 2-6, 11. blocked_by 07. · done · blocked_by 07
 
 **Wave 4**
-- `v0-12-0-remainders-08-cycle-close-story-owns-its-commit` - `cycle.sh` + suite: r2m2, LR31, r2m9, and ADR-006's `returned:` gate with `cstoryr1..r4`. blocked_by 05.
-- `v0-12-0-remainders-12-session-brief-no-cli` - `.claude/hooks/top-model-brief.sh` + `ci.yml` top-model job: ask 4. blocked_by 10 (ci.yml).
+- `v0-12-0-remainders-12-session-brief-no-cli` - `.claude/hooks/top-model-brief.sh` + `ci.yml` top-model job: ask 4. blocked_by 10 (ci.yml). · todo · blocked_by 10
+- `v0-12-0-remainders-15-council-suite-open-round-scenarios` - The council suite proves the six `open-round` fixes of story 05 (`tests/council.test.sh`) · todo · blocked_by 05
 
 **Wave 5**
-- `v0-12-0-remainders-11-cycle-driver-semaphore` - `cycle.sh` + suite + `.gitignore`: ask 3, `claim`/`release`, `--stamp` on four verbs, `pause`/`resume` release (K3). blocked_by 08.
+- `v0-12-0-remainders-08-cycle-close-story-owns-its-commit` - `cycle.sh` + suite: r2m2, LR31, r2m9, and ADR-006's `returned:` gate with `cstoryr1..r4`. blocked_by 05. · todo · blocked_by 05, 15
 
 **Wave 6**
-- `v0-12-0-remainders-13-drivers-hold-the-semaphore` - `vulyk-cycle.js`, driver suite, `/vulyk-build`, `/vulyk-review`: both drivers claim, pass `--stamp`, release on every exit. blocked_by 11, 09.
+- `v0-12-0-remainders-16-council-suite-close-story-scenarios` - The council suite proves the four `close-story`/`wave_stories` fixes of story 08 (`tests/council.test.sh`) · todo · blocked_by 08
+
+**Wave 7**
+- `v0-12-0-remainders-11-cycle-driver-semaphore` - `cycle.sh` + suite + `.gitignore`: ask 3, `claim`/`release`, `--stamp` on four verbs, `pause`/`resume` release (K3). blocked_by 08. · todo · blocked_by 08, 16
+
+**Wave 8**
+- `v0-12-0-remainders-17-council-suite-semaphore-scenarios` - The council suite proves the DRIVER semaphore of story 11 (`tests/council.test.sh`) · todo · blocked_by 11
+
+**Wave 9**
+- `v0-12-0-remainders-13-drivers-hold-the-semaphore` - `vulyk-cycle.js`, driver suite, `/vulyk-build`, `/vulyk-review`: both drivers claim, pass `--stamp`, release on every exit. blocked_by 11, 09. · todo · blocked_by 11, 17, 09
 
 ## Contracts
 
@@ -116,6 +125,8 @@ born after approval - a delta is requirement change on the record.
 '`, byte-identical to HEAD); no story cut - `## Next circle` records it (a `.gitattributes` line `*.js text eol=lf`, or the driver launch step stripping CR, is second-spec work). **Rejected:** editing the working copy by hand (Law 5; and `git` would re-convert it on the next touch).
 - **2026-09-13 · trigger:** second Workflow run (wf_ce039b01-e98) stopped with `stop:{verb:"close-story", exit:2, error:"already done"}` on story 01: the worker had written `status: done` into its own story beside `returned: DONE`, so `close-story` refused as a repeat and the driver ended the run without a commit. Not r2m2 (nothing was committed, nothing was half-done): a worker protocol gap - `returned:` is the worker's key, `status:` is `close-story`'s. **Decision:** the Queen reset `status: in-progress` and ran `close-story --commit` by hand (the fallback table's `close-story:<file>` row); story 09 (the worker protocol) gains one sentence in `worker-code.md`/`worker-test.md` and `templates/story.md`: the worker never writes `status:` - `returned:` is its only frontmatter edit. **Rejected:** teaching `close-story` to accept a story already marked `done` by a worker (it would mask the r2m2 retry case story 08 must distinguish).
 - **2026-09-13 · trigger:** third Workflow run (wf_1bc0c385-0a3) closed 06 and 07, then stopped the same way on story 14 (`close-story` exit 2 `already done`: the worker wrote `status: done`). Also: the first attempt of 07 and of 14 returned empty (dead subagent) and both retries finished on the work the dead attempt left on disk - the pattern of run 1, now four deaths in three runs, every one on a story that reads or runs the 1661-line council suite or writes a whole new file. **Decision:** same hand-close as the previous delta; story 09's protocol sentence stands. `## Next circle` gains: the first attempt should carry the same "edits may already be on disk" sentence as the second (story 06's criterion b covers the retry only), and a story-sizing note for the wiki (a worker that must run `tests/council.test.sh` should be told to run it once, at the end, quietly - the suite prints hundreds of lines and each run is resent every turn). **Rejected:** pausing the build to fix the worker protocol first (story 09 lands next wave; two more hand-closes at most).
+- **2026-09-13 · trigger:** fourth Workflow run (wf_5c6e7c7a-b45) closed 09 and 10, then stopped on story 05 with `stop:{verb:"build", file: story 05, error:"worker returned no report"}` - two dead subagents, no exception reached story 06's `worker threw:` catch, an uncommitted 83-line `cycle.sh` diff left behind. The same shape as story 01's block. **Decision:** apply the story 01 decision without a second `lead-architect` consult (its rule: a `cycle.sh` story is code OR council-suite scenarios, never both): keep the diff; rewrite 05 as code-only, attempt 3 on the kept diff, suite run once at the end through `tail`; cut `v0-12-0-remainders-15-council-suite-open-round-scenarios` (worker-test, wave 4, blocked_by 05); cascade 08 -> wave 5 (blocked_by 05, 15), 11 -> 6, 13 -> 7. **Rejected:** a second consult (the architect's decision names this exact case and the answer would not change); discarding the diff (same undo argument as before).
+- **2026-09-13 · trigger:** planner's note on the 05 recut - stories 08 and 11 still carry the banned shape (cycle.sh code + council-suite scenarios in one story) that killed 01 and 05 twice each. **Decision:** recut both before wave 5 dispatches: 08 -> code-only (wave 5) + `v0-12-0-remainders-16-council-suite-close-story-scenarios` (worker-test, wave 6); 11 -> code-only (wave 7, `cycle.sh` + `.gitignore`) + `v0-12-0-remainders-17-council-suite-semaphore-scenarios` (worker-test, wave 8, also the fixture `.gitignore` line); 13 -> wave 9. The spec now holds 17 stories, one past the Tier 4 calibration of 16: accepted, because the three added stories are test-only halves of stories that existed at approval, not new scope, and the alternative is two more predictable deaths. **Rejected:** waiting for the deaths (each costs a run, a consult and a hand-close); splitting the spec (the suite stories belong to the code they prove).
 
 <!--
 The six lines below are the cycle's confirmation artifacts (docs/cycle.md): one per stage

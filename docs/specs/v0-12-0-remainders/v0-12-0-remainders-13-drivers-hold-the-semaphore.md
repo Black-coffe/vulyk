@@ -6,8 +6,8 @@ returned:
 tier: 4
 worker: worker-code
 tracer: false
-wave: 6
-blocked_by: [v0-12-0-remainders-11, v0-12-0-remainders-09]
+wave: 9
+blocked_by: [v0-12-0-remainders-11, v0-12-0-remainders-17, v0-12-0-remainders-09]
 ---
 
 # Both drivers claim, stamp and release
