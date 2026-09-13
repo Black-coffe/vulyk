@@ -16,31 +16,40 @@ branch).
    Print the resulting `<spec-dir>/journal.md` last line, nothing else.
 
 2. **Read the round's coordinates.** `bash scripts/cycle.sh status docs/specs/<slug> --json` and
-   take `round` (N), `court` and `round_dir` - a seat's entire input (C11); it reads `brief.md` and
-   the Profile from the court itself, never an attached packet.
+   take `round` (N), `court`, `round_dir` and **`missing`** - the same list a driver's `dispatch:`
+   step reads (C3, R20): the seats the round's frozen tier requires and has no accepted report for
+   yet. This on-demand round costs exactly those seats, never a hardcoded four - a Tier 1 spec pays
+   `sonnet` alone, `lead-review` only when `review` itself is in `missing`. Resolve `top_model`
+   (`bash scripts/top-model.sh`, the alias the session brief announced) and, once here,
+   `stamp="$(date -u +%s)"` - both used below and neither ever repeated inside a seat prompt (R11).
 
-3. **Dispatch the round, one message, in parallel** - the same "independent in information, so
-   independent in wall-clock cost" reasoning that ran `lead-review` alongside the old blind gate
-   now runs it alongside three:
-   - `lead-review` at `top_model` (the alias the session brief announced; `bash scripts/top-model.sh`
-     if it scrolled away), in the **main tree**, never the court - it needs the stories. Give it the
-     same packet as before: the diff, the story/plan files it implements, pointers to `docs/wiki/`
-     notes and ADRs for the touched modules.
-   - `council-haiku`, `council-sonnet`, `council-opus`, each working in `court` with nothing else
-     attached.
-   - **Tier 4 only:** a second reviewer on the paired model (`scripts/top-model.sh --explain` names
-     it: `opus` beside a Fable gate; `fable` or `sonnet` beside an Opus gate), given the same packet
-     as `lead-review` and instructed to attack its likely blind spots (concurrency, security, data
-     migration safety). Before recording anything, fold the two verdicts into **one** `review`
-     report: the folded verdict is the **stricter of the two** - `BLOCK` if either one blocks, `PASS`
-     only if both pass. Report both sets of findings under that one report so nothing is lost; only
-     the merged `PASS`/`BLOCK` line reaches `record-seat`. `record-seat` accepts exactly one `review`
-     file per round - there is no second slot to hold a second opinion separately.
+3. **Dispatch only the seats `missing` names, one message, in parallel** - the same "independent in
+   information, so independent in wall-clock cost" reasoning that ran `lead-review` alongside the
+   old blind gate now runs it alongside whichever blind seats this tier still needs:
+   - `review` in `missing` -> `lead-review` at `top_model`, in the **main tree**, never the court -
+     it needs the stories. Give it `round_dir` and its packet: the diff, the story/plan files it
+     implements, pointers to `docs/wiki/` notes and ADRs for the touched modules.
+   - `haiku`/`sonnet`/`opus` in `missing` -> the matching `council-<seat>`, working in `court` with
+     nothing else attached - `slug`, `round` and `court` only, **never `round_dir`**: a seat that
+     echoes its own input back is tainted on the spot (R9). Skip any seat `missing` does not name.
+   - **Tier 4 only, and only when `review` is in `missing`:** also dispatch a second reviewer on the
+     paired model (`scripts/top-model.sh --explain` names it: `opus` beside a Fable gate; `fable` or
+     `sonnet` beside an Opus gate, unless the spec's own Tier 4 sentence in `plan.md` names another),
+     given the same packet as `lead-review` and instructed to attack its likely blind spots
+     (concurrency, security, data migration safety). Before recording anything, fold the two
+     verdicts into **one** `review` report: the folded verdict is the **stricter of the two** -
+     `BLOCK` if either one blocks, `PASS` only if both pass. Report both sets of findings under that
+     one report so nothing is lost; only the merged `PASS`/`BLOCK` line reaches `record-seat`.
+     `record-seat` accepts exactly one `review` file per round - there is no second slot to hold a
+     second opinion separately.
 
-4. **Record each report.** `bash scripts/cycle.sh record-seat docs/specs/<slug> <N> <haiku|sonnet|opus|review> [--model <id>] <<'EOF' ... EOF`.
-   Exit 4 (`MALFORMED`) -> re-ask that one seat once, naming the `error` field verbatim so it knows
-   the exact gap; record the second attempt either way and move on - a seat that is still malformed
-   on attempt 2 is `ABSENT` per D3/D4, and `judge` accounts for that on its own. Print each
+4. **Record each report** through a delimiter no report body can guess or contain:
+   `bash scripts/cycle.sh record-seat docs/specs/<slug> <N> <haiku|sonnet|opus|review> [--model <id>] <<'VULYK_<stamp>_<seat>_<attempt>'`
+   ... `VULYK_<stamp>_<seat>_<attempt>` - never `EOF`, and an empty report is still piped through
+   unchanged, so the attempt exists on disk. Exit 4 (`MALFORMED`) -> re-ask that one seat once,
+   naming the `error` field verbatim so it knows the exact gap, with `<attempt>` now `2` in the next
+   delimiter; record the second attempt either way and move on - a seat that is still malformed on
+   attempt 2 is `ABSENT` per D3/D4, and `judge` accounts for that on its own. Print each
    `record-seat` call's own one-line `cycle: ...` confirmation, nothing else (it does not journal
    per seat).
 

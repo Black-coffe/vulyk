@@ -9,12 +9,16 @@ Pause: "$ARGUMENTS" (first token is the spec slug; anything after it is the reas
    "no reason given" - still a pause, just an unexplained one). Print exactly what it prints: the
    `cycle: <slug> - paused: <why>` line and its JSON, nothing added.
 2. Tell the human what this does to a driver already running:
-   - **Workflow driver:** the running loop stops at its next `cycle-clerk` call. An agent already
-     in flight when you pause - a worker, a council seat, `lead-review` - finishes and its result is
-     recorded once you resume; nothing after that call runs until `/vulyk-resume`.
+   - **Workflow driver:** the running loop stops at its next `cycle-clerk` call, and whatever agent
+     is in flight when you pause finishes - but what survives differs by kind. A worker's file edits
+     are already on disk; only its `close-story` call waits for `/vulyk-resume`, so nothing is lost.
+     A council seat or `lead-review` is different: `record-seat` checks `PAUSE` first and exits 3,
+     writing nothing, so **that seat's report is discarded, not recorded on resume** - the seat is
+     re-dispatched from zero once you resume.
    - **Fallback driver** (this session): the loop's next `status --json` read will see `PAUSE` and
      stop before its next action - every mutating `cycle.sh` verb checks `PAUSE` first and exits 3
-     rather than acting.
+     rather than acting, with the same discard-and-re-dispatch consequence for an in-flight seat
+     report described above.
 3. Say plainly: **the working tree of `vulyk/<slug>` is now the human's** - edit it, inspect it,
    commit on it if needed; nothing in the hive touches it again until `/vulyk-resume <slug>` clears
    the semaphore.

@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-23
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -65,6 +65,15 @@ blocked_by: []
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `stamp` changed from an ISO timestamp to `date -u +%s` in both `vulyk-build.md` step 1 and `vulyk-review.md` step 2, resolved once per run/round and fed into the new heredoc delimiter `VULYK_<stamp>_<seat>_<attempt>`, replacing the literal `EOF` in every `record-seat` call in both files (R11).
+- `second_model` added to `vulyk-build.md` step 1's Workflow `args` and its resolution rule (opus/Fable, sonnet/Opus, plan.md override) written out there and reused by reference from `vulyk-review.md` step 3's existing second-reviewer pairing text (R12).
+- `dispatch:<seats>` (build) and the seat-dispatch step (review) now hand a blind seat only `slug`, `round`, `court` - never `round_dir`; `round_dir` plus the packet stays `lead-review`-only (R9/lead-review 10).
+- Fallback loop gains one stated rule ahead of the table: any verb's `"ok":false` stops the loop, prints `error`, and is journaled by the command itself (`03-building`) since no `cycle.sh` failure path writes `journal.md` on its own - except `open-round`'s ceiling exit 6, which now journals its own ESCALATE per R5 (verified: `cmd_close_story`, `cmd_branch`, `cmd_record_seat*`, `cmd_open_round`'s precondition exits at `scripts/cycle.sh:1078-1090,700-711,960-990,1239-1288` write no journal line; `emit`/`exit` only).
+- `build:<wave>` row: two-strike rule on a story now ends the whole loop on the second miss (mark `blocked`, append error to `## Findings`, dispatch `lead-architect`, stop) instead of "move on to the rest of the wave" - R6 withdraws story 06's in-script-retry criterion and requires the same bound both drivers share.
+- `vulyk-build.md` step 4 (wake-up) rewritten around the Workflow's returned `stop:{verb,file,error}` object (C11/R6): `stop.verb === "close-story"` applies the same blocked/`lead-architect` rule as the fallback; any other `stop` prints `error` and the journal tail; no `stop` falls through to the existing terminal-`next` reporting, `escalated` unchanged (R5 makes it reliable from either `judge` or `open-round`).
+- `vulyk-review.md` step 2-3: reads `missing` from `status --json` (already tier-scoped by `required_seats_for_tier`/`missing_required_seats`, `scripts/cycle.sh:131-154`) and dispatches only those seats; Tier 4 second reviewer now conditioned on `review` being in `missing` too (R20).
+- `vulyk-pause.md`: dropped "finishes and its result is recorded once you resume" (false per `pause_guard` in `cmd_record_seat`, `scripts/cycle.sh:966`, which exits 3 before writing anything); states a worker's edits survive (only its `close-story` call waits) but a seat/`lead-review` report is discarded and the seat is re-dispatched from zero on resume (R19/M-8, minor 28).
+- Did not touch `.claude/workflows/vulyk-cycle.js`, `scripts/cycle.sh` or `CLAUDE.md` (Non-goals); cited their behavior by the delta's R5/R6/R9/R11/R12/R20 decisions rather than current text where those files are mid-repair by concurrent stories 19-22.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
