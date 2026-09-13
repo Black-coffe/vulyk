@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-25
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -58,6 +58,12 @@ blocked_by: []
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- CHANGELOG.md intro + Added bullet rewritten for C15 tier-scaled seats (R21/delta 5), the R16 env-escalation rule quoted verbatim from the story's acceptance line, and R15's court honour-clause (history out of bounds, writes discarded by `judge`); also folded in story 17's staleness rule (only a non-paperwork commit stales a round), absent from the entry before this.
+- CHANGELOG.md driver bullet rewritten from plan delta 6's R5/R6 decisions (not from stories 22/23's diffs, which weren't read): both drivers now end on `"ok":false` except a `record-seat` exit 4 (one re-ask then ABSENT), and both cap a story at two failed `close-story` attempts before `blocked`. Drops the "identical loop" claim m-8 flagged as overstated.
+- CHANGELOG.md `### Upgrading`: drops "verified from a real pre-0.12 install" (m-8/minor 29, no run behind it); states `--upgrade` never deletes and `.claude/agents/drone-acceptance.md` needs manual removal (m-5) - confirmed that path is already absent from this tree.
+- templates/plan.md:3 now offers `<1|2|3|4>`; added one sentence to the end-of-file comment block (not a new block near line 3, per the story's map slice) stating `open-round` refuses a missing/unparsable `**Tier:**` line - satisfies M-10 without inventing a default.
+- .github/workflows/ci.yml: added one `jq -e` assertion each to the real-install and `--upgrade` steps (R22/M-11), checking `.permissions.allow` has both allow-rule strings (copied verbatim from `install.sh:279`) exactly once; no existing assertions touched, `install-smoke` job structure unchanged.
+- Stories 19-21 and 24 were still `status: todo` at write time (only 18, 22, 23 done) - CHANGELOG text is written from plan.md delta 6's decision prose as instructed, not from their diffs.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

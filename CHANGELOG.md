@@ -4,26 +4,35 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [0.12.0] - 2026-09-13
 
-Stage 05 stops being a person and becomes a council: three blind agent seats judge the
-owner's own words against the code, the loop between plan and merge runs mostly without the
-Queen, and the human moves to one stop at the start plus an override anywhere after.
+Stage 05 stops being a person and becomes a council: blind agent seats, scaled to the
+task's own tier, judge the owner's own words against the code, the loop between plan and
+merge runs mostly without the Queen, and the human moves to one stop at the start plus an
+override anywhere after.
 
 ### Added
-- **The council replaces the mandatory owner look.** Three blind seats - `council-haiku`
-  (black box: walks the *Client path* like a client, reads no source), `council-sonnet`
-  (line by line: runs the suite from `## Commands` once, then proves every `brief.md`
-  `## Asks` item with its own `run:`/`saw:`), `council-opus` (intent and edge cases: what the
-  owner meant but did not write) - each a clean-context subagent working inside a detached
-  git worktree (`.vulyk/court/<slug>/round-N/`) reduced to `brief.md`, so none of them can see
-  the hive's own stories, implementation notes or worker reports. `lead-review` sits beside
-  them unchanged, judging code rather than intent. `scripts/cycle.sh judge` - never a model -
-  computes the round verdict from the four labelled reports: GREEN needs every seat GREEN or
-  N/A (with a reason) and `lead-review` PASS; RED fires on one evidenced RED ask (a `## Asks`
-  item that fails, with a command/output or a URL) or a `lead-review` BLOCK; three ABSENT
-  seats escalate as `env`; half the asks RED escalates early as `half`. Ceiling three rounds,
-  then `## Needs a human` in plan.md and a stop. Every round's verdict, the asks judged, the
-  red count and the models used land in `memory/stats/council.jsonl` - the metric the
-  rollback decision reads.
+- **The council replaces the mandatory owner look, sized to the task's own tier (C15).**
+  Required seats: Tier 1 - `council-sonnet` alone; Tier 2 - `council-sonnet`,
+  `council-opus`, `lead-review`; Tier 3-4 - the full court, adding `council-haiku` (black
+  box: walks the *Client path* like a client, reads no source) to the other three; Tier 4
+  alone adds a second reviewer on a different model. `council-sonnet` works line by line:
+  runs the suite from `## Commands` once, then proves every `brief.md` `## Asks` item with
+  its own `run:`/`saw:`; `council-opus` judges intent and edge cases - what the owner meant
+  but did not write. Each blind seat is a clean-context subagent
+  working inside a shared, writable git worktree (`.vulyk/court/<slug>/round-N/`) whose
+  working tree holds `brief.md` alone - an honour clause with a detector, not a filesystem
+  guarantee: the court's git history is out of bounds (`git log`, `git show`, `git diff`
+  against any commit, and the deleted-file lines of `git status` are a BREACH), and any
+  writes a seat leaves behind are discarded by `judge`. `lead-review` sits beside the blind
+  seats unchanged, judging code rather than intent. `scripts/cycle.sh judge` - never a
+  model - computes the round verdict from the required seats' labelled reports: GREEN needs
+  every required seat GREEN or N/A (with a reason) and `lead-review` PASS; RED fires on one
+  evidenced RED ask (a `## Asks` item that fails, with a command/output or a URL) or a
+  `lead-review` BLOCK; every required seat ABSENT, or an ABSENT seat with nothing RED,
+  escalates as `env`; half the asks RED escalates early as `half`. Only a non-paperwork
+  commit - one that touches more than `plan.md`, `journal.md`, `council/*` or the stats
+  ledgers - stales an open round. Ceiling three rounds, then `## Needs a human` in plan.md
+  and a stop. Every round's verdict, the asks judged, the red count and the models used
+  land in `memory/stats/council.jsonl` - the metric the rollback decision reads.
   - `scripts/cycle.sh` (`status --json`, `open-round`, `record-seat`, `judge`, `escalate`,
     `reopen`, `close-story`, `briefed`, `branch`, `pause`, `resume`) is the one state machine
     both drivers below read and write; every mutating verb refuses under a `PAUSE` semaphore
@@ -34,9 +43,15 @@ Queen, and the human moves to one stop at the start plus an override anywhere af
     `cycle.sh status --json` through a Haiku `cycle-clerk` and performs whatever `next`
     names - dispatch a wave, open a round, dispatch a seat, judge, cut a repair story - with
     no verdict or prose-parsing logic of its own. Where the Workflow tool is unavailable
-    (Claude Code < 2.1.154, or Pro without the flag), `/vulyk-build` runs the identical loop
-    in the session through the same scripts. The Queen wakes twice: the final report or an
-    escalation.
+    (Claude Code < 2.1.154, or Pro without the flag), `/vulyk-build`'s session fallback
+    drives the same state machine through the same scripts, and now matches the Workflow
+    driver on the two points that used to diverge: either driver ends the run on a verb's
+    `"ok":false` result - an escalation recorded on disk, a stop surfaced rather than
+    retried - except a `record-seat` exit 4, which gets one re-ask of that seat with its
+    error verbatim before a second failure leaves it ABSENT; and either driver caps a story
+    at two failed `close-story` attempts, ending the run `blocked` on the second rather than
+    looping. A RED round routes both drivers to `repair`, never a silent fresh round. The
+    Queen wakes twice: the final report or an escalation.
   - **`/vulyk-pause <slug> ["why"]` and `/vulyk-resume <slug>`** let a human step in at any
     stage without waiting to be asked; resume always relaunches the driver fresh, never a
     cached run.
@@ -72,7 +87,7 @@ Queen, and the human moves to one stop at the start plus an override anywhere af
   one whitelist instead of four copies that could silently drift apart.
 
 ### Removed
-- `.claude/agents/drone-acceptance.md` - superseded by the three council seats.
+- `.claude/agents/drone-acceptance.md` - superseded by the council seats.
 - The mandatory owner look (stage 05) and the plan-approval stop in autonomous mode; a human
   who wants either back still has `/vulyk-pause` and `human-check.sh`, on their own
   initiative.
@@ -120,10 +135,13 @@ Queen, and the human moves to one stop at the start plus an override anywhere af
 ### Upgrading
 - `install.sh --upgrade` (or `/vulyk-update`) ships the council agents, `cycle.sh` and the
   Workflow script, adds the two `Bash(bash scripts/cycle.sh:*)` /
-  `Bash(bash scripts/journal.sh:*)` allow rules to the target's `settings.json`, and pins the
-  session via `top-model.sh --apply` - all verified from a real pre-0.12 install. Specs
-  recorded under v0.11.0 keep shipping through the acceptance-ledger fallback in
-  `ship-check.sh`; nothing is required of them.
+  `Bash(bash scripts/journal.sh:*)` allow rules to the target's `settings.json`, and pins
+  the session via `top-model.sh --apply`. **`--upgrade` never deletes a file** - it iterates
+  over the source tree, so a framework file this release drops upstream,
+  `.claude/agents/drone-acceptance.md`, survives in every upgraded hive and has to be
+  removed by hand; no removal mechanism ships with this release. Specs recorded under
+  v0.11.0 keep shipping through the acceptance-ledger fallback in `ship-check.sh`; nothing
+  is required of them.
 
 ## [0.11.0] - 2026-09-05
 

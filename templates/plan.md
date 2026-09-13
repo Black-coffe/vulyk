@@ -1,6 +1,6 @@
 # <Spec title> (plan)
 
-**Tier:** <2|3|4> · **Spec slug:** `<slug>` · **Brief:** [brief.md](brief.md)
+**Tier:** <1|2|3|4> · **Spec slug:** `<slug>` · **Brief:** [brief.md](brief.md)
 **Governed by:** <ADRs, DESIGN.md sections, wiki notes that constrain this work>
 **Depends on:** <prior specs / merged work this plan builds on, with commits if known>
 
@@ -59,6 +59,10 @@ and **Approved:** are alternatives - autonomous mode vs. the two-stop mode - eit
 stage 02. **Council:** and **Checked:** likewise close stages 04+05 together: a GREEN
 council row is enough on its own, and **Checked:** is the owner's override in either
 direction, newest timestamp wins (ADR-001 D1/D4).
+
+There is no default tier: `cycle.sh open-round` refuses to open a round when this file's
+`**Tier:** <1|2|3|4>` line above is missing or unparsable, rather than silently sizing the
+council for the largest court.
 -->
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 in autonomous mode: "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
