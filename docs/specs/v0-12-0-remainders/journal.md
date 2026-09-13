@@ -6,3 +6,4 @@
 - 2026-09-13T17:01:13Z · 03-building · story blocked: v0-12-0-remainders-01 · next: worker returned no report twice (subagent died mid-edit both times, 82-line uncommitted cycle.sh diff left behind); story 02 DONE but unclosed; lead-architect consulted, stopped for a human
 - 2026-09-13T17:14:45Z · resumed · resumed · next: status
 - 2026-09-13T17:14:57Z · 03-building · launching the workflow driver (resume) · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
+- 2026-09-13T17:27:18Z · 03-building · launching the workflow driver (relaunch after close-story by hand) · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
