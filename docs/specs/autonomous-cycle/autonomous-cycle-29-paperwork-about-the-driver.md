@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-29
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -56,6 +56,13 @@ ADR-001 no longer shows a driver shape an in-force decision forbids: D2's code b
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- D2's code block removed, replaced by one paragraph naming the canonical `.claude/workflows/vulyk-cycle.js`, its four `args`, the Tier-4 `lead-review` fold, and "every clerk result acted on per the exit-code line"; `grep -n "<<'EOF'\|schema: LAST_LINE\|council-\${seat}"` is empty.
+- D1: added `council/REOPEN` and `council/CEILING` rows (writer `reopen` for both) right after the `ROUND` row; `ROUND`'s row gained `tier=<1\|2\|3\|4>` as its sixth field (confirmed against `scripts/cycle.sh`'s `build_round`, which writes `head/pack/opened/court/ceiling/tier` in that order).
+- D2 `record-seat` precondition cell: `head in ROUND == HEAD` -> `not stale by round_is_stale` (matches `scripts/cycle.sh`'s actual helper name).
+- `## Resume`'s `args` tuple was missing `second_model`; added so it names the same four args as the new D2 paragraph.
+- `## Consequences`: "Blindness has a mechanism and a detector instead of an honour clause" -> "Blindness is an honour clause with a detector, not a filesystem guarantee (D5)" - now agrees with D5 instead of contradicting it.
+- `### Amendments (2026-09-13)` gained one new bullet (`**D1/D2**`) naming plan delta 7 and R34; the five existing amendment bullets are untouched.
+- Story 22's R14 bullet replaced by a real fetch: WebFetch on `https://code.claude.com/docs/en/workflows` (2026-09-13), quoted per shape (agent/parallel/pipeline/phase/log/meta) and per the three runtime behaviours; only `agent()` returning `null` is confirmed by the page - the parallel-thunk-throws and pipeline-stage-throws behaviours R28/R29/R32 rest on are not addressed by this reference at all, and `dispatchSeat`'s `phase: 'Round'` key inside `agent()`'s options is not a documented `agent()` option (the page shows `phase()` only as a standalone call) - both gaps are named in the CONCERNS line below since story 26 owns `vulyk-cycle.js`, not this story.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

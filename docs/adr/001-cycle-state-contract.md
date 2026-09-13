@@ -76,6 +76,9 @@ above stay as first written.
   guarantee (R15).
 - **D6** - an in-flight seat's report is discarded on `/vulyk-pause`, not recorded on
   resume; the seat is re-dispatched instead (R19).
+- **D1/D2** - D2's illustrative driver code block is replaced by a pointer to
+  `.claude/workflows/vulyk-cycle.js`; D1 gains the `council/REOPEN`/`council/CEILING` rows and
+  the `ROUND` row's `tier=` line (plan delta 7, R34).
 
 Option 1. The loop state is a small set of committed files, each with exactly one writer,
 all written by `scripts/cycle.sh`; the verdict is computed by that script from labelled
@@ -92,7 +95,9 @@ performs the one action named in `next` and nothing else.
 | `plan.md` `**Council:** <GREEN\|RED\|ESCALATE\|STALE> round <N>, <date>, at <head>, pack <fp>[ - red: 2,5]` | `cycle.sh judge` / `escalate` | appended, never replaced, one line per round - a mirror of the ledger row, human-readable | yes |
 | `plan.md` `## Needs a human` | `cycle.sh escalate` | reason (`ceiling` / `half` / `env`), one row per RED ask with its evidence across rounds, paths of the seat files | yes |
 | `plan.md` `**Checked:**` | `human-check.sh` (unchanged) | optional override: `ACCEPTED` outranks a RED/ESCALATE, `REJECTED` outranks a GREEN | yes |
-| `docs/specs/<slug>/council/round-N/ROUND` | `cycle.sh open-round` | **the open marker**: `head=<sha>` `pack=<fp>` `opened=<ts>` `court=<path>` `ceiling=<3\|6\|...>`; `mkdir` of the directory is the atomic act | yes |
+| `docs/specs/<slug>/council/round-N/ROUND` | `cycle.sh open-round` | **the open marker**: `head=<sha>` `pack=<fp>` `opened=<ts>` `court=<path>` `ceiling=<3\|6\|...>` `tier=<1\|2\|3\|4>`; `mkdir` of the directory is the atomic act | yes |
+| `docs/specs/<slug>/council/REOPEN` | `cycle.sh reopen` | one line per cleared ESCALATE round, never rewritten: `round=<N> · <ts>`; `status` reads it to tell an ESCALATE row a human already reopened from one still waiting | yes |
+| `docs/specs/<slug>/council/CEILING` | `cycle.sh reopen` | single line, the round ceiling after this reopen (`<old>+3`); `open-round` reads it in place of the default 3 | yes |
 | `docs/specs/<slug>/council/round-N/<haiku\|sonnet\|opus\|review>.md` | `cycle.sh record-seat` (stdin) | seat report verbatim under one header comment `<!-- seat: sonnet · model: <id\|alias> · round: 2 · head: … · pack: … · attempt: 1 · recorded: <ts> -->`; a rejected attempt is kept as `<seat>.attempt-K.md` | at `judge --commit` (or the STALE fold) |
 | `memory/stats/council.jsonl` | `cycle.sh judge` / `escalate` | **the close marker**, one flat row per round (schema below) | yes |
 | `docs/specs/<slug>/journal.md` | `scripts/journal.sh` only (from `cycle.sh`, `/vulyk-plan`, `/vulyk-ship`, hooks) | append-only, one line per state change: `- <ts> · <stage> · <what happened> · next: <what next>`; stage vocabulary = `state.sh` stages + `paused` | yes |
@@ -142,7 +147,7 @@ last stdout line is always one JSON object so no driver parses prose.
 | `branch <spec> [--commit]` | Briefed or Approved | creates/switches `vulyk/<slug>`, writes `**Branch:**` |
 | `close-story <story-file> [--commit]` | worker returned; every `&&`-separated segment of every `## Verification` line equals, byte for byte, a row of the hive's `CLAUDE.md` `## Commands` table (or the line is the literal `none — reviewed by lead-review`, which runs nothing), else exit 2 naming the segment | `scope-check.sh`, `## Verification` x `repeat:`, `status: done`, commit `story(<id>): <title>`; exit 4 on red verification (the driver routes to the repair path of `/vulyk-build` step 5) |
 | `open-round <spec> [--commit]` | Branch; all stories `done`/`blocked`; clean tree; `## Asks`; not paused; round count < ceiling | `mkdir round-N`, `ROUND`, opens the court, journal; at the ceiling, writes the ESCALATE row, `**Council:**` line, `## Needs a human` and the journal line itself (idempotently), then exits 6 `ESCALATE` instead |
-| `record-seat <spec> <N> <seat> [--model <id>] < report` | open round; `head` in `ROUND` == HEAD | validates the report contract (D3); writes the seat file; exit 4 `MALFORMED` (kept as `attempt-K`) when a label is missing, an ask number is uncovered, a RED lacks evidence, or the report is **tainted** - contains `docs/specs/<slug>/plan.md`, `docs/specs/<slug>/journal.md`, `docs/specs/<slug>/council/`, the same three with `docs/specs/` omitted, or a story id `<slug>-NN` (two digits, word-bounded); bare `plan.md`, `journal.md`, `council/`, another directory's `journal.md` and command-file names are not taint |
+| `record-seat <spec> <N> <seat> [--model <id>] < report` | open round; not stale by `round_is_stale` | validates the report contract (D3); writes the seat file; exit 4 `MALFORMED` (kept as `attempt-K`) when a label is missing, an ask number is uncovered, a RED lacks evidence, or the report is **tainted** - contains `docs/specs/<slug>/plan.md`, `docs/specs/<slug>/journal.md`, `docs/specs/<slug>/council/`, the same three with `docs/specs/` omitted, or a story id `<slug>-NN` (two digits, word-bounded); bare `plan.md`, `journal.md`, `council/`, another directory's `journal.md` and command-file names are not taint |
 | `judge <spec> [--commit]` | four seat files present, or a seat exhausted its two attempts (`ABSENT`) | computes the verdict (D4), row -> line -> journal, removes the court |
 | `escalate <spec> [--commit] [--reason <ceiling\|half\|env>] ["<note>"]` | a standalone verb: an open round with seats missing (court removed, no seat precondition) | records the escalation - row, `**Council:** ESCALATE`, `## Needs a human`, journal; behaves as `judge` when nothing is missing |
 | `reopen <spec> "<owner's decision>" [--commit]` | last row is ESCALATE | appends the decision verbatim to `brief.md` `## Answers`, raises `ceiling` by 3 in the next `ROUND`, journal |
@@ -166,24 +171,20 @@ verbatim"; needs `Bash(bash scripts/cycle.sh:*)` and `Bash(bash scripts/journal.
 hive's allowlist, which `install.sh` adds). A seat's report reaches `record-seat` as a
 heredoc in the clerk's prompt; the contract validation is what catches a garbled copy.
 
-```js
-export const meta = { name: 'vulyk-cycle', description: 'build → council → repair, ceiling 3',
-  phases: [{title:'Build'},{title:'Round'},{title:'Judge'},{title:'Repair'}] }
-const spec = args.spec, TOP = args.top_model            // resolved by the Queen's shell
-const clerk = (cmd) => agent(`Run exactly: bash scripts/cycle.sh ${cmd}\nReturn the last stdout line verbatim.`,
-  { agentType: 'cycle-clerk', effort: 'low', schema: LAST_LINE }).then(r => JSON.parse(r.line))
-for (;;) {
-  const st = await clerk(`status ${spec} --json`)
-  if (['green','escalated','paused','shipped'].includes(st.next)) return st
-  if (st.next.startsWith('build:'))     { /* wave workers via pipeline(), each → clerk close-story */ }
-  else if (st.next === 'open-round')    await clerk(`open-round ${spec} --commit`)
-  else if (st.next.startsWith('dispatch:')) await pipeline(st.next.slice(9).split(','),
-      seat => agent(SEAT_PROMPT[seat](st), { agentType: `council-${seat}`, model: seat === 'review' ? TOP : seat }),
-      (report, seat) => clerk(`record-seat ${spec} ${st.round} ${seat} <<'EOF'\n${report}\nEOF`))
-  else if (st.next === 'judge')         await clerk(`judge ${spec} --commit`)
-  else if (st.next === 'repair')        { /* queen-planner (model: TOP) cuts fix stories from st.red + BLOCK findings */ }
-}
-```
+The canonical driver is `.claude/workflows/vulyk-cycle.js`, launched with `args: { spec,
+top_model, second_model, stamp }` (`stamp` a per-run random value the launcher takes once,
+never derived from the clock - R31). It holds no verdict logic itself: each iteration it reads
+`status.next` and takes the one action D2's verb table above names - `build:<wave>` fans
+workers out over `pipeline()` and closes each story through `close-story`; `open-round` and
+`judge` each cross one clerk call; `dispatch:<seats>` sends the missing seats and records every
+result through `record-seat` with a per-seat random delimiter, never the literal `EOF` (R11);
+`repair` hands `st.red` and the review verdict to `queen-planner`. The `review` seat is
+`lead-review`; at Tier 4 it is dispatched twice, on `top_model` and `second_model`, and folded
+by the driver into one recorded report before `record-seat` ever sees it - the fold never
+manufactures a verdict from a blank (R28). Every clerk result is acted on per the exit-code
+line above: `ok:false` ends the run in the `stop` shape, except a `record-seat` MALFORMED
+re-asks the seat once and a second failed `close-story` for the same file ends the run naming
+the file instead of an exit code.
 
 **The fallback driver** (`/vulyk-build` when the session brief reports "Workflow: unavailable")
 runs the same `status` -> act loop with the Queen's own Bash for the verbs and the Agent tool
@@ -191,7 +192,7 @@ for seats. Same files, same verbs, same `next`; the difference is only whose con
 reports pass through. `/vulyk-status` and the SessionStart brief say which driver is active.
 
 **Resume is the disk, not the run.** `/vulyk-resume` relaunches the Workflow fresh (`args:
-{spec, top_model, stamp}` with `stamp` from the shell) and never passes `resumeFromRunId`: a
+{spec, top_model, second_model, stamp}` with `stamp` from the shell) and never passes `resumeFromRunId`: a
 cached `status` result replayed after a human touched the tree is exactly the wrong answer.
 A fresh launch costs one clerk call per already-closed step; it never re-dispatches a seat
 whose file exists.
@@ -290,7 +291,7 @@ the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen 
 - **Easier:** one implementation of the verdict, the ceiling and staleness, tested in bash
   on every push; a driver that fits on one screen; a loop that survives `/clear`, a crash and
   a hive without Workflow identically; evidence the Queen reads from files at wake, not from
-  a transcript. Blindness has a mechanism and a detector instead of an honour clause.
+  a transcript. Blindness is an honour clause with a detector, not a filesystem guarantee (D5).
 - **Harder / accepted debt:** the Workflow script is not executed in CI (bash-only runner);
   it is kept logic-free so that a `node --check` is all it needs where node exists. The clerk
   adds ~5 Haiku calls per round (each one turn, negligible). A seat's report crosses one
