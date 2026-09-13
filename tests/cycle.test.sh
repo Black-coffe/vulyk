@@ -143,6 +143,19 @@ human_row REJECTED "2026-01-01T00:00:05Z"
 git add -A && git commit -qm "record: Checked REJECTED over GREEN"
 shipc | expect "Checked REJECTED newer than a GREEN row overrides to NOT READY" "NOT READY"
 
+echo "a same-second override outranks the row it overrides (m-4): >= on ts, not >"
+council_row GREEN 4 "2026-01-01T00:00:06Z"
+git add -A && git commit -qm "council: round 4 GREEN"
+human_row REJECTED "2026-01-01T00:00:06Z"
+git add -A && git commit -qm "record: Checked REJECTED same second as GREEN"
+shipc | expect "Checked REJECTED same second as GREEN outranks it to NOT READY" "NOT READY"
+
+council_row RED 5 "2026-01-01T00:00:07Z"
+git add -A && git commit -qm "council: round 5 RED"
+human_row ACCEPTED "2026-01-01T00:00:07Z"
+git add -A && git commit -qm "record: Checked ACCEPTED same second as RED"
+shipc | expect "Checked ACCEPTED same second as RED outranks it to READY" "READY."
+
 echo "the paperwork whitelist is anchored to docs/specs/*/ (R23/m-2): a commit under src/council/ or a bare src/journal.md is never paperwork, even though it shares the names"
 mkdir -p docs/specs/anchor-demo
 cp "$SRC"/templates/plan.md docs/specs/anchor-demo/plan.md

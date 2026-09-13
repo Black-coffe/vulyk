@@ -5,8 +5,9 @@
 #          scripts/acceptance-log.sh docs/specs/oauth REJECTED "logout ask never wired up"
 #          scripts/acceptance-log.sh --check <spec-dir>       # is the newest verdict still about THIS pack?
 #
-# `drone-acceptance` judges the built software against brief.md alone - it never sees the
-# stories, so it does not know what the hive believes it finished. This script writes down
+# The pre-council blind judge this log was built for judged the built software against
+# brief.md alone - it never saw the stories, so it did not know what the hive believed it
+# finished. This script writes down
 # both accounts side by side and computes the only number worth keeping:
 #
 #   drift = the stories all say `done` and the blind gate did NOT accept.
@@ -69,7 +70,7 @@ if [ "${1:-}" = "--check" ]; then
     echo "acceptance-log: $CNAME - STALE. The newest verdict was given against a different pack"
     echo "  (recorded $WAS, now $NOW). Stories were added, removed or renamed after the gate ran,"
     echo "  so the recorded verdict - and its drift number - are about work that is not what ships."
-    echo "  Re-dispatch drone-acceptance and log again before treating this spec as accepted."
+    echo "  Run /vulyk-review to record a current council verdict before treating this spec as accepted."
   fi
   exit 0
 fi
