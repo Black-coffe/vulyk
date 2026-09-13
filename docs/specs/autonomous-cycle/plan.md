@@ -71,7 +71,8 @@ Design assumptions not decided by any input (veto here):
 
 **Wave 6**
 - `autonomous-cycle-17-stale-means-code-moved` — plan delta 2026-09-13 (4): one `round_is_stale` helper on `paperwork_only`; the cycle's own commits never stale a round (blocked_by 15)
-**Wave 7**- `autonomous-cycle-18-council-scales-with-tier` — plan delta 2026-09-13 (5), ask 13: required seats by tier (C15) - Tier 1 one Sonnet seat, Tier 2 sonnet+opus+review, Tier 3-4 the full court; routing matrix states the agent cost per tier (blocked_by 17)
+**Wave 7**
+- `autonomous-cycle-18-council-scales-with-tier` — plan delta 2026-09-13 (5), ask 13: required seats by tier (C15) - Tier 1 one Sonnet seat, Tier 2 sonnet+opus+review, Tier 3-4 the full court; routing matrix states the agent cost per tier (blocked_by 17)
 
 ## Contracts
 
