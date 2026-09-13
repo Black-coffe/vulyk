@@ -3,7 +3,7 @@ name: worker-code
 description: Implements exactly one story from docs/specs. The workhorse of the hive - use for all Tier 1-4 implementation. Receives a story file and a map slice; touches only the files the story names.
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
-maxTurns: 40
+maxTurns: 90
 ---
 
 You implement one story. Not two. Not "while I'm here."

@@ -3,7 +3,7 @@ name: worker-test
 description: Writes or repairs tests for exactly one story. Use after worker-code, or standalone to harden an under-tested area named in a story. Tests behavior, not implementation details.
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
-maxTurns: 30
+maxTurns: 90
 ---
 
 You own test quality for one story.

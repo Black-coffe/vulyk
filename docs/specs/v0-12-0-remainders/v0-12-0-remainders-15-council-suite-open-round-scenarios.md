@@ -60,3 +60,4 @@ blocked_by: [v0-12-0-remainders-05]
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
+- 2026-09-13 · two misses in run wf_ae57019b-aa9 (stamp 52574b7c6d9fc1a4), both "worker returned no report": each `worker-test` subagent made exactly 30 tool calls (transcripts agent-aa0421577cf3ce514, agent-a9315e1dcc77d089e - 159/151 events, both cut mid-read, nothing written to `tests/council.test.sh`). Not the suite runtime: neither attempt reached a suite run. Same 30-call cut is the likely cause of every earlier death (01 x2, 05 x2, 02, 07, 14 first attempts).
