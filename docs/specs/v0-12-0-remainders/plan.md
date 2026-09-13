@@ -119,7 +119,7 @@ council for the largest court.
 -->
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
 **Briefed:** via grill, Andrei, 2026-09-13
-**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
+**Branch:** vulyk/v0-12-0-remainders
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
