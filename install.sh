@@ -56,7 +56,7 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
     .claude/settings.local.json|.claude/settings.json.vulyk-bak)
                                    return 2 ;;
-    .claude/state.json|.claude/.vulyk-update-cache|.claude/vulyk-version)
+    .claude/state.json|.claude/.vulyk-update-cache|.claude/vulyk-version|.claude/vulyk-manifest)
                                    return 2 ;;
     .claude/handoff/*|memory/map/.stale|CLAUDE.local.md)
                                    return 2 ;;
@@ -73,6 +73,10 @@ copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading 
       [ "$sc" -eq 2 ] && [ "$CHECK" = "--check" ] && echo "  would skip (runtime) $f"
       continue
     fi
+    # Every path this run found shippable - copied, updated or skipped-as-existing alike -
+    # joins the manifest (ADR-005 D2), whether or not this is a dry run: --check needs the
+    # same set to print an accurate "would write ... (<n> paths)" count.
+    printf '%s\n' "$f" >> "$NEW_MANIFEST"
     if [ -e "$DEST/$f" ]; then
       if [ -n "$UPGRADE" ] && owned "$f" && ! cmp -s "$SRC/$f" "$DEST/$f"; then
         if [ "$CHECK" = "--check" ]; then echo "  would update   $f"
@@ -449,7 +453,46 @@ ensure_gitignore() {
   echo "  gitignore      added $missing VULYK runtime entries"
 }
 
+NEW_MANIFEST="$(mktemp)"
+trap 'rm -f "$NEW_MANIFEST"' EXIT
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr; do copy_tree "$tree"; done
+LC_ALL=C sort -u -o "$NEW_MANIFEST" "$NEW_MANIFEST"
+
+# Removal (ADR-005 D2), after the copy loop and before the new manifest is written: a path
+# that shipped last run, does not ship this run, and lives under OWNED is deleted outright -
+# there is nothing to compare a retired file's content against, the same rule OWNED already
+# applies to replacement. A dropout outside OWNED is an owner's own file and is only ever
+# reported, never touched. No old manifest at all means this hive predates the manifest:
+# delete nothing, just name what an OWNED tree holds that this release no longer ships.
+OLD_MANIFEST="$DEST/.claude/vulyk-manifest"
+if [ -n "$UPGRADE" ]; then
+  if [ -f "$OLD_MANIFEST" ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      grep -qxF "$f" "$NEW_MANIFEST" && continue   # still shipped this run
+      if owned "$f"; then
+        if [ "$CHECK" = "--check" ]; then
+          echo "  would remove   $f"
+        else
+          rm -f "$DEST/$f" 2>/dev/null || true
+          echo "  remove         $f"
+        fi
+      else
+        echo "  leave (yours)  $f"
+      fi
+    done < "$OLD_MANIFEST"
+  else
+    for t in $OWNED; do
+      [ -d "$DEST/$t" ] || continue
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        grep -qxF "$f" "$NEW_MANIFEST" && continue
+        echo "  unlisted (kept) $f"
+      done < <( cd "$DEST" && find "$t" -type f ! -name '.gitkeep' | LC_ALL=C sort )
+    done
+  fi
+fi
+
 ensure_gitignore
 wire_session_hook vulyk-update-check.sh
 wire_session_hook top-model-brief.sh
@@ -541,6 +584,18 @@ else
   mkdir -p "$DEST/.claude"
   printf '%s\n' "$VER" > "$DEST/.claude/vulyk-version"
   echo "  stamp          .claude/vulyk-version = $VER"
+fi
+
+# Manifest - the whole ship set of this run (ADR-005 D2), written beside the stamp for the
+# same reason: it is installer state, not shipped content, and is never gitignored (a hive
+# commits it, same as the stamp).
+MANIFEST_COUNT="$(wc -l < "$NEW_MANIFEST" | tr -d ' ')"
+if [ "$CHECK" = "--check" ]; then
+  echo "  would write    .claude/vulyk-manifest ($MANIFEST_COUNT paths)"
+else
+  mkdir -p "$DEST/.claude"
+  cp "$NEW_MANIFEST" "$DEST/.claude/vulyk-manifest"
+  echo "  write          .claude/vulyk-manifest ($MANIFEST_COUNT paths)"
 fi
 
 # Pin the target's own Queen session to the top model the plan resolves to. A resolver that

@@ -204,6 +204,78 @@ jobs:
           find "$target/docs/adr" -name '001-*.md' | grep -q . && { echo "::error::shipped vulyk's own ADR-001"; exit 1; }
           # ADR-005 K3: the DRIVER semaphore's gitignore entry ships too
           grep -qxF 'docs/specs/*/DRIVER' "$target/.gitignore" || { echo "::error::.gitignore missing docs/specs/*/DRIVER"; exit 1; }
+          # ADR-005 D4.2: the manifest exists, is sorted, names only real files, carries a
+          # load-bearing agent, and never lists installer state or the constitution.
+          test -f "$target/.claude/vulyk-manifest" || { echo "::error::vulyk-manifest not written"; exit 1; }
+          LC_ALL=C sort -c "$target/.claude/vulyk-manifest" || { echo "::error::vulyk-manifest is not LC_ALL=C sorted"; exit 1; }
+          while IFS= read -r mf; do
+            [ -n "$mf" ] || continue
+            test -f "$target/$mf" || { echo "::error::vulyk-manifest names missing file: $mf"; exit 1; }
+          done < "$target/.claude/vulyk-manifest"
+          grep -qxF ".claude/agents/worker-code.md" "$target/.claude/vulyk-manifest" || { echo "::error::vulyk-manifest missing worker-code.md"; exit 1; }
+          grep -E 'vulyk-version|vulyk-manifest|^docs/specs/|^docs/adr/0|CLAUDE' "$target/.claude/vulyk-manifest" && { echo "::error::vulyk-manifest lists installer state or the constitution"; exit 1; }
+          true
+
+      - name: --upgrade removes a retired OWNED file, --check only reports it (ADR-005 D4.3, D4.11 manifest half)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          echo dummy > "$target/.claude/agents/retired-smoke.md"
+          echo ".claude/agents/retired-smoke.md" >> "$target/.claude/vulyk-manifest"
+          LC_ALL=C sort -u -o "$target/.claude/vulyk-manifest" "$target/.claude/vulyk-manifest"
+          before_manifest="$(cat "$target/.claude/vulyk-manifest")"
+          checksum_before="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          out="$(./install.sh "$target" --upgrade --check)"
+          echo "$out" | grep -q "would remove   .claude/agents/retired-smoke.md" || { echo "::error::--check did not report would remove for the retired file"; exit 1; }
+          checksum_after="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          [ "$checksum_before" = "$checksum_after" ] || { echo "::error::--upgrade --check wrote to the target (ADR-005 D4.11)"; exit 1; }
+          [ -f "$target/.claude/agents/retired-smoke.md" ] || { echo "::error::--check deleted the retired file"; exit 1; }
+          after_manifest="$(cat "$target/.claude/vulyk-manifest")"
+          [ "$before_manifest" = "$after_manifest" ] || { echo "::error::--check changed the manifest"; exit 1; }
+          out2="$(./install.sh "$target" --upgrade)"
+          echo "$out2" | grep -q "remove         .claude/agents/retired-smoke.md" || { echo "::error::real upgrade did not report removing the retired file"; exit 1; }
+          test ! -f "$target/.claude/agents/retired-smoke.md" || { echo "::error::real upgrade did not delete the retired file"; exit 1; }
+          grep -qxF ".claude/agents/retired-smoke.md" "$target/.claude/vulyk-manifest" && { echo "::error::real upgrade left the retired file in the manifest"; exit 1; }
+          true
+
+      - name: --upgrade never removes a file outside OWNED, only reports it (ADR-005 D4.4)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          echo dummy > "$target/memory/retired-smoke.md"
+          echo "memory/retired-smoke.md" >> "$target/.claude/vulyk-manifest"
+          LC_ALL=C sort -u -o "$target/.claude/vulyk-manifest" "$target/.claude/vulyk-manifest"
+          out="$(./install.sh "$target" --upgrade)"
+          test -f "$target/memory/retired-smoke.md" || { echo "::error::--upgrade deleted a file outside OWNED"; exit 1; }
+          echo "$out" | grep -Ei 'remove.*retired-smoke\.md$' | grep -v 'leave (yours)' && { echo "::error::--upgrade printed a remove line for a file outside OWNED"; exit 1; }
+          echo "$out" | grep -q "leave (yours)  memory/retired-smoke.md" || { echo "::error::--upgrade did not report leave (yours) for the dropout"; exit 1; }
+          grep -qxF "memory/retired-smoke.md" "$target/.claude/vulyk-manifest" && { echo "::error::the dropout was left in the manifest"; exit 1; }
+          true
+
+      - name: --upgrade never lists or removes an owner's own file (ADR-005 D4.5)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          echo mine > "$target/.claude/agents/mine.md"
+          before="$(md5sum "$target/.claude/agents/mine.md")"
+          ./install.sh "$target" --upgrade >/dev/null
+          after="$(md5sum "$target/.claude/agents/mine.md")"
+          [ "$before" = "$after" ] || { echo "::error::--upgrade touched an owner's own file"; exit 1; }
+          grep -qxF ".claude/agents/mine.md" "$target/.claude/vulyk-manifest" && { echo "::error::an owner's own file was listed in the manifest"; exit 1; }
+          true
+
+      - name: --upgrade with no manifest yet keeps every file and reports it, then writes the manifest (ADR-005 D4.6)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          rm -f "$target/.claude/vulyk-manifest"
+          echo stale > "$target/.claude/agents/stale-smoke.md"
+          out="$(./install.sh "$target" --upgrade)"
+          echo "$out" | grep -q "unlisted (kept) .claude/agents/stale-smoke.md" || { echo "::error::--upgrade with no manifest did not report unlisted (kept)"; exit 1; }
+          test -f "$target/.claude/agents/stale-smoke.md" || { echo "::error::--upgrade with no manifest deleted a file"; exit 1; }
+          test -f "$target/.claude/vulyk-manifest" || { echo "::error::--upgrade with no manifest did not write one"; exit 1; }
+          grep -qxF ".claude/agents/stale-smoke.md" "$target/.claude/vulyk-manifest" && { echo "::error::the unlisted file was written into the new manifest"; exit 1; }
+          true
 
       - name: --upgrade into the same target ships no runtime artifact either
         run: |
