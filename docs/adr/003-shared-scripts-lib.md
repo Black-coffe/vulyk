@@ -1,6 +1,6 @@
 # ADR-003: Shared cycle helpers live in scripts/lib.sh, not per-script copies
 
-- Status: proposed
+- Status: accepted (2026-09-13, owner: Andrei)
 - Date: 2026-09-13
 - Spec: docs/specs/autonomous-cycle (v0.12.0)
 

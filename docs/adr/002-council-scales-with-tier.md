@@ -1,6 +1,6 @@
 # ADR-002: The council scales with the tier, never to zero
 
-- Status: proposed
+- Status: accepted (2026-09-13, owner: Andrei)
 - Date: 2026-09-13
 - Spec: docs/specs/autonomous-cycle (v0.12.0)
 

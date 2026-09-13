@@ -1,6 +1,6 @@
 # ADR-004: Driver mutual exclusion via a DRIVER semaphore (decided, not built)
 
-- Status: proposed
+- Status: accepted (2026-09-13, owner: Andrei)
 - Date: 2026-09-13
 - Spec: docs/specs/autonomous-cycle (v0.12.0)
 

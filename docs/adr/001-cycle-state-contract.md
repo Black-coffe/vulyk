@@ -1,6 +1,6 @@
 # ADR-001: The cycle's state contract - one truth on disk, two thin drivers
 
-- Status: proposed
+- Status: accepted (2026-09-13, owner: Andrei)
 - Date: 2026-09-12
 - Spec: docs/specs/autonomous-cycle (v0.12.0)
 
