@@ -1657,4 +1657,231 @@ printf '%s' "$row" | grep -qF '"opus":"ABSENT"' && echo "  ok    STALE row: opus
 [ -d docs/specs/stalenr1/council/round-2 ] && echo "  ok    round 2 opened (the fold path, not an in-place re-stamp)" \
   || { echo "::error::round-2 missing - the has_seat=0 re-stamp path fired instead of the fold"; fail=1; }
 
+# ============================================================================================
+# Story 14: one scenario per story 01 criterion (LR19, LR21/r2m1, LR25, m-4, m-10, N-m7)
+# ============================================================================================
+
+echo "judge: attempts counts every stored file per seat - a re-ask counts 2, not 1 (LR19, cmd_judge)"
+mk_open_spec lr19a 2
+set_tier lr19a 1
+rd19a="$(mk_open_round lr19a 1)"
+write_seat "$rd19a" sonnet GG
+cp "$rd19a/sonnet.md" "$rd19a/sonnet.attempt-1.md"   # a re-asked seat: attempt-1 + the final .md both on disk
+out="$(council judge docs/specs/lr19a)"; ex=$?
+[ "$ex" -eq 0 ] || { echo "::error::lr19a judge: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"lr19a"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"attempts":2' && echo "  ok    attempts:2 for one seat's .md + .attempt-1.md" \
+  || { echo "::error::row: $row"; fail=1; }
+
+echo "escalate: attempts counts a re-asked seat's files too, across the seats it does see (LR19, write_escalate_row_for_round)"
+mk_open_spec lr19b 2
+set_tier lr19b 3
+rd19b="$(mk_open_round lr19b 1)"
+write_seat "$rd19b" haiku GG
+cp "$rd19b/haiku.md" "$rd19b/haiku.attempt-1.md"     # haiku re-asked: 2 files
+write_seat "$rd19b" sonnet GG                         # sonnet: 1 file
+write_seat "$rd19b" opus GG                           # opus: 1 file
+# review (required at tier 3) never dispatched -> escalate has a real missing seat
+out="$(council escalate docs/specs/lr19b 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] || { echo "::error::lr19b escalate: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"lr19b"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"attempts":4' && echo "  ok    attempts:4 (haiku 2 + sonnet 1 + opus 1 + review 0)" \
+  || { echo "::error::row: $row"; fail=1; }
+
+echo "open-round: the STALE fold's attempts also counts a re-asked seat's attempt-1 file (LR19, write_stale_row)"
+mk_open_spec lr19c 2
+set_tier lr19c 2
+council open-round docs/specs/lr19c --commit >/dev/null
+rd19c="docs/specs/lr19c/council/round-1"
+write_seat "$rd19c" sonnet GG
+cp "$rd19c/sonnet.md" "$rd19c/sonnet.attempt-1.md"
+echo "code change" > lr19c-code.txt
+git add -A && git commit -qm "real code change on lr19c round 1" >/dev/null
+council open-round docs/specs/lr19c --commit >/dev/null
+row="$(grep '"spec":"lr19c"' memory/stats/council.jsonl | grep '"round":1,' | tail -1)"
+printf '%s' "$row" | grep -qF '"attempts":2' && echo "  ok    STALE row attempts:2 (sonnet .md + .attempt-1.md)" \
+  || { echo "::error::row: $row"; fail=1; }
+
+echo "judge: round-number match is exact - a closed round 10's row never satisfies round 1 (LR21/r2m1)"
+mk_open_spec lr21a 2
+set_tier lr21a 1
+printf '{"ts":"2020-01-01T00:00:00Z","spec":"lr21a","round":10,"verdict":"ESCALATE","head":"aaaaaaa","pack":"demo-pack","asks":2,"red":[],"red_unevidenced":[],"na":0,"review":"","haiku":"","haiku_model":"unknown","sonnet":"","sonnet_model":"unknown","opus":"","opus_model":"unknown","attempts":0,"escalate":"ceiling","note":""}\n' >> memory/stats/council.jsonl
+rd21a="$(mk_open_round lr21a 1)"
+write_seat "$rd21a" sonnet GG
+out="$(council status docs/specs/lr21a --json)"
+printf '%s' "$out" | jq -e '.open == true and .round == 1' >/dev/null 2>&1 && echo "  ok    status --json: round 1 reported open despite a round-10 row on record" \
+  || { echo "::error::status: $out"; fail=1; }
+out="$(council judge docs/specs/lr21a)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"green"' && echo "  ok    judge round 1 -> green, not short-circuited by round 10's row" \
+  || { echo "::error::lr21a judge: exit=$ex out=$out"; fail=1; }
+n_round1_rows="$(grep -c '"spec":"lr21a".*"round":1,' memory/stats/council.jsonl)"
+[ "$n_round1_rows" -eq 1 ] && echo "  ok    exactly one round-1 row was written (round 10's row did not block it)" \
+  || { echo "::error::round-1 row count: $n_round1_rows"; fail=1; }
+
+echo "judge: **Council:** replaces the template placeholder in place, before **Shipped:**, not at file EOF (LR25/C7)"
+mk_open_spec lr25a 2
+set_tier lr25a 1
+rd25a="$(mk_open_round lr25a 1)"
+write_seat "$rd25a" sonnet GGG
+council judge docs/specs/lr25a >/dev/null
+cln1="$(grep -n '^\*\*Council:\*\*' docs/specs/lr25a/plan.md | tail -1 | cut -d: -f1)"
+shln1="$(grep -n '^\*\*Shipped:\*\*' docs/specs/lr25a/plan.md | head -1 | cut -d: -f1)"
+[ -n "$cln1" ] && [ -n "$shln1" ] && [ "$cln1" -lt "$shln1" ] && echo "  ok    round 1's Council line sits before Shipped, not appended after it" \
+  || { echo "::error::plan.md order: council@$cln1 shipped@$shln1"; fail=1; }
+before_ct="$(grep -c '^\*\*Council:\*\*' docs/specs/lr25a/plan.md)"
+council judge docs/specs/lr25a >/dev/null
+after_ct="$(grep -c '^\*\*Council:\*\*' docs/specs/lr25a/plan.md)"
+[ "$before_ct" -eq "$after_ct" ] && echo "  ok    a second judge on the same round adds no new Council line (idempotent)" \
+  || { echo "::error::before=$before_ct after=$after_ct"; fail=1; }
+
+echo "judge: with a prior round's Council line already on record, the next round's line inserts right after it, not at EOF (LR25/C7)"
+mk_open_spec lr25b 2
+set_tier lr25b 1
+sed -i 's/^\*\*Council:\*\* <.*/**Council:** GREEN round 1, 2020-01-01, at 1234567, pack demo-pack/' docs/specs/lr25b/plan.md
+git add -A && git commit -qm "lr25b: seed a round-1 Council line" >/dev/null
+rd25b="$(mk_open_round lr25b 2)"
+write_seat "$rd25b" sonnet GGG
+council judge docs/specs/lr25b >/dev/null
+shln2="$(grep -n '^\*\*Shipped:\*\*' docs/specs/lr25b/plan.md | head -1 | cut -d: -f1)"
+newest_cln2="$(grep -n '^\*\*Council:\*\*' docs/specs/lr25b/plan.md | tail -1 | cut -d: -f1)"
+[ -n "$newest_cln2" ] && [ -n "$shln2" ] && [ "$newest_cln2" -lt "$shln2" ] && echo "  ok    round 2's Council line inserts before Shipped, right after round 1's" \
+  || { echo "::error::council lines vs shipped@$shln2: newest@$newest_cln2"; fail=1; }
+grep -A1 -F '**Council:** GREEN round 1' docs/specs/lr25b/plan.md | tail -1 | grep -qF 'round 2' \
+  && echo "  ok    round 2's line sits directly after round 1's line, not at file EOF" \
+  || { echo "::error::plan.md: $(cat docs/specs/lr25b/plan.md)"; fail=1; }
+marker_fn="$(awk '/^marker\(\)/{flag=1} flag{print} flag && /^}/{exit}' scripts/cycle.sh)"
+eval "$marker_fn"
+marker_val="$(marker docs/specs/lr25b/plan.md Council)"
+printf '%s' "$marker_val" | grep -qF 'round 2' && echo "  ok    marker \"\$PLAN\" Council returns the newest (round 2) line" \
+  || { echo "::error::marker returned: $marker_val"; fail=1; }
+
+echo "judge: a human.jsonl REJECTED row timestamped the same second as ROUND.opened still overrides (m-4, >= not >)"
+mk_open_spec m4a 2
+set_tier m4a 1
+rd4a="$(mk_open_round m4a 1)"
+opened_ts="$(sed -n 's/^opened=//p' "$rd4a/ROUND")"
+write_seat "$rd4a" sonnet GG
+printf '{"ts":"%s","spec":"m4a","verdict":"REJECTED","by":"Test Owner","head":"%s","pack":"demo-pack","note":"same-second override"}\n' \
+  "$opened_ts" "$HEAD7" >> memory/stats/human.jsonl
+out="$(council judge docs/specs/m4a)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && echo "  ok    a same-second REJECTED still overrides an all-GREEN round" \
+  || { echo "::error::m4a judge: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"m4a"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"verdict":"RED"' && echo "  ok    row verdict RED (override wins, not the round's own GREEN)" \
+  || { echo "::error::row: $row"; fail=1; }
+
+echo "council.jsonl: each ledger row writer does exactly one printf ... >> per row - structural proof, no partial-write path (m-10)"
+sites="$(grep -c '>> memory/stats/council.jsonl' scripts/cycle.sh)"
+[ "$sites" -eq 3 ] && echo "  ok    exactly 3 append sites (cmd_judge, write_stale_row, write_escalate_row_for_round), one printf each" \
+  || { echo "::error::found $sites append sites to council.jsonl, expected 3"; fail=1; }
+
+echo "escalate: a note carrying a token-shaped string lands masked via redact_note - raw string never reaches the ledger or plan.md (N-m7)"
+mk_open_spec nm7a 2
+set_tier nm7a 1
+mk_open_round nm7a 1 >/dev/null   # sonnet (the only required seat at tier 1) never dispatched
+secret="sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+out="$(council escalate docs/specs/nm7a --reason ceiling "leaked token $secret" 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] && echo "  ok    escalate with a token-shaped note -> exit 6" || { echo "::error::exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"nm7a"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF "$secret" && { echo "::error::raw token leaked into council.jsonl: $row"; fail=1; } \
+  || echo "  ok    raw token absent from council.jsonl"
+printf '%s' "$row" | grep -qF '[VULYK:REDACTED]' && echo "  ok    row note masked by redact.sh" || { echo "::error::row not masked: $row"; fail=1; }
+grep -qF "$secret" docs/specs/nm7a/plan.md && { echo "::error::raw token leaked into plan.md"; fail=1; } \
+  || echo "  ok    raw token absent from plan.md"
+grep -qF '[VULYK:REDACTED]' docs/specs/nm7a/plan.md && echo "  ok    plan.md's ## Needs a human note is masked too" \
+  || { echo "::error::plan.md: $(cat docs/specs/nm7a/plan.md)"; fail=1; }
+
+# --- regression proof: the same six checks run against 3e200bb's cycle.sh (no working-tree ---
+# checkout/stash - a second fixture copy per story 14's own instruction) and against the
+# branch's own scripts/cycle.sh, so ## Implementation notes can quote observed FAIL/ok labels.
+# These probes never touch $fail - the expected outcome differs by version on purpose.
+
+echo "=== regression proof: story 14's six checks replayed against 3e200bb's cycle.sh vs. the branch's ==="
+OLDCYCLE="$(mktemp)"
+git -C "$SRC" show 3e200bb:scripts/cycle.sh > "$OLDCYCLE"
+
+probe_lr19() {
+  mk_open_spec plr19 2; set_tier plr19 1 >/dev/null
+  local rd; rd="$(mk_open_round plr19 1)"
+  write_seat "$rd" sonnet GG
+  cp "$rd/sonnet.md" "$rd/sonnet.attempt-1.md"
+  council judge docs/specs/plr19 >/dev/null 2>&1
+  local row; row="$(grep '"spec":"plr19"' memory/stats/council.jsonl | tail -1)"
+  printf '%s' "$row" | grep -qF '"attempts":2' && echo ok || echo FAIL
+}
+probe_lr21() {
+  mk_open_spec plr21 2; set_tier plr21 1 >/dev/null
+  printf '{"ts":"2020-01-01T00:00:00Z","spec":"plr21","round":10,"verdict":"ESCALATE","head":"aaaaaaa","pack":"demo-pack","asks":2,"red":[],"red_unevidenced":[],"na":0,"review":"","haiku":"","haiku_model":"unknown","sonnet":"","sonnet_model":"unknown","opus":"","opus_model":"unknown","attempts":0,"escalate":"ceiling","note":""}\n' >> memory/stats/council.jsonl
+  local rd; rd="$(mk_open_round plr21 1)"
+  write_seat "$rd" sonnet GG
+  council judge docs/specs/plr21 >/dev/null 2>&1
+  local n; n="$(grep -c '"spec":"plr21".*"round":1,' memory/stats/council.jsonl)"
+  [ "$n" -eq 1 ] && echo ok || echo FAIL
+}
+probe_lr25() {
+  mk_open_spec plr25 2; set_tier plr25 1 >/dev/null
+  local rd; rd="$(mk_open_round plr25 1)"
+  write_seat "$rd" sonnet GGG
+  council judge docs/specs/plr25 >/dev/null 2>&1
+  local cln shln
+  cln="$(grep -n '^\*\*Council:\*\*' docs/specs/plr25/plan.md | tail -1 | cut -d: -f1)"
+  shln="$(grep -n '^\*\*Shipped:\*\*' docs/specs/plr25/plan.md | head -1 | cut -d: -f1)"
+  [ -n "$cln" ] && [ -n "$shln" ] && [ "$cln" -lt "$shln" ] && echo ok || echo FAIL
+}
+probe_m4() {
+  mk_open_spec pm4 2; set_tier pm4 1 >/dev/null
+  local rd; rd="$(mk_open_round pm4 1)"
+  local opened; opened="$(sed -n 's/^opened=//p' "$rd/ROUND")"
+  write_seat "$rd" sonnet GG
+  printf '{"ts":"%s","spec":"pm4","verdict":"REJECTED","by":"t","head":"%s","pack":"demo-pack","note":"x"}\n' "$opened" "$HEAD7" >> memory/stats/human.jsonl
+  local out; out="$(council judge docs/specs/pm4 2>&1)"
+  printf '%s' "$out" | grep -qF '"next":"repair"' && echo ok || echo FAIL
+}
+probe_m10() {
+  local sites; sites="$(grep -c '>> memory/stats/council.jsonl' scripts/cycle.sh)"
+  [ "$sites" -eq 3 ] && echo ok || echo FAIL
+}
+probe_nm7() {
+  mk_open_spec pnm7 2; set_tier pnm7 1 >/dev/null
+  mk_open_round pnm7 1 >/dev/null
+  local secret="sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+  council escalate docs/specs/pnm7 --reason ceiling "leaked token $secret" >/dev/null 2>&1
+  local row; row="$(grep '"spec":"pnm7"' memory/stats/council.jsonl | tail -1)"
+  if printf '%s' "$row" | grep -qF "$secret"; then echo FAIL
+  else printf '%s' "$row" | grep -qF '[VULYK:REDACTED]' && echo ok || echo FAIL
+  fi
+}
+
+run_wall_probes() { # run_wall_probes <label> <cycle.sh-path> - a scratch hive with the given
+  # cycle.sh swapped in, reusing this suite's own mk_spec/mk_round/write_seat/council helpers
+  # (they only touch $T/$HEAD7/cwd) by rebinding those two globals for the duration.
+  local wlabel="$1" cyclesrc="$2" wt
+  wt="$(mktemp -d)"
+  local save_t="$T" save_head7="$HEAD7" save_pwd="$PWD"
+  T="$wt"
+  cd "$wt" || { echo "::error::wall probe [$wlabel]: cannot cd to $wt"; fail=1; return; }
+  git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
+  mkdir -p scripts memory/stats docs/specs .claude
+  cp "$SRC"/scripts/lib.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh scripts/
+  cp "$cyclesrc" scripts/cycle.sh
+  printf '.vulyk/\ndocs/specs/*/PAUSE\n' > .gitignore
+  git add -A && git commit -qm init >/dev/null
+  HEAD7="$(git rev-parse --short HEAD)"
+
+  echo "  [$wlabel] LR19 attempts (cmd_judge):        $(probe_lr19)"
+  echo "  [$wlabel] LR21/r2m1 round-number match:      $(probe_lr21)"
+  echo "  [$wlabel] LR25/C7 Council line placement:    $(probe_lr25)"
+  echo "  [$wlabel] m-4 same-second override:          $(probe_m4)"
+  echo "  [$wlabel] m-10 atomic ledger append:         $(probe_m10)"
+  echo "  [$wlabel] N-m7 note through redact:          $(probe_nm7)"
+
+  cd "$save_pwd" || true
+  T="$save_t"; HEAD7="$save_head7"
+  rm -rf "$wt"
+}
+
+run_wall_probes "3e200bb" "$OLDCYCLE"
+run_wall_probes "branch"  "$SRC/scripts/cycle.sh"
+rm -f "$OLDCYCLE"
+
 exit $fail

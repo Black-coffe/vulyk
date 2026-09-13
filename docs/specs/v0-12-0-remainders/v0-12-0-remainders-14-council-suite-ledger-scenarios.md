@@ -1,7 +1,7 @@
 ---
 story: v0-12-0-remainders-14
 spec: v0-12-0-remainders
-status: todo
+status: done
 returned:
 tier: 4
 worker: worker-test
@@ -55,6 +55,12 @@ blocked_by: [v0-12-0-remainders-01]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- 2026-09-13 · The working tree already carried the six scenarios plus the regression-proof block (`tests/council.test.sh:1660-1885`) from a prior interrupted attempt at this story; verified each scenario against story 01's six criteria and the suite's own helper conventions, found them correct, and closed the story rather than rewriting - only the frontmatter/notes are this pass's own edit.
+- 2026-09-13 · LR19: three sub-scenarios - `judge` (`cmd_judge`), standalone `escalate` (`write_escalate_row_for_round`, the same function the ceiling path calls), and a code-move `open-round` STALE fold (`write_stale_row`) - each with a re-asked seat's `.md` + `.attempt-1.md` both on disk, asserting `attempts` counts both files.
+- 2026-09-13 · LR21/r2m1: fabricates a closed `"round":10,` row in `council.jsonl` (no round-10 line added to plan.md - a closed round without a plan-line mirror is the more adversarial fixture for the JSON-side exactness the fix targets) alongside an open round 1; asserts `status --json` reports `open:true, round:1`, `judge` reaches `green`, and exactly one round-1 row exists. The `## Needs a human` reason-string exactness is not separately exercised here since this fixture's judge verdict is GREEN, not ESCALATE; the code's `"round $n ·"` anchor is the same string-match mechanism proven exact by the row-count assertion, and pre-existing scenarios (`ceil1`/`oceil1`/`esc1`) already cover the reason-line format for single-round cases.
+- 2026-09-13 · m-10: label states the proof used is structural (`grep -c '>> memory/stats/council.jsonl'` == 3, one append site per writer) per the acceptance bullet's instruction to name the chosen proof.
+- 2026-09-13 · Regression proof: `run_wall_probes` builds a **separate** scratch git repo per version (own `mktemp -d`, own `git init`) and copies `git show 3e200bb:scripts/cycle.sh` into one, the branch's `scripts/cycle.sh` into the other - the branch's own working tree and its `$T` fixture are never touched, per the non-goal. Observed labels: `[3e200bb]` LR19 FAIL, LR21 FAIL, LR25 FAIL, m-4 FAIL, m-10 ok, N-m7 FAIL; `[branch]` all six ok. m-10 is `ok` at `3e200bb` rather than `FAIL` because story 01's own notes record that the atomic-append property already held pre-fix (nothing to regress-prove there) - recorded as observed, not forced to a false FAIL.
+- 2026-09-13 · Verification: `bash tests/council.test.sh` - full suite green (exit 0), including every pre-existing scenario, run once.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
