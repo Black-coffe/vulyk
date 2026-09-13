@@ -28,6 +28,20 @@ cp "$SRC"/scripts/lib.sh "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC
 # Mirrors the real .gitignore (D1: neither is ever committed) - without it, open-round's
 # "clean tree" precondition would trip on its own court worktree and PAUSE files.
 printf '.vulyk/\ndocs/specs/*/PAUSE\n' > .gitignore
+# A minimal CLAUDE.md `## Commands` table (R11/C-4, autonomous-cycle-21): close-story now
+# refuses a verification command that is not a literal cell of this table, so every fixture
+# below that calls close-story must have its command listed here first.
+cat > CLAUDE.md <<'EOF'
+# Fixture hive
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Close-story fixture (flag file) | `test -f docs/specs/cstory1/flag.txt` |
+| Fixture: always fails | `false` |
+| Fixture: always succeeds | `true` |
+EOF
 git add -A && git commit -qm init >/dev/null
 HEAD7="$(git rev-parse --short HEAD)"
 council() { bash scripts/cycle.sh "$@"; }
@@ -576,6 +590,52 @@ git log -1 --format=%s | grep -qF 'vulyk(branch2): branch vulyk/branch2' && echo
   || { echo "::error::$(git log -1 --format=%s)"; fail=1; }
 git checkout -q main
 
+# --- git failures are never swallowed into a false success (R17/M-6) -------------------------
+
+echo "branch: checkout fails (branch already checked out in another worktree) -> exit 2, no **Branch:** line (R17/M-6)"
+mk_spec branchfail1 1
+council briefed docs/specs/branchfail1 >/dev/null
+git branch vulyk/branchfail1 >/dev/null
+git worktree add -q "$T-wt" vulyk/branchfail1 >/dev/null 2>&1
+out="$(council branch docs/specs/branchfail1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'checkout' && echo "  ok    checkout failure -> exit 2, error names checkout" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -qF '**Branch:** vulyk/branchfail1' docs/specs/branchfail1/plan.md && { echo "::error::a Branch line was written despite the failed checkout"; fail=1; } \
+  || echo "  ok    no **Branch:** line was written (the template placeholder is untouched)"
+git worktree remove --force "$T-wt" >/dev/null 2>&1
+git branch -D vulyk/branchfail1 >/dev/null 2>&1
+
+echo "git failures: a --commit whose git commit fails (index.lock present) -> exit 2 naming git commit, paperwork stays on disk, re-run after unlocking commits it (R17/M-6)"
+mk_spec lockfail1 1
+touch .git/index.lock
+out="$(council briefed docs/specs/lockfail1 --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'git commit' && echo "  ok    locked index -> exit 2, error names git commit" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -qE '^\*\*Briefed:\*\* via grill,' docs/specs/lockfail1/plan.md && echo "  ok    the Briefed line is still on disk, uncommitted" \
+  || { echo "::error::plan.md: $(cat docs/specs/lockfail1/plan.md)"; fail=1; }
+[ -n "$(git status --porcelain -- docs/specs/lockfail1)" ] && echo "  ok    the tree is dirty (paperwork not committed)" \
+  || { echo "::error::tree unexpectedly clean"; fail=1; }
+rm -f .git/index.lock
+out="$(council briefed docs/specs/lockfail1 --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    re-run after unlocking succeeds" || { echo "::error::exit=$ex out=$out"; fail=1; }
+git log -1 --format=%s | grep -qF 'vulyk(lockfail1): briefed' && echo "  ok    the re-run committed the paperwork" \
+  || { echo "::error::$(git log -1 --format=%s)"; fail=1; }
+
+echo "open-round: leaves no ROUND file when git worktree add fails (R17/M-6) - ROUND is written last"
+mk_open_spec wtfail1 2
+set_tier wtfail1 3
+# clean_court() rm -rf's .vulyk/court/<slug>/ before every attempt, so a file planted there
+# directly would just be swept away - plant the blocker one level up, at .vulyk/court itself
+# (a plain file instead of a directory), so mkdir -p (then worktree add) fails underneath it.
+mkdir -p .vulyk
+touch .vulyk/court
+out="$(council open-round docs/specs/wtfail1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'worktree' && echo "  ok    worktree add failure -> exit 2" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -d docs/specs/wtfail1/council/round-1 ] && echo "  ok    no round-1 directory (and no ROUND file) was left behind" \
+  || { echo "::error::round-1 exists despite the worktree failure: $(ls docs/specs/wtfail1/council/round-1 2>&1)"; fail=1; }
+rm -f .vulyk/court
+
 # --- record-seat: preconditions (open round, HEAD match) -------------------------------------
 
 echo "record-seat: no open round -> exit 2"
@@ -978,6 +1038,125 @@ echo "close-story: exit 2 on an already-done story"
 out="$(council close-story docs/specs/cstory1/cstory1-01-first.md 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && echo "  ok    already done -> exit 2" || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+# --- close-story: the ## Commands gate and one-line-at-a-time execution (R11/R18/C-4/M-3) -----
+
+echo "close-story: a verification command not in CLAUDE.md's ## Commands -> exit 2, names the segment (R11/C-4)"
+mkdir -p docs/specs/cstory3
+cat > docs/specs/cstory3/cstory3-01-first.md <<'EOF'
+---
+story: cstory3-01
+spec: cstory3
+status: todo
+wave: 1
+---
+# Close-story disallowed-command fixture
+
+## Verification
+`echo not-allowed-anywhere`
+EOF
+git add -A && git commit -qm "spec(cstory3): fixture" >/dev/null
+out="$(council close-story docs/specs/cstory3/cstory3-01-first.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'verification not in ## Commands: echo not-allowed-anywhere' \
+  && echo "  ok    disallowed command -> exit 2, names it" || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -q '^status: todo' docs/specs/cstory3/cstory3-01-first.md && echo "  ok    status stays todo (never executed)" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstory3/cstory3-01-first.md)"; fail=1; }
+
+echo "close-story: an &&-joined line passes when every segment is its own ## Commands cell"
+mkdir -p docs/specs/cstory4
+cat > docs/specs/cstory4/cstory4-01-first.md <<'EOF'
+---
+story: cstory4-01
+spec: cstory4
+status: todo
+wave: 1
+---
+# Close-story &&-segment fixture
+
+## Verification
+`true && true`
+EOF
+git add -A && git commit -qm "spec(cstory4): fixture" >/dev/null
+out="$(council close-story docs/specs/cstory4/cstory4-01-first.md --commit)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    both && segments matched ## Commands, ran, exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "close-story: a multi-command block runs one line at a time - false before true -> exit 4 naming the failing line (R18/M-3)"
+mkdir -p docs/specs/cstory2
+cat > docs/specs/cstory2/cstory2-01-first.md <<'EOF'
+---
+story: cstory2-01
+spec: cstory2
+status: todo
+wave: 1
+---
+# Close-story multi-line fixture
+
+## Verification
+`false`
+`true`
+EOF
+git add -A && git commit -qm "spec(cstory2): fixture" >/dev/null
+out="$(council close-story docs/specs/cstory2/cstory2-01-first.md 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF '"error":"false"' && echo "  ok    the first (failing) line is named, exit 4" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -q '^status: todo' docs/specs/cstory2/cstory2-01-first.md && echo "  ok    status stays todo" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstory2/cstory2-01-first.md)"; fail=1; }
+
+echo "close-story: the literal 'none - reviewed by lead-review' runs nothing, but scope-check still runs"
+mkdir -p docs/specs/cstory5
+cat > docs/specs/cstory5/cstory5-01-first.md <<MDEOF
+---
+story: cstory5-01
+spec: cstory5
+status: todo
+wave: 1
+---
+# Close-story none fixture
+
+## Files
+- docs/specs/cstory5/cstory5-01-first.md
+
+## Verification
+\`none — reviewed by lead-review\`
+MDEOF
+git add -A && git commit -qm "spec(cstory5): fixture" >/dev/null
+out="$(council close-story docs/specs/cstory5/cstory5-01-first.md --commit)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    literal none runs nothing, exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -q '^status: done' docs/specs/cstory5/cstory5-01-first.md && echo "  ok    status becomes done" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstory5/cstory5-01-first.md)"; fail=1; }
+grep -qF '"story":"cstory5-01-first"' memory/stats/scope.jsonl && echo "  ok    scope-check.sh still ran for the none story" \
+  || { echo "::error::scope.jsonl missing cstory5 entry"; fail=1; }
+
+echo "close-story --commit: stages memory/stats/scope.jsonl, and open-round right after needs no intervening git add -A (R4/C-3(b))"
+mk_open_spec cstory6 1
+set_tier cstory6 1
+cat > docs/specs/cstory6/cstory6-02-second.md <<'EOF'
+---
+story: cstory6-02
+spec: cstory6
+status: todo
+wave: 1
+---
+# Close-story scope.jsonl commit fixture
+
+## Files
+- docs/specs/cstory6/cstory6-02-second.md
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "cstory6: second story fixture" >/dev/null
+out="$(council close-story docs/specs/cstory6/cstory6-02-second.md --commit)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    close-story --commit exits 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+git show --name-only --format= HEAD | grep -qF 'memory/stats/scope.jsonl' && echo "  ok    scope.jsonl rode in the story's own commit" \
+  || { echo "::error::commit files: $(git show --name-only --format= HEAD)"; fail=1; }
+[ -z "$(git status --porcelain)" ] && echo "  ok    tree is clean after close-story --commit (no lingering scope.jsonl)" \
+  || { echo "::error::tree dirty: $(git status --porcelain)"; fail=1; }
+out="$(council open-round docs/specs/cstory6 --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    open-round right after close-story --commit (no intervening git add -A) still opens (R4)" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -z "$(git status --porcelain)" ] && echo "  ok    tree is clean after both verbs" \
+  || { echo "::error::tree dirty: $(git status --porcelain)"; fail=1; }
+
 # --- open-round: preconditions, the court, D1 idempotency/staleness, orphan cleanup ------------
 
 echo "open-round: preconditions - no Branch line -> exit 2"
@@ -1058,6 +1237,7 @@ git worktree list | grep -qF "$court2" && { echo "::error::git worktree list sti
 
 echo "open-round: exit 6 at the ceiling, next escalated - no new round created"
 mk_spec oceil1 2
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-13/' docs/specs/oceil1/plan.md
 sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/oceil1#' docs/specs/oceil1/plan.md
 set_tier oceil1 3
 mkdir -p docs/specs/oceil1/council
@@ -1073,6 +1253,117 @@ out="$(council open-round docs/specs/oceil1 2>&1)"; ex=$?
 [ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    ceiling reached -> exit 6, next escalated" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 [ ! -d docs/specs/oceil1/council/round-2 ] && echo "  ok    no round-2 was created" || { echo "::error::round-2 exists despite the ceiling"; fail=1; }
+
+echo "open-round: the ceiling gate itself writes the ESCALATE record - row, plan line, Needs a human, journal (R5/C-3(a))"
+row_esc="$(grep '"spec":"oceil1"' memory/stats/council.jsonl | grep '"round":1' | grep '"verdict":"ESCALATE"')"
+[ -n "$row_esc" ] && printf '%s' "$row_esc" | grep -qF '"escalate":"ceiling"' \
+  && echo "  ok    open-round's own ceiling gate wrote an ESCALATE row for round 1" \
+  || { echo "::error::no ESCALATE row for oceil1 round 1: $(grep '\"spec\":\"oceil1\"' memory/stats/council.jsonl)"; fail=1; }
+grep -qE '^\*\*Council:\*\* ESCALATE round 1,' docs/specs/oceil1/plan.md && echo "  ok    plan.md records ESCALATE round 1" \
+  || { echo "::error::plan.md: $(grep '^\*\*Council:\*\*' docs/specs/oceil1/plan.md)"; fail=1; }
+grep -qF 'reason: ceiling · round 1' docs/specs/oceil1/plan.md && echo "  ok    ## Needs a human names ceiling, round 1" \
+  || { echo "::error::plan.md: $(cat docs/specs/oceil1/plan.md)"; fail=1; }
+grep -qF 'ESCALATE' docs/specs/oceil1/journal.md && echo "  ok    journal.md records the ceiling escalation" \
+  || { echo "::error::journal.md: $(cat docs/specs/oceil1/journal.md 2>&1)"; fail=1; }
+out="$(council status docs/specs/oceil1 --json)"
+printf '%s' "$out" | jq -e '.next == "escalated"' >/dev/null 2>&1 && echo "  ok    status --json says escalated after the ceiling gate wrote its own record" \
+  || { echo "::error::status: $out"; fail=1; }
+
+echo "open-round: a second call at the ceiling adds nothing (idempotent)"
+rowcount_before="$(grep -c '"spec":"oceil1"' memory/stats/council.jsonl)"
+council open-round docs/specs/oceil1 >/dev/null 2>&1
+rowcount_after="$(grep -c '"spec":"oceil1"' memory/stats/council.jsonl)"
+[ "$rowcount_before" -eq "$rowcount_after" ] && echo "  ok    no new row was added" \
+  || { echo "::error::row count: before=$rowcount_before after=$rowcount_after"; fail=1; }
+
+echo "open-round --commit: at the ceiling, commits the ESCALATE record (clean tree afterward)"
+mk_spec oceilc1 2
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/oceilc1#' docs/specs/oceilc1/plan.md
+set_tier oceilc1 3
+mkdir -p docs/specs/oceilc1/council
+printf '1\n' > docs/specs/oceilc1/council/CEILING
+git add -A && git commit -qm "oceilc1: branch, ceiling 1" >/dev/null
+mk_round oceilc1 1 1 >/dev/null
+printf '{"ts":"%s","spec":"oceilc1","round":1,"verdict":"RED","head":"%s","pack":"demo-pack","asks":2,"red":[1],"red_unevidenced":[],"na":0,"review":"PASS","haiku":"RED","haiku_model":"m","sonnet":"GREEN","sonnet_model":"m","opus":"GREEN","opus_model":"m","attempts":4,"escalate":null,"note":""}\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$HEAD7" >> memory/stats/council.jsonl
+git add -A && git commit -qm "oceilc1: fabricated round 1, already judged RED" >/dev/null
+out="$(council open-round docs/specs/oceilc1 --commit 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    --commit at the ceiling still exits 6, next escalated" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -z "$(git status --porcelain)" ] && echo "  ok    --commit at the ceiling committed the ESCALATE record (clean tree)" \
+  || { echo "::error::tree dirty after --commit: $(git status --porcelain)"; fail=1; }
+
+# --- escalate: a verb of its own, not an alias of judge (R5/C-3) ------------------------------
+
+echo "escalate: an open round with seats missing -> ESCALATE row (reason defaults to env), court removed, exit 6"
+mk_open_spec esc1 2
+set_tier esc1 3
+rde1="$(mk_open_round esc1 1)"
+write_seat "$rde1" haiku GG
+write_seat "$rde1" sonnet GG
+# opus, review: never dispatched - missing
+court_e1="$(sed -n 's/^court=//p' "$rde1/ROUND")"
+mkdir -p "$court_e1"
+out="$(council escalate docs/specs/esc1 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    escalate on missing seats -> exit 6" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"esc1"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"verdict":"ESCALATE"' && printf '%s' "$row" | grep -qF '"escalate":"env"' \
+  && echo "  ok    row verdict ESCALATE, escalate:env (default reason)" || { echo "::error::row: $row"; fail=1; }
+printf '%s' "$row" | grep -qE '"note":"[^"]*(opus|review)[^"]*"' && echo "  ok    row note names a missing seat" \
+  || { echo "::error::row note: $row"; fail=1; }
+[ ! -d "$court_e1" ] && echo "  ok    the court was removed" || { echo "::error::court still present: $court_e1"; fail=1; }
+grep -qF 'reason: env · round 1' docs/specs/esc1/plan.md && echo "  ok    ## Needs a human names env, round 1" \
+  || { echo "::error::plan.md: $(cat docs/specs/esc1/plan.md)"; fail=1; }
+grep -qF 'ESCALATE' docs/specs/esc1/journal.md && echo "  ok    journal.md records the escalation" \
+  || { echo "::error::journal.md: $(cat docs/specs/esc1/journal.md 2>&1)"; fail=1; }
+
+echo "escalate: --reason and a note override the default"
+mk_open_spec esc2 2
+set_tier esc2 1
+mk_open_round esc2 1 >/dev/null
+# sonnet (the only required seat at tier 1) never dispatched - missing
+out="$(council escalate docs/specs/esc2 --reason half "manual call, two of four RED" 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] && echo "  ok    escalate with explicit reason/note -> exit 6" || { echo "::error::exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"esc2"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"escalate":"half"' && printf '%s' "$row" | grep -qF '"note":"manual call, two of four RED"' \
+  && echo "  ok    row uses the given reason and note" || { echo "::error::row: $row"; fail=1; }
+
+echo "escalate: nothing missing -> behaves exactly like judge"
+mk_open_spec esc3 3
+set_tier esc3 1
+rde3="$(mk_open_round esc3 1)"
+write_seat "$rde3" sonnet GGG
+out="$(council escalate docs/specs/esc3)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"verb":"escalate"' && printf '%s' "$out" | grep -qF '"next":"green"' \
+  && echo "  ok    nothing missing -> judged like judge (GREEN here), verb label stays escalate" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "escalate: PAUSE present -> exit 3"
+mk_open_spec esc4 2
+mk_open_round esc4 1 >/dev/null
+printf 'Test Owner \xc2\xb7 taking the tree back \xc2\xb7 %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > docs/specs/esc4/PAUSE
+out="$(council escalate docs/specs/esc4 2>&1)"; ex=$?
+[ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    PAUSE -> exit 3" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+# --- open-round: the court's reduction is committed inside the worktree (R15/M-1,M-2) ---------
+
+echo "open-round: the court's reduction is committed inside the worktree - clean status, HEAD:plan.md no longer resolves, stays inside the court (R15)"
+mk_open_spec courtred1 2
+set_tier courtred1 3
+out="$(council open-round docs/specs/courtred1 --commit)"; ex=$?
+[ "$ex" -eq 0 ] || { echo "::error::open-round: exit=$ex out=$out"; fail=1; }
+rdcr="docs/specs/courtred1/council/round-1"
+courtcr="$(sed -n 's/^court=//p' "$rdcr/ROUND")"
+[ -z "$(git -C "$courtcr" status --porcelain 2>/dev/null)" ] && echo "  ok    the court's orientation git status is clean" \
+  || { echo "::error::court status: $(git -C "$courtcr" status --porcelain)"; fail=1; }
+git -C "$courtcr" show "HEAD:docs/specs/courtred1/plan.md" >/dev/null 2>&1 \
+  && { echo "::error::HEAD:docs/specs/courtred1/plan.md still resolves inside the court"; fail=1; } \
+  || echo "  ok    HEAD:docs/specs/courtred1/plan.md no longer resolves inside the court"
+git log -1 --format=%s | grep -qF "vulyk(courtred1): open-round 1" \
+  && echo "  ok    the main repo's HEAD carries only open-round's own commit - the court's reduction commit stayed inside the court" \
+  || { echo "::error::main repo HEAD commit message: $(git log -1 --format=%s)"; fail=1; }
 
 # --- reopen: ceiling +3 after ESCALATE, then a fourth round opens ------------------------------
 

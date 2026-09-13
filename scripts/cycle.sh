@@ -461,6 +461,117 @@ reopen_names_round() { # reopen_names_round <spec> <n> -> 0 iff council/REOPEN h
   grep -qE "^round=$n[[:space:]]" "$f"
 }
 
+# --- git helpers (R17/M-6, autonomous-cycle-21): every site below used to swallow a failing
+# git call with `|| true`, so a checkout or commit that failed still let the verb report
+# success and, in build_round's case, still write ROUND as if the court behind it were real.
+# git_commit_or_fail() assumes the caller already staged what it wants committed; a `return 0`
+# (nothing to commit) is not an error. Every mutating verb now goes through one of these two,
+# never a bare `git commit ... || true`.
+git_commit_or_fail() { # git_commit_or_fail <verb-label> <message> - commits what is already
+  # staged; on failure, reports it (naming "git commit", R17) and terminates the process -
+  # never called when there is nothing staged (callers check first, or see commit_paperwork).
+  local verb="$1" msg="$2" err
+  if ! err="$(git commit -q -m "$msg" 2>&1)"; then
+    echo "cycle: $verb - git commit failed: $err" >&2
+    emit false "$verb" 2 error "git commit failed"
+    exit 2
+  fi
+}
+
+commit_paperwork() { # commit_paperwork <verb-label> <message> <path...> - stages and commits
+  # the given paths iff any of them changed; a clean set of paths is not an error and returns
+  # 0 without committing. The common shape shared by judge/briefed/branch/open-round/reopen.
+  local verb="$1" msg="$2"; shift 2
+  [ -n "$(git status --porcelain -- "$@" 2>/dev/null)" ] || return 0
+  git add -A -- "$@" >/dev/null 2>&1
+  git_commit_or_fail "$verb" "$msg"
+}
+
+# --- escalate row/plan-line helpers (R5/C-3, autonomous-cycle-21) -----------------------------
+# Distinct from row_exists()/council_line_exists(): those match ANY verdict for a round number,
+# but a round can legitimately carry more than one row (a STALE fold, or an already-judged RED,
+# followed later by an ESCALATE for the same round number - the ceiling gate and the standalone
+# `escalate` verb both add one), so idempotency here is scoped to "an ESCALATE row/line already
+# exists for this round", not "any row exists".
+escalate_row_exists() { # escalate_row_exists <slug> <round>
+  [ -f memory/stats/council.jsonl ] || return 1
+  grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | grep -F "\"round\":$2" | grep -qF '"verdict":"ESCALATE"'
+}
+escalate_council_line_exists() { grep -qE "^\*\*Council:\*\*.*ESCALATE round $2," "$1" 2>/dev/null; } # <plan> <round>
+
+write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <rd> <n> <reason> <note>
+  # Records an ESCALATE row (council.jsonl), a plan.md **Council:** line, a `## Needs a human`
+  # block (C7) and a journal line for round <n> - shared by the standalone `escalate` verb
+  # (seats missing, R5/C-3) and open-round's own ceiling gates (write_ceiling_escalate below).
+  # Idempotent per round (see the two helpers just above), same pattern as write_stale_row and
+  # cmd_judge's own row/line/journal writes.
+  local spec="$1" slug="$2" rd="$3" n="$4" reason="$5" note="$6"
+  local plan="$spec/plan.md" dateonly; dateonly="$(date -u +%Y-%m-%d)"
+  local rhead rpack; rhead="$(round_field "$rd" head)"; rpack="$(round_field "$rd" pack)"
+  [ -n "$rhead" ] || rhead="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  [ -n "$rpack" ] || rpack="$(pack_fingerprint "$spec")"
+  local a; a="$(asks_count "$spec")"
+
+  local required seat v model
+  local haiku_v="" sonnet_v="" opus_v="" review_v=""
+  local haiku_model=unknown sonnet_model=unknown opus_model=unknown attempts=0
+  required="$(required_seats_for_tier "$(round_tier "$spec" "$rd")")"
+  for seat in haiku sonnet opus; do
+    local f="$rd/$seat.md"
+    if [ -f "$f" ]; then
+      v="$(seat_field "$f" VERDICT)"; [ -n "$v" ] || v="RED"
+      model="$(seat_header_field "$f" model)"; [ -n "$model" ] || model="unknown"
+      attempts=$((attempts+1))
+      case "$seat" in
+        haiku)  haiku_v="$v";  haiku_model="$model" ;;
+        sonnet) sonnet_v="$v"; sonnet_model="$model" ;;
+        opus)   opus_v="$v";   opus_model="$model" ;;
+      esac
+    elif is_required_seat "$seat" "$required"; then
+      case "$seat" in haiku) haiku_v=ABSENT ;; sonnet) sonnet_v=ABSENT ;; opus) opus_v=ABSENT ;; esac
+    fi
+  done
+  if [ -f "$rd/review.md" ]; then
+    review_v="$(review_verdict_of "$rd/review.md")"; [ -n "$review_v" ] || review_v="ABSENT"
+    attempts=$((attempts+1))
+  elif is_required_seat review "$required"; then
+    review_v="ABSENT"
+  fi
+
+  if ! escalate_row_exists "$slug" "$n"; then
+    mkdir -p memory/stats
+    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"ESCALATE","head":"%s","pack":"%s","asks":%s,"red":[],"red_unevidenced":[],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":"%s","note":"%s"}\n' \
+      "$(now_ts)" "$slug" "$n" "$rhead" "$rpack" "$a" \
+      "$review_v" "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" \
+      "$attempts" "$reason" "$note" >> memory/stats/council.jsonl
+  fi
+
+  if [ -f "$plan" ] && ! escalate_council_line_exists "$plan" "$n"; then
+    printf '**Council:** ESCALATE round %s, %s, at %s, pack %s\n' "$n" "$dateonly" "$rhead" "$rpack" >> "$plan"
+  fi
+
+  if [ -f "$plan" ] && ! grep -qF "reason: $reason · round $n" "$plan" 2>/dev/null; then
+    {
+      grep -q '^## Needs a human' "$plan" 2>/dev/null || printf '\n## Needs a human\n'
+      printf -- '- reason: %s · round %s · %s\n' "$reason" "$n" "$dateonly"
+      printf -- '- note: %s\n' "$note"
+      printf -- '- seats: %s/\n' "$rd"
+    } >> "$plan"
+  fi
+
+  journal_line_exists "$spec" "$n" "ESCALATE" || \
+    bash "$HERE/journal.sh" "$spec" "04-council:ESCALATE" "round $n verdict ESCALATE at $rhead pack $rpack ($reason)" "escalated" >/dev/null
+}
+
+write_ceiling_escalate() { # write_ceiling_escalate <spec> <slug> <n> <rd-or-empty> - the
+  # ceiling itself is the reason (R5): open-round's two ceiling gates call this instead of
+  # exiting 6 silently, so the round the ceiling stopped leaves a record on disk and `status`
+  # says `escalated` instead of looping (lead-review 5, C-3(a)).
+  local spec="$1" slug="$2" n="$3" rd="$4"
+  [ -n "$rd" ] || rd="$spec/council/round-$n"
+  write_escalate_row_for_round "$spec" "$slug" "$rd" "$n" "ceiling" "open-round ceiling"
+}
+
 cmd_judge() { # cmd_judge <spec> <commit:0|1> [<verb-label>]
   local SPEC="$1" DOCOMMIT="$2" VERBLABEL="${3:-judge}"
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
@@ -663,10 +774,7 @@ ASKS
     git worktree prune >/dev/null 2>&1 || true
   fi
 
-  if [ "$DOCOMMIT" = "1" ] && [ -n "$(git status --porcelain -- "$SPEC" memory/stats/council.jsonl 2>/dev/null)" ]; then
-    git add -A -- "$SPEC" memory/stats/council.jsonl >/dev/null 2>&1
-    git commit -q -m "vulyk($SLUG): $VERBLABEL round $N -> $overall" >/dev/null 2>&1 || true
-  fi
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork "$VERBLABEL" "vulyk($SLUG): $VERBLABEL round $N -> $overall" "$SPEC" memory/stats/council.jsonl
 
   echo "cycle: $SLUG - round $N judged: $overall"
   # R24/C2: 4 is record-seat MALFORMED and close-story red verification only - a RED verdict
@@ -675,6 +783,75 @@ ASKS
   case "$overall" in ESCALATE) exit_code=6 ;; esac
   emit true "$VERBLABEL" "$exit_code" "$next_val"
   exit "$exit_code"
+}
+
+cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|env>] ["<note>"]
+  # A verb of its own now (R5/C-3, autonomous-cycle-21), not an alias of judge: judge refuses
+  # outright on a missing seat (its presence pass, above), so ADR D2's "the driver calls
+  # escalate on exit 6, or on its own initiative" had nowhere to land. This records an
+  # escalation for an open round that has seats missing - no seat precondition - and falls
+  # through to judge's own computation when nothing is missing, so a driver can call it
+  # uniformly wherever a round might be stuck instead of choosing between two verbs.
+  local SPEC="${1:-}"; shift || true
+  local DOCOMMIT=0 REASON="" NOTE=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --commit) DOCOMMIT=1; shift ;;
+      --reason) REASON="${2:-}"; shift 2 2>/dev/null || shift $# ;;
+      *) NOTE="$1"; shift ;;
+    esac
+  done
+  case "$REASON" in ''|ceiling|half|env) ;; *)
+    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env>] [\"<note>\"]" >&2
+    emit false escalate 1 error "usage"
+    exit 1
+    ;;
+  esac
+  [ -n "$REASON" ] || REASON="env"
+
+  [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
+    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env>] [\"<note>\"]" >&2
+    emit false escalate 1 error "usage"
+    exit 1
+  }
+
+  pause_guard "$SPEC" escalate
+
+  local SLUG; SLUG="$(slug_of "$SPEC")"
+  local RD; RD="$(current_round_dir "$SPEC")"
+  if [ -z "$RD" ] || row_exists "$SLUG" "${RD##*/round-}"; then
+    echo "cycle: escalate - $SPEC has no open council round" >&2
+    emit false escalate 2 error "no open round"
+    exit 2
+  fi
+  local N="${RD##*/round-}"
+
+  local required missing
+  required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
+  missing="$(missing_required_seats "$RD" "$required")"
+
+  if [ -z "$missing" ]; then
+    # Nothing missing: behave exactly like judge (D3) - the verb label stays "escalate" so a
+    # driver's own emit-reading code sees the call it made, whatever judge itself decides.
+    cmd_judge "$SPEC" "$DOCOMMIT" escalate
+    exit 0 # unreachable - cmd_judge always exits itself
+  fi
+
+  [ -n "$NOTE" ] || NOTE="$(printf '%s' "$missing" | sed 's/ /, /g') missing"
+
+  write_escalate_row_for_round "$SPEC" "$SLUG" "$RD" "$N" "$REASON" "$NOTE"
+
+  local court_path; court_path="$(round_field "$RD" court)"
+  if [ -n "$court_path" ]; then
+    remove_worktree_path "$court_path"
+    git worktree prune >/dev/null 2>&1 || true
+  fi
+
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork escalate "vulyk($SLUG): escalate round $N ($REASON)" "$SPEC" memory/stats/council.jsonl
+
+  echo "cycle: $SLUG - round $N escalated ($REASON): ${missing:-none missing}"
+  emit true escalate 6 escalated
+  exit 6
 }
 
 # --- briefed / branch -------------------------------------------------------------------------
@@ -723,10 +900,7 @@ cmd_briefed() { # cmd_briefed <spec> <commit:0|1> <mode: ""|mini-brief|assumed>
     bash "$HERE/journal.sh" "$SPEC" "02-approved" "briefed $variant, $OWNER_V" "branch" >/dev/null
   fi
 
-  if [ "$DOCOMMIT" = "1" ] && [ -n "$(git status --porcelain -- "$SPEC" 2>/dev/null)" ]; then
-    git add -A -- "$SPEC" >/dev/null 2>&1
-    git commit -q -m "vulyk($SLUG): briefed" >/dev/null 2>&1 || true
-  fi
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork briefed "vulyk($SLUG): briefed" "$SPEC"
 
   echo "cycle: $SLUG - briefed"
   emit true briefed 0 branch
@@ -762,10 +936,18 @@ cmd_branch() { # cmd_branch <spec> <commit:0|1>
   local BR="vulyk/$SLUG"
   local branch_v; branch_v="$(marker "$PLAN" Branch)"
   if [ -z "$branch_v" ]; then
+    local co_err co_status
     if git rev-parse --verify -q "$BR" >/dev/null 2>&1; then
-      git checkout -q "$BR" >/dev/null 2>&1
+      co_err="$(git checkout -q "$BR" 2>&1)"; co_status=$?
     else
-      git checkout -q -b "$BR" >/dev/null 2>&1
+      co_err="$(git checkout -q -b "$BR" 2>&1)"; co_status=$?
+    fi
+    # R17/M-6: a checkout that failed must not be followed by a **Branch:** line claiming it
+    # succeeded - the next story commit would land on whatever branch the session was actually on.
+    if [ "$co_status" -ne 0 ]; then
+      echo "cycle: branch - could not check out $BR: $co_err" >&2
+      emit false branch 2 error "git checkout failed"
+      exit 2
     fi
     local line="**Branch:** $BR"
     if grep -q '^\*\*Branch:\*\*' "$PLAN"; then
@@ -776,10 +958,7 @@ cmd_branch() { # cmd_branch <spec> <commit:0|1>
     bash "$HERE/journal.sh" "$SPEC" "03-building" "branch $BR created" "build:1" >/dev/null
   fi
 
-  if [ "$DOCOMMIT" = "1" ] && [ -n "$(git status --porcelain -- "$SPEC" 2>/dev/null)" ]; then
-    git add -A -- "$SPEC" >/dev/null 2>&1
-    git commit -q -m "vulyk($SLUG): branch $BR" >/dev/null 2>&1 || true
-  fi
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork branch "vulyk($SLUG): branch $BR" "$SPEC"
 
   echo "cycle: $SLUG - branch $BR"
   emit true branch 0 "build:1"
@@ -1083,6 +1262,33 @@ files_of() { # files_of <story-file> - the `## Files` block, comments skipped. M
   ' "$1"
 }
 
+command_cell_exists() { # command_cell_exists <claude-md> <command> -> 0 iff <command> equals,
+  # byte for byte, the backticked command cell of some row of the hive's `## Commands` table
+  # (a `\|` inside the cell is a literal `|`, R11/C-4). Reads only that one table's rows -
+  # nothing else in CLAUDE.md (Non-goals) - by slicing to the section first.
+  local file="$1" want="$2"
+  [ -f "$file" ] || return 1
+  awk '
+    /^## Commands[[:space:]]*$/ { inblock=1; next }
+    /^##[[:space:]]/            { if (inblock) exit }
+    inblock                     { print }
+  ' "$file" \
+    | sed -n 's/^|[^|]*|[[:space:]]*`\(.*\)`[[:space:]]*|[[:space:]]*$/\1/p' \
+    | sed 's/\\|/|/g' \
+    | grep -qxF "$want"
+}
+
+verification_segments() { # verification_segments <line> -> one &&-separated segment per line
+  # (R11/C-4): every segment of every ## Verification line must be its own ## Commands cell.
+  local rest="$1" seg
+  while :; do
+    case "$rest" in
+      *' && '*) seg="${rest%%' && '*}"; printf '%s\n' "$seg"; rest="${rest#*' && '}" ;;
+      *) printf '%s\n' "$rest"; break ;;
+    esac
+  done
+}
+
 repeat_of() { # repeat_of <story-file> - the integer `repeat: N` under ## Verification, or 1
   local n
   n="$(verify_of "$1" | awk -F': *' '$1 ~ /^repeat$/ { gsub(/[[:space:]]/, "", $2); print $2; exit }')"
@@ -1129,29 +1335,59 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1>
   local VERIFY; VERIFY="$(verify_of "$STORY")"
   local REPS; REPS="$(printf '%s\n' "$VERIFY" | awk -F': *' '$1 ~ /^repeat$/ { gsub(/[[:space:]]/, "", $2); print $2; exit }')"
   case "$REPS" in ''|*[!0-9]*|0) REPS=1 ;; esac
-  local CMD; CMD="$(printf '%s\n' "$VERIFY" | awk -F': *' '$1 !~ /^repeat$/ { print }' | sed '/^[[:space:]]*$/d')"
+  local CMD_LIST; CMD_LIST="$(printf '%s\n' "$VERIFY" | awk -F': *' '$1 !~ /^repeat$/ { print }' | sed '/^[[:space:]]*$/d')"
 
-  if [ -z "$CMD" ]; then
+  if [ -z "$CMD_LIST" ]; then
     echo "cycle: close-story - $STORY names no command under '## Verification'" >&2
     emit false close-story 4 repair "no verification command"
     exit 4
   fi
 
+  # --- C2 amended (R11/C-4): every &&-segment of every line must be a literal cell of the
+  # hive's CLAUDE.md `## Commands` table, or the line is the literal "none - reviewed by
+  # lead-review" (which runs nothing, below) - a story author never gets unprompted execution.
+  local vline seg
+  while IFS= read -r vline; do
+    [ -n "$vline" ] || continue
+    [ "$vline" = "none — reviewed by lead-review" ] && continue
+    while IFS= read -r seg; do
+      [ -n "$seg" ] || continue
+      command_cell_exists "$ROOT/CLAUDE.md" "$seg" || {
+        echo "cycle: close-story - verification command not in $ROOT/CLAUDE.md's ## Commands: $seg" >&2
+        emit false close-story 2 error "verification not in ## Commands: $seg"
+        exit 2
+      }
+    done <<SEGEOF
+$(verification_segments "$vline")
+SEGEOF
+  done <<EOF
+$CMD_LIST
+EOF
+
+  # --- run: one command at a time, the whole block repeated REPS times (R18/M-3) - a single
+  # `bash -c "$multi_line_block"` used to report only the last line's exit status. -----------
   local i=1
   while [ "$i" -le "$REPS" ]; do
-    if ! bash -c "$CMD"; then
-      echo "cycle: close-story - verification failed (run $i/$REPS): $CMD" >&2
-      emit false close-story 4 repair "$CMD"
-      exit 4
-    fi
+    while IFS= read -r vline; do
+      [ -n "$vline" ] || continue
+      [ "$vline" = "none — reviewed by lead-review" ] && continue
+      if ! bash -c "$vline"; then
+        echo "cycle: close-story - verification failed (run $i/$REPS): $vline" >&2
+        emit false close-story 4 repair "$vline"
+        exit 4
+      fi
+    done <<EOF
+$CMD_LIST
+EOF
     i=$((i+1))
   done
 
   sed -i -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
 
   if [ "$DOCOMMIT" = "1" ]; then
-    # Scoped to this story's own declared Files (+ the story file itself), never `-A`: a
-    # concurrent wave's other in-progress story must not ride along in this commit.
+    # Scoped to this story's own declared Files (+ the story file itself, + the scope.jsonl
+    # row scope-check.sh just wrote for it - R4/C-3(b)), never `-A`: a concurrent wave's other
+    # in-progress story must not ride along in this commit.
     local ID TITLE f
     ID="$(fm_field "$STORY" story)"
     TITLE="$(grep -m1 '^# ' "$STORY" | sed 's/^#[[:space:]]*//; s/`//g')"
@@ -1162,7 +1398,8 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1>
 $(files_of "$STORY")
 EOF
     git add -- "$STORY" >/dev/null 2>&1
-    git commit -q -m "story($ID): $TITLE" >/dev/null 2>&1 || true
+    [ -f memory/stats/scope.jsonl ] && git add -- memory/stats/scope.jsonl >/dev/null 2>&1
+    git_commit_or_fail close-story "story($ID): $TITLE"
   fi
 
   echo "cycle: $(fm_field "$STORY" story) - closed, verification green"
@@ -1208,11 +1445,27 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   local wt_err
   if ! wt_err="$(git worktree add --detach -q "$court_abs" "$head" 2>&1)"; then
     echo "cycle: open-round - could not create the court worktree at $court_abs: $wt_err" >&2
+    # R17/M-6: ROUND is written last (below) precisely so a failure here leaves none behind;
+    # also drop the now-empty round dir mkdir -p just created, so a retry sees no round at all
+    # rather than an orphan directory current_round_dir() would otherwise pick up as open.
+    rmdir "$rd" 2>/dev/null || true
     emit false open-round 2 error "worktree add failed"
     exit 2
   fi
   local court_spec="$court_abs/$spec"
-  [ -d "$court_spec" ] && find "$court_spec" -mindepth 1 -maxdepth 1 ! -name 'brief.md' -exec rm -rf {} +
+  if [ -d "$court_spec" ]; then
+    find "$court_spec" -mindepth 1 -maxdepth 1 ! -name 'brief.md' -exec rm -rf {} +
+    # R15/M-1,M-2: the prune above leaves the court's own git status dirty (deletions
+    # unstaged) and its HEAD still resolving the spec's real files via `git show` - commit the
+    # reduction inside the court's own detached history (never the main repo's) so an
+    # orientation `git status` in the court is clean and `HEAD:<spec>/plan.md` stops
+    # resolving. A local identity is passed explicitly so a fixture without user.name works.
+    if [ -n "$(git -C "$court_abs" status --porcelain 2>/dev/null)" ]; then
+      git -C "$court_abs" add -A >/dev/null 2>&1
+      git -C "$court_abs" -c user.name=VULYK -c user.email=vulyk@localhost \
+        commit -q -m "vulyk: reduce the court to brief.md" >/dev/null 2>&1 || true
+    fi
+  fi
 
   # C15: the tier is derived once, here, and frozen into the round - a plan.md edit mid-round
   # (or a stale re-stamp) never changes what this round already requires.
@@ -1232,10 +1485,7 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   local dispatch_val; dispatch_val="dispatch:$(printf '%s' "$required" | tr ' ' ',')"
   bash "$HERE/journal.sh" "$spec" "04-council:open" "round $n opened, court at $court_abs" "$dispatch_val" >/dev/null
 
-  if [ "$docommit" = "1" ] && [ -n "$(git status --porcelain -- "$spec" 2>/dev/null)" ]; then
-    git add -A -- "$spec" >/dev/null 2>&1
-    git commit -q -m "vulyk($slug): open-round $n" >/dev/null 2>&1 || true
-  fi
+  [ "$docommit" = "1" ] && commit_paperwork open-round "vulyk($slug): open-round $n" "$spec"
 
   echo "cycle: $slug - round $n opened, court at $court_abs"
   emit true open-round 0 "$dispatch_val"
@@ -1328,11 +1578,8 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1>
   if [ -n "$status_out" ]; then
     while IFS= read -r line; do
       [ -n "$line" ] || continue
-      case "${line:3}" in
-        */plan.md|*/journal.md|*/council/*|memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl|memory/stats/council.jsonl) ;;
-        *) dirty="${dirty}${line}
-" ;;
-      esac
+      is_paperwork_path "${line:3}" || dirty="${dirty}${line}
+"
     done <<EOF
 $status_out
 EOF
@@ -1390,7 +1637,11 @@ EOF
     write_stale_row "$SPEC" "$SLUG" "$RD" "$N" "$A"
     local NEXTN=$((N+1))
     [ "$NEXTN" -le "$CEILING" ] || {
+      # R5/C-3(a): the ceiling reached here must leave a record - an ESCALATE row, the plan
+      # line, ## Needs a human and the journal line - not just exit 6 into a silent loop.
       echo "cycle: open-round - $SLUG round $NEXTN would exceed ceiling $CEILING" >&2
+      write_ceiling_escalate "$SPEC" "$SLUG" "$N" "$RD"
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $N" "$SPEC" memory/stats/council.jsonl
       emit false open-round 6 escalated
       exit 6
     }
@@ -1401,6 +1652,10 @@ EOF
   local ROUND_COUNT=0; [ -n "$RD" ] && ROUND_COUNT="${RD##*/round-}"
   [ "$ROUND_COUNT" -lt "$CEILING" ] || {
     echo "cycle: open-round - $SLUG is at the ceiling ($CEILING rounds)" >&2
+    [ "$ROUND_COUNT" -gt 0 ] && {
+      write_ceiling_escalate "$SPEC" "$SLUG" "$ROUND_COUNT" "$SPEC/council/round-$ROUND_COUNT"
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $ROUND_COUNT" "$SPEC" memory/stats/council.jsonl
+    }
     emit false open-round 6 escalated
     exit 6
   }
@@ -1470,10 +1725,7 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
   mkdir -p "$SPEC/council"
   reopen_names_round "$SPEC" "$N" || printf 'round=%s \xc2\xb7 %s\n' "$N" "$(now_ts)" >> "$SPEC/council/REOPEN"
 
-  if [ "$DOCOMMIT" = "1" ] && [ -n "$(git status --porcelain -- "$SPEC" 2>/dev/null)" ]; then
-    git add -A -- "$SPEC" >/dev/null 2>&1
-    git commit -q -m "vulyk($SLUG): reopen after round $N" >/dev/null 2>&1 || true
-  fi
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork reopen "vulyk($SLUG): reopen after round $N" "$SPEC"
 
   echo "cycle: $SLUG - reopened after round $N, ceiling now $NEWCEIL"
   emit true reopen 0 open-round
@@ -1542,9 +1794,7 @@ case "$VERB" in
     cmd_judge "$SPEC" "$COMMIT" "judge"
     ;;
   escalate)
-    COMMIT=0
-    for a in "$@"; do [ "$a" = "--commit" ] && COMMIT=1; done
-    cmd_judge "$SPEC" "$COMMIT" "escalate"
+    cmd_escalate "$SPEC" "${@:3}"
     ;;
   briefed)
     COMMIT=0; MODE=""

@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-21
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -68,6 +68,13 @@ blocked_by: [autonomous-cycle-20]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `lib.sh` gained `is_paperwork_path()`, the single whitelist both `paperwork_only()` and `cycle.sh`'s own `open-round` dirty-tree check now call, so the two can never drift apart again (R23).
+- `escalate` is now `cmd_escalate` in `cycle.sh`, not an alias of `cmd_judge`: it records an ESCALATE row for an open round with seats missing (no presence precondition) and falls through to `cmd_judge` when nothing is missing (R5).
+- `write_escalate_row_for_round()`/`write_ceiling_escalate()` are shared by the standalone `escalate` verb and both of `open-round`'s ceiling gates; idempotency is scoped to "an ESCALATE row/line for this round", distinct from `row_exists()`, since a round can legitimately carry a STALE or RED row and an ESCALATE row for the same number.
+- All `git commit ... || true` sites now go through `git_commit_or_fail`/`commit_paperwork`, which exits 2 naming "git commit" on failure instead of claiming success (R17). `branch`'s checkout is checked the same way.
+- `build_round` now commits the court's brief.md-only reduction inside the court's own detached history (explicit `-c user.name`/`user.email`, R15), and drops the just-created empty round dir when `git worktree add` fails, since `ROUND` is written last and must not be the only thing implying a round exists.
+- `close-story` gates every `## Verification` line's `&&`-segments against the hive's `CLAUDE.md` `## Commands` table (byte-for-byte, `\|` unescaped) before running anything, then runs each line as its own `bash -c` call so a multi-line block's earlier failure is no longer masked by the last line's exit status (R11/R18); `--commit` now stages `memory/stats/scope.jsonl` alongside the story's own files (R4).
+- Test fixtures needed a `CLAUDE.md` with a `## Commands` table (council.test.sh) since every close-story fixture's verification command must now be listed there; verified the real hive's own `CLAUDE.md` accepts this story's own `## Verification` line (the `git ls-files '*.sh' | xargs -n1 bash -n` row's `\|` unescapes correctly) via a standalone `command_cell_exists` probe.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

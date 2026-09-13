@@ -143,4 +143,20 @@ human_row REJECTED "2026-01-01T00:00:05Z"
 git add -A && git commit -qm "record: Checked REJECTED over GREEN"
 shipc | expect "Checked REJECTED newer than a GREEN row overrides to NOT READY" "NOT READY"
 
+echo "the paperwork whitelist is anchored to docs/specs/*/ (R23/m-2): a commit under src/council/ or a bare src/journal.md is never paperwork, even though it shares the names"
+mkdir -p docs/specs/anchor-demo
+cp "$SRC"/templates/plan.md docs/specs/anchor-demo/plan.md
+printf '> build the anchor demo\n' > docs/specs/anchor-demo/brief.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/anchor-demo/plan.md
+printf -- '---\nstory: anchor-demo-01\nspec: anchor-demo\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/anchor-demo/anchor-demo-01-first.md
+git add -A && git commit -qm "anchor-demo: setup" >/dev/null
+bash scripts/human-check.sh docs/specs/anchor-demo ACCEPTED "looks right" >/dev/null
+git add -A && git commit -qm "anchor-demo: record check" >/dev/null
+bash scripts/human-check.sh --check docs/specs/anchor-demo | expect "CURRENT right after the recorded check" "CURRENT"
+mkdir -p src/council
+printf 'not a spec file\n' > src/council/x
+printf 'not a spec journal either\n' > src/journal.md
+git add -A && git commit -qm "a real code change under src/council/ and src/journal.md - not paperwork" >/dev/null
+bash scripts/human-check.sh --check docs/specs/anchor-demo | expect "src/council/x and src/journal.md are not paperwork -> STALE" "STALE"
+
 exit $fail
