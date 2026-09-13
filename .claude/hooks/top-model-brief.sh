@@ -38,24 +38,10 @@ else
   SESSION="Queen session NOT pinned to $MODEL - tell the owner: \`/model $MODEL\` now (cache is cold, the switch is free) and \`bash scripts/top-model.sh --apply\` so the next launch starts there."
 fi
 
-# Workflow driver gate: the CLI must be >= 2.1.154 for the Workflow tool to exist at all.
-# Whether it is actually ENABLED is invisible to a hook (Pro requires an opt-in flag in
-# /config, other paid plans default it on) - so this only ever reports the CLI floor, never
-# claims the driver is definitely running.
-CLIVER=""
-if command -v claude >/dev/null 2>&1; then
-  CLIVER="$(claude --version 2>/dev/null | grep -o -E '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-fi
-if [ -z "$CLIVER" ]; then
-  WORKFLOW="Workflow driver: CLI version unknown."
-else
-  NEWEST="$(printf '%s\n%s\n' "$CLIVER" "2.1.154" | sort -V 2>/dev/null | tail -1)"
-  if [ "$NEWEST" = "2.1.154" ] && [ "$CLIVER" != "2.1.154" ]; then
-    WORKFLOW="Workflow driver: unavailable (CLI $CLIVER < 2.1.154, fallback loop in session)."
-  else
-    WORKFLOW="Workflow driver: CLI $CLIVER >= 2.1.154 - enable in /config on Pro."
-  fi
-fi
+# Workflow driver gate: a hook cannot see which tools the session was launched with, so it
+# makes no claim about the CLI version (a version floor is not the same as the tool being
+# enabled). /vulyk-build's own step 1 decides this in-session from the tool list.
+WORKFLOW="Workflow driver: decided in-session (Workflow tool present -> vulyk-cycle.js, else fallback loop)."
 
 echo "[VULYK] top model: $MODEL ($NAME) - by ${BY:-plan}, plan ${PLAN:-unknown}. Dispatch queen-planner, lead-architect and lead-review with model: $MODEL; Tier 4 second reviewer: ${SECOND:-opus}. $SESSION $WORKFLOW Details: bash scripts/top-model.sh --explain"
 exit 0

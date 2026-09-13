@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-12
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 tracer: false
@@ -42,6 +42,8 @@ blocked_by: [v0-12-0-remainders-10]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `.claude/hooks/top-model-brief.sh`: removed the `claude --version`/`sort -V` block entirely; `WORKFLOW` is now the static one-line equivalent named in the acceptance criteria - no CLI spawn, no version literal.
+- `.github/workflows/ci.yml` (`top-model` job): added a fake `claude` on `PATH` writing a sentinel; asserted the sentinel stays absent and the hook's output line contains `Workflow driver:` and not `CLI`. Used `printf` instead of a heredoc for the fake script's contents - a heredoc inside YAML's `run: |` block scalar breaks the block's indentation and fails YAML parsing.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

@@ -84,6 +84,17 @@ jobs:
           echo "$line" | grep -q '^\[VULYK\] top model: opus' || { echo "::error::hook line wrong: $line"; fail=1; }
           rm "$t/proj/scripts/top-model.sh"
           [ -z "$(CLAUDE_PROJECT_DIR="$t/proj" bash .claude/hooks/top-model-brief.sh)" ] || { echo "::error::hook spoke without a resolver"; fail=1; }
+          # the hook never spawns the CLI for the Workflow line - a fake `claude` on PATH must sit untouched
+          mkdir -p "$t/proj/scripts" "$t/fakebin"
+          cp scripts/top-model.sh "$t/proj/scripts/"
+          sentinel="$t/fakebin/claude-was-called"
+          printf '#!/usr/bin/env bash\ntouch "%s"\necho "2.1.154"\n' "$sentinel" > "$t/fakebin/claude"
+          chmod +x "$t/fakebin/claude"
+          line2="$(PATH="$t/fakebin:$PATH" CLAUDE_PROJECT_DIR="$t/proj" VULYK_CLAUDE_CONFIG="$t/pro.json" bash .claude/hooks/top-model-brief.sh)"
+          [ -f "$sentinel" ] && { echo "::error::hook spawned the fake claude CLI"; fail=1; }
+          echo "$line2" | grep -q 'Workflow driver:' || { echo "::error::hook line missing Workflow driver: $line2"; fail=1; }
+          echo "$line2" | grep -q 'CLI' && { echo "::error::hook line still mentions CLI: $line2"; fail=1; }
+          rm -f "$t/proj/scripts/top-model.sh"
           exit $fail
 
   cycle:
