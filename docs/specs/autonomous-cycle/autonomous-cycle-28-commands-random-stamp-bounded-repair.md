@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-28
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -57,6 +57,12 @@ blocked_by: []
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- Both files: `stamp="$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"` replaces `date -u +%s`, one line each, no `$RANDOM` fallback (R31).
+- Both files: "a delimiter no report body can guess or contain" replaced with "the report travels as free text inside the clerk's prompt" + "a per-run random value the seat is never told" framing, in the dispatch/record-seat prose (R31).
+- `vulyk-build.md` `build:<wave>` row: an empty/aborted/timed-out worker report is now a miss under the same two-attempt bound as a red `close-story`, with `close-story` skipped for that miss; first/second miss language now covers all three miss kinds in any order (R29).
+- `vulyk-build.md` `repair` row: bounded to one `queen-planner` dispatch per round number; prompt now names `red`/`review` from `status --json` and states the review-seat BLOCK explicitly when `red` is empty; a repeat `repair` for the same round stops the loop and prints `repair landed nothing for round <N>` + journal tail, instead of looping forever (R30).
+- `vulyk-build.md` step 4 wake-up: generalized the blocked/`lead-architect` rule to any `stop` carrying `file` (`close-story` or `build`, R29), and added explicit handling for `stop.verb` `repair` (R30) and `launch` (R31's stamp guard) - both print `stop.error` + journal tail with no `file`.
+- `vulyk-review.md`: only the step 2 stamp line and step 4 delimiter sentence changed, matching the same R31 wording; step 3's `missing`-only dispatch (R20) was left untouched, as scoped.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

@@ -21,7 +21,9 @@ branch).
    yet. This on-demand round costs exactly those seats, never a hardcoded four - a Tier 1 spec pays
    `sonnet` alone, `lead-review` only when `review` itself is in `missing`. Resolve `top_model`
    (`bash scripts/top-model.sh`, the alias the session brief announced) and, once here,
-   `stamp="$(date -u +%s)"` - both used below and neither ever repeated inside a seat prompt (R11).
+   `stamp="$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"` (16 hex characters, never `date`) - both
+   used below and neither ever repeated inside a seat prompt: it is a per-run value the seat is
+   never told, not a secret a report is expected to guess (R31).
 
 3. **Dispatch only the seats `missing` names, one message, in parallel** - the same "independent in
    information, so independent in wall-clock cost" reasoning that ran `lead-review` alongside the
@@ -43,7 +45,9 @@ branch).
      `record-seat` accepts exactly one `review` file per round - there is no second slot to hold a
      second opinion separately.
 
-4. **Record each report** through a delimiter no report body can guess or contain:
+4. **Record each report.** The report travels as free text inside the clerk's prompt; the heredoc
+   delimiter `VULYK_<stamp>_<seat>_<attempt>` is a per-run random value the seat is never told,
+   which is what keeps the body from ending the heredoc early (R31):
    `bash scripts/cycle.sh record-seat docs/specs/<slug> <N> <haiku|sonnet|opus|review> [--model <id>] <<'VULYK_<stamp>_<seat>_<attempt>'`
    ... `VULYK_<stamp>_<seat>_<attempt>` - never `EOF`, and an empty report is still piped through
    unchanged, so the attempt exists on disk. Exit 4 (`MALFORMED`) -> re-ask that one seat once,
