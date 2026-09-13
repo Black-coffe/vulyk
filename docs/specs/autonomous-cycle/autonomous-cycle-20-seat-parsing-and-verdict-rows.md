@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-20
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -60,6 +60,13 @@ blocked_by: [autonomous-cycle-19]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `ask_rest_of` now strips only the `ASK n: VERDICT` prefix (keeps interior ` - `); new shared `ask_evidenced_of` is the one function `record-seat`'s evidence pass and `judge`'s `seat_ask_lines` both call (R8) - a header's `unevidenced:` and the row's `red_unevidenced` can no longer disagree.
+- The attempt-2 GREEN→N/A rewrite's cosmetic "short" label keeps the old last-dash-segment trim (a separate inline sed, not `ask_rest_of`) so the exact rewritten text (tested literally) is unchanged; it's cosmetic only, not evidence classification.
+- `taint_reason` is path-anchored: `(docs/specs/)?\b<slug>/plan.md|journal.md|council/` or word-bounded `<slug>-NN` (two digits); bare `plan.md`/`journal.md`/`council/` and another spec's path no longer taint (R9). Verified against the real round-1 `sonnet.attempt-1.md`/`opus.attempt-1.md` false positives (now pass) and a real hive path/story id (still fail) as tests.
+- `half = max(2, ceil(A/2))` - one clamp line added; A=7 behaviour unchanged (already correct), only A=1/A=2 were escalating on a single RED before.
+- Replaced the "every required seat ABSENT" special case with a general `absent_seats` (any required seat, review included, ABSENT) → ESCALATE `env` when RED_e/RED_u are both empty and review isn't BLOCK; row `note` names the absent seats, `## Needs a human` lists their `attempt-N.md` paths (R16/M-5). The old "conservative default" RED branch is now dead code by construction (kept as a defensive fallback, comment updated).
+- `judge`'s exit code for RED is now 0 (`ok:true`, `next:"repair"`); only ESCALATE still exits 6. `record-seat` MALFORMED and `close-story` red-verification exits (both still 4) are separate code paths, untouched (R24).
+- Suite grew from 172 to 200 checks (new R8/R9/R10/R16/R24 fixtures); `bash tests/council.test.sh` exit 0, no `::error::`.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

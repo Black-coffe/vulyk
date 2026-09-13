@@ -322,8 +322,10 @@ write_seat "$rd" sonnet GGG
 write_seat "$rd" opus GGG
 write_review "$rd" PASS
 jout="$(council judge docs/specs/red1)"; jexit=$?
-[ "$jexit" -eq 4 ] || { echo "::error::judge (red) exited $jexit, expected 4"; fail=1; }
+[ "$jexit" -eq 0 ] || { echo "::error::judge (red) exited $jexit, expected 0 (R24: RED is a successful judgement)"; fail=1; }
 printf '%s' "$jout" | expect "next is repair" '"next":"repair"'
+printf '%s' "$jout" | grep -qF '{"ok":true,"verb":"judge","exit":0,"next":"repair"}' \
+  && echo "  ok    RED judge output shape: ok:true, exit:0, next:repair (R24)" || { echo "::error::jout: $jout"; fail=1; }
 row="$(grep '"spec":"red1"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -q '"verdict":"RED"' && printf '%s' "$row" | grep -q '"red":\[2\]' \
   && echo "  ok    row verdict RED, red:[2]" || { echo "::error::row: $row"; fail=1; }
@@ -337,13 +339,13 @@ mk_spec ceil1 5
 rd1c="$(mk_round ceil1 1 3)"
 write_seat "$rd1c" haiku RGGGG; write_seat "$rd1c" sonnet GGGGG; write_seat "$rd1c" opus GGGGG; write_review "$rd1c" PASS
 out1="$(council judge docs/specs/ceil1)"; ex1=$?
-[ "$ex1" -eq 4 ] && printf '%s' "$out1" | grep -qF '"next":"repair"' && echo "  ok    round 1: RED, repair" \
+[ "$ex1" -eq 0 ] && printf '%s' "$out1" | grep -qF '"next":"repair"' && echo "  ok    round 1: RED, repair" \
   || { echo "::error::round 1: exit=$ex1 out=$out1"; fail=1; }
 
 rd2c="$(mk_round ceil1 2 3)"
 write_seat "$rd2c" haiku RGGGG; write_seat "$rd2c" sonnet GGGGG; write_seat "$rd2c" opus GGGGG; write_review "$rd2c" PASS
 out2="$(council judge docs/specs/ceil1)"; ex2=$?
-[ "$ex2" -eq 4 ] && printf '%s' "$out2" | grep -qF '"next":"repair"' && echo "  ok    round 2: RED, still repair - no ceiling yet" \
+[ "$ex2" -eq 0 ] && printf '%s' "$out2" | grep -qF '"next":"repair"' && echo "  ok    round 2: RED, still repair - no ceiling yet" \
   || { echo "::error::round 2: exit=$ex2 out=$out2"; fail=1; }
 
 rd3c="$(mk_round ceil1 3 3)"
@@ -370,6 +372,42 @@ out="$(council judge docs/specs/half1)"; ex=$?
   || { echo "::error::half test: exit=$ex out=$out"; fail=1; }
 row="$(grep '"spec":"half1"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -q '"escalate":"half"' && echo "  ok    row escalate:half" || { echo "::error::row: $row"; fail=1; }
+
+echo "judge: half floor = max(2, ceil(A/2)) - a 1-ask brief's one evidenced RED repairs, never escalates (R10)"
+mk_spec halffloor1 1
+rdf1="$(mk_round halffloor1 1 3)"
+write_seat "$rdf1" haiku R
+write_seat "$rdf1" sonnet G
+write_seat "$rdf1" opus G
+write_review "$rdf1" PASS
+out="$(council judge docs/specs/halffloor1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && echo "  ok    A=1: one evidenced RED repairs, not escalate" \
+  || { echo "::error::A=1: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"halffloor1"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"escalate":null' && echo "  ok    A=1 row escalate:null" || { echo "::error::row: $row"; fail=1; }
+
+echo "judge: half floor - a 2-ask brief needs BOTH asks RED to escalate, not just one (R10)"
+mk_spec halffloor2 2
+rdf2a="$(mk_round halffloor2 1 3)"
+write_seat "$rdf2a" haiku RG
+write_seat "$rdf2a" sonnet GG
+write_seat "$rdf2a" opus GG
+write_review "$rdf2a" PASS
+out="$(council judge docs/specs/halffloor2)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && echo "  ok    A=2: one of two RED repairs" \
+  || { echo "::error::A=2 one-red: exit=$ex out=$out"; fail=1; }
+
+mk_spec halffloor2b 2
+rdf2b="$(mk_round halffloor2b 1 3)"
+write_seat "$rdf2b" haiku RR
+write_seat "$rdf2b" sonnet GG
+write_seat "$rdf2b" opus GG
+write_review "$rdf2b" PASS
+out="$(council judge docs/specs/halffloor2b)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    A=2: both asks RED escalates half" \
+  || { echo "::error::A=2 both-red: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"halffloor2b"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"escalate":"half"' && echo "  ok    A=2 both-red row escalate:half" || { echo "::error::row: $row"; fail=1; }
 
 # --- judge: three ABSENT seats -------------------------------------------------------------------
 
@@ -415,7 +453,7 @@ write_review "$rdr" PASS
 printf '{"ts":"%s","spec":"reject1","verdict":"REJECTED","by":"Test Owner","head":"%s","pack":"demo-pack","note":"button missing"}\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$HEAD7" >> memory/stats/human.jsonl
 out="$(council judge docs/specs/reject1)"; ex=$?
-[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && echo "  ok    owner REJECTED overrides all-GREEN seats" \
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && echo "  ok    owner REJECTED overrides all-GREEN seats" \
   || { echo "::error::reject-override: exit=$ex out=$out"; fail=1; }
 row="$(grep '"spec":"reject1"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -q '"verdict":"RED"' && echo "  ok    row verdict RED" || { echo "::error::row: $row"; fail=1; }
@@ -648,7 +686,7 @@ out="$(report_verdict_mismatch | council record-seat docs/specs/rseat6 1 haiku 2
 [ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'inconsistent' && echo "  ok    VERDICT inconsistent -> exit 4" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
-echo "record-seat: a body naming <slug>-NN, plan.md, journal.md or council/ -> tainted"
+echo "record-seat: taint is path-anchored on the slug, not the bare words (R9)"
 mk_spec demo 2
 rd_demo1="$(mk_open_round demo 1)"
 report_taint() { # report_taint <phrase>
@@ -660,15 +698,97 @@ out="$(report_taint 'looked at demo-01' | council record-seat docs/specs/demo 1 
 [ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    <slug>-NN (demo-01) in body -> tainted" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 out="$(report_taint 'checked plan.md' | council record-seat docs/specs/demo 1 sonnet 2>&1)"; ex=$?
-[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    plan.md in body -> tainted" \
+[ "$ex" -eq 0 ] && echo "  ok    bare plan.md (no slug prefix) -> accepted, not tainted" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 out="$(report_taint 'checked journal.md' | council record-seat docs/specs/demo 1 opus 2>&1)"; ex=$?
-[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    journal.md in body -> tainted" \
+[ "$ex" -eq 0 ] && echo "  ok    bare journal.md (no slug prefix) -> accepted, not tainted" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 rd_demo2="$(mk_open_round demo 2)"
 out="$(report_taint 'looked under council/' | council record-seat docs/specs/demo 2 haiku 2>&1)"; ex=$?
-[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    council/ in body -> tainted" \
+[ "$ex" -eq 0 ] && echo "  ok    bare council/ (no slug prefix) -> accepted, not tainted" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(report_taint 'read demo/plan.md for context' | council record-seat docs/specs/demo 2 sonnet 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    <slug>/plan.md -> tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(report_taint 'read demo/journal.md for context' | council record-seat docs/specs/demo 2 opus 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    <slug>/journal.md -> tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+rd_demo3="$(mk_open_round demo 3)"
+out="$(report_taint 'looked under demo/council/round-1' | council record-seat docs/specs/demo 3 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    <slug>/council/ -> tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(report_taint 'read docs/specs/demo/plan.md for context' | council record-seat docs/specs/demo 3 sonnet 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    docs/specs/<slug>/plan.md -> tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(report_taint 'saw demo-1 mentioned once' | council record-seat docs/specs/demo 3 opus 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    <slug>-N (one digit) -> accepted, not tainted (needs two digits)" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+rd_demo4="$(mk_open_round demo 4)"
+out="$(report_taint 'per vulyk-plan.md step 9' | council record-seat docs/specs/demo 4 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    vulyk-plan.md (command file) -> accepted, not tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(report_taint 'journal.sh appends to <spec>/journal.md' | council record-seat docs/specs/demo 4 sonnet 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    literal <spec>/journal.md placeholder -> accepted, not tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(report_taint 'compare docs/specs/other/plan.md' | council record-seat docs/specs/demo 4 opus 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    another spec's docs/specs/other/plan.md -> accepted, not tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "record-seat: the live round-1 false positives no longer taint under the real slug (R9 live proof)"
+mk_spec autonomous-cycle 2
+rd_ac1="$(mk_open_round autonomous-cycle 1)"
+report_ac_fp() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: GREEN - mini-grill only, then no wait to commit - url: .claude/commands/vulyk-plan.md:16 saw: "there is no wait here"\n'
+  printf 'ASK 2: GREEN - journal on disk + terminal - run: cat scripts/journal.sh saw: appends one line to `<spec>/journal.md`\n'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+out="$(report_ac_fp | council record-seat docs/specs/autonomous-cycle 1 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    vulyk-plan.md and <spec>/journal.md text accepted, not tainted (R9)" \
+  || { echo "::error::live-proof accept: exit=$ex out=$out"; fail=1; }
+
+rd_ac2="$(mk_open_round autonomous-cycle 2)"
+report_ac_real() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: GREEN - read the plan - run: cat docs/specs/autonomous-cycle/plan.md saw: Tier 4\nASK 2: GREEN - a - run: c saw: ok\n'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+out="$(report_ac_real | council record-seat docs/specs/autonomous-cycle 2 sonnet 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    a real hive path (docs/specs/autonomous-cycle/plan.md) still tainted" \
+  || { echo "::error::live-proof reject: exit=$ex out=$out"; fail=1; }
+
+rd_ac3="$(mk_open_round autonomous-cycle 3)"
+report_ac_storyid() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: GREEN - read story 07 - run: cat docs/specs/autonomous-cycle-07-*.md saw: story text\nASK 2: GREEN - a - run: c saw: ok\n'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+out="$(report_ac_storyid | council record-seat docs/specs/autonomous-cycle 3 opus 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    a real story id (autonomous-cycle-07) still tainted" \
+  || { echo "::error::live-proof storyid reject: exit=$ex out=$out"; fail=1; }
+
+echo "record-seat: evidence with an interior ' - ' inside saw: is not truncated (R8)"
+mk_spec dashev 2
+rd_dashev="$(mk_open_round dashev 1)"
+report_dash_evidence() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: GREEN - ask one - run: c saw: ok\nASK 2: GREEN - suite - run: bash t.sh saw: READY - 6/6 ok\n'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+out="$(report_dash_evidence | council record-seat docs/specs/dashev 1 haiku)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    accepted at attempt 1 despite an interior ' - ' inside saw:" \
+  || { echo "::error::dashev record-seat: exit=$ex out=$out"; fail=1; }
+grep -qF 'unevidenced' "$rd_dashev/haiku.md" && { echo "::error::header wrongly carries unevidenced: $(head -1 "$rd_dashev/haiku.md")"; fail=1; } \
+  || echo "  ok    header carries no unevidenced list"
+write_seat "$rd_dashev" sonnet GG
+write_seat "$rd_dashev" opus GG
+printf 'Reviewed.\nPASS\n' | council record-seat docs/specs/dashev 1 review >/dev/null
+jout="$(council judge docs/specs/dashev)"; jex=$?
+[ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"green"' && echo "  ok    judged GREEN (not downgraded by the interior dash)" \
+  || { echo "::error::dashev judge: exit=$jex out=$jout"; fail=1; }
+row="$(grep '"spec":"dashev"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"red_unevidenced":[]' && echo "  ok    row red_unevidenced:[] agrees with the header (R8)" \
+  || { echo "::error::row: $row"; fail=1; }
 
 # --- record-seat: GREEN/RED without evidence - attempt 1 rejects, attempt 2's leniency --------
 
@@ -686,7 +806,7 @@ seat_report sonnet 1 GGG | council record-seat docs/specs/runev 1 sonnet >/dev/n
 seat_report opus 1 GGG | council record-seat docs/specs/runev 1 opus >/dev/null
 printf 'Reviewed.\nPASS\n' | council record-seat docs/specs/runev 1 review >/dev/null
 jout="$(council judge docs/specs/runev)"; jex=$?
-[ "$jex" -eq 4 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    judge: RED (not escalated by an unevidenced-only red)" \
+[ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    judge: RED (not escalated by an unevidenced-only red)" \
   || { echo "::error::jex=$jex jout=$jout"; fail=1; }
 row="$(grep '"spec":"runev"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -qF '"red":[]' && printf '%s' "$row" | grep -qF '"red_unevidenced":[2]' \
@@ -971,7 +1091,7 @@ for n in 1 2 3; do
   write_review "$rdn" PASS
   jout="$(council judge docs/specs/oreopen1 --commit)"; jex=$?
   if [ "$n" -lt 3 ]; then
-    [ "$jex" -eq 4 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    round $n: RED, repair" \
+    [ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    round $n: RED, repair" \
       || { echo "::error::round $n: exit=$jex out=$jout"; fail=1; }
   else
     [ "$jex" -eq 6 ] && printf '%s' "$jout" | grep -qF '"next":"escalated"' && echo "  ok    round $n: ceiling reached, ESCALATE" \
@@ -1007,7 +1127,7 @@ seat_report sonnet 1 GRG | council record-seat docs/specs/realverbs 1 sonnet >/d
 seat_report opus 1 GGG | council record-seat docs/specs/realverbs 1 opus >/dev/null
 printf 'Reviewed the diff against the story files.\nPASS\n' | council record-seat docs/specs/realverbs 1 review >/dev/null
 jout="$(council judge docs/specs/realverbs --commit)"; jex=$?
-[ "$jex" -eq 4 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    round 1 judged RED --commit (one evidenced RED, ask 2)" \
+[ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    round 1 judged RED --commit (one evidenced RED, ask 2)" \
   || { echo "::error::round 1 judge: exit=$jex out=$jout"; fail=1; }
 
 out="$(council status docs/specs/realverbs --json)"
@@ -1089,8 +1209,43 @@ printf '%s' "$out" | jq -r .next | expect "every other required seat recorded ->
 council judge docs/specs/exhaust1 >/dev/null 2>&1
 row="$(grep '"spec":"exhaust1"' memory/stats/council.jsonl | tail -1)"
 [ -n "$row" ] && printf '%s' "$row" | grep -q '"haiku":"ABSENT"' \
-  && echo "  ok    judge ran and the row carries haiku:ABSENT (the verdict itself is story 20's business)" \
+  && echo "  ok    judge ran and the row carries haiku:ABSENT" || { echo "::error::row: $row"; fail=1; }
+printf '%s' "$row" | grep -qF '"verdict":"ESCALATE"' && printf '%s' "$row" | grep -qF '"escalate":"env"' \
+  && echo "  ok    Tier 3, haiku ABSENT + sonnet/opus GREEN + review PASS -> ESCALATE env, not RED with nothing to repair (R16/M-5)" \
   || { echo "::error::row: $row"; fail=1; }
+printf '%s' "$row" | grep -qE '"note":"[^"]*haiku[^"]*"' && echo "  ok    row note names the absent seat" \
+  || { echo "::error::row note: $row"; fail=1; }
+grep -qF 'haiku.attempt-2.md' docs/specs/exhaust1/plan.md && echo "  ok    ## Needs a human points at haiku's attempt-2.md" \
+  || { echo "::error::plan.md: $(grep -A6 '^## Needs a human' docs/specs/exhaust1/plan.md)"; fail=1; }
+
+echo "judge: Tier 3, review ABSENT, haiku+sonnet+opus GREEN -> ESCALATE env, not RED with red:[] (R16/M-5, minor 32)"
+mk_open_spec envpartial2 2
+set_tier envpartial2 3
+rdp2="$(mk_open_round envpartial2 1 3)"
+write_seat "$rdp2" haiku GG
+write_seat "$rdp2" sonnet GG
+write_seat "$rdp2" opus GG
+write_absent "$rdp2" review
+out="$(council judge docs/specs/envpartial2)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    review ABSENT with every seat GREEN -> ESCALATE env" \
+  || { echo "::error::envpartial2: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"envpartial2"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"escalate":"env"' && printf '%s' "$row" | grep -qF '"review":"ABSENT"' \
+  && echo "  ok    row escalate:env, review ABSENT" || { echo "::error::row: $row"; fail=1; }
+
+echo "judge: Tier 3, haiku ABSENT but ask 2 RED elsewhere -> RED repair, not ESCALATE env (R16 boundary)"
+mk_open_spec envpartial3 2
+set_tier envpartial3 3
+rdp3="$(mk_open_round envpartial3 1 3)"
+write_absent "$rdp3" haiku
+write_seat "$rdp3" sonnet GR
+write_seat "$rdp3" opus GG
+write_review "$rdp3" PASS
+out="$(council judge docs/specs/envpartial3)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && echo "  ok    ABSENT haiku + a real RED elsewhere -> RED repair, not env" \
+  || { echo "::error::envpartial3: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"envpartial3"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"escalate":null' && echo "  ok    row escalate:null (not env)" || { echo "::error::row: $row"; fail=1; }
 
 echo "open-round: the STALE fold writes '' for a seat the round's tier does not require, not ABSENT (R21/minor 20)"
 mk_open_spec stalenr1 2

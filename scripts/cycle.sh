@@ -423,12 +423,14 @@ seat_presence() { # seat_presence <round-dir> <seat> -> present | absent | missi
   fi
 }
 
-seat_ask_lines() { # seat_ask_lines <file> -> "n verdict evidenced(1/0)" per ASK line
+seat_ask_lines() { # seat_ask_lines <file> -> "n verdict evidenced(1/0)" per ASK line - evidenced
+  # comes from ask_evidenced_of (below), the same classification record-seat uses (R8), so a
+  # header's unevidenced: list and judge's red/red_unevidenced never disagree on one report.
   grep -E '^ASK [0-9]+:' "$1" 2>/dev/null | while IFS= read -r line; do
-    local n v ev=0
+    local n v ev
     n="$(printf '%s' "$line" | sed -n 's/^ASK \([0-9][0-9]*\):.*/\1/p')"
     v="$(printf '%s' "$line" | sed -n 's/^ASK [0-9][0-9]*:[[:space:]]*\(GREEN\|RED\|N\/A\).*/\1/p')"
-    case "$line" in *run:*saw:*) ev=1 ;; *url:*saw:*) ev=1 ;; esac
+    ev="$(ask_evidenced_of "$line")"
     printf '%s %s %s\n' "$n" "$v" "$ev"
   done
 }
@@ -531,17 +533,6 @@ ASKS
     esac
   done
 
-  # --- env escalation is "every REQUIRED advisory seat is ABSENT" (C15), not a hardcoded 3 --
-  local all_req_absent=1
-  for seat in haiku sonnet opus; do
-    is_required_seat "$seat" "$REQUIRED" || continue
-    case "$seat" in
-      haiku)  [ "$haiku_v" = ABSENT ]  || all_req_absent=0 ;;
-      sonnet) [ "$sonnet_v" = ABSENT ] || all_req_absent=0 ;;
-      opus)   [ "$opus_v" = ABSENT ]   || all_req_absent=0 ;;
-    esac
-  done
-
   # evidenced wins over unevidenced for the same ask number
   local cleaned="" u
   for u in $red_u; do case " $red_e " in *" $u "*) ;; *) cleaned="$cleaned $u" ;; esac; done
@@ -560,6 +551,21 @@ ASKS
   else
     review_v="" # C15: review not required at this tier and never recorded - not ABSENT
   fi
+
+  # --- env escalation is "at least one REQUIRED seat is ABSENT" (R16/M-5), not "all three" -
+  # a partial absence with nothing RED anywhere and review not BLOCK is a court/tooling defect
+  # no repair story can act on, same as the all-absent case it used to be limited to.
+  local absent_seats=""
+  for seat in haiku sonnet opus; do
+    is_required_seat "$seat" "$REQUIRED" || continue
+    case "$seat" in
+      haiku)  [ "$haiku_v" = ABSENT ]  && absent_seats="$absent_seats haiku" ;;
+      sonnet) [ "$sonnet_v" = ABSENT ] && absent_seats="$absent_seats sonnet" ;;
+      opus)   [ "$opus_v" = ABSENT ]   && absent_seats="$absent_seats opus" ;;
+    esac
+  done
+  is_required_seat review "$REQUIRED" && [ "$review_v" = ABSENT ] && absent_seats="$absent_seats review"
+  absent_seats="${absent_seats# }"
 
   local na_count=0 v
   for v in "$haiku_v" "$sonnet_v" "$opus_v"; do [ "$v" = "N/A" ] && na_count=$((na_count+1)); done
@@ -580,10 +586,10 @@ ASKS
 
   # --- the verdict rule (D4), first match wins ----------------------------------------------
   local overall="" next_val="" escalate_reason=""
-  local half=$(( (A+1)/2 ))
+  local half=$(( (A+1)/2 )); [ "$half" -lt 2 ] && half=2  # R10: max(2, ceil(A/2))
   if [ "$override_red" -eq 1 ]; then
     overall="RED"; next_val="repair"
-  elif [ "$all_req_absent" -eq 1 ]; then
+  elif [ -n "$absent_seats" ] && [ "$red_e_count" -eq 0 ] && [ "$red_u_count" -eq 0 ] && [ "$review_v" != "BLOCK" ]; then
     overall="ESCALATE"; escalate_reason="env"; next_val="escalated"
   elif [ "$red_e_count" -gt 0 ] && [ "$red_e_count" -ge "$half" ]; then
     overall="ESCALATE"; escalate_reason="half"; next_val="escalated"
@@ -599,7 +605,8 @@ ASKS
     if [ "$ok" -eq 1 ] && { [ "$review_v" = "PASS" ] || [ -z "$review_v" ]; }; then
       overall="GREEN"; next_val="green"
     else
-      overall="RED"; next_val="repair" # not reached by any story-01 fixture; conservative default
+      overall="RED"; next_val="repair" # defensive default - every ABSENT/RED/BLOCK state is
+      # already routed above, so this should be unreachable (R16 closed the last gap)
     fi
   fi
 
@@ -610,11 +617,13 @@ ASKS
     local escjson="null"; [ -n "$escalate_reason" ] && escjson="\"$escalate_reason\""
     local attempts=0
     for seat in haiku sonnet opus review; do [ -f "$RD/$seat.md" ] && attempts=$((attempts+1)); done
-    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"na":%s,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":%s,"note":""}\n' \
+    local noteval=""
+    [ "$escalate_reason" = "env" ] && noteval="$(printf '%s' "$absent_seats" | sed 's/ /, /g') ABSENT"
+    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"na":%s,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":%s,"note":"%s"}\n' \
       "$(now_ts)" "$SLUG" "$N" "$overall" "$head7" "$RPACK" "$A" \
       "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$na_count" \
       "$review_v" "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" \
-      "$attempts" "$escjson" >> memory/stats/council.jsonl
+      "$attempts" "$escjson" "$noteval" >> memory/stats/council.jsonl
   fi
 
   if [ -f "$PLAN" ] && ! council_line_exists "$PLAN" "$N"; then
@@ -630,6 +639,14 @@ ASKS
       for u in $red_e $red_u; do
         printf -- '- ask %s: RED - see %s/*.md for evidence\n' "$u" "$RD"
       done
+      if [ "$escalate_reason" = "env" ]; then
+        local aseat att
+        for aseat in $absent_seats; do
+          for att in 1 2; do
+            [ -f "$RD/$aseat.attempt-$att.md" ] && printf -- '- %s: %s/%s.attempt-%s.md\n' "$aseat" "$RD" "$aseat" "$att"
+          done
+        done
+      fi
       printf -- '- seats: %s/\n' "$RD"
     } >> "$PLAN"
   fi
@@ -652,8 +669,10 @@ ASKS
   fi
 
   echo "cycle: $SLUG - round $N judged: $overall"
+  # R24/C2: 4 is record-seat MALFORMED and close-story red verification only - a RED verdict
+  # is a successful judgement (ok:true) and exits 0 with next:"repair"; ESCALATE keeps 6.
   local exit_code=0
-  case "$overall" in GREEN) exit_code=0 ;; RED) exit_code=4 ;; ESCALATE) exit_code=6 ;; esac
+  case "$overall" in ESCALATE) exit_code=6 ;; esac
   emit true "$VERBLABEL" "$exit_code" "$next_val"
   exit "$exit_code"
 }
@@ -804,19 +823,30 @@ missing_label() { # missing_label <report> -> the first required C5 label absent
 }
 
 taint_reason() { # taint_reason <report> <slug> -> the D3 taint description, or "" when clean.
-  # The four literal patterns, case-sensitive, nothing else (no prose heuristics).
+  # Path-anchored (R9): a hit needs the slug immediately before /plan.md, /journal.md or
+  # /council/ - optionally under docs/specs/ - or a word-bounded <slug>-NN (two digits) story
+  # id. The bare words plan.md/journal.md/council/, a command file like vulyk-plan.md, and
+  # another spec's paths are never taint; literal, case-sensitive, no prose heuristics.
   local report="$1" slug="$2" esc
   esc="$(printf '%s' "$slug" | sed 's/[.[\*^$()+?{|]/\\&/g')"
-  printf '%s' "$report" | grep -qE "${esc}-[0-9]+" && { printf 'names a story id %s-NN' "$slug"; return; }
-  printf '%s' "$report" | grep -qF 'plan.md'       && { printf 'names plan.md'; return; }
-  printf '%s' "$report" | grep -qF 'journal.md'    && { printf 'names journal.md'; return; }
-  printf '%s' "$report" | grep -qF 'council/'      && { printf 'names council/'; return; }
+  printf '%s' "$report" | grep -qE "\b${esc}-[0-9]{2}\b"                && { printf 'names a story id %s-NN' "$slug"; return; }
+  printf '%s' "$report" | grep -qE "(docs/specs/)?\b${esc}/plan\.md"    && { printf 'names %s/plan.md' "$slug"; return; }
+  printf '%s' "$report" | grep -qE "(docs/specs/)?\b${esc}/journal\.md" && { printf 'names %s/journal.md' "$slug"; return; }
+  printf '%s' "$report" | grep -qE "(docs/specs/)?\b${esc}/council/"    && { printf 'names %s/council/' "$slug"; return; }
   return 0
 }
 
 ask_line_of() { printf '%s\n' "$1" | grep -m1 -E "^ASK $2:"; } # ask_line_of <report> <n>
 ask_verdict_of() { printf '%s' "$1" | sed -n 's/^ASK [0-9][0-9]*:[[:space:]]*\(GREEN\|RED\|N\/A\).*/\1/p'; } # <ask-line>
-ask_rest_of() { printf '%s' "$1" | sed 's/.* - //'; } # <ask-line> -> its evidence/why clause (text after the last " - ")
+ask_rest_of() { printf '%s' "$1" | sed -E 's/^ASK [0-9]+: (GREEN|RED|N\/A)( - )?//'; } # <ask-line> -> everything
+  # after the verdict token, interior " - " kept intact (R8 - no truncation at the last dash)
+ask_evidenced_of() { # ask_evidenced_of <ask-line> -> "1" iff run:+saw: or url:+saw: occur
+  # anywhere in the remainder, "0" otherwise - the one rule record-seat and judge both use (R8).
+  case "$(ask_rest_of "$1")" in
+    *run:*saw:*|*url:*saw:*) printf 1 ;;
+    *) printf 0 ;;
+  esac
+}
 
 cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <report> <model-opt> <head>
   local SPEC="$1" RD="$2" N="$3" ATTEMPT="$4" REPORT="$5" MODEL_OPT="$6" HEAD="$7"
@@ -881,7 +911,7 @@ REPORTEOF
     [ -n "$v" ] || reject_seat_report "$RD" "$SEAT" "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$REPORT" "ASK $i has no GREEN/RED/N/A token"
     rest="$(ask_rest_of "$line")"
     case "$v" in
-      "N/A") case "$rest" in why:*) ;; *) reject_seat_report "$RD" "$SEAT" "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$REPORT" "ASK $i is N/A without why:" ;; esac ;;
+      "N/A") case "$rest" in *why:*) ;; *) reject_seat_report "$RD" "$SEAT" "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$REPORT" "ASK $i is N/A without why:" ;; esac ;;
       RED)   red_any=1; nonNA_any=1 ;;
       GREEN) nonNA_any=1 ;;
     esac
@@ -901,11 +931,7 @@ REPORTEOF
     v="$(ask_verdict_of "$line")"
     case "$v" in
       GREEN|RED)
-        rest="$(ask_rest_of "$line")"
-        case "$rest" in
-          run:*saw:*|url:*saw:*) ;;
-          *) unevidenced="$unevidenced $i" ;;
-        esac
+        [ "$(ask_evidenced_of "$line")" = "1" ] || unevidenced="$unevidenced $i"
         ;;
     esac
   done
@@ -920,14 +946,15 @@ REPORTEOF
   # unevidenced GREEN becomes N/A. Recompute VERDICT only if this changed it.
   local FINAL_REPORT="$REPORT" final_overall="$raw_overall" red_u_list=""
   if [ -n "$unevidenced" ]; then
-    local u short prefix_stripped
+    local u short
     for u in $unevidenced; do
       line="$(ask_line_of "$REPORT" "$u")"
       v="$(ask_verdict_of "$line")"
       if [ "$v" = GREEN ]; then
-        rest="$(ask_rest_of "$line")"
-        prefix_stripped="$(printf '%s' "$line" | sed -E "s/^ASK $u: (GREEN|RED|N\/A) - //")"
-        short="${prefix_stripped% - $rest}"
+        # cosmetic label for the rewrite only (not evidence classification, R8 didn't touch
+        # this): the description before the final dash-separated segment, same as before.
+        short="$(printf '%s' "$line" | sed -E "s/^ASK $u: (GREEN|RED|N\/A) - //")"
+        short="$(printf '%s' "$short" | sed 's/ - [^-]*$//')"
         FINAL_REPORT="$(printf '%s\n' "$FINAL_REPORT" | sed "s#^ASK $u:.*#ASK $u: N/A - $short - why: unevidenced on attempt 2#")"
       else
         red_u_list="$red_u_list $u"
