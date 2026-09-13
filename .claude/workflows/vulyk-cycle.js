@@ -25,7 +25,10 @@ const SEAT_AGENT = { haiku: 'council-haiku', sonnet: 'council-sonnet', opus: 'co
 const spec = args.spec
 const TOP = args.top_model
 const SECOND = args.second_model
-const stamp = args.stamp // opaque per-run string - only used to build the record-seat delimiter (R11); never compared, parsed or shown to a seat
+const stamp = args.stamp // a per-run random value the seat is never told - only used to build the record-seat delimiter (R11/R31); never compared, parsed or shown to a seat
+if (typeof stamp !== 'string' || stamp.length < 12) {
+  return { stop: { verb: 'launch', error: 'args.stamp missing: launch with the 16-hex random stamp of /vulyk-build step 1' } }
+}
 log(`vulyk-cycle: ${spec} · stamp ${stamp}`)
 
 class BadLine extends Error {
@@ -59,9 +62,22 @@ const reviewPrompt = (st) =>
   `Adversarial review for ${st.slug}, round ${st.round}. Round dir: ${st.round_dir}. Spec: ${st.spec} - review its stories and plan. Diff the branch ${st.branch} at ${st.head} against its base. See docs/adr/001-cycle-state-contract.md. You do not enter the court.`
 
 // Only prose this driver ever reads: a review report's first line (C5's PASS|BLOCK token).
-const isBlock = (report) => {
-  const first = String(report).trim().split('\n')[0]
-  return /^BLOCK\b/.test(first) || /^VERDICT:\s*BLOCK\b/.test(first)
+// Folds two reviewer reports into one; a null/empty/prose report on either side never
+// manufactures a verdict - the driver sends NO VERDICT through unchanged so record-seat
+// rejects it (R28, N-C1).
+function foldReviews(r1, r2) {
+  const isEmpty = (r) => r === null || r === undefined || r === ''
+  const firstLine = (r) => isEmpty(r) ? null : String(r).trim().split('\n')[0]
+  const isVerdict = (line) => line !== null && /^VERDICT:\s*(PASS|BLOCK)\b/.test(line)
+  const f1 = firstLine(r1)
+  const f2 = firstLine(r2)
+  if (isVerdict(f1) && isVerdict(f2)) {
+    const block = /^VERDICT:\s*BLOCK\b/.test(f1) || /^VERDICT:\s*BLOCK\b/.test(f2)
+    return `VERDICT: ${block ? 'BLOCK' : 'PASS'}\n${r1}\n${r2}`
+  }
+  const b1 = isEmpty(r1) ? '(no report)' : r1
+  const b2 = isEmpty(r2) ? '(no report)' : r2
+  return `NO VERDICT: top=${f1 ?? '(no report)'} · second=${f2 ?? '(no report)'}\n${b1}\n${b2}`
 }
 
 // Tier 4 folds a second reviewer on the paired model into the one `review` seat (R12); `note`
@@ -70,14 +86,15 @@ const dispatchSeat = (seat, st, note) => (seat === 'review' && st.tier === 4)
   ? parallel([
       () => agent(reviewPrompt(st) + note, { agentType: SEAT_AGENT.review, model: TOP, phase: 'Round' }),
       () => agent(reviewPrompt(st) + note, { agentType: SEAT_AGENT.review, model: SECOND, phase: 'Round' }),
-    ]).then(([r1, r2]) => `VERDICT: ${isBlock(r1) || isBlock(r2) ? 'BLOCK' : 'PASS'}\n${r1}\n${r2}`)
+    ]).then(([r1, r2]) => foldReviews(r1, r2))
   : agent((seat === 'review' ? reviewPrompt(st) : seatPrompt(seat, st)) + note, {
       agentType: SEAT_AGENT[seat],
       model: seat === 'review' ? TOP : undefined,
       phase: 'Round',
     })
 
-const attempts = new Map() // story file -> close-story failures this run (R6, a per-run bound only - nothing on disk depends on it)
+const attempts = new Map() // story file -> misses this run: red close-story or empty worker report, together (R6/R29, per-run only - nothing on disk depends on it)
+const repaired = new Set() // round numbers already sent to queen-planner this run (R30, per-run only)
 
 try {
   for (;;) {
@@ -98,17 +115,20 @@ try {
         { agentType: story.worker, phase: 'Build' },
       )))
       for (let i = 0; i < stories.length; i++) {
-        if (!reports[i]) continue
         const file = stories[i].file
-        // close-story derives `repeat: N` itself from the story's own ## Verification block
-        // (cycle.sh's cmd_close_story) and takes no --repeat flag, so it is not passed here.
-        const res = await clerk(`close-story ${file} --commit`)
-        if (res.ok) continue
-        if (res.exit !== 4) fail(st, asStop(res))
+        // an empty/null worker report is a miss on the same bound a red close-story is
+        // (R29) - close-story never runs on one, and either failure trips the same count.
+        if (reports[i]) {
+          // close-story derives `repeat: N` itself from the story's own ## Verification block
+          // (cycle.sh's cmd_close_story) and takes no --repeat flag, so it is not passed here.
+          const res = await clerk(`close-story ${file} --commit`)
+          if (res.ok) continue
+          if (res.exit !== 4) fail(st, asStop(res))
+        }
         const n = (attempts.get(file) || 0) + 1
         attempts.set(file, n)
-        if (n >= 2) fail(st, { verb: 'close-story', file, error: res.error })
-        // first failed verification for this file: continue - it stays open, the next status poll re-routes it
+        if (n >= 2) fail(st, { verb: 'build', file, error: 'worker returned no report' })
+        // first miss for this file: continue - it stays open, the next status poll re-routes it
       }
     } else if (st.next === 'open-round') {
       phase('Round')
@@ -121,21 +141,21 @@ try {
       const delim = (seat, attempt) => `VULYK_${stamp}_${seat}_${attempt}`
       const recordSeat = (seat, report, attempt) => {
         const d = delim(seat, attempt)
-        return clerk(`record-seat ${spec} ${st.round} ${seat} <<'${d}'\n${report}\n${d}`)
+        const body = report ?? '' // a null report (dead agent(), a throwing parallel thunk) is an empty body, never the string "null"
+        return clerk(`record-seat ${spec} ${st.round} ${seat} <<'${d}'\n${body}\n${d}`)
       }
+      const reports = await parallel(seats.map((seat) => () => dispatchSeat(seat, st, '')))
       let dispatchStop = null
-      await pipeline(
-        seats,
-        (seat) => dispatchSeat(seat, st, ''),
-        async (report, seat) => {
-          // a seat's report is always recorded, empty or not (R6)
-          const res = await recordSeat(seat, report, 1)
-          if (res.ok) return
-          if (res.exit !== 4) { dispatchStop = dispatchStop || asStop(res); return }
-          const retry = await dispatchSeat(seat, st, `\nYour previous report was rejected: ${res.error}`)
-          await recordSeat(seat, retry, 2) // re-asked once (R6) - continue whatever this second result is
-        },
-      )
+      for (let i = 0; i < seats.length; i++) {
+        const seat = seats[i]
+        // a seat's report is always recorded, empty or not (R6); clerk() runs in plain loop
+        // code, not inside a pipeline stage, so a BadLine reaches the one catch (R32).
+        const res = await recordSeat(seat, reports[i], 1)
+        if (res.ok) continue
+        if (res.exit !== 4) { dispatchStop = dispatchStop || asStop(res); continue }
+        const retry = await dispatchSeat(seat, st, `\nYour previous report was rejected: ${res.error}`)
+        await recordSeat(seat, retry, 2) // re-asked once (R6) - continue whatever this second result is
+      }
       if (dispatchStop) fail(st, dispatchStop)
     } else if (st.next === 'judge') {
       phase('Judge')
@@ -143,8 +163,18 @@ try {
       if (!res.ok) fail(st, asStop(res))
     } else if (st.next === 'repair') {
       phase('Repair')
+      // one queen-planner dispatch per round number per run (R30) - a repeat visit means
+      // the last dispatch landed no story, nothing changed, so re-asking would loop forever.
+      if (repaired.has(st.round)) fail(st, { verb: 'repair', round: st.round, error: `repair landed nothing for round ${st.round}` })
+      repaired.add(st.round)
+      const reason = st.red.length > 0
+        ? `left the asks numbered [${st.red.join(', ')}] unresolved - the seat reports are under ${st.round_dir}`
+        : `has no ask numbered - the review seat's BLOCK (or an owner REJECTED) is why the round failed; see ${st.round_dir}/review.md`
+      const ask = st.red.length > 0
+        ? 'one wave, each addressing exactly one of those asks'
+        : 'one wave, one story per critical and per major finding whose fix is local'
       await agent(
-        `Round ${st.round} for ${st.slug} left the asks numbered [${st.red.join(', ')}] unresolved - the seat reports are under ${st.round_dir}. Cut fix stories under docs/specs/${st.slug}/ following templates/story.md's frontmatter and naming convention, one wave, each addressing exactly one of those asks, then update plan.md's story index.`,
+        `Round ${st.round} for ${st.slug} (review: ${st.review}) ${reason}. Cut fix stories under docs/specs/${st.slug}/ following templates/story.md's frontmatter and naming convention, ${ask}, then update plan.md's story index.`,
         { agentType: 'queen-planner', model: TOP, phase: 'Repair' },
       )
     } else {

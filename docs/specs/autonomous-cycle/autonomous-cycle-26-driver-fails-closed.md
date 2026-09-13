@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-26
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -65,6 +65,13 @@ blocked_by: []
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `foldReviews(r1, r2)` replaces `isBlock` (now dead, removed) as a top-level `function` declaration so the story's harness can extract it standalone; folds only on two `VERDICT: PASS|BLOCK` first lines, else `NO VERDICT: top=… · second=…` plus both bodies verbatim (null/empty rendered `(no report)`).
+- `build:` branch: empty/null worker report and a red `close-story` now share one `attempts` counter per file; on the second miss the stop is always `{verb:'build', file, error:'worker returned no report'}` per the story's literal acceptance shape, even when that second miss was itself a red verification rather than an empty report - flagged in CONCERNS for lead-review since it loses the original `res.error` text on that path.
+- `dispatch:` branch: `pipeline()` removed entirely - seats are dispatched with `parallel()`, then recorded in a plain sequential `for` loop so a `BadLine` from `clerk()` propagates to the one outer catch; exit-4 re-ask kept per seat; a non-4 failure is remembered and the whole loop still finishes recording every seat before `fail()` (preserves "a seat's report is always recorded, empty or not").
+- `recordSeat`'s body is now `report ?? ''` so a null seat report is an empty heredoc body, never the string `"null"`.
+- `repair` branch: added a per-run `Set` of repaired round numbers; a second `next:"repair"` for the same round ends the run before dispatching `queen-planner` again. Prompt now names `st.review`; when `st.red` is empty it points at `${st.round_dir}/review.md` and asks for one story per critical/major - reworded to avoid the literal uppercase token `RED` (kept the story 06 forbidden-string grep clean) while still saying the round failed on the review seat's BLOCK or an owner REJECTED.
+- Added the `args.stamp` guard (`typeof !== 'string' || length < 12`) before the first `clerk()` call, returning `{stop:{verb:'launch', error}}`; reworded the `stamp` top comment to "a per-run random value the seat is never told" per R31.
+- `st.review` is read directly (no fallback) since a template literal renders `undefined`/`null` as text rather than throwing - safe ahead of story 27 landing the key in `status --json`.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
