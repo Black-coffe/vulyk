@@ -41,6 +41,8 @@ cat > CLAUDE.md <<'EOF'
 | Close-story fixture (flag file) | `test -f docs/specs/cstory1/flag.txt` |
 | Fixture: always fails | `false` |
 | Fixture: always succeeds | `true` |
+| Fixture: quoted command that fails | `sh -c "exit 1"` |
+| Fixture: backslash command that fails | `sh -c 'echo a\b; exit 1'` |
 EOF
 git add -A && git commit -qm init >/dev/null
 HEAD7="$(git rev-parse --short HEAD)"
@@ -172,7 +174,7 @@ git add -A && git commit -qm "status1: briefed" >/dev/null
 out="$(council status docs/specs/status1 --json)"
 lines="$(printf '%s\n' "$out" | grep -c .)"
 [ "$lines" -eq 1 ] || { echo "::error::status --json printed $lines lines, expected exactly 1"; fail=1; }
-for k in spec slug stage next briefed approved branch head pack stories wave wave_stories round ceiling tier open court missing stale verdict red round_dir paused shipped; do
+for k in spec slug stage next briefed approved branch head pack stories wave wave_stories round ceiling tier open court missing stale verdict review red round_dir paused shipped; do
   printf '%s' "$out" | jq -e "has(\"$k\")" >/dev/null 2>&1 || { echo "::error::status --json is missing key '$k': $out"; fail=1; }
 done
 printf '%s' "$out" | jq -e '.stories | has("todo") and has("in-progress") and has("done") and has("blocked")' >/dev/null 2>&1 \
@@ -842,7 +844,7 @@ grep -qF 'unevidenced' "$rd_dashev/haiku.md" && { echo "::error::header wrongly 
   || echo "  ok    header carries no unevidenced list"
 write_seat "$rd_dashev" sonnet GG
 write_seat "$rd_dashev" opus GG
-printf 'Reviewed.\nPASS\n' | council record-seat docs/specs/dashev 1 review >/dev/null
+printf 'VERDICT: PASS\nReviewed.\n' | council record-seat docs/specs/dashev 1 review >/dev/null
 jout="$(council judge docs/specs/dashev)"; jex=$?
 [ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"green"' && echo "  ok    judged GREEN (not downgraded by the interior dash)" \
   || { echo "::error::dashev judge: exit=$jex out=$jout"; fail=1; }
@@ -864,7 +866,7 @@ grep -qF 'unevidenced: 2' "$rd_runev/haiku.md" && echo "  ok    header carries u
   || { echo "::error::header: $(head -1 "$rd_runev/haiku.md")"; fail=1; }
 seat_report sonnet 1 GGG | council record-seat docs/specs/runev 1 sonnet >/dev/null
 seat_report opus 1 GGG | council record-seat docs/specs/runev 1 opus >/dev/null
-printf 'Reviewed.\nPASS\n' | council record-seat docs/specs/runev 1 review >/dev/null
+printf 'VERDICT: PASS\nReviewed.\n' | council record-seat docs/specs/runev 1 review >/dev/null
 jout="$(council judge docs/specs/runev)"; jex=$?
 [ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    judge: RED (not escalated by an unevidenced-only red)" \
   || { echo "::error::jex=$jex jout=$jout"; fail=1; }
@@ -898,22 +900,52 @@ out="$(printf 'garbage3\n' | council record-seat docs/specs/rabsent 1 haiku 2>&1
 [ ! -f "$rd_rabsent/haiku.md" ] && [ -f "$rd_rabsent/haiku.attempt-2.md" ] && echo "  ok    no final haiku.md, attempt-2.md remains" \
   || { echo "::error::files: $(ls "$rd_rabsent")"; fail=1; }
 
-# --- record-seat: review seat, any shape, PASS/BLOCK extracted -------------------------------
+# --- record-seat: review seat, verdict read from line 1 only (C5 amended, story 27/R28,N-m4) --
 
-echo "record-seat review: any shape accepted, PASS/BLOCK extracted into header verdict:"
+echo "record-seat review: VERDICT: BLOCK on line 1 -> recorded BLOCK"
 mk_spec rrev 2
 rd_rrev="$(mk_open_round rrev 1)"
-out="$(printf 'Looked at everything.\nBLOCK - missing a guard on line 40.\n' | council record-seat docs/specs/rrev 1 review)"; ex=$?
-[ "$ex" -eq 0 ] && echo "  ok    review with BLOCK anywhere -> exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(printf 'VERDICT: BLOCK\nMissing a guard on line 40.\n' | council record-seat docs/specs/rrev 1 review)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    VERDICT: BLOCK on line 1 -> exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
 grep -qF 'verdict: BLOCK' "$rd_rrev/review.md" && echo "  ok    header carries verdict: BLOCK" \
   || { echo "::error::$(head -1 "$rd_rrev/review.md")"; fail=1; }
 
-echo "record-seat review: neither PASS nor BLOCK -> exit 4"
-mk_spec rrev2 2
-mk_open_round rrev2 1 >/dev/null
-out="$(printf 'Just some prose, no verdict token.\n' | council record-seat docs/specs/rrev2 1 review 2>&1)"; ex=$?
-[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'MALFORMED' && echo "  ok    review without PASS/BLOCK -> exit 4" \
+echo "record-seat review: VERDICT: PASS on line 1 wins over a distracting BLOCK later in the body"
+mk_spec rrevb 2
+rd_rrevb="$(mk_open_round rrevb 1)"
+out="$(printf 'VERDICT: PASS\nPASS/BLOCK decision: BLOCK\n' | council record-seat docs/specs/rrevb 1 review)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    VERDICT: PASS on line 1 -> exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -qF 'verdict: PASS' "$rd_rrevb/review.md" && echo "  ok    header carries verdict: PASS - the body's BLOCK token is not read" \
+  || { echo "::error::$(head -1 "$rd_rrevb/review.md")"; fail=1; }
+
+echo "record-seat review: a prose first line is MALFORMED even with VERDICT: PASS on line 3, attempt-1.md kept; a second rejection (the driver's NO VERDICT fold shape) -> attempt-2.md, review ABSENT, ESCALATE env (the envpartial2 shape)"
+mk_open_spec rrev3 2
+set_tier rrev3 3
+rd_rrev3="$(mk_open_round rrev3 1 3)"
+out="$(printf 'Prose first line, no token.\nsecond line.\nVERDICT: PASS\n' | council record-seat docs/specs/rrev3 1 review 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'MALFORMED: review: first line is not VERDICT: PASS|BLOCK' \
+  && echo "  ok    prose first line with VERDICT: PASS on line 3 -> exit 4" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -f "$rd_rrev3/review.attempt-1.md" ] && grep -qF 'VERDICT: PASS' "$rd_rrev3/review.attempt-1.md" \
+  && echo "  ok    attempt-1.md keeps the rejected report" || { echo "::error::files: $(ls "$rd_rrev3")"; fail=1; }
+
+out="$(printf 'NO VERDICT: top=(no report) \xc2\xb7 second=VERDICT: PASS\n(no report)\nVERDICT: PASS\n' | council record-seat docs/specs/rrev3 1 review 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'MALFORMED' && echo "  ok    the driver's NO VERDICT fold first line is also MALFORMED (second rejection)" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -f "$rd_rrev3/review.attempt-2.md" ] && [ ! -f "$rd_rrev3/review.md" ] && echo "  ok    attempt-2.md written, no review.md - review is ABSENT" \
+  || { echo "::error::files: $(ls "$rd_rrev3")"; fail=1; }
+
+out="$(council status docs/specs/rrev3 --json)"
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "status: missing excludes the exhausted review seat" "haiku,opus,sonnet"
+
+write_seat "$rd_rrev3" haiku GG
+write_seat "$rd_rrev3" sonnet GG
+write_seat "$rd_rrev3" opus GG
+out="$(council judge docs/specs/rrev3)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    review exhausted (ABSENT) with every other seat GREEN -> ESCALATE env" \
+  || { echo "::error::rrev3: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"rrev3"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"escalate":"env"' && printf '%s' "$row" | grep -qF '"review":"ABSENT"' \
+  && echo "  ok    row escalate:env, review ABSENT" || { echo "::error::row: $row"; fail=1; }
 
 # --- record-seat: model resolution (--model > report's MODEL: > unknown) ----------------------
 
@@ -1100,6 +1132,50 @@ out="$(council close-story docs/specs/cstory2/cstory2-01-first.md 2>&1)"; ex=$?
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 grep -q '^status: todo' docs/specs/cstory2/cstory2-01-first.md && echo "  ok    status stays todo" \
   || { echo "::error::status: $(grep '^status:' docs/specs/cstory2/cstory2-01-first.md)"; fail=1; }
+
+echo "close-story: emit escapes a failing command's quotes so the last line stays parsable (R33/N-M4)"
+mkdir -p docs/specs/cstoryq
+cat > docs/specs/cstoryq/cstoryq-01-first.md <<'EOF'
+---
+story: cstoryq-01
+spec: cstoryq
+status: todo
+wave: 1
+---
+# emit-escape fixture, a quoted command
+
+## Verification
+`sh -c "exit 1"`
+EOF
+git add -A && git commit -qm "spec(cstoryq): fixture" >/dev/null
+out="$(council close-story docs/specs/cstoryq/cstoryq-01-first.md 2>&1)"; ex=$?
+lastline="$(printf '%s\n' "$out" | tail -1)"
+[ "$ex" -eq 4 ] && printf '%s' "$lastline" | jq -e . >/dev/null 2>&1 && echo "  ok    quoted-command failure -> exit 4, last line is valid JSON" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ "$(printf '%s' "$lastline" | jq -r .error)" = 'sh -c "exit 1"' ] && echo "  ok    error equals the ## Commands cell text byte for byte" \
+  || { echo "::error::error field: $(printf '%s' "$lastline" | jq -r .error) from: $lastline"; fail=1; }
+
+echo "close-story: emit escapes a failing command's backslash the same way (R33/N-M4)"
+mkdir -p docs/specs/cstorybs
+cat > docs/specs/cstorybs/cstorybs-01-first.md <<'EOF'
+---
+story: cstorybs-01
+spec: cstorybs
+status: todo
+wave: 1
+---
+# emit-escape fixture, a backslash command
+
+## Verification
+`sh -c 'echo a\b; exit 1'`
+EOF
+git add -A && git commit -qm "spec(cstorybs): fixture" >/dev/null
+out="$(council close-story docs/specs/cstorybs/cstorybs-01-first.md 2>&1)"; ex=$?
+lastline="$(printf '%s\n' "$out" | tail -1)"
+[ "$ex" -eq 4 ] && printf '%s' "$lastline" | jq -e . >/dev/null 2>&1 && echo "  ok    backslash-command failure -> exit 4, last line is valid JSON" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ "$(printf '%s' "$lastline" | jq -r .error)" = "sh -c 'echo a\\b; exit 1'" ] && echo "  ok    error equals the ## Commands cell text byte for byte" \
+  || { echo "::error::error field: $(printf '%s' "$lastline" | jq -r .error) from: $lastline"; fail=1; }
 
 echo "close-story: the literal 'none - reviewed by lead-review' runs nothing, but scope-check still runs"
 mkdir -p docs/specs/cstory5
@@ -1416,7 +1492,7 @@ set_tier realverbs 2
 council open-round docs/specs/realverbs --commit >/dev/null
 seat_report sonnet 1 GRG | council record-seat docs/specs/realverbs 1 sonnet >/dev/null
 seat_report opus 1 GGG | council record-seat docs/specs/realverbs 1 opus >/dev/null
-printf 'Reviewed the diff against the story files.\nPASS\n' | council record-seat docs/specs/realverbs 1 review >/dev/null
+printf 'VERDICT: PASS\nReviewed the diff against the story files.\n' | council record-seat docs/specs/realverbs 1 review >/dev/null
 jout="$(council judge docs/specs/realverbs --commit)"; jex=$?
 [ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    round 1 judged RED --commit (one evidenced RED, ask 2)" \
   || { echo "::error::round 1 judge: exit=$jex out=$jout"; fail=1; }
@@ -1442,7 +1518,7 @@ for n in 2 3; do
   council open-round docs/specs/realverbs --commit >/dev/null
   seat_report sonnet "$n" GRG | council record-seat docs/specs/realverbs "$n" sonnet >/dev/null
   seat_report opus "$n" GGG | council record-seat docs/specs/realverbs "$n" opus >/dev/null
-  printf 'Reviewed the diff.\nPASS\n' | council record-seat docs/specs/realverbs "$n" review >/dev/null
+  printf 'VERDICT: PASS\nReviewed the diff.\n' | council record-seat docs/specs/realverbs "$n" review >/dev/null
   council judge docs/specs/realverbs --commit >/dev/null
 done
 out="$(council status docs/specs/realverbs --json)"
@@ -1459,6 +1535,33 @@ printf '%s' "$out" | jq -e '.next == "open-round"' >/dev/null 2>&1 && echo "  ok
 out="$(council open-round docs/specs/realverbs --commit)"; ex=$?
 [ "$ex" -eq 0 ] && [ -d docs/specs/realverbs/council/round-4 ] && echo "  ok    open-round opens round 4 past the raised ceiling" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "status --json: review key - the newest row's review verdict verbatim (R30/C3)"
+seat_report sonnet 4 GGG | council record-seat docs/specs/realverbs 4 sonnet >/dev/null
+seat_report opus 4 GGG | council record-seat docs/specs/realverbs 4 opus >/dev/null
+printf 'VERDICT: BLOCK\nStill missing coverage on ask 2.\n' | council record-seat docs/specs/realverbs 4 review >/dev/null
+jout="$(council judge docs/specs/realverbs --commit)"; jex=$?
+[ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    round 4 judged RED --commit (review BLOCK, both seats GREEN)" \
+  || { echo "::error::round 4 judge: exit=$jex out=$jout"; fail=1; }
+out="$(council status docs/specs/realverbs --json)"
+printf '%s' "$out" | jq -e '.review == "BLOCK" and .red == [] and .next == "repair"' >/dev/null 2>&1 \
+  && echo "  ok    status --json review:BLOCK, red:[], next:repair" || { echo "::error::status: $out"; fail=1; }
+
+council open-round docs/specs/realverbs --commit >/dev/null
+seat_report sonnet 5 GGG | council record-seat docs/specs/realverbs 5 sonnet >/dev/null
+seat_report opus 5 GGG | council record-seat docs/specs/realverbs 5 opus >/dev/null
+printf 'VERDICT: PASS\nEverything checks out.\n' | council record-seat docs/specs/realverbs 5 review >/dev/null
+jout="$(council judge docs/specs/realverbs --commit)"; jex=$?
+[ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"green"' && echo "  ok    round 5 judged GREEN --commit (review PASS, both seats GREEN)" \
+  || { echo "::error::round 5 judge: exit=$jex out=$jout"; fail=1; }
+out="$(council status docs/specs/realverbs --json)"
+printf '%s' "$out" | jq -e '.review == "PASS"' >/dev/null 2>&1 && echo "  ok    status --json review:PASS after a GREEN round" \
+  || { echo "::error::status: $out"; fail=1; }
+
+mk_spec freshreview 1
+out="$(council status docs/specs/freshreview --json)"
+printf '%s' "$out" | jq -e '.review == null' >/dev/null 2>&1 && echo "  ok    status --json review:null on a fresh spec with no council row" \
+  || { echo "::error::status: $out"; fail=1; }
 
 echo "status --json: an open round gone stale before any seat is recorded, and with one already present (R2)"
 mk_open_spec stalerd1 2
@@ -1493,7 +1596,7 @@ printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "missing exclu
 
 seat_report sonnet 1 GG | council record-seat docs/specs/exhaust1 1 sonnet >/dev/null
 seat_report opus 1 GG | council record-seat docs/specs/exhaust1 1 opus >/dev/null
-printf 'Reviewed.\nPASS\n' | council record-seat docs/specs/exhaust1 1 review >/dev/null
+printf 'VERDICT: PASS\nReviewed.\n' | council record-seat docs/specs/exhaust1 1 review >/dev/null
 out="$(council status docs/specs/exhaust1 --json)"
 printf '%s' "$out" | jq -r .next | expect "every other required seat recorded -> next reaches judge" "judge"
 

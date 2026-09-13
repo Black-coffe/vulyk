@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-27
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -51,6 +51,13 @@ The last stdout line of every verb parses whatever the hive's `## Commands` cell
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `emit()` now escapes `verb`/`next`/`error` through a new `json_escape()` helper (`\`→`\\`, `"`→`\"`, tab/newline→`\t`/`\n`, backslash first) before printing the last-line JSON object - the one path every emit call goes through.
+- `review_verdict_of_text()` now reads only the report's literal first line (`sed -n '1p'`, then `^VERDICT: (PASS|BLOCK)\b|^(PASS|BLOCK)\b`) instead of the first matching line anywhere in the text.
+- Surprise: `review_verdict_of()` (the file-reading wrapper `judge`/`escalate`/`open-round`'s STALE fold call) passes the whole stored `review.md` - whose own first line is the C4 `<!-- seat: ... -->` header, not the report. Added `sed '1d'` there to drop the header before reading the report's first line; otherwise every judged review would have read as MALFORMED/BLOCK.
+- `cmd_record_seat_review`'s MALFORMED error text is now the acceptance criterion's exact string: `MALFORMED: review: first line is not VERDICT: PASS|BLOCK`.
+- `cmd_status` gains `"review"` in the printed object (placed beside `"verdict"`), read from `newest_row`'s own `review` field the same way `verdict`/`red`/`round_dir` already are; `null` when no row exists.
+- Fixed 5 pre-existing `tests/council.test.sh` fixtures (`dashev`, `runev`, `realverbs` rounds 1-3, `exhaust1`) whose review report opened with a prose sentence before `PASS` - valid under the old "anywhere in the text" rule, MALFORMED under the new first-line rule; reordered each to `VERDICT: PASS\n<sentence>\n`.
+- Replaced the old "any shape accepted, PASS/BLOCK extracted anywhere" record-seat-review tests (contradicted the new contract) with first-line-only coverage: BLOCK on line 1, PASS on line 1 with a distracting `PASS/BLOCK decision: BLOCK` in the body, a prose-then-`VERDICT: PASS`-on-line-3 rejection (attempt-1.md kept), the driver's `NO VERDICT: top=...` fold shape as a second rejection (attempt-2.md, review ABSENT, ESCALATE env).
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

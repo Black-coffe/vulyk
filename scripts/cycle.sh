@@ -39,9 +39,25 @@ VERB="${1:-}"
 SPEC="${2:-}"
 SPEC="${SPEC%/}"
 
+json_escape() { # json_escape <text> -> the JSON-string-safe form of <text>: backslash and
+  # quote doubled, tab/newline replaced with \t/\n (R33/N-M4) - the one helper emit() runs
+  # every value through, so the last stdout line is one parsable JSON object whatever a
+  # hive's `## Commands` cell or a report's own text contains. Order matters: backslash first,
+  # or a later substitution's own backslash would be escaped a second time.
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\t'/\\t}"
+  s="${s//$'\n'/\\n}"
+  printf '%s' "$s"
+}
+
 emit() { # emit <true|false> <verb> <exit> <next> [error]
   local ok="$1" verb="$2" ex="$3" next="$4" err="${5:-}"
+  verb="$(json_escape "$verb")"
+  next="$(json_escape "$next")"
   if [ -n "$err" ]; then
+    err="$(json_escape "$err")"
     printf '{"ok":%s,"verb":"%s","exit":%s,"next":"%s","error":"%s"}\n' "$ok" "$verb" "$ex" "$next" "$err"
   else
     printf '{"ok":%s,"verb":"%s","exit":%s,"next":"%s"}\n' "$ok" "$verb" "$ex" "$next"
@@ -316,15 +332,17 @@ cmd_status() {
   case "$TIER_V" in [1-4]) TIER_JSON="$TIER_V" ;; esac
 
   # --- newest council.jsonl row for this spec -----------------------------------------------
-  local NEWEST NEWEST_VERDICT="" NEWEST_ROUND="" NEWEST_PACK="" NEWEST_HEAD="" RED_LIST=""
-  local VERDICT_JSON="null"
+  local NEWEST NEWEST_VERDICT="" NEWEST_ROUND="" NEWEST_PACK="" NEWEST_HEAD="" NEWEST_REVIEW="" RED_LIST=""
+  local VERDICT_JSON="null" REVIEW_JSON="null"
   NEWEST="$(newest_row "$SLUG")"
   if [ -n "$NEWEST" ]; then
     NEWEST_VERDICT="$(json_field "$NEWEST" verdict)"
     NEWEST_ROUND="$(json_field "$NEWEST" round)"
     NEWEST_PACK="$(json_field "$NEWEST" pack)"
     NEWEST_HEAD="$(json_field "$NEWEST" head)"
+    NEWEST_REVIEW="$(json_field "$NEWEST" review)"
     VERDICT_JSON="\"$NEWEST_VERDICT\""
+    REVIEW_JSON="\"$NEWEST_REVIEW\""  # R30/C3: newest row's review verdict verbatim (PASS|BLOCK|ABSENT|""), null with no row
     RED_LIST="$(printf '%s' "$NEWEST" | sed -n 's/.*"red":\[\([^]]*\)\].*/\1/p' | tr ',' ' ')"
   fi
 
@@ -360,12 +378,12 @@ cmd_status() {
     NEXT="open-round"
   fi
 
-  printf '{"spec":"%s","slug":"%s","stage":"%s","next":"%s","briefed":%s,"approved":%s,"branch":%s,"head":"%s","pack":"%s","stories":{"todo":%s,"in-progress":%s,"done":%s,"blocked":%s},"wave":%s,"wave_stories":[%s],"round":%s,"ceiling":%s,"tier":%s,"open":%s,"court":%s,"missing":[%s],"stale":%s,"verdict":%s,"red":[%s],"round_dir":%s,"paused":%s,"shipped":%s}\n' \
+  printf '{"spec":"%s","slug":"%s","stage":"%s","next":"%s","briefed":%s,"approved":%s,"branch":%s,"head":"%s","pack":"%s","stories":{"todo":%s,"in-progress":%s,"done":%s,"blocked":%s},"wave":%s,"wave_stories":[%s],"round":%s,"ceiling":%s,"tier":%s,"open":%s,"court":%s,"missing":[%s],"stale":%s,"verdict":%s,"review":%s,"red":[%s],"round_dir":%s,"paused":%s,"shipped":%s}\n' \
     "$SPEC" "$SLUG" "$(compute_stage "$SPEC" "$PLAN")" "$NEXT" "$BRIEFED_B" "$APPROVED_B" "$BRANCH_JSON" "$HEAD" "$PACK" \
     "$TODO" "$PROG" "$DONE" "$BLOCKED" \
     "$WAVE_JSON" "$WAVE_STORIES_JSON" \
     "$ROUND_N" "$CEILING" "$TIER_JSON" "$OPEN_B" "$COURT_JSON" "$(json_str_array "$MISSING")" "$STALE_B" \
-    "$VERDICT_JSON" "$(json_num_csv "$RED_LIST")" "$ROUND_DIR_JSON" "$PAUSED_B" "$SHIPPED_B"
+    "$VERDICT_JSON" "$REVIEW_JSON" "$(json_num_csv "$RED_LIST")" "$ROUND_DIR_JSON" "$PAUSED_B" "$SHIPPED_B"
 }
 
 compute_stage() { # compute_stage <spec> <plan> - a best-effort mirror of state.sh's ladder,
@@ -435,18 +453,24 @@ seat_ask_lines() { # seat_ask_lines <file> -> "n verdict evidenced(1/0)" per ASK
   done
 }
 
-review_verdict_of_text() { # review_verdict_of_text <text> -> PASS | BLOCK | "" (D3)
-  local line
-  line="$(printf '%s\n' "$1" | grep -m1 -E '^(PASS|BLOCK)\b|^VERDICT: (PASS|BLOCK)')"
-  case "$line" in
-    VERDICT:*) printf '%s' "$line" | sed -n 's/^VERDICT: \(PASS\|BLOCK\).*/\1/p' ;;
+review_verdict_of_text() { # review_verdict_of_text <text> -> PASS | BLOCK | "" (D3; C5 amended
+  # by story 27, R28/N-m4: only the text's own first line is read - a matching token further
+  # down is not a verdict, so a prose or blank opening line is MALFORMED rather than scored by
+  # whatever PASS/BLOCK the body happens to contain)
+  local first
+  first="$(printf '%s\n' "$1" | sed -n '1p')"
+  first="$(printf '%s' "$first" | grep -E '^(PASS|BLOCK)\b|^VERDICT: (PASS|BLOCK)\b')" || return 0
+  case "$first" in
+    VERDICT:*) printf '%s' "$first" | sed -n 's/^VERDICT: \(PASS\|BLOCK\).*/\1/p' ;;
     PASS*) echo PASS ;;
     BLOCK*) echo BLOCK ;;
   esac
 }
 
-review_verdict_of() { # review_verdict_of <file> -> PASS | BLOCK | "" (D3)
-  review_verdict_of_text "$(cat "$1" 2>/dev/null)"
+review_verdict_of() { # review_verdict_of <file> -> PASS | BLOCK | "" (D3). The stored file's
+  # own first line is the C4 header write_seat_file wrote; the report itself starts at line 2,
+  # so drop the header before reading the report's first line (C5 amended, story 27).
+  review_verdict_of_text "$(sed '1d' "$1" 2>/dev/null)"
 }
 
 council_line_exists() { grep -qE "^\*\*Council:\*\*.*round $2," "$1" 2>/dev/null; } # <plan> <round>
@@ -1035,8 +1059,8 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
   local verdict; verdict="$(review_verdict_of_text "$REPORT")"
   if [ -z "$verdict" ]; then
     write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
-    echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: no PASS or BLOCK found" >&2
-    emit false record-seat 4 error "MALFORMED: no PASS or BLOCK found"
+    echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: review: first line is not VERDICT: PASS|BLOCK" >&2
+    emit false record-seat 4 error "MALFORMED: review: first line is not VERDICT: PASS|BLOCK"
     exit 4
   fi
 
