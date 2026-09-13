@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-09
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 tracer: false
@@ -47,6 +47,10 @@ ADR-006's protocol side: `templates/story.md` documents `returned:`; `worker-cod
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `templates/story.md`: added `returned:` frontmatter line after `status:`, per ADR-006's contract table.
+- `.claude/agents/worker-code.md`, `.claude/agents/worker-test.md`: added a final protocol step setting `returned:` to the STATUS word; NEEDS_CONTEXT now also writes its question under `## Findings` (mirroring WALL).
+- `.claude/commands/vulyk-build.md` `build:<wave>` row: rewrote the close-story sentence so it runs on every non-empty return and treats exit 4 as a miss regardless of `error`; folded the old "red/NEEDS_CONTEXT/WALL, three kinds" wording into two kinds since `returned:` now routes all worker outcomes through the same exit code.
+- `tests/driver.test.sh`: added scenarios (q)(r)(s) per ADR-006's `## How the tests prove it`, each stubbing `close-story`'s answer independently of the agent stub's `STATUS:` line to prove the driver never reads report prose to decide.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

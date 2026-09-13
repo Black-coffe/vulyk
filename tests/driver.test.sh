@@ -388,6 +388,65 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     }
   });
 })
+// --- scenario (q): ADR-006 - a worker report opening STATUS: DONE, but close-story's
+// first answer is exit 4 "returned WALL" (the worker forgot the `returned:` key or wrote
+// the wrong one) - the driver still runs close-story a second time on retry and, once it
+// answers ok:true, the run continues with no stop. This is the proof the driver never
+// read "STATUS: DONE" to decide the story was done - only close-story's own exit code.
+.then(() => {
+  const file = 'docs/specs/demo/demo-10-x.md';
+  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-10', worker: 'worker-test' }] };
+  const returnedWall = { ok: false, verb: 'close-story', exit: 4, error: 'returned WALL' };
+  return run(
+    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+    { clerk: [wave, returnedWall, wave, { ok: true }, { next: 'green' }], agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
+  ).then(({ result, calls }) => {
+    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
+    if (result && result.next === 'green' && !result.stop && closeStoryCalls.length === 2) {
+      console.log('ok ADR-006 returned WALL then ok: close-story called twice, no stop, run continues');
+    } else {
+      console.log('FAIL ADR-006 returned WALL then ok: close-story called twice, no stop, run continues - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+    }
+  });
+})
+// --- scenario (r): same worker report (STATUS: DONE), but close-story answers exit 4
+// "returned WALL" on both attempts - the second miss stops the run, close-story was
+// still called exactly twice, and the stop names this story's file.
+.then(() => {
+  const file = 'docs/specs/demo/demo-11-x.md';
+  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-11', worker: 'worker-test' }] };
+  const returnedWall = { ok: false, verb: 'close-story', exit: 4, error: 'returned WALL' };
+  return run(
+    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+    { clerk: [wave, returnedWall, wave, returnedWall], agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
+  ).then(({ result, calls }) => {
+    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
+    if (result && result.stop && result.stop.verb === 'build' && result.stop.file === file && closeStoryCalls.length === 2) {
+      console.log('ok ADR-006 returned WALL twice: stops on build, close-story called exactly twice');
+    } else {
+      console.log('FAIL ADR-006 returned WALL twice: stops on build, close-story called exactly twice - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+    }
+  });
+})
+// --- scenario (s): a worker report opening STATUS: WALL, but close-story answers ok:true
+// (the worker set `returned: DONE` regardless of its own STATUS line) - the story closes.
+// This documents, not endorses, that the verb's own field is the gate, not the driver's
+// reading of the report.
+.then(() => {
+  const file = 'docs/specs/demo/demo-12-x.md';
+  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-12', worker: 'worker-test' }] };
+  return run(
+    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+    { clerk: [wave, { ok: true }, { next: 'green' }], agents: ['STATUS: WALL\nreport'] },
+  ).then(({ result, calls }) => {
+    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
+    if (result && result.next === 'green' && !result.stop && closeStoryCalls.length === 1) {
+      console.log('ok ADR-006 STATUS: WALL but close-story ok: the story closes on the verb alone');
+    } else {
+      console.log('FAIL ADR-006 STATUS: WALL but close-story ok: the story closes on the verb alone - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+    }
+  });
+})
 .catch((e) => { console.log('FAIL harness threw: ' + (e && e.stack || e)); process.exitCode = 1; });
 NODE_EOF
 )"
@@ -413,5 +472,8 @@ expect "run: next:briefed refuses instead of stamping"           "ok briefed ref
 expect "run: exit 6 ok:true is followed by a status poll"        "ok exit 6: ok:true is followed by a status poll, ends escalated" "$out"
 expect "run: a thrown worker agent() is caught and logged"       "ok worker threw: caught by the build thunk, logged, counted as a miss" "$out"
 expect "run: the retry prompt names the uncommitted-diff note"   "ok retry prompt: only the second dispatch mentions uncommitted edits" "$out"
+expect "run: ADR-006 returned WALL then ok - close-story x2, no stop" "ok ADR-006 returned WALL then ok: close-story called twice, no stop, run continues" "$out"
+expect "run: ADR-006 returned WALL twice - stops, close-story x2"    "ok ADR-006 returned WALL twice: stops on build, close-story called exactly twice" "$out"
+expect "run: ADR-006 STATUS: WALL but close-story ok - story closes" "ok ADR-006 STATUS: WALL but close-story ok: the story closes on the verb alone" "$out"
 
 exit $fail
