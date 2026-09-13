@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-05
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 tracer: false
@@ -58,6 +58,15 @@ Attempt 3. The working tree already carries an uncommitted diff to `scripts/cycl
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- Verified the kept uncommitted diff to `scripts/cycle.sh` against every acceptance criterion before touching anything; all six held as-is, no code changes made this pass.
+- r2m3: `commit_paperwork open-round "vulyk($SLUG): open-round $N" "$SPEC"` already added on the no-op branch (line ~1774) - a failed prior `--commit` leaving `ROUND`/`journal.md` uncommitted is finished here instead of silently reported `ok:true`.
+- r2m16/K1: `open-round`'s story-status scan already refuses a `blocked` story by name/file with `emit false open-round 2 open-round "story $sid is blocked: $f"`, exit 2, no new `next` value, nothing created under `council/` (checked before the loop that builds a round).
+- N-m3: `cmd_status`'s round scan already gates on `[ -f "$RD/ROUND" ]` so a round dir missing its `ROUND` file reads as not-open; `cmd_open_round` already rewrites `ROUND` in place (same N, via `build_round`) rather than treating it as a no-op or opening N+1.
+- r2m5/r2m6: `write_escalate_row_for_round` already collects evidenced/unevidenced RED asks per seat via `seat_ask_lines`, writes `red:[...]`/`red_unevidenced:[...]` into the ledger row and one `- ask N: RED - see <rd>/*.md for evidence` line per red ask into `## Needs a human`, plus the existing `seats: <rd>/` line; both call sites (plain ceiling gate and the STALE-fold path) route through this one function, so both carry the fix.
+- r2m7/N-m2: the court reduction commit already uses `git -c commit.gpgsign=false commit --no-verify -q` with no `|| true`; on failure it removes the worktree/court and `rmdir`s the round dir before `emit false open-round 2 error "court reduction commit failed"; exit 2` - the court is never handed to a seat.
+- r2m4/N-m1: audited every `emit false` call site in the file (`grep -n "emit false"`) - all already carry a non-empty `error` argument, including `pause`'s `paused: $first_line` and `record-seat`'s `stale` sites added by the kept diff.
+- Exit 6 audit: all three exit-6 emit sites (`escalate`, and both `open-round` ceiling gates) already say `emit true ... 6 escalated` - `ok:true`/`next:"escalated"` everywhere, matching `judge`'s existing shape.
+- `bash -n scripts/cycle.sh` passes; `bash tests/council.test.sh` exits 0 (the five `FAIL` lines it prints are the deliberate `[3e200bb]` baseline-regression proof, not this branch's suite - every `[branch]` line is `ok`).
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

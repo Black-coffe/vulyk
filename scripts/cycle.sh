@@ -113,7 +113,8 @@ pause_guard() { # pause_guard <spec> <verb-label> - exits 3 before anything muta
   local spec="$1" verb="$2"
   [ -n "$spec" ] && [ -f "$spec/PAUSE" ] || return 0
   echo "cycle: $(slug_of "$spec") - PAUSE present, $verb refuses to act." >&2
-  emit false "$verb" 3 paused
+  local first_line; first_line="$(head -1 "$spec/PAUSE" 2>/dev/null)"
+  emit false "$verb" 3 paused "paused: $first_line"
   exit 3
 }
 
@@ -344,7 +345,11 @@ cmd_status() {
   # --- the open round, if any ---------------------------------------------------------------
   local RD ROUND_N=0 CEILING=3 COURT_JSON="null" OPEN_B=false MISSING="" STALE_B=false
   RD="$(current_round_dir "$SPEC")"
-  if [ -n "$RD" ]; then
+  # N-m3: a round directory without its own ROUND file (a crash before open-round's last write)
+  # is not an open round - it reads exactly like no round at all, so `next` falls through to
+  # the final "open-round" case below instead of a stale/dispatch/judge state built on empty
+  # round_field() reads.
+  if [ -n "$RD" ] && [ -f "$RD/ROUND" ]; then
     ROUND_N="${RD##*/round-}"
     local RCOURT
     RCOURT="$(round_field "$RD" court)"
@@ -581,6 +586,11 @@ write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <r
   local required seat v model
   local haiku_v="" sonnet_v="" opus_v="" review_v=""
   local haiku_model=unknown sonnet_model=unknown opus_model=unknown attempts=0
+  # r2m5/r2m6: the ceiling gate closes over a round whose seats already carry RED asks (a RED
+  # verdict at N-1, or a STALE-folded round whose seat files were filed before code moved) - the
+  # ESCALATE row and the ## Needs a human block must show those same asks, not empty arrays,
+  # same evidenced/unevidenced split cmd_judge uses (seat_ask_lines, ask_evidenced_of).
+  local red_e="" red_u=""
   required="$(required_seats_for_tier "$(round_tier "$spec" "$rd")")"
   for seat in haiku sonnet opus; do
     local f="$rd/$seat.md"
@@ -592,6 +602,19 @@ write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <r
         sonnet) sonnet_v="$v"; sonnet_model="$model" ;;
         opus)   opus_v="$v";   opus_model="$model" ;;
       esac
+      local askn askv ev
+      while IFS=' ' read -r askn askv ev; do
+        [ -n "$askn" ] || continue
+        if [ "$askv" = "RED" ]; then
+          if [ "$ev" = "1" ]; then
+            case " $red_e " in *" $askn "*) ;; *) red_e="$red_e $askn" ;; esac
+          else
+            case " $red_u " in *" $askn "*) ;; *) red_u="$red_u $askn" ;; esac
+          fi
+        fi
+      done <<ASKS
+$(seat_ask_lines "$f")
+ASKS
     elif is_required_seat "$seat" "$required"; then
       case "$seat" in haiku) haiku_v=ABSENT ;; sonnet) sonnet_v=ABSENT ;; opus) opus_v=ABSENT ;; esac
     fi
@@ -600,6 +623,12 @@ write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <r
     [ -f "$rd/$seat.attempt-1.md" ] && attempts=$((attempts+1))
     [ -f "$rd/$seat.attempt-2.md" ] && attempts=$((attempts+1))
   done
+  # evidenced wins over unevidenced for the same ask number (same rule as cmd_judge)
+  local cleaned="" u
+  for u in $red_u; do case " $red_e " in *" $u "*) ;; *) cleaned="$cleaned $u" ;; esac; done
+  red_u="$cleaned"
+  red_e="$(sort_num_list "$red_e")"
+  red_u="$(sort_num_list "$red_u")"
   if [ -f "$rd/review.md" ]; then
     review_v="$(review_verdict_of "$rd/review.md")"; [ -n "$review_v" ] || review_v="ABSENT"
   elif is_required_seat review "$required"; then
@@ -611,8 +640,9 @@ write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <r
 
   if ! escalate_row_exists "$slug" "$n"; then
     mkdir -p memory/stats
-    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"ESCALATE","head":"%s","pack":"%s","asks":%s,"red":[],"red_unevidenced":[],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":"%s","note":"%s"}\n' \
+    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"ESCALATE","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":"%s","note":"%s"}\n' \
       "$(now_ts)" "$slug" "$n" "$rhead" "$rpack" "$a" \
+      "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" \
       "$review_v" "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" \
       "$attempts" "$reason" "$note" >> memory/stats/council.jsonl
   fi
@@ -626,6 +656,9 @@ write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <r
       grep -q '^## Needs a human' "$plan" 2>/dev/null || printf '\n## Needs a human\n'
       printf -- '- reason: %s · round %s · %s\n' "$reason" "$n" "$dateonly"
       printf -- '- note: %s\n' "$note"
+      for u in $red_e $red_u; do
+        printf -- '- ask %s: RED - see %s/*.md for evidence\n' "$u" "$rd"
+      done
       printf -- '- seats: %s/\n' "$rd"
     } >> "$plan"
   fi
@@ -1288,7 +1321,7 @@ cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] - report 
   local HEAD; HEAD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   round_is_stale "$SPEC" "$N" && {
     echo "cycle: record-seat - round $N is stale (ROUND head=$(round_field "$RD" head), current HEAD=$HEAD)" >&2
-    emit false record-seat 5 stale
+    emit false record-seat 5 stale "stale"
     exit 5
   }
 
@@ -1541,8 +1574,21 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
     # resolving. A local identity is passed explicitly so a fixture without user.name works.
     if [ -n "$(git -C "$court_abs" status --porcelain 2>/dev/null)" ]; then
       git -C "$court_abs" add -A >/dev/null 2>&1
-      git -C "$court_abs" -c user.name=VULYK -c user.email=vulyk@localhost \
-        commit -q -m "vulyk: reduce the court to brief.md" >/dev/null 2>&1 || true
+      # r2m7/N-m2: no `|| true` - a court that never reduced still resolves the spec's real
+      # files via `git show`, and would be handed to a seat as though it were narrowed. Never
+      # hooked or signed either: --no-verify because a repo-wide pre-commit hook has no
+      # business running inside a throwaway detached worktree, gpgsign=false because there is
+      # no key to sign with here and the main repo's signing config must not leak in.
+      local red_err
+      if ! red_err="$(git -C "$court_abs" -c user.name=VULYK -c user.email=vulyk@localhost \
+        -c commit.gpgsign=false commit --no-verify -q -m "vulyk: reduce the court to brief.md" 2>&1)"; then
+        echo "cycle: open-round - court reduction commit failed: $red_err" >&2
+        remove_worktree_path "$court_abs"
+        git worktree prune >/dev/null 2>&1 || true
+        rmdir "$rd" 2>/dev/null || true
+        emit false open-round 2 error "court reduction commit failed"
+        exit 2
+      fi
     fi
   fi
 
@@ -1644,7 +1690,18 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1>
     [ -f "$f" ] || continue
     grep -q '^story:' "$f" 2>/dev/null || continue
     st="$(fm_field "$f" status)"
-    case "$st" in done|blocked) ;; *) bad="$bad $(basename "$f")" ;; esac
+    # r2m16/K1: a blocked story is its own named refusal, not a member of the "done or
+    # blocked" set that lets open-round proceed - the council never opens a round while a
+    # story is stuck, and the error names the story id and its file so the driver knows which
+    # one to unblock, exit 2 same as every other precondition here (K1's Non-goal: no new
+    # `next` value, no C3 state).
+    if [ "$st" = blocked ]; then
+      local sid; sid="$(fm_field "$f" story)"
+      echo "cycle: open-round - story $sid is blocked: $f" >&2
+      emit false open-round 2 open-round "story $sid is blocked: $f"
+      exit 2
+    fi
+    case "$st" in done) ;; *) bad="$bad $(basename "$f")" ;; esac
   done
   [ -z "$bad" ] || {
     echo "cycle: open-round - stories not done/blocked:$bad" >&2
@@ -1700,6 +1757,12 @@ EOF
   local RD; RD="$(current_round_dir "$SPEC")"
   if [ -n "$RD" ] && ! row_exists "$SLUG" "${RD##*/round-}"; then
     local N="${RD##*/round-}"
+    # N-m3: a round dir without its own ROUND file (a crash before open-round's last write, or
+    # ROUND lost) is not open at all - rewrite it in place, same N, never a no-op and never the
+    # STALE/N+1 path below (which reads round_field values this dir does not have).
+    if [ ! -f "$RD/ROUND" ]; then
+      build_round "$SPEC" "$SLUG" "$N" "$HEAD" "$PACK" "$CEILING" "$DOCOMMIT"
+    fi
     # A round's own opening (or STALE-folding) commit necessarily moves HEAD past the code head
     # it recorded - so "unchanged" must also accept a HEAD that only advanced by the cycle's own
     # paperwork since then (round_is_stale, C1), or every round would read itself as stale on
@@ -1709,6 +1772,10 @@ EOF
       required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
       missing="$(missing_required_seats "$RD" "$required")"
       local next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
+      # r2m3: an earlier --commit here may have failed after ROUND/journal.md were already
+      # written (e.g. an index.lock) - a true no-op has nothing left to commit; anything still
+      # uncommitted under this spec's own paperwork is finished now, not silently left behind.
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): open-round $N" "$SPEC"
       echo "cycle: $SLUG - round $N already open at current HEAD, no-op"
       emit true open-round 0 "$next_val"
       exit 0
@@ -1726,7 +1793,7 @@ EOF
       echo "cycle: open-round - $SLUG round $NEXTN would exceed ceiling $CEILING" >&2
       write_ceiling_escalate "$SPEC" "$SLUG" "$N" "$RD"
       [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $N" "$SPEC" memory/stats/council.jsonl
-      emit false open-round 6 escalated
+      emit true open-round 6 escalated
       exit 6
     }
     build_round "$SPEC" "$SLUG" "$NEXTN" "$HEAD" "$PACK" "$CEILING" "$DOCOMMIT"
@@ -1740,7 +1807,7 @@ EOF
       write_ceiling_escalate "$SPEC" "$SLUG" "$ROUND_COUNT" "$SPEC/council/round-$ROUND_COUNT"
       [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $ROUND_COUNT" "$SPEC" memory/stats/council.jsonl
     }
-    emit false open-round 6 escalated
+    emit true open-round 6 escalated
     exit 6
   }
   build_round "$SPEC" "$SLUG" "$((ROUND_COUNT+1))" "$HEAD" "$PACK" "$CEILING" "$DOCOMMIT"
