@@ -24,7 +24,7 @@ expect() { # expect <label> <needle>   (reads the output to judge from stdin)
 cd "$T" || exit 1
 git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
 mkdir -p scripts memory/stats docs/specs .claude
-cp "$SRC"/scripts/lib.sh "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh scripts/
+cp "$SRC"/scripts/lib.sh "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh scripts/
 # Mirrors the real .gitignore (D1: neither is ever committed) - without it, open-round's
 # "clean tree" precondition would trip on its own court worktree and PAUSE files.
 printf '.vulyk/\ndocs/specs/*/PAUSE\n' > .gitignore

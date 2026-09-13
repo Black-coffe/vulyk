@@ -70,6 +70,44 @@ usage() {
   exit 1
 }
 
+redact_note() { # redact_note <text> -> <text> piped through scripts/redact.sh (N-m7) - a
+  # free-text note (escalate's CLI arg, judge's env-absence note) never reaches the ledger
+  # or the plan's ## Needs a human block unmasked. redact.sh always exits 0 and degrades to
+  # `cat` if its own tools are missing, so this never blocks a write.
+  printf '%s' "$1" | bash "$HERE/redact.sh" 2>/dev/null
+}
+
+council_append_line() { # council_append_line <plan> <text> - C7: the **Council:** line lands
+  # right after the last existing one (or replaces the template's unfilled placeholder when
+  # there is none yet), never at the file's true EOF - a round can be judged after an earlier
+  # ESCALATE already wrote ## Needs a human below the last Council line, and a plain `>>`
+  # would land the new line under that section instead of in round order.
+  local plan="$1" text="$2" tmp
+  [ -f "$plan" ] || return 0
+  tmp="$plan.tmp.$$"
+  if grep -qE '^\*\*Council:\*\*[[:space:]]*<' "$plan" 2>/dev/null; then
+    awk -v t="$text" '!done && /^\*\*Council:\*\*[[:space:]]*</ { print t; done=1; next } { print }' "$plan" > "$tmp" && mv "$tmp" "$plan"
+    return 0
+  fi
+  if grep -qE '^\*\*Council:\*\*' "$plan" 2>/dev/null; then
+    awk -v t="$text" '{ lines[NR]=$0; if ($0 ~ /^\*\*Council:\*\*/) last=NR } END { for (i=1;i<=NR;i++) { print lines[i]; if (i==last) print t } }' "$plan" > "$tmp" && mv "$tmp" "$plan"
+    return 0
+  fi
+  printf '%s\n' "$text" >> "$plan"
+}
+
+marker() { # marker <plan.md> <Name> -> the value of the LAST matching line, empty if
+  # absent/placeholder - overrides lib.sh's first-match version (LR25): `**Council:**` is the
+  # one marker `council_append_line` lets accumulate one line per round, so reading it must
+  # return the newest round's line, not the first one ever written; every other marker here
+  # (Briefed/Approved/Branch/Shipped) is still written at most once, so the change is a no-op
+  # for them.
+  local v
+  v="$(grep -E "^\*\*$2:\*\*" "$1" 2>/dev/null | tail -1 | sed "s/^\*\*$2:\*\*[[:space:]]*//")"
+  case "$v" in ''|'<'*) return 0 ;; esac
+  printf '%s' "$v"
+}
+
 pause_guard() { # pause_guard <spec> <verb-label> - exits 3 before anything mutates if PAUSEd;
   # returns (does not exit) when clear. `status`, `pause`, `resume` never call this (C2).
   local spec="$1" verb="$2"
@@ -182,9 +220,11 @@ round_is_stale() { # round_is_stale <spec> <n> - the one staleness rule (autonom
   ! paperwork_only "$ROOT" "$rhead" "$head_now" 2>/dev/null
 }
 
-row_exists() { # row_exists <slug> <round>
+row_exists() { # row_exists <slug> <round> - "round":$2 is followed by a comma in every row
+  # (the next key is always "verdict"), so the trailing comma anchors the match: without it
+  # round 1 is a substring of round 10/11/19/... (LR21/r2m1).
   [ -f memory/stats/council.jsonl ] || return 1
-  grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | grep -qF "\"round\":$2"
+  grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | grep -qF "\"round\":$2,"
 }
 
 newest_row() { # newest_row <slug> -> the last council.jsonl line for this spec, or empty
@@ -517,9 +557,10 @@ commit_paperwork() { # commit_paperwork <verb-label> <message> <path...> - stage
 # followed later by an ESCALATE for the same round number - the ceiling gate and the standalone
 # `escalate` verb both add one), so idempotency here is scoped to "an ESCALATE row/line already
 # exists for this round", not "any row exists".
-escalate_row_exists() { # escalate_row_exists <slug> <round>
+escalate_row_exists() { # escalate_row_exists <slug> <round> - trailing comma anchor, same
+  # reason as row_exists (LR21/r2m1): round 1 must not match round 10/11/... .
   [ -f memory/stats/council.jsonl ] || return 1
-  grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | grep -F "\"round\":$2" | grep -qF '"verdict":"ESCALATE"'
+  grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | grep -F "\"round\":$2," | grep -qF '"verdict":"ESCALATE"'
 }
 escalate_council_line_exists() { grep -qE "^\*\*Council:\*\*.*ESCALATE round $2," "$1" 2>/dev/null; } # <plan> <round>
 
@@ -530,6 +571,7 @@ write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <r
   # Idempotent per round (see the two helpers just above), same pattern as write_stale_row and
   # cmd_judge's own row/line/journal writes.
   local spec="$1" slug="$2" rd="$3" n="$4" reason="$5" note="$6"
+  note="$(redact_note "$note")" # N-m7: free-text note never reaches the ledger/plan unmasked
   local plan="$spec/plan.md" dateonly; dateonly="$(date -u +%Y-%m-%d)"
   local rhead rpack; rhead="$(round_field "$rd" head)"; rpack="$(round_field "$rd" pack)"
   [ -n "$rhead" ] || rhead="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -545,7 +587,6 @@ write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <r
     if [ -f "$f" ]; then
       v="$(seat_field "$f" VERDICT)"; [ -n "$v" ] || v="RED"
       model="$(seat_header_field "$f" model)"; [ -n "$model" ] || model="unknown"
-      attempts=$((attempts+1))
       case "$seat" in
         haiku)  haiku_v="$v";  haiku_model="$model" ;;
         sonnet) sonnet_v="$v"; sonnet_model="$model" ;;
@@ -554,13 +595,19 @@ write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <r
     elif is_required_seat "$seat" "$required"; then
       case "$seat" in haiku) haiku_v=ABSENT ;; sonnet) sonnet_v=ABSENT ;; opus) opus_v=ABSENT ;; esac
     fi
+    # LR19: attempts counts every stored file for the seat this round - a re-ask counts 2.
+    [ -f "$f" ] && attempts=$((attempts+1))
+    [ -f "$rd/$seat.attempt-1.md" ] && attempts=$((attempts+1))
+    [ -f "$rd/$seat.attempt-2.md" ] && attempts=$((attempts+1))
   done
   if [ -f "$rd/review.md" ]; then
     review_v="$(review_verdict_of "$rd/review.md")"; [ -n "$review_v" ] || review_v="ABSENT"
-    attempts=$((attempts+1))
   elif is_required_seat review "$required"; then
     review_v="ABSENT"
   fi
+  [ -f "$rd/review.md" ] && attempts=$((attempts+1))
+  [ -f "$rd/review.attempt-1.md" ] && attempts=$((attempts+1))
+  [ -f "$rd/review.attempt-2.md" ] && attempts=$((attempts+1))
 
   if ! escalate_row_exists "$slug" "$n"; then
     mkdir -p memory/stats
@@ -571,10 +618,10 @@ write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <r
   fi
 
   if [ -f "$plan" ] && ! escalate_council_line_exists "$plan" "$n"; then
-    printf '**Council:** ESCALATE round %s, %s, at %s, pack %s\n' "$n" "$dateonly" "$rhead" "$rpack" >> "$plan"
+    council_append_line "$plan" "$(printf '**Council:** ESCALATE round %s, %s, at %s, pack %s' "$n" "$dateonly" "$rhead" "$rpack")"
   fi
 
-  if [ -f "$plan" ] && ! grep -qF "reason: $reason · round $n" "$plan" 2>/dev/null; then
+  if [ -f "$plan" ] && ! grep -qF "reason: $reason · round $n ·" "$plan" 2>/dev/null; then
     {
       grep -q '^## Needs a human' "$plan" 2>/dev/null || printf '\n## Needs a human\n'
       printf -- '- reason: %s · round %s · %s\n' "$reason" "$n" "$dateonly"
@@ -713,7 +760,10 @@ ASKS
     if [ -n "$hlast" ]; then
       hv="$(json_field "$hlast" verdict)"
       hts="$(json_field "$hlast" ts)"
-      if [ "$hv" = REJECTED ] && [ -n "$hts" ] && [ -n "$ROPENED" ] && [ "$hts" \> "$ROPENED" ]; then
+      # m-4: a REJECTED check timestamped in the same second as the round's own opening still
+      # outranks it - >=, not > (a round and its override can share a clock tick).
+      if [ "$hv" = REJECTED ] && [ -n "$hts" ] && [ -n "$ROPENED" ] \
+        && { [ "$hts" \> "$ROPENED" ] || [ "$hts" = "$ROPENED" ]; }; then
         override_red=1
       fi
     fi
@@ -751,9 +801,14 @@ ASKS
     mkdir -p memory/stats
     local escjson="null"; [ -n "$escalate_reason" ] && escjson="\"$escalate_reason\""
     local attempts=0
-    for seat in haiku sonnet opus review; do [ -f "$RD/$seat.md" ] && attempts=$((attempts+1)); done
+    for seat in haiku sonnet opus review; do
+      # LR19: attempts counts every stored file for the seat this round - a re-ask counts 2.
+      [ -f "$RD/$seat.md" ] && attempts=$((attempts+1))
+      [ -f "$RD/$seat.attempt-1.md" ] && attempts=$((attempts+1))
+      [ -f "$RD/$seat.attempt-2.md" ] && attempts=$((attempts+1))
+    done
     local noteval=""
-    [ "$escalate_reason" = "env" ] && noteval="$(printf '%s' "$absent_seats" | sed 's/ /, /g') ABSENT"
+    [ "$escalate_reason" = "env" ] && noteval="$(redact_note "$(printf '%s' "$absent_seats" | sed 's/ /, /g') ABSENT")"
     printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"na":%s,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":%s,"note":"%s"}\n' \
       "$(now_ts)" "$SLUG" "$N" "$overall" "$head7" "$RPACK" "$A" \
       "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$na_count" \
@@ -763,11 +818,11 @@ ASKS
 
   if [ -f "$PLAN" ] && ! council_line_exists "$PLAN" "$N"; then
     local suffix=""; [ -n "$red_e" ] && suffix=" - red: $(json_num_csv "$red_e")"
-    printf '**Council:** %s round %s, %s, at %s, pack %s%s\n' \
-      "$overall" "$N" "$dateonly" "$head7" "$RPACK" "$suffix" >> "$PLAN"
+    council_append_line "$PLAN" "$(printf '**Council:** %s round %s, %s, at %s, pack %s%s' \
+      "$overall" "$N" "$dateonly" "$head7" "$RPACK" "$suffix")"
   fi
 
-  if [ "$overall" = "ESCALATE" ] && [ -f "$PLAN" ] && ! grep -qF "reason: $escalate_reason · round $N" "$PLAN" 2>/dev/null; then
+  if [ "$overall" = "ESCALATE" ] && [ -f "$PLAN" ] && ! grep -qF "reason: $escalate_reason · round $N ·" "$PLAN" 2>/dev/null; then
     {
       grep -q '^## Needs a human' "$PLAN" 2>/dev/null || printf '\n## Needs a human\n'
       printf -- '- reason: %s · round %s · %s\n' "$escalate_reason" "$N" "$dateonly"
@@ -1538,24 +1593,29 @@ write_stale_row() { # write_stale_row <spec> <slug> <round-dir> <n> <a> - a STAL
       if [ -f "$f" ]; then
         v="$(seat_field "$f" VERDICT)"; [ -n "$v" ] || v="RED"
         model="$(seat_header_field "$f" model)"; [ -n "$model" ] || model="unknown"
-        attempts=$((attempts+1))
         case "$seat" in
           haiku)  haiku_v="$v";  haiku_model="$model" ;;
           sonnet) sonnet_v="$v"; sonnet_model="$model" ;;
           opus)   opus_v="$v";   opus_model="$model" ;;
         esac
       fi
+      # LR19: attempts counts every stored file for the seat this round - a re-ask counts 2.
+      [ -f "$f" ] && attempts=$((attempts+1))
+      [ -f "$rd/$seat.attempt-1.md" ] && attempts=$((attempts+1))
+      [ -f "$rd/$seat.attempt-2.md" ] && attempts=$((attempts+1))
     done
     if [ -f "$rd/review.md" ]; then
       review_v="$(review_verdict_of "$rd/review.md")"; [ -n "$review_v" ] || review_v="ABSENT"
-      attempts=$((attempts+1))
     fi
+    [ -f "$rd/review.md" ] && attempts=$((attempts+1))
+    [ -f "$rd/review.attempt-1.md" ] && attempts=$((attempts+1))
+    [ -f "$rd/review.attempt-2.md" ] && attempts=$((attempts+1))
     printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"STALE","head":"%s","pack":"%s","asks":%s,"red":[],"red_unevidenced":[],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":null,"note":"code moved after dispatch"}\n' \
       "$(now_ts)" "$slug" "$n" "${rhead:-unknown}" "$rpack" "$a" "$review_v" \
       "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" "$attempts" >> memory/stats/council.jsonl
   fi
   if [ -f "$plan" ] && ! council_line_exists "$plan" "$n"; then
-    printf '**Council:** STALE round %s, %s, at %s, pack %s\n' "$n" "$dateonly" "${rhead:-unknown}" "$rpack" >> "$plan"
+    council_append_line "$plan" "$(printf '**Council:** STALE round %s, %s, at %s, pack %s' "$n" "$dateonly" "${rhead:-unknown}" "$rpack")"
   fi
   journal_line_exists "$spec" "$n" "STALE" || bash "$HERE/journal.sh" "$spec" "04-council:STALE" "round $n stale, code moved after dispatch" "open-round" >/dev/null
 }

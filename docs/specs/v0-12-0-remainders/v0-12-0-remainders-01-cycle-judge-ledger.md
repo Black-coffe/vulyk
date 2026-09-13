@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-01
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 tracer: false
@@ -57,7 +57,10 @@ Attempt 3. The working tree already carries an uncommitted diff to `scripts/cycl
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
-
+- 2026-09-13 · Kept the whole uncommitted diff from the two dead attempts (`redact_note`, `council_append_line`, `attempts` fixes in all three copies, exact-round-match `,` anchors, m-4 `>=`) - verified each bullet against the acceptance criteria and found it already correct; no rewrite needed.
+- 2026-09-13 · Added a `marker()` override in `scripts/cycle.sh` (after `council_append_line`) that reads the **last** matching `**Name:**` line instead of lib.sh's first-match version - needed because `council_append_line` lets `**Council:**` accumulate one line per round, so `marker "$PLAN" Council` must return the newest, not the oldest. Chose a same-process function override over editing `scripts/lib.sh` because the story's file list names only `scripts/cycle.sh`; the override is a no-op for Briefed/Approved/Branch/Shipped since those markers are still written at most once.
+- 2026-09-13 · m-10: confirmed, did not need a fix - every row writer (`cmd_judge`, `write_stale_row`, `write_escalate_row_for_round`) already builds the whole JSON row in one `printf ... >> memory/stats/council.jsonl` call; no partial-write path exists.
+- 2026-09-13 · `tests/council.test.sh:27` - added `scripts/redact.sh` to the fixture's `cp` list (only that one line touched, per the non-goal).
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
 - 2026-09-13 · blocked by the Workflow driver (run wf_e1124ab4-a8a, stamp ab76efbc552c7ce3): two misses, both "worker returned no report" - the worker-code subagent returned an empty result on attempt 1 and again on attempt 2 (per-agent journal: `.claude/projects/.../subagents/workflows/wf_e1124ab4-a8a/journal.jsonl`). Neither attempt was a red verification. Both attempts wrote before dying: the working tree holds an uncommitted 82-line diff to `scripts/cycle.sh` (+63/-19, `git diff --stat` at 39dfbfa) that no story owns and no worker reported. Story 02 (same wave) returned `STATUS: DONE` on its attempt 2 but was never closed: its files (`tests/driver.test.sh` untracked, `CLAUDE.md` +1, `.github/workflows/ci.yml` +13) sit uncommitted beside the cycle.sh diff.
