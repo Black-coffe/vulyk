@@ -147,6 +147,42 @@ printf '%s' "$out" | jq -e '.stories | has("todo") and has("in-progress") and ha
 
 printf '%s' "$out" | jq -r .next | expect "no rounds, all stories done -> open-round" "open-round"
 
+echo "status --json: wave_stories carries {file,story,worker,repeat} objects, file name order"
+mkdir -p docs/specs/wstory
+cat > docs/specs/wstory/wstory-01-alpha.md <<'EOF'
+---
+story: wstory-01
+spec: wstory
+status: todo
+wave: 1
+worker: worker-code
+---
+# Alpha
+
+## Verification
+`true`
+EOF
+cat > docs/specs/wstory/wstory-02-beta.md <<'EOF'
+---
+story: wstory-02
+spec: wstory
+status: todo
+wave: 1
+worker: worker-test
+---
+# Beta
+
+## Verification
+repeat: 3
+`true`
+EOF
+git add -A && git commit -qm "spec(wstory): fixture" >/dev/null
+
+out="$(council status docs/specs/wstory --json)"
+printf '%s' "$out" | jq -c '.wave_stories' \
+  | expect "wave_stories: worker-code + worker-test objects, file name order, repeat parsed (default 1, explicit 3)" \
+    '[{"file":"docs/specs/wstory/wstory-01-alpha.md","story":"wstory-01","worker":"worker-code","repeat":1},{"file":"docs/specs/wstory/wstory-02-beta.md","story":"wstory-02","worker":"worker-test","repeat":3}]'
+
 echo "status --json: an open round with missing seats"
 rd1="$(mk_round status1 1)"
 out2="$(council status docs/specs/status1 --json)"

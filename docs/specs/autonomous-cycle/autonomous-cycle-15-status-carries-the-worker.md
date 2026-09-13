@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-15
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -44,6 +44,10 @@ blocked_by: [autonomous-cycle-04, autonomous-cycle-06]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `scripts/cycle.sh`: added `repeat_of()` (reuses `verify_of()`, same parse as `cmd_close_story`'s inline REPS logic, not refactored to keep the passing close-story tests untouched) and `wave_story_json()`; `cmd_status` now builds `WAVE_STORIES_JSON` from these instead of `json_str_array`.
+- `close-story` takes no `--repeat` flag today (`cmd_close_story` derives `REPS` itself from the story file's own `## Verification` block, cycle.sh:975-976) - the driver's `close-story ... --commit` call was left as-is; `repeat` in the object is informational only. Flagged in CONCERNS.
+- `.claude/workflows/vulyk-cycle.js`: `build:<wave>` now maps `agentType: story.worker` per wave_stories object; removed the old comment naming the hardcoded caste literally (verbatim string is now banned by the story's own acceptance grep).
+- `tests/council.test.sh`: new fixture spec `wstory`, two todo stories same wave, `worker: worker-code` (repeat absent -> default 1) and `worker: worker-test` (`repeat: 3` explicit), asserts `.wave_stories` verbatim via `jq -c`. 128 -> 129 checks, still green.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

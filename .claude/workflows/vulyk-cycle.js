@@ -51,16 +51,17 @@ try {
       await clerk(`${st.next} ${spec} --commit`)
     } else if (st.next.startsWith('build:')) {
       phase('Build')
-      const files = st.wave_stories
-      // status --json carries no per-story `worker:` field, so the driver cannot route
-      // between worker-code and worker-test itself (Non-goals: never compute from story
-      // files) - every current story in this spec uses worker-code; reported in INTERFACES.
-      const reports = await parallel(files.map((f) => () => agent(
-        `Your story: ${f}. Read it fully, including the map slice it names, and implement it per your protocol.`,
-        { agentType: 'worker-code', phase: 'Build' },
+      const stories = st.wave_stories
+      // status --json now carries "worker" and "repeat" per story (autonomous-cycle-15) -
+      // route agentType from the object; the driver still never opens a story file itself.
+      const reports = await parallel(stories.map((story) => () => agent(
+        `Your story: ${story.file}. Read it fully, including the map slice it names, and implement it per your protocol.`,
+        { agentType: story.worker, phase: 'Build' },
       )))
-      for (let i = 0; i < files.length; i++) {
-        if (reports[i]) await clerk(`close-story ${files[i]} --commit`)
+      for (let i = 0; i < stories.length; i++) {
+        // close-story derives `repeat: N` itself from the story's own ## Verification block
+        // (cycle.sh's cmd_close_story) and takes no --repeat flag, so it is not passed here.
+        if (reports[i]) await clerk(`close-story ${stories[i].file} --commit`)
       }
     } else if (st.next === 'open-round') {
       phase('Round')

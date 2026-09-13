@@ -218,6 +218,10 @@ cmd_status() {
     if [ "$any_todo" -eq 0 ] && [ -n "$any_prog" ]; then CLOSE_FILE="$any_prog"; break; fi
   done
   local WAVE_JSON="null"; [ -n "$BUILD_WAVE" ] && WAVE_JSON="$BUILD_WAVE"
+  local WAVE_STORIES_JSON="" wsf
+  for wsf in $WAVE_STORIES; do
+    WAVE_STORIES_JSON="${WAVE_STORIES_JSON:+$WAVE_STORIES_JSON,}$(wave_story_json "$wsf")"
+  done
 
   # --- the open round, if any ---------------------------------------------------------------
   local RD ROUND_N=0 CEILING=3 COURT_JSON="null" OPEN_B=false MISSING="" STALE_B=false
@@ -278,7 +282,7 @@ cmd_status() {
   printf '{"spec":"%s","slug":"%s","stage":"%s","next":"%s","briefed":%s,"approved":%s,"branch":%s,"head":"%s","pack":"%s","stories":{"todo":%s,"in-progress":%s,"done":%s,"blocked":%s},"wave":%s,"wave_stories":[%s],"round":%s,"ceiling":%s,"open":%s,"court":%s,"missing":[%s],"stale":%s,"verdict":%s,"red":[%s],"round_dir":%s,"paused":%s,"shipped":%s}\n' \
     "$SPEC" "$SLUG" "$(compute_stage "$SPEC" "$PLAN")" "$NEXT" "$BRIEFED_B" "$APPROVED_B" "$BRANCH_JSON" "$HEAD" "$PACK" \
     "$TODO" "$PROG" "$DONE" "$BLOCKED" \
-    "$WAVE_JSON" "$(json_str_array "$WAVE_STORIES")" \
+    "$WAVE_JSON" "$WAVE_STORIES_JSON" \
     "$ROUND_N" "$CEILING" "$OPEN_B" "$COURT_JSON" "$(json_str_array "$MISSING")" "$STALE_B" \
     "$VERDICT_JSON" "$(json_num_csv "$RED_LIST")" "$ROUND_DIR_JSON" "$PAUSED_B" "$SHIPPED_B"
 }
@@ -942,6 +946,22 @@ files_of() { # files_of <story-file> - the `## Files` block, comments skipped. M
     incomment                           { if (/-->/) incomment=0; next }
     inblock && /^-[[:space:]]+/         { sub(/^-[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); if ($0 != "") print }
   ' "$1"
+}
+
+repeat_of() { # repeat_of <story-file> - the integer `repeat: N` under ## Verification, or 1
+  local n
+  n="$(verify_of "$1" | awk -F': *' '$1 ~ /^repeat$/ { gsub(/[[:space:]]/, "", $2); print $2; exit }')"
+  case "$n" in ''|*[!0-9]*|0) n=1 ;; esac
+  printf '%s' "$n"
+}
+
+wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object, keys in order
+  # file/story/worker/repeat; `worker` defaults to worker-code when the frontmatter line is
+  # absent, never null (Non-goals) - it is never computed from anything but that one line.
+  local f="$1" id worker
+  id="$(fm_field "$f" story)"
+  worker="$(fm_field "$f" worker)"; [ -n "$worker" ] || worker="worker-code"
+  printf '{"file":"%s","story":"%s","worker":"%s","repeat":%s}' "$f" "$id" "$worker" "$(repeat_of "$f")"
 }
 
 cmd_close_story() { # cmd_close_story <story-file> <commit:0|1>
