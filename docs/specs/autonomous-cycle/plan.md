@@ -68,7 +68,8 @@ Design assumptions not decided by any input (veto here):
 **Wave 5**
 - `autonomous-cycle-13-release-0-12-0` — `CHANGELOG.md` `## [0.12.0]`, `VERSION`, `CITATION.cff` sync, `memory/memory.md` pointer.
 - `autonomous-cycle-16-install-profile-rows` — plan delta 2026-09-12 (3): the installer's Profile placeholder carries every row of the constitution's table; install-smoke asserts the row count (blocked_by 11)
-n**Wave 6**
+
+**Wave 6**
 - `autonomous-cycle-17-stale-means-code-moved` — plan delta 2026-09-13 (4): one `round_is_stale` helper on `paperwork_only`; the cycle's own commits never stale a round (blocked_by 15)
 
 ## Contracts
