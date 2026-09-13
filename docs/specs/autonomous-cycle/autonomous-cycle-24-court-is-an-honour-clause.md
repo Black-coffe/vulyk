@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-24
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -71,6 +71,17 @@ The words match the mechanism. The three seat prompts, ADR-001 D5, the constitut
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- Seat prompts (council-haiku/sonnet/opus): rewrote the COURT paragraph to drop "read-only", state shared/writable, working-tree-only-brief.md, writes forbidden+discarded by `judge`, sonnet's suite run may leave files, and a new history-BREACH sentence (`git log`/`git show`/`git diff` against any commit, deleted-file lines of `git status`). Added "receives COURT and the round number, never a round directory" up front. Also dropped "read-only" from each frontmatter `description:` line (not covered by the C10 frontmatter freeze, which is scoped to `tools`/`disallowedTools`/`model`/`maxTurns`).
+- `lead-review.md`: appended one sentence to the existing Verdict-format line - report's first line is exactly `VERDICT: PASS`/`VERDICT: BLOCK`, read by `record-seat … review`. Nothing else in the file touched.
+- ADR-001: added a dated `*Amended 2026-09-13…*` line plus an `### Amendments (2026-09-13)` subsection right under `## Decision`, summarizing all five decision changes with R-numbers, per the team's "mark the amendment, don't rewrite history" instruction; Options/Context and Status (`proposed`) untouched.
+- ADR D1: seat-file row `Committed` column changed from `yes` to `at judge --commit (or the STALE fold)` (R26).
+- ADR D2: `open-round` effect now names writing the ESCALATE row/`**Council:**`/`## Needs a human` idempotently before exit 6 (R5); `escalate` is now a standalone verb signature `[--reason <ceiling|half|env>] ["<note>"]` with precondition "seats missing, court removed" (R5); `close-story` precondition gained the byte-for-byte `## Commands` match rule (R11); `record-seat` taint clause rewritten path-anchored (`docs/specs/<slug>/plan.md` etc., story-id word-bounded) instead of bare-word (R9); exit-code line clarifies 4 is `record-seat` MALFORMED/`close-story` red-verification only and a RED `judge` verdict exits 0 (R24).
+- ADR D4: `half` row formula changed to `|RED_e| >= max(2, ceil(A / 2))` (R10); replaced the old fixed "all three seats ABSENT" row with the general "any required seat (C15) ABSENT, nothing RED, review != BLOCK → ESCALATE env" row in the same table position (R16) - judged this a row update, not an addition, since required seats now vary by tier and the old wording was the narrower special case.
+- ADR D5: retitled "The court - an honour clause with a detector" and fully restated per R15 - shared/writable, working tree holds only `brief.md`, git-history-out-of-bounds list, writes discarded by `judge`, sonnet's suite leftovers noted, plus the new reduction-commit detail from story 21 (`open-round` commits the brief.md-only reduction inside the court so `git status`/`HEAD:plan.md` read clean). Avoided the literal word "read-only" entirely (including negated forms) so the acceptance grep stays clean.
+- ADR D6: first sentence of "Human intervention" now says an in-flight seat's report is discarded on pause and the seat is re-dispatched on resume, not recorded (R19).
+- `docs/command-reference.md:18` (`/vulyk-pause`): same discarded/re-dispatched wording, replacing "its result is recorded once resumed" (R19).
+- `CLAUDE.md` `## The cycle`: rewrote only the "Every seat still judges…" sentence to the honour-clause/detector phrasing (working tree holds only the brief, history out of bounds, `record-seat` taints); left the rest of the paragraph, the routing matrix, and all four `VULYK:PROFILE`/`VULYK:COMMANDS` marker lines untouched (grep count still 4).
+- CONCERN carried to lead-review, not fixed (out of the five named decisions): ADR `## Consequences` still says "Blindness has a mechanism and a detector instead of an honour clause" (line ~293), which now reads backwards against the restated D5 - left alone since Non-goals scoped this story to D1/D2/D4/D5/D6 only.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

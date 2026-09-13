@@ -45,6 +45,38 @@ script judges rounds, the Queen only escalation and the final report).
 
 ## Decision
 
+*Amended 2026-09-13, plan delta 6 of `docs/specs/autonomous-cycle`.*
+
+### Amendments (2026-09-13)
+
+Council round 1 (`council/round-1/review.md`) found D1, D2, D4, D5 and D6 out of step with
+what stories 19-21 already made true, and the court's blindness under-specified as a
+guarantee it cannot be. This section records what changed and why; the Options and Context
+above stay as first written.
+
+- **D1** - the seat-file row's `Committed` column now reads `at judge --commit` (or the
+  STALE fold), not `yes`: seat files reach git only when `judge` commits them, never at
+  `record-seat` time (R26) - four concurrent `record-seat --commit`s would contend on one
+  index while seats run in parallel.
+- **D2** - `open-round` writes the ESCALATE row, `**Council:**` line and `## Needs a human`
+  itself, idempotently, before exiting 6 at the ceiling (R5); `escalate` is a standalone verb
+  - `escalate <spec> [--commit] [--reason <ceiling|half|env>] ["<note>"]` - for an open round
+  with seats missing (court removed, no seat precondition), and behaves as `judge` when
+  nothing is missing; `close-story`'s precondition now names the `## Commands` rule that
+  keeps an untrusted `## Verification` line from reaching a shell as anything but a known
+  command (R11); `record-seat`'s taint clause is path-anchored, not bare-word (R9); a RED
+  verdict from `judge` is a successful judgement and exits 0 - 4 is `record-seat` MALFORMED
+  and `close-story` red verification only (R24).
+- **D4** - `half` reads `|RED_e| >= max(2, ceil(A / 2))` so a one- or two-ask brief never
+  escalates on a single RED alone (R10); the ABSENT row is generalized: any required seat
+  (C15) missing, with nothing RED and review not BLOCK, escalates as `env` (R16), replacing
+  the old fixed "all three seats ABSENT" phrasing now that required seats vary by tier.
+- **D5** - restated as the honour clause it always was: the court is shared and writable,
+  not the sealed room the old wording implied; its blindness is a detector, not a filesystem
+  guarantee (R15).
+- **D6** - an in-flight seat's report is discarded on `/vulyk-pause`, not recorded on
+  resume; the seat is re-dispatched instead (R19).
+
 Option 1. The loop state is a small set of committed files, each with exactly one writer,
 all written by `scripts/cycle.sh`; the verdict is computed by that script from labelled
 lines in seat reports; both drivers are a `while` loop over `cycle.sh status --json` that
@@ -61,7 +93,7 @@ performs the one action named in `next` and nothing else.
 | `plan.md` `## Needs a human` | `cycle.sh escalate` | reason (`ceiling` / `half` / `env`), one row per RED ask with its evidence across rounds, paths of the seat files | yes |
 | `plan.md` `**Checked:**` | `human-check.sh` (unchanged) | optional override: `ACCEPTED` outranks a RED/ESCALATE, `REJECTED` outranks a GREEN | yes |
 | `docs/specs/<slug>/council/round-N/ROUND` | `cycle.sh open-round` | **the open marker**: `head=<sha>` `pack=<fp>` `opened=<ts>` `court=<path>` `ceiling=<3\|6\|...>`; `mkdir` of the directory is the atomic act | yes |
-| `docs/specs/<slug>/council/round-N/<haiku\|sonnet\|opus\|review>.md` | `cycle.sh record-seat` (stdin) | seat report verbatim under one header comment `<!-- seat: sonnet · model: <id\|alias> · round: 2 · head: … · pack: … · attempt: 1 · recorded: <ts> -->`; a rejected attempt is kept as `<seat>.attempt-K.md` | yes |
+| `docs/specs/<slug>/council/round-N/<haiku\|sonnet\|opus\|review>.md` | `cycle.sh record-seat` (stdin) | seat report verbatim under one header comment `<!-- seat: sonnet · model: <id\|alias> · round: 2 · head: … · pack: … · attempt: 1 · recorded: <ts> -->`; a rejected attempt is kept as `<seat>.attempt-K.md` | at `judge --commit` (or the STALE fold) |
 | `memory/stats/council.jsonl` | `cycle.sh judge` / `escalate` | **the close marker**, one flat row per round (schema below) | yes |
 | `docs/specs/<slug>/journal.md` | `scripts/journal.sh` only (from `cycle.sh`, `/vulyk-plan`, `/vulyk-ship`, hooks) | append-only, one line per state change: `- <ts> · <stage> · <what happened> · next: <what next>`; stage vocabulary = `state.sh` stages + `paused` | yes |
 | `docs/specs/<slug>/PAUSE` | `cycle.sh pause` or a human's `touch` | first line: who/why; a semaphore, not a record - the journal line is the record | **no** (gitignored) |
@@ -108,18 +140,20 @@ last stdout line is always one JSON object so no driver parses prose.
 | `status <spec> [--json]` | - | derives everything above; prints `next` (below); never writes |
 | `briefed <spec> [--commit]` | `## Asks` present, non-empty | writes `**Briefed:**`; journal |
 | `branch <spec> [--commit]` | Briefed or Approved | creates/switches `vulyk/<slug>`, writes `**Branch:**` |
-| `close-story <story-file> [--commit]` | worker returned | `scope-check.sh`, `## Verification` x `repeat:`, `status: done`, commit `story(<id>): <title>`; exit 4 on red verification (the driver routes to the repair path of `/vulyk-build` step 5) |
-| `open-round <spec> [--commit]` | Branch; all stories `done`/`blocked`; clean tree; `## Asks`; not paused; round count < ceiling | `mkdir round-N`, `ROUND`, opens the court, journal; exit 6 `ESCALATE` when the ceiling is reached instead |
-| `record-seat <spec> <N> <seat> [--model <id>] < report` | open round; `head` in `ROUND` == HEAD | validates the report contract (D3); writes the seat file; exit 4 `MALFORMED` (kept as `attempt-K`) when a label is missing, an ask number is uncovered, a RED lacks evidence, or the report is **tainted** (names a story id `<slug>-NN`, `plan.md`, `journal.md` or `council/` - things a blind seat cannot know) |
+| `close-story <story-file> [--commit]` | worker returned; every `&&`-separated segment of every `## Verification` line equals, byte for byte, a row of the hive's `CLAUDE.md` `## Commands` table (or the line is the literal `none — reviewed by lead-review`, which runs nothing), else exit 2 naming the segment | `scope-check.sh`, `## Verification` x `repeat:`, `status: done`, commit `story(<id>): <title>`; exit 4 on red verification (the driver routes to the repair path of `/vulyk-build` step 5) |
+| `open-round <spec> [--commit]` | Branch; all stories `done`/`blocked`; clean tree; `## Asks`; not paused; round count < ceiling | `mkdir round-N`, `ROUND`, opens the court, journal; at the ceiling, writes the ESCALATE row, `**Council:**` line, `## Needs a human` and the journal line itself (idempotently), then exits 6 `ESCALATE` instead |
+| `record-seat <spec> <N> <seat> [--model <id>] < report` | open round; `head` in `ROUND` == HEAD | validates the report contract (D3); writes the seat file; exit 4 `MALFORMED` (kept as `attempt-K`) when a label is missing, an ask number is uncovered, a RED lacks evidence, or the report is **tainted** - contains `docs/specs/<slug>/plan.md`, `docs/specs/<slug>/journal.md`, `docs/specs/<slug>/council/`, the same three with `docs/specs/` omitted, or a story id `<slug>-NN` (two digits, word-bounded); bare `plan.md`, `journal.md`, `council/`, another directory's `journal.md` and command-file names are not taint |
 | `judge <spec> [--commit]` | four seat files present, or a seat exhausted its two attempts (`ABSENT`) | computes the verdict (D4), row -> line -> journal, removes the court |
-| `escalate <spec> [--commit]` | called by `judge` itself or by the driver on exit 6 | `**Council:** ESCALATE`, row, `## Needs a human`, journal |
+| `escalate <spec> [--commit] [--reason <ceiling\|half\|env>] ["<note>"]` | a standalone verb: an open round with seats missing (court removed, no seat precondition) | records the escalation - row, `**Council:** ESCALATE`, `## Needs a human`, journal; behaves as `judge` when nothing is missing |
 | `reopen <spec> "<owner's decision>" [--commit]` | last row is ESCALATE | appends the decision verbatim to `brief.md` `## Answers`, raises `ceiling` by 3 in the next `ROUND`, journal |
 | `pause <spec> ["why"]` / `resume <spec>` | - | creates / removes `PAUSE`; journal; `resume` prints `stale: true` if HEAD moved while paused |
 
 Every mutating verb checks `PAUSE` first and exits **3 `PAUSED`** without acting; `status`,
-`pause`, `resume` are exempt. Exit codes: 0 ok · 1 usage · 2 precondition · 3 paused ·
-4 malformed / red verification · 5 stale · 6 escalate. `--commit` commits the paperwork as
-`vulyk(<slug>): <verb> …`; both drivers always pass it, so paperwork commits are uniform.
+`pause`, `resume` are exempt. Exit codes: 0 ok (a RED verdict from `judge` is a successful
+judgement and exits 0 too) · 1 usage · 2 precondition · 3 paused · 4 `record-seat` MALFORMED
+/ `close-story` red verification only · 5 stale · 6 escalate. `--commit` commits the
+paperwork as `vulyk(<slug>): <verb> …`; both drivers always pass it, so paperwork commits are
+uniform.
 
 `status.next` is one of: `briefed` · `branch` · `build:<wave>` · `close-story:<file>` ·
 `open-round` · `dispatch:<missing seats, comma-separated>` · `judge` · `repair` · `green` ·
@@ -200,8 +234,8 @@ after re-ask; N = this round's number; C = ceiling from `ROUND` (3, +3 per `reop
 |---|---|---|
 | `PAUSE` exists | none - `judge` exits 3 | `paused` |
 | `**Checked:** REJECTED` newer than this round's `ROUND` | RED (owner outranks council) | `repair` |
-| all three seats ABSENT | ESCALATE, `escalate:"env"` | `escalated` |
-| \|RED_e\| >= ceil(A / 2) | ESCALATE, `escalate:"half"` - the plan is wrong, rounds are not burnt | `escalated` |
+| any required seat (C15) ABSENT, RED_e ∪ RED_u empty, review != BLOCK | ESCALATE, `escalate:"env"`, `note` names the absent seats | `escalated` |
+| \|RED_e\| >= max(2, ceil(A / 2)) | ESCALATE, `escalate:"half"` - the plan is wrong, rounds are not burnt | `escalated` |
 | review = BLOCK, or RED_e ∪ RED_u non-empty | RED; if N >= C -> ESCALATE, `escalate:"ceiling"` | `repair` / `escalated` |
 | every seat GREEN or N/A, review PASS | GREEN | `green` |
 | every seat N/A, review PASS | GREEN with `na:3` - passes on lead-review + story verification only (Tier 1 and VULYK itself) | `green` |
@@ -214,25 +248,35 @@ or, for specs recorded before v0.12.0, the acceptance row as today. A `**Checked
 ACCEPTED` newer than the row satisfies the stage regardless of the row's verdict; the
 ledger then shows both.
 
-### D5. Blindness enforcement - the court
+### D5. The court - an honour clause with a detector
 
 `open-round` creates `.vulyk/court/<slug>/round-N/` with `git worktree add --detach <path>
-<head>`, then deletes everything under `docs/specs/<slug>/` except `brief.md` (stories,
-`plan.md`, `journal.md`, `council/`). `Read`/`Grep` stay in the seats' toolset; inside the
-court they find nothing to read. All three seats share the one court read-only and receive
-its absolute path as `COURT`; the suite command goes to the sonnet seat only, the *Client
-path* row (parallel-safe by the Profile's own rule: headless runner, curl, CLI) to all three,
-and the *Browser MCP* row to the haiku seat only. `lead-review` never enters the court - it
-needs the stories - and runs in the main tree at the same commit. `judge` removes the
-worktree (`git worktree remove --force`, then `prune`); an orphaned court from a crash is
-removed by the next `open-round`. Reading outside the court is a prompt rule with a
-detector: `record-seat` marks a report tainted when it names a story id, `plan.md`,
-`journal.md` or `council/`, and re-asks once.
+<head>`, deletes everything under `docs/specs/<slug>/` except `brief.md` (stories, `plan.md`,
+`journal.md`, `council/`), then commits that reduction inside the court, detached, never
+touching the main tree's history: an orientation `git status` there comes back clean, and
+`HEAD:docs/specs/<slug>/plan.md` no longer resolves. The court is a **shared, writable**
+worktree that all three seats work in at once, and nothing on disk stops a seat from writing
+to it. `Read`/`Grep` stay in the seats' toolset; its working tree holds `brief.md` and
+nothing else under `docs/specs/<slug>/`. Its git history is out of bounds the same way a story
+id is: `git log`, `git show`, `git diff` against any commit, and the deleted-file lines of
+`git status`, are a **BREACH** a seat must name in its report and re-verify independently. A
+seat's writes are forbidden and discarded when `judge` removes the worktree (`git worktree
+remove --force`, then `prune`); an orphaned court from a crash is removed by the next
+`open-round`. None of this is filesystem-enforced - it is an honour clause with a detector:
+`record-seat` marks a report tainted when it names a story id, `plan.md`, `journal.md` or
+`council/` (D2's path-anchored clause), and re-asks once. The sonnet seat's suite run may
+leave files the other two see; that is accepted, not prevented - a per-seat court would cost
+a pack-commit worktree each, the expense D1 avoids by sharing one. The suite command goes to
+the sonnet seat only, the *Client path* row (parallel-safe by the Profile's own rule: headless
+runner, curl, CLI) to all three, and the *Browser MCP* row to the haiku seat only. `lead-review`
+never enters the court - it needs the stories - and runs in the main tree at the same commit.
 
 ### D6. Human intervention
 
-`/vulyk-pause <slug>` = `cycle.sh pause`; the Workflow stops at its next clerk call (a seat
-already running finishes and its report is recorded on resume). The journal and the terminal
+`/vulyk-pause <slug>` = `cycle.sh pause`; the Workflow stops at its next clerk call - a seat
+already running finishes, but under PAUSE the tree is the human's and a report against it is
+a report against a moving target, so it is discarded rather than recorded, and the seat is
+re-dispatched on resume. The journal and the terminal
 print, at loop start, "the loop holds the working tree of `vulyk/<slug>`; to edit, run
 `/vulyk-pause`". `/vulyk-resume <slug>` = `cycle.sh resume` then a fresh driver launch.
 A manual code commit at any point makes the open round or the newest verdict `STALE` by the

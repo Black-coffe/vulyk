@@ -96,8 +96,11 @@ with the tier, never to zero (C15): `council-sonnet` alone at Tier 1, `council-s
 The tier is the Queen's own call, made once before any work, in the routing matrix above; a
 spec's `plan.md` `**Tier:**` line is what `cycle.sh` reads to size the court, and it is frozen
 into the round at `open-round` so a later edit never reshapes a round in flight. Every seat
-still judges only the brief's own words, in parallel, from a court that cannot see the hive's
-stories - the same blindness stage 05 used to buy from a human who had not read them either.
+still judges only the brief's own words, in parallel, in a court whose working tree holds
+only the brief - an honour clause with a detector, not a filesystem guarantee: the court is
+shared and writable, its git history is out of bounds, and `record-seat` taints a report that
+shows it read past that page, the same blindness stage 05 used to buy from a human who had
+not read them either.
 Green needs unanimity; a round RED on half the asks or more, or three RED rounds running,
 escalates instead of burning a fourth - `plan.md` gains `## Needs a human`
 and the loop stops. Human is never a mandatory stage: the owner may step in at any point via
