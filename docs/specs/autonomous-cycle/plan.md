@@ -149,3 +149,4 @@ command or script that owns the line; `scripts/ship-check.sh` reads all four.
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05. /vulyk-ship refuses without it.>
 **Council:** <appended by scripts/cycle.sh judge, one line per round - stage 04+05 in autonomous mode; ship-check.sh reads the newest memory/stats/council.jsonl row>
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Council:** RED round 1, 2026-09-13, at f0d206b, pack f455a9c64779
