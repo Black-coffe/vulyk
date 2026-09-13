@@ -19,3 +19,10 @@
 {"ts":"2026-09-13T09:16:52Z","story":"autonomous-cycle-15-status-carries-the-worker","declared":3,"changed":5,"out_of_scope":2}
 {"ts":"2026-09-13T10:14:04Z","story":"autonomous-cycle-17-stale-means-code-moved","declared":2,"changed":2,"out_of_scope":0}
 {"ts":"2026-09-13T10:42:22Z","story":"autonomous-cycle-18-council-scales-with-tier","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-09-13T11:52:48Z","story":"autonomous-cycle-23-commands-follow-the-driver","declared":3,"changed":12,"out_of_scope":9}
+{"ts":"2026-09-13T11:53:01Z","story":"autonomous-cycle-22-driver-acts-on-exit-codes","declared":1,"changed":13,"out_of_scope":12}
+{"ts":"2026-09-13T11:53:36Z","story":"autonomous-cycle-23-commands-follow-the-driver","declared":3,"changed":12,"out_of_scope":9}
+{"ts":"2026-09-13T11:56:10Z","story":"autonomous-cycle-24-court-is-an-honour-clause","declared":7,"changed":10,"out_of_scope":3}
+{"ts":"2026-09-13T11:59:46Z","story":"autonomous-cycle-25-release-notes-tell-the-truth","declared":3,"changed":6,"out_of_scope":3}
+{"ts":"2026-09-13T12:00:05Z","story":"autonomous-cycle-25-release-notes-tell-the-truth","declared":3,"changed":6,"out_of_scope":3}
+{"ts":"2026-09-13T12:25:39Z","story":"autonomous-cycle-19-status-after-committed-verbs","declared":2,"changed":3,"out_of_scope":1}

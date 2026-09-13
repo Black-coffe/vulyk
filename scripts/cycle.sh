@@ -107,17 +107,13 @@ round_field() { # round_field <round-dir> <key> - a ROUND file's "key=value" lin
 tier_of() { # tier_of <spec> -> the spec's tier 1-4, from plan.md's first "**Tier:**" line
   # (autonomous-cycle-18, C15). That line is "**Tier:** 4 \xc2\xb7 **Spec slug:** ..." on one
   # line, so this parses only the leading digit - never marker(), which would return the
-  # whole rest of the line as the value. Absent or unparsable defaults to 4, the safe floor,
-  # journaled once (idempotent, like judge's own row/line/journal writes) so a spec's
-  # paperwork bug is visible without failing the read.
-  local spec="$1" plan v
+  # whole rest of the line as the value. Absent or unparsable prints nothing (R21/m-1,
+  # autonomous-cycle-19): there is no default tier anymore - a silent 4 used to buy the
+  # largest court unasked, and this function never writes (status calls it on every read;
+  # m-1 is exactly this journal write, now gone - journal.md is untouched by a status call).
+  local spec="$1" plan
   plan="$spec/plan.md"
-  v="$(grep -m1 '^\*\*Tier:\*\*' "$plan" 2>/dev/null | sed -n 's/^\*\*Tier:\*\* *\([1-4]\).*/\1/p')"
-  if [ -n "$v" ]; then printf '%s' "$v"; return; fi
-  if [ -f "$plan" ] && { [ ! -f "$spec/journal.md" ] || ! grep -qF $' \xc2\xb7 tier:default \xc2\xb7 ' "$spec/journal.md"; }; then
-    bash "$HERE/journal.sh" "$spec" "tier:default" "plan.md has no parsable **Tier:** line" "defaulting to tier 4" >/dev/null 2>&1 || true
-  fi
-  printf '4'
+  grep -m1 '^\*\*Tier:\*\*' "$plan" 2>/dev/null | sed -n 's/^\*\*Tier:\*\* *\([1-4]\).*/\1/p'
 }
 
 round_tier() { # round_tier <spec> <round-dir> -> the round's frozen tier= (open-round writes
@@ -145,9 +141,12 @@ is_required_seat() { # is_required_seat <seat> <required-list> -> 0 iff seat is 
 
 missing_required_seats() { # missing_required_seats <round-dir> <required-list> -> space-sep
   # required seats with no accepted report yet, in canonical haiku/sonnet/opus/review order.
+  # A seat that exhausted both attempts (attempt-2 exists, no final <seat>.md) is ABSENT, not
+  # missing (R3/C-2, autonomous-cycle-19) - it must not block `next` from ever reaching `judge`.
   local rd="$1" required="$2" seat out=""
   for seat in haiku sonnet opus review; do
     [ -f "$rd/$seat.md" ] && continue
+    [ -f "$rd/$seat.attempt-2.md" ] && continue
     is_required_seat "$seat" "$required" && out="$out $seat"
   done
   printf '%s' "${out# }"
@@ -297,17 +296,28 @@ cmd_status() {
     [ -n "$RCOURT" ] && COURT_JSON="\"$RCOURT\""
     if ! row_exists "$SLUG" "$ROUND_N"; then
       OPEN_B=true
-      local seat has_any=0 REQUIRED
+      local seat REQUIRED
       REQUIRED="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
-      for seat in haiku sonnet opus review; do [ -f "$RD/$seat.md" ] && has_any=1; done
       MISSING="$(missing_required_seats "$RD" "$REQUIRED")"
-      if [ "$has_any" -eq 1 ] && round_is_stale "$SPEC" "$ROUND_N"; then STALE_B=true; fi
+      # R2: staleness is reported whether or not a seat file exists yet - a round can go stale
+      # (a real commit lands) before any seat is dispatched, and `next` must still say
+      # open-round, never dispatch:/judge, so record-seat's own exit-5 refusal is never the
+      # first place a driver learns the round is stale.
+      round_is_stale "$SPEC" "$ROUND_N" && STALE_B=true
     fi
   fi
 
+  # --- tier (R12/C3, autonomous-cycle-19): the open round's frozen tier= while one is open,
+  # else the plan's own **Tier:** line, else null - never a silent default (R21/m-1) ---------
+  local TIER_JSON="null" TIER_V=""
+  if [ "$OPEN_B" = true ]; then TIER_V="$(round_tier "$SPEC" "$RD")"
+  else TIER_V="$(tier_of "$SPEC")"
+  fi
+  case "$TIER_V" in [1-4]) TIER_JSON="$TIER_V" ;; esac
+
   # --- newest council.jsonl row for this spec -----------------------------------------------
   local NEWEST NEWEST_VERDICT="" NEWEST_ROUND="" NEWEST_PACK="" NEWEST_HEAD="" RED_LIST=""
-  local VERDICT_JSON="null" ROUND_DIR_JSON="null"
+  local VERDICT_JSON="null"
   NEWEST="$(newest_row "$SLUG")"
   if [ -n "$NEWEST" ]; then
     NEWEST_VERDICT="$(json_field "$NEWEST" verdict)"
@@ -316,7 +326,15 @@ cmd_status() {
     NEWEST_HEAD="$(json_field "$NEWEST" head)"
     VERDICT_JSON="\"$NEWEST_VERDICT\""
     RED_LIST="$(printf '%s' "$NEWEST" | sed -n 's/.*"red":\[\([^]]*\)\].*/\1/p' | tr ',' ' ')"
-    [ -n "$NEWEST_ROUND" ] && ROUND_DIR_JSON="\"$SPEC/council/round-$NEWEST_ROUND\""
+  fi
+
+  # --- round_dir (R25): the open round's directory while one is open, else the newest row's,
+  # else null - it must never be null during a round (lead-review minor 18, live on this spec) -
+  local ROUND_DIR_JSON="null"
+  if [ "$OPEN_B" = true ]; then
+    ROUND_DIR_JSON="\"$RD\""
+  elif [ -n "$NEWEST_ROUND" ]; then
+    ROUND_DIR_JSON="\"$SPEC/council/round-$NEWEST_ROUND\""
   fi
 
   # --- next: first match wins (C3) ----------------------------------------------------------
@@ -328,23 +346,25 @@ cmd_status() {
   elif [ -n "$BUILD_WAVE" ]; then NEXT="build:$BUILD_WAVE"
   elif [ -n "$CLOSE_FILE" ]; then NEXT="close-story:$CLOSE_FILE"
   elif [ "$OPEN_B" = true ]; then
-    if [ -n "$MISSING" ]; then NEXT="dispatch:$(printf '%s' "$MISSING" | tr ' ' ',')"
+    if [ "$STALE_B" = true ]; then NEXT="open-round"
+    elif [ -n "$MISSING" ]; then NEXT="dispatch:$(printf '%s' "$MISSING" | tr ' ' ',')"
     else NEXT="judge"
     fi
-  elif [ "$NEWEST_VERDICT" = "ESCALATE" ]; then NEXT="escalated"
+  elif [ "$NEWEST_VERDICT" = "ESCALATE" ] && ! reopen_names_round "$SPEC" "$NEWEST_ROUND"; then
+    NEXT="escalated"
   elif [ "$NEWEST_VERDICT" = "GREEN" ] && [ "$NEWEST_PACK" = "$PACK" ] && ! round_is_stale "$SPEC" "$NEWEST_ROUND"; then
     NEXT="green"
-  elif [ "$NEWEST_VERDICT" = "RED" ] && [ "$NEWEST_HEAD" = "$HEAD" ]; then
+  elif [ "$NEWEST_VERDICT" = "RED" ] && ! round_is_stale "$SPEC" "$NEWEST_ROUND"; then
     NEXT="repair"
   else
     NEXT="open-round"
   fi
 
-  printf '{"spec":"%s","slug":"%s","stage":"%s","next":"%s","briefed":%s,"approved":%s,"branch":%s,"head":"%s","pack":"%s","stories":{"todo":%s,"in-progress":%s,"done":%s,"blocked":%s},"wave":%s,"wave_stories":[%s],"round":%s,"ceiling":%s,"open":%s,"court":%s,"missing":[%s],"stale":%s,"verdict":%s,"red":[%s],"round_dir":%s,"paused":%s,"shipped":%s}\n' \
+  printf '{"spec":"%s","slug":"%s","stage":"%s","next":"%s","briefed":%s,"approved":%s,"branch":%s,"head":"%s","pack":"%s","stories":{"todo":%s,"in-progress":%s,"done":%s,"blocked":%s},"wave":%s,"wave_stories":[%s],"round":%s,"ceiling":%s,"tier":%s,"open":%s,"court":%s,"missing":[%s],"stale":%s,"verdict":%s,"red":[%s],"round_dir":%s,"paused":%s,"shipped":%s}\n' \
     "$SPEC" "$SLUG" "$(compute_stage "$SPEC" "$PLAN")" "$NEXT" "$BRIEFED_B" "$APPROVED_B" "$BRANCH_JSON" "$HEAD" "$PACK" \
     "$TODO" "$PROG" "$DONE" "$BLOCKED" \
     "$WAVE_JSON" "$WAVE_STORIES_JSON" \
-    "$ROUND_N" "$CEILING" "$OPEN_B" "$COURT_JSON" "$(json_str_array "$MISSING")" "$STALE_B" \
+    "$ROUND_N" "$CEILING" "$TIER_JSON" "$OPEN_B" "$COURT_JSON" "$(json_str_array "$MISSING")" "$STALE_B" \
     "$VERDICT_JSON" "$(json_num_csv "$RED_LIST")" "$ROUND_DIR_JSON" "$PAUSED_B" "$SHIPPED_B"
 }
 
@@ -429,6 +449,15 @@ review_verdict_of() { # review_verdict_of <file> -> PASS | BLOCK | "" (D3)
 
 council_line_exists() { grep -qE "^\*\*Council:\*\*.*round $2," "$1" 2>/dev/null; } # <plan> <round>
 journal_line_exists() { [ -f "$1/journal.md" ] && grep -qF "round $2 verdict $3" "$1/journal.md"; } # <spec> <round> <verdict>
+
+reopen_names_round() { # reopen_names_round <spec> <n> -> 0 iff council/REOPEN has a line for
+  # round n (R7/M-4, autonomous-cycle-19): `[[:space:]]` after the number keeps round 1 from
+  # matching a line for round 10 - n is always digits, so no regex escaping is needed.
+  local spec="$1" n="$2" f
+  f="$spec/council/REOPEN"
+  [ -f "$f" ] || return 1
+  grep -qE "^round=$n[[:space:]]" "$f"
+}
 
 cmd_judge() { # cmd_judge <spec> <commit:0|1> [<verb-label>]
   local SPEC="$1" DOCOMMIT="$2" VERBLABEL="${3:-judge}"
@@ -1194,8 +1223,15 @@ write_stale_row() { # write_stale_row <spec> <slug> <round-dir> <n> <a> - a STAL
   local plan="$spec/plan.md" dateonly; dateonly="$(date -u +%Y-%m-%d)"
   if ! row_exists "$slug" "$n"; then
     mkdir -p memory/stats
-    local seat v model haiku_v=ABSENT sonnet_v=ABSENT opus_v=ABSENT
-    local haiku_model=unknown sonnet_model=unknown opus_model=unknown review_v=ABSENT attempts=0
+    # A seat this round's tier does not require defaults to "" like judge's own row, never
+    # ABSENT (R21/minor 20, autonomous-cycle-19): ABSENT means "required and never recorded".
+    local required; required="$(required_seats_for_tier "$(round_tier "$spec" "$rd")")"
+    local seat v model haiku_v="" sonnet_v="" opus_v="" review_v=""
+    is_required_seat haiku  "$required" && haiku_v=ABSENT
+    is_required_seat sonnet "$required" && sonnet_v=ABSENT
+    is_required_seat opus   "$required" && opus_v=ABSENT
+    is_required_seat review "$required" && review_v=ABSENT
+    local haiku_model=unknown sonnet_model=unknown opus_model=unknown attempts=0
     for seat in haiku sonnet opus; do
       local f="$rd/$seat.md"
       if [ -f "$f" ]; then
@@ -1287,6 +1323,17 @@ EOF
     emit false open-round 2 error "## Asks missing or empty"
     exit 2
   }
+
+  # R21/M-10 (autonomous-cycle-19): an unparsable **Tier:** line must not silently buy the
+  # largest court - it refuses here, naming the line, instead of tier_of() defaulting to 4.
+  case "$(tier_of "$SPEC")" in
+    [1-4]) ;;
+    *)
+      echo "cycle: open-round - $PLAN has no parsable **Tier:** line" >&2
+      emit false open-round 2 error "no parsable **Tier:** line"
+      exit 2
+      ;;
+  esac
 
   local HEAD PACK; HEAD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; PACK="$(pack_fingerprint "$SPEC")"
   local CEILING; CEILING="$(head -1 "$SPEC/council/CEILING" 2>/dev/null | tr -d '[:space:]')"; [ -n "$CEILING" ] || CEILING=3
@@ -1389,6 +1436,12 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
     printf '%s\n' "$NEWCEIL" > "$SPEC/council/CEILING"
     bash "$HERE/journal.sh" "$SPEC" "04-council:ESCALATE" "reopened after round $N, ceiling now $NEWCEIL" "open-round" >/dev/null
   fi
+
+  # R7/M-4/C4: council/REOPEN names every round `reopen` has cleared, so `status` can tell an
+  # ESCALATE row a human already reopened from one still waiting - one line per round, never
+  # rewritten (mkdir -p: a spec can be reopened before any round dir of its own exists).
+  mkdir -p "$SPEC/council"
+  reopen_names_round "$SPEC" "$N" || printf 'round=%s \xc2\xb7 %s\n' "$N" "$(now_ts)" >> "$SPEC/council/REOPEN"
 
   if [ "$DOCOMMIT" = "1" ] && [ -n "$(git status --porcelain -- "$SPEC" 2>/dev/null)" ]; then
     git add -A -- "$SPEC" >/dev/null 2>&1

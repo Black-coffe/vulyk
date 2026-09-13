@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-19
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -67,6 +67,16 @@ The driver interface stops lying: after `judge --commit` a RED round routes to `
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `scripts/cycle.sh` `missing_required_seats`: also skips a seat whose `<seat>.attempt-2.md` exists without `<seat>.md` (ABSENT, not missing) - one shared helper used by `status`, both `record-seat` handlers and `open-round`'s resume branch, so all four agree (R3/C-2).
+- `tier_of`: dropped the "default to 4" branch and its journal write entirely - returns the parsed digit or nothing, never writes (R21/m-1). `cmd_open_round` gained a new precondition (after the `## Asks` check) that refuses (exit 2, names `**Tier:**`) when `tier_of` is unparsable, so a fresh round is never opened without a frozen tier; `build_round`'s existing `tier_of` call then always sees a valid digit.
+- `cmd_status`: `STALE_B` now checked unconditionally (dropped the `has_any` seat-file gate) so an open round reports `stale:true` before any seat is dispatched, not only after (R2). New `tier` key: `round_tier` while a round is open, else `tier_of`, else `null`. `round_dir`: the open round's own dir while one is open, else the newest row's, else `null` (R25 - it used to be `null` during a round, which is the defect the live round 1 review hit). `next`: `repair`/`open-round` on a RED row now go through `round_is_stale` instead of plain `head` equality (R1/C-1); `escalated` requires no `council/REOPEN` line names the newest ESCALATE round (R7/M-4).
+- New helper `reopen_names_round` (exact match via `^round=$n[[:space:]]`, so round 1 never matches round 10's line - same class of bug lead-review 21 flagged elsewhere, avoided here on purpose). `cmd_reopen` now writes `council/REOPEN` (`round=<N> · <ts>`, idempotent, `mkdir -p` first since a spec can be reopened before any round dir exists) alongside its existing brief.md/CEILING writes, all in the same `--commit`.
+- `write_stale_row`: a seat the round's frozen tier does not require now defaults to `""` like `judge`'s own row, not `ABSENT` (R21/minor 20) - computed via `required_seats_for_tier "$(round_tier ...)"` the same way `judge` does.
+- Bug caught by the new tests, not by inspection: `local a="$1" b="$spec/x"` inside one `local` statement reads `$spec` from *before* the statement ran (unset, under `set -u`) - bash evaluates the whole word list before any assignment lands. Fixed by splitting `reopen_names_round`'s `f="$spec/council/REOPEN"` onto its own line; grepped the diff for the same pattern elsewhere, found none.
+- `tests/council.test.sh`: `set_tier`'s sed pattern (`<2|3|4>`) no longer matched the template - another story on this branch already widened it to `<1|2|3|4>` (Tier 1, ask 13/M-10). Generalized to `<[^>]*>` so a future wording change can't silently no-op it again.
+- Fixtures that assert `status --json`'s `next` (not just `judge`'s own emit) needed `mk_open_round` (real current HEAD) instead of `mk_round` (the suite's fixed early `$HEAD7`) - `status` now legitimately reads staleness on every call (R2), and by the time later fixtures run, real HEAD has moved far past `$HEAD7` on unrelated (non-paperwork) files. Fixed `status1`/`tier1a`/`tier2a`; `tier3a`/`tierdefault` only assert `missing`, unaffected.
+- Rewrote the `tierdefault` scenario (was asserting the now-removed "journals once, behaves as tier 4" default) for `tier:null` + "status never writes journal.md"; added a matching `open-round` refusal test. Added `set_tier` to every fixture (`pwseat1`, `oround1`, `oceil1`, `oreopen1`) that calls the real `open-round` verb and previously relied on the removed default. Added one `open-round` precondition test proving the unparsable-tier refusal in isolation.
+- New tests per the acceptance criteria: the "real verbs" walk (`open-round --commit` → `record-seat` ×N → `judge --commit` → `status`, repeated through 3 RED rounds, `reopen`, round 4), the stale-open-round scenario (no seat / one seat present), the exhausted-seat scenario, and the STALE-fold `""`-vs-`ABSENT` scenario. Suite: 149 → 172 checks, exit 0, no `::error::`.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

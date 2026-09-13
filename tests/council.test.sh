@@ -46,11 +46,13 @@ mk_spec() { # mk_spec <slug> <n-asks> - brief.md with an N-item ## Asks, plan.md
   git add -A && git commit -qm "spec($slug): fixture" >/dev/null
 }
 
-set_tier() { # set_tier <slug> <n> - overwrites plan.md's template <2|3|4> placeholder with a
-  # concrete tier digit and commits (autonomous-cycle-18, C15 fixtures)
+set_tier() { # set_tier <slug> <n> - overwrites plan.md's template `**Tier:** <...>` placeholder
+  # with a concrete tier digit and commits (autonomous-cycle-18, C15 fixtures). Matches any
+  # bracketed placeholder (`<1|2|3|4>` today, story 25's template) rather than one literal
+  # spelling, so a template wording change elsewhere on the branch does not silently no-op this.
   local slug="$1" n="$2" plan
   plan="docs/specs/$slug/plan.md"
-  sed -i "s/^\(\*\*Tier:\*\* \)<2|3|4>/\1$n/" "$plan"
+  sed -i "s/^\(\*\*Tier:\*\* \)<[^>]*>/\1$n/" "$plan"
   git add -A && git commit -qm "$slug: tier $n" >/dev/null
 }
 
@@ -156,7 +158,7 @@ git add -A && git commit -qm "status1: briefed" >/dev/null
 out="$(council status docs/specs/status1 --json)"
 lines="$(printf '%s\n' "$out" | grep -c .)"
 [ "$lines" -eq 1 ] || { echo "::error::status --json printed $lines lines, expected exactly 1"; fail=1; }
-for k in spec slug stage next briefed approved branch head pack stories wave wave_stories round ceiling open court missing stale verdict red round_dir paused shipped; do
+for k in spec slug stage next briefed approved branch head pack stories wave wave_stories round ceiling tier open court missing stale verdict red round_dir paused shipped; do
   printf '%s' "$out" | jq -e "has(\"$k\")" >/dev/null 2>&1 || { echo "::error::status --json is missing key '$k': $out"; fail=1; }
 done
 printf '%s' "$out" | jq -e '.stories | has("todo") and has("in-progress") and has("done") and has("blocked")' >/dev/null 2>&1 \
@@ -202,7 +204,7 @@ printf '%s' "$out" | jq -c '.wave_stories' \
     '[{"file":"docs/specs/wstory/wstory-01-alpha.md","story":"wstory-01","worker":"worker-code","repeat":1},{"file":"docs/specs/wstory/wstory-02-beta.md","story":"wstory-02","worker":"worker-test","repeat":3}]'
 
 echo "status --json: an open round with missing seats"
-rd1="$(mk_round status1 1)"
+rd1="$(mk_open_round status1 1)"
 out2="$(council status docs/specs/status1 --json)"
 printf '%s' "$out2" | jq -e '.open == true' >/dev/null 2>&1 || { echo "::error::open round not reported open: $out2"; fail=1; }
 printf '%s' "$out2" | jq -e '.round == 1' >/dev/null 2>&1 || { echo "::error::round number wrong: $out2"; fail=1; }
@@ -222,7 +224,7 @@ printf '%s' "$(council status docs/specs/status1 --json)" | jq -r .next | expect
 echo "C15: Tier 1 requires sonnet only - status missing/next, judge reaches GREEN on one report"
 mk_open_spec tier1a 3
 set_tier tier1a 1
-rdt1="$(mk_round tier1a 1)"
+rdt1="$(mk_open_round tier1a 1)"
 out="$(council status docs/specs/tier1a --json)"
 printf '%s' "$out" | jq -r '.missing | join(",")' | expect "tier 1: missing lists only sonnet" "sonnet"
 printf '%s' "$out" | jq -r .next | expect "tier 1: next is dispatch:sonnet" "dispatch:sonnet"
@@ -239,7 +241,7 @@ printf '%s' "$row" | grep -q '"na":1' && printf '%s' "$row" | grep -q '"verdict"
 echo "C15: Tier 2 requires sonnet, opus, review - no haiku seat needed"
 mk_open_spec tier2a 3
 set_tier tier2a 2
-rdt2="$(mk_round tier2a 1)"
+rdt2="$(mk_open_round tier2a 1)"
 out="$(council status docs/specs/tier2a --json)"
 printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "tier 2: missing lists opus,review,sonnet - not haiku" "opus,review,sonnet"
 write_seat "$rdt2" sonnet GGG
@@ -258,18 +260,25 @@ mk_round tier3a 1 >/dev/null
 out="$(council status docs/specs/tier3a --json)"
 printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "tier 3: missing lists all four seats" "haiku,opus,review,sonnet"
 
-echo "C15: a plan.md without a parsable **Tier:** line behaves as tier 4 and journals it once"
+echo "C15: a plan.md without a parsable **Tier:** line -> status tier:null, still dispatches the full court, never writes (R21/m-1)"
 mk_open_spec tierdefault 3
 mk_round tierdefault 1 >/dev/null
 out="$(council status docs/specs/tierdefault --json)"
-printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "no Tier line: behaves as tier 4 (all four seats)" "haiku,opus,review,sonnet"
-grep -qF $' \xc2\xb7 tier:default \xc2\xb7 ' docs/specs/tierdefault/journal.md && echo "  ok    unparsable tier journaled once as a warning" \
-  || { echo "::error::journal.md: $(cat docs/specs/tierdefault/journal.md 2>&1)"; fail=1; }
-before="$(grep -c 'tier:default' docs/specs/tierdefault/journal.md)"
-council status docs/specs/tierdefault --json >/dev/null
-after="$(grep -c 'tier:default' docs/specs/tierdefault/journal.md)"
-[ "$before" -eq 1 ] && [ "$after" -eq 1 ] && echo "  ok    the tier:default warning is not repeated on later calls" \
-  || { echo "::error::tier:default count before=$before after=$after"; fail=1; }
+printf '%s' "$out" | jq -e '.tier == null' >/dev/null 2>&1 && echo "  ok    tier:null - no default, no silent 4 (R21)" \
+  || { echo "::error::status: $out"; fail=1; }
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "no Tier line still dispatches the full (safe) court" "haiku,opus,review,sonnet"
+[ ! -f docs/specs/tierdefault/journal.md ] && echo "  ok    status never wrote journal.md (tier_of no longer journals, m-1)" \
+  || { echo "::error::journal.md was created by a read-only status call: $(cat docs/specs/tierdefault/journal.md)"; fail=1; }
+
+echo "open-round: an unparsable **Tier:** line refuses (exit 2, names the line) instead of buying the largest court (M-10/R21)"
+mk_spec notier1 2
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/notier1#' docs/specs/notier1/plan.md
+git add -A && git commit -qm "notier1: branch, Tier line left as the template placeholder" >/dev/null
+out="$(council open-round docs/specs/notier1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'tier' && echo "  ok    unparsable Tier line -> exit 2, error names Tier" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -d docs/specs/notier1/council/round-1 ] && echo "  ok    no round was opened" \
+  || { echo "::error::round-1 exists despite the refusal"; fail=1; }
 
 # --- judge: unanimous green -------------------------------------------------------------------
 
@@ -558,6 +567,7 @@ mk_spec pwseat1 3
 sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' docs/specs/pwseat1/plan.md
 sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/pwseat1#' docs/specs/pwseat1/plan.md
 git add -A && git commit -qm "pwseat1: briefed, branch" >/dev/null
+set_tier pwseat1 3
 council open-round docs/specs/pwseat1 --commit >/dev/null   # open-round's own commit moves HEAD
 rdpw1="docs/specs/pwseat1/council/round-1"
 out="$(seat_report haiku 1 GGG | council record-seat docs/specs/pwseat1 1 haiku)"; ex=$?
@@ -866,6 +876,12 @@ out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 rm -f docs/specs/oround1/stray.txt
 
+echo "open-round: preconditions - no parsable **Tier:** line -> exit 2 (M-10/R21)"
+out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'tier' && echo "  ok    unparsable Tier line -> exit 2, naming Tier" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+set_tier oround1 4
+
 echo "open-round: opens round 1 - ROUND file, court reduced to brief.md, journal, next dispatch:..."
 out="$(council open-round docs/specs/oround1 --commit)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:haiku,sonnet,opus,review"' && echo "  ok    round 1 opens, next dispatch:..." \
@@ -873,7 +889,7 @@ out="$(council open-round docs/specs/oround1 --commit)"; ex=$?
 rd1o="docs/specs/oround1/council/round-1"
 [ -f "$rd1o/ROUND" ] && grep -q '^ceiling=3$' "$rd1o/ROUND" && echo "  ok    ROUND file written, ceiling=3 (default)" \
   || { echo "::error::ROUND: $(cat "$rd1o/ROUND" 2>&1)"; fail=1; }
-grep -q '^tier=4$' "$rd1o/ROUND" && echo "  ok    ROUND file freezes tier=4 (no parsable Tier line -> default)" \
+grep -q '^tier=4$' "$rd1o/ROUND" && echo "  ok    ROUND file freezes tier=4 (from plan.md's explicit Tier line)" \
   || { echo "::error::ROUND: $(cat "$rd1o/ROUND" 2>&1)"; fail=1; }
 court1="$(sed -n 's/^court=//p' "$rd1o/ROUND")"
 [ -d "$court1" ] && echo "  ok    court worktree exists on disk" || { echo "::error::no court at $court1"; fail=1; }
@@ -923,6 +939,7 @@ git worktree list | grep -qF "$court2" && { echo "::error::git worktree list sti
 echo "open-round: exit 6 at the ceiling, next escalated - no new round created"
 mk_spec oceil1 2
 sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/oceil1#' docs/specs/oceil1/plan.md
+set_tier oceil1 3
 mkdir -p docs/specs/oceil1/council
 printf '1\n' > docs/specs/oceil1/council/CEILING
 git add -A && git commit -qm "oceil1: branch, ceiling 1" >/dev/null
@@ -943,6 +960,7 @@ echo "reopen: three RED rounds escalate (ceiling) on the third, reopen bumps cei
 mk_spec oreopen1 5
 sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/oreopen1#' docs/specs/oreopen1/plan.md
 git add -A && git commit -qm "oreopen1: branch" >/dev/null
+set_tier oreopen1 3
 
 for n in 1 2 3; do
   council open-round docs/specs/oreopen1 --commit >/dev/null
@@ -974,5 +992,120 @@ out="$(council open-round docs/specs/oreopen1 --commit)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:haiku,sonnet,opus,review"' && echo "  ok    a fourth round opens past the old ceiling" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 [ -d docs/specs/oreopen1/council/round-4 ] && echo "  ok    round-4 directory exists" || { echo "::error::round-4 missing"; fail=1; }
+
+# --- status --json after committed verbs (autonomous-cycle-19: R1, R2, R3, R7, R25) -----------
+# The council round found the suite asserted only each verb's own emit, never `status --json`
+# afterward - which is exactly the seam where `--commit` (used by both drivers, always) moved
+# HEAD past what plain-equality checks expected. These walk the real verb sequence with
+# --commit throughout and assert `status` after each step, the same way a driver reads it.
+
+echo "status --json: real --commit sequence - RED judge -> repair, a code commit -> open-round, ceiling -> escalated, reopen -> open-round, round 4 opens (R1/C-1, R7/M-4, R25)"
+mk_open_spec realverbs 3
+set_tier realverbs 2
+council open-round docs/specs/realverbs --commit >/dev/null
+seat_report sonnet 1 GRG | council record-seat docs/specs/realverbs 1 sonnet >/dev/null
+seat_report opus 1 GGG | council record-seat docs/specs/realverbs 1 opus >/dev/null
+printf 'Reviewed the diff against the story files.\nPASS\n' | council record-seat docs/specs/realverbs 1 review >/dev/null
+jout="$(council judge docs/specs/realverbs --commit)"; jex=$?
+[ "$jex" -eq 4 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    round 1 judged RED --commit (one evidenced RED, ask 2)" \
+  || { echo "::error::round 1 judge: exit=$jex out=$jout"; fail=1; }
+
+out="$(council status docs/specs/realverbs --json)"
+printf '%s' "$out" | jq -e '.next == "repair"' >/dev/null 2>&1 && echo "  ok    status --json next:repair right after the committed RED judge (not open-round)" \
+  || { echo "::error::status: $out"; fail=1; }
+printf '%s' "$out" | jq -e '.verdict == "RED"' >/dev/null 2>&1 && echo "  ok    status --json verdict:RED" \
+  || { echo "::error::status: $out"; fail=1; }
+printf '%s' "$out" | jq -e '.red == [2]' >/dev/null 2>&1 && echo "  ok    status --json red:[2]" \
+  || { echo "::error::status: $out"; fail=1; }
+printf '%s' "$out" | jq -e '.round_dir == "docs/specs/realverbs/council/round-1"' >/dev/null 2>&1 && echo "  ok    status --json round_dir names round 1" \
+  || { echo "::error::status: $out"; fail=1; }
+
+mkdir -p src
+echo "a real code change" > src/x.txt
+git add -A && git commit -qm "real code change on realverbs" >/dev/null
+out="$(council status docs/specs/realverbs --json)"
+printf '%s' "$out" | jq -e '.next == "open-round"' >/dev/null 2>&1 && echo "  ok    a real (non-paperwork) commit flips next from repair to open-round" \
+  || { echo "::error::status: $out"; fail=1; }
+
+for n in 2 3; do
+  council open-round docs/specs/realverbs --commit >/dev/null
+  seat_report sonnet "$n" GRG | council record-seat docs/specs/realverbs "$n" sonnet >/dev/null
+  seat_report opus "$n" GGG | council record-seat docs/specs/realverbs "$n" opus >/dev/null
+  printf 'Reviewed the diff.\nPASS\n' | council record-seat docs/specs/realverbs "$n" review >/dev/null
+  council judge docs/specs/realverbs --commit >/dev/null
+done
+out="$(council status docs/specs/realverbs --json)"
+printf '%s' "$out" | jq -e '.next == "escalated"' >/dev/null 2>&1 && echo "  ok    three committed RED rounds hit the ceiling -> status next:escalated" \
+  || { echo "::error::status: $out"; fail=1; }
+
+council reopen docs/specs/realverbs "owner: fix and re-round" --commit >/dev/null
+[ -f docs/specs/realverbs/council/REOPEN ] && grep -qE '^round=3 ' docs/specs/realverbs/council/REOPEN \
+  && echo "  ok    council/REOPEN names round 3 (C4)" || { echo "::error::REOPEN: $(cat docs/specs/realverbs/council/REOPEN 2>&1)"; fail=1; }
+out="$(council status docs/specs/realverbs --json)"
+printf '%s' "$out" | jq -e '.next == "open-round"' >/dev/null 2>&1 && echo "  ok    status --json next:open-round after reopen, not stuck on escalated" \
+  || { echo "::error::status: $out"; fail=1; }
+
+out="$(council open-round docs/specs/realverbs --commit)"; ex=$?
+[ "$ex" -eq 0 ] && [ -d docs/specs/realverbs/council/round-4 ] && echo "  ok    open-round opens round 4 past the raised ceiling" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "status --json: an open round gone stale before any seat is recorded, and with one already present (R2)"
+mk_open_spec stalerd1 2
+set_tier stalerd1 1
+council open-round docs/specs/stalerd1 --commit >/dev/null
+echo "code change" > stalerd1-code.txt
+git add -A && git commit -qm "real code change while stalerd1 round 1 is open, no seat recorded yet" >/dev/null
+out="$(council status docs/specs/stalerd1 --json)"
+printf '%s' "$out" | jq -e '.stale == true' >/dev/null 2>&1 && echo "  ok    stale:true with no seat file recorded yet" \
+  || { echo "::error::status: $out"; fail=1; }
+printf '%s' "$out" | jq -e '.next == "open-round"' >/dev/null 2>&1 && echo "  ok    next:open-round, never dispatch:/judge, while stale" \
+  || { echo "::error::status: $out"; fail=1; }
+
+rds1="docs/specs/stalerd1/council/round-1"
+write_seat "$rds1" sonnet GG
+out="$(council status docs/specs/stalerd1 --json)"
+printf '%s' "$out" | jq -e '.stale == true and .next == "open-round"' >/dev/null 2>&1 \
+  && echo "  ok    same result once a seat file is already present" \
+  || { echo "::error::status: $out"; fail=1; }
+
+echo "status --json: an exhausted seat (both attempts malformed) drops out of missing, next reaches judge (R3/C-2)"
+mk_open_spec exhaust1 2
+set_tier exhaust1 3
+council open-round docs/specs/exhaust1 --commit >/dev/null
+printf 'garbage attempt 1\n' | council record-seat docs/specs/exhaust1 1 haiku >/dev/null 2>&1
+printf 'garbage attempt 2\n' | council record-seat docs/specs/exhaust1 1 haiku >/dev/null 2>&1
+rdex="docs/specs/exhaust1/council/round-1"
+[ -f "$rdex/haiku.attempt-2.md" ] && [ ! -f "$rdex/haiku.md" ] && echo "  ok    haiku exhausted both attempts on disk" \
+  || { echo "::error::files: $(ls "$rdex")"; fail=1; }
+out="$(council status docs/specs/exhaust1 --json)"
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "missing excludes the exhausted haiku seat" "opus,review,sonnet"
+
+seat_report sonnet 1 GG | council record-seat docs/specs/exhaust1 1 sonnet >/dev/null
+seat_report opus 1 GG | council record-seat docs/specs/exhaust1 1 opus >/dev/null
+printf 'Reviewed.\nPASS\n' | council record-seat docs/specs/exhaust1 1 review >/dev/null
+out="$(council status docs/specs/exhaust1 --json)"
+printf '%s' "$out" | jq -r .next | expect "every other required seat recorded -> next reaches judge" "judge"
+
+council judge docs/specs/exhaust1 >/dev/null 2>&1
+row="$(grep '"spec":"exhaust1"' memory/stats/council.jsonl | tail -1)"
+[ -n "$row" ] && printf '%s' "$row" | grep -q '"haiku":"ABSENT"' \
+  && echo "  ok    judge ran and the row carries haiku:ABSENT (the verdict itself is story 20's business)" \
+  || { echo "::error::row: $row"; fail=1; }
+
+echo "open-round: the STALE fold writes '' for a seat the round's tier does not require, not ABSENT (R21/minor 20)"
+mk_open_spec stalenr1 2
+set_tier stalenr1 2
+council open-round docs/specs/stalenr1 --commit >/dev/null
+write_seat "docs/specs/stalenr1/council/round-1" sonnet GG   # has_seat=1 so the fold (not an in-place re-stamp) fires
+echo "code change" > stalenr1-code.txt
+git add -A && git commit -qm "real code change on stalenr1 round 1, sonnet already recorded" >/dev/null
+council open-round docs/specs/stalenr1 --commit >/dev/null
+row="$(grep '"spec":"stalenr1"' memory/stats/council.jsonl | grep '"round":1' | tail -1)"
+printf '%s' "$row" | grep -qF '"haiku":""' && echo "  ok    STALE row: haiku (not required at tier 2) is '', not ABSENT" \
+  || { echo "::error::row: $row"; fail=1; }
+printf '%s' "$row" | grep -qF '"opus":"ABSENT"' && echo "  ok    STALE row: opus (required, never recorded) is ABSENT" \
+  || { echo "::error::row: $row"; fail=1; }
+[ -d docs/specs/stalenr1/council/round-2 ] && echo "  ok    round 2 opened (the fold path, not an in-place re-stamp)" \
+  || { echo "::error::round-2 missing - the has_seat=0 re-stamp path fired instead of the fold"; fail=1; }
 
 exit $fail
