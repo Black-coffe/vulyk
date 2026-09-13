@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-22
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -62,6 +62,15 @@ blocked_by: []
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- Every clerk() result off briefed/branch/open-round/judge is checked; `ok:false` throws a `Stop` carrying `{...st, stop:{verb,exit,error}}`, caught once at the bottom (mirrors the existing `BadLine` pattern) instead of a `return` at each of the four call sites.
+- `record-seat` exit 4: re-dispatch the same seat once via `dispatchSeat(seat, st, note)` with the rejection appended, record again, and never check the second result - matches "continue whatever the result" verbatim.
+- `close-story` exit 4: a top-level `attempts` Map (story file -> count) persists across loop iterations; first failure continues (story stays open, next status poll re-routes it), second failure for the same file throws `Stop` with `{verb:'close-story', file, error}` (no `exit` key - distinct shape from the generic case).
+- Heredoc delimiter is now `` `VULYK_${stamp}_${seat}_${attempt}` `` (attempt 1 then 2 on retry); literal `EOF` delimiter removed entirely; verified by grep (none left) and that `stamp` appears nowhere in `seatPrompt`/`reviewPrompt`.
+- Blind seat prompt trimmed to slug/round/court (dropped `round_dir`, which was leaking to council seats before this story - R9); `reviewPrompt` gained `round_dir`, `spec`, `branch`, `head` plus prose naming the same three pointers `/vulyk-review` step 3 gives.
+- Tier 4: `dispatchSeat` runs `lead-review` twice in `parallel` (`top_model`, `second_model`) when `st.tier === 4`, folds via `isBlock()` (first line only, `^BLOCK\b` or `^VERDICT:\s*BLOCK\b`) to `VERDICT: <folded>\n<r1>\n<r2>`, one `record-seat … review` either way. Other tiers: unchanged single `lead-review` at `top_model`.
+- `args` gained `second_model` (read as `SECOND`, used only in the tier-4 branch).
+- R14: `agent(prompt,{agentType,model,phase,effort})`, `parallel([...thunks])`, `pipeline(items,fn,then)`, `phase(title)` cross-checked against the platform's Workflow reference at code.claude.com/docs (dated 2026-09-12 per brief.md `## Evidence` line 3, reused rather than re-fetched this run) - all four shapes already matched what the file called before this story; no call shape changed, only the new tier-4 `parallel` use and the extra `dispatchSeat`/`recordSeat` wrapping follow the same confirmed shapes.
+- Dropped `ceiling` from the top-of-file comment (line 12) - the tightened grep in this story's own acceptance criteria (unlike story 06's) requires it absent even in comments; the word now appears only in `meta.description`, which C11 fixes verbatim.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
