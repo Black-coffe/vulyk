@@ -15,3 +15,5 @@
 - 2026-09-13T19:11:36Z · resumed · resumed · next: status
 - 2026-09-13T19:11:50Z · 03-building · launching the workflow driver (resume after owner pause) · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
 - 2026-09-13T19:25:35Z · 03-building · story 15: two empty returns · next: both workers cut at exactly 30 tool calls before writing anything - a turn cap, not the suite; diagnosing before relaunch
+- 2026-09-13T19:26:03Z · 03-building · launching the workflow driver (relaunch, worker maxTurns raised to 90) · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
+- 2026-09-13T19:40:21Z · 03-building · story 15: two empty returns again · next: workers still cut at 30 turns - agent definitions are loaded at session start; restart the session, then /vulyk-resume
