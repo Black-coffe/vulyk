@@ -18,50 +18,12 @@
 # Exit status is always 0: this reports, it does not block. The refusing is the command's.
 set -u
 
-pack_fingerprint() { # pack_fingerprint <spec-dir> - must match acceptance-log.sh exactly
-  local dir="$1" names hasher=""
-  names="$(
-    for f in "$dir"/*.md; do
-      [ -f "$f" ] || continue
-      grep -q '^story:' "$f" 2>/dev/null || continue
-      basename "$f"
-    done | LC_ALL=C sort | tr '\n' ' '
-  )"
-  if command -v sha256sum >/dev/null 2>&1; then hasher="sha256sum"
-  elif command -v shasum >/dev/null 2>&1; then hasher="shasum -a 256"; fi
-  if [ -n "$hasher" ]; then
-    printf '%s' "$names" | $hasher | cut -c1-12
-  else
-    printf 'n%s' "$(printf '%s' "$names" | wc -w | tr -d ' ')"
-  fi
-}
-
-# Recording a check is itself a commit, and so is recording the ship. Those commits move
-# HEAD without moving the software, so a check is still about what ships when every path
-# changed since it was given is one of the cycle's own records. Must match human-check.sh.
-paperwork_only() { # paperwork_only <root> <from-commit> <to-commit>
-  local changed p
-  git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
-  changed="$(git -C "$1" diff --name-only "$2" "$3" 2>/dev/null)" || return 1
-  [ -n "$changed" ] || return 0
-  while IFS= read -r p; do
-    case "$p" in
-      */plan.md|memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl) ;;
-      *) return 1 ;;
-    esac
-  done <<EOF
-$changed
-EOF
-  return 0
-}
-
-# A marker line is "filled" when it exists and does not still carry the template's `<...>`.
-marker() { # marker <plan.md> <Name> -> prints the line's value, empty if absent/placeholder
-  local v
-  v="$(grep -m1 "^\*\*$2:\*\*" "$1" 2>/dev/null | sed "s/^\*\*$2:\*\*[[:space:]]*//")"
-  case "$v" in ''|'<'*) return 0 ;; esac
-  printf '%s' "$v"
-}
+# pack_fingerprint(), paperwork_only() and marker() now live in scripts/lib.sh, shared with
+# human-check.sh, acceptance-log.sh, release-check.sh and cycle.sh (ADR-001 C1) - one
+# implementation instead of several that had to agree by hand.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/lib.sh
+. "$HERE/lib.sh"
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "ship-check: CANNOT RUN - not a git repo, so there is no history to fix and no stats to read." >&2
@@ -118,13 +80,16 @@ echo ""
 if [ -f "$SPEC/brief.md" ]; then ok 01 "spec: brief.md exists"
 else fail 01 "spec: no brief.md - there is no verbatim request for anything below to answer to"; fi
 
-# 02 Plan
+# 02 Plan - **Briefed:** (autonomous mode) or **Approved:** (two-stop mode) close this
+# stage; ship-check.sh accepts either (ADR-001 D1).
 if [ ! -f "$PLAN" ]; then
   fail 02 "plan: no plan.md"
+elif [ -n "$(marker "$PLAN" Briefed)" ]; then
+  ok 02 "plan: briefed - $(marker "$PLAN" Briefed)"
 elif [ -n "$(marker "$PLAN" Approved)" ]; then
   ok 02 "plan: approved - $(marker "$PLAN" Approved)"
 else
-  fail 02 "plan: no **Approved:** line in plan.md - /vulyk-build would have refused this pack"
+  fail 02 "plan: no **Briefed:** or **Approved:** line in plan.md - /vulyk-build would have refused this pack"
 fi
 
 # 03 Code - the branch line, the branch itself, and whether the tree is settled
@@ -175,47 +140,116 @@ else
   ok 03 "code: stories $DONE/$TOTAL done"
 fi
 
-# 04 Tests - the blind gate's newest verdict, and whether it is about this pack
-ACC="memory/stats/acceptance.jsonl"
+# 04+05 Tests + Human - the council's verdict now closes both stages at once (ADR-001 D4):
+# a GREEN council row for the current pack, at HEAD or only paperwork since, is enough on
+# its own. **Checked:** stays the owner's override in both directions - whichever of the
+# two records is newer wins, and the report always names both. With no council row for this
+# spec, both stages fall back to their pre-council behaviour below - the blind gate's
+# acceptance.jsonl verdict, then the owner's human.jsonl check - unchanged.
 NOW_P="$(pack_fingerprint "$SPEC")"
-LAST=""
-[ -f "$ACC" ] && LAST="$(grep -F "\"spec\":\"$SLUG\"" "$ACC" | tail -1)"
-if [ -z "$LAST" ]; then
-  fail 04 "tests: no acceptance verdict recorded - the blind gate never judged this pack (/vulyk-review)"
-else
-  AV="$(printf '%s' "$LAST" | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')"
-  AP="$(printf '%s' "$LAST" | sed -n 's/.*"pack":"\([^"]*\)".*/\1/p')"
-  if [ "$AP" != "$NOW_P" ]; then
-    fail 04 "tests: acceptance verdict $AV is STALE - given against pack $AP, now $NOW_P; re-dispatch drone-acceptance"
-  elif [ "$AV" = ACCEPTED ]; then
-    ok 04 "tests: acceptance ACCEPTED, current for this pack"
-  elif [ "$AV" = CANNOT_RUN ]; then
-    say 04 "weak" "tests: acceptance CANNOT_RUN - nothing observed the asks working; the owner's look at 05 is the only run there is"
-  else
-    fail 04 "tests: acceptance $AV - the blind gate said the asks do not work"
-  fi
-fi
-
-# 05 Human - the red box
+HEAD_NOW="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 HUM="memory/stats/human.jsonl"
 HLAST=""
 [ -f "$HUM" ] && HLAST="$(grep -F "\"spec\":\"$SLUG\"" "$HUM" | tail -1)"
-HEAD_NOW="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-if [ -z "$HLAST" ]; then
-  fail 05 "human: nobody has looked - no record in memory/stats/human.jsonl (scripts/human-check.sh after the owner answers)"
-else
-  HV="$(printf '%s' "$HLAST" | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')"
-  HP="$(printf '%s' "$HLAST" | sed -n 's/.*"pack":"\([^"]*\)".*/\1/p')"
-  HH="$(printf '%s' "$HLAST" | sed -n 's/.*"head":"\([^"]*\)".*/\1/p')"
-  HB="$(printf '%s' "$HLAST" | sed -n 's/.*"by":"\([^"]*\)".*/\1/p')"
-  if [ "$HV" != ACCEPTED ]; then
-    fail 05 "human: the owner REJECTED - route what they named into fix stories and look again"
-  elif [ "$HP" != "$NOW_P" ]; then
-    fail 05 "human: check is STALE (pack) - accepted $HP, now $NOW_P"
-  elif [ "$HH" != "$HEAD_NOW" ] && ! paperwork_only "$ROOT" "$HH" "$HEAD_NOW"; then
-    fail 05 "human: check is STALE (commit) - $HB looked at $HH, HEAD is $HEAD_NOW with code changed since; what they saw is not what ships"
+
+COUNCIL="memory/stats/council.jsonl"
+CLAST=""
+[ -f "$COUNCIL" ] && CLAST="$(grep -F "\"spec\":\"$SLUG\"" "$COUNCIL" | tail -1)"
+
+if [ -n "$CLAST" ]; then
+  CV="$(printf '%s' "$CLAST" | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')"
+  CP="$(printf '%s' "$CLAST" | sed -n 's/.*"pack":"\([^"]*\)".*/\1/p')"
+  CH="$(printf '%s' "$CLAST" | sed -n 's/.*"head":"\([^"]*\)".*/\1/p')"
+  CROUND="$(printf '%s' "$CLAST" | sed -n 's/.*"round":\([0-9]*\).*/\1/p')"
+  CTS="$(printf '%s' "$CLAST" | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')"
+
+  HV=""; HTS=""; HB=""
+  if [ -n "$HLAST" ]; then
+    HV="$(printf '%s' "$HLAST" | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')"
+    HTS="$(printf '%s' "$HLAST" | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')"
+    HB="$(printf '%s' "$HLAST" | sed -n 's/.*"by":"\([^"]*\)".*/\1/p')"
+  fi
+
+  COUNCIL_OK=0
+  COUNCIL_REASON=""
+  case "$CV" in
+    GREEN)
+      if [ "$CP" != "$NOW_P" ]; then
+        COUNCIL_REASON="council verdict is STALE (pack) - judged $CP, now $NOW_P; open a new round"
+      elif [ "$CH" != "$HEAD_NOW" ] && ! paperwork_only "$ROOT" "$CH" "$HEAD_NOW"; then
+        COUNCIL_REASON="council verdict is STALE (commit) - judged at $CH, HEAD is $HEAD_NOW with code changed since; open a new round"
+      else
+        COUNCIL_OK=1
+      fi
+      ;;
+    RED) COUNCIL_REASON="council RED round $CROUND - repair needed (pack $CP at $CH)" ;;
+    ESCALATE) COUNCIL_REASON="council ESCALATE round $CROUND - see ## Needs a human in plan.md" ;;
+    STALE) COUNCIL_REASON="council round $CROUND went STALE before judging - open a new round" ;;
+    *) COUNCIL_REASON="council verdict '$CV' unrecognised - treat as not ready" ;;
+  esac
+
+  OVERRIDE=""
+  if [ -n "$HLAST" ] && [ -n "$HTS" ] && [ -n "$CTS" ] && [ "$HTS" \> "$CTS" ]; then
+    case "$HV" in
+      ACCEPTED) OVERRIDE=ACCEPTED ;;
+      REJECTED) OVERRIDE=REJECTED ;;
+    esac
+  fi
+
+  COUNCIL_LINE="council $CV round $CROUND, pack $CP at $CH"
+  if [ -n "$HLAST" ]; then CHECKED_LINE="**Checked:** $HV by $HB"
+  else CHECKED_LINE="no **Checked:** override recorded"; fi
+
+  if [ "$OVERRIDE" = REJECTED ]; then
+    fail 04 "tests+human: $COUNCIL_LINE, but $CHECKED_LINE is newer and overrides to OPEN"
+    fail 05 "tests+human: $CHECKED_LINE - newer than the council row, overrides $CV"
+  elif [ "$OVERRIDE" = ACCEPTED ]; then
+    ok 04 "tests+human: $COUNCIL_LINE, $CHECKED_LINE overrides"
+    ok 05 "tests+human: $CHECKED_LINE - newer than the council row, overrides $CV"
+  elif [ "$COUNCIL_OK" -eq 1 ]; then
+    ok 04 "tests+human: $COUNCIL_LINE, current for this pack ($CHECKED_LINE)"
+    ok 05 "tests+human: $COUNCIL_LINE closes both stages ($CHECKED_LINE)"
   else
-    ok 05 "human: ACCEPTED by $HB at $HH - this pack, this code (only cycle records landed since, if anything)"
+    fail 04 "tests+human: $COUNCIL_REASON ($CHECKED_LINE)"
+    fail 05 "tests+human: $COUNCIL_REASON ($CHECKED_LINE)"
+  fi
+else
+  # --- no council row for this spec: pre-council behaviour, unchanged -------------------
+  ACC="memory/stats/acceptance.jsonl"
+  LAST=""
+  [ -f "$ACC" ] && LAST="$(grep -F "\"spec\":\"$SLUG\"" "$ACC" | tail -1)"
+  if [ -z "$LAST" ]; then
+    fail 04 "tests: no acceptance verdict recorded - the blind gate never judged this pack (/vulyk-review)"
+  else
+    AV="$(printf '%s' "$LAST" | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')"
+    AP="$(printf '%s' "$LAST" | sed -n 's/.*"pack":"\([^"]*\)".*/\1/p')"
+    if [ "$AP" != "$NOW_P" ]; then
+      fail 04 "tests: acceptance verdict $AV is STALE - given against pack $AP, now $NOW_P; re-dispatch drone-acceptance"
+    elif [ "$AV" = ACCEPTED ]; then
+      ok 04 "tests: acceptance ACCEPTED, current for this pack"
+    elif [ "$AV" = CANNOT_RUN ]; then
+      say 04 "weak" "tests: acceptance CANNOT_RUN - nothing observed the asks working; the owner's look at 05 is the only run there is"
+    else
+      fail 04 "tests: acceptance $AV - the blind gate said the asks do not work"
+    fi
+  fi
+
+  if [ -z "$HLAST" ]; then
+    fail 05 "human: nobody has looked - no record in memory/stats/human.jsonl (scripts/human-check.sh after the owner answers)"
+  else
+    HV="$(printf '%s' "$HLAST" | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')"
+    HP="$(printf '%s' "$HLAST" | sed -n 's/.*"pack":"\([^"]*\)".*/\1/p')"
+    HH="$(printf '%s' "$HLAST" | sed -n 's/.*"head":"\([^"]*\)".*/\1/p')"
+    HB="$(printf '%s' "$HLAST" | sed -n 's/.*"by":"\([^"]*\)".*/\1/p')"
+    if [ "$HV" != ACCEPTED ]; then
+      fail 05 "human: the owner REJECTED - route what they named into fix stories and look again"
+    elif [ "$HP" != "$NOW_P" ]; then
+      fail 05 "human: check is STALE (pack) - accepted $HP, now $NOW_P"
+    elif [ "$HH" != "$HEAD_NOW" ] && ! paperwork_only "$ROOT" "$HH" "$HEAD_NOW"; then
+      fail 05 "human: check is STALE (commit) - $HB looked at $HH, HEAD is $HEAD_NOW with code changed since; what they saw is not what ships"
+    else
+      ok 05 "human: ACCEPTED by $HB at $HH - this pack, this code (only cycle records landed since, if anything)"
+    fi
   fi
 fi
 

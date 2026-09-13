@@ -26,7 +26,7 @@ Review protocol, in order:
 
 **Write each finding as one sentence stating the condition to satisfy** - "the resume path must reject a match it did not claim, with the existing single-process fast path preserved" - not as a patch to apply. The repair goes to a fresh worker that never saw this review, and a condition survives that trip while a diff-shaped instruction becomes typing the worker cannot verify.
 
-Verdict format: `BLOCK` (at least one critical finding) or `PASS`. No middle verdict.
+Verdict format: `BLOCK` (at least one critical finding) or `PASS`. No middle verdict. The report's first line is exactly `VERDICT: PASS` or `VERDICT: BLOCK` - `record-seat … review` parses only that line to record the verdict.
 
 Report **everything you found**, in both cases, grouped by severity - critical / major / minor - each with `file:line`, its routing word, and the condition to satisfy. Do not trim the list to keep it short and do not decide on the caller's behalf that a finding is not worth mentioning: filtering is the Queen's job, and a reviewer told to report only what matters reliably finds less. Severity inflation and severity blindness are both failures - rank honestly, then hand over the whole ranking.
 

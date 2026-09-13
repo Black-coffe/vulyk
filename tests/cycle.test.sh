@@ -24,7 +24,9 @@ hcheck(){ bash scripts/human-check.sh --check docs/specs/demo; }
 cd "$T" || exit 1
 git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
 mkdir -p scripts memory/stats docs/specs/demo .claude
-cp "$SRC"/scripts/ship-check.sh "$SRC"/scripts/human-check.sh "$SRC"/scripts/acceptance-log.sh "$SRC"/scripts/redact.sh "$SRC"/scripts/state.sh scripts/
+cp "$SRC"/scripts/lib.sh "$SRC"/scripts/ship-check.sh "$SRC"/scripts/human-check.sh "$SRC"/scripts/acceptance-log.sh "$SRC"/scripts/redact.sh "$SRC"/scripts/state.sh scripts/
+# shellcheck source=scripts/lib.sh
+. scripts/lib.sh   # pack_fingerprint(), used below to build council/human fixture rows
 cp "$SRC"/templates/plan.md docs/specs/demo/plan.md
 printf -- '---\nstory: demo-01\nspec: demo\nstatus: todo\nwave: 1\n---\n# S1\n' > docs/specs/demo/demo-01-first.md
 printf 'v1\n' > app.txt
@@ -69,6 +71,11 @@ bash scripts/human-check.sh docs/specs/demo ACCEPTED "looks right on staging" >/
 ship | expect "dirty tree is OPEN"               "working tree is not clean"
 git add -A && git commit -qm "record owner's check"
 hcheck | expect "the record commit is paperwork, still CURRENT" "CURRENT"
+mkdir -p docs/specs/demo/council/round-1
+printf 'head=%s\npack=%s\nopened=2026-01-01T00:00:00Z\ncourt=/tmp/court\nceiling=3\n' \
+  "$(git rev-parse --short HEAD)" "$(pack_fingerprint docs/specs/demo)" > docs/specs/demo/council/round-1/ROUND
+git add -A && git commit -qm "council: open round 1"
+hcheck | expect "a council/ paperwork commit stays CURRENT" "CURRENT"
 ship | expect "05 closes on the record commit"   "05   ok"
 ship | expect "READY on first full pass"         "READY."
 printf 'v2\n' > app.txt
@@ -96,5 +103,60 @@ printf -- '---\nstory: demo-02\nspec: demo\nstatus: done\nwave: 2\n---\n# S2\n' 
 git add -A && git commit -qm "story(demo-02): repair"
 ship | expect "new story stales acceptance"      "STALE - given against pack"
 ship | expect "new story stales the check"       "STALE (pack)"
+
+echo "council row closes 04+05 together (ADR-001 D4); **Checked:** still overrides"
+mkdir -p docs/specs/council-demo
+printf '> build the council demo\n' > docs/specs/council-demo/brief.md
+cp "$SRC"/templates/plan.md docs/specs/council-demo/plan.md
+sed -i 's/^\*\*Briefed:\*\* <.*/**Briefed:** via grill, owner, 2026-01-01/' docs/specs/council-demo/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/council-demo/plan.md
+printf -- '---\nstory: council-demo-01\nspec: council-demo\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/council-demo/council-demo-01-first.md
+git add -A && git commit -qm "council-demo: setup"
+C0="$(git rev-parse --short HEAD)"
+PACK0="$(pack_fingerprint docs/specs/council-demo)"
+shipc() { bash scripts/ship-check.sh docs/specs/council-demo; }
+council_row() { # council_row <verdict> <round> <ts>
+  printf '{"ts":"%s","spec":"council-demo","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":1,"red":[],"red_unevidenced":[],"na":0,"review":"PASS","haiku":"GREEN","haiku_model":"sonnet","sonnet":"GREEN","sonnet_model":"sonnet","opus":"GREEN","opus_model":"opus","attempts":1,"escalate":null,"note":""}\n' \
+    "$3" "$2" "$1" "$C0" "$PACK0" >> memory/stats/council.jsonl
+}
+human_row() { # human_row <verdict> <ts>
+  printf '{"ts":"%s","spec":"council-demo","verdict":"%s","by":"Test Owner","head":"%s","pack":"%s","note":""}\n' \
+    "$2" "$1" "$C0" "$PACK0" >> memory/stats/human.jsonl
+}
+
+council_row GREEN 1 "2026-01-01T00:00:01Z"
+git add -A && git commit -qm "council: round 1 GREEN"
+shipc | expect "Briefed + GREEN council row is READY, no Approved/Checked needed" "READY."
+
+council_row RED 2 "2026-01-01T00:00:02Z"
+git add -A && git commit -qm "council: round 2 RED"
+shipc | expect "a RED council row is NOT READY"  "NOT READY"
+
+human_row ACCEPTED "2026-01-01T00:00:03Z"
+git add -A && git commit -qm "record: Checked ACCEPTED over RED"
+shipc | expect "Checked ACCEPTED newer than a RED row overrides to READY" "READY."
+
+council_row GREEN 3 "2026-01-01T00:00:04Z"
+git add -A && git commit -qm "council: round 3 GREEN"
+
+human_row REJECTED "2026-01-01T00:00:05Z"
+git add -A && git commit -qm "record: Checked REJECTED over GREEN"
+shipc | expect "Checked REJECTED newer than a GREEN row overrides to NOT READY" "NOT READY"
+
+echo "the paperwork whitelist is anchored to docs/specs/*/ (R23/m-2): a commit under src/council/ or a bare src/journal.md is never paperwork, even though it shares the names"
+mkdir -p docs/specs/anchor-demo
+cp "$SRC"/templates/plan.md docs/specs/anchor-demo/plan.md
+printf '> build the anchor demo\n' > docs/specs/anchor-demo/brief.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/anchor-demo/plan.md
+printf -- '---\nstory: anchor-demo-01\nspec: anchor-demo\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/anchor-demo/anchor-demo-01-first.md
+git add -A && git commit -qm "anchor-demo: setup" >/dev/null
+bash scripts/human-check.sh docs/specs/anchor-demo ACCEPTED "looks right" >/dev/null
+git add -A && git commit -qm "anchor-demo: record check" >/dev/null
+bash scripts/human-check.sh --check docs/specs/anchor-demo | expect "CURRENT right after the recorded check" "CURRENT"
+mkdir -p src/council
+printf 'not a spec file\n' > src/council/x
+printf 'not a spec journal either\n' > src/journal.md
+git add -A && git commit -qm "a real code change under src/council/ and src/journal.md - not paperwork" >/dev/null
+bash scripts/human-check.sh --check docs/specs/anchor-demo | expect "src/council/x and src/journal.md are not paperwork -> STALE" "STALE"
 
 exit $fail

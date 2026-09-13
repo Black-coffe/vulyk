@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-13
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -46,6 +46,11 @@ The release describes itself: a `## [0.12.0]` entry in the house format that say
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `## [0.12.0]` entry's content follows this story's own acceptance criteria almost verbatim (it names every bullet explicitly); the source material for wording was recon `scout-docs.md` §Answer4/§Gotchas, `plan.md` (Goal/Assumptions/Contracts C6/C10/C11/C14), `brief.md` `## Evidence`, ADR-001 `## Consequences` (cost/rollback-signal/migration paragraphs), `docs/token-economy.md` "The cost of the council", and all 16 story files' frontmatter + `## Implementation notes`.
+- `### Fixed` covers stories 14 (installer shipped gitignored runtime files), 15 (`wave_stories` lacked `worker:`, driver always dispatched `worker-code`) and 16 (Profile placeholder missing three rows) per the plan's `## Plan deltas` — all three are mid-build discoveries, not part of the original wave plan; 04/15/16 were still `status: todo` on disk while writing this (a concurrent worker was still editing `scripts/cycle.sh`/`tests/council.test.sh` for story 04), so the entry describes the pack as planned to land in this wave, not solely what `git log` shows landed as of this write.
+- Verdict-label used in the entry is `RED` (the actual `## Asks` per-ask verdict enum, per plan.md C5), not the brief's conversational `BROKEN` — kept accurate to what `cycle.sh judge` actually implements rather than the original human phrasing.
+- `memory/stats/council.jsonl`, `docs/specs/<slug>/journal.md` and `.claude/agents/drone-acceptance.md`(absent, correctly - deleted) were confirmed against precedent: `memory/stats/human.jsonl`/`ship.jsonl`/`acceptance.jsonl` (named in the v0.11.0 entry) are likewise absent from this repo's tree and were never committed here - VULYK doesn't dogfood these runtime ledgers, so naming a not-yet-populated but code-backed path is the house convention, not a gap.
+- All four touched files confirmed byte-level LF (`\r` count = 0 via a Python byte scan), since `core.autocrlf=true` on this checkout otherwise reintroduces CRLF into the working tree on any read/touch.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

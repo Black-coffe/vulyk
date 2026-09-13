@@ -1,33 +1,103 @@
 ---
-description: Execute approved stories in waves of cascade-routed workers, one commit per story
-argument-hint: [spec slug or story id; defaults to newest approved plan]
+description: Launch the build -> council -> repair loop - the Workflow driver when it is available, an in-session fallback otherwise - one commit per state change
+argument-hint: [spec slug; defaults to the newest spec carrying **Briefed:** or **Approved:** with no branch yet]
 ---
 
-Execute the approved plan: "$ARGUMENTS" (default: most recent plan in `docs/specs/` marked approved).
+Launch the loop for: "$ARGUMENTS" (default: the newest spec under `docs/specs/` that is briefed or
+approved but has no `**Branch:**` line yet).
 
-1. **Load the plan.** Refuse politely if no approval marker - planning and building are separate decisions by design. Then **put the build on its branch (stage 03)**: story commits live in their own branch, never on the default one. `git rev-parse --abbrev-ref HEAD` - on the default branch (`main`/`master`, or whatever the Profile's *Release / deploy* row names), create and switch to `vulyk/<slug>` (or the naming that row prescribes) before wave 1; already on a feature branch, build there. Either way replace the `**Branch:**` placeholder in plan.md with the branch name and commit it with the plan. The branch is what stage 04 tests, what the owner is shown at stage 05 and what `/vulyk-ship` merges; a build whose commits nobody can name later has no rollback point, and `scripts/ship-check.sh` reads this line.
+1. **Mode detection and launch.** This is the driver launch protocol every other command points at
+   rather than repeating - `/vulyk-plan` step 10 says "launch as here"; `/vulyk-resume` says "the
+   same launch as here". Resolve `top_model="$(bash scripts/top-model.sh)"` (the alias the session
+   brief announced; re-run only if it scrolled away); `second_model` - `opus` beside a Fable
+   `top_model`, `sonnet` beside an Opus one, unless the spec's own Tier 4 sentence in `plan.md`
+   names another (the same pairing `/vulyk-review` step 3 uses for its second reviewer); and
+   `stamp="$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"` (16 hex characters, never `date`), taken
+   once, here, before either branch below - both drivers use this one random value for the whole
+   run, and it never appears in a seat prompt: it is a per-run value the seat is never told, not a
+   secret a report is expected to guess (R31). Detect the driver the same way
+   `/vulyk-status` does: `Workflow` present in this session's own tool list -> Workflow driver;
+   otherwise the fallback loop. Print which one - `driver: workflow` or `driver: fallback` - then,
+   before touching anything else, print and journal the one line that tells the human the tree is
+   not theirs right now:
+   ```
+   bash scripts/journal.sh docs/specs/<slug> 03-building "launching the <workflow|fallback> driver" \
+     "the loop holds the working tree of vulyk/<slug>; to edit, run /vulyk-pause <slug>"
+   ```
+   Echo exactly what it prints - that one line - and nothing else.
+   - **Workflow driver:** call the `Workflow` tool named `vulyk-cycle` with
+     `args: {spec: "docs/specs/<slug>", top_model, second_model, stamp}` (C11). It drives
+     build -> round -> judge -> repair through `cycle-clerk` and the worker/council/`lead-review`/
+     `queen-planner` agents on its own to one of the terminal `next` values (`green`, `escalated`,
+     `paused`, `shipped`). Do nothing else in this session while it runs. When it returns - in this
+     session or a fresh one that resumes here - do the **wake-up** step (4) instead of reading
+     anything it printed along the way; the transcript is not the record, the disk is.
+   - **Fallback driver** (`Workflow` absent from the tool list): continue with step 2, in this same
+     session, using your own Bash for every `cycle.sh` verb and the Agent tool for every worker,
+     seat, `lead-review` and `queen-planner` dispatch the Workflow would otherwise make.
 
-2. **Check the stories.** Run `bash scripts/wave-check.sh docs/specs/<slug>` and show its output. A collision, order violation or dangling blocker is a plan defect: fix the story files (merge, split, or re-wave) before dispatching anything. Disjoint `## Files` within a wave is the precondition for parallel dispatch - two concurrent workers on one file silently overwrite each other. The gate runs again here, after approval, because the tree moved since planning: a `missing` path is a worker about to be sent at a file that is not there, and a `verify-gap` or `no-verify` story is one whose green will mean nothing when it returns.
+2. **The fallback loop.** Repeat until a terminal `next`:
+   1. Read `bash scripts/cycle.sh status docs/specs/<slug> --json` and take its `next` field (C3).
+      This single field is the entire interface - never read a seat report, a story's
+      `## Implementation notes` or a round count to decide what happens next; `cycle.sh` has
+      already read everything relevant and named the one thing left to do.
+   2. Act on exactly that value, one action, nothing more, from the table below. **Any verb's last
+      line whose JSON object says `"ok":false` stops the loop**: print its `error` field, and -
+      since no `cycle.sh` failure path writes to `journal.md` on its own (`open-round`'s ceiling
+      exit 6 is the one exception: it now records its own ESCALATE row, `**Council:**` line,
+      `## Needs a human` and journal line before exiting, per R5) - journal the stop yourself first:
+      `bash scripts/journal.sh docs/specs/<slug> 03-building "<verb> exit <n>" "<error>, stopped for
+      a human"`. Exactly two cases read `error` and continue instead of stopping, both spelled out
+      in the rows below: `record-seat` exit 4, and `close-story` exit 4 on a story's first miss.
 
-3. **Dispatch by wave, one message per wave.** Launch every story of the current wave as parallel worker calls **in a single message** - that, and nothing else, is what makes them actually run concurrently; one call per message is a serial build wearing parallel clothes. Each story goes to its worker (`worker-code`, then `worker-test` where the story requires tests) with EXACTLY: the story file, its map slice pointer, the relevant `.claude/rules/` paths. Nothing more - scoped context is the law. Cap: 4 concurrent workers; a bigger wave dispatches in slices.
+   | `next` | Action |
+   |---|---|
+   | `briefed` | Refuse: the spec is neither `**Briefed:**` nor `**Approved:**`. Point at `/vulyk-plan`. Stop. |
+   | `branch` | `bash scripts/cycle.sh branch docs/specs/<slug> --commit`. |
+   | `build:<wave>` | `bash scripts/wave-check.sh docs/specs/<slug>` first - a collision here is a plan defect, fix the story files before dispatching anything. Then dispatch every entry of the status object's `wave_stories` - each already `{"file","story","worker","repeat"}` (C3, plan delta 2 - the driver never opens a story file to learn its worker) - to the named `worker` (`worker-code`/`worker-test`), one message, cap 4 concurrent, each worker getting exactly its story file, its map slice pointer and the relevant `.claude/rules/` paths. A worker that returns nothing at all - an empty final message, an abort, a timeout - is a miss under the same two-attempt bound as a red verification, and `close-story` is not run on it (R29). As each *non-empty* return says `STATUS: DONE` -> `bash scripts/cycle.sh close-story <story-file> --commit` (it repeats `## Verification` the entry's own `repeat` times, C2). **First** miss on a story - a red `close-story` (exit 4), `NEEDS_CONTEXT`/`WALL`, or an empty report, in any order - dispatch one fresh worker with the failure stated as a condition to satisfy (an empty report: state plainly that the previous attempt returned nothing), then `close-story` again once it answers `STATUS: DONE`; the story stays `todo`/`in-progress` for the next `status` either way, and the rest of the wave is untouched. **Second** miss on the *same* story, any mix of the three kinds - edit its `status:` to `blocked`, append a `## Findings` line naming the miss (the `error`, the worker's own `## Findings`, or "worker returned no report"), dispatch `lead-architect` with the story file and both failures, journal the stop (`03-building`, "story blocked" / the error), and **end the loop entirely** - never `open-round` on a wave carrying a blocked story. |
+   | `close-story:<file>` | `bash scripts/cycle.sh close-story <file> --commit` - a story whose worker already returned but was never closed (typically after a resume). |
+   | `open-round` | `bash scripts/cycle.sh open-round docs/specs/<slug> --commit`. |
+   | `dispatch:<seats>` | Read `court` and `round` off this same `status --json` - a blind seat's *entire* input (C11): `slug`, `round` and `court`, **never `round_dir`** - a seat that echoes its own input back is tainted on the spot (R9). `round_dir` goes to `lead-review` alone, alongside its packet. One message, every named seat: `haiku`/`sonnet`/`opus` -> `council-<seat>` working in `court`; `review` -> `lead-review` at `top_model`, in the main tree, never the court (Tier 4: plus a second reviewer at `second_model`, its `BLOCK`/`PASS` folded into `lead-review`'s per `/vulyk-review`'s rule - the stricter of the two). The report travels as free text inside the clerk's prompt; record it through the heredoc delimiter `VULYK_<stamp>_<seat>_<attempt>` - a per-run random value the seat is never told, which is what keeps the body from ending the heredoc early (R31): `bash scripts/cycle.sh record-seat docs/specs/<slug> <N> <seat> [--model <id>] <<'VULYK_<stamp>_<seat>_<attempt>'` ... `VULYK_<stamp>_<seat>_<attempt>` (never `EOF`; an empty report is still piped through unchanged, so the attempt exists on disk). Exit 4 -> re-ask that one seat once, naming the `error` field verbatim in the re-ask, with `<attempt>` now `2` in the next delimiter; record again either way and move on - a seat MALFORMED on both attempts is `ABSENT` on disk and `judge` accounts for it (R3). |
+   | `judge` | `bash scripts/cycle.sh judge docs/specs/<slug> --commit`. |
+   | `repair` | Once per round number: dispatch `queen-planner` at `top_model` with `red` and `review` read off this same `status --json` (C3); when `red` is empty, the prompt says plainly that the RED is the review seat's `BLOCK` (or an owner `REJECTED`), points at `<round_dir>/review.md`, and asks for one story per critical and per major finding whose fix is local - never phrased as addressing asks that are not there. It cuts fix stories into the plan - never write them yourself. Then `bash scripts/wave-check.sh docs/specs/<slug>` again: a repair round changes the pack, and a check that judged a different set of stories is not a check. If the next `status` still says `repair` for this same round (the planner cut no story, nothing landed), stop: print `repair landed nothing for round <N>` and the journal tail; do not dispatch `queen-planner` a second time for the same round (R30). |
+   | `green` / `escalated` / `paused` | Stop - go to step 3. |
+   | `shipped` | Stop: this spec already shipped, nothing to build. |
 
-4. **Close each story as its worker returns** - do not wait for the whole wave:
-   1. Read the return report (`STATUS`/`FILES`/`TESTS`/...). If a worker returned prose instead of the contract, take what it did as unverified: run the story's verification yourself via a quiet command before trusting it.
-   2. `bash scripts/scope-check.sh <story-file>` - with per-story commits the default working-tree range is exactly this story's diff, so the numbers are finally per-story, not per-pileup.
-   3. Run the story's `## Verification` command (quiet variant), as many times as its `repeat:` line asks - a story that names a repeat count is telling you a single green is not evidence for this code. Red -> back to the worker path, never patched by your hands.
-   4. Commit: `git add` the story's declared files (plus the story file itself) and commit as `story(<slug>-NN): <title>`. **One story, one commit** - it is the rollback point and the review unit. Out-of-scope files flagged by scope-check are a decision, not a default: leave them uncommitted and resolve (amend the story, or descope the change) before they ride along.
-   5. Update the story's `status:` line.
+   3. After the action, print exactly one line and nothing else - not the raw `cycle.sh` stdout,
+      not its JSON object, not tool chatter: if the verb just run appended a new line to
+      `<spec-dir>/journal.md` (every verb here does except `record-seat`, which does not journal
+      per seat), print that new last line; for `record-seat`, print its own one-line `cycle: ...`
+      confirmation instead. Either way, one line. This is the entire visible log - a human watching
+      only the terminal must be able to follow the loop by it alone.
+   4. Repeat from 2.1.
 
-5. **Repair has a ceiling: two rounds per story.**
-   - `NEEDS_CONTEXT` -> the story was defective. Fix the story file (or answer the question), then send a **fresh** worker. This round counts against the plan, not the worker.
-   - `WALL` or red verification -> send ONE fresh worker with `## Findings` attached and the repair stated as a condition to satisfy ("make X pass with Y preserved"), not as instructions to follow. Never re-dispatch the identical prompt hoping for luck.
-   - Second failure -> stop the story: mark it `blocked`, and either re-plan it or escalate the design question to `lead-architect`. A third identical attempt is a token bonfire.
-   - **A repair dispatch obeys the wave rule too.** Before sending one alongside anything still in flight, intersect its file set with theirs exactly as wave-check does for stories. Two dispatches that land in one file minutes apart cannot be split by path afterwards: the story loses its one-commit rollback point, and nobody notices until the diff is already mixed. **When the repair is a real story file, do not intersect by hand - re-run `bash scripts/wave-check.sh docs/specs/<slug>`.** The gate ran at step 2 against the pack as approved; a repair round changes that pack, and a check that judged a different set of stories is not a check. Same rule, same reason, as the acceptance verdict in `/vulyk-review`: when the pack moves, whatever judged it is re-run.
+3. **Stop conditions** (both drivers land here - the Workflow driver via step 4 below):
+   - **`green`** - print how many rounds it took (the `round` field of the `status --json` that
+     produced `green`), the newest `**Council:**` line (`grep '^\*\*Council:\*\*' docs/specs/<slug>/plan.md | tail -1`),
+     and the next-circle material already on disk: each seat file's `UNASKED:` line from that round
+     (skip "none"). Recommend `/vulyk-ship`; note that `/vulyk-review` still runs another round on
+     demand first if the owner wants one.
+   - **`escalated`** - print `## Needs a human` from `plan.md` verbatim. The owner has three exits:
+     `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen "<decision>"` (three more
+     rounds), or leaving the spec open. Do not choose for them.
+   - **`paused`** - print that the loop is paused and holds nothing further; `/vulyk-resume <slug>`
+     restarts it, running `/vulyk-pause` again is a no-op.
 
-   **Never `git checkout <path>`, `git restore` or `git stash` during a build.** Uncommitted worker output is the normal state of the tree, and those commands destroy it with no diff to recover from. Mutation testing - "break this guard, confirm the suite goes red" - needs a commit as its restore point, so it waits until the story is committed; before that, the experiment gets described to `lead-review` rather than performed on a tree nothing can restore.
-
-6. **Descoping is recorded, never silent.** If you narrow, split or drop a story mid-build, append one line to `## Descoped` in `plan.md`: what was cut, why, and what evidence the build produced. The human sees the plan they approved; a story that quietly shrank is a requirement that quietly vanished.
-
-7. **Track lean.** You hold the plan, the wave number and the status lines - not the diffs, not the test output. Anything longer than a return report gets re-read from disk when needed.
-
-8. **Close the build.** When all stories are done or blocked: summarize per-story commits and statuses, then run the project's full verification once **without flooding your context** - dispatch it to a worker or pipe through `tail -30`; you need the verdict and the names of what failed, not the log. Recommend `/vulyk-review` (mandatory for Tier 3-4), naming the branch - it is what the gates and the owner's look are pointed at. The map and wiki refresh come at `/vulyk-ship`, after the human, not before.
+4. **Wake-up after a Workflow run.** Never read the transcript - the returned object and the disk
+   are the record.
+   - **The returned object carries `stop`** (`{verb, file, error}`, C11): the driver ended the run
+     early, exactly as the fallback loop's own stop rule does. Print `stop.error`. A `stop` that
+     carries `file` - `stop.verb` is `close-story` (a second red verification) or `build` (a second
+     miss, red or an empty worker report, R29) - applies the fallback's `build:<wave>` rule above
+     regardless of which: edit that story's `status:` to `blocked`, append the error to its
+     `## Findings`, dispatch `lead-architect` with the story file and both failures, then stop.
+     `stop.verb` `repair` (R30: `repair` landed nothing twice for the same round) or `launch` (step 1
+     passed no `stamp` - fix the launch, never relaunch blindly to retry it) carries no `file`: print
+     `journal.md`'s tail (the lines since this launch) and stop. Any other `stop` also prints
+     `journal.md`'s tail and stops, as story 23 left it.
+   - **No `stop` field** (the run reached one of the four terminal `next` values): read
+     `journal.md`'s tail and the newest round's seat files under
+     `docs/specs/<slug>/council/round-N/*.md`, then print exactly the stop-condition report of
+     step 3 for whichever terminal state the run reached; `escalated` still prints `## Needs a
+     human` from `plan.md` verbatim - `open-round` at the ceiling now writes it directly, the same
+     as `judge`'s own ESCALATE (R5), so this reads the same either way.

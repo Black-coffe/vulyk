@@ -95,6 +95,15 @@ jobs:
       - name: synthetic spec -> six confirmations, stale on code, current on paperwork
         run: bash tests/cycle.test.sh
 
+  council:
+    name: the council's verdict machinery - cycle.sh judge/escalate over hand-written fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: fixture rounds -> GREEN, RED, ESCALATE (ceiling/half/env), N/A, owner override
+        run: bash tests/council.test.sh
+
   handoff-window:
     name: handoff.py resolves the context window
     runs-on: ubuntu-latest
@@ -110,6 +119,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: plant dummy runtime artifacts (must never be shipped, per shippable())
+        run: |
+          mkdir -p .claude/handoff memory/snapshots/2026
+          # a sentinel, not a plausible model name: top-model.sh --apply legitimately
+          # creates its OWN settings.local.json in the target later in the run (story 07),
+          # so the file existing afterward is expected - only this literal content leaking
+          # in would mean copy_tree shipped the maintainer's file instead of skipping it.
+          echo '{"model":"__vulyk_smoke_leak_marker__"}' > .claude/settings.local.json
+          echo 'dummy handoff'                           > .claude/handoff/x.md
+          echo '{}'                                       > .claude/state.json
+          echo 'dummy snapshot'                           > memory/snapshots/2026/x.md
+          echo 'BOGUS-VERSION'                            > .claude/vulyk-version
+
       - name: install --check into a clean dir is non-destructive and well-formed
         run: |
           target="$(mktemp -d)"
@@ -123,6 +145,8 @@ jobs:
           for needle in ".claude/commands/vulyk-plan.md" ".claude/agents/queen-planner.md" "memory/memory.md"; do
             echo "$out" | grep -q "$needle" || { echo "::error::--check did not plan to copy $needle"; exit 1; }
           done
+          # and must show it would skip the maintainer's own runtime artifacts, not ship them
+          echo "$out" | grep -q "would skip (runtime) .claude/settings.local.json" || { echo "::error::--check did not report skipping settings.local.json"; exit 1; }
 
       - name: real install into a clean dir produces a runnable hive
         run: |
@@ -132,7 +156,62 @@ jobs:
           test -x "$target/.claude/hooks/session-start-brief.sh" || { echo "::error::hooks not executable"; exit 1; }
           test -x "$target/.claude/hooks/top-model-brief.sh"    || { echo "::error::top-model hook missing or not executable"; exit 1; }
           grep -q 'top-model-brief.sh' "$target/.claude/settings.json" || { echo "::error::top-model hook not wired"; exit 1; }
+          # wire_permissions must have added both allow rules the clerk needs, each exactly
+          # once, or every cycle-clerk dispatch stalls on a prompt nobody is watching (R22).
+          jq -e --arg r1 'Bash(bash scripts/cycle.sh:*)' --arg r2 'Bash(bash scripts/journal.sh:*)' \
+            '([.permissions.allow[] | select(. == $r1)] | length == 1) and
+             ([.permissions.allow[] | select(. == $r2)] | length == 1)' \
+            "$target/.claude/settings.json" >/dev/null \
+            || { echo "::error::permissions.allow does not contain both cycle.sh and journal.sh allow rules exactly once"; exit 1; }
           test -f "$target/memory/stats/skills.json"           || { echo "::error::skills.json not seeded"; exit 1; }
+          # the blanked Profile placeholder must carry every row the source constitution
+          # documents (story 16) - count instead of hardcoding a number, so a row added to
+          # CLAUDE.md but not to install.sh's placeholder turns this red.
+          count_profile_rows() { awk '/<!-- VULYK:PROFILE:START -->/{f=1;next}/<!-- VULYK:PROFILE:END -->/{f=0}f' "$1" | grep -c '^| '; }
+          src_rows="$(count_profile_rows CLAUDE.md)"
+          tgt_rows="$(count_profile_rows "$target/CLAUDE.md")"
+          [ "$src_rows" = "$tgt_rows" ] || { echo "::error::Profile block row count mismatch: source=$src_rows target=$tgt_rows"; exit 1; }
+          # never ships the maintainer's own gitignored runtime artifacts. settings.local.json
+          # is checked by content, not by absence: top-model.sh --apply (story 07) legitimately
+          # writes the target's OWN pin file later in this same install, so the path existing
+          # is expected - only the planted sentinel leaking into it would be a real failure.
+          if [ -e "$target/.claude/settings.local.json" ]; then
+            grep -q "__vulyk_smoke_leak_marker__" "$target/.claude/settings.local.json" && { echo "::error::shipped the maintainer's settings.local.json"; exit 1; }
+          fi
+          test ! -e "$target/.claude/handoff/x.md"        || { echo "::error::shipped a handoff file"; exit 1; }
+          test ! -e "$target/.claude/state.json"          || { echo "::error::shipped state.json"; exit 1; }
+          test ! -e "$target/memory/snapshots/2026/x.md"  || { echo "::error::shipped a snapshot"; exit 1; }
+          grep -qx "$(cat VERSION)" "$target/.claude/vulyk-version" || { echo "::error::vulyk-version is not install.sh's own stamp"; exit 1; }
+
+      - name: --upgrade into the same target ships no runtime artifact either
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          ./install.sh "$target" --upgrade >/dev/null
+          if [ -e "$target/.claude/settings.local.json" ]; then
+            grep -q "__vulyk_smoke_leak_marker__" "$target/.claude/settings.local.json" && { echo "::error::--upgrade shipped the maintainer's settings.local.json"; exit 1; }
+          fi
+          test ! -e "$target/.claude/handoff/x.md"        || { echo "::error::--upgrade shipped a handoff file"; exit 1; }
+          test ! -e "$target/.claude/state.json"          || { echo "::error::--upgrade shipped state.json"; exit 1; }
+          test ! -e "$target/memory/snapshots/2026/x.md"  || { echo "::error::--upgrade shipped a snapshot"; exit 1; }
+          grep -qx "$(cat VERSION)" "$target/.claude/vulyk-version" || { echo "::error::--upgrade vulyk-version is not install.sh's own stamp"; exit 1; }
+          # the allow rules must still be exactly-once after an upgrade, not duplicated or
+          # dropped by a re-run of wire_permissions against an already-wired file (R22).
+          jq -e --arg r1 'Bash(bash scripts/cycle.sh:*)' --arg r2 'Bash(bash scripts/journal.sh:*)' \
+            '([.permissions.allow[] | select(. == $r1)] | length == 1) and
+             ([.permissions.allow[] | select(. == $r2)] | length == 1)' \
+            "$target/.claude/settings.json" >/dev/null \
+            || { echo "::error::--upgrade left permissions.allow without both cycle.sh and journal.sh allow rules exactly once"; exit 1; }
+
+      - name: --upgrade never touches an already-filled Profile block
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          sed -i 's/| Stack | `<fill in>` |/| Stack | `filled-in-value` |/' "$target/CLAUDE.md"
+          before="$(cat "$target/CLAUDE.md")"
+          ./install.sh "$target" --upgrade >/dev/null
+          after="$(cat "$target/CLAUDE.md")"
+          [ "$before" = "$after" ] || { echo "::error::--upgrade modified an already-filled Profile block"; exit 1; }
 
       - name: re-install is idempotent (never overwrites existing files)
         run: |

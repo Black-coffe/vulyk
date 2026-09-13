@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-12
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -53,6 +53,12 @@ Every guide that walks a reader through the cycle walks the v0.12.0 cycle: the g
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `docs/architecture.md`: full rewrite of the caste table (council-haiku/sonnet/opus + cycle-clerk replace drone-acceptance) and the data-flow block (grill -> Briefed -> driver -> waves -> open-round -> lead-review ∥ seats in the court -> judge -> repair/green -> local merge); added a "Two drivers, one state" paragraph on the shared `cycle.sh status --json` contract. Wrote with the Write tool, LF only (verified 0 CRLF bytes).
+- `docs/command-reference.md`: rewrote `/vulyk-plan`, `/vulyk-build`, `/vulyk-review`, `/vulyk-ship`, `/vulyk-status` paragraphs from the actual `.claude/commands/*.md` files (not from the plan/ADR text) and added `/vulyk-pause`/`/vulyk-resume`; dropped every "stops for human approval" / check-card / stage-05 phrase.
+- `docs/getting-started.md`: working-loop block now reads grill questions -> journal lines on the terminal -> wake on green/escalation -> `/vulyk-ship` prints the publish command; added one sentence each on `/vulyk-pause` and the two-stop opt-out.
+- `docs/model-cascade.md:97-106`: split the old `drone-coverage, drone-acceptance` row into `drone-coverage` plus three council-seat rows and `cycle-clerk`, each with its real model; added the "dispatched together" sentence naming `lead-review` ∥ the three seats per round.
+- `docs/token-economy.md`: added a dated "Cost of the council (v0.12.0)" section citing ADR-001 (2026-09-12) as an estimate, not a measured number - per-round seat/clerk/planner cost, the "~2-3x the v0.11 gate cost at <=2 rounds" line, and the fallback driver's ~120-lines-per-round cost that `/vulyk-status` reports. Caught and fixed my own relative-link bug (`../adr/...` -> `adr/...`) before finishing.
+- `README.md`: build-discipline bullet (now the one at the same position, since earlier edits shifted line numbers) says the cycle closes with a council and one human stop at the grill; caste table swaps `drone-acceptance` for the three council seats + `cycle-clerk`; command-table rows for `/vulyk-plan`, `/vulyk-review`, `/vulyk-ship` rewritten and `/vulyk-pause`/`/vulyk-resume` added; the v0.11.0 roadmap entry left untouched (story 13 owns v0.12.0's entry). Also reframed the "What is measured" section's `acceptance-log.sh` paragraph as the explicit pre-council fallback for specs recorded before v0.12.0, without touching its historical numbers - judged necessary for internal consistency (Files list names the whole file; leaving a caste table and a command row naming a deleted agent would fail the story's own `grep -n 'drone-acceptance'` check) even though the acceptance criteria named only three items in this file.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

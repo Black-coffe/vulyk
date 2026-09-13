@@ -1,16 +1,71 @@
 ---
-description: Adversarial review gate - lead-review hunts for reasons NOT to merge
-argument-hint: [spec slug, branch, or file scope; defaults to working tree changes]
+description: One council round on demand - lead-review plus the three blind seats, judged by cycle.sh
+argument-hint: [spec slug; defaults to the spec on the current branch]
 ---
 
-Run the merge gate on: "$ARGUMENTS" (default: current working tree changes against the base branch).
+Run one council round on: "$ARGUMENTS" (default: the spec whose `**Branch:**` matches the current
+branch).
 
-1. **Run the scope gate first - it costs nothing and it decides what to look at.** For each story in scope: `bash scripts/scope-check.sh <story-file>`. It compares the story's `## Files` block against the real diff and appends the numbers to `memory/stats/scope.jsonl`. Files it flags go into the review packet as the first thing `lead-review` reads: an out-of-scope file is either a story that was written wrong or a worker that went wide, and knowing which is worth more than any single bug found later. Report the two numbers to the human alongside the verdict.
-2. Assemble the review packet: the diff, the story/plan files it implements, and pointers to `docs/wiki/` notes + ADRs for the touched modules.
-3. Dispatch `lead-review` with the packet - **with `model: <TOP_MODEL>`**, the alias the session brief announced (`bash scripts/top-model.sh` if it scrolled away); its frontmatter `opus` is the floor, the parameter is the plan-aware upgrade - **and `drone-acceptance` in the same message** - they are independent in INFORMATION - one sees everything, the other almost nothing - so they run concurrently and the blind gate costs only wall-clock it was going to spend anyway. They are not independent in machine resources, but only acceptance runs anything, so the pair is safe. **Two acceptance gates at once are not**: a suite that binds fixed ports hands the second one `EADDRINUSE`, which reads exactly like a defect in the code under test. If you are catching up on several specs, run their gates one at a time. `lead-review` gets everything. `drone-acceptance` gets five things and no more: the spec's `brief.md`, the repository, the run command (the plan's integration gate, or the project's `## Commands`), the *Client path* row of the Profile when it is filled - the URL, CLI or browser runner through which a person reaches the software, because stage 04 is not only the suite: the gate walks the client's path the way a client would - and the statement of which configurations exist yet, so it does not judge the build against a deployment shape you have deferred and can name in `ASSUMED CONFIG` what it judged against. **Prefer the `## Profile` block's *Configurations that exist today* row in `CLAUDE.md`** - it holds configuration and nothing else, so it cannot leak. Fall back to a milestone ledger only where no Profile block is filled, and then **name the section, not the file**: the rest of that file is the framework's own account of what it built, and handing over a whole plan.md invites the gate to read past the ledger into the status tables. Observed exactly once, disclosed by the drone itself, which then re-verified independently - the disclosure worked, and the dispatch that made it possible should not be repeated. It must never receive plan.md, a story, or an implementation note: not knowing what the hive believes it built is the entire reason its verdict carries information. For Tier 4 changes, also dispatch a SECOND reviewer instructed to attack the first one's likely blind spots (concurrency, security, data migration safety). Make it a **different model** - two copies of one model are blind in the same places, and adversarial framing does not fix that. The session brief names the pairing (`scripts/top-model.sh --explain` prints it as `second reviewer`): `opus` beside a Fable gate; beside an Opus gate, `fable` where the plan carries it inside its limits and `sonnet` where it would bill to credits. See `docs/model-cascade.md` for the cost and data-retention tradeoff.
-4. **Record the acceptance verdict, whatever it is:** `bash scripts/acceptance-log.sh docs/specs/<slug> <ACCEPTED|REJECTED|CANNOT_RUN> "<one line>"`. It reads the story statuses itself and computes the only number no other gate can produce: every story `done` while the blind gate did not accept. That is the framework contradicting its own account of itself, and it goes to the human out loud, in this review, not quietly into a file. `CANNOT_RUN` is logged too - a gate that could not run is data; hiding it is how a gate becomes decoration. The record now carries the commit and a fingerprint of the pack it was given against, because a verdict is about the stories that existed when the drone ran - not about whatever the spec grows into afterwards.
-5. On `BLOCK` or `REJECTED`: convert every finding worth acting on - not only the criticals - into a fix story in the same spec directory and route back through `/vulyk-build`. An acceptance `BROKEN` line outranks a review minor: it is the human's own request failing, observed by running it. Do not hand-patch findings in the main session, whatever their size: fixes stay in the cascade (Law 5), each in its own story with its own commit. **Cutting a repair story invalidates the acceptance verdict** - the gate judged a pack that no longer exists - **and the owner's check, where one exists**: `scripts/human-check.sh --check` will say `STALE`, and it is right. Re-dispatch `drone-acceptance` and log again when the repair round closes; a verdict inherited across a changed pack is the drift number quietly lying, which is worse than no number at all.
-6. **Before proposing a merge, prove the verdict still describes what ships:** `bash scripts/acceptance-log.sh --check docs/specs/<slug>`. `CURRENT` means the accepted pack is the shipped pack. `STALE` means stories were added, removed or renamed after the gate ran - re-dispatch it rather than carrying the old verdict forward. `NO VERDICT RECORDED` means the blind gate never judged this spec at all, and saying so is part of the report.
-7. On `PASS`: present both verdicts and the full finding list - `lead-review` reports everything and ranks it; deciding what to act on is your job, not its. Say plainly when acceptance declined to run and what that leaves unchecked. **Then stop for stage 05 - the owner looks, and nothing after it happens until they have.** Hand them a check card short enough to act on: the branch (`**Branch:**` in plan.md), where to look (the Profile's *Client path* row - the URL and test login, the CLI, or how to bring the test version up), and one line per ask in `brief.md` saying what they should see - the drone's `WORKS` lines are the source, not the stories. Do not describe what was built; say where to click. When they answer, record their words, not yours: `bash scripts/human-check.sh docs/specs/<slug> ACCEPTED|REJECTED "<what they said they saw>"`. Never run it before they have answered - a check recorded on the owner's behalf is the failure the stage exists to stop. Commit the record on the spec branch (`vulyk(<slug>): owner's check`): a commit that touches only the cycle's own ledgers is paperwork and does not stale the check; a commit that touches code does, and `human-check.sh --check` tells the two apart. `REJECTED` goes the same road as a `BLOCK`: every named thing becomes a fix story, back through `/vulyk-build`, and both gates run again before the next look - any commit after the look makes the check stale, and `human-check.sh --check` says so. `ACCEPTED` hands over to `/vulyk-ship`: history, version, the merge, the map and wiki refresh and the ADR harvest all live there, after the human, not before.
+1. **Precondition: every story on the branch is `done` or `blocked`.** Do not compute this
+   yourself - `bash scripts/cycle.sh open-round docs/specs/<slug> --commit` refuses (exit 2, stderr
+   names the failing precondition: stories still open, a dirty tree, no `## Asks`, or paused) when
+   it is not true yet. On that refusal, surface it verbatim and point at `/vulyk-build` to finish
+   the wave; do not open a round by hand. `open-round` is idempotent - calling it again on an
+   already-open, non-stale round just resumes it, so running this command mid-round (or twice) is
+   safe. Exit 6 means the ceiling is reached: treat it exactly like the `escalated` stop below.
+   Print the resulting `<spec-dir>/journal.md` last line, nothing else.
 
-The gate's verdict is advice to the human, not authority over them - but overriding a BLOCK should be a conscious, stated decision.
+2. **Read the round's coordinates.** `bash scripts/cycle.sh status docs/specs/<slug> --json` and
+   take `round` (N), `court`, `round_dir` and **`missing`** - the same list a driver's `dispatch:`
+   step reads (C3, R20): the seats the round's frozen tier requires and has no accepted report for
+   yet. This on-demand round costs exactly those seats, never a hardcoded four - a Tier 1 spec pays
+   `sonnet` alone, `lead-review` only when `review` itself is in `missing`. Resolve `top_model`
+   (`bash scripts/top-model.sh`, the alias the session brief announced) and, once here,
+   `stamp="$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"` (16 hex characters, never `date`) - both
+   used below and neither ever repeated inside a seat prompt: it is a per-run value the seat is
+   never told, not a secret a report is expected to guess (R31).
+
+3. **Dispatch only the seats `missing` names, one message, in parallel** - the same "independent in
+   information, so independent in wall-clock cost" reasoning that ran `lead-review` alongside the
+   old blind gate now runs it alongside whichever blind seats this tier still needs:
+   - `review` in `missing` -> `lead-review` at `top_model`, in the **main tree**, never the court -
+     it needs the stories. Give it `round_dir` and its packet: the diff, the story/plan files it
+     implements, pointers to `docs/wiki/` notes and ADRs for the touched modules.
+   - `haiku`/`sonnet`/`opus` in `missing` -> the matching `council-<seat>`, working in `court` with
+     nothing else attached - `slug`, `round` and `court` only, **never `round_dir`**: a seat that
+     echoes its own input back is tainted on the spot (R9). Skip any seat `missing` does not name.
+   - **Tier 4 only, and only when `review` is in `missing`:** also dispatch a second reviewer on the
+     paired model (`scripts/top-model.sh --explain` names it: `opus` beside a Fable gate; `fable` or
+     `sonnet` beside an Opus gate, unless the spec's own Tier 4 sentence in `plan.md` names another),
+     given the same packet as `lead-review` and instructed to attack its likely blind spots
+     (concurrency, security, data migration safety). Before recording anything, fold the two
+     verdicts into **one** `review` report: the folded verdict is the **stricter of the two** -
+     `BLOCK` if either one blocks, `PASS` only if both pass. Report both sets of findings under that
+     one report so nothing is lost; only the merged `PASS`/`BLOCK` line reaches `record-seat`.
+     `record-seat` accepts exactly one `review` file per round - there is no second slot to hold a
+     second opinion separately.
+
+4. **Record each report.** The report travels as free text inside the clerk's prompt; the heredoc
+   delimiter `VULYK_<stamp>_<seat>_<attempt>` is a per-run random value the seat is never told,
+   which is what keeps the body from ending the heredoc early (R31):
+   `bash scripts/cycle.sh record-seat docs/specs/<slug> <N> <haiku|sonnet|opus|review> [--model <id>] <<'VULYK_<stamp>_<seat>_<attempt>'`
+   ... `VULYK_<stamp>_<seat>_<attempt>` - never `EOF`, and an empty report is still piped through
+   unchanged, so the attempt exists on disk. Exit 4 (`MALFORMED`) -> re-ask that one seat once,
+   naming the `error` field verbatim so it knows the exact gap, with `<attempt>` now `2` in the next
+   delimiter; record the second attempt either way and move on - a seat that is still malformed on
+   attempt 2 is `ABSENT` per D3/D4, and `judge` accounts for that on its own. Print each
+   `record-seat` call's own one-line `cycle: ...` confirmation, nothing else (it does not journal
+   per seat).
+
+5. **Judge.** `bash scripts/cycle.sh judge docs/specs/<slug> --commit`. Print the resulting
+   `**Council:**` line the same way step 1 prints a journal line, then act on `next`:
+   - `green` - say so; recommend `/vulyk-ship`.
+   - `repair` - say plainly: **fix stories go through `/vulyk-build`**, never through this command
+     and never by hand-patching in this session (Law 5). Do not cut the fix stories here.
+   - `escalated` - print `## Needs a human` from `plan.md` verbatim; the owner's three exits are
+     `human-check.sh ACCEPTED`, `cycle.sh reopen "<decision>"`, or leaving the spec open - do not
+     choose for them.
+
+There is no stage-05 stop here and no check card: the council's verdict, not the owner's look, is
+what this command exists to produce. The owner's look happens if and when they run `/vulyk-ship` or
+answer an escalation, never as a wait inside this command.

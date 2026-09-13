@@ -27,3 +27,8 @@ CLAUDE.local.md
 
 # Python bytecode (handoff.py)
 __pycache__/
+
+# Autonomous cycle runtime: the court's scratch state and a live pause marker - both
+# derived/transient, never the source of truth (council.jsonl and story frontmatter are).
+.vulyk/
+docs/specs/*/PAUSE

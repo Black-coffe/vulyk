@@ -39,19 +39,31 @@ conversation. The reasoning is in [token-economy.md](token-economy.md).
 ## The working loop
 ```text
 /vulyk-plan "add CSV export to the reports module"
-  -> tier announced, scouts dispatched, stories cut into waves, wave-check + trace-check,
-     blind coverage check (brief + plan, never the stories), approval requested
+  -> tier announced, scouts dispatched, the grill asks 3-7 questions one at a time (recommended
+     option first and labelled, a free-text Other, silence always safe), stories cut into waves,
+     wave-check + trace-check, blind coverage check (brief + plan, never the stories) - the intake
+     closes straight through into the build, no approval wait
 /vulyk-build
-  -> wave by wave: parallel Sonnet workers on disjoint files, one commit per story
+  -> launches the driver (a Workflow run where available, this session's own loop otherwise):
+     wave by wave, parallel Sonnet workers on disjoint files, one commit per story, then the
+     council round opens on its own
+  -> the terminal shows one journal line per step; you next see it wake on green or on an escalation
 /vulyk-review
-  -> adversarial top-model gate (Fable 5.1 on Max, Opus 5 on Pro) + blind acceptance drone (brief + running repo
-     + the client's path, never the specs); BLOCK or REJECTED findings loop back as fix stories
-  -> PASS hands YOU a check card: the branch, where to look, one line per ask - you look, it records your words
+  -> the same council round, run again on demand: `lead-review` at the top model plus three blind
+     seats (haiku black-box client path, sonnet suite-then-each-ask, opus intent and edge cases),
+     judged by `cycle.sh` from labelled evidence - never by a person's look
 /vulyk-ship
-  -> ship-check (all six confirmations, free) -> version + CHANGELOG -> merge -> you publish -> recorded
+  -> ship-check (all six confirmations, free) -> version + CHANGELOG -> local merge ->
+     `/vulyk-ship` prints the publish command under "to publish, run:" and stops there - you press
+     it whenever you choose -> recorded
   -> map/wiki refresh, ADR harvest, and the circle's leftovers handed over as the next brief's draft
 ```
-The shape behind the four commands is [the cycle](cycle.md): spec, plan, code, tests, human, ship - each stage closed by a file on disk, and stage 05 always a person.
+The shape behind the commands is [the cycle](cycle.md): spec, plan, code, tests+human, ship - each
+stage closed by a file on disk. `/vulyk-pause <slug>` hands the working tree back to you at any
+point the loop is running, and `/vulyk-resume <slug>` relaunches it fresh once you are done. The
+grill at the start is the one human stop autonomous mode keeps; an owner who wants the old
+plan-approval stop back says so on the grill's fixed last question (the two-stop opt-out), and
+`/vulyk-plan` then waits for one word of approval before building, as v0.11 did.
 Weekly: `/vulyk-evolve` (config improvements from your own sessions) and `/vulyk-gc` (memory hygiene).
 Anytime: `/vulyk-status` for the dashboard, `/vulyk-map <path>` after big merges.
 

@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-09
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -58,6 +58,11 @@ blocked_by: [autonomous-cycle-03]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- Adopted plan delta 2's amended C3 (`wave_stories` as `{"file","story","worker","repeat"}` objects) in `vulyk-build.md`'s `build:<wave>` row - it landed on disk mid-story, and story 15 (not yet built) won't touch commands, so this file had to be right already.
+- `cycle.sh` internally suppresses `journal.sh`'s own stdout (`>/dev/null` at each call site) and does not journal `record-seat` at all - both drivers therefore print the new `journal.md` tail line rather than the raw verb output, and `record-seat`'s own one-line `cycle: ...` confirmation stands in where no journal line was written.
+- Second-Tier-4-reviewer fold rule (BLOCK/PASS -> the stricter of the two, one merged `review` report) is stated once in `vulyk-review.md` and referenced, not repeated, from `vulyk-build.md`'s `dispatch:<seats>` row - `record-seat` accepts exactly one `review` file per round, so there is no second slot to hold a separate second opinion.
+- Story-level worker repair (`NEEDS_CONTEXT`/`WALL`/red `close-story`) is kept in `build:<wave>` at the same two-round ceiling as the pre-council `/vulyk-build`, since Non-goals only forbids the loop computing council verdicts/rounds/staleness, not ordinary worker-return handling.
+- `cycle.sh close-story/open-round/reopen` are cited only via plan.md C2 (per dispatch instructions), not by reading their current stub/in-progress state - `scripts/cycle.sh` was mid-edit by story 04's worker throughout this story.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

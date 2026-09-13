@@ -31,26 +31,47 @@ DEST="$(cd "$DEST" && pwd)"
 
 # Framework-owned trees: on --upgrade these are synced to the new version (changed files
 # replaced). Everything else keeps install semantics: new files copied, existing kept.
-OWNED=".claude/agents .claude/commands .claude/hooks .claude/skills/_meta bootstrap templates scripts"
+OWNED=".claude/agents .claude/commands .claude/hooks .claude/skills/_meta .claude/workflows bootstrap templates scripts"
 owned() { local f="$1" t; for t in $OWNED; do case "$f" in "$t"/*) return 0 ;; esac; done; return 1; }
 
 # VULYK's own working content never ships: its session learnings, its dev specs, and
 # anything Python compiled on the maintainer's machine. What DOES ship from these trees
 # is the skeleton - the READMEs that explain what goes where.
-shippable() { # shippable <rel-file> - 1 (false) for vulyk-own content
+#
+# It also never ships anything VULYK's OWN .gitignore keeps out of git for being
+# per-machine or derived on the maintainer's box - the pinned-model file above all. A
+# target hive's .gitignore is not vulyk's, so this list is kept explicit here instead of
+# read from .gitignore at runtime; keep the two lists in sync by hand when either changes.
+# `.claude/vulyk-version` is the one entry with no .gitignore line of its own (a real hive
+# DOES commit its stamp) - it is refused anyway because the version stamp below always
+# overwrites it with the target's own value right after the copy loop, so shipping the
+# maintainer's here would only leak it in the interim.
+shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev content,
+              # 2 = gitignored runtime artifact (copy_tree tells the two apart in --check)
   local f="$1"
   case "$f" in
     */__pycache__/*|*.pyc)        return 1 ;;
     docs/specs/*)                 return 1 ;;   # vulyk's own dev specs (dir is still created)
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
+    .claude/settings.local.json|.claude/settings.json.vulyk-bak)
+                                   return 2 ;;
+    .claude/state.json|.claude/.vulyk-update-cache|.claude/vulyk-version)
+                                   return 2 ;;
+    .claude/handoff/*|memory/map/.stale|CLAUDE.local.md)
+                                   return 2 ;;
+    memory/snapshots/*)           case "$f" in */.gitkeep) return 0 ;; esac; return 2 ;;
   esac
   return 0
 }
 
 copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading a framework-owned file
-  local rel="$1"
+  local rel="$1" sc
   ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' -print0 ) | while IFS= read -r -d '' f; do
-    shippable "$f" || continue
+    shippable "$f" && sc=0 || sc=$?
+    if [ "$sc" -ne 0 ]; then
+      [ "$sc" -eq 2 ] && [ "$CHECK" = "--check" ] && echo "  would skip (runtime) $f"
+      continue
+    fi
     if [ -e "$DEST/$f" ]; then
       if [ -n "$UPGRADE" ] && owned "$f" && ! cmp -s "$SRC/$f" "$DEST/$f"; then
         if [ "$CHECK" = "--check" ]; then echo "  would update   $f"
@@ -125,6 +146,9 @@ PLACEHOLDER
 | Test framework | `<fill in>` |
 | Commit convention | `<fill in>` |
 | **Configurations that exist today** | `<fill in - single node? multi-process? a database at all? what is deferred and to when>` |
+| Client path | `<fill in - how a person reaches the running thing: URL + a test login, a CLI entry point, or a browser runner's quiet command; "none: library only" is an honest answer>` |
+| Browser MCP | `<fill in - chrome-devtools \\| claude-in-chrome \\| none; optional, read by the council-haiku seat only, read-only, on a separate test profile - none is the honest default without one>` |
+| Release / deploy | `<fill in - default branch; how a version is published (tag + push? npm publish? CI on merge?) and who presses the button>` |
 PLACEHOLDER
 }
 
@@ -220,6 +244,73 @@ PYWIRE
   fi
 }
 
+# The Workflow driver's clerk (`cycle-clerk.md`) runs every verb by shelling out to
+# `scripts/cycle.sh` and `scripts/journal.sh`, and a subagent's Bash tool is deny-by-default -
+# without an explicit `permissions.allow` entry every dispatch stalls on a prompt nobody is
+# watching. VULYK's OWN settings.json deliberately carries neither rule (only a target hive
+# runs the cycle unattended); this helper is what puts them there. Same treatment as
+# wire_session_hook: append only what is missing, in place, after a backup, idempotent by
+# inspection of the file.
+wire_permissions() {
+  local file="$DEST/.claude/settings.json" py=""
+  [ -f "$file" ] || return 0                                   # nothing to edit
+  if grep -q 'Bash(bash scripts/cycle.sh:\*)' "$file" 2>/dev/null && \
+     grep -q 'Bash(bash scripts/journal.sh:\*)' "$file" 2>/dev/null; then
+    return 0                                                    # already wired
+  fi
+  if [ "$CHECK" = "--check" ]; then
+    echo "  would wire     .claude/settings.json -> permissions.allow: cycle.sh, journal.sh"
+    return 0
+  fi
+  py="$(command -v python3 || command -v python || true)"
+  if [ -z "$py" ]; then
+    echo ""
+    echo "  NOTE: the Workflow driver's clerk needs Bash access but could NOT be wired -"
+    echo "  no python on PATH to edit .claude/settings.json safely. Add these to your"
+    echo "  permissions.allow by hand, or every cycle-clerk dispatch will stall on a prompt:"
+    echo "      \"Bash(bash scripts/cycle.sh:*)\""
+    echo "      \"Bash(bash scripts/journal.sh:*)\""
+    return 0
+  fi
+  cp -p "$file" "$file.vulyk-bak" 2>/dev/null || true
+  if "$py" - "$file" <<'PYPERM'
+import json, sys
+path = sys.argv[1]
+RULES = ["Bash(bash scripts/cycle.sh:*)", "Bash(bash scripts/journal.sh:*)"]
+try:
+    with open(path, encoding='utf-8') as fh:
+        data = json.load(fh)
+except Exception:
+    sys.exit(4)                                  # unparseable: leave it entirely alone
+if not isinstance(data, dict):
+    sys.exit(4)
+allow = data.setdefault('permissions', {}).setdefault('allow', [])
+if not isinstance(allow, list):
+    sys.exit(4)
+added = [r for r in RULES if r not in allow]
+if not added:
+    sys.exit(3)                                  # already there under both spellings
+allow.extend(added)
+with open(path, 'w', encoding='utf-8') as fh:
+    json.dump(data, fh, indent=2)
+    fh.write('\n')
+PYPERM
+  then
+    echo "  wire           .claude/settings.json -> permissions.allow: cycle.sh, journal.sh"
+    echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
+  else
+    case "$?" in
+      3) rm -f "$file.vulyk-bak" 2>/dev/null || true ;;   # already wired; nothing happened
+      *) rm -f "$file.vulyk-bak" 2>/dev/null || true
+         echo ""
+         echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
+         echo "  Add these to permissions.allow by hand:"
+         echo "      \"Bash(bash scripts/cycle.sh:*)\""
+         echo "      \"Bash(bash scripts/journal.sh:*)\"" ;;
+    esac
+  fi
+}
+
 # VULYK ships runtime artifacts - handoffs, snapshots, the update-check cache, the derived
 # state view, the installer's own settings backup - and until now shipped no rule for
 # ignoring any of them. `.gitignore` is the project's file and is not framework-owned, so it
@@ -228,7 +319,7 @@ PYWIRE
 # wiring: append only what is missing, in a marked block, and say what was added.
 ensure_gitignore() {
   local file="$DEST/.gitignore" missing=0 line
-  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/"
+  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ docs/specs/*/PAUSE"
 
   for line in $wanted; do
     grep -qxF "$line" "$file" 2>/dev/null || missing=$((missing + 1))
@@ -257,6 +348,7 @@ for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs
 ensure_gitignore
 wire_session_hook vulyk-update-check.sh
 wire_session_hook top-model-brief.sh
+wire_permissions
 # The empty trees a fresh hive needs. Guarded like every other write: a dry run that
 # creates directories is not a dry run, and this one had been leaving seven of them in
 # repositories whose owners were only asking what the installer would do.
@@ -330,6 +422,25 @@ else
   mkdir -p "$DEST/.claude"
   printf '%s\n' "$VER" > "$DEST/.claude/vulyk-version"
   echo "  stamp          .claude/vulyk-version = $VER"
+fi
+
+# Pin the target's own Queen session to the top model the plan resolves to. A resolver that
+# ships but is never applied is a session that starts on the account default forever - the
+# same reasoning as wire_session_hook, aimed at a decision instead of a hook entry. Skipped
+# on a dry run (nothing to apply) and silent when already pinned; any other failure (no
+# python, an unparsable settings.local.json) is printed by the resolver itself and must
+# never fail the install - pinning a session is a convenience, not a precondition.
+if [ "$CHECK" = "--check" ]; then
+  echo "  would pin      Queen session to the resolved top model (scripts/top-model.sh --apply)"
+elif [ -f "$DEST/scripts/top-model.sh" ]; then
+  # top-model.sh resolves its own root from CLAUDE_PROJECT_DIR, falling back to $(pwd) - and
+  # install.sh never cd's into $DEST, so without this it would pin whatever directory the
+  # installer happened to be run from instead of the target.
+  APPLY_OUT="$(CLAUDE_PROJECT_DIR="$DEST" bash "$DEST/scripts/top-model.sh" --apply 2>&1)" || true
+  case "$APPLY_OUT" in
+    "already pinned:"*) : ;;                       # nothing changed; nothing to report
+    *)                   echo "  $APPLY_OUT" ;;
+  esac
 fi
 
 chmod +x "$DEST"/.claude/hooks/*.sh 2>/dev/null || true

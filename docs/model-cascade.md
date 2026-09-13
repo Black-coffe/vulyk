@@ -101,8 +101,17 @@ rewrite. Pin a full ID only when you deliberately want to freeze behaviour.
 | Queen, `queen-planner`, `lead-architect`, `lead-review` | `TOP_MODEL` — `fable` → Fable 5.1 on Max and premium seats, `opus` → Opus 5 on Pro, standard seats and API | Frontier reasoning where the plan includes it at no extra cost; the frontmatter floor is `opus`, the dispatch parameter carries the upgrade |
 | `worker-code`, `worker-test` | `sonnet` → Sonnet 5 | Implementation against an explicit story does not need frontier reasoning |
 | `drone-scout`, `drone-docs`, `librarian` | `sonnet` → Sonnet 5 | See the caveat below — this one is a judgment call, not a measurement |
-| `drone-coverage`, `drone-acceptance` | `sonnet` → Sonnet 5 | Bounded jobs against a fixed input: coverage reads two files at `maxTurns: 5`, acceptance runs the thing and reports |
+| `drone-coverage` | `sonnet` → Sonnet 5 | Bounded job against a fixed input: brief + plan.md only, `maxTurns: 5` |
+| `council-haiku` | `haiku` → Haiku 4.5 | Black-box seat: walks the Client path as a client would, reads no source |
+| `council-sonnet` | `sonnet` → Sonnet 5 | Line-by-line seat: runs the suite once, then proves every ask by running it |
+| `council-opus` | `opus` → Opus 5 | Intent seat: what the owner meant but did not write, still evidenced |
+| `cycle-clerk` | `haiku` → Haiku 4.5 | Runs one `cycle.sh`/`journal.sh` verb per dispatch; holds no verdict logic of its own |
 | Second reviewer, Tier 4 only | the *other* one: `opus` beside a Fable gate, `fable` or `sonnet` beside an Opus gate (the brief says which) | Ensemble, not duplication — see below |
+
+`lead-review` and the three council seats are dispatched together, one message, per council round —
+the same "independent in information, so independent in wall-clock cost" reasoning that used to pair
+`lead-review` with the single `drone-acceptance` now pairs it with three; `scripts/cycle.sh judge`
+folds their reports into one verdict, no model does.
 
 ### Caveat on the recon tier
 Moving the drones off Haiku is **not backed by evidence**, and the honest case runs the other way:

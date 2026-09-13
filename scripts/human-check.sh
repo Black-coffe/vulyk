@@ -22,45 +22,12 @@
 # Exit status is always 0: this records, it does not block. `/vulyk-ship` is what blocks.
 set -u
 
-# The identity of a pack: its story files, by name, in a stable order - must match
-# acceptance-log.sh exactly, because `--check` compares against verdicts written there too.
-pack_fingerprint() { # pack_fingerprint <spec-dir>
-  local dir="$1" names hasher=""
-  names="$(
-    for f in "$dir"/*.md; do
-      [ -f "$f" ] || continue
-      grep -q '^story:' "$f" 2>/dev/null || continue
-      basename "$f"
-    done | LC_ALL=C sort | tr '\n' ' '
-  )"
-  if command -v sha256sum >/dev/null 2>&1; then hasher="sha256sum"
-  elif command -v shasum >/dev/null 2>&1; then hasher="shasum -a 256"; fi
-  if [ -n "$hasher" ]; then
-    printf '%s' "$names" | $hasher | cut -c1-12
-  else
-    printf 'n%s' "$(printf '%s' "$names" | wc -w | tr -d ' ')"
-  fi
-}
-
-# Recording a check is itself a commit, and so is recording the ship. Those commits move
-# HEAD without moving the software, so a check is still about what ships when every path
-# changed since it was given is one of the cycle's own records. Anything else - one line of
-# code, one test - is a change the owner did not see. Must match ship-check.sh exactly.
-paperwork_only() { # paperwork_only <root> <from-commit> <to-commit>
-  local changed p
-  git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
-  changed="$(git -C "$1" diff --name-only "$2" "$3" 2>/dev/null)" || return 1
-  [ -n "$changed" ] || return 0
-  while IFS= read -r p; do
-    case "$p" in
-      */plan.md|memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl) ;;
-      *) return 1 ;;
-    esac
-  done <<EOF
-$changed
-EOF
-  return 0
-}
+# pack_fingerprint() and paperwork_only() now live in scripts/lib.sh, shared with
+# ship-check.sh, acceptance-log.sh, release-check.sh and cycle.sh (ADR-001 C1) - one
+# implementation instead of several that had to agree by hand.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/lib.sh
+. "$HERE/lib.sh"
 
 # --- `--check`: does the newest recorded human check still describe this pack, here? ----
 if [ "${1:-}" = "--check" ]; then

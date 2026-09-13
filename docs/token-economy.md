@@ -69,6 +69,24 @@ already paid for. Dispatch is a win when the report **replaces** reading that wo
 in the Queen's window — which is exactly the recon and noisy-output cases, and exactly not the
 "look up one symbol I already have open" case.
 
+## The cost of the council (v0.12.0)
+
+An estimate from [ADR-001](adr/001-cycle-state-contract.md) (2026-09-12), not a measured number -
+`memory/stats/council.jsonl` is where the real figure accumulates once rounds have run.
+
+Per round: 3 cold-cache council seats (`council-haiku`, `council-sonnet`, and `council-opus`, one of
+them Opus-class) plus `lead-review` at the top model, plus roughly 5 Haiku `cycle-clerk` calls - the
+Workflow driver's only way to reach a shell, one call per `cycle.sh`/`journal.sh` verb. On a RED
+verdict, add one `queen-planner` dispatch at the top model to cut fix stories, plus the repair
+wave's workers. Against the v0.11 gate (one `lead-review` + one `drone-acceptance`, dispatched
+together), that is roughly **2-3x the gate cost** at the target of <= 2 rounds to green.
+
+The fallback driver (Workflow unavailable) pays the same dispatches and additionally carries
+roughly 120 lines of seat reports per round through the pinned top-model session that is stepping
+the loop itself - the most expensive path in this list, because no phase can be handed to a cheaper
+agent while the Queen's own context is carrying it. `/vulyk-status`'s `driver:` line says which path
+a given hive is on.
+
 ## What is in the context before you type anything
 
 Tool definitions, the system prompt, `CLAUDE.md` (and everything it imports), plus every loaded MCP

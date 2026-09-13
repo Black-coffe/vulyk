@@ -1,6 +1,6 @@
 # <Spec title> (plan)
 
-**Tier:** <2|3|4> · **Spec slug:** `<slug>` · **Brief:** [brief.md](brief.md)
+**Tier:** <1|2|3|4> · **Spec slug:** `<slug>` · **Brief:** [brief.md](brief.md)
 **Governed by:** <ADRs, DESIGN.md sections, wiki notes that constrain this work>
 **Depends on:** <prior specs / merged work this plan builds on, with commits if known>
 
@@ -52,11 +52,21 @@ born after approval - a delta is requirement change on the record.
 -->
 
 <!--
-The four lines below are the cycle's confirmation artifacts (docs/cycle.md): one per stage
+The six lines below are the cycle's confirmation artifacts (docs/cycle.md): one per stage
 whose command refuses without the one before it. Each placeholder is replaced by the
-command or script that owns the line; `scripts/ship-check.sh` reads all four.
+command or script that owns the line; `scripts/ship-check.sh` reads all six. **Briefed:**
+and **Approved:** are alternatives - autonomous mode vs. the two-stop mode - either closes
+stage 02. **Council:** and **Checked:** likewise close stages 04+05 together: a GREEN
+council row is enough on its own, and **Checked:** is the owner's override in either
+direction, newest timestamp wins (ADR-001 D1/D4).
+
+There is no default tier: `cycle.sh open-round` refuses to open a round when this file's
+`**Tier:** <1|2|3|4>` line above is missing or unparsable, rather than silently sizing the
+council for the largest court.
 -->
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
+**Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 in autonomous mode: "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
 **Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05. /vulyk-ship refuses without it.>
+**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
+**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>

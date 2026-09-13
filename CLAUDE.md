@@ -52,17 +52,18 @@ without improving the result. Reviewing *another* agent's diff is a different th
 
 Classify every request into a tier, announce the tier, then follow its protocol:
 
-| Tier | Signal | Stories | Protocol |
-|---|---|---|---|
-| 0 | Trivial, single file, obvious | — | Do it directly. No ceremony. |
-| 1 | One module, clear task | 1 | Dispatch 1 `worker-code` (scout first if location unknown). |
-| 2 | Feature within a module | 2–4 | `/vulyk-plan` lite: brief → scout → stories → workers → quick review → your look → `/vulyk-ship`. |
-| 3 | Cross-cutting, multi-module | 4–8 | Full cycle: `/vulyk-plan` → approval → `/vulyk-build` → `/vulyk-review` → your look → `/vulyk-ship`. |
-| 4 | Architecture, migration, 200k+ LOC touched | 9–16 | Tier 3 + `lead-architect` consult + a second reviewer on a *different* model (the brief names it: `opus` beside a Fable gate, `fable` or `sonnet` beside an Opus one). Raise session effort before planning (see below). |
+| Tier | Signal | Stories | Agents (C15) | Protocol |
+|---|---|---|---|---|
+| 0 | Trivial, single file, obvious | — | none | Do it directly - no brief, no council. No ceremony. |
+| 1 | One module, clear task | 1 | 1 worker + 1 seat | Mini-brief (`## Asks` = the task phrase, verbatim, no grill) → dispatch 1 `worker-code` (scout first if location unknown) → one council round → `/vulyk-ship`. |
+| 2 | Feature within a module | 2–4 | 2-4 workers + 2 seats + `lead-review` | `/vulyk-plan` (grill) → driver (`/vulyk-build`: build → council → repair) → `/vulyk-ship`. |
+| 3 | Cross-cutting, multi-module | 4–8 | 4-8 workers + 3 seats + `lead-review` | `/vulyk-plan` (grill) → driver (`/vulyk-build`) → `/vulyk-ship`; `/vulyk-review` runs one more council round on demand first if you want a second look before shipping. |
+| 4 | Architecture, migration, 200k+ LOC touched | 9–16 | Tier 3, + `lead-architect` + a second reviewer | Tier 3 + `lead-architect` consult + a second reviewer on a *different* model (the brief names it: `opus` beside a Fable gate, `fable` or `sonnet` beside an Opus one). Raise session effort before planning (see below). |
 
 Past 16 stories the goal is more than one spec — split it. Story counts are calibration, not
-targets. **Ceremony floor:** `brief.md` and `## Requirements` quotes exist at Tier 2+;
-`trace-check.sh` runs whenever stories exist; Tier 0–1 gets none of it.
+targets. **Ceremony floor:** `brief.md` and `## Requirements` quotes exist at Tier 2+; `## Asks`
+exists at Tier 1+ (Tier 1: the task phrase itself, verbatim, no grill); `trace-check.sh` runs
+whenever stories exist; Tier 0 gets none of it.
 
 **Effort.** Effort is a session-level setting in Claude Code, not a per-agent one: `/effort <level>`
 mid-session, `--effort <level>` at launch, or `effortLevel` in `.claude/settings.json`. Subagents
@@ -78,21 +79,34 @@ more than the effort change saves; prefer setting it once at the start of a sess
 
 ## The cycle
 
-Every Tier 2+ spec travels one loop, and a stage is closed by a file on disk, not by a chat
+Every Tier 1+ spec travels one loop, and a stage is closed by a file on disk, not by a chat
 turn - [docs/cycle.md](docs/cycle.md) says what each stage cannot skip and what reopens it:
 
 | # | Stage | Confirmation on disk | Command |
 |---|---|---|---|
-| 01 | Spec - what and why, verbatim (a bug report is a spec too) | `brief.md` | `/vulyk-plan` |
-| 02 | Plan - who, what, in which files | `**Approved:**` in plan.md | `/vulyk-plan` → approval |
+| 01+02 | Spec + Plan - what, why, who, in which files | `**Briefed:**` (or `**Approved:**` in two-stop mode) in plan.md | `/vulyk-plan` (grill, one round) |
 | 03 | Code - agents work, in their own branch | `**Branch:**` + one commit per story | `/vulyk-build` |
-| 04 | Tests - the suite, then the client's path, actually run | `acceptance.jsonl` | `/vulyk-review` |
-| 05 | **Human** - the owner looks, on a test or live version | `**Checked:**` via `scripts/human-check.sh` | `/vulyk-review` PASS path |
-| 06 | Ship - history fixed, version published, next circle opened | `**Shipped:**` via `scripts/ship-check.sh --record` | `/vulyk-ship` |
+| 04+05 | **Council** - three blind seats + `lead-review` judge the brief's own `## Asks` | `**Council:** GREEN` + `memory/stats/council.jsonl` | `/vulyk-build` (driver) or `/vulyk-review` (one round) |
+| 06 | Ship - branch merged locally, publish command printed, next circle opened | `**Shipped:**` via `scripts/ship-check.sh --record` | `/vulyk-ship` |
 
-Stage 05 is the one mandatory human control after approval, and it does not shrink with
-tier: an agent can prove the software does what the words said; only the person who wrote
-the words can say the words said what they meant. `/vulyk-ship` refuses without it.
+The council is the one mandatory control after the plan closes, and it shrinks by seat count
+with the tier, never to zero (C15): `council-sonnet` alone at Tier 1, `council-sonnet` +
+`council-opus` + `lead-review` at Tier 2, and the full court - `council-haiku`,
+`council-sonnet`, `council-opus` (one model, one angle each) plus `lead-review` - at Tier 3-4.
+The tier is the Queen's own call, made once before any work, in the routing matrix above; a
+spec's `plan.md` `**Tier:**` line is what `cycle.sh` reads to size the court, and it is frozen
+into the round at `open-round` so a later edit never reshapes a round in flight. Every seat
+still judges only the brief's own words, in parallel, in a court whose working tree holds
+only the brief - an honour clause with a detector, not a filesystem guarantee: the court is
+shared and writable, its git history is out of bounds, and `record-seat` taints a report that
+shows it read past that page, the same blindness stage 05 used to buy from a human who had
+not read them either.
+Green needs unanimity; a round RED on half the asks or more, or three RED rounds running,
+escalates instead of burning a fourth - `plan.md` gains `## Needs a human`
+and the loop stops. Human is never a mandatory stage: the owner may step in at any point via
+`/vulyk-pause`, and `scripts/human-check.sh` remains an override that outranks the council's
+verdict either way (`ACCEPTED` over a RED/ESCALATE, `REJECTED` over a GREEN) - but nothing in
+the loop waits for it.
 
 ## Token economy (non-negotiable)
 
@@ -127,11 +141,15 @@ from another repository is a confident lie. Keep it short - this is the frame ea
 starts from, not documentation.
 
 The configurations row is load-bearing beyond its size. A reviewer that does not know which
-configurations exist will demand guarantees for ones that do not, and a blind acceptance
-gate cannot state the shape it judged against. Both cost real rounds before this block
-existed. The two rows under it belong to the cycle: *Client path* is what the blind gate
-walks at stage 04 and what the owner is pointed at in stage 05; *Release / deploy* is what
-`/vulyk-ship` prints and refuses to press.
+configurations exist will demand guarantees for ones that do not, and a blind council seat
+cannot state the shape it judged against. Both cost real rounds before this block existed.
+The two rows under it belong to the cycle: *Client path* is what the council walks at stage
+04+05, and what the owner is pointed at if they step in via an override; *Release / deploy*
+is what `/vulyk-ship` prints and refuses to press. The optional *Browser MCP* row exists for
+the council's black-box seat, which needs a real browser to walk the *Client path* the way
+an outside user would - but three council agents sharing one signed-in Chrome profile
+collide on ports and can act on a live account by accident. Fill it only when a separate,
+read-only test profile already exists; every other seat never reads this row.
 
 <!-- VULYK:PROFILE:START -->
 | Field | Value |
@@ -143,6 +161,7 @@ walks at stage 04 and what the owner is pointed at in stage 05; *Release / deplo
 | Commit convention | `<fill in>` |
 | **Configurations that exist today** | `<fill in - single node? multi-process? a database at all? what is deferred and to when>` |
 | Client path | `<fill in - how a person reaches the running thing: URL + a test login, a CLI entry point, or a browser runner's quiet command; "none: library only" is an honest answer>` |
+| Browser MCP | `<fill in - chrome-devtools \| claude-in-chrome \| none; optional, read by the council-haiku seat only, read-only, on a separate test profile - none is the honest default without one>` |
 | Release / deploy | `<fill in - default branch; how a version is published (tag + push? npm publish? CI on merge?) and who presses the button>` |
 <!-- VULYK:PROFILE:END -->
 
@@ -170,6 +189,9 @@ Quiet variants only: everything these print is resent on every subsequent turn. 
 | Scope gate, per story | `bash scripts/scope-check.sh <story-file>` |
 | Story gate, per spec | `bash scripts/wave-check.sh docs/specs/<slug>` |
 | Ship gate, per spec | `bash scripts/ship-check.sh docs/specs/<slug>` |
+| Cycle status, per spec | `bash scripts/cycle.sh status docs/specs/<slug> --json` |
+| Cycle state contract tests | `bash tests/cycle.test.sh` |
+| Council verdict contract tests | `bash tests/council.test.sh` |
 | Full suite / build | none exists — VULYK has no test runner and no build step |
 
 The first four are silent on success and non-zero on failure; run them together as the closest
