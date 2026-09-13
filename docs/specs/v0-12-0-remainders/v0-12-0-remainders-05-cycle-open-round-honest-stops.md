@@ -6,8 +6,8 @@ returned:
 tier: 4
 worker: worker-code
 tracer: false
-wave: 2
-blocked_by: [v0-12-0-remainders-01]
+wave: 3
+blocked_by: [v0-12-0-remainders-01, v0-12-0-remainders-14]
 ---
 
 # `open-round` stops honestly: every refusal names itself, the ceiling block carries its RED rows, the court commit is real

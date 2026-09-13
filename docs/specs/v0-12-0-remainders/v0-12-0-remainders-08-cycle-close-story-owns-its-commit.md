@@ -6,7 +6,7 @@ returned:
 tier: 4
 worker: worker-code
 tracer: false
-wave: 3
+wave: 4
 blocked_by: [v0-12-0-remainders-05]
 ---
 

@@ -51,6 +51,8 @@ Every terminal the driver returns names the real cause: a two-miss stop carries 
 - [ ] Any clerk line with `exit === 3` (scenario: `record-seat` answering `{"ok":false,"exit":3,"next":"paused","error":"paused: ..."}`) ends the run with `next === 'paused'` and no `stop`.
 - [ ] `next:"briefed"` -> `{stop:{verb:'briefed', error:'spec not briefed: run /vulyk-plan'}}`; no clerk call contains `briefed --commit`.
 - [ ] `open-round` answering `{"ok":true,"exit":6,"next":"escalated"}` is followed by a `status` poll; with `status` scripted `next:"escalated"` the run ends `next === 'escalated'`, no `stop`.
+- [ ] Each build thunk catches a thrown worker `agent()` and logs `worker threw: <message>` before returning null, so a dead subagent leaves its reason in the run journal; the stop text `worker returned no report` and K2 are unchanged. Scenario: an `agents` entry that throws -> a `logs` entry starting `worker threw:` and the miss counted as before.
+- [ ] The second-attempt worker prompt carries one extra sentence: "a previous attempt may have left uncommitted edits in your files; `git diff` them first". Scenario: after one miss the second `agent()` call's `prompt` contains that sentence and the first call's does not.
 - [ ] Each scenario is asserted to fail against the driver at `3e200bb` before the change (note which); `bash tests/driver.test.sh` passes; story 26's greps stay clean (`GREEN`/`RED`/`stale`/`paperwork` outside comments, `worker-code` count 0, no `EOF` delimiter, `stamp` absent from seat prompts).
 
 ## Verification

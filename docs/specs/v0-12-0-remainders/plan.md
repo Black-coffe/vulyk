@@ -27,27 +27,32 @@ Close what v0.12.0 shipped with known holes, runtime first: the Workflow driver 
 
 ## Stories
 
+<!-- Re-cut 2026-09-13 after the first Workflow run (see ## Plan deltas): story 14 born, 05/08/11/13 each one wave later. -->
+
 **Wave 1** - four disjoint file sets; the driver test harness and the ledger fixes start here
-- `v0-12-0-remainders-01-cycle-judge-ledger` - `scripts/cycle.sh` + `tests/council.test.sh`: LR19 attempts, LR21/r2m1 exact round match, LR25 `**Council:**` by C7, m-10 atomic append, m-4 same-second override, N-m7 note through redact.
+- `v0-12-0-remainders-01-cycle-judge-ledger` - code only, attempt 3 on the kept diff (delta 2026-09-13): `scripts/cycle.sh` + the fixture `cp` line in `tests/council.test.sh`: LR19 attempts, LR21/r2m1 exact round match, LR25 `**Council:**` by C7, m-10 atomic append, m-4 same-second override, N-m7 note through redact.
 - `v0-12-0-remainders-02-driver-test-harness` - `tests/driver.test.sh` (new), `CLAUDE.md` `## Commands` row, `ci.yml` job `driver`: the real parse, the fold harness, the stub loop, `skipped` without node.
 - `v0-12-0-remainders-03-records-describe-the-driver` - story 22 R14 note and ADR-001 D2 paragraph (`:174-187`, `:296`) describe the driver as it is (X-M2, X-M3, minor 1, M1's ADR sentence); ADR-001 D2 exit-code line gains ADR-006's `returned:` clause.
 - `v0-12-0-remainders-04-gates-drop-drone-acceptance` - `ship-check.sh:190` same-second override, `ship-check.sh:227` / `acceptance-log.sh:72` / `drone-docs.md:14` stop naming `drone-acceptance`; `tests/cycle.test.sh` scenario.
 
 **Wave 2**
-- `v0-12-0-remainders-05-cycle-open-round-honest-stops` - `cycle.sh` + suite: r2m3, r2m16, r2m5, r2m6, N-m3, r2m7/N-m2, r2m4/N-m1 (every `ok:false` names its error; exit 6 uniform). blocked_by 01.
 - `v0-12-0-remainders-06-driver-stops-tell-the-truth` - `vulyk-cycle.js` + driver suite: M2/X-M1, X-M4, no-`args` guard, whitespace report, r2m17, r2m15, exit-6 scenario. blocked_by 02.
 - `v0-12-0-remainders-07-installer-ships-the-truth` - `install.sh` + `ci.yml` install-smoke: asks 5 and 7 per ADR-005 D1 (ship set), D3 (`ensure_marked_block`, sidecar, warnings, shared placeholder printers), D4 assertions 1, 7-11; the `docs/specs/*/DRIVER` gitignore entry. blocked_by 02 (ci.yml).
+- `v0-12-0-remainders-14-council-suite-ledger-scenarios` - `tests/council.test.sh` only (worker-test, blocked_by 01): six scenarios, one per story 01 criterion, each shown failing against `3e200bb`'s `cycle.sh`.
 
 **Wave 3**
-- `v0-12-0-remainders-08-cycle-close-story-owns-its-commit` - `cycle.sh` + suite: r2m2, LR31, r2m9, and ADR-006's `returned:` gate with `cstoryr1..r4`. blocked_by 05.
+- `v0-12-0-remainders-05-cycle-open-round-honest-stops` - `cycle.sh` + suite: r2m3, r2m16, r2m5, r2m6, N-m3, r2m7/N-m2, r2m4/N-m1 (every `ok:false` names its error; exit 6 uniform). blocked_by 01. (blocked_by 01, 14)
 - `v0-12-0-remainders-09-workers-record-their-outcome` - `worker-code.md`, `worker-test.md`, `templates/story.md`, `/vulyk-build` `build:<wave>` row, three driver-suite scenarios proving the driver never read the prose (ADR-006). blocked_by 06.
 - `v0-12-0-remainders-10-installer-manifest` - `install.sh` + `ci.yml`: ask 6 per ADR-005 D2 (manifest, removal rule, `leave (yours)`, `unlisted (kept)`), D1's manifest arm, D4 assertions 2-6, 11. blocked_by 07.
 
 **Wave 4**
-- `v0-12-0-remainders-11-cycle-driver-semaphore` - `cycle.sh` + suite + `.gitignore`: ask 3, `claim`/`release`, `--stamp` on four verbs, `pause`/`resume` release (K3). blocked_by 08.
+- `v0-12-0-remainders-08-cycle-close-story-owns-its-commit` - `cycle.sh` + suite: r2m2, LR31, r2m9, and ADR-006's `returned:` gate with `cstoryr1..r4`. blocked_by 05.
 - `v0-12-0-remainders-12-session-brief-no-cli` - `.claude/hooks/top-model-brief.sh` + `ci.yml` top-model job: ask 4. blocked_by 10 (ci.yml).
 
 **Wave 5**
+- `v0-12-0-remainders-11-cycle-driver-semaphore` - `cycle.sh` + suite + `.gitignore`: ask 3, `claim`/`release`, `--stamp` on four verbs, `pause`/`resume` release (K3). blocked_by 08.
+
+**Wave 6**
 - `v0-12-0-remainders-13-drivers-hold-the-semaphore` - `vulyk-cycle.js`, driver suite, `/vulyk-build`, `/vulyk-review`: both drivers claim, pass `--stamp`, release on every exit. blocked_by 11, 09.
 
 ## Contracts
@@ -85,6 +90,7 @@ Before each dispatch: `bash scripts/wave-check.sh docs/specs/v0-12-0-remainders`
 **Chosen: the `returned:` gate folded into the close-story story (08), the worker protocol in its own story (09).** **Rejected: a fifth `cycle.sh` story** - the check is one `case` in the function story 08 already rewrites; the protocol edit touches four other files and needs no `cycle.sh`.
 
 ## Next circle
+- The Workflow tool refuses `.claude/workflows/vulyk-cycle.js` on a Windows checkout with `core.autocrlf=true` (CRLF working copy): fix with `.gitattributes` (`*.js text eol=lf`) or a CR-stripping launch step in `/vulyk-build` step 1 - found 2026-09-13 at the first live launch.
 - Живой тест Haiku-места, в словах владельца: «Сразу после шипа ты апгрейдишь один хайв (VPN — на нём уже воспроизведены все три хвоста), заполняешь Client path руками и прогоняешь там одну задачу Tier 3; результат кладётся в ## Next circle этого плана как первый пункт.»
 - Docs, ADR prose and CHANGELOG (PG2): LR22/r2m18 journal vocabulary, LR27, LR30 (`repeat` dead in `wave_stories`), LR35, r2m10/N-m5, r2m11, r2m14, m-6, m-9; round-3 minors 2/X-m3 (one first-line rule in both parsers), 3/X-m1 (`json_escape` all control chars), 4, 8, 9, X-m2 (`--model` from the driver, `review_model` column); r2m8 (one seat-scan helper); ADR-004 folded into ADR-001 D1/D2 as the built contract; ADR-005's `docs/wiki` invariants and the recon vocabulary line; ADR-005/006 status `proposed` -> accepted by the owner.
 
@@ -103,6 +109,10 @@ Each entry: date, trigger, decision, what was rejected. One-line notice to the h
 when it happens. trace-check.sh accepts these entries as a quote source for stories
 born after approval - a delta is requirement change on the record.
 -->
+
+- **2026-09-13 · trigger:** the Workflow driver's first live run (wf_e1124ab4-a8a) stopped with `stop:{verb:"build", file: story 01, error:"worker returned no report"}` - the `worker-code` subagent died mid-edit on both attempts, leaving an uncommitted 82-line diff to `scripts/cycle.sh` (five of six defects done, no suite scenario, fixture missing `redact.sh`); story 02 lost its first attempt the same way and passed on the second. `lead-architect` consult: best hypothesis is worker context exhaustion - one story asked one worker to read a 1900-line script and a 1661-line suite and run a two-minute suite whose output is resent every turn. **Decision:** keep the partial diff (coherent, parses, closed stories 03/04/02); rewrite story 01 as code-only ("attempt 3: `git diff scripts/cycle.sh` first, verify, keep what holds") plus the one fixture `cp` line; cut story `v0-12-0-remainders-14-council-suite-ledger-scenarios` (worker-test, wave 2, blocked_by 01) for the six scenarios; cascade 05 -> wave 3 (blocked_by 01, 14), 08 -> 4, 11 -> 5, 13 -> 6; story 06 gains two criteria (log `worker threw: <message>` before folding a dead worker to null; the retry prompt says a previous attempt may have left uncommitted edits). Story sizing rule for the wiki: a `cycle.sh` story is code OR council-suite scenarios, never both. **Rejected:** discarding the diff (`git checkout -- scripts/cycle.sh` stays available to the owner at any point, so keeping is the cheaper undo); a same-wave test story (`cmd_status` dispatches every todo of a wave regardless of `blocked_by` - LR31, story 08's fix - so it would be dispatched beside 01); a retry that does not count a dead worker as a miss (a deterministic death would loop forever).
+- **2026-09-13 · trigger:** the `Workflow` tool refused the named script `vulyk-cycle` - "script contains control characters" - because the working copy of `.claude/workflows/vulyk-cycle.js` is CRLF under `core.autocrlf=true` while the index is LF. **Decision:** launched from an LF copy in the session scratchpad (`tr -d '
+'`, byte-identical to HEAD); no story cut - `## Next circle` records it (a `.gitattributes` line `*.js text eol=lf`, or the driver launch step stripping CR, is second-spec work). **Rejected:** editing the working copy by hand (Law 5; and `git` would re-convert it on the next touch).
 
 <!--
 The six lines below are the cycle's confirmation artifacts (docs/cycle.md): one per stage
