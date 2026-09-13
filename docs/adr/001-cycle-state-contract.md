@@ -17,7 +17,7 @@ Two facts decide the shape. First, the constitution: a stage is closed by a file
 never by a chat turn, and every existing gate (`acceptance-log.sh`, `human-check.sh`,
 `ship-check.sh`) is a model-free script whose record carries the commit and the pack
 fingerprint it was given against. Second, the Workflow runtime: a script has **no filesystem,
-no shell, no Node API and no clock** - only `agent()`, `parallel()`, `pipeline()`, `phase()`,
+no shell, no Node API and no clock** - only `agent()`, `parallel()`, `pipeline`, `phase()`,
 `log()`. It cannot hold a round counter that survives a crash, cannot write a ledger, and its
 resume replays cached `agent()` results by call order. Whatever the loop's truth is, the
 script cannot be where it lives.
@@ -79,6 +79,10 @@ above stay as first written.
 - **D1/D2** - D2's illustrative driver code block is replaced by a pointer to
   `.claude/workflows/vulyk-cycle.js`; D1 gains the `council/REOPEN`/`council/CEILING` rows and
   the `ROUND` row's `tier=` line (plan delta 7, R34).
+- **D2** - the canonical-driver paragraph now says `build:<wave>` fans workers out over
+  `parallel` (round-3 review X-M3: `pipeline` is not the driver's mechanism), and its stop
+  shapes match K2; the exit-code line's `4` row gains ADR-006's `returned:` clause
+  (`v0-12-0-remainders-03`, ADR-006).
 
 Option 1. The loop state is a small set of committed files, each with exactly one writer,
 all written by `scripts/cycle.sh`; the verdict is computed by that script from labelled
@@ -156,7 +160,7 @@ last stdout line is always one JSON object so no driver parses prose.
 Every mutating verb checks `PAUSE` first and exits **3 `PAUSED`** without acting; `status`,
 `pause`, `resume` are exempt. Exit codes: 0 ok (a RED verdict from `judge` is a successful
 judgement and exits 0 too) · 1 usage · 2 precondition · 3 paused · 4 `record-seat` MALFORMED
-/ `close-story` red verification only · 5 stale · 6 escalate. `--commit` commits the
+/ `close-story` miss - red verification, or `returned:` not `DONE` · 5 stale · 6 escalate. `--commit` commits the
 paperwork as `vulyk(<slug>): <verb> …`; both drivers always pass it, so paperwork commits are
 uniform.
 
@@ -175,16 +179,18 @@ The canonical driver is `.claude/workflows/vulyk-cycle.js`, launched with `args:
 top_model, second_model, stamp }` (`stamp` a per-run random value the launcher takes once,
 never derived from the clock - R31). It holds no verdict logic itself: each iteration it reads
 `status.next` and takes the one action D2's verb table above names - `build:<wave>` fans
-workers out over `pipeline()` and closes each story through `close-story`; `open-round` and
+workers out over `parallel()` and closes each story through `close-story`; `open-round` and
 `judge` each cross one clerk call; `dispatch:<seats>` sends the missing seats and records every
 result through `record-seat` with a per-seat random delimiter, never the literal `EOF` (R11);
 `repair` hands `st.red` and the review verdict to `queen-planner`. The `review` seat is
 `lead-review`; at Tier 4 it is dispatched twice, on `top_model` and `second_model`, and folded
 by the driver into one recorded report before `record-seat` ever sees it - the fold never
 manufactures a verdict from a blank (R28). Every clerk result is acted on per the exit-code
-line above: `ok:false` ends the run in the `stop` shape, except a `record-seat` MALFORMED
-re-asks the seat once and a second failed `close-story` for the same file ends the run naming
-the file instead of an exit code.
+line above: a failed verb ends the run as `{verb, exit, error}`; a bad launch (missing `args`,
+a bad `stamp`, or a Tier 4 spec whose `second_model` is missing or equals `top_model`) ends it
+as `{verb:'launch', error}`; a `record-seat` MALFORMED re-asks the seat once and a second
+failed `close-story` for the same file ends the run as `{verb:'build', file, error}` instead of
+an exit code; `repair` ends as `{verb:'repair', round, error}` unchanged.
 
 **The fallback driver** (`/vulyk-build` when the session brief reports "Workflow: unavailable")
 runs the same `status` -> act loop with the Queen's own Bash for the verbs and the Agent tool
@@ -293,7 +299,8 @@ the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen 
   a hive without Workflow identically; evidence the Queen reads from files at wake, not from
   a transcript. Blindness is an honour clause with a detector, not a filesystem guarantee (D5).
 - **Harder / accepted debt:** the Workflow script is not executed in CI (bash-only runner);
-  it is kept logic-free so that a `node --check` is all it needs where node exists. The clerk
+  it is kept logic-free, and the gate is `tests/driver.test.sh` (executed where node exists;
+  CI job `driver`), not a syntax check. The clerk
   adds ~5 Haiku calls per round (each one turn, negligible). A seat's report crosses one
   Haiku copy on its way to disk; the contract check catches a mangled copy, a faithful
   paraphrase it cannot. `MODEL:` is `unknown` where a seat cannot see its own id, which
