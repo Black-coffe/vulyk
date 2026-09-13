@@ -472,12 +472,46 @@ out="$(seat_report haiku 1 GGG | council record-seat docs/specs/rseat1 1 haiku)"
 head -1 "$rd_rs1/haiku.md" | grep -qE '^<!-- seat: haiku .* attempt: 1 .* -->$' && echo "  ok    C4 header, attempt 1" \
   || { echo "::error::header: $(head -1 "$rd_rs1/haiku.md")"; fail=1; }
 
-echo "record-seat: stale round (HEAD moved since ROUND.head) -> exit 5"
+echo "record-seat: stale round (a real, non-paperwork commit moved HEAD since ROUND.head) -> exit 5"
 mk_spec rseat2 2
 mk_open_round rseat2 1 >/dev/null
-git commit --allow-empty -qm "advance head" >/dev/null
+echo "real code change" > rseat2-code.txt
+git add -A && git commit -qm "advance head with a real code change" >/dev/null
 out="$(seat_report sonnet 1 GG | council record-seat docs/specs/rseat2 1 sonnet 2>&1)"; ex=$?
 [ "$ex" -eq 5 ] && printf '%s' "$out" | grep -qF '"next":"stale"' && echo "  ok    stale round -> exit 5" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "record-seat: NOT stale when HEAD only advanced by the cycle's own paperwork since ROUND.head"
+mk_spec pwseat1 3
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' docs/specs/pwseat1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/pwseat1#' docs/specs/pwseat1/plan.md
+git add -A && git commit -qm "pwseat1: briefed, branch" >/dev/null
+council open-round docs/specs/pwseat1 --commit >/dev/null   # open-round's own commit moves HEAD
+rdpw1="docs/specs/pwseat1/council/round-1"
+out="$(seat_report haiku 1 GGG | council record-seat docs/specs/pwseat1 1 haiku)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:sonnet,opus,review"' && echo "  ok    record-seat right after open-round --commit is not stale" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -f "$rdpw1/haiku.md" ] && echo "  ok    haiku.md written at attempt 1" || { echo "::error::missing $rdpw1/haiku.md"; fail=1; }
+out="$(council status docs/specs/pwseat1 --json)"
+printf '%s' "$out" | jq -e '.stale == false' >/dev/null 2>&1 && echo "  ok    status --json stale:false right after open-round's own commit" \
+  || { echo "::error::status: $out"; fail=1; }
+printf '%s' "$out" | jq -r .next | grep -qE '^dispatch:' && echo "  ok    next still lists the missing seats" \
+  || { echo "::error::next was $(printf '%s' "$out" | jq -r .next)"; fail=1; }
+
+echo "record-seat: still NOT stale after a further paperwork-only commit (a driver committing council/*)"
+git add -- "$rdpw1/haiku.md" && git commit -qm "vulyk(pwseat1): record-seat haiku round 1" >/dev/null
+out="$(council status docs/specs/pwseat1 --json)"
+printf '%s' "$out" | jq -e '.stale == false' >/dev/null 2>&1 && echo "  ok    status --json stale:false after a paperwork-only commit" \
+  || { echo "::error::status: $out"; fail=1; }
+
+echo "record-seat: stale (exit 5) once a real non-paperwork file lands on top"
+echo "real code change" > pwseat1-code.txt
+git add -A && git commit -qm "real code change while pwseat1 round 1 is open" >/dev/null
+out="$(council status docs/specs/pwseat1 --json)"
+printf '%s' "$out" | jq -e '.stale == true' >/dev/null 2>&1 && echo "  ok    status --json stale:true once real code moved" \
+  || { echo "::error::status: $out"; fail=1; }
+out="$(seat_report sonnet 1 GGG | council record-seat docs/specs/pwseat1 1 sonnet 2>&1)"; ex=$?
+[ "$ex" -eq 5 ] && printf '%s' "$out" | grep -qF '"next":"stale"' && echo "  ok    record-seat exit 5 once real code moved" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
 # --- record-seat: D3 MALFORMED cases (exit 4, kept as attempt-1.md, never <seat>.md) ----------

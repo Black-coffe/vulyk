@@ -17,3 +17,4 @@
 {"ts":"2026-09-12T21:31:50Z","story":"autonomous-cycle-13-release-0-12-0","declared":4,"changed":7,"out_of_scope":3}
 {"ts":"2026-09-13T09:08:12Z","story":"autonomous-cycle-04-cycle-rounds-in-git","declared":2,"changed":3,"out_of_scope":1}
 {"ts":"2026-09-13T09:16:52Z","story":"autonomous-cycle-15-status-carries-the-worker","declared":3,"changed":5,"out_of_scope":2}
+{"ts":"2026-09-13T10:14:04Z","story":"autonomous-cycle-17-stale-means-code-moved","declared":2,"changed":2,"out_of_scope":0}

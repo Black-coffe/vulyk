@@ -1,7 +1,7 @@
 ---
 story: autonomous-cycle-17
 spec: autonomous-cycle
-status: todo
+status: done
 tier: 4
 worker: worker-code
 tracer: false
@@ -44,6 +44,11 @@ Every staleness decision in `cycle.sh` goes through one helper built on `paperwo
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- Added `round_is_stale <spec> <n>` next to `round_field` in `scripts/cycle.sh`: reads the round's `ROUND` file head, recomputes current HEAD itself (git rev-parse), and is stale iff they differ and `paperwork_only` says the diff is not paperwork-only. All three sites now call it instead of comparing heads directly.
+- `cmd_record_seat`'s stale check, `cmd_status`'s `stale` field and its `green`/`open-round` `next` derivation, and `cmd_open_round`'s STALE-row-fold branch were rewritten to call `round_is_stale`; no other `head == HEAD` (or `!=`) comparison for staleness remains in the file (`grep -n 'HEAD"' scripts/cycle.sh` confirms only the RED->repair site at line ~289, which the story's Requirements/Non-goals explicitly leave alone).
+- The `green` derivation and `open-round`'s resume branch already called `paperwork_only` directly before this story (pre-existing, correct) - routing them through the shared helper is a behavior-preserving refactor, not a bugfix; only `record-seat` and `status`'s `stale` field had the plain-equality bug described in the story.
+- `tests/council.test.sh`'s existing "record-seat: stale round" test used `git commit --allow-empty` to simulate "HEAD moved" - an empty commit has an empty `git diff --name-only`, which `paperwork_only` already treats as trivially paperwork-only (returns true), so it would have silently stopped testing staleness at all under the new logic. Changed it to commit a real untracked file instead, preserving the exit-5 assertion.
+- Added a new record-seat/status scenario (spec `pwseat1`) reproducing the story's own bug report verbatim: `open-round --commit` (paperwork commit) -> `record-seat` succeeds, not stale -> a further paperwork-only commit (committing the seat file under `council/*`) -> still not stale -> a real non-paperwork file commit -> `status --json` `stale:true` and `record-seat` exit 5. Net +7 checks (129 -> 136).
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

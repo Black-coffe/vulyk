@@ -104,6 +104,20 @@ round_field() { # round_field <round-dir> <key> - a ROUND file's "key=value" lin
   sed -n "s/^$2=//p" "$1/ROUND" 2>/dev/null | head -1
 }
 
+round_is_stale() { # round_is_stale <spec> <n> - the one staleness rule (autonomous-cycle-17):
+  # a round is stale iff its ROUND file's recorded head differs from current HEAD AND the
+  # commits between them are not paperwork_only() (lib.sh, C1) - so a round's own open-round/
+  # record-seat/judge paperwork commit never stales it, only a real code move does. Every
+  # cmd_record_seat/cmd_status/cmd_open_round staleness decision goes through this, instead of
+  # each reimplementing (or forgetting) the paperwork exemption.
+  local spec="$1" n="$2" rhead head_now
+  rhead="$(round_field "$spec/council/round-$n" head)"
+  [ -n "$rhead" ] || return 1
+  head_now="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  [ "$rhead" != "$head_now" ] || return 1
+  ! paperwork_only "$ROOT" "$rhead" "$head_now" 2>/dev/null
+}
+
 row_exists() { # row_exists <slug> <round>
   [ -f memory/stats/council.jsonl ] || return 1
   grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | grep -qF "\"round\":$2"
@@ -228,8 +242,7 @@ cmd_status() {
   RD="$(current_round_dir "$SPEC")"
   if [ -n "$RD" ]; then
     ROUND_N="${RD##*/round-}"
-    local RHEAD RCOURT
-    RHEAD="$(round_field "$RD" head)"
+    local RCOURT
     RCOURT="$(round_field "$RD" court)"
     CEILING="$(round_field "$RD" ceiling)"; [ -n "$CEILING" ] || CEILING=3
     [ -n "$RCOURT" ] && COURT_JSON="\"$RCOURT\""
@@ -239,7 +252,7 @@ cmd_status() {
       for seat in haiku sonnet opus review; do
         if [ -f "$RD/$seat.md" ]; then has_any=1; else MISSING="$MISSING $seat"; fi
       done
-      if [ "$has_any" -eq 1 ] && [ -n "$RHEAD" ] && [ "$RHEAD" != "$HEAD" ]; then STALE_B=true; fi
+      if [ "$has_any" -eq 1 ] && round_is_stale "$SPEC" "$ROUND_N"; then STALE_B=true; fi
     fi
   fi
   MISSING="$(printf '%s' "$MISSING" | sed 's/^ *//')"
@@ -271,7 +284,7 @@ cmd_status() {
     else NEXT="judge"
     fi
   elif [ "$NEWEST_VERDICT" = "ESCALATE" ]; then NEXT="escalated"
-  elif [ "$NEWEST_VERDICT" = "GREEN" ] && [ "$NEWEST_PACK" = "$PACK" ] && { [ "$NEWEST_HEAD" = "$HEAD" ] || paperwork_only "$ROOT" "$NEWEST_HEAD" "$HEAD" 2>/dev/null; }; then
+  elif [ "$NEWEST_VERDICT" = "GREEN" ] && [ "$NEWEST_PACK" = "$PACK" ] && ! round_is_stale "$SPEC" "$NEWEST_ROUND"; then
     NEXT="green"
   elif [ "$NEWEST_VERDICT" = "RED" ] && [ "$NEWEST_HEAD" = "$HEAD" ]; then
     NEXT="repair"
@@ -892,9 +905,8 @@ cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] - report 
     exit 2
   }
   local HEAD; HEAD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-  local RHEAD; RHEAD="$(round_field "$RD" head)"
-  [ "$RHEAD" = "$HEAD" ] || {
-    echo "cycle: record-seat - round $N is stale (ROUND head=$RHEAD, current HEAD=$HEAD)" >&2
+  round_is_stale "$SPEC" "$N" && {
+    echo "cycle: record-seat - round $N is stale (ROUND head=$(round_field "$RD" head), current HEAD=$HEAD)" >&2
     emit false record-seat 5 stale
     exit 5
   }
@@ -1207,12 +1219,12 @@ EOF
   # --- an already-open round: resume, re-stamp in place, or fold it into a STALE + N+1 ------
   local RD; RD="$(current_round_dir "$SPEC")"
   if [ -n "$RD" ] && ! row_exists "$SLUG" "${RD##*/round-}"; then
-    local N="${RD##*/round-}" RHEAD; RHEAD="$(round_field "$RD" head)"
-    # A round's own opening (or STALE-folding) commit necessarily moves HEAD past RHEAD, the
-    # code head it recorded - so "unchanged" must also accept a HEAD that only advanced by the
-    # cycle's own paperwork since RHEAD (same rule cmd_status's `green` uses), or every round
-    # would read itself as stale on the very next call.
-    if [ "$RHEAD" = "$HEAD" ] || paperwork_only "$ROOT" "$RHEAD" "$HEAD" 2>/dev/null; then
+    local N="${RD##*/round-}"
+    # A round's own opening (or STALE-folding) commit necessarily moves HEAD past the code head
+    # it recorded - so "unchanged" must also accept a HEAD that only advanced by the cycle's own
+    # paperwork since then (round_is_stale, C1), or every round would read itself as stale on
+    # the very next call.
+    if ! round_is_stale "$SPEC" "$N"; then
       local seat missing=""
       for seat in haiku sonnet opus review; do [ -f "$RD/$seat.md" ] || missing="$missing $seat"; done
       missing="$(printf '%s' "$missing" | sed 's/^ *//')"
