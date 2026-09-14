@@ -149,6 +149,20 @@ council for the largest court.
 -->
 - **2026-09-14 · trigger:** ninth Workflow run (wf_d4194c67), council round 1 at `c71ad5f`: `council-sonnet` and `council-opus` returned empty on both attempts (recorded MALFORMED x2 each - ABSENT), the Tier 4 second reviewer on Opus returned empty, `lead-review` on Fable returned PASS with three major plan-routed findings, the haiku seat N/A (no Client path), and the clerk recording the folded NO-VERDICT review returned nothing (BadLine, run ended). Every empty return matches the worker pattern of 2026-09-13: the seat caps were 25 turns, unmeasured until now; a Sonnet seat runs the 2-minute suite plus seven asks, an Opus reviewer diffs 44 files. **Decision:** `maxTurns` 25 -> 60 on `council-haiku`, `council-sonnet`, `council-opus`, `lead-review` (the raise only loads in a new session - restart, then `/vulyk-resume`); this non-paperwork commit stales round 1 by the standing rule, so the relaunched driver opens round 2 with every seat fresh - the ceiling counts round 1. **Rejected:** `judge` now (four ABSENT/missing seats can only escalate `env` and cost a `reopen` for the same relaunch); a human `ACCEPTED` override (the Fable review's three majors are unaddressed and belong to the next brief). The Fable review report is kept at the round dir as `review.fable-attempt.md` for the next round's reviewer and the next brief.
 
+## Next circle
+
+Leftovers of this circle, verbatim from the record, for the next brief (v0.13.1 or later):
+
+- `lead-review` (Fable, round 1 at `c71ad5f`, PASS) - four major, plan-routed findings, full text in `council/round-1/review.fable-attempt.md`:
+  1. `install.sh:221` - on the anchor-insert path the Browser MCP row's `\|` goes through `awk -v block=` twice and becomes `|`, gaining two spurious cells; gawk warns on the owner's terminal.
+  2. `tests/council.test.sh:1385` (`lr31w`) and `:2384` - the LR31 scenario cannot go red against the pre-fix code (no ready story in the wave), so it proves nothing.
+  3. `tests/council.test.sh:2027,2115-2124,2355,2458,2687` - the "shown to fail at `<sha>`" probes for stories 14-17 are print-only: a `[branch] FAIL` never sets `fail=1`, and `git show <sha>:...` has no error handling under a shallow CI checkout.
+  4. `scripts/cycle.sh:2047` vs `/vulyk-build` step 3 and story 13 - `release` is pause-guarded (exit 3 on a paused spec) while the command and the story call it "harmless, exit 0".
+- Council round 1 never judged: `council-sonnet` and `council-opus` returned empty on both attempts and the Opus second reviewer returned empty - all at the 25-turn cap; the clerk recording an 8k-char folded review returned nothing. Caps raised to 60 (seats, `lead-review`), 90 (workers). **Conclusion of the week:** every dead subagent return in v0.12.0's two specs was a turn cap, none a model; the framework should surface a cap death as its own stop reason instead of "returned no report", and `record-seat` should take a file path, not a heredoc through a clerk prompt.
+- The `haiku` seat is `N/A` on this repository because the Profile's *Client path* is blank; fill the row or the seat buys nothing (ADR-007 consequences).
+- Shipped on the owner's `ACCEPTED` override, said in chat 2026-09-14; `memory/stats/human.jsonl` carries the note.
+
+
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
 **Briefed:** via grill, Andrei, 2026-09-13
 **Branch:** vulyk/v0-12-0-remainders
