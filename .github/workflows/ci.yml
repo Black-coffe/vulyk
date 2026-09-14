@@ -111,6 +111,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: fixture rounds -> GREEN, RED, ESCALATE (ceiling/half/env), N/A, owner override
         run: bash tests/council.test.sh
@@ -337,6 +339,11 @@ jobs:
           [ -n "$profile_line" ] && [ -n "$commands_line" ] && [ "$profile_line" -lt "$commands_line" ] \
             || { echo "::error::## Profile did not land before ## Commands"; exit 1; }
           echo "$out" | grep -q 'profile:.*Client path' || { echo "::error::--upgrade did not name Client path among the still-<fill in> rows"; exit 1; }
+          # the row's content, not just its count, must survive the anchor-insert path
+          # byte for byte (a second awk pass over an already-escaped `\|` is implementation-
+          # defined and would corrupt this row without changing the row count).
+          browser_mcp_row="$(grep '| Browser MCP |' CLAUDE.md)"
+          grep -qF "$browser_mcp_row" "$target/CLAUDE.md" || { echo "::error::Browser MCP row content differs from source after --upgrade insert"; exit 1; }
 
       - name: --upgrade restores a missing Commands block before Compact instructions (ADR-005 D4.8)
         run: |
