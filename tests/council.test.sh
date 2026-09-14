@@ -26,8 +26,9 @@ git init -q -b main . && git config user.email t@t && git config user.name "Test
 mkdir -p scripts memory/stats docs/specs .claude
 cp "$SRC"/scripts/lib.sh "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh scripts/
 # Mirrors the real .gitignore (D1: neither is ever committed) - without it, open-round's
-# "clean tree" precondition would trip on its own court worktree and PAUSE files.
-printf '.vulyk/\ndocs/specs/*/PAUSE\n' > .gitignore
+# "clean tree" precondition would trip on its own court worktree and PAUSE files. Story 17
+# adds DRIVER (ADR-004/K3): a claim must leave the fixture repo's tree clean too.
+printf '.vulyk/\ndocs/specs/*/PAUSE\ndocs/specs/*/DRIVER\n' > .gitignore
 # A minimal CLAUDE.md `## Commands` table (R11/C-4, autonomous-cycle-21): close-story now
 # refuses a verification command that is not a literal cell of this table, so every fixture
 # below that calls close-story must have its command listed here first.
@@ -2092,7 +2093,10 @@ run_wall_probes() { # run_wall_probes <label> <cycle.sh-path> [extra-probe-fn ..
   mkdir -p scripts memory/stats docs/specs .claude
   cp "$SRC"/scripts/lib.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh scripts/
   cp "$cyclesrc" scripts/cycle.sh
-  printf '.vulyk/\ndocs/specs/*/PAUSE\n' > .gitignore
+  # Story 17 adds DRIVER here too: without it, an untracked DRIVER file dirties open-round's
+  # whole-tree "clean" precondition (L1778) and probe_gated's matching-stamp call fails for an
+  # unrelated reason instead of proceeding.
+  printf '.vulyk/\ndocs/specs/*/PAUSE\ndocs/specs/*/DRIVER\n' > .gitignore
   # Story 16's close-story probes (returned:/r2m2/r2m9) need a ## Commands table too - the six
   # story 14/15 probes above never call close-story, so this was never needed until now.
   cat > CLAUDE.md <<'MDEOF'
@@ -2455,5 +2459,233 @@ git -C "$SRC" show eb3203a:scripts/cycle.sh > "$OLDCYCLE3"
 run_wall_probes "eb3203a" "$OLDCYCLE3" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
 rm -f "$OLDCYCLE3"
+
+# ============================================================================================
+# Story 17: one scenario per story 11 criterion - the DRIVER semaphore (ADR-004/K3): claim,
+# release, pause/resume release, --stamp on open-round/record-seat/judge/close-story. The code
+# is already on the branch (story 11); this proves it, plus wall probes against the pre-story
+# cycle.sh (the commit immediately before story 11's own).
+# ============================================================================================
+
+echo "=== Story 17: DRIVER semaphore (claim/release, --stamp on four verbs) ==="
+
+echo "claim: first claim exits 0 with stamp=/claimed=; same stamp again exits 0; a different stamp exits 2 held by <first>; PAUSE exits 3"
+mk_spec driverc1 2
+out="$(council claim docs/specs/driverc1 aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"claimed"' && echo "  ok    first claim exits 0, next:claimed" \
+  || { echo "::error::first claim: exit=$ex out=$out"; fail=1; }
+grep -q '^stamp=aaaa1111$' docs/specs/driverc1/DRIVER 2>/dev/null && grep -q '^claimed=' docs/specs/driverc1/DRIVER 2>/dev/null \
+  && echo "  ok    DRIVER holds stamp= and claimed= lines" || { echo "::error::DRIVER: $(cat docs/specs/driverc1/DRIVER 2>&1)"; fail=1; }
+[ -z "$(git status --porcelain)" ] && echo "  ok    git status is empty after a claim (the fixture .gitignore covers DRIVER)" \
+  || { echo "::error::git status not clean after claim: $(git status --porcelain)"; fail=1; }
+out="$(council claim docs/specs/driverc1 aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    same stamp again exits 0" || { echo "::error::same-stamp claim: exit=$ex out=$out"; fail=1; }
+out="$(council claim docs/specs/driverc1 bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && printf '%s' "$out" | grep -qF 'cycle.sh release' \
+  && echo "  ok    a different stamp exits 2, error names the holder and the release command" \
+  || { echo "::error::conflict claim: exit=$ex out=$out"; fail=1; }
+printf 'owner \xc2\xb7 pinned \xc2\xb7 2020-01-01T00:00:00Z\nhead=unknown\n' > docs/specs/driverc1/PAUSE
+out="$(council claim docs/specs/driverc1 cccc3333 2>&1)"; ex=$?
+[ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    claim under PAUSE exits 3, next:paused" \
+  || { echo "::error::paused claim: exit=$ex out=$out"; fail=1; }
+rm -f docs/specs/driverc1/PAUSE
+
+echo "release: matching stamp -> exit 0, file gone; absent file -> exit 0; mismatch -> exit 2 held by <other>, file kept"
+mk_spec driverr1 2
+council claim docs/specs/driverr1 aaaa1111 >/dev/null 2>&1
+out="$(council release docs/specs/driverr1 aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ ! -f docs/specs/driverr1/DRIVER ] && echo "  ok    matching stamp releases, file gone" \
+  || { echo "::error::release match: exit=$ex out=$out"; fail=1; }
+out="$(council release docs/specs/driverr1 aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    release on an absent file exits 0" || { echo "::error::release absent: exit=$ex out=$out"; fail=1; }
+council claim docs/specs/driverr1 aaaa1111 >/dev/null 2>&1
+out="$(council release docs/specs/driverr1 bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ -f docs/specs/driverr1/DRIVER ] \
+  && echo "  ok    mismatch exits 2 held by <other>, file kept" || { echo "::error::release mismatch: exit=$ex out=$out"; fail=1; }
+
+echo "pause/resume: each removes an existing DRIVER and journal.md gains a driver released line"
+mk_spec driverp1 2
+council claim docs/specs/driverp1 aaaa1111 >/dev/null 2>&1
+[ -f docs/specs/driverp1/DRIVER ] || { echo "::error::setup: DRIVER missing before pause"; fail=1; }
+council pause docs/specs/driverp1 "testing" >/dev/null 2>&1
+[ ! -f docs/specs/driverp1/DRIVER ] && grep -qF 'driver released' docs/specs/driverp1/journal.md \
+  && echo "  ok    pause removes DRIVER and journals 'driver released'" \
+  || { echo "::error::pause: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no)"; fail=1; }
+printf 'stamp=aaaa1111\nclaimed=2020-01-01T00:00:00Z\n' > docs/specs/driverp1/DRIVER  # PAUSE already active; write DRIVER directly, claim is itself PAUSE-gated
+before="$(grep -c 'driver released' docs/specs/driverp1/journal.md)"
+council resume docs/specs/driverp1 >/dev/null 2>&1
+after="$(grep -c 'driver released' docs/specs/driverp1/journal.md)"
+[ ! -f docs/specs/driverp1/DRIVER ] && [ "$after" -gt "$before" ] \
+  && echo "  ok    resume removes DRIVER and journals another 'driver released' line" \
+  || { echo "::error::resume: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no) before=$before after=$after"; fail=1; }
+
+echo "gated verbs: open-round, record-seat, judge, close-story each exit 2 held by <holder> without --stamp or with a wrong --stamp, no new file/row/commit; matching --stamp proceeds; PAUSE+DRIVER exits 3, not held by"
+mk_open_spec gatedv1 3
+set_tier gatedv1 1
+council claim docs/specs/gatedv1 aaaa1111 >/dev/null 2>&1
+
+out="$(council open-round docs/specs/gatedv1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -d docs/specs/gatedv1/council ] \
+  && echo "  ok    open-round refused without --stamp, no council/ dir created" \
+  || { echo "::error::open-round no-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council open-round docs/specs/gatedv1 --stamp bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -d docs/specs/gatedv1/council ] \
+  && echo "  ok    open-round refused with a wrong --stamp, no council/ dir created" \
+  || { echo "::error::open-round wrong-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council open-round docs/specs/gatedv1 --stamp aaaa1111 2>&1)"; ex=$?
+[ "$ex" -ne 2 ] && [ -d docs/specs/gatedv1/council/round-1 ] \
+  && echo "  ok    open-round proceeds with the matching --stamp (round-1 created)" \
+  || { echo "::error::open-round right-stamp: exit=$ex out=$out"; fail=1; }
+
+out="$(seat_report sonnet 1 NNN | council record-seat docs/specs/gatedv1 1 sonnet 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -f docs/specs/gatedv1/council/round-1/sonnet.md ] \
+  && echo "  ok    record-seat refused without --stamp, no seat file written" \
+  || { echo "::error::record-seat no-stamp: exit=$ex out=$out"; fail=1; }
+out="$(seat_report sonnet 1 NNN | council record-seat docs/specs/gatedv1 1 sonnet --stamp bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -f docs/specs/gatedv1/council/round-1/sonnet.md ] \
+  && echo "  ok    record-seat refused with a wrong --stamp, no seat file written" \
+  || { echo "::error::record-seat wrong-stamp: exit=$ex out=$out"; fail=1; }
+out="$(seat_report sonnet 1 NNN | council record-seat docs/specs/gatedv1 1 sonnet --stamp aaaa1111 2>&1)"; ex=$?
+[ "$ex" -ne 2 ] && [ -f docs/specs/gatedv1/council/round-1/sonnet.md ] \
+  && echo "  ok    record-seat proceeds with the matching --stamp (seat file written)" \
+  || { echo "::error::record-seat right-stamp: exit=$ex out=$out"; fail=1; }
+
+jsonl_before="$(grep -c '"spec":"gatedv1"' memory/stats/council.jsonl 2>/dev/null)"; jsonl_before="${jsonl_before:-0}"
+out="$(council judge docs/specs/gatedv1 2>&1)"; ex=$?
+jsonl_after="$(grep -c '"spec":"gatedv1"' memory/stats/council.jsonl 2>/dev/null)"; jsonl_after="${jsonl_after:-0}"
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ "$jsonl_after" -eq "$jsonl_before" ] \
+  && ! grep -qE '^\*\*Council:\*\* (GREEN|RED|ESCALATE|STALE) round' docs/specs/gatedv1/plan.md \
+  && echo "  ok    judge refused without --stamp, no jsonl row, no plan.md Council line" \
+  || { echo "::error::judge no-stamp: exit=$ex out=$out jsonl before=$jsonl_before after=$jsonl_after"; fail=1; }
+out="$(council judge docs/specs/gatedv1 --stamp bbbb2222 2>&1)"; ex=$?
+jsonl_after2="$(grep -c '"spec":"gatedv1"' memory/stats/council.jsonl 2>/dev/null)"; jsonl_after2="${jsonl_after2:-0}"
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ "$jsonl_after2" -eq "$jsonl_before" ] \
+  && echo "  ok    judge refused with a wrong --stamp, no jsonl row" \
+  || { echo "::error::judge wrong-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council judge docs/specs/gatedv1 --stamp aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"green"' \
+  && echo "  ok    judge proceeds with the matching --stamp (GREEN)" \
+  || { echo "::error::judge right-stamp: exit=$ex out=$out"; fail=1; }
+
+cat > docs/specs/gatedv1/gatedv1-02-second.md <<'EOF'
+---
+story: gatedv1-02
+spec: gatedv1
+status: todo
+returned: DONE
+wave: 1
+---
+# Second
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "gatedv1: second story" >/dev/null
+out="$(council close-story docs/specs/gatedv1/gatedv1-02-second.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && grep -q '^status: todo' docs/specs/gatedv1/gatedv1-02-second.md \
+  && echo "  ok    close-story refused without --stamp, story left todo" \
+  || { echo "::error::close-story no-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council close-story docs/specs/gatedv1/gatedv1-02-second.md --stamp bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && grep -q '^status: todo' docs/specs/gatedv1/gatedv1-02-second.md \
+  && echo "  ok    close-story refused with a wrong --stamp, story left todo" \
+  || { echo "::error::close-story wrong-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council close-story docs/specs/gatedv1/gatedv1-02-second.md --stamp aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' docs/specs/gatedv1/gatedv1-02-second.md \
+  && echo "  ok    close-story proceeds with the matching --stamp, story now done" \
+  || { echo "::error::close-story right-stamp: exit=$ex out=$out"; fail=1; }
+
+printf 'owner \xc2\xb7 pinned \xc2\xb7 2020-01-01T00:00:00Z\nhead=unknown\n' > docs/specs/gatedv1/PAUSE
+out="$(council open-round docs/specs/gatedv1 2>&1)"; ex=$?
+[ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && ! printf '%s' "$out" | grep -qF 'held by' \
+  && echo "  ok    a paused spec with a held DRIVER answers exit 3, not held-by" \
+  || { echo "::error::pause+driver: exit=$ex out=$out"; fail=1; }
+rm -f docs/specs/gatedv1/PAUSE
+
+echo "no DRIVER: open-round, record-seat, judge, close-story proceed with or without --stamp"
+mk_open_spec gatedv2 2
+set_tier gatedv2 1
+out="$(council open-round docs/specs/gatedv2 2>&1)"; ex=$?
+[ "$ex" -ne 2 ] && [ -d docs/specs/gatedv2/council/round-1 ] && echo "  ok    open-round proceeds without --stamp when no DRIVER exists" \
+  || { echo "::error::open-round no-driver no-stamp: exit=$ex out=$out"; fail=1; }
+out="$(seat_report sonnet 1 NN | council record-seat docs/specs/gatedv2 1 sonnet --stamp unrelated9999 2>&1)"; ex=$?
+[ "$ex" -ne 2 ] && [ -f docs/specs/gatedv2/council/round-1/sonnet.md ] \
+  && echo "  ok    record-seat proceeds with an unrelated --stamp when no DRIVER exists" \
+  || { echo "::error::record-seat no-driver with-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council judge docs/specs/gatedv2 --stamp unrelated9999 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"green"' \
+  && echo "  ok    judge proceeds with an unrelated --stamp when no DRIVER exists" \
+  || { echo "::error::judge no-driver with-stamp: exit=$ex out=$out"; fail=1; }
+cat > docs/specs/gatedv2/gatedv2-02-second.md <<'EOF'
+---
+story: gatedv2-02
+spec: gatedv2
+status: todo
+returned: DONE
+wave: 1
+---
+# Second
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "gatedv2: second story" >/dev/null
+out="$(council close-story docs/specs/gatedv2/gatedv2-02-second.md 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' docs/specs/gatedv2/gatedv2-02-second.md \
+  && echo "  ok    close-story proceeds without --stamp when no DRIVER exists" \
+  || { echo "::error::close-story no-driver no-stamp: exit=$ex out=$out"; fail=1; }
+
+echo "wall probes: DRIVER semaphore against the pre-story-11 cycle.sh vs. the branch"
+probe_claim() {
+  mk_spec pclaim1 2
+  council claim docs/specs/pclaim1 aaaa1111 >/dev/null 2>&1; local ex1=$?
+  council claim docs/specs/pclaim1 aaaa1111 >/dev/null 2>&1; local ex2=$?
+  local out3; out3="$(council claim docs/specs/pclaim1 bbbb2222 2>&1)"; local ex3=$?
+  [ "$ex1" -eq 0 ] && [ -f docs/specs/pclaim1/DRIVER ] && [ "$ex2" -eq 0 ] && [ "$ex3" -eq 2 ] \
+    && printf '%s' "$out3" | grep -qF 'held by aaaa1111' && echo ok || echo FAIL
+}
+probe_release() {
+  mk_spec prelease1 2
+  council claim docs/specs/prelease1 aaaa1111 >/dev/null 2>&1
+  council release docs/specs/prelease1 aaaa1111 >/dev/null 2>&1; local ex1=$?
+  local gone1=false; [ -f docs/specs/prelease1/DRIVER ] || gone1=true
+  council release docs/specs/prelease1 aaaa1111 >/dev/null 2>&1; local ex2=$?
+  council claim docs/specs/prelease1 aaaa1111 >/dev/null 2>&1
+  local out3; out3="$(council release docs/specs/prelease1 bbbb2222 2>&1)"; local ex3=$?
+  [ "$ex1" -eq 0 ] && $gone1 && [ "$ex2" -eq 0 ] && [ "$ex3" -eq 2 ] && [ -f docs/specs/prelease1/DRIVER ] \
+    && printf '%s' "$out3" | grep -qF 'held by aaaa1111' && echo ok || echo FAIL
+}
+probe_pauserelease() {
+  mk_spec ppause1 2
+  council claim docs/specs/ppause1 aaaa1111 >/dev/null 2>&1
+  council pause docs/specs/ppause1 "why" >/dev/null 2>&1
+  local ok=true
+  [ -f docs/specs/ppause1/DRIVER ] && ok=false
+  grep -q 'driver released' docs/specs/ppause1/journal.md 2>/dev/null || ok=false
+  printf 'stamp=aaaa1111\nclaimed=now\n' > docs/specs/ppause1/DRIVER
+  council resume docs/specs/ppause1 >/dev/null 2>&1
+  [ -f docs/specs/ppause1/DRIVER ] && ok=false
+  local jcnt; jcnt="$(grep -c 'driver released' docs/specs/ppause1/journal.md 2>/dev/null)"; jcnt="${jcnt:-0}"
+  [ "$jcnt" -eq 2 ] || ok=false
+  $ok && echo ok || echo FAIL
+}
+probe_gated() {
+  mk_open_spec pgated1 2; set_tier pgated1 1 >/dev/null
+  council claim docs/specs/pgated1 aaaa1111 >/dev/null 2>&1
+  local ok=true out ex
+  out="$(council open-round docs/specs/pgated1 2>&1)"; ex=$?
+  { [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111'; } || ok=false
+  out="$(council open-round docs/specs/pgated1 --stamp bbbb2222 2>&1)"; ex=$?
+  { [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111'; } || ok=false
+  out="$(council open-round docs/specs/pgated1 --stamp aaaa1111 2>&1)"; ex=$?
+  { [ "$ex" -ne 2 ] && [ -d docs/specs/pgated1/council/round-1 ]; } || ok=false
+  $ok && echo ok || echo FAIL
+}
+
+PRESHA11="$(git -C "$SRC" log -1 --format=%h --grep='story(v0-12-0-remainders-11)')^"
+OLDCYCLE4="$(mktemp)"
+git -C "$SRC" show "$PRESHA11":scripts/cycle.sh > "$OLDCYCLE4"
+run_wall_probes "$PRESHA11" "$OLDCYCLE4" probe_claim probe_release probe_pauserelease probe_gated
+run_wall_probes "branch"    "$SRC/scripts/cycle.sh" probe_claim probe_release probe_pauserelease probe_gated
+rm -f "$OLDCYCLE4"
 
 exit $fail
