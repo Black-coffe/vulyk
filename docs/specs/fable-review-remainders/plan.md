@@ -115,4 +115,5 @@ council for the largest court.
 **Branch:** vulyk/fable-review-remainders
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-09-14, at 68eb525, pack 74d6ccf14ab4
+**Council:** GREEN round 2, 2026-09-14, at 88686a8, pack 37a505564b66
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
