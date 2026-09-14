@@ -1,8 +1,8 @@
 ---
 story: fable-review-remainders-07
 spec: fable-review-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 tracer: false
@@ -45,6 +45,12 @@ model: opus
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- The marker check lives in `.claude/workflows/vulyk-cycle.js`: `:30` defines `const MARKER = (who) => (who === 'worker' ? /^STATUS:/m : /^VERDICT:/m)`, and `:33` (the non-empty-string branch of `reasonFor`) returns `MARKER(who).test(r) ? null : ${who} returned no report`. Both regexes are line-anchored and case-sensitive.
+- No new parameter: a seat's `who` is `seat <name>` and the reviewer's is `reviewer`, so "anything not `'worker'`" already selects `VERDICT:`.
+- Ordering matters - the marker test sits inside the non-empty-string branch, before the empty/turn-cap branch, so a markerless non-empty string is `returned no report`, never `returned empty`. The `{threw}`, empty, `null` and non-string paths are unchanged, as is the whole `record-seat` flow (a seat's non-report only adds a `log()` line).
+- `tests/driver.test.sh`: stub report strings only - 7 insertions / 7 deletions, no new scenario, no assertion touched. Six worker stubs (scenarios c, d, e, f, k and the retry-prompt one) gained a leading `STATUS: DONE\n`; the one seat stub (`record-seat exit 3`) gained `VERDICT: PASS\n`.
+- Left alone deliberately: the Tier-4-guard scenario's `agents: ['report']` (that run refuses at launch and never classifies anything), the whitespace-only `'   '` pair, the `{throw: ...}` pair and the `null`s - those fixtures prove the other two reasons.
+- Surprise: writing the fixtures through a shell heredoc turned the two-character `\n` into a real newline and broke the JS string literals; redone via a script file so the escape survives. `bash tests/driver.test.sh` exits 0 (59 ok lines, no FAIL).
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

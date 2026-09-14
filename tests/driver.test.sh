@@ -190,7 +190,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
         { ok: true },
         { next: 'green' },
       ]),
-      agents: ['a worker report'],
+      agents: ['STATUS: DONE\na worker report'],
     },
   ).then(({ result, calls }) => {
     const workerCalls = calls.filter((c) => c.agentType === 'worker-test');
@@ -216,7 +216,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, redLine, wave, redLine]), agents: ['report 1', 'report 2'] },
+    { clerk: withClaim([wave, redLine, wave, redLine]), agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
   ).then(({ result, calls }) => {
     const gated = calls.filter((c) => 'verb' in c);
     if (
@@ -237,7 +237,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, wave, redLine]), agents: [null, 'report 2'] },
+    { clerk: withClaim([wave, wave, redLine]), agents: [null, 'STATUS: DONE\nreport 2'] },
   ).then(({ result }) => {
     if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'red: verification failed') {
       console.log('ok two-miss stop: empty+red carries the verification error');
@@ -253,7 +253,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, redLine, wave]), agents: ['report 1', null] },
+    { clerk: withClaim([wave, redLine, wave]), agents: ['STATUS: DONE\nreport 1', null] },
   ).then(({ result }) => {
     if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'worker returned empty - turn cap suspected (worker-test, maxTurns 90 in .claude/agents/worker-test.md)') {
       console.log('ok two-miss stop: red+empty ends with the empty-return reason');
@@ -321,7 +321,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
         { ok: true },
         { next: 'green' },
       ]),
-      agents: ['a worker report'],
+      agents: ['STATUS: DONE\na worker report'],
     },
   ).then(({ result }) => {
     if (result && result.next === 'green') {
@@ -339,7 +339,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
       { next: 'dispatch:sonnet', tier: 2, round: 1, round_dir: 'docs/specs/demo/council/round-1' },
       { ok: false, exit: 3, next: 'paused', error: 'paused: owner requested a pause' },
     ]),
-    agents: ['a seat report'],
+    agents: ['VERDICT: PASS\na seat report'],
   },
 ).then(({ result, calls }) => {
   const recordSeatCalls = calls.filter((c) => c.verb === 'record-seat');
@@ -415,7 +415,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const sentence = 'a previous attempt may have left uncommitted edits in your files; `git diff` them first';
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, redLine, wave, { ok: true }, { next: 'green' }]), agents: ['report 1', 'report 2'] },
+    { clerk: withClaim([wave, redLine, wave, { ok: true }, { next: 'green' }]), agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
   ).then(({ result, calls }) => {
     const workerCalls = calls.filter((c) => c.agentType === 'worker-test');
     if (

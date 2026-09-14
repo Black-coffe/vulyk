@@ -27,10 +27,12 @@ const CAPS = { 'worker-code': 90, 'worker-test': 90, 'council-haiku': 60, 'counc
 // The three reasons a dispatch comes back dead, told apart for workers, council seats and the
 // reviewer alike (C3): a rejected agent() (the thunk hands back { threw }), an empty resolve -
 // the shape a turn-cap death takes, so name the agent and its cap - and anything else that is
-// not a report. Returns null when <r> is a usable report.
+// not a report - a non-empty return whose text carries no report marker (a worker's line-anchored
+// `STATUS:`, a seat's or the reviewer's `VERDICT:`). Returns null when <r> is a usable report.
+const MARKER = (who) => (who === 'worker' ? /^STATUS:/m : /^VERDICT:/m)
 const reasonFor = (who, agentType, r) => {
   if (r && typeof r === 'object' && 'threw' in r) return `${who} threw: ${r.threw}`
-  if (typeof r === 'string' && r.trim() !== '') return null
+  if (typeof r === 'string' && r.trim() !== '') return MARKER(who).test(r) ? null : `${who} returned no report`
   if (r === null || r === undefined || typeof r === 'string') {
     return `${who} returned empty - turn cap suspected (${agentType}, maxTurns ${CAPS[agentType] ?? 'unknown'} in .claude/agents/${agentType}.md)`
   }
