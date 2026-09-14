@@ -1,6 +1,6 @@
 # ADR-002: The council scales with the tier, never to zero
 
-- Status: accepted (2026-09-13, owner: Andrei)
+- Status: accepted (2026-09-13, owner: Andrei); amended by ADR-007 (2026-09-14): Tier 2 requires `sonnet`, `review` - Tier 1 and 3-4 unchanged
 - Date: 2026-09-13
 - Spec: docs/specs/autonomous-cycle (v0.12.0)
 

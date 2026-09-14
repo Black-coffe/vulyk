@@ -7,8 +7,8 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 The framework stops doing more than it was asked. Read against its own text after two other
 hives ran v0.12.0: the plan launched the build with no approval stop, a request whose answer
 was a document was cut into stories anyway, up to seven agents ran before the first line of
-code, the same suite ran four times per story, and a missed story was retried on the model
-that missed it. Each of those is a line in ADR-007/008 and a diff here.
+code, the same suite ran up to four times (twice per story, twice per round), and a missed
+story was retried on the model that missed it. Each of those is a line in ADR-007/008 and a diff here.
 
 ### Changed
 - **Deliverable before tier (ADR-008).** `/vulyk-plan` step 0 names what the owner gets back.
@@ -26,9 +26,10 @@ that missed it. Each of those is a line in ADR-007/008 and a diff here.
   --json`'s `wave_stories` carry `"model"` (story frontmatter `model:`, default `sonnet`); the
   Workflow driver and the fallback loop pass it on the first dispatch and **`opus` on a story's
   second dispatch** - a miss climbs one rung instead of retrying on the model that missed.
-- **Tier 2 requires `sonnet` + `review`** (C15 amended): the intent seat joins at Tier 3, the
-  black-box seat at Tier 4. `cycle.sh required_seats_for_tier`, the council suite's tier-2
-  scenarios, `docs/cycle.md` and the constitution updated together.
+- **Tier 2 requires `sonnet` + `review`** (C15 amended, ADR-002 marked amended): the intent and
+  black-box seats join at Tier 3, as before. `cycle.sh required_seats_for_tier`, the council
+  suite's tier-2 scenarios, `docs/cycle.md` and the constitution updated together. Recorded as a
+  plan delta under the owner's ask 2; one line reverts it.
 - **Recon capped by tier** in `/vulyk-plan`: 1 scout at Tier 1 (only if the location is
   unknown) and Tier 2, 2 at Tier 3, 4 at Tier 4; `drone-coverage` at Tier 3-4 only.
 - **One suite run per close.** `lead-review` no longer re-runs the whole suite on top of

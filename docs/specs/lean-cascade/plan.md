@@ -59,7 +59,17 @@ Done by hand under the assumption above; listed so the diff has a map.
 
 ## Plan deltas
 
-*(none)*
+- **2026-09-14 · trigger:** `lead-review` (round 1, major 6): the Tier 2 court change (`opus`
+  seat dropped) quotes no ask. **Decision:** kept, under ask 2 - "чтобы максимально была
+  эффективная работа, но и при этом экономия токенов была хорошая" - as the one seat change the
+  ladder implies (the intent seat is a senior; a feature inside one module is judged by the mid
+  seat plus the lead's review); ADR-002 marked amended by ADR-007. **Rejected:** reverting
+  (keeps a senior seat on every Tier 2 round with no round on record to show it caught
+  anything). The owner reverts it with one line in `required_seats_for_tier`.
+- **2026-09-14 · trigger:** the same review, critical 1: Tier 3's court was stated two ways.
+  **Decision:** the script's way - the full court at Tier 3-4 (C15 unchanged there); the eleven
+  prose sites corrected. **Rejected:** dropping the black-box seat at Tier 3 - it is `N/A`
+  only where the Profile's *Client path* is blank, and that is the Profile's defect.
 
 **Approved:** Andrei, 2026-09-14 - in chat, the request itself: "Вот это всё нужно сделать, поправить"
 **Briefed:** <n/a - approved directly>

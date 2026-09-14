@@ -73,17 +73,19 @@ in the Queen's window — which is exactly the recon and noisy-output cases, and
 
 An estimate, not a measured number - `memory/stats/council.jsonl` is where the real figure
 accumulates. Per round, by tier (ADR-002/007): Tier 1 - one cold-cache `council-sonnet`; Tier 2 -
-`council-sonnet` + `lead-review` at the top model; Tier 3 - plus `council-opus`; Tier 4 - plus the
-black-box seat and a second reviewer. Add roughly 5 `cycle-clerk` calls (junior rung, one verb
-each). On a RED verdict, add one `queen-planner` dispatch at the top model plus the repair wave.
-The first recorded spec (Tier 4, v0.12) took three rounds to green with the black-box seat
-returning `N/A` every time - which is why v0.13 moved that seat to Tier 4 only and stopped
-running the whole suite in `lead-review` on top of `close-story` and `council-sonnet`.
+`council-sonnet` + `lead-review` at the top model; Tier 3-4 - plus `council-opus` and the
+black-box seat; Tier 4 - plus a second reviewer. Add roughly 5 `cycle-clerk` calls (junior rung,
+one verb each). On a RED verdict, add one `queen-planner` dispatch at the top model plus the
+repair wave. The first recorded spec (Tier 4, v0.12) took three rounds to green with the black-box
+seat returning `N/A` every time - its Profile's *Client path* row was unfilled, so it had nothing
+to walk: a hive that leaves that row blank pays for a seat that can only say `N/A`. v0.13 also
+stopped running the whole suite in `lead-review` on top of `close-story` and `council-sonnet`.
 
 **Where the money went before v0.13** - read against the framework's own text, not a guess:
 the plan launched the build with no approval stop; a request whose answer was a document was
 cut into stories anyway; up to seven agents ran before the first line of code; the same suite
-ran up to four times per story and round. ADR-008 records each fix.
+ran up to four times - twice per story (worker, `close-story`) and twice per round
+(`council-sonnet`, `lead-review`). ADR-008 records each fix.
 
 The fallback driver (Workflow unavailable) pays the same dispatches and additionally carries
 roughly 120 lines of seat reports per round through the pinned top-model session that is stepping

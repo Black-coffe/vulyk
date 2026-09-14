@@ -82,7 +82,7 @@ that reduction in the worktree's own detached history. Shared by all three blind
 
 ## Drivers
 **Workflow** (`vulyk-cycle.js`, phases Build/Round/Judge/Repair): no verdict/ceiling/stale
-logic of its own - every shell call goes through `cycle-clerk` (`haiku`, `Bash`, `maxTurns:
+logic of its own - every shell call goes through `cycle-clerk` (`sonnet` - junior rung, `Bash`, `maxTurns:
 5`). `args:{spec, top_model, second_model, stamp}` (16-hex `stamp`, taken once by
 `/vulyk-build` step 1, used only in the `record-seat` heredoc delimiter, never `EOF`, never
 shown to a seat). Tier 4 review dispatches twice (`top_model`+`second_model`), folded

@@ -9,7 +9,7 @@ Enter Queen mode for: "$ARGUMENTS"
    **document**. A request to validate, audit, monitor, assess, research, compare, or "make me a
    spec / a plan / a report" is study work, and so is `--study` in "$ARGUMENTS". Study work never
    cuts a story, dispatches a worker, or opens a council: write `docs/specs/<slug>/brief.md` (step
-   2), do the recon of step 3 (the same caps), and write the answer as
+   2), do the recon of step 3 with at most two scouts (a study has no tier), and write the answer as
    `docs/specs/<slug>/report.md` - findings with `file:line` evidence, options with the
    recommended one first and why, and the plan the owner could approve next time as a list of
    candidate stories, not story files. Commit it as `study(<slug>): <title>` and stop. The owner

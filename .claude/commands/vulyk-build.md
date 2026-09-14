@@ -3,8 +3,8 @@ description: Launch the build -> council -> repair loop - the Workflow driver wh
 argument-hint: [spec slug; defaults to the newest spec carrying **Briefed:** or **Approved:** with no branch yet] [--fallback]
 ---
 
-Launch the loop for: "$ARGUMENTS" (default: the newest spec under `docs/specs/` that is briefed or
-approved but has no `**Branch:**` line yet).
+Launch the loop for: "$ARGUMENTS" (strip `--fallback` first; what remains is the slug - default:
+the newest spec under `docs/specs/` that is briefed or approved but has no `**Branch:**` line yet).
 
 1. **Mode detection and launch.** This is the driver launch protocol every other command points at
    rather than repeating - `/vulyk-plan` step 10 says "launch as here"; `/vulyk-resume` says "the

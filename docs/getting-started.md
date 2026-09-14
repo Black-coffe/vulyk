@@ -51,8 +51,8 @@ conversation. The reasoning is in [token-economy.md](token-economy.md).
   -> the terminal shows one journal line per step; you next see it wake on green or on an escalation
 /vulyk-review
   -> the same council round, run again on demand: `lead-review` at the top model plus the tier's
-     blind seats (sonnet suite-then-each-ask; opus intent and edge cases at Tier 3+; the black-box
-     client-path seat at Tier 4), judged by `cycle.sh` from labelled evidence - never by a person's look
+     blind seats (sonnet suite-then-each-ask; from Tier 3 also opus intent and edge cases and the
+     black-box client-path seat), judged by `cycle.sh` from labelled evidence - never by a person's look
 /vulyk-ship
   -> ship-check (all six confirmations, free) -> version + CHANGELOG -> local merge ->
      `/vulyk-ship` prints the publish command under "to publish, run:" and stops there - you press

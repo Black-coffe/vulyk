@@ -106,17 +106,19 @@ budget line, and the rule that fixes each agent to one is in its frontmatter.
 | Mid | `sonnet` → Sonnet 5 | `worker-code`, `worker-test`, `council-sonnet`, `drone-scout`, `drone-docs`, `drone-coverage`, `librarian` | implementation against an explicit story, recon, memory upkeep |
 | Junior | `haiku` **only once a Haiku 5 exists** — `sonnet` until then | `council-haiku` (the black-box seat; the name is the angle, not the model), `cycle-clerk`, the `VULYK_AUTOLEARN` distiller | mechanical, one verb, no judgment |
 
-**Haiku 4.5 is never dispatched.** The one seat that ran on it returned `N/A` in all three
-recorded rounds, and a clerk that mangles one line ends a driver run. When a fifth-generation
+**Haiku 4.5 is never dispatched.** This is the owner's rule (ADR-007), not a measurement: the
+one seat that ran on it returned `N/A` in all three recorded rounds, but because the Profile's
+*Client path* row was unfilled - that says nothing about the model. When a fifth-generation
 Haiku ships, the junior rung flips back with three one-word edits (`council-haiku.md`,
 `cycle-clerk.md`, `session-end-learnings.sh`) and a CHANGELOG line - not before, and not by a
 resolver guessing the generation from a local file.
 
 **The retry climbs one rung.** A story's second dispatch goes to `opus` whatever its own
-`model:` says: a red verification, an empty report or a `WALL` is information, and the same
-model rereading the same wall was, in every recorded case, the cheapest way to buy the second
-miss that blocks the story and wakes the Queen. `status --json` carries each story's `model`
-so the driver never opens the story file to learn it.
+`model:` says. A judgment, not a measured fix: the record (`v0-12-0-remainders` journal) shows
+misses from turn caps and one wave-order plan defect, none attributed to the model - what the
+rung buys is that the second attempt is never the same model reading the same wall, at the price
+of one Opus worker, against the block + `lead-architect` + relaunch a second miss costs. `status
+--json` carries each story's `model` so the driver never opens the story file to learn it.
 
 `lead-review` and the three council seats are dispatched together, one message, per council round —
 the same "independent in information, so independent in wall-clock cost" reasoning that used to pair

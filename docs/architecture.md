@@ -15,7 +15,7 @@ In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a su
 | Workers | `worker-code`, `worker-test` | sonnet | one story, scoped files, structured handback |
 | Drones | `drone-scout`, `drone-docs`, `librarian` | sonnet | recon (capped per tier: 1/1/2/4 scouts), memory truth, hygiene |
 | Gate | `drone-coverage` | sonnet | plan-time independence: sees the brief and the plan, never the stories |
-| Council | `council-sonnet`, `council-opus`, `council-haiku` | sonnet, opus, and the junior rung (sonnet until a Haiku 5 exists - ADR-007); seats required by tier: 1 → sonnet; 2 → + review; 3 → + opus; 4 → + haiku | blind verdict on `brief.md`'s `## Asks` only, from a reduced git worktree that cannot see the stories - three angles: line-by-line suite + each ask, intent and edge cases, black-box client path |
+| Council | `council-sonnet`, `council-opus`, `council-haiku` | sonnet, opus, and the junior rung (sonnet until a Haiku 5 exists - ADR-007); seats required by tier: 1 → sonnet; 2 → + review; 3-4 → + opus + haiku | blind verdict on `brief.md`'s `## Asks` only, from a reduced git worktree that cannot see the stories - three angles: line-by-line suite + each ask, intent and edge cases, black-box client path |
 | Clerk | `cycle-clerk` | junior rung (sonnet until a Haiku 5 exists) | the Workflow driver's only way to reach a shell; runs exactly one `cycle.sh`/`journal.sh` verb per dispatch and holds no verdict or ceiling logic of its own |
 
 ## Data flow of one Tier 3 feature
@@ -46,7 +46,7 @@ goal -> Queen names the deliverable: a document ends at report.md (study, ADR-00
         reduced git worktree - the court - at the pack commit, docs/specs/<slug>/ reduced to brief.md
      -> lead-review (TOP_MODEL, main tree) ∥ the tier's seats (in the court), one message, one
         round (stage 04+05): sonnet runs the suite once then proves each ask by running it; opus
-        (Tier 3+) judges intent and edge cases; haiku (Tier 4) walks the Client path blind
+        (Tier 3-4) judges intent and edge cases; haiku (Tier 3-4) walks the Client path blind
      -> cycle.sh judge: a model-free script reads the labelled, evidenced seat reports plus
         lead-review's PASS/BLOCK and computes the verdict - no model writes it
         GREEN -> stage 04+05 close together, /vulyk-ship unblocks

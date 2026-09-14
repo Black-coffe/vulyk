@@ -117,7 +117,7 @@ Every subagent declares its model in YAML frontmatter — the cascade is enforce
 | 🔍 Drone | `drone-docs` | `sonnet` | Update wiki & map notes after changes | Diffs |
 | 🔍 Drone | `librarian` | `sonnet` | Memory consolidation & garbage collection | Memory files only |
 | 🔍 Drone | `drone-coverage` | `sonnet` | Plan-time coverage check: brief vs plan, blind to the stories | **Never** — brief + plan only |
-| ⚖️ Council | `council-sonnet` / `council-opus` / `council-haiku` | `sonnet` / `opus` / junior rung (`sonnet` until a Haiku 5 exists) — required at Tier 1 / 3 / 4 | Blind verdict on the brief's `## Asks`, from a reduced worktree — suite + each ask / intent & edge cases / black-box client path | Only what a client or the suite would see — never the stories |
+| ⚖️ Council | `council-sonnet` / `council-opus` / `council-haiku` | `sonnet` / `opus` / junior rung (`sonnet` until a Haiku 5 exists) — `sonnet` at every tier, `opus` and `haiku` from Tier 3 | Blind verdict on the brief's `## Asks`, from a reduced worktree — suite + each ask / intent & edge cases / black-box client path | Only what a client or the suite would see — never the stories |
 | ⚖️ Council | `cycle-clerk` | junior rung (`sonnet` until a Haiku 5 exists) | The Workflow driver's only shell access — runs one `cycle.sh`/`journal.sh` verb per dispatch, no logic of its own | Never |
 | 🐝 Senior | *any story's second attempt* | `opus` | A story a Sonnet worker missed is retried one rung up, never on the same model (ADR-007) | Scoped slice |
 
@@ -164,7 +164,7 @@ What changed with Opus 5 is the *reason* for the bookend, not its shape. The bin
 | `/vulyk-bootstrap` | Interview → tailored constitution, pruned roster, initial map & wiki seed |
 | `/vulyk-plan <goal> [--go] [--study]` | Queen mode: deliverable named first (a document ends at `report.md`), capped recon, a one-round grill (recommended options first, silence safe) closes into the brief's `## Asks`, plan + story files written to `docs/specs/`, then the plan shown for one word of approval; `--go` builds straight through |
 | `/vulyk-build [slug] [--fallback]` | Execute the plan wave by wave: parallel workers on disjoint files, one commit per story, a missed story retried one rung up; the in-session fallback driver only with `--fallback` |
-| `/vulyk-review [slug]` | One council round on demand: `lead-review` ∥ the tier's blind seats (`council-sonnet`, + `council-opus` at Tier 3, + `council-haiku` at Tier 4), judged by `cycle.sh` from evidenced reports - `RED` routes to `/vulyk-build` as fix stories |
+| `/vulyk-review [slug]` | One council round on demand: `lead-review` ∥ the tier's blind seats (`council-sonnet`; `council-opus` and `council-haiku` from Tier 3), judged by `cycle.sh` from evidenced reports - `RED` routes to `/vulyk-build` as fix stories |
 | `/vulyk-pause <slug>` | Hand the working tree back to you at any point the loop is running |
 | `/vulyk-resume <slug>` | Clear the pause and relaunch the driver fresh - never a replayed run |
 | `/vulyk-ship [slug]` | Stage 06: refuses without a current, GREEN council verdict, then version + CHANGELOG, a local merge, the publish command printed for a human to press, recorded - and the next circle's draft handed over |

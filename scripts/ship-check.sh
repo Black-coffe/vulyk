@@ -80,7 +80,7 @@ echo ""
 if [ -f "$SPEC/brief.md" ]; then ok 01 "spec: brief.md exists"
 else fail 01 "spec: no brief.md - there is no verbatim request for anything below to answer to"; fi
 
-# 02 Plan - **Briefed:** (autonomous mode) or **Approved:** (two-stop mode) close this
+# 02 Plan - **Approved:** (the default) or **Briefed:** (--go / Tier 1) close this
 # stage; ship-check.sh accepts either (ADR-001 D1).
 if [ ! -f "$PLAN" ]; then
   fail 02 "plan: no plan.md"

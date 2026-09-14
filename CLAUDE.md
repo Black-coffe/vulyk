@@ -39,8 +39,8 @@ code* gets a tier:
 | 0 | Trivial, single file, obvious | — | none | Do it directly - no brief, no council, no ceremony. |
 | 1 | One module, clear task | 1 | 1 worker + `council-sonnet` | Mini-brief (`## Asks` = the task phrase, verbatim, no grill) → 1 `worker-code` (scout first only if the location is unknown) → one council round → `/vulyk-ship`. |
 | 2 | Feature within a module | 2–4 | 2-4 workers + `council-sonnet` + `lead-review` | `/vulyk-plan` (grill, ≤1 scout) → **stop for approval** → `/vulyk-build` → `/vulyk-ship`. |
-| 3 | Cross-cutting, multi-module | 4–8 | 4-8 workers + `sonnet`/`opus` seats + `lead-review` | `/vulyk-plan` (grill, ≤2 scouts, coverage check) → **stop for approval** → `/vulyk-build` → `/vulyk-ship`. |
-| 4 | Architecture, migration, 200k+ LOC touched | 9–16 | Tier 3 + `haiku` seat + `lead-architect` + a second reviewer on a *different* model | Tier 3 + `lead-architect` consult; second reviewer `opus` beside a Fable gate, `sonnet` beside an Opus one. Raise session effort before planning. |
+| 3 | Cross-cutting, multi-module | 4–8 | 4-8 workers + the full court (`sonnet`, `opus`, `haiku` seats) + `lead-review` | `/vulyk-plan` (grill, ≤2 scouts, coverage check) → **stop for approval** → `/vulyk-build` → `/vulyk-ship`. |
+| 4 | Architecture, migration, 200k+ LOC touched | 9–16 | Tier 3 + `lead-architect` + a second reviewer on a *different* model | Tier 3 + `lead-architect` consult; second reviewer `opus` beside a Fable gate, `sonnet` beside an Opus one. Raise session effort before planning. |
 
 Past 16 stories the goal is more than one spec — split it. Counts are calibration, not targets.
 **Ceremony floor:** `brief.md` and `## Requirements` quotes exist at Tier 2+; `## Asks` at Tier 1+;
@@ -81,8 +81,9 @@ Every Tier 1+ spec travels one loop, and a stage is closed by a file on disk, no
 | 06 | Ship - merged locally, publish command printed, next circle opened | `**Shipped:**` via `scripts/ship-check.sh --record` | `/vulyk-ship` |
 
 The council shrinks with the tier, never to zero (C15, ADR-002/007): `council-sonnet` alone at
-Tier 1; `council-sonnet` + `lead-review` at Tier 2; `council-sonnet` + `council-opus` +
-`lead-review` at Tier 3; the full court plus the second reviewer at Tier 4. Every seat judges
+Tier 1; `council-sonnet` + `lead-review` at Tier 2; the full court - `council-sonnet`,
+`council-opus`, `council-haiku` - plus `lead-review` at Tier 3-4, and the second reviewer at
+Tier 4. Every seat judges
 only the brief's words, in a court whose working tree holds only the brief. Green needs
 unanimity; RED on half the asks or more, or three RED rounds, escalates to `## Needs a human`.
 The owner may step in at any point via `/vulyk-pause`; `scripts/human-check.sh` outranks the
@@ -193,7 +194,7 @@ Drop file contents, diffs, command output and scout reports: they are on disk an
 
 - Path-scoped rules: `.claude/rules/` (loaded only where relevant — keep this file lean).
 - Plans & stories: `docs/specs/` · Study reports: `docs/specs/<slug>/report.md` · Decisions: `docs/adr/` · Domain knowledge: `docs/wiki/`.
-- Codebase map: `memory/map/` · Session learnings: `memory/learnings/` · Stats series: `memory/stats/` (`scope.jsonl`, `council.jsonl`, `ship.jsonl`, `skills.json`).
+- Codebase map: `memory/map/` · Session learnings: `memory/learnings/` · Stats series: `memory/stats/` (`scope.jsonl`, `council.jsonl`, `acceptance.jsonl`, `human.jsonl`, `ship.jsonl`, `skills.json`).
 
 ## Evolution
 
