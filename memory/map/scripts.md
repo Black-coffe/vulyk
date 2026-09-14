@@ -13,7 +13,7 @@ report-only gates it now sits beside (`ship-check.sh`, `human-check.sh`, `accept
   `/vulyk-pause`, `/vulyk-resume` (fallback driver / on-demand round).
 - `journal.sh <spec-dir> <stage> "<what>" "<next>"` - appends+prints one line to
   `<spec-dir>/journal.md`; called by `cycle.sh` itself and by `/vulyk-build` step 1 (the
-  "tree is not yours" line) and `/vulyk-plan` step 9 (two-stop opt-out path).
+  "tree is not yours" line) and `/vulyk-plan` step 9 (the approval path, the default).
 - `lib.sh` - sourced only, never run (`. "$(dirname "$0")/lib.sh"`); no `exit` in it.
   Consumed by `cycle.sh`, `ship-check.sh`, `human-check.sh`, `acceptance-log.sh`,
   `release-check.sh`.

@@ -2,6 +2,50 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.13.0] - 2026-09-14
+
+The framework stops doing more than it was asked. Read against its own text after two other
+hives ran v0.12.0: the plan launched the build with no approval stop, a request whose answer
+was a document was cut into stories anyway, up to seven agents ran before the first line of
+code, the same suite ran up to four times (twice per story, twice per round), and a missed
+story was retried on the model that missed it. Each of those is a line in ADR-007/008 and a diff here.
+
+### Changed
+- **Deliverable before tier (ADR-008).** `/vulyk-plan` step 0 names what the owner gets back.
+  Study work - validate, audit, monitor, research, "make me a spec", or `--study` - writes
+  `brief.md` + `report.md` and stops: no story, no worker, no council. `state.sh` shows it as
+  `study`. The routing matrix, README and cycle.md carry the row.
+- **The approval stop is the default (ADR-008).** After stories and the deterministic checks
+  `/vulyk-plan` shows the plan and waits for one word (`**Approved:**`). Straight-through is
+  the opt-in: `--go`, or the owner asking on the grill's last question; Tier 1 stays
+  straight-through. No-question mode can no longer approve a plan. `templates/grill.md`'s
+  fixed last question offers the opt-in instead of the old opt-out.
+- **The model ladder (ADR-007).** Lead = `TOP_MODEL`, senior = `opus`, mid = `sonnet`, junior
+  = `haiku` only once a Haiku 5 exists - until then `council-haiku`, `cycle-clerk` and the
+  `VULYK_AUTOLEARN` distiller run on `sonnet`, and Haiku 4.5 is never dispatched. `status
+  --json`'s `wave_stories` carry `"model"` (story frontmatter `model:`, default `sonnet`); the
+  Workflow driver and the fallback loop pass it on the first dispatch and **`opus` on a story's
+  second dispatch** - a miss climbs one rung instead of retrying on the model that missed.
+- **Tier 2 requires `sonnet` + `review`** (C15 amended, ADR-002 marked amended): the intent and
+  black-box seats join at Tier 3, as before. `cycle.sh required_seats_for_tier`, the council
+  suite's tier-2 scenarios, `docs/cycle.md` and the constitution updated together. Recorded as a
+  plan delta under the owner's ask 2; one line reverts it.
+- **Recon capped by tier** in `/vulyk-plan`: 1 scout at Tier 1 (only if the location is
+  unknown) and Tier 2, 2 at Tier 3, 4 at Tier 4; `drone-coverage` at Tier 3-4 only.
+- **One suite run per close.** `lead-review` no longer re-runs the whole suite on top of
+  `close-story`'s recorded green - it runs only what the diff makes suspicious and says which.
+- **The fallback driver needs `--fallback`.** `/vulyk-build` refuses to step the loop inside
+  the pinned top-model session unless the owner asked for exactly that.
+- **`CLAUDE.md` cut from 236 to ~200 lines, 60 of them the Profile and Commands blocks the installer needs.** The top-model essay, the effort essay and the
+  council prose moved to `docs/model-cascade.md` and `docs/cycle.md`; the constitution keeps the
+  laws, the routing matrix with the deliverable rule, the ladder, the cycle table, the token
+  economy, the profile and the commands. Every subagent reads this file on every dispatch.
+
+### Added
+- `docs/adr/007-model-ladder.md`, `docs/adr/008-approval-stop-and-study-work.md`.
+- `tests/driver.test.sh`: the retry scenario asserts the second dispatch carries `model: opus`
+  and the first the story's own model. `tests/council.test.sh`: tier 2 = `sonnet review`; an
+  extra recorded seat is still accepted; `wave_stories` fixtures carry `"model"`.
 ## [0.12.1] - 2026-09-14
 
 The remainders of v0.12.0: the council and driver run to the end, and every stop says why.

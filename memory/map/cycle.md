@@ -41,7 +41,7 @@ seat is missing, else `judge`] → `escalated` (newest row ESCALATE, not `reopen
 else `open-round`.
 
 ## Required seats by tier (`required_seats_for_tier`) and the verdict rule (`cmd_judge`)
-1 → `sonnet` · 2 → `sonnet opus review` · 3/4 → `haiku sonnet opus review`; frozen into
+1 → `sonnet` · 2 → `sonnet review` · 3/4 → `haiku sonnet opus review` (ADR-007, v0.13); frozen into
 `ROUND.tier=` at `open-round`, so a later `plan.md` edit never reshapes an open round. A seat
 not required reads `""` (not ABSENT). Verdict, first match wins - A=asks count, `half =
 max(2, ceil(A/2))`, `red_e`/`red_u` = evidenced/unevidenced RED ask numbers (evidenced wins
@@ -82,7 +82,7 @@ that reduction in the worktree's own detached history. Shared by all three blind
 
 ## Drivers
 **Workflow** (`vulyk-cycle.js`, phases Build/Round/Judge/Repair): no verdict/ceiling/stale
-logic of its own - every shell call goes through `cycle-clerk` (`haiku`, `Bash`, `maxTurns:
+logic of its own - every shell call goes through `cycle-clerk` (`sonnet` - junior rung, `Bash`, `maxTurns:
 5`). `args:{spec, top_model, second_model, stamp}` (16-hex `stamp`, taken once by
 `/vulyk-build` step 1, used only in the `record-seat` heredoc delimiter, never `EOF`, never
 shown to a seat). Tier 4 review dispatches twice (`top_model`+`second_model`), folded

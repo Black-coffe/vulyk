@@ -7,7 +7,7 @@ dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept 
 `ship-check.sh`'s fallback for pre-council specs (see `memory/map/scripts.md`).
 
 ## Agents - model, tools, angle, report contract
-- **council-haiku/sonnet/opus** (`haiku`/`sonnet`/`opus`; `Bash,Read,+mcp__chrome-devtools__*,
+- **council-haiku/sonnet/opus** (`sonnet` (junior rung, ADR-007)/`sonnet`/`opus`; `Bash,Read,+mcp__chrome-devtools__*,
   mcp__claude-in-chrome__*` (haiku only) / `Bash,Read,Grep,Glob` (sonnet, opus); no Write/Edit;
   `maxTurns:25`) - the three blind seats, one round, one court. haiku: black-box, walks the
   *Client path* like a client, drives the Profile's Browser MCP row only when named, reads no
@@ -17,7 +17,7 @@ dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept 
   contract: `COUNCIL/MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH` + one `ASK <n>` line/ask +
   `UNASKED:`/`BREACH:`, 40 lines max (`cycle.md` D3). Dispatch names only `slug`/`round`/
   `court` - never `round_dir` (echoing it back is a taint).
-- **cycle-clerk** (`haiku`, `Bash` only, `maxTurns:5`) - runs exactly the one `cycle.sh`/
+- **cycle-clerk** (`sonnet` - junior rung, ADR-007, `Bash` only, `maxTurns:5`) - runs exactly the one `cycle.sh`/
   `journal.sh` command given, returns the last stdout line verbatim, no verdict logic. The
   Workflow driver's only shell access.
 - **lead-review** (`opus`, `Read,Grep,Glob,Bash`, `maxTurns:25`) - adversarial review, sees
@@ -54,8 +54,9 @@ dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept 
   grill (`templates/grill.md`, Tier 2-4; Tier 1 writes `## Asks` as the task phrase, no grill)
   -> plan (`queen-planner` Tier 3-4, inline Tier 2) -> stories -> `wave-check.sh`+
   `trace-check.sh` -> `drone-coverage` -> `cycle.sh briefed --commit` (`--mode mini-brief`/
-  `assumed` as applicable) -> **launches the build directly** (v0.12.0: no approval stop
-  unless the grill's two-stop opt-out was invoked). Never writes story code itself, never
+  `assumed` as applicable) -> **stops for the owner's approval** (v0.13.0, ADR-008; `--go`
+  or the grill's straight-through opt-in launches directly; a document deliverable ends at
+  report.md before any of this). Never writes story code itself, never
   skips `wave-check`/`trace-check` once stories exist.
 - **`/vulyk-build`** - resolves `top_model`/`second_model`/a random `stamp`, detects
   `Workflow` vs fallback, prints the "tree is not yours" journal line, then calls the

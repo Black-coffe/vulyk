@@ -94,19 +94,31 @@ that tier, so the next generation is absorbed without editing a single file. Tha
 main reason this framework survived the 4.8 → 5 transition with a three-line diff instead of a
 rewrite. Pin a full ID only when you deliberately want to freeze behaviour.
 
-## Current assignment (September 2026)
+## The ladder (v0.13.0, ADR-007)
 
-| Caste | Model | Why |
-|---|---|---|
-| Queen, `queen-planner`, `lead-architect`, `lead-review` | `TOP_MODEL` — `fable` → Fable 5.1 on Max and premium seats, `opus` → Opus 5 on Pro, standard seats and API | Frontier reasoning where the plan includes it at no extra cost; the frontmatter floor is `opus`, the dispatch parameter carries the upgrade |
-| `worker-code`, `worker-test` | `sonnet` → Sonnet 5 | Implementation against an explicit story does not need frontier reasoning |
-| `drone-scout`, `drone-docs`, `librarian` | `sonnet` → Sonnet 5 | See the caveat below — this one is a judgment call, not a measurement |
-| `drone-coverage` | `sonnet` → Sonnet 5 | Bounded job against a fixed input: brief + plan.md only, `maxTurns: 5` |
-| `council-haiku` | `haiku` → Haiku 4.5 | Black-box seat: walks the Client path as a client would, reads no source |
-| `council-sonnet` | `sonnet` → Sonnet 5 | Line-by-line seat: runs the suite once, then proves every ask by running it |
-| `council-opus` | `opus` → Opus 5 | Intent seat: what the owner meant but did not write, still evidenced |
-| `cycle-clerk` | `haiku` → Haiku 4.5 | Runs one `cycle.sh`/`journal.sh` verb per dispatch; holds no verdict logic of its own |
-| Second reviewer, Tier 4 only | the *other* one: `opus` beside a Fable gate, `fable` or `sonnet` beside an Opus gate (the brief says which) | Ensemble, not duplication — see below |
+Four rungs, named the way a team is: lead, senior, mid, junior. A rung is a job, not a
+budget line, and the rule that fixes each agent to one is in its frontmatter.
+
+| Rung | Alias | Agents | Work |
+|---|---|---|---|
+| Lead | `TOP_MODEL` — `fable` → Fable 5.1 on Max and premium seats, `opus` → Opus 5 on Pro, standard seats and API | Queen, `queen-planner`, `lead-architect`, `lead-review` | planning, design, the gate; the frontmatter floor is `opus`, the dispatch parameter carries the upgrade |
+| Senior | `opus` → Opus 5 | `council-opus`; the **second attempt** of any story a mid missed; stories the planner marks `model: opus` (cross-cutting, contract-touching, the tracer); the Tier 4 second reviewer beside a Fable gate | judgment, hard stories, retries |
+| Mid | `sonnet` → Sonnet 5 | `worker-code`, `worker-test`, `council-sonnet`, `drone-scout`, `drone-docs`, `drone-coverage`, `librarian` | implementation against an explicit story, recon, memory upkeep |
+| Junior | `haiku` **only once a Haiku 5 exists** — `sonnet` until then | `council-haiku` (the black-box seat; the name is the angle, not the model), `cycle-clerk`, the `VULYK_AUTOLEARN` distiller | mechanical, one verb, no judgment |
+
+**Haiku 4.5 is never dispatched.** This is the owner's rule (ADR-007), not a measurement: the
+one seat that ran on it returned `N/A` in all three recorded rounds, but because the Profile's
+*Client path* row was unfilled - that says nothing about the model. When a fifth-generation
+Haiku ships, the junior rung flips back with three one-word edits (`council-haiku.md`,
+`cycle-clerk.md`, `session-end-learnings.sh`) and a CHANGELOG line - not before, and not by a
+resolver guessing the generation from a local file.
+
+**The retry climbs one rung.** A story's second dispatch goes to `opus` whatever its own
+`model:` says. A judgment, not a measured fix: the record (`v0-12-0-remainders` journal) shows
+misses from turn caps and one wave-order plan defect, none attributed to the model - what the
+rung buys is that the second attempt is never the same model reading the same wall, at the price
+of one Opus worker, against the block + `lead-architect` + relaunch a second miss costs. `status
+--json` carries each story's `model` so the driver never opens the story file to learn it.
 
 `lead-review` and the three council seats are dispatched together, one message, per council round —
 the same "independent in information, so independent in wall-clock cost" reasoning that used to pair
@@ -114,14 +126,9 @@ the same "independent in information, so independent in wall-clock cost" reasoni
 folds their reports into one verdict, no model does.
 
 ### Caveat on the recon tier
-Moving the drones off Haiku is **not backed by evidence**, and the honest case runs the other way:
-Anthropic's own effort-routing guidance puts classification and simple summarisation at "Sonnet or
-cheaper", which is exactly what recon is. The argument for the move is that Haiku 4.5 is the only
-tier without a fifth-generation upgrade, so the quality gap is now the widest it has ever been —
-and a scout report feeds planning, where a bad map poisons every story downstream.
-
-That is a hypothesis. It is first in line to be measured: run two scout reports over the same
-module on `haiku` and `sonnet` and compare. Reverting is three lines.
+Recon on Sonnet rather than the junior rung is a judgment, not a measurement: a scout report
+feeds planning, where a bad map poisons every story downstream. The measurement stays on the
+list for the day a Haiku 5 exists - two scout reports over the same module, one per rung.
 
 ### Why the second reviewer must be a different model
 A production review benchmark (CodeRabbit) measured Opus 5 against Opus 4.8: precision rose

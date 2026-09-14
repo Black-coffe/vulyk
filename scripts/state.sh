@@ -78,7 +78,26 @@ for dir in $( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirn
     grep -q '^story:' "$f" 2>/dev/null || continue
     stories="$stories $f"
   done
-  [ -n "$stories" ] || continue
+  if [ -z "$stories" ]; then
+    # A study spec (ADR-008): brief + report, no plan, no story - a document deliverable that
+    # never entered the cycle. Listed with stage "study" so the dashboard shows it exists.
+    if [ -f "$dir/report.md" ] && [ ! -f "$dir/plan.md" ]; then
+      [ "$first_spec" -eq 1 ] || printf ',\n' >> "$TMP"
+      first_spec=0
+      {
+        printf '    {\n'
+        printf '      "spec": "%s",\n' "$(j "$(basename "$dir")")"
+        printf '      "path": "%s",\n' "$(j "$dir")"
+        printf '      "stories": 0, "done": 0, "in_progress": 0, "blocked": 0, "todo": 0, "unrecognised": 0,\n'
+        printf '      "stale": false,\n'
+        printf '      "stage": "study",\n'
+        printf '      "story_list": [\n'
+        printf '      ]\n'
+        printf '    }'
+      } >> "$TMP"
+    fi
+    continue
+  fi
 
   total=0; done_n=0; blocked_n=0; progress_n=0; todo_n=0; unknown_n=0
   newest=0

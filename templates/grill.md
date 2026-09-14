@@ -1,7 +1,8 @@
 # Grill protocol
 
 Read by `/vulyk-plan` after recon (map + `drone-scout`), before the plan is drafted. Governs
-the one interactive round with the human that autonomous mode keeps. Depends on nothing but
+the one interactive question round before the plan is written (the plan approval that follows
+it is a stop, not a round). Depends on nothing but
 Claude Code's own `AskUserQuestion`, `Agent` and `Bash` - never the personal `grill` skill,
 never a statusbar.
 
@@ -33,15 +34,17 @@ never a statusbar.
   escaped from; the chosen slug is written into `brief.md`'s header as `**Escaped from:** <slug>`.
 - The fixed last question, always asked, always last: show the N candidate requirement lines
   pulled from `## Request (verbatim)` and ask the owner to confirm or edit them. Its own text also
-  offers, in one line, the two-stop opt-out - an owner who wants plan approval back says so here,
-  and `/vulyk-plan` then stops for approval before building, as v0.11 did, instead of closing the
-  intake straight through.
+  offers, in one line, the straight-through opt-in - by default `/vulyk-plan` stops and shows the
+  plan for approval before anything is built (v0.13); an owner who wants the build to start the
+  moment the plan is written says so here, and the intake then closes straight through.
 - Close: once the owner answers the fixed last question, read the confirmed list back to them in
   their own words, one line per item - a statement, not a question - then move straight to planning.
+  The next thing the owner sees after planning is the plan itself, for approval (`/vulyk-plan`
+  step 9) - unless they opted into straight-through above.
 - The round is capped at 7 questions and never repeats. A topic it did not reach is a default, not
   a silent gap: the planner records it under plan.md's `## Assumptions`.
-- After the read-back, ask nothing else. The next line the owner sees is `journal.sh`'s stdout line
-  (contract C9) - never a summary, never "shall I proceed?".
+- After the read-back, ask nothing else until the plan is on disk. The approval stop is not a
+  question - it is the plan shown once, and one word from the owner.
 
 ## Recording answers
 
@@ -56,4 +59,5 @@ Append to `brief.md`, in this order:
 Do not wait on anything. For every question the round would have asked, take its recommended
 option and write it to `## Answers` with `(assumed)` appended to the entry. Still derive `## Asks`
 from the same fixed-last-question logic - the N candidate requirement lines, all confirmed by
-default. `/vulyk-plan` then closes the intake with `--mode assumed`.
+default. No-question mode cannot approve a plan either: `/vulyk-plan` writes the plan and stops
+unless `--go` was given, in which case it closes the intake with `--mode assumed`.

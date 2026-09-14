@@ -3,7 +3,7 @@
 Static configs rot. VULYK closes the loop with a weekly cycle that turns the hive's own experience into reviewed configuration changes.
 
 ## Signal collection (continuous, automatic)
-- **SessionEnd hook** captures a learnings stub per session (set `VULYK_AUTOLEARN=1` for one-shot Haiku distillation of the transcript).
+- **SessionEnd hook** captures a learnings stub per session (set `VULYK_AUTOLEARN=1` for a one-shot junior-rung distillation of the transcript).
 - **PostToolUse(Skill) hook** maintains per-skill counters in `memory/stats/skills.json`.
 - Workers' `## Findings` sections record every wall hit during builds.
 
