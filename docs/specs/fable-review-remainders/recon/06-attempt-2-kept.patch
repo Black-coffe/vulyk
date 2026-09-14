@@ -1,0 +1,201 @@
+diff --git a/tests/driver.test.sh b/tests/driver.test.sh
+index 7a4807c..f4e9f4b 100644
+--- a/tests/driver.test.sh
++++ b/tests/driver.test.sh
+@@ -507,6 +507,180 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
+     console.log('FAIL claim refusal: stop verb claim, no further clerk call - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+   }
+ }))
++// --- scenario (u): C3 - the same throw twice is logged once per miss and is the stop's error
++.then(() => {
++  const file = 'docs/specs/demo/demo-13-x.md';
++  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-13', worker: 'worker-test' }] };
++  return run(
++    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
++    { clerk: withClaim([wave, wave]), agents: [{ throw: 'boom' }, { throw: 'boom' }] },
++  ).then(({ result, logs }) => {
++    const threwLines = logs.filter((l) => l === 'worker threw: boom');
++    if (result && result.stop && result.stop.error === 'worker threw: boom' && threwLines.length === 2) {
++      console.log('ok C3 worker threw: stop.error carries it and both misses are logged');
++    } else {
++      console.log('FAIL C3 worker threw: stop.error carries it and both misses are logged - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
++    }
++  });
++})
++// --- scenario (v): C3 - an empty worker return names the dispatched agent and its cap
++.then(() => {
++  const file = 'docs/specs/demo/demo-14-x.md';
++  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-14', worker: 'worker-code' }] };
++  const want = 'worker returned empty - turn cap suspected (worker-code, maxTurns 90 in .claude/agents/worker-code.md)';
++  return run(
++    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
++    { clerk: withClaim([wave, wave]), agents: ['', ''] },
++  ).then(({ result, logs }) => {
++    const emptyLines = logs.filter((l) => l === want);
++    if (result && result.stop && result.stop.error === want && emptyLines.length === 2) {
++      console.log('ok C3 worker empty: names worker-code and maxTurns 90, logged per miss');
++    } else {
++      console.log('FAIL C3 worker empty: names worker-code and maxTurns 90, logged per miss - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
++    }
++  });
++})
++// --- the shared council status line for the seat/reviewer scenarios below
++.then(() => {
++  const dispatchSt = (seatList) => ({
++    next: 'dispatch:' + seatList, tier: 2, round: 1, slug: 'demo',
++    court: '.vulyk/court/demo', round_dir: 'docs/specs/demo/council/round-1',
++  });
++  const recordOk = { ok: true, verb: 'record-seat', exit: 0 };
++  const args = { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' };
++
++  // --- scenario (w): C3 - a seat that threw is logged with its seat name, and is still recorded
++  return run(args, {
++    clerk: withClaim([dispatchSt('sonnet'), recordOk, { next: 'green' }]),
++    agents: [{ throw: 'seat died' }],
++  }).then(({ result, logs, calls }) => {
++    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
++    if (result && result.next === 'green' && logs.includes('seat sonnet threw: seat died') && recordCalls.length === 1) {
++      console.log('ok C3 seat threw: logged by seat name, still recorded, no stop');
++    } else {
++      console.log('FAIL C3 seat threw: logged by seat name, still recorded, no stop - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
++    }
++  })
++  // --- scenario (x): C3 - an empty seat return names council-<seat> and 60
++  .then(() => run(args, {
++    clerk: withClaim([dispatchSt('sonnet'), recordOk, { next: 'green' }]),
++    agents: [''],
++  }).then(({ result, logs, calls }) => {
++    const want = 'seat sonnet returned empty - turn cap suspected (council-sonnet, maxTurns 60 in .claude/agents/council-sonnet.md)';
++    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
++    if (result && result.next === 'green' && logs.includes(want) && recordCalls.length === 1) {
++      console.log('ok C3 seat empty: names council-sonnet and maxTurns 60, still recorded');
++    } else {
++      console.log('FAIL C3 seat empty: names council-sonnet and maxTurns 60, still recorded - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
++    }
++  }))
++  // --- scenario (y): C3 - the reviewer's own two strings say "reviewer", not "seat review"
++  .then(() => run(args, {
++    clerk: withClaim([dispatchSt('review'), recordOk, { next: 'green' }]),
++    agents: [{ throw: 'reviewer died' }],
++  }).then(({ result, logs, calls }) => {
++    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
++    if (result && result.next === 'green' && logs.includes('reviewer threw: reviewer died') && recordCalls.length === 1) {
++      console.log('ok C3 reviewer threw: logged as reviewer, still recorded');
++    } else {
++      console.log('FAIL C3 reviewer threw: logged as reviewer, still recorded - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
++    }
++  }))
++  .then(() => run(args, {
++    clerk: withClaim([dispatchSt('review'), recordOk, { next: 'green' }]),
++    agents: [''],
++  }).then(({ result, logs, calls }) => {
++    const want = 'reviewer returned empty - turn cap suspected (lead-review, maxTurns 60 in .claude/agents/lead-review.md)';
++    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
++    if (result && result.next === 'green' && logs.includes(want) && recordCalls.length === 1) {
++      console.log('ok C3 reviewer empty: names lead-review and maxTurns 60, still recorded');
++    } else {
++      console.log('FAIL C3 reviewer empty: names lead-review and maxTurns 60, still recorded - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
++    }
++  }))
++  // --- scenario (z): C2 - the seat dispatch prompt ends with the write-your-report sentence
++  // naming this attempt's path; the single re-ask after an exit 4 names attempt-2.
++  .then(() => run(args, {
++    clerk: withClaim([
++      dispatchSt('sonnet'),
++      { ok: false, verb: 'record-seat', exit: 4, error: 'ABSENT: no verdict line' },
++      recordOk,
++      { next: 'green' },
++    ]),
++    agents: ['seat report 1', 'seat report 2'],
++  }).then(({ result, calls }) => {
++    const seatCalls = calls.filter((c) => c.agentType === 'council-sonnet');
++    const note = (k) => ' As your last action, write your full report verbatim to .vulyk/reports/demo/round-1/sonnet.attempt-' + k
++      + '.md (mkdir -p its directory); your chat reply is the same text.';
++    if (
++      result && result.next === 'green' && seatCalls.length === 2
++      && seatCalls[0].prompt.endsWith(note(1)) && seatCalls[1].prompt.endsWith(note(2))
++    ) {
++      console.log('ok C2 prompt: seat dispatch ends with the report path, the re-ask names attempt-2');
++    } else {
++      console.log('FAIL C2 prompt: seat dispatch ends with the report path, the re-ask names attempt-2 - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(seatCalls));
++    }
++  }))
++  // --- scenario (aa): C2 good case - recording is one --file call, no heredoc at all
++  .then(() => run(args, {
++    clerk: withClaim([dispatchSt('sonnet'), recordOk, { next: 'green' }]),
++    agents: ['the seat chat reply'],
++  }).then(({ result, calls }) => {
++    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
++    if (
++      result && result.next === 'green' && recordCalls.length === 1
++      && recordCalls[0].cmd.includes('--file .vulyk/reports/demo/round-1/sonnet.attempt-1.md')
++      && !recordCalls[0].cmd.includes('VULYK_')
++    ) {
++      console.log('ok C2 record good: exactly one record-seat --file call, no heredoc delimiter');
++    } else {
++      console.log('FAIL C2 record good: exactly one record-seat --file call, no heredoc delimiter - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(recordCalls));
++    }
++  }))
++  // --- scenario (ab): C2 fallback - exit 2 `file: ` and only that falls back to the heredoc,
++  // which carries the delimiter built from the run stamp and the seat's own chat reply.
++  .then(() => run(args, {
++    clerk: withClaim([
++      dispatchSt('sonnet'),
++      { ok: false, verb: 'record-seat', exit: 2, error: 'file: .vulyk/reports/demo/round-1/sonnet.attempt-1.md not found' },
++      recordOk,
++      { next: 'green' },
++    ]),
++    agents: ['the seat chat reply'],
++  }).then(({ result, calls }) => {
++    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
++    if (
++      result && result.next === 'green' && recordCalls.length === 2
++      && recordCalls[0].cmd.includes('--file .vulyk/reports/demo/round-1/sonnet.attempt-1.md')
++      && recordCalls[1].cmd.includes("<<'VULYK_0123456789abcdef_sonnet_1'")
++      && recordCalls[1].cmd.includes('the seat chat reply')
++      && !recordCalls[1].cmd.includes('--file')
++    ) {
++      console.log('ok C2 record fallback: exit 2 file: falls back to the stamped heredoc with the chat reply');
++    } else {
++      console.log('FAIL C2 record fallback: exit 2 file: falls back to the stamped heredoc with the chat reply - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(recordCalls));
++    }
++  }))
++  // --- scenario (ac): C2 - an exit 2 that is NOT `file: ` is a real failure: no heredoc
++  // retry, the run ends on the record-seat stop shape after that single call.
++  .then(() => run(args, {
++    clerk: withClaim([
++      dispatchSt('sonnet'),
++      { ok: false, verb: 'record-seat', exit: 2, error: 'stamp mismatch: not the holding driver' },
++    ]),
++    agents: ['the seat chat reply'],
++  }).then(({ result, calls }) => {
++    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
++    if (
++      result && result.stop && result.stop.verb === 'record-seat' && result.stop.exit === 2
++      && recordCalls.length === 1 && !recordCalls[0].cmd.includes('VULYK_0123456789abcdef_sonnet_1')
++    ) {
++      console.log('ok C2 record other exit 2: stops on record-seat, no heredoc fallback');
++    } else {
++      console.log('FAIL C2 record other exit 2: stops on record-seat, no heredoc fallback - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(recordCalls));
++    }
++  }));
++})
+ .catch((e) => { console.log('FAIL harness threw: ' + (e && e.stack || e)); process.exitCode = 1; });
+ NODE_EOF
+ )"
+@@ -542,5 +716,15 @@ expect "run: DRIVER semaphore - record-seat carries --stamp"              "ok re
+ expect "run: DRIVER semaphore - open-round carries --stamp"               "ok open-round: carries --stamp" "$out"
+ expect "run: DRIVER semaphore - a refused claim ends the run at once"     "ok claim refusal: stop verb claim, no further clerk call" "$out"
+ expect "static: all four gated verbs' templates carry --stamp"            "ok stamp: all four gated verbs carry --stamp in their template" "$out"
++expect "C3: worker threw - stop.error and one log line per miss"          "ok C3 worker threw: stop.error carries it and both misses are logged" "$out"
++expect "C3: worker empty - names the agent and its maxTurns"              "ok C3 worker empty: names worker-code and maxTurns 90, logged per miss" "$out"
++expect "C3: a seat that threw is logged and still recorded"               "ok C3 seat threw: logged by seat name, still recorded, no stop" "$out"
++expect "C3: an empty seat return names council-<seat> and 60"             "ok C3 seat empty: names council-sonnet and maxTurns 60, still recorded" "$out"
++expect "C3: a reviewer that threw is logged as 'reviewer'"                "ok C3 reviewer threw: logged as reviewer, still recorded" "$out"
++expect "C3: an empty reviewer return names lead-review and 60"            "ok C3 reviewer empty: names lead-review and maxTurns 60, still recorded" "$out"
++expect "C2: the seat prompt ends with its attempt's report path"          "ok C2 prompt: seat dispatch ends with the report path, the re-ask names attempt-2" "$out"
++expect "C2: the good case records with --file and no heredoc"             "ok C2 record good: exactly one record-seat --file call, no heredoc delimiter" "$out"
++expect "C2: exit 2 'file: ' falls back to the stamped heredoc"            "ok C2 record fallback: exit 2 file: falls back to the stamped heredoc with the chat reply" "$out"
++expect "C2: any other exit 2 stops instead of falling back"               "ok C2 record other exit 2: stops on record-seat, no heredoc fallback" "$out"
+ 
+ exit $fail
