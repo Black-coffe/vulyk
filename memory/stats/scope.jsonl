@@ -86,3 +86,5 @@
 {"ts":"2026-09-14T14:30:07Z","story":"fable-review-remainders-08-driver-third-reason-from-the-verbs","declared":2,"changed":5,"out_of_scope":3}
 {"ts":"2026-09-14T14:30:30Z","story":"fable-review-remainders-08-driver-third-reason-from-the-verbs","declared":2,"changed":6,"out_of_scope":4}
 {"ts":"2026-09-14T14:30:40Z","story":"fable-review-remainders-09-fallback-loop-same-bound-for-no-report","declared":1,"changed":2,"out_of_scope":1}
+{"ts":"2026-09-14T21:12:16Z","story":"anomaly-telemetry-01-tracer-script","declared":4,"changed":6,"out_of_scope":2}
+{"ts":"2026-09-14T21:12:57Z","story":"anomaly-telemetry-01-tracer-script","declared":4,"changed":7,"out_of_scope":3}

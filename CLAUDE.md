@@ -160,6 +160,7 @@ Quiet variants only: everything these print is resent on every subsequent turn. 
 | Cycle state contract tests | `bash tests/cycle.test.sh` |
 | Council verdict contract tests | `bash tests/council.test.sh` |
 | Driver contract tests | `bash tests/driver.test.sh` |
+| Anomaly telemetry contract tests | `bash tests/telemetry.test.sh` |
 | Full suite / build | none exists — VULYK has no test runner and no build step |
 
 The first four are silent on success and non-zero on failure; run them together as the closest
