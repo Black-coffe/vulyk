@@ -2,6 +2,29 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.12.1] - 2026-09-14
+
+The remainders of v0.12.0: the council and driver run to the end, and every stop says why.
+Seventeen stories on `vulyk/v0-12-0-remainders`; shipped on the owner's override after the
+council's own seats died at their 25-turn cap (raised to 60 here; the Fable review passed).
+
+### Fixed
+- `cycle.sh judge`/`escalate` count, match and write the ledger correctly; `open-round`
+  refuses honestly (every refusal names itself, the ceiling block carries its RED rows, the
+  court commit is real); `close-story` reads the worker's `returned:` (ADR-006), owns its
+  commit, matches a `## Commands` cell containing `&&` whole; `wave_stories` lists only ready
+  stories. The council suite proves each fix against the commit it fixes.
+- The Workflow driver has a test that executes it; its stops say what happened (a red
+  verification, a missing second reviewer, a paused tree); both drivers claim, stamp and
+  release the `DRIVER` semaphore (ADR-004).
+- The installer ships no ADRs or wiki, carries missing Profile/Commands blocks into an
+  upgraded constitution, keeps a manifest and removes what a release retired (ADR-005).
+- The session brief stops spawning the CLI for a gate it cannot decide.
+
+### Changed
+- `worker-code`/`worker-test` `maxTurns` 30/40 -> 90; council seats and `lead-review` 25 -> 60 -
+  every dead subagent return this week was a turn cap, none a model.
+
 ## [0.12.0] - 2026-09-13
 
 Stage 05 stops being a person and becomes a council: blind agent seats, scaled to the

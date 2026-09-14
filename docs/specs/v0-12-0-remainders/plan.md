@@ -152,6 +152,6 @@ council for the largest court.
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
 **Briefed:** via grill, Andrei, 2026-09-13
 **Branch:** vulyk/v0-12-0-remainders
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Checked:** ACCEPTED by Andrei, 2026-09-14, at f6021ad - owner's decision in chat 2026-09-14 ('всё упаковываем, вносим все апдейты') over a council round the seats could not finish at their 25-turn cap; lead-review on Fable at c71ad5f: PASS with three major plan-routed findings, kept at council/round-1/review.fable-attempt.md and carried into the next brief
