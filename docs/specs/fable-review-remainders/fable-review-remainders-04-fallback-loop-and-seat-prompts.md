@@ -1,8 +1,8 @@
 ---
 story: fable-review-remainders-04
 spec: fable-review-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 tracer: false
@@ -52,6 +52,20 @@ The `/vulyk-build` fallback loop and `/vulyk-review` hand each seat and the sing
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `vulyk-build.md` `build:<wave>` row: split the old "returns nothing" wording into the three C3
+  strings (`worker threw`/`worker returned empty - turn cap suspected (<agent>, maxTurns <N> in
+  .claude/agents/<agent>.md)`/`worker returned no report`), read on the spot from the Bash-visible
+  agent file rather than a static CAPS map (the fallback loop has a shell; the Workflow driver in
+  story 03 does not, hence its own `CAPS` const).
+- `vulyk-build.md` `dispatch:<seats>` row and `vulyk-review.md` steps 3-4: added the C2 report-path
+  sentence to every seat/reviewer prompt except the Tier 4 second reviewer's fold, and `--file
+  <path>` recording with the `exit 2`/`file: ` heredoc fallback, mirroring C1/C2 verbatim.
+- Added the identical one-sentence BREACH exemption to `council-haiku.md`, `council-sonnet.md`,
+  `council-opus.md` (new paragraph after the COURT/BREACH block) and `lead-review.md` (folded into
+  its existing Bash-tools sentence) - one hunk per file, no `tools:`/`maxTurns:`/`model:` line
+  touched.
+- Left `vulyk-build.md:107-108`'s `release ... (harmless, exit 0, ...)` sentence untouched (byte
+  check via `grep -n` before/after).
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

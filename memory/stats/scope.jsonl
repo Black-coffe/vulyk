@@ -73,3 +73,16 @@
 {"ts":"2026-09-14T09:38:02Z","story":"v0-12-0-remainders-15-council-suite-open-round-scenarios","declared":1,"changed":1,"out_of_scope":1}
 {"ts":"2026-09-14T09:38:02Z","story":"v0-12-0-remainders-16-council-suite-close-story-scenarios","declared":1,"changed":1,"out_of_scope":1}
 {"ts":"2026-09-14T09:38:02Z","story":"v0-12-0-remainders-17-council-suite-semaphore-scenarios","declared":1,"changed":1,"out_of_scope":1}
+{"ts":"2026-09-14T12:40:23Z","story":"fable-review-remainders-04-fallback-loop-and-seat-prompts","declared":6,"changed":11,"out_of_scope":5}
+{"ts":"2026-09-14T12:42:39Z","story":"fable-review-remainders-03-driver-three-reasons-and-file-recording","declared":2,"changed":15,"out_of_scope":13}
+{"ts":"2026-09-14T12:45:30Z","story":"fable-review-remainders-01-install-anchor-by-line-number","declared":2,"changed":18,"out_of_scope":16}
+{"ts":"2026-09-14T12:45:37Z","story":"fable-review-remainders-02-cycle-record-seat-file-and-release-unguarded","declared":3,"changed":14,"out_of_scope":12}
+{"ts":"2026-09-14T12:52:06Z","story":"fable-review-remainders-03-driver-three-reasons-and-file-recording","declared":2,"changed":11,"out_of_scope":9}
+{"ts":"2026-09-14T12:52:13Z","story":"fable-review-remainders-04-fallback-loop-and-seat-prompts","declared":6,"changed":8,"out_of_scope":2}
+{"ts":"2026-09-14T13:33:24Z","story":"fable-review-remainders-05-council-suite-probes-fail-and-new-scenarios","declared":1,"changed":4,"out_of_scope":3}
+{"ts":"2026-09-14T13:58:07Z","story":"fable-review-remainders-07-driver-no-report-content-check","declared":2,"changed":4,"out_of_scope":2}
+{"ts":"2026-09-14T13:58:52Z","story":"fable-review-remainders-07-driver-no-report-content-check","declared":2,"changed":5,"out_of_scope":3}
+{"ts":"2026-09-14T14:03:36Z","story":"fable-review-remainders-06-driver-suite-reasons-and-file-path","declared":1,"changed":3,"out_of_scope":2}
+{"ts":"2026-09-14T14:30:07Z","story":"fable-review-remainders-08-driver-third-reason-from-the-verbs","declared":2,"changed":5,"out_of_scope":3}
+{"ts":"2026-09-14T14:30:30Z","story":"fable-review-remainders-08-driver-third-reason-from-the-verbs","declared":2,"changed":6,"out_of_scope":4}
+{"ts":"2026-09-14T14:30:40Z","story":"fable-review-remainders-09-fallback-loop-same-bound-for-no-report","declared":1,"changed":2,"out_of_scope":1}

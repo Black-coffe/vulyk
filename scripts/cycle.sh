@@ -109,7 +109,7 @@ marker() { # marker <plan.md> <Name> -> the value of the LAST matching line, emp
 }
 
 pause_guard() { # pause_guard <spec> <verb-label> - exits 3 before anything mutates if PAUSEd;
-  # returns (does not exit) when clear. `status`, `pause`, `resume` never call this (C2).
+  # returns (does not exit) when clear. `status`, `pause`, `resume`, `release` never call this.
   local spec="$1" verb="$2"
   [ -n "$spec" ] && [ -f "$spec/PAUSE" ] || return 0
   echo "cycle: $(slug_of "$spec") - PAUSE present, $verb refuses to act." >&2
@@ -1299,15 +1299,17 @@ REPORTEOF
   exit 0
 }
 
-cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] - report on stdin
+cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] [--stamp <s>] [--file <path>]
+  # - report on stdin, or from --file when given (C1)
   local SPEC="${1:-}" N="${2:-}" SEAT="${3:-}"
   local nargs=$#
   if [ "$nargs" -ge 3 ]; then shift 3; else shift "$nargs"; fi
-  local MODEL_OPT="" STAMP=""
+  local MODEL_OPT="" STAMP="" FILE_OPT="" FILE_SET=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --model) MODEL_OPT="${2:-}"; shift 2 2>/dev/null || shift $# ;;
       --stamp) STAMP="${2:-}"; shift 2 2>/dev/null || shift $# ;;
+      --file) FILE_OPT="${2:-}"; FILE_SET=1; shift 2 2>/dev/null || shift $# ;;
       *) shift ;;
     esac
   done
@@ -1315,20 +1317,20 @@ cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] - report 
   case "$SEAT" in
     haiku|sonnet|opus|review) ;;
     *)
-      echo "cycle: usage: $0 record-seat <spec-dir> <N> <haiku|sonnet|opus|review> [--model <id>] < report" >&2
+      echo "cycle: usage: $0 record-seat <spec-dir> <N> <haiku|sonnet|opus|review> [--model <id>] [--stamp <s>] [--file <path>] [< report]" >&2
       emit false record-seat 1 error "usage"
       exit 1
       ;;
   esac
   case "$N" in
     ''|*[!0-9]*)
-      echo "cycle: usage: $0 record-seat <spec-dir> <N> <seat> [--model <id>] < report" >&2
+      echo "cycle: usage: $0 record-seat <spec-dir> <N> <seat> [--model <id>] [--stamp <s>] [--file <path>] [< report]" >&2
       emit false record-seat 1 error "usage"
       exit 1
       ;;
   esac
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
-    echo "cycle: usage: $0 record-seat <spec-dir> <N> <seat> [--model <id>] < report" >&2
+    echo "cycle: usage: $0 record-seat <spec-dir> <N> <seat> [--model <id>] [--stamp <s>] [--file <path>] [< report]" >&2
     emit false record-seat 1 error "usage"
     exit 1
   }
@@ -1363,7 +1365,19 @@ cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] - report 
     ATTEMPT=2
   fi
 
-  local REPORT; REPORT="$(cat)"
+  local REPORT
+  if [ "$FILE_SET" = 1 ]; then
+    # Last precondition, in place of the `cat`: nothing has been written yet, so a bad path
+    # leaves no attempt file behind (C1). Checked verbatim as given, for the error string.
+    [ -n "$FILE_OPT" ] && [ -f "$FILE_OPT" ] && [ -r "$FILE_OPT" ] && [ -s "$FILE_OPT" ] || {
+      echo "cycle: record-seat - report file missing, unreadable or empty: $FILE_OPT" >&2
+      emit false record-seat 2 error "file: $FILE_OPT"
+      exit 2
+    }
+    REPORT="$(cat "$FILE_OPT")"
+  else
+    REPORT="$(cat)"
+  fi
 
   if [ "$SEAT" = review ]; then
     cmd_record_seat_review "$SPEC" "$RD" "$N" "$ATTEMPT" "$REPORT" "$MODEL_OPT" "$HEAD"
@@ -2048,7 +2062,8 @@ cmd_release() { # cmd_release <spec> <stamp>
     emit false release 1 error "usage"
     exit 1
   }
-  pause_guard "$SPEC" release
+  # No pause_guard (C4/ADR-001 D2): release is a lock-hygiene verb like status/pause/resume -
+  # a dead driver's DRIVER file must be clearable while the spec is paused.
 
   local holder; holder="$(driver_stamp "$SPEC")"
   if [ -n "$holder" ] && [ "$holder" != "$STAMP" ]; then

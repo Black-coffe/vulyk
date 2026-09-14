@@ -2,6 +2,41 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.13.1] - 2026-09-14
+
+The four majors the Fable `lead-review` filed against v0.12.1 (kept at
+`docs/specs/v0-12-0-remainders/council/round-1/review.fable-attempt.md`) and the week's
+turn-cap conclusion, built as spec `fable-review-remainders`: nine stories, two council rounds
+(RED on a Fable BLOCK, then GREEN), not one empty agent return.
+
+### Fixed
+- **Installer (major 1).** `--upgrade`'s anchor-insert path spliced the Profile/Commands block
+  through a second `awk -v` pass, so the Browser MCP row's `\|` gained two cells and gawk
+  warned. The splice is now line-number + `head`/`printf`/`tail`, byte-identical to the EOF
+  path; the CI D4.7 scenario asserts the row's content, not its count.
+- **Council suite (majors 2, 3).** `run_wall_probes` sets `fail=1` on any non-`ok` branch
+  result; every pinned copy goes through `pin_cycle`, which prints `unavailable: <reason>` and
+  fails the suite when `git show` cannot produce it; `PIN_MUST_FAIL` asserts that a named probe
+  is red at its pinned sha. The LR31 scenario now puts a ready story and a not-ready `todo` in one
+  wave and is red at `eb3203a`. The `council` CI job checks out with `fetch-depth: 0`.
+- **`release` under PAUSE (major 4).** `cmd_release` no longer calls `pause_guard`: it removes
+  only its own stamp file, which `pause` already removed, and exits 0 as the two drivers and
+  story 13 always claimed. ADR-001 D2 lists `release` beside `status`/`pause`/`resume`.
+
+### Changed
+- **A cap death has a name.** The Workflow driver and the fallback loop classify a failed
+  dispatch three ways, for workers, seats and the reviewer: `threw: <message>`, `returned empty -
+  turn cap suspected (<agent>, maxTurns <N> in .claude/agents/<agent>.md)` (a `CAPS` table
+  mirrors the frontmatter), and `returned no report` - decided by the verbs (`close-story` exit 4
+  with `returned:` missing, `record-seat` exit 4), never by grepping the report's prose (round-1
+  critical 1). `tests/driver.test.sh` proves each.
+- **`record-seat --file <path>`.** The seat's report no longer travels as a heredoc inside the
+  clerk's prompt. The driver hands each seat and the single reviewer a path under
+  `.vulyk/reports/<slug>/round-N/<seat>.attempt-K.md`, the seat writes its report there as its
+  last action, and the clerk runs one short `record-seat --file` line; exit 2 `file:` falls back
+  to the heredoc. Verified live in this spec's own two rounds - every report was on disk before
+  its agent returned. Tier 4's folded review stays on the heredoc (flagged for the next circle).
+
 ## [0.13.0] - 2026-09-14
 
 The framework stops doing more than it was asked. Read against its own text after two other

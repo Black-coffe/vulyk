@@ -968,6 +968,36 @@ printf 'COUNCIL: x\nMODEL: \nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none giv
 grep -qF 'model: unknown' "$rd_rmodel2/sonnet.md" && echo "  ok    falls back to unknown when neither is given" \
   || { echo "::error::header: $(head -1 "$rd_rmodel2/sonnet.md")"; fail=1; }
 
+# --- record-seat --file: report from a path instead of stdin (C1) ------------------------------
+
+echo "record-seat --file: a report read from a file records a body byte-identical to the stdin-recorded twin"
+mk_spec rfile1 2
+rd_rfile1="$(mk_open_round rfile1 1)"
+seat_report sonnet 1 GG | council record-seat docs/specs/rfile1 1 sonnet >/dev/null
+mkdir -p .vulyk/reports
+seat_report sonnet 1 GG > .vulyk/reports/opus.md
+out="$(council record-seat docs/specs/rfile1 1 opus --file .vulyk/reports/opus.md)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qE '"next":"dispatch:' && echo "  ok    record-seat --file exits 0, recorded" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+diff <(tail -n +2 "$rd_rfile1/sonnet.md") <(tail -n +2 "$rd_rfile1/opus.md") >/dev/null \
+  && echo "  ok    --file body is byte-identical to the stdin-recorded twin" \
+  || { echo "::error::--file body differs from the stdin twin: $(diff <(tail -n +2 "$rd_rfile1/sonnet.md") <(tail -n +2 "$rd_rfile1/opus.md"))"; fail=1; }
+
+echo "record-seat --file: a missing path exits 2 with error exactly 'file: <path>', writes no attempt file"
+out="$(council record-seat docs/specs/rfile1 1 haiku --file .vulyk/reports/does-not-exist.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"file: .vulyk/reports/does-not-exist.md"' \
+  && [ ! -e "$rd_rfile1/haiku.md" ] && [ ! -e "$rd_rfile1/haiku.attempt-1.md" ] \
+  && echo "  ok    missing --file path: exit 2, error names the path verbatim, no attempt file" \
+  || { echo "::error::--file missing: exit=$ex out=$out"; fail=1; }
+
+echo "record-seat --file: an empty file behaves as missing"
+: > .vulyk/reports/empty.md
+out="$(council record-seat docs/specs/rfile1 1 haiku --file .vulyk/reports/empty.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"file: .vulyk/reports/empty.md"' \
+  && [ ! -e "$rd_rfile1/haiku.md" ] && [ ! -e "$rd_rfile1/haiku.attempt-1.md" ] \
+  && echo "  ok    empty --file path behaves as missing: exit 2, no attempt file" \
+  || { echo "::error::--file empty: exit=$ex out=$out"; fail=1; }
+
 # --- PAUSE guard: every mutating verb refuses before touching anything ------------------------
 
 echo "PAUSE: briefed, branch, record-seat, close-story, open-round, reopen all exit 3"
@@ -1384,7 +1414,7 @@ grep -q '^status: done' docs/specs/cstorylock1/cstorylock1-01-first.md && echo "
 [ "$((commits_after - commits_before))" -eq 1 ] && echo "  ok    r2m2: retry lands exactly one commit" \
   || { echo "::error::commits before=$commits_before after=$commits_after"; fail=1; }
 
-echo "status --json: LR31 - a todo story blocked_by a blocked story is excluded from wave_stories; once the blocker is done, it is listed"
+echo "status --json: LR31 - a ready todo A and a not-ready todo B (blocked_by a not-done C) share wave 1; wave_stories names only A; once C is done, both A and B are listed"
 mkdir -p docs/specs/lr31w
 cat > docs/specs/lr31w/lr31w-01-a.md <<'EOF'
 ---
@@ -1392,33 +1422,46 @@ story: lr31w-01
 spec: lr31w
 status: todo
 wave: 1
-blocked_by: [lr31w-02]
 ---
-# A
+# A (ready)
 
 ## Verification
 `true`
 EOF
-cat > docs/specs/lr31w/lr31w-02-b.md <<'EOF'
+cat > docs/specs/lr31w/lr31w-02-c.md <<'EOF'
 ---
 story: lr31w-02
 spec: lr31w
 status: blocked
 wave: 1
 ---
-# B
+# C (the blocker)
+
+## Verification
+`true`
+EOF
+cat > docs/specs/lr31w/lr31w-03-b.md <<'EOF'
+---
+story: lr31w-03
+spec: lr31w
+status: todo
+wave: 1
+blocked_by: [lr31w-02]
+---
+# B (not ready)
 
 ## Verification
 `true`
 EOF
 git add -A && git commit -qm "spec(lr31w): fixture" >/dev/null
 out="$(council status docs/specs/lr31w --json)"
-printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: A blocked_by a blocked B -> wave_stories: []" '[]'
-sed -i 's/^status: blocked/status: done/' docs/specs/lr31w/lr31w-02-b.md
-git add -A && git commit -qm "lr31w: B done" >/dev/null
-out="$(council status docs/specs/lr31w --json)"
-printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: B done -> A is listed" \
+printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: ready A and not-ready B (blocked_by todo/blocked C) -> wave_stories names only A" \
   '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"sonnet","repeat":1}]'
+sed -i 's/^status: blocked/status: done/' docs/specs/lr31w/lr31w-02-c.md
+git add -A && git commit -qm "lr31w: blocker C done" >/dev/null
+out="$(council status docs/specs/lr31w --json)"
+printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: blocker C done -> both A and B are listed" \
+  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"sonnet","repeat":1},{"file":"docs/specs/lr31w/lr31w-03-b.md","story":"lr31w-03","worker":"worker-code","model":"sonnet","repeat":1}]'
 
 echo "close-story: r2m9 - a ## Commands cell with its own && matches whole; adding a further && true is refused, naming the segment"
 mkdir -p docs/specs/cstoryr2m9
@@ -2023,11 +2066,45 @@ grep -qF '[VULYK:REDACTED]' docs/specs/nm7a/plan.md && echo "  ok    plan.md's #
 # --- regression proof: the same six checks run against 3e200bb's cycle.sh (no working-tree ---
 # checkout/stash - a second fixture copy per story 14's own instruction) and against the
 # branch's own scripts/cycle.sh, so ## Implementation notes can quote observed FAIL/ok labels.
-# These probes never touch $fail - the expected outcome differs by version on purpose.
+# A `[branch]` result other than ok now sets $fail (C5); a pinned `[<sha>]` result only sets
+# $fail when the probe's name is listed in $PIN_MUST_FAIL for that run - empty by default, so
+# the pre-fix runs above stay print-only exactly as before unless a story explicitly pins one.
+
+pin_cycle() { # pin_cycle <sha> <dest> - wraps `git -C "$SRC" show <sha>:scripts/cycle.sh`
+  # (C5): on a non-zero exit or an empty result, prints "  [<sha>] unavailable: <reason>",
+  # sets $fail, and returns 1 so the caller skips that block's probes instead of running them
+  # against a truncated/empty cycle.sh.
+  local sha="$1" dest="$2" errfile reason gex
+  errfile="$(mktemp)"
+  git -C "$SRC" show "$sha:scripts/cycle.sh" > "$dest" 2>"$errfile"; gex=$?
+  if [ "$gex" -ne 0 ] || [ ! -s "$dest" ]; then
+    reason="$(head -1 "$errfile")"
+    [ -n "$reason" ] || reason="empty"
+    echo "  [$sha] unavailable: $reason"
+    fail=1
+    rm -f "$errfile"
+    return 1
+  fi
+  rm -f "$errfile"
+  return 0
+}
+
+check_probe_result() { # check_probe_result <wlabel> <probe-name> <result> (C5) - branch: any
+  # non-ok result sets $fail; a pinned label: only probes named in $PIN_MUST_FAIL must be FAIL.
+  local wlabel="$1" name="$2" result="$3"
+  if [ "$wlabel" = branch ]; then
+    [ "$result" = ok ] || { echo "::error::[$wlabel] $name: expected ok, got $result"; fail=1; }
+  else
+    case " ${PIN_MUST_FAIL:-} " in
+      *" $name "*) [ "$result" = FAIL ] || { echo "::error::[$wlabel] $name: expected FAIL (PIN_MUST_FAIL), got $result"; fail=1; } ;;
+    esac
+  fi
+}
 
 echo "=== regression proof: story 14's six checks replayed against 3e200bb's cycle.sh vs. the branch's ==="
 OLDCYCLE="$(mktemp)"
-git -C "$SRC" show 3e200bb:scripts/cycle.sh > "$OLDCYCLE"
+PIN_MUST_FAIL=""
+pin_cycle 3e200bb "$OLDCYCLE" || OLDCYCLE=""
 
 probe_lr19() {
   mk_open_spec plr19 2; set_tier plr19 1 >/dev/null
@@ -2115,16 +2192,19 @@ MDEOF
   git add -A && git commit -qm init >/dev/null
   HEAD7="$(git rev-parse --short HEAD)"
 
-  echo "  [$wlabel] LR19 attempts (cmd_judge):        $(probe_lr19)"
-  echo "  [$wlabel] LR21/r2m1 round-number match:      $(probe_lr21)"
-  echo "  [$wlabel] LR25/C7 Council line placement:    $(probe_lr25)"
-  echo "  [$wlabel] m-4 same-second override:          $(probe_m4)"
-  echo "  [$wlabel] m-10 atomic ledger append:         $(probe_m10)"
-  echo "  [$wlabel] N-m7 note through redact:          $(probe_nm7)"
+  local r
+  r="$(probe_lr19)";  echo "  [$wlabel] LR19 attempts (cmd_judge):        $r"; check_probe_result "$wlabel" probe_lr19 "$r"
+  r="$(probe_lr21)";  echo "  [$wlabel] LR21/r2m1 round-number match:      $r"; check_probe_result "$wlabel" probe_lr21 "$r"
+  r="$(probe_lr25)";  echo "  [$wlabel] LR25/C7 Council line placement:    $r"; check_probe_result "$wlabel" probe_lr25 "$r"
+  r="$(probe_m4)";    echo "  [$wlabel] m-4 same-second override:          $r"; check_probe_result "$wlabel" probe_m4 "$r"
+  r="$(probe_m10)";   echo "  [$wlabel] m-10 atomic ledger append:         $r"; check_probe_result "$wlabel" probe_m10 "$r"
+  r="$(probe_nm7)";   echo "  [$wlabel] N-m7 note through redact:          $r"; check_probe_result "$wlabel" probe_nm7 "$r"
 
   local extra
   for extra in "$@"; do
-    echo "  [$wlabel] $extra:  $($extra)"
+    r="$($extra)"
+    echo "  [$wlabel] $extra:  $r"
+    check_probe_result "$wlabel" "$extra" "$r"
   done
 
   cd "$save_pwd" || true
@@ -2132,9 +2212,11 @@ MDEOF
   rm -rf "$wt"
 }
 
-run_wall_probes "3e200bb" "$OLDCYCLE"
+if [ -n "$OLDCYCLE" ]; then
+  run_wall_probes "3e200bb" "$OLDCYCLE"
+  rm -f "$OLDCYCLE"
+fi
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh"
-rm -f "$OLDCYCLE"
 
 # ============================================================================================
 # Story 15: one scenario per story 05 criterion (r2m3, r2m16, N-m3, r2m5/r2m6 x2, r2m7/N-m2 x2,
@@ -2355,10 +2437,12 @@ probe_exit6uniform() {
 }
 
 OLDCYCLE2="$(mktemp)"
-git -C "$SRC" show b9f36e8:scripts/cycle.sh > "$OLDCYCLE2"
-run_wall_probes "b9f36e8" "$OLDCYCLE2" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
+PIN_MUST_FAIL=""
+if pin_cycle b9f36e8 "$OLDCYCLE2"; then
+  run_wall_probes "b9f36e8" "$OLDCYCLE2" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
+  rm -f "$OLDCYCLE2"
+fi
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
-rm -f "$OLDCYCLE2"
 
 # ============================================================================================
 # Story 16: one wall probe per story 08 fix (M3/ADR-006 returned:, r2m2, LR31, r2m9), replayed
@@ -2406,7 +2490,9 @@ EOF
   rm -f .git/index.lock
   grep -q '^status: todo' docs/specs/pr2m2/pr2m2-02-second.md && echo ok || echo FAIL
 }
-probe_lr31wall() {
+probe_lr31wall() { # mirrors the `lr31w` scenario above: a ready todo A and a not-ready todo B
+  # (blocked_by a not-done C) share wave 1; only A must be listed. Pre-fix (eb3203a) lists all
+  # todo wave files regardless of blocked_by, so this is FAIL there and ok on the branch.
   mkdir -p docs/specs/plr31
   cat > docs/specs/plr31/plr31-01-a.md <<'EOF'
 ---
@@ -2414,28 +2500,40 @@ story: plr31-01
 spec: plr31
 status: todo
 wave: 1
-blocked_by: [plr31-02]
 ---
-# A
+# A (ready)
 
 ## Verification
 `true`
 EOF
-  cat > docs/specs/plr31/plr31-02-b.md <<'EOF'
+  cat > docs/specs/plr31/plr31-02-c.md <<'EOF'
 ---
 story: plr31-02
 spec: plr31
 status: blocked
 wave: 1
 ---
-# B
+# C (the blocker)
+
+## Verification
+`true`
+EOF
+  cat > docs/specs/plr31/plr31-03-b.md <<'EOF'
+---
+story: plr31-03
+spec: plr31
+status: todo
+wave: 1
+blocked_by: [plr31-02]
+---
+# B (not ready)
 
 ## Verification
 `true`
 EOF
   git add -A && git commit -qm "plr31: fixture" >/dev/null
   local out; out="$(council status docs/specs/plr31 --json)"
-  printf '%s' "$out" | jq -e '.wave_stories == []' >/dev/null 2>&1 && echo ok || echo FAIL
+  printf '%s' "$out" | jq -e '(.wave_stories | length) == 1 and .wave_stories[0].story == "plr31-01"' >/dev/null 2>&1 && echo ok || echo FAIL
 }
 probe_r2m9wall() {
   mkdir -p docs/specs/pr2m9
@@ -2458,10 +2556,13 @@ EOF
 }
 
 OLDCYCLE3="$(mktemp)"
-git -C "$SRC" show eb3203a:scripts/cycle.sh > "$OLDCYCLE3"
-run_wall_probes "eb3203a" "$OLDCYCLE3" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
+PIN_MUST_FAIL="probe_lr31wall"
+if pin_cycle eb3203a "$OLDCYCLE3"; then
+  run_wall_probes "eb3203a" "$OLDCYCLE3" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
+  rm -f "$OLDCYCLE3"
+fi
+PIN_MUST_FAIL=""
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
-rm -f "$OLDCYCLE3"
 
 # ============================================================================================
 # Story 17: one scenario per story 11 criterion - the DRIVER semaphore (ADR-004/K3): claim,
@@ -2505,6 +2606,24 @@ council claim docs/specs/driverr1 aaaa1111 >/dev/null 2>&1
 out="$(council release docs/specs/driverr1 bbbb2222 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ -f docs/specs/driverr1/DRIVER ] \
   && echo "  ok    mismatch exits 2 held by <other>, file kept" || { echo "::error::release mismatch: exit=$ex out=$out"; fail=1; }
+
+echo "release: not pause_guard-gated (C4/ADR-001 D2) - a claimed then paused spec still releases; a foreign stamp under PAUSE still exits 2 held by; claim under PAUSE is untouched (exit 3)"
+mk_spec driverrp1 2
+council claim docs/specs/driverrp1 aaaa1111 >/dev/null 2>&1
+printf 'owner \xc2\xb7 pinned \xc2\xb7 2020-01-01T00:00:00Z\nhead=unknown\n' > docs/specs/driverrp1/PAUSE
+out="$(council release docs/specs/driverrp1 aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"ok":true' && [ ! -f docs/specs/driverrp1/DRIVER ] \
+  && echo "  ok    release under PAUSE exits 0, ok:true, DRIVER gone" \
+  || { echo "::error::release under pause: exit=$ex out=$out"; fail=1; }
+printf 'stamp=cccc3333\nclaimed=2020-01-01T00:00:00Z\n' > docs/specs/driverrp1/DRIVER  # claim is itself PAUSE-gated; write DRIVER directly
+out="$(council release docs/specs/driverrp1 dddd4444 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by cccc3333' && [ -f docs/specs/driverrp1/DRIVER ] \
+  && echo "  ok    release under PAUSE with a foreign stamp still exits 2 held by, file kept" \
+  || { echo "::error::release foreign under pause: exit=$ex out=$out"; fail=1; }
+out="$(council claim docs/specs/driverrp1 eeee5555 2>&1)"; ex=$?
+[ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    claim under PAUSE still exits 3, next:paused (untouched)" \
+  || { echo "::error::claim under pause: exit=$ex out=$out"; fail=1; }
+rm -f docs/specs/driverrp1/PAUSE
 
 echo "pause/resume: each removes an existing DRIVER and journal.md gains a driver released line"
 mk_spec driverp1 2
@@ -2684,11 +2803,22 @@ probe_gated() {
   $ok && echo ok || echo FAIL
 }
 
-PRESHA11="$(git -C "$SRC" log -1 --format=%h --grep='story(v0-12-0-remainders-11)')^"
+SHA11="$(git -C "$SRC" log -1 --format=%h --grep='story(v0-12-0-remainders-11)')"
 OLDCYCLE4="$(mktemp)"
-git -C "$SRC" show "$PRESHA11":scripts/cycle.sh > "$OLDCYCLE4"
-run_wall_probes "$PRESHA11" "$OLDCYCLE4" probe_claim probe_release probe_pauserelease probe_gated
-run_wall_probes "branch"    "$SRC/scripts/cycle.sh" probe_claim probe_release probe_pauserelease probe_gated
+PIN_MUST_FAIL=""
+if [ -z "$SHA11" ]; then
+  echo "  [pre-story-11] unavailable: no commit matches story(v0-12-0-remainders-11)"
+  fail=1
+  PRESHA11=""
+else
+  PRESHA11="$SHA11^"
+  if pin_cycle "$PRESHA11" "$OLDCYCLE4"; then
+    run_wall_probes "$PRESHA11" "$OLDCYCLE4" probe_claim probe_release probe_pauserelease probe_gated
+  else
+    PRESHA11=""
+  fi
+fi
 rm -f "$OLDCYCLE4"
+run_wall_probes "branch"    "$SRC/scripts/cycle.sh" probe_claim probe_release probe_pauserelease probe_gated
 
 exit $fail

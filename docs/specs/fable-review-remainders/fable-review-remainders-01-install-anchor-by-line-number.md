@@ -1,8 +1,8 @@
 ---
 story: fable-review-remainders-01
 spec: fable-review-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 tracer: false
@@ -45,7 +45,17 @@ model: sonnet
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
-<!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `install.sh:220-227` `ensure_marked_block`: replaced the second `awk -v block=` splice with `grep -n -F -x` line lookup + `head -n $((n-1))` + `printf '%s\n' "$block"` + `tail -n "+$n"`, mirroring the EOF path's own `printf`. Only the splice awk was removed; heading-finder/block-builder/anchor-finder awks (unrelated to reprocessing `$block`) are untouched, per Non-goals.
+- Surprise: under `set -euo pipefail`, `n="$(grep ... | head -1 | cut -d: -f1)"` aborts the whole script when `grep` finds no anchor (pipefail propagates grep's exit 1) even though `n` empty is a legitimate, expected case (EOF path). Fixed by gating the grep behind `[ -n "$anchor" ]` and appending `|| true` to the assignment.
+- `.github/workflows/ci.yml:109-116` council job: added `with: fetch-depth: 0` to its `actions/checkout@v4` step.
+- `.github/workflows/ci.yml:321-344` D4.7 step: appended a new assertion that greps the shipped `CLAUDE.md`'s literal Browser MCP row (`grep '| Browser MCP |' CLAUDE.md`) and requires it verbatim (`grep -qF`) in the upgraded target's `CLAUDE.md`, failing with `::error::` on mismatch. Existing count/order assertions untouched.
+- Hand smoke (`mktemp -d` targets, recorded exit codes):
+  - Two targets from a fresh install: one with `## Profile` block stripped only (`## Commands` intact -> anchor path), one with both `## Profile` and `## Commands` blocks stripped (anchor heading absent -> EOF path). Both upgraded with `./install.sh "$target" --upgrade`; both printed `insert CLAUDE.md '## Profile block' (placeholders)`; stderr empty on both (no `warning:`).
+  - `sed -n '/VULYK:PROFILE:START/,/VULYK:PROFILE:END/p'` extracted from both targets and from the shipped `CLAUDE.md`: `cmp` on all three pairs exits 0 (byte-identical).
+  - Browser MCP row in both targets: 5 pipes (6 cells), same as source; contains literal `\|` in both.
+  - Ran the real D4.7 scenario (fresh install, strip only `## Profile`, upgrade) with every assertion line from the updated `ci.yml` step pasted verbatim, including the new Browser MCP content check: all passed, printed `ALL D4.7 ASSERTIONS PASSED (exit 0)`.
+- `bash -n install.sh` clean; `git ls-files '*.sh' | xargs -n1 bash -n` clean across the repo.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
+

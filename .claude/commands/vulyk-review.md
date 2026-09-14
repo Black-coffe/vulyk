@@ -35,7 +35,11 @@ branch).
 
 3. **Dispatch only the seats `missing` names, one message, in parallel** - the same "independent in
    information, so independent in wall-clock cost" reasoning that ran `lead-review` alongside the
-   old blind gate now runs it alongside whichever blind seats this tier still needs:
+   old blind gate now runs it alongside whichever blind seats this tier still needs. Compute each
+   seat's report path first, `.vulyk/reports/<slug>/round-<N>/<seat>.attempt-1.md` (repo-relative,
+   forward slashes, `2` in place of `1` on the exit-4 re-ask below) - every dispatch but the Tier 4
+   second reviewer's ends with: `As your last action, write your full report verbatim to <path>
+   (mkdir -p its directory); your chat reply is the same text.`
    - `review` in `missing` -> `lead-review` at `top_model`, in the **main tree**, never the court -
      it needs the stories. Give it `round_dir` and its packet: the diff, the story/plan files it
      implements, pointers to `docs/wiki/` notes and ADRs for the touched modules.
@@ -53,17 +57,22 @@ branch).
      `record-seat` accepts exactly one `review` file per round - there is no second slot to hold a
      second opinion separately.
 
-4. **Record each report.** The report travels as free text inside the clerk's prompt; the heredoc
-   delimiter `VULYK_<stamp>_<seat>_<attempt>` is a per-run random value the seat is never told,
-   which is what keeps the body from ending the heredoc early (R31):
+4. **Record each report.** Good case, every seat but the Tier 4 second reviewer's fold: `bash
+   scripts/cycle.sh record-seat docs/specs/<slug> <N> <haiku|sonnet|opus|review> --stamp $stamp
+   [--model <id>] --file <path>` (the report path from step 3). On exit 2 with `error` starting
+   `file: `, fall back to today's heredoc form with the chat reply as the body - and this is the
+   only form for the Tier 4 folded review, which never gets a report path: the report travels as
+   free text inside the clerk's prompt; the heredoc delimiter `VULYK_<stamp>_<seat>_<attempt>` is a
+   per-run random value the seat is never told, which is what keeps the body from ending the
+   heredoc early (R31):
    `bash scripts/cycle.sh record-seat docs/specs/<slug> <N> <haiku|sonnet|opus|review> --stamp $stamp [--model <id>] <<'VULYK_<stamp>_<seat>_<attempt>'`
    ... `VULYK_<stamp>_<seat>_<attempt>` - never `EOF`, and an empty report is still piped through
-   unchanged, so the attempt exists on disk. Exit 4 (`MALFORMED`) -> re-ask that one seat once,
-   naming the `error` field verbatim so it knows the exact gap, with `<attempt>` now `2` in the next
-   delimiter; record the second attempt either way and move on - a seat that is still malformed on
-   attempt 2 is `ABSENT` per D3/D4, and `judge` accounts for that on its own. Print each
-   `record-seat` call's own one-line `cycle: ...` confirmation, nothing else (it does not journal
-   per seat).
+   unchanged, so the attempt exists on disk. Exit 4 (`MALFORMED`) on either form -> re-ask that one
+   seat once, naming the `error` field verbatim so it knows the exact gap, with `<attempt>` now `2`
+   in the next report path/delimiter; record the second attempt either way (`--file` first, same
+   fallback) and move on - a seat that is still malformed on attempt 2 is `ABSENT` per D3/D4, and
+   `judge` accounts for that on its own. Print each `record-seat` call's own one-line `cycle: ...`
+   confirmation, nothing else (it does not journal per seat).
 
 5. **Judge.** `bash scripts/cycle.sh judge docs/specs/<slug> --commit --stamp $stamp`. Then release
    the semaphore - `bash scripts/cycle.sh release docs/specs/<slug> $stamp` - regardless of `next`;

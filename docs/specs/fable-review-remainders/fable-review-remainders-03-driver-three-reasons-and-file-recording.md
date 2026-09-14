@@ -1,8 +1,8 @@
 ---
 story: fable-review-remainders-03
 spec: fable-review-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 tracer: false
@@ -48,6 +48,10 @@ model: opus
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `.claude/workflows/vulyk-cycle.js`: `CAPS` + one `reasonFor(who, agentType, r)` shared by workers, seats and the reviewer (returns null when the value is a usable report); the worker thunk and both seat dispatches now `.catch` into `{ threw: msg }` so a rejection stays distinct from an empty resolve. The `worker threw:` log moved from the catch into the classifier so each miss logs exactly one line.
+- Recording: `record(seat, report, attempt)` tries `record-seat ... --stamp <s> --file .vulyk/reports/<slug>/round-<N>/<seat>.attempt-<K>.md` first and falls back to today's heredoc only on `exit === 2 && /^file: /`; Tier 4's folded review skips the `--file` try entirely and carries no path sentence. `recordSeat`'s body is now `typeof report === 'string' ? report : ''` so a `{ threw }` never becomes "[object Object]".
+- Decision: the first clerk call carries no `--model`, exactly as today - the driver knows no model id for a council seat (its frontmatter decides) and `cycle.sh` falls back to the report's own `MODEL` field. C2's `--model <id>` was read as `cycle.sh`'s optional synopsis slot, not a new value to invent.
+- `tests/driver.test.sh`: three pre-existing assertions reddened by the new reason strings and were updated in place, intent kept - (f) `red+empty` now expects the empty-return reason (label and its `expect` line renamed), (g) whitespace-only expects the same reason (label unchanged, still asserts close-story is never called), (o) a thrown worker now expects `stop.error === 'worker threw: subagent died again'` and its stale comment was corrected. No scenario added, no stub sequence changed.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

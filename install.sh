@@ -217,11 +217,13 @@ ensure_marked_block() {
     index($0, m ":END") { done = 1; next }
     done && /^## / { print; exit }
   ' "$SRC/CLAUDE.md")"
-  if [ -n "$anchor" ] && grep -qxF "$anchor" "$file" 2>/dev/null; then
-    awk -v anchor="$anchor" -v block="$block" '
-      !done && $0 == anchor { print block; print ""; done = 1 }
-      { print }
-    ' "$file" > "$file.vulyktmp" && mv "$file.vulyktmp" "$file"
+  local n=""
+  if [ -n "$anchor" ]; then
+    n="$(grep -n -F -x "$anchor" "$file" 2>/dev/null | head -1 | cut -d: -f1)" || true
+  fi
+  if [ -n "$n" ]; then
+    { head -n "$((n - 1))" "$file"; printf '%s\n' "$block"; echo ""; tail -n "+$n" "$file"; } \
+      > "$file.vulyktmp" && mv "$file.vulyktmp" "$file"
   else
     { echo ""; printf '%s\n' "$block"; } >> "$file"
   fi

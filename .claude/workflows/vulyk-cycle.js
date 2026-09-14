@@ -9,8 +9,9 @@ export const meta = {
   ],
 }
 
-// This driver holds no verdict or staleness logic and never parses prose except the first
-// line of a review report (VERDICT: PASS|BLOCK, folded at Tier 4) - it loops on
+// This driver holds no verdict or staleness logic and never parses a dispatch return except to
+// see whether it is empty; the one prose it reads is the first line of a review report it folds
+// itself (VERDICT: PASS|BLOCK, Tier 4 only) - it loops on
 // scripts/cycle.sh's `status --json` and acts on every verb's exit code too (ADR-001 D2):
 // ok:false ends the run with the failure in the returned object, except a record-seat
 // MALFORMED (re-ask that seat once) and a second failed close-story for the same file (also
@@ -21,6 +22,24 @@ export const meta = {
 
 const TERMINAL = ['green', 'escalated', 'paused', 'shipped']
 const SEAT_AGENT = { haiku: 'council-haiku', sonnet: 'council-sonnet', opus: 'council-opus', review: 'lead-review' }
+// mirrors maxTurns in .claude/agents/*.md as of 2026-09-14 - update both together
+const CAPS = { 'worker-code': 90, 'worker-test': 90, 'council-haiku': 60, 'council-sonnet': 60, 'council-opus': 60, 'lead-review': 60, 'cycle-clerk': 5, 'drone-scout': 15 }
+
+// The three reasons a dispatch comes back dead, told apart for workers, council seats and the
+// reviewer alike (C3): a rejected agent() (the thunk hands back { threw }), an empty resolve -
+// the shape a turn-cap death takes, so name the agent and its cap - and "no report", which is
+// not decided here: a non-empty return is always handed to the verb, and NO_REPORT below is
+// what the driver calls that verb's own exit 4 (ADR-006 - the driver never reads the prose).
+// Returns null when <r> is a non-empty string, whatever its text.
+const NO_REPORT = (who) => `${who} returned no report`
+const reasonFor = (who, agentType, r) => {
+  if (r && typeof r === 'object' && 'threw' in r) return `${who} threw: ${r.threw}`
+  if (typeof r === 'string' && r.trim() !== '') return null
+  if (r === null || r === undefined || typeof r === 'string') {
+    return `${who} returned empty - turn cap suspected (${agentType}, maxTurns ${CAPS[agentType] ?? 'unknown'} in .claude/agents/${agentType}.md)`
+  }
+  return NO_REPORT(who)
+}
 
 const A = args ?? {} // a missing args object reaches this guard instead of throwing on args.spec
 const spec = A.spec
@@ -69,6 +88,12 @@ const seatPrompt = (seat, st) =>
 const reviewPrompt = (st) =>
   `Adversarial review for ${st.slug}, round ${st.round}. Round dir: ${st.round_dir}. Spec: ${st.spec} - review its stories and plan. Diff the branch ${st.branch} at ${st.head} against its base. See docs/adr/001-cycle-state-contract.md. You do not enter the court.`
 
+// Where a seat or a single reviewer writes its own report (C2) - under .vulyk/ (gitignored,
+// outside docs/specs, so the taint rule is untouched); the clerk then records it with --file.
+const reportPath = (st, seat, attempt) => `.vulyk/reports/${st.slug}/round-${st.round}/${seat}.attempt-${attempt}.md`
+const writeReportNote = (st, seat, attempt) =>
+  ` As your last action, write your full report verbatim to ${reportPath(st, seat, attempt)} (mkdir -p its directory); your chat reply is the same text.`
+
 // Only prose this driver ever reads: a review report's first line (C5's PASS|BLOCK token).
 // Folds two reviewer reports into one; a null/empty/prose report on either side never
 // manufactures a verdict - the driver sends NO VERDICT through unchanged so record-seat
@@ -90,12 +115,12 @@ function foldReviews(r1, r2) {
 
 // Tier 4 folds a second reviewer on the paired model into the one `review` seat (R12); `note`
 // carries the re-ask text on a record-seat MALFORMED retry, appended to every prompt it builds.
-const dispatchSeat = (seat, st, note) => (seat === 'review' && st.tier === 4)
+const dispatchSeat = (seat, st, note, attempt) => (seat === 'review' && st.tier === 4)
   ? parallel([
       () => agent(reviewPrompt(st) + note, { agentType: SEAT_AGENT.review, model: TOP, phase: 'Round' }),
       () => agent(reviewPrompt(st) + note, { agentType: SEAT_AGENT.review, model: SECOND, phase: 'Round' }),
     ]).then(([r1, r2]) => foldReviews(r1, r2))
-  : agent((seat === 'review' ? reviewPrompt(st) : seatPrompt(seat, st)) + note, {
+  : agent((seat === 'review' ? reviewPrompt(st) : seatPrompt(seat, st)) + note + writeReportNote(st, seat, attempt), {
       agentType: SEAT_AGENT[seat],
       model: seat === 'review' ? TOP : undefined,
       phase: 'Round',
@@ -148,23 +173,32 @@ try {
           + (retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
         const model = retry ? 'opus' : (story.model || undefined)
         return agent(prompt, { agentType: story.worker, model, phase: 'Build' })
-          .catch((e) => { log(`worker threw: ${e && e.message ? e.message : e}`); return null })
+          // the rejection is carried, not flattened to null, so the classification below can
+          // tell a dead agent() from an empty resolve (C3); it logs both, once each.
+          .catch((e) => ({ threw: e && e.message ? e.message : String(e) }))
       }))
       for (let i = 0; i < stories.length; i++) {
         const file = stories[i].file
         const report = reports[i]
-        // an empty/null/whitespace-only worker report is a miss on the same bound a red
-        // close-story is (R29) - close-story never runs on one, and either failure trips
+        // a thrown, empty/whitespace-only or unusable worker report is a miss on the same bound
+        // a red close-story is (R29) - close-story never runs on one, and either failure trips
         // the same count; lastError carries the failing verb's own reason into the stop.
-        if (typeof report === 'string' && report.trim() !== '') {
+        const reason = reasonFor('worker', stories[i].worker, report)
+        if (reason === null) {
           // close-story derives `repeat: N` itself from the story's own ## Verification block
           // (cycle.sh's cmd_close_story) and takes no --repeat flag, so it is not passed here.
           const res = await clerk(`close-story ${file} --commit --stamp ${stamp}`)
           if (res.ok) continue
           if (res.exit !== 4) fail(st, asStop(res))
-          lastError.set(file, res.error)
+          // ADR-006's third driver scenario: exit 4 with `returned: missing` is a worker that
+          // came back with text but never set the key - the driver's "no report", read off the
+          // clerk's own JSON. Any other exit-4 error is the miss reason verbatim, as before.
+          const noReport = res.error === 'returned: missing' ? NO_REPORT('worker') : null
+          if (noReport !== null) log(noReport)
+          lastError.set(file, noReport ?? res.error)
         } else {
-          lastError.set(file, 'worker returned no report')
+          log(reason)
+          lastError.set(file, reason)
         }
         const n = (attempts.get(file) || 0) + 1
         attempts.set(file, n)
@@ -182,20 +216,42 @@ try {
       const delim = (seat, attempt) => `VULYK_${stamp}_${seat}_${attempt}`
       const recordSeat = (seat, report, attempt) => {
         const d = delim(seat, attempt)
-        const body = report ?? '' // a null report (dead agent(), a throwing parallel thunk) is an empty body, never the string "null"
+        const body = typeof report === 'string' ? report : '' // a dead agent() (null, or the { threw } its catch hands back) is an empty body, never the string "null"
         return clerk(`record-seat ${spec} ${st.round} ${seat} --stamp ${stamp} <<'${d}'\n${body}\n${d}`)
       }
-      const reports = await parallel(seats.map((seat) => () => dispatchSeat(seat, st, '')))
+      // C2: one short clerk line reading the file the seat wrote itself; only a missing,
+      // unreadable or empty file (exit 2 `file: `) falls back to today's inline heredoc. A Tier 4
+      // folded review exists in no file and goes straight to the heredoc, as today.
+      const record = async (seat, report, attempt) => {
+        if (!(seat === 'review' && st.tier === 4)) {
+          const res = await clerk(`record-seat ${spec} ${st.round} ${seat} --stamp ${stamp} --file ${reportPath(st, seat, attempt)}`)
+          if (!(res.exit === 2 && /^file: /.test(String(res.error ?? '')))) return res
+        }
+        return recordSeat(seat, report, attempt)
+      }
+      const reports = await parallel(seats.map((seat) => () => dispatchSeat(seat, st, '', 1)
+        .catch((e) => ({ threw: e && e.message ? e.message : String(e) }))))
       let dispatchStop = null
       for (let i = 0; i < seats.length; i++) {
         const seat = seats[i]
+        // the same three reasons as a worker's, one log line each; a seat never stops the run,
+        // and the recording below is unchanged - an empty seat return still goes to record-seat,
+        // whose exit 4 attempt files are how ABSENT is counted (C3).
+        const who = seat === 'review' ? 'reviewer' : `seat ${seat}`
+        const reason = reasonFor(who, SEAT_AGENT[seat], reports[i])
+        if (reason !== null) log(reason)
         // a seat's report is always recorded, empty or not (R6); clerk() runs in plain loop
         // code, not inside a pipeline stage, so a BadLine reaches the one catch (R32).
-        const res = await recordSeat(seat, reports[i], 1)
+        const res = await record(seat, reports[i], 1)
         if (res.ok) continue
         if (res.exit !== 4) { dispatchStop = dispatchStop || asStop(res); continue }
-        const retry = await dispatchSeat(seat, st, `\nYour previous report was rejected: ${res.error}`)
-        await recordSeat(seat, retry, 2) // re-asked once (R6) - continue whatever this second result is
+        // record-seat's own exit 4 on a non-empty return is the third reason for a seat: text
+        // came back, the verb refused it. An empty or thrown return already said why above, so
+        // it is not named twice. The single re-ask below is unchanged.
+        if (reason === null) log(NO_REPORT(who))
+        const retry = await dispatchSeat(seat, st, `\nYour previous report was rejected: ${res.error}`, 2)
+          .catch((e) => ({ threw: e && e.message ? e.message : String(e) }))
+        await record(seat, retry, 2) // re-asked once (R6) - continue whatever this second result is
       }
       if (dispatchStop) fail(st, dispatchStop)
     } else if (st.next === 'judge') {
