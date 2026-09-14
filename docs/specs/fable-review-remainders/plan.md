@@ -1,0 +1,104 @@
+# Fable review remainders: the four majors and the turn-cap conclusion (plan)
+
+**Tier:** 3 · **Spec slug:** `fable-review-remainders` · **Brief:** [brief.md](brief.md)
+**Governed by:** ADR-001 [docs/adr/001-cycle-state-contract.md](../../adr/001-cycle-state-contract.md) (D2 verb table and the PAUSE exempt list - story 02 amends both in place) · ADR-004 [docs/adr/004-driver-mutual-exclusion.md](../../adr/004-driver-mutual-exclusion.md) (`release` keeps its stamp match) · ADR-006 [docs/adr/006-worker-status-channel.md](../../adr/006-worker-status-channel.md) (`returned:` is the worker's only frontmatter key) · ADR-007 [docs/adr/007-model-ladder.md](../../adr/007-model-ladder.md) (seats and caps as they stand) · CLAUDE.md `## Commands` (the only legal `## Verification` cells)
+**Depends on:** v0.13.0 (`7ec008d`, shipped 2026-09-14), main at `2c9747d`; `docs/specs/v0-12-0-remainders/plan.md` `## Next circle` and `council/round-1/review.fable-attempt.md` majors 1-4 (the defect list, file:line at `c71ad5f`); the two scout reports under `recon/` (file:line at `2c9747d`).
+
+## Goal
+
+Close the debt the Fable review left on the record and the conclusion the week's cap deaths forced. The installer's `--upgrade` anchor-insert path stops sending the Profile/Commands block through a second `awk -v` pass: the anchor becomes a line number and the file is reassembled with `head`/`printf`/`tail`, so both insertion paths print the same bytes, and CI's D4.7 asserts the Browser MCP row's content. `release` drops its `pause_guard` call, ADR-001 names it exempt, and the two command files' "harmless, exit 0" sentence becomes true without an edit. The Workflow driver stops folding every dead dispatch into `worker returned no report`: it distinguishes a thrown agent, an empty return (a suspected turn cap, named with the agent and its `maxTurns`), and text without a report, for workers, council seats and the reviewer alike. `record-seat` accepts `--file <path>`; each seat and the reviewer write their report to a path the driver hands them under `.vulyk/reports/`, the clerk records it in one short line, and the heredoc stays as the fallback when the file is absent. The council suite's "shown to fail at `<sha>`" probes finally fail the suite: a `[branch]` result other than `ok` is red, an unproducible pinned source is red with a printed reason, the LR31 scenario puts a ready story and a not-ready `todo` in one wave and is asserted red at its pre-fix sha, and CI's council job fetches full history. Two test stories prove the code stories in the second wave.
+
+## Assumptions
+
+- **Scope is the brief's six asks only.** The other `## Next circle` items of `v0-12-0-remainders` are OUT: the CRLF `.gitattributes` line, carrying the clerk's `timeout: 600000` rule into the driver's clerk prompt, the first-attempt "edits may already be on disk" sentence, the live Haiku-seat test on the VPN hive, the `close-story` double-commit `git commit failed` line, the `/vulyk-map` refresh, and every PG2 docs/ADR prose item. The owner's request names the Fable majors and the turn-cap conclusion; nothing else is cut here.
+- **`.vulyk/` is already gitignored** (`.gitignore:33`, verified by the planner), so `.vulyk/reports/` needs no ignore line and no story names `.gitignore`.
+- **The seat's Bash runs with the hive root as its working directory**, the same cwd the clerk runs `cycle.sh` in, so a repo-relative report path written by the seat is the path the clerk reads. If a seat's cwd is the court worktree, the relative path lands inside the court and the clerk's `--file` fails with exit 2 `file:` - the driver then falls back to the heredoc, so the assumption costs one clerk call, never a lost report. Story 06's stub cannot test cwd; the first live round does.
+- **Writing the report to the driver-given path is not a BREACH.** The court rule forbids *reading* outside `COURT`; story 04 says so in each seat file in one sentence.
+- **The `maxTurns` numbers live in a static `CAPS` map in the driver** (C3), mirroring the agent frontmatter as of 2026-09-14: workers 90, the three seats and `lead-review` 60, `cycle-clerk` 5, `drone-scout` 15; `queen-planner` has no cap and prints `maxTurns unknown`. The driver has no shell and cannot read the agent files. Whoever changes a `maxTurns:` line updates `CAPS`; the map carries a one-line comment saying so. Rejected: passing the caps through `args` (the launcher in `/vulyk-build` would have to read six files on every launch).
+- **A Tier 4 folded review is recorded through the heredoc as today** (C2). The fold is driver-composed and exists in no file; only a single reviewer dispatch (Tier 1-3) gets a report path. The 8k-char folded review that killed the clerk on 2026-09-14 stays on the heredoc path at Tier 4 - flagged, not fixed, because a two-file `--file` fold is a `cycle.sh` contract change the brief did not ask for.
+- **A clerk that returns nothing stays `BadLine`.** Ask 5 names workers, seats and the reviewer; the clerk's 5-turn cap is untouched (Answer 4) and its empty return is not reclassified.
+- **`release` keeps its stamp-match refusal** (exit 2 `held by <other>` on a foreign stamp) and is not `driver_guard`ed - it never was one of ADR-004's four gated verbs; its own stamp match is its guard. Only the `pause_guard` call goes. ADR-001 D2 has no `claim`/`release` verb row (ADR-004's fold into ADR-001 is PG2 work); story 02 extends only the exempt sentence at `:160` and the `record-seat` row's synopsis, and adds no verb row.
+- **Ask 2's "red against the pre-fix `cycle.sh`" is enforced on disk, not observed**: C5 adds `PIN_MUST_FAIL`, so the pinned `[eb3203a]` run of the rewritten `probe_lr31wall` must print `FAIL` or the suite is red. Without it, the fix for major 3 would leave major 2's proof exactly as print-only as before. Only `probe_lr31wall` is listed; the release and `--file` scenarios are `expect`-based scenarios on the branch with no pinned counterpart (asks 4 and 6 say "fixes it" / "checks the file variant", not "red pre-fix").
+- **One test story for the council suite, not two.** Ask 3 (the probe harness) and asks 2/4/6's scenarios all land in `tests/council.test.sh`; a split would need a third wave and a second two-minute suite-verified close for about thirty lines. The `fetch-depth: 0` line goes to story 01, the only wave-1 story that already owns `ci.yml`.
+- **Story 02 and story 03 carry `tests/council.test.sh` / `tests/driver.test.sh` in `## Files` for the minimal fixture edit only** (the 2026-09-14 sizing rule from the previous circle): if the `--file` call order or the `release` change reddens an existing assertion, the code story repairs that fixture and nothing more; new scenarios stay in 05 and 06. The planner expects no such red (no existing scenario feeds `release` under PAUSE, `record-seat --file`, or asserts the clerk-call count around `record-seat`).
+- **`## Verification` cells.** `install.sh` and `ci.yml` close on the `bash -n` cell (the precedent of `v0-12-0-remainders-07`); the CI job is the real proof, named in the criteria with a hand smoke in `mktemp -d`. The command and agent `.md` files of story 04 are reached by no cell, so it closes on the literal `none — reviewed by lead-review`.
+
+## Stories
+
+**Wave 1**
+- `fable-review-remainders-01-install-anchor-by-line-number` - `install.sh` anchor-insert via `grep -n -F -x` + `head`/`printf '%s\n'`/`tail`, no second awk; `ci.yml` D4.7 asserts the Browser MCP row's content and the council job gets `fetch-depth: 0`. worker-code, sonnet.
+- `fable-review-remainders-02-cycle-record-seat-file-and-release-unguarded` - `scripts/cycle.sh`: `record-seat --file <path>` (C1), `release` without `pause_guard` (C4); ADR-001 D2 exempt sentence and `record-seat` synopsis. worker-code, opus. Verified by the council suite, once, at the end.
+- `fable-review-remainders-03-driver-three-reasons-and-file-recording` - `.claude/workflows/vulyk-cycle.js`: the three failure reasons with `CAPS` (C3) for workers, seats and reviewer; report path in the dispatch prompt and `record-seat --file` with heredoc fallback (C2). worker-code, opus.
+- `fable-review-remainders-04-fallback-loop-and-seat-prompts` - `/vulyk-build` fallback loop and `/vulyk-review` record by `--file` with the same fallback and name the three reasons; the three seat files and `lead-review.md` gain the write-your-report-to-path sentence. worker-code, sonnet.
+
+**Wave 2**
+- `fable-review-remainders-05-council-suite-probes-fail-and-new-scenarios` - `tests/council.test.sh`: `run_wall_probes` fail-capable with `pin_cycle` and `PIN_MUST_FAIL` (C5); LR31 scenario and probe in the ready+not-ready shape; `release` under PAUSE exit 0; `record-seat --file` happy path and missing file. worker-test, sonnet, blocked_by 02.
+- `fable-review-remainders-06-driver-suite-reasons-and-file-path` - `tests/driver.test.sh`: one scenario per reason for a worker, a seat and the reviewer; `--file` recording and the exit 2 `file:` fallback; the report path in the seat prompt. worker-test, sonnet, blocked_by 03.
+
+## Contracts
+
+**C1. `record-seat --file <path>`** (story 02 builds, 03/04/05 call). Synopsis becomes `record-seat <spec> <N> <seat> [--model <id>] [--stamp <s>] [--file <path>] [< report]`. `--file` is parsed with the other options, before the report is read. When present, the report is the file's content and stdin is not read; when absent, stdin as today. Precondition order is unchanged (`pause_guard`, `driver_guard`, open round, stale, already recorded, attempts) and the file check comes last, in place of the `cat`: a path that is missing, unreadable, or empty (`! -s`) exits 2 with `{"ok":false,"verb":"record-seat","exit":2,"next":"<unchanged>","error":"file: <path>"}` and writes nothing - no attempt file. `<path>` in the error is the argument verbatim. Everything after the read is byte-identical to today: MALFORMED exit 4, taint, attempt files, the review first-line parse. The driver matches the fallback on `exit === 2 && /^file: /.test(error)`; any other exit 2 is a failed verb as before.
+
+**C2. The report path and the two-step record** (story 03 builds the Workflow side, 04 the fallback loop and `/vulyk-review`, 04 the agent files, 06 proves it). Path: `.vulyk/reports/<slug>/round-<N>/<seat>.attempt-<K>.md`, repo-relative, forward slashes, `<seat>` one of `haiku|sonnet|opus|review`, `<K>` the attempt the driver is on (1, or 2 after an exit 4). The driver appends one sentence to the seat's and the single reviewer's dispatch prompt: `As your last action, write your full report verbatim to <path> (mkdir -p its directory); your chat reply is the same text.` A Tier 4 review (two dispatches, folded) carries no path and is recorded through the heredoc exactly as today. Recording, good case: one clerk call, `bash scripts/cycle.sh record-seat <spec> <N> <seat> --model <id> --stamp <stamp> --file <path>`. On exit 2 with `error` starting `file: `, the driver runs today's heredoc call with the chat reply and continues; exit 4 on either form triggers the existing single re-ask (attempt 2 gets the `attempt-2` path). No `test -s` probe call: the `--file` attempt is the check. The agent files say: when the dispatch names a report path, write the report there as the last action; writing there is not a BREACH; the chat reply stays the full report.
+
+**C3. Driver failure reasons** (story 03 builds, 04 mirrors in the fallback loop's stop text, 06 proves). Exact strings, `<agent>` the `agentType` dispatched, `<N>` from `CAPS`:
+- `worker threw: <message>` - the `agent()` promise rejected (`e.message`).
+- `worker returned empty - turn cap suspected (<agent>, maxTurns <N> in .claude/agents/<agent>.md)` - resolved to `null`, `''`, or whitespace only. With no `CAPS` entry: `maxTurns unknown`.
+- `worker returned no report` - a non-empty string that is not a report (the existing classification, unchanged).
+For a worker each string is the `lastError` value, the `stop.error` after the second miss, and one `log()` line per miss. For a seat the strings read `seat <seat> threw: ...`, `seat <seat> returned empty - turn cap suspected (...)`, `seat <seat> returned no report`; for the reviewer `reviewer threw: ...`, `reviewer returned empty - ...`, `reviewer returned no report`. Seats and the reviewer produce no stop: each string is one `log()` line, and the recording flow is unchanged (an empty return still goes to `record-seat`, whose exit 4 attempt files are how `ABSENT` is counted). `CAPS` is a `const` object at the top of the driver: `{'worker-code':90,'worker-test':90,'council-haiku':60,'council-sonnet':60,'council-opus':60,'lead-review':60,'cycle-clerk':5,'drone-scout':15}` with the comment `// mirrors maxTurns in .claude/agents/*.md as of 2026-09-14 - update both together`. The `parallel()` thunk `.catch` keeps the throw distinct: it returns `{threw: e.message}` (or records the message beside the `null`) so the classifier can tell a rejection from an empty resolve; K2's stop shape `{verb:'build', file, error}` is unchanged.
+
+**C4. `release` under PAUSE** (story 02 builds, 05 proves). `cmd_release` no longer calls `pause_guard`; on a paused spec with a matching stamp or no `DRIVER` file it exits 0 `{"ok":true,"verb":"release","exit":0,...}`, on a foreign stamp exit 2 `held by <other>` as before. `claim` stays guarded (exit 3). No `driver_guard` on `release` (it never had one). ADR-001 D2's sentence at `:160` reads: `status`, `pause`, `resume`, `release` are exempt. The prose at `vulyk-cycle.js:231-233`, `vulyk-build.md:87-88` and story 13's non-goal is now true and is not edited.
+
+**C5. `run_wall_probes` fails the suite** (story 05 builds, story 01 adds the CI line). Every probe line keeps its shape `  [<label>] <probe>: <result>`. On the `branch` label any `<result>` other than `ok` sets `fail=1`. On a pinned label (`[<sha>]`) the result is printed, and for each probe name in `PIN_MUST_FAIL` (a space-separated variable set beside that pinned run; `PIN_MUST_FAIL="probe_lr31wall"` beside the `eb3203a` run, empty elsewhere) a result other than `FAIL` sets `fail=1`. Every pinned copy is produced by one helper `pin_cycle <sha> <dest>` wrapping `git -C "$SRC" show <sha>:scripts/cycle.sh`; on a non-zero exit or an empty result it prints `  [<sha>] unavailable: <first line of git's stderr, or "empty">`, sets `fail=1`, and the caller skips that block's probes. An empty `$PRESHA11` (the `git log --grep` found nothing) prints the same line with reason `no commit matches story(v0-12-0-remainders-11)` and sets `fail=1`. The final `exit "$fail"` is verified present. `.github/workflows/ci.yml` council job: `actions/checkout@v4` gains `with: fetch-depth: 0`.
+
+## Tradeoffs
+
+**Chosen: line-number splice (`grep -n -F -x` + `head`/`printf`/`tail`) for the anchor insert.** **Rejected: awk `getline` from a temp file** - it keeps a second awk on the path and a temp file to clean; the line-number form writes the block through the same `printf '%s\n' "$block"` the EOF path uses, which is what makes byte-identity a property of the code rather than a test result.
+
+**Chosen: `release` exempt from `pause_guard`.** **Rejected: keeping exit 3 and fixing three prose sites** - `pause` already removes `DRIVER`, so a guarded `release` protects nothing and would make the fallback loop print `paused:` on every paused terminal (major 4's reproduction).
+
+**Chosen: the seat writes its own report file; the driver tries `--file` first and falls back to the heredoc on exit 2 `file:`.** **Rejected: a clerk `test -s` probe before recording** - one extra clerk turn on every seat in the good case, for a check the `--file` call already makes.
+
+**Chosen: a static `CAPS` map in the driver.** **Rejected: omitting the number and naming only the file** - the stop text is what the owner reads at 2 a.m.; the number is what says "this was the cap" without opening the file.
+
+**Chosen: one council-suite test story (05) for the harness fix and the three new scenarios.** **Rejected: two stories sequenced by `blocked_by`** - same file, same helper set, a third wave and a second suite-verified close for thirty lines.
+
+## Integration gate
+`git ls-files '*.sh' | xargs -n1 bash -n && python -m py_compile .claude/hooks/*.py && git ls-files '*.json' | xargs -n1 jq -e . > /dev/null && bash .claude/hooks/handoff.sh status && bash tests/cycle.test.sh && bash tests/driver.test.sh && bash tests/council.test.sh`
+Before each dispatch: `bash scripts/wave-check.sh docs/specs/fable-review-remainders`; after planning and after any delta: `bash scripts/trace-check.sh docs/specs/fable-review-remainders`.
+
+## Descoped
+<!-- Mid-build narrowing, appended by the Queen as it happens - never silent. Each line:
+what was dropped, why, and the single line quoted from the human authorizing it. Only
+the human removes a requirement. -->
+
+*(empty)*
+
+## Plan deltas
+<!--
+Queen-written, from a worker's RETURN REPORT (never from a diff), one entry per change
+to the plan after approval: new story cut, story files expanded, contract changed.
+Each entry: date, trigger, decision, what was rejected. One-line notice to the human
+when it happens. trace-check.sh accepts these entries as a quote source for stories
+born after approval - a delta is requirement change on the record.
+-->
+
+<!--
+The six lines below are the cycle's confirmation artifacts (docs/cycle.md): one per stage
+whose command refuses without the one before it. Each placeholder is replaced by the
+command or script that owns the line; `scripts/ship-check.sh` reads all six. **Approved:**
+(the owner's word, the default since v0.13) and **Briefed:** (`--go`, Tier 1, or no-question
+mode with `--go`) are alternatives - either closes stage 02. **Council:** and **Checked:** likewise close stages 04+05 together: a GREEN
+council row is enough on its own, and **Checked:** is the owner's override in either
+direction, newest timestamp wins (ADR-001 D1/D4).
+
+There is no default tier: `cycle.sh open-round` refuses to open a round when this file's
+`**Tier:** <1|2|3|4>` line above is missing or unparsable, rather than silently sizing the
+council for the largest court.
+-->
+**Approved:** Andrei, 2026-09-14 - said in chat («Одобряю. Можешь продолжать.»)
+**Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
+**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
+**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
+**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
+**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
