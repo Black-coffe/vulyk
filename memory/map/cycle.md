@@ -24,10 +24,13 @@ ceiling=tier=`) ← `open-round`→`build_round` · `council/REOPEN`/`CEILING` �
 [--commit]` · `close-story <file> [--commit]` (scope-check + repeats `## Verification`, each
 `&&`-segment must equal a cell of root `CLAUDE.md` `## Commands`, or the literal `none —
 reviewed by lead-review`) · `open-round [--commit]` · `record-seat <spec> <N> <seat> [--model
-id] <report on stdin>` · `judge [--commit]` · `escalate [--commit] [--reason ceiling|half|env]
+id] [--stamp <s>] [--file <path>] <report on stdin, or from --file when given>` (`--file` takes
+precedence over stdin; a missing/unreadable/empty file exits 2 with `error` `file: <path>`,
+before anything is written) · `judge [--commit]` · `escalate [--commit] [--reason ceiling|half|env]
 [note]` (standalone; open round w/ seats missing) · `reopen "<decision>" [--commit]` ·
-`pause`/`resume` (exempt from the PAUSE guard - every other mutating verb calls `pause_guard`
-first, exits 3 if `PAUSE` exists).
+`pause`/`resume`/`release <spec> <stamp>` (exempt from the PAUSE guard, same as `status` - every
+other mutating verb calls `pause_guard` first, exits 3 if `PAUSE` exists; `release` clears the
+`DRIVER` semaphore even on a paused spec, exit 2 only if a different stamp holds it).
 
 ## `status --json` keys and `next`
 Keys: `spec, slug, stage, next, briefed, approved, branch, head, pack, stories{todo,
@@ -82,19 +85,30 @@ that reduction in the worktree's own detached history. Shared by all three blind
 
 ## Drivers
 **Workflow** (`vulyk-cycle.js`, phases Build/Round/Judge/Repair): no verdict/ceiling/stale
-logic of its own - every shell call goes through `cycle-clerk` (`sonnet` - junior rung, `Bash`, `maxTurns:
-5`). `args:{spec, top_model, second_model, stamp}` (16-hex `stamp`, taken once by
-`/vulyk-build` step 1, used only in the `record-seat` heredoc delimiter, never `EOF`, never
-shown to a seat). Tier 4 review dispatches twice (`top_model`+`second_model`), folded
-stricter-of-two before recording. `ok:false` on a clerk call ends the run, except
-`record-seat` exit 4 (re-ask once) and a 2nd close-story/worker-report miss on one file
-(blocks that story instead). **Fallback** (`/vulyk-build`, `Workflow` absent from the tool
-list): same `status`→act loop, Queen's Bash for verbs and `Agent` for seats/workers - same
-files, same `next` contract.
+logic of its own - every shell call goes through `cycle-clerk` (`sonnet` - junior rung, `Bash`,
+`maxTurns: 5`). `args:{spec, top_model, second_model, stamp}` (16-hex, taken once by
+`/vulyk-build` step 1, used in the `record-seat` heredoc delimiter, never shown to a seat). Tier
+4 review dispatches twice (`top_model`+`second_model`), folded stricter-of-two before recording.
+`ok:false` on a clerk call ends the run, except `record-seat` exit 4 (re-ask once) and a 2nd
+close-story/worker-report miss on one file (blocks that story instead). **Fallback**
+(`/vulyk-build`, `Workflow` absent): same `status`→act loop, Queen's Bash for verbs and `Agent`
+for seats/workers - same files, contract, report-path/`--file`/three-reasons scheme below.
+
+## Report-path recording (v0.13.1) and the three dead-dispatch reasons
+Every seat/worker/reviewer dispatch gets a report path `.vulyk/reports/<slug>/round-<N>/
+<seat>.attempt-<K>.md` and is told to write its full report there verbatim as its last action -
+not a BREACH per D3/D5. `record-seat` tries `--file <path>` first; on exit 2 with `error`
+starting `file: ` (empty/missing/unreadable) it falls back to the stdin heredoc (Tier 4's folded
+second-reviewer verdict always uses the heredoc, no report path). A dead dispatch is told apart
+*before* `record-seat` runs, by exit codes, not prose: `threw:` (rejected call), `returned empty
+- turn cap suspected (<agent>, maxTurns N ...)` (empty/blank resolve - `vulyk-cycle.js`'s `CAPS`
+const mirrors each agent's `maxTurns:` frontmatter by hand, comment dated 2026-09-14: seats/
+`lead-review` 60, workers 90, `cycle-clerk` 5, `drone-scout` 15), or `returned no report`
+(non-empty text but `record-seat`/`close-story` itself exits 4).
 
 ## Tests
 `tests/council.test.sh` (fixture repo, no model calls): verdict table, staleness/ceiling/
 reopen, PAUSE guard, taint/MALFORMED. `tests/cycle.test.sh`: the six-stage walk. Both wired
 into `.github/workflows/ci.yml`.
 
-last-verified: 2026-09-13
+last-verified: 2026-09-14

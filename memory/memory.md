@@ -39,8 +39,8 @@
 ## Learnings
 - Model ladder and no Haiku below generation 5 (v0.13.0, 2026-09-14): docs/adr/007-model-ladder.md
 - Deliverable before tier, plan stops for approval (v0.13.0, 2026-09-14): docs/adr/008-approval-stop-and-study-work.md
-- Next brief's draft (Fable review majors, turn-cap conclusion): docs/specs/v0-12-0-remainders/plan.md `## Next circle`
-- Map slices last verified 2026-09-13 - v0.12.1/v0.13.0 changed cycle.sh (returned:, DRIVER semaphore, wave_stories model), state.sh (study), the agent caps and /vulyk-plan; refresh with /vulyk-map before trusting them
+- Next brief's draft (round-2 UNASKED, ten review minors, ship-gate staleness on release paperwork): docs/specs/fable-review-remainders/plan.md `## Next circle`, CHANGELOG 0.13.1; the Fable majors of v0-12-0-remainders are closed there
+- Dispatch failure reasons from verb exit codes, seat reports by file (v0.13.1, proposed): docs/adr/009-dispatch-failure-reasons-and-report-by-file.md
 
 - Consolidated: memory/learnings/CONSOLIDATED.md (run /vulyk-gc to refresh)
 - Human gates rework (2026-09-12): memory/learnings/2026-09-12-human-gates-rework.md — один стоп в начале, дальше агентный совет; «owner looks» как обязательную стадию не возвращать

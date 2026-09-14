@@ -50,7 +50,9 @@ report-only gates it now sits beside (`ship-check.sh`, `human-check.sh`, `accept
 - Every `cycle.sh` verb's **last stdout line**, on every exit code, is one JSON object
   `{"ok":bool,"verb":"...","exit":N,"next":"...","error":"..."}` (`emit()`, line 55) - no
   driver ever parses prose. `status --json` prints only that object (the full status object,
-  see `cycle.md`).
+  see `cycle.md`). `record-seat`'s `--file <path>` (v0.13.1) takes precedence over stdin; a
+  missing/unreadable/empty file is checked before anything is written and emits
+  `error: "file: <path>"` at exit 2 (both drivers fall back to the stdin heredoc on that exit).
 - Exit codes (`cycle.sh`): 0 ok (RED verdict from `judge` is ok:true too) - 1 usage -
   2 precondition (stderr names it) - 3 paused - 4 `record-seat` MALFORMED / `close-story` red
   verification only - 5 stale - 6 escalate.
@@ -84,5 +86,8 @@ report-only gates it now sits beside (`ship-check.sh`, `human-check.sh`, `accept
   before v0.12.0. Do not route new specs through it.
 - `state.sh` and `.claude/state.json` are gitignored and derived - never read as truth by
   `cycle.sh` (which recomputes story counts itself from frontmatter on every `status` call).
+- `cmd_release` (`release <spec> <stamp>`) is **not** `pause_guard`-ed (v0.13.1, ADR-001 D2's
+  exempt list is `status`, `pause`, `resume`, `release`) - it must clear a dead driver's
+  `DRIVER` semaphore even while the spec is paused; exit 2 only if a different stamp holds it.
 
-last-verified: 2026-09-13
+last-verified: 2026-09-14
