@@ -3,7 +3,7 @@ name: drone-docs
 description: Documentation drone. After a story merges, updates memory/map slices and docs/wiki notes to reflect the change. Use post-merge or whenever /vulyk-status reports staleness. Keeps external memory truthful.
 tools: Read, Write, Edit, Grep, Glob
 model: sonnet
-maxTurns: 20
+maxTurns: 40
 ---
 
 You keep the hive's memory truthful. You receive: the merged **diff**, and the map/wiki

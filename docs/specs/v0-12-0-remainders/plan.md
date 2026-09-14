@@ -161,6 +161,7 @@ Leftovers of this circle, verbatim from the record, for the next brief (v0.13.1 
 - Council round 1 never judged: `council-sonnet` and `council-opus` returned empty on both attempts and the Opus second reviewer returned empty - all at the 25-turn cap; the clerk recording an 8k-char folded review returned nothing. Caps raised to 60 (seats, `lead-review`), 90 (workers). **Conclusion of the week:** every dead subagent return in v0.12.0's two specs was a turn cap, none a model; the framework should surface a cap death as its own stop reason instead of "returned no report", and `record-seat` should take a file path, not a heredoc through a clerk prompt.
 - The `haiku` seat is `N/A` on this repository because the Profile's *Client path* is blank; fill the row or the seat buys nothing (ADR-007 consequences).
 - Shipped on the owner's `ACCEPTED` override, said in chat 2026-09-14; `memory/stats/human.jsonl` carries the note.
+- The `drone-docs` map refresh after both ships died at its own 20-turn cap without writing a line (raised to 40 in the same commit as this line); the map slices still say 2026-09-13 - `/vulyk-map` is the first job of the next circle.
 
 
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>

@@ -37,6 +37,11 @@
 - Full suite / build: none exists - VULYK has no test runner and no build step
 
 ## Learnings
+- Model ladder and no Haiku below generation 5 (v0.13.0, 2026-09-14): docs/adr/007-model-ladder.md
+- Deliverable before tier, plan stops for approval (v0.13.0, 2026-09-14): docs/adr/008-approval-stop-and-study-work.md
+- Next brief's draft (Fable review majors, turn-cap conclusion): docs/specs/v0-12-0-remainders/plan.md `## Next circle`
+- Map slices last verified 2026-09-13 - v0.12.1/v0.13.0 changed cycle.sh (returned:, DRIVER semaphore, wave_stories model), state.sh (study), the agent caps and /vulyk-plan; refresh with /vulyk-map before trusting them
+
 - Consolidated: memory/learnings/CONSOLIDATED.md (run /vulyk-gc to refresh)
 - Human gates rework (2026-09-12): memory/learnings/2026-09-12-human-gates-rework.md — один стоп в начале, дальше агентный совет; «owner looks» как обязательную стадию не возвращать
 - Autonomous cycle / council (v0.12.0, 2026-09-13): docs/specs/autonomous-cycle/ — mechanics in docs/adr/001-cycle-state-contract.md (ADR-001), per-spec state in docs/specs/<slug>/journal.md
