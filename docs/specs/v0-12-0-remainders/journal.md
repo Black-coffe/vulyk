@@ -17,3 +17,8 @@
 - 2026-09-13T19:25:35Z · 03-building · story 15: two empty returns · next: both workers cut at exactly 30 tool calls before writing anything - a turn cap, not the suite; diagnosing before relaunch
 - 2026-09-13T19:26:03Z · 03-building · launching the workflow driver (relaunch, worker maxTurns raised to 90) · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
 - 2026-09-13T19:40:21Z · 03-building · story 15: two empty returns again · next: workers still cut at 30 turns - agent definitions are loaded at session start; restart the session, then /vulyk-resume
+- 2026-09-14T06:01:37Z · resumed · resumed · next: status
+- 2026-09-14T06:01:55Z · 03-building · launching the workflow driver · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
+- 2026-09-14T06:38:25Z · 03-building · workflow run wf_62daded2 died: session lost login mid-wave 4 · next: story 15 worker cut with an uncommitted partial diff in tests/council.test.sh; relogin done, relaunching fresh
+- 2026-09-14T06:38:25Z · 03-building · launching the workflow driver · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
+- 2026-09-14T07:22:06Z · 03-building · story blocked · next: story 08: two red verifications (bash tests/council.test.sh) - returned: gate breaks fixtures that story 16 fixes in wave 6; lead-architect consulted

@@ -13,7 +13,7 @@ blocked_by: [v0-12-0-remainders-08]
 # The council suite proves the four `close-story`/`wave_stories` fixes of story 08
 
 ## Goal
-`tests/council.test.sh` gains the `cstoryr1..r4` scenarios for the `returned:` gate and one scenario each for the commit-owns-`done` rule, the ready-only `wave_stories` and the whole-cell `&&` match, each shown to fail against the `cycle.sh` from before story 08's commit and to pass against the branch; every pre-existing `close-story` fixture gains `returned: DONE` so the suite is green again. The code is already on the branch; this story is the evidence.
+`tests/council.test.sh` gains the `cstoryr1..r4` scenarios for the `returned:` gate and one scenario each for the commit-owns-`done` rule, the ready-only `wave_stories` and the whole-cell `&&` match, each shown to fail against the `cycle.sh` from before story 08's commit and to pass against the branch. The code is already on the branch; this story is the evidence.
 
 ## Requirements
 > история с ответом NEEDS_CONTEXT/WALL не закрывается (M3)
@@ -40,7 +40,7 @@ blocked_by: [v0-12-0-remainders-08]
 
 ## Acceptance criteria
 - [ ] `cstoryr1`: `returned: DONE`, verification `true` -> exit 0, `status: done`, exactly one new commit. `cstoryr2`: `returned: WALL`, verification `none — reviewed by lead-review` -> exit 4, last line `"error":"returned WALL"`, `next:"repair"`, `status:` still `in-progress`, no new commit. `cstoryr3`: key absent -> exit 4, `"error":"returned: missing"`. `cstoryr4`: `returned: NEEDS_CONTEXT` with a verification that touches a flag file -> exit 4 and the flag absent (verification never ran).
-- [ ] Every pre-existing `close-story` fixture gains `returned: DONE` and passes as before; no other line of those scenarios changes.
+- [ ] The pre-existing `close-story` fixtures already carry `returned: DONE` (story 08); no line of those scenarios changes.
 - [ ] r2m2 scenario: `close-story --commit` with `index.lock` present exits 2 with `error` naming the commit and the story file still reads `todo|in-progress`; lock removed, the retry exits 0 with `status: done` and one commit; `status --json` afterwards does not say `next:"open-round"` while the tree is dirty.
 - [ ] LR31 scenario: story A `todo` with `blocked_by: [B]`, B `blocked`, both in one wave: `status --json` reports `wave_stories: []`; with B `done`, A is listed.
 - [ ] r2m9 scenario: a fixture `## Commands` cell `sh -c 'true && true'`; a `## Verification` line equal to it whole closes the story; `sh -c 'true && true' && true` is refused with the segment named; `cstoryq`/`cstorybs` unchanged and green.

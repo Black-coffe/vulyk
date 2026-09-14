@@ -13,7 +13,7 @@ blocked_by: [v0-12-0-remainders-05, v0-12-0-remainders-15]
 # `close-story` reads `returned:`, owns its commit, and matches a `&&` cell whole; `wave_stories` lists only ready stories
 
 ## Goal
-A story closes only when its worker wrote `returned: DONE` (ADR-006), and only when its commit landed or the retry after a failed commit is accepted; `status --json` dispatches only stories whose blockers are done; a `## Commands` cell that itself contains ` && ` can be a verification line. The suite scenarios that prove each point belong to story 16; this story lands the code only.
+A story closes only when its worker wrote `returned: DONE` (ADR-006), and only when its commit landed or the retry after a failed commit is accepted; `status --json` dispatches only stories whose blockers are done; a `## Commands` cell that itself contains ` && ` can be a verification line. The new scenarios that prove each point belong to story 16; this story lands the code plus the one-line `returned: DONE` repair of the pre-existing `close-story` fixtures, so the suite is green at its own close.
 
 ## Requirements
 > история с ответом NEEDS_CONTEXT/WALL не закрывается (M3)
@@ -27,10 +27,10 @@ A story closes only when its worker wrote `returned: DONE` (ADR-006), and only w
 ## Files
 - scripts/cycle.sh
 - tests/council.test.sh
-<!-- listed so the verification command reaches this story's files (wave-check); the Non-goals forbid editing it -->
+<!-- edited only to add returned: DONE to the existing close-story fixtures (plan delta 2026-09-14) -->
 
 ## Non-goals
-- No edits to `tests/council.test.sh` - story 16 owns every scenario, including adding `returned: DONE` to the pre-existing `close-story` fixtures. Run the suite once, at the end, as `bash tests/council.test.sh | tail -3` (hundreds of lines, resent every turn). Expect the pre-existing `cstory*` scenarios to go red on the `returned:` gate until story 16 lands: name the red labels in `## Implementation notes` and confirm each is a `returned: missing` refusal, not another failure; any other red is a wall.
+- Attempt 3 on the kept diff: `git diff scripts/cycle.sh` first - the four fixes are on disk and read correct; keep what holds. In `tests/council.test.sh` the only edit is one line `returned: DONE` directly after `status:` in each fixture heredoc the suite passes to `close-story` (`grep -n 'council close-story' tests/council.test.sh`; attempt 2 named `cstory1/2/3/5/6/q/bs`) - no new scenario, no changed assertion; story 16 owns every scenario. Run the suite once, at the end, as `bash tests/council.test.sh | tail -3` (hundreds of lines, resent every turn); any red is a wall.
 - Do not add `--stamp` or the DRIVER check (story 11); do not touch either driver, the worker agent files or `templates/story.md` (story 09).
 - `close-story` never writes or clears `returned:`; never writes `blocked`.
 - Do not widen the whitelist: the whole-line match against a cell comes first, then the per-segment match; keep the byte-for-byte rule and the `none — reviewed by lead-review` literal.
@@ -46,13 +46,41 @@ A story closes only when its worker wrote `returned: DONE` (ADR-006), and only w
 - [ ] r2m2: `close-story --commit` whose commit fails (an `index.lock`) exits 2 with `error` naming the commit and leaves the story `todo|in-progress` on disk - `status: done` is written only after the commit lands; the retry after the lock is removed closes and commits; `status --json` then routes forward, never to `open-round` on a dirty tree.
 - [ ] LR31: `wave_stories` lists only `todo`/`in-progress` stories of the wave whose `blocked_by` are all `done`; A (`todo`, blocked_by B) with B `blocked` yields `wave_stories: []`.
 - [ ] r2m9: a `## Commands` cell `sh -c 'true && true'`: a `## Verification` line equal to it whole passes and runs; `sh -c 'true && true' && true` is refused naming the segment; the existing per-segment rule is otherwise unchanged.
-- [ ] `bash -n scripts/cycle.sh` passes; one suite run through `tail -3`, with the red labels explained per the first non-goal.
+- [ ] `bash -n scripts/cycle.sh` passes; `bash tests/council.test.sh` green whole - every pre-existing `close-story` fixture carries `returned: DONE` and passes as before.
 
 ## Verification
 `bash tests/council.test.sh`
 
 ## Implementation notes
-<!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `scripts/cycle.sh` `cmd_close_story`: added the `returned:` gate (M3/K5) right after the
+  `status:` case, before `scope-check.sh` - `DONE` proceeds, anything else (`WALL`,
+  `NEEDS_CONTEXT`, empty/absent) exits 4 with `next:repair`, `error:"returned <value>"` /
+  `"returned: missing"`; `status:` and `returned:` are never touched by this gate.
+- `cmd_close_story` `--commit` path (r2m2): moved `status: done` and its `git add` to happen
+  right before the commit attempt; a failed `git commit` now reverts the `status:` line back to
+  its pre-close value (`todo`/`in-progress`) before exiting 2, so a failed commit never leaves
+  `done` uncommitted on disk. Non-`--commit` path unchanged (still sets `done` unconditionally).
+- Verification whitelist (r2m9): `command_cell_exists` is now tried against the whole
+  `## Verification` line first; only a line that is not itself a literal `## Commands` cell
+  falls through to the existing per-`&&`-segment check.
+- `wave_stories` (LR31): `status --json`'s per-wave loop used to collect every `todo` **and**
+  `in-progress` file in the wave into `WAVE_STORIES` once any story was ready, including
+  not-yet-ready `todo` stories whose `blocked_by` wasn't done. Now only the already-collected
+  `ready` list (blockers-done todo files) plus all `in-progress` files of the wave are used.
+- Verification: `bash tests/council.test.sh | tail -3` (full run also captured, not just the
+  tail) - 16 red `::error::` lines, all in the pre-existing `cstory1/cstory2/cstory3/cstory5/
+  cstory6/cstoryq/cstorybs` `close-story` scenarios (none of which set `returned:` in their
+  fixtures yet - story 16's job). Every one traces to the same root cause: `close-story` now
+  exits 4 with `error:"returned: missing"` before scope-check/commit/open-round run, so the
+  downstream assertions in those same scenarios (status stays todo, scope.jsonl entry,
+  commit message, open-round's story-count) cascade red from that one refusal, not a distinct
+  failure. No other scenario in the ~465-line run went red.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
+- 2026-09-14 · blocked by the driver (run wf_54420cc4, wave 5): two `close-story` exit 4 in a row,
+  both `error:"bash tests/council.test.sh"` (red verification). Not a code wall - a wave-order
+  defect: this story's `returned:` gate makes `close-story` refuse every existing council-suite
+  fixture (none sets `returned:`), and the fixtures are story 16's job in wave 6. The story's own
+  verification cannot go green before 16 lands. Worker diff sits uncommitted in `scripts/cycle.sh`.
+- 2026-09-14 · unblocked by plan delta (fixture repair moved into this story); attempt 3 on the kept diff.

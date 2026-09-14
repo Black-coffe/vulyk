@@ -48,3 +48,5 @@
 {"ts":"2026-09-13T18:22:16Z","story":"v0-12-0-remainders-05-cycle-open-round-honest-stops","declared":2,"changed":4,"out_of_scope":3}
 {"ts":"2026-09-13T18:39:22Z","story":"v0-12-0-remainders-12-session-brief-no-cli","declared":2,"changed":4,"out_of_scope":2}
 {"ts":"2026-09-14T06:48:08Z","story":"v0-12-0-remainders-15-council-suite-open-round-scenarios","declared":1,"changed":4,"out_of_scope":3}
+{"ts":"2026-09-14T07:02:51Z","story":"v0-12-0-remainders-08-cycle-close-story-owns-its-commit","declared":2,"changed":4,"out_of_scope":3}
+{"ts":"2026-09-14T07:16:22Z","story":"v0-12-0-remainders-08-cycle-close-story-owns-its-commit","declared":2,"changed":5,"out_of_scope":4}
