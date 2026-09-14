@@ -75,5 +75,5 @@ Done by hand under the assumption above; listed so the diff has a map.
 **Briefed:** <n/a - approved directly>
 **Branch:** vulyk/lean-cascade (worktree ../vulyk-lean, forked from vulyk/v0-12-0-remainders at 30a6e3d)
 **Council:** <none - Law 5 suspended by the owner, see Assumptions>
-**Shipped:** <written by scripts/ship-check.sh --record>
 **Checked:** ACCEPTED by Andrei, 2026-09-14, at d992527 - owner's decision in chat 2026-09-14 ('всё упаковываем, вносим все апдейты'); built by the Queen alone on the owner's instruction, lead-review on Fable: BLOCK then PASS; council suite, driver, cycle and syntax suites green on the merged tree
+**Shipped:** 0.13.0, 2026-09-14, at a73436f - merged to main, publish pending; shipped on the owner's ACCEPTED override (built by the Queen alone at the owner's instruction, lead-review on Fable PASS, all suites green) - said out loud in chat 2026-09-14
