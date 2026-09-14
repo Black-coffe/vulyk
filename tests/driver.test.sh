@@ -190,9 +190,9 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
         { ok: true },
         { next: 'green' },
       ]),
-      agents: ['STATUS: DONE\na worker report'],
+      agents: ['a worker report'],
     },
-  ).then(({ result, calls }) => {
+  ).then(({ result, calls, logs }) => {
     const workerCalls = calls.filter((c) => c.agentType === 'worker-test');
     const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
     if (
@@ -200,9 +200,13 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
       && workerCalls.length === 1
       && closeStoryCalls.length === 1
       && closeStoryCalls[0].cmd.includes('--stamp 0123456789abcdef')
+      && !logs.includes('worker returned no report')
     ) {
       console.log('ok build wave: worker dispatched, close-story called once');
       console.log('ok build wave: close-story carries --stamp');
+      // ADR-006's third driver scenario: this report carries no STATUS: line at all and the
+      // story still closes on close-story's ok alone - no miss, no "returned no report".
+      console.log('ok ADR-006 no STATUS: line but close-story ok: closes, nothing logged');
     } else {
       console.log('FAIL build wave: worker dispatched, close-story called once - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
     }
@@ -216,7 +220,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, redLine, wave, redLine]), agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
+    { clerk: withClaim([wave, redLine, wave, redLine]), agents: ['report 1', 'report 2'] },
   ).then(({ result, calls }) => {
     const gated = calls.filter((c) => 'verb' in c);
     if (
@@ -237,7 +241,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, wave, redLine]), agents: [null, 'STATUS: DONE\nreport 2'] },
+    { clerk: withClaim([wave, wave, redLine]), agents: [null, 'report 2'] },
   ).then(({ result }) => {
     if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'red: verification failed') {
       console.log('ok two-miss stop: empty+red carries the verification error');
@@ -253,7 +257,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, redLine, wave]), agents: ['STATUS: DONE\nreport 1', null] },
+    { clerk: withClaim([wave, redLine, wave]), agents: ['report 1', null] },
   ).then(({ result }) => {
     if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'worker returned empty - turn cap suspected (worker-test, maxTurns 90 in .claude/agents/worker-test.md)') {
       console.log('ok two-miss stop: red+empty ends with the empty-return reason');
@@ -321,7 +325,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
         { ok: true },
         { next: 'green' },
       ]),
-      agents: ['STATUS: DONE\na worker report'],
+      agents: ['a worker report'],
     },
   ).then(({ result }) => {
     if (result && result.next === 'green') {
@@ -339,7 +343,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
       { next: 'dispatch:sonnet', tier: 2, round: 1, round_dir: 'docs/specs/demo/council/round-1' },
       { ok: false, exit: 3, next: 'paused', error: 'paused: owner requested a pause' },
     ]),
-    agents: ['VERDICT: PASS\na seat report'],
+    agents: ['a seat report'],
   },
 ).then(({ result, calls }) => {
   const recordSeatCalls = calls.filter((c) => c.verb === 'record-seat');
@@ -415,7 +419,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const sentence = 'a previous attempt may have left uncommitted edits in your files; `git diff` them first';
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, redLine, wave, { ok: true }, { next: 'green' }]), agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
+    { clerk: withClaim([wave, redLine, wave, { ok: true }, { next: 'green' }]), agents: ['report 1', 'report 2'] },
   ).then(({ result, calls }) => {
     const workerCalls = calls.filter((c) => c.agentType === 'worker-test');
     if (
@@ -540,40 +544,51 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     }
   });
 })
-// --- scenario (v2): C3/story 07 - a non-empty worker return with no STATUS: line is "no report"
+// --- scenario (v2): C3/story 08 - the third reason comes from close-story's own verdict:
+// every non-empty return reaches the verb, and exit 4 `returned: missing` is what the driver
+// calls "worker returned no report" - once per miss, with close-story called once per miss.
 .then(() => {
   const file = 'docs/specs/demo/demo-15-x.md';
   const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-15', worker: 'worker-test' }] };
+  const missing = { ok: false, verb: 'close-story', exit: 4, error: 'returned: missing' };
   const want = 'worker returned no report';
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, wave]), agents: ['prose without a STATUS: line', 'prose without a STATUS: line'] },
-  ).then(({ result, logs }) => {
+    { clerk: withClaim([wave, missing, wave, missing]), agents: ['prose, no report key', 'prose, no report key'] },
+  ).then(({ result, logs, calls }) => {
     const noReportLines = logs.filter((l) => l === want);
-    if (result && result.stop && result.stop.error === want && noReportLines.length === 2) {
-      console.log('ok C3 worker no report: prose without STATUS: is a miss, logged per attempt');
+    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
+    if (
+      result && result.stop && result.stop.error === want
+      && noReportLines.length === 2 && closeStoryCalls.length === 2
+    ) {
+      console.log('ok C3 worker no report: close-story exit 4 returned: missing is the reason, logged per attempt');
     } else {
-      console.log('FAIL C3 worker no report: prose without STATUS: is a miss, logged per attempt - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
+      console.log('FAIL C3 worker no report: close-story exit 4 returned: missing is the reason, logged per attempt - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs) + ' calls=' + JSON.stringify(calls));
     }
   });
 })
-// --- scenario (v3): mixed misses - the second miss's own reason is what the stop carries
+// --- scenario (v3): mixed misses - the second miss's own reason is what the stop carries.
+// The empty first return never reaches close-story, so the verb runs exactly once.
 .then(() => {
   const file = 'docs/specs/demo/demo-16-x.md';
   const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-16', worker: 'worker-test' }] };
+  const missing = { ok: false, verb: 'close-story', exit: 4, error: 'returned: missing' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, wave]), agents: ['', 'prose without a STATUS: line'] },
-  ).then(({ result, logs }) => {
+    { clerk: withClaim([wave, wave, missing]), agents: ['', 'prose, no report key'] },
+  ).then(({ result, logs, calls }) => {
     const emptyWant = 'worker returned empty - turn cap suspected (worker-test, maxTurns 90 in .claude/agents/worker-test.md)';
     const noReportWant = 'worker returned no report';
+    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
     if (
       result && result.stop && result.stop.error === noReportWant
       && logs.includes(emptyWant) && logs.includes(noReportWant)
+      && closeStoryCalls.length === 1
     ) {
-      console.log('ok C3 worker mixed misses: stop carries the second miss\'s own reason');
+      console.log('ok C3 worker mixed misses: stop carries the second miss\'s own reason, close-story called once');
     } else {
-      console.log('FAIL C3 worker mixed misses: stop carries the second miss\'s own reason - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
+      console.log('FAIL C3 worker mixed misses: stop carries the second miss\'s own reason, close-story called once - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs) + ' calls=' + JSON.stringify(calls));
     }
   });
 })
@@ -584,6 +599,9 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     court: '.vulyk/court/demo', round_dir: 'docs/specs/demo/council/round-1',
   });
   const recordOk = { ok: true, verb: 'record-seat', exit: 0 };
+  // record-seat's own refusal of a seat reply (C3/story 08): the driver reads exit 4 off this
+  // JSON - it never looks at the reply's text for a VERDICT: line.
+  const malformed = { ok: false, verb: 'record-seat', exit: 4, error: 'MALFORMED' };
   const args = { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' };
 
   // --- scenario (w): C3 - a seat that threw is logged with its seat name, and is still recorded
@@ -635,28 +653,45 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
       console.log('FAIL C3 reviewer empty: names lead-review and maxTurns 60, still recorded - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
     }
   }))
-  // --- scenario (x2): C3/story 07 - a seat return with no VERDICT: line is "no report", still recorded
+  // --- scenario (x2): C3/story 08 - a seat whose non-empty return record-seat rejects with
+  // exit 4 is the third reason: the line is logged once, off the verb's answer, and the seat
+  // is re-asked once as today (two record-seat calls, no stop).
   .then(() => run(args, {
-    clerk: withClaim([dispatchSt('sonnet'), recordOk, { next: 'green' }]),
-    agents: ['prose without a verdict line'],
+    clerk: withClaim([dispatchSt('sonnet'), malformed, recordOk, { next: 'green' }]),
+    agents: ['a seat reply the verb rejects', 'seat report 2'],
   }).then(({ result, logs, calls }) => {
     const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    if (result && result.next === 'green' && logs.includes('seat sonnet returned no report') && recordCalls.length === 1) {
-      console.log('ok C3 seat no report: prose without VERDICT: is logged, still recorded');
+    const lines = logs.filter((l) => l === 'seat sonnet returned no report');
+    if (result && result.next === 'green' && lines.length === 1 && recordCalls.length === 2) {
+      console.log('ok C3 seat no report: record-seat exit 4 on a non-empty return is logged once, seat re-asked');
     } else {
-      console.log('FAIL C3 seat no report: prose without VERDICT: is logged, still recorded - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
+      console.log('FAIL C3 seat no report: record-seat exit 4 on a non-empty return is logged once, seat re-asked - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs) + ' calls=' + JSON.stringify(recordCalls));
     }
   }))
-  // --- scenario (y3): C3/story 07 - the reviewer's own no-report line says "reviewer"
+  // --- scenario (x3): C3/story 08 - an empty seat return that record-seat also rejects says
+  // only why it was empty: the turn-cap reason is the one reason, never doubled by a second.
   .then(() => run(args, {
-    clerk: withClaim([dispatchSt('review'), recordOk, { next: 'green' }]),
-    agents: ['prose without a verdict line'],
+    clerk: withClaim([dispatchSt('sonnet'), malformed, recordOk, { next: 'green' }]),
+    agents: ['', ''],
+  }).then(({ result, logs }) => {
+    const emptyWant = 'seat sonnet returned empty - turn cap suspected (council-sonnet, maxTurns 60 in .claude/agents/council-sonnet.md)';
+    if (result && result.next === 'green' && logs.includes(emptyWant) && !logs.includes('seat sonnet returned no report')) {
+      console.log('ok C3 seat empty + exit 4: only the turn-cap reason is logged, no second reason');
+    } else {
+      console.log('FAIL C3 seat empty + exit 4: only the turn-cap reason is logged, no second reason - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
+    }
+  }))
+  // --- scenario (y3): C3/story 08 - the reviewer's own no-report line says "reviewer"
+  .then(() => run(args, {
+    clerk: withClaim([dispatchSt('review'), malformed, recordOk, { next: 'green' }]),
+    agents: ['a reviewer reply the verb rejects', 'reviewer report 2'],
   }).then(({ result, logs, calls }) => {
     const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    if (result && result.next === 'green' && logs.includes('reviewer returned no report') && recordCalls.length === 1) {
-      console.log('ok C3 reviewer no report: prose without VERDICT: is logged as reviewer, still recorded');
+    const lines = logs.filter((l) => l === 'reviewer returned no report');
+    if (result && result.next === 'green' && lines.length === 1 && recordCalls.length === 2) {
+      console.log('ok C3 reviewer no report: record-seat exit 4 is logged once as reviewer, re-asked');
     } else {
-      console.log('FAIL C3 reviewer no report: prose without VERDICT: is logged as reviewer, still recorded - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
+      console.log('FAIL C3 reviewer no report: record-seat exit 4 is logged once as reviewer, re-asked - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs) + ' calls=' + JSON.stringify(recordCalls));
     }
   }))
   // --- scenario (z): C2 - the seat dispatch prompt ends with the write-your-report sentence
@@ -671,13 +706,17 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     agents: ['seat report 1', 'seat report 2'],
   }).then(({ result, calls }) => {
     const seatCalls = calls.filter((c) => c.agentType === 'council-sonnet');
+    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
     const note = (k) => ' As your last action, write your full report verbatim to .vulyk/reports/demo/round-1/sonnet.attempt-' + k
       + '.md (mkdir -p its directory); your chat reply is the same text.';
     if (
       result && result.next === 'green' && seatCalls.length === 2
       && seatCalls[0].prompt.endsWith(note(1)) && seatCalls[1].prompt.endsWith(note(2))
+      && recordCalls.length === 2
+      && recordCalls[1].cmd.includes('--file .vulyk/reports/demo/round-1/sonnet.attempt-2.md')
     ) {
       console.log('ok C2 prompt: seat dispatch ends with the report path, the re-ask names attempt-2');
+      console.log('ok C2 record: the re-ask is recorded from the attempt-2 file, not a heredoc');
     } else {
       console.log('FAIL C2 prompt: seat dispatch ends with the report path, the re-ask names attempt-2 - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(seatCalls));
     }
@@ -777,17 +816,20 @@ expect "run: DRIVER semaphore - record-seat carries --stamp"              "ok re
 expect "run: DRIVER semaphore - open-round carries --stamp"               "ok open-round: carries --stamp" "$out"
 expect "run: DRIVER semaphore - a refused claim ends the run at once"     "ok claim refusal: stop verb claim, no further clerk call" "$out"
 expect "static: all four gated verbs' templates carry --stamp"            "ok stamp: all four gated verbs carry --stamp in their template" "$out"
+expect "ADR-006: a return with no STATUS: line still closes on the verb" "ok ADR-006 no STATUS: line but close-story ok: closes, nothing logged" "$out"
 expect "C3: worker threw - stop.error and one log line per miss"          "ok C3 worker threw: stop.error carries it and both misses are logged" "$out"
 expect "C3: worker empty - names the agent and its maxTurns"              "ok C3 worker empty: names worker-code and maxTurns 90, logged per miss" "$out"
-expect "C3: worker no report - prose without STATUS: is a miss"           "ok C3 worker no report: prose without STATUS: is a miss, logged per attempt" "$out"
-expect "C3: worker mixed misses - stop carries the second's reason"       "ok C3 worker mixed misses: stop carries the second miss's own reason" "$out"
+expect "C3: worker no report - close-story exit 4 returned: missing"      "ok C3 worker no report: close-story exit 4 returned: missing is the reason, logged per attempt" "$out"
+expect "C3: worker mixed misses - stop carries the second's reason"       "ok C3 worker mixed misses: stop carries the second miss's own reason, close-story called once" "$out"
 expect "C3: a seat that threw is logged and still recorded"               "ok C3 seat threw: logged by seat name, still recorded, no stop" "$out"
 expect "C3: an empty seat return names council-<seat> and 60"             "ok C3 seat empty: names council-sonnet and maxTurns 60, still recorded" "$out"
-expect "C3: a seat no-report return is logged, still recorded"            "ok C3 seat no report: prose without VERDICT: is logged, still recorded" "$out"
+expect "C3: a seat no-report return is logged, then re-asked"             "ok C3 seat no report: record-seat exit 4 on a non-empty return is logged once, seat re-asked" "$out"
+expect "C3: an empty seat + exit 4 logs no second reason"                 "ok C3 seat empty + exit 4: only the turn-cap reason is logged, no second reason" "$out"
 expect "C3: a reviewer that threw is logged as 'reviewer'"                "ok C3 reviewer threw: logged as reviewer, still recorded" "$out"
 expect "C3: an empty reviewer return names lead-review and 60"            "ok C3 reviewer empty: names lead-review and maxTurns 60, still recorded" "$out"
-expect "C3: a reviewer no-report return is logged as 'reviewer'"          "ok C3 reviewer no report: prose without VERDICT: is logged as reviewer, still recorded" "$out"
+expect "C3: a reviewer no-report return is logged as 'reviewer'"          "ok C3 reviewer no report: record-seat exit 4 is logged once as reviewer, re-asked" "$out"
 expect "C2: the seat prompt ends with its attempt's report path"          "ok C2 prompt: seat dispatch ends with the report path, the re-ask names attempt-2" "$out"
+expect "C2: the re-ask records from the attempt-2 file"                   "ok C2 record: the re-ask is recorded from the attempt-2 file, not a heredoc" "$out"
 expect "C2: the good case records with --file and no heredoc"             "ok C2 record good: exactly one record-seat --file call, no heredoc delimiter" "$out"
 expect "C2: exit 2 'file: ' falls back to the stamped heredoc"            "ok C2 record fallback: exit 2 file: falls back to the stamped heredoc with the chat reply" "$out"
 expect "C2: any other exit 2 stops instead of falling back"               "ok C2 record other exit 2: stops on record-seat, no heredoc fallback" "$out"

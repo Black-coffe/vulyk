@@ -9,8 +9,9 @@ export const meta = {
   ],
 }
 
-// This driver holds no verdict or staleness logic and never parses prose except the first
-// line of a review report (VERDICT: PASS|BLOCK, folded at Tier 4) - it loops on
+// This driver holds no verdict or staleness logic and never parses a dispatch return except to
+// see whether it is empty; the one prose it reads is the first line of a review report it folds
+// itself (VERDICT: PASS|BLOCK, Tier 4 only) - it loops on
 // scripts/cycle.sh's `status --json` and acts on every verb's exit code too (ADR-001 D2):
 // ok:false ends the run with the failure in the returned object, except a record-seat
 // MALFORMED (re-ask that seat once) and a second failed close-story for the same file (also
@@ -26,17 +27,18 @@ const CAPS = { 'worker-code': 90, 'worker-test': 90, 'council-haiku': 60, 'counc
 
 // The three reasons a dispatch comes back dead, told apart for workers, council seats and the
 // reviewer alike (C3): a rejected agent() (the thunk hands back { threw }), an empty resolve -
-// the shape a turn-cap death takes, so name the agent and its cap - and anything else that is
-// not a report - a non-empty return whose text carries no report marker (a worker's line-anchored
-// `STATUS:`, a seat's or the reviewer's `VERDICT:`). Returns null when <r> is a usable report.
-const MARKER = (who) => (who === 'worker' ? /^STATUS:/m : /^VERDICT:/m)
+// the shape a turn-cap death takes, so name the agent and its cap - and "no report", which is
+// not decided here: a non-empty return is always handed to the verb, and NO_REPORT below is
+// what the driver calls that verb's own exit 4 (ADR-006 - the driver never reads the prose).
+// Returns null when <r> is a non-empty string, whatever its text.
+const NO_REPORT = (who) => `${who} returned no report`
 const reasonFor = (who, agentType, r) => {
   if (r && typeof r === 'object' && 'threw' in r) return `${who} threw: ${r.threw}`
-  if (typeof r === 'string' && r.trim() !== '') return MARKER(who).test(r) ? null : `${who} returned no report`
+  if (typeof r === 'string' && r.trim() !== '') return null
   if (r === null || r === undefined || typeof r === 'string') {
     return `${who} returned empty - turn cap suspected (${agentType}, maxTurns ${CAPS[agentType] ?? 'unknown'} in .claude/agents/${agentType}.md)`
   }
-  return `${who} returned no report`
+  return NO_REPORT(who)
 }
 
 const A = args ?? {} // a missing args object reaches this guard instead of throwing on args.spec
@@ -188,7 +190,12 @@ try {
           const res = await clerk(`close-story ${file} --commit --stamp ${stamp}`)
           if (res.ok) continue
           if (res.exit !== 4) fail(st, asStop(res))
-          lastError.set(file, res.error)
+          // ADR-006's third driver scenario: exit 4 with `returned: missing` is a worker that
+          // came back with text but never set the key - the driver's "no report", read off the
+          // clerk's own JSON. Any other exit-4 error is the miss reason verbatim, as before.
+          const noReport = res.error === 'returned: missing' ? NO_REPORT('worker') : null
+          if (noReport !== null) log(noReport)
+          lastError.set(file, noReport ?? res.error)
         } else {
           log(reason)
           lastError.set(file, reason)
@@ -230,13 +237,18 @@ try {
         // the same three reasons as a worker's, one log line each; a seat never stops the run,
         // and the recording below is unchanged - an empty seat return still goes to record-seat,
         // whose exit 4 attempt files are how ABSENT is counted (C3).
-        const reason = reasonFor(seat === 'review' ? 'reviewer' : `seat ${seat}`, SEAT_AGENT[seat], reports[i])
+        const who = seat === 'review' ? 'reviewer' : `seat ${seat}`
+        const reason = reasonFor(who, SEAT_AGENT[seat], reports[i])
         if (reason !== null) log(reason)
         // a seat's report is always recorded, empty or not (R6); clerk() runs in plain loop
         // code, not inside a pipeline stage, so a BadLine reaches the one catch (R32).
         const res = await record(seat, reports[i], 1)
         if (res.ok) continue
         if (res.exit !== 4) { dispatchStop = dispatchStop || asStop(res); continue }
+        // record-seat's own exit 4 on a non-empty return is the third reason for a seat: text
+        // came back, the verb refused it. An empty or thrown return already said why above, so
+        // it is not named twice. The single re-ask below is unchanged.
+        if (reason === null) log(NO_REPORT(who))
         const retry = await dispatchSeat(seat, st, `\nYour previous report was rejected: ${res.error}`, 2)
           .catch((e) => ({ threw: e && e.message ? e.message : String(e) }))
         await record(seat, retry, 2) // re-asked once (R6) - continue whatever this second result is
