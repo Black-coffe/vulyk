@@ -2,6 +2,15 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.13.3] - 2026-09-14
+
+### Fixed
+- **Installer normalizes the driver every run.** 0.13.2 relied on the `.gitattributes` rule and a
+  re-checkout, which did nothing when the rule was already present, while `copy_tree` copied the
+  driver's bytes from a source checkout that git had not re-smudged (unchanged content, only
+  `.gitattributes` moved between tags) - so an upgrade put CRLF back into every hive. The
+  installer now strips CR from `.claude/workflows/*.js` after every copy, rule or no rule.
+
 ## [0.13.2] - 2026-09-14
 
 ### Fixed

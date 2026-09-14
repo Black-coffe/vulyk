@@ -461,24 +461,29 @@ ensure_gitignore() {
 # the file is the project's, append only the missing line, say what was added. The working
 # copy is re-checked out so the rule takes effect now, not at the next clone.
 ensure_gitattributes() {
-  local file="$DEST/.gitattributes" rule=".claude/workflows/*.js text eol=lf"
-  grep -qF ".claude/workflows/*.js" "$file" 2>/dev/null && return 0
-  if [ "$CHECK" = "--check" ]; then
-    echo "  would add      eol=lf rule for .claude/workflows/*.js to .gitattributes"
-    return 0
+  local file="$DEST/.gitattributes" rule=".claude/workflows/*.js text eol=lf" f n=0
+  if ! grep -qF ".claude/workflows/*.js" "$file" 2>/dev/null; then
+    if [ "$CHECK" = "--check" ]; then
+      echo "  would add      eol=lf rule for .claude/workflows/*.js to .gitattributes"
+    else
+      {
+        [ -s "$file" ] && echo ""
+        echo "# --- VULYK: the Workflow driver must check out with LF (added by install.sh) ---"
+        echo "$rule"
+      } >> "$file"
+      echo "  gitattributes  added eol=lf rule for .claude/workflows/*.js"
+    fi
   fi
-  {
-    [ -s "$file" ] && echo ""
-    echo "# --- VULYK: the Workflow driver must check out with LF (added by install.sh) ---"
-    echo "$rule"
-  } >> "$file"
-  echo "  gitattributes  added eol=lf rule for .claude/workflows/*.js"
-  if git -C "$DEST" rev-parse --is-inside-work-tree >/dev/null 2>&1      && [ -n "$(git -C "$DEST" ls-files .claude/workflows 2>/dev/null)" ]; then
-    git -C "$DEST" ls-files .claude/workflows | while read -r f; do
-      rm -f "$DEST/$f"; git -C "$DEST" checkout -- "$f" 2>/dev/null || true
-    done
-    echo "  gitattributes  re-checked out .claude/workflows/*.js as LF"
-  fi
+  # The bytes copy_tree just wrote came from the source checkout, and on Windows that checkout
+  # may itself be CRLF (git does not re-smudge an unchanged file when only .gitattributes moved
+  # between tags). So the rule alone is not enough: strip CR from the copied drivers, every run.
+  [ "$CHECK" = "--check" ] && return 0
+  for f in "$DEST"/.claude/workflows/*.js; do
+    [ -f "$f" ] || continue
+    if grep -q $'' "$f"; then sed -i 's/$//' "$f"; n=$((n + 1)); fi
+  done
+  [ "$n" -gt 0 ] && echo "  gitattributes  normalized $n driver script(s) to LF"
+  return 0
 }
 
 NEW_MANIFEST="$(mktemp)"
