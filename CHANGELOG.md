@@ -2,7 +2,7 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
-## [Unreleased]
+## [0.13.2] - 2026-09-14
 
 ### Fixed
 - **Driver line endings.** `.claude/workflows/vulyk-cycle.js` had no `eol=lf` rule, so a Windows
