@@ -307,7 +307,7 @@ cmd_status() {
   done
   local w
   for w in $(seq 1 "${MAXWAVE:-0}" 2>/dev/null); do
-    local ready="" any_todo=0 any_prog="" wave_files=""
+    local ready="" any_todo=0 any_prog="" prog_files=""
     for f in "$SPEC"/*.md; do
       [ -f "$f" ] || continue
       grep -q '^story:' "$f" 2>/dev/null || continue
@@ -324,16 +324,17 @@ cmd_status() {
             [ -n "$b" ] || continue
             [ "$(story_status_for_id "$SPEC" "$b")" = "done" ] || blockers_done=0
           done
+          # LR31: an unready todo (a blocker not yet done) is never listed - it is not
+          # dispatchable, and re-dispatching it would just re-fail the same blocker.
           [ "$blockers_done" -eq 1 ] && ready="$ready $f"
-          wave_files="$wave_files $f"
           ;;
         in-progress)
           [ -n "$any_prog" ] || any_prog="$f"
-          wave_files="$wave_files $f"
+          prog_files="$prog_files $f"
           ;;
       esac
     done
-    if [ -n "$ready" ]; then BUILD_WAVE="$w"; WAVE_STORIES="$wave_files"; break; fi
+    if [ -n "$ready" ]; then BUILD_WAVE="$w"; WAVE_STORIES="$ready$prog_files"; break; fi
     if [ "$any_todo" -eq 0 ] && [ -n "$any_prog" ]; then CLOSE_FILE="$any_prog"; break; fi
   done
   local WAVE_JSON="null"; [ -n "$BUILD_WAVE" ] && WAVE_JSON="$BUILD_WAVE"
@@ -1442,6 +1443,25 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1>
       ;;
   esac
 
+  # --- ADR-006: a story closes only when its worker wrote `returned: DONE` as its last edit;
+  # `close-story` never writes or clears the key. Anything else is a miss, not a precondition
+  # error - same exit 4 a red verification uses, so the driver's two-attempt rule sees one kind
+  # of "not yet" (M3/K5).
+  local RETURNED; RETURNED="$(fm_field "$STORY" returned)"
+  case "$RETURNED" in
+    DONE) ;;
+    '')
+      echo "cycle: close-story - $STORY has no 'returned: DONE'" >&2
+      emit false close-story 4 repair "returned: missing"
+      exit 4
+      ;;
+    *)
+      echo "cycle: close-story - $STORY returned '$RETURNED', expected DONE" >&2
+      emit false close-story 4 repair "returned $RETURNED"
+      exit 4
+      ;;
+  esac
+
   bash "$HERE/scope-check.sh" "$STORY"
 
   local VERIFY; VERIFY="$(verify_of "$STORY")"
@@ -1462,6 +1482,9 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1>
   while IFS= read -r vline; do
     [ -n "$vline" ] || continue
     [ "$vline" = "none — reviewed by lead-review" ] && continue
+    # r2m9: a line matching a `## Commands` cell whole (its own `&&` and all) is one unit -
+    # only a line that is NOT itself a cell gets split and checked segment by segment.
+    command_cell_exists "$ROOT/CLAUDE.md" "$vline" && continue
     while IFS= read -r seg; do
       [ -n "$seg" ] || continue
       command_cell_exists "$ROOT/CLAUDE.md" "$seg" || {
@@ -1494,11 +1517,12 @@ EOF
     i=$((i+1))
   done
 
-  sed -i -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
-
   if [ "$DOCOMMIT" = "1" ]; then
-    # Scoped to this story's own declared Files (+ the story file itself, + the scope.jsonl
-    # row scope-check.sh just wrote for it - R4/C-3(b)), never `-A`: a concurrent wave's other
+    # r2m2: `status: done` is written only after the commit lands - a failed commit (an
+    # index.lock, say) must leave the story exactly as it was on disk, or a dirty tree with an
+    # uncommitted `done` would misroute `status --json` on the next poll. Scoped to this
+    # story's own declared Files (+ the story file itself, + the scope.jsonl row
+    # scope-check.sh just wrote for it - R4/C-3(b)), never `-A`: a concurrent wave's other
     # in-progress story must not ride along in this commit.
     local ID TITLE f
     ID="$(fm_field "$STORY" story)"
@@ -1509,9 +1533,20 @@ EOF
     done <<EOF
 $(files_of "$STORY")
 EOF
-    git add -- "$STORY" >/dev/null 2>&1
     [ -f memory/stats/scope.jsonl ] && git add -- memory/stats/scope.jsonl >/dev/null 2>&1
-    git_commit_or_fail close-story "story($ID): $TITLE"
+
+    sed -i -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
+    git add -- "$STORY" >/dev/null 2>&1
+
+    local commit_err
+    if ! commit_err="$(git commit -q -m "story($ID): $TITLE" 2>&1)"; then
+      sed -i -E "s/^(status:[[:space:]]*)done/\1$ST/" "$STORY"
+      echo "cycle: close-story - git commit failed: $commit_err" >&2
+      emit false close-story 2 error "git commit failed"
+      exit 2
+    fi
+  else
+    sed -i -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
   fi
 
   echo "cycle: $(fm_field "$STORY" story) - closed, verification green"

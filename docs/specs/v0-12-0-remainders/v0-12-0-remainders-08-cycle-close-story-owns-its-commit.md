@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-08
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 tracer: false
@@ -75,6 +75,12 @@ A story closes only when its worker wrote `returned: DONE` (ADR-006), and only w
   downstream assertions in those same scenarios (status stays todo, scope.jsonl entry,
   commit message, open-round's story-count) cascade red from that one refusal, not a distinct
   failure. No other scenario in the ~465-line run went red.
+- Fixture repair (plan delta): added `returned: DONE` right after `status: todo` in every
+  `close-story` fixture heredoc in `tests/council.test.sh` - `cstory1`, `cstory2`, `cstory3`,
+  `cstory4`, `cstoryq`, `cstorybs`, `cstory5`, `cstory6` (8 fixtures; `cstory4`'s `&&`-segment
+  fixture was also going through `close-story` though not named in the earlier grep). The
+  `pauseall` fixture used at line 982 needs no fix - `pause_guard` runs before the `returned:`
+  gate. Full run: `bash tests/council.test.sh` exits 0, zero `::error::` lines end to end.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

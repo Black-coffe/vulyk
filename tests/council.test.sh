@@ -1038,6 +1038,7 @@ cat > docs/specs/cstory1/cstory1-01-first.md <<'EOF'
 story: cstory1-01
 spec: cstory1
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story fixture
@@ -1079,6 +1080,7 @@ cat > docs/specs/cstory3/cstory3-01-first.md <<'EOF'
 story: cstory3-01
 spec: cstory3
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story disallowed-command fixture
@@ -1100,6 +1102,7 @@ cat > docs/specs/cstory4/cstory4-01-first.md <<'EOF'
 story: cstory4-01
 spec: cstory4
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story &&-segment fixture
@@ -1118,6 +1121,7 @@ cat > docs/specs/cstory2/cstory2-01-first.md <<'EOF'
 story: cstory2-01
 spec: cstory2
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story multi-line fixture
@@ -1140,6 +1144,7 @@ cat > docs/specs/cstoryq/cstoryq-01-first.md <<'EOF'
 story: cstoryq-01
 spec: cstoryq
 status: todo
+returned: DONE
 wave: 1
 ---
 # emit-escape fixture, a quoted command
@@ -1162,6 +1167,7 @@ cat > docs/specs/cstorybs/cstorybs-01-first.md <<'EOF'
 story: cstorybs-01
 spec: cstorybs
 status: todo
+returned: DONE
 wave: 1
 ---
 # emit-escape fixture, a backslash command
@@ -1184,6 +1190,7 @@ cat > docs/specs/cstory5/cstory5-01-first.md <<MDEOF
 story: cstory5-01
 spec: cstory5
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story none fixture
@@ -1210,6 +1217,7 @@ cat > docs/specs/cstory6/cstory6-02-second.md <<'EOF'
 story: cstory6-02
 spec: cstory6
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story scope.jsonl commit fixture
