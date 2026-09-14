@@ -7,3 +7,4 @@
 - 2026-09-14T14:04:19Z · 03-built · all seven stories done; relaunching the workflow driver for the council round · next: the loop holds the working tree of vulyk/fable-review-remainders; to edit, run /vulyk-pause fable-review-remainders
 - 2026-09-14T14:04:45Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/fable-review-remainders/round-1 · next: dispatch:haiku,sonnet,opus,review
 - 2026-09-14T14:20:20Z · 04-council:RED · round 1 verdict RED at 68eb525 pack 74d6ccf14ab4 · next: repair
+- 2026-09-14T14:30:57Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/fable-review-remainders/round-2 · next: dispatch:haiku,sonnet,opus,review
