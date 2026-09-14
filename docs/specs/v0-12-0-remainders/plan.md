@@ -147,6 +147,8 @@ There is no default tier: `cycle.sh open-round` refuses to open a round when thi
 `**Tier:** <1|2|3|4>` line above is missing or unparsable, rather than silently sizing the
 council for the largest court.
 -->
+- **2026-09-14 · trigger:** ninth Workflow run (wf_d4194c67), council round 1 at `c71ad5f`: `council-sonnet` and `council-opus` returned empty on both attempts (recorded MALFORMED x2 each - ABSENT), the Tier 4 second reviewer on Opus returned empty, `lead-review` on Fable returned PASS with three major plan-routed findings, the haiku seat N/A (no Client path), and the clerk recording the folded NO-VERDICT review returned nothing (BadLine, run ended). Every empty return matches the worker pattern of 2026-09-13: the seat caps were 25 turns, unmeasured until now; a Sonnet seat runs the 2-minute suite plus seven asks, an Opus reviewer diffs 44 files. **Decision:** `maxTurns` 25 -> 60 on `council-haiku`, `council-sonnet`, `council-opus`, `lead-review` (the raise only loads in a new session - restart, then `/vulyk-resume`); this non-paperwork commit stales round 1 by the standing rule, so the relaunched driver opens round 2 with every seat fresh - the ceiling counts round 1. **Rejected:** `judge` now (four ABSENT/missing seats can only escalate `env` and cost a `reopen` for the same relaunch); a human `ACCEPTED` override (the Fable review's three majors are unaddressed and belong to the next brief). The Fable review report is kept at the round dir as `review.fable-attempt.md` for the next round's reviewer and the next brief.
+
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
 **Briefed:** via grill, Andrei, 2026-09-13
 **Branch:** vulyk/v0-12-0-remainders

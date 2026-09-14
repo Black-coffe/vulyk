@@ -25,3 +25,4 @@
 - 2026-09-14T07:28:36Z · 03-building · launching the workflow driver · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
 - 2026-09-14T09:27:48Z · 03-built · launching the workflow driver · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
 - 2026-09-14T09:28:19Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/v0-12-0-remainders/round-1 · next: dispatch:haiku,sonnet,opus,review
+- 2026-09-14T09:58:54Z · 04-council:open · round 1: sonnet/opus seats and the Opus second reviewer returned empty at the 25-turn cap; Fable review PASS kept as review.fable-attempt.md · next: seat caps raised to 60 - restart the session, then /vulyk-resume v0-12-0-remainders; round 2 opens fresh
