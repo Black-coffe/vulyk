@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-15
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-test
 tracer: false
@@ -57,6 +57,16 @@ blocked_by: [v0-12-0-remainders-05]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- 2026-09-14 · The working tree already carried the six story-15 scenarios plus the `run_wall_probes` extension (`tests/council.test.sh:1855-2119`, +236/-4 uncommitted) from a prior interrupted attempt at this story (same "30-call cut" pattern recorded in `## Findings` below). Verified each scenario against story 05's six criteria and the suite's existing helper conventions, found them correct and non-duplicative of story 14's scenarios, and closed the story rather than rewriting - only frontmatter/notes are this pass's own edit.
+- r2m3: scenario builds a locked `.git/index.lock`, asserts the first `--commit` fails (exit 2, `ROUND` on disk, tree dirty), then a clean second `--commit` exits 0, tree clean, and `ROUND`/`journal.md` are reachable via `git show HEAD:...` (committed, not silently reported as a no-op).
+- r2m16: a fabricated `status: blocked` story asserts exit 2, `next:"open-round"`, `error` containing `"story r2m16a-02 is blocked: docs/specs/r2m16a/r2m16a-02-second.md"`, and no `council/` directory created.
+- N-m3: an empty `council/round-1/` (no `ROUND` file) asserts `status --json` reports `open:false`/`next:"open-round"`; `open-round --commit` then writes `ROUND` into that same round-1 (asserted via `"next":"dispatch:sonnet"`, not a no-op line) with no `round-2/` created.
+- r2m5/r2m6: two scenarios (`ceilred1` plain ceiling path via `mk_round`, `ceilstale1` STALE-fold path via `mk_open_round` + a real commit while the round is open) each fabricate a judged-RED round-1 row with `red:[2,5]` at `CEILING=1`, then assert the ESCALATE row carries `"red":[2,5]`, `plan.md` has one `- ask 2: RED - see` and one `- ask 5: RED - see` line, and `seats: <round-dir>/` names the round directory - both paths route through the same `write_escalate_row_for_round`, proven by identical assertions on both.
+- r2m7/N-m2: one scenario taints the git identity env vars so the court reduction commit itself fails, asserting exit 2 with `error` `"court reduction commit failed"` and `council/round-1/` gone (never handed to a seat); a second scenario asserts by structure (grepping the 4 lines around `reduce the court to brief.md`) that the reduction commit carries `--no-verify` and `-c commit.gpgsign=false` and no `|| true`.
+- r2m4/N-m1: chose the structural option named in the acceptance bullet over the single-pass-over-captured-lines option - one assertion counts every `emit false` call site in `scripts/cycle.sh` and confirms none is missing a non-empty `error` argument (superset of the specific sites named in story 05's map slice, since it scans all sites at once), and a second confirms all 3 literal `exit 6` sites pair with `emit true ... 6 escalated` (never `emit false`), plus the `ceilred1`/`ceilstale1` scenarios above each assert the ceiling's last line equals exactly `{"ok":true,"verb":"open-round","exit":6,"next":"escalated"}` on its four keys via `jq -e '{ok,verb,exit,next} == {...}'`.
+- Regression proof: `run_wall_probes` was extended (kept as-is) with a variadic extra-probe-fn list rather than a second runner; `probe_r2m3`/`probe_r2m16`/`probe_nm3`/`probe_ceiling`/`probe_courtcommit`/`probe_exit6uniform` are each a compact re-run of the corresponding scenario's core assertion, invoked once against `git show b9f36e8:scripts/cycle.sh` copied into its own scratch repo and once against the branch's `scripts/cycle.sh` - branch's own `$T` fixture and working tree untouched throughout (own `mktemp -d`, own `git init`, per the non-goal).
+- Observed labels (`bash tests/council.test.sh` full run, `tail`/`grep` of the captured log): `[b9f36e8]` all six of `probe_r2m3`/`probe_r2m16`/`probe_nm3`/`probe_ceiling`/`probe_courtcommit`/`probe_exit6uniform` → `FAIL`; `[branch]` all six → `ok`. No criterion was `ok` at `b9f36e8` (all six of story 05's fixes were genuinely absent there), so nothing needed the "observed, not forced" carve-out.
+- Verification: `bash tests/council.test.sh` run once in full - exit 0, zero `::error::` lines; the only `FAIL` tokens in the captured output are the deliberate baseline-regression labels (5 `[3e200bb]` story-14 probes + 6 `[b9f36e8]` story-15 probes, all expected); every `[branch]` probe line (18 total across both `run_wall_probes` extensions) is `ok`.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

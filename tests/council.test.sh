@@ -1852,10 +1852,13 @@ probe_nm7() {
   fi
 }
 
-run_wall_probes() { # run_wall_probes <label> <cycle.sh-path> - a scratch hive with the given
-  # cycle.sh swapped in, reusing this suite's own mk_spec/mk_round/write_seat/council helpers
-  # (they only touch $T/$HEAD7/cwd) by rebinding those two globals for the duration.
-  local wlabel="$1" cyclesrc="$2" wt
+run_wall_probes() { # run_wall_probes <label> <cycle.sh-path> [extra-probe-fn ...] - a scratch
+  # hive with the given cycle.sh swapped in, reusing this suite's own mk_spec/mk_round/
+  # write_seat/council helpers (they only touch $T/$HEAD7/cwd) by rebinding those two globals
+  # for the duration. Story 14's own six probes always run; story 15 extends this same runner
+  # with a second pinned version (b9f36e8) by passing its own probe function names as extra
+  # args, rather than writing a second copy of this scaffolding.
+  local wlabel="$1" cyclesrc="$2" wt; shift 2
   wt="$(mktemp -d)"
   local save_t="$T" save_head7="$HEAD7" save_pwd="$PWD"
   T="$wt"
@@ -1875,6 +1878,11 @@ run_wall_probes() { # run_wall_probes <label> <cycle.sh-path> - a scratch hive w
   echo "  [$wlabel] m-10 atomic ledger append:         $(probe_m10)"
   echo "  [$wlabel] N-m7 note through redact:          $(probe_nm7)"
 
+  local extra
+  for extra in "$@"; do
+    echo "  [$wlabel] $extra:  $($extra)"
+  done
+
   cd "$save_pwd" || true
   T="$save_t"; HEAD7="$save_head7"
   rm -rf "$wt"
@@ -1883,5 +1891,229 @@ run_wall_probes() { # run_wall_probes <label> <cycle.sh-path> - a scratch hive w
 run_wall_probes "3e200bb" "$OLDCYCLE"
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh"
 rm -f "$OLDCYCLE"
+
+# ============================================================================================
+# Story 15: one scenario per story 05 criterion (r2m3, r2m16, N-m3, r2m5/r2m6 x2, r2m7/N-m2 x2,
+# r2m4/N-m1 structural). The code is already on the branch (story 05); this proves it.
+# ============================================================================================
+
+echo "=== Story 15: one scenario per story 05 criterion ==="
+
+echo "open-round --commit: r2m3 - a failed first commit (index.lock) leaves ROUND/journal.md uncommitted; the second --commit finishes them, not a silent no-op"
+mk_open_spec r2m3a 2
+set_tier r2m3a 3
+touch .git/index.lock
+out="$(council open-round docs/specs/r2m3a --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'git commit' && echo "  ok    first --commit fails on the locked index" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+rd_r2m3="docs/specs/r2m3a/council/round-1"
+[ -f "$rd_r2m3/ROUND" ] && echo "  ok    ROUND was written to disk despite the failed commit" \
+  || { echo "::error::no ROUND at $rd_r2m3"; fail=1; }
+[ -n "$(git status --porcelain -- docs/specs/r2m3a)" ] && echo "  ok    the round's paperwork is left uncommitted" \
+  || { echo "::error::tree unexpectedly clean"; fail=1; }
+rm -f .git/index.lock
+out="$(council open-round docs/specs/r2m3a --commit)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    second --commit exits 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -z "$(git status --porcelain -- docs/specs/r2m3a)" ] && echo "  ok    docs/specs/r2m3a is clean afterward" \
+  || { echo "::error::tree dirty: $(git status --porcelain -- docs/specs/r2m3a)"; fail=1; }
+git show HEAD:"$rd_r2m3/ROUND" >/dev/null 2>&1 && git show HEAD:docs/specs/r2m3a/journal.md >/dev/null 2>&1 \
+  && echo "  ok    ROUND and journal.md are committed, not left behind by a silent no-op" \
+  || { echo "::error::ROUND or journal.md not committed"; fail=1; }
+
+echo "open-round: r2m16 - a status: blocked story refuses by name and file, nothing created under council/"
+mk_open_spec r2m16a 2
+set_tier r2m16a 1
+printf -- '---\nstory: r2m16a-02\nspec: r2m16a\nstatus: blocked\nwave: 1\n---\n# S2\n' > docs/specs/r2m16a/r2m16a-02-second.md
+git add -A && git commit -qm "r2m16a: add a blocked story" >/dev/null
+out="$(council open-round docs/specs/r2m16a 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"next":"open-round"' \
+  && printf '%s' "$out" | grep -qF '"error":"story r2m16a-02 is blocked: docs/specs/r2m16a/r2m16a-02-second.md"' \
+  && echo "  ok    exit 2, next:open-round, error names the story id and file" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -d docs/specs/r2m16a/council ] && echo "  ok    nothing was created under council/" \
+  || { echo "::error::council/ exists despite the blocked story"; fail=1; }
+
+echo "open-round / status --json: N-m3 - a round dir without its own ROUND file is not open; open-round rewrites it in place (same N), no round-2, no no-op line"
+mk_open_spec nm3a 2
+set_tier nm3a 1
+mkdir -p docs/specs/nm3a/council/round-1
+out="$(council status docs/specs/nm3a --json)"
+printf '%s' "$out" | jq -e '.open == false and .next == "open-round"' >/dev/null 2>&1 \
+  && echo "  ok    status --json: open:false, next:open-round despite the round-1 dir existing" \
+  || { echo "::error::status: $out"; fail=1; }
+out="$(council open-round docs/specs/nm3a --commit)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:sonnet"' \
+  && echo "  ok    open-round writes ROUND into round-1 (fresh dispatch, not a no-op line)" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -f docs/specs/nm3a/council/round-1/ROUND ] && echo "  ok    ROUND file now exists in round-1" \
+  || { echo "::error::no ROUND written"; fail=1; }
+[ ! -d docs/specs/nm3a/council/round-2 ] && echo "  ok    no round-2 was opened" \
+  || { echo "::error::round-2 exists"; fail=1; }
+
+echo "open-round: r2m5/r2m6 - the ceiling block (plain path) carries the RED asks (2,5) of the last judged round"
+mk_spec ceilred1 5
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-14/' docs/specs/ceilred1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/ceilred1#' docs/specs/ceilred1/plan.md
+set_tier ceilred1 3
+mkdir -p docs/specs/ceilred1/council
+printf '1\n' > docs/specs/ceilred1/council/CEILING
+git add -A && git commit -qm "ceilred1: branch, ceiling 1" >/dev/null
+rd_cr="$(mk_round ceilred1 1 1)"
+write_seat "$rd_cr" haiku GRGGR
+write_seat "$rd_cr" sonnet GGGGG
+write_seat "$rd_cr" opus GGGGG
+write_review "$rd_cr" PASS
+printf '{"ts":"%s","spec":"ceilred1","round":1,"verdict":"RED","head":"%s","pack":"demo-pack","asks":5,"red":[2,5],"red_unevidenced":[],"na":0,"review":"PASS","haiku":"RED","haiku_model":"m","sonnet":"GREEN","sonnet_model":"m","opus":"GREEN","opus_model":"m","attempts":4,"escalate":null,"note":""}\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$HEAD7" >> memory/stats/council.jsonl
+git add -A && git commit -qm "ceilred1: fabricated round 1, already judged RED" >/dev/null
+out="$(council open-round docs/specs/ceilred1 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | tail -n1 | jq -e '{ok, verb, exit, next} == {ok:true, verb:"open-round", exit:6, next:"escalated"}' >/dev/null 2>&1 \
+  && echo "  ok    ceiling exit 6, last line is exactly ok:true/verb:open-round/exit:6/next:escalated" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+row_cr="$(grep '"spec":"ceilred1"' memory/stats/council.jsonl | grep '"verdict":"ESCALATE"')"
+printf '%s' "$row_cr" | grep -qF '"red":[2,5]' && echo "  ok    the ESCALATE row carries red:[2,5], computed live from the seat files" \
+  || { echo "::error::row: $row_cr"; fail=1; }
+grep -qF -- '- ask 2: RED - see' docs/specs/ceilred1/plan.md && grep -qF -- '- ask 5: RED - see' docs/specs/ceilred1/plan.md \
+  && echo "  ok    ## Needs a human has one - ask 2: and one - ask 5: line with the evidence clause" \
+  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilred1/plan.md)"; fail=1; }
+grep -qF "seats: $rd_cr/" docs/specs/ceilred1/plan.md && echo "  ok    seats: names the round directory" \
+  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilred1/plan.md)"; fail=1; }
+
+echo "open-round: r2m5/r2m6 - the ceiling block (STALE-fold path) carries the same RED asks (2,5)"
+mk_open_spec ceilstale1 5
+set_tier ceilstale1 3
+mkdir -p docs/specs/ceilstale1/council
+printf '1\n' > docs/specs/ceilstale1/council/CEILING
+git add -A && git commit -qm "ceilstale1: ceiling 1" >/dev/null
+rd_cs="$(mk_open_round ceilstale1 1 1)"
+write_seat "$rd_cs" haiku GRGGR
+write_seat "$rd_cs" sonnet GGGGG
+write_seat "$rd_cs" opus GGGGG
+write_review "$rd_cs" PASS
+echo "real code change" > ceilstale1-code.txt
+git add -A && git commit -qm "real code change while ceilstale1 round 1 is open" >/dev/null
+out="$(council open-round docs/specs/ceilstale1 --commit 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | tail -n1 | jq -e '{ok, verb, exit, next} == {ok:true, verb:"open-round", exit:6, next:"escalated"}' >/dev/null 2>&1 \
+  && echo "  ok    STALE-fold ceiling: exit 6, exact four-key last line" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+row_cs="$(grep '"spec":"ceilstale1"' memory/stats/council.jsonl | grep '"verdict":"ESCALATE"')"
+printf '%s' "$row_cs" | grep -qF '"red":[2,5]' && echo "  ok    STALE-fold ESCALATE row carries red:[2,5] too" \
+  || { echo "::error::row: $row_cs"; fail=1; }
+grep -qF -- '- ask 2: RED - see' docs/specs/ceilstale1/plan.md && grep -qF -- '- ask 5: RED - see' docs/specs/ceilstale1/plan.md \
+  && echo "  ok    STALE-fold ## Needs a human has the same ask 2 / ask 5 lines" \
+  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilstale1/plan.md)"; fail=1; }
+grep -qF "seats: $rd_cs/" docs/specs/ceilstale1/plan.md && echo "  ok    STALE-fold seats: names the round directory" \
+  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilstale1/plan.md)"; fail=1; }
+
+echo "open-round: r2m7/N-m2 - a failing court reduction commit exits 2 naming it, and removes the round/court (never handed to a seat)"
+mk_open_spec r2m7a 2
+set_tier r2m7a 3
+out="$(GIT_AUTHOR_NAME='' GIT_AUTHOR_EMAIL='' GIT_COMMITTER_NAME='' GIT_COMMITTER_EMAIL='' council open-round docs/specs/r2m7a --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"court reduction commit failed"' \
+  && echo "  ok    exit 2, error names the reduction commit" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -d docs/specs/r2m7a/council/round-1 ] && echo "  ok    the round directory (and its court) is gone, never handed to a seat" \
+  || { echo "::error::round-1 still present: $(ls docs/specs/r2m7a/council/round-1 2>&1)"; fail=1; }
+
+echo "open-round: r2m7/N-m2 - by structure, the reduction commit uses -c commit.gpgsign=false and --no-verify, with no || true"
+redline="$(grep -n 'reduce the court to brief.md' scripts/cycle.sh | head -1 | cut -d: -f1)"
+ctx="$(sed -n "$((redline-3)),$((redline+1))p" scripts/cycle.sh)"
+printf '%s' "$ctx" | grep -qF -- '--no-verify' && echo "  ok    --no-verify is present on the reduction commit" \
+  || { echo "::error::$ctx"; fail=1; }
+printf '%s' "$ctx" | grep -qF 'commit.gpgsign=false' && echo "  ok    -c commit.gpgsign=false is present" \
+  || { echo "::error::$ctx"; fail=1; }
+printf '%s' "$ctx" | grep -qF '|| true' && { echo "::error::the reduction commit still has a || true: $ctx"; fail=1; } \
+  || echo "  ok    no || true masks a failing reduction commit"
+
+echo "r2m4/N-m1: structural - every 'emit false' call site carries a non-empty error argument"
+n_all="$(grep -c 'emit false' scripts/cycle.sh)"
+n_bad="$(grep -cE 'emit false [^ ]+ [0-9]+ [^ ]+( "")?$' scripts/cycle.sh)"
+[ "$n_bad" -eq 0 ] && echo "  ok    no 'emit false' line is missing its error argument (all $n_all sites carry one)" \
+  || { echo "::error::$n_bad site(s) missing error: $(grep -nE 'emit false [^ ]+ [0-9]+ [^ ]+( "")?$' scripts/cycle.sh)"; fail=1; }
+
+echo "r2m4/N-m1: structural - every exit-6 site means ok:true/next:escalated, never ok:false (exit 6 means one thing everywhere)"
+n_lit6="$(grep -cE 'exit 6$' scripts/cycle.sh)"
+n_lit6ok="$(grep -B1 -E 'exit 6$' scripts/cycle.sh | grep -cE 'emit true .* 6 escalated$')"
+[ "$n_lit6" -eq 3 ] && [ "$n_lit6ok" -eq 3 ] && echo "  ok    all 3 literal exit-6 sites (escalate, both open-round ceiling gates) emit ok:true/next:escalated" \
+  || { echo "::error::lit6=$n_lit6 lit6ok=$n_lit6ok"; fail=1; }
+grep -qF 'emit true "$VERBLABEL" "$exit_code" "$next_val"' scripts/cycle.sh \
+  && echo "  ok    judge's own ESCALATE (exit_code=6) path shares the same unconditional emit true call - never emit false" \
+  || { echo "::error::judge's emit call not found in the expected literal shape"; fail=1; }
+
+# --- regression proof: the same six checks replayed against b9f36e8's cycle.sh vs. the branch's,
+# reusing run_wall_probes (extended above with a variadic extra-probe list) rather than a second
+# runner - a second scratch git repo per version, the branch's own working tree untouched. ------
+
+probe_r2m3() {
+  mk_open_spec pr2m3 2; set_tier pr2m3 3 >/dev/null
+  touch .git/index.lock
+  council open-round docs/specs/pr2m3 --commit >/dev/null 2>&1
+  rm -f .git/index.lock
+  council open-round docs/specs/pr2m3 --commit >/dev/null 2>&1
+  [ -z "$(git status --porcelain -- docs/specs/pr2m3)" ] && echo ok || echo FAIL
+}
+probe_r2m16() {
+  mk_open_spec pr2m16 2; set_tier pr2m16 1 >/dev/null
+  printf -- '---\nstory: pr2m16-02\nspec: pr2m16\nstatus: blocked\nwave: 1\n---\n# S2\n' > docs/specs/pr2m16/pr2m16-02-second.md
+  git add -A && git commit -qm "blocked story" >/dev/null
+  local out ex; out="$(council open-round docs/specs/pr2m16 2>&1)"; ex=$?
+  [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'is blocked:' && echo ok || echo FAIL
+}
+probe_nm3() {
+  mk_open_spec pnm3 2; set_tier pnm3 1 >/dev/null
+  mkdir -p docs/specs/pnm3/council/round-1
+  local out; out="$(council status docs/specs/pnm3 --json)"
+  printf '%s' "$out" | jq -e '.open == false' >/dev/null 2>&1 && echo ok || echo FAIL
+}
+probe_ceiling() {
+  mk_spec pceil 5
+  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, x/' docs/specs/pceil/plan.md
+  sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/pceil#' docs/specs/pceil/plan.md
+  set_tier pceil 3 >/dev/null
+  mkdir -p docs/specs/pceil/council
+  printf '1\n' > docs/specs/pceil/council/CEILING
+  git add -A && git commit -qm "pceil setup" >/dev/null
+  local rd; rd="$(mk_round pceil 1 1)"
+  write_seat "$rd" haiku GRGGR
+  write_seat "$rd" sonnet GGGGG
+  write_seat "$rd" opus GGGGG
+  write_review "$rd" PASS
+  printf '{"ts":"%s","spec":"pceil","round":1,"verdict":"RED","head":"%s","pack":"demo-pack","asks":5,"red":[2,5],"red_unevidenced":[],"na":0,"review":"PASS","haiku":"RED","haiku_model":"m","sonnet":"GREEN","sonnet_model":"m","opus":"GREEN","opus_model":"m","attempts":4,"escalate":null,"note":""}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$HEAD7" >> memory/stats/council.jsonl
+  git add -A && git commit -qm "pceil fabricated round 1" >/dev/null
+  council open-round docs/specs/pceil >/dev/null 2>&1
+  local row; row="$(grep '"spec":"pceil"' memory/stats/council.jsonl | grep '"verdict":"ESCALATE"')"
+  printf '%s' "$row" | grep -qF '"red":[2,5]' && echo ok || echo FAIL
+}
+probe_courtcommit() {
+  mk_open_spec pcourt 2; set_tier pcourt 3 >/dev/null
+  local out; out="$(GIT_AUTHOR_NAME='' GIT_AUTHOR_EMAIL='' GIT_COMMITTER_NAME='' GIT_COMMITTER_EMAIL='' council open-round docs/specs/pcourt --commit 2>&1)"
+  # Exit 2 alone is not distinctive here: the tainted identity env can also break the outer
+  # commit_paperwork call (a different site, same exit code) - only the "court reduction
+  # commit failed" error names the fix this probe is for (the old `|| true` masks the court's
+  # own commit failure and lets build_round continue to exit 0/6 instead).
+  printf '%s' "$out" | grep -qF '"error":"court reduction commit failed"' && echo ok || echo FAIL
+}
+probe_exit6uniform() {
+  mk_spec puni 2
+  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, x/' docs/specs/puni/plan.md
+  sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/puni#' docs/specs/puni/plan.md
+  set_tier puni 1 >/dev/null
+  mkdir -p docs/specs/puni/council
+  printf '1\n' > docs/specs/puni/council/CEILING
+  git add -A && git commit -qm "puni setup" >/dev/null
+  mk_round puni 1 1 >/dev/null
+  printf '{"ts":"%s","spec":"puni","round":1,"verdict":"RED","head":"%s","pack":"demo-pack","asks":2,"red":[1],"red_unevidenced":[],"na":0,"review":"","haiku":"","haiku_model":"unknown","sonnet":"RED","sonnet_model":"m","opus":"","opus_model":"unknown","attempts":1,"escalate":null,"note":""}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$HEAD7" >> memory/stats/council.jsonl
+  git add -A && git commit -qm "puni fabricated round 1" >/dev/null
+  local out; out="$(council open-round docs/specs/puni 2>&1)"
+  printf '%s' "$out" | tail -n1 | jq -e '.ok == true' >/dev/null 2>&1 && echo ok || echo FAIL
+}
+
+OLDCYCLE2="$(mktemp)"
+git -C "$SRC" show b9f36e8:scripts/cycle.sh > "$OLDCYCLE2"
+run_wall_probes "b9f36e8" "$OLDCYCLE2" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
+run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
+rm -f "$OLDCYCLE2"
 
 exit $fail
