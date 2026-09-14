@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-13
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 tracer: false
@@ -46,6 +46,11 @@ The Workflow driver, the `/vulyk-build` fallback and `/vulyk-review` each claim 
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `.claude/workflows/vulyk-cycle.js`: first clerk call is `claim <spec> <stamp>` (returns `{stop:{verb:'claim',...}}` on refusal, no further clerk call); `open-round`/`close-story`/`judge`/`record-seat` command templates now append `--stamp ${stamp}`; a `finally` around the try/catch calls `release <spec> <stamp>` whenever `claimed` is true, covering every exit (terminal `next`, `Stop`, `BadLine`, `Paused`).
+- `tests/driver.test.sh`: added a `withClaim()` helper that brackets every scenario's clerk queue with claim/release stub entries (kept scenarios (a)/(h) - the pre-claim launch guards - unwrapped); added scenario (t) for a refused claim, a static regex check that all four gated verbs' templates carry `--stamp ${stamp}`, and inline assertions on individual scenarios that close-story/open-round/record-seat commands carry `--stamp` and that release still runs after a two-miss stop.
+- `.claude/commands/vulyk-build.md` step 1: claims right after taking `$stamp`, stops on refusal without dispatching either driver; fallback loop's four gated verbs (`close-story`, `open-round`, `record-seat`, `judge`) now pass `--stamp $stamp`; every loop exit (an `ok:false` stop, `briefed`, `shipped`, the three step-3 terminals, the second-miss block-and-stop) releases the semaphore; step 4's wake-up names `stop.verb === 'claim'` and points at the release command the error names.
+- `.claude/commands/vulyk-review.md`: step 1 now takes the stamp and claims before the precondition check (release on refusal or ceiling exit 6); `open-round`, `record-seat`, `judge` carry `--stamp $stamp`; step 5 releases unconditionally right after `judge`, before reading `next`.
+- Verification: `bash tests/driver.test.sh` - 31 checks green, exit 0 (run twice, both green). `bash scripts/scope-check.sh` on this story confirms the 4 declared files are exactly what changed (the two extra files scope-check flags - `journal.md`, a learnings file - predate this story, per the session's initial git status).
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

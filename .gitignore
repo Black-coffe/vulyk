@@ -32,3 +32,4 @@ __pycache__/
 # derived/transient, never the source of truth (council.jsonl and story frontmatter are).
 .vulyk/
 docs/specs/*/PAUSE
+docs/specs/*/DRIVER

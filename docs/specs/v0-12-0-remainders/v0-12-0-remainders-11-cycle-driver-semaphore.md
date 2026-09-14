@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-11
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 tracer: false
@@ -48,6 +48,12 @@ blocked_by: [v0-12-0-remainders-08, v0-12-0-remainders-16]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `scripts/cycle.sh`: added `driver_stamp`/`driver_guard` helpers next to `pause_guard`; new `cmd_claim`/`cmd_release` verbs (noclobber write, PAUSE-gated, no `--commit`); `open-round`/`record-seat`/`close-story`/`judge` now parse `--stamp` and call `driver_guard` right after `pause_guard`, before any write.
+- `cmd_judge` guards only when invoked as the real `judge` verb (`VERBLABEL="judge"`), not when `cmd_escalate` reuses it internally as `escalate` - keeps escalate ungated per Non-goals.
+- `pause`/`resume` remove `DRIVER` when present and journal a `driver` stage line "driver released", ahead of their existing journal writes.
+- `.gitignore`: added `docs/specs/*/DRIVER`.
+- Verified manually (temp git repos): claim/claim-same-stamp/claim-conflict/release-match/release-mismatch/PAUSE-blocks-claim/four-verbs-gated-with-and-without-`--stamp`/pause+resume release DRIVER - all matched acceptance criteria.
+- `bash tests/council.test.sh` (no `tests/council.test.sh` edits made, per Non-goals): exit 0, all scenarios `ok` including the story-11-adjacent `probe_returned`/`probe_r2m2wall`/`probe_lr31wall`/`probe_r2m9wall` checks on the current `branch` snapshot (the `eb3203a` snapshot's expected `FAIL`s are the suite's own negative control, unrelated to this story).
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

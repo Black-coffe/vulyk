@@ -105,7 +105,15 @@ const attempts = new Map() // story file -> misses this run: red close-story or 
 const lastError = new Map() // story file -> the most recent miss's own reason, carried into the two-miss stop (M2/X-M1)
 const repaired = new Set() // round numbers already sent to queen-planner this run (R30, per-run only)
 
+// The DRIVER semaphore (ADR-004/K3): claim once, right after the launch guards, before any
+// other clerk call; release on every exit path including a stop, a BadLine or a Paused - the
+// `finally` below is the one release point, so a held-by refusal never reaches it (claimed
+// stays false) and every other exit does.
+let claimed = false
 try {
+  const claimRes = await clerk(`claim ${spec} ${stamp}`)
+  if (!claimRes.ok) return { stop: asStop(claimRes) }
+  claimed = true
   for (;;) {
     const st = await clerk(`status ${spec} --json`)
     log(`${st.slug} · ${st.stage} · next: ${st.next}`)
@@ -151,7 +159,7 @@ try {
         if (typeof report === 'string' && report.trim() !== '') {
           // close-story derives `repeat: N` itself from the story's own ## Verification block
           // (cycle.sh's cmd_close_story) and takes no --repeat flag, so it is not passed here.
-          const res = await clerk(`close-story ${file} --commit`)
+          const res = await clerk(`close-story ${file} --commit --stamp ${stamp}`)
           if (res.ok) continue
           if (res.exit !== 4) fail(st, asStop(res))
           lastError.set(file, res.error)
@@ -165,7 +173,7 @@ try {
       }
     } else if (st.next === 'open-round') {
       phase('Round')
-      const res = await clerk(`open-round ${spec} --commit`)
+      const res = await clerk(`open-round ${spec} --commit --stamp ${stamp}`)
       // exit 6 at the bound: cycle.sh already recorded the escalation (R5) - this driver's job is only to stop
       if (!res.ok) fail(st, asStop(res))
     } else if (st.next.startsWith('dispatch:')) {
@@ -175,7 +183,7 @@ try {
       const recordSeat = (seat, report, attempt) => {
         const d = delim(seat, attempt)
         const body = report ?? '' // a null report (dead agent(), a throwing parallel thunk) is an empty body, never the string "null"
-        return clerk(`record-seat ${spec} ${st.round} ${seat} <<'${d}'\n${body}\n${d}`)
+        return clerk(`record-seat ${spec} ${st.round} ${seat} --stamp ${stamp} <<'${d}'\n${body}\n${d}`)
       }
       const reports = await parallel(seats.map((seat) => () => dispatchSeat(seat, st, '')))
       let dispatchStop = null
@@ -192,7 +200,7 @@ try {
       if (dispatchStop) fail(st, dispatchStop)
     } else if (st.next === 'judge') {
       phase('Judge')
-      const res = await clerk(`judge ${spec} --commit`)
+      const res = await clerk(`judge ${spec} --commit --stamp ${stamp}`)
       if (!res.ok) fail(st, asStop(res))
     } else if (st.next === 'repair') {
       phase('Repair')
@@ -219,4 +227,8 @@ try {
   if (e instanceof Paused) return { next: e.next }
   if (e instanceof Stop) return e.result
   throw e
+} finally {
+  // A release after pause is harmless (DRIVER already absent, exit 0) - not the mechanism,
+  // just a no-op on that path; every other path is where this call matters (K3, Non-goals).
+  if (claimed) await clerk(`release ${spec} ${stamp}`).catch(() => {})
 }

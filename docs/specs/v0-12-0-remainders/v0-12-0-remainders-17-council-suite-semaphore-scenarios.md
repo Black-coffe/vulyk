@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-17
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-test
 tracer: false
@@ -45,6 +45,13 @@ blocked_by: [v0-12-0-remainders-11]
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `tests/council.test.sh:30`: fixture `.gitignore` printf gains `docs/specs/*/DRIVER`.
+- New "Story 17" section at the end of the file: `claim` (creation/idempotent/conflict/PAUSE), `release` (match/absent/mismatch), `pause`/`resume` (DRIVER removal + `driver released` journal line), and the gated-verbs scenario (`open-round`/`record-seat`/`judge`/`close-story`, no-stamp/wrong-stamp/right-stamp/PAUSE+DRIVER/no-DRIVER), reusing `mk_spec`/`mk_open_spec`/`set_tier`/`seat_report`/`council` exactly as the recon's "To add one scenario" describes.
+- Extended `run_wall_probes` with a fourth pinned version, computed dynamically per the map slice (`PRESHA11="$(git -C "$SRC" log -1 --format=%h --grep='story(v0-12-0-remainders-11)')^"` = `ca0c74a^`, i.e. `30a6e3d`), with 4 new probe fns (`probe_claim`, `probe_release`, `probe_pauserelease`, `probe_gated`) - no restructuring of the runner itself, per Non-goals.
+- One in-scope fix inside `run_wall_probes`'s own scratch-hive `.gitignore` printf (not the line-30 literal the criterion names): added `docs/specs/*/DRIVER` there too. Without it, `probe_gated`'s matching-stamp `open-round` call tripped the unrelated whole-tree "clean" precondition (`cycle.sh:1778`, `git status --porcelain` with no path scoping) on the untracked `DRIVER` file and failed for the wrong reason. Confirmed by reproducing the probe in an isolated fixture with and without the ignore line before touching the suite.
+- One assertion fix in the gated-verbs scenario: `! grep -q '^\*\*Council:\*\*' plan.md` false-failed because `templates/plan.md`'s own placeholder line starts with the same marker; tightened to `! grep -qE '^\*\*Council:\*\* (GREEN|RED|ESCALATE|STALE) round'`.
+- Pre-story (`ca0c74a^`/`30a6e3d`) observed labels: `probe_claim FAIL`, `probe_release FAIL`, `probe_pauserelease FAIL`, `probe_gated FAIL` (no `claim`/`release`/`DRIVER` code exists there at all - `usage` catches the unknown verb). Branch observed labels: `probe_claim ok`, `probe_release ok`, `probe_pauserelease ok`, `probe_gated ok` - each `ok` was observed, not forced.
+- `bash tests/council.test.sh | tail -3` (whole run, final of three): exit 0, last lines `probe_release: ok` / `probe_pauserelease: ok` / `probe_gated: ok`, `grep -c '::error'` = 0 across the full transcript. Every pre-existing scenario (stories 14/15/16) unchanged and green.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
