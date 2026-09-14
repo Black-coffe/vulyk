@@ -22,3 +22,4 @@
 - 2026-09-14T06:38:25Z · 03-building · workflow run wf_62daded2 died: session lost login mid-wave 4 · next: story 15 worker cut with an uncommitted partial diff in tests/council.test.sh; relogin done, relaunching fresh
 - 2026-09-14T06:38:25Z · 03-building · launching the workflow driver · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
 - 2026-09-14T07:22:06Z · 03-building · story blocked · next: story 08: two red verifications (bash tests/council.test.sh) - returned: gate breaks fixtures that story 16 fixes in wave 6; lead-architect consulted
+- 2026-09-14T07:28:36Z · 03-building · launching the workflow driver · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
