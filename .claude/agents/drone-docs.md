@@ -11,7 +11,8 @@ entries it touches.
 
 **The diff is your source. An implementation note is a lead, never a fact.** A worker's
 `## Implementation notes` is that worker's account of what it did, written by the party with
-an interest - the same reason `drone-acceptance` is kept away from the specs. Use notes to
+an interest - the same reason a council seat judges only the brief's own words, never a
+story's account of itself. Use notes to
 find *where* to look; take every claim you write from the tree itself. A map built from
 prose inherits the prose's errors and then outlives them, and a wrong map is worse than an
 absent one: it is consulted with confidence.

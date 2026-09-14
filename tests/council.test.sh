@@ -24,10 +24,11 @@ expect() { # expect <label> <needle>   (reads the output to judge from stdin)
 cd "$T" || exit 1
 git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
 mkdir -p scripts memory/stats docs/specs .claude
-cp "$SRC"/scripts/lib.sh "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh scripts/
+cp "$SRC"/scripts/lib.sh "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh scripts/
 # Mirrors the real .gitignore (D1: neither is ever committed) - without it, open-round's
-# "clean tree" precondition would trip on its own court worktree and PAUSE files.
-printf '.vulyk/\ndocs/specs/*/PAUSE\n' > .gitignore
+# "clean tree" precondition would trip on its own court worktree and PAUSE files. Story 17
+# adds DRIVER (ADR-004/K3): a claim must leave the fixture repo's tree clean too.
+printf '.vulyk/\ndocs/specs/*/PAUSE\ndocs/specs/*/DRIVER\n' > .gitignore
 # A minimal CLAUDE.md `## Commands` table (R11/C-4, autonomous-cycle-21): close-story now
 # refuses a verification command that is not a literal cell of this table, so every fixture
 # below that calls close-story must have its command listed here first.
@@ -43,6 +44,7 @@ cat > CLAUDE.md <<'EOF'
 | Fixture: always succeeds | `true` |
 | Fixture: quoted command that fails | `sh -c "exit 1"` |
 | Fixture: backslash command that fails | `sh -c 'echo a\b; exit 1'` |
+| r2m9 fixture: a cell that is itself an &&-joined command | `sh -c 'true && true'` |
 EOF
 git add -A && git commit -qm init >/dev/null
 HEAD7="$(git rev-parse --short HEAD)"
@@ -1038,6 +1040,7 @@ cat > docs/specs/cstory1/cstory1-01-first.md <<'EOF'
 story: cstory1-01
 spec: cstory1
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story fixture
@@ -1079,6 +1082,7 @@ cat > docs/specs/cstory3/cstory3-01-first.md <<'EOF'
 story: cstory3-01
 spec: cstory3
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story disallowed-command fixture
@@ -1100,6 +1104,7 @@ cat > docs/specs/cstory4/cstory4-01-first.md <<'EOF'
 story: cstory4-01
 spec: cstory4
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story &&-segment fixture
@@ -1118,6 +1123,7 @@ cat > docs/specs/cstory2/cstory2-01-first.md <<'EOF'
 story: cstory2-01
 spec: cstory2
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story multi-line fixture
@@ -1140,6 +1146,7 @@ cat > docs/specs/cstoryq/cstoryq-01-first.md <<'EOF'
 story: cstoryq-01
 spec: cstoryq
 status: todo
+returned: DONE
 wave: 1
 ---
 # emit-escape fixture, a quoted command
@@ -1162,6 +1169,7 @@ cat > docs/specs/cstorybs/cstorybs-01-first.md <<'EOF'
 story: cstorybs-01
 spec: cstorybs
 status: todo
+returned: DONE
 wave: 1
 ---
 # emit-escape fixture, a backslash command
@@ -1184,6 +1192,7 @@ cat > docs/specs/cstory5/cstory5-01-first.md <<MDEOF
 story: cstory5-01
 spec: cstory5
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story none fixture
@@ -1210,6 +1219,7 @@ cat > docs/specs/cstory6/cstory6-02-second.md <<'EOF'
 story: cstory6-02
 spec: cstory6
 status: todo
+returned: DONE
 wave: 1
 ---
 # Close-story scope.jsonl commit fixture
@@ -1232,6 +1242,222 @@ out="$(council open-round docs/specs/cstory6 --commit 2>&1)"; ex=$?
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 [ -z "$(git status --porcelain)" ] && echo "  ok    tree is clean after both verbs" \
   || { echo "::error::tree dirty: $(git status --porcelain)"; fail=1; }
+
+# --- story 16: the four story 08 fixes - cstoryr1..r4 (M3/ADR-006 returned: gate), r2m2 -------
+# (close-story --commit owns its commit), LR31 (wave_stories lists only ready stories), r2m9 --
+# (a ## Commands cell with its own && matches whole) ------------------------------------------
+
+echo "close-story: cstoryr1 - returned: DONE, verification true -> exit 0, status: done, exactly one new commit (M3)"
+mkdir -p docs/specs/cstoryr1
+cat > docs/specs/cstoryr1/cstoryr1-01-first.md <<'EOF'
+---
+story: cstoryr1-01
+spec: cstoryr1
+status: todo
+returned: DONE
+wave: 1
+---
+# R1
+
+## Files
+- docs/specs/cstoryr1/cstoryr1-01-first.md
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "spec(cstoryr1): fixture" >/dev/null
+commits_before="$(git rev-list --count HEAD)"
+out="$(council close-story docs/specs/cstoryr1/cstoryr1-01-first.md --commit)"; ex=$?
+commits_after="$(git rev-list --count HEAD)"
+[ "$ex" -eq 0 ] && echo "  ok    cstoryr1: exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -q '^status: done' docs/specs/cstoryr1/cstoryr1-01-first.md && echo "  ok    cstoryr1: status: done" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstoryr1/cstoryr1-01-first.md)"; fail=1; }
+[ "$((commits_after - commits_before))" -eq 1 ] && echo "  ok    cstoryr1: exactly one new commit" \
+  || { echo "::error::commits before=$commits_before after=$commits_after"; fail=1; }
+
+echo "close-story: cstoryr2 - returned: WALL, verification 'none' -> exit 4, last line names returned WALL, status stays in-progress, no commit (M3)"
+mkdir -p docs/specs/cstoryr2
+cat > docs/specs/cstoryr2/cstoryr2-01-first.md <<MDEOF
+---
+story: cstoryr2-01
+spec: cstoryr2
+status: in-progress
+returned: WALL
+wave: 1
+---
+# R2
+
+## Verification
+none — reviewed by lead-review
+MDEOF
+git add -A && git commit -qm "spec(cstoryr2): fixture" >/dev/null
+commits_before="$(git rev-list --count HEAD)"
+out="$(council close-story docs/specs/cstoryr2/cstoryr2-01-first.md --commit 2>&1)"; ex=$?
+commits_after="$(git rev-list --count HEAD)"
+lastline="$(printf '%s\n' "$out" | tail -1)"
+[ "$ex" -eq 4 ] && printf '%s' "$lastline" | grep -qF '"error":"returned WALL"' && printf '%s' "$lastline" | grep -qF '"next":"repair"' \
+  && echo "  ok    cstoryr2: exit 4, last line names returned WALL, next:repair" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -q '^status: in-progress' docs/specs/cstoryr2/cstoryr2-01-first.md && echo "  ok    cstoryr2: status stays in-progress" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstoryr2/cstoryr2-01-first.md)"; fail=1; }
+[ "$commits_after" -eq "$commits_before" ] && echo "  ok    cstoryr2: no new commit" \
+  || { echo "::error::commits before=$commits_before after=$commits_after"; fail=1; }
+
+echo "close-story: cstoryr3 - returned: absent -> exit 4, error returned: missing (M3)"
+mkdir -p docs/specs/cstoryr3
+cat > docs/specs/cstoryr3/cstoryr3-01-first.md <<'EOF'
+---
+story: cstoryr3-01
+spec: cstoryr3
+status: todo
+wave: 1
+---
+# R3
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "spec(cstoryr3): fixture" >/dev/null
+out="$(council close-story docs/specs/cstoryr3/cstoryr3-01-first.md 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s\n' "$out" | tail -1 | grep -qF '"error":"returned: missing"' && echo "  ok    cstoryr3: exit 4, error returned: missing" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "close-story: cstoryr4 - returned: NEEDS_CONTEXT -> exit 4 before the command runs, flag file stays absent (M3)"
+mkdir -p docs/specs/cstoryr4
+cat > docs/specs/cstoryr4/cstoryr4-01-first.md <<'EOF'
+---
+story: cstoryr4-01
+spec: cstoryr4
+status: todo
+returned: NEEDS_CONTEXT
+wave: 1
+---
+# R4
+
+## Verification
+`touch docs/specs/cstoryr4/flag.txt`
+EOF
+git add -A && git commit -qm "spec(cstoryr4): fixture" >/dev/null
+out="$(council close-story docs/specs/cstoryr4/cstoryr4-01-first.md 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && echo "  ok    cstoryr4: exit 4" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -f docs/specs/cstoryr4/flag.txt ] && echo "  ok    cstoryr4: flag file absent - the verification command never ran" \
+  || { echo "::error::flag.txt exists: the verification command ran"; fail=1; }
+
+echo "close-story --commit: r2m2 - a locked index leaves the story todo|in-progress on disk (never an uncommitted 'done'); the retry closes and commits"
+mkdir -p docs/specs/cstorylock1
+cat > docs/specs/cstorylock1/cstorylock1-01-first.md <<'EOF'
+---
+story: cstorylock1-01
+spec: cstorylock1
+status: todo
+returned: DONE
+wave: 1
+---
+# Lock
+
+## Files
+- docs/specs/cstorylock1/cstorylock1-01-first.md
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "spec(cstorylock1): fixture" >/dev/null
+touch .git/index.lock
+out="$(council close-story docs/specs/cstorylock1/cstorylock1-01-first.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'commit' && echo "  ok    r2m2: locked index -> exit 2, error names the commit" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -qE '^status: (todo|in-progress)$' docs/specs/cstorylock1/cstorylock1-01-first.md && echo "  ok    r2m2: story still reads todo|in-progress on disk" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstorylock1/cstorylock1-01-first.md)"; fail=1; }
+statusout="$(council status docs/specs/cstorylock1 --json)"
+printf '%s' "$statusout" | jq -e '.next != "open-round"' >/dev/null 2>&1 && echo "  ok    r2m2: status --json does not say next:open-round while the tree is dirty" \
+  || { echo "::error::status: $statusout"; fail=1; }
+rm -f .git/index.lock
+commits_before="$(git rev-list --count HEAD)"
+out="$(council close-story docs/specs/cstorylock1/cstorylock1-01-first.md --commit)"; ex=$?
+commits_after="$(git rev-list --count HEAD)"
+[ "$ex" -eq 0 ] && echo "  ok    r2m2: retry after the lock is removed exits 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -q '^status: done' docs/specs/cstorylock1/cstorylock1-01-first.md && echo "  ok    r2m2: retry writes status: done" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstorylock1/cstorylock1-01-first.md)"; fail=1; }
+[ "$((commits_after - commits_before))" -eq 1 ] && echo "  ok    r2m2: retry lands exactly one commit" \
+  || { echo "::error::commits before=$commits_before after=$commits_after"; fail=1; }
+
+echo "status --json: LR31 - a todo story blocked_by a blocked story is excluded from wave_stories; once the blocker is done, it is listed"
+mkdir -p docs/specs/lr31w
+cat > docs/specs/lr31w/lr31w-01-a.md <<'EOF'
+---
+story: lr31w-01
+spec: lr31w
+status: todo
+wave: 1
+blocked_by: [lr31w-02]
+---
+# A
+
+## Verification
+`true`
+EOF
+cat > docs/specs/lr31w/lr31w-02-b.md <<'EOF'
+---
+story: lr31w-02
+spec: lr31w
+status: blocked
+wave: 1
+---
+# B
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "spec(lr31w): fixture" >/dev/null
+out="$(council status docs/specs/lr31w --json)"
+printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: A blocked_by a blocked B -> wave_stories: []" '[]'
+sed -i 's/^status: blocked/status: done/' docs/specs/lr31w/lr31w-02-b.md
+git add -A && git commit -qm "lr31w: B done" >/dev/null
+out="$(council status docs/specs/lr31w --json)"
+printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: B done -> A is listed" \
+  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","repeat":1}]'
+
+echo "close-story: r2m9 - a ## Commands cell with its own && matches whole; adding a further && true is refused, naming the segment"
+mkdir -p docs/specs/cstoryr2m9
+cat > docs/specs/cstoryr2m9/cstoryr2m9-01-first.md <<'EOF'
+---
+story: cstoryr2m9-01
+spec: cstoryr2m9
+status: todo
+returned: DONE
+wave: 1
+---
+# R2M9
+
+## Files
+- docs/specs/cstoryr2m9/cstoryr2m9-01-first.md
+
+## Verification
+`sh -c 'true && true'`
+EOF
+git add -A && git commit -qm "spec(cstoryr2m9): fixture" >/dev/null
+out="$(council close-story docs/specs/cstoryr2m9/cstoryr2m9-01-first.md --commit)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    r2m9: the && cell matches whole and runs" || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+mkdir -p docs/specs/cstoryr2m9b
+cat > docs/specs/cstoryr2m9b/cstoryr2m9b-01-first.md <<'EOF'
+---
+story: cstoryr2m9b-01
+spec: cstoryr2m9b
+status: todo
+returned: DONE
+wave: 1
+---
+# R2M9B
+
+## Verification
+`sh -c 'true && true' && true`
+EOF
+git add -A && git commit -qm "spec(cstoryr2m9b): fixture" >/dev/null
+out="$(council close-story docs/specs/cstoryr2m9b/cstoryr2m9b-01-first.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF "verification not in ## Commands: sh -c 'true" \
+  && echo "  ok    r2m9: an extra && true segment is refused, naming the segment" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
 
 # --- open-round: preconditions, the court, D1 idempotency/staleness, orphan cleanup ------------
 
@@ -1656,5 +1882,810 @@ printf '%s' "$row" | grep -qF '"opus":"ABSENT"' && echo "  ok    STALE row: opus
   || { echo "::error::row: $row"; fail=1; }
 [ -d docs/specs/stalenr1/council/round-2 ] && echo "  ok    round 2 opened (the fold path, not an in-place re-stamp)" \
   || { echo "::error::round-2 missing - the has_seat=0 re-stamp path fired instead of the fold"; fail=1; }
+
+# ============================================================================================
+# Story 14: one scenario per story 01 criterion (LR19, LR21/r2m1, LR25, m-4, m-10, N-m7)
+# ============================================================================================
+
+echo "judge: attempts counts every stored file per seat - a re-ask counts 2, not 1 (LR19, cmd_judge)"
+mk_open_spec lr19a 2
+set_tier lr19a 1
+rd19a="$(mk_open_round lr19a 1)"
+write_seat "$rd19a" sonnet GG
+cp "$rd19a/sonnet.md" "$rd19a/sonnet.attempt-1.md"   # a re-asked seat: attempt-1 + the final .md both on disk
+out="$(council judge docs/specs/lr19a)"; ex=$?
+[ "$ex" -eq 0 ] || { echo "::error::lr19a judge: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"lr19a"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"attempts":2' && echo "  ok    attempts:2 for one seat's .md + .attempt-1.md" \
+  || { echo "::error::row: $row"; fail=1; }
+
+echo "escalate: attempts counts a re-asked seat's files too, across the seats it does see (LR19, write_escalate_row_for_round)"
+mk_open_spec lr19b 2
+set_tier lr19b 3
+rd19b="$(mk_open_round lr19b 1)"
+write_seat "$rd19b" haiku GG
+cp "$rd19b/haiku.md" "$rd19b/haiku.attempt-1.md"     # haiku re-asked: 2 files
+write_seat "$rd19b" sonnet GG                         # sonnet: 1 file
+write_seat "$rd19b" opus GG                           # opus: 1 file
+# review (required at tier 3) never dispatched -> escalate has a real missing seat
+out="$(council escalate docs/specs/lr19b 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] || { echo "::error::lr19b escalate: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"lr19b"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"attempts":4' && echo "  ok    attempts:4 (haiku 2 + sonnet 1 + opus 1 + review 0)" \
+  || { echo "::error::row: $row"; fail=1; }
+
+echo "open-round: the STALE fold's attempts also counts a re-asked seat's attempt-1 file (LR19, write_stale_row)"
+mk_open_spec lr19c 2
+set_tier lr19c 2
+council open-round docs/specs/lr19c --commit >/dev/null
+rd19c="docs/specs/lr19c/council/round-1"
+write_seat "$rd19c" sonnet GG
+cp "$rd19c/sonnet.md" "$rd19c/sonnet.attempt-1.md"
+echo "code change" > lr19c-code.txt
+git add -A && git commit -qm "real code change on lr19c round 1" >/dev/null
+council open-round docs/specs/lr19c --commit >/dev/null
+row="$(grep '"spec":"lr19c"' memory/stats/council.jsonl | grep '"round":1,' | tail -1)"
+printf '%s' "$row" | grep -qF '"attempts":2' && echo "  ok    STALE row attempts:2 (sonnet .md + .attempt-1.md)" \
+  || { echo "::error::row: $row"; fail=1; }
+
+echo "judge: round-number match is exact - a closed round 10's row never satisfies round 1 (LR21/r2m1)"
+mk_open_spec lr21a 2
+set_tier lr21a 1
+printf '{"ts":"2020-01-01T00:00:00Z","spec":"lr21a","round":10,"verdict":"ESCALATE","head":"aaaaaaa","pack":"demo-pack","asks":2,"red":[],"red_unevidenced":[],"na":0,"review":"","haiku":"","haiku_model":"unknown","sonnet":"","sonnet_model":"unknown","opus":"","opus_model":"unknown","attempts":0,"escalate":"ceiling","note":""}\n' >> memory/stats/council.jsonl
+rd21a="$(mk_open_round lr21a 1)"
+write_seat "$rd21a" sonnet GG
+out="$(council status docs/specs/lr21a --json)"
+printf '%s' "$out" | jq -e '.open == true and .round == 1' >/dev/null 2>&1 && echo "  ok    status --json: round 1 reported open despite a round-10 row on record" \
+  || { echo "::error::status: $out"; fail=1; }
+out="$(council judge docs/specs/lr21a)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"green"' && echo "  ok    judge round 1 -> green, not short-circuited by round 10's row" \
+  || { echo "::error::lr21a judge: exit=$ex out=$out"; fail=1; }
+n_round1_rows="$(grep -c '"spec":"lr21a".*"round":1,' memory/stats/council.jsonl)"
+[ "$n_round1_rows" -eq 1 ] && echo "  ok    exactly one round-1 row was written (round 10's row did not block it)" \
+  || { echo "::error::round-1 row count: $n_round1_rows"; fail=1; }
+
+echo "judge: **Council:** replaces the template placeholder in place, before **Shipped:**, not at file EOF (LR25/C7)"
+mk_open_spec lr25a 2
+set_tier lr25a 1
+rd25a="$(mk_open_round lr25a 1)"
+write_seat "$rd25a" sonnet GGG
+council judge docs/specs/lr25a >/dev/null
+cln1="$(grep -n '^\*\*Council:\*\*' docs/specs/lr25a/plan.md | tail -1 | cut -d: -f1)"
+shln1="$(grep -n '^\*\*Shipped:\*\*' docs/specs/lr25a/plan.md | head -1 | cut -d: -f1)"
+[ -n "$cln1" ] && [ -n "$shln1" ] && [ "$cln1" -lt "$shln1" ] && echo "  ok    round 1's Council line sits before Shipped, not appended after it" \
+  || { echo "::error::plan.md order: council@$cln1 shipped@$shln1"; fail=1; }
+before_ct="$(grep -c '^\*\*Council:\*\*' docs/specs/lr25a/plan.md)"
+council judge docs/specs/lr25a >/dev/null
+after_ct="$(grep -c '^\*\*Council:\*\*' docs/specs/lr25a/plan.md)"
+[ "$before_ct" -eq "$after_ct" ] && echo "  ok    a second judge on the same round adds no new Council line (idempotent)" \
+  || { echo "::error::before=$before_ct after=$after_ct"; fail=1; }
+
+echo "judge: with a prior round's Council line already on record, the next round's line inserts right after it, not at EOF (LR25/C7)"
+mk_open_spec lr25b 2
+set_tier lr25b 1
+sed -i 's/^\*\*Council:\*\* <.*/**Council:** GREEN round 1, 2020-01-01, at 1234567, pack demo-pack/' docs/specs/lr25b/plan.md
+git add -A && git commit -qm "lr25b: seed a round-1 Council line" >/dev/null
+rd25b="$(mk_open_round lr25b 2)"
+write_seat "$rd25b" sonnet GGG
+council judge docs/specs/lr25b >/dev/null
+shln2="$(grep -n '^\*\*Shipped:\*\*' docs/specs/lr25b/plan.md | head -1 | cut -d: -f1)"
+newest_cln2="$(grep -n '^\*\*Council:\*\*' docs/specs/lr25b/plan.md | tail -1 | cut -d: -f1)"
+[ -n "$newest_cln2" ] && [ -n "$shln2" ] && [ "$newest_cln2" -lt "$shln2" ] && echo "  ok    round 2's Council line inserts before Shipped, right after round 1's" \
+  || { echo "::error::council lines vs shipped@$shln2: newest@$newest_cln2"; fail=1; }
+grep -A1 -F '**Council:** GREEN round 1' docs/specs/lr25b/plan.md | tail -1 | grep -qF 'round 2' \
+  && echo "  ok    round 2's line sits directly after round 1's line, not at file EOF" \
+  || { echo "::error::plan.md: $(cat docs/specs/lr25b/plan.md)"; fail=1; }
+marker_fn="$(awk '/^marker\(\)/{flag=1} flag{print} flag && /^}/{exit}' scripts/cycle.sh)"
+eval "$marker_fn"
+marker_val="$(marker docs/specs/lr25b/plan.md Council)"
+printf '%s' "$marker_val" | grep -qF 'round 2' && echo "  ok    marker \"\$PLAN\" Council returns the newest (round 2) line" \
+  || { echo "::error::marker returned: $marker_val"; fail=1; }
+
+echo "judge: a human.jsonl REJECTED row timestamped the same second as ROUND.opened still overrides (m-4, >= not >)"
+mk_open_spec m4a 2
+set_tier m4a 1
+rd4a="$(mk_open_round m4a 1)"
+opened_ts="$(sed -n 's/^opened=//p' "$rd4a/ROUND")"
+write_seat "$rd4a" sonnet GG
+printf '{"ts":"%s","spec":"m4a","verdict":"REJECTED","by":"Test Owner","head":"%s","pack":"demo-pack","note":"same-second override"}\n' \
+  "$opened_ts" "$HEAD7" >> memory/stats/human.jsonl
+out="$(council judge docs/specs/m4a)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && echo "  ok    a same-second REJECTED still overrides an all-GREEN round" \
+  || { echo "::error::m4a judge: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"m4a"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"verdict":"RED"' && echo "  ok    row verdict RED (override wins, not the round's own GREEN)" \
+  || { echo "::error::row: $row"; fail=1; }
+
+echo "council.jsonl: each ledger row writer does exactly one printf ... >> per row - structural proof, no partial-write path (m-10)"
+sites="$(grep -c '>> memory/stats/council.jsonl' scripts/cycle.sh)"
+[ "$sites" -eq 3 ] && echo "  ok    exactly 3 append sites (cmd_judge, write_stale_row, write_escalate_row_for_round), one printf each" \
+  || { echo "::error::found $sites append sites to council.jsonl, expected 3"; fail=1; }
+
+echo "escalate: a note carrying a token-shaped string lands masked via redact_note - raw string never reaches the ledger or plan.md (N-m7)"
+mk_open_spec nm7a 2
+set_tier nm7a 1
+mk_open_round nm7a 1 >/dev/null   # sonnet (the only required seat at tier 1) never dispatched
+secret="sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+out="$(council escalate docs/specs/nm7a --reason ceiling "leaked token $secret" 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] && echo "  ok    escalate with a token-shaped note -> exit 6" || { echo "::error::exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"nm7a"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF "$secret" && { echo "::error::raw token leaked into council.jsonl: $row"; fail=1; } \
+  || echo "  ok    raw token absent from council.jsonl"
+printf '%s' "$row" | grep -qF '[VULYK:REDACTED]' && echo "  ok    row note masked by redact.sh" || { echo "::error::row not masked: $row"; fail=1; }
+grep -qF "$secret" docs/specs/nm7a/plan.md && { echo "::error::raw token leaked into plan.md"; fail=1; } \
+  || echo "  ok    raw token absent from plan.md"
+grep -qF '[VULYK:REDACTED]' docs/specs/nm7a/plan.md && echo "  ok    plan.md's ## Needs a human note is masked too" \
+  || { echo "::error::plan.md: $(cat docs/specs/nm7a/plan.md)"; fail=1; }
+
+# --- regression proof: the same six checks run against 3e200bb's cycle.sh (no working-tree ---
+# checkout/stash - a second fixture copy per story 14's own instruction) and against the
+# branch's own scripts/cycle.sh, so ## Implementation notes can quote observed FAIL/ok labels.
+# These probes never touch $fail - the expected outcome differs by version on purpose.
+
+echo "=== regression proof: story 14's six checks replayed against 3e200bb's cycle.sh vs. the branch's ==="
+OLDCYCLE="$(mktemp)"
+git -C "$SRC" show 3e200bb:scripts/cycle.sh > "$OLDCYCLE"
+
+probe_lr19() {
+  mk_open_spec plr19 2; set_tier plr19 1 >/dev/null
+  local rd; rd="$(mk_open_round plr19 1)"
+  write_seat "$rd" sonnet GG
+  cp "$rd/sonnet.md" "$rd/sonnet.attempt-1.md"
+  council judge docs/specs/plr19 >/dev/null 2>&1
+  local row; row="$(grep '"spec":"plr19"' memory/stats/council.jsonl | tail -1)"
+  printf '%s' "$row" | grep -qF '"attempts":2' && echo ok || echo FAIL
+}
+probe_lr21() {
+  mk_open_spec plr21 2; set_tier plr21 1 >/dev/null
+  printf '{"ts":"2020-01-01T00:00:00Z","spec":"plr21","round":10,"verdict":"ESCALATE","head":"aaaaaaa","pack":"demo-pack","asks":2,"red":[],"red_unevidenced":[],"na":0,"review":"","haiku":"","haiku_model":"unknown","sonnet":"","sonnet_model":"unknown","opus":"","opus_model":"unknown","attempts":0,"escalate":"ceiling","note":""}\n' >> memory/stats/council.jsonl
+  local rd; rd="$(mk_open_round plr21 1)"
+  write_seat "$rd" sonnet GG
+  council judge docs/specs/plr21 >/dev/null 2>&1
+  local n; n="$(grep -c '"spec":"plr21".*"round":1,' memory/stats/council.jsonl)"
+  [ "$n" -eq 1 ] && echo ok || echo FAIL
+}
+probe_lr25() {
+  mk_open_spec plr25 2; set_tier plr25 1 >/dev/null
+  local rd; rd="$(mk_open_round plr25 1)"
+  write_seat "$rd" sonnet GGG
+  council judge docs/specs/plr25 >/dev/null 2>&1
+  local cln shln
+  cln="$(grep -n '^\*\*Council:\*\*' docs/specs/plr25/plan.md | tail -1 | cut -d: -f1)"
+  shln="$(grep -n '^\*\*Shipped:\*\*' docs/specs/plr25/plan.md | head -1 | cut -d: -f1)"
+  [ -n "$cln" ] && [ -n "$shln" ] && [ "$cln" -lt "$shln" ] && echo ok || echo FAIL
+}
+probe_m4() {
+  mk_open_spec pm4 2; set_tier pm4 1 >/dev/null
+  local rd; rd="$(mk_open_round pm4 1)"
+  local opened; opened="$(sed -n 's/^opened=//p' "$rd/ROUND")"
+  write_seat "$rd" sonnet GG
+  printf '{"ts":"%s","spec":"pm4","verdict":"REJECTED","by":"t","head":"%s","pack":"demo-pack","note":"x"}\n' "$opened" "$HEAD7" >> memory/stats/human.jsonl
+  local out; out="$(council judge docs/specs/pm4 2>&1)"
+  printf '%s' "$out" | grep -qF '"next":"repair"' && echo ok || echo FAIL
+}
+probe_m10() {
+  local sites; sites="$(grep -c '>> memory/stats/council.jsonl' scripts/cycle.sh)"
+  [ "$sites" -eq 3 ] && echo ok || echo FAIL
+}
+probe_nm7() {
+  mk_open_spec pnm7 2; set_tier pnm7 1 >/dev/null
+  mk_open_round pnm7 1 >/dev/null
+  local secret="sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+  council escalate docs/specs/pnm7 --reason ceiling "leaked token $secret" >/dev/null 2>&1
+  local row; row="$(grep '"spec":"pnm7"' memory/stats/council.jsonl | tail -1)"
+  if printf '%s' "$row" | grep -qF "$secret"; then echo FAIL
+  else printf '%s' "$row" | grep -qF '[VULYK:REDACTED]' && echo ok || echo FAIL
+  fi
+}
+
+run_wall_probes() { # run_wall_probes <label> <cycle.sh-path> [extra-probe-fn ...] - a scratch
+  # hive with the given cycle.sh swapped in, reusing this suite's own mk_spec/mk_round/
+  # write_seat/council helpers (they only touch $T/$HEAD7/cwd) by rebinding those two globals
+  # for the duration. Story 14's own six probes always run; story 15 extends this same runner
+  # with a second pinned version (b9f36e8) by passing its own probe function names as extra
+  # args, rather than writing a second copy of this scaffolding.
+  local wlabel="$1" cyclesrc="$2" wt; shift 2
+  wt="$(mktemp -d)"
+  local save_t="$T" save_head7="$HEAD7" save_pwd="$PWD"
+  T="$wt"
+  cd "$wt" || { echo "::error::wall probe [$wlabel]: cannot cd to $wt"; fail=1; return; }
+  git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
+  mkdir -p scripts memory/stats docs/specs .claude
+  cp "$SRC"/scripts/lib.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh scripts/
+  cp "$cyclesrc" scripts/cycle.sh
+  # Story 17 adds DRIVER here too: without it, an untracked DRIVER file dirties open-round's
+  # whole-tree "clean" precondition (L1778) and probe_gated's matching-stamp call fails for an
+  # unrelated reason instead of proceeding.
+  printf '.vulyk/\ndocs/specs/*/PAUSE\ndocs/specs/*/DRIVER\n' > .gitignore
+  # Story 16's close-story probes (returned:/r2m2/r2m9) need a ## Commands table too - the six
+  # story 14/15 probes above never call close-story, so this was never needed until now.
+  cat > CLAUDE.md <<'MDEOF'
+# Fixture hive
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Fixture: always succeeds | `true` |
+| r2m9 fixture: a cell that is itself an &&-joined command | `sh -c 'true && true'` |
+MDEOF
+  git add -A && git commit -qm init >/dev/null
+  HEAD7="$(git rev-parse --short HEAD)"
+
+  echo "  [$wlabel] LR19 attempts (cmd_judge):        $(probe_lr19)"
+  echo "  [$wlabel] LR21/r2m1 round-number match:      $(probe_lr21)"
+  echo "  [$wlabel] LR25/C7 Council line placement:    $(probe_lr25)"
+  echo "  [$wlabel] m-4 same-second override:          $(probe_m4)"
+  echo "  [$wlabel] m-10 atomic ledger append:         $(probe_m10)"
+  echo "  [$wlabel] N-m7 note through redact:          $(probe_nm7)"
+
+  local extra
+  for extra in "$@"; do
+    echo "  [$wlabel] $extra:  $($extra)"
+  done
+
+  cd "$save_pwd" || true
+  T="$save_t"; HEAD7="$save_head7"
+  rm -rf "$wt"
+}
+
+run_wall_probes "3e200bb" "$OLDCYCLE"
+run_wall_probes "branch"  "$SRC/scripts/cycle.sh"
+rm -f "$OLDCYCLE"
+
+# ============================================================================================
+# Story 15: one scenario per story 05 criterion (r2m3, r2m16, N-m3, r2m5/r2m6 x2, r2m7/N-m2 x2,
+# r2m4/N-m1 structural). The code is already on the branch (story 05); this proves it.
+# ============================================================================================
+
+echo "=== Story 15: one scenario per story 05 criterion ==="
+
+echo "open-round --commit: r2m3 - a failed first commit (index.lock) leaves ROUND/journal.md uncommitted; the second --commit finishes them, not a silent no-op"
+mk_open_spec r2m3a 2
+set_tier r2m3a 3
+touch .git/index.lock
+out="$(council open-round docs/specs/r2m3a --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'git commit' && echo "  ok    first --commit fails on the locked index" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+rd_r2m3="docs/specs/r2m3a/council/round-1"
+[ -f "$rd_r2m3/ROUND" ] && echo "  ok    ROUND was written to disk despite the failed commit" \
+  || { echo "::error::no ROUND at $rd_r2m3"; fail=1; }
+[ -n "$(git status --porcelain -- docs/specs/r2m3a)" ] && echo "  ok    the round's paperwork is left uncommitted" \
+  || { echo "::error::tree unexpectedly clean"; fail=1; }
+rm -f .git/index.lock
+out="$(council open-round docs/specs/r2m3a --commit)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    second --commit exits 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -z "$(git status --porcelain -- docs/specs/r2m3a)" ] && echo "  ok    docs/specs/r2m3a is clean afterward" \
+  || { echo "::error::tree dirty: $(git status --porcelain -- docs/specs/r2m3a)"; fail=1; }
+git show HEAD:"$rd_r2m3/ROUND" >/dev/null 2>&1 && git show HEAD:docs/specs/r2m3a/journal.md >/dev/null 2>&1 \
+  && echo "  ok    ROUND and journal.md are committed, not left behind by a silent no-op" \
+  || { echo "::error::ROUND or journal.md not committed"; fail=1; }
+
+echo "open-round: r2m16 - a status: blocked story refuses by name and file, nothing created under council/"
+mk_open_spec r2m16a 2
+set_tier r2m16a 1
+printf -- '---\nstory: r2m16a-02\nspec: r2m16a\nstatus: blocked\nwave: 1\n---\n# S2\n' > docs/specs/r2m16a/r2m16a-02-second.md
+git add -A && git commit -qm "r2m16a: add a blocked story" >/dev/null
+out="$(council open-round docs/specs/r2m16a 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"next":"open-round"' \
+  && printf '%s' "$out" | grep -qF '"error":"story r2m16a-02 is blocked: docs/specs/r2m16a/r2m16a-02-second.md"' \
+  && echo "  ok    exit 2, next:open-round, error names the story id and file" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -d docs/specs/r2m16a/council ] && echo "  ok    nothing was created under council/" \
+  || { echo "::error::council/ exists despite the blocked story"; fail=1; }
+
+echo "open-round / status --json: N-m3 - a round dir without its own ROUND file is not open; open-round rewrites it in place (same N), no round-2, no no-op line"
+mk_open_spec nm3a 2
+set_tier nm3a 1
+mkdir -p docs/specs/nm3a/council/round-1
+out="$(council status docs/specs/nm3a --json)"
+printf '%s' "$out" | jq -e '.open == false and .next == "open-round"' >/dev/null 2>&1 \
+  && echo "  ok    status --json: open:false, next:open-round despite the round-1 dir existing" \
+  || { echo "::error::status: $out"; fail=1; }
+out="$(council open-round docs/specs/nm3a --commit)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:sonnet"' \
+  && echo "  ok    open-round writes ROUND into round-1 (fresh dispatch, not a no-op line)" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -f docs/specs/nm3a/council/round-1/ROUND ] && echo "  ok    ROUND file now exists in round-1" \
+  || { echo "::error::no ROUND written"; fail=1; }
+[ ! -d docs/specs/nm3a/council/round-2 ] && echo "  ok    no round-2 was opened" \
+  || { echo "::error::round-2 exists"; fail=1; }
+
+echo "open-round: r2m5/r2m6 - the ceiling block (plain path) carries the RED asks (2,5) of the last judged round"
+mk_spec ceilred1 5
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-14/' docs/specs/ceilred1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/ceilred1#' docs/specs/ceilred1/plan.md
+set_tier ceilred1 3
+mkdir -p docs/specs/ceilred1/council
+printf '1\n' > docs/specs/ceilred1/council/CEILING
+git add -A && git commit -qm "ceilred1: branch, ceiling 1" >/dev/null
+rd_cr="$(mk_round ceilred1 1 1)"
+write_seat "$rd_cr" haiku GRGGR
+write_seat "$rd_cr" sonnet GGGGG
+write_seat "$rd_cr" opus GGGGG
+write_review "$rd_cr" PASS
+printf '{"ts":"%s","spec":"ceilred1","round":1,"verdict":"RED","head":"%s","pack":"demo-pack","asks":5,"red":[2,5],"red_unevidenced":[],"na":0,"review":"PASS","haiku":"RED","haiku_model":"m","sonnet":"GREEN","sonnet_model":"m","opus":"GREEN","opus_model":"m","attempts":4,"escalate":null,"note":""}\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$HEAD7" >> memory/stats/council.jsonl
+git add -A && git commit -qm "ceilred1: fabricated round 1, already judged RED" >/dev/null
+out="$(council open-round docs/specs/ceilred1 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | tail -n1 | jq -e '{ok, verb, exit, next} == {ok:true, verb:"open-round", exit:6, next:"escalated"}' >/dev/null 2>&1 \
+  && echo "  ok    ceiling exit 6, last line is exactly ok:true/verb:open-round/exit:6/next:escalated" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+row_cr="$(grep '"spec":"ceilred1"' memory/stats/council.jsonl | grep '"verdict":"ESCALATE"')"
+printf '%s' "$row_cr" | grep -qF '"red":[2,5]' && echo "  ok    the ESCALATE row carries red:[2,5], computed live from the seat files" \
+  || { echo "::error::row: $row_cr"; fail=1; }
+grep -qF -- '- ask 2: RED - see' docs/specs/ceilred1/plan.md && grep -qF -- '- ask 5: RED - see' docs/specs/ceilred1/plan.md \
+  && echo "  ok    ## Needs a human has one - ask 2: and one - ask 5: line with the evidence clause" \
+  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilred1/plan.md)"; fail=1; }
+grep -qF "seats: $rd_cr/" docs/specs/ceilred1/plan.md && echo "  ok    seats: names the round directory" \
+  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilred1/plan.md)"; fail=1; }
+
+echo "open-round: r2m5/r2m6 - the ceiling block (STALE-fold path) carries the same RED asks (2,5)"
+mk_open_spec ceilstale1 5
+set_tier ceilstale1 3
+mkdir -p docs/specs/ceilstale1/council
+printf '1\n' > docs/specs/ceilstale1/council/CEILING
+git add -A && git commit -qm "ceilstale1: ceiling 1" >/dev/null
+rd_cs="$(mk_open_round ceilstale1 1 1)"
+write_seat "$rd_cs" haiku GRGGR
+write_seat "$rd_cs" sonnet GGGGG
+write_seat "$rd_cs" opus GGGGG
+write_review "$rd_cs" PASS
+echo "real code change" > ceilstale1-code.txt
+git add -A && git commit -qm "real code change while ceilstale1 round 1 is open" >/dev/null
+out="$(council open-round docs/specs/ceilstale1 --commit 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | tail -n1 | jq -e '{ok, verb, exit, next} == {ok:true, verb:"open-round", exit:6, next:"escalated"}' >/dev/null 2>&1 \
+  && echo "  ok    STALE-fold ceiling: exit 6, exact four-key last line" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+row_cs="$(grep '"spec":"ceilstale1"' memory/stats/council.jsonl | grep '"verdict":"ESCALATE"')"
+printf '%s' "$row_cs" | grep -qF '"red":[2,5]' && echo "  ok    STALE-fold ESCALATE row carries red:[2,5] too" \
+  || { echo "::error::row: $row_cs"; fail=1; }
+grep -qF -- '- ask 2: RED - see' docs/specs/ceilstale1/plan.md && grep -qF -- '- ask 5: RED - see' docs/specs/ceilstale1/plan.md \
+  && echo "  ok    STALE-fold ## Needs a human has the same ask 2 / ask 5 lines" \
+  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilstale1/plan.md)"; fail=1; }
+grep -qF "seats: $rd_cs/" docs/specs/ceilstale1/plan.md && echo "  ok    STALE-fold seats: names the round directory" \
+  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilstale1/plan.md)"; fail=1; }
+
+echo "open-round: r2m7/N-m2 - a failing court reduction commit exits 2 naming it, and removes the round/court (never handed to a seat)"
+mk_open_spec r2m7a 2
+set_tier r2m7a 3
+out="$(GIT_AUTHOR_NAME='' GIT_AUTHOR_EMAIL='' GIT_COMMITTER_NAME='' GIT_COMMITTER_EMAIL='' council open-round docs/specs/r2m7a --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"court reduction commit failed"' \
+  && echo "  ok    exit 2, error names the reduction commit" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -d docs/specs/r2m7a/council/round-1 ] && echo "  ok    the round directory (and its court) is gone, never handed to a seat" \
+  || { echo "::error::round-1 still present: $(ls docs/specs/r2m7a/council/round-1 2>&1)"; fail=1; }
+
+echo "open-round: r2m7/N-m2 - by structure, the reduction commit uses -c commit.gpgsign=false and --no-verify, with no || true"
+redline="$(grep -n 'reduce the court to brief.md' scripts/cycle.sh | head -1 | cut -d: -f1)"
+ctx="$(sed -n "$((redline-3)),$((redline+1))p" scripts/cycle.sh)"
+printf '%s' "$ctx" | grep -qF -- '--no-verify' && echo "  ok    --no-verify is present on the reduction commit" \
+  || { echo "::error::$ctx"; fail=1; }
+printf '%s' "$ctx" | grep -qF 'commit.gpgsign=false' && echo "  ok    -c commit.gpgsign=false is present" \
+  || { echo "::error::$ctx"; fail=1; }
+printf '%s' "$ctx" | grep -qF '|| true' && { echo "::error::the reduction commit still has a || true: $ctx"; fail=1; } \
+  || echo "  ok    no || true masks a failing reduction commit"
+
+echo "r2m4/N-m1: structural - every 'emit false' call site carries a non-empty error argument"
+n_all="$(grep -c 'emit false' scripts/cycle.sh)"
+n_bad="$(grep -cE 'emit false [^ ]+ [0-9]+ [^ ]+( "")?$' scripts/cycle.sh)"
+[ "$n_bad" -eq 0 ] && echo "  ok    no 'emit false' line is missing its error argument (all $n_all sites carry one)" \
+  || { echo "::error::$n_bad site(s) missing error: $(grep -nE 'emit false [^ ]+ [0-9]+ [^ ]+( "")?$' scripts/cycle.sh)"; fail=1; }
+
+echo "r2m4/N-m1: structural - every exit-6 site means ok:true/next:escalated, never ok:false (exit 6 means one thing everywhere)"
+n_lit6="$(grep -cE 'exit 6$' scripts/cycle.sh)"
+n_lit6ok="$(grep -B1 -E 'exit 6$' scripts/cycle.sh | grep -cE 'emit true .* 6 escalated$')"
+[ "$n_lit6" -eq 3 ] && [ "$n_lit6ok" -eq 3 ] && echo "  ok    all 3 literal exit-6 sites (escalate, both open-round ceiling gates) emit ok:true/next:escalated" \
+  || { echo "::error::lit6=$n_lit6 lit6ok=$n_lit6ok"; fail=1; }
+grep -qF 'emit true "$VERBLABEL" "$exit_code" "$next_val"' scripts/cycle.sh \
+  && echo "  ok    judge's own ESCALATE (exit_code=6) path shares the same unconditional emit true call - never emit false" \
+  || { echo "::error::judge's emit call not found in the expected literal shape"; fail=1; }
+
+# --- regression proof: the same six checks replayed against b9f36e8's cycle.sh vs. the branch's,
+# reusing run_wall_probes (extended above with a variadic extra-probe list) rather than a second
+# runner - a second scratch git repo per version, the branch's own working tree untouched. ------
+
+probe_r2m3() {
+  mk_open_spec pr2m3 2; set_tier pr2m3 3 >/dev/null
+  touch .git/index.lock
+  council open-round docs/specs/pr2m3 --commit >/dev/null 2>&1
+  rm -f .git/index.lock
+  council open-round docs/specs/pr2m3 --commit >/dev/null 2>&1
+  [ -z "$(git status --porcelain -- docs/specs/pr2m3)" ] && echo ok || echo FAIL
+}
+probe_r2m16() {
+  mk_open_spec pr2m16 2; set_tier pr2m16 1 >/dev/null
+  printf -- '---\nstory: pr2m16-02\nspec: pr2m16\nstatus: blocked\nwave: 1\n---\n# S2\n' > docs/specs/pr2m16/pr2m16-02-second.md
+  git add -A && git commit -qm "blocked story" >/dev/null
+  local out ex; out="$(council open-round docs/specs/pr2m16 2>&1)"; ex=$?
+  [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'is blocked:' && echo ok || echo FAIL
+}
+probe_nm3() {
+  mk_open_spec pnm3 2; set_tier pnm3 1 >/dev/null
+  mkdir -p docs/specs/pnm3/council/round-1
+  local out; out="$(council status docs/specs/pnm3 --json)"
+  printf '%s' "$out" | jq -e '.open == false' >/dev/null 2>&1 && echo ok || echo FAIL
+}
+probe_ceiling() {
+  mk_spec pceil 5
+  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, x/' docs/specs/pceil/plan.md
+  sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/pceil#' docs/specs/pceil/plan.md
+  set_tier pceil 3 >/dev/null
+  mkdir -p docs/specs/pceil/council
+  printf '1\n' > docs/specs/pceil/council/CEILING
+  git add -A && git commit -qm "pceil setup" >/dev/null
+  local rd; rd="$(mk_round pceil 1 1)"
+  write_seat "$rd" haiku GRGGR
+  write_seat "$rd" sonnet GGGGG
+  write_seat "$rd" opus GGGGG
+  write_review "$rd" PASS
+  printf '{"ts":"%s","spec":"pceil","round":1,"verdict":"RED","head":"%s","pack":"demo-pack","asks":5,"red":[2,5],"red_unevidenced":[],"na":0,"review":"PASS","haiku":"RED","haiku_model":"m","sonnet":"GREEN","sonnet_model":"m","opus":"GREEN","opus_model":"m","attempts":4,"escalate":null,"note":""}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$HEAD7" >> memory/stats/council.jsonl
+  git add -A && git commit -qm "pceil fabricated round 1" >/dev/null
+  council open-round docs/specs/pceil >/dev/null 2>&1
+  local row; row="$(grep '"spec":"pceil"' memory/stats/council.jsonl | grep '"verdict":"ESCALATE"')"
+  printf '%s' "$row" | grep -qF '"red":[2,5]' && echo ok || echo FAIL
+}
+probe_courtcommit() {
+  mk_open_spec pcourt 2; set_tier pcourt 3 >/dev/null
+  local out; out="$(GIT_AUTHOR_NAME='' GIT_AUTHOR_EMAIL='' GIT_COMMITTER_NAME='' GIT_COMMITTER_EMAIL='' council open-round docs/specs/pcourt --commit 2>&1)"
+  # Exit 2 alone is not distinctive here: the tainted identity env can also break the outer
+  # commit_paperwork call (a different site, same exit code) - only the "court reduction
+  # commit failed" error names the fix this probe is for (the old `|| true` masks the court's
+  # own commit failure and lets build_round continue to exit 0/6 instead).
+  printf '%s' "$out" | grep -qF '"error":"court reduction commit failed"' && echo ok || echo FAIL
+}
+probe_exit6uniform() {
+  mk_spec puni 2
+  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, x/' docs/specs/puni/plan.md
+  sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/puni#' docs/specs/puni/plan.md
+  set_tier puni 1 >/dev/null
+  mkdir -p docs/specs/puni/council
+  printf '1\n' > docs/specs/puni/council/CEILING
+  git add -A && git commit -qm "puni setup" >/dev/null
+  mk_round puni 1 1 >/dev/null
+  printf '{"ts":"%s","spec":"puni","round":1,"verdict":"RED","head":"%s","pack":"demo-pack","asks":2,"red":[1],"red_unevidenced":[],"na":0,"review":"","haiku":"","haiku_model":"unknown","sonnet":"RED","sonnet_model":"m","opus":"","opus_model":"unknown","attempts":1,"escalate":null,"note":""}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$HEAD7" >> memory/stats/council.jsonl
+  git add -A && git commit -qm "puni fabricated round 1" >/dev/null
+  local out; out="$(council open-round docs/specs/puni 2>&1)"
+  printf '%s' "$out" | tail -n1 | jq -e '.ok == true' >/dev/null 2>&1 && echo ok || echo FAIL
+}
+
+OLDCYCLE2="$(mktemp)"
+git -C "$SRC" show b9f36e8:scripts/cycle.sh > "$OLDCYCLE2"
+run_wall_probes "b9f36e8" "$OLDCYCLE2" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
+run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
+rm -f "$OLDCYCLE2"
+
+# ============================================================================================
+# Story 16: one wall probe per story 08 fix (M3/ADR-006 returned:, r2m2, LR31, r2m9), replayed
+# against eb3203a's cycle.sh (the commit immediately before story 08's own) vs. the branch's,
+# reusing run_wall_probes exactly as stories 14/15 did - a third pinned version, not a third
+# runner.
+# ============================================================================================
+
+probe_returned() {
+  mk_open_spec pret 2; set_tier pret 1 >/dev/null
+  cat > docs/specs/pret/pret-02-second.md <<'EOF'
+---
+story: pret-02
+spec: pret
+status: todo
+wave: 1
+---
+# Ret
+
+## Verification
+`true`
+EOF
+  git add -A && git commit -qm "pret: second story, no returned:" >/dev/null
+  local out ex; out="$(council close-story docs/specs/pret/pret-02-second.md 2>&1)"; ex=$?
+  [ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'returned: missing' && echo ok || echo FAIL
+}
+probe_r2m2wall() {
+  mk_open_spec pr2m2 2; set_tier pr2m2 1 >/dev/null
+  cat > docs/specs/pr2m2/pr2m2-02-second.md <<'EOF'
+---
+story: pr2m2-02
+spec: pr2m2
+status: todo
+returned: DONE
+wave: 1
+---
+# Lock
+
+## Verification
+`true`
+EOF
+  git add -A && git commit -qm "pr2m2: second story" >/dev/null
+  touch .git/index.lock
+  council close-story docs/specs/pr2m2/pr2m2-02-second.md --commit >/dev/null 2>&1
+  rm -f .git/index.lock
+  grep -q '^status: todo' docs/specs/pr2m2/pr2m2-02-second.md && echo ok || echo FAIL
+}
+probe_lr31wall() {
+  mkdir -p docs/specs/plr31
+  cat > docs/specs/plr31/plr31-01-a.md <<'EOF'
+---
+story: plr31-01
+spec: plr31
+status: todo
+wave: 1
+blocked_by: [plr31-02]
+---
+# A
+
+## Verification
+`true`
+EOF
+  cat > docs/specs/plr31/plr31-02-b.md <<'EOF'
+---
+story: plr31-02
+spec: plr31
+status: blocked
+wave: 1
+---
+# B
+
+## Verification
+`true`
+EOF
+  git add -A && git commit -qm "plr31: fixture" >/dev/null
+  local out; out="$(council status docs/specs/plr31 --json)"
+  printf '%s' "$out" | jq -e '.wave_stories == []' >/dev/null 2>&1 && echo ok || echo FAIL
+}
+probe_r2m9wall() {
+  mkdir -p docs/specs/pr2m9
+  cat > docs/specs/pr2m9/pr2m9-01-first.md <<'EOF'
+---
+story: pr2m9-01
+spec: pr2m9
+status: todo
+returned: DONE
+wave: 1
+---
+# R2M9
+
+## Verification
+`sh -c 'true && true'`
+EOF
+  git add -A && git commit -qm "pr2m9: fixture" >/dev/null
+  local out ex; out="$(council close-story docs/specs/pr2m9/pr2m9-01-first.md 2>&1)"; ex=$?
+  [ "$ex" -eq 0 ] && echo ok || echo FAIL
+}
+
+OLDCYCLE3="$(mktemp)"
+git -C "$SRC" show eb3203a:scripts/cycle.sh > "$OLDCYCLE3"
+run_wall_probes "eb3203a" "$OLDCYCLE3" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
+run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
+rm -f "$OLDCYCLE3"
+
+# ============================================================================================
+# Story 17: one scenario per story 11 criterion - the DRIVER semaphore (ADR-004/K3): claim,
+# release, pause/resume release, --stamp on open-round/record-seat/judge/close-story. The code
+# is already on the branch (story 11); this proves it, plus wall probes against the pre-story
+# cycle.sh (the commit immediately before story 11's own).
+# ============================================================================================
+
+echo "=== Story 17: DRIVER semaphore (claim/release, --stamp on four verbs) ==="
+
+echo "claim: first claim exits 0 with stamp=/claimed=; same stamp again exits 0; a different stamp exits 2 held by <first>; PAUSE exits 3"
+mk_spec driverc1 2
+out="$(council claim docs/specs/driverc1 aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"claimed"' && echo "  ok    first claim exits 0, next:claimed" \
+  || { echo "::error::first claim: exit=$ex out=$out"; fail=1; }
+grep -q '^stamp=aaaa1111$' docs/specs/driverc1/DRIVER 2>/dev/null && grep -q '^claimed=' docs/specs/driverc1/DRIVER 2>/dev/null \
+  && echo "  ok    DRIVER holds stamp= and claimed= lines" || { echo "::error::DRIVER: $(cat docs/specs/driverc1/DRIVER 2>&1)"; fail=1; }
+[ -z "$(git status --porcelain)" ] && echo "  ok    git status is empty after a claim (the fixture .gitignore covers DRIVER)" \
+  || { echo "::error::git status not clean after claim: $(git status --porcelain)"; fail=1; }
+out="$(council claim docs/specs/driverc1 aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    same stamp again exits 0" || { echo "::error::same-stamp claim: exit=$ex out=$out"; fail=1; }
+out="$(council claim docs/specs/driverc1 bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && printf '%s' "$out" | grep -qF 'cycle.sh release' \
+  && echo "  ok    a different stamp exits 2, error names the holder and the release command" \
+  || { echo "::error::conflict claim: exit=$ex out=$out"; fail=1; }
+printf 'owner \xc2\xb7 pinned \xc2\xb7 2020-01-01T00:00:00Z\nhead=unknown\n' > docs/specs/driverc1/PAUSE
+out="$(council claim docs/specs/driverc1 cccc3333 2>&1)"; ex=$?
+[ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    claim under PAUSE exits 3, next:paused" \
+  || { echo "::error::paused claim: exit=$ex out=$out"; fail=1; }
+rm -f docs/specs/driverc1/PAUSE
+
+echo "release: matching stamp -> exit 0, file gone; absent file -> exit 0; mismatch -> exit 2 held by <other>, file kept"
+mk_spec driverr1 2
+council claim docs/specs/driverr1 aaaa1111 >/dev/null 2>&1
+out="$(council release docs/specs/driverr1 aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ ! -f docs/specs/driverr1/DRIVER ] && echo "  ok    matching stamp releases, file gone" \
+  || { echo "::error::release match: exit=$ex out=$out"; fail=1; }
+out="$(council release docs/specs/driverr1 aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    release on an absent file exits 0" || { echo "::error::release absent: exit=$ex out=$out"; fail=1; }
+council claim docs/specs/driverr1 aaaa1111 >/dev/null 2>&1
+out="$(council release docs/specs/driverr1 bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ -f docs/specs/driverr1/DRIVER ] \
+  && echo "  ok    mismatch exits 2 held by <other>, file kept" || { echo "::error::release mismatch: exit=$ex out=$out"; fail=1; }
+
+echo "pause/resume: each removes an existing DRIVER and journal.md gains a driver released line"
+mk_spec driverp1 2
+council claim docs/specs/driverp1 aaaa1111 >/dev/null 2>&1
+[ -f docs/specs/driverp1/DRIVER ] || { echo "::error::setup: DRIVER missing before pause"; fail=1; }
+council pause docs/specs/driverp1 "testing" >/dev/null 2>&1
+[ ! -f docs/specs/driverp1/DRIVER ] && grep -qF 'driver released' docs/specs/driverp1/journal.md \
+  && echo "  ok    pause removes DRIVER and journals 'driver released'" \
+  || { echo "::error::pause: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no)"; fail=1; }
+printf 'stamp=aaaa1111\nclaimed=2020-01-01T00:00:00Z\n' > docs/specs/driverp1/DRIVER  # PAUSE already active; write DRIVER directly, claim is itself PAUSE-gated
+before="$(grep -c 'driver released' docs/specs/driverp1/journal.md)"
+council resume docs/specs/driverp1 >/dev/null 2>&1
+after="$(grep -c 'driver released' docs/specs/driverp1/journal.md)"
+[ ! -f docs/specs/driverp1/DRIVER ] && [ "$after" -gt "$before" ] \
+  && echo "  ok    resume removes DRIVER and journals another 'driver released' line" \
+  || { echo "::error::resume: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no) before=$before after=$after"; fail=1; }
+
+echo "gated verbs: open-round, record-seat, judge, close-story each exit 2 held by <holder> without --stamp or with a wrong --stamp, no new file/row/commit; matching --stamp proceeds; PAUSE+DRIVER exits 3, not held by"
+mk_open_spec gatedv1 3
+set_tier gatedv1 1
+council claim docs/specs/gatedv1 aaaa1111 >/dev/null 2>&1
+
+out="$(council open-round docs/specs/gatedv1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -d docs/specs/gatedv1/council ] \
+  && echo "  ok    open-round refused without --stamp, no council/ dir created" \
+  || { echo "::error::open-round no-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council open-round docs/specs/gatedv1 --stamp bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -d docs/specs/gatedv1/council ] \
+  && echo "  ok    open-round refused with a wrong --stamp, no council/ dir created" \
+  || { echo "::error::open-round wrong-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council open-round docs/specs/gatedv1 --stamp aaaa1111 2>&1)"; ex=$?
+[ "$ex" -ne 2 ] && [ -d docs/specs/gatedv1/council/round-1 ] \
+  && echo "  ok    open-round proceeds with the matching --stamp (round-1 created)" \
+  || { echo "::error::open-round right-stamp: exit=$ex out=$out"; fail=1; }
+
+out="$(seat_report sonnet 1 NNN | council record-seat docs/specs/gatedv1 1 sonnet 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -f docs/specs/gatedv1/council/round-1/sonnet.md ] \
+  && echo "  ok    record-seat refused without --stamp, no seat file written" \
+  || { echo "::error::record-seat no-stamp: exit=$ex out=$out"; fail=1; }
+out="$(seat_report sonnet 1 NNN | council record-seat docs/specs/gatedv1 1 sonnet --stamp bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -f docs/specs/gatedv1/council/round-1/sonnet.md ] \
+  && echo "  ok    record-seat refused with a wrong --stamp, no seat file written" \
+  || { echo "::error::record-seat wrong-stamp: exit=$ex out=$out"; fail=1; }
+out="$(seat_report sonnet 1 NNN | council record-seat docs/specs/gatedv1 1 sonnet --stamp aaaa1111 2>&1)"; ex=$?
+[ "$ex" -ne 2 ] && [ -f docs/specs/gatedv1/council/round-1/sonnet.md ] \
+  && echo "  ok    record-seat proceeds with the matching --stamp (seat file written)" \
+  || { echo "::error::record-seat right-stamp: exit=$ex out=$out"; fail=1; }
+
+jsonl_before="$(grep -c '"spec":"gatedv1"' memory/stats/council.jsonl 2>/dev/null)"; jsonl_before="${jsonl_before:-0}"
+out="$(council judge docs/specs/gatedv1 2>&1)"; ex=$?
+jsonl_after="$(grep -c '"spec":"gatedv1"' memory/stats/council.jsonl 2>/dev/null)"; jsonl_after="${jsonl_after:-0}"
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ "$jsonl_after" -eq "$jsonl_before" ] \
+  && ! grep -qE '^\*\*Council:\*\* (GREEN|RED|ESCALATE|STALE) round' docs/specs/gatedv1/plan.md \
+  && echo "  ok    judge refused without --stamp, no jsonl row, no plan.md Council line" \
+  || { echo "::error::judge no-stamp: exit=$ex out=$out jsonl before=$jsonl_before after=$jsonl_after"; fail=1; }
+out="$(council judge docs/specs/gatedv1 --stamp bbbb2222 2>&1)"; ex=$?
+jsonl_after2="$(grep -c '"spec":"gatedv1"' memory/stats/council.jsonl 2>/dev/null)"; jsonl_after2="${jsonl_after2:-0}"
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ "$jsonl_after2" -eq "$jsonl_before" ] \
+  && echo "  ok    judge refused with a wrong --stamp, no jsonl row" \
+  || { echo "::error::judge wrong-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council judge docs/specs/gatedv1 --stamp aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"green"' \
+  && echo "  ok    judge proceeds with the matching --stamp (GREEN)" \
+  || { echo "::error::judge right-stamp: exit=$ex out=$out"; fail=1; }
+
+cat > docs/specs/gatedv1/gatedv1-02-second.md <<'EOF'
+---
+story: gatedv1-02
+spec: gatedv1
+status: todo
+returned: DONE
+wave: 1
+---
+# Second
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "gatedv1: second story" >/dev/null
+out="$(council close-story docs/specs/gatedv1/gatedv1-02-second.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && grep -q '^status: todo' docs/specs/gatedv1/gatedv1-02-second.md \
+  && echo "  ok    close-story refused without --stamp, story left todo" \
+  || { echo "::error::close-story no-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council close-story docs/specs/gatedv1/gatedv1-02-second.md --stamp bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && grep -q '^status: todo' docs/specs/gatedv1/gatedv1-02-second.md \
+  && echo "  ok    close-story refused with a wrong --stamp, story left todo" \
+  || { echo "::error::close-story wrong-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council close-story docs/specs/gatedv1/gatedv1-02-second.md --stamp aaaa1111 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' docs/specs/gatedv1/gatedv1-02-second.md \
+  && echo "  ok    close-story proceeds with the matching --stamp, story now done" \
+  || { echo "::error::close-story right-stamp: exit=$ex out=$out"; fail=1; }
+
+printf 'owner \xc2\xb7 pinned \xc2\xb7 2020-01-01T00:00:00Z\nhead=unknown\n' > docs/specs/gatedv1/PAUSE
+out="$(council open-round docs/specs/gatedv1 2>&1)"; ex=$?
+[ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && ! printf '%s' "$out" | grep -qF 'held by' \
+  && echo "  ok    a paused spec with a held DRIVER answers exit 3, not held-by" \
+  || { echo "::error::pause+driver: exit=$ex out=$out"; fail=1; }
+rm -f docs/specs/gatedv1/PAUSE
+
+echo "no DRIVER: open-round, record-seat, judge, close-story proceed with or without --stamp"
+mk_open_spec gatedv2 2
+set_tier gatedv2 1
+out="$(council open-round docs/specs/gatedv2 2>&1)"; ex=$?
+[ "$ex" -ne 2 ] && [ -d docs/specs/gatedv2/council/round-1 ] && echo "  ok    open-round proceeds without --stamp when no DRIVER exists" \
+  || { echo "::error::open-round no-driver no-stamp: exit=$ex out=$out"; fail=1; }
+out="$(seat_report sonnet 1 NN | council record-seat docs/specs/gatedv2 1 sonnet --stamp unrelated9999 2>&1)"; ex=$?
+[ "$ex" -ne 2 ] && [ -f docs/specs/gatedv2/council/round-1/sonnet.md ] \
+  && echo "  ok    record-seat proceeds with an unrelated --stamp when no DRIVER exists" \
+  || { echo "::error::record-seat no-driver with-stamp: exit=$ex out=$out"; fail=1; }
+out="$(council judge docs/specs/gatedv2 --stamp unrelated9999 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"green"' \
+  && echo "  ok    judge proceeds with an unrelated --stamp when no DRIVER exists" \
+  || { echo "::error::judge no-driver with-stamp: exit=$ex out=$out"; fail=1; }
+cat > docs/specs/gatedv2/gatedv2-02-second.md <<'EOF'
+---
+story: gatedv2-02
+spec: gatedv2
+status: todo
+returned: DONE
+wave: 1
+---
+# Second
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "gatedv2: second story" >/dev/null
+out="$(council close-story docs/specs/gatedv2/gatedv2-02-second.md 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' docs/specs/gatedv2/gatedv2-02-second.md \
+  && echo "  ok    close-story proceeds without --stamp when no DRIVER exists" \
+  || { echo "::error::close-story no-driver no-stamp: exit=$ex out=$out"; fail=1; }
+
+echo "wall probes: DRIVER semaphore against the pre-story-11 cycle.sh vs. the branch"
+probe_claim() {
+  mk_spec pclaim1 2
+  council claim docs/specs/pclaim1 aaaa1111 >/dev/null 2>&1; local ex1=$?
+  council claim docs/specs/pclaim1 aaaa1111 >/dev/null 2>&1; local ex2=$?
+  local out3; out3="$(council claim docs/specs/pclaim1 bbbb2222 2>&1)"; local ex3=$?
+  [ "$ex1" -eq 0 ] && [ -f docs/specs/pclaim1/DRIVER ] && [ "$ex2" -eq 0 ] && [ "$ex3" -eq 2 ] \
+    && printf '%s' "$out3" | grep -qF 'held by aaaa1111' && echo ok || echo FAIL
+}
+probe_release() {
+  mk_spec prelease1 2
+  council claim docs/specs/prelease1 aaaa1111 >/dev/null 2>&1
+  council release docs/specs/prelease1 aaaa1111 >/dev/null 2>&1; local ex1=$?
+  local gone1=false; [ -f docs/specs/prelease1/DRIVER ] || gone1=true
+  council release docs/specs/prelease1 aaaa1111 >/dev/null 2>&1; local ex2=$?
+  council claim docs/specs/prelease1 aaaa1111 >/dev/null 2>&1
+  local out3; out3="$(council release docs/specs/prelease1 bbbb2222 2>&1)"; local ex3=$?
+  [ "$ex1" -eq 0 ] && $gone1 && [ "$ex2" -eq 0 ] && [ "$ex3" -eq 2 ] && [ -f docs/specs/prelease1/DRIVER ] \
+    && printf '%s' "$out3" | grep -qF 'held by aaaa1111' && echo ok || echo FAIL
+}
+probe_pauserelease() {
+  mk_spec ppause1 2
+  council claim docs/specs/ppause1 aaaa1111 >/dev/null 2>&1
+  council pause docs/specs/ppause1 "why" >/dev/null 2>&1
+  local ok=true
+  [ -f docs/specs/ppause1/DRIVER ] && ok=false
+  grep -q 'driver released' docs/specs/ppause1/journal.md 2>/dev/null || ok=false
+  printf 'stamp=aaaa1111\nclaimed=now\n' > docs/specs/ppause1/DRIVER
+  council resume docs/specs/ppause1 >/dev/null 2>&1
+  [ -f docs/specs/ppause1/DRIVER ] && ok=false
+  local jcnt; jcnt="$(grep -c 'driver released' docs/specs/ppause1/journal.md 2>/dev/null)"; jcnt="${jcnt:-0}"
+  [ "$jcnt" -eq 2 ] || ok=false
+  $ok && echo ok || echo FAIL
+}
+probe_gated() {
+  mk_open_spec pgated1 2; set_tier pgated1 1 >/dev/null
+  council claim docs/specs/pgated1 aaaa1111 >/dev/null 2>&1
+  local ok=true out ex
+  out="$(council open-round docs/specs/pgated1 2>&1)"; ex=$?
+  { [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111'; } || ok=false
+  out="$(council open-round docs/specs/pgated1 --stamp bbbb2222 2>&1)"; ex=$?
+  { [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111'; } || ok=false
+  out="$(council open-round docs/specs/pgated1 --stamp aaaa1111 2>&1)"; ex=$?
+  { [ "$ex" -ne 2 ] && [ -d docs/specs/pgated1/council/round-1 ]; } || ok=false
+  $ok && echo ok || echo FAIL
+}
+
+PRESHA11="$(git -C "$SRC" log -1 --format=%h --grep='story(v0-12-0-remainders-11)')^"
+OLDCYCLE4="$(mktemp)"
+git -C "$SRC" show "$PRESHA11":scripts/cycle.sh > "$OLDCYCLE4"
+run_wall_probes "$PRESHA11" "$OLDCYCLE4" probe_claim probe_release probe_pauserelease probe_gated
+run_wall_probes "branch"    "$SRC/scripts/cycle.sh" probe_claim probe_release probe_pauserelease probe_gated
+rm -f "$OLDCYCLE4"
 
 exit $fail

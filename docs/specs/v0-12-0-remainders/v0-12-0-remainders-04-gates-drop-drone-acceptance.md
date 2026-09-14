@@ -1,7 +1,7 @@
 ---
 story: v0-12-0-remainders-04
 spec: v0-12-0-remainders
-status: todo
+status: done
 returned:
 tier: 4
 worker: worker-code
@@ -45,7 +45,11 @@ No live script or agent file tells anyone to re-dispatch `drone-acceptance`, an 
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
-<!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `scripts/ship-check.sh:191-193`: `[ "$HTS" \> "$CTS" ]` (strict) changed to `{ [ "$HTS" \> "$CTS" ] || [ "$HTS" = "$CTS" ]; }` (same-second override wins); wording at line ~227 now says "run /vulyk-review to record a current council verdict" instead of naming the dead agent.
+- `scripts/acceptance-log.sh:8-10,72`: reworded the header comment and the STALE hint to describe "the pre-council blind judge" / point at `/vulyk-review`, no agent name left.
+- `.claude/agents/drone-docs.md:14`: reworded the analogy to reference council seats (blind to a story's own account) instead of the dead `drone-acceptance`.
+- `tests/cycle.test.sh`: added two steps after the existing council-override block - GREEN+REJECTED same second -> NOT READY, RED+ACCEPTED same second -> READY. Verified manually (line-swap, not committed) that both new steps fail against the `3e200bb` version of `ship-check.sh:192-193` (strict `>` only) and pass with the fix.
+- `grep -rn drone-acceptance scripts/ .claude/agents/` is empty; `bash -n` clean on both scripts; `bash tests/cycle.test.sh` all green.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

@@ -1,7 +1,7 @@
 ---
 story: v0-12-0-remainders-03
 spec: v0-12-0-remainders
-status: todo
+status: done
 returned:
 tier: 4
 worker: worker-code
@@ -47,6 +47,12 @@ The two records a future reader trusts about the driver stop lying: the R14 note
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- Story 22 line 72 (R14): replaced the whole bullet with a corrected one that keeps the fetch as history, adds the `workflow-authoring` skill text as source, withdraws the `phase` "mismatch" and the "stay unverified" verdicts, and cites `dispatchSeat` at `vulyk-cycle.js:85-94` (X-m4).
+- ADR-001 D2 canonical-driver paragraph: `pipeline()` → `parallel()`; stop-shape clause rewritten to name each K2 shape (`{verb, exit, error}`, `{verb:'launch', error}`, `{verb:'build', file, error}`, `{verb:'repair', round, error}`) instead of the vague "stop shape" wording.
+- ADR-001 D2 exit-code line (`:157-159` originally, now `:160-163` after the amendment bullet insertion) gained ADR-006's exact clause, `or \`returned:\` not \`DONE\``.
+- ADR-001 `## Amendments` list gained one new `**D2**` bullet naming this spec and ADR-006, per the criterion.
+- ADR-001 `## Consequences` sentence: `node --check` claim replaced by `tests/driver.test.sh` (executed where node exists; CI job `driver`) as the gate; file confirmed to exist at `tests/driver.test.sh`.
+- Surprise/deviation: acceptance criterion 5 requires `grep -n 'pipeline()'` empty file-wide, but the Context section (line 20, outside the three named edit spots) also read `` `pipeline()` `` as one of the runtime's five primitives - and my own new Amendments bullet initially reused the same literal. Both are outside the Non-goals' "the edits are X/Y/Z" list read strictly, but satisfying the acceptance criterion is impossible otherwise. Resolved by dropping the parens on both (`pipeline()` → `pipeline`, a factual list item, not a rewrite of meaning) rather than escalating over a two-character mechanical fix; flagged here for the record instead of silently expanding scope.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

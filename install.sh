@@ -15,7 +15,7 @@ set -euo pipefail
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VER="$(cat "$SRC/VERSION" 2>/dev/null || echo unknown)"
 
-DEST=""; CHECK=""; UPGRADE=""
+DEST=""; CHECK=""; UPGRADE=""; BLOCK_INSERTED=""
 for arg in "$@"; do
   case "$arg" in
     --check)   CHECK="--check" ;;
@@ -52,10 +52,11 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
   case "$f" in
     */__pycache__/*|*.pyc)        return 1 ;;
     docs/specs/*)                 return 1 ;;   # vulyk's own dev specs (dir is still created)
+    docs/adr/*|docs/wiki/*)       case "$f" in */README.md) return 0 ;; esac; return 1 ;;   # vulyk's own ADRs/wiki (dir still created; a skeleton README ships)
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
     .claude/settings.local.json|.claude/settings.json.vulyk-bak)
                                    return 2 ;;
-    .claude/state.json|.claude/.vulyk-update-cache|.claude/vulyk-version)
+    .claude/state.json|.claude/.vulyk-update-cache|.claude/vulyk-version|.claude/vulyk-manifest)
                                    return 2 ;;
     .claude/handoff/*|memory/map/.stale|CLAUDE.local.md)
                                    return 2 ;;
@@ -72,6 +73,10 @@ copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading 
       [ "$sc" -eq 2 ] && [ "$CHECK" = "--check" ] && echo "  would skip (runtime) $f"
       continue
     fi
+    # Every path this run found shippable - copied, updated or skipped-as-existing alike -
+    # joins the manifest (ADR-005 D2), whether or not this is a dry run: --check needs the
+    # same set to print an accurate "would write ... (<n> paths)" count.
+    printf '%s\n' "$f" >> "$NEW_MANIFEST"
     if [ -e "$DEST/$f" ]; then
       if [ -n "$UPGRADE" ] && owned "$f" && ! cmp -s "$SRC/$f" "$DEST/$f"; then
         if [ "$CHECK" = "--check" ]; then echo "  would update   $f"
@@ -124,8 +129,11 @@ reset_marked_block() {
   echo "  reset          $name '$label' -> placeholders"
 }
 
-reset_commands_table() { # reset_commands_table <constitution-file>
-  reset_marked_block "$1" "VULYK:COMMANDS" "## Commands table" <<'PLACEHOLDER'
+# The placeholder text for each block lives here, in one function per block, so that
+# reset_commands_table (fresh install / re-blank) and ensure_marked_block (--upgrade insert)
+# share one source and the CI row-count check covers both.
+print_commands_placeholder() {
+  cat <<'PLACEHOLDER'
 | Purpose | Command |
 |---|---|
 | Single test file | `<fill in - the quiet variant>` |
@@ -137,7 +145,10 @@ Filled in by `/vulyk-bootstrap`. Verify each command actually runs before writin
 down, and write "none" where this project genuinely lacks one - a verification that
 always exits 0 is worse than an admitted gap.
 PLACEHOLDER
-  reset_marked_block "$1" "VULYK:PROFILE" "## Profile block" <<'PLACEHOLDER'
+}
+
+print_profile_placeholder() {
+  cat <<'PLACEHOLDER'
 | Field | Value |
 |---|---|
 | Stack | `<fill in>` |
@@ -150,6 +161,104 @@ PLACEHOLDER
 | Browser MCP | `<fill in - chrome-devtools \\| claude-in-chrome \\| none; optional, read by the council-haiku seat only, read-only, on a separate test profile - none is the honest default without one>` |
 | Release / deploy | `<fill in - default branch; how a version is published (tag + push? npm publish? CI on merge?) and who presses the button>` |
 PLACEHOLDER
+}
+
+reset_commands_table() { # reset_commands_table <constitution-file>
+  print_commands_placeholder | reset_marked_block "$1" "VULYK:COMMANDS" "## Commands table"
+  print_profile_placeholder | reset_marked_block "$1" "VULYK:PROFILE" "## Profile block"
+}
+
+# ensure_marked_block <file> <MARKER> <label>  (placeholder text on stdin, like reset_marked_block)
+#
+# Runs on --upgrade against an already-established constitution, where reset_marked_block never
+# runs (a filled block must never be touched). Both markers present -> nothing, whatever they
+# hold. Exactly one -> WARNING, nothing written. Neither marker, but the source's preceding
+# heading already exists in the target -> WARNING (an owner wrote that section by hand; the
+# installer does not know which rows are theirs). Neither marker, heading absent -> insert the
+# source's whole section (heading, the prose before START, then START/placeholder/END) right
+# before the first later source heading that exists verbatim in the target, else at EOF.
+ensure_marked_block() {
+  local file="$1" marker="$2" label="$3" name repl has_start=0 has_end=0
+  name="$(basename "$file")"
+  repl="$(cat)"
+  grep -q "${marker}:START" "$file" 2>/dev/null && has_start=1
+  grep -q "${marker}:END" "$file" 2>/dev/null && has_end=1
+  if [ "$has_start" -eq 1 ] && [ "$has_end" -eq 1 ]; then
+    return 0
+  fi
+  if [ "$has_start" -eq 1 ] || [ "$has_end" -eq 1 ]; then
+    echo ""
+    echo "  WARNING: $name has only one of ${marker}:START/${marker}:END - left as-is."
+    echo ""
+    return 0
+  fi
+  local heading
+  heading="$(awk -v m="$marker" '/^## / {h=$0} index($0, m ":START"){print h; exit}' "$SRC/CLAUDE.md")"
+  [ -n "$heading" ] || return 0   # defensive: source has no such block either
+  if grep -qxF "$heading" "$file" 2>/dev/null; then
+    echo ""
+    echo "  WARNING: $heading exists without ${marker} markers in $name - left as-is."
+    echo ""
+    return 0
+  fi
+  if [ "$CHECK" = "--check" ]; then
+    echo "  would insert   $name '$label' (placeholders)"
+    return 0
+  fi
+  local block anchor
+  block="$(awk -v m="$marker" -v repl="$repl" '
+    /^## / { buf = $0; next }
+    index($0, m ":START") { print buf; print $0; print repl; skip = 1; next }
+    index($0, m ":END")   { skip = 0; print $0; exit }
+    skip { next }
+    { buf = buf "\n" $0 }
+  ' "$SRC/CLAUDE.md")"
+  anchor="$(awk -v m="$marker" '
+    index($0, m ":END") { done = 1; next }
+    done && /^## / { print; exit }
+  ' "$SRC/CLAUDE.md")"
+  if [ -n "$anchor" ] && grep -qxF "$anchor" "$file" 2>/dev/null; then
+    awk -v anchor="$anchor" -v block="$block" '
+      !done && $0 == anchor { print block; print ""; done = 1 }
+      { print }
+    ' "$file" > "$file.vulyktmp" && mv "$file.vulyktmp" "$file"
+  else
+    { echo ""; printf '%s\n' "$block"; } >> "$file"
+  fi
+  BLOCK_INSERTED=1
+  echo "  insert         $name '$label' (placeholders)"
+}
+
+# report_fill_status <file> <MARKER> <name> - prints, per block, which rows still hold
+# `<fill in`, so an --upgrade tells an owner whether the council can run in this hive.
+report_fill_status() {
+  local file="$1" marker="$2" name="$3" labels n joined line
+  grep -q "${marker}:START" "$file" 2>/dev/null || return 0
+  grep -q "${marker}:END" "$file" 2>/dev/null || return 0
+  labels="$(awk -v m="$marker" '
+    index($0, m ":START") { on = 1; next }
+    index($0, m ":END")   { on = 0 }
+    on && /<fill in/ {
+      line = $0
+      sub(/^\| */, "", line)
+      sub(/ *\|.*/, "", line)
+      gsub(/\*\*/, "", line)
+      print line
+    }
+  ' "$file")"
+  if [ -z "$labels" ]; then
+    echo "  $name: filled"
+    return 0
+  fi
+  n=0; joined=""
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    n=$((n + 1))
+    if [ -z "$joined" ]; then joined="$line"; else joined="$joined, $line"; fi
+  done <<EOF
+$labels
+EOF
+  echo "  $name: $n rows still hold <fill in: $joined"
 }
 
 PREV="$(cat "$DEST/.claude/vulyk-version" 2>/dev/null || echo none)"
@@ -319,7 +428,7 @@ PYPERM
 # wiring: append only what is missing, in a marked block, and say what was added.
 ensure_gitignore() {
   local file="$DEST/.gitignore" missing=0 line
-  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ docs/specs/*/PAUSE"
+  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ docs/specs/*/PAUSE docs/specs/*/DRIVER"
 
   for line in $wanted; do
     grep -qxF "$line" "$file" 2>/dev/null || missing=$((missing + 1))
@@ -344,7 +453,46 @@ ensure_gitignore() {
   echo "  gitignore      added $missing VULYK runtime entries"
 }
 
+NEW_MANIFEST="$(mktemp)"
+trap 'rm -f "$NEW_MANIFEST"' EXIT
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr; do copy_tree "$tree"; done
+LC_ALL=C sort -u -o "$NEW_MANIFEST" "$NEW_MANIFEST"
+
+# Removal (ADR-005 D2), after the copy loop and before the new manifest is written: a path
+# that shipped last run, does not ship this run, and lives under OWNED is deleted outright -
+# there is nothing to compare a retired file's content against, the same rule OWNED already
+# applies to replacement. A dropout outside OWNED is an owner's own file and is only ever
+# reported, never touched. No old manifest at all means this hive predates the manifest:
+# delete nothing, just name what an OWNED tree holds that this release no longer ships.
+OLD_MANIFEST="$DEST/.claude/vulyk-manifest"
+if [ -n "$UPGRADE" ]; then
+  if [ -f "$OLD_MANIFEST" ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      grep -qxF "$f" "$NEW_MANIFEST" && continue   # still shipped this run
+      if owned "$f"; then
+        if [ "$CHECK" = "--check" ]; then
+          echo "  would remove   $f"
+        else
+          rm -f "$DEST/$f" 2>/dev/null || true
+          echo "  remove         $f"
+        fi
+      else
+        echo "  leave (yours)  $f"
+      fi
+    done < "$OLD_MANIFEST"
+  else
+    for t in $OWNED; do
+      [ -d "$DEST/$t" ] || continue
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        grep -qxF "$f" "$NEW_MANIFEST" && continue
+        echo "  unlisted (kept) $f"
+      done < <( cd "$DEST" && find "$t" -type f ! -name '.gitkeep' | LC_ALL=C sort )
+    done
+  fi
+fi
+
 ensure_gitignore
 wire_session_hook vulyk-update-check.sh
 wire_session_hook top-model-brief.sh
@@ -384,6 +532,13 @@ if [ -f "$DEST/CLAUDE.md" ]; then
       echo "  Your constitution still pins \`TOP_MODEL = opus\`; change it to \`TOP_MODEL = auto\` to"
       echo "  enable that, or keep the pin deliberately. \`scripts/top-model.sh --explain\` shows the pick."
     fi
+    # The council needs Profile/Commands to exist, not to be filled - an owner who bootstrapped
+    # before this release has a constitution with neither block. Insert what's missing; never
+    # touch a block whose markers, or whose hand-written heading, are already there.
+    print_profile_placeholder | ensure_marked_block "$DEST/CLAUDE.md" "VULYK:PROFILE" "## Profile block"
+    print_commands_placeholder | ensure_marked_block "$DEST/CLAUDE.md" "VULYK:COMMANDS" "## Commands table"
+    report_fill_status "$DEST/CLAUDE.md" "VULYK:PROFILE" "profile"
+    report_fill_status "$DEST/CLAUDE.md" "VULYK:COMMANDS" "commands"
   elif [ -e "$DEST/CLAUDE.vulyk.md" ]; then
     echo ""
     echo "  CLAUDE.vulyk.md exists - left untouched."
@@ -392,6 +547,13 @@ if [ -f "$DEST/CLAUDE.md" ]; then
       echo "      git -C \"$SRC\" log --oneline -- CLAUDE.md   # or simply:"
       echo "      diff \"$DEST/CLAUDE.vulyk.md\" \"$SRC/CLAUDE.md\""
     fi
+    # Same treatment as the CLAUDE.md branch above - it's the same constitution under a
+    # different filename, and the council reads the same blocks from it. The foreign
+    # CLAUDE.md sitting beside the sidecar is never opened.
+    print_profile_placeholder | ensure_marked_block "$DEST/CLAUDE.vulyk.md" "VULYK:PROFILE" "## Profile block"
+    print_commands_placeholder | ensure_marked_block "$DEST/CLAUDE.vulyk.md" "VULYK:COMMANDS" "## Commands table"
+    report_fill_status "$DEST/CLAUDE.vulyk.md" "VULYK:PROFILE" "profile"
+    report_fill_status "$DEST/CLAUDE.vulyk.md" "VULYK:COMMANDS" "commands"
   else
     if [ "$CHECK" != "--check" ]; then
       cp -p "$SRC/CLAUDE.md" "$DEST/CLAUDE.vulyk.md"
@@ -424,6 +586,18 @@ else
   echo "  stamp          .claude/vulyk-version = $VER"
 fi
 
+# Manifest - the whole ship set of this run (ADR-005 D2), written beside the stamp for the
+# same reason: it is installer state, not shipped content, and is never gitignored (a hive
+# commits it, same as the stamp).
+MANIFEST_COUNT="$(wc -l < "$NEW_MANIFEST" | tr -d ' ')"
+if [ "$CHECK" = "--check" ]; then
+  echo "  would write    .claude/vulyk-manifest ($MANIFEST_COUNT paths)"
+else
+  mkdir -p "$DEST/.claude"
+  cp "$NEW_MANIFEST" "$DEST/.claude/vulyk-manifest"
+  echo "  write          .claude/vulyk-manifest ($MANIFEST_COUNT paths)"
+fi
+
 # Pin the target's own Queen session to the top model the plan resolves to. A resolver that
 # ships but is never applied is a session that starts on the account default forever - the
 # same reasoning as wire_session_hook, aimed at a decision instead of a hook entry. Skipped
@@ -449,7 +623,12 @@ chmod +x "$DEST"/scripts/git-hooks/post-merge 2>/dev/null || true
 
 echo ""
 if [ -n "$UPGRADE" ]; then
-  echo "Done. Upgraded framework files only; your CLAUDE.md, memory/, specs, ADRs and wiki were not touched."
+  if [ -n "$BLOCK_INSERTED" ]; then
+    echo "Done. Upgraded framework files only; inserted a missing Profile/Commands block into your"
+    echo "constitution (see note above). Otherwise your CLAUDE.md, memory/, specs, ADRs and wiki were not touched."
+  else
+    echo "Done. Upgraded framework files only; your CLAUDE.md, memory/, specs, ADRs and wiki were not touched."
+  fi
   echo "If the constitution changed this release, merge those edits by hand (see note above)."
 else
   echo "Done. Next: cd $DEST && claude  ->  /vulyk-bootstrap"

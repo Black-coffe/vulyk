@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-10
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 tracer: false
@@ -42,6 +42,9 @@ ADR-005 D2 built: `install.sh` writes `.claude/vulyk-manifest` (the whole ship s
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `install.sh`: `shippable()` joins `.claude/vulyk-manifest` to the return-2 arm; `copy_tree` appends every sc==0 path to a `mktemp` accumulator (`$NEW_MANIFEST`); after the tree loop, sorted `LC_ALL=C`, removal runs only when `$UPGRADE` is set (old manifest -> remove/leave (yours); no old manifest -> unlisted (kept)); the manifest itself is written in the same guarded block as the version stamp, printing `would write`/`write`.
+- `.github/workflows/ci.yml`: added 5 new `install-smoke` steps for D4 2, 3 (+ 11's manifest half via checksum-before/after), 4, 5, 6; existing steps untouched, no job renamed/reordered.
+- Hand-smoked all of D4 2-6 and the manifest half of 11 directly against `install.sh` in `mktemp -d` targets (never this repo as DEST) - all passed; also extracted every `install-smoke` step's script with a small Python/yaml helper and ran `bash -n` on each (all OK) plus a live run of the 6 new/touched steps (2-7) in isolation, confirming the 4 new ones pass; step 2 (pre-existing, untouched) exits 1 in this local git-bash due to a `grep -q ... && { ...; exit 1 ;}` pattern combined with `set -e` when the grep finds nothing - reproduced identically on the pre-change `install.sh`/`ci.yml` via `git stash`, so it's an environment quirk of this local shell, not a regression from this story.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

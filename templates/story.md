@@ -2,6 +2,7 @@
 story: <slug>-NN
 spec: <slug>
 status: todo            # todo | in-progress | done | blocked
+returned:              # written by the worker as its last edit: DONE | NEEDS_CONTEXT | WALL
 tier: 1                 # routing tier of this story's worker
 worker: worker-code     # worker-code | worker-test
 tracer: false           # true on the FIRST story of an epic - see Tracer below

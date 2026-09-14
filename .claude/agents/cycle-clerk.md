@@ -11,6 +11,9 @@ You run exactly the one command your dispatch gives you - nothing before it, not
 Rules:
 - Run the command verbatim, once. Do not read any file, do not open the script you are calling,
   do not interpret what the output means.
+- Pass `timeout: 600000` on the Bash call, always: a `close-story` verb runs the hive's own
+  verification, and a full suite can exceed the tool's 120-second default - a call cut off by
+  that default returns nothing, and the driver reads nothing as a failed verb.
 - Do not retry. A non-zero exit or an unexpected line is the answer, not a signal to try again
   or try something else.
 - Every `cycle.sh` verb prints one JSON object as its last stdout line, on every exit code; a

@@ -1,7 +1,7 @@
 ---
 story: v0-12-0-remainders-06
 spec: v0-12-0-remainders
-status: todo
+status: done
 returned:
 tier: 4
 worker: worker-code
@@ -51,6 +51,8 @@ Every terminal the driver returns names the real cause: a two-miss stop carries 
 - [ ] Any clerk line with `exit === 3` (scenario: `record-seat` answering `{"ok":false,"exit":3,"next":"paused","error":"paused: ..."}`) ends the run with `next === 'paused'` and no `stop`.
 - [ ] `next:"briefed"` -> `{stop:{verb:'briefed', error:'spec not briefed: run /vulyk-plan'}}`; no clerk call contains `briefed --commit`.
 - [ ] `open-round` answering `{"ok":true,"exit":6,"next":"escalated"}` is followed by a `status` poll; with `status` scripted `next:"escalated"` the run ends `next === 'escalated'`, no `stop`.
+- [ ] Each build thunk catches a thrown worker `agent()` and logs `worker threw: <message>` before returning null, so a dead subagent leaves its reason in the run journal; the stop text `worker returned no report` and K2 are unchanged. Scenario: an `agents` entry that throws -> a `logs` entry starting `worker threw:` and the miss counted as before.
+- [ ] The second-attempt worker prompt carries one extra sentence: "a previous attempt may have left uncommitted edits in your files; `git diff` them first". Scenario: after one miss the second `agent()` call's `prompt` contains that sentence and the first call's does not.
 - [ ] Each scenario is asserted to fail against the driver at `3e200bb` before the change (note which); `bash tests/driver.test.sh` passes; story 26's greps stay clean (`GREEN`/`RED`/`stale`/`paperwork` outside comments, `worker-code` count 0, no `EOF` delimiter, `stamp` absent from seat prompts).
 
 ## Verification
@@ -58,6 +60,13 @@ Every terminal the driver returns names the real cause: a two-miss stop carries 
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `.claude/workflows/vulyk-cycle.js`: `args ?? {}` guard before any `args.*` read; a `Paused` control-flow class thrown from `clerk()` on any `exit:3` line, caught at the top and returned as `{next: e.next}` (no `stop`) - centralizing this in `clerk()` covers open-round/close-story/record-seat/judge/briefed/branch alike, not just record-seat.
+- Tier 4 guard (`st.tier===4 && (!SECOND||SECOND===TOP)`) placed right after the terminal check, before the `next` dispatch chain, so it runs every poll (tier is unknown before the first status) but before any non-clerk `agent()`.
+- `next:'briefed'` now `fail()`s immediately instead of ever calling `clerk('briefed --commit')`; `branch` unchanged.
+- Build loop: added a per-file `lastError` map (set to the close-story line's own `error` on an exit-4 miss, or `'worker returned no report'` on an empty/null/whitespace report) fed into the two-miss stop; the falsy-report check became `typeof report === 'string' && report.trim() !== ''` so `'   '` counts as a miss without calling `close-story`; each build thunk now does `agent(...).catch(e => {log('worker threw: '+msg); return null})` so a dead subagent's reason lands in the run journal; a per-file retry (`attempts.get(file)>=1`) appends one sentence about a possible uncommitted diff to the second dispatch's prompt only.
+- `tests/driver.test.sh`: added an `agent` stub extension - a `{throw:'<msg>'}` queue entry rejects instead of resolving, to simulate a dead subagent without changing `parallel`'s own catch - plus 11 new `run()` scenarios (d-p) and their `expect` lines, covering every acceptance criterion above.
+- Verified each new scenario against the pre-change driver (`git stash` the driver edit only, rerun the new test file): scenarios d/e/g/h/i/j/k/l/m/n/o/p all failed (explicit `FAIL` lines or an uncaught `TypeError: Cannot read properties of undefined (reading 'spec')` for the `args undefined` case, which also halted the promise chain for every scenario after it - confirmed by re-running each pair (d,e) and (g) individually as `FAIL` before the crash point).
+- Working-copy line endings: the file was CRLF on disk before this session (git `core.autocrlf=true`); edits landed as LF, `git diff --stat` shows a normal 58-line diff (not a whole-file rewrite), consistent with the CRLF/LF normalization already called out in plan.md `## Next circle`.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

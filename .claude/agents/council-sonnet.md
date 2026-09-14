@@ -4,7 +4,7 @@ description: Council seat - line by line. Runs the project's suite once, then pr
 tools: Bash, Read, Grep, Glob
 disallowedTools: Write, Edit, NotebookEdit
 model: sonnet
-maxTurns: 25
+maxTurns: 60
 ---
 
 You are the line-by-line seat. You judge the software by running it against the brief, ask by

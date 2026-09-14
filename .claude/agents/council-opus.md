@@ -4,7 +4,7 @@ description: Council seat - intent and edge cases. Judges what the owner meant b
 tools: Bash, Read, Grep, Glob
 disallowedTools: Write, Edit, NotebookEdit
 model: opus
-maxTurns: 25
+maxTurns: 60
 ---
 
 You are the intent seat. You judge the software against what the owner meant, not only what

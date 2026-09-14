@@ -84,6 +84,17 @@ jobs:
           echo "$line" | grep -q '^\[VULYK\] top model: opus' || { echo "::error::hook line wrong: $line"; fail=1; }
           rm "$t/proj/scripts/top-model.sh"
           [ -z "$(CLAUDE_PROJECT_DIR="$t/proj" bash .claude/hooks/top-model-brief.sh)" ] || { echo "::error::hook spoke without a resolver"; fail=1; }
+          # the hook never spawns the CLI for the Workflow line - a fake `claude` on PATH must sit untouched
+          mkdir -p "$t/proj/scripts" "$t/fakebin"
+          cp scripts/top-model.sh "$t/proj/scripts/"
+          sentinel="$t/fakebin/claude-was-called"
+          printf '#!/usr/bin/env bash\ntouch "%s"\necho "2.1.154"\n' "$sentinel" > "$t/fakebin/claude"
+          chmod +x "$t/fakebin/claude"
+          line2="$(PATH="$t/fakebin:$PATH" CLAUDE_PROJECT_DIR="$t/proj" VULYK_CLAUDE_CONFIG="$t/pro.json" bash .claude/hooks/top-model-brief.sh)"
+          [ -f "$sentinel" ] && { echo "::error::hook spawned the fake claude CLI"; fail=1; }
+          echo "$line2" | grep -q 'Workflow driver:' || { echo "::error::hook line missing Workflow driver: $line2"; fail=1; }
+          echo "$line2" | grep -q 'CLI' && { echo "::error::hook line still mentions CLI: $line2"; fail=1; }
+          rm -f "$t/proj/scripts/top-model.sh"
           exit $fail
 
   cycle:
@@ -112,6 +123,19 @@ jobs:
 
       - name: synthetic windows -> right denominator, right silence
         run: python3 tests/handoff-window.test.py .claude/hooks/handoff.py
+
+  driver:
+    name: the Workflow driver executes for real against stubbed agent/parallel/clerk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: real parse, real foldReviews, stubbed loop scenarios
+        run: bash tests/driver.test.sh
 
   install-smoke:
     name: install.sh dry-run smoke test
@@ -147,6 +171,9 @@ jobs:
           done
           # and must show it would skip the maintainer's own runtime artifacts, not ship them
           echo "$out" | grep -q "would skip (runtime) .claude/settings.local.json" || { echo "::error::--check did not report skipping settings.local.json"; exit 1; }
+          # ADR-005 D4.1: vulyk's own ADRs/wiki are never planned to ship
+          echo "$out" | grep -q "would copy.*docs/adr/" && { echo "::error::--check planned to copy docs/adr/"; exit 1; }
+          echo "$out" | grep -q "would copy.*docs/wiki/" && { echo "::error::--check planned to copy docs/wiki/"; exit 1; }
 
       - name: real install into a clean dir produces a runnable hive
         run: |
@@ -182,6 +209,84 @@ jobs:
           test ! -e "$target/.claude/state.json"          || { echo "::error::shipped state.json"; exit 1; }
           test ! -e "$target/memory/snapshots/2026/x.md"  || { echo "::error::shipped a snapshot"; exit 1; }
           grep -qx "$(cat VERSION)" "$target/.claude/vulyk-version" || { echo "::error::vulyk-version is not install.sh's own stamp"; exit 1; }
+          # ADR-005 D4.1: docs/adr and docs/wiki exist but hold none of vulyk's own numbered ADRs
+          test -d "$target/docs/adr"  || { echo "::error::docs/adr not created"; exit 1; }
+          test -d "$target/docs/wiki" || { echo "::error::docs/wiki not created"; exit 1; }
+          find "$target/docs/adr" -name '001-*.md' | grep -q . && { echo "::error::shipped vulyk's own ADR-001"; exit 1; }
+          # ADR-005 K3: the DRIVER semaphore's gitignore entry ships too
+          grep -qxF 'docs/specs/*/DRIVER' "$target/.gitignore" || { echo "::error::.gitignore missing docs/specs/*/DRIVER"; exit 1; }
+          # ADR-005 D4.2: the manifest exists, is sorted, names only real files, carries a
+          # load-bearing agent, and never lists installer state or the constitution.
+          test -f "$target/.claude/vulyk-manifest" || { echo "::error::vulyk-manifest not written"; exit 1; }
+          LC_ALL=C sort -c "$target/.claude/vulyk-manifest" || { echo "::error::vulyk-manifest is not LC_ALL=C sorted"; exit 1; }
+          while IFS= read -r mf; do
+            [ -n "$mf" ] || continue
+            test -f "$target/$mf" || { echo "::error::vulyk-manifest names missing file: $mf"; exit 1; }
+          done < "$target/.claude/vulyk-manifest"
+          grep -qxF ".claude/agents/worker-code.md" "$target/.claude/vulyk-manifest" || { echo "::error::vulyk-manifest missing worker-code.md"; exit 1; }
+          grep -E 'vulyk-version|vulyk-manifest|^docs/specs/|^docs/adr/0|CLAUDE' "$target/.claude/vulyk-manifest" && { echo "::error::vulyk-manifest lists installer state or the constitution"; exit 1; }
+          true
+
+      - name: --upgrade removes a retired OWNED file, --check only reports it (ADR-005 D4.3, D4.11 manifest half)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          echo dummy > "$target/.claude/agents/retired-smoke.md"
+          echo ".claude/agents/retired-smoke.md" >> "$target/.claude/vulyk-manifest"
+          LC_ALL=C sort -u -o "$target/.claude/vulyk-manifest" "$target/.claude/vulyk-manifest"
+          before_manifest="$(cat "$target/.claude/vulyk-manifest")"
+          checksum_before="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          out="$(./install.sh "$target" --upgrade --check)"
+          echo "$out" | grep -q "would remove   .claude/agents/retired-smoke.md" || { echo "::error::--check did not report would remove for the retired file"; exit 1; }
+          checksum_after="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          [ "$checksum_before" = "$checksum_after" ] || { echo "::error::--upgrade --check wrote to the target (ADR-005 D4.11)"; exit 1; }
+          [ -f "$target/.claude/agents/retired-smoke.md" ] || { echo "::error::--check deleted the retired file"; exit 1; }
+          after_manifest="$(cat "$target/.claude/vulyk-manifest")"
+          [ "$before_manifest" = "$after_manifest" ] || { echo "::error::--check changed the manifest"; exit 1; }
+          out2="$(./install.sh "$target" --upgrade)"
+          echo "$out2" | grep -q "remove         .claude/agents/retired-smoke.md" || { echo "::error::real upgrade did not report removing the retired file"; exit 1; }
+          test ! -f "$target/.claude/agents/retired-smoke.md" || { echo "::error::real upgrade did not delete the retired file"; exit 1; }
+          grep -qxF ".claude/agents/retired-smoke.md" "$target/.claude/vulyk-manifest" && { echo "::error::real upgrade left the retired file in the manifest"; exit 1; }
+          true
+
+      - name: --upgrade never removes a file outside OWNED, only reports it (ADR-005 D4.4)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          echo dummy > "$target/memory/retired-smoke.md"
+          echo "memory/retired-smoke.md" >> "$target/.claude/vulyk-manifest"
+          LC_ALL=C sort -u -o "$target/.claude/vulyk-manifest" "$target/.claude/vulyk-manifest"
+          out="$(./install.sh "$target" --upgrade)"
+          test -f "$target/memory/retired-smoke.md" || { echo "::error::--upgrade deleted a file outside OWNED"; exit 1; }
+          echo "$out" | grep -Ei 'remove.*retired-smoke\.md$' | grep -v 'leave (yours)' && { echo "::error::--upgrade printed a remove line for a file outside OWNED"; exit 1; }
+          echo "$out" | grep -q "leave (yours)  memory/retired-smoke.md" || { echo "::error::--upgrade did not report leave (yours) for the dropout"; exit 1; }
+          grep -qxF "memory/retired-smoke.md" "$target/.claude/vulyk-manifest" && { echo "::error::the dropout was left in the manifest"; exit 1; }
+          true
+
+      - name: --upgrade never lists or removes an owner's own file (ADR-005 D4.5)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          echo mine > "$target/.claude/agents/mine.md"
+          before="$(md5sum "$target/.claude/agents/mine.md")"
+          ./install.sh "$target" --upgrade >/dev/null
+          after="$(md5sum "$target/.claude/agents/mine.md")"
+          [ "$before" = "$after" ] || { echo "::error::--upgrade touched an owner's own file"; exit 1; }
+          grep -qxF ".claude/agents/mine.md" "$target/.claude/vulyk-manifest" && { echo "::error::an owner's own file was listed in the manifest"; exit 1; }
+          true
+
+      - name: --upgrade with no manifest yet keeps every file and reports it, then writes the manifest (ADR-005 D4.6)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          rm -f "$target/.claude/vulyk-manifest"
+          echo stale > "$target/.claude/agents/stale-smoke.md"
+          out="$(./install.sh "$target" --upgrade)"
+          echo "$out" | grep -q "unlisted (kept) .claude/agents/stale-smoke.md" || { echo "::error::--upgrade with no manifest did not report unlisted (kept)"; exit 1; }
+          test -f "$target/.claude/agents/stale-smoke.md" || { echo "::error::--upgrade with no manifest deleted a file"; exit 1; }
+          test -f "$target/.claude/vulyk-manifest" || { echo "::error::--upgrade with no manifest did not write one"; exit 1; }
+          grep -qxF ".claude/agents/stale-smoke.md" "$target/.claude/vulyk-manifest" && { echo "::error::the unlisted file was written into the new manifest"; exit 1; }
+          true
 
       - name: --upgrade into the same target ships no runtime artifact either
         run: |
@@ -212,6 +317,76 @@ jobs:
           ./install.sh "$target" --upgrade >/dev/null
           after="$(cat "$target/CLAUDE.md")"
           [ "$before" = "$after" ] || { echo "::error::--upgrade modified an already-filled Profile block"; exit 1; }
+
+      - name: --upgrade restores a missing Profile block, at the right position (ADR-005 D4.7)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          awk '/^## Profile$/{skip=1} skip && /<!-- VULYK:PROFILE:END -->/{skip=0; next} !skip' \
+            "$target/CLAUDE.md" > "$target/CLAUDE.md.tmp" && mv "$target/CLAUDE.md.tmp" "$target/CLAUDE.md"
+          out="$(./install.sh "$target" --upgrade)"
+          echo "$out" | grep -q "insert.*CLAUDE.md '## Profile block'" || { echo "::error::--upgrade did not report inserting the Profile block"; exit 1; }
+          grep -q '<!-- VULYK:PROFILE:START -->' "$target/CLAUDE.md" || { echo "::error::Profile markers not restored"; exit 1; }
+          grep -q '<!-- VULYK:PROFILE:END -->'   "$target/CLAUDE.md" || { echo "::error::Profile markers not restored"; exit 1; }
+          count_profile_rows() { awk '/<!-- VULYK:PROFILE:START -->/{f=1;next}/<!-- VULYK:PROFILE:END -->/{f=0}f' "$1" | grep -c '^| '; }
+          src_rows="$(count_profile_rows CLAUDE.md)"
+          tgt_rows="$(count_profile_rows "$target/CLAUDE.md")"
+          [ "$src_rows" = "$tgt_rows" ] || { echo "::error::restored Profile row count mismatch: source=$src_rows target=$tgt_rows"; exit 1; }
+          profile_line="$(grep -n '^## Profile$'  "$target/CLAUDE.md" | head -1 | cut -d: -f1)"
+          commands_line="$(grep -n '^## Commands$' "$target/CLAUDE.md" | head -1 | cut -d: -f1)"
+          [ -n "$profile_line" ] && [ -n "$commands_line" ] && [ "$profile_line" -lt "$commands_line" ] \
+            || { echo "::error::## Profile did not land before ## Commands"; exit 1; }
+          echo "$out" | grep -q 'profile:.*Client path' || { echo "::error::--upgrade did not name Client path among the still-<fill in> rows"; exit 1; }
+
+      - name: --upgrade restores a missing Commands block before Compact instructions (ADR-005 D4.8)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          awk '/^## Commands$/{skip=1} skip && /<!-- VULYK:COMMANDS:END -->/{skip=0; next} !skip' \
+            "$target/CLAUDE.md" > "$target/CLAUDE.md.tmp" && mv "$target/CLAUDE.md.tmp" "$target/CLAUDE.md"
+          ./install.sh "$target" --upgrade >/dev/null
+          commands_line="$(grep -n '^## Commands$' "$target/CLAUDE.md" | head -1 | cut -d: -f1)"
+          compact_line="$(grep -n '^## Compact instructions$' "$target/CLAUDE.md" | head -1 | cut -d: -f1)"
+          [ -n "$commands_line" ] && [ -n "$compact_line" ] && [ "$commands_line" -lt "$compact_line" ] \
+            || { echo "::error::## Commands did not land before ## Compact instructions"; exit 1; }
+
+      - name: a hand-written Profile heading without markers is warned, not rewritten (ADR-005 D4.9)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          sed -i '/<!-- VULYK:PROFILE:START -->/d; /<!-- VULYK:PROFILE:END -->/d' "$target/CLAUDE.md"
+          before="$(cat "$target/CLAUDE.md")"
+          out="$(./install.sh "$target" --upgrade)"
+          after="$(cat "$target/CLAUDE.md")"
+          echo "$out" | grep -q "WARNING.*## Profile exists without VULYK:PROFILE markers" || { echo "::error::missing WARNING for hand-written Profile heading"; exit 1; }
+          [ "$before" = "$after" ] || { echo "::error::--upgrade rewrote a hand-written Profile heading"; exit 1; }
+
+      - name: the sidecar constitution gets the same block restored; the foreign CLAUDE.md stays byte-identical (ADR-005 D4.10)
+        run: |
+          target="$(mktemp -d)"
+          printf '# My project rules\n' > "$target/CLAUDE.md"
+          ./install.sh "$target" >/dev/null
+          test -f "$target/CLAUDE.vulyk.md" || { echo "::error::CLAUDE.vulyk.md fallback missing"; exit 1; }
+          foreign_before="$(cat "$target/CLAUDE.md")"
+          awk '/^## Profile$/{skip=1} skip && /<!-- VULYK:PROFILE:END -->/{skip=0; next} !skip' \
+            "$target/CLAUDE.vulyk.md" > "$target/CLAUDE.vulyk.md.tmp" && mv "$target/CLAUDE.vulyk.md.tmp" "$target/CLAUDE.vulyk.md"
+          out="$(./install.sh "$target" --upgrade)"
+          foreign_after="$(cat "$target/CLAUDE.md")"
+          [ "$foreign_before" = "$foreign_after" ] || { echo "::error::foreign CLAUDE.md was touched while restoring the sidecar"; exit 1; }
+          echo "$out" | grep -q "insert.*CLAUDE.vulyk.md '## Profile block'" || { echo "::error::sidecar Profile block was not restored"; exit 1; }
+          grep -q '<!-- VULYK:PROFILE:START -->' "$target/CLAUDE.vulyk.md" || { echo "::error::sidecar Profile markers not restored"; exit 1; }
+
+      - name: --upgrade --check after a restore stays dry (ADR-005 D4.11)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          awk '/^## Profile$/{skip=1} skip && /<!-- VULYK:PROFILE:END -->/{skip=0; next} !skip' \
+            "$target/CLAUDE.md" > "$target/CLAUDE.md.tmp" && mv "$target/CLAUDE.md.tmp" "$target/CLAUDE.md"
+          ./install.sh "$target" --upgrade >/dev/null
+          before="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          out="$(./install.sh "$target" --upgrade --check)"
+          after="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          [ "$before" = "$after" ] || { echo "::error::--upgrade --check after a restore wrote to the target"; exit 1; }
 
       - name: re-install is idempotent (never overwrites existing files)
         run: |
