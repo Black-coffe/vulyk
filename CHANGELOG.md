@@ -2,6 +2,17 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [Unreleased]
+
+### Fixed
+- **Driver line endings.** `.claude/workflows/vulyk-cycle.js` had no `eol=lf` rule, so a Windows
+  checkout (`core.autocrlf=true`) produced CRLF and the Workflow tool refused the script
+  ("script contains control characters"); sessions launched from a hand-made LF copy instead.
+  `.gitattributes` now pins `.claude/workflows/*.js` to LF, and `install.sh` appends the same
+  rule to a hive's `.gitattributes` (marked block, append-only) and re-checks the driver out.
+- **Driver call.** `/vulyk-build` calls the Workflow tool by `scriptPath`, not `name: vulyk-cycle`;
+  the by-name call was rejected by the same handler.
+
 ## [0.13.1] - 2026-09-14
 
 The four majors the Fable `lead-review` filed against v0.12.1 (kept at

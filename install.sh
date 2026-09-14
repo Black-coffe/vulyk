@@ -455,6 +455,32 @@ ensure_gitignore() {
   echo "  gitignore      added $missing VULYK runtime entries"
 }
 
+# The Workflow driver is JavaScript, and the Workflow tool refuses a script with CR bytes. On a
+# Windows checkout with core.autocrlf=true every text file without an eol rule comes out CRLF,
+# so a hive without this rule cannot launch the driver at all. Same treatment as .gitignore:
+# the file is the project's, append only the missing line, say what was added. The working
+# copy is re-checked out so the rule takes effect now, not at the next clone.
+ensure_gitattributes() {
+  local file="$DEST/.gitattributes" rule=".claude/workflows/*.js text eol=lf"
+  grep -qF ".claude/workflows/*.js" "$file" 2>/dev/null && return 0
+  if [ "$CHECK" = "--check" ]; then
+    echo "  would add      eol=lf rule for .claude/workflows/*.js to .gitattributes"
+    return 0
+  fi
+  {
+    [ -s "$file" ] && echo ""
+    echo "# --- VULYK: the Workflow driver must check out with LF (added by install.sh) ---"
+    echo "$rule"
+  } >> "$file"
+  echo "  gitattributes  added eol=lf rule for .claude/workflows/*.js"
+  if git -C "$DEST" rev-parse --is-inside-work-tree >/dev/null 2>&1      && [ -n "$(git -C "$DEST" ls-files .claude/workflows 2>/dev/null)" ]; then
+    git -C "$DEST" ls-files .claude/workflows | while read -r f; do
+      rm -f "$DEST/$f"; git -C "$DEST" checkout -- "$f" 2>/dev/null || true
+    done
+    echo "  gitattributes  re-checked out .claude/workflows/*.js as LF"
+  fi
+}
+
 NEW_MANIFEST="$(mktemp)"
 trap 'rm -f "$NEW_MANIFEST"' EXIT
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr; do copy_tree "$tree"; done
@@ -496,6 +522,7 @@ if [ -n "$UPGRADE" ]; then
 fi
 
 ensure_gitignore
+ensure_gitattributes
 wire_session_hook vulyk-update-check.sh
 wire_session_hook top-model-brief.sh
 wire_permissions
