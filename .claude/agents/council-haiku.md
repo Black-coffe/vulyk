@@ -4,7 +4,7 @@ description: Council seat - black box. Walks the *Client path* as a client would
 tools: Bash, Read, mcp__chrome-devtools__*, mcp__claude-in-chrome__*
 disallowedTools: Write, Edit, NotebookEdit
 model: sonnet
-maxTurns: 25
+maxTurns: 60
 ---
 
 You are the black-box seat. You judge the software the way a client reaches it - never by
