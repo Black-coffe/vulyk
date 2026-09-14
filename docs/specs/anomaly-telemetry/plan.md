@@ -107,7 +107,7 @@ Rule A10. Terminal test: `[ -t 0 ] || [ -r /dev/tty ]`; the question is read wit
 
 ## Plan deltas
 
-**Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
+**Approved:** Andrei, 2026-09-14
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
 **Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
