@@ -246,7 +246,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     }
   });
 })
-// --- scenario (f): a red close-story then an empty report -> "worker returned no report" wins
+// --- scenario (f): a red close-story then an empty report -> the empty return's own reason wins
 .then(() => {
   const file = 'docs/specs/demo/demo-04-x.md';
   const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-04', worker: 'worker-test' }] };
@@ -255,10 +255,10 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
     { clerk: withClaim([wave, redLine, wave]), agents: ['report 1', null] },
   ).then(({ result }) => {
-    if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'worker returned no report') {
-      console.log('ok two-miss stop: red+empty ends "worker returned no report"');
+    if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'worker returned empty - turn cap suspected (worker-test, maxTurns 90 in .claude/agents/worker-test.md)') {
+      console.log('ok two-miss stop: red+empty ends with the empty-return reason');
     } else {
-      console.log('FAIL two-miss stop: red+empty ends "worker returned no report" - got ' + JSON.stringify(result));
+      console.log('FAIL two-miss stop: red+empty ends with the empty-return reason - got ' + JSON.stringify(result));
     }
   });
 })
@@ -271,7 +271,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     { clerk: withClaim([wave, wave]), agents: ['   ', '   '] },
   ).then(({ result, calls }) => {
     const closeStoryCalls = calls.filter((c) => c.verb === 'close-story');
-    if (result && result.stop && result.stop.error === 'worker returned no report' && closeStoryCalls.length === 0) {
+    if (result && result.stop && result.stop.error === 'worker returned empty - turn cap suspected (worker-test, maxTurns 90 in .claude/agents/worker-test.md)' && closeStoryCalls.length === 0) {
       console.log('ok whitespace report: a miss, close-story never called');
     } else {
       console.log('FAIL whitespace report: a miss, close-story never called - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
@@ -389,8 +389,8 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   }
 }))
 // --- scenario (o): a thrown worker agent() is caught by its own build thunk, logged, and
-// counted as the same miss a null report would be - the dead subagent's reason survives
-// in the run journal even though the two-miss stop still says "worker returned no report"
+// counted as the same miss a null report would be - the dead subagent's reason is now the
+// two-miss stop's own error as well as a line in the run journal (C3)
 .then(() => {
   const file = 'docs/specs/demo/demo-08-x.md';
   const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-08', worker: 'worker-test' }] };
@@ -399,7 +399,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     { clerk: withClaim([wave, wave]), agents: [{ throw: 'subagent died' }, { throw: 'subagent died again' }] },
   ).then(({ result, logs }) => {
     const threw = logs.some((l) => l.startsWith('worker threw:'));
-    if (result && result.stop && result.stop.error === 'worker returned no report' && threw) {
+    if (result && result.stop && result.stop.error === 'worker threw: subagent died again' && threw) {
       console.log('ok worker threw: caught by the build thunk, logged, counted as a miss');
     } else {
       console.log('FAIL worker threw: caught by the build thunk, logged, counted as a miss - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
@@ -521,7 +521,7 @@ expect "run: status green is terminal, no dispatch"      "ok status green: termi
 expect "run: build wave dispatches worker, closes story" "ok build wave: worker dispatched, close-story called once" "$out"
 expect "run: two-miss stop names the red verification (M2/X-M1)" "ok two-miss stop: red+red carries the verification error" "$out"
 expect "run: two-miss stop, empty then red"                      "ok two-miss stop: empty+red carries the verification error" "$out"
-expect "run: two-miss stop, red then empty"                      "ok two-miss stop: red+empty ends \"worker returned no report\"" "$out"
+expect "run: two-miss stop, red then empty"                      "ok two-miss stop: red+empty ends with the empty-return reason" "$out"
 expect "run: whitespace-only report is a miss"                   "ok whitespace report: a miss, close-story never called" "$out"
 expect "run: launch guard on args undefined"                     "ok launch guard: args undefined" "$out"
 expect "run: Tier 4 without second_model refuses at launch"      "ok tier4 guard: second_model missing" "$out"
