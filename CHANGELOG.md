@@ -19,8 +19,9 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
   ("script contains control characters"); sessions launched from a hand-made LF copy instead.
   `.gitattributes` now pins `.claude/workflows/*.js` to LF, and `install.sh` appends the same
   rule to a hive's `.gitattributes` (marked block, append-only) and re-checks the driver out.
-- **Driver call.** `/vulyk-build` calls the Workflow tool by `scriptPath`, not `name: vulyk-cycle`;
-  the by-name call was rejected by the same handler.
+- **Driver call.** `/vulyk-build` calls the Workflow tool by `scriptPath`, not `name: vulyk-cycle`.
+  The by-name call is refused ("script contains control characters") even on an LF working copy,
+  so its cause is not the line endings and is unknown; `scriptPath` is the supported call.
 
 ## [0.13.1] - 2026-09-14
 
