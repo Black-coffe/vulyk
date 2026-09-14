@@ -83,6 +83,19 @@ try {
   console.log('fold ok');
 }
 
+// --- static check (K3/story 13): the four gated verbs' own command templates all carry
+// --stamp ${stamp} literally in the source - covers judge, which no runtime scenario below
+// exercises directly (open-round/record-seat/close-story are also proved at runtime above).
+{
+  const gated = ['close-story', 'open-round', 'record-seat', 'judge'];
+  const missing = gated.filter((v) => {
+    const re = new RegExp('`' + v + ' [^`]*--stamp \\$\\{stamp\\}');
+    return !re.test(src);
+  });
+  if (missing.length === 0) console.log('ok stamp: all four gated verbs carry --stamp in their template');
+  else console.log('FAIL stamp: all four gated verbs carry --stamp in their template - missing ' + JSON.stringify(missing));
+}
+
 // --- run(args, script) harness: script = { clerk: [...], agents: [...] }
 function run(args, script) {
   const clerkQueue = (script.clerk || []).slice();
@@ -132,6 +145,13 @@ function run(args, script) {
   return driverFn(args, agent, parallel, pipeline, phase, log).then((result) => ({ result, calls, phases, logs }));
 }
 
+// --- DRIVER semaphore harness (K3/story 13): claim is the first clerk call after the launch
+// guards, release is the last on every path. Scenarios that reach a terminal or a stop must
+// supply both ends of the clerk queue themselves; this helper does it once.
+const claimOk = { ok: true, verb: 'claim', exit: 0 };
+const releaseOk = { ok: true, verb: 'release', exit: 0 };
+const withClaim = (clerkArr) => [claimOk, ...clerkArr, releaseOk];
+
 // --- scenario (a): args.stamp missing -> stop.verb === 'launch', no clerk call
 run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const clerkCalls = calls.filter((c) => 'verb' in c);
@@ -144,11 +164,16 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
 // --- scenario (b): status next:"green" -> next === 'green', zero agent dispatches
 .then(() => run(
   { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-  { clerk: [{ next: 'green' }], agents: [] },
+  { clerk: withClaim([{ next: 'green' }]), agents: [] },
 ).then(({ result, calls }) => {
   const dispatches = calls.filter((c) => !('verb' in c));
-  if (result && result.next === 'green' && dispatches.length === 0) {
+  const gated = calls.filter((c) => 'verb' in c);
+  if (
+    result && result.next === 'green' && dispatches.length === 0
+    && gated[0].verb === 'claim' && gated[gated.length - 1].verb === 'release'
+  ) {
     console.log('ok status green: terminal, no dispatch');
+    console.log('ok status green: claim/release bracket the run');
   } else {
     console.log('FAIL status green: terminal, no dispatch - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
   }
@@ -160,11 +185,11 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
     {
-      clerk: [
+      clerk: withClaim([
         { next: 'build:1', wave_stories: [{ file, story: 'demo-01', worker: 'worker-test' }] },
         { ok: true },
         { next: 'green' },
-      ],
+      ]),
       agents: ['a worker report'],
     },
   ).then(({ result, calls }) => {
@@ -174,8 +199,10 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
       result && result.next === 'green'
       && workerCalls.length === 1
       && closeStoryCalls.length === 1
+      && closeStoryCalls[0].cmd.includes('--stamp 0123456789abcdef')
     ) {
       console.log('ok build wave: worker dispatched, close-story called once');
+      console.log('ok build wave: close-story carries --stamp');
     } else {
       console.log('FAIL build wave: worker dispatched, close-story called once - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
     }
@@ -189,10 +216,15 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: [wave, redLine, wave, redLine], agents: ['report 1', 'report 2'] },
-  ).then(({ result }) => {
-    if (result && result.stop && result.stop.verb === 'build' && result.stop.file === file && result.stop.error === 'red: verification failed') {
+    { clerk: withClaim([wave, redLine, wave, redLine]), agents: ['report 1', 'report 2'] },
+  ).then(({ result, calls }) => {
+    const gated = calls.filter((c) => 'verb' in c);
+    if (
+      result && result.stop && result.stop.verb === 'build' && result.stop.file === file && result.stop.error === 'red: verification failed'
+      && gated[gated.length - 1].verb === 'release'
+    ) {
       console.log('ok two-miss stop: red+red carries the verification error');
+      console.log('ok two-miss stop: release still called after a stop');
     } else {
       console.log('FAIL two-miss stop: red+red carries the verification error - got ' + JSON.stringify(result));
     }
@@ -205,7 +237,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: [wave, wave, redLine], agents: [null, 'report 2'] },
+    { clerk: withClaim([wave, wave, redLine]), agents: [null, 'report 2'] },
   ).then(({ result }) => {
     if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'red: verification failed') {
       console.log('ok two-miss stop: empty+red carries the verification error');
@@ -221,7 +253,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: [wave, redLine, wave], agents: ['report 1', null] },
+    { clerk: withClaim([wave, redLine, wave]), agents: ['report 1', null] },
   ).then(({ result }) => {
     if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'worker returned no report') {
       console.log('ok two-miss stop: red+empty ends "worker returned no report"');
@@ -236,7 +268,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-05', worker: 'worker-test' }] };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: [wave, wave], agents: ['   ', '   '] },
+    { clerk: withClaim([wave, wave]), agents: ['   ', '   '] },
   ).then(({ result, calls }) => {
     const closeStoryCalls = calls.filter((c) => c.verb === 'close-story');
     if (result && result.stop && result.stop.error === 'worker returned no report' && closeStoryCalls.length === 0) {
@@ -258,7 +290,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
 // --- scenario (i): Tier 4 with no second_model refuses at launch, before any worker dispatch
 .then(() => run(
   { spec: 'demo', top_model: 'opus', stamp: '0123456789abcdef' },
-  { clerk: [{ next: 'build:1', tier: 4, wave_stories: [{ file: 'docs/specs/demo/demo-06-x.md', story: 'demo-06', worker: 'worker-test' }] }], agents: ['report'] },
+  { clerk: withClaim([{ next: 'build:1', tier: 4, wave_stories: [{ file: 'docs/specs/demo/demo-06-x.md', story: 'demo-06', worker: 'worker-test' }] }]), agents: ['report'] },
 ).then(({ result, calls }) => {
   const dispatches = calls.filter((c) => !('verb' in c));
   if (result && result.stop && result.stop.verb === 'launch' && /second_model/.test(result.stop.error) && dispatches.length === 0) {
@@ -270,7 +302,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
 // --- scenario (j): Tier 4 with second_model equal to top_model also refuses
 .then(() => run(
   { spec: 'demo', top_model: 'opus', second_model: 'opus', stamp: '0123456789abcdef' },
-  { clerk: [{ next: 'build:1', tier: 4, wave_stories: [] }], agents: [] },
+  { clerk: withClaim([{ next: 'build:1', tier: 4, wave_stories: [] }]), agents: [] },
 ).then(({ result }) => {
   if (result && result.stop && result.stop.verb === 'launch' && /second_model/.test(result.stop.error)) {
     console.log('ok tier4 guard: second_model equal to top_model');
@@ -284,11 +316,11 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   return run(
     { spec: 'demo', top_model: 'opus', stamp: '0123456789abcdef' },
     {
-      clerk: [
+      clerk: withClaim([
         { next: 'build:1', tier: 3, wave_stories: [{ file, story: 'demo-07', worker: 'worker-test' }] },
         { ok: true },
         { next: 'green' },
-      ],
+      ]),
       agents: ['a worker report'],
     },
   ).then(({ result }) => {
@@ -303,15 +335,20 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
 .then(() => run(
   { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
   {
-    clerk: [
+    clerk: withClaim([
       { next: 'dispatch:sonnet', tier: 2, round: 1, round_dir: 'docs/specs/demo/council/round-1' },
       { ok: false, exit: 3, next: 'paused', error: 'paused: owner requested a pause' },
-    ],
+    ]),
     agents: ['a seat report'],
   },
-).then(({ result }) => {
-  if (result && result.next === 'paused' && !result.stop) {
+).then(({ result, calls }) => {
+  const recordSeatCalls = calls.filter((c) => c.verb === 'record-seat');
+  if (
+    result && result.next === 'paused' && !result.stop
+    && recordSeatCalls.length === 1 && recordSeatCalls[0].cmd.includes('--stamp 0123456789abcdef')
+  ) {
     console.log('ok record-seat exit 3: ends the run paused, no stop');
+    console.log('ok record-seat: carries --stamp');
   } else {
     console.log('FAIL record-seat exit 3: ends the run paused, no stop - got ' + JSON.stringify(result));
   }
@@ -319,7 +356,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
 // --- scenario (m): next:"briefed" -> the driver refuses, never runs briefed --commit itself
 .then(() => run(
   { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-  { clerk: [{ next: 'briefed' }], agents: [] },
+  { clerk: withClaim([{ next: 'briefed' }]), agents: [] },
 ).then(({ result, calls }) => {
   const briefedCommit = calls.some((c) => c.cmd && c.cmd.includes('briefed --commit'));
   if (result && result.stop && result.stop.verb === 'briefed' && !briefedCommit) {
@@ -332,16 +369,21 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
 .then(() => run(
   { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
   {
-    clerk: [
+    clerk: withClaim([
       { next: 'open-round' },
       { ok: true, verb: 'open-round', exit: 6, next: 'escalated' },
       { next: 'escalated' },
-    ],
+    ]),
     agents: [],
   },
-).then(({ result }) => {
-  if (result && result.next === 'escalated' && !result.stop) {
+).then(({ result, calls }) => {
+  const openRoundCalls = calls.filter((c) => c.verb === 'open-round');
+  if (
+    result && result.next === 'escalated' && !result.stop
+    && openRoundCalls.length === 1 && openRoundCalls[0].cmd.includes('--stamp 0123456789abcdef')
+  ) {
     console.log('ok exit 6: ok:true is followed by a status poll, ends escalated');
+    console.log('ok open-round: carries --stamp');
   } else {
     console.log('FAIL exit 6: ok:true is followed by a status poll, ends escalated - got ' + JSON.stringify(result));
   }
@@ -354,7 +396,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-08', worker: 'worker-test' }] };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: [wave, wave], agents: [{ throw: 'subagent died' }, { throw: 'subagent died again' }] },
+    { clerk: withClaim([wave, wave]), agents: [{ throw: 'subagent died' }, { throw: 'subagent died again' }] },
   ).then(({ result, logs }) => {
     const threw = logs.some((l) => l.startsWith('worker threw:'));
     if (result && result.stop && result.stop.error === 'worker returned no report' && threw) {
@@ -373,7 +415,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const sentence = 'a previous attempt may have left uncommitted edits in your files; `git diff` them first';
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: [wave, redLine, wave, { ok: true }, { next: 'green' }], agents: ['report 1', 'report 2'] },
+    { clerk: withClaim([wave, redLine, wave, { ok: true }, { next: 'green' }]), agents: ['report 1', 'report 2'] },
   ).then(({ result, calls }) => {
     const workerCalls = calls.filter((c) => c.agentType === 'worker-test');
     if (
@@ -399,7 +441,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const returnedWall = { ok: false, verb: 'close-story', exit: 4, error: 'returned WALL' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: [wave, returnedWall, wave, { ok: true }, { next: 'green' }], agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
+    { clerk: withClaim([wave, returnedWall, wave, { ok: true }, { next: 'green' }]), agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
   ).then(({ result, calls }) => {
     const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
     if (result && result.next === 'green' && !result.stop && closeStoryCalls.length === 2) {
@@ -418,7 +460,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const returnedWall = { ok: false, verb: 'close-story', exit: 4, error: 'returned WALL' };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: [wave, returnedWall, wave, returnedWall], agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
+    { clerk: withClaim([wave, returnedWall, wave, returnedWall]), agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
   ).then(({ result, calls }) => {
     const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
     if (result && result.stop && result.stop.verb === 'build' && result.stop.file === file && closeStoryCalls.length === 2) {
@@ -437,7 +479,7 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-12', worker: 'worker-test' }] };
   return run(
     { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: [wave, { ok: true }, { next: 'green' }], agents: ['STATUS: WALL\nreport'] },
+    { clerk: withClaim([wave, { ok: true }, { next: 'green' }]), agents: ['STATUS: WALL\nreport'] },
   ).then(({ result, calls }) => {
     const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
     if (result && result.next === 'green' && !result.stop && closeStoryCalls.length === 1) {
@@ -447,6 +489,22 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     }
   });
 })
+// --- scenario (t): DRIVER semaphore (K3/story 13) - a refused claim ends the run at once,
+// carrying the stop shape verb:'claim', and no further clerk call is ever made (no status
+// poll, no release - claim never succeeded, so there is nothing to release).
+.then(() => run(
+  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+  { clerk: [{ ok: false, verb: 'claim', exit: 2, error: 'held by aaaaaaaaaaaaaaaa; run: bash scripts/cycle.sh release docs/specs/demo aaaaaaaaaaaaaaaa if that driver is dead' }], agents: [] },
+).then(({ result, calls }) => {
+  if (
+    result && result.stop && result.stop.verb === 'claim' && result.stop.exit === 2
+    && /held by/.test(result.stop.error) && calls.length === 1
+  ) {
+    console.log('ok claim refusal: stop verb claim, no further clerk call');
+  } else {
+    console.log('FAIL claim refusal: stop verb claim, no further clerk call - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+  }
+}))
 .catch((e) => { console.log('FAIL harness threw: ' + (e && e.stack || e)); process.exitCode = 1; });
 NODE_EOF
 )"
@@ -475,5 +533,12 @@ expect "run: the retry prompt names the uncommitted-diff note"   "ok retry promp
 expect "run: ADR-006 returned WALL then ok - close-story x2, no stop" "ok ADR-006 returned WALL then ok: close-story called twice, no stop, run continues" "$out"
 expect "run: ADR-006 returned WALL twice - stops, close-story x2"    "ok ADR-006 returned WALL twice: stops on build, close-story called exactly twice" "$out"
 expect "run: ADR-006 STATUS: WALL but close-story ok - story closes" "ok ADR-006 STATUS: WALL but close-story ok: the story closes on the verb alone" "$out"
+expect "run: DRIVER semaphore - claim/release bracket a green run"        "ok status green: claim/release bracket the run" "$out"
+expect "run: DRIVER semaphore - close-story carries --stamp"              "ok build wave: close-story carries --stamp" "$out"
+expect "run: DRIVER semaphore - release still runs after a stop"          "ok two-miss stop: release still called after a stop" "$out"
+expect "run: DRIVER semaphore - record-seat carries --stamp"              "ok record-seat: carries --stamp" "$out"
+expect "run: DRIVER semaphore - open-round carries --stamp"               "ok open-round: carries --stamp" "$out"
+expect "run: DRIVER semaphore - a refused claim ends the run at once"     "ok claim refusal: stop verb claim, no further clerk call" "$out"
+expect "static: all four gated verbs' templates carry --stamp"            "ok stamp: all four gated verbs carry --stamp in their template" "$out"
 
 exit $fail

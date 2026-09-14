@@ -6,24 +6,30 @@ argument-hint: [spec slug; defaults to the spec on the current branch]
 Run one council round on: "$ARGUMENTS" (default: the spec whose `**Branch:**` matches the current
 branch).
 
-1. **Precondition: every story on the branch is `done` or `blocked`.** Do not compute this
-   yourself - `bash scripts/cycle.sh open-round docs/specs/<slug> --commit` refuses (exit 2, stderr
-   names the failing precondition: stories still open, a dirty tree, no `## Asks`, or paused) when
-   it is not true yet. On that refusal, surface it verbatim and point at `/vulyk-build` to finish
-   the wave; do not open a round by hand. `open-round` is idempotent - calling it again on an
-   already-open, non-stale round just resumes it, so running this command mid-round (or twice) is
-   safe. Exit 6 means the ceiling is reached: treat it exactly like the `escalated` stop below.
-   Print the resulting `<spec-dir>/journal.md` last line, nothing else.
+1. **Claim, then check the precondition.** Resolve
+   `stamp="$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"` (16 hex characters, never `date`) first,
+   once, here - it is a per-run value the seat is never told, not a secret a report is expected to
+   guess (R31) - then claim the DRIVER semaphore before touching anything else (ADR-004/K3):
+   `bash scripts/cycle.sh claim docs/specs/<slug> $stamp`. `"ok":false` (`held by <stamp>`) means
+   another driver holds this spec - print the `error` verbatim and stop; never retry the claim.
+   Every story on the branch must be `done` or `blocked` before a round opens. Do not compute
+   this yourself -
+   `bash scripts/cycle.sh open-round docs/specs/<slug> --commit --stamp $stamp` refuses (exit 2,
+   stderr names the failing precondition: stories still open, a dirty tree, no `## Asks`, or paused)
+   when it is not true yet. On that refusal, release the semaphore, surface it verbatim and point at
+   `/vulyk-build` to finish the wave; do not open a round by hand. `open-round` is idempotent -
+   calling it again on an already-open, non-stale round just resumes it, so running this command
+   mid-round (or twice) is safe. Exit 6 means the ceiling is reached: release the semaphore and treat
+   it exactly like the `escalated` stop below. Print the resulting `<spec-dir>/journal.md` last line,
+   nothing else.
 
 2. **Read the round's coordinates.** `bash scripts/cycle.sh status docs/specs/<slug> --json` and
    take `round` (N), `court`, `round_dir` and **`missing`** - the same list a driver's `dispatch:`
    step reads (C3, R20): the seats the round's frozen tier requires and has no accepted report for
    yet. This on-demand round costs exactly those seats, never a hardcoded four - a Tier 1 spec pays
    `sonnet` alone, `lead-review` only when `review` itself is in `missing`. Resolve `top_model`
-   (`bash scripts/top-model.sh`, the alias the session brief announced) and, once here,
-   `stamp="$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"` (16 hex characters, never `date`) - both
-   used below and neither ever repeated inside a seat prompt: it is a per-run value the seat is
-   never told, not a secret a report is expected to guess (R31).
+   (`bash scripts/top-model.sh`, the alias the session brief announced) - `stamp` was already taken
+   in step 1 and is reused here, not re-rolled.
 
 3. **Dispatch only the seats `missing` names, one message, in parallel** - the same "independent in
    information, so independent in wall-clock cost" reasoning that ran `lead-review` alongside the
@@ -48,7 +54,7 @@ branch).
 4. **Record each report.** The report travels as free text inside the clerk's prompt; the heredoc
    delimiter `VULYK_<stamp>_<seat>_<attempt>` is a per-run random value the seat is never told,
    which is what keeps the body from ending the heredoc early (R31):
-   `bash scripts/cycle.sh record-seat docs/specs/<slug> <N> <haiku|sonnet|opus|review> [--model <id>] <<'VULYK_<stamp>_<seat>_<attempt>'`
+   `bash scripts/cycle.sh record-seat docs/specs/<slug> <N> <haiku|sonnet|opus|review> --stamp $stamp [--model <id>] <<'VULYK_<stamp>_<seat>_<attempt>'`
    ... `VULYK_<stamp>_<seat>_<attempt>` - never `EOF`, and an empty report is still piped through
    unchanged, so the attempt exists on disk. Exit 4 (`MALFORMED`) -> re-ask that one seat once,
    naming the `error` field verbatim so it knows the exact gap, with `<attempt>` now `2` in the next
@@ -57,8 +63,11 @@ branch).
    `record-seat` call's own one-line `cycle: ...` confirmation, nothing else (it does not journal
    per seat).
 
-5. **Judge.** `bash scripts/cycle.sh judge docs/specs/<slug> --commit`. Print the resulting
-   `**Council:**` line the same way step 1 prints a journal line, then act on `next`:
+5. **Judge.** `bash scripts/cycle.sh judge docs/specs/<slug> --commit --stamp $stamp`. Then release
+   the semaphore - `bash scripts/cycle.sh release docs/specs/<slug> $stamp` - regardless of `next`;
+   this is the one release point for a round that reached judgement (step 1 already released on a
+   precondition refusal). Print the resulting `**Council:**` line the same way step 1 prints a
+   journal line, then act on `next`:
    - `green` - say so; recommend `/vulyk-ship`.
    - `repair` - say plainly: **fix stories go through `/vulyk-build`**, never through this command
      and never by hand-patching in this session (Law 5). Do not cut the fix stories here.

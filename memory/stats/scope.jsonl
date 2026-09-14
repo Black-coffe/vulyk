@@ -54,3 +54,5 @@
 {"ts":"2026-09-14T08:07:42Z","story":"v0-12-0-remainders-16-council-suite-close-story-scenarios","declared":1,"changed":3,"out_of_scope":2}
 {"ts":"2026-09-14T08:27:39Z","story":"v0-12-0-remainders-11-cycle-driver-semaphore","declared":3,"changed":4,"out_of_scope":2}
 {"ts":"2026-09-14T09:12:42Z","story":"v0-12-0-remainders-17-council-suite-semaphore-scenarios","declared":1,"changed":3,"out_of_scope":2}
+{"ts":"2026-09-14T09:26:13Z","story":"v0-12-0-remainders-13-drivers-hold-the-semaphore","declared":4,"changed":6,"out_of_scope":2}
+{"ts":"2026-09-14T09:26:51Z","story":"v0-12-0-remainders-13-drivers-hold-the-semaphore","declared":4,"changed":7,"out_of_scope":3}
