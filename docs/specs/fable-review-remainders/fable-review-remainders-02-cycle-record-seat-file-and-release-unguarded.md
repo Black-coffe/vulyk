@@ -1,8 +1,8 @@
 ---
 story: fable-review-remainders-02
 spec: fable-review-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 tracer: false
@@ -50,6 +50,11 @@ model: opus
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `scripts/cycle.sh`: `--file` parsed beside `--model`/`--stamp` (order-free) with a separate `FILE_SET` flag, so `--file ""` is a bad path (exit 2 `file: `) rather than a silent fall-back to stdin; the check replaces the `cat` in place, after every existing precondition, so nothing is written on failure.
+- `scripts/cycle.sh`: dropped `pause_guard` from `cmd_release` and updated the `pause_guard` header comment's exempt list (same file, one line) so the code does not contradict ADR-001.
+- `docs/adr/001-cycle-state-contract.md`: exempt sentence gains `release`; the D2 `record-seat` row's synopsis now `[--model <id>] [--stamp <s>] [--file <path>] [< report]`.
+- `tests/council.test.sh` needed **no** edit and was not touched: `bash tests/council.test.sh` exits 0 unchanged (existing `probe_release` / `probe_pauserelease` already print `ok`).
+- Verified by hand on throwaway fixtures: `--file` and stdin produce byte-identical seat/attempt files (modulo the `recorded:` timestamp); stdin is not read when `--file` is present; a paused spec still answers exit 3 before the file check; `release` under PAUSE exits 0 (own stamp / no DRIVER), exit 2 `held by other` on a foreign stamp; `claim` under PAUSE still exits 3.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
