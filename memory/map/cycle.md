@@ -41,7 +41,7 @@ seat is missing, else `judge`] → `escalated` (newest row ESCALATE, not `reopen
 else `open-round`.
 
 ## Required seats by tier (`required_seats_for_tier`) and the verdict rule (`cmd_judge`)
-1 → `sonnet` · 2 → `sonnet opus review` · 3/4 → `haiku sonnet opus review`; frozen into
+1 → `sonnet` · 2 → `sonnet review` · 3/4 → `haiku sonnet opus review` (ADR-007, v0.13); frozen into
 `ROUND.tier=` at `open-round`, so a later `plan.md` edit never reshapes an open round. A seat
 not required reads `""` (not ABSENT). Verdict, first match wins - A=asks count, `half =
 max(2, ceil(A/2))`, `red_e`/`red_u` = evidenced/unevidenced RED ask numbers (evidenced wins

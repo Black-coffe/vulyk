@@ -22,10 +22,10 @@ that opens the next stage refuses when the previous stage's artifact is missing.
 | # | Stage | Who | Confirmation artifact | Where it lives | Opened by |
 |---|---|---|---|---|---|
 | 01 | **Spec** — what and why: the message, the error report, the user's ask | human writes, Queen records | the spec text, verbatim | `docs/specs/<slug>/brief.md` (+ `## Answers`) | `/vulyk-plan` |
-| 02 | **Plan** — who does what in which files; the plan can be handed to an agent whole | Queen / `queen-planner` | the list of steps, approved | `plan.md` + story files; `**Approved:**` line | `/vulyk-plan`, stop for approval |
+| 02 | **Plan** — who does what in which files; the plan can be handed to an agent whole | Queen / `queen-planner` | the list of steps, approved by the owner (default) or briefed straight through (`--go`, Tier 1) | `plan.md` + story files; `**Approved:**` or `**Briefed:**` line | `/vulyk-plan`, stop for approval |
 | 03 | **Code** — an agent or a person works; changes live in their own branch | workers | the branch, one commit per story | `**Branch:**` line in plan.md; git | `/vulyk-build` |
 | 04 | **Tests** — automatic: each story's own `## Verification` command, run and repeated as the story asks | `worker-code` / `worker-test`, via `cycle.sh close-story` | every story's verification green | story `## Verification` greens | `/vulyk-build` |
-| 05 | **Council** — three blind seats judge the brief's own `## Asks` from a court that cannot see the hive's stories; `lead-review` judges the code in parallel | `council-haiku`, `council-sonnet`, `council-opus`, `lead-review` | unanimous green, or an evidenced verdict on every ask | `**Council:**` line in plan.md; `memory/stats/council.jsonl` | `/vulyk-build` (driver) or `/vulyk-review` (one round) |
+| 05 | **Council** — the tier's blind seats judge the brief's own `## Asks` from a court that cannot see the hive's stories; `lead-review` judges the code in parallel | `council-sonnet` (+ `council-opus` at Tier 3, + `council-haiku` at Tier 4), `lead-review` | unanimous green, or an evidenced verdict on every ask | `**Council:**` line in plan.md; `memory/stats/council.jsonl` | `/vulyk-build` (driver) or `/vulyk-review` (one round) |
 | 06 | **Ship** — history fixed, branch merged locally, publish command printed and never pressed, next circle opened | Queen merges and prints; human presses when ready | the local merge, recorded | `**Shipped:**` line in plan.md; git (local merge) | `/vulyk-ship` |
 
 ## Why 05 is red
@@ -88,8 +88,13 @@ calls for (C15) — the council shrinks by seat count with the tier, but never t
 | Tier | Required seats | Agents |
 |---|---|---|
 | 1 | `sonnet` | 1 worker + 1 seat |
-| 2 | `sonnet`, `opus`, `review` | 2-4 workers + 2 seats + `lead-review` |
-| 3-4 | `haiku`, `sonnet`, `opus`, `review` | 4-8 workers (+ `lead-architect` and a second reviewer at Tier 4) |
+| 2 | `sonnet`, `review` | 2-4 workers + 1 seat + `lead-review` |
+| 3 | `sonnet`, `opus`, `review` | 4-8 workers + 2 seats + `lead-review` |
+| 4 | `haiku`, `sonnet`, `opus`, `review` | 9-16 workers + 3 seats + `lead-review`, `lead-architect` and a second reviewer |
+
+Study work - a request whose deliverable is a document - never enters the loop at all: it ends
+at `report.md` (ADR-008). And since v0.13 stage 02 closes on the owner's `**Approved:**` by
+default; `**Briefed:**` is the straight-through opt-in (`--go`) and Tier 1's mini-brief.
 
 What still shrinks below that floor is the size of the record — a one-line `## Asks` instead
 of a grill's 3-7, one story instead of many — never whether a seat the tier requires runs.

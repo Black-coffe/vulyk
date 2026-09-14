@@ -185,7 +185,7 @@ required_seats_for_tier() { # required_seats_for_tier <tier> -> the space-separa
   # second `lead-review` dispatch, not a fifth seat here.
   case "$1" in
     1) printf 'sonnet' ;;
-    2) printf 'sonnet opus review' ;;
+    2) printf 'sonnet review' ;;
     *) printf 'haiku sonnet opus review' ;;
   esac
 }
@@ -1410,12 +1410,16 @@ repeat_of() { # repeat_of <story-file> - the integer `repeat: N` under ## Verifi
 }
 
 wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object, keys in order
-  # file/story/worker/repeat; `worker` defaults to worker-code when the frontmatter line is
+  # file/story/worker/model/repeat; `worker` defaults to worker-code when the frontmatter line is
   # absent, never null (Non-goals) - it is never computed from anything but that one line.
-  local f="$1" id worker
+  local f="$1" id worker model
   id="$(fm_field "$f" story)"
   worker="$(fm_field "$f" worker)"; [ -n "$worker" ] || worker="worker-code"
-  printf '{"file":"%s","story":"%s","worker":"%s","repeat":%s}' "$f" "$id" "$worker" "$(repeat_of "$f")"
+  # `model` is the planner's per-story call (ADR-007: sonnet for a mid-level story, opus for a
+  # senior one); absent means sonnet. The driver passes it as the dispatch parameter and
+  # never reads the story file to learn it.
+  model="$(fm_field "$f" model)"; [ -n "$model" ] || model="sonnet"
+  printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$f")"
 }
 
 cmd_close_story() { # cmd_close_story <story-file> <commit:0|1>

@@ -218,7 +218,7 @@ git add -A && git commit -qm "spec(wstory): fixture" >/dev/null
 out="$(council status docs/specs/wstory --json)"
 printf '%s' "$out" | jq -c '.wave_stories' \
   | expect "wave_stories: worker-code + worker-test objects, file name order, repeat parsed (default 1, explicit 3)" \
-    '[{"file":"docs/specs/wstory/wstory-01-alpha.md","story":"wstory-01","worker":"worker-code","repeat":1},{"file":"docs/specs/wstory/wstory-02-beta.md","story":"wstory-02","worker":"worker-test","repeat":3}]'
+    '[{"file":"docs/specs/wstory/wstory-01-alpha.md","story":"wstory-01","worker":"worker-code","model":"sonnet","repeat":1},{"file":"docs/specs/wstory/wstory-02-beta.md","story":"wstory-02","worker":"worker-test","model":"sonnet","repeat":3}]'
 
 echo "status --json: an open round with missing seats"
 rd1="$(mk_open_round status1 1)"
@@ -255,17 +255,20 @@ row="$(grep '"spec":"tier1a"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -q '"na":1' && printf '%s' "$row" | grep -q '"verdict":"GREEN"' \
   && echo "  ok    tier 1: row verdict GREEN, na:1 (one seat, not na:3)" || { echo "::error::row: $row"; fail=1; }
 
-echo "C15: Tier 2 requires sonnet, opus, review - no haiku seat needed"
+echo "C15: Tier 2 requires sonnet, review - no haiku or opus seat needed (ADR-007)"
 mk_open_spec tier2a 3
 set_tier tier2a 2
 rdt2="$(mk_open_round tier2a 1)"
 out="$(council status docs/specs/tier2a --json)"
-printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "tier 2: missing lists opus,review,sonnet - not haiku" "opus,review,sonnet"
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "tier 2: missing lists review,sonnet - not haiku, not opus" "review,sonnet"
 write_seat "$rdt2" sonnet GGG
-write_seat "$rdt2" opus GGG
 write_review "$rdt2" PASS
 out="$(council status docs/specs/tier2a --json)"
-printf '%s' "$out" | jq -r .next | expect "tier 2: next is judge without a haiku seat" "judge"
+printf '%s' "$out" | jq -r .next | expect "tier 2: next is judge without a haiku or opus seat" "judge"
+write_seat "$rdt2" opus GGG   # a recorded non-required seat is still accepted and counted (ADR-002)
+out="$(council status docs/specs/tier2a --json)"
+printf '%s' "$out" | jq -r '.missing | length' | expect "tier 2: an extra opus report is accepted, missing stays empty" "0"
+printf '%s' "$out" | jq -r .next | expect "tier 2: next is still judge with the extra seat" "judge"
 jout="$(council judge docs/specs/tier2a)"; jex=$?
 [ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"green"' && echo "  ok    tier 2: judge GREEN without haiku" \
   || { echo "::error::tier2a judge: exit=$jex out=$jout"; fail=1; }
@@ -1414,7 +1417,7 @@ sed -i 's/^status: blocked/status: done/' docs/specs/lr31w/lr31w-02-b.md
 git add -A && git commit -qm "lr31w: B done" >/dev/null
 out="$(council status docs/specs/lr31w --json)"
 printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: B done -> A is listed" \
-  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","repeat":1}]'
+  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"sonnet","repeat":1}]'
 
 echo "close-story: r2m9 - a ## Commands cell with its own && matches whole; adding a further && true is refused, naming the segment"
 mkdir -p docs/specs/cstoryr2m9
@@ -1877,7 +1880,7 @@ council open-round docs/specs/stalenr1 --commit >/dev/null
 row="$(grep '"spec":"stalenr1"' memory/stats/council.jsonl | grep '"round":1' | tail -1)"
 printf '%s' "$row" | grep -qF '"haiku":""' && echo "  ok    STALE row: haiku (not required at tier 2) is '', not ABSENT" \
   || { echo "::error::row: $row"; fail=1; }
-printf '%s' "$row" | grep -qF '"opus":"ABSENT"' && echo "  ok    STALE row: opus (required, never recorded) is ABSENT" \
+printf '%s' "$row" | grep -qF '"opus":""' && echo "  ok    STALE row: opus (not required at tier 2 either) is ''" \
   || { echo "::error::row: $row"; fail=1; }
 [ -d docs/specs/stalenr1/council/round-2 ] && echo "  ok    round 2 opened (the fold path, not an in-place re-stamp)" \
   || { echo "::error::round-2 missing - the has_seat=0 re-stamp path fired instead of the fold"; fail=1; }

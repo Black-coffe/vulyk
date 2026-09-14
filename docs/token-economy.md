@@ -69,23 +69,27 @@ already paid for. Dispatch is a win when the report **replaces** reading that wo
 in the Queen's window — which is exactly the recon and noisy-output cases, and exactly not the
 "look up one symbol I already have open" case.
 
-## The cost of the council (v0.12.0)
+## The cost of the council (v0.13.0)
 
-An estimate from [ADR-001](adr/001-cycle-state-contract.md) (2026-09-12), not a measured number -
-`memory/stats/council.jsonl` is where the real figure accumulates once rounds have run.
+An estimate, not a measured number - `memory/stats/council.jsonl` is where the real figure
+accumulates. Per round, by tier (ADR-002/007): Tier 1 - one cold-cache `council-sonnet`; Tier 2 -
+`council-sonnet` + `lead-review` at the top model; Tier 3 - plus `council-opus`; Tier 4 - plus the
+black-box seat and a second reviewer. Add roughly 5 `cycle-clerk` calls (junior rung, one verb
+each). On a RED verdict, add one `queen-planner` dispatch at the top model plus the repair wave.
+The first recorded spec (Tier 4, v0.12) took three rounds to green with the black-box seat
+returning `N/A` every time - which is why v0.13 moved that seat to Tier 4 only and stopped
+running the whole suite in `lead-review` on top of `close-story` and `council-sonnet`.
 
-Per round: 3 cold-cache council seats (`council-haiku`, `council-sonnet`, and `council-opus`, one of
-them Opus-class) plus `lead-review` at the top model, plus roughly 5 Haiku `cycle-clerk` calls - the
-Workflow driver's only way to reach a shell, one call per `cycle.sh`/`journal.sh` verb. On a RED
-verdict, add one `queen-planner` dispatch at the top model to cut fix stories, plus the repair
-wave's workers. Against the v0.11 gate (one `lead-review` + one `drone-acceptance`, dispatched
-together), that is roughly **2-3x the gate cost** at the target of <= 2 rounds to green.
+**Where the money went before v0.13** - read against the framework's own text, not a guess:
+the plan launched the build with no approval stop; a request whose answer was a document was
+cut into stories anyway; up to seven agents ran before the first line of code; the same suite
+ran up to four times per story and round. ADR-008 records each fix.
 
 The fallback driver (Workflow unavailable) pays the same dispatches and additionally carries
 roughly 120 lines of seat reports per round through the pinned top-model session that is stepping
 the loop itself - the most expensive path in this list, because no phase can be handed to a cheaper
-agent while the Queen's own context is carrying it. `/vulyk-status`'s `driver:` line says which path
-a given hive is on.
+agent while the Queen's own context is carrying it. `/vulyk-build` therefore refuses it without
+`--fallback`; `/vulyk-status`'s `driver:` line says which path a given hive is on.
 
 ## What is in the context before you type anything
 

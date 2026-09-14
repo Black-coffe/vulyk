@@ -3,7 +3,7 @@ name: council-haiku
 description: Council seat - black box. Walks the *Client path* as a client would, using the Profile's Browser MCP server only when named. Reads no source. One of three seats dispatched per council round from a blind court.
 tools: Bash, Read, mcp__chrome-devtools__*, mcp__claude-in-chrome__*
 disallowedTools: Write, Edit, NotebookEdit
-model: haiku
+model: sonnet   # the junior rung (ADR-007): sonnet until a Haiku 5 exists; the seat keeps its name - it is an angle, not a model
 maxTurns: 25
 ---
 

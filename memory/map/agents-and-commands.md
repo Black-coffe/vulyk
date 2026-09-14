@@ -17,7 +17,7 @@ dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept 
   contract: `COUNCIL/MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH` + one `ASK <n>` line/ask +
   `UNASKED:`/`BREACH:`, 40 lines max (`cycle.md` D3). Dispatch names only `slug`/`round`/
   `court` - never `round_dir` (echoing it back is a taint).
-- **cycle-clerk** (`haiku`, `Bash` only, `maxTurns:5`) - runs exactly the one `cycle.sh`/
+- **cycle-clerk** (`sonnet` - junior rung, ADR-007, `Bash` only, `maxTurns:5`) - runs exactly the one `cycle.sh`/
   `journal.sh` command given, returns the last stdout line verbatim, no verdict logic. The
   Workflow driver's only shell access.
 - **lead-review** (`opus`, `Read,Grep,Glob,Bash`, `maxTurns:25`) - adversarial review, sees

@@ -130,12 +130,16 @@ try {
       // status --json now carries "worker" and "repeat" per story (autonomous-cycle-15) -
       // route agentType from the object; the driver still never opens a story file itself.
       // A story on its second dispatch (one miss already counted) gets one extra sentence:
-      // a previous attempt may have left an uncommitted diff behind.
+      // a previous attempt may have left an uncommitted diff behind - and goes to the senior
+      // model (ADR-007): a miss is information, and the same model retrying the same story
+      // is the cheapest way to buy a second miss. The first dispatch carries the story's
+      // own `model` (status --json, sonnet unless the planner said opus).
       const reports = await parallel(stories.map((story) => () => {
         const retry = (attempts.get(story.file) || 0) >= 1
         const prompt = `Your story: ${story.file}. Read it fully, including the map slice it names, and implement it per your protocol.`
           + (retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
-        return agent(prompt, { agentType: story.worker, phase: 'Build' })
+        const model = retry ? 'opus' : (story.model || undefined)
+        return agent(prompt, { agentType: story.worker, model, phase: 'Build' })
           .catch((e) => { log(`worker threw: ${e && e.message ? e.message : e}`); return null })
       }))
       for (let i = 0; i < stories.length; i++) {

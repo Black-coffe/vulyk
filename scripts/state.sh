@@ -118,6 +118,7 @@ for dir in $( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirn
   mark() { grep -m1 "^\*\*$2:\*\*" "$1" 2>/dev/null | sed "s/^\*\*$2:\*\*[[:space:]]*//" | grep -v '^<' | grep -v '^$'; }
   last_checked="$(grep '^\*\*Checked:\*\*' "$plan" 2>/dev/null | grep -v '^\*\*Checked:\*\* <' | tail -1)"
   stage="01-spec"
+  [ -f "$dir/report.md" ] && [ ! -f "$plan" ] && stage="study"   # a document deliverable (/vulyk-plan step 0): no plan, no stories, no cycle
   [ -f "$plan" ] && stage="02-planned"
   [ -f "$plan" ] && [ -n "$(mark "$plan" Approved)" ] && stage="02-approved"
   [ -f "$plan" ] && [ -n "$(mark "$plan" Branch)" ] && stage="03-building"

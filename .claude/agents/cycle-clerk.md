@@ -2,7 +2,7 @@
 name: cycle-clerk
 description: Runs one scripts/cycle.sh or scripts/journal.sh verb and returns its last stdout line verbatim. The Workflow driver's only way to reach a shell - holds no logic of its own.
 tools: Bash
-model: haiku
+model: sonnet   # the junior rung (ADR-007): sonnet until a Haiku 5 exists
 maxTurns: 5
 ---
 

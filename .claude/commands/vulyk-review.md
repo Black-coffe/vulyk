@@ -19,7 +19,9 @@ branch).
    take `round` (N), `court`, `round_dir` and **`missing`** - the same list a driver's `dispatch:`
    step reads (C3, R20): the seats the round's frozen tier requires and has no accepted report for
    yet. This on-demand round costs exactly those seats, never a hardcoded four - a Tier 1 spec pays
-   `sonnet` alone, `lead-review` only when `review` itself is in `missing`. Resolve `top_model`
+   `sonnet` alone, Tier 2 `sonnet` + `review`, Tier 3 adds `opus`, Tier 4 adds `haiku` (the
+   black-box seat - on the junior rung, Sonnet until a Haiku 5 exists) and the second reviewer;
+   `lead-review` only when `review` itself is in `missing`. Resolve `top_model`
    (`bash scripts/top-model.sh`, the alias the session brief announced) and, once here,
    `stamp="$(od -An -tx1 -N8 /dev/urandom | tr -d ' \n')"` (16 hex characters, never `date`) - both
    used below and neither ever repeated inside a seat prompt: it is a per-run value the seat is
