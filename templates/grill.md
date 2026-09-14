@@ -1,7 +1,8 @@
 # Grill protocol
 
 Read by `/vulyk-plan` after recon (map + `drone-scout`), before the plan is drafted. Governs
-the one interactive round with the human that autonomous mode keeps. Depends on nothing but
+the one interactive question round before the plan is written (the plan approval that follows
+it is a stop, not a round). Depends on nothing but
 Claude Code's own `AskUserQuestion`, `Agent` and `Bash` - never the personal `grill` skill,
 never a statusbar.
 

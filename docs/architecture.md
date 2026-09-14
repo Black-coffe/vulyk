@@ -27,8 +27,8 @@ goal -> Queen names the deliverable: a document ends at report.md (study, ADR-00
      -> drone-scouts (sonnet, capped: 1 at Tier 1-2, 2 at Tier 3, 4 at Tier 4) -- reports --+
      -> memory/map + wiki pointers --------------------------+-> queen-planner (TOP_MODEL, Tier 3-4)
      -> the grill (templates/grill.md): one round, one question at a time, recommended option
-        first with a recon-grounded reason, closing into brief.md's ## Asks - the one human
-        stop autonomous mode keeps (stage 01+02, **Briefed:**)
+        first with a recon-grounded reason, closing into brief.md's ## Asks - the first of the
+        two human stops (the second is the plan approval below, stage 01+02, **Approved:**)
      -> plan.md (+ Contracts) + stories (## Requirements quote the brief)
      -> wave-check.sh: waves dispatchable? (file collisions, blocker order - deterministic)
      -> trace-check.sh: every story quotes the brief? every brief line carried? (deterministic)
