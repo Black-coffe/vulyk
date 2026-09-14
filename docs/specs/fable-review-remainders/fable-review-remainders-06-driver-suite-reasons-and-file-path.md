@@ -1,8 +1,8 @@
 ---
 story: fable-review-remainders-06
 spec: fable-review-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-test
 tracer: false
@@ -47,6 +47,12 @@ model: sonnet
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `tests/driver.test.sh`: applied `recon/06-attempt-2-kept.patch` (scenarios u/v/w/x/y/z/aa/ab/ac + their `expect` lines) cleanly, then added four scenarios for story 07's content check the kept diff predates: v2 (worker no-report, twice), v3 (mixed empty-then-no-report, stop carries the second miss), x2 (seat no-report), y3 (reviewer no-report) - each with its own `expect` line.
+- Pre-story reds, checked per scenario with an isolated node harness (same `run`/`withClaim` as the suite) against `git show 7785669^:.claude/workflows/vulyk-cycle.js` (pre-03) and `git show b69be67^:.claude/workflows/vulyk-cycle.js` (pre-07, story 03 done):
+  - pre-03: u, v, v2, w, x, x2, y, y2, y3, z, aa, ab, ac all FAIL; v3 throws (clerk queue exhausted - the old driver's classification diverges enough that the scripted queue underruns, a red by a different route).
+  - pre-07: u, v, w, x, y, y2, z, aa, ab, ac already `ok` (story 03's C2/C3 machinery is already in place); v2, x2, y3 FAIL (the content check is story 07's); v3 still throws (queue exhausted, same reason).
+  - branch (after story 07): all fourteen new scenarios `ok`.
+- `bash tests/driver.test.sh` exits 0 on the branch; the pre-existing `expect` lines are unchanged and all pass.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
