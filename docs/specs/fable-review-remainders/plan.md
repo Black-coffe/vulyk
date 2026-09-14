@@ -98,7 +98,7 @@ council for the largest court.
 -->
 **Approved:** Andrei, 2026-09-14 - said in chat («Одобряю. Можешь продолжать.»)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
-**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
+**Branch:** vulyk/fable-review-remainders
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
