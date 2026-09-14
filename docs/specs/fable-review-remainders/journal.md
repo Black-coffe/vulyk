@@ -5,3 +5,4 @@
 - 2026-09-14T12:37:13Z · 03-building · branch vulyk/fable-review-remainders created · next: build:1
 - 2026-09-14T13:56:34Z · 03-building · relaunching the workflow driver after delta (story 07 cut, 06 to wave 3) · next: the loop holds the working tree of vulyk/fable-review-remainders; to edit, run /vulyk-pause fable-review-remainders
 - 2026-09-14T14:04:19Z · 03-built · all seven stories done; relaunching the workflow driver for the council round · next: the loop holds the working tree of vulyk/fable-review-remainders; to edit, run /vulyk-pause fable-review-remainders
+- 2026-09-14T14:04:45Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/fable-review-remainders/round-1 · next: dispatch:haiku,sonnet,opus,review
