@@ -1,3 +1,4 @@
 {"ts":"2026-09-13T15:19:06Z","spec":"autonomous-cycle","version":"0.12.0","head":"a7e8c5d","pack":"c0a97d497e2a","note":"merged to main, publish pending"}
 {"ts":"2026-09-14T11:30:02Z","spec":"v0-12-0-remainders","version":"0.12.1","head":"f60ff0a","pack":"f4d03242cedb","note":"merged to main, publish pending; shipped on the owner's ACCEPTED override over an unjudged council round (seats died at the 25-turn cap), lead-review on Fable PASS - said out loud in chat 2026-09-14"}
 {"ts":"2026-09-14T11:36:42Z","spec":"lean-cascade","version":"0.13.0","head":"a73436f","pack":"e3b0c44298fc","note":"merged to main, publish pending; shipped on the owner's ACCEPTED override (built by the Queen alone at the owner's instruction, lead-review on Fable PASS, all suites green) - said out loud in chat 2026-09-14"}
+{"ts":"2026-09-14T14:51:16Z","spec":"fable-review-remainders","version":"0.13.1","head":"6584495","pack":"37a505564b66","note":"merged to main, publish pending"}
