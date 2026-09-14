@@ -24,3 +24,4 @@
 - 2026-09-14T07:22:06Z · 03-building · story blocked · next: story 08: two red verifications (bash tests/council.test.sh) - returned: gate breaks fixtures that story 16 fixes in wave 6; lead-architect consulted
 - 2026-09-14T07:28:36Z · 03-building · launching the workflow driver · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
 - 2026-09-14T09:27:48Z · 03-built · launching the workflow driver · next: the loop holds the working tree of vulyk/v0-12-0-remainders; to edit, run /vulyk-pause v0-12-0-remainders
+- 2026-09-14T09:28:19Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/v0-12-0-remainders/round-1 · next: dispatch:haiku,sonnet,opus,review
