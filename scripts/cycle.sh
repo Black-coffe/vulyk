@@ -118,6 +118,24 @@ pause_guard() { # pause_guard <spec> <verb-label> - exits 3 before anything muta
   exit 3
 }
 
+driver_stamp() { # driver_stamp <spec> -> the stamp= value in <spec>/DRIVER, empty if absent
+  [ -f "$1/DRIVER" ] || return 0
+  sed -n 's/^stamp=//p' "$1/DRIVER" | head -1
+}
+
+driver_guard() { # driver_guard <spec> <verb-label> <stamp-opt> - exits 2 before anything
+  # mutates if DRIVER exists and <stamp-opt> is absent or differs from its stamp= (ADR-004/K3).
+  # Called right after pause_guard on open-round, record-seat, judge, close-story; no-op when
+  # no DRIVER file exists.
+  local spec="$1" verb="$2" stamp="${3:-}" holder
+  holder="$(driver_stamp "$spec")"
+  [ -n "$holder" ] || return 0
+  [ -n "$stamp" ] && [ "$stamp" = "$holder" ] && return 0
+  echo "cycle: $(slug_of "$spec") - DRIVER held by $holder, $verb refuses to act." >&2
+  emit false "$verb" 2 error "held by $holder"
+  exit 2
+}
+
 [ -n "$VERB" ] || usage
 
 # --- small parsers shared by status and judge ---------------------------------------------
@@ -677,8 +695,8 @@ write_ceiling_escalate() { # write_ceiling_escalate <spec> <slug> <n> <rd-or-emp
   write_escalate_row_for_round "$spec" "$slug" "$rd" "$n" "ceiling" "open-round ceiling"
 }
 
-cmd_judge() { # cmd_judge <spec> <commit:0|1> [<verb-label>]
-  local SPEC="$1" DOCOMMIT="$2" VERBLABEL="${3:-judge}"
+cmd_judge() { # cmd_judge <spec> <commit:0|1> [<verb-label>] [<stamp>]
+  local SPEC="$1" DOCOMMIT="$2" VERBLABEL="${3:-judge}" STAMP="${4:-}"
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
     echo "cycle: usage: $0 $VERBLABEL <spec-dir> [--commit]" >&2
     emit false "$VERBLABEL" 1 error "usage"
@@ -687,6 +705,9 @@ cmd_judge() { # cmd_judge <spec> <commit:0|1> [<verb-label>]
   local SLUG PLAN; SLUG="$(slug_of "$SPEC")"; PLAN="$SPEC/plan.md"
 
   pause_guard "$SPEC" "$VERBLABEL"
+  # driver_guard only for the real `judge` verb: cmd_escalate reuses this function internally
+  # with VERBLABEL=escalate, and escalate is not gated by DRIVER (non-goal).
+  [ "$VERBLABEL" = "judge" ] && driver_guard "$SPEC" "$VERBLABEL" "$STAMP"
 
   local RD; RD="$(current_round_dir "$SPEC")"
   if [ -z "$RD" ]; then
@@ -1282,10 +1303,11 @@ cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] - report 
   local SPEC="${1:-}" N="${2:-}" SEAT="${3:-}"
   local nargs=$#
   if [ "$nargs" -ge 3 ]; then shift 3; else shift "$nargs"; fi
-  local MODEL_OPT=""
+  local MODEL_OPT="" STAMP=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --model) MODEL_OPT="${2:-}"; shift 2 2>/dev/null || shift $# ;;
+      --stamp) STAMP="${2:-}"; shift 2 2>/dev/null || shift $# ;;
       *) shift ;;
     esac
   done
@@ -1312,6 +1334,7 @@ cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] - report 
   }
 
   pause_guard "$SPEC" record-seat
+  driver_guard "$SPEC" record-seat "$STAMP"
 
   local RD="$SPEC/council/round-$N"
   [ -f "$RD/ROUND" ] || {
@@ -1418,8 +1441,8 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
   printf '{"file":"%s","story":"%s","worker":"%s","repeat":%s}' "$f" "$id" "$worker" "$(repeat_of "$f")"
 }
 
-cmd_close_story() { # cmd_close_story <story-file> <commit:0|1>
-  local STORY="$1" DOCOMMIT="$2"
+cmd_close_story() { # cmd_close_story <story-file> <commit:0|1> [<stamp>]
+  local STORY="$1" DOCOMMIT="$2" STAMP="${3:-}"
   [ -n "$STORY" ] && [ -f "$STORY" ] || {
     echo "cycle: usage: $0 close-story <story-file> [--commit]" >&2
     emit false close-story 1 error "usage"
@@ -1427,6 +1450,7 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1>
   }
   local SPECDIR; SPECDIR="$(dirname "$STORY")"
   pause_guard "$SPECDIR" close-story
+  driver_guard "$SPECDIR" close-story "$STAMP"
 
   local ST; ST="$(fm_field "$STORY" status)"
   case "$ST" in
@@ -1701,14 +1725,15 @@ write_stale_row() { # write_stale_row <spec> <slug> <round-dir> <n> <a> - a STAL
   journal_line_exists "$spec" "$n" "STALE" || bash "$HERE/journal.sh" "$spec" "04-council:STALE" "round $n stale, code moved after dispatch" "open-round" >/dev/null
 }
 
-cmd_open_round() { # cmd_open_round <spec> <commit:0|1>
-  local SPEC="$1" DOCOMMIT="$2"
+cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
+  local SPEC="$1" DOCOMMIT="$2" STAMP="${3:-}"
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
     echo "cycle: usage: $0 open-round <spec-dir> [--commit]" >&2
     emit false open-round 1 error "usage"
     exit 1
   }
   pause_guard "$SPEC" open-round
+  driver_guard "$SPEC" open-round "$STAMP"
 
   local SLUG PLAN; SLUG="$(slug_of "$SPEC")"; PLAN="$SPEC/plan.md"
 
@@ -1935,6 +1960,10 @@ cmd_pause() { # cmd_pause <spec> <why>
     printf '%s \xc2\xb7 %s \xc2\xb7 %s\n' "$WHO" "$WHY" "$(now_ts)"
     printf 'head=%s\n' "$HEAD"
   } > "$SPEC/PAUSE"
+  if [ -f "$SPEC/DRIVER" ]; then
+    rm -f "$SPEC/DRIVER"
+    bash "$HERE/journal.sh" "$SPEC" driver "driver released" paused >/dev/null
+  fi
   bash "$HERE/journal.sh" "$SPEC" paused "$WHY" paused >/dev/null
   echo "cycle: $(slug_of "$SPEC") - paused: $WHY"
   emit true pause 0 paused
@@ -1951,6 +1980,10 @@ cmd_resume() { # cmd_resume <spec>
   local WAS_HEAD=""
   [ -f "$SPEC/PAUSE" ] && WAS_HEAD="$(sed -n 's/^head=//p' "$SPEC/PAUSE" | head -1)"
   rm -f "$SPEC/PAUSE"
+  if [ -f "$SPEC/DRIVER" ]; then
+    rm -f "$SPEC/DRIVER"
+    bash "$HERE/journal.sh" "$SPEC" driver "driver released" status >/dev/null
+  fi
   local NOWHEAD; NOWHEAD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   local STALE=false
   [ -n "$WAS_HEAD" ] && [ "$WAS_HEAD" != "$NOWHEAD" ] && STALE=true
@@ -1960,6 +1993,68 @@ cmd_resume() { # cmd_resume <spec>
   real_next="$(json_field "$status_out" next)"
   echo "cycle: $(slug_of "$SPEC") - resumed"
   printf '{"ok":true,"verb":"resume","exit":0,"next":"%s","stale":%s}\n' "$real_next" "$STALE"
+  exit 0
+}
+
+# --- claim/release (ADR-004/K3: the DRIVER semaphore, no --commit accepted) ----------------
+
+cmd_claim() { # cmd_claim <spec> <stamp>
+  local SPEC="$1" STAMP="${2:-}"
+  [ -n "$SPEC" ] && [ -d "$SPEC" ] && [ -n "$STAMP" ] || {
+    echo "cycle: usage: $0 claim <spec-dir> <stamp>" >&2
+    emit false claim 1 error "usage"
+    exit 1
+  }
+  pause_guard "$SPEC" claim
+
+  local holder; holder="$(driver_stamp "$SPEC")"
+  if [ -n "$holder" ]; then
+    if [ "$holder" = "$STAMP" ]; then
+      echo "cycle: $(slug_of "$SPEC") - already claimed by $STAMP"
+      emit true claim 0 claimed
+      exit 0
+    fi
+    echo "cycle: $(slug_of "$SPEC") - DRIVER held by $holder" >&2
+    emit false claim 2 error "held by $holder; run: bash scripts/cycle.sh release $SPEC $holder if that driver is dead"
+    exit 2
+  fi
+
+  if ( set -o noclobber; { printf 'stamp=%s\n' "$STAMP"; printf 'claimed=%s\n' "$(now_ts)"; } > "$SPEC/DRIVER" ) 2>/dev/null; then
+    echo "cycle: $(slug_of "$SPEC") - claimed by $STAMP"
+    emit true claim 0 claimed
+    exit 0
+  fi
+
+  # noclobber race: another claim won between our check and our write.
+  holder="$(driver_stamp "$SPEC")"
+  if [ "$holder" = "$STAMP" ]; then
+    echo "cycle: $(slug_of "$SPEC") - already claimed by $STAMP"
+    emit true claim 0 claimed
+    exit 0
+  fi
+  echo "cycle: $(slug_of "$SPEC") - DRIVER held by $holder" >&2
+  emit false claim 2 error "held by $holder; run: bash scripts/cycle.sh release $SPEC $holder if that driver is dead"
+  exit 2
+}
+
+cmd_release() { # cmd_release <spec> <stamp>
+  local SPEC="$1" STAMP="${2:-}"
+  [ -n "$SPEC" ] && [ -d "$SPEC" ] && [ -n "$STAMP" ] || {
+    echo "cycle: usage: $0 release <spec-dir> <stamp>" >&2
+    emit false release 1 error "usage"
+    exit 1
+  }
+  pause_guard "$SPEC" release
+
+  local holder; holder="$(driver_stamp "$SPEC")"
+  if [ -n "$holder" ] && [ "$holder" != "$STAMP" ]; then
+    echo "cycle: $(slug_of "$SPEC") - DRIVER held by $holder" >&2
+    emit false release 2 error "held by $holder"
+    exit 2
+  fi
+  rm -f "$SPEC/DRIVER"
+  echo "cycle: $(slug_of "$SPEC") - released"
+  emit true release 0 released
   exit 0
 }
 
@@ -1975,9 +2070,14 @@ case "$VERB" in
     cmd_status "$SPEC"
     ;;
   judge)
-    COMMIT=0
-    for a in "$@"; do [ "$a" = "--commit" ] && COMMIT=1; done
-    cmd_judge "$SPEC" "$COMMIT" "judge"
+    COMMIT=0; STAMP=""
+    prevarg=""
+    for a in "$@"; do
+      [ "$a" = "--commit" ] && COMMIT=1
+      [ "$prevarg" = "--stamp" ] && STAMP="$a"
+      prevarg="$a"
+    done
+    cmd_judge "$SPEC" "$COMMIT" "judge" "$STAMP"
     ;;
   escalate)
     cmd_escalate "$SPEC" "${@:3}"
@@ -2007,15 +2107,31 @@ case "$VERB" in
   resume)
     cmd_resume "$SPEC"
     ;;
+  claim)
+    cmd_claim "$SPEC" "${3:-}"
+    ;;
+  release)
+    cmd_release "$SPEC" "${3:-}"
+    ;;
   close-story)
-    COMMIT=0
-    for a in "$@"; do [ "$a" = "--commit" ] && COMMIT=1; done
-    cmd_close_story "$SPEC" "$COMMIT"
+    COMMIT=0; STAMP=""
+    prevarg=""
+    for a in "$@"; do
+      [ "$a" = "--commit" ] && COMMIT=1
+      [ "$prevarg" = "--stamp" ] && STAMP="$a"
+      prevarg="$a"
+    done
+    cmd_close_story "$SPEC" "$COMMIT" "$STAMP"
     ;;
   open-round)
-    COMMIT=0
-    for a in "$@"; do [ "$a" = "--commit" ] && COMMIT=1; done
-    cmd_open_round "$SPEC" "$COMMIT"
+    COMMIT=0; STAMP=""
+    prevarg=""
+    for a in "$@"; do
+      [ "$a" = "--commit" ] && COMMIT=1
+      [ "$prevarg" = "--stamp" ] && STAMP="$a"
+      prevarg="$a"
+    done
+    cmd_open_round "$SPEC" "$COMMIT" "$STAMP"
     ;;
   reopen)
     DECISION="${3:-}"
