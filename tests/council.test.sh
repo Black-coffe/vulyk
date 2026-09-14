@@ -43,6 +43,7 @@ cat > CLAUDE.md <<'EOF'
 | Fixture: always succeeds | `true` |
 | Fixture: quoted command that fails | `sh -c "exit 1"` |
 | Fixture: backslash command that fails | `sh -c 'echo a\b; exit 1'` |
+| r2m9 fixture: a cell that is itself an &&-joined command | `sh -c 'true && true'` |
 EOF
 git add -A && git commit -qm init >/dev/null
 HEAD7="$(git rev-parse --short HEAD)"
@@ -1241,6 +1242,222 @@ out="$(council open-round docs/specs/cstory6 --commit 2>&1)"; ex=$?
 [ -z "$(git status --porcelain)" ] && echo "  ok    tree is clean after both verbs" \
   || { echo "::error::tree dirty: $(git status --porcelain)"; fail=1; }
 
+# --- story 16: the four story 08 fixes - cstoryr1..r4 (M3/ADR-006 returned: gate), r2m2 -------
+# (close-story --commit owns its commit), LR31 (wave_stories lists only ready stories), r2m9 --
+# (a ## Commands cell with its own && matches whole) ------------------------------------------
+
+echo "close-story: cstoryr1 - returned: DONE, verification true -> exit 0, status: done, exactly one new commit (M3)"
+mkdir -p docs/specs/cstoryr1
+cat > docs/specs/cstoryr1/cstoryr1-01-first.md <<'EOF'
+---
+story: cstoryr1-01
+spec: cstoryr1
+status: todo
+returned: DONE
+wave: 1
+---
+# R1
+
+## Files
+- docs/specs/cstoryr1/cstoryr1-01-first.md
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "spec(cstoryr1): fixture" >/dev/null
+commits_before="$(git rev-list --count HEAD)"
+out="$(council close-story docs/specs/cstoryr1/cstoryr1-01-first.md --commit)"; ex=$?
+commits_after="$(git rev-list --count HEAD)"
+[ "$ex" -eq 0 ] && echo "  ok    cstoryr1: exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -q '^status: done' docs/specs/cstoryr1/cstoryr1-01-first.md && echo "  ok    cstoryr1: status: done" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstoryr1/cstoryr1-01-first.md)"; fail=1; }
+[ "$((commits_after - commits_before))" -eq 1 ] && echo "  ok    cstoryr1: exactly one new commit" \
+  || { echo "::error::commits before=$commits_before after=$commits_after"; fail=1; }
+
+echo "close-story: cstoryr2 - returned: WALL, verification 'none' -> exit 4, last line names returned WALL, status stays in-progress, no commit (M3)"
+mkdir -p docs/specs/cstoryr2
+cat > docs/specs/cstoryr2/cstoryr2-01-first.md <<MDEOF
+---
+story: cstoryr2-01
+spec: cstoryr2
+status: in-progress
+returned: WALL
+wave: 1
+---
+# R2
+
+## Verification
+none — reviewed by lead-review
+MDEOF
+git add -A && git commit -qm "spec(cstoryr2): fixture" >/dev/null
+commits_before="$(git rev-list --count HEAD)"
+out="$(council close-story docs/specs/cstoryr2/cstoryr2-01-first.md --commit 2>&1)"; ex=$?
+commits_after="$(git rev-list --count HEAD)"
+lastline="$(printf '%s\n' "$out" | tail -1)"
+[ "$ex" -eq 4 ] && printf '%s' "$lastline" | grep -qF '"error":"returned WALL"' && printf '%s' "$lastline" | grep -qF '"next":"repair"' \
+  && echo "  ok    cstoryr2: exit 4, last line names returned WALL, next:repair" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -q '^status: in-progress' docs/specs/cstoryr2/cstoryr2-01-first.md && echo "  ok    cstoryr2: status stays in-progress" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstoryr2/cstoryr2-01-first.md)"; fail=1; }
+[ "$commits_after" -eq "$commits_before" ] && echo "  ok    cstoryr2: no new commit" \
+  || { echo "::error::commits before=$commits_before after=$commits_after"; fail=1; }
+
+echo "close-story: cstoryr3 - returned: absent -> exit 4, error returned: missing (M3)"
+mkdir -p docs/specs/cstoryr3
+cat > docs/specs/cstoryr3/cstoryr3-01-first.md <<'EOF'
+---
+story: cstoryr3-01
+spec: cstoryr3
+status: todo
+wave: 1
+---
+# R3
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "spec(cstoryr3): fixture" >/dev/null
+out="$(council close-story docs/specs/cstoryr3/cstoryr3-01-first.md 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s\n' "$out" | tail -1 | grep -qF '"error":"returned: missing"' && echo "  ok    cstoryr3: exit 4, error returned: missing" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "close-story: cstoryr4 - returned: NEEDS_CONTEXT -> exit 4 before the command runs, flag file stays absent (M3)"
+mkdir -p docs/specs/cstoryr4
+cat > docs/specs/cstoryr4/cstoryr4-01-first.md <<'EOF'
+---
+story: cstoryr4-01
+spec: cstoryr4
+status: todo
+returned: NEEDS_CONTEXT
+wave: 1
+---
+# R4
+
+## Verification
+`touch docs/specs/cstoryr4/flag.txt`
+EOF
+git add -A && git commit -qm "spec(cstoryr4): fixture" >/dev/null
+out="$(council close-story docs/specs/cstoryr4/cstoryr4-01-first.md 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && echo "  ok    cstoryr4: exit 4" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -f docs/specs/cstoryr4/flag.txt ] && echo "  ok    cstoryr4: flag file absent - the verification command never ran" \
+  || { echo "::error::flag.txt exists: the verification command ran"; fail=1; }
+
+echo "close-story --commit: r2m2 - a locked index leaves the story todo|in-progress on disk (never an uncommitted 'done'); the retry closes and commits"
+mkdir -p docs/specs/cstorylock1
+cat > docs/specs/cstorylock1/cstorylock1-01-first.md <<'EOF'
+---
+story: cstorylock1-01
+spec: cstorylock1
+status: todo
+returned: DONE
+wave: 1
+---
+# Lock
+
+## Files
+- docs/specs/cstorylock1/cstorylock1-01-first.md
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "spec(cstorylock1): fixture" >/dev/null
+touch .git/index.lock
+out="$(council close-story docs/specs/cstorylock1/cstorylock1-01-first.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'commit' && echo "  ok    r2m2: locked index -> exit 2, error names the commit" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -qE '^status: (todo|in-progress)$' docs/specs/cstorylock1/cstorylock1-01-first.md && echo "  ok    r2m2: story still reads todo|in-progress on disk" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstorylock1/cstorylock1-01-first.md)"; fail=1; }
+statusout="$(council status docs/specs/cstorylock1 --json)"
+printf '%s' "$statusout" | jq -e '.next != "open-round"' >/dev/null 2>&1 && echo "  ok    r2m2: status --json does not say next:open-round while the tree is dirty" \
+  || { echo "::error::status: $statusout"; fail=1; }
+rm -f .git/index.lock
+commits_before="$(git rev-list --count HEAD)"
+out="$(council close-story docs/specs/cstorylock1/cstorylock1-01-first.md --commit)"; ex=$?
+commits_after="$(git rev-list --count HEAD)"
+[ "$ex" -eq 0 ] && echo "  ok    r2m2: retry after the lock is removed exits 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -q '^status: done' docs/specs/cstorylock1/cstorylock1-01-first.md && echo "  ok    r2m2: retry writes status: done" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstorylock1/cstorylock1-01-first.md)"; fail=1; }
+[ "$((commits_after - commits_before))" -eq 1 ] && echo "  ok    r2m2: retry lands exactly one commit" \
+  || { echo "::error::commits before=$commits_before after=$commits_after"; fail=1; }
+
+echo "status --json: LR31 - a todo story blocked_by a blocked story is excluded from wave_stories; once the blocker is done, it is listed"
+mkdir -p docs/specs/lr31w
+cat > docs/specs/lr31w/lr31w-01-a.md <<'EOF'
+---
+story: lr31w-01
+spec: lr31w
+status: todo
+wave: 1
+blocked_by: [lr31w-02]
+---
+# A
+
+## Verification
+`true`
+EOF
+cat > docs/specs/lr31w/lr31w-02-b.md <<'EOF'
+---
+story: lr31w-02
+spec: lr31w
+status: blocked
+wave: 1
+---
+# B
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "spec(lr31w): fixture" >/dev/null
+out="$(council status docs/specs/lr31w --json)"
+printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: A blocked_by a blocked B -> wave_stories: []" '[]'
+sed -i 's/^status: blocked/status: done/' docs/specs/lr31w/lr31w-02-b.md
+git add -A && git commit -qm "lr31w: B done" >/dev/null
+out="$(council status docs/specs/lr31w --json)"
+printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: B done -> A is listed" \
+  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","repeat":1}]'
+
+echo "close-story: r2m9 - a ## Commands cell with its own && matches whole; adding a further && true is refused, naming the segment"
+mkdir -p docs/specs/cstoryr2m9
+cat > docs/specs/cstoryr2m9/cstoryr2m9-01-first.md <<'EOF'
+---
+story: cstoryr2m9-01
+spec: cstoryr2m9
+status: todo
+returned: DONE
+wave: 1
+---
+# R2M9
+
+## Files
+- docs/specs/cstoryr2m9/cstoryr2m9-01-first.md
+
+## Verification
+`sh -c 'true && true'`
+EOF
+git add -A && git commit -qm "spec(cstoryr2m9): fixture" >/dev/null
+out="$(council close-story docs/specs/cstoryr2m9/cstoryr2m9-01-first.md --commit)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    r2m9: the && cell matches whole and runs" || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+mkdir -p docs/specs/cstoryr2m9b
+cat > docs/specs/cstoryr2m9b/cstoryr2m9b-01-first.md <<'EOF'
+---
+story: cstoryr2m9b-01
+spec: cstoryr2m9b
+status: todo
+returned: DONE
+wave: 1
+---
+# R2M9B
+
+## Verification
+`sh -c 'true && true' && true`
+EOF
+git add -A && git commit -qm "spec(cstoryr2m9b): fixture" >/dev/null
+out="$(council close-story docs/specs/cstoryr2m9b/cstoryr2m9b-01-first.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF "verification not in ## Commands: sh -c 'true" \
+  && echo "  ok    r2m9: an extra && true segment is refused, naming the segment" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+
 # --- open-round: preconditions, the court, D1 idempotency/staleness, orphan cleanup ------------
 
 echo "open-round: preconditions - no Branch line -> exit 2"
@@ -1876,6 +2093,18 @@ run_wall_probes() { # run_wall_probes <label> <cycle.sh-path> [extra-probe-fn ..
   cp "$SRC"/scripts/lib.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh scripts/
   cp "$cyclesrc" scripts/cycle.sh
   printf '.vulyk/\ndocs/specs/*/PAUSE\n' > .gitignore
+  # Story 16's close-story probes (returned:/r2m2/r2m9) need a ## Commands table too - the six
+  # story 14/15 probes above never call close-story, so this was never needed until now.
+  cat > CLAUDE.md <<'MDEOF'
+# Fixture hive
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Fixture: always succeeds | `true` |
+| r2m9 fixture: a cell that is itself an &&-joined command | `sh -c 'true && true'` |
+MDEOF
   git add -A && git commit -qm init >/dev/null
   HEAD7="$(git rev-parse --short HEAD)"
 
@@ -2123,5 +2352,108 @@ git -C "$SRC" show b9f36e8:scripts/cycle.sh > "$OLDCYCLE2"
 run_wall_probes "b9f36e8" "$OLDCYCLE2" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
 rm -f "$OLDCYCLE2"
+
+# ============================================================================================
+# Story 16: one wall probe per story 08 fix (M3/ADR-006 returned:, r2m2, LR31, r2m9), replayed
+# against eb3203a's cycle.sh (the commit immediately before story 08's own) vs. the branch's,
+# reusing run_wall_probes exactly as stories 14/15 did - a third pinned version, not a third
+# runner.
+# ============================================================================================
+
+probe_returned() {
+  mk_open_spec pret 2; set_tier pret 1 >/dev/null
+  cat > docs/specs/pret/pret-02-second.md <<'EOF'
+---
+story: pret-02
+spec: pret
+status: todo
+wave: 1
+---
+# Ret
+
+## Verification
+`true`
+EOF
+  git add -A && git commit -qm "pret: second story, no returned:" >/dev/null
+  local out ex; out="$(council close-story docs/specs/pret/pret-02-second.md 2>&1)"; ex=$?
+  [ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'returned: missing' && echo ok || echo FAIL
+}
+probe_r2m2wall() {
+  mk_open_spec pr2m2 2; set_tier pr2m2 1 >/dev/null
+  cat > docs/specs/pr2m2/pr2m2-02-second.md <<'EOF'
+---
+story: pr2m2-02
+spec: pr2m2
+status: todo
+returned: DONE
+wave: 1
+---
+# Lock
+
+## Verification
+`true`
+EOF
+  git add -A && git commit -qm "pr2m2: second story" >/dev/null
+  touch .git/index.lock
+  council close-story docs/specs/pr2m2/pr2m2-02-second.md --commit >/dev/null 2>&1
+  rm -f .git/index.lock
+  grep -q '^status: todo' docs/specs/pr2m2/pr2m2-02-second.md && echo ok || echo FAIL
+}
+probe_lr31wall() {
+  mkdir -p docs/specs/plr31
+  cat > docs/specs/plr31/plr31-01-a.md <<'EOF'
+---
+story: plr31-01
+spec: plr31
+status: todo
+wave: 1
+blocked_by: [plr31-02]
+---
+# A
+
+## Verification
+`true`
+EOF
+  cat > docs/specs/plr31/plr31-02-b.md <<'EOF'
+---
+story: plr31-02
+spec: plr31
+status: blocked
+wave: 1
+---
+# B
+
+## Verification
+`true`
+EOF
+  git add -A && git commit -qm "plr31: fixture" >/dev/null
+  local out; out="$(council status docs/specs/plr31 --json)"
+  printf '%s' "$out" | jq -e '.wave_stories == []' >/dev/null 2>&1 && echo ok || echo FAIL
+}
+probe_r2m9wall() {
+  mkdir -p docs/specs/pr2m9
+  cat > docs/specs/pr2m9/pr2m9-01-first.md <<'EOF'
+---
+story: pr2m9-01
+spec: pr2m9
+status: todo
+returned: DONE
+wave: 1
+---
+# R2M9
+
+## Verification
+`sh -c 'true && true'`
+EOF
+  git add -A && git commit -qm "pr2m9: fixture" >/dev/null
+  local out ex; out="$(council close-story docs/specs/pr2m9/pr2m9-01-first.md 2>&1)"; ex=$?
+  [ "$ex" -eq 0 ] && echo ok || echo FAIL
+}
+
+OLDCYCLE3="$(mktemp)"
+git -C "$SRC" show eb3203a:scripts/cycle.sh > "$OLDCYCLE3"
+run_wall_probes "eb3203a" "$OLDCYCLE3" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
+run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
+rm -f "$OLDCYCLE3"
 
 exit $fail

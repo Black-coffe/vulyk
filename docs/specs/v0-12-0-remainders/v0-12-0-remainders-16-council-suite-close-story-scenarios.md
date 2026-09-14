@@ -1,8 +1,8 @@
 ---
 story: v0-12-0-remainders-16
 spec: v0-12-0-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-test
 tracer: false
@@ -51,7 +51,31 @@ blocked_by: [v0-12-0-remainders-08]
 `bash tests/council.test.sh`
 
 ## Implementation notes
-<!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `tests/council.test.sh`: added `cstoryr1..r4` (returned: DONE/WALL/absent/NEEDS_CONTEXT),
+  `cstorylock1` (r2m2, index.lock), `lr31w` (LR31, blocked_by pointing at a `status: blocked`
+  story), and `cstoryr2m9`/`cstoryr2m9b` (r2m9, whole-`&&`-cell match vs. a further `&&`
+  segment) right after the existing cstory6 block, before the open-round section. Added one
+  `## Commands` row (`sh -c 'true && true'`) to the fixture CLAUDE.md for r2m9.
+- `run_wall_probes`: added its own minimal `## Commands` table (`true` + the r2m9 cell) since
+  the story 14/15 probes never called `close-story` and the helper had none; harmless to the
+  existing six probes at all three pinned versions. Added `probe_returned`, `probe_r2m2wall`,
+  `probe_lr31wall`, `probe_r2m9wall` and a third pinned-version pair
+  (`run_wall_probes "eb3203a" ...` / `"branch" ...`, `eb3203a` = story 08's own commit `e493ac2`
+  minus one, i.e. `close-story`/`wave_stories` exactly as they read the moment before story 08
+  landed) - one more pinned version on the existing runner, per the Non-goals.
+- Observed labels: `[eb3203a] probe_returned: FAIL`, `probe_r2m2wall: FAIL`, `probe_r2m9wall:
+  FAIL`, all `ok` on `[branch]` - the three fixes each flip a real wall. `probe_lr31wall` came
+  back `ok` at `eb3203a` too: with only one `todo` story in the wave and it not ready, the
+  pre-story loop's `ready`-gated `if [ -n "$ready" ]; then ... WAVE_STORIES=$wave_files` branch
+  never fires for that wave, so `WAVE_STORIES` stays at its initial `""` regardless of the bug -
+  the bug only leaks a not-ready `todo` story into `wave_stories` when the *same* wave also
+  has a genuinely ready story riding along. Story 08's own LR31 criterion (and this story's,
+  quoted verbatim) is the single-blocked-story case, which both versions already get right; per
+  the Non-goals ("a scenario that is ok pre-story is recorded as observed... never forced") this
+  is left as observed, not rewritten to force a fail the acceptance text does not ask for.
+- `bash tests/council.test.sh` (full, untruncated, piped to a log file rather than the terminal
+  per the Non-goals' `| tail -3` instruction for the interactive run): exit 0, zero `::error::`
+  lines across 504 output lines, both truncated (`| tail -3`) and full runs.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
