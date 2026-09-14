@@ -1,8 +1,8 @@
 ---
 story: fable-review-remainders-05
 spec: fable-review-remainders
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-test
 tracer: false
@@ -49,6 +49,12 @@ model: sonnet
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `run_wall_probes` now captures each probe's result into a local before printing, then calls `check_probe_result <wlabel> <name> <result>`: `[branch]` labels require `ok` (else `fail=1`); pinned labels only require `FAIL` for names listed in `$PIN_MUST_FAIL` (empty by default, so the pre-fix pinned runs stay print-only unless a story opts a probe in).
+- Added `pin_cycle <sha> <dest>` wrapping the four `git -C "$SRC" show <sha>:scripts/cycle.sh` sites; on failure/empty it prints `  [<sha>] unavailable: <reason>`, sets `fail=1`, returns 1, and the caller skips that pinned `run_wall_probes` block. The `$PRESHA11` site computes the raw sha first and prints `no commit matches story(v0-12-0-remainders-11)` when empty, before appending `^`.
+- Rewrote `lr31w` (expect-based) and `probe_lr31wall` to a 3-story shape: ready A (no blockers), blocker C (`status: blocked`), not-ready B (`blocked_by: [C]`) - the prior 2-story fixture never put a ready and a not-ready `todo` in the same wave, so it could never be red pre-fix. `PIN_MUST_FAIL="probe_lr31wall"` beside the `eb3203a` run; verified FAIL there and `ok` on `branch`.
+- Added a `release` under PAUSE scenario (claim, then PAUSE, then release exits 0/`ok:true`/DRIVER gone; a foreign stamp under PAUSE still exits 2 `held by`, file kept; `claim` under PAUSE stays exit 3) - written directly to `DRIVER` for the foreign-stamp case since `claim` is itself PAUSE-gated.
+- Added a `record-seat --file` scenario: a report from `.vulyk/reports/*.md` records a body byte-identical (post-header) to the stdin-recorded twin; a missing or empty `--file` path exits 2 with `"error":"file: <path>"` and writes no attempt file.
+- Verified the forced-FAIL and bad-sha/empty-`$PRESHA11` claims live (not just by reading the code): patched a scratch copy of the suite to force `probe_m10` to `echo FAIL` -> `[branch]` line printed `::error::[branch] probe_m10: expected ok, got FAIL` and the suite exited 1; separately patched a scratch copy's `pin_cycle` call to a bad sha, which (as a side effect of the copy no longer sitting inside the vulyk git repo) also broke every other pinned `git -C "$SRC" show`, confirming the `unavailable:` line and `fail=1` fire uniformly, and that `$PRESHA11`'s empty-grep case prints its own reason line.
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->
