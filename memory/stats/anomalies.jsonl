@@ -157,3 +157,4 @@
 {"v":1,"ts":"2026-09-15T11:08:58Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"anomaly-telemetry-14-agent-token-fixed-set","ref":"scope:anomaly-telemetry-14-agent-token-fixed-set"}
 {"v":1,"ts":"2026-09-15T11:53:48Z","code":"agent_empty","value":59,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"worker-code","spec":"","story":"","ref":"agent:agent-a7c1358eff8c3adc8.jsonl"}
 {"v":1,"ts":"2026-09-15T11:53:49Z","code":"agent_empty","value":57,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"worker-code","spec":"","story":"","ref":"agent:agent-a97931d855dc4a903.jsonl"}
+{"v":1,"ts":"2026-09-15T16:02:25Z","code":"driver_relaunched","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"driver-hardening","story":"","ref":"driver:driver-hardening:2026-09-15"}
