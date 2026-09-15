@@ -16,8 +16,12 @@ export const meta = {
 // ok:false ends the run with the failure in the returned object, except a record-seat
 // MALFORMED (re-ask that seat once), a second failed close-story for the same file (also
 // ends the run, naming the file instead of an exit code) and a non-JSON clerk last line
-// (re-asked once, then ends the run). Everything else it knows about the
-// state comes from `status --json`; a decision that needs more than `next`, `wave_stories`,
+// (one more dispatch, then ends the run). Two-track rule (C1 revised): a garbled line from a
+// read-only or stamp-idempotent verb (`status`, `claim`, `release`) is re-asked with the
+// identical prompt, while one from a mutating verb (`branch`, `close-story`, `open-round`,
+// `record-seat`, `judge`) is recovered by asking `status <spec> --json` once instead - the
+// verb may already have taken effect, and re-running it would exit 2.
+// Everything else it knows about the state comes from `status --json`; a decision that needs more than `next`, `wave_stories`,
 // `court`, `round`, `round_dir`, `spec`, `branch`, `head` or `tier` means the status contract
 // is missing a key, not something to work around here.
 // Poll rule (C6): `status --json` is asked once before the first iteration and again only after
@@ -74,15 +78,26 @@ const asStop = (res) => ({ verb: res.verb, exit: res.exit, error: res.error })
 // C6/C5: the post-verb status a single sequential verb embeds, or null - which is the loop's
 // signal to poll instead. Only an ok:true result can carry state, and an older cycle.sh that
 // emits no `status` key simply falls back to the poll; a status is never synthesised from `next`.
+// An error envelope ({"ok":false,"verb":"status",...}) is not a status object: it carries an
+// `ok` key and no usable `next`, so it makes the loop poll rather than stop on an
+// unrecognised `next` (C6 addendum).
 const carriedStatus = (res) =>
-  (res && res.ok === true && res.status && typeof res.status === 'object') ? res.status : null
+  (res && res.ok === true && res.status && typeof res.status === 'object'
+    && typeof res.status.next === 'string' && !('ok' in res.status)) ? res.status : null
+
+// The verbs whose second dispatch is a `status` poll, never the verb again: each one may have
+// taken effect before its relay was garbled, and a re-run then exits 2 (`already done` /
+// `already recorded`) and ends the run. Story 03 makes every one of them carry the same status
+// object on success, so the poll loses nothing (C1 revised).
+const MUTATING = ['branch', 'close-story', 'open-round', 'record-seat', 'judge']
 
 // The Workflow runtime has no shell of its own - cycle-clerk is the only way to reach one.
-// A non-JSON last line from any verb is re-asked once, then ends the whole run; the Queen
-// reads the raw line at wake.
+// A non-JSON last line costs exactly one more dispatch: the identical prompt for `status`,
+// `claim` and `release`, `status <spec> --json` for the five mutating verbs. If that second
+// line is unparsable too the whole run ends and the Queen reads the raw line at wake.
 const clerk = (cmd) => {
-  const ask = () => agent(
-    `Run exactly: bash scripts/cycle.sh ${cmd}\nReturn the last stdout line verbatim.`,
+  const ask = (c) => agent(
+    `Run exactly: bash scripts/cycle.sh ${c}\nReturn the last stdout line verbatim.`,
     { agentType: 'cycle-clerk', effort: 'low' },
   ).then((out) => {
     const line = String(out).trim().split('\n').pop()
@@ -91,10 +106,19 @@ const clerk = (cmd) => {
     if (parsed.exit === 3) throw new Paused(parsed.next)
     return parsed
   })
-  return ask().catch((e) => {
+  const verb = cmd.trim().split(/\s+/)[0]
+  return ask(cmd).catch((e) => {
     if (!(e instanceof BadLine)) throw e
-    log(`cycle-clerk: non-JSON last line, retrying once: ${cmd}`)
-    return ask()
+    if (!MUTATING.includes(verb)) {
+      log(`cycle-clerk: non-JSON last line, retrying once: ${cmd}`)
+      return ask(cmd)
+    }
+    log(`cycle-clerk: non-JSON last line from "${cmd}", asking status instead`)
+    // the recovered result is shaped like an ok verb result carrying its own post-verb status,
+    // so every branch and carriedStatus() read it exactly as they read a real one; a verb that
+    // never took effect simply shows the same `next` again and the ordinary loop re-runs it.
+    return ask(`status ${spec} --json`)
+      .then((st) => ({ ok: true, verb, exit: 0, next: st.next, error: '', status: st, recovered: 'status' }))
   })
 }
 

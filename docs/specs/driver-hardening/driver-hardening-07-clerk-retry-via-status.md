@@ -1,8 +1,8 @@
 ---
 story: driver-hardening-07
 spec: driver-hardening
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -45,5 +45,11 @@ Round 1 review Major 2 and the driver half of Minor 10. Story 02's retry re-disp
 `bash tests/driver.test.sh`
 
 ## Implementation notes
+- `.claude/workflows/vulyk-cycle.js`: `clerk()`'s inner `ask()` now takes the command as an argument; a `BadLine` routes on the first token of `cmd` - a new `MUTATING` list (`branch`, `close-story`, `open-round`, `record-seat`, `judge`) asks `status ${spec} --json` once and returns `{ok:true, verb, exit:0, next: st.next, error:'', status: st, recovered:'status'}`; every other verb keeps story 02's identical re-dispatch. Still at most two dispatches per `clerk()` call; a second unparsable line throws `BadLine` with that line, an `exit:3` recovery throws `Paused`.
+- `carriedStatus()` additionally requires `typeof res.status.next === 'string'` and no `ok` key, so cycle.sh's `{"ok":false,"verb":"status",...}` envelope makes the loop poll instead of falling through to the unrecognised-`next` return (C6 addendum / Minor 10 driver half).
+- Verified against `scripts/cycle.sh` `cmd_claim:2075-2085` rather than assumed: a re-claim with the *same* stamp exits 0 (`already claimed by`), so A9's recon question is answered and `claim` correctly stays on the identical-re-dispatch track with `status` and `release`.
+- `tests/driver.test.sh`: six scenarios (ak)-(ap) - judge, record-seat and close-story recoveries (each asserting the verb prompt is sent exactly once, the second prompt is the status prompt, the `asking status instead` log names the command, and the loop continues), the double-garble raw-second-line stop, an exit-3 recovery pausing, and the C6 error-envelope poll.
+- Checked, not assumed: with only `vulyk-cycle.js` reverted to HEAD, each of the six new scenarios prints its own FAIL line (all six seen individually in one run) while every pre-existing scenario stays green.
+- Not mine, already dirty before this story: `scripts/cycle.sh` (story 06's diff) shows in `git diff`.
 
 ## Findings
