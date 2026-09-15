@@ -79,7 +79,7 @@ The loop keeps one status object `st`. It is obtained by `clerk("status <spec> -
 <!--
 The six lines below are the cycle's confirmation artifacts (docs/cycle.md).
 -->
-**Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
+**Approved:** Andrei, 2026-09-15
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path. Alternative to **Approved:** above.>
 **Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05.>
