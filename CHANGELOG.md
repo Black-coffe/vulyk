@@ -2,7 +2,7 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
-## [Unreleased]
+## [0.15.0] - 2026-09-15
 
 ### Fixed
 - **Clerk retry on a non-JSON last line.** `clerk()` in `.claude/workflows/vulyk-cycle.js` re-dispatches once before ending a run; for `branch`, `close-story`, `open-round`, `record-seat` and `judge` the second dispatch is a `status <spec> --json` re-check instead of the mutating verb itself, the same shape already used for a MALFORMED seat report.
