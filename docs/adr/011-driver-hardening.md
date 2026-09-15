@@ -6,19 +6,19 @@
 
 ## Context
 
-The anomaly-telemetry circle's round 6 surfaced five defects in the Workflow driver
-(`.claude/workflows/vulyk-cycle.js`) and `scripts/cycle.sh` that ADR-001 and ADR-006 did not
-anticipate: a clerk relay can return a non-JSON last line and end a run outright; two files
-the cycle's own hooks write (`memory/stats/skills.json`, `memory/learnings/*.md`) are not on
-`is_paperwork_path`'s whitelist, so they stall `open-round` and stale a GREEN row they never
-touched; `close-story` refuses a story a worker marked `status: done` itself even when its
-files still carry an uncommitted diff, leaving the tree in exactly the state the guard exists
-to prevent; `record-seat`'s taint detector flags a bare `<slug>-NN` token, which any seat can
-synthesise from the slug it is handed, while the actual leak in round 6 was a story *file*
-path; and the driver spends one clerk call on `status` after nearly every action even though
-five of `cycle.sh`'s mutating verbs already compute that object internally before returning.
-Each defect had a named alternative in the brief's `## Answers`; this ADR records the five
-decisions as built.
+The anomaly-telemetry circle's driver (`.claude/workflows/vulyk-cycle.js`) and `scripts/cycle.sh`
+met five gaps ADR-001 and ADR-006 did not anticipate, at different points in that circle: on
+launch, a clerk relay returned a non-JSON last line and ended a run outright; between driver
+steps, `open-round` refused a tree twice over two files the cycle's own hooks write
+(`memory/stats/skills.json`, `memory/learnings/*.md`) not on `is_paperwork_path`'s whitelist,
+staling a GREEN row they never touched; also between driver steps, `close-story` refused a story
+a worker marked `status: done` itself even when its files still carried an uncommitted diff,
+leaving the tree in exactly the state the guard exists to prevent; round 6 alone met the fourth:
+`record-seat`'s taint detector flagged a bare `<slug>-NN` token a seat typed in its own `run:`
+line, though the actual leak that round was a story *file* path; and the driver spends one clerk
+call on `status` after nearly every action even though five of `cycle.sh`'s mutating verbs
+already compute that object internally before returning. Each defect had a named alternative in
+the brief's `## Answers`; this ADR records the five decisions as built.
 
 ## Options
 
@@ -34,15 +34,21 @@ decisions as built.
 Each of the five, as built - decision, rejected alternative, site, invariant:
 
 **1. Clerk retry on a non-JSON last line.**
-Built: `clerk()` in `.claude/workflows/vulyk-cycle.js` re-dispatches the identical prompt once
-when the last stdout line fails `JSON.parse`, logs the retry, and only then lets a second
-`BadLine` end the run - the same shape the driver already uses for a MALFORMED seat report.
+Built: `clerk()` in `.claude/workflows/vulyk-cycle.js` re-dispatches once when the last stdout
+line fails `JSON.parse`, logging the retry; the second dispatch depends on the verb. For
+`status`, `claim` and `release` (idempotent by stamp or read-only, A9) it is the identical
+prompt again - the same shape the driver already uses for a MALFORMED seat report. For
+`branch`, `close-story`, `open-round`, `record-seat` and `judge` (mutating; a re-run of a verb
+that took effect exits 2 `already done` / `already recorded` and would end the run) it is
+`status <spec> --json` instead - the verb itself is never dispatched a second time, and the
+loop continues from that status exactly as it would from a carried one. Only a second
+unparsable line, on either track, ends the run.
 Rejected: writing status to a file for the driver to read - the Workflow runtime has no
 filesystem, so a file still reaches the driver only through a clerk relay of the same bytes;
 it moves the copy, it does not remove it.
 Site: `clerk()`, `.claude/workflows/vulyk-cycle.js`.
-Invariant: at most two `cycle-clerk` dispatches per `clerk()` call; `cycle-clerk.md` itself
-never retries.
+Invariant: at most two `cycle-clerk` dispatches per `clerk()` call; a mutating verb is never
+re-dispatched a second time on this path; `cycle-clerk.md` itself never retries.
 
 **2. `skills.json` and `memory/learnings/*.md` are cycle paperwork.**
 Built: `is_paperwork_path` in `scripts/lib.sh` accepts exactly `memory/stats/skills.json` and
@@ -52,8 +58,10 @@ Rejected: staging them through a cycle verb - the owner ruled `skills.json` not 
 and learnings are the librarian's; rejected: gitignoring them - both are meant to be
 committed. `scope-check.sh`, which does not source `lib.sh`, is untouched.
 Site: `is_paperwork_path`, `scripts/lib.sh`.
-Invariant: `is_paperwork_path` is the one predicate both `open-round` and `paperwork_only()`
-consult; nothing stages the two new paths.
+Invariant: `is_paperwork_path` is the one predicate every `paperwork_only()` caller consults -
+`open-round`'s own dirty-tree guard and staleness check in `scripts/cycle.sh`, `ship-check.sh`'s
+council and human staleness checks (two call sites), and `human-check.sh` - so a commit touching
+only the two new paths never stales any of them; nothing stages the two new paths.
 
 **3. `close-story` tolerates a self-marked `status: done`.**
 Built: `cmd_close_story`'s `done` branch runs `git status --porcelain` against the story file
@@ -69,10 +77,12 @@ tolerated, not endorsed - it always goes through scope-check and verification be
 commits.
 
 **4. Taint is the story file, not the bare id.**
-Built: `taint_reason()`'s pattern 1 matches `\bS-NN\.md\b` or `(docs/specs/)?\bS/S-NN\b` (with
-or without `.md`), `S` the escaped slug; a bare `<slug>-NN` token with neither `.md` nor the
-`<slug>/` directory prefix is no longer taint. Patterns 2-4 (`plan.md`, `journal.md`,
-`council/`) are unchanged.
+Built: `taint_reason()`'s pattern 1 matches `\bS-[0-9]{2}(-[A-Za-z0-9_-]+)?\.md\b` or
+`(docs/specs/)?\bS/S-[0-9]{2}\b` (with or without a title and `.md`), `S` the escaped slug - so
+`demo-14-title.md`, `demo-14.md`, `docs/specs/demo/demo-14-title.md` and `demo/demo-14` are
+taint, matching the repo's real `<slug>-NN-<title>.md` story-file shape; a bare `<slug>-NN`
+token, `<slug>-NN-<title>` without `.md`, and the round-6 `run:`/`saw:` shape are not. Patterns
+2-4 (`plan.md`, `journal.md`, `council/`) are unchanged.
 Rejected: exempting `run:` lines from the scan - round 6 also echoed the id in a `saw:` line,
 and line-type parsing widens the detector's code for no extra safety.
 Site: `taint_reason()`, `scripts/cycle.sh`.
@@ -85,7 +95,7 @@ Built: on exit 0, `branch`, `close-story`, `open-round`, `record-seat` and `judg
 more key, `status` - byte-for-byte `cmd_status <spec>` computed after every write the verb
 made, including its own `--commit`:
 ```
-`status, spec, slug, stage, next, briefed, approved, branch, head, pack, stories, wave,
+`spec, slug, stage, next, briefed, approved, branch, head, pack, stories, wave,
 wave_stories, round, ceiling, tier, open, court, missing, stale, verdict, review, red,
 round_dir, paused, shipped`
 ```
@@ -100,8 +110,11 @@ latency reorders promise resolution relative to command completion, so "last ret
 "last written".
 Site: `emit_status`/`cmd_status`, `scripts/cycle.sh`; the loop's `carriedStatus()` and the
 pre-loop poll, `.claude/workflows/vulyk-cycle.js`.
-Invariant: the top-level `next` of a verb's JSON always equals `status.next` when `status` is
-present; a driver that does not read `status` still works unchanged (the key is additive).
+Invariant: the top-level `next` stays the verb's own value; it equals `status.next` on a
+well-formed spec (Briefed or Approved present, the round pack current) - deriving `next` from
+`status` instead changed several pre-C5 fixtures (a plan with no `**Briefed:**`, a round whose
+pack had moved), so `next` stays verb-owned rather than status-derived; a driver that does not
+read `status` still works unchanged (the key is additive).
 
 ## Consequences
 

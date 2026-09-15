@@ -121,3 +121,4 @@
 {"ts":"2026-09-15T17:51:59Z","story":"driver-hardening-06-taint-shape-learnings-dir-selfmark-journal","declared":3,"changed":6,"out_of_scope":4}
 {"ts":"2026-09-15T18:02:16Z","story":"driver-hardening-06-taint-shape-learnings-dir-selfmark-journal","declared":3,"changed":6,"out_of_scope":4}
 {"ts":"2026-09-15T18:14:34Z","story":"driver-hardening-07-clerk-retry-via-status","declared":2,"changed":2,"out_of_scope":0}
+{"ts":"2026-09-15T18:18:20Z","story":"driver-hardening-08-adr-docs-repair","declared":4,"changed":4,"out_of_scope":0}

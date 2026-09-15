@@ -1,8 +1,8 @@
 ---
 story: driver-hardening-08
 spec: driver-hardening
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -50,5 +50,10 @@ plan.md `## Contracts` C1 revised, C2 addendum, C3 revised, C4 revised, C5 adden
 `none — reviewed by lead-review`
 
 ## Implementation notes
+- `docs/adr/011-driver-hardening.md`: Context paragraph rewritten to attribute the clerk `]`, dirty-tree refusals and self-mark to launch/between driver steps, only the taint false positive to round 6 (Minor 11). Decision 1 rewritten to state the two-track retry (status re-dispatch for the five mutating verbs, identical re-dispatch for status/claim/release) per C1 revised. Decision 2 invariant lists every `paperwork_only` caller: `open-round`'s own staleness check, `ship-check.sh`'s two staleness call sites, `human-check.sh` (Minor 8). Decision 4 Built rewritten to the real `\bS-[0-9]{2}(-[A-Za-z0-9_-]+)?\.md\b` regex per C4 revised, with the repo's real `<slug>-NN-<title>.md` examples. Decision 5 invariant rewritten to "next stays verb-owned, coincides with status.next on a well-formed spec" with story 03's fixture reason (Major 3). Key list quote dropped the leading `status,` not printed by `cmd_status` (Minor 7, verified against cycle.sh:469's printf order).
+- `docs/adr/001-cycle-state-contract.md`: the 2026-09-15 amendment's taint bullet and the `record-seat` table row both updated from the old `<slug>-NN.md` / `docs/specs/<slug>/<slug>-NN` shape to `<slug>-NN[-<title>].md` (with/without `docs/specs/<slug>/`) or `<slug>/<slug>-NN`; also corrected the bullet's stray "ADR-011 decision 2" label to "decision 4" (the taint decision) while touching that sentence. Other mentions of the old shape (Handoff/honour-clause prose around line 292, the walkthrough near 347) don't name the `.md`-only form explicitly and were left untouched per non-goals.
+- `.claude/agents/worker-test.md`: return-step sentence now matches `worker-code.md` verbatim - `close-story reads this key; the driver never opens the story file` (Minor 9).
+- `CHANGELOG.md` `## [Unreleased]`: ask 1 (clerk retry) line now names the status re-dispatch for the five mutating verbs; ask 2 (paperwork) line now notes the `-uall` untracked-directory listing; ask 4 (taint) line now quotes `<slug>-NN-<title>.md`.
+- No code or test file touched; every change is a doc sentence named by the acceptance criteria.
 
 ## Findings

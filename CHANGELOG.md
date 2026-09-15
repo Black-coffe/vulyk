@@ -5,10 +5,10 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 ## [Unreleased]
 
 ### Fixed
-- **Clerk retry on a non-JSON last line.** `clerk()` in `.claude/workflows/vulyk-cycle.js` re-dispatches the identical prompt once before ending a run, the same shape already used for a MALFORMED seat report.
-- **Hook-written files are cycle paperwork.** `is_paperwork_path` in `scripts/lib.sh` now accepts `memory/stats/skills.json` and one-level `memory/learnings/*.md`, so `open-round` and `paperwork_only()` stop treating them as a dirty tree.
+- **Clerk retry on a non-JSON last line.** `clerk()` in `.claude/workflows/vulyk-cycle.js` re-dispatches once before ending a run; for `branch`, `close-story`, `open-round`, `record-seat` and `judge` the second dispatch is a `status <spec> --json` re-check instead of the mutating verb itself, the same shape already used for a MALFORMED seat report.
+- **Hook-written files are cycle paperwork.** `is_paperwork_path` in `scripts/lib.sh` now accepts `memory/stats/skills.json` and one-level `memory/learnings/*.md`, and the open-round dirty-tree listing lists an untracked-only directory file by file (`-uall`) so `open-round` and `paperwork_only()` stop treating them as a dirty tree.
 - **`close-story` tolerates a self-marked `status: done`.** `cmd_close_story` in `scripts/cycle.sh` journals and proceeds when a worker's own `status: done` still has an uncommitted diff in its files, instead of refusing outright.
-- **Taint is the story file, not the bare id.** `taint_reason()` in `scripts/cycle.sh` flags a story-file path (`<slug>-NN.md`, `docs/specs/<slug>/<slug>-NN`); a bare `<slug>-NN` token is no longer taint.
+- **Taint is the story file, not the bare id.** `taint_reason()` in `scripts/cycle.sh` flags a story-file path (`<slug>-NN-<title>.md`, `docs/specs/<slug>/<slug>-NN`); a bare `<slug>-NN` token is no longer taint.
 
 ### Changed
 - **Mutating verbs carry post-verb status; the driver polls three times fewer per round.** `branch`, `close-story`, `open-round`, `record-seat` and `judge` in `scripts/cycle.sh` embed the post-verb `status` object in their exit-0 JSON; the driver in `.claude/workflows/vulyk-cycle.js` polls `status` only at loop start and after a parallel step, three fewer polls on a steady Tier 3 round.
