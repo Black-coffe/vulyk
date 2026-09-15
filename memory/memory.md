@@ -42,6 +42,10 @@
 - Next brief's draft (round-2 UNASKED, ten review minors, ship-gate staleness on release paperwork): docs/specs/fable-review-remainders/plan.md `## Next circle`, CHANGELOG 0.13.1; the Fable majors of v0-12-0-remainders are closed there
 - Dispatch failure reasons from verb exit codes, seat reports by file (v0.13.1, proposed): docs/adr/009-dispatch-failure-reasons-and-report-by-file.md
 
+- Anomaly telemetry, opt-in (v0.14.0, 2026-09-15): docs/telemetry.md — `scripts/telemetry.sh`
+  (enum/agents/consent/record/scan/bundle/check/publish/inbox), the Stop+SessionEnd
+  `anomaly-scan.sh` hook, the installer consent question, the `/vulyk-evolve` weekly
+  distil-and-clear; never sends on its own, `publish` only prints a copy recipe
 - Consolidated: memory/learnings/CONSOLIDATED.md (run /vulyk-gc to refresh)
 - Human gates rework (2026-09-12): memory/learnings/2026-09-12-human-gates-rework.md — один стоп в начале, дальше агентный совет; «owner looks» как обязательную стадию не возвращать
 - Autonomous cycle / council (v0.12.0, 2026-09-13): docs/specs/autonomous-cycle/ — mechanics in docs/adr/001-cycle-state-contract.md (ADR-001), per-spec state in docs/specs/<slug>/journal.md

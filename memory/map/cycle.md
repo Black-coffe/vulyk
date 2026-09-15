@@ -111,4 +111,16 @@ const mirrors each agent's `maxTurns:` frontmatter by hand, comment dated 2026-0
 reopen, PAUSE guard, taint/MALFORMED. `tests/cycle.test.sh`: the six-stage walk. Both wired
 into `.github/workflows/ci.yml`.
 
-last-verified: 2026-09-14
+## Telemetry read-only consumers (v0.14.0, `scripts/telemetry.sh`, see `memory/map/scripts.md`)
+Anomaly detectors read the cycle's own files without writing them: `detect_council` scans
+`memory/stats/council.jsonl` for the max `round` per spec (`council_rounds_high`);
+`detect_stage` scans every `docs/specs/*/journal.md` for a gap between consecutive lines
+(`stage_long`, never the still-open last stage); `detect_scope` scans
+`memory/stats/scope.jsonl` (`scope_breach`). `/vulyk-build`/`/vulyk-resume` separately call
+`telemetry.sh record driver_refused`/`driver_relaunched` on the driver-failure paths those
+commands already handle. `memory/stats/anomalies.jsonl` joined `lib.sh`'s
+`is_paperwork_path()` whitelist (now six `memory/stats/*.jsonl` files, not five) since
+`telemetry.sh record` writes it - a scan that fires mid-round must not itself stale that
+round. Full contract: `docs/telemetry.md`.
+
+last-verified: 2026-09-15

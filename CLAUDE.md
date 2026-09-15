@@ -196,7 +196,7 @@ Drop file contents, diffs, command output and scout reports: they are on disk an
 
 - Path-scoped rules: `.claude/rules/` (loaded only where relevant — keep this file lean).
 - Plans & stories: `docs/specs/` · Study reports: `docs/specs/<slug>/report.md` · Decisions: `docs/adr/` · Domain knowledge: `docs/wiki/`.
-- Codebase map: `memory/map/` · Session learnings: `memory/learnings/` · Stats series: `memory/stats/` (`scope.jsonl`, `council.jsonl`, `acceptance.jsonl`, `human.jsonl`, `ship.jsonl`, `skills.json`).
+- Codebase map: `memory/map/` · Session learnings: `memory/learnings/` · Stats series: `memory/stats/` (`scope.jsonl`, `council.jsonl`, `acceptance.jsonl`, `human.jsonl`, `ship.jsonl`, `anomalies.jsonl`, `skills.json`).
 
 ## Evolution
 

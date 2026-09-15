@@ -69,6 +69,9 @@ dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept 
   <path>` first, falling back to the stdin heredoc only on exit 2 `error: "file: ..."`; a
   worker/seat/reviewer's empty return is logged by one of three reasons (`threw:`/`returned
   empty - turn cap suspected .../`returned no report`) per `cycle.md`'s Report-path section.
+  v0.14.0: a `--fallback`-less refusal (no `Workflow` tool) and a Workflow call that itself
+  throws both record `bash scripts/telemetry.sh record driver_refused 1 0 --spec <slug> --ref
+  driver:<slug>:<date>` before stopping (`docs/telemetry.md`).
 - **`/vulyk-review`** - one on-demand round: `open-round --commit` (refusal = surface
   verbatim, point at `/vulyk-build`), dispatch only the seats `missing` names (Tier 4: +
   second reviewer, folded stricter-of-two), `record-seat` each (same `--file`-then-heredoc
@@ -84,13 +87,22 @@ dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept 
   buffer, skill stats, `top-model.sh --explain`. Writes nothing.
 - **`/vulyk-pause`/`/vulyk-resume`** - wrap `cycle.sh pause`/`resume`; pause explains the
   discard-and-re-dispatch consequence for an in-flight seat report; resume always relaunches
-  the driver fresh (`/vulyk-build` step 1), never `resumeFromRunId`.
+  the driver fresh (`/vulyk-build` step 1), never `resumeFromRunId`. v0.14.0: a relaunch
+  records `bash scripts/telemetry.sh record driver_relaunched 1 0 --spec <slug> --ref
+  driver:<slug>:<date>` first.
 - **`/vulyk-evolve`** - harvest -> **new in v0.12.0**: 7-day `council.jsonl`/`human.jsonl`
   check-in (median rounds, escalations, escaped defects vs. REJECTED count; prints a "models
-  are ready" signal when escaped defects exceed the human-gate baseline) -> diagnose ->
+  are ready" signal when escaped defects exceed the human-gate baseline) -> **new in v0.14.0**:
+  a same-window `memory/stats/anomalies.jsonl` count by code (`bash scripts/telemetry.sh enum`
+  for the row list), then `bash scripts/telemetry.sh consent` gates a `publish`/`publish
+  --dry-run` call (prints its recipe, never sends) -> **VULYK-repo-only**: `bash
+  scripts/telemetry.sh inbox` prints `<week> <code> <rows> <hives>` per merged bundle, its
+  table goes into the CHANGELOG entry, then (full path only) `inbox --clear` **stages** the
+  emptied `telemetry/inbox/<week>/` deletions (`git rm`, no commit) -> diagnose ->
   changeset on `vulyk/evolve-<date>` -> human gate. Applies NOTHING to main; `--dry-run`
-  stops after diagnosis.
-- **`/vulyk-bootstrap`** - interview -> fill `## Profile` -> `top-model.sh --apply`
+  stops after diagnosis (and skips `inbox --clear`). Full contract: `docs/telemetry.md`.
+- **`/vulyk-bootstrap`** - interview -> fill `## Profile` (now includes the `Telemetry`
+  consent row `install.sh` also writes, `off` by default) -> `top-model.sh --apply`
   **unconditionally now** (the council runs unattended, so the session must run on the
   resolved model, not just be told about it) -> prune roster (the council trio's removal is
   never silent) -> map -> seed memory/wiki.
