@@ -47,18 +47,31 @@ opus
 sonnet
 haiku"
 
-# The agent token set is resolved at runtime from the hive's own .claude/agents/ (plan A12):
-# a hive that adds an agent gets it in its rows without a code change, and `check` in the
-# VULYK repo resolves it from the repo's own agents. `other` absorbs everything else, so a
-# dispatch name (owner-chosen text - it can carry a story name) never reaches a row.
-agent_set() {
-  local f
-  for f in "$ROOT"/.claude/agents/*.md; do
-    [ -f "$f" ] || continue
-    basename "$f" .md
-  done
-  echo other
-}
+# The agent token set. Fixed in this script and identical on every machine (plan A20): it used
+# to be read from the hive's own .claude/agents/, but ADR-005 invites owners to add agents there,
+# so an owner-chosen filename became a legal token on the hive side - free text in the bundle -
+# while `check` in the VULYK repo, resolving the set from a different directory, rejected the
+# same file. `other` absorbs everything else, at `record` time and again at `bundle` time, so a
+# dispatch name (owner-chosen text - it can carry a story name) never reaches a row. Adding a
+# framework agent under .claude/agents/ means editing this list; tests/telemetry.test.sh guards
+# the drift.
+AGENTS="council-haiku
+council-opus
+council-sonnet
+cycle-clerk
+drone-coverage
+drone-docs
+drone-scout
+lead-architect
+lead-review
+librarian
+queen-planner
+worker-code
+worker-test
+other"
+
+agent_set() { printf '%s
+' "$AGENTS"; }
 
 die() { printf 'telemetry: %s\n' "$1" >&2; exit "${2:-1}"; }
 

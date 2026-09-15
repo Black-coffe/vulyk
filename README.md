@@ -247,8 +247,9 @@ contribute an anonymized weekly bundle back to this project if you opt in. **Off
 A bundle row has exactly 10 keys — `v code value threshold vulyk tier model agent week hive` —
 codes and numbers only: `code` is one of `context_high agent_prefix_high agent_empty
 council_rounds_high stage_long driver_refused driver_relaunched scope_breach`
-(`bash scripts/telemetry.sh enum`), `agent` is a framework agent name (a `.claude/agents/*.md`
-basename) or `other`. **Never included:** file paths, story/spec slugs, dispatch names, emails,
+(`bash scripts/telemetry.sh enum`), `agent` is a framework agent name from a fixed list shipped
+in `scripts/telemetry.sh` (`bash scripts/telemetry.sh agents`) - any other agent is reported as
+`other`. **Never included:** file paths, story/spec slugs, dispatch names, emails,
 free text, or file contents.
 
 The installer asks once — `Enable telemetry? [y/N]`, default off — and the `Telemetry` row in

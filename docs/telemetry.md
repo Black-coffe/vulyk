@@ -29,11 +29,12 @@ overrides it, and every local row records the threshold it was checked against.
 
 ### The agent token
 
-`agent_prefix_high` and `agent_empty` rows carry an `agent` token: the basename of a
-`.claude/agents/*.md` file (a framework agent name, e.g. `worker-code`, `council-sonnet`), or
-`other` when the subagent's `agentType` is not one of those - never the free-form dispatch
-`name`, which is owner-chosen text and could carry a story name. Print the current set with
-`bash scripts/telemetry.sh agents`. Every other code carries an empty `agent`.
+`agent_prefix_high` and `agent_empty` rows carry an `agent` token from a fixed list shipped in
+`scripts/telemetry.sh` - the framework agent names, e.g. `worker-code`, `council-sonnet` - the
+same list on every machine. Any other agent, including one you add under `.claude/agents/`, is
+reported as `other`, and so is the free-form dispatch `name`, which is owner-chosen text and
+could carry a story name. Print the list with `bash scripts/telemetry.sh agents`. Every other
+code carries an empty `agent`.
 
 ### The local row - 12 keys
 

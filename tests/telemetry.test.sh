@@ -974,6 +974,80 @@ tel publish --week "$WEEK" --dry-run >/dev/null 2>&1
 expect_eq "publish --dry-run emits the same rows as bundle --out" "same" \
   "$(cmp -s "$EMPTYB" "$HIVE/.vulyk/telemetry/$WEEK-$HIVEID3.jsonl" && echo same || echo different)"
 
+# --- case 19: the agent token set is fixed in the script, not read from the hive ---------------
+# Round-5 opus seat, ask 3: the set used to be the hive's own .claude/agents/ basenames, so an
+# owner-added agent (ADR-005 invites exactly that) became a legal token - free text in the
+# bundle - that the VULYK repo's `check` then rejected, aborting every hive's inbox that week.
+echo "--- agents: a fixed set, an owner's own agent becomes other"
+BAKED_AGENTS="$( (cd "$SRC" && bash scripts/telemetry.sh agents) | tr -d '' )"
+FHIVE="$T/hive-frontend"
+mkdir -p "$FHIVE/scripts" "$FHIVE/memory/stats" "$FHIVE/.claude/agents"
+cp "$SRC/scripts/telemetry.sh" "$SRC/scripts/lib.sh" "$FHIVE/scripts/"
+cp "$SRC"/.claude/agents/*.md "$FHIVE/.claude/agents/"
+printf 'name: worker-frontend
+' > "$FHIVE/.claude/agents/worker-frontend.md"
+printf '# Fixture hive
+
+## Profile
+
+| Field | Value |
+|---|---|
+| Telemetry | on - anonymized weekly bundle |
+'   > "$FHIVE/CLAUDE.md"
+git -C "$FHIVE" init -q -b main . && git -C "$FHIVE" config user.email t@t &&
+  git -C "$FHIVE" config user.name "Test Owner" && git -C "$FHIVE" config core.autocrlf false
+git -C "$FHIVE" add -A >/dev/null 2>&1; git -C "$FHIVE" commit -qm init >/dev/null
+telf() { (cd "$FHIVE" && VULYK_HIVE="$FHIVE" bash scripts/telemetry.sh "$@"); }
+FLOG="$FHIVE/memory/stats/anomalies.jsonl"
+
+NOAG="$T/hive-no-agents-dir"; mkdir -p "$NOAG/scripts" "$NOAG/memory/stats"
+cp "$SRC/scripts/telemetry.sh" "$SRC/scripts/lib.sh" "$NOAG/scripts/"
+
+expect_eq "a hive with an extra agent file prints the same list" "$BAKED_AGENTS"   "$(telf agents | tr -d '')"
+expect_eq "a hive with no .claude/agents/ at all prints the same list" "$BAKED_AGENTS"   "$( (cd "$NOAG" && VULYK_HIVE="$NOAG" bash scripts/telemetry.sh agents) | tr -d '' )"
+telf agents | expect_absent "an owner-added agent is not a token" "worker-frontend"
+
+# record: the owner's own name never reaches the local row; a framework name is kept
+telf record agent_prefix_high 60000 50000 --agent worker-frontend --ref agent:f
+expect_eq "--agent with an owner-added name records as other" "other"   "$(grep -F '"ref":"agent:f"' "$FLOG" | jq -r '.agent' | tr -d '')"
+telf record agent_prefix_high 60000 50000 --agent worker-code --ref agent:w
+expect_eq "--agent with a framework name records unchanged" "worker-code"   "$(grep -F '"ref":"agent:w"' "$FLOG" | jq -r '.agent' | tr -d '')"
+# a row already in the log under the old behaviour still bundles clean
+printf '{"v":1,"ts":"%s","code":"agent_empty","value":3,"threshold":0,"vulyk":"0.13.3","tier":3,"model":"sonnet","agent":"worker-frontend","spec":"","story":"","ref":"agent:hand"}
+'   "$NOW" >> "$FLOG"
+
+FB="$T/frontend-bundle.jsonl"
+telf bundle --week "$WEEK" --out "$FB"
+expect_eq "three local rows bundle as three rows" "3" "$(grep -c . "$FB")"
+fagent() { jq -r '.agent' < "$FB" | tr -d '' | sed -n "$1p"; }
+expect_eq "an owner-added name recorded as other bundles as other" "other"       "$(fagent 1)"
+expect_eq "a framework name bundles unchanged"                     "worker-code" "$(fagent 2)"
+expect_eq "a hand-written row with an owner-added name bundles as other" "other" "$(fagent 3)"
+if telf check "$FB" >/dev/null 2>&1; then ok "check accepts the bundle from the hive"
+else bad "check rejected the bundle from the hive:"; telf check "$FB" 2>&1 | sed 's/^/        /'; fi
+if (cd "$SRC" && bash scripts/telemetry.sh check "$FB") >/dev/null 2>&1; then
+  ok "check accepts the same bundle from the VULYK repo"
+else bad "check rejected the bundle from the VULYK repo:"
+  (cd "$SRC" && bash scripts/telemetry.sh check "$FB") 2>&1 | sed 's/^/        /'; fi
+
+BADAGENT="$T/frontend-bad.jsonl"
+printf '{"v":1,"code":"agent_prefix_high","value":60000,"threshold":50000,"vulyk":"0.13.3","tier":3,"model":"sonnet","agent":"worker-frontend","week":"%s","hive":"aaaaaaaaaaaa"}
+'   "$WEEK" > "$BADAGENT"
+ERR="$(telf check "$BADAGENT" 2>&1 >/dev/null)"; RC=$?
+printf '%s' "$ERR" | expect "the hive rejects an out-of-set agent by name"   "agent is not in the agent token set"
+expect_eq "an out-of-set agent fails check in the hive" "1" "$RC"
+ERR="$( (cd "$SRC" && bash scripts/telemetry.sh check "$BADAGENT") 2>&1 >/dev/null )"; RC=$?
+printf '%s' "$ERR" | expect "the VULYK repo rejects the same row for the same reason"   "agent is not in the agent token set"
+expect_eq "an out-of-set agent fails check in the VULYK repo" "1" "$RC"
+
+# --- case 20: the drift guard - the baked list IS this repo's agent roster ---------------------
+# The only place the suite looks at .claude/agents/, and only to prove the list has not drifted.
+echo "--- agents: drift guard"
+REPO_BASENAMES="$(for f in "$SRC"/.claude/agents/*.md; do basename "$f" .md; done | LC_ALL=C sort)"
+expect_eq "the baked agent list minus other = this repo's .claude/agents/*.md basenames (added or renamed a framework agent? edit AGENTS in scripts/telemetry.sh)"   "$REPO_BASENAMES" "$(printf '%s
+' "$BAKED_AGENTS" | grep -vxF other | LC_ALL=C sort)"
+grep -v '^[[:space:]]*#' "$SRC/scripts/telemetry.sh"   | expect_absent "no code line in telemetry.sh reads .claude/agents" ".claude/agents"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1
