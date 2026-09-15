@@ -52,16 +52,33 @@ json_escape() { # json_escape <text> -> the JSON-string-safe form of <text>: bac
   printf '%s' "$s"
 }
 
-emit() { # emit <true|false> <verb> <exit> <next> [error]
-  local ok="$1" verb="$2" ex="$3" next="$4" err="${5:-}"
+emit() { # emit <true|false> <verb> <exit> <next> [error] [status-json]
+  # C5: <status-json> is a whole `status --json` object, appended verbatim as the last key -
+  # exit-0 mutating verbs only (see emit_status below); every other call passes nothing and
+  # the line is byte-for-byte what it was.
+  local ok="$1" verb="$2" ex="$3" next="$4" err="${5:-}" st="${6:-}"
   verb="$(json_escape "$verb")"
   next="$(json_escape "$next")"
+  local tail=""
+  [ -n "$st" ] && tail=",\"status\":$st"
   if [ -n "$err" ]; then
     err="$(json_escape "$err")"
-    printf '{"ok":%s,"verb":"%s","exit":%s,"next":"%s","error":"%s"}\n' "$ok" "$verb" "$ex" "$next" "$err"
+    printf '{"ok":%s,"verb":"%s","exit":%s,"next":"%s","error":"%s"%s}\n' "$ok" "$verb" "$ex" "$next" "$err" "$tail"
   else
-    printf '{"ok":%s,"verb":"%s","exit":%s,"next":"%s"}\n' "$ok" "$verb" "$ex" "$next"
+    printf '{"ok":%s,"verb":"%s","exit":%s,"next":"%s"%s}\n' "$ok" "$verb" "$ex" "$next" "$tail"
   fi
+}
+
+emit_status() { # emit_status <verb> <spec-dir> [next] - C5: the exit-0 line of a mutating verb,
+  # with the post-verb `status --json` object carried under `status`. Called after every write
+  # the verb makes, including its `--commit`, so the carried head/stale/next describe the
+  # repository the caller is about to act on - one clerk call instead of two. cmd_status derives
+  # everything from disk; nothing is verified or scope-checked again here. <next> stays the
+  # verb's own value (byte-for-byte what a pre-C5 driver read); omit it to take status.next.
+  local verb="$1" spec="$2" next="${3:-}" st
+  st="$(cmd_status "$spec")"
+  [ -n "$next" ] || next="$(json_field "$st" next)"
+  emit true "$verb" 0 "$next" "" "$st"
 }
 
 usage() {
@@ -922,7 +939,11 @@ ASKS
   # is a successful judgement (ok:true) and exits 0 with next:"repair"; ESCALATE keeps 6.
   local exit_code=0
   case "$overall" in ESCALATE) exit_code=6 ;; esac
-  emit true "$VERBLABEL" "$exit_code" "$next_val"
+  if [ "$exit_code" -eq 0 ] && [ "$VERBLABEL" = judge ]; then
+    emit_status judge "$SPEC" "$next_val"
+  else
+    emit true "$VERBLABEL" "$exit_code" "$next_val"
+  fi
   exit "$exit_code"
 }
 
@@ -1102,7 +1123,7 @@ cmd_branch() { # cmd_branch <spec> <commit:0|1>
   [ "$DOCOMMIT" = "1" ] && commit_paperwork branch "vulyk($SLUG): branch $BR" "$SPEC"
 
   echo "cycle: $SLUG - branch $BR"
-  emit true branch 0 "build:1"
+  emit_status branch "$SPEC" "build:1"
   exit 0
 }
 
@@ -1188,11 +1209,11 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
   local extra; extra="$(printf ' \xc2\xb7 verdict: %s' "$verdict")"
   write_seat_file "$RD/review.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$extra" "$REPORT"
   echo "cycle: record-seat - review recorded for round $N (verdict $verdict)"
-  local missing required
+  local missing required next_val
   required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
   missing="$(missing_required_seats "$RD" "$required")"
-  local next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
-  emit true record-seat 0 "$next_val"
+  next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
+  emit_status record-seat "$SPEC" "$next_val"
   exit 0
 }
 
@@ -1302,11 +1323,11 @@ REPORTEOF
   write_seat_file "$RD/$SEAT.md" "$SEAT" "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$extra" "$FINAL_REPORT"
   echo "cycle: record-seat - $SEAT recorded for round $N (attempt $ATTEMPT)$( [ -n "$red_u_list" ] && printf ', unevidenced: %s' "$(json_num_csv "$red_u_list")" )"
 
-  local missing required
+  local missing required next_val
   required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
   missing="$(missing_required_seats "$RD" "$required")"
-  local next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
-  emit true record-seat 0 "$next_val"
+  next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
+  emit_status record-seat "$SPEC" "$next_val"
   exit 0
 }
 
@@ -1621,10 +1642,7 @@ EOF
   fi
 
   echo "cycle: $(fm_field "$STORY" story) - closed, verification green"
-  local status_out real_next
-  status_out="$(cmd_status "$SPECDIR")"
-  real_next="$(json_field "$status_out" next)"
-  emit true close-story 0 "$real_next"
+  emit_status close-story "$SPECDIR"
   exit 0
 }
 
@@ -1719,7 +1737,7 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   [ "$docommit" = "1" ] && commit_paperwork open-round "vulyk($slug): open-round $n" "$spec"
 
   echo "cycle: $slug - round $n opened, court at $court_abs"
-  emit true open-round 0 "$dispatch_val"
+  emit_status open-round "$spec" "$dispatch_val"
   exit 0
 }
 
@@ -1875,16 +1893,16 @@ EOF
     # paperwork since then (round_is_stale, C1), or every round would read itself as stale on
     # the very next call.
     if ! round_is_stale "$SPEC" "$N"; then
-      local missing required
-      required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
-      missing="$(missing_required_seats "$RD" "$required")"
-      local next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
       # r2m3: an earlier --commit here may have failed after ROUND/journal.md were already
       # written (e.g. an index.lock) - a true no-op has nothing left to commit; anything still
       # uncommitted under this spec's own paperwork is finished now, not silently left behind.
       [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): open-round $N" "$SPEC"
+      local missing required next_val
+      required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
+      missing="$(missing_required_seats "$RD" "$required")"
+      next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
       echo "cycle: $SLUG - round $N already open at current HEAD, no-op"
-      emit true open-round 0 "$next_val"
+      emit_status open-round "$SPEC" "$next_val"
       exit 0
     fi
     local has_seat=0 seat2

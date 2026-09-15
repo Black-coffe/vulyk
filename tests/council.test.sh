@@ -306,7 +306,9 @@ out="$(council open-round docs/specs/notier1 2>&1)"; ex=$?
 echo "judge: GGGGGGG x3, review PASS -> GREEN"
 jout="$(council judge docs/specs/status1)"; jexit=$?
 [ "$jexit" -eq 0 ] || { echo "::error::judge (green) exited $jexit, expected 0"; fail=1; }
-printf '%s\n' "$jout" | tail -1 | expect "last stdout line is the JSON contract" '{"ok":true,"verb":"judge","exit":0,"next":"green"}'
+# C5 (driver-hardening-03): the exit-0 line keeps its four keys in order and now appends the
+# post-verb status object last - the needle below is the whole line up to that appended key.
+printf '%s\n' "$jout" | tail -1 | expect "last stdout line is the JSON contract" '{"ok":true,"verb":"judge","exit":0,"next":"green","status":{'
 row="$(grep '"spec":"status1"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -q '"verdict":"GREEN"' && echo "  ok    row verdict GREEN" || { echo "::error::row: $row"; fail=1; }
 keys="$(printf '%s' "$row" | grep -oE '"[a-z_]+":' | tr -d '":' | tr '\n' ',')"
@@ -345,7 +347,7 @@ write_review "$rd" PASS
 jout="$(council judge docs/specs/red1)"; jexit=$?
 [ "$jexit" -eq 0 ] || { echo "::error::judge (red) exited $jexit, expected 0 (R24: RED is a successful judgement)"; fail=1; }
 printf '%s' "$jout" | expect "next is repair" '"next":"repair"'
-printf '%s' "$jout" | grep -qF '{"ok":true,"verb":"judge","exit":0,"next":"repair"}' \
+printf '%s' "$jout" | grep -qF '{"ok":true,"verb":"judge","exit":0,"next":"repair","status":{' \
   && echo "  ok    RED judge output shape: ok:true, exit:0, next:repair (R24)" || { echo "::error::jout: $jout"; fail=1; }
 row="$(grep '"spec":"red1"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -q '"verdict":"RED"' && printf '%s' "$row" | grep -q '"red":\[2\]' \
@@ -2890,5 +2892,106 @@ else
 fi
 rm -f "$OLDCYCLE4"
 run_wall_probes "branch"    "$SRC/scripts/cycle.sh" probe_claim probe_release probe_pauserelease probe_gated
+
+echo "=== Story driver-hardening-03: the five mutating verbs carry the post-verb status --json (C5) ==="
+# One well-formed spec walked branch -> close-story -> open-round -> record-seat -> judge, each
+# verb's exit-0 line compared against a `status <spec> --json` call made immediately after it.
+c5_check() { # c5_check <label> <spec> <verb-stdout>
+  local label="$1" spec="$2" out="$3" last njson after
+  njson="$(printf '%s\n' "$out" | grep -c '^{')"
+  last="$(printf '%s\n' "$out" | tail -1)"
+  after="$(council status "$spec" --json)"
+  [ "$njson" -eq 1 ] || { echo "::error::$label: $njson JSON lines on stdout, expected exactly 1: $out"; fail=1; return; }
+  printf '%s' "$last" | jq -e . >/dev/null 2>&1 || { echo "::error::$label: last line is not JSON: $last"; fail=1; return; }
+  [ "$(printf '%s' "$last" | jq -S .status)" = "$(printf '%s' "$after" | jq -S .)" ] \
+    || { echo "::error::$label: carried status differs from status --json right after: $last vs $after"; fail=1; return; }
+  [ "$(printf '%s' "$last" | jq -r .next)" = "$(printf '%s' "$last" | jq -r .status.next)" ] \
+    || { echo "::error::$label: next is not .status.next: $last"; fail=1; return; }
+  [ "$(printf '%s' "$last" | jq -r 'keys_unsorted | join(",")')" = "ok,verb,exit,next,status" ] \
+    || { echo "::error::$label: key order is not ok,verb,exit,next,status: $last"; fail=1; return; }
+  echo "  ok    $label"
+}
+
+mk_spec c5verb 2
+set_tier c5verb 1
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-15/' docs/specs/c5verb/plan.md
+cat > docs/specs/c5verb/c5verb-02-second.md <<'EOF'
+---
+story: c5verb-02
+spec: c5verb
+status: todo
+returned: DONE
+wave: 1
+---
+# Second
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "c5verb: approved + a todo story" >/dev/null
+
+out="$(council branch docs/specs/c5verb --commit 2>&1)"
+c5_check "branch --commit carries the post-commit status" docs/specs/c5verb "$out"
+out="$(council close-story docs/specs/c5verb/c5verb-02-second.md --commit 2>&1)"
+c5_check "close-story --commit carries the post-commit status" docs/specs/c5verb "$out"
+
+out="$(council open-round docs/specs/c5verb --commit 2>&1)"
+c5_check "open-round --commit carries the post-commit status" docs/specs/c5verb "$out"
+last="$(printf '%s\n' "$out" | tail -1)"
+[ "$(printf '%s' "$last" | jq -r .status.head)" = "$(git rev-parse --short HEAD)" ] \
+  && echo "  ok    open-round --commit: status.head is the HEAD the commit just created" \
+  || { echo "::error::open-round status.head: $last vs $(git rev-parse --short HEAD)"; fail=1; }
+printf '%s' "$last" | jq -e '.status.next == "dispatch:sonnet"' >/dev/null 2>&1 \
+  && echo "  ok    open-round --commit: status.next is dispatch:<seats>" \
+  || { echo "::error::open-round status.next: $last"; fail=1; }
+
+out="$(seat_report sonnet 1 GG | council record-seat docs/specs/c5verb 1 sonnet 2>&1)"
+c5_check "record-seat carries the post-write status" docs/specs/c5verb "$out"
+
+out="$(council judge docs/specs/c5verb --commit 2>&1)"
+c5_check "judge --commit carries the post-commit status" docs/specs/c5verb "$out"
+last="$(printf '%s\n' "$out" | tail -1)"
+printf '%s' "$last" | jq -e '.status.next == "green" and .status.verdict == "GREEN"' >/dev/null 2>&1 \
+  && echo "  ok    judge --commit on a GREEN fixture: status.next green, status.verdict GREEN" \
+  || { echo "::error::judge status: $last"; fail=1; }
+
+echo "C5: non-zero exits carry no status key and are unchanged"
+cat > docs/specs/c5verb/c5verb-03-wall.md <<'EOF'
+---
+story: c5verb-03
+spec: c5verb
+status: todo
+returned: WALL
+wave: 2
+---
+# Third
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "c5verb: a WALL story" >/dev/null
+out="$(council close-story docs/specs/c5verb/c5verb-03-wall.md 2>&1)"; ex=$?
+last="$(printf '%s\n' "$out" | tail -1)"
+{ [ "$ex" -eq 4 ] && [ "$last" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"returned WALL"}' ]; } \
+  && echo "  ok    close-story exit 4 (returned: WALL): no status key, line unchanged" \
+  || { echo "::error::close-story WALL: exit=$ex last=$last"; fail=1; }
+
+mk_open_spec c5dirty 2
+set_tier c5dirty 1
+echo "a dirty non-paperwork file" > c5verb-dirty.txt
+out="$(council open-round docs/specs/c5dirty 2>&1)"; ex=$?
+last="$(printf '%s\n' "$out" | tail -1)"
+{ [ "$ex" -eq 2 ] && [ "$last" = '{"ok":false,"verb":"open-round","exit":2,"next":"error","error":"working tree not clean"}' ]; } \
+  && echo "  ok    open-round exit 2 (dirty tree): no status key, line unchanged" \
+  || { echo "::error::open-round dirty: exit=$ex last=$last"; fail=1; }
+rm -f c5verb-dirty.txt
+
+council pause docs/specs/c5dirty >/dev/null 2>&1
+out="$(council open-round docs/specs/c5dirty 2>&1)"; ex=$?
+last="$(printf '%s\n' "$out" | tail -1)"
+{ [ "$ex" -eq 3 ] && printf '%s' "$last" | jq -e '.next == "paused" and (has("status") | not)' >/dev/null 2>&1; } \
+  && echo "  ok    PAUSE + any verb -> exit 3, no status key" \
+  || { echo "::error::paused verb: exit=$ex last=$last"; fail=1; }
+council resume docs/specs/c5dirty >/dev/null 2>&1
 
 exit $fail

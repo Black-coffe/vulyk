@@ -1,8 +1,8 @@
 ---
 story: driver-hardening-03
 spec: driver-hardening
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -44,5 +44,23 @@ blocked_by: [driver-hardening-01]
 `bash tests/council.test.sh && git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- `scripts/cycle.sh`: `emit()` takes an optional 6th arg (a whole status object) appended as the
+  last key; new `emit_status <verb> <spec> [next]` computes `cmd_status` after all writes and the
+  `--commit` and emits it. Wired into the seven exit-0 sites of branch / close-story / open-round
+  (fresh + no-op) / record-seat (council + review) / judge. `escalate` reuses `cmd_judge`, so the
+  new line is gated on `VERBLABEL = judge`.
+- Tradeoff: the top-level `next` stays each verb's own value, not `status.next`, because the story
+  promises an older driver can simply ignore the key - deriving `next` from status changed it in
+  several existing fixtures (a plan with no `**Briefed:**`, a round whose pack no longer matches),
+  which would have broken pre-C5 callers. In a well-formed spec the two coincide, and the new suite
+  case asserts `next == .status.next` for all five verbs. `close-story` already derived its `next`
+  from `cmd_status`, so it keeps doing so (unchanged behaviour).
+- `tests/council.test.sh`: new end-to-end section walks one spec through branch -> close-story ->
+  open-round -> record-seat -> judge, comparing the carried object with a `status --json` call made
+  right after each verb (`jq -S`), plus the exit-4 / exit-2 / exit-3 unchanged-line cases. Two
+  existing judge assertions pinned the whole exit-0 line literally and now match the prefix up to
+  `,"status":{` - the only pre-existing cases touched.
+- Surprise: the dirty-tree case needs its own spec - `open-round` refuses an open `todo` story
+  before it ever reaches the clean-tree check.
 
 ## Findings
