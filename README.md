@@ -240,6 +240,23 @@ Most agent frameworks — this one included, until now — ship claims nobody ch
 
 Claims of the form "N× cheaper" or "near-parity quality" have been removed from this README. They may well be true; nobody here has measured them. When `scope.jsonl` and `acceptance.jsonl` have data from real projects, this section gets numbers instead of prose.
 
+### Anomaly telemetry — opt-in, anonymized, never automatic
+
+VULYK logs anomalies locally (`memory/stats/anomalies.jsonl`) to improve VULYK itself, and can
+contribute an anonymized weekly bundle back to this project if you opt in. **Off by default.**
+A bundle row has exactly 10 keys — `v code value threshold vulyk tier model agent week hive` —
+codes and numbers only: `code` is one of `context_high agent_prefix_high agent_empty
+council_rounds_high stage_long driver_refused driver_relaunched scope_breach`
+(`bash scripts/telemetry.sh enum`), `agent` is a framework agent name (a `.claude/agents/*.md`
+basename) or `other`. **Never included:** file paths, story/spec slugs, dispatch names, emails,
+free text, or file contents.
+
+The installer asks once — `Enable telemetry? [y/N]`, default off — and the `Telemetry` row in
+your `CLAUDE.md` Profile table holds the answer. With it on, `/vulyk-evolve` prints the exact
+command to send the week's bundle (a local commit, or `gh pr create`) — it never runs it; you
+push the PR into `telemetry/inbox/` yourself. The inbox is distilled and cleared weekly by
+`/vulyk-evolve` in the VULYK repo, feeding releases. Full contract: [docs/telemetry.md](docs/telemetry.md).
+
 ## FAQ
 
 **Does this work on a Pro/Max subscription?** Yes — that is the design constraint. Everything runs inside the official Claude Code client. (Running many parallel sessions still consumes your limits faster; the cascade exists precisely to keep that affordable.)

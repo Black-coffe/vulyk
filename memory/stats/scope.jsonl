@@ -92,3 +92,4 @@
 {"ts":"2026-09-15T05:57:12Z","story":"anomaly-telemetry-04-public-docs-and-ci","declared":6,"changed":18,"out_of_scope":12}
 {"ts":"2026-09-15T06:08:10Z","story":"anomaly-telemetry-02-detectors-and-hook","declared":5,"changed":19,"out_of_scope":14}
 {"ts":"2026-09-15T06:09:16Z","story":"anomaly-telemetry-03-evolve-step-and-driver-events","declared":3,"changed":13,"out_of_scope":10}
+{"ts":"2026-09-15T06:09:23Z","story":"anomaly-telemetry-04-public-docs-and-ci","declared":6,"changed":9,"out_of_scope":3}

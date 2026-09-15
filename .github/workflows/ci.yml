@@ -139,6 +139,25 @@ jobs:
       - name: real parse, real foldReviews, stubbed loop scenarios
         run: bash tests/driver.test.sh
 
+  telemetry-inbox:
+    name: telemetry.sh suite + check every inbox bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: telemetry.sh test suite
+        run: bash tests/telemetry.test.sh
+
+      - name: check every telemetry/inbox bundle (green with none present)
+        run: |
+          shopt -s nullglob globstar
+          files=(telemetry/inbox/**/*.jsonl)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "no bundles in telemetry/inbox - nothing to check"
+          else
+            bash scripts/telemetry.sh check "${files[@]}"
+          fi
+
   install-smoke:
     name: install.sh dry-run smoke test
     runs-on: ubuntu-latest
