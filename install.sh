@@ -15,16 +15,26 @@ set -euo pipefail
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VER="$(cat "$SRC/VERSION" 2>/dev/null || echo unknown)"
 
+USAGE="Usage: $0 /path/to/your/project [--upgrade] [--check] [--telemetry on|off|ask]"
 DEST=""; CHECK=""; UPGRADE=""; BLOCK_INSERTED=""
-for arg in "$@"; do
-  case "$arg" in
-    --check)   CHECK="--check" ;;
-    --upgrade) UPGRADE=1 ;;
-    -*)        echo "error: unknown flag $arg"; echo "Usage: $0 /path/to/project [--upgrade] [--check]"; exit 1 ;;
-    *)         DEST="$arg" ;;
+# Telemetry consent (docs/telemetry.md): the flag wins over the env var, both are optional,
+# and `ask` forces the question even for a hive that already answered it once.
+TEL_MODE="${VULYK_TELEMETRY:-}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check)     CHECK="--check" ;;
+    --upgrade)   UPGRADE=1 ;;
+    --telemetry) shift; TEL_MODE="${1:-}"; [ -n "$TEL_MODE" ] || { echo "error: --telemetry needs a value (on|off|ask)"; exit 1; } ;;
+    -*)          echo "error: unknown flag $1"; echo "$USAGE"; exit 1 ;;
+    *)           DEST="$1" ;;
   esac
+  shift
 done
-[ -n "$DEST" ] || { echo "Usage: $0 /path/to/your/project [--upgrade] [--check]"; exit 1; }
+case "$TEL_MODE" in
+  ""|on|off|ask) ;;
+  *) echo "error: --telemetry/VULYK_TELEMETRY must be on, off or ask (got '$TEL_MODE')"; exit 1 ;;
+esac
+[ -n "$DEST" ] || { echo "$USAGE"; exit 1; }
 [ -d "$DEST" ] || { echo "error: $DEST is not a directory"; exit 1; }
 DEST="$(cd "$DEST" && pwd)"
 [ "$DEST" != "$SRC" ] || { echo "error: source and destination are the same"; exit 1; }
@@ -61,6 +71,7 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     .claude/handoff/*|memory/map/.stale|CLAUDE.local.md)
                                    return 2 ;;
     memory/snapshots/*)           case "$f" in */.gitkeep) return 0 ;; esac; return 2 ;;
+    memory/stats/anomalies.jsonl) return 2 ;;   # the maintainer's own anomaly log: runtime, per-hive
   esac
   return 0
 }
@@ -147,6 +158,13 @@ always exits 0 is worse than an admitted gap.
 PLACEHOLDER
 }
 
+# The consent row (docs/telemetry.md). ONE source for it: the fresh-install placeholder below
+# and the --upgrade append both call this, so a hive can never end up with two spellings of
+# the row `scripts/telemetry.sh consent` reads.
+telemetry_row() { # telemetry_row <on|off>
+  printf '| Telemetry | %s - anonymized weekly anomaly bundle (codes and numbers only, docs/telemetry.md); on = /vulyk-evolve prints the send command, never sends |\n' "$1"
+}
+
 print_profile_placeholder() {
   cat <<'PLACEHOLDER'
 | Field | Value |
@@ -161,6 +179,7 @@ print_profile_placeholder() {
 | Browser MCP | `<fill in - chrome-devtools \\| claude-in-chrome \\| none; optional, read by the council-haiku seat only, read-only, on a separate test profile - none is the honest default without one>` |
 | Release / deploy | `<fill in - default branch; how a version is published (tag + push? npm publish? CI on merge?) and who presses the button>` |
 PLACEHOLDER
+  telemetry_row off
 }
 
 reset_commands_table() { # reset_commands_table <constitution-file>
@@ -263,6 +282,114 @@ EOF
   echo "  $name: $n rows still hold <fill in: $joined"
 }
 
+# --- telemetry consent -------------------------------------------------------------------------
+# One question, asked once, on the one surface every hive passes through: this installer.
+# /vulyk-bootstrap only reports the answer (asking twice would silently overwrite the first one).
+#
+# The answer is NEVER read from stdin: the copy and manifest loops above are `while read` over
+# `find`/`ls` output, and a piped `curl | bash` install has no answer on stdin either. It is read
+# from the controlling terminal, and when there is none (CI, pipes, a non-interactive
+# vulyk-update.sh) nothing is printed and the row is written as `off`.
+
+telemetry_row_value() { # telemetry_row_value <file> - prints on|off, or nothing when no valid row
+  local row value=""
+  [ -f "$1" ] || return 0
+  row="$(grep -m1 '^|[[:space:]]*Telemetry[[:space:]]*|' "$1" 2>/dev/null || true)"
+  [ -n "$row" ] || return 0
+  value="$(printf '%s' "$row" | awk -F'|' '{print $3}' | tr -d '`' | awk '{print $1}')"
+  case "$value" in on|off) printf '%s' "$value" ;; esac
+}
+
+telemetry_constitution() { # the target's constitution as it is BEFORE this run ("" on a fresh install)
+  if [ -f "$DEST/CLAUDE.md" ] && { head -3 "$DEST/CLAUDE.md" 2>/dev/null | grep -q '^# VULYK Constitution' || \
+       grep -q 'VULYK:COMMANDS:START' "$DEST/CLAUDE.md" 2>/dev/null; }; then
+    printf '%s' "$DEST/CLAUDE.md"
+  elif [ -f "$DEST/CLAUDE.vulyk.md" ]; then
+    printf '%s' "$DEST/CLAUDE.vulyk.md"
+  fi
+}
+
+# `[ -t 0 ]` alone is not the test: a piped install has no tty on stdin and still has a terminal
+# behind /dev/tty. `[ -r /dev/tty ]` alone is not it either - on CI runners the device node is
+# readable by mode while opening it fails - so the open is what decides.
+telemetry_tty() {
+  [ -t 0 ] && return 0
+  [ -r /dev/tty ] || return 1
+  ( exec 3< /dev/tty ) 2>/dev/null
+}
+
+print_telemetry_explanation() {
+  echo ""
+  echo "  Telemetry (optional, off by default)"
+  echo "  VULYK can log anomalies - context blowups, empty agent returns, council rounds, long"
+  echo "  stages - into memory/stats/anomalies.jsonl in this project, and bundle a week of them"
+  echo "  into codes from a fixed list plus numbers. Never paths, slugs, story names, prompts,"
+  echo "  emails or any free text. Nothing is ever sent: /vulyk-evolve prints the command and you"
+  echo "  run it. Details: docs/telemetry.md. Default: off."
+}
+
+telemetry_decide() { # sets TEL_WANT: on|off to write, "" to leave the row exactly as it is
+  local ans=""
+  TEL_WANT=""
+  if [ "$CHECK" = "--check" ]; then                      # A10 (1): never asks, never writes
+    case "$TEL_MODE" in
+      on|off) TEL_WANT="$TEL_MODE" ;;
+      *)      [ -n "$TEL_PRE" ] || TEL_WANT="off" ;;
+    esac
+    return 0
+  fi
+  case "$TEL_MODE" in on|off) TEL_WANT="$TEL_MODE"; return 0 ;; esac   # A10 (2)
+  if [ "$TEL_MODE" != "ask" ] && [ -n "$TEL_PRE" ]; then return 0; fi  # A10 (4): already answered
+  if ! telemetry_tty; then                                             # A10 (5): nobody to ask
+    [ -n "$TEL_PRE" ] || TEL_WANT="off"
+    return 0
+  fi
+  print_telemetry_explanation                                          # A10 (3) and (5)
+  printf '  Enable telemetry? [y/N] '
+  if [ -r /dev/tty ] && ! [ -t 0 ]; then read -r ans < /dev/tty || ans=""
+  else read -r ans || ans=""; fi
+  echo ""
+  case "$ans" in y|Y|yes|YES|Yes) TEL_WANT="on" ;; *) TEL_WANT="off" ;; esac
+}
+
+# The one permitted edit to a filled Profile block (A6): the `| Telemetry |` row - appended when
+# missing, its value token replaced when the question was answered. Every other byte stays, and a
+# block without markers is left entirely alone (ADR-005 D4.9).
+ensure_telemetry_row() { # ensure_telemetry_row <constitution-file>
+  local file="$1" name
+  [ -n "$file" ] && [ -n "$TEL_WANT" ] || return 0
+  name="$(basename "$file")"
+  if [ "$CHECK" = "--check" ]; then
+    echo "  would set      $name Profile row: Telemetry = $TEL_WANT"
+    return 0
+  fi
+  [ -f "$file" ] || return 0
+  if ! grep -q 'VULYK:PROFILE:START' "$file" 2>/dev/null || ! grep -q 'VULYK:PROFILE:END' "$file" 2>/dev/null; then
+    echo "warning: Profile block has no markers - not writing | Telemetry | $TEL_WANT |; add the row by hand" >&2
+    return 0
+  fi
+  [ "$(telemetry_row_value "$file")" = "$TEL_WANT" ] && return 0      # already says that
+  awk -v val="$TEL_WANT" -v newrow="$(telemetry_row "$TEL_WANT")" '
+    index($0, "VULYK:PROFILE:START") { inblock = 1; print; next }
+    index($0, "VULYK:PROFILE:END") {
+      if (inblock && !seen) { print newrow }
+      inblock = 0; print; next
+    }
+    inblock && $0 ~ /^\|[[:space:]]*Telemetry[[:space:]]*\|/ {
+      seen = 1
+      n = split($0, cell, "|")
+      if (sub(/[A-Za-z]+/, val, cell[3])) {
+        line = cell[1]
+        for (i = 2; i <= n; i++) line = line "|" cell[i]
+        print line
+      } else { print newrow }
+      next
+    }
+    { print }
+  ' "$file" > "$file.vulyktmp" && mv "$file.vulyktmp" "$file"
+  echo "  profile row    $name: Telemetry = $TEL_WANT"
+}
+
 PREV="$(cat "$DEST/.claude/vulyk-version" 2>/dev/null || echo none)"
 if [ -n "$UPGRADE" ]; then
   echo "VULYK upgrade -> $DEST  ($PREV -> $VER) ${CHECK:+(dry run)}"
@@ -276,27 +403,16 @@ fi
 # being wired is a hook that silently does nothing - which is how an upgrade notice would fail
 # to reach exactly the people who most need it. So: append the one missing entry, in place,
 # after taking a backup, and say out loud what was done. Idempotent by inspection of the file.
-wire_session_hook() { # wire_session_hook <hook-script-name>
-  local script="$1" file="$DEST/.claude/settings.json" py=""
-  [ -f "$file" ] || return 0                                   # fresh install: ours was copied whole
-  grep -q "$script" "$file" 2>/dev/null && return 0            # already wired
-  if [ "$CHECK" = "--check" ]; then
-    echo "  would wire     .claude/settings.json -> SessionStart: $script"
-    return 0
-  fi
-  py="$(command -v python3 || command -v python || true)"
-  if [ -z "$py" ]; then
-    echo ""
-    echo "  NOTE: .claude/hooks/$script was installed but could NOT be wired -"
-    echo "  no python on PATH to edit .claude/settings.json safely. Add this to your"
-    echo "  SessionStart hooks by hand, or the update check will never run:"
-    echo "      { \"type\": \"command\", \"command\": \"\$CLAUDE_PROJECT_DIR/.claude/hooks/$script\" }"
-    return 0
-  fi
-  cp -p "$file" "$file.vulyk-bak" 2>/dev/null || true
-  if "$py" - "$file" "$script" <<'PYWIRE'
+#
+# Generalised to any event (A13): one script can be wired on Stop and SessionEnd as well, so the
+# "already wired" test is per EVENT, not per file - a script present under Stop must still be
+# added under SessionEnd. For a single-event script (the two SessionStart ones) this is exactly
+# the old behaviour.
+py_wire() { # py_wire <settings.json> <script> <event> [--dry]   (exit 3 = already wired there)
+  "$PYBIN" - "$@" <<'PYWIRE'
 import json, re, sys
-path, script = sys.argv[1], sys.argv[2]
+path, script, event = sys.argv[1], sys.argv[2], sys.argv[3]
+dry = '--dry' in sys.argv[4:]
 REL = '$CLAUDE_PROJECT_DIR/.claude/hooks/'
 try:
     with open(path, encoding='utf-8') as fh:
@@ -323,7 +439,7 @@ for groups_any in (data.get('hooks') or {}).values():
                 prefix, quoted = found.group(1), found.group(2) == '"'
 cmd = prefix + ('"' if quoted else '') + REL + script + ('"' if quoted else '')
 
-groups = data.setdefault('hooks', {}).setdefault('SessionStart', [])
+groups = data.setdefault('hooks', {}).setdefault(event, [])
 if not isinstance(groups, list):
     sys.exit(4)
 for group in groups:
@@ -331,6 +447,8 @@ for group in groups:
         for hook in group.get('hooks', []) or []:
             if isinstance(hook, dict) and script in str(hook.get('command', '')):
                 sys.exit(3)                      # already there under any spelling
+if dry:
+    sys.exit(0)                                  # --check: would wire; nothing written
 entry = {'type': 'command', 'command': cmd}
 if groups and isinstance(groups[0], dict):
     groups[0].setdefault('hooks', []).append(entry)
@@ -340,8 +458,33 @@ with open(path, 'w', encoding='utf-8') as fh:
     json.dump(data, fh, indent=2)
     fh.write('\n')
 PYWIRE
-  then
-    echo "  wire           .claude/settings.json -> SessionStart: $script"
+}
+
+wire_hook() { # wire_hook <event> <hook-script-name>
+  local event="$1" script="$2" file="$DEST/.claude/settings.json"
+  [ -f "$file" ] || return 0                                   # fresh install: ours was copied whole
+  PYBIN="$(command -v python3 || command -v python || true)"
+  if [ -z "$PYBIN" ]; then
+    grep -q "$script" "$file" 2>/dev/null && return 0          # no python: file-wide check is all we have
+    if [ "$CHECK" = "--check" ]; then
+      echo "  would wire     .claude/settings.json -> $event: $script"
+      return 0
+    fi
+    echo ""
+    echo "  NOTE: .claude/hooks/$script was installed but could NOT be wired -"
+    echo "  no python on PATH to edit .claude/settings.json safely. Add this to your"
+    echo "  $event hooks by hand, or that hook will never run:"
+    echo "      { \"type\": \"command\", \"command\": \"\$CLAUDE_PROJECT_DIR/.claude/hooks/$script\" }"
+    return 0
+  fi
+  if [ "$CHECK" = "--check" ]; then
+    py_wire "$file" "$script" "$event" --dry \
+      && echo "  would wire     .claude/settings.json -> $event: $script"
+    return 0
+  fi
+  cp -p "$file" "$file.vulyk-bak" 2>/dev/null || true
+  if py_wire "$file" "$script" "$event"; then
+    echo "  wire           .claude/settings.json -> $event: $script"
     echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
   else
     case "$?" in
@@ -349,11 +492,13 @@ PYWIRE
       *) rm -f "$file.vulyk-bak" 2>/dev/null || true
          echo ""
          echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
-         echo "  Wire the update check by hand into your SessionStart hooks:"
+         echo "  Wire this hook by hand into your $event hooks:"
          echo "      { \"type\": \"command\", \"command\": \"\$CLAUDE_PROJECT_DIR/.claude/hooks/$script\" }" ;;
     esac
   fi
 }
+
+wire_session_hook() { wire_hook SessionStart "$1"; }
 
 # The Workflow driver's clerk (`cycle-clerk.md`) runs every verb by shelling out to
 # `scripts/cycle.sh` and `scripts/journal.sh`, and a subagent's Bash tool is deny-by-default -
@@ -530,6 +675,10 @@ ensure_gitignore
 ensure_gitattributes
 wire_session_hook vulyk-update-check.sh
 wire_session_hook top-model-brief.sh
+# The anomaly scan runs at the end of a turn and at the end of a session; an existing hive's
+# settings.json knows about neither group until this wires them (A13).
+wire_hook Stop anomaly-scan.sh
+wire_hook SessionEnd anomaly-scan.sh
 wire_permissions
 # The empty trees a fresh hive needs. Guarded like every other write: a dry run that
 # creates directories is not a dry run, and this one had been leaving seven of them in
@@ -540,6 +689,12 @@ else
   mkdir -p "$DEST/memory/learnings" "$DEST/memory/snapshots" "$DEST/docs/wiki" "$DEST/docs/specs" "$DEST/docs/adr" 2>/dev/null || true
 fi
 [ -f "$DEST/memory/stats/skills.json" ] || { [ "$CHECK" = "--check" ] || { mkdir -p "$DEST/memory/stats"; echo '{}' > "$DEST/memory/stats/skills.json"; }; }
+
+# Telemetry consent, decided before the constitution is touched: TEL_PRE is the row as this hive
+# had it BEFORE this run (empty on a fresh install, or on a hive from before the row existed),
+# which is what tells rule (4) - "already answered, leave it" - from rule (5) - "never asked".
+TEL_PRE="$(telemetry_row_value "$(telemetry_constitution)")"
+telemetry_decide
 
 # Constitution: never overwritten - not on install, not on upgrade. A bootstrapped
 # constitution is the user's tailored law; merging framework-side changes into it is a
@@ -610,6 +765,11 @@ else
   echo "  copy           CLAUDE.md"
 fi
 [ -f "$DEST/AGENTS.md" ] || { [ "$CHECK" = "--check" ] || cp -p "$SRC/AGENTS.md" "$DEST/AGENTS.md"; }
+
+# The consent row goes into whichever file is this hive's constitution now - the sidecar included.
+CONST="$(telemetry_constitution)"
+[ -n "$CONST" ] || CONST="$DEST/CLAUDE.md"
+ensure_telemetry_row "$CONST"
 
 # Version stamp - what a future --upgrade reads as "from".
 if [ "$CHECK" = "--check" ]; then

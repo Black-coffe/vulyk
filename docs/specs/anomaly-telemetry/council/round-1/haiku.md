@@ -1,0 +1,16 @@
+<!-- seat: haiku · model: claude-sonnet-5 · round: 1 · head: 4a6afd0 · pack: 9b30072f04a4 · attempt: 1 · recorded: 2026-09-15T06:37:42Z -->
+COUNCIL: anomaly-telemetry · round 1 · seat haiku
+MODEL: claude-sonnet-5
+COURT: E:/Projects/vulyk/.vulyk/court/anomaly-telemetry/round-1
+VERDICT: GREEN
+ASSUMED CONFIG: Client path/Browser MCP unfilled in Profile (both `<fill in>`) -> treated as none given; walked as a CLI tool via plain Bash. Telemetry Profile row present: off by default.
+RAN: telemetry.sh consent/scan/publish/check/enum/agents; install.sh fresh install (default, --telemetry on) and --upgrade with no tty, in throwaway temp git repos; grep of README.md, docs/telemetry.md, .github/workflows/ci.yml, install.sh
+PATH: CLI entry points scripts/telemetry.sh and install.sh, run directly against COURT and two scratch install targets outside COURT (temp dirs, discarded)
+ASK 1: GREEN - all terminals monitor anomalies and log - run: bash scripts/telemetry.sh scan; cat memory/stats/anomalies.jsonl saw: scan exits 0 and memory/stats/anomalies.jsonl already holds real rows (code scope_breach etc.) with the documented 12-key local schema
+ASK 2: GREEN - weekly send to VULYK repo, local commit or PR from other machines - run: bash scripts/telemetry.sh publish --dry-run (consent on) saw: prints a local `git add/commit/push` recipe into telemetry/inbox/<week>/<hive>.jsonl when the hive is the VULYK checkout, and per docs.md the same command prints a `gh pr create` recipe otherwise; nothing is run automatically (verified publish with consent off exits 0 printing "nothing to send")
+ASK 3: GREEN - logs maximally anonymized, no personal files - run: bash scripts/telemetry.sh check <file-with-injected "path" key> saw: rejected with "key set is not the 10 bundle keys", exit 1; docs/telemetry.md documents the 10-key bundle schema (codes/numbers/hashed hive only) and the anonymization guard
+ASK 4: GREEN - properly wrapped into VULYK framework, not lost - run: grep Telemetry CLAUDE.md; ls scripts/telemetry.sh docs/telemetry.md tests/telemetry.test.sh saw: dedicated Profile row, docs page, script and test file all present and wired into install.sh/CI
+ASK 5: GREEN - public GitHub repo documents the collection/PR/weekly-clean process - url: README.md (local file, would be the GitHub-rendered README) saw: "### Anomaly telemetry — opt-in, anonymized, never automatic" section explaining opt-in, the PR path into telemetry/inbox/, and weekly distill+clear by /vulyk-evolve, linking docs/telemetry.md; .github/workflows/ci.yml runs a telemetry-inbox check job
+ASK 6: GREEN - install/upgrade terminal prompt, explains, default off - run: bash install.sh <fresh-dir> (no flag) saw: Profile row written as off; bash install.sh <dir> --telemetry on saw: row written as on; bash install.sh <dir> --upgrade with no tty and no VULYK_TELEMETRY saw: row left off (no prompt possible, safe default); install.sh source shows print_telemetry_explanation() text and "Enable telemetry? [y/N]" default-no prompt over /dev/tty
+UNASKED: none
+BREACH: none - one self-inflicted issue: to test consent=on behavior I temporarily edited COURT/CLAUDE.md's Telemetry row with sed, then immediately reverted it via sed and `git checkout -- CLAUDE.md`; `git status --short` confirmed clean afterward, so no lasting write survived

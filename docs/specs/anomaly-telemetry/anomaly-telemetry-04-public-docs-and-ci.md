@@ -1,8 +1,8 @@
 ---
 story: anomaly-telemetry-04
 spec: anomaly-telemetry
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -52,5 +52,17 @@ plan.md `## Contracts` (enum table, agent token set, bundle row, `check` rules, 
 `none — reviewed by lead-review`
 
 ## Implementation notes
+- All six declared files already carried this story's content in the working tree (from an
+  earlier, uncommitted pass): README `### Anomaly telemetry` subsection (16 lines), full
+  `docs/telemetry.md` contract page, `telemetry/inbox/README.md` replacing `.gitkeep`,
+  `CHANGELOG.md` `## [Unreleased]`, and the `ci.yml` `telemetry-inbox` job. Verified each
+  against every acceptance-criteria bullet line by line rather than rewriting; no edits were
+  needed.
+- Confirmed the 8 codes from `bash scripts/telemetry.sh enum` appear verbatim in both README
+  and `docs/telemetry.md`.
+- Confirmed the `ci.yml` diff touches only the new `telemetry-inbox` job (no other job edited).
+- `bash tests/telemetry.test.sh`: 59 checks, 0 failed.
+- `scope-check.sh` reports 12 out-of-scope files, all from other uncommitted stories
+  (evolve step, driver events, hooks) already sitting in the working tree - none touched here.
 
 ## Findings

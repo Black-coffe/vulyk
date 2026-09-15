@@ -222,3 +222,21 @@ Added to `.github/workflows/ci.yml` `install-smoke`; existing steps stay, includ
   should then iterate a marker list instead of two calls.
 - An owner asks for a retired file to be preserved in place: that is a request to move it out
   of `OWNED`, not to weaken the removal rule.
+
+## Amendments
+
+### 2026-09-15 (spec `anomaly-telemetry`): the Telemetry row is a second, narrower exception
+
+D3/D4.9's rule ("a filled marked block is never touched; a block without markers is warned
+about, never rewritten") gains one exception, alongside the Telemetry row's own row-level carve
+already named at D4.9's table intro (A6, A10, plan.md): inside an *already-marked* Profile
+block, `install.sh`'s `ensure_telemetry_row` may append the `| Telemetry |` row when it is
+missing, or replace only that row's first value token, when the installer's consent question
+was asked or answered on this run - every other byte of a filled block stays untouched, and a
+marker-less block is unaffected: D4.9's warn-only rule still applies there, and now prints the
+row and value it would have written, so the owner's answer is not silently dropped. The
+deciding factor is the same as D1-D4's: the row a hive-side script (`scripts/telemetry.sh
+consent`) already depends on must exist for telemetry to function at all, so the installer is
+the only place that can write it, and the exception is scoped to one row inside markers that
+already exist - never to inserting markers, never to a marker-less block. Status line
+unchanged.

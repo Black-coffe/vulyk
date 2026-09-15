@@ -4,6 +4,7 @@
 #   Dry run:  scripts/vulyk-update.sh . --check
 #   Apply:    scripts/vulyk-update.sh .
 #   Pin:      scripts/vulyk-update.sh . --version 0.7.0
+#   Consent:  scripts/vulyk-update.sh . --telemetry ask     (on|off|ask; or VULYK_TELEMETRY)
 #
 # Fetches the origin repository into a cache outside your project, checks out the requested
 # tag (newest by default), and hands the work to that release's own `install.sh --upgrade`.
@@ -16,12 +17,16 @@
 #   VULYK_SRC=/path/to/cache  where the source clone lives (default ~/.vulyk/src)
 set -euo pipefail
 
-DEST="."; CHECK=""; WANT=""
+DEST="."; CHECK=""; WANT=""; TEL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --check)   CHECK="--check" ;;
     --version) shift; WANT="${1:-}"; [ -n "$WANT" ] || { echo "error: --version needs a value"; exit 1; } ;;
-    -*)        echo "error: unknown flag $1"; echo "Usage: $0 [project-dir] [--check] [--version X.Y.Z]"; exit 1 ;;
+    # Passed through verbatim to the release's own install.sh, which owns the consent rule;
+    # VULYK_TELEMETRY needs no plumbing at all (it travels in the environment), and neither
+    # does stdin - the installer reads its question from /dev/tty, which is inherited here.
+    --telemetry) shift; TEL="${1:-}"; [ -n "$TEL" ] || { echo "error: --telemetry needs a value (on|off|ask)"; exit 1; } ;;
+    -*)        echo "error: unknown flag $1"; echo "Usage: $0 [project-dir] [--check] [--version X.Y.Z] [--telemetry on|off|ask]"; exit 1 ;;
     *)         DEST="$1" ;;
   esac
   shift
@@ -73,7 +78,9 @@ if [ -n "$CHECK" ]; then
   echo "DRY RUN - nothing is written."
   echo ""
 fi
-"$SRC/install.sh" "$DEST" --upgrade $CHECK
+TELARGS=()
+if [ -n "$TEL" ]; then TELARGS=(--telemetry "$TEL"); fi
+"$SRC/install.sh" "$DEST" --upgrade $CHECK ${TELARGS[@]+"${TELARGS[@]}"}
 
 echo ""
 if [ -n "$CHECK" ]; then

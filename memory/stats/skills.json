@@ -1,22 +1,22 @@
 {
   "vulyk-build": {
-    "count": 2,
+    "count": 3,
     "last_used": "2026-09-14"
   },
   "vulyk-handoff": {
-    "count": 2,
-    "last_used": "2026-09-14"
+    "count": 3,
+    "last_used": "2026-09-15"
   },
   "vulyk-resume": {
     "count": 1,
     "last_used": "2026-09-14"
   },
   "vulyk-plan": {
-    "count": 1,
+    "count": 2,
     "last_used": "2026-09-14"
   },
   "vulyk-ship": {
-    "count": 1,
-    "last_used": "2026-09-14"
+    "count": 2,
+    "last_used": "2026-09-15"
   }
 }

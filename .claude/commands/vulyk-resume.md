@@ -13,7 +13,10 @@ Resume: "$ARGUMENTS" (the spec slug).
    it.
 3. **Relaunch.** This is always a fresh run: perform the exact same launch `/vulyk-build` step 1
    describes - mode detection, `top_model`/`stamp` resolution, the "loop holds the working tree"
-   line, then either the `Workflow` call or the fallback loop. Never pass `resumeFromRunId` or any
+   line, then either the `Workflow` call or the fallback loop. Once `$stamp` is resolved, record
+   `bash scripts/telemetry.sh record driver_relaunched 1 0 --spec <slug> --ref
+   relaunch:<slug>:$stamp` (quiet one-liner, no output) before continuing the launch. Never pass
+   `resumeFromRunId` or any
    equivalent - a cached `status` replayed after a human touched the tree is exactly the wrong
    answer (ADR-001 D2, "Resume is the disk, not the run"). A fresh launch costs one `cycle-clerk`
    call per already-closed step; it never re-dispatches a seat or a worker whose file already

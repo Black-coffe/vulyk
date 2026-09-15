@@ -139,6 +139,25 @@ jobs:
       - name: real parse, real foldReviews, stubbed loop scenarios
         run: bash tests/driver.test.sh
 
+  telemetry-inbox:
+    name: telemetry.sh suite + check every inbox bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: telemetry.sh test suite
+        run: bash tests/telemetry.test.sh
+
+      - name: check every telemetry/inbox bundle (green with none present)
+        run: |
+          shopt -s nullglob globstar
+          files=(telemetry/inbox/**/*.jsonl)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "no bundles in telemetry/inbox - nothing to check"
+          else
+            bash scripts/telemetry.sh check "${files[@]}"
+          fi
+
   install-smoke:
     name: install.sh dry-run smoke test
     runs-on: ubuntu-latest
@@ -157,6 +176,8 @@ jobs:
           echo '{}'                                       > .claude/state.json
           echo 'dummy snapshot'                           > memory/snapshots/2026/x.md
           echo 'BOGUS-VERSION'                            > .claude/vulyk-version
+          mkdir -p memory/stats
+          echo '{"v":1,"code":"context_high"}' > memory/stats/anomalies.jsonl
 
       - name: install --check into a clean dir is non-destructive and well-formed
         run: |
@@ -210,6 +231,7 @@ jobs:
           test ! -e "$target/.claude/handoff/x.md"        || { echo "::error::shipped a handoff file"; exit 1; }
           test ! -e "$target/.claude/state.json"          || { echo "::error::shipped state.json"; exit 1; }
           test ! -e "$target/memory/snapshots/2026/x.md"  || { echo "::error::shipped a snapshot"; exit 1; }
+          test ! -e "$target/memory/stats/anomalies.jsonl" || { echo "::error::shipped the maintainer's anomaly log"; exit 1; }
           grep -qx "$(cat VERSION)" "$target/.claude/vulyk-version" || { echo "::error::vulyk-version is not install.sh's own stamp"; exit 1; }
           # ADR-005 D4.1: docs/adr and docs/wiki exist but hold none of vulyk's own numbered ADRs
           test -d "$target/docs/adr"  || { echo "::error::docs/adr not created"; exit 1; }
@@ -301,6 +323,7 @@ jobs:
           test ! -e "$target/.claude/handoff/x.md"        || { echo "::error::--upgrade shipped a handoff file"; exit 1; }
           test ! -e "$target/.claude/state.json"          || { echo "::error::--upgrade shipped state.json"; exit 1; }
           test ! -e "$target/memory/snapshots/2026/x.md"  || { echo "::error::--upgrade shipped a snapshot"; exit 1; }
+          test ! -e "$target/memory/stats/anomalies.jsonl" || { echo "::error::--upgrade shipped the maintainer's anomaly log"; exit 1; }
           grep -qx "$(cat VERSION)" "$target/.claude/vulyk-version" || { echo "::error::--upgrade vulyk-version is not install.sh's own stamp"; exit 1; }
           # the allow rules must still be exactly-once after an upgrade, not duplicated or
           # dropped by a re-run of wire_permissions against an already-wired file (R22).
@@ -310,7 +333,7 @@ jobs:
             "$target/.claude/settings.json" >/dev/null \
             || { echo "::error::--upgrade left permissions.allow without both cycle.sh and journal.sh allow rules exactly once"; exit 1; }
 
-      - name: --upgrade never touches an already-filled Profile block
+      - name: --upgrade never touches an already-filled Profile block (except the Telemetry row)
         run: |
           target="$(mktemp -d)"
           ./install.sh "$target" >/dev/null
@@ -319,6 +342,60 @@ jobs:
           ./install.sh "$target" --upgrade >/dev/null
           after="$(cat "$target/CLAUDE.md")"
           [ "$before" = "$after" ] || { echo "::error::--upgrade modified an already-filled Profile block"; exit 1; }
+          # the one permitted exception (A6) still holds to exactly one row, written as `off`
+          [ "$(grep -c '^| Telemetry |' "$target/CLAUDE.md")" = "1" ] || { echo "::error::the Telemetry row is not present exactly once"; exit 1; }
+          grep -q '^| Telemetry | off ' "$target/CLAUDE.md" || { echo "::error::the Telemetry row is not off by default"; exit 1; }
+
+      - name: --upgrade appends a missing Telemetry row as off, with no terminal and no question
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          sed -i '/^| Telemetry |/d' "$target/CLAUDE.md"
+          before="$(grep -v '^| Telemetry |' "$target/CLAUDE.md")"
+          out="$(./install.sh "$target" --upgrade)"
+          echo "$out" | grep -q "Enable telemetry?" && { echo "::error::the installer asked a question with no terminal"; exit 1; }
+          echo "$out" | grep -q "profile row    CLAUDE.md: Telemetry = off" || { echo "::error::--upgrade did not report writing the Telemetry row"; exit 1; }
+          [ "$(grep -c '^| Telemetry | off ' "$target/CLAUDE.md")" = "1" ] || { echo "::error::the Telemetry row was not appended exactly once as off"; exit 1; }
+          [ "$before" = "$(grep -v '^| Telemetry |' "$target/CLAUDE.md")" ] || { echo "::error::appending the Telemetry row changed another byte of the constitution"; exit 1; }
+          # it lands inside the marked block, as its last table row
+          awk '/<!-- VULYK:PROFILE:START -->/{f=1;next}/<!-- VULYK:PROFILE:END -->/{f=0}f' "$target/CLAUDE.md" \
+            | grep '^| ' | tail -1 | grep -q '^| Telemetry |' || { echo "::error::the Telemetry row is not the last row inside the Profile block"; exit 1; }
+          # and a second upgrade leaves it byte-identical
+          b2="$(cat "$target/CLAUDE.md")"
+          ./install.sh "$target" --upgrade >/dev/null
+          [ "$b2" = "$(cat "$target/CLAUDE.md")" ] || { echo "::error::a second --upgrade rewrote the Telemetry row"; exit 1; }
+
+      - name: VULYK_TELEMETRY=on sets the row on a fresh install; --check never writes it
+        run: |
+          target="$(mktemp -d)"
+          VULYK_TELEMETRY=on ./install.sh "$target" >/dev/null
+          [ "$(grep -c '^| Telemetry | on ' "$target/CLAUDE.md")" = "1" ] || { echo "::error::VULYK_TELEMETRY=on did not set the row to on"; exit 1; }
+          sed -i '/^| Telemetry |/d' "$target/CLAUDE.md"
+          before="$(md5sum "$target/CLAUDE.md")"
+          out="$(./install.sh "$target" --upgrade --check)"
+          [ "$before" = "$(md5sum "$target/CLAUDE.md")" ] || { echo "::error::--check wrote the Telemetry row"; exit 1; }
+          echo "$out" | grep -q "would set      CLAUDE.md Profile row: Telemetry" || { echo "::error::--check did not report the pending Telemetry row"; exit 1; }
+
+      - name: --upgrade wires anomaly-scan.sh on Stop and SessionEnd, idempotently
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" >/dev/null
+          jq '.hooks.Stop = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop"}]}] | del(.hooks.SessionEnd)' \
+            "$target/.claude/settings.json" > "$target/s.json" && mv "$target/s.json" "$target/.claude/settings.json"
+          out="$(./install.sh "$target" --upgrade)"
+          echo "$out" | grep -q "wire           .claude/settings.json -> Stop: anomaly-scan.sh" || { echo "::error::--upgrade did not wire anomaly-scan.sh on Stop"; exit 1; }
+          echo "$out" | grep -q "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh" || { echo "::error::--upgrade did not wire anomaly-scan.sh on SessionEnd"; exit 1; }
+          jq -e '([.hooks.Stop[].hooks[].command | select(test("anomaly-scan.sh"))] | length == 1) and
+                 ([.hooks.SessionEnd[].hooks[].command | select(test("anomaly-scan.sh"))] | length == 1) and
+                 ([.hooks.Stop[].hooks[].command | select(test("handoff.sh stop"))] | length == 1)' \
+            "$target/.claude/settings.json" >/dev/null \
+            || { echo "::error::anomaly-scan.sh is not wired exactly once per event, or an existing entry was lost"; exit 1; }
+          before="$(md5sum "$target/.claude/settings.json")"
+          ./install.sh "$target" --upgrade >/dev/null
+          [ "$before" = "$(md5sum "$target/.claude/settings.json")" ] || { echo "::error::a second --upgrade re-wrote settings.json"; exit 1; }
+          out3="$(./install.sh "$target" --upgrade --check)"
+          echo "$out3" | grep -q "would wire     .claude/settings.json -> Stop" && { echo "::error::--check reported wiring an already-wired hook"; exit 1; }
+          true
 
       - name: --upgrade restores a missing Profile block, at the right position (ADR-005 D4.7)
         run: |
@@ -367,6 +444,18 @@ jobs:
           after="$(cat "$target/CLAUDE.md")"
           echo "$out" | grep -q "WARNING.*## Profile exists without VULYK:PROFILE markers" || { echo "::error::missing WARNING for hand-written Profile heading"; exit 1; }
           [ "$before" = "$after" ] || { echo "::error::--upgrade rewrote a hand-written Profile heading"; exit 1; }
+
+      - name: a marker-less Profile block with no terminal - warn with the row and value, write nothing (ADR-005 D4.9 amendment)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" --telemetry off >/dev/null
+          sed -i '/<!-- VULYK:PROFILE:START -->/d; /<!-- VULYK:PROFILE:END -->/d' "$target/CLAUDE.md"
+          before="$(cat "$target/CLAUDE.md")"
+          out="$(VULYK_TELEMETRY=on ./install.sh "$target" --upgrade 2>&1)"
+          after="$(cat "$target/CLAUDE.md")"
+          echo "$out" | grep -qF "warning: Profile block has no markers - not writing | Telemetry | on |; add the row by hand" \
+            || { echo "::error::missing warning naming the Telemetry row and value for a marker-less Profile block"; exit 1; }
+          [ "$before" = "$after" ] || { echo "::error::--upgrade wrote to a marker-less Profile block"; exit 1; }
 
       - name: the sidecar constitution gets the same block restored; the foreign CLAUDE.md stays byte-identical (ADR-005 D4.10)
         run: |

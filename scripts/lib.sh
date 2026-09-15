@@ -42,7 +42,8 @@ pack_fingerprint() { # pack_fingerprint <spec-dir> - must match every caller exa
 is_paperwork_path() { # is_paperwork_path <repo-relative-path>
   case "$1" in
     docs/specs/*/plan.md|docs/specs/*/journal.md|docs/specs/*/council/*|docs/specs/*/brief.md| \
-    memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl|memory/stats/council.jsonl|memory/stats/scope.jsonl) return 0 ;;
+    memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl|memory/stats/council.jsonl|memory/stats/scope.jsonl| \
+    memory/stats/anomalies.jsonl) return 0 ;;
     *) return 1 ;;
   esac
 }

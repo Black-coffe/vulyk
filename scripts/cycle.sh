@@ -569,9 +569,16 @@ git_commit_or_fail() { # git_commit_or_fail <verb-label> <message> - commits wha
 commit_paperwork() { # commit_paperwork <verb-label> <message> <path...> - stages and commits
   # the given paths iff any of them changed; a clean set of paths is not an error and returns
   # 0 without committing. The common shape shared by judge/briefed/branch/open-round/reopen.
+  # Story 09: memory/stats/anomalies.jsonl (the anomaly-scan Stop hook's log) rides every
+  # --commit'd verb the same way, so it never needs a hand commit ADR-001 forbids.
   local verb="$1" msg="$2"; shift 2
-  [ -n "$(git status --porcelain -- "$@" 2>/dev/null)" ] || return 0
-  git add -A -- "$@" >/dev/null 2>&1
+  local -a paths=("$@")
+  # `git add -A --` errors out entirely (staging nothing) if any one pathspec matches no
+  # file, so a spec that never had a Stop hook fire yet must not add a path that does not
+  # exist on disk - only ride the log when there is a log to ride.
+  [ -e memory/stats/anomalies.jsonl ] && paths+=(memory/stats/anomalies.jsonl)
+  [ -n "$(git status --porcelain -- "${paths[@]}" 2>/dev/null)" ] || return 0
+  git add -A -- "${paths[@]}" >/dev/null 2>&1
   git_commit_or_fail "$verb" "$msg"
 }
 
@@ -1576,6 +1583,8 @@ EOF
 $(files_of "$STORY")
 EOF
     [ -f memory/stats/scope.jsonl ] && git add -- memory/stats/scope.jsonl >/dev/null 2>&1
+    # Story 09: the anomaly-scan hook's log rides this commit too, same as scope.jsonl above.
+    [ -n "$(git status --porcelain -- memory/stats/anomalies.jsonl 2>/dev/null)" ] && git add -- memory/stats/anomalies.jsonl >/dev/null 2>&1
 
     sed -i -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
     git add -- "$STORY" >/dev/null 2>&1

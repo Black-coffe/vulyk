@@ -1,8 +1,8 @@
 ---
 story: anomaly-telemetry-01
 spec: anomaly-telemetry
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -58,5 +58,13 @@ memory/map/scripts.md (`lib.sh` exports, gates' exit-0 convention, the `## Comma
 Cut the thinnest slice through every layer: one `record` row -> one `bundle` row -> `check` green -> `publish --dry-run` prints a command. Schemas, dedupe and the anonymization guard are the contract stories 02-05 build on; if the slice changes the contract, report it in the INTERFACES line, do not improvise.
 
 ## Implementation notes
+- `scripts/telemetry.sh` (new): `enum`, `agents`, `consent`, `record`, `scan` (stub), `bundle`, `check`, `publish`. Sources `lib.sh`, root = `VULYK_HIVE` else `git rev-parse --show-toplevel`. Contract kept as written - no schema change.
+- Anonymization is enforced twice on purpose: `bundle` drops `ts`/`spec`/`story`/`ref` and re-maps every token to its set, and `check` re-rejects any string carrying `/`, `\`, `@` or whitespace. `publish` runs `check` on the bundle before it copies anything.
+- Surprise (cost me a red run): **jq on Windows writes CRLF**, so the `\r` rode into the last `@tsv` field and turned every `agent` token into `other`. `bundle_emit` now pipes jq through `tr -d '\r'`; `check` already stripped `\r$` inside jq.
+- Surprise 2: `cmd | expect ...` runs the helper in a subshell, so `fail=1` inside it is lost - `tests/council.test.sh` has the same shape and the same hole. This suite tallies verdicts in two files under its temp dir instead; verified a piped assertion now exits 1 by flipping one needle in a throwaway copy.
+- `record` dedupes with two `grep -F` passes on (`"code":"X"`, `"ref":"Y"`) rather than jq - it must stay usable from a hook on a machine without jq. `bundle`/`check`/`publish` need jq and say so.
+- `publish` empty-week case (not in the AC): prints `telemetry: no anomalies for <week> - nothing to send` and removes the empty file.
+- `lib.sh`: one literal `memory/stats/anomalies.jsonl` added to `is_paperwork_path`, anchored like the other five. `CLAUDE.md`: one `## Commands` row, inside the VULYK:COMMANDS markers, nothing else touched.
+- Verified untouched by this story: no Profile row, no hook, no `settings.json`, no detector, no `git`/`gh`/`push` call anywhere in the script (a PATH shim in the suite records every invocation and asserts it).
 
 ## Findings

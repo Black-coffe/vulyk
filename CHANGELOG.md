@@ -2,6 +2,16 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.14.0] - 2026-09-15
+
+### Added
+- **Anomaly telemetry, opt-in.** `memory/stats/anomalies.jsonl` logs eight anomaly codes locally on every hive - context size, subagent prefix cost, empty subagent returns, council round count, stage duration, driver refusals/relaunches, scope breaches - via `scripts/telemetry.sh`.
+- **The five detectors and the fail-open hook.** `scripts/telemetry.sh scan`, wired on `Stop` and `SessionEnd`, runs all five and records through `record`, silently, without breaking a session when `jq`/`python`/the script are missing.
+- **The weekly evolve step.** `/vulyk-evolve` reads the week's anomaly rows into its diagnosis and, with consent on, prints (never runs) the `telemetry.sh publish` send command for the owner to push.
+- **Consent.** A `Telemetry` Profile row (`off` by default) and one installer question (`Enable telemetry? [y/N]`, `/dev/tty`, `--telemetry on|off|ask` / `VULYK_TELEMETRY`) gate every send; nothing is ever sent automatically.
+- **Docs.** README and the new [docs/telemetry.md](docs/telemetry.md) state exactly what is measured, what never leaves the machine, and how a bundle reaches the project as a pull request.
+- **CI.** A `telemetry-inbox` job validates every `telemetry/inbox/**/*.jsonl` with `scripts/telemetry.sh check`.
+
 ## [0.13.3] - 2026-09-14
 
 ### Fixed

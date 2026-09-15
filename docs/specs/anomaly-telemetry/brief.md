@@ -20,6 +20,9 @@ Context from the same session: three `cycle-clerk` calls cost ~55k tokens each i
 5. **Согласие** - строка Telemetry в Профиле, по умолчанию off: новая строка в таблице Profile конституции, /vulyk-bootstrap спрашивает её одним вопросом, установщик дописывает её старым хайвам как off. Журнал пишется всегда, шаг отправки в /vulyk-evolve печатает команду только при on.
 6. **Требования** - подтверждаю все пять, план на одобрение.
 
+
+**After escalation (round 3, 2026-09-15).**
+> owner 2026-09-15: repair the round-3 review's three findings only - bounded Stop-hook scan (record under-threshold subagents so they are never re-measured), docs/telemetry.md recipe brought to story 08's shape, skills.json back under the scope gate - then up to three more rounds
 ## Confirmed (verbatim, quotable)
 
 <!-- trace-check.sh reads only `> ` lines: the confirmed asks and the grill's chosen options, repeated here as quotes. -->

@@ -108,8 +108,32 @@ fi
 if [ "$BRANCH_NOW" = "$DEFAULT" ]; then
   say "" "note" "you are on $DEFAULT: ship-check reads the spec branch; run it there, before the merge"
 fi
-if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-  fail 03 "code: working tree is not clean - uncommitted changes are not part of any story's commit"
+DIRTY="$(git status --porcelain 2>/dev/null)"
+if [ -n "$DIRTY" ]; then
+  # Story 09: a tree dirty only in the hook-written memory/stats/anomalies.jsonl (the
+  # anomaly-scan Stop hook writes it on every run, outside any commit) is not a build in
+  # progress - pass it through, named, rather than blocking stage 03 on a file no story owns.
+  # Story 12: skills.json is NOT cycle-owned (owner decision) - it is real dirt like any
+  # other path, so only this one path is exempt.
+  HOOKFILE=memory/stats/anomalies.jsonl
+  ALLHOOK=1
+  HOOKPATHS=""
+  while IFS= read -r dline; do
+    [ -n "$dline" ] || continue
+    dp="${dline:3}"
+    if [ "$dp" = "$HOOKFILE" ]; then
+      HOOKPATHS="$HOOKPATHS${HOOKPATHS:+, }$dp"
+      continue
+    fi
+    ALLHOOK=0
+  done <<EOF
+$DIRTY
+EOF
+  if [ "$ALLHOOK" = "1" ]; then
+    ok 03 "code: clean (hook-written stats pending: $HOOKPATHS)"
+  else
+    fail 03 "code: working tree is not clean - uncommitted changes are not part of any story's commit"
+  fi
 fi
 
 # Stories - every one closed, one way or the other
