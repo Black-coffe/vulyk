@@ -177,7 +177,6 @@ Recorded per the round-2 review's condition that nothing ships narrower than con
 **Approved:** Andrei, 2026-09-14
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
 **Branch:** vulyk/anomaly-telemetry
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-09-15, at 1a91924, pack 9b30072f04a4 - red: 2
 **Council:** RED round 2, 2026-09-15, at 0e0c6f8, pack b0e5e31fff8f - red: 5
 **Council:** ESCALATE round 3, 2026-09-15, at 5300d6a, pack 7260d521a997
@@ -193,3 +192,4 @@ Recorded per the round-2 review's condition that nothing ships narrower than con
 - haiku: docs/specs/anomaly-telemetry/council/round-6/haiku.attempt-1.md
 - haiku: docs/specs/anomaly-telemetry/council/round-6/haiku.attempt-2.md
 - seats: docs/specs/anomaly-telemetry/council/round-6/
+**Checked:** ACCEPTED by Andrei, 2026-09-15, at 13f7a9f - round 6: all judging seats GREEN, review PASS, haiku GREEN on disk twice, rejected by a taint false positive

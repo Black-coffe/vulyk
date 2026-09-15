@@ -154,3 +154,4 @@
 {"v":1,"ts":"","code":"scope_breach","value":6,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"anomaly-telemetry-11-scan-seen-list","ref":"scope:anomaly-telemetry-11-scan-seen-list"}
 {"v":1,"ts":"","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"anomaly-telemetry-12-recipe-docs-and-scope-gate","ref":"scope:anomaly-telemetry-12-recipe-docs-and-scope-gate"}
 {"v":1,"ts":"2026-09-15T10:14:32Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"anomaly-telemetry-13-bundle-agent-token","ref":"scope:anomaly-telemetry-13-bundle-agent-token"}
+{"v":1,"ts":"2026-09-15T11:08:58Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"anomaly-telemetry-14-agent-token-fixed-set","ref":"scope:anomaly-telemetry-14-agent-token-fixed-set"}
