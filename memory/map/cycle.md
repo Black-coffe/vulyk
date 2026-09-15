@@ -23,7 +23,14 @@ ceiling=tier=`) ← `open-round`→`build_round` · `council/REOPEN`/`CEILING` �
 `status [--json]` read-only · `briefed [--commit] [--mode mini-brief|assumed]` · `branch
 [--commit]` · `close-story <file> [--commit]` (scope-check + repeats `## Verification`, each
 `&&`-segment must equal a cell of root `CLAUDE.md` `## Commands`, or the literal `none —
-reviewed by lead-review`) · `open-round [--commit]` · `record-seat <spec> <N> <seat> [--model
+reviewed by lead-review`; a story a worker self-marked `status: done` with an uncommitted diff
+still on `## Files` or the story file itself is *not* refused - `close-story` sets `SELFMARKED`,
+journals "worker marked status: done itself, closing on the uncommitted diff", and falls through
+the normal scope/verify/commit path; only a clean tree on an already-`done` story exits 2
+`already done`, C3/ADR-011 D3) · `open-round [--commit]` (its dirty-tree precondition reads
+`git status --porcelain -uall`, so an untracked directory like a fresh `memory/learnings/` lists
+file by file, not as one collapsed `?? <dir>/` line the paperwork predicate would reject) ·
+`record-seat <spec> <N> <seat> [--model
 id] [--stamp <s>] [--file <path>] <report on stdin, or from --file when given>` (`--file` takes
 precedence over stdin; a missing/unreadable/empty file exits 2 with `error` `file: <path>`,
 before anything is written) · `judge [--commit]` · `escalate [--commit] [--reason ceiling|half|env]
@@ -31,6 +38,9 @@ before anything is written) · `judge [--commit]` · `escalate [--commit] [--rea
 `pause`/`resume`/`release <spec> <stamp>` (exempt from the PAUSE guard, same as `status` - every
 other mutating verb calls `pause_guard` first, exits 3 if `PAUSE` exists; `release` clears the
 `DRIVER` semaphore even on a paused spec, exit 2 only if a different stamp holds it).
+On exit 0, `branch`, `close-story`, `open-round`, `record-seat` and `judge` (ADR-011 D5) embed
+one more top-level key, `status` - byte-for-byte `cmd_status`'s object computed after every
+write the verb made, so a caller that already has the result never re-polls for it.
 
 ## `status --json` keys and `next`
 Keys: `spec, slug, stage, next, briefed, approved, branch, head, pack, stories{todo,
@@ -73,15 +83,20 @@ discarded and re-dispatched, never recorded from a paused run.
 Header `COUNCIL/MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH`, one `ASK <n>: GREEN|RED|N/A -
 ... - run:+saw: | url:+saw: | why:` per `## Asks` item, `UNASKED:`, `BREACH:`. `VERDICT` must
 be RED iff any ASK is RED, N/A iff all N/A. Missing label, ask mismatch, or GREEN/RED without
-evidence → MALFORMED (exit 4, re-asked once, kept as `attempt-1.md`). Taint (exit 4): names
-`docs/specs/<slug>/{plan.md,journal.md,council/}` (with/without prefix) or a story id
-`<slug>-NN`. 2nd-attempt unevidenced RED stays RED but excluded from `half`; unevidenced
+evidence → MALFORMED (exit 4, re-asked once, kept as `attempt-1.md`). Taint: see the story-file
+rule below. 2nd-attempt unevidenced RED stays RED but excluded from `half`; unevidenced
 GREEN folds to N/A. `lead-review`: only its first line (`VERDICT: PASS|BLOCK`) is parsed.
 Court: `build_round` runs `git worktree add --detach <path> <head>` at
 `.vulyk/court/<slug>/round-N/`, strips its `docs/specs/<slug>/` to `brief.md` alone, commits
 that reduction in the worktree's own detached history. Shared by all three blind seats;
 `lead-review` never enters it. Reading outside `COURT` or its history is a self-reported
 **BREACH**, not filesystem-enforced. `judge` always removes it, any verdict.
+Taint (exit 4) is a path to a hidden file - `taint_reason()` matches the story *file*:
+`\bslug-NN(-title)?\.md\b` or `(docs/specs/)?slug/slug-NN(\.md)?`, i.e.
+`demo-14-title.md`/`demo-14.md`/`docs/specs/demo/demo-14-title.md`/`demo/demo-14` - or
+`slug/plan.md`, `slug/journal.md`, `slug/council/` (with/without a `docs/specs/` prefix). A
+bare `<slug>-NN` token with neither `.md` nor a `<slug>/` prefix (e.g. echoed in a `run:`/`saw:`
+line) is **not** taint (ADR-011 D4, C4 revised) - it is a synthesizable id, not a leak.
 
 ## Drivers
 **Workflow** (`vulyk-cycle.js`, phases Build/Round/Judge/Repair): no verdict/ceiling/stale
@@ -93,6 +108,15 @@ logic of its own - every shell call goes through `cycle-clerk` (`sonnet` - junio
 close-story/worker-report miss on one file (blocks that story instead). **Fallback**
 (`/vulyk-build`, `Workflow` absent): same `status`→act loop, Queen's Bash for verbs and `Agent`
 for seats/workers - same files, contract, report-path/`--file`/three-reasons scheme below.
+`clerk()` (ADR-011 D1): when `cycle-clerk`'s last stdout line fails `JSON.parse`, retries once -
+for `status`/`claim`/`release` the identical prompt again; for the five `MUTATING` verbs
+(`branch`, `close-story`, `open-round`, `record-seat`, `judge`, never re-dispatched a second
+time) `status <spec> --json` instead, folded into a synthetic `{ok:true, verb, next:
+st.next, status: st, recovered: 'status'}`. Only a *second* unparsable line ends the run. The
+loop's own `st` (ADR-011 D5) polls `status` once before the first iteration and again only
+after an iteration that ran zero verbs, more than one verb, or one verb whose result lacked a
+`status` key (parallel/dispatch steps); a single sequential verb with `ok:true` and `status`
+sets `st = res.status` with no extra poll (`carriedStatus()`).
 
 ## Report-path recording (v0.13.1) and the three dead-dispatch reasons
 Every seat/worker/reviewer dispatch gets a report path `.vulyk/reports/<slug>/round-<N>/
@@ -123,4 +147,4 @@ commands already handle. `memory/stats/anomalies.jsonl` joined `lib.sh`'s
 `telemetry.sh record` writes it - a scan that fires mid-round must not itself stale that
 round. Full contract: `docs/telemetry.md`.
 
-last-verified: 2026-09-15
+last-verified: 2026-09-15 (v0.15.0, ADR-011)

@@ -102,8 +102,13 @@ anomaly telemetry, full contract in `docs/telemetry.md`). All are `#!/usr/bin/en
   12 hex chars), `is_paperwork_path <repo-relative-path>` (the one whitelist: `plan.md`,
   `journal.md`, `council/*`, `brief.md` under `docs/specs/*/`, plus **six**
   `memory/stats/*.jsonl` files - `human`, `acceptance`, `ship`, `council`, `scope`, and
-  `anomalies` (v0.14.0, joined the set because `telemetry.sh record` writes it)),
-  `paperwork_only <root> <from> <to>`, `marker <plan.md>
+  `anomalies` (v0.14.0, joined the set because `telemetry.sh record` writes it) - plus, since
+  v0.15.0/ADR-011, `memory/stats/skills.json` (not cycle-owned but hook-written, so a commit
+  touching only it never stales a round) and `memory/learnings/*.md` one level deep only (a
+  `/` past `learnings/<name>.md` fails the predicate)), `paperwork_only <root> <from> <to>`
+  (every caller - `open-round`'s own dirty-tree guard, `ship-check.sh`'s and
+  `human-check.sh`'s staleness checks - inherits both new paths through this one function,
+  ADR-011 D2), `marker <plan.md>
   <Name>` (a `**Name:**` line's value, empty if placeholder `<...>`), `now_ts`, `slug_of`.
 
 ## Dependencies
@@ -130,6 +135,11 @@ anomaly telemetry, full contract in `docs/telemetry.md`). All are `#!/usr/bin/en
   `none — reviewed by lead-review`), and `is_paperwork_path`'s anchoring to `docs/specs/*/`
   are all security-relevant string matches - a change to any one must stay anchored the same
   way or the whitelist silently widens.
+- Taint (`taint_reason()` in `cycle.sh`, ADR-011 D4) is a path to a hidden file - a story
+  *file* (`<slug>-NN.md`/`<slug>-NN-<title>.md`/`<slug>/<slug>-NN[.md]`, with or without a
+  `docs/specs/` prefix), `plan.md`, `journal.md` or `council/` under the slug. A bare
+  `<slug>-NN` token with no `.md` and no `<slug>/` prefix (e.g. echoed in a seat's own `run:`
+  line) is **not** taint - see `memory/map/cycle.md` for the full pattern.
 - `acceptance-log.sh` and `drone-acceptance` are **not the same generation** as the council:
   the agent is gone, the script is kept only as `ship-check.sh`'s fallback for specs recorded
   before v0.12.0. Do not route new specs through it.
@@ -149,4 +159,4 @@ anomaly telemetry, full contract in `docs/telemetry.md`). All are `#!/usr/bin/en
 - `telemetry/` (the inbox) is VULYK-repo-only - `install.sh`'s `copy_tree` does not walk it, so
   a hive's own history lives only in its `memory/stats/anomalies.jsonl`.
 
-last-verified: 2026-09-15
+last-verified: 2026-09-15 (v0.15.0, ADR-011)

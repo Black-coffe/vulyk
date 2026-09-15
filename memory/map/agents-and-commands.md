@@ -40,7 +40,11 @@ dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept 
 - **worker-code** (`sonnet`, `Read,Write,Edit,Grep,Glob,Bash`, `maxTurns:90`) / **worker-test**
   (same tools, `maxTurns:90`) - one story each, touches only its `## Files`. Final line
   `STATUS: DONE|NEEDS_CONTEXT|WALL`; a wall (3 failed distinct approaches) writes `##
-  Findings` to the story file first. Never edits `memory/` or the wiki.
+  Findings` to the story file first. v0.15.0/ADR-011: never edits the story's `status:`
+  frontmatter key - `close-story` writes it, a driver writes `blocked` - the worker's last edit
+  before returning sets only `returned:` to the same word as its `STATUS:` line
+  (`DONE`/`NEEDS_CONTEXT`/`WALL`); `close-story` tolerates a self-marked `status: done` on a
+  dirty tree instead of refusing (see `memory/map/cycle.md`). Never edits `memory/` or the wiki.
 - **queen-planner** (`opus`, `Read,Write,Grep,Glob`) - Tier 3-4 synthesis: goal+brief+scout
   reports+map pointers -> a plan. Never reads source. Also the `repair` dispatch target (cuts
   fix stories into the existing plan, one per critical/major finding or RED ask).
@@ -110,4 +114,4 @@ dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept 
   scout-batch map refresh; `librarian` GC pass; session-state dump to `.claude/handoff/`; the
   release-upgrade wrapper over `vulyk-update.sh`.
 
-last-verified: 2026-09-14
+last-verified: 2026-09-15 (v0.15.0, ADR-011)

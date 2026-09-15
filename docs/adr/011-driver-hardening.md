@@ -62,13 +62,23 @@ Invariant: `is_paperwork_path` is the one predicate every `paperwork_only()` cal
 `open-round`'s own dirty-tree guard and staleness check in `scripts/cycle.sh`, `ship-check.sh`'s
 council and human staleness checks (two call sites), and `human-check.sh` - so a commit touching
 only the two new paths never stales any of them; nothing stages the two new paths.
+Addendum (story 06, opus UNASKED (a)): in a hive with nothing tracked under
+`memory/learnings/`, `git status --porcelain` collapses the directory to one
+`?? memory/learnings/` line, which the predicate rejects. `open-round`'s dirty-tree guard's
+`git status --porcelain` gains `-uall`, so every untracked file is listed by its own path and
+the one-level rule applies to each; the predicate itself is unchanged (no directory form, no
+`sub/x.md`).
 
 **3. `close-story` tolerates a self-marked `status: done`.**
 Built: `cmd_close_story`'s `done` branch runs `git status --porcelain` against the story file
-and every path in `files_of`; a clean result still exits 2 `already done`; a dirty result
-journals "worker marked status: done itself, closing on the uncommitted diff" and falls
-through to the unchanged `returned:`/scope/verify/commit path. `worker-code.md` and
-`worker-test.md` each gained one line telling workers not to write `status:` themselves.
+and every path in `files_of`; a clean result still exits 2 `already done`; a dirty result is
+marked self-marked and falls through, unchanged, to the `returned:`/scope-check/verify/commit
+path - only once verification is green, immediately before the `status:` write / commit step,
+does it journal "worker marked status: done itself, closing on the uncommitted diff" once,
+with `next` = `build:<wave>` taken from the story's `wave:` frontmatter (not a hardcoded
+`build:1`). Every exit-4 path leaves the journal untouched, so a retried attempt never
+journals twice. `worker-code.md` and `worker-test.md` each gained one line telling workers not
+to write `status:` themselves.
 Rejected: treating the driver's exit-2 `already done` as success - the run would continue
 with the worker's edits uncommitted and unscoped, the exact state the defect left behind.
 Site: `cmd_close_story`, `scripts/cycle.sh`.

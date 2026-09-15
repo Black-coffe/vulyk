@@ -46,6 +46,10 @@
   (enum/agents/consent/record/scan/bundle/check/publish/inbox), the Stop+SessionEnd
   `anomaly-scan.sh` hook, the installer consent question, the `/vulyk-evolve` weekly
   distil-and-clear; never sends on its own, `publish` only prints a copy recipe
+- Driver hardening (v0.15.0, 2026-09-15): docs/adr/011-driver-hardening.md — clerk retry on a
+  garbled relay, `skills.json`+`memory/learnings/*.md` as cycle paperwork, `close-story`
+  tolerates a self-marked `status: done`, taint is the story file not a bare `<slug>-NN`, five
+  mutating verbs carry post-verb `status`
 - Consolidated: memory/learnings/CONSOLIDATED.md (run /vulyk-gc to refresh)
 - Human gates rework (2026-09-12): memory/learnings/2026-09-12-human-gates-rework.md — один стоп в начале, дальше агентный совет; «owner looks» как обязательную стадию не возвращать
 - Autonomous cycle / council (v0.12.0, 2026-09-13): docs/specs/autonomous-cycle/ — mechanics in docs/adr/001-cycle-state-contract.md (ADR-001), per-spec state in docs/specs/<slug>/journal.md

@@ -93,14 +93,15 @@ behaviour; nothing else in this ADR moves:
 
 - **D2** - `branch`, `close-story`, `open-round`, `record-seat` and `judge` now also embed
   the post-verb `status` object in their exit-0 JSON, so the canonical driver polls `status`
-  only at loop start and after a `parallel()` step, not on every iteration (ADR-011 decision 1).
+  only at loop start and after a `parallel()` step, not on every iteration (ADR-011 decision 5).
 - **D2** - `record-seat`'s taint clause no longer treats a bare `<slug>-NN` token as taint;
   taint is the story *file* - `<slug>-NN[-<title>].md` (with or without the
   `docs/specs/<slug>/` prefix) or `<slug>/<slug>-NN` (with or without `.md`) (ADR-011
   decision 4).
 - **D2** - `close-story`'s `done` precondition now tolerates a worker's own `status: done`
-  when the story's files still carry an uncommitted diff: it journals the self-mark and
-  proceeds through the normal scope/verify/commit path instead of refusing (ADR-011 decision 3).
+  when the story's files still carry an uncommitted diff: it proceeds through the normal
+  scope/verify/commit path instead of refusing, and journals the self-mark once verification
+  is green (ADR-011 decision 3).
 
 Option 1. The loop state is a small set of committed files, each with exactly one writer,
 all written by `scripts/cycle.sh`; the verdict is computed by that script from labelled
