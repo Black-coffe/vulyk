@@ -104,9 +104,31 @@ then decides where a copy goes by this order (A1):
 When one of those matches, the bundle is copied to
 `<repo>/telemetry/inbox/<week>/<hive>.jsonl` and the script prints the local commit recipe
 (`git add`, `git commit`, `git push`). When neither matches - the common case, a hive on a
-different machine from the VULYK checkout - it prints the `gh pr create` recipe instead: copy
-the bundle by hand into a VULYK checkout's `telemetry/inbox/<week>/<hive>.jsonl` and open a pull
-request. Either way, a human reads the printed block and runs it themselves.
+different machine from the VULYK checkout - it prints the fork-to-pull-request recipe instead,
+nine lines that end in an open PR when pasted as they are:
+
+```
+gh repo fork 'Black-coffe/vulyk' --clone -- 'vulyk-telemetry'
+cd 'vulyk-telemetry'
+git switch -c 'telemetry/<week>-<hive>'
+mkdir -p 'telemetry/inbox/<week>'
+cp '<bundle>' 'telemetry/inbox/<week>/<hive>.jsonl'
+git add 'telemetry/inbox/<week>/<hive>.jsonl'
+git commit -m 'telemetry(<week>): <hive>'
+git push -u origin 'telemetry/<week>-<hive>'
+gh pr create --repo 'Black-coffe/vulyk' --head 'telemetry/<week>-<hive>' --title 'telemetry(<week>): <hive>' --body 'An anonymized weekly anomaly bundle - codes and numbers only.'
+```
+
+`<bundle>` is the `.vulyk/telemetry/<week>-<hive>.jsonl` path the run just wrote, and the repo
+slug is the one A1 resolved. Every path is single-quoted, so a checkout or bundle path holding
+a space, a `#` or an `&` pastes and runs unchanged. Either way, a human reads the printed block
+and runs it themselves - `publish` prints, it never executes `git`, `gh` or a clone.
+
+With no `--week`, both `publish` and `bundle` cover **the previous ISO week and the current
+one**, so a weekly run early in a week still carries the week it is reporting on; a week with
+no rows is skipped silently, each week that has rows gets its own
+`.vulyk/telemetry/<week>-<hive>.jsonl`, its own inbox path and its own recipe. `--week
+YYYY-Www` selects exactly one week.
 
 ## The CI check
 

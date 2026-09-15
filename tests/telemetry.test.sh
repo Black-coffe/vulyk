@@ -33,6 +33,20 @@ expect_absent() { # expect_absent <label> <needle>   (reads the output to judge 
   else ok "$label"; fi
 }
 
+expect_order() { # expect_order <label> <needle>...   (reads the output to judge from stdin)
+  local label="$1"; shift
+  local out n line prev=0; out="$(cat)"
+  for n in "$@"; do
+    line="$(printf '%s\n' "$out" | grep -nF -- "$n" | head -1 | cut -d: -f1)"
+    if [ -z "$line" ] || [ "$line" -le "$prev" ]; then
+      bad "$label - '$n' is missing or out of order in:"
+      printf '%s\n' "$out" | sed 's/^/        /'; return
+    fi
+    prev="$line"
+  done
+  ok "$label"
+}
+
 expect_eq() { # expect_eq <label> <expected> <actual>
   local label="$1" want="$2" got="$3"
   if [ "$want" = "$got" ]; then ok "$label"
@@ -211,7 +225,7 @@ set_consent "on - anonymized weekly bundle"
 OUT="$( (cd "$HIVE" && PATH="$SHIM:$PATH" VULYK_HIVE="$HIVE" VULYK_LOCAL="$LOCAL" \
         bash scripts/telemetry.sh publish) 2>&1 )"
 HIVEID="$(jq -r '.hive' < "$BUNDLE" | head -1)"
-printf '%s' "$OUT" | expect "a local checkout gets a printed commit command" "git add telemetry/inbox/$WEEK/$HIVEID.jsonl"
+printf '%s' "$OUT" | expect "a local checkout gets a printed commit command" "git add 'telemetry/inbox/$WEEK/$HIVEID.jsonl'"
 expect_eq "the bundle is copied into telemetry/inbox/<week>/<hive>.jsonl" "yes" \
   "$([ -s "$LOCAL/telemetry/inbox/$WEEK/$HIVEID.jsonl" ] && echo yes || echo no)"
 if tel check "$LOCAL/telemetry/inbox/$WEEK/$HIVEID.jsonl" >/dev/null 2>&1
@@ -220,7 +234,7 @@ then ok "the copied bundle passes check"; else bad "the copied bundle fails chec
 rm -rf "$LOCAL/telemetry/inbox/$WEEK"
 OUT="$( (cd "$HIVE" && PATH="$SHIM:$PATH" VULYK_HIVE="$HIVE" VULYK_LOCAL="$LOCAL" \
         bash scripts/telemetry.sh publish --dry-run) 2>&1 )"
-printf '%s' "$OUT" | expect "--dry-run still prints the commit command" "git add telemetry/inbox/$WEEK/$HIVEID.jsonl"
+printf '%s' "$OUT" | expect "--dry-run still prints the commit command" "git add 'telemetry/inbox/$WEEK/$HIVEID.jsonl'"
 expect_eq "--dry-run copies nothing" "no" \
   "$([ -e "$LOCAL/telemetry/inbox/$WEEK/$HIVEID.jsonl" ] && echo yes || echo no)"
 
@@ -230,11 +244,79 @@ OUT="$( (cd "$HIVE" && PATH="$SHIM:$PATH" VULYK_HIVE="$HIVE" VULYK_LOCAL="$LOCAL
 printf '%s' "$OUT" | expect "no local checkout gets the PR recipe" "gh pr create"
 printf '%s' "$OUT" | expect_absent "the PR recipe does not claim anything was sent" "telemetry: wrote"
 
+# (a) The cross-machine recipe is the whole fork -> PR sequence, in order: pasted as-is it
+# ends in an open pull request (council round 1, ask 2).
+printf '%s' "$OUT" | expect_order "the PR recipe runs fork, branch, copy, add, commit, push, PR" \
+  "gh repo fork" "cd 'vulyk-telemetry'" "git switch -c 'telemetry/$WEEK-$HIVEID'" \
+  "mkdir -p 'telemetry/inbox/$WEEK'" "cp '" "git add 'telemetry/inbox/$WEEK/$HIVEID.jsonl'" \
+  "git commit -m 'telemetry($WEEK): $HIVEID'" "git push -u origin 'telemetry/$WEEK-$HIVEID'" \
+  "gh pr create --repo"
+printf '%s' "$OUT" | expect "the PR is opened against the configured origin slug" \
+  "gh pr create --repo 'Black-coffe/vulyk' --head 'telemetry/$WEEK-$HIVEID'"
+printf '%s' "$OUT" | expect "the PR body is one sentence with no path" \
+  "--body 'An anonymized weekly anomaly bundle - codes and numbers only.'"
+
+# (b) A hive (and a checkout) whose path holds a space and a `#`: every printed path is
+# single-quoted, and check's own <file>:<line>: prefix survives the `#` (review finding 14).
+HIVE2="$T/sp ace#hive"
+LOCAL2="$T/vu lyk#local"
+mkdir -p "$HIVE2/scripts" "$HIVE2/memory/stats" "$HIVE2/.claude/agents"
+cp "$SRC/scripts/telemetry.sh" "$SRC/scripts/lib.sh" "$HIVE2/scripts/"
+cp "$SRC"/.claude/agents/*.md "$HIVE2/.claude/agents/"
+printf '| Telemetry | on - anonymized weekly bundle |\n' > "$HIVE2/CLAUDE.md"
+git -C "$HIVE2" init -q -b main . && git -C "$HIVE2" config user.email t@t &&
+  git -C "$HIVE2" config user.name "Test Owner" && git -C "$HIVE2" config core.autocrlf false
+git -C "$HIVE2" add -A >/dev/null 2>&1; git -C "$HIVE2" commit -qm init >/dev/null
+mkdir -p "$LOCAL2/telemetry/inbox"
+git -C "$LOCAL2" init -q -b main . && git -C "$LOCAL2" config user.email t@t &&
+  git -C "$LOCAL2" config user.name "Test Owner"
+git -C "$LOCAL2" commit -qm init --allow-empty >/dev/null
+
+LOG2="$HIVE2/memory/stats/anomalies.jsonl"
+PREVWEEK="$(date -u -d '7 days ago' +%G-W%V 2>/dev/null || date -u -v-7d +%G-W%V)"
+PREVTS="$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-7d +%Y-%m-%dT%H:%M:%SZ)"
+printf '{"v":1,"ts":"%s","code":"context_high","value":150000,"threshold":140000,"vulyk":"0.13.3","tier":3,"model":"opus","agent":"","spec":"s","story":"t","ref":"session:a"}\n' \
+  "$NOW" >> "$LOG2"
+printf '{"v":1,"ts":"%s","code":"stage_long","value":40,"threshold":24,"vulyk":"0.13.3","tier":2,"model":"","agent":"","spec":"s","story":"t","ref":"stage:b"}\n' \
+  "$PREVTS" >> "$LOG2"
+tel2()      { (cd "$HIVE2" && PATH="$SHIM:$PATH" VULYK_HIVE="$HIVE2" bash scripts/telemetry.sh "$@"); }
+tel2local() { (cd "$HIVE2" && PATH="$SHIM:$PATH" VULYK_HIVE="$HIVE2" VULYK_LOCAL="$LOCAL2" \
+               bash scripts/telemetry.sh "$@"); }
+HIVEID2="$(tel2 bundle --week "$WEEK" | jq -r '.hive' | head -1 | tr -d '\r')"
+
+OUT="$(tel2local publish --week "$WEEK" 2>&1)"
+# git prints the checkout's own toplevel form (on Windows a C:/... path), which is what the
+# recipe quotes - the space and the `#` are in it either way.
+LOCAL2TOP="$(git -C "$LOCAL2" rev-parse --show-toplevel)"
+printf '%s' "$OUT" | expect "a checkout path with a space and a # is single-quoted" "cd '$LOCAL2TOP'"
+printf '%s' "$OUT" | expect "the local git add line is quoted" \
+  "git add 'telemetry/inbox/$WEEK/$HIVEID2.jsonl'"
+OUT="$(tel2 publish --week "$WEEK" 2>&1)"
+printf '%s' "$OUT" | expect "the cp line quotes a bundle path with a space and a #" \
+  "cp '$HIVE2/.vulyk/telemetry/$WEEK-$HIVEID2.jsonl'"
+
+BADF="$T/ba d#bundle.jsonl"
+tel2 bundle --week "$WEEK" | head -1 | jq -c '.code = "not_a_code"' > "$BADF"
+ERR="$(tel2 check "$BADF" 2>&1 >/dev/null)"
+printf '%s' "$ERR" | expect "check's <file>:<line>: prefix survives a # in the path" "$BADF:1: "
+
+# (c) A15: with no --week, publish covers the previous ISO week and the current one.
+OUT="$(tel2local publish --dry-run 2>&1)"
+printf '%s' "$OUT" | expect "a bare publish names the current week"  "telemetry/inbox/$WEEK/$HIVEID2.jsonl"
+printf '%s' "$OUT" | expect "a bare publish names the previous week" "telemetry/inbox/$PREVWEEK/$HIVEID2.jsonl"
+expect_eq "each week gets its own bundle file" "yes" \
+  "$([ -s "$HIVE2/.vulyk/telemetry/$PREVWEEK-$HIVEID2.jsonl" ] && echo yes || echo no)"
+OUT="$(tel2local publish --week "$WEEK" --dry-run 2>&1)"
+printf '%s' "$OUT" | expect_absent "--week selects exactly one week" "$PREVWEEK"
+tel2 publish --week 1999-W01 2>&1 | expect "a week with no rows is skipped" "nothing to send"
+
 # The rule the whole spec rests on (.claude/commands/vulyk-ship.md:11): nothing is sent.
 cat "$CALLS" | expect_absent "publish never invokes git push"   " push"
 cat "$CALLS" | expect_absent "publish never invokes git commit" " commit"
 cat "$CALLS" | expect_absent "publish never invokes gh"         "gh "
 cat "$CALLS" | expect_absent "publish never invokes a pr"       "pr create"
+cat "$CALLS" | expect_absent "publish never invokes git clone"  " clone"
+cat "$CALLS" | expect_absent "publish never invokes a fork"     "fork"
 
 # --- case 7: the log is paperwork -------------------------------------------------------------
 echo "--- is_paperwork_path"

@@ -9,6 +9,9 @@
 #   bash scripts/telemetry.sh check <file>...
 #   bash scripts/telemetry.sh publish [--week YYYY-Www] [--dry-run]
 #
+# `bundle` and `publish` with no --week cover the PREVIOUS ISO week and the current one
+# (plan A15), so a weekly run never silently drops the week it is reporting on.
+#
 # Two schemas (docs/specs/anomaly-telemetry/plan.md ## Contracts): the LOCAL row, 12 keys,
 # appended to memory/stats/anomalies.jsonl (committed paperwork, like the five stats files
 # beside it); and the BUNDLE row, 10 keys, codes and numbers only - no ts, spec, story or ref,
@@ -73,6 +76,27 @@ sanitize() { printf '%s' "${1:-}" | tr -d '"\\\r\n\t'; }
 is_number() { case "${1:-}" in ''|*[!0-9.-]*) return 1 ;; *) return 0 ;; esac; }
 
 now_week() { date -u +%G-W%V; }
+
+prev_week() { # the ISO week seven days back (GNU date, then BSD date; empty when neither works)
+  local w=""
+  w="$(date -u -d '7 days ago' +%G-W%V 2>/dev/null || true)"
+  [ -n "$w" ] || w="$(date -u -v-7d +%G-W%V 2>/dev/null || true)"
+  printf '%s' "$w"
+}
+
+# Plan A15: a weekly run must not drop the week it reports on. With no --week, `bundle` and
+# `publish` cover the PREVIOUS ISO week and the current one, so a Monday run still carries
+# last week's rows. A default, not a ledger: nothing on disk records what was published.
+default_weeks() {
+  local cur prev
+  cur="$(now_week)"; prev="$(prev_week)"
+  [ -n "$prev" ] && [ "$prev" != "$cur" ] && printf '%s\n' "$prev"
+  printf '%s\n' "$cur"
+}
+
+# Every path that reaches a printed recipe goes through this: the recipe is pasted into a
+# shell, and a bundle or checkout path can hold a space, a `#` or an `&` (review finding 14).
+shq() { local s="${1:-}" q="'" r="'\''"; printf "'%s'" "${s//$q/$r}"; }
 
 week_of() { # week_of <UTC ISO-8601 ts> -> YYYY-Www  (empty when the ts is unparseable)
   local ts="${1:-}" w=""
@@ -382,7 +406,7 @@ bundle_emit() { # bundle_emit <week> <hive> <agent-set>
 }
 
 cmd_bundle() {
-  local week="" out=""
+  local week="" out="" weeks w hive agents
   while [ $# -gt 0 ]; do
     case "$1" in
       --week) week="${2:-}"; shift 2 ;;
@@ -391,13 +415,17 @@ cmd_bundle() {
     esac
   done
   need_jq
-  [ -n "$week" ] || week="$(now_week)"
+  # --week selects exactly one week; without it, the previous ISO week and the current one.
+  if [ -n "$week" ]; then weeks="$week"; else weeks="$(default_weeks)"; fi
+  hive="$(hive_id)"; agents="$(agent_set)"
   if [ -n "$out" ]; then
     mkdir -p "$(dirname "$out")"
-    bundle_emit "$week" "$(hive_id)" "$(agent_set)" > "$out"
-  else
-    bundle_emit "$week" "$(hive_id)" "$(agent_set)"
+    : > "$out"
   fi
+  for w in $weeks; do
+    if [ -n "$out" ]; then bundle_emit "$w" "$hive" "$agents" >> "$out"
+    else bundle_emit "$w" "$hive" "$agents"; fi
+  done
   return 0
 }
 
@@ -447,7 +475,8 @@ cmd_check() {
       printf '%s: unreadable\n' "$f" >&2; rc=1; continue
     fi
     if [ -n "$out" ]; then
-      printf '%s\n' "$out" | sed "s#^#$f:#" >&2
+      # Not `sed "s#^#$f:#"`: a `#` in the path closes sed's own delimiter (finding 14).
+      printf '%s\n' "$out" | while IFS= read -r line; do printf '%s:%s\n' "$f" "$line"; done >&2
       rc=1
     fi
   done
@@ -457,6 +486,16 @@ cmd_check() {
 # Plan A1. Order: VULYK_LOCAL (explicit, must be a git worktree with telemetry/inbox/), else
 # this hive when its origin URL carries the origin slug. ~/.vulyk/src is deliberately NOT a
 # target: it is vulyk-update.sh's pull-only cache, usually detached at a tag.
+# The public repo both recipes point at: VULYK_REPO, else .claude/vulyk-origin, else default.
+origin_slug() {
+  local slug="${VULYK_REPO:-}"
+  if [ -z "$slug" ] && [ -f "$ROOT/.claude/vulyk-origin" ]; then
+    slug="$(tr -d ' \r\n' < "$ROOT/.claude/vulyk-origin")"
+  fi
+  [ -n "$slug" ] || slug="Black-coffe/vulyk"
+  printf '%s' "$slug"
+}
+
 local_vulyk_repo() {
   local cand origin slug
   cand="${VULYK_LOCAL:-}"
@@ -465,11 +504,7 @@ local_vulyk_repo() {
     git -C "$cand" rev-parse --show-toplevel
     return 0
   fi
-  slug="${VULYK_REPO:-}"
-  if [ -z "$slug" ] && [ -f "$ROOT/.claude/vulyk-origin" ]; then
-    slug="$(tr -d ' \r\n' < "$ROOT/.claude/vulyk-origin")"
-  fi
-  [ -n "$slug" ] || slug="Black-coffe/vulyk"
+  slug="$(origin_slug)"
   origin="$(git -C "$ROOT" remote get-url origin 2>/dev/null || true)"
   if [ -n "$origin" ] && [ -d "$ROOT/telemetry/inbox" ]; then
     case "$origin" in *"$slug"*) printf '%s' "$ROOT"; return 0 ;; esac
@@ -477,8 +512,41 @@ local_vulyk_repo() {
   return 1
 }
 
+# One week's recipe, printed - never run. Every path goes through shq() so a bundle or a
+# checkout path holding a space, a `#` or an `&` survives the paste (review finding 14).
+recipe_local() { # recipe_local <repo> <rel> <week>
+  printf 'Run this yourself - nothing is sent for you:\n\n'
+  printf '```\n'
+  printf 'cd %s && git add %s && git commit -m %s && git push\n' \
+    "$(shq "$1")" "$(shq "$2")" "$(shq "telemetry: $3 bundle")"
+  printf '```\n'
+}
+
+# The cross-machine path (council round 1, ask 2): fork, clone, branch, copy, add, commit,
+# push, open the PR. Pasted as-is it ends in an open pull request - the previous two-line
+# form left the copy untracked, so `gh pr create` had nothing to open from.
+# `gh repo fork --clone` is a boolean flag; the clone directory is a git-clone argument,
+# which `gh repo fork` passes through after `--` (confirmed with `gh repo fork --help`).
+recipe_pr() { # recipe_pr <slug> <dir> <bundle> <rel> <week> <hive> <branch>
+  local slug="$1" dir="$2" bundle="$3" rel="$4" week="$5" hive="$6" branch="$7"
+  printf 'No local VULYK checkout found. Run this yourself - nothing is sent for you:\n\n'
+  printf '```\n'
+  printf 'gh repo fork %s --clone -- %s\n' "$(shq "$slug")" "$(shq "$dir")"
+  printf 'cd %s\n'                         "$(shq "$dir")"
+  printf 'git switch -c %s\n'              "$(shq "$branch")"
+  printf 'mkdir -p %s\n'                   "$(shq "telemetry/inbox/$week")"
+  printf 'cp %s %s\n'                      "$(shq "$bundle")" "$(shq "$rel")"
+  printf 'git add %s\n'                    "$(shq "$rel")"
+  printf 'git commit -m %s\n'              "$(shq "telemetry($week): $hive")"
+  printf 'git push -u origin %s\n'         "$(shq "$branch")"
+  printf 'gh pr create --repo %s --head %s --title %s --body %s\n' \
+    "$(shq "$slug")" "$(shq "$branch")" "$(shq "telemetry($week): $hive")" \
+    "$(shq 'An anonymized weekly anomaly bundle - codes and numbers only.')"
+  printf '```\n'
+}
+
 cmd_publish() {
-  local week="" dry=0 hive bundle repo dest rel
+  local week="" dry=0 weeks w hive agents bundle repo="" haslocal=0 sent=0 dest rel slug
   while [ $# -gt 0 ]; do
     case "$1" in
       --week)    week="${2:-}"; shift 2 ;;
@@ -491,37 +559,39 @@ cmd_publish() {
     return 0
   fi
   need_jq
-  [ -n "$week" ] || week="$(now_week)"
-  hive="$(hive_id)"
-  bundle="$ROOT/.vulyk/telemetry/$week-$hive.jsonl"
-  cmd_bundle --week "$week" --out "$bundle"
-  if [ ! -s "$bundle" ]; then
-    rm -f "$bundle"
-    echo "telemetry: no anomalies for $week - nothing to send"
-    return 0
-  fi
-  cmd_check "$bundle" || die "publish: the bundle failed check, nothing was copied"
+  if [ -n "$week" ]; then weeks="$week"; else weeks="$(default_weeks)"; fi
+  hive="$(hive_id)"; agents="$(agent_set)"
+  if repo="$(local_vulyk_repo)"; then haslocal=1; fi
+  slug="$(origin_slug)"
 
-  rel="telemetry/inbox/$week/$hive.jsonl"
-  if repo="$(local_vulyk_repo)"; then
-    dest="$repo/$rel"
-    if [ "$dry" -eq 0 ]; then
-      mkdir -p "$(dirname "$dest")"
-      cp "$bundle" "$dest"
-      echo "telemetry: wrote $dest"
+  for w in $weeks; do
+    bundle="$ROOT/.vulyk/telemetry/$w-$hive.jsonl"
+    mkdir -p "$(dirname "$bundle")"
+    bundle_emit "$w" "$hive" "$agents" > "$bundle"
+    # A week with no rows is skipped silently: a run covering two weeks routinely has rows
+    # in only one of them.
+    if [ ! -s "$bundle" ]; then rm -f "$bundle"; continue; fi
+    cmd_check "$bundle" || die "publish: the bundle failed check, nothing was copied"
+    sent=1
+
+    rel="telemetry/inbox/$w/$hive.jsonl"
+    if [ "$haslocal" -eq 1 ]; then
+      dest="$repo/$rel"
+      if [ "$dry" -eq 0 ]; then
+        mkdir -p "$(dirname "$dest")"
+        cp "$bundle" "$dest"
+        echo "telemetry: wrote $dest"
+      else
+        echo "telemetry: --dry-run, would write $dest"
+      fi
+      recipe_local "$repo" "$rel" "$w"
     else
-      echo "telemetry: --dry-run, would write $dest"
+      recipe_pr "$slug" "vulyk-telemetry" "$bundle" "$rel" "$w" "$hive" "telemetry/$w-$hive"
     fi
-    printf 'Run this yourself - nothing is sent for you:\n\n'
-    printf '```\n'
-    printf 'cd %s && git add %s && git commit -m "telemetry: %s bundle" && git push\n' "$repo" "$rel" "$week"
-    printf '```\n'
-  else
-    printf 'No local VULYK checkout found. Run this yourself - nothing is sent for you:\n\n'
-    printf '```\n'
-    printf 'cp %s /path/to/vulyk/%s\n' "$bundle" "$rel"
-    printf 'cd /path/to/vulyk && gh pr create --title "telemetry: %s bundle" --body "anonymized anomaly bundle - codes and numbers only"\n' "$week"
-    printf '```\n'
+  done
+
+  if [ "$sent" -eq 0 ]; then
+    echo "telemetry: no anomalies for $(printf '%s' "$weeks" | tr '\n' ' ' | sed 's/ $//') - nothing to send"
   fi
   return 0
 }
