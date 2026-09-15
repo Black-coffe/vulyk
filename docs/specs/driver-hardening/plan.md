@@ -83,5 +83,5 @@ The six lines below are the cycle's confirmation artifacts (docs/cycle.md).
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path. Alternative to **Approved:** above.>
 **Branch:** vulyk/driver-hardening
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05.>
-**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05, appended once per round.>
+**Council:** GREEN round 1, 2026-09-15, at 8521d20, pack 92f41ba75c4c
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
