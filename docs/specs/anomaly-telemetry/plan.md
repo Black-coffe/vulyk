@@ -173,6 +173,7 @@ Recorded per the round-2 review's condition that nothing ships narrower than con
 **Council:** RED round 2, 2026-09-15, at 0e0c6f8, pack b0e5e31fff8f - red: 5
 **Council:** ESCALATE round 3, 2026-09-15, at 5300d6a, pack 7260d521a997
 **Council:** RED round 4, 2026-09-15, at e3fccde, pack 07a6a02fb6fb - red: 3
+**Council:** RED round 5, 2026-09-15, at a1d7668, pack 63563afc2e88 - red: 3
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 
 ## Needs a human
