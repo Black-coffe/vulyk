@@ -97,3 +97,7 @@
 {"ts":"2026-09-15T06:22:31Z","story":"anomaly-telemetry-05-consent-profile-install","declared":7,"changed":11,"out_of_scope":4}
 {"ts":"2026-09-15T06:59:08Z","story":"anomaly-telemetry-06-publish-pr-recipe","declared":3,"changed":4,"out_of_scope":1}
 {"ts":"2026-09-15T07:27:25Z","story":"anomaly-telemetry-07-evolve-inbox-distill","declared":6,"changed":9,"out_of_scope":3}
+{"ts":"2026-09-15T07:48:21Z","story":"anomaly-telemetry-09-cycle-owns-hook-log","declared":4,"changed":9,"out_of_scope":5}
+{"ts":"2026-09-15T08:06:56Z","story":"anomaly-telemetry-08-subagent-path-bounded-scan","declared":4,"changed":11,"out_of_scope":7}
+{"ts":"2026-09-15T08:07:13Z","story":"anomaly-telemetry-08-subagent-path-bounded-scan","declared":4,"changed":11,"out_of_scope":7}
+{"ts":"2026-09-15T08:07:17Z","story":"anomaly-telemetry-09-cycle-owns-hook-log","declared":4,"changed":11,"out_of_scope":7}

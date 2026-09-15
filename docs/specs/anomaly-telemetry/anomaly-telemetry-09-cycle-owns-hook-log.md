@@ -1,8 +1,8 @@
 ---
 story: anomaly-telemetry-09
 spec: anomaly-telemetry
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -46,5 +46,11 @@ memory/map/cycle.md "Files, one writer each", "`cycle.sh` verbs", "Tests"; memor
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
+- `commit_paperwork()` (scripts/cycle.sh) now appends `memory/stats/anomalies.jsonl` to its path set whenever the file exists on disk, so every `--commit`'d verb (judge/escalate/briefed/branch/open-round/reopen) stages it in the same commit; `close-story --commit`'s own manual `git add` block (it doesn't call `commit_paperwork`) got the same one-line addition next to its `scope.jsonl` staging.
+- Guard: `git add -A -- <existing> <missing>` fails the *whole* pathspec (exit 128, nothing staged) when one path doesn't exist yet - a spec whose Stop hook never fired has no `anomalies.jsonl` at all. Fixed by only appending the path when `[ -e memory/stats/anomalies.jsonl ]`; added a regression case for it (`tests/cycle.test.sh`, "commit_paperwork: a verb still commits cleanly when memory/stats/anomalies.jsonl does not exist on disk yet").
+- `ship-check.sh` stage 03: a dirty tree is now walked line by line (`git status --porcelain`); if every dirty path is under `memory/stats/` and passes `is_paperwork_path`, stage 03 reports `ok ... clean (hook-written stats pending: <paths>)` instead of failing; any other dirty path still fails with the original message.
+- `scope-check.sh`: after the existing story-file exclusion, drops `memory/stats/anomalies.jsonl` and `memory/stats/skills.json` from `CHANGED` unless the story's own `## Files` names one of them, so they never count toward `out_of_scope`.
+- Did not touch `scripts/lib.sh` or widen `is_paperwork_path` (already had `memory/stats/anomalies.jsonl` from story 01).
+- Added 3 new cases to `tests/cycle.test.sh` (own new "hooklog" scratch spec, copying `cycle.sh`/`journal.sh`/`scope-check.sh` and a minimal `## Commands` cell): close-story --commit stages the log; the no-log-on-disk regression above; ship-check stage 03 hook-only-dirty passes, hook+real-dirt still blocks.
 
 ## Findings

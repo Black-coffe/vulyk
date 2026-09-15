@@ -172,4 +172,77 @@ printf 'not a spec journal either\n' > src/journal.md
 git add -A && git commit -qm "a real code change under src/council/ and src/journal.md - not paperwork" >/dev/null
 bash scripts/human-check.sh --check docs/specs/anchor-demo | expect "src/council/x and src/journal.md are not paperwork -> STALE" "STALE"
 
+echo "story 09: memory/stats/anomalies.jsonl (the anomaly-scan Stop hook's log) rides close-story --commit, ship-check stage 03 passes a hook-only-dirty tree, scope-check drops it from out_of_scope - no separate ship-check suite exists, so these cases live here"
+cp "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh scripts/
+cat >> CLAUDE.md <<'EOF'
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Trivial pass | `true` |
+EOF
+git add -A && git commit -qm "add cycle.sh + a ## Commands cell for the hook-log tests" >/dev/null
+
+mkdir -p docs/specs/hooklog
+cp "$SRC"/templates/plan.md docs/specs/hooklog/plan.md
+printf '> build the hooklog demo\n' > docs/specs/hooklog/brief.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/hooklog/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/hooklog#' docs/specs/hooklog/plan.md
+printf 'v1\n' > hook-app.txt
+cat > docs/specs/hooklog/hooklog-01-first.md <<'EOF'
+---
+story: hooklog-01
+spec: hooklog
+status: in-progress
+returned: DONE
+wave: 1
+---
+# Hook-log fixture
+
+## Files
+- hook-app.txt
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "hooklog: setup" >/dev/null
+
+# An uncommitted row, as anomaly-scan.sh's Stop hook would leave it - untracked, undeclared.
+printf '{"ts":"x"}\n' >> memory/stats/anomalies.jsonl
+
+out="$(bash scripts/cycle.sh close-story docs/specs/hooklog/hooklog-01-first.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    close-story --commit exits 0 with an uncommitted anomalies.jsonl row" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ -z "$(git status --porcelain -- memory/stats/anomalies.jsonl)" ] && echo "  ok    anomalies.jsonl is clean after close-story --commit" \
+  || { echo "::error::anomalies.jsonl still dirty: $(git status --porcelain -- memory/stats/anomalies.jsonl)"; fail=1; }
+git show --stat -1 | grep -qF "memory/stats/anomalies.jsonl" && echo "  ok    close-story's own commit touches anomalies.jsonl" \
+  || { echo "::error::the close-story commit did not touch anomalies.jsonl: $(git show --stat -1)"; fail=1; }
+grep -F '"story":"hooklog-01-first"' memory/stats/scope.jsonl | tail -1 | grep -qF '"out_of_scope":0' \
+  && echo "  ok    scope-check: the hook-written log dirty but undeclared does not count as out_of_scope" \
+  || { echo "::error::scope.jsonl row: $(grep -F '"story":"hooklog-01-first"' memory/stats/scope.jsonl | tail -1)"; fail=1; }
+
+echo "commit_paperwork: a verb still commits cleanly when memory/stats/anomalies.jsonl does not exist on disk yet (git add -A -- <path> <missing-path> fails the whole pathspec, not just the missing one)"
+git rm -q --cached memory/stats/anomalies.jsonl >/dev/null 2>&1
+rm -f memory/stats/anomalies.jsonl
+git add -A && git commit -qm "test: drop anomalies.jsonl - no Stop hook has fired yet" >/dev/null
+mkdir -p docs/specs/nolog
+cp "$SRC"/templates/plan.md docs/specs/nolog/plan.md
+printf '> build the nolog demo\n\n## Asks\n1. one ask\n' > docs/specs/nolog/brief.md
+out="$(bash scripts/cycle.sh briefed docs/specs/nolog --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    briefed --commit succeeds with no anomalies.jsonl on disk" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -q '^\*\*Briefed:\*\*' docs/specs/nolog/plan.md && echo "  ok    the Briefed line landed (the commit was not skipped)" \
+  || { echo "::error::plan.md: $(cat docs/specs/nolog/plan.md)"; fail=1; }
+
+shiph() { bash scripts/ship-check.sh docs/specs/hooklog; }
+echo "ship-check stage 03 (no separate ship-check suite - case here): a tree dirty only in hook-written memory/stats/ files is reported clean, not blocked"
+printf '{"ts":"y"}\n' >> memory/stats/anomalies.jsonl
+shiph | expect "hook log alone -> 03 clean, names the pending path" "clean (hook-written stats pending: memory/stats/anomalies.jsonl)"
+
+echo "ship-check stage 03: a hook-written path plus a real dirty file still blocks, naming neither"
+printf 'v2\n' >> hook-app.txt
+shiph | expect "hook log + real code dirt -> 03 still not clean" "working tree is not clean"
+git checkout -- hook-app.txt
+
 exit $fail
