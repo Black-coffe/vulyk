@@ -546,13 +546,20 @@ bundle_emit() { # bundle_emit <week> <hive> <agent-set>
   local week="$1" hive="$2" agents="$3"
   local ts code value threshold vulyk tier model agent rowweek vsan
   [ -f "$LOG" ] || return 0
+  # A unit separator (US, 0x1f), not a tab: tab is IFS whitespace, so bash collapses a run of
+  # them and an empty `model` would shift `agent` into `model`'s slot and off the end of the
+  # row - exactly the rows `detect_agents` writes, which never carry a model (round-4 opus
+  # seat, ask 3). US is not IFS whitespace, so every field keeps its own position however many
+  # of them are empty; jq strips it from every value first, beside the quote, the backslash and
+  # the line breaks `sanitize` already removes, so no local row can inject a separator.
   # `tr -d '\r'` below is load-bearing on Windows: jq there ends every output line with CRLF,
-  # and the CR would ride into the last @tsv field (agent) and push every token out of its set.
+  # and the CR would ride into the last field (agent) and push every token out of its set.
   jq -r 'select(type == "object")
          | [ (.ts // ""), (.code // ""), (.value // ""), (.threshold // ""),
              (.vulyk // ""), (.tier // 0), (.model // ""), (.agent // "") ]
-         | @tsv' "$LOG" 2>/dev/null | tr -d '\r' |
-  while IFS="$(printf '\t')" read -r ts code value threshold vulyk tier model agent; do
+         | map(tostring | gsub("[\"\\\\\t\n\r\u001f]"; ""))
+         | join("\u001f")' "$LOG" 2>/dev/null | tr -d '\r' |
+  while IFS="$(printf '\037')" read -r ts code value threshold vulyk tier model agent; do
     rowweek="$(week_of "$ts")"
     [ "$rowweek" = "$week" ] || continue
     in_set "$code" "$ENUM" || continue

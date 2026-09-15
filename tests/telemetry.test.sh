@@ -941,6 +941,39 @@ cat "$CALLS" | expect_absent "nothing in the script invokes a pr"       "pr crea
 cat "$CALLS" | expect_absent "nothing in the script invokes git clone"  " clone"
 cat "$CALLS" | expect_absent "nothing in the script invokes a fork"     "fork"
 
+# --- case 18: bundle - an empty string field keeps every other field in its own key ------------
+# Round-4 opus seat, ask 3: the local row used to be read with a tab IFS, and tab is IFS
+# whitespace - an empty `model` collapsed with its neighbour and pushed `agent` off the end.
+# Those are exactly the rows `detect_agents` writes: it never passes --model.
+echo "--- bundle: empty fields keep their slots"
+set_consent "on - anonymized weekly bundle"
+: > "$LOG"
+localrow() { # localrow <model> <agent> <ref>
+  printf '{"v":1,"ts":"%s","code":"agent_empty","value":3,"threshold":0,"vulyk":"0.13.3","tier":2,"model":"%s","agent":"%s","spec":"s","story":"","ref":"%s"}\n' \
+    "$NOW" "$1" "$2" "$3" >> "$LOG"
+}
+localrow ""       "worker-code" "agent:no-model"
+localrow "sonnet" ""            "agent:no-agent"
+localrow ""       ""            "agent:neither"
+localrow "sonnet" "cycle-clerk" "agent:both"
+
+EMPTYB="$T/empty-fields.jsonl"
+tel bundle --week "$WEEK" --out "$EMPTYB"
+expect_eq "four local rows bundle as four rows" "4" "$(grep -c . "$EMPTYB")"
+pair() { jq -r '"\(.model)/\(.agent)"' < "$EMPTYB" | tr -d '\r' | sed -n "$1p"; }
+expect_eq "an empty model keeps the agent token" "/worker-code"       "$(pair 1)"
+expect_eq "an empty agent keeps the model alias" "sonnet/"            "$(pair 2)"
+expect_eq "both empty stay empty"                "/"                  "$(pair 3)"
+expect_eq "both set are unchanged"               "sonnet/cycle-clerk" "$(pair 4)"
+if tel check "$EMPTYB" >/dev/null 2>&1; then ok "check accepts all four rows"
+else bad "check rejected the four rows:"; tel check "$EMPTYB" 2>&1 | sed 's/^/        /'; fi
+
+# One emitter, no second parser: publish's own bundle is byte-identical to `bundle --out`.
+HIVEID3="$(jq -r '.hive' < "$EMPTYB" | head -1 | tr -d '\r')"
+tel publish --week "$WEEK" --dry-run >/dev/null 2>&1
+expect_eq "publish --dry-run emits the same rows as bundle --out" "same" \
+  "$(cmp -s "$EMPTYB" "$HIVE/.vulyk/telemetry/$WEEK-$HIVEID3.jsonl" && echo same || echo different)"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1

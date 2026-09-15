@@ -107,3 +107,4 @@
 {"ts":"2026-09-15T09:33:46Z","story":"anomaly-telemetry-11-scan-seen-list","declared":2,"changed":8,"out_of_scope":6}
 {"ts":"2026-09-15T09:36:33Z","story":"anomaly-telemetry-11-scan-seen-list","declared":2,"changed":9,"out_of_scope":7}
 {"ts":"2026-09-15T09:39:20Z","story":"anomaly-telemetry-12-recipe-docs-and-scope-gate","declared":5,"changed":5,"out_of_scope":1}
+{"ts":"2026-09-15T10:10:26Z","story":"anomaly-telemetry-13-bundle-agent-token","declared":2,"changed":3,"out_of_scope":1}
