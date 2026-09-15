@@ -19,8 +19,10 @@ the newest spec under `docs/specs/` that is briefed or approved but has no `**Br
    `/vulyk-status` does: `Workflow` present in this session's own tool list -> Workflow driver;
    otherwise the fallback loop. **The fallback loop runs every step inside this pinned top-model
    session - the most expensive path in `docs/token-economy.md` - so it needs `--fallback` in
-   "$ARGUMENTS": without it, stop here and say so in one sentence (enable the Workflow tool, or
-   relaunch with `--fallback`).** Print which one - `driver: workflow` or `driver: fallback` - then,
+   "$ARGUMENTS": without it, record `bash scripts/telemetry.sh record driver_refused 1 0 --spec
+   <slug> --ref driver:<slug>:$(date -u +%Y-%m-%d)` (quiet one-liner, no output), then stop here and
+   say so in one sentence (enable the Workflow tool, or relaunch with `--fallback`).** Print which
+   one - `driver: workflow` or `driver: fallback` - then,
    before touching anything else, print and journal the one line that tells the human the tree is
    not theirs right now:
    ```
@@ -41,7 +43,11 @@ the newest spec under `docs/specs/` that is briefed or approved but has no `**Br
      `queen-planner` agents on its own to one of the terminal `next` values (`green`, `escalated`,
      `paused`, `shipped`). Do nothing else in this session while it runs. When it returns - in this
      session or a fresh one that resumes here - do the **wake-up** step (4) instead of reading
-     anything it printed along the way; the transcript is not the record, the disk is.
+     anything it printed along the way; the transcript is not the record, the disk is. If this call
+     itself throws (a tool error at invocation, not the run's own outcome) - the driver never
+     started: record `bash scripts/telemetry.sh record driver_refused 1 0 --spec <slug> --ref
+     driver:<slug>:$(date -u +%Y-%m-%d)`, then print the tool's error verbatim and stop; never
+     retry blindly.
    - **Fallback driver** (`Workflow` absent from the tool list): continue with step 2, in this same
      session, using your own Bash for every `cycle.sh` verb and the Agent tool for every worker,
      seat, `lead-review` and `queen-planner` dispatch the Workflow would otherwise make.

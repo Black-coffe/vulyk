@@ -1,8 +1,8 @@
 ---
 story: anomaly-telemetry-03
 spec: anomaly-telemetry
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -49,5 +49,10 @@ memory/map/agents-and-commands.md (`/vulyk-evolve`, `/vulyk-build` step 1 and th
 `none — reviewed by lead-review`
 
 ## Implementation notes
+- `vulyk-evolve.md` step 2: appended the anomaly-count table (per-code, 7d, zero-filled from `telemetry.sh enum`) and the consent/publish branch inline in the check-in step, rather than inserting a numbered step 2.5 - avoids renumbering steps 3-5 and matches the story's "or as part of the check-in" option.
+- `vulyk-build.md`: recorded `driver_refused` at the two refusal points named in the story - the missing-`--fallback` stop in step 1, and a new sentence covering the `Workflow` tool call itself throwing at invocation (the file previously had no branch for that case; added one, scoped to "stop, never retry blindly", per the plan's `by-name call threw` phrasing).
+- `vulyk-resume.md`: `driver_relaunched` recorded once `$stamp` is resolved inside step 3's relaunch, before continuing the launch.
+- All three calls are quiet one-liners (`telemetry.sh record` prints nothing on success); `publish`'s fenced block is the only script output any of these command files shows the owner, per acceptance criterion 5.
+- Interpreted the ambiguous acceptance line "the publish call happens only on the full path, and `publish --dry-run` is used under `--dry-run`" as: publish only runs when consent is `on` (vs. the off-notice branch), and `/vulyk-evolve --dry-run` passes `--dry-run` through to `telemetry.sh publish` rather than skipping it - flagged here since the story text reads ambiguously between "full path" (= consent-on) and "the full (non-dry-run) path".
 
 ## Findings

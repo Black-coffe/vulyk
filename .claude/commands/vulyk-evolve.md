@@ -39,6 +39,18 @@ Run the evolution cycle. Use the `insight-harvester` and `skill-gardener` skills
    ' memory/stats/human.jsonl
    ```
    Print `human.jsonl REJECTED (7d): <n>`. If escaped defects (7d) > REJECTED (7d), print the signal sentence: `signal: escaped defects this week (<n>) exceed what a human gate caught in a comparable span (<n>) - the "models are ready" hypothesis is losing this week; docs/grill/2026-09-12-autonomous-cycle-council.md Decision 14 names human_gate: blocking as the fallback, not a default.` Otherwise print `signal: none - escaped defects at or below the human-gate baseline`. Nothing in this step applies anything; it feeds step 3's diagnosis the way `skills.json` already does.
+
+   **Anomaly telemetry (7d, same check-in).** Schema and enum: `docs/telemetry.md`. If `memory/stats/anomalies.jsonl` does not exist, print `anomalies: none logged yet` and skip to the consent line below. Otherwise count rows with `ts >= SINCE` (the same window as above) by `code`:
+   ```
+   awk -v since="$SINCE" '
+     { match($0, /"ts":"[^"]*"/);   ts=substr($0, RSTART+6, RLENGTH-7) }
+     ts < since { next }
+     { match($0, /"code":"[^"]*"/); code=substr($0, RSTART+7, RLENGTH-8) }
+     { count[code]++ }
+     END { for (c in count) printf "%s\t%d\n", c, count[c] }
+   ' memory/stats/anomalies.jsonl
+   ```
+   Print one row per code from `bash scripts/telemetry.sh enum` - `anomalies (7d): <code> <n>` (`<n>` is `0` for a code the awk pass did not emit) - beside the council stats above; no free text from the log, the schema carries none. Then run `bash scripts/telemetry.sh consent`: `off` prints its own one-line notice (`telemetry: off (Profile row Telemetry) - nothing to send`) and moves straight to step 3, nothing further sent or printed. `on` runs `bash scripts/telemetry.sh publish` - `publish --dry-run` instead when this `/vulyk-evolve` run itself carries `--dry-run` - shows its fenced command block to the owner verbatim, and states plainly that the command was printed, not run, same posture as `/vulyk-ship` step 3 (never `git commit`, never `gh`, never waits for the owner). The anomaly counts feed step 3's diagnosis the same way the council stats do.
 3. **Diagnose.** Produce three lists with evidence: (a) top 3 friction patterns (repeated mistakes, expensive habits, recurring re-explanations); (b) skills/rules unused for 3+ weeks -> archive candidates; (c) patterns done manually 3+ times -> new skill/rule candidates. A "signal" line from step 2 is evidence for (a), not a separate list.
 4. **Propose.** On a branch `vulyk/evolve-<date>`, write the actual diffs: edits to `CLAUDE.md` project profile, `.claude/rules/`, agent prompts, new skill scaffolds; move archived skills to `.claude/skills/_graveyard/<name>/` adding `RETIRED.md` (date, reason, evidence). Append a CHANGELOG.md entry justifying EVERY change in one line each.
 5. **Human gate.** Present the changeset as a review: per-change rationale, expected effect, rollback note. Apply NOTHING to the main branch yourself. With `--dry-run`, stop after the diagnosis report.
