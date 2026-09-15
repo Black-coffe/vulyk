@@ -487,6 +487,93 @@ expect_eq "a scan with no --transcript records no agent row" "0" \
   "$(grep -c '"code":"agent_' "$LOG" || true)"
 expect_eq "a scan with no --transcript starts no python at all" "0" "$(pycount)"
 
+# --- case 10b: scan - the per-session seen-list (plan A18, round-3 review Critical 1) -----------
+echo "--- scan: seen-list bounds the Stop-hook scan"
+# The case story 08 could not have passed: 40 subagents UNDER the threshold, so none of them
+# ever produces a log row and the log-ref bound never fires. Without the seen-list every Stop
+# scan re-measures all forty (the reviewer measured 74 python starts / ~26 s on a real session).
+SEENPROJ="$T/seenproj"
+SEENSESSION="$SEENPROJ/sid2"
+mkdir -p "$SEENSESSION/subagents"
+N_SUB=40
+i=1
+while [ "$i" -le "$N_SUB" ]; do
+  agent_file "$SEENSESSION/subagents/agent-s$i.jsonl" 100 text cycle-clerk
+  i=$(( i + 1 ))
+done
+# One subagent that IS an anomaly, and whose last entry is a tool_use: it proves the cached JSON
+# drives the detectors, not just the skip - `agent_empty` at SessionEnd must come out of the
+# cache with no python started for the file.
+agent_file "$SEENSESSION/subagents/agent-big.jsonl" 60000 tool_use cycle-clerk
+cat > "$SEENPROJ/sid2.jsonl" <<'EOF'
+{"type":"assistant","isSidechain":false,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}
+EOF
+
+# A shim that logs its argv, not just a tick: "no python for this subagent" is only provable
+# from outside as a file name that never reaches an interpreter.
+ARGSHIM="$T/argshim"; PYARGS="$T/pyargs.txt"; mkdir -p "$ARGSHIM"; : > "$PYARGS"
+cat > "$ARGSHIM/python3" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$PYARGS"
+exec "$PY" "\$@"
+EOF
+chmod +x "$ARGSHIM/python3"
+telargs() { (cd "$HIVE" && PATH="$ARGSHIM:$PATH" VULYK_HIVE="$HIVE" bash scripts/telemetry.sh "$@"); }
+argcount() { grep -c . "$PYARGS" 2>/dev/null | head -1; }
+SEEN_FILE="$HIVE/.vulyk/telemetry/seen/sid2"
+
+: > "$LOG"; : > "$PYARGS"; rm -rf "$HIVE/.vulyk"
+telargs scan --transcript "$SEENPROJ/sid2.jsonl" >/dev/null 2>&1
+expect_eq "the first scan measures every subagent plus the main transcript" "$(( N_SUB + 2 ))" \
+  "$(argcount)"
+expect_eq "only the over-threshold subagent records a row" "1" \
+  "$(grep -c '"code":"agent_prefix_high"' "$LOG" || true)"
+expect_eq "a plain scan records no agent_empty row" "0" \
+  "$(grep -c '"code":"agent_empty"' "$LOG" || true)"
+expect_eq "the seen-list holds one line per subagent" "$(( N_SUB + 1 ))" "$(grep -c . "$SEEN_FILE")"
+expect_eq "a seen-list line is <basename><TAB><bytes><TAB><measure json>" \
+  "agent-s1.jsonl $(wc -c < "$SEENSESSION/subagents/agent-s1.jsonl" | tr -d ' ') {" \
+  "$(grep '^agent-s1\.jsonl' "$SEEN_FILE" | awk -F'\t' '{print $1, $2, substr($3,1,1)}')"
+
+: > "$PYARGS"
+telargs scan --transcript "$SEENPROJ/sid2.jsonl" >/dev/null 2>&1
+expect_eq "the second scan starts python at most once (the main transcript's own measure)" "1" \
+  "$(argcount)"
+expect_eq "no subagent file reaches an interpreter on the second scan" "0" \
+  "$(grep -c 'agent-s' "$PYARGS" || true)"
+expect_eq "the second scan still holds one line per subagent" "$(( N_SUB + 1 ))" \
+  "$(grep -c . "$SEEN_FILE")"
+
+# SessionEnd: agent_empty is judged off the cached JSON of a file nothing has touched since.
+: > "$PYARGS"
+telargs scan --transcript "$SEENPROJ/sid2.jsonl" --final >/dev/null 2>&1
+expect_eq "a --final scan over seen subagents starts python at most once" "1" "$(argcount)"
+expect_eq "no subagent file reaches an interpreter on the --final scan" "0" \
+  "$(grep -c 'agent-' "$PYARGS" || true)"
+expect_eq "agent_empty is recorded from the cached measurement" "1" \
+  "$(grep -c '"code":"agent_empty"' "$LOG")"
+expect_eq "the cached agent_empty row carries the cached agentType" "cycle-clerk" \
+  "$(grep '"code":"agent_empty"' "$LOG" | jq -r '.agent')"
+
+# A subagent that grew is measured again - and only it: the key is the byte size, not an age.
+printf '{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":10},"content":[{"type":"text","text":"more"}]}}\n' \
+  >> "$SEENSESSION/subagents/agent-s7.jsonl"
+GREW_BYTES="$(wc -c < "$SEENSESSION/subagents/agent-s7.jsonl" | tr -d ' ')"
+: > "$PYARGS"
+telargs scan --transcript "$SEENPROJ/sid2.jsonl" >/dev/null 2>&1
+expect_eq "the grown subagent is measured again" "1" "$(grep -c 'agent-s7\.jsonl' "$PYARGS")"
+expect_eq "and it is the only subagent measured" "2" "$(argcount)"
+expect_eq "its seen-list line is rewritten with the new byte size" "$GREW_BYTES" \
+  "$(grep '^agent-s7\.jsonl' "$SEEN_FILE" | awk -F'\t' '{print $2}')"
+expect_eq "the seen-list still holds one line per subagent" "$(( N_SUB + 1 ))" \
+  "$(grep -c . "$SEEN_FILE")"
+
+# A scan with no --transcript has no session, so it has no seen-list either.
+rm -rf "$HIVE/.vulyk"
+telargs scan >/dev/null 2>&1
+expect_eq "a scan with no --transcript writes no seen-list" "0" \
+  "$([ -d "$HIVE/.vulyk" ] && echo 1 || echo 0)"
+
 # --- case 11: scan - context_high ----------------------------------------------------------------
 echo "--- scan: context_high"
 : > "$LOG"

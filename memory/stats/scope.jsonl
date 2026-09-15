@@ -104,3 +104,5 @@
 {"ts":"2026-09-15T08:14:20Z","story":"anomaly-telemetry-08-subagent-path-bounded-scan","declared":4,"changed":5,"out_of_scope":1}
 {"ts":"2026-09-15T08:14:42Z","story":"anomaly-telemetry-08-subagent-path-bounded-scan","declared":4,"changed":6,"out_of_scope":2}
 {"ts":"2026-09-15T08:24:05Z","story":"anomaly-telemetry-10-adr-installer-warning-docs-truth","declared":7,"changed":8,"out_of_scope":1}
+{"ts":"2026-09-15T09:33:46Z","story":"anomaly-telemetry-11-scan-seen-list","declared":2,"changed":8,"out_of_scope":6}
+{"ts":"2026-09-15T09:36:33Z","story":"anomaly-telemetry-11-scan-seen-list","declared":2,"changed":9,"out_of_scope":7}

@@ -277,50 +277,125 @@ detect_context() { # detect_context <main transcript>
   fi
 }
 
-# agent_prefix_high / agent_empty: every subagent file of THIS session. Claude Code writes them
-# under the transcript's own session directory - `<dirname>/<basename .jsonl>/subagents/`, plain
-# dispatches directly there and workflow ones under `workflows/<wf>/` (recon/hooks-and-stats.md
-# §6) - never beside the main transcript.
-#
-# Bounded (plan A17, review Major 5): the scope is one session's subagents; the log is grepped
-# ONCE for the `agent:<basename>` refs already recorded, and a file already covered is skipped
-# before python starts. `agent_empty` is evaluated only on a final scan (SessionEnd), so a
-# subagent still mid-turn at `Stop` time never becomes a permanent false row (Major 6) - which
-# is also why a file is only "covered" by its prefix row when this scan cannot record the
-# other code anyway.
+# The per-session seen-list (plan A18, round-3 review Critical 1): `.vulyk/telemetry/seen/<sid>`,
+# one TSV line per subagent file - `<basename>\t<bytes when measured>\t<measure json>`. Story
+# 08's log-ref bound only ever skipped a subagent that had already produced a row, so an
+# under-threshold one - the normal case - started python again on every Stop (measured on a real
+# 73-subagent session: 74 starts, ~26 s per scan, every run). The key is the file's byte size:
+# exact and content-derived, not an age guard. The list is per-machine and gitignored via
+# `.vulyk/` (A5); the committed log stays anomalies only.
+# The four fields the two agent detectors read, as one tab-separated line - one jq pass instead
+# of four over the same small object.
+MEASURE_FIELDS_JQ='[(.first_prefix // 0), (.assistant_turns // 0), (.last_has_text // false), (.agent_type // "")] | @tsv'
+measure_fields() { # measure_fields <measure json>
+  printf '%s' "${1:-}" | jq -r "$MEASURE_FIELDS_JQ" 2>/dev/null | tr -d '\r'
+}
+
+file_bytes() { # file_bytes <path> -> byte size, digits only, empty when unreadable
+  local n; n="$(wc -c < "$1" 2>/dev/null || true)"; n="${n//[!0-9]/}"; printf '%s' "$n"
+}
+
 detect_agents() { # detect_agents <main transcript> <final 0|1>
-  local transcript="${1:-}" final="${2:-0}" dir
+  local transcript="${1:-}" final="${2:-0}" dir seen list fields tab
   [ -n "$transcript" ] && [ -f "$transcript" ] || return 0
   dir="$(dirname "$transcript")/$(basename "$transcript" .jsonl)/subagents"
   [ -d "$dir" ] || return 0
 
-  local f measured first_prefix turns last_has_text agent_type base ref
-  find "$dir" -type f -name 'agent-*.jsonl' 2>/dev/null | sort | \
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    base="$(basename "$f")"
-    ref="agent:$base"
-    # The dedupe `record` would do anyway, checked here so python is never started for a file
-    # whose every recordable row is already in the log.
-    if scan_seen agent_prefix_high "$ref" &&
-       { [ "$final" != "1" ] || scan_seen agent_empty "$ref"; }; then
-      continue
-    fi
-    measured="$(measure "$f" --sidechain)"
-    [ -n "$measured" ] || continue
-    first_prefix="$(printf '%s' "$measured" | jq -r '.first_prefix // 0' 2>/dev/null)"
-    turns="$(printf '%s' "$measured" | jq -r '.assistant_turns // 0' 2>/dev/null)"
-    last_has_text="$(printf '%s' "$measured" | jq -r '.last_has_text // false' 2>/dev/null)"
-    agent_type="$(printf '%s' "$measured" | jq -r '.agent_type // ""' 2>/dev/null)"
+  tab="$(printf '\t')"
+  seen="$ROOT/.vulyk/telemetry/seen/$(basename "$transcript" .jsonl)"
+  list=""; fields=""
+  if [ -f "$seen" ]; then
+    list="$(tr -d '\r' < "$seen" 2>/dev/null || true)"
+    # One jq for the WHOLE list, not one per cached subagent: `<basename>\t<bytes>\t<the four
+    # fields>`, looked up by the same key as the list itself. Seventy per-file jq spawns were
+    # what remained of a Stop scan once python stopped starting.
+    fields="$(printf '%s\n' "$list" | jq -R -r 'select(length > 0)
+      | split("\t") as $r
+      | ((try ($r[2] | fromjson) catch {}) // {}) as $m
+      | [$r[0], $r[1], ($m.first_prefix // 0), ($m.assistant_turns // 0),
+         ($m.last_has_text // false), ($m.agent_type // "")] | @tsv' 2>/dev/null | tr -d '\r' || true)"
+  fi
+  # Newline-anchored on both ends, like SCAN_SEEN, so one basename never matches inside another.
+  list="
+$list
+"
+  fields="
+$fields
+"
 
-    if is_number "$first_prefix" && [ "$first_prefix" -gt "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" ] 2>/dev/null; then
-      cmd_record agent_prefix_high "$first_prefix" "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" \
-        --ref "$ref" --agent "$agent_type"
+  find "$dir" -type f -name 'agent-*.jsonl' 2>/dev/null | sort | {
+    local f measured first_prefix turns last_has_text agent_type base ref size key rest cached
+    local frest fline
+    local newlist=""
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      base="$(basename "$f")"
+      ref="agent:$base"
+      size="$(file_bytes "$f")"
+      cached=""
+      if [ -n "$size" ]; then
+        key="
+$base$tab$size$tab"
+        case "$list" in
+          *"$key"*) rest="${list#*"$key"}"; cached="${rest%%"
+"*}" ;;
+        esac
+      fi
+
+      fline=""
+      if [ -n "$cached" ]; then
+        # Unchanged since it was measured: the cached JSON drives the same detectors, and no
+        # python starts for this file again - ever, for as long as the file stops growing.
+        measured="$cached"
+        newlist="$newlist$base$tab$size$tab$cached
+"
+        case "$fields" in
+          *"$key"*) frest="${fields#*"$key"}"; fline="${frest%%"
+"*}" ;;
+        esac
+        # Already in the log under every code this scan could record: nothing left to do.
+        if scan_seen agent_prefix_high "$ref" &&
+           { [ "$final" != "1" ] || scan_seen agent_empty "$ref"; }; then
+          continue
+        fi
+      else
+        # The dedupe `record` would do anyway, checked here so python is never started for a file
+        # whose every recordable row is already in the log (story 08). No longer the only bound.
+        if scan_seen agent_prefix_high "$ref" &&
+           { [ "$final" != "1" ] || scan_seen agent_empty "$ref"; }; then
+          continue
+        fi
+        measured="$(measure "$f" --sidechain)"
+        [ -n "$measured" ] || continue
+        measured="$(printf '%s' "$measured" | tr -d '\r\n')"
+        [ -n "$measured" ] || continue
+        [ -n "$size" ] && newlist="$newlist$base$tab$size$tab$measured
+"
+      fi
+
+      # A cached file's fields came out of the one jq above; a freshly measured one pays a jq of
+      # its own, as does a cached line that batch pass could not parse.
+      [ -n "$fline" ] || fline="$(measure_fields "$measured")"
+      IFS="$tab" read -r first_prefix turns last_has_text agent_type <<EOF
+$fline
+EOF
+
+      if is_number "$first_prefix" && [ "$first_prefix" -gt "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" ] 2>/dev/null; then
+        cmd_record agent_prefix_high "$first_prefix" "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" \
+          --ref "$ref" --agent "$agent_type"
+      fi
+      if [ "$final" = "1" ] && is_number "$turns" && [ "$turns" != "0" ] && [ "$last_has_text" = "false" ]; then
+        cmd_record agent_empty "$turns" 0 --ref "$ref" --agent "$agent_type"
+      fi
+    done
+    # One write per scan, holding one line per subagent file present now: a line for a file that
+    # is gone is dropped with it. Written only when this session has subagents at all, so a scan
+    # with no --transcript (which returned above) never creates the directory.
+    if [ -n "$newlist" ]; then
+      mkdir -p "$(dirname "$seen")" 2>/dev/null || true
+      printf '%s' "$newlist" > "$seen" 2>/dev/null || true
     fi
-    if [ "$final" = "1" ] && is_number "$turns" && [ "$turns" != "0" ] && [ "$last_has_text" = "false" ]; then
-      cmd_record agent_empty "$turns" 0 --ref "$ref" --agent "$agent_type"
-    fi
-  done
+  }
 }
 
 # A slug read out of a stats file is data, not a path: only a plain slug may become a path
