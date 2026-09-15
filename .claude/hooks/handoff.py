@@ -945,11 +945,16 @@ def mode_measure(argv):
     sys.exit(0)
 
 
-HOOK_MODES = ("stop", "prompt", "precompact", "sessionend", "sessionstart", "measure")
+HOOK_MODES = ("stop", "prompt", "precompact", "sessionend", "sessionstart")
 
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
+    # `measure` is dispatched before anything else: it is called from a terminal and from
+    # scripts/telemetry.sh, never from a hook, and it needs no config, no window and above
+    # all no stdin - a blind read there blocked a direct call (review finding 16).
+    if mode == "measure":
+        mode_measure(sys.argv[2:])
     # Only hook modes consume stdin; dump/status are invoked from a shell where
     # a blind stdin read could block on an open pipe.
     payload = read_stdin_json() if mode in HOOK_MODES else {}
@@ -993,8 +998,6 @@ def main():
         sys.exit(0)
     elif mode == "status":
         mode_status(payload, cfg, root)
-    elif mode == "measure":
-        mode_measure(sys.argv[2:])
     emit(None)
 
 

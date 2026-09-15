@@ -11,11 +11,20 @@ SCRIPT="$ROOT/scripts/telemetry.sh"
 
 payload=$(cat 2>/dev/null || true)
 transcript=""
-[ -n "$payload" ] && transcript=$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>/dev/null)
+event=""
+if [ -n "$payload" ]; then
+  transcript=$(printf '%s' "$payload" | jq -r '.transcript_path // empty' 2>/dev/null)
+  event=$(printf '%s' "$payload" | jq -r '.hook_event_name // empty' 2>/dev/null)
+fi
+
+# `agent_empty` is a permanent row, so it is only judged when the session is over: at `Stop`
+# a subagent mid-turn looks exactly like one that returned nothing (plan A17, review Major 6).
+final=""
+[ "$event" = "SessionEnd" ] && final="--final"
 
 if [ -n "$transcript" ]; then
-  bash "$SCRIPT" scan --transcript "$transcript" >/dev/null 2>&1 < /dev/null
+  bash "$SCRIPT" scan --transcript "$transcript" $final >/dev/null 2>&1 < /dev/null
 else
-  bash "$SCRIPT" scan >/dev/null 2>&1 < /dev/null
+  bash "$SCRIPT" scan $final >/dev/null 2>&1 < /dev/null
 fi
 exit 0

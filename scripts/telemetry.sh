@@ -4,7 +4,7 @@
 #   bash scripts/telemetry.sh enum|agents|consent
 #   bash scripts/telemetry.sh record <code> <value> <threshold> [--spec s] [--story id]
 #                                    [--ref r] [--model alias] [--tier n] [--agent token]
-#   bash scripts/telemetry.sh scan [--transcript <path>]      # story 02
+#   bash scripts/telemetry.sh scan [--transcript <path>] [--final]   # --final = SessionEnd
 #   bash scripts/telemetry.sh bundle [--week YYYY-Www] [--out <file>]
 #   bash scripts/telemetry.sh check <file>...
 #   bash scripts/telemetry.sh publish [--week YYYY-Www] [--dry-run]
@@ -206,6 +206,27 @@ measure() { # measure <transcript> [--sidechain]
   bash "$ROOT/.claude/hooks/handoff.sh" measure "$@" < /dev/null 2>/dev/null
 }
 
+# The (code, ref) pairs already in the log, read ONCE per scan (plan A17, review Major 5).
+# `record` dedupes on the same pair, but it gets there through a dozen subprocesses per call -
+# on a log with sixty recorded breaches that was most of a Stop-hook scan. A detector asks
+# here first and skips the work entirely; `record` stays the authority.
+SCAN_SEEN=""
+scan_seen_load() {
+  SCAN_SEEN=""
+  [ -f "$LOG" ] || return 0
+  SCAN_SEEN="$(sed -n 's/.*"code":"\([a-z_]*\)".*"ref":"\([^"]*\)".*/\1 \2/p' "$LOG" 2>/dev/null || true)"
+  SCAN_SEEN="
+$SCAN_SEEN
+"
+}
+
+scan_seen() { # scan_seen <code> <ref>   (the newlines keep `scope:a` out of `scope:abc`)
+  [ -n "${2:-}" ] || return 1
+  case "$SCAN_SEEN" in *"
+$1 $2
+"*) return 0 ;; *) return 1 ;; esac
+}
+
 # claude-fable-5-1 -> fable, claude-opus-... -> opus, etc. Anything else (or empty) -> "".
 # cmd_record re-validates against MODELS anyway; this just gives it a token worth keeping.
 model_alias() {
@@ -256,37 +277,61 @@ detect_context() { # detect_context <main transcript>
   fi
 }
 
-# agent_prefix_high / agent_empty: every subagent file under <session dir>/subagents/
-# (plain dispatches and workflow ones alike - recon/hooks-and-stats.md §6).
-detect_agents() { # detect_agents <session dir>
-  local session_dir="${1:-}" f measured first_prefix turns last_has_text agent_type base ref
-  [ -n "$session_dir" ] && [ -d "$session_dir/subagents" ] || return 0
-  find "$session_dir/subagents" -type f -name '*.jsonl' 2>/dev/null | sort | \
+# agent_prefix_high / agent_empty: every subagent file of THIS session. Claude Code writes them
+# under the transcript's own session directory - `<dirname>/<basename .jsonl>/subagents/`, plain
+# dispatches directly there and workflow ones under `workflows/<wf>/` (recon/hooks-and-stats.md
+# §6) - never beside the main transcript.
+#
+# Bounded (plan A17, review Major 5): the scope is one session's subagents; the log is grepped
+# ONCE for the `agent:<basename>` refs already recorded, and a file already covered is skipped
+# before python starts. `agent_empty` is evaluated only on a final scan (SessionEnd), so a
+# subagent still mid-turn at `Stop` time never becomes a permanent false row (Major 6) - which
+# is also why a file is only "covered" by its prefix row when this scan cannot record the
+# other code anyway.
+detect_agents() { # detect_agents <main transcript> <final 0|1>
+  local transcript="${1:-}" final="${2:-0}" dir
+  [ -n "$transcript" ] && [ -f "$transcript" ] || return 0
+  dir="$(dirname "$transcript")/$(basename "$transcript" .jsonl)/subagents"
+  [ -d "$dir" ] || return 0
+
+  local f measured first_prefix turns last_has_text agent_type base ref
+  find "$dir" -type f -name 'agent-*.jsonl' 2>/dev/null | sort | \
   while IFS= read -r f; do
     [ -n "$f" ] || continue
+    base="$(basename "$f")"
+    ref="agent:$base"
+    # The dedupe `record` would do anyway, checked here so python is never started for a file
+    # whose every recordable row is already in the log.
+    if scan_seen agent_prefix_high "$ref" &&
+       { [ "$final" != "1" ] || scan_seen agent_empty "$ref"; }; then
+      continue
+    fi
     measured="$(measure "$f" --sidechain)"
     [ -n "$measured" ] || continue
     first_prefix="$(printf '%s' "$measured" | jq -r '.first_prefix // 0' 2>/dev/null)"
     turns="$(printf '%s' "$measured" | jq -r '.assistant_turns // 0' 2>/dev/null)"
     last_has_text="$(printf '%s' "$measured" | jq -r '.last_has_text // false' 2>/dev/null)"
     agent_type="$(printf '%s' "$measured" | jq -r '.agent_type // ""' 2>/dev/null)"
-    base="$(basename "$f")"
-    ref="agent:$base"
 
     if is_number "$first_prefix" && [ "$first_prefix" -gt "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" ] 2>/dev/null; then
       cmd_record agent_prefix_high "$first_prefix" "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" \
         --ref "$ref" --agent "$agent_type"
     fi
-    if is_number "$turns" && [ "$turns" != "0" ] && [ "$last_has_text" = "false" ]; then
+    if [ "$final" = "1" ] && is_number "$turns" && [ "$turns" != "0" ] && [ "$last_has_text" = "false" ]; then
       cmd_record agent_empty "$turns" 0 --ref "$ref" --agent "$agent_type"
     fi
   done
 }
 
+# A slug read out of a stats file is data, not a path: only a plain slug may become a path
+# segment or reach a row (review finding 15).
+valid_slug() { case "${1:-}" in *[!A-Za-z0-9._-]*|'') return 1 ;; *) return 0 ;; esac; }
+
 # spec_tier <slug> -> the number on that spec's plan.md "**Tier:**" line, else empty
 # (cmd_record maps anything outside 0-4 to 0).
 spec_tier() {
   local spec="${1:-}" f line
+  valid_slug "$spec" || return 0
   f="$ROOT/docs/specs/$spec/plan.md"
   [ -f "$f" ] || return 0
   line="$(grep -m1 '\*\*Tier:\*\*' "$f" 2>/dev/null || true)"
@@ -303,35 +348,69 @@ detect_council() {
   while IFS="$(printf '\t')" read -r spec round; do
     [ -n "$spec" ] || continue
     is_number "$round" || continue
+    scan_seen council_rounds_high "council:$spec" && continue
     if [ "$round" -ge "$VULYK_ANOMALY_COUNCIL_ROUNDS" ] 2>/dev/null; then
-      cmd_record council_rounds_high "$round" "$VULYK_ANOMALY_COUNCIL_ROUNDS" \
-        --spec "$spec" --tier "$(spec_tier "$spec")" --ref "council:$spec"
+      # A spec that is not a plain slug never becomes a path and never reaches the row; the
+      # ref still carries it, so the anomaly is still recorded exactly once (finding 15).
+      if valid_slug "$spec"; then
+        cmd_record council_rounds_high "$round" "$VULYK_ANOMALY_COUNCIL_ROUNDS" \
+          --spec "$spec" --tier "$(spec_tier "$spec")" --ref "council:$spec"
+      else
+        cmd_record council_rounds_high "$round" "$VULYK_ANOMALY_COUNCIL_ROUNDS" \
+          --spec "" --tier 0 --ref "council:$spec"
+      fi
     fi
   done
 }
 
 # stage_long: the gap between two CONSECUTIVE journal.md lines, per spec. Plan A9: the still-
 # open last stage (last line to now) is never measured - it would re-fire on every scan.
+#
+# One awk pass per journal (review Major 5): the timestamps are parsed and differenced inside
+# awk - a `date` spawn per journal line was most of the 31 s a Stop-hook scan cost. Only a gap
+# at or above the threshold leaves the pass, so `record` runs for anomalies, not for rows.
+# `<line no>` in the ref counts journal entries, as before, so refs already in a log still match.
+STAGE_AWK='
+function epoch(ts,   y, mo, d, h, mi, s, era, yoe, doy, doe, days) {
+  if (ts !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/) return -1
+  y = substr(ts, 1, 4) + 0; mo = substr(ts, 6, 2) + 0; d = substr(ts, 9, 2) + 0
+  h = substr(ts, 12, 2) + 0; mi = substr(ts, 15, 2) + 0; s = substr(ts, 18, 2) + 0
+  if (mo < 1 || mo > 12) return -1
+  # days from civil (Howard Hinnant), so no mktime and no locale is involved
+  if (mo <= 2) y = y - 1
+  era = int((y >= 0 ? y : y - 399) / 400)
+  yoe = y - era * 400
+  doy = int((153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5) + d - 1
+  doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy
+  days = era * 146097 + doe - 719468
+  return days * 86400 + h * 3600 + mi * 60 + s
+}
+{
+  if (match($0, /^-[ \t]*[^ \t]+/) != 1) next
+  ts = substr($0, RSTART + 1, RLENGTH - 1)
+  sub(/^[ \t]+/, "", ts)
+  if (substr($0, RSTART + RLENGTH) !~ /^[ \t]·/) next   # the journal separator, as sed required
+  n++
+  cur = epoch(ts)
+  if (cur < 0) next
+  if (prev != "") {
+    gap = int((cur - prev) / 3600)
+    if (gap >= th) print gap "\t" n
+  }
+  prev = cur
+}'
+
 detect_stage() {
-  local f spec prev_epoch=""  line_no cur_epoch gap
+  local f spec gap line_no
   for f in "$ROOT"/docs/specs/*/journal.md; do
     [ -f "$f" ] || continue
     spec="$(basename "$(dirname "$f")")"
-    prev_epoch=""; line_no=0
-    while IFS= read -r ts; do
-      line_no=$((line_no + 1))
-      [ -n "$ts" ] || continue
-      cur_epoch="$(epoch_of "$ts")"
-      [ -n "$cur_epoch" ] || continue
-      if [ -n "$prev_epoch" ]; then
-        gap=$(( (cur_epoch - prev_epoch) / 3600 ))
-        if [ "$gap" -ge "$VULYK_ANOMALY_STAGE_HOURS" ]; then
-          cmd_record stage_long "$gap" "$VULYK_ANOMALY_STAGE_HOURS" \
-            --spec "$spec" --ref "stage:$spec:$line_no"
-        fi
-      fi
-      prev_epoch="$cur_epoch"
-    done < <(sed -n 's/^-[[:space:]]*\([^ ]*\)[[:space:]]·.*/\1/p' "$f")
+    while IFS="$(printf '\t')" read -r gap line_no; do
+      [ -n "$gap" ] || continue
+      scan_seen stage_long "stage:$spec:$line_no" && continue
+      cmd_record stage_long "$gap" "$VULYK_ANOMALY_STAGE_HOURS" \
+        --spec "$spec" --ref "stage:$spec:$line_no"
+    done < <(awk -v th="$VULYK_ANOMALY_STAGE_HOURS" "$STAGE_AWK" "$f" 2>/dev/null | tr -d '\r')
   done
 }
 
@@ -340,39 +419,46 @@ detect_stage() {
 detect_scope() {
   local log="$ROOT/memory/stats/scope.jsonl"
   [ -f "$log" ] || return 0
-  jq -c 'select(type == "object")' "$log" 2>/dev/null | \
-  while IFS= read -r row; do
-    [ -n "$row" ] || continue
-    local ts story value
-    ts="$(printf '%s' "$row" | jq -r '.ts // ""' 2>/dev/null)"
-    story="$(printf '%s' "$row" | jq -r '.story // ""' 2>/dev/null)"
-    value="$(printf '%s' "$row" | jq -r \
-      '(.out_of_scope) as $o
-       | if ($o | type) == "array" then ($o | length)
-         elif ($o | type) == "number" then $o
-         else 0 end' 2>/dev/null)"
+  # One jq pass, three jq spawns per row gone (review Major 5): the count and the filter live
+  # in the filter itself, so only breaching rows reach the loop.
+  jq -r 'select(type == "object")
+         | ((.out_of_scope) as $o
+            | if ($o | type) == "array" then ($o | length)
+              elif ($o | type) == "number" then $o
+              else 0 end) as $n
+         | select($n > 0)
+         | [$n, (.story // ""), (.ts // "")] | @tsv' "$log" 2>/dev/null | tr -d '\r' | \
+  while IFS="$(printf '\t')" read -r value story ts; do
     is_number "$value" || continue
-    [ "$value" != "0" ] || continue
-    [ -n "$ts" ] || continue
-    cmd_record scope_breach "$value" 0 --story "$story" --ref "scope:$ts:$story"
+    # Plan A17 / review finding 11: one row per story, first breach wins. `scope.jsonl` holds
+    # one row per scope-check run, so the per-ts ref turned a re-run into a second anomaly.
+    if [ -n "$story" ]; then
+      scan_seen scope_breach "scope:$story" && continue
+      cmd_record scope_breach "$value" 0 --story "$story" --ref "scope:$story"
+    elif [ -n "$ts" ]; then
+      scan_seen scope_breach "scope:$ts" && continue
+      cmd_record scope_breach "$value" 0 --story "" --ref "scope:$ts"
+    fi
   done
 }
 
 cmd_scan() {
-  local transcript=""
+  local transcript="" final=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --transcript) transcript="${2:-}"; shift 2 ;;
+      --final)      final=1; shift ;;
       *) shift ;;
     esac
   done
   [ "${VULYK_TELEMETRY_SCAN:-1}" = "0" ] && return 0
   command -v jq >/dev/null 2>&1 || return 0
 
+  scan_seen_load
   detect_context "$transcript"
-  if [ -n "$transcript" ] && [ -f "$transcript" ]; then
-    detect_agents "$(dirname "$transcript")"
-  fi
+  # No transcript, no subagent file is read at all: a scan outside a session has no session
+  # whose subagents it could be bounded to (plan A17).
+  detect_agents "$transcript" "$final"
   detect_council
   detect_stage
   detect_scope
@@ -432,7 +518,9 @@ cmd_bundle() {
 
 # The schema gate. Anything it rejects is a bundle that must not travel: a key set other than
 # the ten, a code or token outside its set, or any string carrying a path, an address or
-# whitespace - the last one is the anonymization guard, not a formatting nicety.
+# whitespace - the anonymization guard, which runs FIRST among the value rules (story 08):
+# every other field is anchored to a shape, so a path in one of them would otherwise be
+# reported as that field's own shape failure and the guard would never name anything.
 CHECK_JQ='
   (sub("\r$"; "")) as $line
   | input_line_number as $n
@@ -443,6 +531,8 @@ CHECK_JQ='
           elif ($o | type) != "object"     then "not a JSON object"
           elif (($o | keys) != ($keys | sort)) then "key set is not the 10 bundle keys"
           elif ($o.v != 1)                 then "v is not 1"
+          elif ([$o | to_entries[] | select(.value | type == "string") | .value]
+                | map(test("[/\\\\@]") or test("[[:space:]]")) | any) then "a string value carries a path, an address or whitespace"
           elif (($codes | index($o.code)) == null) then "code is not in the enum"
           elif (($o.value | type) != "number") then "value is not a number"
           elif (($o.threshold | type) != "number") then "threshold is not a number"
@@ -451,9 +541,7 @@ CHECK_JQ='
           elif (($agents | index($o.agent)) == null) then "agent is not in the agent token set"
           elif (($o.week | type) != "string" or ($o.week | test("^[0-9]{4}-W[0-9]{2}$") | not)) then "week is not YYYY-Www"
           elif (($o.hive | type) != "string" or ($o.hive | test("^[0-9a-f]{12}$") | not)) then "hive is not 12 hex"
-          elif (($o.vulyk | type) != "string" or ($o.vulyk | test("^[0-9]+[.][0-9]+[.][0-9]+") | not)) then "vulyk is not a semver"
-          elif ([$o | to_entries[] | select(.value | type == "string") | .value]
-                | map(test("[/\\\\@]") or test("[[:space:]]")) | any) then "a string value carries a path, an address or whitespace"
+          elif (($o.vulyk | type) != "string" or ($o.vulyk | test("^[0-9]+[.][0-9]+[.][0-9]+$") | not)) then "vulyk is not a semver"
           else "" end) as $r
        | if $r == "" then empty else "\($n): \($r)" end)
     end
@@ -528,26 +616,41 @@ recipe_local() { # recipe_local <repo> <rel> <week>
 # form left the copy untracked, so `gh pr create` had nothing to open from.
 # `gh repo fork --clone` is a boolean flag; the clone directory is a git-clone argument,
 # which `gh repo fork` passes through after `--` (confirmed with `gh repo fork --help`).
-recipe_pr() { # recipe_pr <slug> <dir> <bundle> <rel> <week> <hive> <branch>
-  local slug="$1" dir="$2" bundle="$3" rel="$4" week="$5" hive="$6" branch="$7"
+#
+# Two weeks share ONE clone (review finding 8): the fork and the `cd` are printed once, and
+# every week's block starts by going back to the clone's default branch - captured into `base`
+# right after the clone, because the fork's default branch is not knowable from here and no
+# command in this script ever runs. Without that, the second week's `git switch -c` branched
+# off the first week's branch and its PR carried both weeks.
+recipe_pr() { # recipe_pr <slug> <dir> <hive> <week> <bundle> [<week> <bundle>...]
+  local slug="$1" dir="$2" hive="$3"; shift 3
+  local week bundle rel branch
   printf 'No local VULYK checkout found. Run this yourself - nothing is sent for you:\n\n'
   printf '```\n'
   printf 'gh repo fork %s --clone -- %s\n' "$(shq "$slug")" "$(shq "$dir")"
   printf 'cd %s\n'                         "$(shq "$dir")"
-  printf 'git switch -c %s\n'              "$(shq "$branch")"
-  printf 'mkdir -p %s\n'                   "$(shq "telemetry/inbox/$week")"
-  printf 'cp %s %s\n'                      "$(shq "$bundle")" "$(shq "$rel")"
-  printf 'git add %s\n'                    "$(shq "$rel")"
-  printf 'git commit -m %s\n'              "$(shq "telemetry($week): $hive")"
-  printf 'git push -u origin %s\n'         "$(shq "$branch")"
-  printf 'gh pr create --repo %s --head %s --title %s --body %s\n' \
-    "$(shq "$slug")" "$(shq "$branch")" "$(shq "telemetry($week): $hive")" \
-    "$(shq 'An anonymized weekly anomaly bundle - codes and numbers only.')"
+  printf 'base="$(git rev-parse --abbrev-ref HEAD)"\n'
+  while [ $# -ge 2 ]; do
+    week="$1"; bundle="$2"; shift 2
+    rel="telemetry/inbox/$week/$hive.jsonl"
+    branch="telemetry/$week-$hive"
+    printf 'git switch "$base"\n'
+    printf 'git switch -c %s\n'              "$(shq "$branch")"
+    printf 'mkdir -p %s\n'                   "$(shq "telemetry/inbox/$week")"
+    printf 'cp %s %s\n'                      "$(shq "$bundle")" "$(shq "$rel")"
+    printf 'git add %s\n'                    "$(shq "$rel")"
+    printf 'git commit -m %s\n'              "$(shq "telemetry($week): $hive")"
+    printf 'git push -u origin %s\n'         "$(shq "$branch")"
+    printf 'gh pr create --repo %s --head %s --title %s --body %s\n' \
+      "$(shq "$slug")" "$(shq "$branch")" "$(shq "telemetry($week): $hive")" \
+      "$(shq 'An anonymized weekly anomaly bundle - codes and numbers only.')"
+  done
   printf '```\n'
 }
 
 cmd_publish() {
   local week="" dry=0 weeks w hive agents bundle repo="" haslocal=0 sent=0 dest rel slug
+  local prpairs=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --week)    week="${2:-}"; shift 2 ;;
@@ -587,9 +690,14 @@ cmd_publish() {
       fi
       recipe_local "$repo" "$rel" "$w"
     else
-      recipe_pr "$slug" "vulyk-telemetry" "$bundle" "$rel" "$w" "$hive" "telemetry/$w-$hive"
+      # Collected, not printed per week: one clone carries every week's branch (finding 8).
+      prpairs+=("$w" "$bundle")
     fi
   done
+
+  if [ "${#prpairs[@]}" -gt 0 ]; then
+    recipe_pr "$slug" "vulyk-telemetry" "$hive" "${prpairs[@]}"
+  fi
 
   if [ "$sent" -eq 0 ]; then
     echo "telemetry: no anomalies for $(printf '%s' "$weeks" | tr '\n' ' ' | sed 's/ $//') - nothing to send"

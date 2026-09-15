@@ -101,3 +101,5 @@
 {"ts":"2026-09-15T08:06:56Z","story":"anomaly-telemetry-08-subagent-path-bounded-scan","declared":4,"changed":11,"out_of_scope":7}
 {"ts":"2026-09-15T08:07:13Z","story":"anomaly-telemetry-08-subagent-path-bounded-scan","declared":4,"changed":11,"out_of_scope":7}
 {"ts":"2026-09-15T08:07:17Z","story":"anomaly-telemetry-09-cycle-owns-hook-log","declared":4,"changed":11,"out_of_scope":7}
+{"ts":"2026-09-15T08:14:20Z","story":"anomaly-telemetry-08-subagent-path-bounded-scan","declared":4,"changed":5,"out_of_scope":1}
+{"ts":"2026-09-15T08:14:42Z","story":"anomaly-telemetry-08-subagent-path-bounded-scan","declared":4,"changed":6,"out_of_scope":2}

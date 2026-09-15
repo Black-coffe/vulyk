@@ -178,6 +178,7 @@ reject "an unknown code"             '.code = "not_a_code"'  "code is not in the
 reject "an agent outside the set"    '.agent = "mystery"'    "agent token set"
 reject "a string carrying a path"    '.vulyk = "1.2.3/home"' "path, an address or whitespace"
 reject "a hive that is not 12 hex"   '.hive = "nothex"'      "hive is not 12 hex"
+reject "a semver with a suffix"      '.vulyk = "1.2.3-x"'    "vulyk is not a semver"
 
 # --- case 5: consent --------------------------------------------------------------------------
 echo "--- consent"
@@ -245,12 +246,8 @@ printf '%s' "$OUT" | expect "no local checkout gets the PR recipe" "gh pr create
 printf '%s' "$OUT" | expect_absent "the PR recipe does not claim anything was sent" "telemetry: wrote"
 
 # (a) The cross-machine recipe is the whole fork -> PR sequence, in order: pasted as-is it
-# ends in an open pull request (council round 1, ask 2).
-printf '%s' "$OUT" | expect_order "the PR recipe runs fork, branch, copy, add, commit, push, PR" \
-  "gh repo fork" "cd 'vulyk-telemetry'" "git switch -c 'telemetry/$WEEK-$HIVEID'" \
-  "mkdir -p 'telemetry/inbox/$WEEK'" "cp '" "git add 'telemetry/inbox/$WEEK/$HIVEID.jsonl'" \
-  "git commit -m 'telemetry($WEEK): $HIVEID'" "git push -u origin 'telemetry/$WEEK-$HIVEID'" \
-  "gh pr create --repo"
+# ends in an open pull request (council round 1, ask 2). The ordered-needle assertion
+# itself lives in (d) below, where a hive with rows in two weeks exercises both blocks.
 printf '%s' "$OUT" | expect "the PR is opened against the configured origin slug" \
   "gh pr create --repo 'Black-coffe/vulyk' --head 'telemetry/$WEEK-$HIVEID'"
 printf '%s' "$OUT" | expect "the PR body is one sentence with no path" \
@@ -309,6 +306,26 @@ expect_eq "each week gets its own bundle file" "yes" \
 OUT="$(tel2local publish --week "$WEEK" --dry-run 2>&1)"
 printf '%s' "$OUT" | expect_absent "--week selects exactly one week" "$PREVWEEK"
 tel2 publish --week 1999-W01 2>&1 | expect "a week with no rows is skipped" "nothing to send"
+
+# (d) Two weeks, no local checkout (review finding 8): ONE fork and ONE cd, and every week's
+# block starts back at the clone's default branch, so each PR carries exactly one week.
+OUT="$(tel2 publish 2>&1)"
+printf '%s' "$OUT" | expect_order "the PR recipe runs fork, branch, copy, add, commit, push, PR - twice, in order" \
+  "gh repo fork" "cd 'vulyk-telemetry'" 'base="$(git rev-parse --abbrev-ref HEAD)"' \
+  "git switch -c 'telemetry/$PREVWEEK-$HIVEID2'" "mkdir -p 'telemetry/inbox/$PREVWEEK'" \
+  "git add 'telemetry/inbox/$PREVWEEK/$HIVEID2.jsonl'" \
+  "git commit -m 'telemetry($PREVWEEK): $HIVEID2'" \
+  "git push -u origin 'telemetry/$PREVWEEK-$HIVEID2'" "gh pr create --repo" \
+  "git switch -c 'telemetry/$WEEK-$HIVEID2'" "mkdir -p 'telemetry/inbox/$WEEK'" \
+  "git add 'telemetry/inbox/$WEEK/$HIVEID2.jsonl'" \
+  "git commit -m 'telemetry($WEEK): $HIVEID2'" \
+  "git push -u origin 'telemetry/$WEEK-$HIVEID2'"
+expect_eq "the fork and clone step is printed once for both weeks" "1" \
+  "$(printf '%s\n' "$OUT" | grep -c 'gh repo fork')"
+expect_eq "each week's block starts from the clone's default branch" "2" \
+  "$(printf '%s\n' "$OUT" | grep -B1 "git switch -c 'telemetry/" | grep -cF 'git switch "$base"')"
+expect_eq "each week gets its own PR" "2" \
+  "$(printf '%s\n' "$OUT" | grep -c 'gh pr create --repo')"
 
 # The rule the whole spec rests on (.claude/commands/vulyk-ship.md:11): nothing is sent.
 cat "$CALLS" | expect_absent "publish never invokes git push"   " push"
@@ -369,41 +386,106 @@ MISSING_OUT="$("$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/does-not-
 expect_eq "measure on a missing file prints {}" "{}" "$MISSING_OUT"
 expect_eq "measure on a missing file exits 0" "0" "$MISSING_RC"
 
+# Review finding 16: `measure` is a direct call, so it must return with a terminal (or any
+# never-written pipe) on stdin - the hook-payload read used to block it forever.
+TTY_RC=0; TTY_OUT=""
+if { : < /dev/tty; } 2>/dev/null; then
+  TTY_OUT="$(timeout 5 "$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/main.jsonl" < /dev/tty 2>/dev/null)" || TTY_RC=$?
+else
+  FIFO="$T/measure.fifo"; rm -f "$FIFO"; mkfifo "$FIFO"
+  sleep 10 > "$FIFO" &            # a writer that never writes: a blind read would never return
+  FIFO_PID=$!
+  TTY_OUT="$(timeout 5 "$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/main.jsonl" < "$FIFO" 2>/dev/null)" || TTY_RC=$?
+  kill "$FIFO_PID" 2>/dev/null; wait "$FIFO_PID" 2>/dev/null || true
+fi
+expect_eq "measure with a terminal on stdin returns instead of blocking" "0" "$TTY_RC"
+expect_eq "measure with a terminal on stdin still prints its measurement" "3800" \
+  "$(printf '%s' "$TTY_OUT" | jq -r '.tokens')"
+
 STATUS_RC=0
 bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null >/dev/null 2>&1 || STATUS_RC=$?
 expect_eq "handoff.sh status still exits 0 with measure added" "0" "$STATUS_RC"
 
 # --- case 10: scan - agent_prefix_high / agent_empty --------------------------------------------
 echo "--- scan: agent_prefix_high, agent_empty"
-SESSION="$T/session1"
-mkdir -p "$SESSION/subagents"
-cat > "$SESSION/subagents/agent-hi.jsonl" <<'EOF'
-{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":40000,"cache_creation_input_tokens":20000,"cache_read_input_tokens":0,"output_tokens":10},"content":[{"type":"text","text":"ok"}]}}
-EOF
-printf '{"agentType":"cycle-clerk"}\n' > "$SESSION/subagents/agent-hi.meta.json"
-cat > "$SESSION/subagents/agent-empty.jsonl" <<'EOF'
-{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5},"content":[{"type":"tool_use","name":"Bash"}]}}
-EOF
-printf '{"agentType":"my-custom-agent"}\n' > "$SESSION/subagents/agent-empty.meta.json"
-cat > "$SESSION/main.jsonl" <<'EOF'
+# The layout Claude Code actually writes (recon/hooks-and-stats.md §6, review Critical 1):
+# `<dir>/<session-id>.jsonl` beside `<dir>/<session-id>/subagents/`, plain dispatches directly
+# there and workflow ones under `workflows/<wf>/`. `<dir>/subagents/` - where the detector used
+# to look - is the control: a file there is above threshold and must yield no row at all.
+PROJ="$T/proj"
+SESSION="$PROJ/sid1"
+mkdir -p "$SESSION/subagents/workflows/wf1" "$PROJ/subagents"
+agent_file() { # agent_file <path> <prefix tokens> <text|tool_use> <agentType>
+  local block
+  if [ "$3" = "text" ]; then block='{"type":"text","text":"done"}'; else block='{"type":"tool_use","name":"Bash"}'; fi
+  printf '{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":%s,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":10},"content":[%s]}}\n' \
+    "$2" "$block" > "$1"
+  printf '{"agentType":"%s"}\n' "$4" > "${1%.jsonl}.meta.json"
+}
+agent_file "$SESSION/subagents/agent-a1.jsonl"              60000 text     cycle-clerk
+agent_file "$SESSION/subagents/workflows/wf1/agent-a2.jsonl" 70000 tool_use my-custom-agent
+agent_file "$PROJ/subagents/agent-a3.jsonl"                  80000 text     cycle-clerk
+cat > "$PROJ/sid1.jsonl" <<'EOF'
 {"type":"assistant","isSidechain":false,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}
 EOF
 
-: > "$LOG"
-tel scan --transcript "$SESSION/main.jsonl" >/dev/null 2>&1
-expect_eq "scan records exactly one agent_prefix_high row" "1" \
+# Every python start is counted: the bound of a Stop-hook scan is "no python for a file whose
+# ref is already in the log" (plan A17, review Major 5), which is only visible from outside as
+# a process that is never spawned.
+PYSHIM="$T/pyshim"; PYCALLS="$T/pycalls.txt"; mkdir -p "$PYSHIM"; : > "$PYCALLS"
+cat > "$PYSHIM/python3" <<EOF
+#!/usr/bin/env bash
+printf 'py\n' >> "$PYCALLS"
+exec "$PY" "\$@"
+EOF
+chmod +x "$PYSHIM/python3"
+telpy() { (cd "$HIVE" && PATH="$PYSHIM:$PATH" VULYK_HIVE="$HIVE" bash scripts/telemetry.sh "$@"); }
+pycount() { grep -c . "$PYCALLS" 2>/dev/null | head -1; }
+
+: > "$LOG"; : > "$PYCALLS"
+telpy scan --transcript "$PROJ/sid1.jsonl" >/dev/null 2>&1
+expect_eq "scan finds the subagent beside the session dir, not beside the transcript" "1" \
+  "$(grep -c '"ref":"agent:agent-a1.jsonl"' "$LOG")"
+expect_eq "scan finds the workflow subagent one directory deeper" "1" \
+  "$(grep -c '"ref":"agent:agent-a2.jsonl"' "$LOG")"
+expect_eq "nothing is read from <dirname>/subagents/ beside the transcript" "0" \
+  "$(grep -c '"ref":"agent:agent-a3.jsonl"' "$LOG")"
+expect_eq "scan records exactly two agent_prefix_high rows" "2" \
   "$(grep -c '"code":"agent_prefix_high"' "$LOG")"
 expect_eq "agent_prefix_high carries the cycle-clerk agent token" "cycle-clerk" \
-  "$(grep '"code":"agent_prefix_high"' "$LOG" | jq -r '.agent')"
-expect_eq "scan records exactly one agent_empty row" "1" \
+  "$(grep -F '"ref":"agent:agent-a1.jsonl"' "$LOG" | jq -r '.agent')"
+expect_eq "agent_prefix_high maps a non-framework agentType to other" "other" \
+  "$(grep -F '"ref":"agent:agent-a2.jsonl"' "$LOG" | jq -r '.agent')"
+# Major 6: at Stop time a subagent whose last entry is a tool_use is mid-turn, not empty.
+expect_eq "a plain scan records no agent_empty row" "0" \
   "$(grep -c '"code":"agent_empty"' "$LOG")"
+expect_eq "the first scan starts python for the transcript and both subagents" "3" "$(pycount)"
+
+AGENT_ROWS="$(grep -c . "$LOG")"
+: > "$PYCALLS"
+telpy scan --transcript "$PROJ/sid1.jsonl" >/dev/null 2>&1
+expect_eq "a second scan over the same session appends nothing" "$AGENT_ROWS" "$(grep -c . "$LOG")"
+expect_eq "a second scan starts no python for an already-recorded subagent" "1" "$(pycount)"
+
+# --final (SessionEnd) is where agent_empty is judged, once.
+telpy scan --transcript "$PROJ/sid1.jsonl" --final >/dev/null 2>&1
+expect_eq "scan --final records exactly one agent_empty row" "1" \
+  "$(grep -c '"code":"agent_empty"' "$LOG")"
+expect_eq "agent_empty ref is agent:<basename>" "agent:agent-a2.jsonl" \
+  "$(grep '"code":"agent_empty"' "$LOG" | jq -r '.ref')"
 expect_eq "agent_empty maps a non-framework agentType to other" "other" \
   "$(grep '"code":"agent_empty"' "$LOG" | jq -r '.agent')"
-expect_eq "agent_empty ref is agent:<basename>" "agent:agent-empty.jsonl" \
-  "$(grep '"code":"agent_empty"' "$LOG" | jq -r '.ref')"
-AGENT_ROWS="$(grep -c . "$LOG")"
-tel scan --transcript "$SESSION/main.jsonl" >/dev/null 2>&1
-expect_eq "a second scan over the same session appends nothing" "$AGENT_ROWS" "$(grep -c . "$LOG")"
+FINAL_ROWS="$(grep -c . "$LOG")"
+telpy scan --transcript "$PROJ/sid1.jsonl" --final >/dev/null 2>&1
+expect_eq "a second --final scan appends nothing" "$FINAL_ROWS" "$(grep -c . "$LOG")"
+
+# Major 5, the other half of the bound: with no --transcript there is no session to scope to,
+# so no subagent file is read even though one is above threshold.
+: > "$LOG"; : > "$PYCALLS"
+telpy scan >/dev/null 2>&1
+expect_eq "a scan with no --transcript records no agent row" "0" \
+  "$(grep -c '"code":"agent_' "$LOG" || true)"
+expect_eq "a scan with no --transcript starts no python at all" "0" "$(pycount)"
 
 # --- case 11: scan - context_high ----------------------------------------------------------------
 echo "--- scan: context_high"
@@ -438,6 +520,18 @@ expect_eq "council_rounds_high carries the spec's tier from plan.md" "2" \
   "$(grep '"code":"council_rounds_high"' "$LOG" | jq -r '.tier')"
 expect_eq "no council_rounds_high row for the spec at round 2" "0" \
   "$(grep -c '"spec":"low-round-spec"' "$LOG")"
+
+# Review finding 15: a spec read out of council.jsonl is data - it never becomes a path and
+# never reaches the row unless it is a plain slug.
+printf '{"ts":"%s","spec":"../x","round":4,"verdict":"RED"}\n' "$NOW" >> "$COUNCIL_LOG"
+: > "$LOG"
+tel scan >/dev/null 2>&1
+expect_eq "a spec outside the slug shape still records the anomaly" "1" \
+  "$(grep -c '"code":"council_rounds_high","value":4' "$LOG")"
+expect_eq "the unsafe spec never reaches the row" "" \
+  "$(grep -F '"value":4' "$LOG" | jq -r '.spec')"
+expect_eq "the unsafe spec yields tier 0 - no path was built" "0" \
+  "$(grep -F '"value":4' "$LOG" | jq -r '.tier')"
 
 # --- case 13: scan - stage_long -------------------------------------------------------------------
 echo "--- scan: stage_long"
@@ -479,6 +573,18 @@ expect_eq "scope_breach carries the story id" "breach-story" \
   "$(grep '"code":"scope_breach"' "$LOG" | jq -r '.story')"
 expect_eq "no scope_breach row for an empty out_of_scope" "0" \
   "$(grep -c '"story":"clean-story"' "$LOG")"
+expect_eq "scope_breach ref is scope:<story>" "scope:breach-story" \
+  "$(grep '"code":"scope_breach"' "$LOG" | jq -r '.ref')"
+
+# Review finding 11: scope.jsonl holds one row per scope-check RUN, so a story checked twice
+# became two anomalies. One row per story, first breach wins (plan A17).
+printf '{"ts":"2026-01-01T00:00:00Z","story":"breach-story","declared":1,"changed":5,"out_of_scope":["a/b.sh"]}\n' \
+  >> "$SCOPE_LOG"
+tel scan >/dev/null 2>&1
+expect_eq "a second scope.jsonl row for the same story adds no second anomaly" "1" \
+  "$(grep -c '"code":"scope_breach"' "$LOG")"
+expect_eq "the first breach wins" "2" \
+  "$(grep '"code":"scope_breach"' "$LOG" | jq -r '.value')"
 
 # --- case 15: scan - kill switch and the no-transcript, no-session-dir path -------------------------
 echo "--- scan: kill switch, minimal invocation"
@@ -504,28 +610,42 @@ expect_eq "the existing Stop hook is preserved beside it" "1" \
 
 : > "$LOG"
 HOOK_RC=0
-echo '{"transcript_path":""}' | CLAUDE_PROJECT_DIR="$HIVE" bash "$HIVE/.claude/hooks/anomaly-scan.sh" \
+echo '{"transcript_path":""}' | CLAUDE_PROJECT_DIR="$HIVE" VULYK_HIVE="$HIVE" bash "$HIVE/.claude/hooks/anomaly-scan.sh" \
   > "$T/hook-out" 2> "$T/hook-err" || HOOK_RC=$?
 expect_eq "anomaly-scan.sh exits 0 on the success path" "0" "$HOOK_RC"
 expect_eq "anomaly-scan.sh prints nothing on the success path" "" "$(cat "$T/hook-out")"
 
+# Plan A17 / review Major 6: the hook reads hook_event_name, and only a SessionEnd scan may
+# judge a subagent empty. The session fixture is case 10's.
+: > "$LOG"
+printf '{"transcript_path":"%s","hook_event_name":"Stop"}\n' "$PROJ/sid1.jsonl" |
+  CLAUDE_PROJECT_DIR="$HIVE" VULYK_HIVE="$HIVE" bash "$HIVE/.claude/hooks/anomaly-scan.sh" >/dev/null 2>&1
+expect_eq "a Stop hook records the prefix anomalies" "2" \
+  "$(grep -c '"code":"agent_prefix_high"' "$LOG")"
+expect_eq "a Stop hook records no agent_empty row" "0" \
+  "$(grep -c '"code":"agent_empty"' "$LOG")"
+printf '{"transcript_path":"%s","hook_event_name":"SessionEnd"}\n' "$PROJ/sid1.jsonl" |
+  CLAUDE_PROJECT_DIR="$HIVE" VULYK_HIVE="$HIVE" bash "$HIVE/.claude/hooks/anomaly-scan.sh" >/dev/null 2>&1
+expect_eq "a SessionEnd hook passes --final, so agent_empty is judged" "1" \
+  "$(grep -c '"code":"agent_empty"' "$LOG")"
+
 BASHBIN="$(command -v bash)"
 EMPTYPATH="$T/emptybin"; mkdir -p "$EMPTYPATH"
 NOJQ_RC=0
-echo '{}' | PATH="$EMPTYPATH" CLAUDE_PROJECT_DIR="$HIVE" "$BASHBIN" "$HIVE/.claude/hooks/anomaly-scan.sh" \
+echo '{}' | PATH="$EMPTYPATH" CLAUDE_PROJECT_DIR="$HIVE" VULYK_HIVE="$HIVE" "$BASHBIN" "$HIVE/.claude/hooks/anomaly-scan.sh" \
   >/dev/null 2>&1 || NOJQ_RC=$?
 expect_eq "anomaly-scan.sh exits 0 when jq is missing" "0" "$NOJQ_RC"
 
 JQONLY="$T/jq-only"; mkdir -p "$JQONLY"
 cp "$(command -v jq)" "$JQONLY/jq"
 NOPY_RC=0
-echo '{}' | PATH="$JQONLY" CLAUDE_PROJECT_DIR="$HIVE" "$BASHBIN" "$HIVE/.claude/hooks/anomaly-scan.sh" \
+echo '{}' | PATH="$JQONLY" CLAUDE_PROJECT_DIR="$HIVE" VULYK_HIVE="$HIVE" "$BASHBIN" "$HIVE/.claude/hooks/anomaly-scan.sh" \
   >/dev/null 2>&1 || NOPY_RC=$?
 expect_eq "anomaly-scan.sh exits 0 when python is missing" "0" "$NOPY_RC"
 
 mkdir -p "$T/no-telemetry"
 NOSCRIPT_RC=0
-echo '{}' | CLAUDE_PROJECT_DIR="$T/no-telemetry" bash "$HIVE/.claude/hooks/anomaly-scan.sh" \
+echo '{}' | CLAUDE_PROJECT_DIR="$T/no-telemetry" VULYK_HIVE="$T/no-telemetry" bash "$HIVE/.claude/hooks/anomaly-scan.sh" \
   >/dev/null 2>&1 || NOSCRIPT_RC=$?
 expect_eq "anomaly-scan.sh exits 0 when scripts/telemetry.sh is missing" "0" "$NOSCRIPT_RC"
 
