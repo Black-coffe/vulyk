@@ -592,6 +592,45 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     }
   });
 })
+// --- scenario (ad): C1 - a non-JSON clerk last line is re-asked once, then the run proceeds
+.then(() => run(
+  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+  { clerk: ['{"ok":true,', claimOk, { next: 'green' }, releaseOk], agents: [] },
+).then(({ result, calls, logs }) => {
+  const claimCalls = calls.filter((c) => c.verb === 'claim');
+  const retryLog = logs.find((l) => l.includes('retrying once') && l.includes('claim demo 0123456789abcdef'));
+  if (result && result.next === 'green' && claimCalls.length === 2 && retryLog) {
+    console.log('ok clerk retry: non-JSON line re-asked once, run proceeds');
+  } else {
+    console.log('FAIL clerk retry: non-JSON line re-asked once, run proceeds - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls) + ' logs=' + JSON.stringify(logs));
+  }
+}))
+// --- scenario (ae): C1 - two non-JSON lines in a row end the run with the raw second line
+// (today's BadLine shape), calling the stub exactly twice and dispatching no further prompt.
+.then(() => run(
+  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+  { clerk: ['{"ok":true,', '{"ok":true, still bad'], agents: [] },
+).then(({ result, calls }) => {
+  const claimCalls = calls.filter((c) => c.verb === 'claim');
+  if (result === '{"ok":true, still bad' && claimCalls.length === 2) {
+    console.log('ok clerk retry: two non-JSON lines end the run with the raw second line');
+  } else {
+    console.log('FAIL clerk retry: two non-JSON lines end the run with the raw second line - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+  }
+}))
+// --- scenario (af): a Paused result on the retried (second) attempt is still thrown as
+// Paused, not swallowed by the retry's own catch.
+.then(() => run(
+  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+  { clerk: withClaim(['{"stage":"build",', { exit: 3, next: 'awaiting-review' }]), agents: [] },
+).then(({ result, calls }) => {
+  const statusCalls = calls.filter((c) => c.verb === 'status');
+  if (result && result.next === 'awaiting-review' && statusCalls.length === 2) {
+    console.log('ok clerk retry: Paused on the retried attempt is thrown, not swallowed');
+  } else {
+    console.log('FAIL clerk retry: Paused on the retried attempt is thrown, not swallowed - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+  }
+}))
 // --- the shared council status line for the seat/reviewer scenarios below
 .then(() => {
   const dispatchSt = (seatList) => ({
@@ -833,5 +872,8 @@ expect "C2: the re-ask records from the attempt-2 file"                   "ok C2
 expect "C2: the good case records with --file and no heredoc"             "ok C2 record good: exactly one record-seat --file call, no heredoc delimiter" "$out"
 expect "C2: exit 2 'file: ' falls back to the stamped heredoc"            "ok C2 record fallback: exit 2 file: falls back to the stamped heredoc with the chat reply" "$out"
 expect "C2: any other exit 2 stops instead of falling back"               "ok C2 record other exit 2: stops on record-seat, no heredoc fallback" "$out"
+expect "C1: a non-JSON clerk line is re-asked once, then proceeds"        "ok clerk retry: non-JSON line re-asked once, run proceeds" "$out"
+expect "C1: two non-JSON clerk lines end the run with the raw second"     "ok clerk retry: two non-JSON lines end the run with the raw second line" "$out"
+expect "C1: a Paused result on the retried attempt is not swallowed"      "ok clerk retry: Paused on the retried attempt is thrown, not swallowed" "$out"
 
 exit $fail

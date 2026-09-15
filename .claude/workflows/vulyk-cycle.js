@@ -14,8 +14,9 @@ export const meta = {
 // itself (VERDICT: PASS|BLOCK, Tier 4 only) - it loops on
 // scripts/cycle.sh's `status --json` and acts on every verb's exit code too (ADR-001 D2):
 // ok:false ends the run with the failure in the returned object, except a record-seat
-// MALFORMED (re-ask that seat once) and a second failed close-story for the same file (also
-// ends the run, naming the file instead of an exit code). Everything else it knows about the
+// MALFORMED (re-ask that seat once), a second failed close-story for the same file (also
+// ends the run, naming the file instead of an exit code) and a non-JSON clerk last line
+// (re-asked once, then ends the run). Everything else it knows about the
 // state comes from `status --json`; a decision that needs more than `next`, `wave_stories`,
 // `court`, `round`, `round_dir`, `spec`, `branch`, `head` or `tier` means the status contract
 // is missing a key, not something to work around here.
@@ -68,17 +69,25 @@ const fail = (st, stop) => { throw new Stop({ ...st, stop }) }
 const asStop = (res) => ({ verb: res.verb, exit: res.exit, error: res.error })
 
 // The Workflow runtime has no shell of its own - cycle-clerk is the only way to reach one.
-// A non-JSON last line from any verb ends the whole run; the Queen reads the raw line at wake.
-const clerk = (cmd) => agent(
-  `Run exactly: bash scripts/cycle.sh ${cmd}\nReturn the last stdout line verbatim.`,
-  { agentType: 'cycle-clerk', effort: 'low' },
-).then((out) => {
-  const line = String(out).trim().split('\n').pop()
-  let parsed
-  try { parsed = JSON.parse(line) } catch { throw new BadLine(line) }
-  if (parsed.exit === 3) throw new Paused(parsed.next)
-  return parsed
-})
+// A non-JSON last line from any verb is re-asked once, then ends the whole run; the Queen
+// reads the raw line at wake.
+const clerk = (cmd) => {
+  const ask = () => agent(
+    `Run exactly: bash scripts/cycle.sh ${cmd}\nReturn the last stdout line verbatim.`,
+    { agentType: 'cycle-clerk', effort: 'low' },
+  ).then((out) => {
+    const line = String(out).trim().split('\n').pop()
+    let parsed
+    try { parsed = JSON.parse(line) } catch { throw new BadLine(line) }
+    if (parsed.exit === 3) throw new Paused(parsed.next)
+    return parsed
+  })
+  return ask().catch((e) => {
+    if (!(e instanceof BadLine)) throw e
+    log(`cycle-clerk: non-JSON last line, retrying once: ${cmd}`)
+    return ask()
+  })
+}
 
 // A blind seat gets slug/round/court only (R9) - round_dir would let it name the very
 // taint pattern C5 forbids it to repeat. lead-review is never blind, so it gets the full
