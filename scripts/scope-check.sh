@@ -69,14 +69,14 @@ fi
 STORY_REL="${STORY#./}"
 CHANGED="$(printf '%s\n' "$CHANGED" | grep -v '^$' | grep -Fxv "$STORY_REL" | sort -u)"
 
-# The two hook-written stats files (memory/stats/anomalies.jsonl, memory/stats/skills.json)
-# ride every committing cycle.sh verb on their own schedule, never a story's own edit - drop
-# them from the diff too, unless the story itself names one under '## Files' (same reasoning
-# as the story-file exclusion above).
-for HOOKFILE in memory/stats/anomalies.jsonl memory/stats/skills.json; do
-  printf '%s\n' "$DECLARED" | grep -Fxq "$HOOKFILE" && continue
+# memory/stats/anomalies.jsonl rides every committing cycle.sh verb on its own schedule,
+# never a story's own edit - drop it from the diff too, unless the story itself names it
+# under '## Files' (same reasoning as the story-file exclusion above). skills.json is NOT
+# cycle-owned (owner decision, story 12) - it counts like any other path.
+HOOKFILE=memory/stats/anomalies.jsonl
+if ! printf '%s\n' "$DECLARED" | grep -Fxq "$HOOKFILE"; then
   CHANGED="$(printf '%s\n' "$CHANGED" | grep -Fxv "$HOOKFILE")"
-done
+fi
 
 CHANGED_N=0
 [ -n "$CHANGED" ] && CHANGED_N="$(printf '%s\n' "$CHANGED" | grep -c .)"

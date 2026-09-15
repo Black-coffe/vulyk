@@ -245,4 +245,17 @@ printf 'v2\n' >> hook-app.txt
 shiph | expect "hook log + real code dirt -> 03 still not clean" "working tree is not clean"
 git checkout -- hook-app.txt
 
+echo "story 12: skills.json is NOT cycle-owned - scope-check counts it, ship-check stage 03 blocks on it alone"
+printf '{"n":1}\n' > memory/stats/skills.json
+bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | grep -qF 'memory/stats/skills.json' \
+  && echo "  ok    scope-check: skills.json dirty and undeclared is listed as out_of_scope" \
+  || { echo "::error::scope-check output: $(bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md)"; fail=1; }
+shiph | expect "skills.json alone dirty -> 03 not clean" "working tree is not clean"
+rm -f memory/stats/skills.json
+
+echo "story 12: council.jsonl alone dirty also blocks stage 03 - only anomalies.jsonl is the pass-through path"
+printf '{"n":1}\n' > memory/stats/council.jsonl
+shiph | expect "council.jsonl alone dirty -> 03 not clean" "working tree is not clean"
+rm -f memory/stats/council.jsonl
+
 exit $fail

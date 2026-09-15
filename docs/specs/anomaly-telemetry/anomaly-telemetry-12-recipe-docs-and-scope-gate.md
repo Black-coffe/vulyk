@@ -1,8 +1,8 @@
 ---
 story: anomaly-telemetry-12
 spec: anomaly-telemetry
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -50,5 +50,11 @@ plan.md `## Contracts` (`publish` PR recipe as amended by story 08 and the seen-
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
+- `docs/telemetry.md`: fenced recipe now matches `recipe_pr()` in `scripts/telemetry.sh` (read only) - 11 lines for one week, `base="$(git rev-parse --abbrev-ref HEAD)"` + `git switch "$base"` added; "nine lines" -> "eleven lines for one week"; added the second-week-repeats-from-`git switch "$base"` sentence.
+- `scripts/scope-check.sh`: the hook-file exclusion loop dropped `memory/stats/skills.json`, keeping only `memory/stats/anomalies.jsonl`.
+- `scripts/ship-check.sh` stage 03: replaced the `memory/stats/*` + `is_paperwork_path` case with an exact match on `memory/stats/anomalies.jsonl` only; `is_paperwork_path` is no longer called from this file (still used by `lib.sh`'s `paperwork_only()` and `cycle.sh`'s `open-round`, untouched).
+- `scripts/lib.sh`: untouched - the stage-03 pass-through helper is inline in `ship-check.sh`, not in `lib.sh`; `is_paperwork_path` itself was not widened, per Non-goals.
+- `tests/cycle.test.sh`: added two "story 12" cases at the end of the hooklog block - `memory/stats/skills.json` dirty+undeclared now shows in `scope-check`'s out_of_scope and fails ship-check stage 03; `memory/stats/council.jsonl` dirty alone also fails stage 03 (it was in `is_paperwork_path`'s whitelist before this story, so it would have wrongly passed through). Story 09's existing cases (anomalies.jsonl pass-through, hook+real-dirt block) left unchanged.
+- `scripts/telemetry.sh`, `docs/specs/anomaly-telemetry/journal.md` and `tests/telemetry.test.sh` were already dirty in the working tree from story 11's in-progress work before this story started (per Non-goals, not touched by this story).
 
 ## Findings

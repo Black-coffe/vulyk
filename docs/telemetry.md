@@ -110,12 +110,14 @@ When one of those matches, the bundle is copied to
 `<repo>/telemetry/inbox/<week>/<hive>.jsonl` and the script prints the local commit recipe
 (`git add`, `git commit`, `git push`). When neither matches - the common case, a hive on a
 different machine from the VULYK checkout - it prints the fork-to-pull-request recipe instead,
-nine lines meant to end in an open PR when pasted as they are - not yet exercised against a
-real fork (no push right, no network in the suite):
+eleven lines for one week meant to end in an open PR when pasted as they are - not yet exercised
+against a real fork (no push right, no network in the suite):
 
 ```
 gh repo fork 'Black-coffe/vulyk' --clone -- 'vulyk-telemetry'
 cd 'vulyk-telemetry'
+base="$(git rev-parse --abbrev-ref HEAD)"
+git switch "$base"
 git switch -c 'telemetry/<week>-<hive>'
 mkdir -p 'telemetry/inbox/<week>'
 cp '<bundle>' 'telemetry/inbox/<week>/<hive>.jsonl'
@@ -125,6 +127,8 @@ git push -u origin 'telemetry/<week>-<hive>'
 gh pr create --repo 'Black-coffe/vulyk' --head 'telemetry/<week>-<hive>' --title 'telemetry(<week>): <hive>' --body 'An anonymized weekly anomaly bundle - codes and numbers only.'
 ```
 
+A second week in the same run repeats from `git switch "$base"`: the fork and `cd` are printed
+once for the whole recipe, so each pull request still carries exactly one week's bundle.
 `<bundle>` is the `.vulyk/telemetry/<week>-<hive>.jsonl` path the run just wrote, and the repo
 slug is the one A1 resolved. Every path is single-quoted, so a checkout or bundle path holding
 a space, a `#` or an `&` pastes and runs unchanged. Either way, a human reads the printed block
