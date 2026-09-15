@@ -1144,12 +1144,16 @@ missing_label() { # missing_label <report> -> the first required C5 label absent
 
 taint_reason() { # taint_reason <report> <slug> -> the D3 taint description, or "" when clean.
   # Path-anchored (R9): a hit needs the slug immediately before /plan.md, /journal.md or
-  # /council/ - optionally under docs/specs/ - or a word-bounded <slug>-NN (two digits) story
-  # id. The bare words plan.md/journal.md/council/, a command file like vulyk-plan.md, and
-  # another spec's paths are never taint; literal, case-sensitive, no prose heuristics.
+  # /council/ - optionally under docs/specs/ - or the story *file* itself: <slug>-NN.md, or
+  # <slug>/<slug>-NN with or without .md, optionally under docs/specs/. A bare <slug>-NN with
+  # neither the .md suffix nor the <slug>/ directory prefix is a synthesized id (a CLI --story
+  # value, say), not a leak (C4/A6). The bare words plan.md/journal.md/council/, a command file
+  # like vulyk-plan.md, and another spec's paths are never taint; literal, case-sensitive, no
+  # prose heuristics.
   local report="$1" slug="$2" esc
   esc="$(printf '%s' "$slug" | sed 's/[.[\*^$()+?{|]/\\&/g')"
-  printf '%s' "$report" | grep -qE "\b${esc}-[0-9]{2}\b"                && { printf 'names a story id %s-NN' "$slug"; return; }
+  printf '%s' "$report" | grep -qE "\b${esc}-[0-9]{2}\.md\b|(docs/specs/)?\b${esc}/${esc}-[0-9]{2}(\.md)?\b" \
+                                                                          && { printf 'names the story file %s-NN' "$slug"; return; }
   printf '%s' "$report" | grep -qE "(docs/specs/)?\b${esc}/plan\.md"    && { printf 'names %s/plan.md' "$slug"; return; }
   printf '%s' "$report" | grep -qE "(docs/specs/)?\b${esc}/journal\.md" && { printf 'names %s/journal.md' "$slug"; return; }
   printf '%s' "$report" | grep -qE "(docs/specs/)?\b${esc}/council/"    && { printf 'names %s/council/' "$slug"; return; }
@@ -1481,9 +1485,25 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1> [<stamp>]
   case "$ST" in
     todo|in-progress) ;;
     done)
-      echo "cycle: close-story - $STORY is already done" >&2
-      emit false close-story 2 error "already done"
-      exit 2
+      # --- C3: a worker that self-marked `status: done` is a miss, not a fraud - if the
+      # story's named files or the story file itself still carry an uncommitted diff, this
+      # is the worker's own unfinished close, so proceed down the normal path (journaling the
+      # self-mark) instead of refusing. A clean tree means a real prior close - exit 2 as before.
+      local -a DONE_PATHS=("$STORY")
+      local donef
+      while IFS= read -r donef; do
+        [ -n "$donef" ] || continue
+        DONE_PATHS+=("$donef")
+      done <<EOF
+$(files_of "$STORY")
+EOF
+      local DONE_DIRTY; DONE_DIRTY="$(git status --porcelain -- "${DONE_PATHS[@]}" 2>/dev/null)"
+      if [ -z "$DONE_DIRTY" ]; then
+        echo "cycle: close-story - $STORY is already done" >&2
+        emit false close-story 2 error "already done"
+        exit 2
+      fi
+      bash "$HERE/journal.sh" "$SPECDIR" "03-building" "close-story $(fm_field "$STORY" story): worker marked status: done itself, closing on the uncommitted diff" "build:1" >/dev/null
       ;;
     *)
       echo "cycle: close-story - $STORY has status '$ST', expected todo or in-progress" >&2

@@ -1,8 +1,8 @@
 ---
 story: driver-hardening-01
 spec: driver-hardening
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -50,5 +50,11 @@ Three surgical fixes in the cycle's shell, each with suite cases. `is_paperwork_
 `bash tests/council.test.sh && bash tests/cycle.test.sh && git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- `scripts/lib.sh`: `is_paperwork_path` gained `memory/stats/skills.json` (exact) and `memory/learnings/*.md` (one level - checked via `${1#memory/learnings/}` containing no `/`).
+- `scripts/cycle.sh` `cmd_close_story`: the `done` branch now checks `git status --porcelain` on the story file + `files_of`; empty -> exit 2 `already done` as before; non-empty -> one `journal.sh` line (stage `03-building`, "worker marked status: done itself, closing on the uncommitted diff") then falls through to the unchanged `returned:`/scope/verify/commit path.
+- `scripts/cycle.sh` `taint_reason()`: pattern 1 replaced with two alternatives - `\bS-NN\.md\b` and `(docs/specs/)?\bS/S-NN\b` (with or without `.md`) - so a bare `S-NN` (no `.md`, no `S/` prefix) is no longer taint; comment updated to match.
+- `tests/council.test.sh`: updated the `demo-01` bare-id case from tainted to not-tainted; added `demo-01.md`, `demo/demo-14`, `docs/specs/demo/demo-14.md` (tainted) and a round-6 `run:`+`saw:` shape (not tainted) to the `report_taint()` suite; added C2 open-round dirty-tree and staleness cases for `skills.json`/`memory/learnings/*.md`; added C3 self-marked-done cases (dirty diff -> proceeds + journals; dirty + `returned:` absent -> exit 4, no commit); updated the pre-existing "live round-1 false positive" `autonomous-cycle-07` case to use a real story-file path (still tainted) and added a sibling case for the old bare-glob form (now not tainted, since it has neither `.md` nor a `<slug>/` prefix).
+- `.claude/agents/worker-code.md`, `worker-test.md`: both gained "Never edit the story's `status:` line..." in the return step; `worker-code.md`'s line about who reads `returned:` now says `close-story reads this key; the driver never opens the story file` (dropped the driver-reads-it claim).
+- Verification: `bash tests/council.test.sh && bash tests/cycle.test.sh && git ls-files '*.sh' | xargs -n1 bash -n` - all green (ran each command standalone too, all exit 0, no `::error::` lines).
 
 ## Findings

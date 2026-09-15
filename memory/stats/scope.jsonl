@@ -110,3 +110,5 @@
 {"ts":"2026-09-15T10:10:26Z","story":"anomaly-telemetry-13-bundle-agent-token","declared":2,"changed":3,"out_of_scope":1}
 {"ts":"2026-09-15T10:46:04Z","story":"anomaly-telemetry-14-agent-token-fixed-set","declared":4,"changed":5,"out_of_scope":1}
 {"ts":"2026-09-15T10:46:26Z","story":"anomaly-telemetry-14-agent-token-fixed-set","declared":4,"changed":6,"out_of_scope":2}
+{"ts":"2026-09-15T14:31:44Z","story":"driver-hardening-02-clerk-retry","declared":2,"changed":5,"out_of_scope":3}
+{"ts":"2026-09-15T14:54:40Z","story":"driver-hardening-01-paperwork-selfmark-taint","declared":5,"changed":9,"out_of_scope":4}

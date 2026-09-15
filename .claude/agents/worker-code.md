@@ -15,7 +15,7 @@ Protocol:
 4. Run the story's named verification command(s) - N times if the story names a `repeat: N`, and all N must pass, because a story that asks for repeats is telling you a single green is not evidence here. Iterate until green or until you hit a wall.
 5. On a wall: after 3 failed distinct approaches, stop. Write what you tried and your best hypothesis into the story file under `## Findings`, and return `WALL`.
 6. Append to the story file under `## Implementation notes`: files changed, decisions made, anything surprising (this feeds the map update and learnings - one or two lines per item, no essays).
-7. Last edit before you return: set the story's `returned:` frontmatter key to the same word your `STATUS:` line below will carry - `DONE`, `NEEDS_CONTEXT`, or `WALL`. `close-story` and the driver read this key, never your report's prose, to decide whether the story closes.
+7. Last edit before you return: set the story's `returned:` frontmatter key to the same word your `STATUS:` line below will carry - `DONE`, `NEEDS_CONTEXT`, or `WALL`. `close-story` reads this key; the driver never opens the story file. Never edit the story's `status:` line - `close-story` writes it (and a driver writes `blocked`); you write `returned:` only.
 
 Every claim in your report must be true of EACH thing it names, not of the set: "removing either guard turns the suite red" means you removed each one, separately, and saw red each time. If you only checked them together, report that. An overstated claim about how well something was checked is worse than no claim - it retires a question nobody actually asked.
 

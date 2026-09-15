@@ -18,7 +18,7 @@ Protocol:
 
 Wall rule: 3 failed distinct approaches on the same failure -> stop, write findings to the story file under `## Findings`, return `WALL`.
 
-Last edit before you return: set the story's `returned:` frontmatter key to the same word your `STATUS:` line below will carry - `DONE`, `NEEDS_CONTEXT`, or `WALL`. `close-story` and the driver read this key, never your report's prose, to decide whether the story closes.
+Last edit before you return: set the story's `returned:` frontmatter key to the same word your `STATUS:` line below will carry - `DONE`, `NEEDS_CONTEXT`, or `WALL`. `close-story` and the driver read this key, never your report's prose, to decide whether the story closes. Never edit the story's `status:` line - `close-story` writes it (and a driver writes `blocked`); you write `returned:` only.
 
 Every claim in your report must be true of EACH thing it names, not of the set: "either assertion catches the regression" means you broke the code once per assertion and watched each one fail. If you checked them together, say so. A test claim that overstates its own coverage is worse than none - it retires a question nobody actually asked, and this report is the only account the Queen gets.
 

@@ -691,6 +691,15 @@ out="$(council status docs/specs/pwseat1 --json)"
 printf '%s' "$out" | jq -e '.stale == false' >/dev/null 2>&1 && echo "  ok    status --json stale:false after a paperwork-only commit" \
   || { echo "::error::status: $out"; fail=1; }
 
+echo "record-seat: still NOT stale after a commit touching only skills.json + memory/learnings/*.md (C2)"
+mkdir -p memory/learnings
+echo '{"x":1}' > memory/stats/skills.json
+echo 'note' > memory/learnings/2026-09-15-pwseat1.md
+git add -- memory/stats/skills.json memory/learnings/2026-09-15-pwseat1.md && git commit -qm "hook writes: skills.json, learnings" >/dev/null
+out="$(council status docs/specs/pwseat1 --json)"
+printf '%s' "$out" | jq -e '.stale == false' >/dev/null 2>&1 && echo "  ok    status --json stale:false after a skills.json + learnings-only commit" \
+  || { echo "::error::status: $out"; fail=1; }
+
 echo "record-seat: stale (exit 5) once a real non-paperwork file lands on top"
 echo "real code change" > pwseat1-code.txt
 git add -A && git commit -qm "real code change while pwseat1 round 1 is open" >/dev/null
@@ -762,7 +771,7 @@ report_taint() { # report_taint <phrase>
   printf 'UNASKED: none\nBREACH: none\n'
 }
 out="$(report_taint 'looked at demo-01' | council record-seat docs/specs/demo 1 haiku 2>&1)"; ex=$?
-[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    <slug>-NN (demo-01) in body -> tainted" \
+[ "$ex" -eq 0 ] && echo "  ok    bare <slug>-NN (demo-01) in body -> accepted, not tainted (C4: synthesized id)" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 out="$(report_taint 'checked plan.md' | council record-seat docs/specs/demo 1 sonnet 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && echo "  ok    bare plan.md (no slug prefix) -> accepted, not tainted" \
@@ -800,6 +809,26 @@ out="$(report_taint 'journal.sh appends to <spec>/journal.md' | council record-s
 out="$(report_taint 'compare docs/specs/other/plan.md' | council record-seat docs/specs/demo 4 opus 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && echo "  ok    another spec's docs/specs/other/plan.md -> accepted, not tainted" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
+rd_demo5="$(mk_open_round demo 5)"
+out="$(report_taint 'read demo-01.md for context' | council record-seat docs/specs/demo 5 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    <slug>-NN.md (demo-01.md) -> tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(report_taint 'looked under demo/demo-14 for context' | council record-seat docs/specs/demo 5 sonnet 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    <slug>/<slug>-NN (demo/demo-14) -> tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(report_taint 'read docs/specs/demo/demo-14.md for context' | council record-seat docs/specs/demo 5 opus 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    docs/specs/<slug>/<slug>-NN.md -> tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+rd_demo6="$(mk_open_round demo 6)"
+report_round6() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: GREEN - checked the recorder - run: bash scripts/telemetry.sh record x 1 0 --story demo-14 saw: {"story":"demo-14"}\n'
+  printf 'ASK 2: GREEN - a - run: c saw: ok\n'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+out="$(report_round6 | council record-seat docs/specs/demo 6 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    round-6 shape (bare id in a run: and a saw: JSON echo) -> accepted, not tainted" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
 
 echo "record-seat: the live round-1 false positives no longer taint under the real slug (R9 live proof)"
 mk_spec autonomous-cycle 2
@@ -827,12 +856,22 @@ out="$(report_ac_real | council record-seat docs/specs/autonomous-cycle 2 sonnet
 rd_ac3="$(mk_open_round autonomous-cycle 3)"
 report_ac_storyid() {
   printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
-  printf 'ASK 1: GREEN - read story 07 - run: cat docs/specs/autonomous-cycle-07-*.md saw: story text\nASK 2: GREEN - a - run: c saw: ok\n'
+  printf 'ASK 1: GREEN - read story 07 - run: cat docs/specs/autonomous-cycle/autonomous-cycle-07-x.md saw: story text\nASK 2: GREEN - a - run: c saw: ok\n'
   printf 'UNASKED: none\nBREACH: none\n'
 }
 out="$(report_ac_storyid | council record-seat docs/specs/autonomous-cycle 3 opus 2>&1)"; ex=$?
-[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    a real story id (autonomous-cycle-07) still tainted" \
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'tainted' && echo "  ok    a real story file (autonomous-cycle/autonomous-cycle-07-x.md) still tainted" \
   || { echo "::error::live-proof storyid reject: exit=$ex out=$out"; fail=1; }
+
+rd_ac4="$(mk_open_round autonomous-cycle 4)"
+report_ac_bareid() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf 'ASK 1: GREEN - read story 07 - run: cat docs/specs/autonomous-cycle-07-*.md saw: story text\nASK 2: GREEN - a - run: c saw: ok\n'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+out="$(report_ac_bareid | council record-seat docs/specs/autonomous-cycle 4 haiku 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    a bare story id glob (autonomous-cycle-07-*.md, no <slug>/ prefix, no literal .md) -> accepted, not tainted (C4)" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
 
 echo "record-seat: evidence with an interior ' - ' inside saw: is not truncated (R8)"
 mk_spec dashev 2
@@ -1105,6 +1144,28 @@ git log -1 --format=%s | grep -qF 'story(cstory1-01):' && echo "  ok    --commit
 echo "close-story: exit 2 on an already-done story"
 out="$(council close-story docs/specs/cstory1/cstory1-01-first.md 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && echo "  ok    already done -> exit 2" || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "close-story: self-marked status: done with an uncommitted diff -> proceeds, journals the self-mark (C3)"
+printf 'again\n' > docs/specs/cstory1/flag.txt
+out="$(council close-story docs/specs/cstory1/cstory1-01-first.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    self-marked done + dirty diff -> exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -qF 'worker marked status: done itself' docs/specs/cstory1/journal.md && echo "  ok    journal.md gained the self-mark line" \
+  || { echo "::error::journal.md: $(cat docs/specs/cstory1/journal.md)"; fail=1; }
+grep -q '^status: done' docs/specs/cstory1/cstory1-01-first.md && echo "  ok    status: still done" \
+  || { echo "::error::status: $(grep '^status:' docs/specs/cstory1/cstory1-01-first.md)"; fail=1; }
+flagcommits="$(git log --oneline -- docs/specs/cstory1/flag.txt | wc -l)"
+[ "$flagcommits" -eq 2 ] && echo "  ok    a second story(<id>) commit landed, containing flag.txt" \
+  || { echo "::error::commits touching flag.txt: $flagcommits"; fail=1; }
+
+echo "close-story: self-marked done, dirty diff, but returned: absent -> exit 4 returned: missing, no commit (C3)"
+sed -i -E 's/^returned:.*/returned:/' docs/specs/cstory1/cstory1-01-first.md
+headbefore="$(git rev-parse HEAD)"
+out="$(council close-story docs/specs/cstory1/cstory1-01-first.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'returned: missing' && echo "  ok    returned: absent -> exit 4, returned: missing" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+headafter="$(git rev-parse HEAD)"
+[ "$headbefore" = "$headafter" ] && echo "  ok    no commit landed" || { echo "::error::HEAD moved: $headbefore -> $headafter"; fail=1; }
+git checkout -- docs/specs/cstory1/cstory1-01-first.md
 
 # --- close-story: the ## Commands gate and one-line-at-a-time execution (R11/R18/C-4/M-3) -----
 
@@ -1522,6 +1583,15 @@ out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'clean' && echo "  ok    dirty tree -> exit 2" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 rm -f docs/specs/oround1/stray.txt
+
+echo "open-round: preconditions - only skills.json/learnings dirty -> not refused as unclean (C2)"
+mkdir -p memory/learnings
+echo '{}' > memory/stats/skills.json
+echo 'note' > memory/learnings/2026-09-15-x.md
+out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'tier' && echo "  ok    skills.json + memory/learnings/*.md dirty alone do not trip 'working tree not clean'" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+rm -f memory/stats/skills.json memory/learnings/2026-09-15-x.md
 
 echo "open-round: preconditions - no parsable **Tier:** line -> exit 2 (M-10/R21)"
 out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
