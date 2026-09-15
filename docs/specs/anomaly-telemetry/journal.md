@@ -16,3 +16,5 @@
 - 2026-09-15T08:51:54Z · 03-building · relaunching the workflow driver for wave 8 and round 4 · next: the loop holds the working tree of vulyk/anomaly-telemetry; to edit, run /vulyk-pause anomaly-telemetry
 - 2026-09-15T09:40:24Z · 04-council:open · round 4 opened, court at E:/Projects/vulyk/.vulyk/court/anomaly-telemetry/round-4 · next: dispatch:haiku,sonnet,opus,review
 - 2026-09-15T09:56:45Z · 04-council:RED · round 4 verdict RED at e3fccde pack 07a6a02fb6fb · next: repair
+- 2026-09-15T10:13:26Z · 03-building · story 13 closed by the Queen via close-story after the worker self-marked done; relaunching the workflow driver for round 5 · next: the loop holds the working tree of vulyk/anomaly-telemetry; to edit, run /vulyk-pause anomaly-telemetry
+- 2026-09-15T10:13:57Z · 04-council:open · round 5 opened, court at E:/Projects/vulyk/.vulyk/court/anomaly-telemetry/round-5 · next: dispatch:haiku,sonnet,opus,review
