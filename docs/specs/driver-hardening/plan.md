@@ -81,7 +81,7 @@ The six lines below are the cycle's confirmation artifacts (docs/cycle.md).
 -->
 **Approved:** Andrei, 2026-09-15
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path. Alternative to **Approved:** above.>
-**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
+**Branch:** vulyk/driver-hardening
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05.>
 **Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05, appended once per round.>
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
