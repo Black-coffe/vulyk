@@ -445,6 +445,18 @@ jobs:
           echo "$out" | grep -q "WARNING.*## Profile exists without VULYK:PROFILE markers" || { echo "::error::missing WARNING for hand-written Profile heading"; exit 1; }
           [ "$before" = "$after" ] || { echo "::error::--upgrade rewrote a hand-written Profile heading"; exit 1; }
 
+      - name: a marker-less Profile block with no terminal - warn with the row and value, write nothing (ADR-005 D4.9 amendment)
+        run: |
+          target="$(mktemp -d)"
+          ./install.sh "$target" --telemetry off >/dev/null
+          sed -i '/<!-- VULYK:PROFILE:START -->/d; /<!-- VULYK:PROFILE:END -->/d' "$target/CLAUDE.md"
+          before="$(cat "$target/CLAUDE.md")"
+          out="$(VULYK_TELEMETRY=on ./install.sh "$target" --upgrade 2>&1)"
+          after="$(cat "$target/CLAUDE.md")"
+          echo "$out" | grep -qF "warning: Profile block has no markers - not writing | Telemetry | on |; add the row by hand" \
+            || { echo "::error::missing warning naming the Telemetry row and value for a marker-less Profile block"; exit 1; }
+          [ "$before" = "$after" ] || { echo "::error::--upgrade wrote to a marker-less Profile block"; exit 1; }
+
       - name: the sidecar constitution gets the same block restored; the foreign CLAUDE.md stays byte-identical (ADR-005 D4.10)
         run: |
           target="$(mktemp -d)"

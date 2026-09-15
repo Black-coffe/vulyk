@@ -700,6 +700,18 @@ expect_eq "--check never writes the row" "1" \
   "$([ "$CONST_BEFORE" = "$(cat "$TGT/CLAUDE.md")" ] && echo 1 || echo 0)"
 cat "$T/up-check.out" | expect "--check reports the pending row" "would set      CLAUDE.md Profile row: Telemetry"
 
+# a Profile block with no markers: warn, and never write the row (ADR-005: only exception is
+# the Telemetry row itself, and only inside existing markers)
+NOMARK="$T/hive-nomarkers"; mkdir -p "$NOMARK"
+bash "$SRC/install.sh" "$NOMARK" --telemetry off > "$T/nomark-install.out" 2>&1
+sed -i '/VULYK:PROFILE:START/d; /VULYK:PROFILE:END/d' "$NOMARK/CLAUDE.md"
+NOMARK_BEFORE="$(cat "$NOMARK/CLAUDE.md")"
+VULYK_TELEMETRY=on bash "$SRC/install.sh" "$NOMARK" --upgrade > "$T/nomark-upgrade.out" 2>&1
+cat "$T/nomark-upgrade.out" | expect "marker-less Profile: warns and names the row and value" \
+  "warning: Profile block has no markers - not writing | Telemetry | on |; add the row by hand"
+expect_eq "marker-less Profile: the file is unchanged" "1" \
+  "$([ "$NOMARK_BEFORE" = "$(cat "$NOMARK/CLAUDE.md")" ] && echo 1 || echo 0)"
+
 # A run with no controlling terminal: setsid is what makes /dev/tty unopenable even when the
 # suite itself is driven from a real one. Without setsid the case is only honest when this
 # shell already has no terminal - otherwise it is skipped, loudly.

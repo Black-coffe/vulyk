@@ -65,7 +65,7 @@ recon/hooks-and-stats.md §5 (OWNED, `shippable()`, `ensure_gitignore()`, the `s
 - `wire_hook <event> <script>` + `py_wire` (the python heredoc, now taking `event` and `--dry`); `wire_session_hook` is a one-line wrapper. The "already wired" test is per event, not per file, or a script on Stop would never reach SessionEnd; `--check` runs the same python with `--dry` and falls back to the old file-wide grep when python is absent.
 - `wire_hook Stop|SessionEnd anomaly-scan.sh` is called unconditionally beside the SessionStart pair (not only under `--upgrade`): a fresh install into a project that already has its own `settings.json` needs it too, and it is idempotent.
 - `vulyk-update.sh`: `--telemetry <v>` parsed and forwarded as an array; `TELARGS=()` assignment is an `if`, not `&&` - a top-level `&&` that yields 1 kills the script under `set -e`.
-- Verified: `bash tests/telemetry.test.sh` - 125 checks, 0 failed (the pseudo-terminal case skipped here, no util-linux `script` on this box; it runs in the telemetry-inbox CI job). Also green: `bash -n` over all shell files, `py_compile`, `jq -e` over all JSON.
+- Verified: `bash tests/telemetry.test.sh` - 125 checks, 0 failed (the pseudo-terminal case skipped here, no util-linux `script` on this box; not observed green on this branch - skipped locally). Also green: `bash -n` over all shell files, `py_compile`, `jq -e` over all JSON.
 
 ## Findings
 - `scope-check.sh` reports 3 out-of-scope paths - `memory/learnings/2026-09-14_222936.md`, `memory/stats/anomalies.jsonl`, `memory/stats/skills.json`. All three were already untracked/modified in the working tree when this story started (see the session's git status); this story touched none of them.

@@ -1,8 +1,8 @@
 ---
 story: anomaly-telemetry-10
 spec: anomaly-telemetry
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -52,5 +52,32 @@ plan.md A6, A10, A15, A17 and `## Contracts` (`bundle`, installer prompt, consen
 `bash tests/telemetry.test.sh`
 
 ## Implementation notes
+- `docs/adr/005-installer-upgrade-contract.md`: appended `## Amendments` with a dated
+  2026-09-15 entry naming the Telemetry-row exception inside already-marked Profile blocks;
+  Status line left as `proposed`.
+- `install.sh` `ensure_telemetry_row`: the two silent `grep ... || return 0` marker checks
+  became one `if` that also prints `warning: Profile block has no markers - not writing |
+  Telemetry | <on|off> |; add the row by hand` to stderr before returning; write path,
+  `--check` path and every other case unchanged.
+- `tests/telemetry.test.sh`: new case between the `--check` case and the no-terminal block -
+  installs a hive, strips the Profile markers, runs `--upgrade` with `VULYK_TELEMETRY=on`, and
+  asserts the warning text and a byte-identical file.
+- `.github/workflows/ci.yml`: new install-smoke step right after the existing D4.9 marker-less
+  warning step, same shape but non-interactively driven (`VULYK_TELEMETRY=on`, no `script`/tty)
+  to match the "no-terminal case" the acceptance criterion names.
+- `docs/telemetry.md`: `agent_empty` row now says "recorded on `SessionEnd` only"; `scope_breach`
+  row says "one row per story (first breach wins)"; added a sentence on `bundle --out` covering
+  both default weeks without `--week`; the PR-recipe sentence now says "meant to end in an open
+  PR ... not yet exercised against a real fork (no push right, no network in the suite)" instead
+  of asserting it was run. `VULYK_ANOMALY_*` table (story 07) untouched.
+- Story 05 `## Implementation notes`: the "it runs in the telemetry-inbox CI job" clause
+  replaced with "not observed green on this branch - skipped locally"; no other line touched.
+- `memory/learnings/2026-09-14_222936.md` deleted - it held only frontmatter and the stub
+  comment, no body.
+- Verified: `bash tests/telemetry.test.sh` - 189 checks, 0 failed. Also green:
+  `git ls-files '*.sh' | xargs -n1 bash -n`, `python -m py_compile .claude/hooks/*.py`,
+  `git ls-files '*.json' | xargs -n1 jq -e .`, and `.github/workflows/ci.yml` parses as valid
+  YAML (`yaml.safe_load`); the new install-smoke step itself was not run (no GH Actions runner
+  here) - it mirrors the suite case verified above line for line.
 
 ## Findings

@@ -16,12 +16,12 @@ is local history, not a send.
 |---|---|---|---|
 | `context_high` | main-thread context size above threshold | tokens | `VULYK_ANOMALY_CONTEXT_PCT` (percent of an observed window) / `VULYK_ANOMALY_CONTEXT_TOKENS` (the absolute fallback) |
 | `agent_prefix_high` | a subagent's first-turn `input + cache_creation_input_tokens` above threshold | tokens | `VULYK_ANOMALY_AGENT_PREFIX_TOKENS` |
-| `agent_empty` | a subagent transcript whose last assistant entry has no text block (cap death / empty return) | assistant entries | 0 |
+| `agent_empty` | a subagent transcript whose last assistant entry has no text block (cap death / empty return), recorded on `SessionEnd` only | assistant entries | 0 |
 | `council_rounds_high` | max `round` per spec in `council.jsonl` at or above threshold | rounds | `VULYK_ANOMALY_COUNCIL_ROUNDS` |
 | `stage_long` | gap between two consecutive `journal.md` lines above threshold | hours (integer) | `VULYK_ANOMALY_STAGE_HOURS` |
 | `driver_refused` | `/vulyk-build` refused (no `Workflow`, no `--fallback`; by-name call threw) | 1 | 0 |
 | `driver_relaunched` | `/vulyk-resume` relaunched the driver fresh | 1 | 0 |
-| `scope_breach` | a `scope.jsonl` row with non-empty `out_of_scope` | out-of-scope path count | 0 |
+| `scope_breach` | a `scope.jsonl` row with non-empty `out_of_scope`, one row per story (first breach wins) | out-of-scope path count | 0 |
 
 Print the same list yourself with `bash scripts/telemetry.sh enum`. The thresholds' current
 defaults are v1 calibration, not measured facts - each row above names the env var that
@@ -61,6 +61,11 @@ row below drops them.
 `week` is the ISO week (`date -u +%G-W%V`); `hive` is the first 12 hex of a sha256 of the repo's
 own toplevel path - stable per machine, not reversible to an address. `ts`, `spec`, `story` and
 `ref` are dropped before the bundle is written; they never exist in a bundle row.
+
+`scripts/telemetry.sh bundle --out <file>` with no `--week` writes both default weeks (the
+previous ISO week and the current one) into that one file, one JSON line per bundle row; pass
+`--week YYYY-Www` to get a single-week file, which is what hand-copying to another machine
+needs.
 
 **Never included, in any row that leaves the machine:** file paths, story or spec slugs,
 dispatch names, emails, free text, or file contents. `scripts/telemetry.sh check <file>...`
@@ -105,7 +110,8 @@ When one of those matches, the bundle is copied to
 `<repo>/telemetry/inbox/<week>/<hive>.jsonl` and the script prints the local commit recipe
 (`git add`, `git commit`, `git push`). When neither matches - the common case, a hive on a
 different machine from the VULYK checkout - it prints the fork-to-pull-request recipe instead,
-nine lines that end in an open PR when pasted as they are:
+nine lines meant to end in an open PR when pasted as they are - not yet exercised against a
+real fork (no push right, no network in the suite):
 
 ```
 gh repo fork 'Black-coffe/vulyk' --clone -- 'vulyk-telemetry'

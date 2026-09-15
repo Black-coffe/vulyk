@@ -103,3 +103,4 @@
 {"ts":"2026-09-15T08:07:17Z","story":"anomaly-telemetry-09-cycle-owns-hook-log","declared":4,"changed":11,"out_of_scope":7}
 {"ts":"2026-09-15T08:14:20Z","story":"anomaly-telemetry-08-subagent-path-bounded-scan","declared":4,"changed":5,"out_of_scope":1}
 {"ts":"2026-09-15T08:14:42Z","story":"anomaly-telemetry-08-subagent-path-bounded-scan","declared":4,"changed":6,"out_of_scope":2}
+{"ts":"2026-09-15T08:24:05Z","story":"anomaly-telemetry-10-adr-installer-warning-docs-truth","declared":7,"changed":8,"out_of_scope":1}

@@ -364,8 +364,10 @@ ensure_telemetry_row() { # ensure_telemetry_row <constitution-file>
     return 0
   fi
   [ -f "$file" ] || return 0
-  grep -q 'VULYK:PROFILE:START' "$file" 2>/dev/null || return 0
-  grep -q 'VULYK:PROFILE:END' "$file" 2>/dev/null || return 0
+  if ! grep -q 'VULYK:PROFILE:START' "$file" 2>/dev/null || ! grep -q 'VULYK:PROFILE:END' "$file" 2>/dev/null; then
+    echo "warning: Profile block has no markers - not writing | Telemetry | $TEL_WANT |; add the row by hand" >&2
+    return 0
+  fi
   [ "$(telemetry_row_value "$file")" = "$TEL_WANT" ] && return 0      # already says that
   awk -v val="$TEL_WANT" -v newrow="$(telemetry_row "$TEL_WANT")" '
     index($0, "VULYK:PROFILE:START") { inblock = 1; print; next }
