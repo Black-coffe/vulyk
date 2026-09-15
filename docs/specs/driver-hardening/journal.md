@@ -8,3 +8,4 @@
 - 2026-09-15T17:05:49Z · 04-council:GREEN · round 1 verdict GREEN at 8521d20 pack 92f41ba75c4c · next: green
 - 2026-09-15T17:23:15Z · 03-building · repair wave 5-6 (stories 06-08) cut by the Queen from the round-1 review Majors 1-4, opus UNASKED (a), minors 5-12; relaunching the workflow driver · next: build:5
 - 2026-09-15T18:14:52Z · 03-building · story 07 closed by the Queen's own cycle.sh call after two empty clerk returns on its close; relaunching the workflow driver · next: build:6
+- 2026-09-15T18:18:40Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/driver-hardening/round-2 · next: dispatch:haiku,sonnet,opus,review
