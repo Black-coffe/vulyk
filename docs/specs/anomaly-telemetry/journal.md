@@ -8,3 +8,4 @@
 - 2026-09-15T06:38:17Z · 04-council:RED · round 1 verdict RED at 1a91924 pack 9b30072f04a4 · next: repair
 - 2026-09-15T07:01:33Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/anomaly-telemetry/round-2 · next: dispatch:haiku,sonnet,opus,review
 - 2026-09-15T07:12:51Z · 04-council:RED · round 2 verdict RED at 0e0c6f8 pack b0e5e31fff8f · next: repair
+- 2026-09-15T07:40:39Z · 03-building · round-3 repair: stories 08-10 cut by queen-planner for the round-2 review Critical and Majors (plan delta 2026-09-15); round-1 finding 13 (pre-existing uncommitted telemetry.sh/hook code seen by stories 02/04) - origin unknown to the Queen, nothing was hand-written in this session · next: build:6
