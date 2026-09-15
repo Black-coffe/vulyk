@@ -183,7 +183,6 @@ Recorded per the round-2 review's condition that nothing ships narrower than con
 **Council:** RED round 4, 2026-09-15, at e3fccde, pack 07a6a02fb6fb - red: 3
 **Council:** RED round 5, 2026-09-15, at a1d7668, pack 63563afc2e88 - red: 3
 **Council:** ESCALATE round 6, 2026-09-15, at 83437ce, pack c3cdb6873008
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 
 ## Needs a human
 - reason: ceiling · round 3 · 2026-09-15
@@ -193,3 +192,4 @@ Recorded per the round-2 review's condition that nothing ships narrower than con
 - haiku: docs/specs/anomaly-telemetry/council/round-6/haiku.attempt-2.md
 - seats: docs/specs/anomaly-telemetry/council/round-6/
 **Checked:** ACCEPTED by Andrei, 2026-09-15, at 13f7a9f - round 6: all judging seats GREEN, review PASS, haiku GREEN on disk twice, rejected by a taint false positive
+**Shipped:** 0.14.0, 2026-09-15, at ce2d1f1 - merged to main, publish pending
