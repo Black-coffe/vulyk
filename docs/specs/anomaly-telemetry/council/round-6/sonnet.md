@@ -1,0 +1,16 @@
+<!-- seat: sonnet · model: claude-sonnet-5 · round: 6 · head: 42d225d · pack: c3cdb6873008 · attempt: 1 · recorded: 2026-09-15T11:04:39Z -->
+COUNCIL: anomaly-telemetry · round 6 · seat sonnet
+MODEL: claude-sonnet-5
+COURT: E:/Projects/vulyk/.vulyk/court/anomaly-telemetry/round-6
+VERDICT: GREEN
+ASSUMED CONFIG: VULYK's own repo - shell + Python + markdown toolkit, no compiler/test runner; Telemetry Profile row present (off by default)
+RAN: git ls-files '*.sh'|xargs bash -n; py_compile hooks; jq check all json; handoff.sh status; tests/telemetry.test.sh (230 checks, EXIT=0); tests/cycle.test.sh (EXIT=0); scripts/telemetry.sh enum/agents/consent/record/bundle/check/publish (dry-run and PR-recipe paths, VULYK_HIVE/VULYK_LOCAL pointed at scratch dirs); install.sh with VULYK_TELEMETRY=on/off against scratch targets
+PATH: CLI-only tool: scripts/telemetry.sh subcommands + install.sh flags, no server/browser client
+ASK 1: GREEN - all CC terminals monitor anomalies and keep a log file - run: VULYK_HIVE=<scratch> bash scripts/telemetry.sh record scope_breach 3 0 --spec test-spec --story test-spec-01 --ref scope:test-spec-01 saw: appended 12-key row to <scratch>/memory/stats/anomalies.jsonl; tests/telemetry.test.sh scan/record suites all ok
+ASK 2: GREEN - weekly send: local repo commit vs PR for other machines - run: VULYK_HIVE=<scratch> bash scripts/telemetry.sh publish --week 2026-W38 (consent on, no local VULYK) saw: full 11-line gh fork/PR recipe printed, nothing executed; run: VULYK_LOCAL=<COURT> bash scripts/telemetry.sh publish --dry-run --week 2026-W38 saw: local git add/commit/push recipe printed instead, and consent off prints "telemetry: off ... nothing to send"
+ASK 3: GREEN - logs maximally anonymized, no personal files - run: VULYK_HIVE=<scratch> bash scripts/telemetry.sh bundle --out bundle.jsonl --week 2026-W38 && bash scripts/telemetry.sh check bundle.jsonl saw: bundle row has exactly 10 keys (v,code,value,threshold,vulyk,tier,model,agent,week,hive) - no ts/spec/story/ref, hive is a 12-hex sha256 slice; check exit=0
+ASK 4: GREEN - properly wired into the VULYK framework so it isn't lost - run: grep anomaly-scan .claude/settings.json; grep telemetry .claude/commands/vulyk-evolve.md; grep telemetry install.sh saw: anomaly-scan.sh wired on Stop and SessionEnd hooks, /vulyk-evolve step prints 7d anomaly counts + consent-gated publish/inbox steps, install.sh writes/reads the Profile Telemetry row, CI job `telemetry-inbox` runs check on every merged bundle
+ASK 5: GREEN - public GitHub repo documents the collection/PR/weekly-clean cycle - run: grep -n telemetry README.md saw: "### Anomaly telemetry — opt-in, anonymized, never automatic" section explaining bundle schema, PR flow and weekly /vulyk-evolve distill-and-clear cycle, linking docs/telemetry.md
+ASK 6: GREEN - install/upgrade asks the user to opt in, explains it, default off - run: VULYK_TELEMETRY=off bash install.sh <scratch1>; VULYK_TELEMETRY=on bash install.sh <scratch2> saw: Profile row written as "off" and "on" respectively; interactive branch (telemetry_tty/print_telemetry_explanation) verified by tests/telemetry.test.sh's install.sh suite (question text, default off, --check reports pending row) - the one live-pty subtest is `skip` here (no util-linux `script` on PATH), consistent with the suite's own conditional skip
+UNASKED: none
+BREACH: none

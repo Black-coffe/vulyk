@@ -183,8 +183,13 @@ Recorded per the round-2 review's condition that nothing ships narrower than con
 **Council:** ESCALATE round 3, 2026-09-15, at 5300d6a, pack 7260d521a997
 **Council:** RED round 4, 2026-09-15, at e3fccde, pack 07a6a02fb6fb - red: 3
 **Council:** RED round 5, 2026-09-15, at a1d7668, pack 63563afc2e88 - red: 3
+**Council:** ESCALATE round 6, 2026-09-15, at 83437ce, pack c3cdb6873008
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 
 ## Needs a human
 - reason: ceiling · round 3 · 2026-09-15
 - seats: docs/specs/anomaly-telemetry/council/round-3/
+- reason: env · round 6 · 2026-09-15
+- haiku: docs/specs/anomaly-telemetry/council/round-6/haiku.attempt-1.md
+- haiku: docs/specs/anomaly-telemetry/council/round-6/haiku.attempt-2.md
+- seats: docs/specs/anomaly-telemetry/council/round-6/
