@@ -121,4 +121,5 @@ Rule A10. Terminal test: `[ -t 0 ] || [ -r /dev/tty ]`; the question is read wit
 **Branch:** vulyk/anomaly-telemetry
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-09-15, at 1a91924, pack 9b30072f04a4 - red: 2
+**Council:** RED round 2, 2026-09-15, at 0e0c6f8, pack b0e5e31fff8f - red: 5
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
