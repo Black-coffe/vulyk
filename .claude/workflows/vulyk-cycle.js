@@ -14,11 +14,20 @@ export const meta = {
 // itself (VERDICT: PASS|BLOCK, Tier 4 only) - it loops on
 // scripts/cycle.sh's `status --json` and acts on every verb's exit code too (ADR-001 D2):
 // ok:false ends the run with the failure in the returned object, except a record-seat
-// MALFORMED (re-ask that seat once) and a second failed close-story for the same file (also
-// ends the run, naming the file instead of an exit code). Everything else it knows about the
-// state comes from `status --json`; a decision that needs more than `next`, `wave_stories`,
+// MALFORMED (re-ask that seat once), a second failed close-story for the same file (also
+// ends the run, naming the file instead of an exit code) and a non-JSON clerk last line
+// (one more dispatch, then ends the run). Two-track rule (C1 revised): a garbled line from a
+// read-only or stamp-idempotent verb (`status`, `claim`, `release`) is re-asked with the
+// identical prompt, while one from a mutating verb (`branch`, `close-story`, `open-round`,
+// `record-seat`, `judge`) is recovered by asking `status <spec> --json` once instead - the
+// verb may already have taken effect, and re-running it would exit 2.
+// Everything else it knows about the state comes from `status --json`; a decision that needs more than `next`, `wave_stories`,
 // `court`, `round`, `round_dir`, `spec`, `branch`, `head` or `tier` means the status contract
 // is missing a key, not something to work around here.
+// Poll rule (C6): `status --json` is asked once before the first iteration and again only after
+// an iteration that ran no verb, ran several verbs in parallel, or ran one verb whose result
+// carried no `status` - otherwise that single sequential verb's own post-verb `status` object
+// is the next iteration's state.
 
 const TERMINAL = ['green', 'escalated', 'paused', 'shipped']
 const SEAT_AGENT = { haiku: 'council-haiku', sonnet: 'council-sonnet', opus: 'council-opus', review: 'lead-review' }
@@ -66,19 +75,52 @@ class Paused extends Error {
 }
 const fail = (st, stop) => { throw new Stop({ ...st, stop }) }
 const asStop = (res) => ({ verb: res.verb, exit: res.exit, error: res.error })
+// C6/C5: the post-verb status a single sequential verb embeds, or null - which is the loop's
+// signal to poll instead. Only an ok:true result can carry state, and an older cycle.sh that
+// emits no `status` key simply falls back to the poll; a status is never synthesised from `next`.
+// An error envelope ({"ok":false,"verb":"status",...}) is not a status object: it carries an
+// `ok` key and no usable `next`, so it makes the loop poll rather than stop on an
+// unrecognised `next` (C6 addendum).
+const carriedStatus = (res) =>
+  (res && res.ok === true && res.status && typeof res.status === 'object'
+    && typeof res.status.next === 'string' && !('ok' in res.status)) ? res.status : null
+
+// The verbs whose second dispatch is a `status` poll, never the verb again: each one may have
+// taken effect before its relay was garbled, and a re-run then exits 2 (`already done` /
+// `already recorded`) and ends the run. Story 03 makes every one of them carry the same status
+// object on success, so the poll loses nothing (C1 revised).
+const MUTATING = ['branch', 'close-story', 'open-round', 'record-seat', 'judge']
 
 // The Workflow runtime has no shell of its own - cycle-clerk is the only way to reach one.
-// A non-JSON last line from any verb ends the whole run; the Queen reads the raw line at wake.
-const clerk = (cmd) => agent(
-  `Run exactly: bash scripts/cycle.sh ${cmd}\nReturn the last stdout line verbatim.`,
-  { agentType: 'cycle-clerk', effort: 'low' },
-).then((out) => {
-  const line = String(out).trim().split('\n').pop()
-  let parsed
-  try { parsed = JSON.parse(line) } catch { throw new BadLine(line) }
-  if (parsed.exit === 3) throw new Paused(parsed.next)
-  return parsed
-})
+// A non-JSON last line costs exactly one more dispatch: the identical prompt for `status`,
+// `claim` and `release`, `status <spec> --json` for the five mutating verbs. If that second
+// line is unparsable too the whole run ends and the Queen reads the raw line at wake.
+const clerk = (cmd) => {
+  const ask = (c) => agent(
+    `Run exactly: bash scripts/cycle.sh ${c}\nReturn the last stdout line verbatim.`,
+    { agentType: 'cycle-clerk', effort: 'low' },
+  ).then((out) => {
+    const line = String(out).trim().split('\n').pop()
+    let parsed
+    try { parsed = JSON.parse(line) } catch { throw new BadLine(line) }
+    if (parsed.exit === 3) throw new Paused(parsed.next)
+    return parsed
+  })
+  const verb = cmd.trim().split(/\s+/)[0]
+  return ask(cmd).catch((e) => {
+    if (!(e instanceof BadLine)) throw e
+    if (!MUTATING.includes(verb)) {
+      log(`cycle-clerk: non-JSON last line, retrying once: ${cmd}`)
+      return ask(cmd)
+    }
+    log(`cycle-clerk: non-JSON last line from "${cmd}", asking status instead`)
+    // the recovered result is shaped like an ok verb result carrying its own post-verb status,
+    // so every branch and carriedStatus() read it exactly as they read a real one; a verb that
+    // never took effect simply shows the same `next` again and the ordinary loop re-runs it.
+    return ask(`status ${spec} --json`)
+      .then((st) => ({ ok: true, verb, exit: 0, next: st.next, error: '', status: st, recovered: 'status' }))
+  })
+}
 
 // A blind seat gets slug/round/court only (R9) - round_dir would let it name the very
 // taint pattern C5 forbids it to repeat. lead-review is never blind, so it gets the full
@@ -139,17 +181,21 @@ try {
   const claimRes = await clerk(`claim ${spec} ${stamp}`)
   if (!claimRes.ok) return { stop: asStop(claimRes) }
   claimed = true
+  let st = await clerk(`status ${spec} --json`)
   for (;;) {
-    const st = await clerk(`status ${spec} --json`)
     log(`${st.slug} · ${st.stage} · next: ${st.next}`)
     if (TERMINAL.includes(st.next)) return st
 
     // second_model missing or equal to top_model on a Tier 4 spec refuses at launch, before
-    // any non-clerk agent() is dispatched (X-M4) - checked every poll since tier is unknown
-    // before the first status.
+    // any non-clerk agent() is dispatched (X-M4) - checked every iteration since tier is
+    // unknown before the first status.
     if (st.tier === 4 && (!SECOND || SECOND === TOP)) {
       fail(st, { verb: 'launch', error: 'second_model missing or equal to top_model on a Tier 4 spec' })
     }
+
+    // set only where the iteration's action was exactly one sequential verb that carried its
+    // own post-verb status; left null everywhere else, which is what makes the loop poll.
+    let nextSt = null
 
     if (st.next === 'briefed') {
       // r2m15: the driver refuses instead of stamping - it never runs briefed --commit itself.
@@ -157,6 +203,7 @@ try {
     } else if (st.next === 'branch') {
       const res = await clerk(`${st.next} ${spec} --commit`)
       if (!res.ok) fail(st, asStop(res))
+      nextSt = carriedStatus(res)
     } else if (st.next.startsWith('build:')) {
       phase('Build')
       const stories = st.wave_stories
@@ -210,6 +257,7 @@ try {
       const res = await clerk(`open-round ${spec} --commit --stamp ${stamp}`)
       // exit 6 at the bound: cycle.sh already recorded the escalation (R5) - this driver's job is only to stop
       if (!res.ok) fail(st, asStop(res))
+      nextSt = carriedStatus(res)
     } else if (st.next.startsWith('dispatch:')) {
       phase('Round')
       const seats = st.next.slice(9).split(',')
@@ -258,6 +306,7 @@ try {
       phase('Judge')
       const res = await clerk(`judge ${spec} --commit --stamp ${stamp}`)
       if (!res.ok) fail(st, asStop(res))
+      nextSt = carriedStatus(res)
     } else if (st.next === 'repair') {
       phase('Repair')
       // one queen-planner dispatch per round number per run (R30) - a repeat visit means
@@ -277,6 +326,10 @@ try {
     } else {
       return st // an unrecognised `next` - report it rather than guess at an action
     }
+
+    // the one poll site left: a fan-out (build, dispatch), a verb-less iteration (repair) or a
+    // verb whose result carried no status all land here; a carried status costs no clerk call.
+    st = nextSt || await clerk(`status ${spec} --json`)
   }
 } catch (e) {
   if (e instanceof BadLine) return e.line

@@ -1,8 +1,8 @@
 ---
 story: driver-hardening-04
 spec: driver-hardening
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -45,5 +45,10 @@ The Workflow driver polls `status --json` six times in a steady Tier 3 round (be
 `bash tests/driver.test.sh`
 
 ## Implementation notes
+- `.claude/workflows/vulyk-cycle.js`: the loop's `const st = await clerk('status ...')` moved out of the `for` head into a single pre-loop poll plus one tail assignment `st = nextSt || await clerk(...)`; `nextSt` is set only by the three sequential verb branches (`branch`, `open-round`, `judge`) via a new `carriedStatus(res)` helper that returns `res.status` only when `ok === true` and it is an object, else null. `build:`/`dispatch:`/`repair` and the unknown-`next` branch leave it null, so they poll exactly as before. Header comment gained the one-sentence poll rule; the Tier 4 guard comment now says "every iteration" instead of "every poll".
+- `close-story`'s carried status is deliberately discarded: `build:<wave>` is a fan-out, so C6 makes it poll regardless. `record-seat` the same.
+- `tests/driver.test.sh`: four scenarios (ag)-(aj) - the 13-call/3-poll steady Tier 3 round, the 16-call/6-poll walk against verbs with no `status` key, the status poll after a `close-story` exit 4, and a `judge`-carried `next: repair` reaching `queen-planner` with no poll between.
+- Checked, not assumed: reverting only `vulyk-cycle.js` and rerunning the suite turns exactly the two new carried-status scenarios ((ag), (aj)) red while (ah)/(ai) stay green - they are regression guards on the old path, not on the new one.
+- Gate green: `tests/driver.test.sh`, `tests/council.test.sh`, `tests/cycle.test.sh` all exit 0; both touched files are CR-free; `scope-check.sh` reports 0 out of scope.
 
 ## Findings

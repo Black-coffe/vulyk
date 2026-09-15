@@ -52,16 +52,40 @@ json_escape() { # json_escape <text> -> the JSON-string-safe form of <text>: bac
   printf '%s' "$s"
 }
 
-emit() { # emit <true|false> <verb> <exit> <next> [error]
-  local ok="$1" verb="$2" ex="$3" next="$4" err="${5:-}"
+emit() { # emit <true|false> <verb> <exit> <next> [error] [status-json]
+  # C5: <status-json> is a whole `status --json` object, appended verbatim as the last key -
+  # exit-0 mutating verbs only (see emit_status below); every other call passes nothing and
+  # the line is byte-for-byte what it was.
+  local ok="$1" verb="$2" ex="$3" next="$4" err="${5:-}" st="${6:-}"
   verb="$(json_escape "$verb")"
   next="$(json_escape "$next")"
+  local tail=""
+  [ -n "$st" ] && tail=",\"status\":$st"
   if [ -n "$err" ]; then
     err="$(json_escape "$err")"
-    printf '{"ok":%s,"verb":"%s","exit":%s,"next":"%s","error":"%s"}\n' "$ok" "$verb" "$ex" "$next" "$err"
+    printf '{"ok":%s,"verb":"%s","exit":%s,"next":"%s","error":"%s"%s}\n' "$ok" "$verb" "$ex" "$next" "$err" "$tail"
   else
-    printf '{"ok":%s,"verb":"%s","exit":%s,"next":"%s"}\n' "$ok" "$verb" "$ex" "$next"
+    printf '{"ok":%s,"verb":"%s","exit":%s,"next":"%s"%s}\n' "$ok" "$verb" "$ex" "$next" "$tail"
   fi
+}
+
+emit_status() { # emit_status <verb> <spec-dir> [next] - C5: the exit-0 line of a mutating verb,
+  # with the post-verb `status --json` object carried under `status`. Called after every write
+  # the verb makes, including its `--commit`, so the carried head/stale/next describe the
+  # repository the caller is about to act on - one clerk call instead of two. cmd_status derives
+  # everything from disk; nothing is verified or scope-checked again here. <next> stays the
+  # verb's own value (byte-for-byte what a pre-C5 driver read); omit it to take status.next.
+  local verb="$1" spec="$2" next="${3:-}" st rc
+  st="$(cmd_status "$spec")"; rc=$?
+  [ -n "$next" ] || next="$(json_field "$st" next)"
+  # C5 addendum (Minor 10): a carried `status` is a status object or absent, never an error
+  # envelope. If cmd_status took its usage branch (non-zero, `{"ok":false,"verb":"status",...}`
+  # on stdout), emit the pre-C5 five-key line - byte-for-byte what a pre-C5 caller read.
+  if [ "$rc" -ne 0 ] || [ -z "$st" ] || printf '%s' "$st" | grep -q '"ok":false'; then
+    emit true "$verb" 0 "$next"
+    return
+  fi
+  emit true "$verb" 0 "$next" "" "$st"
 }
 
 usage() {
@@ -922,7 +946,11 @@ ASKS
   # is a successful judgement (ok:true) and exits 0 with next:"repair"; ESCALATE keeps 6.
   local exit_code=0
   case "$overall" in ESCALATE) exit_code=6 ;; esac
-  emit true "$VERBLABEL" "$exit_code" "$next_val"
+  if [ "$exit_code" -eq 0 ] && [ "$VERBLABEL" = judge ]; then
+    emit_status judge "$SPEC" "$next_val"
+  else
+    emit true "$VERBLABEL" "$exit_code" "$next_val"
+  fi
   exit "$exit_code"
 }
 
@@ -1102,7 +1130,7 @@ cmd_branch() { # cmd_branch <spec> <commit:0|1>
   [ "$DOCOMMIT" = "1" ] && commit_paperwork branch "vulyk($SLUG): branch $BR" "$SPEC"
 
   echo "cycle: $SLUG - branch $BR"
-  emit true branch 0 "build:1"
+  emit_status branch "$SPEC" "build:1"
   exit 0
 }
 
@@ -1144,12 +1172,17 @@ missing_label() { # missing_label <report> -> the first required C5 label absent
 
 taint_reason() { # taint_reason <report> <slug> -> the D3 taint description, or "" when clean.
   # Path-anchored (R9): a hit needs the slug immediately before /plan.md, /journal.md or
-  # /council/ - optionally under docs/specs/ - or a word-bounded <slug>-NN (two digits) story
-  # id. The bare words plan.md/journal.md/council/, a command file like vulyk-plan.md, and
-  # another spec's paths are never taint; literal, case-sensitive, no prose heuristics.
+  # /council/ - optionally under docs/specs/ - or the story *file* itself: <slug>-NN.md and
+  # the repo's real <slug>-NN-<title>.md shape (C4 revised), or
+  # <slug>/<slug>-NN with or without .md, optionally under docs/specs/. A bare <slug>-NN with
+  # neither the .md suffix nor the <slug>/ directory prefix is a synthesized id (a CLI --story
+  # value, say), not a leak (C4/A6). The bare words plan.md/journal.md/council/, a command file
+  # like vulyk-plan.md, and another spec's paths are never taint; literal, case-sensitive, no
+  # prose heuristics.
   local report="$1" slug="$2" esc
   esc="$(printf '%s' "$slug" | sed 's/[.[\*^$()+?{|]/\\&/g')"
-  printf '%s' "$report" | grep -qE "\b${esc}-[0-9]{2}\b"                && { printf 'names a story id %s-NN' "$slug"; return; }
+  printf '%s' "$report" | grep -qE "\b${esc}-[0-9]{2}(-[A-Za-z0-9_-]+)?\.md\b|(docs/specs/)?\b${esc}/${esc}-[0-9]{2}(\.md)?\b" \
+                                                                          && { printf 'names the story file %s-NN' "$slug"; return; }
   printf '%s' "$report" | grep -qE "(docs/specs/)?\b${esc}/plan\.md"    && { printf 'names %s/plan.md' "$slug"; return; }
   printf '%s' "$report" | grep -qE "(docs/specs/)?\b${esc}/journal\.md" && { printf 'names %s/journal.md' "$slug"; return; }
   printf '%s' "$report" | grep -qE "(docs/specs/)?\b${esc}/council/"    && { printf 'names %s/council/' "$slug"; return; }
@@ -1184,11 +1217,11 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
   local extra; extra="$(printf ' \xc2\xb7 verdict: %s' "$verdict")"
   write_seat_file "$RD/review.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$extra" "$REPORT"
   echo "cycle: record-seat - review recorded for round $N (verdict $verdict)"
-  local missing required
+  local missing required next_val
   required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
   missing="$(missing_required_seats "$RD" "$required")"
-  local next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
-  emit true record-seat 0 "$next_val"
+  next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
+  emit_status record-seat "$SPEC" "$next_val"
   exit 0
 }
 
@@ -1298,11 +1331,11 @@ REPORTEOF
   write_seat_file "$RD/$SEAT.md" "$SEAT" "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$extra" "$FINAL_REPORT"
   echo "cycle: record-seat - $SEAT recorded for round $N (attempt $ATTEMPT)$( [ -n "$red_u_list" ] && printf ', unevidenced: %s' "$(json_num_csv "$red_u_list")" )"
 
-  local missing required
+  local missing required next_val
   required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
   missing="$(missing_required_seats "$RD" "$required")"
-  local next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
-  emit true record-seat 0 "$next_val"
+  next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
+  emit_status record-seat "$SPEC" "$next_val"
   exit 0
 }
 
@@ -1477,13 +1510,32 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1> [<stamp>]
   pause_guard "$SPECDIR" close-story
   driver_guard "$SPECDIR" close-story "$STAMP"
 
-  local ST; ST="$(fm_field "$STORY" status)"
+  local ST SELFMARKED=0; ST="$(fm_field "$STORY" status)"
   case "$ST" in
     todo|in-progress) ;;
     done)
-      echo "cycle: close-story - $STORY is already done" >&2
-      emit false close-story 2 error "already done"
-      exit 2
+      # --- C3: a worker that self-marked `status: done` is a miss, not a fraud - if the
+      # story's named files or the story file itself still carry an uncommitted diff, this
+      # is the worker's own unfinished close, so proceed down the normal path (journaling the
+      # self-mark) instead of refusing. A clean tree means a real prior close - exit 2 as before.
+      local -a DONE_PATHS=("$STORY")
+      local donef
+      while IFS= read -r donef; do
+        [ -n "$donef" ] || continue
+        DONE_PATHS+=("$donef")
+      done <<EOF
+$(files_of "$STORY")
+EOF
+      local DONE_DIRTY; DONE_DIRTY="$(git status --porcelain -- "${DONE_PATHS[@]}" 2>/dev/null)"
+      if [ -z "$DONE_DIRTY" ]; then
+        echo "cycle: close-story - $STORY is already done" >&2
+        emit false close-story 2 error "already done"
+        exit 2
+      fi
+      # C3 revised (Minors 5, 6): the journal line is written once, below, only after
+      # verification is green - every exit-4 path leaves journal.md untouched, so a retried
+      # attempt never journals twice.
+      SELFMARKED=1
       ;;
     *)
       echo "cycle: close-story - $STORY has status '$ST', expected todo or in-progress" >&2
@@ -1566,6 +1618,14 @@ EOF
     i=$((i+1))
   done
 
+  if [ "$SELFMARKED" = "1" ]; then
+    # C3 revised: verification is green, so this closing is real - record the self-mark once,
+    # with the story's own wave as `next` (Minor 5: never a hardcoded build:1).
+    local SMWAVE; SMWAVE="$(fm_field "$STORY" wave)"
+    case "$SMWAVE" in ''|*[!0-9]*) SMWAVE=1 ;; esac
+    bash "$HERE/journal.sh" "$SPECDIR" "03-building" "close-story $(fm_field "$STORY" story): worker marked status: done itself, closing on the uncommitted diff" "build:$SMWAVE" >/dev/null
+  fi
+
   if [ "$DOCOMMIT" = "1" ]; then
     # r2m2: `status: done` is written only after the commit lands - a failed commit (an
     # index.lock, say) must leave the story exactly as it was on disk, or a dirty tree with an
@@ -1601,10 +1661,7 @@ EOF
   fi
 
   echo "cycle: $(fm_field "$STORY" story) - closed, verification green"
-  local status_out real_next
-  status_out="$(cmd_status "$SPECDIR")"
-  real_next="$(json_field "$status_out" next)"
-  emit true close-story 0 "$real_next"
+  emit_status close-story "$SPECDIR"
   exit 0
 }
 
@@ -1699,7 +1756,7 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   [ "$docommit" = "1" ] && commit_paperwork open-round "vulyk($slug): open-round $n" "$spec"
 
   echo "cycle: $slug - round $n opened, court at $court_abs"
-  emit true open-round 0 "$dispatch_val"
+  emit_status open-round "$spec" "$dispatch_val"
   exit 0
 }
 
@@ -1802,7 +1859,10 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
   # is exactly the state the HEAD-unchanged resume case below must tolerate, not reject.
   # Anything else dirty is real and still refuses.
   local status_out dirty="" line
-  status_out="$(git status --porcelain 2>/dev/null)"
+  # C2 addendum: -uall, so a directory with nothing tracked in it (a fresh hive's
+  # memory/learnings/) is listed file by file instead of collapsing to one `?? <dir>/` line
+  # the one-level predicate must reject. The predicate itself is unchanged.
+  status_out="$(git status --porcelain -uall 2>/dev/null)"
   if [ -n "$status_out" ]; then
     while IFS= read -r line; do
       [ -n "$line" ] || continue
@@ -1855,16 +1915,16 @@ EOF
     # paperwork since then (round_is_stale, C1), or every round would read itself as stale on
     # the very next call.
     if ! round_is_stale "$SPEC" "$N"; then
-      local missing required
-      required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
-      missing="$(missing_required_seats "$RD" "$required")"
-      local next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
       # r2m3: an earlier --commit here may have failed after ROUND/journal.md were already
       # written (e.g. an index.lock) - a true no-op has nothing left to commit; anything still
       # uncommitted under this spec's own paperwork is finished now, not silently left behind.
       [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): open-round $N" "$SPEC"
+      local missing required next_val
+      required="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
+      missing="$(missing_required_seats "$RD" "$required")"
+      next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
       echo "cycle: $SLUG - round $N already open at current HEAD, no-op"
-      emit true open-round 0 "$next_val"
+      emit_status open-round "$SPEC" "$next_val"
       exit 0
     fi
     local has_seat=0 seat2

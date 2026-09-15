@@ -1,8 +1,8 @@
 ---
 story: driver-hardening-02
 spec: driver-hardening
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -44,5 +44,9 @@ blocked_by: []
 `bash tests/driver.test.sh`
 
 ## Implementation notes
+- `clerk()` now wraps the single-attempt logic in an inner `ask()`; on `BadLine` it logs `cycle-clerk: non-JSON last line, retrying once: ${cmd}` and calls `ask()` once more. A second `BadLine` (or any other error, including `Paused`) propagates unchanged - only one retry, never caught twice.
+- Updated the two header comments (:16-18, :71-73 post-edit) to say the non-JSON case is "re-asked once, then ends the run".
+- Added three `tests/driver.test.sh` scenarios (ad/ae/af) exercising C1: retry-then-succeed (via `claim`), two-bad-lines-stop (raw second line, exactly 2 calls, no further dispatch), and Paused-on-retry-not-swallowed (via `status`). Added matching `expect` lines.
+- `scope-check.sh` flags `scripts/cycle.sh`, `scripts/lib.sh`, `tests/council.test.sh` as changed-but-undeclared - these were already dirty in the working tree before this story started (other stories' output), not touched here.
 
 ## Findings
