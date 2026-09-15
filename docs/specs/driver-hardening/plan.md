@@ -108,7 +108,6 @@ The six lines below are the cycle's confirmation artifacts (docs/cycle.md).
 **Approved:** Andrei, 2026-09-15
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path. Alternative to **Approved:** above.>
 **Branch:** vulyk/driver-hardening
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05.>
 **Council:** GREEN round 1, 2026-09-15, at 8521d20, pack 92f41ba75c4c
 **Council:** ESCALATE round 2, 2026-09-15, at ebf7a5f, pack 3a929636825c
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
@@ -118,3 +117,4 @@ The six lines below are the cycle's confirmation artifacts (docs/cycle.md).
 - sonnet: docs/specs/driver-hardening/council/round-2/sonnet.attempt-1.md
 - sonnet: docs/specs/driver-hardening/council/round-2/sonnet.attempt-2.md
 - seats: docs/specs/driver-hardening/council/round-2/
+**Checked:** ACCEPTED by Andrei, 2026-09-15, at fef1b4b - round 2: every judging seat GREEN or N/A, review PASS with no Major; the sonnet seat was rejected twice by the taint rule for typing the taint test strings in its own run: line (self-reference of ask 4), both reports GREEN on disk
