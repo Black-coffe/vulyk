@@ -116,3 +116,4 @@
 {"ts":"2026-09-15T15:43:10Z","story":"driver-hardening-03-verb-status","declared":2,"changed":2,"out_of_scope":0}
 {"ts":"2026-09-15T16:16:19Z","story":"driver-hardening-04-driver-carries-status","declared":2,"changed":2,"out_of_scope":0}
 {"ts":"2026-09-15T16:16:41Z","story":"driver-hardening-04-driver-carries-status","declared":2,"changed":3,"out_of_scope":1}
+{"ts":"2026-09-15T16:19:14Z","story":"driver-hardening-05-adr-and-docs","declared":4,"changed":3,"out_of_scope":0}

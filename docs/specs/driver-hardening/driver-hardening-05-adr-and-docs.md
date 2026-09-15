@@ -1,8 +1,8 @@
 ---
 story: driver-hardening-05
 spec: driver-hardening
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -47,5 +47,9 @@ plan.md `## Contracts` C1-C7, `## Tradeoffs`, A1-A8; the merged diffs of stories
 `none — reviewed by lead-review`
 
 ## Implementation notes
+- `docs/adr/011-driver-hardening.md`: new, `proposed`, spec `docs/specs/driver-hardening`; each of the five decisions states the rejected alternative from `## Answers`, the file/function it lives in, and one invariant; C5's key list and C6's poll rule are quoted verbatim from plan.md.
+- `docs/adr/001-cycle-state-contract.md`: added `### Amendments (2026-09-15)` naming ADR-011 and its three code-touching decisions; adjusted exactly the four spots named in Goal - the `close-story` D2 row (self-mark tolerance), the `record-seat` D2 row (story-file taint, not bare id), the `while` loop over `status --json` sentence (now notes the carried-status/poll-only-at-start-and-parallel rule), and the "Invariants created" taint line. Options, Context and the 2026-09-13 amendments untouched; D5's own "story id" mention (line ~273, not named in Goal) left as-is.
+- `CHANGELOG.md`: added `## [Unreleased]` with one `### Fixed` line per ask 1-4 and one `### Changed` line for ask 5, each naming the changed file; the ask-5 line says "three fewer polls per round" (plan A5), not "about a third".
+- `docs/cycle.md`: left unchanged - the only pre-existing mention that touches this spec's territory is the `paperwork_only` staleness sentence, and it stays true (generic, doesn't claim which paths are whitelisted); no other sentence misstates the shipped behaviour.
 
 ## Findings

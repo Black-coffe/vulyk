@@ -84,10 +84,29 @@ above stay as first written.
   shapes match K2; the exit-code line's `4` row gains ADR-006's `returned:` clause
   (`v0-12-0-remainders-03`, ADR-006).
 
+### Amendments (2026-09-15)
+
+`driver-hardening` (ADR-011) closed five defects the anomaly-telemetry circle met in the
+driver and `cycle.sh`; see ADR-011 for the decision, the rejected alternative and the
+invariant of each. Four spots below are updated so they stop contradicting the shipped
+behaviour; nothing else in this ADR moves:
+
+- **D2** - `branch`, `close-story`, `open-round`, `record-seat` and `judge` now also embed
+  the post-verb `status` object in their exit-0 JSON, so the canonical driver polls `status`
+  only at loop start and after a `parallel()` step, not on every iteration (ADR-011 decision 1).
+- **D2** - `record-seat`'s taint clause no longer treats a bare `<slug>-NN` token as taint;
+  taint is the story *file* - `<slug>-NN.md` or `docs/specs/<slug>/<slug>-NN` (with or
+  without `.md`) (ADR-011 decision 2).
+- **D2** - `close-story`'s `done` precondition now tolerates a worker's own `status: done`
+  when the story's files still carry an uncommitted diff: it journals the self-mark and
+  proceeds through the normal scope/verify/commit path instead of refusing (ADR-011 decision 3).
+
 Option 1. The loop state is a small set of committed files, each with exactly one writer,
 all written by `scripts/cycle.sh`; the verdict is computed by that script from labelled
 lines in seat reports; both drivers are a `while` loop over `cycle.sh status --json` that
-performs the one action named in `next` and nothing else.
+performs the one action named in `next` and nothing else - carried forward from a mutating
+verb's own `status` key where one is available, polled fresh only at loop start and after a
+parallel step (ADR-011).
 
 ### D1. Files, owners, schemas
 
@@ -149,9 +168,9 @@ last stdout line is always one JSON object so no driver parses prose.
 | `status <spec> [--json]` | - | derives everything above; prints `next` (below); never writes |
 | `briefed <spec> [--commit]` | `## Asks` present, non-empty | writes `**Briefed:**`; journal |
 | `branch <spec> [--commit]` | Briefed or Approved | creates/switches `vulyk/<slug>`, writes `**Branch:**` |
-| `close-story <story-file> [--commit]` | worker returned; every `&&`-separated segment of every `## Verification` line equals, byte for byte, a row of the hive's `CLAUDE.md` `## Commands` table (or the line is the literal `none — reviewed by lead-review`, which runs nothing), else exit 2 naming the segment | `scope-check.sh`, `## Verification` x `repeat:`, `status: done`, commit `story(<id>): <title>`; exit 4 on red verification (the driver routes to the repair path of `/vulyk-build` step 5) |
+| `close-story <story-file> [--commit]` | worker returned; every `&&`-separated segment of every `## Verification` line equals, byte for byte, a row of the hive's `CLAUDE.md` `## Commands` table (or the line is the literal `none — reviewed by lead-review`, which runs nothing), else exit 2 naming the segment; a worker's own `status: done` with a clean tree still exits 2 `already done`, but with an uncommitted diff in the story's files it journals the self-mark and falls through to the normal path instead of refusing (ADR-011) | `scope-check.sh`, `## Verification` x `repeat:`, `status: done`, commit `story(<id>): <title>`; exit 4 on red verification (the driver routes to the repair path of `/vulyk-build` step 5) |
 | `open-round <spec> [--commit]` | Branch; all stories `done`/`blocked`; clean tree; `## Asks`; not paused; round count < ceiling | `mkdir round-N`, `ROUND`, opens the court, journal; at the ceiling, writes the ESCALATE row, `**Council:**` line, `## Needs a human` and the journal line itself (idempotently), then exits 6 `ESCALATE` instead |
-| `record-seat <spec> <N> <seat> [--model <id>] [--stamp <s>] [--file <path>] [< report]` | open round; not stale by `round_is_stale` | validates the report contract (D3); writes the seat file; exit 4 `MALFORMED` (kept as `attempt-K`) when a label is missing, an ask number is uncovered, a RED lacks evidence, or the report is **tainted** - contains `docs/specs/<slug>/plan.md`, `docs/specs/<slug>/journal.md`, `docs/specs/<slug>/council/`, the same three with `docs/specs/` omitted, or a story id `<slug>-NN` (two digits, word-bounded); bare `plan.md`, `journal.md`, `council/`, another directory's `journal.md` and command-file names are not taint |
+| `record-seat <spec> <N> <seat> [--model <id>] [--stamp <s>] [--file <path>] [< report]` | open round; not stale by `round_is_stale` | validates the report contract (D3); writes the seat file; exit 4 `MALFORMED` (kept as `attempt-K`) when a label is missing, an ask number is uncovered, a RED lacks evidence, or the report is **tainted** - contains `docs/specs/<slug>/plan.md`, `docs/specs/<slug>/journal.md`, `docs/specs/<slug>/council/`, the same three with `docs/specs/` omitted, or a story *file* - `<slug>-NN.md` or `docs/specs/<slug>/<slug>-NN` (with or without `.md`); bare `plan.md`, `journal.md`, `council/`, another directory's `journal.md`, command-file names and a bare `<slug>-NN` token are not taint (ADR-011) |
 | `judge <spec> [--commit]` | four seat files present, or a seat exhausted its two attempts (`ABSENT`) | computes the verdict (D4), row -> line -> journal, removes the court |
 | `escalate <spec> [--commit] [--reason <ceiling\|half\|env>] ["<note>"]` | a standalone verb: an open round with seats missing (court removed, no seat precondition) | records the escalation - row, `**Council:** ESCALATE`, `## Needs a human`, journal; behaves as `judge` when nothing is missing |
 | `reopen <spec> "<owner's decision>" [--commit]` | last row is ESCALATE | appends the decision verbatim to `brief.md` `## Answers`, raises `ceiling` by 3 in the next `ROUND`, journal |
@@ -338,7 +357,8 @@ the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen 
   STALE rounds with a seat file count toward the ceiling.
 - Seats return reports, never write files; the driver records them through `record-seat`,
   which validates the contract before anything reaches disk.
-- A seat report that names a story id, `plan.md`, `journal.md` or `council/` is tainted.
+- A seat report that names a story *file* (not a bare `<slug>-NN`), `plan.md`, `journal.md`
+  or `council/` is tainted (ADR-011).
 - The council works in a worktree at the pack commit whose `docs/specs/<slug>/` holds only
   `brief.md`; `lead-review` never works there.
 - `PAUSE` is honoured by every mutating verb of `cycle.sh`, not by a driver's goodwill.
