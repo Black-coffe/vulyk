@@ -11,3 +11,4 @@
 - 2026-09-15T07:40:39Z · 03-building · round-3 repair: stories 08-10 cut by queen-planner for the round-2 review Critical and Majors (plan delta 2026-09-15); round-1 finding 13 (pre-existing uncommitted telemetry.sh/hook code seen by stories 02/04) - origin unknown to the Queen, nothing was hand-written in this session · next: build:6
 - 2026-09-15T07:40:50Z · 03-building · relaunching the workflow driver for waves 6-7 and round 3 · next: the loop holds the working tree of vulyk/anomaly-telemetry; to edit, run /vulyk-pause anomaly-telemetry
 - 2026-09-15T08:26:35Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/anomaly-telemetry/round-3 · next: dispatch:haiku,sonnet,opus,review
+- 2026-09-15T08:41:24Z · 04-council:ESCALATE · round 3 verdict ESCALATE at 5300d6a pack 7260d521a997 · next: escalated
