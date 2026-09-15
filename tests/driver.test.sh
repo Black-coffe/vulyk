@@ -820,6 +820,134 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
     }
   }));
 })
+// --- C6: the poll rule. The same steady Tier 3 round - claim, branch, one story built and
+// closed, a round opened, four seats dispatched and recorded, judge GREEN - is walked twice:
+// once with every verb carrying its post-verb `status` (C5), once with an older cycle.sh that
+// carries none. The only difference the driver may show is the clerk bill.
+.then(() => {
+  const args = { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' };
+  const file = 'docs/specs/demo/demo-20-x.md';
+  const stBranch = { next: 'branch', tier: 3, slug: 'demo', stage: '02' };
+  const stBuild = { next: 'build:1', tier: 3, slug: 'demo', stage: '03', wave_stories: [{ file, story: 'demo-20', worker: 'worker-code' }] };
+  const stOpen = { next: 'open-round', tier: 3, slug: 'demo', stage: '04' };
+  const stDispatch = {
+    next: 'dispatch:haiku,sonnet,opus,review', tier: 3, round: 1, slug: 'demo', stage: '04',
+    court: '.vulyk/court/demo', round_dir: 'docs/specs/demo/council/round-1',
+  };
+  const stJudge = { next: 'judge', tier: 3, slug: 'demo', stage: '05' };
+  const stGreen = { next: 'green', tier: 3, slug: 'demo', stage: '05' };
+  const seatReports = ['haiku report', 'sonnet report', 'opus report', 'review report'];
+  const verb = (v, next, status) => status
+    ? { ok: true, verb: v, exit: 0, next, status }
+    : { ok: true, verb: v, exit: 0, next };
+
+  // --- scenario (ag): every verb carries `status` -> 13 clerk calls, 3 status polls
+  return run(args, {
+    clerk: withClaim([
+      stBranch,
+      verb('branch', 'build:1', stBuild),
+      verb('close-story', 'open-round', stOpen),
+      stOpen,
+      verb('open-round', stDispatch.next, stDispatch),
+      verb('record-seat', 'dispatch:sonnet,opus,review', stDispatch),
+      verb('record-seat', 'dispatch:opus,review', stDispatch),
+      verb('record-seat', 'dispatch:review', stDispatch),
+      verb('record-seat', 'judge', stJudge),
+      stJudge,
+      verb('judge', 'green', stGreen),
+    ]),
+    agents: ['a worker report', ...seatReports],
+  }).then(({ result, calls }) => {
+    const clerkCalls = calls.filter((c) => 'verb' in c);
+    const statusCalls = clerkCalls.filter((c) => c.verb === 'status');
+    if (result && result.next === 'green' && clerkCalls.length === 13 && statusCalls.length === 3) {
+      console.log('ok C6 carried: steady Tier 3 round costs 13 clerk calls and 3 status polls');
+    } else {
+      console.log('FAIL C6 carried: steady Tier 3 round costs 13 clerk calls and 3 status polls - got '
+        + JSON.stringify(result) + ' clerk=' + clerkCalls.length + ' status=' + statusCalls.length
+        + ' verbs=' + JSON.stringify(clerkCalls.map((c) => c.verb)));
+    }
+  })
+  // --- scenario (ah): the same walk against an older cycle.sh whose verbs carry no `status`
+  // -> the pre-C5 bill, 16 clerk calls and 6 polls, and the same green ending
+  .then(() => run(args, {
+    clerk: withClaim([
+      stBranch,
+      verb('branch', 'build:1'),
+      stBuild,
+      verb('close-story', 'open-round'),
+      stOpen,
+      verb('open-round', stDispatch.next),
+      stDispatch,
+      verb('record-seat', 'dispatch:sonnet,opus,review'),
+      verb('record-seat', 'dispatch:opus,review'),
+      verb('record-seat', 'dispatch:review'),
+      verb('record-seat', 'judge'),
+      stJudge,
+      verb('judge', 'green'),
+      stGreen,
+    ]),
+    agents: ['a worker report', ...seatReports],
+  }).then(({ result, calls }) => {
+    const clerkCalls = calls.filter((c) => 'verb' in c);
+    const statusCalls = clerkCalls.filter((c) => c.verb === 'status');
+    if (result && result.next === 'green' && clerkCalls.length === 16 && statusCalls.length === 6) {
+      console.log('ok C6 old cycle.sh: verbs without `status` still walk to green on 16 calls, 6 polls');
+    } else {
+      console.log('FAIL C6 old cycle.sh: verbs without `status` still walk to green on 16 calls, 6 polls - got '
+        + JSON.stringify(result) + ' clerk=' + clerkCalls.length + ' status=' + statusCalls.length
+        + ' verbs=' + JSON.stringify(clerkCalls.map((c) => c.verb)));
+    }
+  }))
+  // --- scenario (ai): a non-ok result never carries state - the clerk call right after a
+  // close-story exit 4 (first miss) is the status poll, as before C6
+  .then(() => run(args, {
+    clerk: withClaim([
+      stBuild,
+      { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' },
+      stGreen,
+    ]),
+    agents: ['a worker report'],
+  }).then(({ result, calls }) => {
+    const clerkCalls = calls.filter((c) => 'verb' in c);
+    const verbs = clerkCalls.map((c) => c.verb).join(',');
+    if (result && result.next === 'green' && verbs === 'claim,status,close-story,status,release') {
+      console.log('ok C6 miss: a close-story exit 4 is followed by a status poll');
+    } else {
+      console.log('FAIL C6 miss: a close-story exit 4 is followed by a status poll - got '
+        + JSON.stringify(result) + ' verbs=' + verbs);
+    }
+  }))
+  // --- scenario (aj): a judge carrying status next:"repair" routes straight into the repair
+  // dispatch - queen-planner is reached with no status poll between judge and it
+  .then(() => run(args, {
+    clerk: withClaim([
+      stJudge,
+      verb('judge', 'repair', {
+        next: 'repair', tier: 3, slug: 'demo', stage: '05', round: 1, red: [2], review: 'BLOCK',
+        round_dir: 'docs/specs/demo/council/round-1',
+      }),
+      stGreen,
+    ]),
+    agents: ['repair stories cut'],
+  }).then(({ result, calls }) => {
+    const judgeAt = calls.findIndex((c) => c.verb === 'judge');
+    const plannerAt = calls.findIndex((c) => c.agentType === 'queen-planner');
+    const between = calls.slice(judgeAt + 1, plannerAt).filter((c) => c.verb === 'status');
+    const statusCalls = calls.filter((c) => c.verb === 'status');
+    const planner = calls[plannerAt];
+    if (
+      result && result.next === 'green' && judgeAt >= 0 && plannerAt > judgeAt
+      && between.length === 0 && statusCalls.length === 2
+      && planner.prompt.includes('numbered [2]')
+    ) {
+      console.log('ok C6 judge -> repair: the carried status routes the repair with no poll between');
+    } else {
+      console.log('FAIL C6 judge -> repair: the carried status routes the repair with no poll between - got '
+        + JSON.stringify(result) + ' calls=' + JSON.stringify(calls.map((c) => c.verb || c.agentType)));
+    }
+  }));
+})
 .catch((e) => { console.log('FAIL harness threw: ' + (e && e.stack || e)); process.exitCode = 1; });
 NODE_EOF
 )"
@@ -875,5 +1003,9 @@ expect "C2: any other exit 2 stops instead of falling back"               "ok C2
 expect "C1: a non-JSON clerk line is re-asked once, then proceeds"        "ok clerk retry: non-JSON line re-asked once, run proceeds" "$out"
 expect "C1: two non-JSON clerk lines end the run with the raw second"     "ok clerk retry: two non-JSON lines end the run with the raw second line" "$out"
 expect "C1: a Paused result on the retried attempt is not swallowed"      "ok clerk retry: Paused on the retried attempt is thrown, not swallowed" "$out"
+expect "C6: a steady Tier 3 round costs 13 clerk calls and 3 polls"       "ok C6 carried: steady Tier 3 round costs 13 clerk calls and 3 status polls" "$out"
+expect "C6: verbs without a status key keep the old 16-call path"         "ok C6 old cycle.sh: verbs without \`status\` still walk to green on 16 calls, 6 polls" "$out"
+expect "C6: a close-story exit 4 is followed by a status poll"            "ok C6 miss: a close-story exit 4 is followed by a status poll" "$out"
+expect "C6: a judge carrying next:repair routes with no poll between"     "ok C6 judge -> repair: the carried status routes the repair with no poll between" "$out"
 
 exit $fail

@@ -20,6 +20,10 @@ export const meta = {
 // state comes from `status --json`; a decision that needs more than `next`, `wave_stories`,
 // `court`, `round`, `round_dir`, `spec`, `branch`, `head` or `tier` means the status contract
 // is missing a key, not something to work around here.
+// Poll rule (C6): `status --json` is asked once before the first iteration and again only after
+// an iteration that ran no verb, ran several verbs in parallel, or ran one verb whose result
+// carried no `status` - otherwise that single sequential verb's own post-verb `status` object
+// is the next iteration's state.
 
 const TERMINAL = ['green', 'escalated', 'paused', 'shipped']
 const SEAT_AGENT = { haiku: 'council-haiku', sonnet: 'council-sonnet', opus: 'council-opus', review: 'lead-review' }
@@ -67,6 +71,11 @@ class Paused extends Error {
 }
 const fail = (st, stop) => { throw new Stop({ ...st, stop }) }
 const asStop = (res) => ({ verb: res.verb, exit: res.exit, error: res.error })
+// C6/C5: the post-verb status a single sequential verb embeds, or null - which is the loop's
+// signal to poll instead. Only an ok:true result can carry state, and an older cycle.sh that
+// emits no `status` key simply falls back to the poll; a status is never synthesised from `next`.
+const carriedStatus = (res) =>
+  (res && res.ok === true && res.status && typeof res.status === 'object') ? res.status : null
 
 // The Workflow runtime has no shell of its own - cycle-clerk is the only way to reach one.
 // A non-JSON last line from any verb is re-asked once, then ends the whole run; the Queen
@@ -148,17 +157,21 @@ try {
   const claimRes = await clerk(`claim ${spec} ${stamp}`)
   if (!claimRes.ok) return { stop: asStop(claimRes) }
   claimed = true
+  let st = await clerk(`status ${spec} --json`)
   for (;;) {
-    const st = await clerk(`status ${spec} --json`)
     log(`${st.slug} · ${st.stage} · next: ${st.next}`)
     if (TERMINAL.includes(st.next)) return st
 
     // second_model missing or equal to top_model on a Tier 4 spec refuses at launch, before
-    // any non-clerk agent() is dispatched (X-M4) - checked every poll since tier is unknown
-    // before the first status.
+    // any non-clerk agent() is dispatched (X-M4) - checked every iteration since tier is
+    // unknown before the first status.
     if (st.tier === 4 && (!SECOND || SECOND === TOP)) {
       fail(st, { verb: 'launch', error: 'second_model missing or equal to top_model on a Tier 4 spec' })
     }
+
+    // set only where the iteration's action was exactly one sequential verb that carried its
+    // own post-verb status; left null everywhere else, which is what makes the loop poll.
+    let nextSt = null
 
     if (st.next === 'briefed') {
       // r2m15: the driver refuses instead of stamping - it never runs briefed --commit itself.
@@ -166,6 +179,7 @@ try {
     } else if (st.next === 'branch') {
       const res = await clerk(`${st.next} ${spec} --commit`)
       if (!res.ok) fail(st, asStop(res))
+      nextSt = carriedStatus(res)
     } else if (st.next.startsWith('build:')) {
       phase('Build')
       const stories = st.wave_stories
@@ -219,6 +233,7 @@ try {
       const res = await clerk(`open-round ${spec} --commit --stamp ${stamp}`)
       // exit 6 at the bound: cycle.sh already recorded the escalation (R5) - this driver's job is only to stop
       if (!res.ok) fail(st, asStop(res))
+      nextSt = carriedStatus(res)
     } else if (st.next.startsWith('dispatch:')) {
       phase('Round')
       const seats = st.next.slice(9).split(',')
@@ -267,6 +282,7 @@ try {
       phase('Judge')
       const res = await clerk(`judge ${spec} --commit --stamp ${stamp}`)
       if (!res.ok) fail(st, asStop(res))
+      nextSt = carriedStatus(res)
     } else if (st.next === 'repair') {
       phase('Repair')
       // one queen-planner dispatch per round number per run (R30) - a repeat visit means
@@ -286,6 +302,10 @@ try {
     } else {
       return st // an unrecognised `next` - report it rather than guess at an action
     }
+
+    // the one poll site left: a fan-out (build, dispatch), a verb-less iteration (repair) or a
+    // verb whose result carried no status all land here; a carried status costs no clerk call.
+    st = nextSt || await clerk(`status ${spec} --json`)
   }
 } catch (e) {
   if (e instanceof BadLine) return e.line
