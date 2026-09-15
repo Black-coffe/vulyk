@@ -1,6 +1,6 @@
 # ADR-010: Anomaly telemetry - row schemas, anonymization, consent, and the print-never-send rule
 
-- Status: proposed
+- Status: accepted (2026-09-15, owner)
 - Date: 2026-09-15
 - Spec: docs/specs/anomaly-telemetry (v0.14.0)
 

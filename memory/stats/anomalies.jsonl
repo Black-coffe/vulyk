@@ -155,3 +155,5 @@
 {"v":1,"ts":"","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"anomaly-telemetry-12-recipe-docs-and-scope-gate","ref":"scope:anomaly-telemetry-12-recipe-docs-and-scope-gate"}
 {"v":1,"ts":"2026-09-15T10:14:32Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"anomaly-telemetry-13-bundle-agent-token","ref":"scope:anomaly-telemetry-13-bundle-agent-token"}
 {"v":1,"ts":"2026-09-15T11:08:58Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"anomaly-telemetry-14-agent-token-fixed-set","ref":"scope:anomaly-telemetry-14-agent-token-fixed-set"}
+{"v":1,"ts":"2026-09-15T11:53:48Z","code":"agent_empty","value":59,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"worker-code","spec":"","story":"","ref":"agent:agent-a7c1358eff8c3adc8.jsonl"}
+{"v":1,"ts":"2026-09-15T11:53:49Z","code":"agent_empty","value":57,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"worker-code","spec":"","story":"","ref":"agent:agent-a97931d855dc4a903.jsonl"}
