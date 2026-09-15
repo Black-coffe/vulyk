@@ -1,8 +1,8 @@
 ---
 story: anomaly-telemetry-05
 spec: anomaly-telemetry
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -58,5 +58,14 @@ recon/hooks-and-stats.md §5 (OWNED, `shippable()`, `ensure_gitignore()`, the `s
 `bash tests/telemetry.test.sh`
 
 ## Implementation notes
+- `CLAUDE.md`: the `Telemetry` row added after *Release / deploy* inside the PROFILE markers, `off`; `install.sh`'s `telemetry_row()` is the single source of that string and the fresh-install placeholder ends with `telemetry_row off`, so the CI row-count check stays honest.
+- `install.sh`: arg loop became a `while`/`shift` loop for `--telemetry <v>`; `telemetry_row_value`, `telemetry_constitution`, `telemetry_tty`, `print_telemetry_explanation`, `telemetry_decide` (A10 precedence) run before the constitution block, `ensure_telemetry_row` after it - on whichever file is the constitution now (sidecar included). The row edit replaces only the first alphabetic token of the value cell, so backticks and an owner-edited description survive.
+- Terminal test: `[ -t 0 ]`, else `[ -r /dev/tty ]` **and** an actual `( exec 3< /dev/tty )` open. The `-r` test alone is true on GitHub runners (the device node is mode-readable while opening it fails), which would have printed the question into CI logs.
+- Decision: `--telemetry ask` with no terminal and an existing row leaves the row alone rather than resetting it to `off` - A10(5)'s `off` default is written for a *missing* row.
+- `wire_hook <event> <script>` + `py_wire` (the python heredoc, now taking `event` and `--dry`); `wire_session_hook` is a one-line wrapper. The "already wired" test is per event, not per file, or a script on Stop would never reach SessionEnd; `--check` runs the same python with `--dry` and falls back to the old file-wide grep when python is absent.
+- `wire_hook Stop|SessionEnd anomaly-scan.sh` is called unconditionally beside the SessionStart pair (not only under `--upgrade`): a fresh install into a project that already has its own `settings.json` needs it too, and it is idempotent.
+- `vulyk-update.sh`: `--telemetry <v>` parsed and forwarded as an array; `TELARGS=()` assignment is an `if`, not `&&` - a top-level `&&` that yields 1 kills the script under `set -e`.
+- Verified: `bash tests/telemetry.test.sh` - 125 checks, 0 failed (the pseudo-terminal case skipped here, no util-linux `script` on this box; it runs in the telemetry-inbox CI job). Also green: `bash -n` over all shell files, `py_compile`, `jq -e` over all JSON.
 
 ## Findings
+- `scope-check.sh` reports 3 out-of-scope paths - `memory/learnings/2026-09-14_222936.md`, `memory/stats/anomalies.jsonl`, `memory/stats/skills.json`. All three were already untracked/modified in the working tree when this story started (see the session's git status); this story touched none of them.

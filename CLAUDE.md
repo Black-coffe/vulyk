@@ -130,6 +130,7 @@ seat only - fill it only when a separate, read-only test profile already exists.
 | Client path | `<fill in - how a person reaches the running thing: URL + a test login, a CLI entry point, or a browser runner's quiet command; "none: library only" is an honest answer>` |
 | Browser MCP | `<fill in - chrome-devtools \| claude-in-chrome \| none; optional, read by the council-haiku seat only, read-only, on a separate test profile - none is the honest default without one>` |
 | Release / deploy | `<fill in - default branch; how a version is published (tag + push? npm publish? CI on merge?) and who presses the button>` |
+| Telemetry | off - anonymized weekly anomaly bundle (codes and numbers only, docs/telemetry.md); on = /vulyk-evolve prints the send command, never sends |
 <!-- VULYK:PROFILE:END -->
 
 ## Commands

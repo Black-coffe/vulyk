@@ -450,6 +450,113 @@ expect_eq "anomaly-scan.sh exits 0 when scripts/telemetry.sh is missing" "0" "$N
 # --- install and consent wiring (anomaly-telemetry-05) ----------------------------------------
 # Story 05 adds the Telemetry Profile row, install.sh's /dev/tty question and `wire_hook`.
 # Its local cases belong here, below this marker.
+echo "--- install.sh: the Telemetry row, the question, wire_hook"
+
+if bash -n "$SRC/install.sh" 2>/dev/null; then ok "bash -n install.sh"
+else bad "bash -n install.sh failed"; bash -n "$SRC/install.sh"; fi
+
+rowval() { # rowval <constitution> - the first token of the Telemetry row's value cell
+  grep -m1 '^|[[:space:]]*Telemetry[[:space:]]*|' "$1" 2>/dev/null \
+    | awk -F'|' '{print $3}' | tr -d '`' | awk '{print $1}'
+}
+profile_rows() { awk '/VULYK:PROFILE:START/{f=1;next}/VULYK:PROFILE:END/{f=0}f' "$1" | grep '^| '; }
+
+expect_eq "the repo's own constitution consents to nothing" "off" "$(cd "$SRC" && bash scripts/telemetry.sh consent)"
+
+# Every install below names its consent explicitly unless the case is ABOUT the question, so
+# no case can block on a prompt when the suite is run from a real terminal.
+TGT="$T/hive-install"; mkdir -p "$TGT"
+bash "$SRC/install.sh" "$TGT" --telemetry off > "$T/install.out" 2>&1
+expect_eq "fresh install writes the Telemetry row as off" "off" "$(rowval "$TGT/CLAUDE.md")"
+expect_eq "the row is the last row inside the Profile block" "1" \
+  "$(profile_rows "$TGT/CLAUDE.md" | tail -1 | grep -c '^| Telemetry |')"
+expect_eq "the installed hive's own consent verb reads it" "off" \
+  "$(VULYK_HIVE="$TGT" bash "$TGT/scripts/telemetry.sh" consent)"
+expect_eq "the anomaly log is never shipped into a hive" "0" \
+  "$([ -e "$TGT/memory/stats/anomalies.jsonl" ] && echo 1 || echo 0)"
+
+# --telemetry on changes that one row's value and nothing else in the constitution
+PROF_BEFORE="$(grep -v '^| Telemetry |' "$TGT/CLAUDE.md")"
+bash "$SRC/install.sh" "$TGT" --upgrade --telemetry on > "$T/up-on.out" 2>&1
+expect_eq "--telemetry on flips the row" "on" "$(rowval "$TGT/CLAUDE.md")"
+expect_eq "nothing else in the constitution moved" "1" \
+  "$([ "$PROF_BEFORE" = "$(grep -v '^| Telemetry |' "$TGT/CLAUDE.md")" ] && echo 1 || echo 0)"
+expect_eq "the row is still there exactly once" "1" "$(grep -c '^| Telemetry |' "$TGT/CLAUDE.md")"
+
+# an answered row survives a plain upgrade byte for byte, and is not asked about again
+CONST_BEFORE="$(cat "$TGT/CLAUDE.md")"
+bash "$SRC/install.sh" "$TGT" --upgrade > "$T/up-plain.out" 2>&1
+expect_eq "an answered row is byte-identical after --upgrade" "1" \
+  "$([ "$CONST_BEFORE" = "$(cat "$TGT/CLAUDE.md")" ] && echo 1 || echo 0)"
+cat "$T/up-plain.out" | expect_absent "no question for a hive that already answered" "Enable telemetry?"
+
+# --check reports the pending insertion and writes nothing
+sed -i '/^| Telemetry |/d' "$TGT/CLAUDE.md"
+CONST_BEFORE="$(cat "$TGT/CLAUDE.md")"
+bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/up-check.out" 2>&1
+expect_eq "--check never writes the row" "1" \
+  "$([ "$CONST_BEFORE" = "$(cat "$TGT/CLAUDE.md")" ] && echo 1 || echo 0)"
+cat "$T/up-check.out" | expect "--check reports the pending row" "would set      CLAUDE.md Profile row: Telemetry"
+
+# A run with no controlling terminal: setsid is what makes /dev/tty unopenable even when the
+# suite itself is driven from a real one. Without setsid the case is only honest when this
+# shell already has no terminal - otherwise it is skipped, loudly.
+tty_reachable() { ( exec 3< /dev/tty ) 2>/dev/null; }
+NOTTY=""
+if command -v setsid >/dev/null 2>&1 && setsid --wait true 2>/dev/null; then NOTTY="setsid --wait"
+elif ! tty_reachable; then NOTTY="env"
+fi
+
+if [ -n "$NOTTY" ]; then
+  # upgrade, row missing, nobody to ask -> appended as off, silently
+  $NOTTY bash "$SRC/install.sh" "$TGT" --upgrade > "$T/up-notty.out" 2>&1
+  expect_eq "no terminal: the missing row is appended as off" "off" "$(rowval "$TGT/CLAUDE.md")"
+  expect_eq "appended exactly once" "1" "$(grep -c '^| Telemetry |' "$TGT/CLAUDE.md")"
+  cat "$T/up-notty.out" | expect_absent "no terminal: no question is printed" "Enable telemetry?"
+  cat "$T/up-notty.out" | expect_absent "no terminal: no explanation is printed" "Telemetry (optional"
+
+  # a piped `y` on stdin is NOT an answer: stdin is never the answer channel
+  PIPED="$T/hive-piped"; mkdir -p "$PIPED"
+  echo y | $NOTTY bash "$SRC/install.sh" "$PIPED" > "$T/piped.out" 2>&1
+  expect_eq "piped stdin never answers the question" "off" "$(rowval "$PIPED/CLAUDE.md")"
+else
+  echo "  skip  no-terminal cases: no setsid and this shell has a reachable /dev/tty"
+fi
+
+# The real thing, through a pseudo-terminal, when util-linux `script` is on PATH.
+if command -v script >/dev/null 2>&1 && script --version 2>&1 | grep -qi 'util-linux'; then
+  PTY="$T/hive-pty"; mkdir -p "$PTY"
+  printf 'y\n' | script -qec "bash '$SRC/install.sh' '$PTY'" /dev/null > "$T/pty.out" 2>&1 || true
+  cat "$T/pty.out" | expect "a terminal gets the explanation, naming off as the default" "Default: off."
+  cat "$T/pty.out" | expect "a terminal gets exactly one question" "Enable telemetry? [y/N]"
+  expect_eq "answering y lands the row as on" "on" "$(rowval "$PTY/CLAUDE.md")"
+else
+  echo "  skip  terminal case: no util-linux \`script\` on PATH to drive a pseudo-terminal"
+fi
+
+# wire_hook: the two anomaly-scan.sh entries appear once each, preserve what was there, and a
+# second upgrade is byte-identical.
+SET="$TGT/.claude/settings.json"
+jq '.hooks.Stop = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop"}]}] | del(.hooks.SessionEnd)' \
+  "$SET" > "$T/set.json" && mv "$T/set.json" "$SET"
+bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/wire.out" 2>&1
+cat "$T/wire.out" | expect "wire_hook reports Stop" "wire           .claude/settings.json -> Stop: anomaly-scan.sh"
+cat "$T/wire.out" | expect "wire_hook reports SessionEnd" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+expect_eq "anomaly-scan.sh is wired once on Stop" "1" \
+  "$(jq -r '.hooks.Stop[].hooks[].command' "$SET" | grep -c 'anomaly-scan.sh')"
+expect_eq "anomaly-scan.sh is wired once on SessionEnd" "1" \
+  "$(jq -r '.hooks.SessionEnd[].hooks[].command' "$SET" | grep -c 'anomaly-scan.sh')"
+expect_eq "the existing Stop entry is preserved" "1" \
+  "$(jq -r '.hooks.Stop[].hooks[].command' "$SET" | grep -c 'handoff.sh stop')"
+expect_eq "SessionStart wiring is untouched" "1" \
+  "$(jq -r '.hooks.SessionStart[].hooks[].command' "$SET" | grep -c 'vulyk-update-check.sh')"
+SET_BEFORE="$(cat "$SET")"
+bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/wire2.out" 2>&1
+expect_eq "a second upgrade leaves settings.json byte-identical" "1" \
+  "$([ "$SET_BEFORE" = "$(cat "$SET")" ] && echo 1 || echo 0)"
+cat "$T/wire2.out" | expect_absent "and reports no second wiring" "-> Stop: anomaly-scan.sh"
+bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire3.out" 2>&1
+cat "$T/wire3.out" | expect_absent "--check reports no wiring for an already-wired hook" "would wire     .claude/settings.json -> Stop"
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
