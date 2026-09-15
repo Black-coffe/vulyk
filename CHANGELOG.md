@@ -2,7 +2,7 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
-## [Unreleased]
+## [0.14.0] - 2026-09-15
 
 ### Added
 - **Anomaly telemetry, opt-in.** `memory/stats/anomalies.jsonl` logs eight anomaly codes locally on every hive - context size, subagent prefix cost, empty subagent returns, council round count, stage duration, driver refusals/relaunches, scope breaches - via `scripts/telemetry.sh`.
