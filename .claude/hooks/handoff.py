@@ -869,7 +869,83 @@ def mode_status(payload, cfg, root):
     sys.exit(0)
 
 
-HOOK_MODES = ("stop", "prompt", "precompact", "sessionend", "sessionstart")
+def mode_measure(argv):
+    """Read-only transcript inspection for `scripts/telemetry.sh scan` (plan A7).
+
+    `python handoff.py measure <transcript.jsonl> [--sidechain]`. Never writes state,
+    never blocks: an unreadable or missing file prints `{}` and exits 0, same contract
+    as every other guard hook here. `--sidechain` reads a subagent's own file, where
+    every entry carries `isSidechain: true`; without it, only main-thread entries count -
+    matching context_tokens()'s own isSidechain skip.
+    """
+    path = None
+    sidechain = False
+    for a in argv:
+        if a == "--sidechain":
+            sidechain = True
+        elif path is None:
+            path = a
+
+    if not path or not os.path.isfile(path):
+        print("{}")
+        sys.exit(0)
+
+    entries = []
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or not line.startswith("{"):
+                    continue
+                try:
+                    entries.append(json.loads(line))
+                except Exception:
+                    continue
+    except Exception:
+        print("{}")
+        sys.exit(0)
+
+    tokens, model, _ = context_tokens(path)
+
+    turns = [e for e in entries
+             if e.get("type") == "assistant" and bool(e.get("isSidechain")) == sidechain]
+
+    first_prefix = 0
+    if turns:
+        usage = (turns[0].get("message") or {}).get("usage") or {}
+        first_prefix = (usage.get("input_tokens") or 0) + (usage.get("cache_creation_input_tokens") or 0)
+
+    last_has_text = False
+    if turns:
+        content = (turns[-1].get("message") or {}).get("content")
+        if isinstance(content, list):
+            last_has_text = any(
+                isinstance(b, dict) and b.get("type") == "text" and b.get("text")
+                for b in content)
+        elif isinstance(content, str):
+            last_has_text = bool(content.strip())
+
+    agent_type = ""
+    meta_path = os.path.splitext(path)[0] + ".meta.json"
+    try:
+        with open(meta_path, "r", encoding="utf-8") as fh:
+            meta = json.load(fh) or {}
+        agent_type = meta.get("agentType") or ""
+    except Exception:
+        agent_type = ""
+
+    print(json.dumps({
+        "tokens": tokens,
+        "model": model or "",
+        "first_prefix": first_prefix,
+        "assistant_turns": len(turns),
+        "last_has_text": last_has_text,
+        "agent_type": agent_type,
+    }, ensure_ascii=False))
+    sys.exit(0)
+
+
+HOOK_MODES = ("stop", "prompt", "precompact", "sessionend", "sessionstart", "measure")
 
 
 def main():
@@ -917,6 +993,8 @@ def main():
         sys.exit(0)
     elif mode == "status":
         mode_status(payload, cfg, root)
+    elif mode == "measure":
+        mode_measure(sys.argv[2:])
     emit(None)
 
 

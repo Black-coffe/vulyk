@@ -247,11 +247,205 @@ expect_eq "the entry stays anchored (no bare basename)" "false" "$(paper anomali
 echo "--- paperwork"
 cat "$SRC/CLAUDE.md" | expect "CLAUDE.md ## Commands names this suite" \
   '| Anomaly telemetry contract tests | `bash tests/telemetry.test.sh` |'
-tel scan 2>&1 | expect "scan is a fail-open stub until story 02" "not implemented"
 
 # --- detectors (anomaly-telemetry-02) ---------------------------------------------------------
 # Story 02 adds the `scan` verb's five detectors, .claude/hooks/anomaly-scan.sh and
 # `handoff.py measure`. Its cases belong here, below this marker.
+PY="$(command -v python3 || command -v python || true)"
+mkdir -p "$HIVE/.claude/hooks"
+cp "$SRC/.claude/hooks/handoff.py" "$SRC/.claude/hooks/handoff.sh" "$SRC/.claude/hooks/anomaly-scan.sh" \
+  "$HIVE/.claude/hooks/"
+
+# --- case 9: handoff.py measure ----------------------------------------------------------------
+echo "--- handoff.py measure"
+MEASURE="$T/measure"
+mkdir -p "$MEASURE/subagents"
+
+cat > "$MEASURE/main.jsonl" <<'EOF'
+{"type":"assistant","isSidechain":false,"message":{"model":"claude-fable-5-1","usage":{"input_tokens":1000,"cache_read_input_tokens":500,"cache_creation_input_tokens":2000,"output_tokens":300}}}
+EOF
+MAIN_OUT="$("$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/main.jsonl" < /dev/null)"
+expect_eq "measure tokens equals context_tokens()'s answer" "3800" \
+  "$(printf '%s' "$MAIN_OUT" | jq -r '.tokens')"
+
+cat > "$MEASURE/subagents/agent-a1.jsonl" <<'EOF'
+{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":40000,"cache_creation_input_tokens":15000,"cache_read_input_tokens":0,"output_tokens":50},"content":[{"type":"tool_use","name":"Bash"}]}}
+{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":2000,"output_tokens":40},"content":[{"type":"text","text":"done"}]}}
+EOF
+printf '{"agentType":"cycle-clerk"}\n' > "$MEASURE/subagents/agent-a1.meta.json"
+SIDE_OUT="$("$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/subagents/agent-a1.jsonl" --sidechain < /dev/null)"
+expect_eq "measure --sidechain first_prefix is the first turn's input+cache_creation" "55000" \
+  "$(printf '%s' "$SIDE_OUT" | jq -r '.first_prefix')"
+expect_eq "measure --sidechain assistant_turns counts sidechain entries" "2" \
+  "$(printf '%s' "$SIDE_OUT" | jq -r '.assistant_turns')"
+expect_eq "measure --sidechain last_has_text reads the last entry's content" "true" \
+  "$(printf '%s' "$SIDE_OUT" | jq -r '.last_has_text')"
+expect_eq "measure --sidechain agent_type reads the sibling .meta.json" "cycle-clerk" \
+  "$(printf '%s' "$SIDE_OUT" | jq -r '.agent_type')"
+
+MISSING_OUT="$("$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/does-not-exist.jsonl" < /dev/null)"; MISSING_RC=$?
+expect_eq "measure on a missing file prints {}" "{}" "$MISSING_OUT"
+expect_eq "measure on a missing file exits 0" "0" "$MISSING_RC"
+
+STATUS_RC=0
+bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null >/dev/null 2>&1 || STATUS_RC=$?
+expect_eq "handoff.sh status still exits 0 with measure added" "0" "$STATUS_RC"
+
+# --- case 10: scan - agent_prefix_high / agent_empty --------------------------------------------
+echo "--- scan: agent_prefix_high, agent_empty"
+SESSION="$T/session1"
+mkdir -p "$SESSION/subagents"
+cat > "$SESSION/subagents/agent-hi.jsonl" <<'EOF'
+{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":40000,"cache_creation_input_tokens":20000,"cache_read_input_tokens":0,"output_tokens":10},"content":[{"type":"text","text":"ok"}]}}
+EOF
+printf '{"agentType":"cycle-clerk"}\n' > "$SESSION/subagents/agent-hi.meta.json"
+cat > "$SESSION/subagents/agent-empty.jsonl" <<'EOF'
+{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5},"content":[{"type":"tool_use","name":"Bash"}]}}
+EOF
+printf '{"agentType":"my-custom-agent"}\n' > "$SESSION/subagents/agent-empty.meta.json"
+cat > "$SESSION/main.jsonl" <<'EOF'
+{"type":"assistant","isSidechain":false,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}
+EOF
+
+: > "$LOG"
+tel scan --transcript "$SESSION/main.jsonl" >/dev/null 2>&1
+expect_eq "scan records exactly one agent_prefix_high row" "1" \
+  "$(grep -c '"code":"agent_prefix_high"' "$LOG")"
+expect_eq "agent_prefix_high carries the cycle-clerk agent token" "cycle-clerk" \
+  "$(grep '"code":"agent_prefix_high"' "$LOG" | jq -r '.agent')"
+expect_eq "scan records exactly one agent_empty row" "1" \
+  "$(grep -c '"code":"agent_empty"' "$LOG")"
+expect_eq "agent_empty maps a non-framework agentType to other" "other" \
+  "$(grep '"code":"agent_empty"' "$LOG" | jq -r '.agent')"
+expect_eq "agent_empty ref is agent:<basename>" "agent:agent-empty.jsonl" \
+  "$(grep '"code":"agent_empty"' "$LOG" | jq -r '.ref')"
+AGENT_ROWS="$(grep -c . "$LOG")"
+tel scan --transcript "$SESSION/main.jsonl" >/dev/null 2>&1
+expect_eq "a second scan over the same session appends nothing" "$AGENT_ROWS" "$(grep -c . "$LOG")"
+
+# --- case 11: scan - context_high ----------------------------------------------------------------
+echo "--- scan: context_high"
+: > "$LOG"
+CTX="$T/ctx-main.jsonl"
+cat > "$CTX" <<'EOF'
+{"type":"assistant","isSidechain":false,"message":{"model":"claude-fable-5-1","usage":{"input_tokens":100000,"cache_read_input_tokens":40000,"cache_creation_input_tokens":10000,"output_tokens":5000}}}
+EOF
+tel scan --transcript "$CTX" >/dev/null 2>&1
+expect_eq "scan records one context_high row above the absolute threshold" "1" \
+  "$(grep -c '"code":"context_high"' "$LOG")"
+expect_eq "context_high maps claude-fable-5-1 to fable" "fable" \
+  "$(grep '"code":"context_high"' "$LOG" | jq -r '.model')"
+expect_eq "context_high carries an empty agent" "" \
+  "$(grep '"code":"context_high"' "$LOG" | jq -r '.agent')"
+
+# --- case 12: scan - council_rounds_high ---------------------------------------------------------
+echo "--- scan: council_rounds_high"
+mkdir -p "$HIVE/docs/specs/fixture-spec" "$HIVE/docs/specs/low-round-spec"
+printf '**Tier:** 2 · **Spec slug:** `fixture-spec`\n' > "$HIVE/docs/specs/fixture-spec/plan.md"
+printf '**Tier:** 1 · **Spec slug:** `low-round-spec`\n' > "$HIVE/docs/specs/low-round-spec/plan.md"
+COUNCIL_LOG="$HIVE/memory/stats/council.jsonl"
+: > "$COUNCIL_LOG"
+printf '{"ts":"%s","spec":"fixture-spec","round":3,"verdict":"GREEN"}\n' "$NOW" >> "$COUNCIL_LOG"
+printf '{"ts":"%s","spec":"low-round-spec","round":2,"verdict":"GREEN"}\n' "$NOW" >> "$COUNCIL_LOG"
+
+: > "$LOG"
+tel scan >/dev/null 2>&1
+expect_eq "council_rounds_high fires for the spec at round 3" "1" \
+  "$(grep -c '"code":"council_rounds_high".*"spec":"fixture-spec"' "$LOG")"
+expect_eq "council_rounds_high carries the spec's tier from plan.md" "2" \
+  "$(grep '"code":"council_rounds_high"' "$LOG" | jq -r '.tier')"
+expect_eq "no council_rounds_high row for the spec at round 2" "0" \
+  "$(grep -c '"spec":"low-round-spec"' "$LOG")"
+
+# --- case 13: scan - stage_long -------------------------------------------------------------------
+echo "--- scan: stage_long"
+mkdir -p "$HIVE/docs/specs/stage-long-spec" "$HIVE/docs/specs/stage-short-spec"
+cat > "$HIVE/docs/specs/stage-long-spec/journal.md" <<'EOF'
+- 2026-01-01T00:00:00Z · 01-spec · start · next: plan
+- 2026-01-02T06:00:00Z · 02-plan · planned · next: build
+EOF
+cat > "$HIVE/docs/specs/stage-short-spec/journal.md" <<'EOF'
+- 2026-01-01T00:00:00Z · 01-spec · start · next: plan
+- 2026-01-01T02:00:00Z · 02-plan · planned · next: build
+EOF
+
+: > "$LOG"
+tel scan >/dev/null 2>&1
+expect_eq "stage_long fires for a 30h gap" "1" \
+  "$(grep -c '"code":"stage_long".*"spec":"stage-long-spec"' "$LOG")"
+expect_eq "stage_long value is the gap in hours" "30" \
+  "$(grep '"code":"stage_long".*"spec":"stage-long-spec"' "$LOG" | jq -r '.value')"
+expect_eq "stage_long threshold is the configured hours" "24" \
+  "$(grep '"code":"stage_long".*"spec":"stage-long-spec"' "$LOG" | jq -r '.threshold')"
+expect_eq "no stage_long row for a 2h gap" "0" \
+  "$(grep -c '"spec":"stage-short-spec"' "$LOG")"
+
+# --- case 14: scan - scope_breach ------------------------------------------------------------------
+echo "--- scan: scope_breach"
+SCOPE_LOG="$HIVE/memory/stats/scope.jsonl"
+: > "$SCOPE_LOG"
+printf '{"ts":"%s","story":"breach-story","declared":1,"changed":3,"out_of_scope":["a/b.sh","c/d.sh"]}\n' "$NOW" >> "$SCOPE_LOG"
+printf '{"ts":"%s","story":"clean-story","declared":1,"changed":1,"out_of_scope":[]}\n' "$NOW" >> "$SCOPE_LOG"
+
+: > "$LOG"
+tel scan >/dev/null 2>&1
+expect_eq "scope_breach fires for a non-empty out_of_scope" "1" \
+  "$(grep -c '"code":"scope_breach"' "$LOG")"
+expect_eq "scope_breach value is the out-of-scope path count" "2" \
+  "$(grep '"code":"scope_breach"' "$LOG" | jq -r '.value')"
+expect_eq "scope_breach carries the story id" "breach-story" \
+  "$(grep '"code":"scope_breach"' "$LOG" | jq -r '.story')"
+expect_eq "no scope_breach row for an empty out_of_scope" "0" \
+  "$(grep -c '"story":"clean-story"' "$LOG")"
+
+# --- case 15: scan - kill switch and the no-transcript, no-session-dir path -------------------------
+echo "--- scan: kill switch, minimal invocation"
+: > "$LOG"
+(cd "$HIVE" && VULYK_HIVE="$HIVE" VULYK_TELEMETRY_SCAN=0 bash scripts/telemetry.sh scan --transcript "$CTX") >/dev/null 2>&1
+expect_eq "VULYK_TELEMETRY_SCAN=0 writes nothing" "0" "$(grep -c . "$LOG" 2>/dev/null || true)"
+
+: > "$LOG"
+SCAN_RC=0
+tel scan >/dev/null 2>&1 || SCAN_RC=$?
+expect_eq "scan with no transcript and no session dir exits 0" "0" "$SCAN_RC"
+expect_eq "scan with no transcript still runs the stats-file detectors" "1" \
+  "$(grep -c '"code":"scope_breach"' "$LOG")"
+
+# --- case 16: anomaly-scan.sh - wiring and fail-open ------------------------------------------------
+echo "--- anomaly-scan.sh"
+expect_eq "anomaly-scan.sh is wired on Stop" "1" \
+  "$(jq -r '.hooks.Stop[].hooks[].command' "$SRC/.claude/settings.json" | grep -c 'anomaly-scan.sh')"
+expect_eq "anomaly-scan.sh is wired on SessionEnd" "1" \
+  "$(jq -r '.hooks.SessionEnd[].hooks[].command' "$SRC/.claude/settings.json" | grep -c 'anomaly-scan.sh')"
+expect_eq "the existing Stop hook is preserved beside it" "1" \
+  "$(jq -r '.hooks.Stop[].hooks[].command' "$SRC/.claude/settings.json" | grep -c 'handoff.sh stop')"
+
+: > "$LOG"
+HOOK_RC=0
+echo '{"transcript_path":""}' | CLAUDE_PROJECT_DIR="$HIVE" bash "$HIVE/.claude/hooks/anomaly-scan.sh" \
+  > "$T/hook-out" 2> "$T/hook-err" || HOOK_RC=$?
+expect_eq "anomaly-scan.sh exits 0 on the success path" "0" "$HOOK_RC"
+expect_eq "anomaly-scan.sh prints nothing on the success path" "" "$(cat "$T/hook-out")"
+
+BASHBIN="$(command -v bash)"
+EMPTYPATH="$T/emptybin"; mkdir -p "$EMPTYPATH"
+NOJQ_RC=0
+echo '{}' | PATH="$EMPTYPATH" CLAUDE_PROJECT_DIR="$HIVE" "$BASHBIN" "$HIVE/.claude/hooks/anomaly-scan.sh" \
+  >/dev/null 2>&1 || NOJQ_RC=$?
+expect_eq "anomaly-scan.sh exits 0 when jq is missing" "0" "$NOJQ_RC"
+
+JQONLY="$T/jq-only"; mkdir -p "$JQONLY"
+cp "$(command -v jq)" "$JQONLY/jq"
+NOPY_RC=0
+echo '{}' | PATH="$JQONLY" CLAUDE_PROJECT_DIR="$HIVE" "$BASHBIN" "$HIVE/.claude/hooks/anomaly-scan.sh" \
+  >/dev/null 2>&1 || NOPY_RC=$?
+expect_eq "anomaly-scan.sh exits 0 when python is missing" "0" "$NOPY_RC"
+
+mkdir -p "$T/no-telemetry"
+NOSCRIPT_RC=0
+echo '{}' | CLAUDE_PROJECT_DIR="$T/no-telemetry" bash "$HIVE/.claude/hooks/anomaly-scan.sh" \
+  >/dev/null 2>&1 || NOSCRIPT_RC=$?
+expect_eq "anomaly-scan.sh exits 0 when scripts/telemetry.sh is missing" "0" "$NOSCRIPT_RC"
 
 # --- install and consent wiring (anomaly-telemetry-05) ----------------------------------------
 # Story 05 adds the Telemetry Profile row, install.sh's /dev/tty question and `wire_hook`.

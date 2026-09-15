@@ -165,10 +165,192 @@ cmd_record() {
     "$spec" "$story" "$ref" >> "$LOG"
 }
 
-# Story 02 owns the detectors. The stub exists now so the hook that story 05 wires into old
-# hives can be written against a verb that is already there and already fails open.
+# --- scan: the five detectors -----------------------------------------------------------------
+# Thresholds (plan A2), one env var each, defaults baked in and echoed into every row so
+# /vulyk-evolve can recalibrate from data later.
+VULYK_ANOMALY_CONTEXT_PCT="${VULYK_ANOMALY_CONTEXT_PCT:-70}"
+VULYK_ANOMALY_CONTEXT_TOKENS="${VULYK_ANOMALY_CONTEXT_TOKENS:-140000}"
+VULYK_ANOMALY_AGENT_PREFIX_TOKENS="${VULYK_ANOMALY_AGENT_PREFIX_TOKENS:-50000}"
+VULYK_ANOMALY_COUNCIL_ROUNDS="${VULYK_ANOMALY_COUNCIL_ROUNDS:-3}"
+VULYK_ANOMALY_STAGE_HOURS="${VULYK_ANOMALY_STAGE_HOURS:-24}"
+
+# handoff.py's own fail-open wrapper: whatever python3/python/py is on PATH, exits 0 with
+# nothing on stdout when none is found. Reused rather than re-resolving the interpreter here.
+measure() { # measure <transcript> [--sidechain]
+  [ -f "$ROOT/.claude/hooks/handoff.sh" ] || return 0
+  bash "$ROOT/.claude/hooks/handoff.sh" measure "$@" < /dev/null 2>/dev/null
+}
+
+# claude-fable-5-1 -> fable, claude-opus-... -> opus, etc. Anything else (or empty) -> "".
+# cmd_record re-validates against MODELS anyway; this just gives it a token worth keeping.
+model_alias() {
+  case "${1:-}" in
+    *fable*)  echo fable ;;
+    *opus*)   echo opus ;;
+    *sonnet*) echo sonnet ;;
+    *haiku*)  echo haiku ;;
+    *) echo "" ;;
+  esac
+}
+
+epoch_of() { # epoch_of <UTC ISO-8601 ts> -> unix seconds, empty when unparseable
+  local ts="${1:-}" e=""
+  [ -n "$ts" ] || return 0
+  e="$(date -u -d "$ts" +%s 2>/dev/null || true)"
+  [ -n "$e" ] || e="$(date -u -jf '%Y-%m-%dT%H:%M:%SZ' "$ts" +%s 2>/dev/null || true)"
+  printf '%s' "$e"
+}
+
+# context_high: the main-thread transcript's current context size (handoff.py's own
+# context_tokens()) against a threshold that is percent-of-window when a window has actually
+# been observed for this session (handoff's own state file), else the absolute fallback.
+detect_context() { # detect_context <main transcript>
+  local transcript="${1:-}" session_id measured tokens model window threshold state_file malias
+  [ -n "$transcript" ] && [ -f "$transcript" ] || return 0
+  measured="$(measure "$transcript")"
+  [ -n "$measured" ] || return 0
+  tokens="$(printf '%s' "$measured" | jq -r '.tokens // 0' 2>/dev/null)"
+  model="$(printf '%s' "$measured" | jq -r '.model // ""' 2>/dev/null)"
+  is_number "$tokens" || return 0
+  [ "$tokens" != "0" ] || return 0
+
+  session_id="$(basename "$transcript" .jsonl)"
+  state_file="$ROOT/.claude/handoff/state/$session_id.json"
+  window=""
+  [ -f "$state_file" ] && window="$(jq -r '.window // empty' "$state_file" 2>/dev/null)"
+  if [ -n "$window" ] && is_number "$window" && [ "$window" != "0" ]; then
+    threshold=$(( window * VULYK_ANOMALY_CONTEXT_PCT / 100 ))
+  else
+    threshold="$VULYK_ANOMALY_CONTEXT_TOKENS"
+  fi
+
+  if [ "$tokens" -gt "$threshold" ] 2>/dev/null; then
+    malias="$(model_alias "$model")"
+    cmd_record context_high "$tokens" "$threshold" --model "$malias" \
+      --ref "session:$(basename "$transcript")"
+  fi
+}
+
+# agent_prefix_high / agent_empty: every subagent file under <session dir>/subagents/
+# (plain dispatches and workflow ones alike - recon/hooks-and-stats.md §6).
+detect_agents() { # detect_agents <session dir>
+  local session_dir="${1:-}" f measured first_prefix turns last_has_text agent_type base ref
+  [ -n "$session_dir" ] && [ -d "$session_dir/subagents" ] || return 0
+  find "$session_dir/subagents" -type f -name '*.jsonl' 2>/dev/null | sort | \
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    measured="$(measure "$f" --sidechain)"
+    [ -n "$measured" ] || continue
+    first_prefix="$(printf '%s' "$measured" | jq -r '.first_prefix // 0' 2>/dev/null)"
+    turns="$(printf '%s' "$measured" | jq -r '.assistant_turns // 0' 2>/dev/null)"
+    last_has_text="$(printf '%s' "$measured" | jq -r '.last_has_text // false' 2>/dev/null)"
+    agent_type="$(printf '%s' "$measured" | jq -r '.agent_type // ""' 2>/dev/null)"
+    base="$(basename "$f")"
+    ref="agent:$base"
+
+    if is_number "$first_prefix" && [ "$first_prefix" -gt "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" ] 2>/dev/null; then
+      cmd_record agent_prefix_high "$first_prefix" "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" \
+        --ref "$ref" --agent "$agent_type"
+    fi
+    if is_number "$turns" && [ "$turns" != "0" ] && [ "$last_has_text" = "false" ]; then
+      cmd_record agent_empty "$turns" 0 --ref "$ref" --agent "$agent_type"
+    fi
+  done
+}
+
+# spec_tier <slug> -> the number on that spec's plan.md "**Tier:**" line, else empty
+# (cmd_record maps anything outside 0-4 to 0).
+spec_tier() {
+  local spec="${1:-}" f line
+  f="$ROOT/docs/specs/$spec/plan.md"
+  [ -f "$f" ] || return 0
+  line="$(grep -m1 '\*\*Tier:\*\*' "$f" 2>/dev/null || true)"
+  printf '%s' "$line" | sed -n 's/.*\*\*Tier:\*\*[[:space:]]*\([0-9]\).*/\1/p' | head -1
+}
+
+# council_rounds_high: the max round per spec in council.jsonl, at or above threshold.
+detect_council() {
+  local log="$ROOT/memory/stats/council.jsonl"
+  [ -f "$log" ] || return 0
+  jq -r 'select(type == "object") | [(.spec // ""), (.round // 0)] | @tsv' "$log" 2>/dev/null | \
+  tr -d '\r' | \
+  awk -F'\t' '$1 != "" { r = $2 + 0; if (!($1 in m) || r > m[$1]) m[$1] = r } END { for (s in m) print s "\t" m[s] }' | \
+  while IFS="$(printf '\t')" read -r spec round; do
+    [ -n "$spec" ] || continue
+    is_number "$round" || continue
+    if [ "$round" -ge "$VULYK_ANOMALY_COUNCIL_ROUNDS" ] 2>/dev/null; then
+      cmd_record council_rounds_high "$round" "$VULYK_ANOMALY_COUNCIL_ROUNDS" \
+        --spec "$spec" --tier "$(spec_tier "$spec")" --ref "council:$spec"
+    fi
+  done
+}
+
+# stage_long: the gap between two CONSECUTIVE journal.md lines, per spec. Plan A9: the still-
+# open last stage (last line to now) is never measured - it would re-fire on every scan.
+detect_stage() {
+  local f spec prev_epoch=""  line_no cur_epoch gap
+  for f in "$ROOT"/docs/specs/*/journal.md; do
+    [ -f "$f" ] || continue
+    spec="$(basename "$(dirname "$f")")"
+    prev_epoch=""; line_no=0
+    while IFS= read -r ts; do
+      line_no=$((line_no + 1))
+      [ -n "$ts" ] || continue
+      cur_epoch="$(epoch_of "$ts")"
+      [ -n "$cur_epoch" ] || continue
+      if [ -n "$prev_epoch" ]; then
+        gap=$(( (cur_epoch - prev_epoch) / 3600 ))
+        if [ "$gap" -ge "$VULYK_ANOMALY_STAGE_HOURS" ]; then
+          cmd_record stage_long "$gap" "$VULYK_ANOMALY_STAGE_HOURS" \
+            --spec "$spec" --ref "stage:$spec:$line_no"
+        fi
+      fi
+      prev_epoch="$cur_epoch"
+    done < <(sed -n 's/^-[[:space:]]*\([^ ]*\)[[:space:]]·.*/\1/p' "$f")
+  done
+}
+
+# scope_breach: any scope.jsonl row whose out_of_scope is non-zero (the count out-of-scope
+# gate already writes; a bare [] or 0 is treated the same as "nothing to report").
+detect_scope() {
+  local log="$ROOT/memory/stats/scope.jsonl"
+  [ -f "$log" ] || return 0
+  jq -c 'select(type == "object")' "$log" 2>/dev/null | \
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    local ts story value
+    ts="$(printf '%s' "$row" | jq -r '.ts // ""' 2>/dev/null)"
+    story="$(printf '%s' "$row" | jq -r '.story // ""' 2>/dev/null)"
+    value="$(printf '%s' "$row" | jq -r \
+      '(.out_of_scope) as $o
+       | if ($o | type) == "array" then ($o | length)
+         elif ($o | type) == "number" then $o
+         else 0 end' 2>/dev/null)"
+    is_number "$value" || continue
+    [ "$value" != "0" ] || continue
+    [ -n "$ts" ] || continue
+    cmd_record scope_breach "$value" 0 --story "$story" --ref "scope:$ts:$story"
+  done
+}
+
 cmd_scan() {
-  printf 'telemetry: scan not implemented (anomaly-telemetry-02)\n' >&2
+  local transcript=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --transcript) transcript="${2:-}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  [ "${VULYK_TELEMETRY_SCAN:-1}" = "0" ] && return 0
+  command -v jq >/dev/null 2>&1 || return 0
+
+  detect_context "$transcript"
+  if [ -n "$transcript" ] && [ -f "$transcript" ]; then
+    detect_agents "$(dirname "$transcript")"
+  fi
+  detect_council
+  detect_stage
+  detect_scope
   return 0
 }
 
