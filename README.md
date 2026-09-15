@@ -254,8 +254,11 @@ free text, or file contents.
 The installer asks once — `Enable telemetry? [y/N]`, default off — and the `Telemetry` row in
 your `CLAUDE.md` Profile table holds the answer. With it on, `/vulyk-evolve` prints the exact
 command to send the week's bundle (a local commit, or `gh pr create`) — it never runs it; you
-push the PR into `telemetry/inbox/` yourself. The inbox is distilled and cleared weekly by
-`/vulyk-evolve` in the VULYK repo, feeding releases. Full contract: [docs/telemetry.md](docs/telemetry.md).
+push the PR into `telemetry/inbox/` yourself. Weekly, `/vulyk-evolve` in the VULYK repo runs
+`scripts/telemetry.sh inbox`: the merged bundles are distilled into per-week, per-code counts
+that land in that run's CHANGELOG entry, and the emptied week directories are staged for
+deletion in the same changeset — which a maintainer reviews and commits, so the improvements
+ship with the next release. Full contract: [docs/telemetry.md](docs/telemetry.md).
 
 ## FAQ
 

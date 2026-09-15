@@ -8,6 +8,7 @@
 #   bash scripts/telemetry.sh bundle [--week YYYY-Www] [--out <file>]
 #   bash scripts/telemetry.sh check <file>...
 #   bash scripts/telemetry.sh publish [--week YYYY-Www] [--dry-run]
+#   bash scripts/telemetry.sh inbox [--clear]                 # VULYK repo only
 #
 # `bundle` and `publish` with no --week cover the PREVIOUS ISO week and the current one
 # (plan A15), so a weekly run never silently drops the week it is reporting on.
@@ -596,9 +597,77 @@ cmd_publish() {
   return 0
 }
 
+# Plan A16: the repo side of the weekly promise. `/vulyk-evolve` in the VULYK repo distils the
+# inbox into per-week, per-code counts for its diagnosis and its CHANGELOG entry, and `--clear`
+# STAGES the emptied week directories (`git rm`) so the deletions ride in that same reviewable
+# changeset. Like every other verb here it never commits and never pushes - a human does.
+cmd_inbox() {
+  local clear=0 dir list f rowtsv weeks w rc=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --clear) clear=1; shift ;;
+      *) die "inbox: unknown option '$1'" ;;
+    esac
+  done
+  dir="$ROOT/telemetry/inbox"
+  if [ ! -d "$dir" ]; then
+    echo "telemetry: no inbox at $ROOT - nothing to distil"
+    return 0
+  fi
+  need_jq
+
+  # `telemetry/inbox/*/*.jsonl` - one week directory deep, exactly where publish's recipes put
+  # a bundle. README.md and anything else that is not a bundle is left alone.
+  list="$(find "$dir" -mindepth 2 -maxdepth 2 -type f -name '*.jsonl' 2>/dev/null | sort || true)"
+  # An inbox holding no bundles at all: nothing to print, and `--clear` has nothing to stage.
+  [ -n "$list" ] || return 0
+
+  # The gate first: a bundle that fails `check` is never distilled and never deleted, so a bad
+  # merge is still on disk when the maintainer reads the failure.
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    cmd_check "$f" || rc=1
+  done <<EOF
+$list
+EOF
+  [ "$rc" -eq 0 ] || return 1
+
+  # `<week>\t<code>\t<rows>\t<hives>`, sorted by week then code. `week` and `hive` come from the
+  # rows themselves (the schema carries both), not from the path.
+  rowtsv="$(while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              jq -r 'select(type == "object") | [(.week // ""), (.code // ""), (.hive // "")] | @tsv' \
+                "$f" 2>/dev/null
+            done <<EOF
+$list
+EOF
+)"
+  printf '%s\n' "$rowtsv" | tr -d '\r' |
+  awk -F'\t' '
+    $1 != "" && $2 != "" {
+      k = $1 "\t" $2
+      rows[k]++
+      if (!((k "\t" $3) in seen)) { seen[k "\t" $3] = 1; hives[k]++ }
+    }
+    END { for (k in rows) printf "%s\t%d\t%d\n", k, rows[k], hives[k] }
+  ' | LC_ALL=C sort
+
+  [ "$clear" -eq 1 ] || return 0
+
+  # Every week directory that held a bundle, staged as a deletion. `-q` because the table above
+  # is the output of this verb; `--` because a week name is data, however well-shaped.
+  weeks="$(printf '%s\n' "$list" | while IFS= read -r f; do
+             [ -n "$f" ] && basename "$(dirname "$f")"; done | LC_ALL=C sort -u)"
+  for w in $weeks; do
+    git -C "$ROOT" rm -r -q -- "telemetry/inbox/$w" ||
+      die "inbox: could not stage the deletion of telemetry/inbox/$w"
+  done
+  return 0
+}
+
 # --- dispatch --------------------------------------------------------------------------------
 
-[ $# -ge 1 ] || die "usage: telemetry.sh enum|agents|consent|record|scan|bundle|check|publish"
+[ $# -ge 1 ] || die "usage: telemetry.sh enum|agents|consent|record|scan|bundle|check|publish|inbox"
 VERB="$1"; shift
 case "$VERB" in
   enum)    cmd_enum "$@" ;;
@@ -609,5 +678,6 @@ case "$VERB" in
   bundle)  cmd_bundle "$@" ;;
   check)   cmd_check "$@" ;;
   publish) cmd_publish "$@" ;;
+  inbox)   cmd_inbox "$@" ;;
   *) die "unknown verb '$VERB'" ;;
 esac

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The anomaly telemetry contract, driven through hand-written fixtures - no model calls, no
 # network, nothing sent. Covers scripts/telemetry.sh (`enum`, `agents`, `record`, `bundle`,
-# `check`, `consent`, `publish`) and scripts/lib.sh's `is_paperwork_path` entry for the new
+# `check`, `consent`, `publish`, `inbox`) and scripts/lib.sh's `is_paperwork_path` entry for the new
 # stats file. Schemas: docs/specs/anomaly-telemetry/plan.md ## Contracts.
 #
 #   Usage: bash tests/telemetry.test.sh            # from the VULYK repo root
@@ -639,6 +639,88 @@ expect_eq "a second upgrade leaves settings.json byte-identical" "1" \
 cat "$T/wire2.out" | expect_absent "and reports no second wiring" "-> Stop: anomaly-scan.sh"
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire3.out" 2>&1
 cat "$T/wire3.out" | expect_absent "--check reports no wiring for an already-wired hook" "would wire     .claude/settings.json -> Stop"
+
+# --- case 17: inbox - distil, then stage the clear (anomaly-telemetry-07) ----------------------
+echo "--- inbox"
+# The repo side of the weekly promise: a scratch VULYK-repo-shaped checkout with committed
+# bundles, distilled into per-(week, code) counts and cleared as a STAGED deletion - never a
+# commit. Run through the same PATH shim as publish, so the never-executed list covers it too.
+INBOX="$T/vulyk repo"
+mkdir -p "$INBOX/scripts" "$INBOX/.claude/agents" \
+         "$INBOX/telemetry/inbox/2026-W37" "$INBOX/telemetry/inbox/2026-W38"
+cp "$SRC/scripts/telemetry.sh" "$SRC/scripts/lib.sh" "$INBOX/scripts/"
+cp "$SRC"/.claude/agents/*.md "$INBOX/.claude/agents/"
+printf '# Telemetry inbox\n' > "$INBOX/telemetry/inbox/README.md"
+inbox_row() { # inbox_row <code> <week> <hive>
+  printf '{"v":1,"code":"%s","value":1,"threshold":0,"vulyk":"0.13.3","tier":3,"model":"opus","agent":"","week":"%s","hive":"%s"}\n' \
+    "$1" "$2" "$3"
+}
+HIVE_A="aaaaaaaaaaaa"; HIVE_B="bbbbbbbbbbbb"
+{ inbox_row context_high 2026-W37 "$HIVE_A"; inbox_row stage_long 2026-W37 "$HIVE_A"; } \
+  > "$INBOX/telemetry/inbox/2026-W37/$HIVE_A.jsonl"
+inbox_row context_high 2026-W37 "$HIVE_B" > "$INBOX/telemetry/inbox/2026-W37/$HIVE_B.jsonl"
+inbox_row context_high 2026-W38 "$HIVE_A" > "$INBOX/telemetry/inbox/2026-W38/$HIVE_A.jsonl"
+git -C "$INBOX" init -q -b main . && git -C "$INBOX" config user.email t@t &&
+  git -C "$INBOX" config user.name "Test Owner" && git -C "$INBOX" config core.autocrlf false
+git -C "$INBOX" add -A >/dev/null 2>&1; git -C "$INBOX" commit -qm init >/dev/null
+telin() { (cd "$INBOX" && PATH="$SHIM:$PATH" VULYK_HIVE="$INBOX" bash scripts/telemetry.sh "$@"); }
+TAB="$(printf '\t')"
+
+# (a) the table: one line per (week, code), rows and distinct hives, sorted by week then code
+OUT="$(telin inbox 2>&1)"
+printf '%s' "$OUT" | expect "a (week, code) two hives share counts both rows and both hives" \
+  "2026-W37${TAB}context_high${TAB}2${TAB}2"
+printf '%s' "$OUT" | expect "a single-hive (week, code) counts one hive" \
+  "2026-W37${TAB}stage_long${TAB}1${TAB}1"
+printf '%s' "$OUT" | expect "the second week gets its own row" \
+  "2026-W38${TAB}context_high${TAB}1${TAB}1"
+printf '%s' "$OUT" | expect_order "the table is sorted by week then code" \
+  "2026-W37${TAB}context_high" "2026-W37${TAB}stage_long" "2026-W38${TAB}context_high"
+expect_eq "the table is exactly three lines" "3" "$(printf '%s\n' "$OUT" | grep -c .)"
+expect_eq "a plain inbox deletes nothing" "" "$(git -C "$INBOX" status --porcelain)"
+
+# (b) --clear stages the deletions and stops there: no commit, README untouched
+HEAD_BEFORE="$(git -C "$INBOX" rev-parse HEAD)"
+telin inbox --clear | expect "--clear still prints the table first" "2026-W38${TAB}context_high"
+expect_eq "--clear stages exactly the three bundles as deletions" \
+  "D  telemetry/inbox/2026-W37/$HIVE_A.jsonl
+D  telemetry/inbox/2026-W37/$HIVE_B.jsonl
+D  telemetry/inbox/2026-W38/$HIVE_A.jsonl" \
+  "$(git -C "$INBOX" status --porcelain | LC_ALL=C sort)"
+expect_eq "the inbox README survives the clear" "yes" \
+  "$([ -f "$INBOX/telemetry/inbox/README.md" ] && echo yes || echo no)"
+expect_eq "--clear never commits - HEAD is unchanged" "$HEAD_BEFORE" \
+  "$(git -C "$INBOX" rev-parse HEAD)"
+
+# (c) a root with no telemetry/inbox/ (every hive): a notice, exit 0
+NOINBOX="$T/hive-no-inbox"; mkdir -p "$NOINBOX/scripts" "$NOINBOX/.claude/agents"
+cp "$SRC/scripts/telemetry.sh" "$SRC/scripts/lib.sh" "$NOINBOX/scripts/"
+OUT="$( (cd "$NOINBOX" && VULYK_HIVE="$NOINBOX" bash scripts/telemetry.sh inbox 2>&1); echo "rc=$?" )"
+printf '%s' "$OUT" | expect "no inbox names the root and calls it nothing to distil" \
+  "telemetry: no inbox at $NOINBOX - nothing to distil"
+printf '%s' "$OUT" | expect "no inbox is not an error" "rc=0"
+
+# (d) an invalid row: check's lines, exit 1, and nothing deleted
+git -C "$INBOX" reset -q --hard HEAD
+printf 'not json at all\n' > "$INBOX/telemetry/inbox/2026-W37/$HIVE_B.jsonl"
+ERR="$(telin inbox --clear 2>&1 >/dev/null)"; RC=$?
+printf '%s' "$ERR" | expect "a bad bundle is named <file>:<line>: <reason>" \
+  "$INBOX/telemetry/inbox/2026-W37/$HIVE_B.jsonl:1: not valid JSON"
+expect_eq "a bad bundle stops inbox --clear" "1" "$RC"
+expect_eq "a failed check deletes nothing" "yes" \
+  "$([ -f "$INBOX/telemetry/inbox/2026-W38/$HIVE_A.jsonl" ] && echo yes || echo no)"
+expect_eq "a failed check stages nothing" "" \
+  "$(git -C "$INBOX" status --porcelain | grep '^D' || true)"
+git -C "$INBOX" checkout -q -- telemetry/inbox
+
+# (e) the rule the whole spec rests on, now with inbox's own git calls in the ledger too
+cat "$CALLS" | expect "the shim recorded inbox's own git rm" " rm -r -q -- telemetry/inbox/"
+cat "$CALLS" | expect_absent "nothing in the script invokes git push"   " push"
+cat "$CALLS" | expect_absent "nothing in the script invokes git commit" " commit"
+cat "$CALLS" | expect_absent "nothing in the script invokes gh"         "gh "
+cat "$CALLS" | expect_absent "nothing in the script invokes a pr"       "pr create"
+cat "$CALLS" | expect_absent "nothing in the script invokes git clone"  " clone"
+cat "$CALLS" | expect_absent "nothing in the script invokes a fork"     "fork"
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

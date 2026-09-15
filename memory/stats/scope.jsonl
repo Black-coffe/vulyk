@@ -96,3 +96,4 @@
 {"ts":"2026-09-15T06:21:50Z","story":"anomaly-telemetry-05-consent-profile-install","declared":7,"changed":10,"out_of_scope":3}
 {"ts":"2026-09-15T06:22:31Z","story":"anomaly-telemetry-05-consent-profile-install","declared":7,"changed":11,"out_of_scope":4}
 {"ts":"2026-09-15T06:59:08Z","story":"anomaly-telemetry-06-publish-pr-recipe","declared":3,"changed":4,"out_of_scope":1}
+{"ts":"2026-09-15T07:27:25Z","story":"anomaly-telemetry-07-evolve-inbox-distill","declared":6,"changed":9,"out_of_scope":3}

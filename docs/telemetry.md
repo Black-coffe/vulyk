@@ -14,11 +14,11 @@ is local history, not a send.
 
 | code | detector | value | threshold / env var |
 |---|---|---|---|
-| `context_high` | main-thread context size above threshold | tokens | `VULYK_TELEMETRY_CONTEXT_HIGH` |
-| `agent_prefix_high` | a subagent's first-turn `input + cache_creation_input_tokens` above threshold | tokens | `VULYK_TELEMETRY_AGENT_PREFIX_HIGH` |
+| `context_high` | main-thread context size above threshold | tokens | `VULYK_ANOMALY_CONTEXT_PCT` (percent of an observed window) / `VULYK_ANOMALY_CONTEXT_TOKENS` (the absolute fallback) |
+| `agent_prefix_high` | a subagent's first-turn `input + cache_creation_input_tokens` above threshold | tokens | `VULYK_ANOMALY_AGENT_PREFIX_TOKENS` |
 | `agent_empty` | a subagent transcript whose last assistant entry has no text block (cap death / empty return) | assistant entries | 0 |
-| `council_rounds_high` | max `round` per spec in `council.jsonl` at or above threshold | rounds | `VULYK_TELEMETRY_COUNCIL_ROUNDS_HIGH` |
-| `stage_long` | gap between two consecutive `journal.md` lines above threshold | hours (integer) | `VULYK_TELEMETRY_STAGE_LONG` |
+| `council_rounds_high` | max `round` per spec in `council.jsonl` at or above threshold | rounds | `VULYK_ANOMALY_COUNCIL_ROUNDS` |
+| `stage_long` | gap between two consecutive `journal.md` lines above threshold | hours (integer) | `VULYK_ANOMALY_STAGE_HOURS` |
 | `driver_refused` | `/vulyk-build` refused (no `Workflow`, no `--fallback`; by-name call threw) | 1 | 0 |
 | `driver_relaunched` | `/vulyk-resume` relaunched the driver fresh | 1 | 0 |
 | `scope_breach` | a `scope.jsonl` row with non-empty `out_of_scope` | out-of-scope path count | 0 |
@@ -139,10 +139,15 @@ merges.
 
 ## The weekly cycle
 
-`/vulyk-evolve`, run in the VULYK repo, reads the week's rows across `telemetry/inbox/` as part
-of its diagnosis, then clears the directory - distilled and cleared weekly, feeding the next
-release. This step has never been run against real data yet; this page describes what it does,
-not a measured result.
+`/vulyk-evolve`, run in the VULYK repo, runs `bash scripts/telemetry.sh inbox`: it checks every
+merged bundle, then prints one line per (week, code) - `<week> <code> <rows> <hives>` - which
+that run reads as diagnosis input beside its local counts and copies into the changeset's
+CHANGELOG entry. It then runs `telemetry.sh inbox --clear`, which **stages** (`git rm`, never a
+commit) the deletion of the emptied week directories; `telemetry/inbox/README.md` stays. Table
+and staged deletions travel together in the evolve changeset a maintainer reviews and commits,
+and the improvements it drives ship with the next release. Under `/vulyk-evolve --dry-run`
+nothing is cleared. This cycle has never been run against real data yet; this page describes
+what the command does, not a measured result.
 
 ## `telemetry/` is VULYK-repo-only
 
