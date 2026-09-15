@@ -1,0 +1,15 @@
+<!-- seat: sonnet · model: claude-sonnet-5 · round: 2 · head: 8b80941 · pack: 3a929636825c · attempt: 2 · recorded: 2026-09-15T18:42:48Z -->
+COUNCIL: driver-hardening · round 2 · seat sonnet
+MODEL: claude-sonnet-5
+COURT: E:/Projects/vulyk/.vulyk/court/driver-hardening/round-2
+VERDICT: GREEN
+ASSUMED CONFIG: VULYK's own repo - shell + Python + markdown toolkit, no compiler, no test runner (Profile placeholders unfilled; Commands table's own note names this repo's real commands)
+RAN: full suite (bash -n on all *.sh, py_compile on hooks, jq validity on *.json, handoff.sh status) - all clean; tests/driver.test.sh (0 FAIL); tests/council.test.sh (partial, 0 FAIL so far, large file); manual live probes below
+PATH: none named - library/CLI toolkit, no client path in Profile
+ASK 1: GREEN - non-JSON clerk line retried once, then driver stops - run: bash tests/driver.test.sh saw: "ok C1: a non-JSON clerk line is re-asked once, then proceeds", "ok C1: two non-JSON clerk lines end the run with the raw second", "ok C1: a Paused result on the retried attempt is not swallowed" - all pass; code at .claude/workflows/vulyk-cycle.js clerk() retries once then falls to status poll for mutating verbs
+ASK 2: GREEN - skills.json and memory/learnings/*.md do not block or age open-round - run: manual repo with dirty memory/stats/skills.json + memory/learnings/2026-09-15-x.md, then `bash scripts/cycle.sh open-round docs/specs/demo` saw: no "working tree not clean" error; run stopped instead at the next real precondition ("no Branch line"), proving the paperwork files were not counted dirty
+ASK 3: GREEN - close-story tolerates a self-marked status: done when an uncommitted diff remains - run: manual repo, story file set to status: done with an uncommitted trailing edit, then `bash scripts/cycle.sh close-story <file>` saw: no "already done" refusal (exit 2); instead proceeded down the normal path and stopped on the next real check ("returned: missing", exit 4) - proving self-mark alone does not refuse
+ASK 4: GREEN - a bare <slug>-NN token is not taint; the story file itself and old paths still are - run: sourced taint_reason() from scripts/cycle.sh directly and called it three ways saw: bare "driver-hardening-08" in prose -> empty (clean); "driver-hardening-08.md" -> "names the story file driver-hardening-NN"; "driver-hardening/driver-hardening-08" -> same taint reason - matches the ask exactly
+ASK 5: GREEN - branch, close-story, open-round, record-seat, judge each carry next in their own JSON; driver polls status only at start - run: grep for emit_status call sites in scripts/cycle.sh saw: all five mutating verbs (branch, close-story, open-round, record-seat x2, judge) call emit_status; bash tests/driver.test.sh saw: "ok C6: a steady Tier 3 round costs 13 clerk calls and 3 polls", "ok C6: verbs without a status key keep the old 16-call path", "ok C6: a close-story exit 4 is followed by a status poll", "ok C6: a judge carrying next:repair routes with no poll between" - all pass
+UNASKED: none
+BREACH: none

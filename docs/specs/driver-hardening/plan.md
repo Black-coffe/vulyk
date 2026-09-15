@@ -110,4 +110,11 @@ The six lines below are the cycle's confirmation artifacts (docs/cycle.md).
 **Branch:** vulyk/driver-hardening
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05.>
 **Council:** GREEN round 1, 2026-09-15, at 8521d20, pack 92f41ba75c4c
+**Council:** ESCALATE round 2, 2026-09-15, at ebf7a5f, pack 3a929636825c
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+
+## Needs a human
+- reason: env · round 2 · 2026-09-15
+- sonnet: docs/specs/driver-hardening/council/round-2/sonnet.attempt-1.md
+- sonnet: docs/specs/driver-hardening/council/round-2/sonnet.attempt-2.md
+- seats: docs/specs/driver-hardening/council/round-2/
