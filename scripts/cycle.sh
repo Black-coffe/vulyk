@@ -75,9 +75,16 @@ emit_status() { # emit_status <verb> <spec-dir> [next] - C5: the exit-0 line of 
   # repository the caller is about to act on - one clerk call instead of two. cmd_status derives
   # everything from disk; nothing is verified or scope-checked again here. <next> stays the
   # verb's own value (byte-for-byte what a pre-C5 driver read); omit it to take status.next.
-  local verb="$1" spec="$2" next="${3:-}" st
-  st="$(cmd_status "$spec")"
+  local verb="$1" spec="$2" next="${3:-}" st rc
+  st="$(cmd_status "$spec")"; rc=$?
   [ -n "$next" ] || next="$(json_field "$st" next)"
+  # C5 addendum (Minor 10): a carried `status` is a status object or absent, never an error
+  # envelope. If cmd_status took its usage branch (non-zero, `{"ok":false,"verb":"status",...}`
+  # on stdout), emit the pre-C5 five-key line - byte-for-byte what a pre-C5 caller read.
+  if [ "$rc" -ne 0 ] || [ -z "$st" ] || printf '%s' "$st" | grep -q '"ok":false'; then
+    emit true "$verb" 0 "$next"
+    return
+  fi
   emit true "$verb" 0 "$next" "" "$st"
 }
 
@@ -1165,7 +1172,8 @@ missing_label() { # missing_label <report> -> the first required C5 label absent
 
 taint_reason() { # taint_reason <report> <slug> -> the D3 taint description, or "" when clean.
   # Path-anchored (R9): a hit needs the slug immediately before /plan.md, /journal.md or
-  # /council/ - optionally under docs/specs/ - or the story *file* itself: <slug>-NN.md, or
+  # /council/ - optionally under docs/specs/ - or the story *file* itself: <slug>-NN.md and
+  # the repo's real <slug>-NN-<title>.md shape (C4 revised), or
   # <slug>/<slug>-NN with or without .md, optionally under docs/specs/. A bare <slug>-NN with
   # neither the .md suffix nor the <slug>/ directory prefix is a synthesized id (a CLI --story
   # value, say), not a leak (C4/A6). The bare words plan.md/journal.md/council/, a command file
@@ -1173,7 +1181,7 @@ taint_reason() { # taint_reason <report> <slug> -> the D3 taint description, or 
   # prose heuristics.
   local report="$1" slug="$2" esc
   esc="$(printf '%s' "$slug" | sed 's/[.[\*^$()+?{|]/\\&/g')"
-  printf '%s' "$report" | grep -qE "\b${esc}-[0-9]{2}\.md\b|(docs/specs/)?\b${esc}/${esc}-[0-9]{2}(\.md)?\b" \
+  printf '%s' "$report" | grep -qE "\b${esc}-[0-9]{2}(-[A-Za-z0-9_-]+)?\.md\b|(docs/specs/)?\b${esc}/${esc}-[0-9]{2}(\.md)?\b" \
                                                                           && { printf 'names the story file %s-NN' "$slug"; return; }
   printf '%s' "$report" | grep -qE "(docs/specs/)?\b${esc}/plan\.md"    && { printf 'names %s/plan.md' "$slug"; return; }
   printf '%s' "$report" | grep -qE "(docs/specs/)?\b${esc}/journal\.md" && { printf 'names %s/journal.md' "$slug"; return; }
@@ -1502,7 +1510,7 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1> [<stamp>]
   pause_guard "$SPECDIR" close-story
   driver_guard "$SPECDIR" close-story "$STAMP"
 
-  local ST; ST="$(fm_field "$STORY" status)"
+  local ST SELFMARKED=0; ST="$(fm_field "$STORY" status)"
   case "$ST" in
     todo|in-progress) ;;
     done)
@@ -1524,7 +1532,10 @@ EOF
         emit false close-story 2 error "already done"
         exit 2
       fi
-      bash "$HERE/journal.sh" "$SPECDIR" "03-building" "close-story $(fm_field "$STORY" story): worker marked status: done itself, closing on the uncommitted diff" "build:1" >/dev/null
+      # C3 revised (Minors 5, 6): the journal line is written once, below, only after
+      # verification is green - every exit-4 path leaves journal.md untouched, so a retried
+      # attempt never journals twice.
+      SELFMARKED=1
       ;;
     *)
       echo "cycle: close-story - $STORY has status '$ST', expected todo or in-progress" >&2
@@ -1606,6 +1617,14 @@ $CMD_LIST
 EOF
     i=$((i+1))
   done
+
+  if [ "$SELFMARKED" = "1" ]; then
+    # C3 revised: verification is green, so this closing is real - record the self-mark once,
+    # with the story's own wave as `next` (Minor 5: never a hardcoded build:1).
+    local SMWAVE; SMWAVE="$(fm_field "$STORY" wave)"
+    case "$SMWAVE" in ''|*[!0-9]*) SMWAVE=1 ;; esac
+    bash "$HERE/journal.sh" "$SPECDIR" "03-building" "close-story $(fm_field "$STORY" story): worker marked status: done itself, closing on the uncommitted diff" "build:$SMWAVE" >/dev/null
+  fi
 
   if [ "$DOCOMMIT" = "1" ]; then
     # r2m2: `status: done` is written only after the commit lands - a failed commit (an
@@ -1840,7 +1859,10 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
   # is exactly the state the HEAD-unchanged resume case below must tolerate, not reject.
   # Anything else dirty is real and still refuses.
   local status_out dirty="" line
-  status_out="$(git status --porcelain 2>/dev/null)"
+  # C2 addendum: -uall, so a directory with nothing tracked in it (a fresh hive's
+  # memory/learnings/) is listed file by file instead of collapsing to one `?? <dir>/` line
+  # the one-level predicate must reject. The predicate itself is unchanged.
+  status_out="$(git status --porcelain -uall 2>/dev/null)"
   if [ -n "$status_out" ]; then
     while IFS= read -r line; do
       [ -n "$line" ] || continue

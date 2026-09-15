@@ -1,8 +1,8 @@
 ---
 story: driver-hardening-06
 spec: driver-hardening
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -49,5 +49,12 @@ Round 1 review Major 1, opus UNASKED (a), Minors 5, 6, 10, 12 - all in the cycle
 `bash tests/council.test.sh && bash tests/cycle.test.sh && git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- `scripts/cycle.sh` only (`scripts/lib.sh` untouched - C2's fix is `-uall`, the predicate stays one-level as the non-goals require).
+- C4 revised: pattern 1 alternative 1 is now (word-boundary) S-[0-9]{2}(-[A-Za-z0-9_-]+)?[.]md (word-boundary); order, first-hit-wins and the `story file` reason text unchanged. `autonomous-cycle-07-*.md` stays clean because `*` is outside the title class.
+- C2 addendum: `git status --porcelain -uall` in `cmd_open_round`'s dirty guard. Verified directly with git that a directory with nothing tracked under it collapses to `?? memory/learnings/` without `-uall`, and that `is_paperwork_path` rejects that trailing-slash form.
+- C3 revised: the `done` branch now only sets `SELFMARKED=1`; the journal line is written after verification passes, before the commit/status-write step, with `next=build:<wave:>` (non-numeric or absent wave falls back to 1). journal.md is still left uncommitted, as before.
+- C5 addendum: `emit_status` captures `cmd_status`'s exit status and falls back to the five-key `emit true <verb> 0 <next>` when it is non-zero, empty, or contains `"ok":false`. With `next` omitted it still reads `json_field <st> next` first, which reproduces the pre-C5 line byte-for-byte (the old close-story path did exactly that).
+- Suite: the C2 fixture repo had a *tracked* `memory/learnings/*.md` from the earlier staleness case, so the new case untracks it (one paperwork-only commit) before asserting the collapsed-dir shape; the sub-directory case proves the one-level rule still refuses.
+- The C5 fallback is proved by a throwaway `scripts/c5probe.sh` that sources cycle.sh via `status <spec>` (the dispatcher's status branch returns instead of exiting) and then stubs `cmd_status`; the probe is removed right after.
 
 ## Findings
