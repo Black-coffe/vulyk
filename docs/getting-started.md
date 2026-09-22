@@ -23,9 +23,9 @@ cd your-project
 claude
 > /vulyk-bootstrap        # ~10 minutes: interview -> tailored config -> initial map -> wiki seed
 ```
-The first line of every session is the `[VULYK] top model:` brief: which model plans on this account - Fable 5.1 where the plan carries it (Max, premium seats), Opus 5 where it would bill to credits (Pro, standard seats) - and whether your own session is pinned to it. `bash scripts/top-model.sh --apply` pins it; bootstrap does that for you.
+The first line of every session is the `[VULYK] gate model:` brief. It names the model that holds the gate (`lead-review`, `lead-architect`, the Tier 4 planner, retries) on this account: Fable 5.1 where the plan carries it (Max, premium seats), Opus 5.5 where Fable would bill to credits (Pro, standard seats). It also says whether your own session is pinned to `opus`: the Queen runs on Opus 5.5 on every plan. `bash scripts/top-model.sh --apply` pins it; bootstrap does that for you.
 
-For large repos the initial mapping runs on Sonnet drones in batches - cheap by design. A 1000-file repo maps breadth-first: the 8-12 load-bearing modules now, the rest recorded as unmapped territory.
+For large repos the initial mapping runs on scout drones in batches (Opus 5.5 at `effort: low`) - cheap by design. A 1000-file repo maps breadth-first: the 8-12 load-bearing modules now, the rest recorded as unmapped territory.
 
 ## Context hygiene (once, then rarely)
 
@@ -46,11 +46,11 @@ conversation. The reasoning is in [token-economy.md](token-economy.md).
      `--study` (or any request whose answer is a document) ends at report.md with no build at all
 /vulyk-build
   -> launches the driver (a Workflow run where available, this session's own loop otherwise):
-     wave by wave, parallel Sonnet workers on disjoint files, one commit per story, then the
+     wave by wave, parallel Opus 5.5 workers on disjoint files, one commit per story, then the
      council round opens on its own
   -> the terminal shows one journal line per step; you next see it wake on green or on an escalation
 /vulyk-review
-  -> the same council round, run again on demand: `lead-review` at the top model plus the tier's
+  -> the same council round, run again on demand: `lead-review` at the gate model plus the tier's
      blind seats (sonnet suite-then-each-ask; from Tier 3 also opus intent and edge cases and the
      black-box client-path seat), judged by `cycle.sh` from labelled evidence - never by a person's look
 /vulyk-ship

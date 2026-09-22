@@ -210,15 +210,16 @@ try {
       // status --json now carries "worker" and "repeat" per story (autonomous-cycle-15) -
       // route agentType from the object; the driver still never opens a story file itself.
       // A story on its second dispatch (one miss already counted) gets one extra sentence:
-      // a previous attempt may have left an uncommitted diff behind - and goes to the senior
-      // model (ADR-007): a miss is information, and the same model retrying the same story
-      // is the cheapest way to buy a second miss. The first dispatch carries the story's
-      // own `model` (status --json, sonnet unless the planner said opus).
+      // a previous attempt may have left an uncommitted diff behind - and goes to the gate
+      // model TOP (ADR-012, was opus under ADR-007): a miss is information, and the same model
+      // retrying the same story is the cheapest way to buy a second miss. The first dispatch
+      // carries the story's own `model` (status --json, opus unless the planner said otherwise).
+      // Where TOP is opus (Pro, API) the retry is the same model - the one rung that plan lacks.
       const reports = await parallel(stories.map((story) => () => {
         const retry = (attempts.get(story.file) || 0) >= 1
         const prompt = `Your story: ${story.file}. Read it fully, including the map slice it names, and implement it per your protocol.`
           + (retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
-        const model = retry ? 'opus' : (story.model || undefined)
+        const model = retry ? (TOP || 'opus') : (story.model || undefined)
         return agent(prompt, { agentType: story.worker, model, phase: 'Build' })
           // the rejection is carried, not flattened to null, so the classification below can
           // tell a dead agent() from an empty resolve (C3); it logs both, once each.

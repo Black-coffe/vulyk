@@ -2,7 +2,8 @@
 name: worker-test
 description: Writes or repairs tests for exactly one story. Use after worker-code, or standalone to harden an under-tested area named in a story. Tests behavior, not implementation details.
 tools: Read, Write, Edit, Grep, Glob, Bash
-model: sonnet
+model: opus
+effort: medium
 maxTurns: 90
 ---
 

@@ -31,7 +31,7 @@ Produce the hive status report. Read only metadata - this command must stay chea
 4. **Memory freshness:** `memory/map/*` last-verified dates vs. recent git churn in their modules (`git log --since` per path); flag stale. Note if `scripts/git-hooks/post-merge` left a `.stale` flag.
 5. **Learnings buffer:** count raw files in `memory/learnings/` awaiting consolidation; remind about /vulyk-gc past 10.
 6. **Skill usage:** top/bottom entries from `memory/stats/skills.json`; note candidates the next /vulyk-evolve will examine.
-7. **Budget posture:** run `bash scripts/top-model.sh --explain` and show it - the resolved top model, the plan it was read from, the Tier 4 pairing, and whether the Queen's own session is pinned to it; then the routing matrix one-liner. If the session has been long, recommend `/vulyk-handoff` then `/clear` after this report.
+7. **Budget posture:** run `bash scripts/top-model.sh --explain` and show it - the resolved gate model, the plan it was read from, the Tier 4 pairing, and whether the Queen's own session is pinned to `opus`; then the routing matrix one-liner. If the session has been long, recommend `/vulyk-handoff` then `/clear` after this report.
 8. **Context hygiene** (only when the session is fresh — otherwise the advice arrives too late to act on): suggest `/context` to see what the session starts with, and `/mcp` to switch off servers this project never calls. Skip this step entirely on a long session.
 
 Format: compact tables, no prose padding. End with the single most useful next action.

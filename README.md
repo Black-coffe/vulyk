@@ -19,7 +19,7 @@ A model-cascade, memory-first, self-evolving framework for running multi-agent c
 
 **Vulyk** (Ukrainian: *вулик*) means **beehive**. A hive does not send the queen to gather pollen. It routes every job to the cheapest unit that can do it well, keeps shared memory outside any single bee, and continuously adapts the colony to the season. VULYK applies the same economics to AI-assisted software development:
 
-- **Queen** — your main Claude Code session on the strongest model your plan carries: Fable 5.1 on Max, Opus 5 on Pro, resolved from the account, not remembered. Plans, decomposes, integrates. Never reads source code directly.
+- **Queen** — your main Claude Code session on Opus 5.5 on every plan; the gate above her (`lead-review`, `lead-architect`) runs on the strongest model your plan carries: Fable 5.1 on Max, Opus 5.5 on Pro, resolved from the account, not remembered. Plans, decomposes, integrates. Never reads source code directly.
 - **Leads** — frontier-class subagents on the same model for architecture decisions and adversarial review.
 - **Workers** — Sonnet-class subagents that implement and test individual stories. This is where most tokens are spent.
 - **Drones** — cheap subagents for reconnaissance, documentation updates, and memory upkeep.
@@ -94,7 +94,7 @@ git -C /tmp/vulyk pull
 
 ```text
 /vulyk-plan  "add OAuth login with refresh tokens"   # Queen plans, scouts recon, stories written
-/vulyk-build                                          # Workers implement stories on Sonnet, in parallel
+/vulyk-build                                          # Workers implement stories on Opus 5.5, in parallel
 /vulyk-review                                         # Adversarial top-model review gate before merge
 ```
 
@@ -107,27 +107,33 @@ Every subagent declares its model in YAML frontmatter — the cascade is enforce
 
 | Caste | Agent | Model | Job | Reads source? |
 |---|---|---|---|---|
-| 👑 Queen | *(main session)* + `queen-planner` | `TOP_MODEL` — `fable` on Max, `opus` on Pro | Decompose goals, integrate results, own the roadmap | **Never** — consumes scout reports & memory only |
+| 👑 Queen | *(main session)* + `queen-planner` | `opus` (Opus 5.5); a Tier 4 `queen-planner` gets `TOP_MODEL` | Decompose goals, integrate results, own the roadmap | **Never** — consumes scout reports & memory only |
 | 🛡 Lead | `lead-architect` | `TOP_MODEL` | Design decisions, ADRs, tradeoff analysis | Targeted excerpts only |
 | 🛡 Lead | `lead-review` | `TOP_MODEL` | Adversarial review gate: correctness, security, invariants | Diffs + tests |
-| 🛡 Lead | *second reviewer, Tier 4* | the other one: `opus` beside Fable, `sonnet` beside Opus on Pro | Recall complement — an ensemble, not a duplicate | Diffs |
-| 🐝 Worker | `worker-code` | `sonnet` | Implement exactly one story | Scoped slice via map |
-| 🐝 Worker | `worker-test` | `sonnet` | Write/repair tests for one story | Scoped slice |
-| 🔍 Drone | `drone-scout` | `sonnet` | Recon: files, symbols, structure → map-format report | Yes — that's the point |
-| 🔍 Drone | `drone-docs` | `sonnet` | Update wiki & map notes after changes | Diffs |
-| 🔍 Drone | `librarian` | `sonnet` | Memory consolidation & garbage collection | Memory files only |
-| 🔍 Drone | `drone-coverage` | `sonnet` | Plan-time coverage check: brief vs plan, blind to the stories | **Never** — brief + plan only |
-| ⚖️ Council | `council-sonnet` / `council-opus` / `council-haiku` | `sonnet` / `opus` / junior rung (`sonnet` until a Haiku 5 exists) — `sonnet` at every tier, `opus` and `haiku` from Tier 3 | Blind verdict on the brief's `## Asks`, from a reduced worktree — suite + each ask / intent & edge cases / black-box client path | Only what a client or the suite would see — never the stories |
-| ⚖️ Council | `cycle-clerk` | junior rung (`sonnet` until a Haiku 5 exists) | The Workflow driver's only shell access — runs one `cycle.sh`/`journal.sh` verb per dispatch, no logic of its own | Never |
-| 🐝 Senior | *any story's second attempt* | `opus` | A story a Sonnet worker missed is retried one rung up, never on the same model (ADR-007) | Scoped slice |
+| 🛡 Lead | *second reviewer, Tier 4* | a different model: `opus` beside Fable, `sonnet` beside Opus on Pro | Recall complement — an ensemble, not a duplicate | Diffs |
+| 🐝 Worker | `worker-code` | `opus` · effort `medium` | Implement exactly one story | Scoped slice via map |
+| 🐝 Worker | `worker-test` | `opus` · effort `medium` | Write/repair tests for one story | Scoped slice |
+| 🔍 Drone | `drone-scout` | `opus` · effort `low` | Recon: files, symbols, structure → map-format report | Yes — that's the point |
+| 🔍 Drone | `drone-docs` | `opus` · effort `low` | Update wiki & map notes after changes | Diffs |
+| 🔍 Drone | `librarian` | `opus` · effort `low` | Memory consolidation & garbage collection | Memory files only |
+| 🔍 Drone | `drone-coverage` | `opus` · effort `medium` | Plan-time coverage check: brief vs plan, blind to the stories | **Never** — brief + plan only |
+| ⚖️ Council | `council-sonnet` / `council-opus` / `council-haiku` | `sonnet` (kept for model diversity) / `opus` / junior rung (`sonnet` until a Haiku 5.5 ships) — `sonnet` at every tier, `opus` and `haiku` from Tier 3 | Blind verdict on the brief's `## Asks`, from a reduced worktree — suite + each ask / intent & edge cases / black-box client path | Only what a client or the suite would see — never the stories |
+| ⚖️ Council | `cycle-clerk` | junior rung (`sonnet` · effort `low`, until a Haiku 5.5 ships) | The Workflow driver's only shell access — runs one `cycle.sh`/`journal.sh` verb per dispatch, no logic of its own | Never |
+| 🛡 Lead | *any story's second attempt* | `TOP_MODEL` | A story an Opus 5.5 worker missed is retried on the gate model: Fable on Max, the same Opus on Pro (ADR-012) | Scoped slice |
 
-**The top model follows the plan.** `TOP_MODEL = auto` in the constitution, and `scripts/top-model.sh` reads the account profile Claude Code keeps in `~/.claude.json`: Max 5x / 20x and premium seats resolve to `fable` — Fable 5.1, which those plans carry at no extra cost up to half the weekly limit; Pro, standard seats and API keys resolve to `opus` — on those, every Fable token bills to usage credits on top of the subscription. A SessionStart hook announces the result, `/vulyk-plan` and `/vulyk-review` pass it as the dispatch `model:` for the three top castes, and `--apply` pins the Queen's own session to it. The three agent files keep `opus` as their floor because frontmatter cannot be conditional and must be right on every plan. Pin an alias in place of `auto` to overrule the plan. Why not the native `best` alias: it resolves to Fable wherever it is *available*, and on Pro it is available — for credits. [docs/model-cascade.md](docs/model-cascade.md) has the table and the rejected alternatives.
+**The gate model follows the plan.** `TOP_MODEL = auto` in the constitution, and `scripts/top-model.sh` reads the account profile Claude Code keeps in `~/.claude.json`: Max 5x / 20x and premium seats resolve to `fable` — Fable 5.1, which those plans carry at no extra cost up to half the weekly limit; Pro, standard seats and API keys resolve to `opus` — on those, every Fable token bills to usage credits on top of the subscription. A SessionStart hook announces the result, and `/vulyk-plan`, `/vulyk-review` and the build driver pass it as the dispatch `model:` to `lead-review`, `lead-architect`, a Tier 4 `queen-planner` and a missed story's retry. `--apply` pins the Queen's own session to `opus`: since v0.16.0 she orchestrates on Opus 5.5 on every plan. The gate agent files keep `opus` as their floor because frontmatter cannot be conditional and must be right on every plan. Pin an alias in place of `auto` to overrule the plan. Why not the native `best` alias: it resolves to Fable wherever it is *available*, and on Pro it is available — for credits. [docs/model-cascade.md](docs/model-cascade.md) has the table and the rejected alternatives.
 
-**The ladder (v0.13).** Lead = `TOP_MODEL`, senior = `opus`, mid = `sonnet`, junior = `haiku` only once a fifth-generation Haiku exists — until then the junior rung runs on Sonnet and Haiku 4.5 is never dispatched. [docs/model-cascade.md](docs/model-cascade.md), ADR-007.
+**The ladder (v0.16, ADR-012).** There are three rungs.
 
-**Aliases, not pinned IDs.** `fable`, `opus` and `sonnet` resolve to the current model in each tier — as of September 2026, Fable 5.1, Opus 5 and Sonnet 5. That is why the 4.8 → 5 transition cost this framework a three-line diff instead of a rewrite. Pin a full ID only to freeze behaviour deliberately.
+- **Gate = `TOP_MODEL`:** `lead-review`, `lead-architect`, the Tier 4 planner and retries. Fable 5.1 on Max, Opus 5.5 on Pro.
+- **Workhorse = `opus`:** Opus 5.5 for the Queen, the planner, the workers, the drones and `council-opus`.
+- **Junior = `sonnet`:** `council-sonnet`, the black-box seat, the clerk and the distiller. The last three move to `haiku` once Haiku 5.5 ships. Haiku 4.5 is never dispatched.
 
-**Effort is a session setting, not a per-agent one.** `effortLevel` in `.claude/settings.json` works and ships set to `medium`; `effort:` in agent frontmatter is silently ignored. Both were measured — see [docs/model-cascade.md](docs/model-cascade.md) for the numbers and the escalation table.
+On Opus 5.5 launch day, Artificial Analysis measured Opus 5.5 at `medium` matching Fable 5.1 at `high` for about a third of the cost, and beating Sonnet 5 per task outright. [docs/model-cascade.md](docs/model-cascade.md) has the numbers.
+
+**Aliases, not pinned IDs.** `fable`, `opus` and `sonnet` resolve to the current model in each tier — as of 22 September 2026, Fable 5.1, Opus 5.5 and Sonnet 5. That is why the 4.8 → 5 transition cost this framework a three-line diff instead of a rewrite. Pin a full ID only to freeze behaviour deliberately.
+
+**Effort is set per agent.** Since Claude Code 2.1.280, `effort:` in agent frontmatter overrides the session level. In July 2026 it was silently ignored; both results were measured. Drones run at `low`, workers at `medium`, the planner and the gate at `high`. A top-level `effortLevel` does not apply to Opus 5.5. [docs/model-cascade.md](docs/model-cascade.md) has the numbers and the escalation table.
 
 ### The routing matrix
 
@@ -211,7 +217,7 @@ Each cycle is a ratchet: the colony clicks forward and never slips back.
 | Hook | Event | Effect |
 |---|---|---|
 | `session-start-brief.sh` | SessionStart | Injects memory freshness + pending-learnings line into context |
-| `top-model-brief.sh` | SessionStart | Announces the top model the plan resolved to (`fable` on Max, `opus` on Pro), the Tier 4 pairing, and whether your session is pinned to it — reads only, never writes |
+| `top-model-brief.sh` | SessionStart | Announces the gate model the plan resolved to (`fable` on Max, `opus` on Pro), the Tier 4 pairing, and whether your session is pinned to `opus` — reads only, never writes |
 | `session-end-learnings.sh` | SessionEnd | Captures a structured learnings stub (optional auto-distill with `VULYK_AUTOLEARN=1`) |
 | `skill-usage-counter.sh` | PostToolUse (Skill) | Increments per-skill counters → fuel for `skill-gardener` |
 | `context-guard.sh` | PreCompact | Snapshots memory & task state before compaction |

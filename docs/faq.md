@@ -6,14 +6,17 @@ No. It is configuration: agents, commands, skills, hooks, rules, templates, and 
 **Does it work on Pro/Max subscriptions after Anthropic's April 4, 2026 third-party policy?**
 Yes - by design. The policy restricts subscription OAuth to official clients; VULYK lives entirely inside the official client. (Independent of policy: parallel agents consume limits faster - the cascade exists to make that affordable.)
 
-**Which model plans - Fable 5.1 or Opus 5?**
-Whichever your plan carries inside its limits. `scripts/top-model.sh` reads the account profile Claude Code caches in `~/.claude.json`: Max 5x / 20x and premium seats get `fable` (up to half the weekly limit is Fable at no extra cost); Pro, standard seats and API keys get `opus` (Fable would bill to usage credits on top of the subscription). The SessionStart brief announces it; `/vulyk-plan` and `/vulyk-review` pass it as the dispatch `model:`. Details and the rejected alternatives in [model-cascade.md](model-cascade.md).
+**Which model plans - Fable 5.1 or Opus 5.5?**
+Since v0.16.0 (ADR-012), Opus 5.5 plans and orchestrates on every plan: at `medium` effort it
+measured level with Fable 5.1 at `high` for about a third of the cost. Fable is kept for the
+**gate**: `lead-review`, `lead-architect`, the Tier 4 planner and a missed story's retry. The gate
+goes to whichever model your plan carries inside its limits. `scripts/top-model.sh` reads the account profile Claude Code caches in `~/.claude.json`: Max 5x / 20x and premium seats get `fable` (up to half the weekly limit is Fable at no extra cost); Pro, standard seats and API keys get `opus` (Fable would bill to usage credits on top of the subscription). The SessionStart brief announces it; `/vulyk-plan`, `/vulyk-review` and the build driver pass it as the dispatch `model:`. Details and the rejected alternatives in [model-cascade.md](model-cascade.md).
 
 **I want Fable on Pro anyway / Opus on Max anyway.**
 Replace `auto` in the `TOP_MODEL = auto` line of CLAUDE.md with the alias you want; the pin beats the plan. `VULYK_TOP_MODEL=<alias>` does the same for one shell. The cascade is model-agnostic everywhere else.
 
 **The brief says my session is "not pinned".**
-The Queen's own session starts on the account default (Sonnet 5 on Pro, Opus 5 on Max) unless something pins it. `bash scripts/top-model.sh --apply` writes one `"model"` key into the gitignored `.claude/settings.local.json` and the next launch starts on the resolved model; `/model <alias>` on the first turn does it for the current session, free, because the cache is still cold.
+The Queen's own session starts on the account default (Opus 5.5 since Claude Code 2.1.280) unless something pins it. `bash scripts/top-model.sh --apply` writes `"model": "opus"` into the gitignored `.claude/settings.local.json` and the next launch starts there; `/model <alias>` on the first turn does it for the current session, free, because the cache is still cold.
 
 **Why can't my lead-build agent spawn workers?**
 Claude Code subagents cannot use the Task tool - a platform constraint. VULYK's answer: fan-out lives in the main session's commands; subagents stay single-purpose. See [architecture.md](architecture.md).

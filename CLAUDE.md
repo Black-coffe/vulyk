@@ -3,10 +3,12 @@
 This project runs on **VULYK** — hive orchestration for Claude Code.
 You (the main session) are the **Queen**: planner, dispatcher, integrator. You delegate; you do not labor.
 
-> Top model policy: `TOP_MODEL = auto` — the plan decides (`scripts/top-model.sh`): **Fable 5.1**
-> on Max and premium seats, **Opus 5** on Pro, standard seats and API keys. The SessionStart brief
-> announces the resolved alias; pass it as `model:` on every `queen-planner`, `lead-architect` and
-> `lead-review` dispatch. Replace `auto` with an alias to pin. Details: `docs/model-cascade.md`.
+> Model policy (v0.16.0, ADR-012): **Opus 5.5 is the workhorse** — the Queen, the planner at
+> Tier 1–3, workers, drones and the `librarian` run on `opus`. `TOP_MODEL = auto` names the **gate**
+> model, and the plan decides it (`scripts/top-model.sh`): **Fable 5.1** on Max and premium seats,
+> **Opus 5.5** on Pro, standard seats and API keys. Pass it as `model:` on every `lead-review` and
+> `lead-architect` dispatch, on a Tier 4 `queen-planner` and on a missed story's retry. Replace `auto`
+> with an alias to pin. Details: `docs/model-cascade.md`.
 
 ## The Five Laws
 
@@ -50,24 +52,27 @@ Past 16 stories the goal is more than one spec — split it. Counts are calibrat
 build is the opt-in — `/vulyk-plan --go`, or the owner saying so on the grill's last question.
 An owner who has not read the plan has not approved the spend.
 
-**Effort** is a session setting, not a per-agent one (`effort:` in agent frontmatter is silently
-ignored). Set it once at launch: `low` for recon, `medium` for implementation, `high` for planning
-and review; `max` only after a real failure. Changing it mid-session drops the cached prefix.
+**Effort** lives in agent frontmatter (`effort:` overrides the session level — re-measured on
+Claude Code 2.1.280, ADR-012): drones and the `librarian` run at `low`, workers at `medium`, and the
+planner and gate at `high`. Seats inherit the session level. Set the session level once at launch:
+`high` for planning, `medium` for building. Use `max` only after a real failure; on Opus 5.5 it
+costs about 5× the tokens of `high`. Changing the level mid-session drops the cached prefix.
 
 ## The model ladder
 
-Four rungs, one job each. Agent frontmatter carries the rung; the dispatch parameter carries the
-plan-aware upgrade. Full table and rationale: `docs/model-cascade.md` (ADR-007).
+Three rungs, one job each. Agent frontmatter carries the rung, and the dispatch parameter carries
+the plan-aware gate. Full table and rationale: `docs/model-cascade.md` (ADR-012, supersedes the
+rungs of ADR-007).
 
 | Rung | Alias | Who | Work |
 |---|---|---|---|
-| Lead | `TOP_MODEL` (`fable` where the plan carries it, else `opus`) | Queen, `queen-planner`, `lead-architect`, `lead-review` | planning, design, the gate |
-| Senior | `opus` | `council-opus`; the **second attempt** of any story a mid missed; stories the planner marks `model: opus`; the Tier 4 second reviewer beside Fable | judgment, hard stories, retries |
-| Mid | `sonnet` | `worker-code`, `worker-test`, `council-sonnet`, `drone-scout`, `drone-docs`, `drone-coverage`, `librarian` | implementation, recon, memory |
-| Junior | `haiku` **only once a Haiku 5 exists**; until then `sonnet` | `council-haiku` (the black-box seat keeps its name - it is an angle), `cycle-clerk`, the learnings distiller | mechanical, one-verb, no judgment |
+| Gate | `TOP_MODEL` (`fable` where the plan carries it, else `opus`) | `lead-review`, `lead-architect`, the Tier 4 `queen-planner`, the **second attempt** of any missed story | the gate, design, the hardest plans, retries — short calls where a miss costs most, and never the model that wrote the code |
+| Workhorse | `opus` → Opus 5.5 | the Queen, `queen-planner` at Tier 1–3, `worker-code`, `worker-test`, `drone-scout`, `drone-docs`, `drone-coverage`, `librarian`, `council-opus`; the Tier 4 second reviewer beside Fable | orchestration, planning, implementation, recon, memory, intent |
+| Junior | `sonnet` until a Haiku 5.5 ships, then `haiku` | `council-sonnet` (stays `sonnet`: a different model in the court), `council-haiku` (the black-box seat keeps its name - it is an angle), `cycle-clerk`, the learnings distiller | mechanical, one verb, running what exists |
 
-Haiku 4.5 is never dispatched: the junior rung runs on Sonnet until a fifth-generation Haiku
-ships. Route with frontmatter and the dispatch parameter, never `/model` mid-session.
+Haiku 4.5 is never dispatched. When Haiku 5.5 ships, the clerk, the black-box seat and the
+distiller move to it; `council-sonnet` stays on Sonnet for model diversity. Route with frontmatter
+and the dispatch parameter, never `/model` mid-session.
 
 ## The cycle
 
@@ -94,14 +99,14 @@ council either way - but nothing in the loop waits for it.
 Every rule here has a price behind it — [docs/token-economy.md](docs/token-economy.md).
 
 - **Queen never reads source code.** Request `drone-scout` reports; consume `memory/map/` and `memory/memory.md`.
-- **Bookend:** the top model plans and reviews; Sonnet implements; a miss escalates one rung, never the whole spec.
+- **Bookend:** Opus 5.5 plans and implements; the gate model reviews; a miss escalates to the gate model, never the whole spec.
 - **Scoped context:** a worker receives its story file plus the relevant map slice — never "the whole project".
 - **Verification runs once per close.** The worker runs it before returning; `cycle.sh close-story` runs it as the record. Seats and reviewers do not re-run the whole suite to see the same green.
 - **Route models with frontmatter and the dispatch parameter, never `/model` mid-session** — a session switch re-prefills the whole conversation. Same for `/effort` and fast mode: set them once, at the start.
 - **Paths, not descriptions.** Name the file; `@`-mention it once.
 - **Command output is permanent.** Under 30 000 characters it is resent every turn. Use the quiet variants in `## Commands`; hand noisy jobs to a subagent.
 - **`/clear` between tiers.** `/vulyk-handoff` first if the thread carries state. Use `/rewind`, not `/compact`, to undo the last few turns.
-- **The fallback driver is the most expensive path** - the whole loop inside the pinned top-model session. `/vulyk-build` refuses it without `--fallback`.
+- **The fallback driver is the most expensive path** - the whole loop inside the Queen's own long-lived session. `/vulyk-build` refuses it without `--fallback`.
 - **Session budget:** past ~10 turns of a debugging loop without progress, stop, write findings to the story file, re-plan.
 
 ## Secrets

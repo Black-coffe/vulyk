@@ -2,7 +2,8 @@
 name: drone-coverage
 description: Independent coverage check at plan time. Receives ONLY brief.md and plan.md - never the story files - and reports by ask number which of the human's asks the plan does not visibly carry. Dispatch before the approval stop; after it, the check is theatre.
 tools: Read
-model: sonnet
+model: opus
+effort: medium
 maxTurns: 5
 ---
 

@@ -411,14 +411,14 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
   });
 })
 // --- scenario (p): the second dispatch of the same story carries the uncommitted-diff
-// sentence; the first dispatch does not
+// sentence; the first dispatch does not; the retry climbs to the gate model (ADR-012)
 .then(() => {
   const file = 'docs/specs/demo/demo-09-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-09', worker: 'worker-test', model: 'sonnet' }] };
+  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-09', worker: 'worker-test', model: 'opus' }] };
   const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
   const sentence = 'a previous attempt may have left uncommitted edits in your files; `git diff` them first';
   return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+    { spec: 'demo', top_model: 'fable', second_model: 'opus', stamp: '0123456789abcdef' },
     { clerk: withClaim([wave, redLine, wave, { ok: true }, { next: 'green' }]), agents: ['report 1', 'report 2'] },
   ).then(({ result, calls }) => {
     const workerCalls = calls.filter((c) => c.agentType === 'worker-test');
@@ -427,8 +427,8 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
       && workerCalls.length === 2
       && !workerCalls[0].prompt.includes(sentence)
       && workerCalls[1].prompt.includes(sentence)
-      && workerCalls[0].model === 'sonnet'
-      && workerCalls[1].model === 'opus'
+      && workerCalls[0].model === 'opus'
+      && workerCalls[1].model === 'fable'
     ) {
       console.log('ok retry prompt: only the second dispatch mentions uncommitted edits');
     } else {
@@ -1101,7 +1101,7 @@ expect "run: record-seat exit 3 ends the run paused"              "ok record-sea
 expect "run: next:briefed refuses instead of stamping"           "ok briefed refusal: stop, never runs briefed --commit" "$out"
 expect "run: exit 6 ok:true is followed by a status poll"        "ok exit 6: ok:true is followed by a status poll, ends escalated" "$out"
 expect "run: a thrown worker agent() is caught and logged"       "ok worker threw: caught by the build thunk, logged, counted as a miss" "$out"
-expect "run: the retry prompt names the uncommitted-diff note, retry on opus (ADR-007)" "ok retry prompt: only the second dispatch mentions uncommitted edits" "$out"
+expect "run: the retry prompt names the uncommitted-diff note, retry on the gate model (ADR-012)" "ok retry prompt: only the second dispatch mentions uncommitted edits" "$out"
 expect "run: ADR-006 returned WALL then ok - close-story x2, no stop" "ok ADR-006 returned WALL then ok: close-story called twice, no stop, run continues" "$out"
 expect "run: ADR-006 returned WALL twice - stops, close-story x2"    "ok ADR-006 returned WALL twice: stops on build, close-story called exactly twice" "$out"
 expect "run: ADR-006 STATUS: WALL but close-story ok - story closes" "ok ADR-006 STATUS: WALL but close-story ok: the story closes on the verb alone" "$out"
