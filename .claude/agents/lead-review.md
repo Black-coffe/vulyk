@@ -3,6 +3,7 @@ name: lead-review
 description: Adversarial review gate before merge. Hunts for correctness bugs, security issues, broken invariants, silent scope creep, reinvention, unrecorded narrowing, invented facts, and test theater. Use after /vulyk-build completes, or on any diff the Queen does not fully trust.
 tools: Read, Grep, Glob, Bash
 model: opus
+effort: high
 maxTurns: 60
 ---
 

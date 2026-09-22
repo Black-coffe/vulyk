@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# VULYK top-model resolver: which model is the king of planning on THIS account, right now.
+# VULYK top-model resolver: which model holds the gate on THIS account, right now.
 #
 #   scripts/top-model.sh            -> prints one alias: fable | opus
 #   scripts/top-model.sh --explain  -> plan, the signal it was read from, and the reason
-#   scripts/top-model.sh --apply    -> pins the resolved alias as "model" in .claude/settings.local.json
-#                                      so the Queen's own session starts on it (next launch)
-#   scripts/top-model.sh --check    -> exit 0 if settings.local.json pins the resolved alias, 1 if not
+#   scripts/top-model.sh --apply    -> pins the Queen's model (always opus, v0.16.0) as "model" in
+#                                      .claude/settings.local.json so her session starts on it
+#   scripts/top-model.sh --check    -> exit 0 if settings.local.json pins the Queen's model, 1 if not
 #
-# The rule (v0.10.0): Fable 5.1 is the planning and orchestration model wherever the plan
-# includes it, Opus 5 everywhere else. Per Anthropic's plan terms (Sept 2026) that means:
+# The rule (v0.16.0, ADR-012): the resolved alias is the GATE model - lead-review,
+# lead-architect, the Tier 4 planner and a missed story's retry. The Queen and every other
+# rung run on Opus 5.5 whatever the plan. Fable 5.1 holds the gate wherever the plan
+# includes it, Opus 5.5 everywhere else. Per Anthropic's plan terms (Sept 2026) that means:
 #
 #   Max 5x / Max 20x, Team & Enterprise premium seats  -> fable   (up to half the weekly limit
 #                                                                  is Fable at no extra cost)
@@ -133,9 +135,9 @@ else
       max|premium-seat)
         MODEL="fable"; REASON="$DETAIL - Fable 5.1 is inside the plan (up to half the weekly limit at no extra cost)" ;;
       pro|standard-seat)
-        MODEL="opus";  REASON="$DETAIL - Fable bills to usage credits on top of the subscription; Opus 5 is the frontier model the plan includes" ;;
+        MODEL="opus";  REASON="$DETAIL - Fable bills to usage credits on top of the subscription; Opus 5.5 is the frontier model the plan includes" ;;
       api)
-        MODEL="opus";  REASON="$DETAIL - Opus 5 is the floor; pin TOP_MODEL = fable in CLAUDE.md to spend on Fable per token" ;;
+        MODEL="opus";  REASON="$DETAIL - Opus 5.5 is the floor; pin TOP_MODEL = fable in CLAUDE.md to spend on Fable per token" ;;
       *)
         MODEL="opus";  REASON="$DETAIL - defaulting to the safe floor; pin TOP_MODEL in CLAUDE.md or set VULYK_TOP_MODEL" ;;
     esac
@@ -145,7 +147,7 @@ fi
 label() { # label <alias> - human name for the brief
   case "$1" in
     fable) echo "Fable 5.1" ;;
-    opus)  echo "Opus 5" ;;
+    opus)  echo "Opus 5.5" ;;
     *)     echo "$1" ;;
   esac
 }
@@ -162,7 +164,10 @@ second_reviewer() {
 }
 
 # ---------------------------------------------------------------- the local pin
+# The Queen is not the gate: she orchestrates on Opus 5.5 on every plan (ADR-012) - the same
+# index as Fable 5.1 at high for about a third of the cost, and no half-the-weekly-limit cap.
 
+QUEEN="opus"
 LOCAL="$ROOT/.claude/settings.local.json"
 pinned_model() { [ -f "$LOCAL" ] && field "$LOCAL" model; }
 
@@ -181,28 +186,28 @@ case "$MODE" in
     echo "second reviewer (Tier 4): $(second_reviewer "$MODEL")"
     P="$(pinned_model)"
     if [ -z "$P" ]; then
-      echo "queen session: not pinned - the session starts on the account default (Sonnet 5 on Pro, Opus 5 on Max). Run: bash scripts/top-model.sh --apply"
-    elif [ "$P" = "$MODEL" ]; then
+      echo "queen session: not pinned - the session starts on the account default (Opus 5.5 since Claude Code 2.1.280). Run: bash scripts/top-model.sh --apply"
+    elif [ "$P" = "$QUEEN" ]; then
       echo "queen session: pinned $P in .claude/settings.local.json"
     else
-      echo "queen session: pinned $P in .claude/settings.local.json, resolver says $MODEL - re-run --apply, or keep the pin deliberately"
+      echo "queen session: pinned $P in .claude/settings.local.json, the Queen runs on $QUEEN - re-run --apply, or keep the pin deliberately"
     fi ;;
 
   check)
     P="$(pinned_model)"
-    [ "$P" = "$MODEL" ] && exit 0
+    [ "$P" = "$QUEEN" ] && exit 0
     exit 1 ;;
 
   apply)
     P="$(pinned_model)"
-    if [ "$P" = "$MODEL" ]; then
-      echo "already pinned: model = $MODEL in $LOCAL"
+    if [ "$P" = "$QUEEN" ]; then
+      echo "already pinned: model = $QUEEN in $LOCAL"
       exit 0
     fi
     mkdir -p "$ROOT/.claude" 2>/dev/null || true
     if [ ! -f "$LOCAL" ]; then
-      printf '{\n  "model": "%s"\n}\n' "$MODEL" > "$LOCAL" || { echo "error: cannot write $LOCAL" >&2; exit 1; }
-      echo "pinned: model = $MODEL -> created $LOCAL (takes effect on the next launch; /model $MODEL now if this session must have it)"
+      printf '{\n  "model": "%s"\n}\n' "$QUEEN" > "$LOCAL" || { echo "error: cannot write $LOCAL" >&2; exit 1; }
+      echo "pinned: model = $QUEEN -> created $LOCAL (takes effect on the next launch; /model $QUEEN now if this session must have it)"
       exit 0
     fi
     # Existing file: it carries the owner's permissions and standing approvals, so merge one
@@ -210,10 +215,10 @@ case "$MODE" in
     # handoff.py; without it, say exactly what to add rather than rewriting JSON with sed.
     PY="$(command -v python3 || command -v python || command -v py || true)"
     if [ -z "$PY" ]; then
-      echo "cannot merge without python: add  \"model\": \"$MODEL\"  to $LOCAL by hand"
+      echo "cannot merge without python: add  \"model\": \"$QUEEN\"  to $LOCAL by hand"
       exit 1
     fi
-    if "$PY" - "$LOCAL" "$MODEL" <<'PYPIN'
+    if "$PY" - "$LOCAL" "$QUEEN" <<'PYPIN'
 import json, sys
 path, model = sys.argv[1], sys.argv[2]
 try:
@@ -229,9 +234,9 @@ with open(path, "w", encoding="utf-8") as fh:
     fh.write("\n")
 PYPIN
     then
-      echo "pinned: model = $MODEL in $LOCAL (was: ${P:-unset}; takes effect on the next launch)"
+      echo "pinned: model = $QUEEN in $LOCAL (was: ${P:-unset}; takes effect on the next launch)"
     else
-      echo "cannot parse $LOCAL as JSON - left untouched; add  \"model\": \"$MODEL\"  by hand"
+      echo "cannot parse $LOCAL as JSON - left untouched; add  \"model\": \"$QUEEN\"  by hand"
       exit 1
     fi ;;
 esac

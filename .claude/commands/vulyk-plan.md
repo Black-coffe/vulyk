@@ -38,14 +38,15 @@ Enter Queen mode for: "$ARGUMENTS"
    is the task phrase as its one line.
 5. **Plan.** Tier 2: draft the plan inline. Tier 3-4: delegate synthesis to `queen-planner` with
    the brief, scout reports and map pointers attached; Tier 4 also requests a `lead-architect`
-   consult on the central design fork. **Both dispatches carry `model: <TOP_MODEL>`** - the alias
-   the session brief announced (`bash scripts/top-model.sh` if it scrolled away). Plan file
+   consult on the central design fork. **Tier 4 only: both dispatches carry `model: <TOP_MODEL>`**
+   - the gate alias the session brief announced (`bash scripts/top-model.sh` if it scrolled away);
+   a Tier 3 `queen-planner` runs on its frontmatter `opus` with no parameter (ADR-012). Plan file
    follows `templates/plan.md`; contracts between concurrent stories are decided here. Tier 1:
    write plan.md directly - a single-story plan still needs the file.
 6. **Stories.** `docs/specs/<slug>/` holds plan.md plus one story file per unit of work
    (`templates/story.md`): verbatim `## Requirements` quotes, files, acceptance criteria, quiet
-   verification command, map slice pointer, `wave:`/`blocked_by:`, and `model:` - `sonnet` unless
-   the story is cross-cutting, touches a contract, or is the tracer, then `opus` (ADR-007). Stories
+   verification command, map slice pointer, `wave:`/`blocked_by:`, and `model:` - `opus` for every
+   story (ADR-012; the retry climbs to the gate model on its own, so no story needs a mark). Stories
    in one wave run concurrently, so their `## Files` must be disjoint. Tier 1: exactly one story.
 7. **Check the stories, deterministically.** `bash scripts/wave-check.sh docs/specs/<slug>` and
    `bash scripts/trace-check.sh docs/specs/<slug>` - both free, both at every tier that has a

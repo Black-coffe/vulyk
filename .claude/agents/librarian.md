@@ -2,7 +2,8 @@
 name: librarian
 description: Memory consolidation and garbage collection. The ONLY agent that merges into memory/learnings and prunes memory files. Used by /vulyk-gc and /vulyk-evolve. Prevents concurrent-write races by design.
 tools: Read, Write, Edit, Glob
-model: sonnet
+model: opus
+effort: low
 maxTurns: 25
 ---
 

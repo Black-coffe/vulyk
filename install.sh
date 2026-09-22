@@ -717,7 +717,7 @@ if [ -f "$DEST/CLAUDE.md" ]; then
     # Say so here, once, rather than letting the session brief report "by constitution"
     # forever to an owner who never chose it.
     if grep -q 'TOP_MODEL = opus' "$DEST/CLAUDE.md" 2>/dev/null; then
-      echo "  Since 0.10.0 the top model follows the plan (Fable 5.1 on Max, Opus 5 on Pro)."
+      echo "  Since 0.10.0 the gate model follows the plan (Fable 5.1 on Max, Opus 5.5 on Pro)."
       echo "  Your constitution still pins \`TOP_MODEL = opus\`; change it to \`TOP_MODEL = auto\` to"
       echo "  enable that, or keep the pin deliberately. \`scripts/top-model.sh --explain\` shows the pick."
     fi
@@ -792,14 +792,14 @@ else
   echo "  write          .claude/vulyk-manifest ($MANIFEST_COUNT paths)"
 fi
 
-# Pin the target's own Queen session to the top model the plan resolves to. A resolver that
+# Pin the target's own Queen session to opus (ADR-012: the Queen is not the gate). A resolver that
 # ships but is never applied is a session that starts on the account default forever - the
 # same reasoning as wire_session_hook, aimed at a decision instead of a hook entry. Skipped
 # on a dry run (nothing to apply) and silent when already pinned; any other failure (no
 # python, an unparsable settings.local.json) is printed by the resolver itself and must
 # never fail the install - pinning a session is a convenience, not a precondition.
 if [ "$CHECK" = "--check" ]; then
-  echo "  would pin      Queen session to the resolved top model (scripts/top-model.sh --apply)"
+  echo "  would pin      Queen session to opus (scripts/top-model.sh --apply)"
 elif [ -f "$DEST/scripts/top-model.sh" ]; then
   # top-model.sh resolves its own root from CLAUDE_PROJECT_DIR, falling back to $(pwd) - and
   # install.sh never cd's into $DEST, so without this it would pin whatever directory the

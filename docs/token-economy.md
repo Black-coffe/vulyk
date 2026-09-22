@@ -73,9 +73,9 @@ in the Queen's window — which is exactly the recon and noisy-output cases, and
 
 An estimate, not a measured number - `memory/stats/council.jsonl` is where the real figure
 accumulates. Per round, by tier (ADR-002/007): Tier 1 - one cold-cache `council-sonnet`; Tier 2 -
-`council-sonnet` + `lead-review` at the top model; Tier 3-4 - plus `council-opus` and the
+`council-sonnet` + `lead-review` at the gate model; Tier 3-4 - plus `council-opus` and the
 black-box seat; Tier 4 - plus a second reviewer. Add roughly 5 `cycle-clerk` calls (junior rung,
-one verb each). On a RED verdict, add one `queen-planner` dispatch at the top model plus the
+one verb each). On a RED verdict, add one `queen-planner` dispatch (Opus 5.5; the gate model at Tier 4) plus the
 repair wave. The first recorded spec (Tier 4, v0.12) took three rounds to green with the black-box
 seat returning `N/A` every time - its Profile's *Client path* row was unfilled, so it had nothing
 to walk: a hive that leaves that row blank pays for a seat that can only say `N/A`. v0.13 also
@@ -88,7 +88,7 @@ ran up to four times - twice per story (worker, `close-story`) and twice per rou
 (`council-sonnet`, `lead-review`). ADR-008 records each fix.
 
 The fallback driver (Workflow unavailable) pays the same dispatches and additionally carries
-roughly 120 lines of seat reports per round through the pinned top-model session that is stepping
+roughly 120 lines of seat reports per round through the Queen's own long-lived session that is stepping
 the loop itself - the most expensive path in this list, because no phase can be handed to a cheaper
 agent while the Queen's own context is carrying it. `/vulyk-build` therefore refuses it without
 `--fallback`; `/vulyk-status`'s `driver:` line says which path a given hive is on.

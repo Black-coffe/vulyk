@@ -1,6 +1,6 @@
 # ADR-007: The model ladder - four rungs, no Haiku until Haiku 5
 
-- Status: accepted (2026-09-14, owner: Andrei)
+- Status: accepted (2026-09-14, owner: Andrei); rungs superseded by ADR-012 (2026-09-22) - the Haiku rule stands
 - Date: 2026-09-14
 - Spec: docs/specs/lean-cascade (v0.13.0)
 - Amends: ADR-002 (Tier 2 court)

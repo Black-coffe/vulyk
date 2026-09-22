@@ -2,6 +2,24 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.16.0] - 2026-09-22
+
+### Changed
+- **Opus 5.5 is the workhorse (ADR-012, supersedes the rungs of ADR-007).**
+  - **What moved:** the Queen, the Tier 1–3 `queen-planner`, `worker-code`, `worker-test`, `drone-scout`, `drone-docs`, `drone-coverage` and `librarian` now run on `opus` (Opus 5.5 since Claude Code 2.1.280).
+  - **Why:** Artificial Analysis measured Opus 5.5 at `medium` level with Fable 5.1 at `high` for about a third of the cost. It also beats Sonnet 5 per task.
+  - **What stays on Sonnet:** `council-sonnet` (model diversity in the court), `council-haiku`, `cycle-clerk` and the distiller. The last three move to Haiku 5.5 when it ships. Haiku 4.5 is still never dispatched.
+- **`TOP_MODEL` names the gate, not the Queen.**
+  - **What it covers:** `lead-review`, `lead-architect`, the Tier 4 planner and a missed story's retry get the plan-resolved alias: Fable 5.1 on Max, Opus 5.5 on Pro.
+  - **Resolver:** `scripts/top-model.sh --apply` / `--check` now pin and compare the Queen's session against `opus`.
+  - **Hook:** `top-model-brief.sh` prints `[VULYK] gate model:`.
+  - **Upgrade note:** upgrading re-pins an existing hive's Queen from `fable` to `opus`.
+- **The retry climbs to the gate.** `vulyk-cycle.js` dispatches a story's second attempt with `model: top_model`, where it used to hard-code `opus`. `cycle.sh status --json` defaults a story's `model` to `opus` instead of `sonnet`. On Pro the retry runs on the same model as the first attempt; ADR-012 records that gap.
+- **Effort is back in agent frontmatter.**
+  - **Evidence:** re-measured on Claude Code 2.1.280, `effort:` now overrides the session level (`low` → ~660, `max` → ~3 200 output tokens on Opus 5.5).
+  - **Levels:** drones, `librarian` and `cycle-clerk` run at `low`; workers and `drone-coverage` at `medium`; planner, architect and gate at `high`.
+  - **Docs:** `docs/model-cascade.md` records both the July "ignored" finding and the new one.
+
 ## [0.15.0] - 2026-09-15
 
 ### Fixed
