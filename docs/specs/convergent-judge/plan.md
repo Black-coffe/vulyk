@@ -44,7 +44,7 @@ The judge stops counting rounds and starts measuring convergence. The ceiling fo
 
 ## Plan deltas
 
-**Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
+**Approved:** Andrei, 2026-09-23
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** <written by /vulyk-build before wave 1>
 **Checked:** <written by scripts/human-check.sh>
