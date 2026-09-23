@@ -1871,6 +1871,53 @@ out="$(council open-round docs/specs/oreopen1 --commit)"; ex=$?
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 [ -d docs/specs/oreopen1/council/round-4 ] && echo "  ok    round-4 directory exists" || { echo "::error::round-4 missing"; fail=1; }
 
+# --- tier-scaled ceiling (convergent-judge ask 1): 1 for Tier 1, 2 for Tier 2, 3 for Tier 3-4;
+# reopen raises it by the same amount. Tier 3 at 3 is the oreopen1 block above, Tier 4 at 3 is
+# oround1's ROUND ceiling=3.
+
+echo "tier ceiling: Tier 1 - ROUND ceiling=1, a RED round 1 escalates (ceiling)"
+mk_spec tceil1 2
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/tceil1#' docs/specs/tceil1/plan.md
+git add -A && git commit -qm "tceil1: branch" >/dev/null
+set_tier tceil1 1
+council open-round docs/specs/tceil1 --commit >/dev/null
+rdn="docs/specs/tceil1/council/round-1"
+grep -q '^ceiling=1$' "$rdn/ROUND" && echo "  ok    tier 1: ROUND ceiling=1" \
+  || { echo "::error::ROUND: $(cat "$rdn/ROUND" 2>&1)"; fail=1; }
+write_seat "$rdn" sonnet RG
+jout="$(council judge docs/specs/tceil1 --commit)"; jex=$?
+[ "$jex" -eq 6 ] && printf '%s' "$jout" | grep -qF '"next":"escalated"' \
+  && grep '"spec":"tceil1"' memory/stats/council.jsonl | grep '"round":1' | grep -qF '"escalate":"ceiling"' \
+  && echo "  ok    tier 1: RED round 1 -> ESCALATE ceiling" \
+  || { echo "::error::tier 1 judge: exit=$jex out=$jout"; fail=1; }
+
+echo "tier ceiling: Tier 2 - round 1 RED repairs, round 2 RED escalates (ceiling), reopen gives 4"
+mk_spec tceil2 2
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/tceil2#' docs/specs/tceil2/plan.md
+git add -A && git commit -qm "tceil2: branch" >/dev/null
+set_tier tceil2 2
+for n in 1 2; do
+  council open-round docs/specs/tceil2 --commit >/dev/null
+  rdn="docs/specs/tceil2/council/round-$n"
+  grep -q '^ceiling=2$' "$rdn/ROUND" && echo "  ok    tier 2 round $n: ROUND ceiling=2" \
+    || { echo "::error::ROUND: $(cat "$rdn/ROUND" 2>&1)"; fail=1; }
+  write_seat "$rdn" sonnet RG
+  write_review "$rdn" PASS
+  jout="$(council judge docs/specs/tceil2 --commit)"; jex=$?
+  if [ "$n" -lt 2 ]; then
+    [ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    tier 2 round 1: RED, repair" \
+      || { echo "::error::tier 2 round 1: exit=$jex out=$jout"; fail=1; }
+  else
+    [ "$jex" -eq 6 ] && printf '%s' "$jout" | grep -qF '"next":"escalated"' \
+      && grep '"spec":"tceil2"' memory/stats/council.jsonl | grep '"round":2' | grep -qF '"escalate":"ceiling"' \
+      && echo "  ok    tier 2 round 2: RED -> ESCALATE ceiling" \
+      || { echo "::error::tier 2 round 2: exit=$jex out=$jout"; fail=1; }
+  fi
+done
+council reopen docs/specs/tceil2 "owner: one more pass" --commit >/dev/null
+[ "$(cat docs/specs/tceil2/council/CEILING 2>&1)" = "4" ] && echo "  ok    tier 2: reopen raises the ceiling to 4" \
+  || { echo "::error::CEILING: $(cat docs/specs/tceil2/council/CEILING 2>&1)"; fail=1; }
+
 # --- status --json after committed verbs (autonomous-cycle-19: R1, R2, R3, R7, R25) -----------
 # The council round found the suite asserted only each verb's own emit, never `status --json`
 # afterward - which is exactly the seam where `--commit` (used by both drivers, always) moved
@@ -1880,6 +1927,10 @@ out="$(council open-round docs/specs/oreopen1 --commit)"; ex=$?
 echo "status --json: real --commit sequence - RED judge -> repair, a code commit -> open-round, ceiling -> escalated, reopen -> open-round, round 4 opens (R1/C-1, R7/M-4, R25)"
 mk_open_spec realverbs 3
 set_tier realverbs 2
+# convergent-judge: Tier 2's own ceiling is 2; this walk needs three rounds before the ceiling,
+# so it pins council/CEILING at 3 (the file still wins over the tier default). reopen adds 2 -> 5.
+mkdir -p docs/specs/realverbs/council && printf '3\n' > docs/specs/realverbs/council/CEILING
+git add -A && git commit -qm "realverbs: ceiling 3" >/dev/null
 council open-round docs/specs/realverbs --commit >/dev/null
 seat_report sonnet 1 GRG | council record-seat docs/specs/realverbs 1 sonnet >/dev/null
 seat_report opus 1 GGG | council record-seat docs/specs/realverbs 1 opus >/dev/null

@@ -19,7 +19,7 @@
 # mutating verb. autonomous-cycle-04 (this story) adds `close-story` (scope-check + the
 # story's `## Verification` x `repeat:`, then `status: done` and a `story(<id>): <title>`
 # commit), `open-round` (preconditions, the court worktree, D1's crash/idempotency rules)
-# and `reopen` (ceiling +3 after ESCALATE); `judge` gains only the court removal - the
+# and `reopen` (ceiling + the tier's own ceiling after ESCALATE, convergent-judge); `judge` gains only the court removal - the
 # verdict rule and the row schema are unchanged from story 01/03.
 set -u
 shopt -s nullglob 2>/dev/null || true
@@ -221,6 +221,16 @@ round_tier() { # round_tier <spec> <round-dir> -> the round's frozen tier= (open
   tier_of "$spec"
 }
 
+tier_ceiling() { # tier_ceiling <tier> -> the default round ceiling for a tier (convergent-judge
+  # ask 1): 1 for Tier 1, 2 for Tier 2, 3 for Tier 3-4 and anything else. The one place the
+  # mapping lives; a council/CEILING file still wins over it, and `reopen` adds it again.
+  case "$1" in
+    1) printf '1' ;;
+    2) printf '2' ;;
+    *) printf '3' ;;
+  esac
+}
+
 required_seats_for_tier() { # required_seats_for_tier <tier> -> the space-separated seats a
   # round of this tier must have before judge will run (C15). 3 and 4 (and any value outside
   # 1-4, which tier_of never produces) share the full court - Tier 4's extra reviewer is a
@@ -396,7 +406,7 @@ cmd_status() {
     ROUND_N="${RD##*/round-}"
     local RCOURT
     RCOURT="$(round_field "$RD" court)"
-    CEILING="$(round_field "$RD" ceiling)"; [ -n "$CEILING" ] || CEILING=3
+    CEILING="$(round_field "$RD" ceiling)"; [ -n "$CEILING" ] || CEILING="$(tier_ceiling "$(round_tier "$SPEC" "$RD")")"
     [ -n "$RCOURT" ] && COURT_JSON="\"$RCOURT\""
     if ! row_exists "$SLUG" "$ROUND_N"; then
       OPEN_B=true
@@ -751,7 +761,7 @@ cmd_judge() { # cmd_judge <spec> <commit:0|1> [<verb-label>] [<stamp>]
   RHEAD="$(round_field "$RD" head)"
   RPACK="$(round_field "$RD" pack)"
   ROPENED="$(round_field "$RD" opened)"
-  RCEILING="$(round_field "$RD" ceiling)"; [ -n "$RCEILING" ] || RCEILING=3
+  RCEILING="$(round_field "$RD" ceiling)"; [ -n "$RCEILING" ] || RCEILING="$(tier_ceiling "$(round_tier "$SPEC" "$RD")")"
   local REQUIRED; REQUIRED="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
 
   # --- presence pass: every REQUIRED seat must be present or ABSENT, in order (C15: a seat
@@ -1898,7 +1908,7 @@ EOF
   esac
 
   local HEAD PACK; HEAD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; PACK="$(pack_fingerprint "$SPEC")"
-  local CEILING; CEILING="$(head -1 "$SPEC/council/CEILING" 2>/dev/null | tr -d '[:space:]')"; [ -n "$CEILING" ] || CEILING=3
+  local CEILING; CEILING="$(head -1 "$SPEC/council/CEILING" 2>/dev/null | tr -d '[:space:]')"; [ -n "$CEILING" ] || CEILING="$(tier_ceiling "$(tier_of "$SPEC")")"
 
   # --- an already-open round: resume, re-stamp in place, or fold it into a STALE + N+1 ------
   local RD; RD="$(current_round_dir "$SPEC")"
@@ -2006,12 +2016,13 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
   local marker_text="**After escalation (round $N, $dateonly).**"
   local already=0; grep -qF "$marker_text" "$BRIEF" 2>/dev/null && already=1
 
-  local OLDCEIL; OLDCEIL="$(head -1 "$SPEC/council/CEILING" 2>/dev/null | tr -d '[:space:]')"; [ -n "$OLDCEIL" ] || OLDCEIL=3
+  local STEP; STEP="$(tier_ceiling "$(tier_of "$SPEC")")"
+  local OLDCEIL; OLDCEIL="$(head -1 "$SPEC/council/CEILING" 2>/dev/null | tr -d '[:space:]')"; [ -n "$OLDCEIL" ] || OLDCEIL="$STEP"
   local NEWCEIL="$OLDCEIL"
 
   if [ "$already" -eq 0 ]; then
     append_after_answers "$BRIEF" "$(printf '\n%s\n> %s\n' "$marker_text" "$DECISION")"
-    NEWCEIL=$((OLDCEIL+3))
+    NEWCEIL=$((OLDCEIL+STEP))
     mkdir -p "$SPEC/council"
     printf '%s\n' "$NEWCEIL" > "$SPEC/council/CEILING"
     bash "$HERE/journal.sh" "$SPEC" "04-council:ESCALATE" "reopened after round $N, ceiling now $NEWCEIL" "open-round" >/dev/null

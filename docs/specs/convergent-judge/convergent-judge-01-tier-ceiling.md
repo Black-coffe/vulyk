@@ -1,8 +1,8 @@
 ---
 story: convergent-judge-01
 spec: convergent-judge
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 model: opus
@@ -48,5 +48,10 @@ memory/map/cycle.md - "Staleness / ceiling / PAUSE-REOPEN-CEILING", "Required se
 `bash tests/council.test.sh && bash tests/cycle.test.sh`
 
 ## Implementation notes
+- scripts/cycle.sh: new `tier_ceiling` beside `required_seats_for_tier`; defaults in `status` and `cmd_judge` use `round_tier` (frozen tier=, else plan), `cmd_open_round` and `cmd_reopen` use `tier_of`. Reopen step = `tier_ceiling`, also the OLDCEIL default. Unparsable tier falls to 3.
+- tests/council.test.sh: new Tier 1 / Tier 2 / reopen-to-4 block after oreopen1. Surprising: the `realverbs` walk (Tier 2, needs 3 RED rounds) broke; pinned its `council/CEILING` to 3 rather than retiering it (Tier 3 would change its dispatch set). Its reopen now lands at 5, which still admits rounds 4-5.
+- tests/cycle.test.sh untouched: its only fixture writes `ceiling=3` explicitly and still passes.
+- docs/cycle.md: line 74 "(three more rounds)" also reworded, same file, same fact.
+- Re-dispatch 2026-09-23: found the change already on disk uncommitted; re-ran verification (green), no code edits. scope-check flags memory/learnings/* and memory/stats/skills.json - hook-written, not this story's.
 
 ## Findings
