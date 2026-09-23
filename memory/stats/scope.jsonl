@@ -122,3 +122,5 @@
 {"ts":"2026-09-15T18:02:16Z","story":"driver-hardening-06-taint-shape-learnings-dir-selfmark-journal","declared":3,"changed":6,"out_of_scope":4}
 {"ts":"2026-09-15T18:14:34Z","story":"driver-hardening-07-clerk-retry-via-status","declared":2,"changed":2,"out_of_scope":0}
 {"ts":"2026-09-15T18:18:20Z","story":"driver-hardening-08-adr-docs-repair","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-09-23T18:32:38Z","story":"convergent-judge-01-tier-ceiling","declared":5,"changed":42,"out_of_scope":38}
+{"ts":"2026-09-23T18:43:07Z","story":"convergent-judge-03-installer-council-ledger","declared":2,"changed":43,"out_of_scope":41}
