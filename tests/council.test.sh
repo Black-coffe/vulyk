@@ -312,7 +312,7 @@ printf '%s\n' "$jout" | tail -1 | expect "last stdout line is the JSON contract"
 row="$(grep '"spec":"status1"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -q '"verdict":"GREEN"' && echo "  ok    row verdict GREEN" || { echo "::error::row: $row"; fail=1; }
 keys="$(printf '%s' "$row" | grep -oE '"[a-z_]+":' | tr -d '":' | tr '\n' ',')"
-[ "$keys" = "ts,spec,round,verdict,head,pack,asks,red,red_unevidenced,na,review,haiku,haiku_model,sonnet,sonnet_model,opus,opus_model,attempts,escalate,note," ] \
+[ "$keys" = "ts,spec,round,verdict,head,pack,asks,red,red_unevidenced,review_asks,na,review,haiku,haiku_model,sonnet,sonnet_model,opus,opus_model,attempts,escalate,note," ] \
   && echo "  ok    row keys are in C4 order" || { echo "::error::row key order: $keys"; fail=1; }
 grep -q '^\*\*Council:\*\* GREEN round 1,' docs/specs/status1/plan.md && echo "  ok    plan.md Council line appended" \
   || { echo "::error::Council line missing from plan.md"; fail=1; }
@@ -354,6 +354,82 @@ printf '%s' "$row" | grep -q '"verdict":"RED"' && printf '%s' "$row" | grep -q '
   && echo "  ok    row verdict RED, red:[2]" || { echo "::error::row: $row"; fail=1; }
 grep -qE '^\*\*Council:\*\* RED round 1,.* - red: 2$' docs/specs/red1/plan.md && echo "  ok    plan line ends '- red: 2'" \
   || { echo "::error::plan.md: $(grep '^\*\*Council:\*\*' docs/specs/red1/plan.md)"; fail=1; }
+
+# --- judge: an anchored review BLOCK (convergent-judge-02, D4) ------------------------------
+
+write_review_body() { # write_review_body <round-dir> <body...> - a BLOCK review with a given finding line
+  local rd="$1" n="${1##*/round-}"; shift
+  {
+    printf '<!-- seat: review \xc2\xb7 model: test \xc2\xb7 round: %s \xc2\xb7 head: %s \xc2\xb7 pack: demo-pack \xc2\xb7 attempt: 1 \xc2\xb7 recorded: 2020-01-01T00:00:01Z -->\n' "$n" "$HEAD7"
+    printf 'VERDICT: BLOCK\n'
+    printf '%s\n' "$@"
+  } > "$rd/review.md"
+}
+
+echo "judge: review BLOCK anchored [ask 2], seats GREEN -> RED/repair, review_asks:[2]"
+mk_spec anch1 3
+rd="$(mk_round anch1 1)"
+write_seat "$rd" haiku GGG; write_seat "$rd" sonnet GGG; write_seat "$rd" opus GGG
+write_review_body "$rd" '- major [ask 2]: the guard on line 40 is missing'
+jout="$(council judge docs/specs/anch1)"; jexit=$?
+[ "$jexit" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    anchored BLOCK -> next repair" \
+  || { echo "::error::anch1 judge: exit=$jexit out=$jout"; fail=1; }
+row="$(grep '"spec":"anch1"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"verdict":"RED"' && printf '%s' "$row" | grep -qF '"red_unevidenced":[],"review_asks":[2],' \
+  && printf '%s' "$row" | grep -qF '"review":"BLOCK"' && echo "  ok    row RED, review BLOCK, review_asks:[2] after red_unevidenced" \
+  || { echo "::error::row: $row"; fail=1; }
+
+echo "judge: review BLOCK anchored [regression] only -> RED/repair, review_asks:[]"
+mk_spec anchreg 3
+rd="$(mk_round anchreg 1)"
+write_seat "$rd" haiku GGG; write_seat "$rd" sonnet GGG; write_seat "$rd" opus GGG
+write_review_body "$rd" '- critical [regression]: base passes t.sh, head fails it'
+jout="$(council judge docs/specs/anchreg)"; jexit=$?
+row="$(grep '"spec":"anchreg"' memory/stats/council.jsonl | tail -1)"
+[ "$jexit" -eq 0 ] && printf '%s' "$row" | grep -qF '"verdict":"RED"' && printf '%s' "$row" | grep -qF '"review_asks":[]' \
+  && echo "  ok    [regression] holds the BLOCK" || { echo "::error::anchreg: exit=$jexit row=$row"; fail=1; }
+
+echo "judge: review BLOCK unanchored, seats GREEN -> GREEN, review PASS, note names it"
+mk_spec unanch1 3
+rd="$(mk_round unanch1 1)"
+write_seat "$rd" haiku GGG; write_seat "$rd" sonnet GGG; write_seat "$rd" opus GGG
+write_review_body "$rd" '- major [unanchored]: naming of the helper is confusing'
+jout="$(council judge docs/specs/unanch1)"; jexit=$?
+[ "$jexit" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"green"' && echo "  ok    unanchored BLOCK -> next green" \
+  || { echo "::error::unanch1 judge: exit=$jexit out=$jout"; fail=1; }
+row="$(grep '"spec":"unanch1"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"verdict":"GREEN"' && printf '%s' "$row" | grep -qF '"review":"PASS"' \
+  && printf '%s' "$row" | grep -qF '"review_asks":[]' && printf '%s' "$row" | grep -qF '"note":"review BLOCK unanchored"' \
+  && echo "  ok    row GREEN, review PASS, review_asks:[], note 'review BLOCK unanchored'" || { echo "::error::row: $row"; fail=1; }
+
+echo "judge: review BLOCK tagged [ask 9] on a 3-ask brief -> unanchored -> GREEN"
+mk_spec unanch9 3
+rd="$(mk_round unanch9 1)"
+write_seat "$rd" haiku GGG; write_seat "$rd" sonnet GGG; write_seat "$rd" opus GGG
+write_review_body "$rd" '- major [ask 9]: out of range' '- major [ask 0]: also out of range'
+jout="$(council judge docs/specs/unanch9)"; jexit=$?
+row="$(grep '"spec":"unanch9"' memory/stats/council.jsonl | tail -1)"
+[ "$jexit" -eq 0 ] && printf '%s' "$row" | grep -qF '"verdict":"GREEN"' && printf '%s' "$row" | grep -qF '"review_asks":[]' \
+  && printf '%s' "$row" | grep -qF '"note":"review BLOCK unanchored"' \
+  && echo "  ok    out-of-range [ask 9] / [ask 0] count as unanchored" || { echo "::error::unanch9: exit=$jexit row=$row"; fail=1; }
+
+echo "judge: unanchored BLOCK does not mask a seat RED -> still RED"
+mk_spec unanchr 3
+rd="$(mk_round unanchr 1)"
+write_seat "$rd" haiku GRG; write_seat "$rd" sonnet GGG; write_seat "$rd" opus GGG
+write_review_body "$rd" '- major: no tag at all'
+jout="$(council judge docs/specs/unanchr)"; jexit=$?
+row="$(grep '"spec":"unanchr"' memory/stats/council.jsonl | tail -1)"
+[ "$jexit" -eq 0 ] && printf '%s' "$row" | grep -qF '"verdict":"RED"' && printf '%s' "$row" | grep -qF '"review":"PASS"' \
+  && echo "  ok    seat RED still repairs; review recorded PASS" || { echo "::error::unanchr: exit=$jexit row=$row"; fail=1; }
+
+echo "status: an older row without review_asks still parses"
+mk_open_spec oldrow1 2
+printf '{"ts":"2020-01-01T00:00:00Z","spec":"oldrow1","round":1,"verdict":"GREEN","head":"%s","pack":"demo-pack","asks":2,"red":[],"red_unevidenced":[],"na":0,"review":"PASS","haiku":"GREEN","haiku_model":"m","sonnet":"GREEN","sonnet_model":"m","opus":"GREEN","opus_model":"m","attempts":4,"escalate":null,"note":""}\n' \
+  "$HEAD7" >> memory/stats/council.jsonl
+out="$(council status docs/specs/oldrow1 --json)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | jq -e '.review == "PASS"' >/dev/null 2>&1 \
+  && echo "  ok    status reads a pre-review_asks row" || { echo "::error::oldrow1: exit=$ex out=$out"; fail=1; }
 
 # --- judge: three RED rounds hit the ceiling on the third -------------------------------------
 
@@ -1981,7 +2057,7 @@ out="$(council open-round docs/specs/realverbs --commit)"; ex=$?
 echo "status --json: review key - the newest row's review verdict verbatim (R30/C3)"
 seat_report sonnet 4 GGG | council record-seat docs/specs/realverbs 4 sonnet >/dev/null
 seat_report opus 4 GGG | council record-seat docs/specs/realverbs 4 opus >/dev/null
-printf 'VERDICT: BLOCK\nStill missing coverage on ask 2.\n' | council record-seat docs/specs/realverbs 4 review >/dev/null
+printf 'VERDICT: BLOCK\n- major [ask 2]: still missing coverage.\n' | council record-seat docs/specs/realverbs 4 review >/dev/null
 jout="$(council judge docs/specs/realverbs --commit)"; jex=$?
 [ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    round 4 judged RED --commit (review BLOCK, both seats GREEN)" \
   || { echo "::error::round 4 judge: exit=$jex out=$jout"; fail=1; }

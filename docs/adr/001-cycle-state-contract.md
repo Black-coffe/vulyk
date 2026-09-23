@@ -135,11 +135,16 @@ parallel step (ADR-011).
 
 ```
 {"ts":"2026-09-13T02:14:07Z","spec":"<slug>","round":2,"verdict":"GREEN|RED|ESCALATE|STALE",
- "head":"abc1234","pack":"1a2b3c4d5e6f","asks":7,"red":[2,5],"red_unevidenced":[],"na":1,
+ "head":"abc1234","pack":"1a2b3c4d5e6f","asks":7,"red":[2,5],"red_unevidenced":[],"review_asks":[],"na":1,
  "review":"PASS|BLOCK|ABSENT","haiku":"GREEN|RED|N/A|ABSENT","haiku_model":"<id or alias>",
  "sonnet":"…","sonnet_model":"…","opus":"…","opus_model":"…","attempts":4,
  "escalate":"ceiling|half|env|null","note":"<one line, redacted>"}
 ```
+
+*Amended 2026-09-23 (convergent-judge-02):* `review_asks` follows `red_unevidenced` - the
+in-range `[ask N]` anchors of a review `BLOCK` (empty on PASS, STALE, or a BLOCK held by
+`[regression]` alone). Rows written before it carry no such key and still parse: every reader
+extracts fields by name.
 
 **Resume and atomicity.** The round counter is the number of `council/round-*` directories;
 it lives in git, never in a run. A round is *open* when its `ROUND` file exists and no
@@ -264,9 +269,16 @@ after re-ask; N = this round's number; C = ceiling from `ROUND` (3, +3 per `reop
 | `**Checked:** REJECTED` newer than this round's `ROUND` | RED (owner outranks council) | `repair` |
 | any required seat (C15) ABSENT, RED_e ∪ RED_u empty, review != BLOCK | ESCALATE, `escalate:"env"`, `note` names the absent seats | `escalated` |
 | \|RED_e\| >= max(2, ceil(A / 2)) | ESCALATE, `escalate:"half"` - the plan is wrong, rounds are not burnt | `escalated` |
-| review = BLOCK, or RED_e ∪ RED_u non-empty | RED; if N >= C -> ESCALATE, `escalate:"ceiling"` | `repair` / `escalated` |
+| review = BLOCK (anchored, see below), or RED_e ∪ RED_u non-empty | RED; if N >= C -> ESCALATE, `escalate:"ceiling"` | `repair` / `escalated` |
 | every seat GREEN or N/A, review PASS | GREEN | `green` |
 | every seat N/A, review PASS | GREEN with `na:3` - passes on lead-review + story verification only (Tier 1 and VULYK itself) | `green` |
+
+*Amended 2026-09-23 (convergent-judge-02):* before the table is read, a review `BLOCK` must be
+anchored - its body (`review.md` minus the C4 header) carries at least one `[ask N]` with
+1 <= N <= A, or `[regression]` (the tag is read, never validated). A `BLOCK` with no such tag is
+recorded `review:"PASS"` with `note:"review BLOCK unanchored"`, so it neither repairs nor
+escalates; its findings go to the next circle via `/vulyk-ship` step 5. A stored review with no
+readable verdict line still counts as `BLOCK`.
 
 A round is one dispatch of `lead-review` ∥ three seats on one pack commit. Any fix - for a
 BLOCK or a RED - is a new commit, therefore a new round; BLOCK never spawns a round of its

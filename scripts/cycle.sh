@@ -571,6 +571,19 @@ review_verdict_of() { # review_verdict_of <file> -> PASS | BLOCK | "" (D3). The 
   review_verdict_of_text "$(sed '1d' "$1" 2>/dev/null)"
 }
 
+review_anchor_asks() { # review_anchor_asks <file> <A> -> sorted "n n" of every `[ask N]` tag in
+  # the stored review's body with 1 <= N <= A (convergent-judge-02, D4): an out-of-range ask is
+  # not an anchor. The C4 header line is dropped, same as review_verdict_of.
+  local n out=""
+  for n in $(sed '1d' "$1" 2>/dev/null | grep -oE '\[ask [0-9]+\]' | sed 's/[^0-9]//g'); do
+    n=$((10#$n))
+    [ "$n" -ge 1 ] && [ "$n" -le "$2" ] || continue
+    case " $out " in *" $n "*) ;; *) out="$out $n" ;; esac
+  done
+  sort_num_list "$out"
+}
+review_has_regression() { sed '1d' "$1" 2>/dev/null | grep -qF '[regression]'; } # <file>
+
 council_line_exists() { grep -qE "^\*\*Council:\*\*.*round $2," "$1" 2>/dev/null; } # <plan> <round>
 journal_line_exists() { [ -f "$1/journal.md" ] && grep -qF "round $2 verdict $3" "$1/journal.md"; } # <spec> <round> <verdict>
 
@@ -644,7 +657,7 @@ write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <r
   local a; a="$(asks_count "$spec")"
 
   local required seat v model
-  local haiku_v="" sonnet_v="" opus_v="" review_v=""
+  local haiku_v="" sonnet_v="" opus_v="" review_v="" review_asks=""
   local haiku_model=unknown sonnet_model=unknown opus_model=unknown attempts=0
   # r2m5/r2m6: the ceiling gate closes over a round whose seats already carry RED asks (a RED
   # verdict at N-1, or a STALE-folded round whose seat files were filed before code moved) - the
@@ -691,6 +704,7 @@ ASKS
   red_u="$(sort_num_list "$red_u")"
   if [ -f "$rd/review.md" ]; then
     review_v="$(review_verdict_of "$rd/review.md")"; [ -n "$review_v" ] || review_v="ABSENT"
+    [ "$review_v" = "BLOCK" ] && review_asks="$(review_anchor_asks "$rd/review.md" "$a")"
   elif is_required_seat review "$required"; then
     review_v="ABSENT"
   fi
@@ -700,9 +714,9 @@ ASKS
 
   if ! escalate_row_exists "$slug" "$n"; then
     mkdir -p memory/stats
-    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"ESCALATE","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":"%s","note":"%s"}\n' \
+    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"ESCALATE","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"review_asks":[%s],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":"%s","note":"%s"}\n' \
       "$(now_ts)" "$slug" "$n" "$rhead" "$rpack" "$a" \
-      "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" \
+      "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$(json_num_csv "$review_asks")" \
       "$review_v" "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" \
       "$attempts" "$reason" "$note" >> memory/stats/council.jsonl
   fi
@@ -821,9 +835,19 @@ ASKS
   red_e_count="$(printf '%s' "$red_e" | wc -w | tr -d ' ')"
   red_u_count="$(printf '%s' "$red_u" | wc -w | tr -d ' ')"
 
-  local rf="$RD/review.md"
+  local rf="$RD/review.md" review_asks="" review_note=""
   if [ -f "$rf" ]; then
-    review_v="$(review_verdict_of "$rf")"; [ -n "$review_v" ] || review_v="BLOCK"
+    review_v="$(review_verdict_of "$rf")"
+    if [ "$review_v" = "BLOCK" ]; then
+      # D4 (convergent-judge-02): a BLOCK holds only on an `[ask N]` (N a real brief ask) or a
+      # `[regression]` tag in the body; otherwise it is recorded PASS and its findings go to the
+      # next circle (vulyk-ship step 5), not to a repair wave. The tag is read, not validated.
+      review_asks="$(review_anchor_asks "$rf" "$A")"
+      if [ -z "$review_asks" ] && ! review_has_regression "$rf"; then
+        review_v="PASS"; review_note="review BLOCK unanchored"
+      fi
+    fi
+    [ -n "$review_v" ] || review_v="BLOCK" # an unreadable stored report stays a block
   elif is_required_seat review "$REQUIRED"; then
     review_v="ABSENT"
   else
@@ -905,9 +929,10 @@ ASKS
     done
     local noteval=""
     [ "$escalate_reason" = "env" ] && noteval="$(redact_note "$(printf '%s' "$absent_seats" | sed 's/ /, /g') ABSENT")"
-    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"na":%s,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":%s,"note":"%s"}\n' \
+    [ -n "$review_note" ] && noteval="${noteval:+$noteval; }$review_note"
+    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"review_asks":[%s],"na":%s,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":%s,"note":"%s"}\n' \
       "$(now_ts)" "$SLUG" "$N" "$overall" "$head7" "$RPACK" "$A" \
-      "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$na_count" \
+      "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$(json_num_csv "$review_asks")" "$na_count" \
       "$review_v" "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" \
       "$attempts" "$escjson" "$noteval" >> memory/stats/council.jsonl
   fi
@@ -1809,7 +1834,7 @@ write_stale_row() { # write_stale_row <spec> <slug> <round-dir> <n> <a> - a STAL
     [ -f "$rd/review.md" ] && attempts=$((attempts+1))
     [ -f "$rd/review.attempt-1.md" ] && attempts=$((attempts+1))
     [ -f "$rd/review.attempt-2.md" ] && attempts=$((attempts+1))
-    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"STALE","head":"%s","pack":"%s","asks":%s,"red":[],"red_unevidenced":[],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":null,"note":"code moved after dispatch"}\n' \
+    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"STALE","head":"%s","pack":"%s","asks":%s,"red":[],"red_unevidenced":[],"review_asks":[],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":null,"note":"code moved after dispatch"}\n' \
       "$(now_ts)" "$slug" "$n" "${rhead:-unknown}" "$rpack" "$a" "$review_v" \
       "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" "$attempts" >> memory/stats/council.jsonl
   fi
