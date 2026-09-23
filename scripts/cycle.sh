@@ -285,6 +285,16 @@ newest_row() { # newest_row <slug> -> the last council.jsonl line for this spec,
   grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | tail -1
 }
 
+round_row() { # round_row <slug> <round> -> the last council.jsonl line for that round, or empty
+  # (a round can carry two rows - a RED, then a ceiling ESCALATE - the newest is its outcome)
+  [ -f memory/stats/council.jsonl ] || return 0
+  grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | grep -F "\"round\":$2," | tail -1
+}
+
+json_num_array() { # json_num_array <json-line> <key> -> "2 5" from "key":[2,5]; a missing key is empty
+  printf '%s' "$1" | sed -n "s/.*\"$2\":\[\([^]]*\)\].*/\1/p" | tr ',' ' '
+}
+
 json_field() { # json_field <json-line> <key> - a flat top-level string or number value
   printf '%s' "$1" | sed -n "s/.*\"$2\":\"\\([^\"]*\\)\".*/\\1/p; s/.*\"$2\":\\([0-9][0-9]*\\).*/\\1/p" | head -1
 }
@@ -889,6 +899,19 @@ ASKS
     fi
   fi
 
+  # --- no progress (convergent-judge-04): an ask RED this round (evidenced or review-anchored)
+  # that round N-1's RED row also held RED. Ask numbers only; a STALE/ESCALATE/missing N-1
+  # row never triggers.
+  local repeated="" prow="" prev="" x
+  [ "$N" -gt 1 ] && prow="$(round_row "$SLUG" "$((N-1))")"
+  if [ -n "$prow" ] && [ "$(json_field "$prow" verdict)" = "RED" ]; then
+    prev=" $(json_num_array "$prow" red) $(json_num_array "$prow" review_asks) "
+    for x in $red_e $review_asks; do
+      case "$prev" in *" $x "*) case " $repeated " in *" $x "*) ;; *) repeated="$repeated $x" ;; esac ;; esac
+    done
+    repeated="$(sort_num_list "$repeated")"
+  fi
+
   # --- the verdict rule (D4), first match wins ----------------------------------------------
   local overall="" next_val="" escalate_reason=""
   local half=$(( (A+1)/2 )); [ "$half" -lt 2 ] && half=2  # R10: max(2, ceil(A/2))
@@ -899,7 +922,9 @@ ASKS
   elif [ "$red_e_count" -gt 0 ] && [ "$red_e_count" -ge "$half" ]; then
     overall="ESCALATE"; escalate_reason="half"; next_val="escalated"
   elif [ "$review_v" = "BLOCK" ] || [ "$red_e_count" -gt 0 ] || [ "$red_u_count" -gt 0 ]; then
-    if [ "$N" -ge "$RCEILING" ]; then
+    if [ -n "$repeated" ]; then
+      overall="ESCALATE"; escalate_reason="no-progress"; next_val="escalated"
+    elif [ "$N" -ge "$RCEILING" ]; then
       overall="ESCALATE"; escalate_reason="ceiling"; next_val="escalated"
     else
       overall="RED"; next_val="repair"
@@ -950,6 +975,9 @@ ASKS
       for u in $red_e $red_u; do
         printf -- '- ask %s: RED - see %s/*.md for evidence\n' "$u" "$RD"
       done
+      if [ "$escalate_reason" = "no-progress" ]; then
+        printf -- '- no progress: ask %s RED in rounds %s and %s\n' "$(json_num_csv "$repeated" | sed 's/,/, /g')" "$((N-1))" "$N"
+      fi
       if [ "$escalate_reason" = "env" ]; then
         local aseat att
         for aseat in $absent_seats; do
@@ -989,7 +1017,7 @@ ASKS
   exit "$exit_code"
 }
 
-cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|env>] ["<note>"]
+cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress>] ["<note>"]
   # A verb of its own now (R5/C-3, autonomous-cycle-21), not an alias of judge: judge refuses
   # outright on a missing seat (its presence pass, above), so ADR D2's "the driver calls
   # escalate on exit 6, or on its own initiative" had nowhere to land. This records an
@@ -1005,8 +1033,8 @@ cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|en
       *) NOTE="$1"; shift ;;
     esac
   done
-  case "$REASON" in ''|ceiling|half|env) ;; *)
-    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env>] [\"<note>\"]" >&2
+  case "$REASON" in ''|ceiling|half|env|no-progress) ;; *)
+    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress>] [\"<note>\"]" >&2
     emit false escalate 1 error "usage"
     exit 1
     ;;
@@ -1014,7 +1042,7 @@ cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|en
   [ -n "$REASON" ] || REASON="env"
 
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
-    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env>] [\"<note>\"]" >&2
+    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress>] [\"<note>\"]" >&2
     emit false escalate 1 error "usage"
     exit 1
   }

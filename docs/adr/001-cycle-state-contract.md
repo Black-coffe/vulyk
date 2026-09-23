@@ -60,7 +60,7 @@ above stay as first written.
   index while seats run in parallel.
 - **D2** - `open-round` writes the ESCALATE row, `**Council:**` line and `## Needs a human`
   itself, idempotently, before exiting 6 at the ceiling (R5); `escalate` is a standalone verb
-  - `escalate <spec> [--commit] [--reason <ceiling|half|env>] ["<note>"]` - for an open round
+  - `escalate <spec> [--commit] [--reason <ceiling|half|env|no-progress>] ["<note>"]` - for an open round
   with seats missing (court removed, no seat precondition), and behaves as `judge` when
   nothing is missing; `close-story`'s precondition now names the `## Commands` rule that
   keeps an untrusted `## Verification` line from reaching a shell as anything but a known
@@ -118,7 +118,7 @@ parallel step (ADR-011).
 | `plan.md` `**Briefed:** via grill, <owner>, <date>` | `cycle.sh briefed` (called by `/vulyk-plan`) | stage 01+02 in autonomous mode; `**Approved:**` stays for the two-stop mode; `/vulyk-build` and `ship-check.sh` accept either | yes |
 | `plan.md` `**Branch:** vulyk/<slug>` | `cycle.sh branch` (called by `/vulyk-build` / the driver) | unchanged meaning | yes |
 | `plan.md` `**Council:** <GREEN\|RED\|ESCALATE\|STALE> round <N>, <date>, at <head>, pack <fp>[ - red: 2,5]` | `cycle.sh judge` / `escalate` | appended, never replaced, one line per round - a mirror of the ledger row, human-readable | yes |
-| `plan.md` `## Needs a human` | `cycle.sh escalate` | reason (`ceiling` / `half` / `env`), one row per RED ask with its evidence across rounds, paths of the seat files | yes |
+| `plan.md` `## Needs a human` | `cycle.sh escalate` | reason (`ceiling` / `half` / `env` / `no-progress`), one row per RED ask with its evidence across rounds, paths of the seat files | yes |
 | `plan.md` `**Checked:**` | `human-check.sh` (unchanged) | optional override: `ACCEPTED` outranks a RED/ESCALATE, `REJECTED` outranks a GREEN | yes |
 | `docs/specs/<slug>/council/round-N/ROUND` | `cycle.sh open-round` | **the open marker**: `head=<sha>` `pack=<fp>` `opened=<ts>` `court=<path>` `ceiling=<3\|6\|...>` `tier=<1\|2\|3\|4>`; `mkdir` of the directory is the atomic act | yes |
 | `docs/specs/<slug>/council/REOPEN` | `cycle.sh reopen` | one line per cleared ESCALATE round, never rewritten: `round=<N> · <ts>`; `status` reads it to tell an ESCALATE row a human already reopened from one still waiting | yes |
@@ -138,7 +138,7 @@ parallel step (ADR-011).
  "head":"abc1234","pack":"1a2b3c4d5e6f","asks":7,"red":[2,5],"red_unevidenced":[],"review_asks":[],"na":1,
  "review":"PASS|BLOCK|ABSENT","haiku":"GREEN|RED|N/A|ABSENT","haiku_model":"<id or alias>",
  "sonnet":"…","sonnet_model":"…","opus":"…","opus_model":"…","attempts":4,
- "escalate":"ceiling|half|env|null","note":"<one line, redacted>"}
+ "escalate":"ceiling|half|env|no-progress|null","note":"<one line, redacted>"}
 ```
 
 *Amended 2026-09-23 (convergent-judge-02):* `review_asks` follows `red_unevidenced` - the
@@ -179,7 +179,7 @@ last stdout line is always one JSON object so no driver parses prose.
 | `open-round <spec> [--commit]` | Branch; all stories `done`/`blocked`; clean tree; `## Asks`; not paused; round count < ceiling | `mkdir round-N`, `ROUND`, opens the court, journal; at the ceiling, writes the ESCALATE row, `**Council:**` line, `## Needs a human` and the journal line itself (idempotently), then exits 6 `ESCALATE` instead |
 | `record-seat <spec> <N> <seat> [--model <id>] [--stamp <s>] [--file <path>] [< report]` | open round; not stale by `round_is_stale` | validates the report contract (D3); writes the seat file; exit 4 `MALFORMED` (kept as `attempt-K`) when a label is missing, an ask number is uncovered, a RED lacks evidence, or the report is **tainted** - contains `docs/specs/<slug>/plan.md`, `docs/specs/<slug>/journal.md`, `docs/specs/<slug>/council/`, the same three with `docs/specs/` omitted, or a story *file* - `<slug>-NN[-<title>].md` (with or without the `docs/specs/<slug>/` prefix) or `<slug>/<slug>-NN` (with or without `.md`); bare `plan.md`, `journal.md`, `council/`, another directory's `journal.md`, command-file names and a bare `<slug>-NN` token are not taint (ADR-011) |
 | `judge <spec> [--commit]` | four seat files present, or a seat exhausted its two attempts (`ABSENT`) | computes the verdict (D4), row -> line -> journal, removes the court |
-| `escalate <spec> [--commit] [--reason <ceiling\|half\|env>] ["<note>"]` | a standalone verb: an open round with seats missing (court removed, no seat precondition) | records the escalation - row, `**Council:** ESCALATE`, `## Needs a human`, journal; behaves as `judge` when nothing is missing |
+| `escalate <spec> [--commit] [--reason <ceiling\|half\|env\|no-progress>] ["<note>"]` | a standalone verb: an open round with seats missing (court removed, no seat precondition) | records the escalation - row, `**Council:** ESCALATE`, `## Needs a human`, journal; behaves as `judge` when nothing is missing |
 | `reopen <spec> "<owner's decision>" [--commit]` | last row is ESCALATE | appends the decision verbatim to `brief.md` `## Answers`, raises `ceiling` by 3 in the next `ROUND`, journal |
 | `pause <spec> ["why"]` / `resume <spec>` | - | creates / removes `PAUSE`; journal; `resume` prints `stale: true` if HEAD moved while paused |
 
@@ -269,6 +269,7 @@ after re-ask; N = this round's number; C = ceiling from `ROUND` (3, +3 per `reop
 | `**Checked:** REJECTED` newer than this round's `ROUND` | RED (owner outranks council) | `repair` |
 | any required seat (C15) ABSENT, RED_e ∪ RED_u empty, review != BLOCK | ESCALATE, `escalate:"env"`, `note` names the absent seats | `escalated` |
 | \|RED_e\| >= max(2, ceil(A / 2)) | ESCALATE, `escalate:"half"` - the plan is wrong, rounds are not burnt | `escalated` |
+| review = BLOCK (anchored, see below), or RED_e ∪ RED_u non-empty, and (RED_e ∪ review_asks) ∩ (round N-1's `red` ∪ `review_asks`) non-empty, N-1's row RED | ESCALATE, `escalate:"no-progress"`, `## Needs a human` names the repeated asks | `escalated` |
 | review = BLOCK (anchored, see below), or RED_e ∪ RED_u non-empty | RED; if N >= C -> ESCALATE, `escalate:"ceiling"` | `repair` / `escalated` |
 | every seat GREEN or N/A, review PASS | GREEN | `green` |
 | every seat N/A, review PASS | GREEN with `na:3` - passes on lead-review + story verification only (Tier 1 and VULYK itself) | `green` |
@@ -279,6 +280,11 @@ anchored - its body (`review.md` minus the C4 header) carries at least one `[ask
 recorded `review:"PASS"` with `note:"review BLOCK unanchored"`, so it neither repairs nor
 escalates; its findings go to the next circle via `/vulyk-ship` step 5. A stored review with no
 readable verdict line still counts as `BLOCK`.
+
+*Amended 2026-09-23 (convergent-judge-04):* the `no-progress` row compares ask numbers only,
+never finding text or `[regression]` lines; round N-1's newest row must be `RED` (a `STALE` or
+`ESCALATE` row, or no row, never triggers), and a missing `review_asks` key reads as empty. It
+ranks after `half` and before `ceiling`, so a repeat on the ceiling round reads `no-progress`.
 
 A round is one dispatch of `lead-review` ∥ three seats on one pack commit. Any fix - for a
 BLOCK or a RED - is a new commit, therefore a new round; BLOCK never spawns a round of its

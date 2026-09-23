@@ -433,7 +433,7 @@ out="$(council status docs/specs/oldrow1 --json)"; ex=$?
 
 # --- judge: three RED rounds hit the ceiling on the third -------------------------------------
 
-echo "judge: three RED rounds escalate (ceiling) on the third, not the second"
+echo "judge: three RED rounds (a different ask each) escalate (ceiling) on the third, not the second"
 mk_spec ceil1 5
 rd1c="$(mk_round ceil1 1 3)"
 write_seat "$rd1c" haiku RGGGG; write_seat "$rd1c" sonnet GGGGG; write_seat "$rd1c" opus GGGGG; write_review "$rd1c" PASS
@@ -442,13 +442,13 @@ out1="$(council judge docs/specs/ceil1)"; ex1=$?
   || { echo "::error::round 1: exit=$ex1 out=$out1"; fail=1; }
 
 rd2c="$(mk_round ceil1 2 3)"
-write_seat "$rd2c" haiku RGGGG; write_seat "$rd2c" sonnet GGGGG; write_seat "$rd2c" opus GGGGG; write_review "$rd2c" PASS
+write_seat "$rd2c" haiku GRGGG; write_seat "$rd2c" sonnet GGGGG; write_seat "$rd2c" opus GGGGG; write_review "$rd2c" PASS
 out2="$(council judge docs/specs/ceil1)"; ex2=$?
 [ "$ex2" -eq 0 ] && printf '%s' "$out2" | grep -qF '"next":"repair"' && echo "  ok    round 2: RED, still repair - no ceiling yet" \
   || { echo "::error::round 2: exit=$ex2 out=$out2"; fail=1; }
 
 rd3c="$(mk_round ceil1 3 3)"
-write_seat "$rd3c" haiku RGGGG; write_seat "$rd3c" sonnet GGGGG; write_seat "$rd3c" opus GGGGG; write_review "$rd3c" PASS
+write_seat "$rd3c" haiku GGRGG; write_seat "$rd3c" sonnet GGGGG; write_seat "$rd3c" opus GGGGG; write_review "$rd3c" PASS
 out3="$(council judge docs/specs/ceil1)"; ex3=$?
 [ "$ex3" -eq 6 ] && printf '%s' "$out3" | grep -qF '"next":"escalated"' && echo "  ok    round 3: ceiling reached, ESCALATE" \
   || { echo "::error::round 3: exit=$ex3 out=$out3"; fail=1; }
@@ -456,6 +456,58 @@ row3="$(grep '"spec":"ceil1"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row3" | grep -q '"escalate":"ceiling"' && echo "  ok    row escalate:ceiling" || { echo "::error::row3: $row3"; fail=1; }
 grep -q '^## Needs a human' docs/specs/ceil1/plan.md && grep -qF 'reason: ceiling · round 3' docs/specs/ceil1/plan.md \
   && echo "  ok    ## Needs a human names ceiling, round 3" || { echo "::error::plan.md missing/wrong Needs a human section"; fail=1; }
+
+# --- judge: the same ask RED two rounds running escalates no-progress (convergent-judge-04) ----
+
+echo "judge: ask 3 RED in rounds 1 and 2 -> round 2 ESCALATE no-progress (ceiling 3)"
+mk_open_spec noprog1 5
+rd="$(mk_round noprog1 1 3)"
+write_seat "$rd" haiku GGRGG; write_seat "$rd" sonnet GGGGG; write_seat "$rd" opus GGGGG; write_review "$rd" PASS
+out="$(council judge docs/specs/noprog1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && echo "  ok    round 1: RED, repair"   || { echo "::error::noprog1 round 1: exit=$ex out=$out"; fail=1; }
+rd="$(mk_round noprog1 2 3)"
+write_seat "$rd" haiku GGRGG; write_seat "$rd" sonnet GGGGG; write_seat "$rd" opus GGGGG; write_review "$rd" PASS
+out="$(council judge docs/specs/noprog1)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    round 2: ESCALATE, next escalated"   || { echo "::error::noprog1 round 2: exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"noprog1"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"round":2,"verdict":"ESCALATE"' && printf '%s' "$row" | grep -qF '"escalate":"no-progress"'   && echo "  ok    row escalate:no-progress" || { echo "::error::noprog1 row: $row"; fail=1; }
+grep -qF 'reason: no-progress · round 2' docs/specs/noprog1/plan.md && grep -qF -- '- no progress: ask 3 RED in rounds 1 and 2' docs/specs/noprog1/plan.md   && echo "  ok    ## Needs a human names no-progress and ask 3" || { echo "::error::noprog1 plan: $(sed -n '/## Needs a human/,$p' docs/specs/noprog1/plan.md)"; fail=1; }
+out="$(council status docs/specs/noprog1 --json)"
+printf '%s' "$out" | jq -e '.next == "escalated"' >/dev/null 2>&1 && echo "  ok    status next escalated"   || { echo "::error::noprog1 status: $out"; fail=1; }
+
+echo "judge: ask 2 RED then ask 5 RED -> round 2 RED/repair, no trigger"
+mk_spec noprog2 5
+rd="$(mk_round noprog2 1 3)"
+write_seat "$rd" haiku GRGGG; write_seat "$rd" sonnet GGGGG; write_seat "$rd" opus GGGGG; write_review "$rd" PASS
+council judge docs/specs/noprog2 >/dev/null
+rd="$(mk_round noprog2 2 3)"
+write_seat "$rd" haiku GGGGR; write_seat "$rd" sonnet GGGGG; write_seat "$rd" opus GGGGG; write_review "$rd" PASS
+out="$(council judge docs/specs/noprog2)"; ex=$?
+row="$(grep '"spec":"noprog2"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && printf '%s' "$row" | grep -qF '"round":2,"verdict":"RED"'   && echo "  ok    different asks: RED, repair" || { echo "::error::noprog2: exit=$ex row=$row"; fail=1; }
+
+echo "judge: round N-1 STALE with ask 3 -> round 2 RED/repair, no trigger"
+mk_spec noprog3 5
+printf '{"ts":"2020-01-01T00:00:00Z","spec":"noprog3","round":1,"verdict":"STALE","head":"%s","pack":"demo-pack","asks":5,"red":[3],"red_unevidenced":[],"review_asks":[3],"na":0,"review":"ABSENT","haiku":"ABSENT","haiku_model":"m","sonnet":"ABSENT","sonnet_model":"m","opus":"ABSENT","opus_model":"m","attempts":1,"escalate":null,"note":"code moved after dispatch"}
+'   "$HEAD7" >> memory/stats/council.jsonl
+rd="$(mk_round noprog3 2 3)"
+write_seat "$rd" haiku GGRGG; write_seat "$rd" sonnet GGGGG; write_seat "$rd" opus GGGGG; write_review "$rd" PASS
+out="$(council judge docs/specs/noprog3)"; ex=$?
+row="$(grep '"spec":"noprog3"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 0 ] && printf '%s' "$row" | grep -qF '"round":2,"verdict":"RED"'   && echo "  ok    STALE N-1 never triggers" || { echo "::error::noprog3: exit=$ex row=$row"; fail=1; }
+
+echo "judge: review [ask 4] BLOCK in rounds 1 and 2, seats GREEN -> round 2 ESCALATE no-progress"
+mk_spec noprog4 5
+rd="$(mk_round noprog4 1 3)"
+write_seat "$rd" haiku GGGGG; write_seat "$rd" sonnet GGGGG; write_seat "$rd" opus GGGGG
+write_review_body "$rd" '- major [ask 4]: the guard is missing'
+council judge docs/specs/noprog4 >/dev/null
+rd="$(mk_round noprog4 2 3)"
+write_seat "$rd" haiku GGGGG; write_seat "$rd" sonnet GGGGG; write_seat "$rd" opus GGGGG
+write_review_body "$rd" '- major [ask 4]: the guard is still missing'
+out="$(council judge docs/specs/noprog4)"; ex=$?
+row="$(grep '"spec":"noprog4"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 6 ] && printf '%s' "$row" | grep -qF '"round":2,"verdict":"ESCALATE"' && printf '%s' "$row" | grep -qF '"escalate":"no-progress"'   && grep -qF -- '- no progress: ask 4 RED in rounds 1 and 2' docs/specs/noprog4/plan.md   && echo "  ok    review-anchored repeat triggers no-progress" || { echo "::error::noprog4: exit=$ex row=$row"; fail=1; }
 
 # --- judge: half the asks RED escalates regardless of round -------------------------------------
 
@@ -1919,7 +1971,9 @@ set_tier oreopen1 3
 for n in 1 2 3; do
   council open-round docs/specs/oreopen1 --commit >/dev/null
   rdn="docs/specs/oreopen1/council/round-$n"
-  write_seat "$rdn" haiku RGGGG
+  # a different ask RED each round, so no-progress (convergent-judge-04) never fires first
+  case "$n" in 1) pat=RGGGG ;; 2) pat=GRGGG ;; *) pat=GGRGG ;; esac
+  write_seat "$rdn" haiku "$pat"
   write_seat "$rdn" sonnet GGGGG
   write_seat "$rdn" opus GGGGG
   write_review "$rdn" PASS
@@ -1977,7 +2031,7 @@ for n in 1 2; do
   rdn="docs/specs/tceil2/council/round-$n"
   grep -q '^ceiling=2$' "$rdn/ROUND" && echo "  ok    tier 2 round $n: ROUND ceiling=2" \
     || { echo "::error::ROUND: $(cat "$rdn/ROUND" 2>&1)"; fail=1; }
-  write_seat "$rdn" sonnet RG
+  if [ "$n" -eq 1 ]; then write_seat "$rdn" sonnet RG; else write_seat "$rdn" sonnet GR; fi # distinct asks: no no-progress
   write_review "$rdn" PASS
   jout="$(council judge docs/specs/tceil2 --commit)"; jex=$?
   if [ "$n" -lt 2 ]; then
