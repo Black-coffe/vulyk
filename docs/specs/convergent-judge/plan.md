@@ -58,4 +58,9 @@ The judge stops counting rounds and starts measuring convergence. The ceiling fo
 **Branch:** vulyk/convergent-judge
 **Checked:** <written by scripts/human-check.sh>
 **Council:** RED round 1, 2026-09-24, at b29c46d, pack 69dc98d46660
+**Council:** ESCALATE round 2, 2026-09-24, at d89806b, pack 437cadda76db
 **Shipped:** <written by scripts/ship-check.sh --record>
+
+## Needs a human
+- reason: ceiling · round 2 · 2026-09-24
+- seats: docs/specs/convergent-judge/council/round-2/
