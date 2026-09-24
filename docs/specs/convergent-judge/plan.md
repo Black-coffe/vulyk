@@ -66,6 +66,7 @@ The judge stops counting rounds and starts measuring convergence. The ceiling fo
 **Checked:** <written by scripts/human-check.sh>
 **Council:** RED round 1, 2026-09-24, at b29c46d, pack 69dc98d46660
 **Council:** ESCALATE round 2, 2026-09-24, at d89806b, pack 437cadda76db
+**Council:** GREEN round 3, 2026-09-24, at eb816f5, pack 7d38d6f5bb1e
 **Shipped:** <written by scripts/ship-check.sh --record>
 
 ## Needs a human

@@ -11,3 +11,4 @@
 - 2026-09-24T11:20:23Z · 04-council:ESCALATE · reopened after round 2, ceiling now 4 · next: open-round
 - 2026-09-24T11:27:04Z · 03-building · relaunching the workflow driver after reopen (repair story 07 cut) · next: the loop holds the working tree of vulyk/convergent-judge; to edit, run /vulyk-pause convergent-judge
 - 2026-09-24T12:18:45Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/convergent-judge/round-3 · next: dispatch:sonnet,review
+- 2026-09-24T12:38:39Z · 04-council:GREEN · round 3 verdict GREEN at eb816f5 pack 7d38d6f5bb1e · next: green
