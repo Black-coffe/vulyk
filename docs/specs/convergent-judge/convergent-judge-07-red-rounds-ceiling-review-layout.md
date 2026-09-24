@@ -1,8 +1,8 @@
 ---
 story: convergent-judge-07
 spec: convergent-judge
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 model: opus
@@ -57,6 +57,11 @@ memory/map/cycle.md - "Staleness / ceiling / PAUSE-REOPEN-CEILING", "Required se
 
 ## Implementation notes
 <!-- appended by the worker: files changed, decisions, surprises - 1-2 lines each -->
+- `scripts/cycle.sh`: `judged_rounds` replaced by `red_rounds` (RED row, or ESCALATE `ceiling`/`no-progress`), used by both `open-round` gates and `judge`'s ceiling row; `review_blocking_lines` split into a text-taking `review_blocking_lines_text` (reused by `record-seat`) plus the file wrapper; `cmd_record_seat_review` rejects a tagless BLOCK as MALFORMED (exit 4, `review.attempt-K.md`); `write_stale_row` and the reopen banner comments reworded.
+- `tests/council.test.sh`: new blocks `rlaybold` (bold + `### Major` second attempt -> attempt-2, ABSENT), `rlayh2`, `rlaywrap`, `rlayprose`, `rlayun`; `tgreen1`, `tgreen2` (incl. reopen C=4). Flipped: `rrev` (tagged `## Major` line), `unanch1` and `unanchr` (under `## Major`, `[unanchored]`). Checked the new blocks against HEAD's cycle.sh: each of rlaybold/rlaywrap/rlayprose/tgreen1/tgreen2 goes red there.
+- `lead-review.md`, ADR-001, `docs/cycle.md`: CRLF preserved; ADR amended in place with dated `convergent-judge-07` notes beside the story-05 ones (not rewritten).
+- Decision: an out-of-range `[ask 9]` still passes `record-seat` (it is a tag) and is downgraded at `judge`, per the non-goal.
+- Stale in `memory/map/cycle.md` (librarian): line 65 ("RED if round N < ceiling" - now RED rounds + 1 >= C), lines 73-77 ("either way counts toward the ceiling", "raises CEILING by 3"), line 86-88 (review MALFORMED now also covers a tagless BLOCK; "only its first line is parsed" no longer complete).
 
 ## Findings
 <!-- appended by the worker ONLY on a wall: what was tried, best hypothesis -->

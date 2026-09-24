@@ -157,7 +157,8 @@ being idempotent:
 - open round, HEAD moved (a manual code commit, a repair) -> the round is stale. With no
   seat file, `open-round` re-stamps it in place; with any seat file, it writes a `STALE`
   row for N and opens N+1. *(amended 2026-09-24, convergent-judge-05)* a STALE round no longer counts against the ceiling - only judged
-  (non-STALE) rounds do.
+  (non-STALE) rounds do. *(amended 2026-09-24, convergent-judge-07)* only rounds that ended RED do - a `RED`
+  row, or an `ESCALATE` row with `escalate` `ceiling` or `no-progress`; GREEN, STALE and ESCALATE `env`/`half` never.
 - row written, `**Council:**` line or journal line missing -> `judge` recomputes and writes
   whichever of the three is absent, in the fixed order seat files -> row -> plan line ->
   journal. The row is authoritative; the line is its mirror.
@@ -177,8 +178,8 @@ last stdout line is always one JSON object so no driver parses prose.
 | `briefed <spec> [--commit]` | `## Asks` present, non-empty | writes `**Briefed:**`; journal |
 | `branch <spec> [--commit]` | Briefed or Approved | creates/switches `vulyk/<slug>`, writes `**Branch:**` |
 | `close-story <story-file> [--commit]` | worker returned; every `&&`-separated segment of every `## Verification` line equals, byte for byte, a row of the hive's `CLAUDE.md` `## Commands` table (or the line is the literal `none — reviewed by lead-review`, which runs nothing), else exit 2 naming the segment; a worker's own `status: done` with a clean tree still exits 2 `already done`, but with an uncommitted diff in the story's files it journals the self-mark and falls through to the normal path instead of refusing (ADR-011) | `scope-check.sh`, `## Verification` x `repeat:`, `status: done`, commit `story(<id>): <title>`; exit 4 on red verification (the driver routes to the repair path of `/vulyk-build` step 5) |
-| `open-round <spec> [--commit]` | Branch; all stories `done`/`blocked`; clean tree; `## Asks`; not paused; judged (non-STALE) rounds < ceiling *(amended 2026-09-24, convergent-judge-05)* | `mkdir round-N`, `ROUND`, opens the court, journal; at the ceiling, writes the ESCALATE row, `**Council:**` line, `## Needs a human` and the journal line itself (idempotently), then exits 6 `ESCALATE` instead |
-| `record-seat <spec> <N> <seat> [--model <id>] [--stamp <s>] [--file <path>] [< report]` | open round; not stale by `round_is_stale` | validates the report contract (D3); writes the seat file; exit 4 `MALFORMED` (kept as `attempt-K`) when a label is missing, an ask number is uncovered, a RED lacks evidence, or the report is **tainted** - contains `docs/specs/<slug>/plan.md`, `docs/specs/<slug>/journal.md`, `docs/specs/<slug>/council/`, the same three with `docs/specs/` omitted, or a story *file* - `<slug>-NN[-<title>].md` (with or without the `docs/specs/<slug>/` prefix) or `<slug>/<slug>-NN` (with or without `.md`); bare `plan.md`, `journal.md`, `council/`, another directory's `journal.md`, command-file names and a bare `<slug>-NN` token are not taint (ADR-011) |
+| `open-round <spec> [--commit]` | Branch; all stories `done`/`blocked`; clean tree; `## Asks`; not paused; rounds that ended RED < ceiling *(amended 2026-09-24, convergent-judge-05; narrowed to RED rounds by convergent-judge-07)* | `mkdir round-N`, `ROUND`, opens the court, journal; at the ceiling, writes the ESCALATE row, `**Council:**` line, `## Needs a human` and the journal line itself (idempotently), then exits 6 `ESCALATE` instead |
+| `record-seat <spec> <N> <seat> [--model <id>] [--stamp <s>] [--file <path>] [< report]` | open round; not stale by `round_is_stale` | validates the report contract (D3); writes the seat file; exit 4 `MALFORMED` (kept as `attempt-K`) when a label is missing, an ask number is uncovered, a RED lacks evidence, a `review` `VERDICT: BLOCK` carries no list line under `## Critical` / `## Major` tagged `[ask N]`, `[regression]` or `[unanchored]` *(amended 2026-09-24, convergent-judge-07)*, or the report is **tainted** - contains `docs/specs/<slug>/plan.md`, `docs/specs/<slug>/journal.md`, `docs/specs/<slug>/council/`, the same three with `docs/specs/` omitted, or a story *file* - `<slug>-NN[-<title>].md` (with or without the `docs/specs/<slug>/` prefix) or `<slug>/<slug>-NN` (with or without `.md`); bare `plan.md`, `journal.md`, `council/`, another directory's `journal.md`, command-file names and a bare `<slug>-NN` token are not taint (ADR-011) |
 | `judge <spec> [--commit]` | four seat files present, or a seat exhausted its two attempts (`ABSENT`) | computes the verdict (D4), row -> line -> journal, removes the court |
 | `escalate <spec> [--commit] [--reason <ceiling\|half\|env\|no-progress>] ["<note>"]` | a standalone verb: an open round with seats missing (court removed, no seat precondition) | records the escalation - row, `**Council:** ESCALATE`, `## Needs a human`, journal; behaves as `judge` when nothing is missing |
 | `reopen <spec> "<owner's decision>" [--commit]` | last row is ESCALATE | appends the decision verbatim to `brief.md` `## Answers`, raises `ceiling` by the tier ceiling (1 / 2 / 3) in the next `ROUND`, journal *(amended 2026-09-24, convergent-judge-05)* |
@@ -255,7 +256,10 @@ A missing token is `MALFORMED` -> the seat is re-asked once with the gap named; 
 attempt an unevidenced RED **stays RED** (the grill's rule) but is listed under
 `red_unevidenced` and does not count toward the half-of-asks trigger, and an unevidenced
 GREEN becomes N/A. `lead-review` keeps its own contract; `record-seat … review` extracts
-only `PASS`/`BLOCK` and stores the whole report. An environmental failure (`EADDRINUSE`, a
+only `PASS`/`BLOCK` and stores the whole report. *(amended 2026-09-24, convergent-judge-07)* that
+contract includes the layout (`lead-review.md`): a `BLOCK` with no tagged list line under
+`## Critical` / `## Major` is MALFORMED - exit 4, kept as `review.attempt-K.md`, re-asked once like
+any seat; a `PASS` is accepted regardless of layout. An environmental failure (`EADDRINUSE`, a
 missing service) is `N/A - why: environment: …`, never RED - a gate that names its own
 interference is believed, as `docs/pipeline.md` already says.
 
@@ -266,6 +270,9 @@ after re-ask; N = this round's number; C = ceiling from `ROUND` (the tier ceilin
 *(amended 2026-09-24, convergent-judge-05)* J = judged rounds - this spec's other rounds with a non-STALE
 `council.jsonl` row (ESCALATE rows count, STALE rows never do), plus this one; the ceiling
 row compares J, not the round number N, against C.
+*(amended 2026-09-24, convergent-judge-07)* J = rounds that ended RED - this spec's other rounds with a
+`RED` row or an `ESCALATE` row whose `escalate` is `ceiling` or `no-progress` (GREEN, STALE and
+ESCALATE `env`/`half` rows never count), plus this one.
 
 | Condition (first match wins) | Round verdict | `next` |
 |---|---|---|
@@ -287,6 +294,9 @@ readable verdict line still counts as `BLOCK`.
 *(amended 2026-09-24, convergent-judge-05)* a tag counts only on a list line (`- `, `* `, `N. `) between a `## Critical` or
 `## Major` heading (case-insensitive) and the next `## ` heading; a tag in prose or on a minor
 finding never anchors.
+*(amended 2026-09-24, convergent-judge-07)* a `BLOCK` with no tagged list line at all never reaches
+`judge` - `record-seat` refuses it as MALFORMED. The downgrade above fires only on a `BLOCK` whose
+tagged lines are all `[unanchored]` (or carry an out-of-range `[ask N]`).
 
 *Amended 2026-09-23 (convergent-judge-04):* the `no-progress` row compares ask numbers only,
 never finding text or `[regression]` lines; round N-1's newest row must be `RED` (a `STALE` or
@@ -334,9 +344,11 @@ print, at loop start, "the loop holds the working tree of `vulyk/<slug>`; to edi
 `/vulyk-pause`". `/vulyk-resume <slug>` = `cycle.sh resume` then a fresh driver launch.
 A manual code commit at any point makes the open round or the newest verdict `STALE` by the
 same `paperwork_only` rule the human check uses today; the next `open-round` opens a new
-round, which the ceiling does not count *(amended 2026-09-24, convergent-judge-05)*. After `ESCALATE` the owner has three exits, all on
+round, which the ceiling does not count *(amended 2026-09-24, convergent-judge-05)*; the ceiling counts
+only rounds that ended RED, so a GREEN round followed by a code commit never spends it either
+*(amended 2026-09-24, convergent-judge-07)*. After `ESCALATE` the owner has three exits, all on
 the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen "<decision>"`
-(the tier's ceiling again - one, two or three more judged rounds - the decision quoted into
+(the tier's ceiling again - one, two or three more RED rounds *(amended 2026-09-24, convergent-judge-07)* - the decision quoted into
 `## Answers`), or leaving the spec open.
 
 ## Consequences
@@ -366,7 +378,7 @@ the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen 
 - **Tests that must exist** (`tests/council.test.sh`, wired into `ci.yml` beside
   `cycle.test.sh`, synthetic repo, fixture reports): GREENx3+PASS -> GREEN; one evidenced RED
   -> RED; unevidenced RED -> exit 4 then RED on attempt 2 and excluded from `half`; 4 of 7
-  asks RED -> ESCALATE `half`; tier-ceiling RED rounds -> ESCALATE `ceiling`; `reopen` -> ceiling + the tier step;
+  asks RED -> ESCALATE `half`; tier-ceiling RED rounds -> ESCALATE `ceiling` (a GREEN round then a commit opens the next round, *convergent-judge-07*); a review BLOCK with no tagged finding line -> exit 4; `reopen` -> ceiling + the tier step;
   `ROUND` without a row -> `status` says open and lists missing seats; row without a plan
   line -> `judge` completes it; manual commit on an open round with a seat file -> STALE row
   and round N+1; `PAUSE` -> every mutating verb exits 3; `paperwork_only` accepts council
@@ -382,7 +394,8 @@ the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen 
 - The round counter is the set of `docs/specs/<slug>/council/round-*` directories in git.
   A driver never holds it, and a resume never trusts a cached copy of it.
 - A round is one dispatch on one pack commit; any commit after it is a new round, and
-  STALE rounds never count toward the ceiling - only judged (non-STALE) rounds do *(amended 2026-09-24, convergent-judge-05)*.
+  STALE rounds never count toward the ceiling - only judged (non-STALE) rounds do *(amended 2026-09-24, convergent-judge-05)*;
+  narrowed to rounds that ended RED - GREEN rounds never count either *(amended 2026-09-24, convergent-judge-07)*.
 - Seats return reports, never write files; the driver records them through `record-seat`,
   which validates the contract before anything reaches disk.
 - A seat report that names a story *file* (not a bare `<slug>-NN`), `plan.md`, `journal.md`

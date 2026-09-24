@@ -285,11 +285,13 @@ newest_row() { # newest_row <slug> -> the last council.jsonl line for this spec,
   grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | tail -1
 }
 
-judged_rounds() { # judged_rounds <slug> [<exclude-round>] -> how many distinct rounds of this
-  # spec carry a non-STALE council.jsonl row (convergent-judge-05, plan ## Contracts): the count
-  # every ceiling gate compares against. ESCALATE rows count; a STALE-folded round never does.
+red_rounds() { # red_rounds <slug> [<exclude-round>] -> how many distinct rounds of this spec
+  # ended RED (convergent-judge-07, plan ## Contracts: RED rounds): a council.jsonl row with
+  # verdict RED, or ESCALATE with escalate ceiling|no-progress. GREEN, STALE and ESCALATE
+  # env|half rows never count - the count every ceiling gate compares against.
   [ -f memory/stats/council.jsonl ] || { echo 0; return; }
-  grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | grep -vF '"verdict":"STALE"' \
+  grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl \
+    | grep -E '"verdict":"RED"|"verdict":"ESCALATE".*"escalate":"(ceiling|no-progress)"' \
     | sed -n 's/.*"round":\([0-9][0-9]*\),.*/\1/p' | sort -u | grep -vxF "${2:-x}" | grep -c . || true
 }
 
@@ -589,13 +591,17 @@ review_verdict_of() { # review_verdict_of <file> -> PASS | BLOCK | "" (D3). The 
   review_verdict_of_text "$(sed '1d' "$1" 2>/dev/null)"
 }
 
-review_blocking_lines() { # review_blocking_lines <file> -> the stored review's list lines
-  # (`- `, `* `, `N. `) between a `## Critical` or `## Major` heading (case-insensitive) and the
-  # next `## ` heading (convergent-judge-05): the only lines whose anchor tag counts - a tag in
-  # prose or on a minor finding never anchors a BLOCK. The C4 header line is dropped first.
-  sed '1d' "$1" 2>/dev/null | awk '
+review_blocking_lines_text() { # review_blocking_lines_text <report> -> its list lines (`- `,
+  # `* `, `N. `) between a `## Critical` or `## Major` heading (case-insensitive) and the next
+  # `## ` heading (convergent-judge-05): the only lines whose anchor tag counts - a tag in prose
+  # or on a minor finding never anchors a BLOCK. Plan ## Contracts: review.md finding line.
+  printf '%s\n' "$1" | awk '
     /^##[[:space:]]/ { h=tolower($0); sub(/^##[[:space:]]+/, "", h); blk=(h ~ /^(critical|major)/); next }
     blk && /^[[:space:]]*([-*][[:space:]]|[0-9]+\.[[:space:]])/ { print }'
+}
+review_blocking_lines() { # review_blocking_lines <file> -> the same, for a stored review (its
+  # C4 header line is dropped first).
+  review_blocking_lines_text "$(sed '1d' "$1" 2>/dev/null)"
 }
 
 review_anchor_asks() { # review_anchor_asks <file> <A> -> sorted "n n" of every `[ask N]` tag on
@@ -941,7 +947,7 @@ ASKS
   elif [ "$review_v" = "BLOCK" ] || [ "$red_e_count" -gt 0 ] || [ "$red_u_count" -gt 0 ]; then
     if [ -n "$repeated" ]; then
       overall="ESCALATE"; escalate_reason="no-progress"; next_val="escalated"
-    elif [ "$(( $(judged_rounds "$SLUG" "$N") + 1 ))" -ge "$RCEILING" ]; then
+    elif [ "$(( $(red_rounds "$SLUG" "$N") + 1 ))" -ge "$RCEILING" ]; then
       overall="ESCALATE"; escalate_reason="ceiling"; next_val="escalated"
     else
       overall="RED"; next_val="repair"
@@ -1291,6 +1297,17 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
     write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
     echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: review: first line is not VERDICT: PASS|BLOCK" >&2
     emit false record-seat 4 error "MALFORMED: review: first line is not VERDICT: PASS|BLOCK"
+    exit 4
+  fi
+
+  # convergent-judge-07: a BLOCK must carry at least one finding line (plan ## Contracts) with
+  # an anchor tag; otherwise it is MALFORMED like any seat - kept, exit 4, re-asked once. The tag
+  # is not validated further here (ask range, regression claim: judge's business).
+  if [ "$verdict" = BLOCK ] && ! review_blocking_lines_text "$REPORT" | grep -qE '\[ask [0-9]+\]|\[regression\]|\[unanchored\]'; then
+    local why="review: BLOCK has no tagged finding - no list line under ## Critical / ## Major carries [ask N], [regression] or [unanchored]"
+    write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
+    echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
+    emit false record-seat 4 error "MALFORMED: $why"
     exit 4
   fi
 
@@ -1841,8 +1858,9 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
 }
 
 write_stale_row() { # write_stale_row <spec> <slug> <round-dir> <n> <a> - a STALE round record
-  # (D1 crash rule: a manual code commit against an open round with a seat file "was a
-  # dispatch, it counts against the ceiling"). Idempotent like judge's own row/line/journal.
+  # (D1 crash rule: a manual code commit against an open round with a seat file folds it; the
+  # row never counts against the ceiling - only RED rounds do, convergent-judge-07).
+  # Idempotent like judge's own row/line/journal.
   local spec="$1" slug="$2" rd="$3" n="$4" a="$5"
   local rhead rpack; rhead="$(round_field "$rd" head)"; rpack="$(round_field "$rd" pack)"
   local plan="$spec/plan.md" dateonly; dateonly="$(date -u +%Y-%m-%d)"
@@ -2014,12 +2032,12 @@ EOF
     fi
     write_stale_row "$SPEC" "$SLUG" "$RD" "$N" "$A"
     local NEXTN=$((N+1))
-    # convergent-judge-05: the STALE row just written does not consume the budget - only
-    # judged (non-STALE) rounds count against the ceiling.
-    [ "$(judged_rounds "$SLUG")" -lt "$CEILING" ] || {
+    # convergent-judge-07: the STALE row just written does not consume the budget - only
+    # rounds that ended RED count against the ceiling.
+    [ "$(red_rounds "$SLUG")" -lt "$CEILING" ] || {
       # R5/C-3(a): the ceiling reached here must leave a record - an ESCALATE row, the plan
       # line, ## Needs a human and the journal line - not just exit 6 into a silent loop.
-      echo "cycle: open-round - $SLUG round $NEXTN would exceed ceiling $CEILING judged rounds" >&2
+      echo "cycle: open-round - $SLUG round $NEXTN would exceed ceiling $CEILING RED rounds" >&2
       write_ceiling_escalate "$SPEC" "$SLUG" "$N" "$RD"
       [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $N" "$SPEC" memory/stats/council.jsonl
       emit true open-round 6 escalated
@@ -2029,11 +2047,11 @@ EOF
   fi
 
   # --- no open round: a fresh round, gated by the ceiling -----------------------------------
-  # ROUND_COUNT names the directory the next round follows; the gate itself counts judged
-  # (non-STALE) rounds, not round numbers (convergent-judge-05).
+  # ROUND_COUNT names the directory the next round follows; the gate itself counts rounds that
+  # ended RED, not round numbers (convergent-judge-07).
   local ROUND_COUNT=0; [ -n "$RD" ] && ROUND_COUNT="${RD##*/round-}"
-  [ "$(judged_rounds "$SLUG")" -lt "$CEILING" ] || {
-    echo "cycle: open-round - $SLUG is at the ceiling ($CEILING judged rounds)" >&2
+  [ "$(red_rounds "$SLUG")" -lt "$CEILING" ] || {
+    echo "cycle: open-round - $SLUG is at the ceiling ($CEILING RED rounds)" >&2
     [ "$ROUND_COUNT" -gt 0 ] && {
       write_ceiling_escalate "$SPEC" "$SLUG" "$ROUND_COUNT" "$SPEC/council/round-$ROUND_COUNT"
       [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $ROUND_COUNT" "$SPEC" memory/stats/council.jsonl
@@ -2045,7 +2063,7 @@ EOF
 }
 
 # --- reopen: the tier's own ceiling again after ESCALATE (D6; convergent-judge) - Tier 1 +1,
-# Tier 2 +2, Tier 3-4 +3 judged rounds (a STALE-folded round never counts) ---------------------
+# Tier 2 +2, Tier 3-4 +3 RED rounds (GREEN and STALE rounds never count) ------------------------
 
 append_after_answers() { # append_after_answers <brief.md> <block> - inserts before the next
   # "## " heading after "## Answers" (or at EOF if that's the last section); creates the
