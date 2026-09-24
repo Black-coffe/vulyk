@@ -6,7 +6,7 @@ lives in committed files under `docs/specs/<slug>/`, written only by `scripts/cy
 drivers (`.claude/workflows/vulyk-cycle.js`, or the `/vulyk-build` fallback loop) both just
 poll `cycle.sh status --json` and act on `next`. Full record: `docs/adr/
 001-cycle-state-contract.md`; stage table: `CLAUDE.md` `## The cycle`. Verified against
-`scripts/cycle.sh` (1867 lines) directly.
+`scripts/cycle.sh` (2337 lines) directly.
 
 ## Files, one writer each
 `brief.md ## Asks` (numbered) ← `/vulyk-plan` grill · `plan.md **Briefed:**/**Approved:**` ←
@@ -33,7 +33,7 @@ file by file, not as one collapsed `?? <dir>/` line the paperwork predicate woul
 `record-seat <spec> <N> <seat> [--model
 id] [--stamp <s>] [--file <path>] <report on stdin, or from --file when given>` (`--file` takes
 precedence over stdin; a missing/unreadable/empty file exits 2 with `error` `file: <path>`,
-before anything is written) · `judge [--commit]` · `escalate [--commit] [--reason ceiling|half|env]
+before anything is written) · `judge [--commit]` · `escalate [--commit] [--reason ceiling|half|env|no-progress]
 [note]` (standalone; open round w/ seats missing) · `reopen "<decision>" [--commit]` ·
 `pause`/`resume`/`release <spec> <stamp>` (exempt from the PAUSE guard, same as `status` - every
 other mutating verb calls `pause_guard` first, exits 3 if `PAUSE` exists; `release` clears the
@@ -62,8 +62,20 @@ overlap), `absent_seats` = required seats with no accepted report, `override_red
 `human.jsonl` REJECTED row newer than `ROUND.opened`:
 1. `override_red` → RED, `repair`. 2. `absent_seats` non-empty & `red_e`+`red_u` empty &
 review != BLOCK → ESCALATE `env`. 3. `|red_e| >= half` → ESCALATE `half`. 4. review BLOCK, or
-`red_e`/`red_u` non-empty → RED if round N < ceiling else ESCALATE `ceiling`. 5. else (every
-seat GREEN/N/A, review PASS/absent) → GREEN.
+`red_e`/`red_u` non-empty → ESCALATE `no-progress` if an ask in `red_e`+`review_asks` was also in
+round N-1's `red`+`review_asks` and N-1's row is RED; else ESCALATE `ceiling` if
+`red_rounds(other rounds)+1 >= ceiling`; else RED. 5. else (every seat GREEN/N/A, review
+PASS/absent) → GREEN. (v0.17.0, `cmd_judge` ~l.925-964.)
+**Ceiling** (v0.17.0): `tier_ceiling` 1→1, 2→2, 3/4→3; `council/CEILING` wins over it.
+`red_rounds` counts only rounds whose row is RED or ESCALATE `ceiling`/`no-progress` - GREEN,
+STALE, ESCALATE `env`/`half` never count. `open-round` refuses (ceiling ESCALATE, exit 6) when
+`red_rounds >= CEILING`.
+**Anchored BLOCK** (ADR-001 D4 amendments): only list lines (`- `/`* `/`N. `) under `## Critical`/
+`## Major` count (`review_blocking_lines`). `record-seat review` refuses a BLOCK with no such
+line tagged `[ask N]`/`[regression]`/`[unanchored]` as MALFORMED (exit 4). At `judge`, a BLOCK
+with no in-range `[ask N]` (1..A) and no `[regression]` is recorded `review:"PASS"`, note
+`review BLOCK unanchored`. Row field `review_asks:[...]` (after `red_unevidenced`) = the
+in-range anchors; STALE rows write `[]`.
 Writes idempotently: `council.jsonl` row → `plan.md **Council:**` line → (`## Needs a human`,
 ESCALATE only) → journal line, then always removes the court worktree, any verdict.
 
@@ -71,10 +83,11 @@ ESCALATE only) → journal line, then always removes the court worktree, any ver
 Stale iff `ROUND.head` != HEAD AND the commits between are not `paperwork_only()` (lib.sh) -
 the cycle's own paperwork never self-stales a round. Open+non-stale+unchanged HEAD →
 `open-round` no-ops. Gone stale, no seat file yet → re-stamps `ROUND` in place (same N); with
-a seat file → `write_stale_row` (seats default ABSENT) for N, opens N+1 - either way counts
-toward the ceiling. Ceiling hit → `write_ceiling_escalate`, reason `"ceiling"`, exit 6;
-default ceiling 3 (no `CEILING` file). `reopen "<decision>"` (newest row must be ESCALATE):
-appends the decision to `brief.md ## Answers`, raises `CEILING` by 3, appends to `REOPEN`,
+a seat file → `write_stale_row` (seats default ABSENT) for N, opens N+1 - neither counts
+toward the ceiling (`red_rounds`). Ceiling hit → `write_ceiling_escalate`, reason `"ceiling"`,
+exit 6; default ceiling `tier_ceiling` (no `CEILING` file). `reopen "<decision>"` (newest row
+must be ESCALATE): appends the decision to `brief.md ## Answers`, raises `CEILING` by the tier
+ceiling (old value defaults to it too), appends to `REOPEN`,
 next `open-round`. `pause "why"` writes `PAUSE`; `resume` removes it, reports `stale:` if
 HEAD moved, relaunches fresh (never `resumeFromRunId`) - an in-flight seat's report is
 discarded and re-dispatched, never recorded from a paused run.
@@ -85,7 +98,8 @@ Header `COUNCIL/MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH`, one `ASK <n>: GREE
 be RED iff any ASK is RED, N/A iff all N/A. Missing label, ask mismatch, or GREEN/RED without
 evidence → MALFORMED (exit 4, re-asked once, kept as `attempt-1.md`). Taint: see the story-file
 rule below. 2nd-attempt unevidenced RED stays RED but excluded from `half`; unevidenced
-GREEN folds to N/A. `lead-review`: only its first line (`VERDICT: PASS|BLOCK`) is parsed.
+GREEN folds to N/A. `lead-review`: first line `VERDICT: PASS|BLOCK` gives the verdict; a BLOCK's
+tagged `## Critical`/`## Major` list lines are also read (see Anchored BLOCK above).
 Court: `build_round` runs `git worktree add --detach <path> <head>` at
 `.vulyk/court/<slug>/round-N/`, strips its `docs/specs/<slug>/` to `brief.md` alone, commits
 that reduction in the worktree's own detached history. Shared by all three blind seats;
@@ -147,4 +161,4 @@ commands already handle. `memory/stats/anomalies.jsonl` joined `lib.sh`'s
 `telemetry.sh record` writes it - a scan that fires mid-round must not itself stale that
 round. Full contract: `docs/telemetry.md`.
 
-last-verified: 2026-09-15 (v0.15.0, ADR-011)
+last-verified: 2026-09-24 (v0.17.0, convergent-judge, ADR-001 D3/D4 amendments)

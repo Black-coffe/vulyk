@@ -24,9 +24,12 @@ dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept 
   Workflow driver's only shell access.
 - **lead-review** (`opus`, `Read,Grep,Glob,Bash`, `maxTurns:60`) - adversarial review, sees
   everything (diff, stories, plan, wiki, ADRs). Report's **first line** is exactly `VERDICT:
-  PASS`/`VERDICT: BLOCK` (v0.12.0: `record-seat … review` parses only that line); findings
-  grouped critical/major/minor, each `file:line` + condition to satisfy, never a patch. Never
-  enters the court. Same report-path-as-last-action contract as the council seats (v0.13.1).
+  PASS`/`VERDICT: BLOCK`; BLOCK on any critical **or major** finding. v0.17.0 layout contract:
+  findings as one-line list items under `## Critical`/`## Major`/`## Minor` (empty = `None.`),
+  each `file:line`, routing word (`plan`/`worker`), condition, and on critical/major exactly one
+  tag `[ask N]`/`[regression]` (base-side evidence on the line)/`[unanchored]`; a BLOCK with no
+  tagged blocking line is MALFORMED at `record-seat`, an `[unanchored]`-only BLOCK is recorded
+  PASS by `judge` (see `cycle.md` Anchored BLOCK). Never enters the court. Same report-path-as-last-action contract as the council seats (v0.13.1).
 - **drone-coverage** (`sonnet`, `Read` only, `maxTurns:5`) - reads ONLY `brief.md`+`plan.md`,
   never story files. v0.12.0: reports **by ask number** (`## Asks`'s `1..N` if present, else
   its own reading-order numbering, states which) - `Ask <n>: <verbatim>` under
@@ -75,16 +78,22 @@ dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept 
   empty - turn cap suspected .../`returned no report`) per `cycle.md`'s Report-path section.
   v0.14.0: a `--fallback`-less refusal (no `Workflow` tool) and a Workflow call that itself
   throws both record `bash scripts/telemetry.sh record driver_refused 1 0 --spec <slug> --ref
-  driver:<slug>:<date>` before stopping (`docs/telemetry.md`).
+  driver:<slug>:<date>` before stopping (`docs/telemetry.md`). v0.17.0: the `repair` planner
+  prompt (here and in `vulyk-cycle.js`) asks for one story per critical/major finding carrying
+  `[ask N]` (N in `## Asks`) or `[regression]`; `[unanchored]` findings never become stories,
+  they wait for `/vulyk-ship` step 5.
 - **`/vulyk-review`** - one on-demand round: `open-round --commit` (refusal = surface
   verbatim, point at `/vulyk-build`), dispatch only the seats `missing` names (Tier 4: +
-  second reviewer, folded stricter-of-two), `record-seat` each (same `--file`-then-heredoc
+  second reviewer, folded stricter-of-two, each finding keeping its anchor tag verbatim),
+  `record-seat` each (same `--file`-then-heredoc
   scheme as `/vulyk-build`, v0.13.1), `judge --commit`. Never cuts repair stories itself -
   that always goes back through `/vulyk-build`.
 - **`/vulyk-ship`** - `ship-check.sh` (refuse on NOT READY unless the owner overrides out
   loud) -> version bump+CHANGELOG commit if not already on branch -> local merge -> print the
   publish command from *Release / deploy* -> `ship-check.sh --record` -> dispatch
-  `drone-docs`+`librarian` for the next circle. **Never pushes, tags, publishes or deploys**,
+  `drone-docs`+`librarian` for the next circle; step 5's next-brief draft now also carries the
+  findings of a BLOCK recorded PASS (`review BLOCK unanchored`) and every `[unanchored]`
+  critical/major finding from any round's `review.md` (v0.17.0). **Never pushes, tags, publishes or deploys**,
   never waits for the human to run the printed command.
 - **`/vulyk-status`** - read-only: driver mode, `council.jsonl` stats (specs/median rounds to
   green/escalations/escaped defects), `state.sh` story table, memory freshness, learnings
@@ -114,4 +123,4 @@ dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept 
   scout-batch map refresh; `librarian` GC pass; session-state dump to `.claude/handoff/`; the
   release-upgrade wrapper over `vulyk-update.sh`.
 
-last-verified: 2026-09-15 (v0.15.0, ADR-011)
+last-verified: 2026-09-24 (v0.17.0; lead-review/build/review/ship/driver repair prompt only)

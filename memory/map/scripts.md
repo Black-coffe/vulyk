@@ -156,7 +156,12 @@ anomaly telemetry, full contract in `docs/telemetry.md`). All are `#!/usr/bin/en
 - `telemetry.sh publish` and `bundle` never send anything themselves - `publish` at most copies
   a checked bundle into a local checkout's `telemetry/inbox/` and prints a recipe; no `git
   push`/`git commit`/`gh` call exists in the file, by design not by flag (file header comment).
+- `install.sh` (v0.17.0): `memory/stats/council.jsonl` is excluded from the copy like
+  `anomalies.jsonl` (per-hive runtime ledger); `--upgrade` runs `clean_seeded_council`, which
+  drops only `"spec":"autonomous-cycle"` rows, skips a hive that has
+  `docs/specs/autonomous-cycle/`, and only reports under `--check`.
+- `cycle.sh`'s ceiling default is `tier_ceiling` (1/2/3/3), not a flat 3 - see `cycle.md`.
 - `telemetry/` (the inbox) is VULYK-repo-only - `install.sh`'s `copy_tree` does not walk it, so
   a hive's own history lives only in its `memory/stats/anomalies.jsonl`.
 
-last-verified: 2026-09-15 (v0.15.0, ADR-011)
+last-verified: 2026-09-24 (v0.17.0: install.sh council.jsonl, ceiling pointer only)
