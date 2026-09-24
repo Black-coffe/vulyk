@@ -946,7 +946,40 @@ run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
       console.log('FAIL C6 judge -> repair: the carried status routes the repair with no poll between - got '
         + JSON.stringify(result) + ' calls=' + JSON.stringify(calls.map((c) => c.verb || c.agentType)));
     }
-  }));
+  }))
+  // --- scenario (aj2): a review BLOCK with no RED ask - the repair prompt carries the anchor
+  // rule of vulyk-build.md's repair row: [ask N] or [regression], never an [unanchored] finding
+  .then(() => run(args, {
+    clerk: withClaim([
+      stJudge,
+      verb('judge', 'repair', {
+        next: 'repair', tier: 2, slug: 'demo', stage: '05', round: 1, red: [], review: 'BLOCK',
+        round_dir: 'docs/specs/demo/council/round-1',
+      }),
+      stGreen,
+    ]),
+    agents: ['repair stories cut'],
+  }).then(({ result, calls }) => {
+    const planner = calls.find((c) => c.agentType === 'queen-planner');
+    const p = planner ? planner.prompt : '';
+    const missing = [
+      '[ask N]', "the brief's `## Asks`", '[regression]',
+      'an `[unanchored]` finding never becomes a story', '`/vulyk-ship` step 5',
+      'docs/specs/demo/council/round-1/review.md', "review seat's BLOCK",
+    ].filter((n) => !p.includes(n));
+    if (result && result.next === 'green' && planner && missing.length === 0 && !/numbered \[/.test(p)) {
+      console.log('ok repair anchor: a BLOCK-only repair prompt carries [ask N], [regression] and the [unanchored] exclusion');
+    } else {
+      console.log('FAIL repair anchor: a BLOCK-only repair prompt carries [ask N], [regression] and the [unanchored] exclusion - missing '
+        + JSON.stringify(missing) + ' prompt=' + JSON.stringify(p));
+    }
+  }))
+  // --- static: the launch banner states no flat round ceiling (the tier decides it)
+  .then(() => {
+    const m = src.match(/description:\s*'([^']*)'/);
+    if (m && !/ceiling\s*\(?3\b/.test(m[1])) console.log('ok banner: the description states no flat ceiling 3');
+    else console.log('FAIL banner: the description states no flat ceiling 3 - got ' + (m ? m[1] : 'no description'));
+  });
 })
 // --- C1 revised: a garbled relay of a MUTATING verb is recovered through `status`, never by
 // re-running the verb - the second dispatch of the pair is always the status prompt.
@@ -1136,6 +1169,8 @@ expect "C6: a steady Tier 3 round costs 13 clerk calls and 3 polls"       "ok C6
 expect "C6: verbs without a status key keep the old 16-call path"         "ok C6 old cycle.sh: verbs without \`status\` still walk to green on 16 calls, 6 polls" "$out"
 expect "C6: a close-story exit 4 is followed by a status poll"            "ok C6 miss: a close-story exit 4 is followed by a status poll" "$out"
 expect "C6: a judge carrying next:repair routes with no poll between"     "ok C6 judge -> repair: the carried status routes the repair with no poll between" "$out"
+expect "repair: a BLOCK-only prompt carries the anchor rule (asks 1, 3)"   "ok repair anchor: a BLOCK-only repair prompt carries [ask N], [regression] and the [unanchored] exclusion" "$out"
+expect "banner: the driver description names no flat ceiling 3"          "ok banner: the description states no flat ceiling 3" "$out"
 expect "C1 revised: a garbled judge line is recovered through status"    "ok C1 judge: garbled judge line recovered through status, judge never re-sent" "$out"
 expect "C1 revised: a garbled record-seat line is recovered through status" "ok C1 record-seat: garbled line recovered through status, seat recorded once, poll unchanged" "$out"
 expect "C1 revised: a garbled close-story line costs no miss"             "ok C1 close-story: garbled line recovered through status, no miss, no stop, sent once" "$out"

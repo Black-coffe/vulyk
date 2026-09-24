@@ -132,3 +132,5 @@
 {"ts":"2026-09-23T20:37:59Z","story":"convergent-judge-02-anchored-block","declared":7,"changed":43,"out_of_scope":36}
 {"ts":"2026-09-23T20:38:16Z","story":"convergent-judge-02-anchored-block","declared":7,"changed":43,"out_of_scope":36}
 {"ts":"2026-09-23T21:17:11Z","story":"convergent-judge-04-no-progress","declared":4,"changed":39,"out_of_scope":35}
+{"ts":"2026-09-24T08:45:14Z","story":"convergent-judge-05-judged-rounds-ceiling","declared":5,"changed":44,"out_of_scope":40}
+{"ts":"2026-09-24T08:55:52Z","story":"convergent-judge-06-driver-repair-prompt","declared":4,"changed":45,"out_of_scope":41}
