@@ -49,3 +49,17 @@ The owner's answer:
 3. BLOCK засчитывается, только если хоть одно блокирующее замечание помечено `ask N` или `regression`, иначе оно идёт как PASS, а замечания — в заметки к ship.
 4. Ревьюер ставит BLOCK за любой critical или major, PASS при major запрещён.
 5. Установщик не копирует council.jsonl в новые проекты, а --upgrade убирает строки autonomous-cycle там, где такого спека нет.
+
+## Confirmed (verbatim, quotable)
+
+The owner's confirmed asks (grill's last question, 2026-09-23), repeated as quotable lines:
+
+> Потолок раундов зависит от тира: Tier 1 — 1, Tier 2 — 2, Tier 3–4 — 3; reopen добавляет столько же.
+
+> Один и тот же вопрос RED два раунда подряд — сразу ESCALATE no-progress.
+
+> BLOCK засчитывается, только если хоть одно блокирующее замечание помечено `ask N` или `regression`, иначе оно идёт как PASS, а замечания — в заметки к ship.
+
+> Ревьюер ставит BLOCK за любой critical или major, PASS при major запрещён.
+
+> Установщик не копирует council.jsonl в новые проекты, а --upgrade убирает строки autonomous-cycle там, где такого спека нет.
