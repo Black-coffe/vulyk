@@ -19,7 +19,7 @@
 # mutating verb. autonomous-cycle-04 (this story) adds `close-story` (scope-check + the
 # story's `## Verification` x `repeat:`, then `status: done` and a `story(<id>): <title>`
 # commit), `open-round` (preconditions, the court worktree, D1's crash/idempotency rules)
-# and `reopen` (ceiling +3 after ESCALATE); `judge` gains only the court removal - the
+# and `reopen` (ceiling + the tier's own ceiling after ESCALATE, convergent-judge); `judge` gains only the court removal - the
 # verdict rule and the row schema are unchanged from story 01/03.
 set -u
 shopt -s nullglob 2>/dev/null || true
@@ -221,6 +221,16 @@ round_tier() { # round_tier <spec> <round-dir> -> the round's frozen tier= (open
   tier_of "$spec"
 }
 
+tier_ceiling() { # tier_ceiling <tier> -> the default round ceiling for a tier (convergent-judge
+  # ask 1): 1 for Tier 1, 2 for Tier 2, 3 for Tier 3-4 and anything else. The one place the
+  # mapping lives; a council/CEILING file still wins over it, and `reopen` adds it again.
+  case "$1" in
+    1) printf '1' ;;
+    2) printf '2' ;;
+    *) printf '3' ;;
+  esac
+}
+
 required_seats_for_tier() { # required_seats_for_tier <tier> -> the space-separated seats a
   # round of this tier must have before judge will run (C15). 3 and 4 (and any value outside
   # 1-4, which tier_of never produces) share the full court - Tier 4's extra reviewer is a
@@ -273,6 +283,26 @@ row_exists() { # row_exists <slug> <round> - "round":$2 is followed by a comma i
 newest_row() { # newest_row <slug> -> the last council.jsonl line for this spec, or empty
   [ -f memory/stats/council.jsonl ] || return 0
   grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | tail -1
+}
+
+red_rounds() { # red_rounds <slug> [<exclude-round>] -> how many distinct rounds of this spec
+  # ended RED (convergent-judge-07, plan ## Contracts: RED rounds): a council.jsonl row with
+  # verdict RED, or ESCALATE with escalate ceiling|no-progress. GREEN, STALE and ESCALATE
+  # env|half rows never count - the count every ceiling gate compares against.
+  [ -f memory/stats/council.jsonl ] || { echo 0; return; }
+  grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl \
+    | grep -E '"verdict":"RED"|"verdict":"ESCALATE".*"escalate":"(ceiling|no-progress)"' \
+    | sed -n 's/.*"round":\([0-9][0-9]*\),.*/\1/p' | sort -u | grep -vxF "${2:-x}" | grep -c . || true
+}
+
+round_row() { # round_row <slug> <round> -> the last council.jsonl line for that round, or empty
+  # (a round can carry two rows - a RED, then a ceiling ESCALATE - the newest is its outcome)
+  [ -f memory/stats/council.jsonl ] || return 0
+  grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | grep -F "\"round\":$2," | tail -1
+}
+
+json_num_array() { # json_num_array <json-line> <key> -> "2 5" from "key":[2,5]; a missing key is empty
+  printf '%s' "$1" | sed -n "s/.*\"$2\":\[\([^]]*\)\].*/\1/p" | tr ',' ' '
 }
 
 json_field() { # json_field <json-line> <key> - a flat top-level string or number value
@@ -396,7 +426,7 @@ cmd_status() {
     ROUND_N="${RD##*/round-}"
     local RCOURT
     RCOURT="$(round_field "$RD" court)"
-    CEILING="$(round_field "$RD" ceiling)"; [ -n "$CEILING" ] || CEILING=3
+    CEILING="$(round_field "$RD" ceiling)"; [ -n "$CEILING" ] || CEILING="$(tier_ceiling "$(round_tier "$SPEC" "$RD")")"
     [ -n "$RCOURT" ] && COURT_JSON="\"$RCOURT\""
     if ! row_exists "$SLUG" "$ROUND_N"; then
       OPEN_B=true
@@ -561,6 +591,32 @@ review_verdict_of() { # review_verdict_of <file> -> PASS | BLOCK | "" (D3). The 
   review_verdict_of_text "$(sed '1d' "$1" 2>/dev/null)"
 }
 
+review_blocking_lines_text() { # review_blocking_lines_text <report> -> its list lines (`- `,
+  # `* `, `N. `) between a `## Critical` or `## Major` heading (case-insensitive) and the next
+  # `## ` heading (convergent-judge-05): the only lines whose anchor tag counts - a tag in prose
+  # or on a minor finding never anchors a BLOCK. Plan ## Contracts: review.md finding line.
+  printf '%s\n' "$1" | awk '
+    /^##[[:space:]]/ { h=tolower($0); sub(/^##[[:space:]]+/, "", h); blk=(h ~ /^(critical|major)/); next }
+    blk && /^[[:space:]]*([-*][[:space:]]|[0-9]+\.[[:space:]])/ { print }'
+}
+review_blocking_lines() { # review_blocking_lines <file> -> the same, for a stored review (its
+  # C4 header line is dropped first).
+  review_blocking_lines_text "$(sed '1d' "$1" 2>/dev/null)"
+}
+
+review_anchor_asks() { # review_anchor_asks <file> <A> -> sorted "n n" of every `[ask N]` tag on
+  # a blocking list line (review_blocking_lines) with 1 <= N <= A (convergent-judge-02, D4;
+  # scope narrowed by convergent-judge-05): an out-of-range ask is not an anchor.
+  local n out=""
+  for n in $(review_blocking_lines "$1" | grep -oE '\[ask [0-9]+\]' | sed 's/[^0-9]//g'); do
+    n=$((10#$n))
+    [ "$n" -ge 1 ] && [ "$n" -le "$2" ] || continue
+    case " $out " in *" $n "*) ;; *) out="$out $n" ;; esac
+  done
+  sort_num_list "$out"
+}
+review_has_regression() { review_blocking_lines "$1" | grep -qF '[regression]'; } # <file>
+
 council_line_exists() { grep -qE "^\*\*Council:\*\*.*round $2," "$1" 2>/dev/null; } # <plan> <round>
 journal_line_exists() { [ -f "$1/journal.md" ] && grep -qF "round $2 verdict $3" "$1/journal.md"; } # <spec> <round> <verdict>
 
@@ -634,7 +690,7 @@ write_escalate_row_for_round() { # write_escalate_row_for_round <spec> <slug> <r
   local a; a="$(asks_count "$spec")"
 
   local required seat v model
-  local haiku_v="" sonnet_v="" opus_v="" review_v=""
+  local haiku_v="" sonnet_v="" opus_v="" review_v="" review_asks=""
   local haiku_model=unknown sonnet_model=unknown opus_model=unknown attempts=0
   # r2m5/r2m6: the ceiling gate closes over a round whose seats already carry RED asks (a RED
   # verdict at N-1, or a STALE-folded round whose seat files were filed before code moved) - the
@@ -681,6 +737,7 @@ ASKS
   red_u="$(sort_num_list "$red_u")"
   if [ -f "$rd/review.md" ]; then
     review_v="$(review_verdict_of "$rd/review.md")"; [ -n "$review_v" ] || review_v="ABSENT"
+    [ "$review_v" = "BLOCK" ] && review_asks="$(review_anchor_asks "$rd/review.md" "$a")"
   elif is_required_seat review "$required"; then
     review_v="ABSENT"
   fi
@@ -690,9 +747,9 @@ ASKS
 
   if ! escalate_row_exists "$slug" "$n"; then
     mkdir -p memory/stats
-    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"ESCALATE","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":"%s","note":"%s"}\n' \
+    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"ESCALATE","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"review_asks":[%s],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":"%s","note":"%s"}\n' \
       "$(now_ts)" "$slug" "$n" "$rhead" "$rpack" "$a" \
-      "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" \
+      "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$(json_num_csv "$review_asks")" \
       "$review_v" "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" \
       "$attempts" "$reason" "$note" >> memory/stats/council.jsonl
   fi
@@ -751,7 +808,7 @@ cmd_judge() { # cmd_judge <spec> <commit:0|1> [<verb-label>] [<stamp>]
   RHEAD="$(round_field "$RD" head)"
   RPACK="$(round_field "$RD" pack)"
   ROPENED="$(round_field "$RD" opened)"
-  RCEILING="$(round_field "$RD" ceiling)"; [ -n "$RCEILING" ] || RCEILING=3
+  RCEILING="$(round_field "$RD" ceiling)"; [ -n "$RCEILING" ] || RCEILING="$(tier_ceiling "$(round_tier "$SPEC" "$RD")")"
   local REQUIRED; REQUIRED="$(required_seats_for_tier "$(round_tier "$SPEC" "$RD")")"
 
   # --- presence pass: every REQUIRED seat must be present or ABSENT, in order (C15: a seat
@@ -811,9 +868,19 @@ ASKS
   red_e_count="$(printf '%s' "$red_e" | wc -w | tr -d ' ')"
   red_u_count="$(printf '%s' "$red_u" | wc -w | tr -d ' ')"
 
-  local rf="$RD/review.md"
+  local rf="$RD/review.md" review_asks="" review_note=""
   if [ -f "$rf" ]; then
-    review_v="$(review_verdict_of "$rf")"; [ -n "$review_v" ] || review_v="BLOCK"
+    review_v="$(review_verdict_of "$rf")"
+    if [ "$review_v" = "BLOCK" ]; then
+      # D4 (convergent-judge-02): a BLOCK holds only on an `[ask N]` (N a real brief ask) or a
+      # `[regression]` tag in the body; otherwise it is recorded PASS and its findings go to the
+      # next circle (vulyk-ship step 5), not to a repair wave. The tag is read, not validated.
+      review_asks="$(review_anchor_asks "$rf" "$A")"
+      if [ -z "$review_asks" ] && ! review_has_regression "$rf"; then
+        review_v="PASS"; review_note="review BLOCK unanchored"
+      fi
+    fi
+    [ -n "$review_v" ] || review_v="BLOCK" # an unreadable stored report stays a block
   elif is_required_seat review "$REQUIRED"; then
     review_v="ABSENT"
   else
@@ -855,6 +922,19 @@ ASKS
     fi
   fi
 
+  # --- no progress (convergent-judge-04): an ask RED this round (evidenced or review-anchored)
+  # that round N-1's RED row also held RED. Ask numbers only; a STALE/ESCALATE/missing N-1
+  # row never triggers.
+  local repeated="" prow="" prev="" x
+  [ "$N" -gt 1 ] && prow="$(round_row "$SLUG" "$((N-1))")"
+  if [ -n "$prow" ] && [ "$(json_field "$prow" verdict)" = "RED" ]; then
+    prev=" $(json_num_array "$prow" red) $(json_num_array "$prow" review_asks) "
+    for x in $red_e $review_asks; do
+      case "$prev" in *" $x "*) case " $repeated " in *" $x "*) ;; *) repeated="$repeated $x" ;; esac ;; esac
+    done
+    repeated="$(sort_num_list "$repeated")"
+  fi
+
   # --- the verdict rule (D4), first match wins ----------------------------------------------
   local overall="" next_val="" escalate_reason=""
   local half=$(( (A+1)/2 )); [ "$half" -lt 2 ] && half=2  # R10: max(2, ceil(A/2))
@@ -865,7 +945,9 @@ ASKS
   elif [ "$red_e_count" -gt 0 ] && [ "$red_e_count" -ge "$half" ]; then
     overall="ESCALATE"; escalate_reason="half"; next_val="escalated"
   elif [ "$review_v" = "BLOCK" ] || [ "$red_e_count" -gt 0 ] || [ "$red_u_count" -gt 0 ]; then
-    if [ "$N" -ge "$RCEILING" ]; then
+    if [ -n "$repeated" ]; then
+      overall="ESCALATE"; escalate_reason="no-progress"; next_val="escalated"
+    elif [ "$(( $(red_rounds "$SLUG" "$N") + 1 ))" -ge "$RCEILING" ]; then
       overall="ESCALATE"; escalate_reason="ceiling"; next_val="escalated"
     else
       overall="RED"; next_val="repair"
@@ -895,9 +977,10 @@ ASKS
     done
     local noteval=""
     [ "$escalate_reason" = "env" ] && noteval="$(redact_note "$(printf '%s' "$absent_seats" | sed 's/ /, /g') ABSENT")"
-    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"na":%s,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":%s,"note":"%s"}\n' \
+    [ -n "$review_note" ] && noteval="${noteval:+$noteval; }$review_note"
+    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"review_asks":[%s],"na":%s,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":%s,"note":"%s"}\n' \
       "$(now_ts)" "$SLUG" "$N" "$overall" "$head7" "$RPACK" "$A" \
-      "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$na_count" \
+      "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$(json_num_csv "$review_asks")" "$na_count" \
       "$review_v" "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" \
       "$attempts" "$escjson" "$noteval" >> memory/stats/council.jsonl
   fi
@@ -915,6 +998,9 @@ ASKS
       for u in $red_e $red_u; do
         printf -- '- ask %s: RED - see %s/*.md for evidence\n' "$u" "$RD"
       done
+      if [ "$escalate_reason" = "no-progress" ]; then
+        printf -- '- no progress: ask %s RED in rounds %s and %s\n' "$(json_num_csv "$repeated" | sed 's/,/, /g')" "$((N-1))" "$N"
+      fi
       if [ "$escalate_reason" = "env" ]; then
         local aseat att
         for aseat in $absent_seats; do
@@ -954,7 +1040,7 @@ ASKS
   exit "$exit_code"
 }
 
-cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|env>] ["<note>"]
+cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress>] ["<note>"]
   # A verb of its own now (R5/C-3, autonomous-cycle-21), not an alias of judge: judge refuses
   # outright on a missing seat (its presence pass, above), so ADR D2's "the driver calls
   # escalate on exit 6, or on its own initiative" had nowhere to land. This records an
@@ -970,8 +1056,8 @@ cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|en
       *) NOTE="$1"; shift ;;
     esac
   done
-  case "$REASON" in ''|ceiling|half|env) ;; *)
-    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env>] [\"<note>\"]" >&2
+  case "$REASON" in ''|ceiling|half|env|no-progress) ;; *)
+    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress>] [\"<note>\"]" >&2
     emit false escalate 1 error "usage"
     exit 1
     ;;
@@ -979,7 +1065,7 @@ cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|en
   [ -n "$REASON" ] || REASON="env"
 
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
-    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env>] [\"<note>\"]" >&2
+    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress>] [\"<note>\"]" >&2
     emit false escalate 1 error "usage"
     exit 1
   }
@@ -1211,6 +1297,17 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
     write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
     echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: review: first line is not VERDICT: PASS|BLOCK" >&2
     emit false record-seat 4 error "MALFORMED: review: first line is not VERDICT: PASS|BLOCK"
+    exit 4
+  fi
+
+  # convergent-judge-07: a BLOCK must carry at least one finding line (plan ## Contracts) with
+  # an anchor tag; otherwise it is MALFORMED like any seat - kept, exit 4, re-asked once. The tag
+  # is not validated further here (ask range, regression claim: judge's business).
+  if [ "$verdict" = BLOCK ] && ! review_blocking_lines_text "$REPORT" | grep -qE '\[ask [0-9]+\]|\[regression\]|\[unanchored\]'; then
+    local why="review: BLOCK has no tagged finding - no list line under ## Critical / ## Major carries [ask N], [regression] or [unanchored]"
+    write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
+    echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
+    emit false record-seat 4 error "MALFORMED: $why"
     exit 4
   fi
 
@@ -1761,8 +1858,9 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
 }
 
 write_stale_row() { # write_stale_row <spec> <slug> <round-dir> <n> <a> - a STALE round record
-  # (D1 crash rule: a manual code commit against an open round with a seat file "was a
-  # dispatch, it counts against the ceiling"). Idempotent like judge's own row/line/journal.
+  # (D1 crash rule: a manual code commit against an open round with a seat file folds it; the
+  # row never counts against the ceiling - only RED rounds do, convergent-judge-07).
+  # Idempotent like judge's own row/line/journal.
   local spec="$1" slug="$2" rd="$3" n="$4" a="$5"
   local rhead rpack; rhead="$(round_field "$rd" head)"; rpack="$(round_field "$rd" pack)"
   local plan="$spec/plan.md" dateonly; dateonly="$(date -u +%Y-%m-%d)"
@@ -1799,7 +1897,7 @@ write_stale_row() { # write_stale_row <spec> <slug> <round-dir> <n> <a> - a STAL
     [ -f "$rd/review.md" ] && attempts=$((attempts+1))
     [ -f "$rd/review.attempt-1.md" ] && attempts=$((attempts+1))
     [ -f "$rd/review.attempt-2.md" ] && attempts=$((attempts+1))
-    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"STALE","head":"%s","pack":"%s","asks":%s,"red":[],"red_unevidenced":[],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":null,"note":"code moved after dispatch"}\n' \
+    printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"STALE","head":"%s","pack":"%s","asks":%s,"red":[],"red_unevidenced":[],"review_asks":[],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":null,"note":"code moved after dispatch"}\n' \
       "$(now_ts)" "$slug" "$n" "${rhead:-unknown}" "$rpack" "$a" "$review_v" \
       "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" "$attempts" >> memory/stats/council.jsonl
   fi
@@ -1898,7 +1996,7 @@ EOF
   esac
 
   local HEAD PACK; HEAD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"; PACK="$(pack_fingerprint "$SPEC")"
-  local CEILING; CEILING="$(head -1 "$SPEC/council/CEILING" 2>/dev/null | tr -d '[:space:]')"; [ -n "$CEILING" ] || CEILING=3
+  local CEILING; CEILING="$(head -1 "$SPEC/council/CEILING" 2>/dev/null | tr -d '[:space:]')"; [ -n "$CEILING" ] || CEILING="$(tier_ceiling "$(tier_of "$SPEC")")"
 
   # --- an already-open round: resume, re-stamp in place, or fold it into a STALE + N+1 ------
   local RD; RD="$(current_round_dir "$SPEC")"
@@ -1934,10 +2032,12 @@ EOF
     fi
     write_stale_row "$SPEC" "$SLUG" "$RD" "$N" "$A"
     local NEXTN=$((N+1))
-    [ "$NEXTN" -le "$CEILING" ] || {
+    # convergent-judge-07: the STALE row just written does not consume the budget - only
+    # rounds that ended RED count against the ceiling.
+    [ "$(red_rounds "$SLUG")" -lt "$CEILING" ] || {
       # R5/C-3(a): the ceiling reached here must leave a record - an ESCALATE row, the plan
       # line, ## Needs a human and the journal line - not just exit 6 into a silent loop.
-      echo "cycle: open-round - $SLUG round $NEXTN would exceed ceiling $CEILING" >&2
+      echo "cycle: open-round - $SLUG round $NEXTN would exceed ceiling $CEILING RED rounds" >&2
       write_ceiling_escalate "$SPEC" "$SLUG" "$N" "$RD"
       [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $N" "$SPEC" memory/stats/council.jsonl
       emit true open-round 6 escalated
@@ -1947,9 +2047,11 @@ EOF
   fi
 
   # --- no open round: a fresh round, gated by the ceiling -----------------------------------
+  # ROUND_COUNT names the directory the next round follows; the gate itself counts rounds that
+  # ended RED, not round numbers (convergent-judge-07).
   local ROUND_COUNT=0; [ -n "$RD" ] && ROUND_COUNT="${RD##*/round-}"
-  [ "$ROUND_COUNT" -lt "$CEILING" ] || {
-    echo "cycle: open-round - $SLUG is at the ceiling ($CEILING rounds)" >&2
+  [ "$(red_rounds "$SLUG")" -lt "$CEILING" ] || {
+    echo "cycle: open-round - $SLUG is at the ceiling ($CEILING RED rounds)" >&2
     [ "$ROUND_COUNT" -gt 0 ] && {
       write_ceiling_escalate "$SPEC" "$SLUG" "$ROUND_COUNT" "$SPEC/council/round-$ROUND_COUNT"
       [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $ROUND_COUNT" "$SPEC" memory/stats/council.jsonl
@@ -1960,7 +2062,8 @@ EOF
   build_round "$SPEC" "$SLUG" "$((ROUND_COUNT+1))" "$HEAD" "$PACK" "$CEILING" "$DOCOMMIT"
 }
 
-# --- reopen: three more rounds after ESCALATE (D6) --------------------------------------------
+# --- reopen: the tier's own ceiling again after ESCALATE (D6; convergent-judge) - Tier 1 +1,
+# Tier 2 +2, Tier 3-4 +3 RED rounds (GREEN and STALE rounds never count) ------------------------
 
 append_after_answers() { # append_after_answers <brief.md> <block> - inserts before the next
   # "## " heading after "## Answers" (or at EOF if that's the last section); creates the
@@ -2006,12 +2109,13 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
   local marker_text="**After escalation (round $N, $dateonly).**"
   local already=0; grep -qF "$marker_text" "$BRIEF" 2>/dev/null && already=1
 
-  local OLDCEIL; OLDCEIL="$(head -1 "$SPEC/council/CEILING" 2>/dev/null | tr -d '[:space:]')"; [ -n "$OLDCEIL" ] || OLDCEIL=3
+  local STEP; STEP="$(tier_ceiling "$(tier_of "$SPEC")")"
+  local OLDCEIL; OLDCEIL="$(head -1 "$SPEC/council/CEILING" 2>/dev/null | tr -d '[:space:]')"; [ -n "$OLDCEIL" ] || OLDCEIL="$STEP"
   local NEWCEIL="$OLDCEIL"
 
   if [ "$already" -eq 0 ]; then
     append_after_answers "$BRIEF" "$(printf '\n%s\n> %s\n' "$marker_text" "$DECISION")"
-    NEWCEIL=$((OLDCEIL+3))
+    NEWCEIL=$((OLDCEIL+STEP))
     mkdir -p "$SPEC/council"
     printf '%s\n' "$NEWCEIL" > "$SPEC/council/CEILING"
     bash "$HERE/journal.sh" "$SPEC" "04-council:ESCALATE" "reopened after round $N, ceiling now $NEWCEIL" "open-round" >/dev/null

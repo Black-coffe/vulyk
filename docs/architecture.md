@@ -51,7 +51,8 @@ goal -> Queen names the deliverable: a document ends at report.md (study, ADR-00
         lead-review's PASS/BLOCK and computes the verdict - no model writes it
         GREEN -> stage 04+05 close together, /vulyk-ship unblocks
         RED -> repair: queen-planner (opus; TOP_MODEL at Tier 4) cuts fix stories from the RED asks, back through /vulyk-build
-        ESCALATE (ceiling 3 rounds, or half the asks RED already) -> the Queen wakes once,
+        ESCALATE (tier ceiling: 1/2/3 rounds for Tier 1/2/3-4, + the same per reopen;
+        or half the asks RED already) -> the Queen wakes once,
         ## Needs a human in plan.md names the exits
 /vulyk-ship (stage 06)
      -> ship-check.sh: all six confirmations present, and about THIS pack at THIS commit

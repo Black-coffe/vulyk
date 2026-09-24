@@ -90,7 +90,8 @@ Tier 1; `council-sonnet` + `lead-review` at Tier 2; the full court - `council-so
 `council-opus`, `council-haiku` - plus `lead-review` at Tier 3-4, and the second reviewer at
 Tier 4. Every seat judges
 only the brief's words, in a court whose working tree holds only the brief. Green needs
-unanimity; RED on half the asks or more, or three RED rounds, escalates to `## Needs a human`.
+unanimity; RED on half the asks or more, or RED at the tier's ceiling (1 round at Tier 1, 2 at
+Tier 2, 3 at Tier 3-4; `reopen` adds the same again), escalates to `## Needs a human`.
 The owner may step in at any point via `/vulyk-pause`; `scripts/human-check.sh` outranks the
 council either way - but nothing in the loop waits for it.
 

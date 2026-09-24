@@ -1,8 +1,8 @@
 ---
 story: convergent-judge-03
 spec: convergent-judge
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 model: opus
@@ -44,5 +44,9 @@ memory/map/scripts.md - install.sh entries; install.sh `shippable` (:59-77), `co
 `bash tests/telemetry.test.sh`
 
 ## Implementation notes
+- install.sh: `shippable` returns 2 for `memory/stats/council.jsonl`; new `clean_seeded_council` runs on `--upgrade` after the manifest-removal block (grep -vF on `"spec":"autonomous-cycle"`, written back via `cat >` to keep the file's mode). Edited with Edit only; the single literal-CR line (:628 area) is intact (CR line count still 1).
+- `--check` wording chosen: `council.jsonl: would remove <n> seeded autonomous-cycle row(s)` (story named only the write-mode line).
+- A hive whose old manifest listed council.jsonl will also see `leave (yours) memory/stats/council.jsonl` from the existing removal loop - expected, not changed (file is outside OWNED).
+- tests/telemetry.test.sh: fresh-install absence check + 9 cases (check skip, check no-write, clean, byte-for-byte via cmp, no-seeded-rows, own autonomous-cycle spec).
 
 ## Findings

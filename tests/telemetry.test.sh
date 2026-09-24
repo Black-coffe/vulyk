@@ -763,6 +763,8 @@ expect_eq "the installed hive's own consent verb reads it" "off" \
   "$(VULYK_HIVE="$TGT" bash "$TGT/scripts/telemetry.sh" consent)"
 expect_eq "the anomaly log is never shipped into a hive" "0" \
   "$([ -e "$TGT/memory/stats/anomalies.jsonl" ] && echo 1 || echo 0)"
+expect_eq "the council ledger is never shipped into a hive" "0" \
+  "$([ -e "$TGT/memory/stats/council.jsonl" ] && echo 1 || echo 0)"
 
 # --telemetry on changes that one row's value and nothing else in the constitution
 PROF_BEFORE="$(grep -v '^| Telemetry |' "$TGT/CLAUDE.md")"
@@ -858,6 +860,45 @@ expect_eq "a second upgrade leaves settings.json byte-identical" "1" \
 cat "$T/wire2.out" | expect_absent "and reports no second wiring" "-> Stop: anomaly-scan.sh"
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire3.out" 2>&1
 cat "$T/wire3.out" | expect_absent "--check reports no wiring for an already-wired hook" "would wire     .claude/settings.json -> Stop"
+
+# council.jsonl (convergent-judge-03): excluded as runtime; --upgrade strips the seeded
+# autonomous-cycle rows an older release shipped, and nothing else.
+echo "--- install.sh: council.jsonl exclusion and seeded-row cleanup"
+bash "$SRC/install.sh" "$TGT" --check > "$T/council-check.out" 2>&1
+cat "$T/council-check.out" | expect "--check lists council.jsonl as a runtime skip" \
+  "would skip (runtime) memory/stats/council.jsonl"
+LEDG="$TGT/memory/stats/council.jsonl"
+KEEP1='{"ts":"2026-09-20T10:00:00Z","spec":"my-feature","round":1,"verdict":"GREEN"}'
+KEEP2='{"ts":"2026-09-21T10:00:00Z","spec":"other","round":2,"verdict":"RED","note":"x"}'
+seed_ledger() {
+  { echo '{"ts":"2026-09-13T11:09:36Z","spec":"autonomous-cycle","round":1,"verdict":"RED"}'
+    echo "$KEEP1"
+    echo '{"ts":"2026-09-13T14:03:59Z","spec":"autonomous-cycle","round":2,"verdict":"RED"}'
+    echo "$KEEP2"
+    echo '{"ts":"2026-09-13T16:00:00Z","spec":"autonomous-cycle","round":3,"verdict":"GREEN"}'
+  } > "$LEDG"
+}
+seed_ledger; cp "$LEDG" "$T/ledger.before"
+bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/council-upcheck.out" 2>&1
+cat "$T/council-upcheck.out" | expect "--upgrade --check reports the pending cleanup" \
+  "council.jsonl: would remove 3 seeded autonomous-cycle row(s)"
+expect_eq "--upgrade --check leaves the ledger untouched" "1" \
+  "$(cmp -s "$T/ledger.before" "$LEDG" && echo 1 || echo 0)"
+bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/council-up.out" 2>&1
+cat "$T/council-up.out" | expect "--upgrade reports the removed rows" \
+  "council.jsonl: removed 3 seeded autonomous-cycle row(s)"
+expect_eq "--upgrade keeps every other row byte for byte" "1" \
+  "$(printf '%s\n%s\n' "$KEEP1" "$KEEP2" | cmp -s - "$LEDG" && echo 1 || echo 0)"
+bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/council-up2.out" 2>&1
+cat "$T/council-up2.out" | expect_absent "a ledger with no seeded rows: nothing said" "council.jsonl:"
+expect_eq "a ledger with no seeded rows: untouched" "1" \
+  "$(printf '%s\n%s\n' "$KEEP1" "$KEEP2" | cmp -s - "$LEDG" && echo 1 || echo 0)"
+seed_ledger; cp "$LEDG" "$T/ledger.before"; mkdir -p "$TGT/docs/specs/autonomous-cycle"
+bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/council-own.out" 2>&1
+cat "$T/council-own.out" | expect_absent "a hive with its own autonomous-cycle spec: nothing said" "council.jsonl:"
+expect_eq "a hive with its own autonomous-cycle spec: ledger untouched" "1" \
+  "$(cmp -s "$T/ledger.before" "$LEDG" && echo 1 || echo 0)"
+rmdir "$TGT/docs/specs/autonomous-cycle"
 
 # --- case 17: inbox - distil, then stage the clear (anomaly-telemetry-07) ----------------------
 echo "--- inbox"

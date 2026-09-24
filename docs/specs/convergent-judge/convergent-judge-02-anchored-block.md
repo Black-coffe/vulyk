@@ -1,8 +1,8 @@
 ---
 story: convergent-judge-02
 spec: convergent-judge
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 model: opus
@@ -54,5 +54,13 @@ memory/map/cycle.md - "Required seats by tier and the verdict rule", seat/court 
 `bash tests/council.test.sh && bash tests/cycle.test.sh && bash tests/driver.test.sh`
 
 ## Implementation notes
+- scripts/cycle.sh: new `review_anchor_asks` / `review_has_regression` helpers (body = review.md minus the C4 header); `cmd_judge` downgrades a BLOCK with no in-range `[ask N]` and no `[regression]` to review `PASS` + note `review BLOCK unanchored` (joined with `; ` if an env note also applies). `review_asks` added after `red_unevidenced` on judge, ESCALATE (ceiling/escalate verb, BLOCK only, no downgrade there) and STALE (`[]`) rows so all rows keep one key order.
+- Decision: a stored review.md whose verdict line is unreadable still counts as BLOCK (fail-closed, unchanged); only a *read* BLOCK can be downgraded. `review_asks` is recorded for BLOCK only, not for anchors in a PASS body.
+- tests/council.test.sh: key-order check gains `review_asks`; the realverbs round-4 fixture now tags `[ask 2]` (its untagged BLOCK would now judge GREEN); six new cases (anchored ask, regression-only, unanchored, out-of-range [ask 9]/[ask 0], unanchored BLOCK beside a seat RED, pre-review_asks row via status).
+- Docs: lead-review.md verdict + anchor paragraph; vulyk-build repair row; vulyk-ship step 5; vulyk-review fold keeps tags; ADR-001 row shape + D4 amended in place with 2026-09-23 notes (file is CRLF, preserved).
+- Re-dispatch 2026-09-23: the work was already on disk, so nothing was re-implemented. The verification command was re-run and all three suites passed.
+- Re-dispatch #2 on 2026-09-23: the diff was still uncommitted on disk, with 7 files changed. Nothing was changed. The verification command was re-run and all three suites exited 0.
+- Re-dispatch #3 on 2026-09-23: the diff was still uncommitted, so nothing was changed. All three suites exited 0 again. On Windows the council suite takes about 10 minutes.
+- Surprising: the Tier 4 fold concatenates both bodies, so a PASS reviewer's `[ask N]` tag can anchor the other reviewer's BLOCK - left as is (non-goal).
 
 ## Findings

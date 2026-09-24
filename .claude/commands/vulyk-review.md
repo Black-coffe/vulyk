@@ -53,7 +53,8 @@ branch).
      (concurrency, security, data migration safety). Before recording anything, fold the two
      verdicts into **one** `review` report: the folded verdict is the **stricter of the two** -
      `BLOCK` if either one blocks, `PASS` only if both pass. Report both sets of findings under that
-     one report so nothing is lost; only the merged `PASS`/`BLOCK` line reaches `record-seat`.
+     one report so nothing is lost, each keeping its `[ask N]`/`[regression]`/`[unanchored]` tag
+     verbatim - `judge` reads those tags off the folded body the same way; only the merged `PASS`/`BLOCK` line reaches `record-seat`.
      `record-seat` accepts exactly one `review` file per round - there is no second slot to hold a
      second opinion separately.
 

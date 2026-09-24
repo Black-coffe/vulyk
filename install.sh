@@ -72,6 +72,7 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
                                    return 2 ;;
     memory/snapshots/*)           case "$f" in */.gitkeep) return 0 ;; esac; return 2 ;;
     memory/stats/anomalies.jsonl) return 2 ;;   # the maintainer's own anomaly log: runtime, per-hive
+    memory/stats/council.jsonl)   return 2 ;;   # the maintainer's own council ledger: runtime, per-hive
   esac
   return 0
 }
@@ -670,6 +671,25 @@ if [ -n "$UPGRADE" ]; then
     done
   fi
 fi
+
+# Releases before council.jsonl was excluded seeded every hive's ledger with VULYK's own
+# `autonomous-cycle` rounds. On --upgrade, drop exactly those rows - but only in a hive that has
+# no such spec of its own (VULYK's repo does), and never touch any other line.
+clean_seeded_council() {
+  local file="$DEST/memory/stats/council.jsonl" needle='"spec":"autonomous-cycle"' n
+  [ -f "$file" ] || return 0
+  [ -d "$DEST/docs/specs/autonomous-cycle" ] && return 0
+  n="$(grep -cF "$needle" "$file" 2>/dev/null)" || n=0
+  [ "$n" -gt 0 ] || return 0
+  if [ "$CHECK" = "--check" ]; then
+    echo "  council.jsonl: would remove $n seeded autonomous-cycle row(s)"
+    return 0
+  fi
+  grep -vF "$needle" "$file" > "$file.vulyktmp" || true
+  cat "$file.vulyktmp" > "$file" && rm -f "$file.vulyktmp"
+  echo "  council.jsonl: removed $n seeded autonomous-cycle row(s)"
+}
+[ -n "$UPGRADE" ] && clean_seeded_council
 
 ensure_gitignore
 ensure_gitattributes

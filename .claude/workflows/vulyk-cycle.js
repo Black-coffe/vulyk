@@ -1,6 +1,6 @@
 export const meta = {
   name: 'vulyk-cycle',
-  description: 'build → council → repair, ceiling 3',
+  description: 'build → council → repair, round ceiling by tier (1 / 2 / 3 for Tier 1 / 2 / 3-4, the same again per reopen)',
   phases: [
     { title: 'Build' },
     { title: 'Round' },
@@ -319,7 +319,7 @@ try {
         : `has no ask numbered - the review seat's BLOCK (or an owner REJECTED) is why the round failed; see ${st.round_dir}/review.md`
       const ask = st.red.length > 0
         ? 'one wave, each addressing exactly one of those asks'
-        : 'one wave, one story per critical and per major finding whose fix is local'
+        : "one wave, one story per critical and per major finding whose fix is local and that carries an anchor - `[ask N]` for an N in the brief's `## Asks`, or `[regression]`; an `[unanchored]` finding never becomes a story, it waits for `/vulyk-ship` step 5"
       await agent(
         `Round ${st.round} for ${st.slug} (review: ${st.review}) ${reason}. Cut fix stories under docs/specs/${st.slug}/ following templates/story.md's frontmatter and naming convention, ${ask}, then update plan.md's story index.`,
         { agentType: 'queen-planner', model: TOP, phase: 'Repair' },
