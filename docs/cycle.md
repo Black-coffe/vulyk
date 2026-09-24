@@ -49,7 +49,7 @@ stories either. Green requires unanimity: every seat `GREEN` or `N/A`, and `lead
 (which does see the code, in parallel, unchanged) `PASS`. A round with an evidenced RED on
 half the asks or more escalates immediately rather than burning further rounds on a plan
 that is wrong; a round that finds the same ask RED as the round before escalates at once
-(`no-progress`) instead of opening another repair; RED rounds without unanimity escalate on the tier's ceiling (1 round at Tier 1,
+(`no-progress`) instead of opening another repair; RED rounds without unanimity escalate on the tier's ceiling (1 judged round at Tier 1,
 2 at Tier 2, 3 at Tier 3–4). Either way
 `cycle.sh escalate` writes `## Needs a human` into `plan.md` and stops — this is the
 emergency exit, not the routine path.
@@ -69,9 +69,9 @@ something else — same rule as every gate in [pipeline.md](pipeline.md).
 | Event | Stage(s) it reopens | Artifact that goes stale |
 |---|---|---|
 | The brief gains an `## Answers` line that changes an ask after the grill closed | 02 onward | `**Approved:**` (or `**Briefed:**` on the `--go` / Tier 1 path) — re-present the plan |
-| A code commit lands on the branch while a council round is open | 05 | the open round: `cycle.sh open-round` re-stamps it in place if no seat has reported yet, or writes a `STALE` row and opens round N+1 if one already has — either way the ceiling still counts it |
+| A code commit lands on the branch while a council round is open | 05 | the open round: `cycle.sh open-round` re-stamps it in place if no seat has reported yet, or writes a `STALE` row and opens round N+1 if one already has — neither counts against the ceiling, which counts judged (non-STALE) rounds only |
 | A code commit lands after a round already judged GREEN | that `**Council:**` row | `ship-check.sh` reads it as `STALE (commit)` unless only paperwork landed since (`paperwork_only`); a fresh round is needed |
-| A round is RED for half the asks or more, holds an ask RED that round N-1 also held RED (`no-progress`), or the tier's ceiling (1 / 2 / 3 for Tier 1 / 2 / 3–4, `+` the same per `reopen`) is reached | 05 | `ESCALATE` — `cycle.sh escalate` writes `## Needs a human` into `plan.md`; the loop stops instead of opening a round nobody asked for |
+| A round is RED for half the asks or more, holds an ask RED that round N-1 also held RED (`no-progress`), or the tier's ceiling (1 / 2 / 3 judged rounds for Tier 1 / 2 / 3–4, `+` the same per `reopen`; a `STALE` round never counts) is reached | 05 | `ESCALATE` — `cycle.sh escalate` writes `## Needs a human` into `plan.md`; the loop stops instead of opening a round nobody asked for |
 | The owner pauses, at any stage | any | `PAUSE` semaphore — the loop stops at its next safe point; `/vulyk-resume` clears it and relaunches fresh, never resuming a cached run |
 | An `ESCALATE` is on the record | 05 | three exits, all on the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen "<decision>"` (another tier's worth of rounds), or leaving the spec open |
 | The owner records `**Checked:** REJECTED` after a GREEN council row | 05, then 03–04 via repair | the council verdict — treated as RED regardless of what the seats said; fix stories go through `/vulyk-build`, then a fresh round |

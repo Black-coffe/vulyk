@@ -370,7 +370,7 @@ echo "judge: review BLOCK anchored [ask 2], seats GREEN -> RED/repair, review_as
 mk_spec anch1 3
 rd="$(mk_round anch1 1)"
 write_seat "$rd" haiku GGG; write_seat "$rd" sonnet GGG; write_seat "$rd" opus GGG
-write_review_body "$rd" '- major [ask 2]: the guard on line 40 is missing'
+write_review_body "$rd" '## Major' '- major [ask 2]: the guard on line 40 is missing'
 jout="$(council judge docs/specs/anch1)"; jexit=$?
 [ "$jexit" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    anchored BLOCK -> next repair" \
   || { echo "::error::anch1 judge: exit=$jexit out=$jout"; fail=1; }
@@ -383,11 +383,43 @@ echo "judge: review BLOCK anchored [regression] only -> RED/repair, review_asks:
 mk_spec anchreg 3
 rd="$(mk_round anchreg 1)"
 write_seat "$rd" haiku GGG; write_seat "$rd" sonnet GGG; write_seat "$rd" opus GGG
-write_review_body "$rd" '- critical [regression]: base passes t.sh, head fails it'
+write_review_body "$rd" '## Critical' '- critical [regression]: base passes t.sh, head fails it'
 jout="$(council judge docs/specs/anchreg)"; jexit=$?
 row="$(grep '"spec":"anchreg"' memory/stats/council.jsonl | tail -1)"
 [ "$jexit" -eq 0 ] && printf '%s' "$row" | grep -qF '"verdict":"RED"' && printf '%s' "$row" | grep -qF '"review_asks":[]' \
   && echo "  ok    [regression] holds the BLOCK" || { echo "::error::anchreg: exit=$jexit row=$row"; fail=1; }
+
+# convergent-judge-05: a tag anchors only on a list line under a critical/major heading.
+echo "judge: [regression] in prose under ## Major does not anchor -> GREEN, unanchored"
+mk_spec anchprose 3
+rd="$(mk_round anchprose 1)"
+write_seat "$rd" haiku GGG; write_seat "$rd" sonnet GGG; write_seat "$rd" opus GGG
+write_review_body "$rd" '## Major' 'No [regression] found - base and head both pass t.sh.' '- major [unanchored]: naming is confusing'
+jout="$(council judge docs/specs/anchprose)"; jexit=$?
+row="$(grep '"spec":"anchprose"' memory/stats/council.jsonl | tail -1)"
+[ "$jexit" -eq 0 ] && printf '%s' "$row" | grep -qF '"verdict":"GREEN"' && printf '%s' "$row" | grep -qF '"note":"review BLOCK unanchored"' \
+  && echo "  ok    prose [regression] under ## Major is not an anchor" || { echo "::error::anchprose: exit=$jexit row=$row"; fail=1; }
+
+echo "judge: [ask 2] on a ## Minor list line does not anchor -> GREEN, unanchored"
+mk_spec anchminor 3
+rd="$(mk_round anchminor 1)"
+write_seat "$rd" haiku GGG; write_seat "$rd" sonnet GGG; write_seat "$rd" opus GGG
+write_review_body "$rd" '## Major' '- major [unanchored]: naming is confusing' '## Minor' '- minor [ask 2]: a nit on the guard'
+jout="$(council judge docs/specs/anchminor)"; jexit=$?
+row="$(grep '"spec":"anchminor"' memory/stats/council.jsonl | tail -1)"
+[ "$jexit" -eq 0 ] && printf '%s' "$row" | grep -qF '"verdict":"GREEN"' && printf '%s' "$row" | grep -qF '"review_asks":[]' \
+  && printf '%s' "$row" | grep -qF '"note":"review BLOCK unanchored"' \
+  && echo "  ok    [ask 2] on a ## Minor line is not an anchor" || { echo "::error::anchminor: exit=$jexit row=$row"; fail=1; }
+
+echo "judge: [ask 2] on a numbered ## major (lower-case) list line still anchors -> RED, review_asks:[2]"
+mk_spec anchnum 3
+rd="$(mk_round anchnum 1)"
+write_seat "$rd" haiku GGG; write_seat "$rd" sonnet GGG; write_seat "$rd" opus GGG
+write_review_body "$rd" '## major' '1. `x.sh:4` - [ask 2] - the guard is missing' '## Minor' '- minor [ask 3]: nit'
+jout="$(council judge docs/specs/anchnum)"; jexit=$?
+row="$(grep '"spec":"anchnum"' memory/stats/council.jsonl | tail -1)"
+[ "$jexit" -eq 0 ] && printf '%s' "$row" | grep -qF '"verdict":"RED"' && printf '%s' "$row" | grep -qF '"review_asks":[2],' \
+  && echo "  ok    numbered ## major list line anchors [ask 2] only" || { echo "::error::anchnum: exit=$jexit row=$row"; fail=1; }
 
 echo "judge: review BLOCK unanchored, seats GREEN -> GREEN, review PASS, note names it"
 mk_spec unanch1 3
@@ -406,7 +438,7 @@ echo "judge: review BLOCK tagged [ask 9] on a 3-ask brief -> unanchored -> GREEN
 mk_spec unanch9 3
 rd="$(mk_round unanch9 1)"
 write_seat "$rd" haiku GGG; write_seat "$rd" sonnet GGG; write_seat "$rd" opus GGG
-write_review_body "$rd" '- major [ask 9]: out of range' '- major [ask 0]: also out of range'
+write_review_body "$rd" '## Major' '- major [ask 9]: out of range' '- major [ask 0]: also out of range'
 jout="$(council judge docs/specs/unanch9)"; jexit=$?
 row="$(grep '"spec":"unanch9"' memory/stats/council.jsonl | tail -1)"
 [ "$jexit" -eq 0 ] && printf '%s' "$row" | grep -qF '"verdict":"GREEN"' && printf '%s' "$row" | grep -qF '"review_asks":[]' \
@@ -500,11 +532,11 @@ echo "judge: review [ask 4] BLOCK in rounds 1 and 2, seats GREEN -> round 2 ESCA
 mk_spec noprog4 5
 rd="$(mk_round noprog4 1 3)"
 write_seat "$rd" haiku GGGGG; write_seat "$rd" sonnet GGGGG; write_seat "$rd" opus GGGGG
-write_review_body "$rd" '- major [ask 4]: the guard is missing'
+write_review_body "$rd" '## Major' '- major [ask 4]: the guard is missing'
 council judge docs/specs/noprog4 >/dev/null
 rd="$(mk_round noprog4 2 3)"
 write_seat "$rd" haiku GGGGG; write_seat "$rd" sonnet GGGGG; write_seat "$rd" opus GGGGG
-write_review_body "$rd" '- major [ask 4]: the guard is still missing'
+write_review_body "$rd" '## Major' '- major [ask 4]: the guard is still missing'
 out="$(council judge docs/specs/noprog4)"; ex=$?
 row="$(grep '"spec":"noprog4"' memory/stats/council.jsonl | tail -1)"
 [ "$ex" -eq 6 ] && printf '%s' "$row" | grep -qF '"round":2,"verdict":"ESCALATE"' && printf '%s' "$row" | grep -qF '"escalate":"no-progress"'   && grep -qF -- '- no progress: ask 4 RED in rounds 1 and 2' docs/specs/noprog4/plan.md   && echo "  ok    review-anchored repeat triggers no-progress" || { echo "::error::noprog4: exit=$ex row=$row"; fail=1; }
@@ -2048,6 +2080,64 @@ council reopen docs/specs/tceil2 "owner: one more pass" --commit >/dev/null
 [ "$(cat docs/specs/tceil2/council/CEILING 2>&1)" = "4" ] && echo "  ok    tier 2: reopen raises the ceiling to 4" \
   || { echo "::error::CEILING: $(cat docs/specs/tceil2/council/CEILING 2>&1)"; fail=1; }
 
+# --- judged-rounds ceiling (convergent-judge-05): a STALE-folded round does not consume the
+# tier's budget - the ceiling counts rounds with a non-STALE council.jsonl row only.
+
+echo "judged ceiling: Tier 1 - round 1 goes STALE, round 2 opens (exit 0), round 2 RED escalates (ceiling)"
+mk_spec tstale1 2
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/tstale1#' docs/specs/tstale1/plan.md
+git add -A && git commit -qm "tstale1: branch" >/dev/null
+set_tier tstale1 1
+council open-round docs/specs/tstale1 --commit >/dev/null
+write_seat docs/specs/tstale1/council/round-1 sonnet RG
+echo "code change" > tstale1-code.txt
+git add -A && git commit -qm "code commit while tstale1 round 1 is open" >/dev/null
+out="$(council open-round docs/specs/tstale1 --commit 2>&1)"; ex=$?
+row1="$(grep '"spec":"tstale1"' memory/stats/council.jsonl | grep '"round":1,' | tail -1)"
+[ "$ex" -eq 0 ] && printf '%s' "$row1" | grep -qF '"verdict":"STALE"' && [ -f docs/specs/tstale1/council/round-2/ROUND ] \
+  && echo "  ok    tier 1: STALE row for round 1, round 2 opened, exit 0 (not 6)" \
+  || { echo "::error::tstale1 open-round: exit=$ex row1=$row1 out=$out"; fail=1; }
+write_seat docs/specs/tstale1/council/round-2 sonnet RG
+jout="$(council judge docs/specs/tstale1 --commit)"; jex=$?
+[ "$jex" -eq 6 ] && grep '"spec":"tstale1"' memory/stats/council.jsonl | grep '"round":2,' | grep -qF '"escalate":"ceiling"' \
+  && echo "  ok    tier 1: round 2 RED -> ESCALATE ceiling (the one judged round)" \
+  || { echo "::error::tstale1 judge: exit=$jex out=$jout"; fail=1; }
+
+echo "judged ceiling: Tier 2 - STALE, RED (repair), RED (ESCALATE ceiling); after reopen the next RED is repair"
+mk_spec tstale2 2
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/tstale2#' docs/specs/tstale2/plan.md
+git add -A && git commit -qm "tstale2: branch" >/dev/null
+set_tier tstale2 2
+council open-round docs/specs/tstale2 --commit >/dev/null
+write_seat docs/specs/tstale2/council/round-1 sonnet RG
+echo "code change" > tstale2-code.txt
+git add -A && git commit -qm "code commit while tstale2 round 1 is open" >/dev/null
+out="$(council open-round docs/specs/tstale2 --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep '"spec":"tstale2"' memory/stats/council.jsonl | grep '"round":1,' | grep -qF '"verdict":"STALE"' \
+  && echo "  ok    tier 2: round 1 STALE, round 2 opened" || { echo "::error::tstale2 fold: exit=$ex out=$out"; fail=1; }
+rdn="docs/specs/tstale2/council/round-2"
+write_seat "$rdn" sonnet RG; write_review "$rdn" PASS
+jout="$(council judge docs/specs/tstale2 --commit)"; jex=$?
+[ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    tier 2: round 2 RED -> repair (first judged round)" \
+  || { echo "::error::tstale2 round 2: exit=$jex out=$jout"; fail=1; }
+out="$(council open-round docs/specs/tstale2 --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -f docs/specs/tstale2/council/round-3/ROUND ] && echo "  ok    tier 2: round 3 opens (one judged round < 2)" \
+  || { echo "::error::tstale2 open 3: exit=$ex out=$out"; fail=1; }
+rdn="docs/specs/tstale2/council/round-3"
+write_seat "$rdn" sonnet GR; write_review "$rdn" PASS # a different ask: no no-progress
+jout="$(council judge docs/specs/tstale2 --commit)"; jex=$?
+[ "$jex" -eq 6 ] && grep '"spec":"tstale2"' memory/stats/council.jsonl | grep '"round":3,' | grep -qF '"escalate":"ceiling"' \
+  && echo "  ok    tier 2: round 3 RED -> ESCALATE ceiling (second judged round)" \
+  || { echo "::error::tstale2 round 3: exit=$jex out=$jout"; fail=1; }
+council reopen docs/specs/tstale2 "owner: one more pass" --commit >/dev/null
+out="$(council open-round docs/specs/tstale2 --commit 2>&1)"; ex=$?
+rdn="docs/specs/tstale2/council/round-4"
+[ "$ex" -eq 0 ] && [ -f "$rdn/ROUND" ] || { echo "::error::tstale2 open 4: exit=$ex out=$out"; fail=1; }
+write_seat "$rdn" sonnet RG; write_review "$rdn" PASS
+jout="$(council judge docs/specs/tstale2 --commit)"; jex=$?
+[ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    tier 2: after reopen (ceiling 4), round 4 RED -> repair" \
+  || { echo "::error::tstale2 round 4: exit=$jex out=$jout"; fail=1; }
+
 # --- status --json after committed verbs (autonomous-cycle-19: R1, R2, R3, R7, R25) -----------
 # The council round found the suite asserted only each verb's own emit, never `status --json`
 # afterward - which is exactly the seam where `--commit` (used by both drivers, always) moved
@@ -2111,7 +2201,7 @@ out="$(council open-round docs/specs/realverbs --commit)"; ex=$?
 echo "status --json: review key - the newest row's review verdict verbatim (R30/C3)"
 seat_report sonnet 4 GGG | council record-seat docs/specs/realverbs 4 sonnet >/dev/null
 seat_report opus 4 GGG | council record-seat docs/specs/realverbs 4 opus >/dev/null
-printf 'VERDICT: BLOCK\n- major [ask 2]: still missing coverage.\n' | council record-seat docs/specs/realverbs 4 review >/dev/null
+printf 'VERDICT: BLOCK\n## Major\n- major [ask 2]: still missing coverage.\n' | council record-seat docs/specs/realverbs 4 review >/dev/null
 jout="$(council judge docs/specs/realverbs --commit)"; jex=$?
 [ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"repair"' && echo "  ok    round 4 judged RED --commit (review BLOCK, both seats GREEN)" \
   || { echo "::error::round 4 judge: exit=$jex out=$jout"; fail=1; }
@@ -2605,7 +2695,7 @@ grep -qF -- '- ask 2: RED - see' docs/specs/ceilred1/plan.md && grep -qF -- '- a
 grep -qF "seats: $rd_cr/" docs/specs/ceilred1/plan.md && echo "  ok    seats: names the round directory" \
   || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilred1/plan.md)"; fail=1; }
 
-echo "open-round: r2m5/r2m6 - the ceiling block (STALE-fold path) carries the same RED asks (2,5)"
+echo "open-round: a STALE fold at ceiling 1 no longer counts toward the ceiling (convergent-judge-05, flipped) - round 2 opens"
 mk_open_spec ceilstale1 5
 set_tier ceilstale1 3
 mkdir -p docs/specs/ceilstale1/council
@@ -2619,17 +2709,42 @@ write_review "$rd_cs" PASS
 echo "real code change" > ceilstale1-code.txt
 git add -A && git commit -qm "real code change while ceilstale1 round 1 is open" >/dev/null
 out="$(council open-round docs/specs/ceilstale1 --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -f docs/specs/ceilstale1/council/round-2/ROUND ] \
+  && grep '"spec":"ceilstale1"' memory/stats/council.jsonl | grep '"round":1,' | grep -qF '"verdict":"STALE"' \
+  && ! grep '"spec":"ceilstale1"' memory/stats/council.jsonl | grep -qF '"verdict":"ESCALATE"' \
+  && echo "  ok    STALE round 1 does not count: exit 0, round 2 opened, no ESCALATE row" \
+  || { echo "::error::ceilstale1: exit=$ex out=$out"; fail=1; }
+
+echo "open-round: r2m5/r2m6 - the ceiling block (STALE-fold path) carries the same RED asks (2,5)"
+# convergent-judge-05: the STALE-fold path reaches the ceiling only when judged rounds already
+# fill it - here round 1 is judged RED (ceiling 1) and round 2, with seats, goes stale.
+mk_open_spec ceilstale2 5
+set_tier ceilstale2 3
+mkdir -p docs/specs/ceilstale2/council
+printf '1\n' > docs/specs/ceilstale2/council/CEILING
+mk_round ceilstale2 1 1 >/dev/null
+printf '{"ts":"%s","spec":"ceilstale2","round":1,"verdict":"RED","head":"%s","pack":"demo-pack","asks":5,"red":[1],"red_unevidenced":[],"na":0,"review":"PASS","haiku":"RED","haiku_model":"m","sonnet":"GREEN","sonnet_model":"m","opus":"GREEN","opus_model":"m","attempts":3,"escalate":null,"note":""}\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$HEAD7" >> memory/stats/council.jsonl
+git add -A && git commit -qm "ceilstale2: ceiling 1, round 1 judged RED" >/dev/null
+rd_cs="$(mk_open_round ceilstale2 2 1)"
+write_seat "$rd_cs" haiku GRGGR
+write_seat "$rd_cs" sonnet GGGGG
+write_seat "$rd_cs" opus GGGGG
+write_review "$rd_cs" PASS
+echo "real code change" > ceilstale2-code.txt
+git add -A && git commit -qm "real code change while ceilstale2 round 2 is open" >/dev/null
+out="$(council open-round docs/specs/ceilstale2 --commit 2>&1)"; ex=$?
 [ "$ex" -eq 6 ] && printf '%s' "$out" | tail -n1 | jq -e '{ok, verb, exit, next} == {ok:true, verb:"open-round", exit:6, next:"escalated"}' >/dev/null 2>&1 \
   && echo "  ok    STALE-fold ceiling: exit 6, exact four-key last line" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
-row_cs="$(grep '"spec":"ceilstale1"' memory/stats/council.jsonl | grep '"verdict":"ESCALATE"')"
+row_cs="$(grep '"spec":"ceilstale2"' memory/stats/council.jsonl | grep '"verdict":"ESCALATE"')"
 printf '%s' "$row_cs" | grep -qF '"red":[2,5]' && echo "  ok    STALE-fold ESCALATE row carries red:[2,5] too" \
   || { echo "::error::row: $row_cs"; fail=1; }
-grep -qF -- '- ask 2: RED - see' docs/specs/ceilstale1/plan.md && grep -qF -- '- ask 5: RED - see' docs/specs/ceilstale1/plan.md \
+grep -qF -- '- ask 2: RED - see' docs/specs/ceilstale2/plan.md && grep -qF -- '- ask 5: RED - see' docs/specs/ceilstale2/plan.md \
   && echo "  ok    STALE-fold ## Needs a human has the same ask 2 / ask 5 lines" \
-  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilstale1/plan.md)"; fail=1; }
-grep -qF "seats: $rd_cs/" docs/specs/ceilstale1/plan.md && echo "  ok    STALE-fold seats: names the round directory" \
-  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilstale1/plan.md)"; fail=1; }
+  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilstale2/plan.md)"; fail=1; }
+grep -qF "seats: $rd_cs/" docs/specs/ceilstale2/plan.md && echo "  ok    STALE-fold seats: names the round directory" \
+  || { echo "::error::plan.md: $(grep -A8 '^## Needs a human' docs/specs/ceilstale2/plan.md)"; fail=1; }
 
 echo "open-round: r2m7/N-m2 - a failing court reduction commit exits 2 naming it, and removes the round/court (never handed to a seat)"
 mk_open_spec r2m7a 2

@@ -285,6 +285,14 @@ newest_row() { # newest_row <slug> -> the last council.jsonl line for this spec,
   grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | tail -1
 }
 
+judged_rounds() { # judged_rounds <slug> [<exclude-round>] -> how many distinct rounds of this
+  # spec carry a non-STALE council.jsonl row (convergent-judge-05, plan ## Contracts): the count
+  # every ceiling gate compares against. ESCALATE rows count; a STALE-folded round never does.
+  [ -f memory/stats/council.jsonl ] || { echo 0; return; }
+  grep -F "\"spec\":\"$1\"" memory/stats/council.jsonl | grep -vF '"verdict":"STALE"' \
+    | sed -n 's/.*"round":\([0-9][0-9]*\),.*/\1/p' | sort -u | grep -vxF "${2:-x}" | grep -c . || true
+}
+
 round_row() { # round_row <slug> <round> -> the last council.jsonl line for that round, or empty
   # (a round can carry two rows - a RED, then a ceiling ESCALATE - the newest is its outcome)
   [ -f memory/stats/council.jsonl ] || return 0
@@ -581,18 +589,27 @@ review_verdict_of() { # review_verdict_of <file> -> PASS | BLOCK | "" (D3). The 
   review_verdict_of_text "$(sed '1d' "$1" 2>/dev/null)"
 }
 
-review_anchor_asks() { # review_anchor_asks <file> <A> -> sorted "n n" of every `[ask N]` tag in
-  # the stored review's body with 1 <= N <= A (convergent-judge-02, D4): an out-of-range ask is
-  # not an anchor. The C4 header line is dropped, same as review_verdict_of.
+review_blocking_lines() { # review_blocking_lines <file> -> the stored review's list lines
+  # (`- `, `* `, `N. `) between a `## Critical` or `## Major` heading (case-insensitive) and the
+  # next `## ` heading (convergent-judge-05): the only lines whose anchor tag counts - a tag in
+  # prose or on a minor finding never anchors a BLOCK. The C4 header line is dropped first.
+  sed '1d' "$1" 2>/dev/null | awk '
+    /^##[[:space:]]/ { h=tolower($0); sub(/^##[[:space:]]+/, "", h); blk=(h ~ /^(critical|major)/); next }
+    blk && /^[[:space:]]*([-*][[:space:]]|[0-9]+\.[[:space:]])/ { print }'
+}
+
+review_anchor_asks() { # review_anchor_asks <file> <A> -> sorted "n n" of every `[ask N]` tag on
+  # a blocking list line (review_blocking_lines) with 1 <= N <= A (convergent-judge-02, D4;
+  # scope narrowed by convergent-judge-05): an out-of-range ask is not an anchor.
   local n out=""
-  for n in $(sed '1d' "$1" 2>/dev/null | grep -oE '\[ask [0-9]+\]' | sed 's/[^0-9]//g'); do
+  for n in $(review_blocking_lines "$1" | grep -oE '\[ask [0-9]+\]' | sed 's/[^0-9]//g'); do
     n=$((10#$n))
     [ "$n" -ge 1 ] && [ "$n" -le "$2" ] || continue
     case " $out " in *" $n "*) ;; *) out="$out $n" ;; esac
   done
   sort_num_list "$out"
 }
-review_has_regression() { sed '1d' "$1" 2>/dev/null | grep -qF '[regression]'; } # <file>
+review_has_regression() { review_blocking_lines "$1" | grep -qF '[regression]'; } # <file>
 
 council_line_exists() { grep -qE "^\*\*Council:\*\*.*round $2," "$1" 2>/dev/null; } # <plan> <round>
 journal_line_exists() { [ -f "$1/journal.md" ] && grep -qF "round $2 verdict $3" "$1/journal.md"; } # <spec> <round> <verdict>
@@ -924,7 +941,7 @@ ASKS
   elif [ "$review_v" = "BLOCK" ] || [ "$red_e_count" -gt 0 ] || [ "$red_u_count" -gt 0 ]; then
     if [ -n "$repeated" ]; then
       overall="ESCALATE"; escalate_reason="no-progress"; next_val="escalated"
-    elif [ "$N" -ge "$RCEILING" ]; then
+    elif [ "$(( $(judged_rounds "$SLUG" "$N") + 1 ))" -ge "$RCEILING" ]; then
       overall="ESCALATE"; escalate_reason="ceiling"; next_val="escalated"
     else
       overall="RED"; next_val="repair"
@@ -1997,10 +2014,12 @@ EOF
     fi
     write_stale_row "$SPEC" "$SLUG" "$RD" "$N" "$A"
     local NEXTN=$((N+1))
-    [ "$NEXTN" -le "$CEILING" ] || {
+    # convergent-judge-05: the STALE row just written does not consume the budget - only
+    # judged (non-STALE) rounds count against the ceiling.
+    [ "$(judged_rounds "$SLUG")" -lt "$CEILING" ] || {
       # R5/C-3(a): the ceiling reached here must leave a record - an ESCALATE row, the plan
       # line, ## Needs a human and the journal line - not just exit 6 into a silent loop.
-      echo "cycle: open-round - $SLUG round $NEXTN would exceed ceiling $CEILING" >&2
+      echo "cycle: open-round - $SLUG round $NEXTN would exceed ceiling $CEILING judged rounds" >&2
       write_ceiling_escalate "$SPEC" "$SLUG" "$N" "$RD"
       [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $N" "$SPEC" memory/stats/council.jsonl
       emit true open-round 6 escalated
@@ -2010,9 +2029,11 @@ EOF
   fi
 
   # --- no open round: a fresh round, gated by the ceiling -----------------------------------
+  # ROUND_COUNT names the directory the next round follows; the gate itself counts judged
+  # (non-STALE) rounds, not round numbers (convergent-judge-05).
   local ROUND_COUNT=0; [ -n "$RD" ] && ROUND_COUNT="${RD##*/round-}"
-  [ "$ROUND_COUNT" -lt "$CEILING" ] || {
-    echo "cycle: open-round - $SLUG is at the ceiling ($CEILING rounds)" >&2
+  [ "$(judged_rounds "$SLUG")" -lt "$CEILING" ] || {
+    echo "cycle: open-round - $SLUG is at the ceiling ($CEILING judged rounds)" >&2
     [ "$ROUND_COUNT" -gt 0 ] && {
       write_ceiling_escalate "$SPEC" "$SLUG" "$ROUND_COUNT" "$SPEC/council/round-$ROUND_COUNT"
       [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $ROUND_COUNT" "$SPEC" memory/stats/council.jsonl
@@ -2023,7 +2044,8 @@ EOF
   build_round "$SPEC" "$SLUG" "$((ROUND_COUNT+1))" "$HEAD" "$PACK" "$CEILING" "$DOCOMMIT"
 }
 
-# --- reopen: three more rounds after ESCALATE (D6) --------------------------------------------
+# --- reopen: the tier's own ceiling again after ESCALATE (D6; convergent-judge) - Tier 1 +1,
+# Tier 2 +2, Tier 3-4 +3 judged rounds (a STALE-folded round never counts) ---------------------
 
 append_after_answers() { # append_after_answers <brief.md> <block> - inserts before the next
   # "## " heading after "## Answers" (or at EOF if that's the last section); creates the

@@ -134,3 +134,6 @@
 {"ts":"2026-09-23T21:17:11Z","story":"convergent-judge-04-no-progress","declared":4,"changed":39,"out_of_scope":35}
 {"ts":"2026-09-24T08:45:14Z","story":"convergent-judge-05-judged-rounds-ceiling","declared":5,"changed":44,"out_of_scope":40}
 {"ts":"2026-09-24T08:55:52Z","story":"convergent-judge-06-driver-repair-prompt","declared":4,"changed":45,"out_of_scope":41}
+{"ts":"2026-09-24T09:30:40Z","story":"convergent-judge-05-judged-rounds-ceiling","declared":5,"changed":39,"out_of_scope":35}
+{"ts":"2026-09-24T09:58:04Z","story":"convergent-judge-05-judged-rounds-ceiling","declared":5,"changed":40,"out_of_scope":36}
+{"ts":"2026-09-24T10:25:42Z","story":"convergent-judge-05-judged-rounds-ceiling","declared":5,"changed":40,"out_of_scope":36}
