@@ -16,6 +16,8 @@ The judge stops counting rounds and starts measuring convergence. The ceiling fo
 - **A6 - "ship notes"** are the existing next-circle hand-off of `/vulyk-ship` step 5 (vulyk-ship.md:16), which today carries only `minor` findings; it will also carry every finding of an unanchored BLOCK. `/vulyk-build`'s repair row (vulyk-build.md:101) cuts stories only for anchored findings.
 - **A7 - upgrade cleaning** touches only `memory/stats/council.jsonl` lines containing `"spec":"autonomous-cycle"`, only when `docs/specs/autonomous-cycle/` is absent in the target, and prints one line saying how many rows it removed. A new install gets no `council.jsonl` at all (`shippable` returns 2, as for `anomalies.jsonl`, install.sh:74). Other ledgers (`human`, `ship`, `scope`, `acceptance`) are out of scope.
 - **A8 - the running `web-accounts-p0` build in wild-world-rpg** is not touched; hives pick this up on their next `/vulyk-update`.
+- **A9 - a STALE fold is not a judged round (repair, 2026-09-24):** the ceiling of ask 1 counts verdicts, not dispatches. ADR-001's invariant "STALE rounds with a seat file count toward the ceiling" is reversed by story 05 - an owner's mid-round commit costs the seats' tokens but never a tier's only verdict. Needs the owner's nod: it is a contract change on the record.
+- **A10 - review minors folded, not cut (repair, 2026-09-24):** minors 3, 4, 6 (cycle.sh comment, ADR-001 ceiling numbers, tag scope) ride in story 05 and minor 5 (driver banner, two docs) in story 06 because each sits in a file that story already owns this wave and each is ask-1/ask-3 residue, not new work. Minors 7-12 go to `/vulyk-ship` step 5 untouched. Strike any fold the Queen disagrees with before dispatch.
 
 ## Stories
 
@@ -29,11 +31,17 @@ The judge stops counting rounds and starts measuring convergence. The ceiling fo
 **Wave 3**
 - `convergent-judge-04` — `no-progress` escalation in `judge`, ADR-001 reason enum. (opus)
 
+**Wave 4** (repair, round 1)
+- `convergent-judge-05` — ceiling counts judged rounds, a STALE fold burns none (review major 1); anchor tags read only on critical/major list lines (minor 6); ADR-001, `reopen` comment and `docs/cycle.md` lose every flat 3 (minors 3, 4). (opus)
+- `convergent-judge-06` — Workflow driver's repair prompt carries the same anchor rule as vulyk-build.md:101 (review major 2); driver banner, `docs/pipeline.md`, `docs/architecture.md` lose "ceiling 3" (minor 5). (opus)
+
 ## Contracts
 - `tier_ceiling <tier>` (cycle.sh, story 01): prints 1, 2, 3 or 3 for tiers 1-4; the one place the mapping lives. Story 04 does not call it.
-- `review.md` finding line (story 02): a list line under a critical or major heading carrying `[ask N]`, `[regression]` or `[unanchored]`; the judge's anchor regex is `\[(ask [0-9]+|regression)\]`.
+- **Judged rounds** (cycle.sh, story 05): the ceiling C is compared against the number of this spec's `council.jsonl` rows whose `verdict` is not `STALE` - ESCALATE rows count, STALE rows never do. `open-round` escalates `ceiling` iff judged >= C; `judge` turns a RED into ESCALATE `ceiling` iff judged + 1 >= C. `status`'s `round` stays the `round-*` directory count. `reopen` still raises C by `tier_ceiling`.
+- `review.md` finding line (story 02, scope fixed by story 05): a list line (`- `, `* `, `N. `) between a `## Critical` or `## Major` heading (case-insensitive) and the next `## ` heading, carrying `[ask N]`, `[regression]` or `[unanchored]`. The judge's anchor read is exactly this - a tag in prose, in a header, or under any other heading is text, never an anchor. This line is the single statement of the rule; ADR-001 D4 and `lead-review.md` point at it.
 - `council.jsonl` row (story 02 writes, story 04 reads): new key `review_asks:[n,...]` right after `red_unevidenced`; note text `review BLOCK unanchored` when the downgrade fires.
 - `escalate` reason enum (story 04): `ceiling|half|env|no-progress`.
+- **Repair prompt** (story 06): both drivers hand `queen-planner` the vulyk-build.md:101 sentence - one story per critical and per major finding whose fix is local and that carries `[ask N]` (N in the brief's `## Asks`) or `[regression]`; an `[unanchored]` finding never becomes a story, it waits for `/vulyk-ship` step 5; never phrased as addressing asks that are not there.
 
 ## Integration gate
 `git ls-files '*.sh' | xargs -n1 bash -n && bash tests/council.test.sh && bash tests/cycle.test.sh && bash tests/driver.test.sh && bash tests/telemetry.test.sh`
@@ -43,6 +51,7 @@ The judge stops counting rounds and starts measuring convergence. The ceiling fo
 *(empty)*
 
 ## Plan deltas
+- **2026-09-24, repair after round 1 (review BLOCK, no ask numbered).** Trigger: `council/round-1/review.md` - two majors, both tagged `[unanchored]`; the ledger row shows `review_asks:[]`, `note:""`, yet `review:"BLOCK"` held: `review_has_regression` matched the literal `[regression]` the reviewer wrote in prose (its own minor 6), so the round judged RED instead of the PASS-with-note story 02 intended. Decision: two stories in wave 4 - 05 (major 1 + minors 3, 4, 6) and 06 (major 2 + minor 5); disjoint files; minors 7-12 to ship notes. Tradeoffs: (05) chose "ceiling counts judged rounds" over "document that a STALE fold burns a round" - the latter keeps ADR-001's invariant but lets a Tier 1 spec escalate with no verdict on record, which is the owner's complaint ("принимай решение ты") reproduced with zero evidence; (06) chose copying vulyk-build.md:101 verbatim into the driver over extracting the sentence into a shared file both read - one sentence does not pay for a new file and a loader in a logic-free driver. Assumptions A9, A10 added. Contract "review.md finding line" narrowed from the body-wide regex to critical/major list lines. Open: the reviewer's `[unanchored]` tags mean vulyk-build.md:101 would have cut nothing here; the harness prompt (old wording) asked for one story per major and both majors tie to asks 1 and 3 verbatim, so they were cut - the Queen decides whether that stands. After ship, `memory/map/cycle.md` "Staleness / ceiling" (rows 73-77) is stale and needs the librarian.
 
 **Approved:** Andrei, 2026-09-23
 **Briefed:** <written by scripts/cycle.sh briefed>
