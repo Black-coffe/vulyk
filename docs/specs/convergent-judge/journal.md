@@ -5,3 +5,4 @@
 - 2026-09-23T18:09:15Z · 03-building · branch vulyk/convergent-judge created · next: build:1
 - 2026-09-23T21:30:51Z · 03-building · relaunching the workflow driver after open-round refused (owner's untracked docs/grill note parked in git stash) · next: the loop holds the working tree of vulyk/convergent-judge; to edit, run /vulyk-pause convergent-judge
 - 2026-09-23T21:31:14Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/convergent-judge/round-1 · next: dispatch:sonnet,review
+- 2026-09-24T08:06:02Z · 04-council:RED · round 1 verdict RED at b29c46d pack 69dc98d46660 · next: repair
