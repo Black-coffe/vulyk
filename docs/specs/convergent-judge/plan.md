@@ -67,8 +67,8 @@ The judge stops counting rounds and starts measuring convergence. The ceiling fo
 **Council:** RED round 1, 2026-09-24, at b29c46d, pack 69dc98d46660
 **Council:** ESCALATE round 2, 2026-09-24, at d89806b, pack 437cadda76db
 **Council:** GREEN round 3, 2026-09-24, at eb816f5, pack 7d38d6f5bb1e
-**Shipped:** <written by scripts/ship-check.sh --record>
 
 ## Needs a human
 - reason: ceiling · round 2 · 2026-09-24
 - seats: docs/specs/convergent-judge/council/round-2/
+**Shipped:** 0.17.0, 2026-09-24, at 3db0999 - merged to main, publish pending; gate READY at 76c38f6 before the release commit (CHANGELOG/VERSION read as code by ship-check - next circle)
