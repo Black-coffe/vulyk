@@ -8,3 +8,4 @@
 - 2026-09-24T08:06:02Z · 04-council:RED · round 1 verdict RED at b29c46d pack 69dc98d46660 · next: repair
 - 2026-09-24T10:46:02Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/convergent-judge/round-2 · next: dispatch:sonnet,review
 - 2026-09-24T11:04:11Z · 04-council:ESCALATE · round 2 verdict ESCALATE at d89806b pack 437cadda76db · next: escalated
+- 2026-09-24T11:20:23Z · 04-council:ESCALATE · reopened after round 2, ceiling now 4 · next: open-round

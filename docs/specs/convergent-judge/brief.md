@@ -39,6 +39,9 @@ The owner's answer:
 3. Старые строки - Чистить при обновлении (Рекомендую): `install.sh --upgrade` удаляет из council.jsonl только строки `"spec":"autonomous-cycle"` и только там, где в проекте нет спека `docs/specs/autonomous-cycle`. Рекомендую: иначе все 17 проектов продолжат показывать ложные «3 раунда» в /vulyk-status и /vulyk-evolve.
 4. Требования - Верно, покажи план (Рекомендую): Список принят как есть, план показываю на утверждение.
 
+
+**After escalation (round 2, 2026-09-24).**
+> Owner (Andrei, 2026-09-24): only rounds that ended RED count toward the tier ceiling - GREEN and STALE rounds never do; lead-review.md states the report layout as a contract (H2 ## Critical / ## Major, one finding per list line, its anchor tag on that line), and record-seat rejects a BLOCK carrying no such line as MALFORMED (retryable) instead of judge downgrading it.
 ## Asks
 
 1. Потолок раундов зависит от тира: Tier 1 — 1, Tier 2 — 2, Tier 3–4 — 3; reopen добавляет столько же.
