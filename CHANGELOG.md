@@ -2,6 +2,17 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.17.0] - 2026-09-24
+
+### Changed
+- **The council judge measures convergence, not a round count (spec `convergent-judge`, ADR-001 D3/D4 amended).**
+  - **Why:** `council.jsonl` across 17 hives showed 9 of 21 specs spending 3+ rounds while 9 were GREEN at round 1; RED rounds were mostly a `lead-review` BLOCK with every seat GREEN, and GREEN rounds were followed by repair waves on PASS-with-majors.
+  - **Tier-scaled ceiling:** Tier 1 = 1 round, Tier 2 = 2, Tier 3-4 = 3; `reopen` adds the same again. Only rounds that ended RED count - GREEN and STALE rounds never do; an `ESCALATE ceiling`/`no-progress` round counts as ended RED (owner's decision, 2026-09-24, plan A11).
+  - **`no-progress`:** the same ask RED (seat-evidenced or review-anchored) in two consecutive rounds escalates at once.
+  - **Anchored BLOCK:** `lead-review` blocks on any critical **or major** finding and tags each `[ask N]`, `[regression]` or `[unanchored]` under `## Critical` / `## Major`; a BLOCK with only `[unanchored]` findings is recorded PASS with note `review BLOCK unanchored`, its findings go to the next circle, not a repair wave. A BLOCK without the tagged layout is MALFORMED at `record-seat` and re-asked once; malformed twice, the review is ABSENT and the round escalates `env` (owner's decision, 2026-09-24). Rows gain `review_asks`.
+  - **Both drivers** hand `queen-planner` the anchor rule; the Workflow banner states the tier ceiling.
+- **The installer no longer ships `memory/stats/council.jsonl`;** `--upgrade` removes the seeded `autonomous-cycle` rows from a hive that has no such spec.
+
 ## [0.16.0] - 2026-09-22
 
 ### Changed
