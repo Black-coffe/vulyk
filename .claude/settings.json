@@ -1,6 +1,5 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "effortLevel": "medium",
   "hooks": {
     "SessionStart": [
       {
@@ -15,7 +14,6 @@
     "SessionEnd": [
       {
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-end-learnings.sh" },
           { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh sessionend" },
           { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh" }
         ]
@@ -31,8 +29,7 @@
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop" },
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh" }
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop" }
         ]
       }
     ],

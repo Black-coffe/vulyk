@@ -57,7 +57,6 @@ haiku"
 # the drift.
 AGENTS="council-haiku
 council-opus
-council-sonnet
 cycle-clerk
 drone-coverage
 drone-docs
@@ -67,11 +66,15 @@ lead-review
 librarian
 queen-planner
 worker-code
-worker-test
-other"
+worker-test"
 
-agent_set() { printf '%s
-' "$AGENTS"; }
+# Retired framework agents stay legal tokens, like retired codes: a hive on an older release
+# still records and bundles them, and `check` here must accept its bundle. Retiring an agent
+# moves its name from AGENTS to this list, never out of the script.
+#   council-sonnet - retired in 0.18.0 (ADR-013 D1)
+RETIRED_AGENTS="council-sonnet"
+
+agent_set() { printf '%s\n%s\nother\n' "$AGENTS" "$RETIRED_AGENTS"; }
 
 die() { printf 'telemetry: %s\n' "$1" >&2; exit "${2:-1}"; }
 
