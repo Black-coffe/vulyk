@@ -16,7 +16,7 @@ Modes (argv[1]); hook modes read the hook JSON payload on stdin:
     precompact     PreCompact         -> emergency mechanical handoff dump
     sessionend     SessionEnd         -> mechanical handoff dump on /clear or exit
     sessionstart   SessionStart       -> injects the freshest handoff for this project
-                                         (source clear / compact / resume only, <= 4 000 chars)
+                                         (source clear / compact only, <= 4 000 chars)
     dump           manual             -> writes the mechanical skeleton, prints its path (used by /vulyk-handoff)
     status         debug              -> human-readable current numbers
 
@@ -800,8 +800,9 @@ def mode_dump_hook(payload, cfg, reason, min_tokens_check=True):
 
 # SessionStart sources that continue earlier work (ADR-013 D7). A plain `startup` or a
 # `fork` starts on its own topic: restoring there injected the last handoff into every
-# session opened within 12 h, whatever it was about.
-RESTORE_SOURCES = ("clear", "compact", "resume")
+# session opened within 12 h, whatever it was about. `resume` is left out too: a resumed
+# session still carries its own context, so the handoff would only repeat it.
+RESTORE_SOURCES = ("clear", "compact")
 
 
 def mode_sessionstart(payload, cfg, root):
