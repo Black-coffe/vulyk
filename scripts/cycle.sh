@@ -782,7 +782,7 @@ reopen_names_round() { # reopen_names_round <spec> <n> -> 0 iff council/REOPEN h
   local spec="$1" n="$2" f
   f="$spec/council/REOPEN"
   [ -f "$f" ] || return 1
-  grep -qE "^round=$n[[:space:]]" "$f"
+  grep -qE "^round=${n}[[:space:]]" "$f"
 }
 
 # --- git helpers (R17/M-6, autonomous-cycle-21): every site below used to swallow a failing
