@@ -1,12 +1,17 @@
 ---
-description: Hive dashboard - driver mode, council numbers, unpushed merges, open stories, memory freshness, skill stats, budget posture
+description: Hive dashboard - driver, council numbers, token spend per spec, unpushed merges, open stories, memory freshness, skill stats, budget posture
 argument-hint: []
 ---
 
-Produce the hive status report. Read only metadata - this command must stay cheap:
+Produce the hive status report. Read only metadata; this command stays cheap.
 
-1. **Driver & release.** `driver:` - if `Workflow` is in your own tool list this session, print `driver: workflow`; otherwise print `driver: fallback (CLI <version>)`, reading `<version>` the same way `top-model-brief.sh` does (`claude --version`, compared against `2.1.154` with `sort -V`), plus one sentence: the fallback runs the build -> council -> repair loop inside this pinned top-model session instead of a background Workflow run - the most expensive path in the token economy (`docs/token-economy.md`), because no phase can be handed to a cheaper agent while the Queen's own context is carrying the loop. Then `merged locally, not pushed: <n>` - resolve the default branch the way `ship-check.sh` does (`git symbolic-ref --short refs/remotes/origin/HEAD`, else `main`/`master`), then `git log origin/<default>..<default> --oneline | wc -l`; print `merged locally, not pushed: no remote` when `origin` is not configured.
-2. **Council.** If `memory/stats/council.jsonl` does not exist, print `council: no rounds yet` and skip the rest of this step. Otherwise one `awk` pass over it, printed as-is (no model judgment on the numbers):
+1. Driver and release. Print `driver: workflow` if `Workflow` is in your own tool list this session,
+   else `driver: agent loop` (Tier 3-4 run their agents from the Queen's session; Tier 1-2 build solo
+   either way). Then `merged locally, not pushed: <n>`: resolve the default branch as `ship-check.sh`
+   does (`git symbolic-ref --short refs/remotes/origin/HEAD`, else `main`/`master`), then
+   `git log origin/<default>..<default> --oneline | wc -l`; print `no remote` when `origin` is absent.
+2. Council. If `memory/stats/council.jsonl` does not exist, print `council: no rounds yet` and skip the
+   rest of this step. Otherwise one `awk` pass over it, printed as-is:
    ```
    awk '
      { match($0, /"spec":"[^"]*"/);    spec=substr($0, RSTART+8, RLENGTH-9) }
@@ -26,12 +31,27 @@ Produce the hive status report. Read only metadata - this command must stay chea
      }
    ' memory/stats/council.jsonl
    ```
-   gives `<specs>` (distinct specs the council has ever judged), `<median>` (median round number of each spec's first `GREEN` row, over specs that ever went green) and `<escalations>` (rows with `verdict":"ESCALATE"`). Separately, escaped defects: `grep -rl '^\*\*Escaped from:\*\*' docs/specs/*/brief.md`, then for each match read the `<slug>` after the label and count it only if `memory/stats/council.jsonl` holds a `GREEN` row for that slug (`grep -F "\"spec\":\"<slug>\"" memory/stats/council.jsonl | grep -q '"verdict":"GREEN"'`). Print `council: <specs> specs · median <n> rounds to green · <n> escalations · <n> escaped defects`.
-3. **Stories:** run `bash scripts/state.sh` and read `.claude/state.json` -> table: spec, its `stage` (which confirmation of the six-stage cycle it has reached - `docs/cycle.md`; `study` is the one value outside the cycle: a document deliverable, ADR-008; a spec with a council round shows `04-council:<verdict>` here instead of the pre-council `04-tested:<verdict>`, and any spec with a `PAUSE` file shows `paused` regardless of how far it got), story, status, assigned tier. It is a derived view, regenerated on the spot, never a source of truth - if a number here disagrees with a story file, the story file wins and the view was stale. Report `unrecognised` counts out loud rather than folding them into anything: a spec written before the `todo|in-progress|done|blocked` convention is not a spec with nothing done, and treating it as one is the derived view lying.
-4. **Memory freshness:** `memory/map/*` last-verified dates vs. recent git churn in their modules (`git log --since` per path); flag stale. Note if `scripts/git-hooks/post-merge` left a `.stale` flag.
-5. **Learnings buffer:** count raw files in `memory/learnings/` awaiting consolidation; remind about /vulyk-gc past 10.
-6. **Skill usage:** top/bottom entries from `memory/stats/skills.json`; note candidates the next /vulyk-evolve will examine.
-7. **Budget posture:** run `bash scripts/top-model.sh --explain` and show it - the resolved gate model, the plan it was read from, the Tier 4 pairing, and whether the Queen's own session is pinned to `opus`; then the routing matrix one-liner. If the session has been long, recommend `/vulyk-handoff` then `/clear` after this report.
-8. **Context hygiene** (only when the session is fresh — otherwise the advice arrives too late to act on): suggest `/context` to see what the session starts with, and `/mcp` to switch off servers this project never calls. Skip this step entirely on a long session.
+   Escaped defects: `grep -rl '^\*\*Escaped from:\*\*' docs/specs/*/brief.md`, counting a match only
+   when `memory/stats/council.jsonl` holds a `GREEN` row for the slug it names
+   (`grep -F "\"spec\":\"<slug>\"" memory/stats/council.jsonl | grep -q '"verdict":"GREEN"'`). Print
+   `council: <specs> specs · median <n> rounds to green · <n> escalations · <n> escaped defects`.
+3. Token spend. `python scripts/token-report.py . --since "$(date -u -d '-14 days' +%Y-%m-%d)"` and
+   print its per-spec lines as-is: raw and weighted tokens, dispatches, rounds. The `totalTokens` a
+   Workflow run prints is a sum of final contexts, not spend; quote this report instead.
+4. Stories. Run `bash scripts/state.sh` and read `.claude/state.json` into a table: spec, `stage`, story,
+   status, tier. `stage` is the cycle confirmation reached (`docs/cycle.md`); `study` marks a document
+   deliverable; a spec with a council round shows `04-council:<verdict>`; a `PAUSE` file shows `paused`.
+   The view is derived: a story file that disagrees wins. Statuses are `todo | done | blocked`; older
+   specs may still carry `in-progress`. Report `unrecognised` counts out loud.
+5. Memory freshness. `memory/map/*` `last-verified` dates against recent git churn in their modules
+   (`git log --since` per path); flag stale ones, and a `.stale` flag left by `scripts/git-hooks/post-merge`.
+6. Learnings buffer. Count raw files in `memory/learnings/`; past 10, suggest `/vulyk-gc`.
+7. Skill usage. Top and bottom entries of `memory/stats/skills.json`; name the candidates the next
+   `/vulyk-evolve` will examine.
+8. Budget posture. Show `bash scripts/top-model.sh --explain`: the gate model, the plan it came from,
+   the Tier 4 pairing, and whether the Queen's session is pinned to `opus`. On a long session,
+   recommend `/vulyk-handoff`, then `/clear`.
+9. Context hygiene, only on a fresh session: suggest `/context` to see what the session starts with,
+   and `/mcp` to switch off servers this project never calls.
 
-Format: compact tables, no prose padding. End with the single most useful next action.
+Format: compact tables, no padding. End with the single most useful next action.
