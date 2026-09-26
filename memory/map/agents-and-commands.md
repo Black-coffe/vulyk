@@ -1,126 +1,78 @@
-# Scout report: agents and commands (post v0.12.0)
+# Scout report: agents and commands (v0.18.0)
 
 ## Purpose
-Every `.claude/agents/*.md` caste and `.claude/commands/vulyk-*.md` entry point, as they
-stand after the council replaced stage 05. `drone-acceptance.md` is **gone** - do not
-dispatch it or point anyone at it; its ledger role is `acceptance-log.sh`, kept only as
-`ship-check.sh`'s fallback for pre-council specs (see `memory/map/scripts.md`).
+Every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` as they stand after ADR-013 (light
+VULYK). Retired: `council-sonnet.md` (0.18.0), `drone-acceptance.md` (0.12.0) - do not dispatch
+them. Frontmatter is the model/effort/turn cap; `vulyk-cycle.js` `CAPS` (:28) mirrors `maxTurns`.
 
-## Agents - model, tools, angle, report contract
-- **council-haiku/sonnet/opus** (`sonnet` (junior rung, ADR-007)/`sonnet`/`opus`; `Bash,Read,+mcp__chrome-devtools__*,
-  mcp__claude-in-chrome__*` (haiku only) / `Bash,Read,Grep,Glob` (sonnet, opus); no Write/Edit;
-  `maxTurns:60`) - the three blind seats, one round, one court. haiku: black-box, walks the
-  *Client path* like a client, drives the Profile's Browser MCP row only when named, reads no
-  source. sonnet: the only seat given the full-suite command, runs it once then proves every
-  `## Asks` item with `run:`/`saw:`. opus: intent seat, judges what the owner meant beyond the
-  literal ask; edge cases go under `UNASKED:`, never folded into an `ASK` line. Shared return
-  contract: `COUNCIL/MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH` + one `ASK <n>` line/ask +
-  `UNASKED:`/`BREACH:`, 40 lines max (`cycle.md` D3). Dispatch names only `slug`/`round`/
-  `court` - never `round_dir` (echoing it back is a taint). v0.13.1: when the dispatch also
-  gives a report path (`.vulyk/reports/<slug>/round-N/<seat>.attempt-K.md`), the seat writes its
-  report there verbatim as the very last action - not a BREACH.
-- **cycle-clerk** (`sonnet` - junior rung, ADR-007, `Bash` only, `maxTurns:5`) - runs exactly the one `cycle.sh`/
-  `journal.sh` command given, returns the last stdout line verbatim, no verdict logic. The
-  Workflow driver's only shell access.
-- **lead-review** (`opus`, `Read,Grep,Glob,Bash`, `maxTurns:60`) - adversarial review, sees
-  everything (diff, stories, plan, wiki, ADRs). Report's **first line** is exactly `VERDICT:
-  PASS`/`VERDICT: BLOCK`; BLOCK on any critical **or major** finding. v0.17.0 layout contract:
-  findings as one-line list items under `## Critical`/`## Major`/`## Minor` (empty = `None.`),
-  each `file:line`, routing word (`plan`/`worker`), condition, and on critical/major exactly one
-  tag `[ask N]`/`[regression]` (base-side evidence on the line)/`[unanchored]`; a BLOCK with no
-  tagged blocking line is MALFORMED at `record-seat`, an `[unanchored]`-only BLOCK is recorded
-  PASS by `judge` (see `cycle.md` Anchored BLOCK). Never enters the court. Same report-path-as-last-action contract as the council seats (v0.13.1).
-- **drone-coverage** (`sonnet`, `Read` only, `maxTurns:5`) - reads ONLY `brief.md`+`plan.md`,
-  never story files. v0.12.0: reports **by ask number** (`## Asks`'s `1..N` if present, else
-  its own reading-order numbering, states which) - `Ask <n>: <verbatim>` under
-  `## Absent`/`## Partial`. `CANNOT RUN: no brief.md at <path>` when the file is missing.
-- **drone-scout** (`sonnet`, `Read,Grep,Glob`, `maxTurns:15`) - recon only. Report:
-  `# Scout report: <target>` with `## Purpose/Entry points/Key types/Dependencies/Gotchas/
-  Answer` - the format every `memory/map/*.md` slice follows (+ `last-verified`).
-- **drone-docs** (`sonnet`, `Read,Write,Edit,Grep,Glob`, `maxTurns:40`) - this agent; owns
-  `memory/map/`+`docs/wiki/` only, never code/commands/agents/specs/CLAUDE.md. Diff is the
-  source; a story's `## Implementation notes` only locates where to look.
-- **worker-code** (`sonnet`, `Read,Write,Edit,Grep,Glob,Bash`, `maxTurns:90`) / **worker-test**
-  (same tools, `maxTurns:90`) - one story each, touches only its `## Files`. Final line
-  `STATUS: DONE|NEEDS_CONTEXT|WALL`; a wall (3 failed distinct approaches) writes `##
-  Findings` to the story file first. v0.15.0/ADR-011: never edits the story's `status:`
-  frontmatter key - `close-story` writes it, a driver writes `blocked` - the worker's last edit
-  before returning sets only `returned:` to the same word as its `STATUS:` line
-  (`DONE`/`NEEDS_CONTEXT`/`WALL`); `close-story` tolerates a self-marked `status: done` on a
-  dirty tree instead of refusing (see `memory/map/cycle.md`). Never edits `memory/` or the wiki.
-- **queen-planner** (`opus`, `Read,Write,Grep,Glob`) - Tier 3-4 synthesis: goal+brief+scout
-  reports+map pointers -> a plan. Never reads source. Also the `repair` dispatch target (cuts
-  fix stories into the existing plan, one per critical/major finding or RED ask).
-- **lead-architect** (`opus`, `Read,Grep,Glob,Write`) - consulted, not deployed. Every
-  decision becomes an ADR (`templates/adr.md`). Output: ADR path, 3-sentence summary,
-  affected stories.
-- **librarian** (`sonnet`, `Read,Write,Edit,Glob`, `maxTurns:25`) - the only agent that
-  merges into `memory/learnings/` and prunes memory files. Report: merged/deleted/stale/
-  needs-a-human, terse. Also the ADR harvest from `## Plan deltas` at `/vulyk-ship` step 5.
+## Agents - frontmatter, job, report
+`omitClaudeMd: true` (no constitution loaded) on cycle-clerk, council-opus, council-haiku,
+drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for host conventions.
+- **lead-review** (`opus`, `high`, `maxTurns:60`; Read/Grep/Glob/Bash) - the `review` seat of every
+  round. Judges the brief's `## Asks` (+ plan.md `## Descoped`) and correctness only. Round 1:
+  `merge-base..head`; round 2+: `since..head` + the previous round's files - are its blocking findings
+  fixed, any regression? Runs the `## Commands` full suite once under `timeout 540` (a timeout is a
+  minor). Report line 1 `VERDICT: PASS|BLOCK`, then `## Critical`/`## Major`/`## Minor` one-line
+  list items; BLOCK needs an anchored line (`[ask N]`/`[regression]`, with repro command or
+  `file:line`), else `[unanchored]`; ≤ 5 minors. Writes the report to its path as last action.
+  Tier 1-3: no model parameter; Tier 4: two dispatches (`top_model`, `second_model`).
+- **council-opus** (`opus`, `medium`, `maxTurns:60`; Bash/Read/Grep/Glob, no Write/Edit) - Tier 3-4
+  intent seat inside `COURT`; one `ASK <n>` line per ask with `run:`/`saw:` evidence, edge cases under
+  `UNASKED:`. Blind: reading outside `COURT`, git history or naming plan/journal/council/story files
+  is a BREACH / taint.
+- **council-haiku** (`sonnet`, session effort, `maxTurns:60`; Bash/Read + browser MCPs) - black-box
+  seat, walks the Profile's *Client path*; required only when `client_path_filled`. Same contract.
+- **cycle-clerk** (`sonnet`, `low`, `maxTurns:5`; Bash only) - runs the one `cycle.sh` command given
+  (`timeout: 600000`), returns its last stdout line verbatim. The Workflow driver's only shell.
+- **worker-code** / **worker-test** (`opus`, `medium`, `maxTurns:90`) - Tier 3-4, one story. Targeted
+  checks while working; do not run the full `## Verification` separately. Close: `returned: DONE`,
+  then `bash scripts/cycle.sh close-story <story> --commit --stamp <S>` (no stamp when none given);
+  exit 4 → fix and rerun, after three failed reruns `## Findings` + `returned: WALL`; other exits →
+  `NEEDS_CONTEXT`. Never edit `status:`, never stash/checkout/reset/clean. Final message ≤ 25 lines
+  `STATUS/FILES/TESTS/INTERFACES/CONCERNS/BLOCKERS`. A repair story's `## Findings` are conditions.
+- **queen-planner** (`opus`, `high`, `maxTurns:40`; Read/Write/Grep/Glob) - Tier 3-4 plan + stories
+  (`model: opus` each, verbatim `## Requirements`). Never reads source; never plans repairs.
+  Tier 4 dispatch carries `model: <top_model>`.
+- **lead-architect** (`opus`, `high`, `maxTurns:30`) - consulted at Tier 4 planning and after a
+  story's second miss; every decision an ADR. Dispatched with `model: <top_model>`.
+- **drone-scout** (`opus`, `low`, `maxTurns:15`; Read/Grep/Glob) - recon; `# Scout report:` format
+  every map slice follows. **drone-coverage** (`opus`, `medium`, `maxTurns:5`; Read) - Tier 3-4,
+  reads only brief.md + plan.md, reports absent/partial asks by number. **drone-docs** (`opus`,
+  `low`, `maxTurns:40`) - map + wiki from the tree after a merge. **librarian** (`opus`, `low`,
+  `maxTurns:25`) - the only writer that consolidates `memory/learnings/` and prunes memory; ADR
+  harvest at `/vulyk-ship`.
 
-## Commands - what each runs, what it never does
-- **`/vulyk-plan`** - tier classify -> brief (`redact.sh` piped) -> recon (`drone-scout`) ->
-  grill (`templates/grill.md`, Tier 2-4; Tier 1 writes `## Asks` as the task phrase, no grill)
-  -> plan (`queen-planner` Tier 3-4, inline Tier 2) -> stories -> `wave-check.sh`+
-  `trace-check.sh` -> `drone-coverage` -> `cycle.sh briefed --commit` (`--mode mini-brief`/
-  `assumed` as applicable) -> **stops for the owner's approval** (v0.13.0, ADR-008; `--go`
-  or the grill's straight-through opt-in launches directly; a document deliverable ends at
-  report.md before any of this). Never writes story code itself, never
-  skips `wave-check`/`trace-check` once stories exist.
-- **`/vulyk-build`** - resolves `top_model`/`second_model`/a random `stamp`, detects
-  `Workflow` vs fallback, prints the "tree is not yours" journal line, then calls the
-  `vulyk-cycle` Workflow or runs the same `status`->act loop itself (full verb table in
-  `cycle.md`). Never writes `**Council:**`/`council.jsonl`/verdict logic itself - always
-  through `cycle.sh`; never dispatches `queen-planner` twice for the same round. v0.13.1: on
-  `dispatch:<seats>` gives each seat a report path and records with `record-seat ... --file
-  <path>` first, falling back to the stdin heredoc only on exit 2 `error: "file: ..."`; a
-  worker/seat/reviewer's empty return is logged by one of three reasons (`threw:`/`returned
-  empty - turn cap suspected .../`returned no report`) per `cycle.md`'s Report-path section.
-  v0.14.0: a `--fallback`-less refusal (no `Workflow` tool) and a Workflow call that itself
-  throws both record `bash scripts/telemetry.sh record driver_refused 1 0 --spec <slug> --ref
-  driver:<slug>:<date>` before stopping (`docs/telemetry.md`). v0.17.0: the `repair` planner
-  prompt (here and in `vulyk-cycle.js`) asks for one story per critical/major finding carrying
-  `[ask N]` (N in `## Asks`) or `[regression]`; `[unanchored]` findings never become stories,
-  they wait for `/vulyk-ship` step 5.
-- **`/vulyk-review`** - one on-demand round: `open-round --commit` (refusal = surface
-  verbatim, point at `/vulyk-build`), dispatch only the seats `missing` names (Tier 4: +
-  second reviewer, folded stricter-of-two, each finding keeping its anchor tag verbatim),
-  `record-seat` each (same `--file`-then-heredoc
-  scheme as `/vulyk-build`, v0.13.1), `judge --commit`. Never cuts repair stories itself -
-  that always goes back through `/vulyk-build`.
-- **`/vulyk-ship`** - `ship-check.sh` (refuse on NOT READY unless the owner overrides out
-  loud) -> version bump+CHANGELOG commit if not already on branch -> local merge -> print the
-  publish command from *Release / deploy* -> `ship-check.sh --record` -> dispatch
-  `drone-docs`+`librarian` for the next circle; step 5's next-brief draft now also carries the
-  findings of a BLOCK recorded PASS (`review BLOCK unanchored`) and every `[unanchored]`
-  critical/major finding from any round's `review.md` (v0.17.0). **Never pushes, tags, publishes or deploys**,
-  never waits for the human to run the printed command.
-- **`/vulyk-status`** - read-only: driver mode, `council.jsonl` stats (specs/median rounds to
-  green/escalations/escaped defects), `state.sh` story table, memory freshness, learnings
-  buffer, skill stats, `top-model.sh --explain`. Writes nothing.
-- **`/vulyk-pause`/`/vulyk-resume`** - wrap `cycle.sh pause`/`resume`; pause explains the
-  discard-and-re-dispatch consequence for an in-flight seat report; resume always relaunches
-  the driver fresh (`/vulyk-build` step 1), never `resumeFromRunId`. v0.14.0: a relaunch
-  records `bash scripts/telemetry.sh record driver_relaunched 1 0 --spec <slug> --ref
-  driver:<slug>:<date>` first.
-- **`/vulyk-evolve`** - harvest -> **new in v0.12.0**: 7-day `council.jsonl`/`human.jsonl`
-  check-in (median rounds, escalations, escaped defects vs. REJECTED count; prints a "models
-  are ready" signal when escaped defects exceed the human-gate baseline) -> **new in v0.14.0**:
-  a same-window `memory/stats/anomalies.jsonl` count by code (`bash scripts/telemetry.sh enum`
-  for the row list), then `bash scripts/telemetry.sh consent` gates a `publish`/`publish
-  --dry-run` call (prints its recipe, never sends) -> **VULYK-repo-only**: `bash
-  scripts/telemetry.sh inbox` prints `<week> <code> <rows> <hives>` per merged bundle, its
-  table goes into the CHANGELOG entry, then (full path only) `inbox --clear` **stages** the
-  emptied `telemetry/inbox/<week>/` deletions (`git rm`, no commit) -> diagnose ->
-  changeset on `vulyk/evolve-<date>` -> human gate. Applies NOTHING to main; `--dry-run`
-  stops after diagnosis (and skips `inbox --clear`). Full contract: `docs/telemetry.md`.
-- **`/vulyk-bootstrap`** - interview -> fill `## Profile` (now includes the `Telemetry`
-  consent row `install.sh` also writes, `off` by default) -> `top-model.sh --apply`
-  **unconditionally now** (the council runs unattended, so the session must run on the
-  resolved model, not just be told about it) -> prune roster (the council trio's removal is
-  never silent) -> map -> seed memory/wiki.
-- **`/vulyk-map`/`/vulyk-gc`/`/vulyk-handoff`/`/vulyk-update`** - unchanged this release:
-  scout-batch map refresh; `librarian` GC pass; session-state dump to `.claude/handoff/`; the
-  release-upgrade wrapper over `vulyk-update.sh`.
+## Commands - what each runs
+- **`/vulyk-plan`** - step 0 deliverable (document → brief + report, stop); tier; brief via
+  `redact.sh`; recon (scouts: T1 0-1, T2 ≤1, T3 ≤2, T4 ≤4); grill T2-4; plan (Queen at T1-2,
+  `queen-planner` at T3-4, `lead-architect` at T4); stories; `wave-check.sh` + `trace-check.sh`;
+  `drone-coverage` T3-4. T1 → `cycle.sh briefed --mode mini-brief` + `/vulyk-build`. T2-4 stop for
+  `**Approved:**` (`--go` opts out). T2 builds in a fresh session; T3-4 launch at once.
+- **`/vulyk-build`** (6.1 KB) - `**Tier:**` picks the path. Solo T1-2: loop `cycle.sh advance`;
+  `build:W` → the Queen implements each story and runs `close-story --commit`; `dispatch:review` →
+  one `lead-review` (report path, `since` from round 2), then `advance --ingest`, one re-dispatch on
+  rejection. Hive T3-4: `top-model.sh`, `second_model`, 16-hex stamp, journal line, Workflow tool
+  with `scriptPath` (never `name:`); a thrown call records `telemetry.sh record driver_refused`. On
+  return: stop with `file` → story `blocked` + `lead-architect`. Without Workflow: the same advance
+  loop with `--stamp --claim`, agents via the Agent tool, `release` on every exit.
+- **`/vulyk-review`** - claim + `advance --claim`; dispatch the seats `next` names; `advance
+  --ingest`; release. `build:W` = RED, repair story already written → `/vulyk-build`.
+- **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses; owner may override out loud); release
+  commit (VERSION/CHANGELOG are paperwork); local merge; print the publish command, never run it;
+  `ship-check.sh --record`; `drone-docs`/`librarian` only when they have work; next-brief draft
+  (UNASKED, minors, `[unanchored]` findings, `## Descoped`, `## Needs a human`).
+- **`/vulyk-status`** - driver line (`workflow` / `agent loop`), unpushed merges, council awk stats,
+  `token-report.py --since <14 days>`, `state.sh` table, map freshness, learnings count, skills,
+  `top-model.sh --explain`. Writes nothing but `.claude/state.json`.
+- **`/vulyk-evolve`** - learnings + skills + `token-report.py --since <7 days>` (spend, never the
+  Workflow `totalTokens`); 7-day council/human/anomaly check-in; telemetry consent/publish (prints,
+  never sends); repo-only `telemetry.sh inbox [--clear]`; changeset on `vulyk/evolve-<date>`.
+- **`/vulyk-pause`** / **`/vulyk-resume`** - wrap `cycle.sh pause`/`resume`; resume relaunches
+  `/vulyk-build` fresh (hive path records `driver_relaunched`), never `resumeFromRunId`.
+- **`/vulyk-update`** - `vulyk-update.sh . --check`, CHANGELOG summary, ask; offers
+  `--constitution replace` as a separate choice (backup `<name>.pre-0.18.md`).
+- **`/vulyk-bootstrap`** - interview, Profile + Commands between markers (constitution =
+  `CLAUDE.vulyk.md` if present), `top-model.sh --apply`, prune roster, scouts → map, memory, wiki.
+- **`/vulyk-map`**, **`/vulyk-gc`** (librarian), **`/vulyk-handoff`** (`handoff.py dump` + summary).
 
-last-verified: 2026-09-24 (v0.17.0; lead-review/build/review/ship/driver repair prompt only)
+last-verified: 2026-09-27 (v0.18.0, ADR-013)

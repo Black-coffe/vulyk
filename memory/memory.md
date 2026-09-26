@@ -6,8 +6,8 @@
 ## Codebase map
 <!-- one line per mapped module, added by /vulyk-bootstrap and /vulyk-map -->
 - `scripts/` (every gate/helper script, entry points, exit codes, callers): memory/map/scripts.md
-- the cycle state contract as `cycle.sh` implements it (files, verbs, verdict rule, staleness,
-  seat/court contracts, both drivers): memory/map/cycle.md
+- the cycle state contract as `cycle.sh` implements it (files, verbs, `advance`, verdict rule,
+  staleness, seat/court contracts, repair, the Workflow driver): memory/map/cycle.md
 - every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (model, tools, report
   contract, what each command runs/never does): memory/map/agents-and-commands.md
 
@@ -32,8 +32,10 @@
 - Story gate, per spec: `bash scripts/wave-check.sh docs/specs/<slug>`
 - Ship gate, per spec: `bash scripts/ship-check.sh docs/specs/<slug>`
 - Cycle status, per spec: `bash scripts/cycle.sh status docs/specs/<slug> --json`
+- Token report, per spec: `python scripts/token-report.py . --spec <slug>`
 - Cycle state contract tests: `bash tests/cycle.test.sh`
-- Council verdict contract tests: `bash tests/council.test.sh`
+- Council verdict contract tests: `bash tests/council.test.sh` (`--quick` for ~3 min)
+- Driver contract / end to end: `bash tests/driver.test.sh`, `bash tests/e2e.test.sh`
 - Full suite / build: none exists - VULYK has no test runner and no build step
 
 ## Learnings
@@ -43,14 +45,15 @@
 - Dispatch failure reasons from verb exit codes, seat reports by file (v0.13.1, proposed): docs/adr/009-dispatch-failure-reasons-and-report-by-file.md
 
 - Anomaly telemetry, opt-in (v0.14.0, 2026-09-15): docs/telemetry.md — `scripts/telemetry.sh`
-  (enum/agents/consent/record/scan/bundle/check/publish/inbox), the Stop+SessionEnd
-  `anomaly-scan.sh` hook, the installer consent question, the `/vulyk-evolve` weekly
+  (enum/agents/consent/record/scan/bundle/check/publish/inbox), the `anomaly-scan.sh` hook
+  (SessionEnd only since 0.18), the installer consent question, the `/vulyk-evolve` weekly
   distil-and-clear; never sends on its own, `publish` only prints a copy recipe
 - Driver hardening (v0.15.0, 2026-09-15): docs/adr/011-driver-hardening.md — clerk retry on a
   garbled relay, `skills.json`+`memory/learnings/*.md` as cycle paperwork, `close-story`
   tolerates a self-marked `status: done`, taint is the story file not a bare `<slug>-NN`, five
   mutating verbs carry post-verb `status`
 - Convergent judge (v0.17.0, 2026-09-24): docs/specs/convergent-judge/ + ADR-001 D3/D4 amendments — tier ceiling on RED rounds, no-progress, anchored BLOCK
+- Light VULYK (v0.18.0, 2026-09-27): docs/adr/013-light-vulyk.md + docs/specs/token-audit/ — single agent below Tier 3, advance verb, converging council, token-report
 - Consolidated: memory/learnings/CONSOLIDATED.md (run /vulyk-gc to refresh)
 - Human gates rework (2026-09-12): memory/learnings/2026-09-12-human-gates-rework.md — один стоп в начале, дальше агентный совет; «owner looks» как обязательную стадию не возвращать
 - Autonomous cycle / council (v0.12.0, 2026-09-13): docs/specs/autonomous-cycle/ — mechanics in docs/adr/001-cycle-state-contract.md (ADR-001), per-spec state in docs/specs/<slug>/journal.md
