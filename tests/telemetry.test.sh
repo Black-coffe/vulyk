@@ -408,9 +408,9 @@ bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null >/dev/null 2>&1 || STATU
 expect_eq "handoff.sh status still exits 0 with measure added" "0" "$STATUS_RC"
 
 # --- case 9b: handoff.py sessionstart - which sessions get the handoff (ADR-013 D7) ------------
-# Only a session that continues earlier work - /clear, compaction, resume - is handed the last
-# handoff, and never more than 4 000 characters of it. `resume` keeps the old startup guards
-# (younger than 12 h, not yet consumed), so it is restored once.
+# Only a session that continues earlier work - /clear or compaction - is handed the last
+# handoff, and never more than 4 000 characters of it. A resumed session still carries its own
+# context, so it gets nothing, like startup and fork.
 echo "--- handoff.py sessionstart"
 RS="$T/restore"; mkdir -p "$RS/.claude/handoff"
 RSW="$(cd "$RS" && { pwd -W 2>/dev/null || pwd; })"   # native python on Windows needs C:/...
@@ -432,8 +432,7 @@ expect_eq "a payload with no source gets none"  "0"    "$(restored '')"
 expect_eq "clear gets it, cut to 4000 chars"    "4000" "$(restored clear)"
 expect_eq "compact gets it again (deliberate)"  "4000" "$(restored compact)"
 restore_index
-expect_eq "resume gets an unconsumed handoff"   "4000" "$(restored resume)"
-expect_eq "resume does not get it twice"        "0"    "$(restored resume)"
+expect_eq "resume gets no handoff"              "0"    "$(restored resume)"
 
 # --- case 10: scan - agent_prefix_high / agent_empty --------------------------------------------
 echo "--- scan: agent_prefix_high, agent_empty"
