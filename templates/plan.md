@@ -5,64 +5,63 @@
 **Depends on:** <prior specs / merged work this plan builds on, with commits if known>
 
 ## Goal
-<one paragraph - restate the goal in the planner's words. The verbatim words live in
-brief.md; this is the interpretation, and divergence between the two is reviewable.>
+<one paragraph - the goal in the planner's words. The verbatim words live in brief.md; this is the
+interpretation, and divergence between the two is reviewable.>
 
 ## Assumptions
-<!-- Law 1: every assumption the plan rests on, stated so the human can veto it at the
-approval stop. An assumption nobody confirmed is a defect, not a default. -->
+<!-- Law 1: every assumption the plan rests on, stated so the owner can veto it at the approval
+stop. -->
 - <...>
 
 ## Stories
-<!-- One line per story, grouped by wave. The story files are the truth; this list is
-the human-readable index of it. -->
+<!-- One line per story, grouped by wave; the story files are the truth, this is their index.
+Tier 1-2 (solo): the Queen builds the stories herself, in order, and one reviewer judges each round.
+Tier 3-4 (hive): one worker per story; a wave's workers run in parallel, so their ## Files are
+disjoint. A story earns its own worker only when it can run in parallel; fewer, larger stories are
+cheaper. -->
 
 **Wave 1**
 - `<slug>-01-...` — <one line>
 
 ## Contracts
 <!--
-Interfaces that cross a story boundary, agreed HERE at plan time: function signatures,
-message shapes, route paths, event names. Two workers building against each other's
-story must both read the same contract from this section - neither invents it mid-build.
-A worker whose story forces a contract change reports it in its INTERFACES line; the
-Queen updates this section and records the change under ## Plan deltas.
+Tier 3-4: interfaces that cross a story boundary, agreed here at plan time - function signatures,
+message shapes, route paths, event names - so two workers building against each other read the same
+contract. A worker whose story forces a change reports it in its INTERFACES line; the Queen updates
+this section and records it under ## Plan deltas. Tier 1-2: usually "none".
 -->
 - <...>
 
 ## Integration gate
-<!-- The full quiet suite the Queen runs after the last wave, from ## Commands in
-CLAUDE.md, plus `bash scripts/wave-check.sh docs/specs/<slug>` before each dispatch. -->
+<!-- The full quiet suite from ## Commands in the constitution. lead-review runs it once per round;
+wave-check.sh runs before each wave. -->
 `<command>`
 
 ## Descoped
-<!-- Mid-build narrowing, appended by the Queen as it happens - never silent. Each line:
-what was dropped, why, and the single line quoted from the human authorizing it. Only
-the human removes a requirement. -->
+<!-- Mid-build narrowing, appended as it happens - never silent. Each line: what was dropped, why,
+and the owner's line authorizing it, quoted. Only the owner removes a requirement. -->
 
 *(empty)*
 
 ## Plan deltas
 <!--
-Queen-written, from a worker's RETURN REPORT (never from a diff), one entry per change
-to the plan after approval: new story cut, story files expanded, contract changed.
-Each entry: date, trigger, decision, what was rejected. One-line notice to the human
-when it happens. trace-check.sh accepts these entries as a quote source for stories
-born after approval - a delta is requirement change on the record.
+One entry per change to the plan after approval - a new story, expanded story files, a changed
+contract - written from a return report, never from a diff: date, trigger, decision, what was
+rejected. Tell the owner in one line when it happens. trace-check.sh accepts these entries as a quote
+source for stories cut after approval. /vulyk-ship hands them to librarian for an ADR harvest.
 -->
 
 <!--
-The six lines below are the cycle's confirmation artifacts (docs/cycle.md): one per stage
-whose command refuses without the one before it. Each placeholder is replaced by the
-command or script that owns the line; `scripts/ship-check.sh` reads all six. **Approved:**
-(the owner's word, the default since v0.13) and **Briefed:** (`--go`, Tier 1, or no-question
-mode with `--go`) are alternatives - either closes stage 02. **Council:** and **Checked:** likewise close stages 04+05 together: a GREEN
-council row is enough on its own, and **Checked:** is the owner's override in either
-direction, newest timestamp wins (ADR-001 D1/D4).
+The lines below are the cycle's confirmation markers (docs/cycle.md); each placeholder is replaced by
+the command or script that owns it, and scripts/ship-check.sh reads them all. Approved is the owner's
+word, the stop at Tier 2-4; Briefed is written by `cycle.sh briefed` instead, at Tier 1 ("via
+mini-brief"), with `--go`, or in no-question mode ("assumed"). Either closes stage 02. Council and
+Checked close stages 04+05 together: a GREEN council row is enough on its own, and Checked is the
+owner's override in either direction, newest timestamp wins. No line of this comment may start with
+a marker: the scripts read the first line that does.
 
-There is no default tier: `cycle.sh open-round` refuses to open a round when this file's
-`**Tier:** <1|2|3|4>` line above is missing or unparsable, rather than silently sizing the
-council for the largest court.
+There is no default tier: `cycle.sh open-round` refuses to open a round while the `**Tier:**` line above
+is missing or unparsable.
 -->
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
