@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Stop + SessionEnd hook: run the anomaly-telemetry detectors (scripts/telemetry.sh scan)
-# after every turn and every session. Fail-open, silent: a missing prerequisite is exit 0
-# with nothing printed, never a block (docs/token-economy.md).
+# SessionEnd hook: run the anomaly-telemetry detectors (scripts/telemetry.sh scan) once per
+# session (ADR-013 D7 dropped the per-turn Stop wiring). Fail-open, silent: a missing
+# prerequisite is exit 0 with nothing printed, never a block (docs/token-economy.md).
 set -uo pipefail
 ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 command -v jq >/dev/null 2>&1 || exit 0
@@ -19,6 +19,7 @@ fi
 
 # `agent_empty` is a permanent row, so it is only judged when the session is over: at `Stop`
 # a subagent mid-turn looks exactly like one that returned nothing (plan A17, review Major 6).
+# The check stays for a hive whose settings.json still wires this hook on Stop.
 final=""
 [ "$event" = "SessionEnd" ] && final="--final"
 

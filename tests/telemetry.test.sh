@@ -99,8 +99,9 @@ expect_eq "enum is exactly 8 codes" "8" "$(tel enum | grep -c .)"
 tel enum | expect_absent "enum prints codes only, no prose" " "
 tel agents | expect "agents prints a framework agent" "cycle-clerk"
 tel agents | expect "agents prints the catch-all token" "other"
-expect_eq "agents = .claude/agents/*.md basenames + other" \
-  "$(( $(ls "$HIVE"/.claude/agents/*.md | wc -l) + 1 ))" "$(tel agents | grep -c .)"
+expect_eq "agents = .claude/agents/*.md basenames + council-sonnet (retired, still legal) + other" \
+  "$(( $(ls "$HIVE"/.claude/agents/*.md | wc -l) + 2 ))" "$(tel agents | grep -c .)"
+tel agents | expect "a retired framework agent stays a legal token" "council-sonnet"
 tel agents | expect_absent "agents does not print the .md extension" ".md"
 
 # --- case 2: record ---------------------------------------------------------------------------
@@ -406,6 +407,34 @@ STATUS_RC=0
 bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null >/dev/null 2>&1 || STATUS_RC=$?
 expect_eq "handoff.sh status still exits 0 with measure added" "0" "$STATUS_RC"
 
+# --- case 9b: handoff.py sessionstart - which sessions get the handoff (ADR-013 D7) ------------
+# Only a session that continues earlier work - /clear, compaction, resume - is handed the last
+# handoff, and never more than 4 000 characters of it. `resume` keeps the old startup guards
+# (younger than 12 h, not yet consumed), so it is restored once.
+echo "--- handoff.py sessionstart"
+RS="$T/restore"; mkdir -p "$RS/.claude/handoff"
+RSW="$(cd "$RS" && { pwd -W 2>/dev/null || pwd; })"   # native python on Windows needs C:/...
+head -c 9000 /dev/zero | tr '\0' 'x' > "$RS/.claude/handoff/h.md"
+restore_index() {
+  printf '{"path":"%s/.claude/handoff/h.md","ts":%s,"reason":"exit"}\n' "$RSW" "$(date +%s)" \
+    > "$RS/.claude/handoff/index.json"
+}
+restored() { # restored <source> - the length of the handoff body injected, 0 when none
+  printf '{"source":"%s","cwd":"%s"}' "$1" "$RSW" \
+    | CLAUDE_PROJECT_DIR="$RSW" "$PY" "$SRC/.claude/hooks/handoff.py" sessionstart 2>/dev/null \
+    | { jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null || true; } \
+    | grep -o 'xxxxxxxxxx*' | awk '{ if (length > m) m = length } END { print m + 0 }'
+}
+restore_index
+expect_eq "startup gets no handoff"             "0"    "$(restored startup)"
+expect_eq "fork gets no handoff"                "0"    "$(restored fork)"
+expect_eq "a payload with no source gets none"  "0"    "$(restored '')"
+expect_eq "clear gets it, cut to 4000 chars"    "4000" "$(restored clear)"
+expect_eq "compact gets it again (deliberate)"  "4000" "$(restored compact)"
+restore_index
+expect_eq "resume gets an unconsumed handoff"   "4000" "$(restored resume)"
+expect_eq "resume does not get it twice"        "0"    "$(restored resume)"
+
 # --- case 10: scan - agent_prefix_high / agent_empty --------------------------------------------
 echo "--- scan: agent_prefix_high, agent_empty"
 # The layout Claude Code actually writes (recon/hooks-and-stats.md §6, review Critical 1):
@@ -688,12 +717,19 @@ expect_eq "scan with no transcript still runs the stats-file detectors" "1" \
 
 # --- case 16: anomaly-scan.sh - wiring and fail-open ------------------------------------------------
 echo "--- anomaly-scan.sh"
-expect_eq "anomaly-scan.sh is wired on Stop" "1" \
+# ADR-013 D7: the scan runs once per session, on SessionEnd; the learnings hook and the
+# effortLevel key are gone from VULYK's own settings.json.
+expect_eq "anomaly-scan.sh is not wired on Stop" "0" \
   "$(jq -r '.hooks.Stop[].hooks[].command' "$SRC/.claude/settings.json" | grep -c 'anomaly-scan.sh')"
 expect_eq "anomaly-scan.sh is wired on SessionEnd" "1" \
   "$(jq -r '.hooks.SessionEnd[].hooks[].command' "$SRC/.claude/settings.json" | grep -c 'anomaly-scan.sh')"
-expect_eq "the existing Stop hook is preserved beside it" "1" \
+expect_eq "the Stop hook handoff.sh stop is still wired" "1" \
   "$(jq -r '.hooks.Stop[].hooks[].command' "$SRC/.claude/settings.json" | grep -c 'handoff.sh stop')"
+expect_eq "no learnings hook is wired anywhere" "0" \
+  "$(jq -r '.hooks[][].hooks[].command' "$SRC/.claude/settings.json" | grep -c 'session-end-learnings')"
+expect_eq "the learnings hook no longer ships" "0" \
+  "$([ -e "$SRC/.claude/hooks/session-end-learnings.sh" ] && echo 1 || echo 0)"
+expect_eq "settings.json carries no effortLevel" "false" "$(jq -r 'has("effortLevel")' "$SRC/.claude/settings.json" | tr -d '\r')"
 
 : > "$LOG"
 HOOK_RC=0
@@ -765,6 +801,19 @@ expect_eq "the anomaly log is never shipped into a hive" "0" \
   "$([ -e "$TGT/memory/stats/anomalies.jsonl" ] && echo 1 || echo 0)"
 expect_eq "the council ledger is never shipped into a hive" "0" \
   "$([ -e "$TGT/memory/stats/council.jsonl" ] && echo 1 || echo 0)"
+# ADR-013 D7: a fresh hive gets no learnings hook and no Stop scan
+expect_eq "fresh install: no learnings hook file" "0" \
+  "$([ -e "$TGT/.claude/hooks/session-end-learnings.sh" ] && echo 1 || echo 0)"
+expect_eq "fresh install: no learnings hook wired" "0" "$(grep -c 'session-end-learnings' "$TGT/.claude/settings.json")"
+expect_eq "fresh install: the scan is wired on SessionEnd only" "0 1" \
+  "$(jq -r '[.hooks.Stop[]?.hooks[].command | select(test("anomaly-scan"))] | length' "$TGT/.claude/settings.json" | tr -d '\r') $(jq -r '[.hooks.SessionEnd[]?.hooks[].command | select(test("anomaly-scan"))] | length' "$TGT/.claude/settings.json" | tr -d '\r')"
+# ...and a project that already had its own settings.json gets the same through wire_hook
+OWNSET="$T/hive-own-settings"; mkdir -p "$OWNSET/.claude"
+printf '{"permissions":{"allow":["Bash(ls:*)"]}}\n' > "$OWNSET/.claude/settings.json"
+bash "$SRC/install.sh" "$OWNSET" --telemetry off > "$T/ownset.out" 2>&1
+cat "$T/ownset.out" | expect "an owner's settings.json gets the scan on SessionEnd" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+cat "$T/ownset.out" | expect_absent "and no Stop wiring" "-> Stop:"
+expect_eq "and no learnings hook" "0" "$(grep -c 'session-end-learnings' "$OWNSET/.claude/settings.json")"
 
 # --telemetry on changes that one row's value and nothing else in the constitution
 PROF_BEFORE="$(grep -v '^| Telemetry |' "$TGT/CLAUDE.md")"
@@ -837,29 +886,47 @@ else
   echo "  skip  terminal case: no util-linux \`script\` on PATH to drive a pseudo-terminal"
 fi
 
-# wire_hook: the two anomaly-scan.sh entries appear once each, preserve what was there, and a
-# second upgrade is byte-identical.
+# wire_hook / unwire_hook (ADR-013 D7): a 0.17-shaped settings.json - the scan on Stop, the
+# learnings hook on SessionEnd, no scan there yet - loses the two entries this release no longer
+# wants, gains the SessionEnd scan once, keeps everything else, and a second upgrade is
+# byte-identical. The backup is the file as the owner left it, however many edits followed.
 SET="$TGT/.claude/settings.json"
-jq '.hooks.Stop = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop"}]}] | del(.hooks.SessionEnd)' \
+jq '.hooks.Stop = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop"},{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh"}]}]
+    | .hooks.SessionEnd = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/session-end-learnings.sh"},{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh sessionend"}]}]' \
   "$SET" > "$T/set.json" && mv "$T/set.json" "$SET"
+cp "$SET" "$T/set.before"
+bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire0.out" 2>&1
+cat "$T/wire0.out" | expect "--check reports the Stop unwiring" "would unwire   .claude/settings.json -> Stop: anomaly-scan.sh"
+cat "$T/wire0.out" | expect "--check reports the learnings unwiring" "would unwire   .claude/settings.json -> SessionEnd: session-end-learnings.sh"
+cat "$T/wire0.out" | expect "--check reports the SessionEnd wiring" "would wire     .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+expect_eq "--check leaves settings.json untouched" "1" "$(cmp -s "$T/set.before" "$SET" && echo 1 || echo 0)"
 bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/wire.out" 2>&1
-cat "$T/wire.out" | expect "wire_hook reports Stop" "wire           .claude/settings.json -> Stop: anomaly-scan.sh"
+cat "$T/wire.out" | expect "unwire_hook reports Stop" "unwire         .claude/settings.json -> Stop: anomaly-scan.sh"
+cat "$T/wire.out" | expect "unwire_hook reports the learnings hook" "unwire         .claude/settings.json -> SessionEnd: session-end-learnings.sh"
 cat "$T/wire.out" | expect "wire_hook reports SessionEnd" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
-expect_eq "anomaly-scan.sh is wired once on Stop" "1" \
+cat "$T/wire.out" | expect_absent "nothing is wired on Stop" "wire           .claude/settings.json -> Stop"
+expect_eq "anomaly-scan.sh is gone from Stop" "0" \
   "$(jq -r '.hooks.Stop[].hooks[].command' "$SET" | grep -c 'anomaly-scan.sh')"
-expect_eq "anomaly-scan.sh is wired once on SessionEnd" "1" \
-  "$(jq -r '.hooks.SessionEnd[].hooks[].command' "$SET" | grep -c 'anomaly-scan.sh')"
 expect_eq "the existing Stop entry is preserved" "1" \
   "$(jq -r '.hooks.Stop[].hooks[].command' "$SET" | grep -c 'handoff.sh stop')"
+expect_eq "anomaly-scan.sh is wired once on SessionEnd" "1" \
+  "$(jq -r '.hooks.SessionEnd[].hooks[].command' "$SET" | grep -c 'anomaly-scan.sh')"
+expect_eq "the learnings hook is gone from settings.json" "0" "$(grep -c 'session-end-learnings' "$SET")"
+expect_eq "the existing SessionEnd entry is preserved" "1" \
+  "$(jq -r '.hooks.SessionEnd[].hooks[].command' "$SET" | grep -c 'handoff.sh sessionend')"
 expect_eq "SessionStart wiring is untouched" "1" \
   "$(jq -r '.hooks.SessionStart[].hooks[].command' "$SET" | grep -c 'vulyk-update-check.sh')"
+expect_eq "the backup is settings.json as it was before the run" "1" \
+  "$(cmp -s "$T/set.before" "$SET.vulyk-bak" && echo 1 || echo 0)"
 SET_BEFORE="$(cat "$SET")"
 bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/wire2.out" 2>&1
 expect_eq "a second upgrade leaves settings.json byte-identical" "1" \
   "$([ "$SET_BEFORE" = "$(cat "$SET")" ] && echo 1 || echo 0)"
-cat "$T/wire2.out" | expect_absent "and reports no second wiring" "-> Stop: anomaly-scan.sh"
+cat "$T/wire2.out" | expect_absent "and reports no second wiring" "-> SessionEnd: anomaly-scan.sh"
+cat "$T/wire2.out" | expect_absent "and no second unwiring" "unwire"
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire3.out" 2>&1
-cat "$T/wire3.out" | expect_absent "--check reports no wiring for an already-wired hook" "would wire     .claude/settings.json -> Stop"
+cat "$T/wire3.out" | expect_absent "--check reports no wiring for an already-wired hook" "would wire     .claude/settings.json -> SessionEnd"
+cat "$T/wire3.out" | expect_absent "--check reports no unwiring once it is done" "would unwire"
 
 # council.jsonl (convergent-judge-03): excluded as runtime; --upgrade strips the seeded
 # autonomous-cycle rows an older release shipped, and nothing else.
@@ -899,6 +966,151 @@ cat "$T/council-own.out" | expect_absent "a hive with its own autonomous-cycle s
 expect_eq "a hive with its own autonomous-cycle spec: ledger untouched" "1" \
   "$(cmp -s "$T/ledger.before" "$LEDG" && echo 1 || echo 0)"
 rmdir "$TGT/docs/specs/autonomous-cycle"
+
+# --- install.sh: --constitution replace (ADR-013 D7) ------------------------------------------
+# The release's constitution goes in whole; the hive's Profile and Commands bodies are carried
+# over verbatim between the markers; the old file is kept as <name>.pre-<major.minor>.md. A
+# plain --upgrade never writes it and prints the size and the command. Comparisons drop CR:
+# a Windows checkout of the release is CRLF, and the carried lines take its line ending.
+echo "--- install.sh: --constitution replace"
+BAKNAME="pre-$(tr -d '[:space:]' < "$SRC/VERSION" | cut -d. -f1-2)"
+outside() { # the file minus both block bodies (markers kept)
+  awk '/VULYK:PROFILE:END|VULYK:COMMANDS:END/ { f = 0 } !f { print } /VULYK:PROFILE:START|VULYK:COMMANDS:START/ { f = 1 }' "$1" | tr -d '\r'
+}
+block() { awk -v m="$2" 'index($0, m ":END") { f = 0 } f { print } index($0, m ":START") { f = 1 }' "$1" | tr -d '\r'; }
+treesum() { (cd "$1" && find . -type f -exec md5sum {} + | LC_ALL=C sort | md5sum); }
+same() { cmp -s "$1" "$2" && echo 1 || echo 0; }
+
+CR="$T/hive-replace"; mkdir -p "$CR"
+bash "$SRC/install.sh" "$CR" --telemetry on > /dev/null 2>&1
+sed -i 's/| Stack | `<fill in>` |/| Stack | `filled-stack` |/; s/| Lint | `<fill in>` |/| Lint | `npm run lint -- --quiet` |/' "$CR/CLAUDE.md"
+printf 'An owner line outside the blocks\n' >> "$CR/CLAUDE.md"
+cp "$CR/CLAUDE.md" "$T/cr.before"
+block "$CR/CLAUDE.md" VULYK:PROFILE > "$T/cr.profile"
+block "$CR/CLAUDE.md" VULYK:COMMANDS > "$T/cr.commands"
+
+bash "$SRC/install.sh" "$CR" --upgrade > "$T/cr-plain.out" 2>&1
+expect_eq "plain --upgrade never writes the constitution" "1" "$(same "$T/cr.before" "$CR/CLAUDE.md")"
+cat "$T/cr-plain.out" | expect "plain --upgrade prints the sizes" "constitution differs from yours: CLAUDE.md is "
+cat "$T/cr-plain.out" | expect "plain --upgrade prints the migrate command" "install.sh\" \"$CR\" --upgrade --constitution replace"
+cat "$T/cr-plain.out" | expect "plain --upgrade names the backup" "the old file as CLAUDE.$BAKNAME.md"
+
+S0="$(treesum "$CR")"
+bash "$SRC/install.sh" "$CR" --upgrade --check --constitution replace > "$T/cr-check.out" 2>&1
+cat "$T/cr-check.out" | expect "--check names the backup" "would back up  CLAUDE.md -> CLAUDE.$BAKNAME.md"
+cat "$T/cr-check.out" | expect "--check names the replace" "would replace  CLAUDE.md with the"
+expect_eq "--check --constitution replace writes nothing" "$S0" "$(treesum "$CR")"
+
+RC=0; bash "$SRC/install.sh" "$CR" --upgrade --constitution replace > "$T/cr-real.out" 2>&1 || RC=$?
+expect_eq "--constitution replace exits 0" "0" "$RC"
+cat "$T/cr-real.out" | expect "it reports the backup" "back up        CLAUDE.md -> CLAUDE.$BAKNAME.md"
+expect_eq "the backup is the old file byte for byte" "1" "$(same "$T/cr.before" "$CR/CLAUDE.$BAKNAME.md")"
+expect_eq "the Profile body is carried over verbatim" "$(cat "$T/cr.profile")" "$(block "$CR/CLAUDE.md" VULYK:PROFILE)"
+expect_eq "the Commands body is carried over verbatim" "$(cat "$T/cr.commands")" "$(block "$CR/CLAUDE.md" VULYK:COMMANDS)"
+expect_eq "everything outside the blocks is the release's text" "$(outside "$SRC/CLAUDE.md")" "$(outside "$CR/CLAUDE.md")"
+expect_eq "the Telemetry row keeps its answer" "on" "$(rowval "$CR/CLAUDE.md")"
+expect_eq "an owner line outside the blocks survives in the backup only" "0 1" \
+  "$(grep -c 'An owner line outside' "$CR/CLAUDE.md") $(grep -c 'An owner line outside' "$CR/CLAUDE.$BAKNAME.md")"
+expect_eq "VULYK's own Commands rows never land in a hive" "0" "$(grep -c 'Anomaly telemetry contract tests' "$CR/CLAUDE.md")"
+cat "$T/cr-real.out" | expect_absent "a Profile with every release row gets no missing-rows note" "rows yours lacks"
+
+bash "$SRC/install.sh" "$CR" --upgrade --constitution replace > "$T/cr-again.out" 2>&1
+cat "$T/cr-again.out" | expect "a second replace has nothing to do" "is already the"
+expect_eq "and writes no second backup" "1" "$(ls "$CR"/CLAUDE.pre-*.md | grep -c .)"
+bash "$SRC/install.sh" "$CR" --upgrade > "$T/cr-after.out" 2>&1
+cat "$T/cr-after.out" | expect_absent "a migrated hive gets no migrate hint" "--constitution replace"
+
+# the sidecar: CLAUDE.vulyk.md is replaced, the foreign CLAUDE.md that imports it is not opened
+SC="$T/hive-sidecar-replace"; mkdir -p "$SC"
+printf '# My project rules\n\n@CLAUDE.vulyk.md\n' > "$SC/CLAUDE.md"
+bash "$SRC/install.sh" "$SC" --telemetry off > /dev/null 2>&1
+sed -i 's/| Stack | `<fill in>` |/| Stack | `sidecar-stack` |/; /^| Browser MCP |/d' "$SC/CLAUDE.vulyk.md"
+printf 'An owner line in the sidecar\n' >> "$SC/CLAUDE.vulyk.md"
+cp "$SC/CLAUDE.md" "$T/sc.foreign"; cp "$SC/CLAUDE.vulyk.md" "$T/sc.before"
+bash "$SRC/install.sh" "$SC" --upgrade --constitution replace > "$T/sc.out" 2>&1
+cat "$T/sc.out" | expect "the sidecar is backed up under its own name" "back up        CLAUDE.vulyk.md -> CLAUDE.vulyk.$BAKNAME.md"
+expect_eq "the foreign CLAUDE.md is byte-identical" "1" "$(same "$T/sc.foreign" "$SC/CLAUDE.md")"
+expect_eq "the sidecar backup is the old sidecar" "1" "$(same "$T/sc.before" "$SC/CLAUDE.vulyk.$BAKNAME.md")"
+expect_eq "the sidecar's Profile is carried over" "1" "$(grep -c 'sidecar-stack' "$SC/CLAUDE.vulyk.md")"
+expect_eq "the sidecar's outside text is the release's" "$(outside "$SRC/CLAUDE.md")" "$(outside "$SC/CLAUDE.vulyk.md")"
+expect_eq "the sidecar's Telemetry row keeps its answer" "off" "$(rowval "$SC/CLAUDE.vulyk.md")"
+cat "$T/sc.out" | expect "a release Profile row the hive lacks is named, not dropped silently" "this release's Profile has rows yours lacks: Browser MCP."
+
+# refused, before anything is written, when the markers are gone
+NMR="$T/hive-replace-nomarkers"; mkdir -p "$NMR"
+bash "$SRC/install.sh" "$NMR" --telemetry off > /dev/null 2>&1
+sed -i '/VULYK:COMMANDS:START/d; /VULYK:COMMANDS:END/d' "$NMR/CLAUDE.md"
+S1="$(treesum "$NMR")"
+RC=0; bash "$SRC/install.sh" "$NMR" --upgrade --constitution replace > "$T/nmr.out" 2>&1 || RC=$?
+expect_eq "a constitution without markers: replace exits 1" "1" "$RC"
+cat "$T/nmr.out" | expect "and says why, naming the manual merge" "--constitution replace refused: CLAUDE.md lacks the VULYK:PROFILE and VULYK:COMMANDS"
+expect_eq "and writes nothing at all" "$S1" "$(treesum "$NMR")"
+cat "$T/nmr.out" | expect_absent "not even a framework file" "update         "
+RC=0; bash "$SRC/install.sh" "$NMR" --constitution replace > "$T/nmr2.out" 2>&1 || RC=$?
+expect_eq "--constitution replace without --upgrade is an error" "1" "$RC"
+EMPTYH="$T/hive-replace-empty"; mkdir -p "$EMPTYH"
+RC=0; bash "$SRC/install.sh" "$EMPTYH" --upgrade --constitution replace > "$T/empty.out" 2>&1 || RC=$?
+expect_eq "no constitution to replace is an error" "1" "$RC"
+expect_eq "and leaves the directory empty" "" "$(ls -A "$EMPTYH")"
+
+# --- install.sh: retired framework files and the hooks wired to them (ADR-013 D7) -------------
+# A release clone with history: v9.8.0 ships council-sonnet.md and session-end-learnings.sh, the
+# working tree (9.9.0) does not. An unedited retired file is removed and its hook unwired; one
+# the owner edited is kept, and its hook stays wired; a retired file no tag can vouch for is
+# removed as ADR-005 D2 always did.
+echo "--- install.sh: retired framework files"
+REL="$T/release"; mkdir -p "$REL"
+tar -C "$SRC" --exclude=./.git --exclude=./.claude/worktrees -cf - . | tar -C "$REL" -xf -
+git -C "$REL" init -q -b main . && git -C "$REL" config user.email t@t &&
+  git -C "$REL" config user.name "Test Owner" && git -C "$REL" config core.autocrlf false
+printf '9.8.0\n' > "$REL/VERSION"
+printf -- '---\nname: council-sonnet\n---\nold seat\n' > "$REL/.claude/agents/council-sonnet.md"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$REL/.claude/hooks/session-end-learnings.sh"
+git -C "$REL" add -A >/dev/null 2>&1 && git -C "$REL" commit -qm v9.8.0 >/dev/null 2>&1 && git -C "$REL" tag v9.8.0
+RH="$T/hive-retire"; mkdir -p "$RH"
+bash "$REL/install.sh" "$RH" --telemetry off > /dev/null 2>&1
+expect_eq "the old release shipped both files" "2" \
+  "$(grep -cxE '\.claude/agents/council-sonnet\.md|\.claude/hooks/session-end-learnings\.sh' "$RH/.claude/vulyk-manifest")"
+jq '.hooks.SessionEnd[0].hooks += [{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/session-end-learnings.sh"}]' \
+  "$RH/.claude/settings.json" > "$T/rh.json" && mv "$T/rh.json" "$RH/.claude/settings.json"
+printf 'my own tweak\n' >> "$RH/.claude/agents/council-sonnet.md"
+echo dummy > "$RH/.claude/agents/retired-smoke.md"
+echo ".claude/agents/retired-smoke.md" >> "$RH/.claude/vulyk-manifest"
+LC_ALL=C sort -u -o "$RH/.claude/vulyk-manifest" "$RH/.claude/vulyk-manifest"
+rm -f "$REL/.claude/agents/council-sonnet.md" "$REL/.claude/hooks/session-end-learnings.sh"
+printf '9.9.0\n' > "$REL/VERSION"
+
+S2="$(treesum "$RH")"
+bash "$REL/install.sh" "$RH" --upgrade --check > "$T/rh-check.out" 2>&1
+cat "$T/rh-check.out" | expect "--check: the unedited retired hook would go" "would remove   .claude/hooks/session-end-learnings.sh"
+cat "$T/rh-check.out" | expect "--check: its wiring would go with it" "would unwire   .claude/settings.json -> SessionEnd: session-end-learnings.sh"
+cat "$T/rh-check.out" | expect "--check: the edited retired agent is kept" "keep (edited)  .claude/agents/council-sonnet.md"
+expect_eq "--check writes nothing" "$S2" "$(treesum "$RH")"
+
+bash "$REL/install.sh" "$RH" --upgrade > "$T/rh.out" 2>&1
+cat "$T/rh.out" | expect "an unedited retired file is removed" "remove         .claude/hooks/session-end-learnings.sh"
+expect_eq "and is gone" "0" "$([ -e "$RH/.claude/hooks/session-end-learnings.sh" ] && echo 1 || echo 0)"
+expect_eq "and unwired" "0" "$(grep -c 'session-end-learnings' "$RH/.claude/settings.json")"
+cat "$T/rh.out" | expect "an edited retired file is kept, with a note" "keep (edited)  .claude/agents/council-sonnet.md - retired in 9.9.0, but edited since v9.8.0"
+expect_eq "and is still there" "1" "$([ -e "$RH/.claude/agents/council-sonnet.md" ] && echo 1 || echo 0)"
+cat "$T/rh.out" | expect "a retired file no tag vouches for is removed (ADR-005 D2)" "remove         .claude/agents/retired-smoke.md"
+expect_eq "the new manifest lists none of the three" "0" \
+  "$(grep -cE 'council-sonnet|session-end-learnings|retired-smoke' "$RH/.claude/vulyk-manifest")"
+
+# an edited learnings hook stays, and so does its wiring
+RH2="$T/hive-retire-edited"; mkdir -p "$RH2"
+printf '9.8.0\n' > "$REL/VERSION"
+git -C "$REL" checkout -q v9.8.0 -- .claude/agents/council-sonnet.md .claude/hooks/session-end-learnings.sh
+bash "$REL/install.sh" "$RH2" --telemetry off > /dev/null 2>&1
+jq '.hooks.SessionEnd[0].hooks += [{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/session-end-learnings.sh"}]' \
+  "$RH2/.claude/settings.json" > "$T/rh2.json" && mv "$T/rh2.json" "$RH2/.claude/settings.json"
+printf '# my distiller\n' >> "$RH2/.claude/hooks/session-end-learnings.sh"
+rm -f "$REL/.claude/agents/council-sonnet.md" "$REL/.claude/hooks/session-end-learnings.sh"
+printf '9.9.0\n' > "$REL/VERSION"
+bash "$REL/install.sh" "$RH2" --upgrade > "$T/rh2.out" 2>&1
+cat "$T/rh2.out" | expect "an edited learnings hook is kept" "keep (edited)  .claude/hooks/session-end-learnings.sh"
+expect_eq "and stays wired" "1" "$(grep -c 'session-end-learnings' "$RH2/.claude/settings.json")"
+cat "$T/rh2.out" | expect "the unedited retired agent beside it goes" "remove         .claude/agents/council-sonnet.md"
 
 # --- case 17: inbox - distil, then stage the clear (anomaly-telemetry-07) ----------------------
 echo "--- inbox"
@@ -1085,8 +1297,18 @@ expect_eq "an out-of-set agent fails check in the VULYK repo" "1" "$RC"
 # The only place the suite looks at .claude/agents/, and only to prove the list has not drifted.
 echo "--- agents: drift guard"
 REPO_BASENAMES="$(for f in "$SRC"/.claude/agents/*.md; do basename "$f" .md; done | LC_ALL=C sort)"
-expect_eq "the baked agent list minus other = this repo's .claude/agents/*.md basenames (added or renamed a framework agent? edit AGENTS in scripts/telemetry.sh)"   "$REPO_BASENAMES" "$(printf '%s
-' "$BAKED_AGENTS" | grep -vxF other | LC_ALL=C sort)"
+# Retired agents stay in the set (a hive on an older release still bundles them) and are the only
+# names allowed beyond the roster: council-sonnet since 0.18.0 (ADR-013 D1).
+RETIRED="council-sonnet"
+expect_eq "the baked agent list minus other and the retired names = this repo's .claude/agents/*.md basenames (added or renamed a framework agent? edit AGENTS in scripts/telemetry.sh)"   "$REPO_BASENAMES" "$(printf '%s
+' "$BAKED_AGENTS" | grep -vxF other | grep -vxF "$RETIRED" | LC_ALL=C sort)"
+expect_eq "a retired agent has no file in .claude/agents/" "0" "$([ -e "$SRC/.claude/agents/$RETIRED.md" ] && echo 1 || echo 0)"
+RETB="$T/retired-agent.jsonl"
+printf '{"v":1,"code":"agent_empty","value":3,"threshold":0,"vulyk":"0.17.0","tier":1,"model":"sonnet","agent":"council-sonnet","week":"%s","hive":"aaaaaaaaaaaa"}\n' "$WEEK" > "$RETB"
+if (cd "$SRC" && bash scripts/telemetry.sh check "$RETB") >/dev/null 2>&1; then
+  ok "check still accepts a 0.17 bundle row naming council-sonnet"
+else bad "check rejected a bundle row naming the retired council-sonnet:"
+  (cd "$SRC" && bash scripts/telemetry.sh check "$RETB") 2>&1 | sed 's/^/        /'; fi
 grep -v '^[[:space:]]*#' "$SRC/scripts/telemetry.sh"   | expect_absent "no code line in telemetry.sh reads .claude/agents" ".claude/agents"
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
