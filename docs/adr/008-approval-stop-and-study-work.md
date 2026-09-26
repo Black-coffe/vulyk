@@ -1,6 +1,6 @@
 # ADR-008: The plan stops for approval, and a document is a deliverable
 
-- Status: accepted (2026-09-14, owner: Andrei)
+- Status: accepted (2026-09-14, owner: Andrei). Partially superseded by ADR-013 (2026-09-27): decision 5 - verification runs once, inside `close-story`, and `council-sonnet` is retired; and decision 4 - without the Workflow tool the Queen runs the same `advance` loop, no `--fallback`
 - Date: 2026-09-14
 - Spec: docs/specs/lean-cascade (v0.13.0)
 

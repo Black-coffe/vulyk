@@ -1,6 +1,6 @@
 # ADR-012: Opus 5.5 is the workhorse, Fable holds the gate, effort goes back into frontmatter
 
-- Status: accepted (2026-09-22, owner: Andrei)
+- Status: accepted (2026-09-22, owner: Andrei). Partially superseded by ADR-013 (2026-09-27): the gate's scope - `lead-review` runs on `opus` at Tier 1-3, and `TOP_MODEL` is passed only to the Tier 4 review (with the second reviewer), `lead-architect`, the Tier 4 `queen-planner` and a missed story's retry; `council-sonnet` leaves the junior rung
 - Date: 2026-09-22
 - Spec: docs/specs/opus-5-5-ladder (study report + owner approval; the change was made by the
   Queen's session directly, the owner having lifted the 2026-09-14 "framework surgery is

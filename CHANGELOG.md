@@ -2,6 +2,82 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.18.0] - 2026-09-27
+
+Light VULYK ([ADR-013](docs/adr/013-light-vulyk.md)). A token audit over 1,844 sessions
+([docs/specs/token-audit/report.md](docs/specs/token-audit/report.md)) found that a median task processed
+84.9M raw tokens (13.5M weighted) and dispatched 67 subagents, 43 of them `cycle-clerk`. Spend split into
+near-equal thirds: the Queen 30.5%, workers 30.4%, review machinery 30.7%. The instruction bundle every
+subagent re-read was 23% of all spend, extra council rounds took 29.5% of the spend of the tasks that had
+them, and 56% of driver runs stopped before a verdict. This release cuts agents, not what they are told.
+
+### Added
+- **`cycle.sh advance <spec> [--stamp <s>] [--claim] [--ingest]`: one call per agent boundary.**
+  - Runs `branch`, `open-round`, `judge` and `repair` until the next thing only an agent can do, and prints one JSON line with `steps`, `rejected` and `status`.
+  - `--ingest` records the seats' files from `.vulyk/reports/<slug>/round-<n>/<seat>.attempt-<k>.md`; a missing file is an empty attempt, and Tier 4's `review-top`/`review-second` are folded in bash.
+  - A stop keeps `verb:"advance"` and names `failed`; a step that leaves `next` unchanged stops with exit 2.
+- **`cycle.sh repair`: the repair story, written mechanically.** `<slug>-NN-repair-round-<n>.md` quotes the RED and anchored asks as `> N. text`, copies the findings verbatim, and takes Files and Verification from the done stories. It is idempotent, and `trace-check.sh` accepts the `## Asks` quotes. No `queen-planner` in a repair.
+- **`scripts/token-report.py <project> [--spec] [--since] [--json]`.** Raw and weighted tokens, dispatches by agent type and rounds per spec, read from the transcripts; it reproduces the audit's per-spec figures. `/vulyk-status` and `/vulyk-evolve` print it. The `totalTokens` a Workflow run prints is the sum of final contexts, not spend.
+- **`status --json` gains `since`, `seat_attempt` and `seats`** at the end; `ROUND` gains `seats=` and `since=`.
+- **Tests.** `tests/e2e.test.sh` runs the real driver against the real `cycle.sh` (green in one round; anchored BLOCK → mechanical repair → carried seat → green). Also `tests/token-report.test.sh`, and `tests/council.test.sh --quick` (~3 minutes).
+
+### Changed
+- **Routing (ADR-013 D1).**
+  - Tier 1–2 are solo: the Queen builds the stories, runs `cycle.sh advance` from her own Bash and dispatches one `lead-review` per round. No driver, no clerk, no court.
+  - Tier 3–4 keep the hive: workers in waves through the Workflow driver, seats `opus` + `review`, and `haiku` only when the Profile's *Client path* is filled. Tier 4's `review` folds a second reviewer.
+  - Round ceilings are unchanged (1 / 2 / 3 / 3). Law 5 binds from Tier 3.
+- **The council converges (D3).**
+  - The roster is frozen into `ROUND` at open. A blind seat that was GREEN or N/A in round n−1 is carried into round n (`carried: round <n-1>`, not counted in `attempts`).
+  - From round 2, `lead-review` reviews only `since..head` against the previous round's findings.
+  - No court worktree is built when no blind seat is required. `reopen` routes to `repair` (`env` or a stale round → `open-round`).
+- **`lead-review` judges the asks and correctness only.**
+  - BLOCK needs an anchored critical or major line with a reproducing command or `file:line`. At most five minors.
+  - It runs the full-suite command once under `timeout 540`; a timeout is a minor.
+  - It runs on `opus` at Tier 1–3. The gate model (`TOP_MODEL`) is passed only at Tier 4 (with the second reviewer), to `lead-architect`, to the Tier 4 `queen-planner` and to a missed story's retry.
+- **Workers close their own stories (D5).**
+  - They run `close-story … --commit [--stamp]` and rerun it on exit 4 up to three times, then set `returned: WALL`.
+  - Verification runs once, inside `close-story`, under `timeout ${VULYK_VERIFY_TIMEOUT:-540}` where a working GNU `timeout` exists.
+  - `close-story` on a done story with a clean tree is `ok:true`.
+- **The Workflow driver makes one clerk call per agent boundary (D6).**
+  - The sequence is `advance --claim`, then `advance` after each wave or `advance --ingest` after each council dispatch, then `release`. A happy Tier 3 run costs 4 clerk calls (was ~19–30).
+  - A missed story is retried once on the gate model; a second miss stops the run. A rejected seat is re-dispatched once with the rejection. The iteration cap is 40.
+  - Without the Workflow tool, the Queen runs the same `advance` loop and dispatches with the Agent tool.
+- **The constitution** is 7.3 KB / 116 lines (was 16.2 KB / 211): Laws, routing, models, Secrets, Profile, Commands. The ladder, the cycle, the token economy and evolution live in `docs/` and the `/vulyk-*` commands. `/vulyk-build` is 6.1 KB (was 16.2 KB). No MUST/NEVER shouting in agents or commands.
+- **`omitClaudeMd: true`** on `cycle-clerk`, `council-opus`, `council-haiku`, `drone-scout`, `drone-coverage`, `drone-docs` and `librarian` (Claude Code ≥ 2.1.271). `council-opus` runs at `effort: medium`; `queen-planner` gets `maxTurns: 40`, `lead-architect` 30.
+- **Gates.**
+  - `claim` refuses a tree dirty outside paperwork; a re-claim by the holder skips the check.
+  - `VERSION` and `CHANGELOG.md` are paperwork.
+  - `scope-check` ignores the files of not-done sibling stories.
+  - `wave-check` reports `## Verification` segments that are not `## Commands` cells.
+  - Everywhere VULYK reads the constitution, it reads `CLAUDE.vulyk.md` if present, else `CLAUDE.md`.
+- **Faster `cycle.sh`.** The hot paths are plain bash now: `status` 0.62 → 0.32 s, `record-seat` 3.5 → 1.1 s, `judge` 2.3 → 1.4 s; the full council suite runs in 531 s (was 752 s).
+- **Hooks.** The handoff is restored only after `/clear` or compaction, capped at 4 000 characters. `anomaly-scan.sh` runs on `SessionEnd` only.
+
+### Removed
+- **`council-sonnet`.** It returned 0 RED in 16 rows of VULYK's own ledger and was GREEN in 80 of 101 rounds across 20 hives. `record-seat` still accepts `sonnet` so old rounds stay readable, and `telemetry.sh` keeps it as a legal agent token.
+- **`session-end-learnings.sh` and `VULYK_AUTOLEARN`.** The hook wrote empty stubs; the Chronicle plugin replaces it.
+- **Driver-side logic:** `queen-planner` in repairs, the JS review fold, the fallback prose loop and `--fallback`.
+- **Dead settings:** `"effortLevel"` in `.claude/settings.json` (no effect on Opus 5.5); `status: in-progress` and `tracer:` in the story template; the ADR-001 pointer and "find reasons this change should NOT merge" in the reviewer prompt.
+
+### Fixed
+- **Sidecar hives.** `close-story`'s `## Commands` check read `CLAUDE.md` in a hive whose constitution is `CLAUDE.vulyk.md`.
+- **Unbounded review loop.** A review without `VERDICT:` was re-dispatched with no counter: one Tier 4 spec saw 44 `lead-review` runs. A seat now gets at most two dispatches per round.
+- **Release commit.** It staled a GREEN round.
+- **Dirty tree.** A stray owner file stopped a run at `open-round`, after the build; `claim` now refuses it before the build.
+- **Slow suites.** One could die silently at the Bash tool's 10-minute cap; now `close-story` fails with exit 4, `verification timed out after <N>s`.
+
+### Upgrade notes
+- **Replace the constitution to get the saving.** A plain upgrade never touches your constitution; it prints the size difference and the command. Run either:
+  - `bash /path/to/vulyk/install.sh <project> --upgrade --constitution replace`
+  - `bash scripts/vulyk-update.sh . --constitution replace`
+
+  Either one writes the 0.18 constitution, carries over your `VULYK:PROFILE` and `VULYK:COMMANDS` blocks and telemetry row, and keeps the old file as `<name>.pre-0.18.md`. It refuses a constitution without the two markers. Hand-written sections outside the blocks stay only in the backup. A hive with a 15–31 KB constitution gets the per-dispatch prefix saving only after the replace.
+- **What `--upgrade` removes.**
+  - `council-sonnet.md` and `session-end-learnings.sh` go through the manifest, unless you edited them; an edited file stays, with a note.
+  - The learnings hook is unwired from `SessionEnd`, and `anomaly-scan.sh` from `Stop`.
+  - `.claude/worktrees/` is added to `.gitignore`.
+- **Open rounds.** A round opened before 0.18 has no `seats=` line; it is judged against its tier's 0.18 roster.
+
 ## [0.17.0] - 2026-09-24
 
 ### Changed

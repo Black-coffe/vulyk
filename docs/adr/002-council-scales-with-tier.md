@@ -1,6 +1,6 @@
 # ADR-002: The council scales with the tier, never to zero
 
-- Status: accepted (2026-09-13, owner: Andrei); amended by ADR-007 (2026-09-14): Tier 2 requires `sonnet`, `review` - Tier 1 and 3-4 unchanged
+- Status: accepted (2026-09-13, owner: Andrei); amended by ADR-007 (2026-09-14): Tier 2 requires `sonnet`, `review` - Tier 1 and 3-4 unchanged. Partially superseded by ADR-013 (2026-09-27): the roster - Tier 1-2 require only `review`, Tier 3-4 `opus` and `review` (+ `haiku` when the Client path is filled); `council-sonnet` is retired
 - Date: 2026-09-13
 - Spec: docs/specs/autonomous-cycle (v0.12.0)
 
