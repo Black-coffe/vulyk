@@ -16,6 +16,7 @@ Modes (argv[1]); hook modes read the hook JSON payload on stdin:
     precompact     PreCompact         -> emergency mechanical handoff dump
     sessionend     SessionEnd         -> mechanical handoff dump on /clear or exit
     sessionstart   SessionStart       -> injects the freshest handoff for this project
+                                         (source clear / compact only, <= 4 000 chars)
     dump           manual             -> writes the mechanical skeleton, prints its path (used by /vulyk-handoff)
     status         debug              -> human-readable current numbers
 
@@ -67,8 +68,10 @@ DEFAULTS = {
     # (unless ENABLE_PROMPT_CACHING_1H=1). Checkpointing inside this window
     # re-reads the conversation at cache price; outside it, at full price.
     "cache_ttl_minutes": 60,
-    # SessionStart(startup) only restores a handoff younger than this
+    # SessionStart(resume) only restores a handoff younger than this
     "restore_max_age_hours": 12,
+    # the restored handoff is cut to this many characters
+    "restore_max_chars": 4000,
     # how much transcript tail to parse for a dump (bytes)
     "dump_tail_bytes": 12 * 1024 * 1024,
     "max_user_prompts": 12,
@@ -795,9 +798,16 @@ def mode_dump_hook(payload, cfg, reason, min_tokens_check=True):
           "suppressOutput": True})
 
 
+# SessionStart sources that continue earlier work (ADR-013 D7). A plain `startup` or a
+# `fork` starts on its own topic: restoring there injected the last handoff into every
+# session opened within 12 h, whatever it was about. `resume` is left out too: a resumed
+# session still carries its own context, so the handoff would only repeat it.
+RESTORE_SOURCES = ("clear", "compact")
+
+
 def mode_sessionstart(payload, cfg, root):
     source = (payload.get("source") or "").lower()
-    if source in ("resume", "fork"):
+    if source not in RESTORE_SOURCES:
         emit(None)
     idx = index_path(root)
     try:
@@ -823,8 +833,9 @@ def mode_sessionstart(payload, cfg, root):
             body = fh.read()
     except Exception:
         emit(None)
-    if len(body) > 12000:
-        body = body[:12000] + "\n\n...(truncated)"
+    cap = positive_int(cfg.get("restore_max_chars")) or DEFAULTS["restore_max_chars"]
+    if len(body) > cap:
+        body = body[:cap] + "\n\n...(truncated)"
 
     try:
         meta["consumed_by_startup"] = True

@@ -1,6 +1,6 @@
 # ADR-001: The cycle's state contract - one truth on disk, two thin drivers
 
-- Status: accepted (2026-09-13, owner: Andrei)
+- Status: accepted (2026-09-13, owner: Andrei). Partially superseded by ADR-013 (2026-09-27): D2's one clerk call per verb (the driver calls `cycle.sh advance` once per agent boundary) and D3's seat roster (`council-sonnet` retired; seats per ADR-013 D1)
 - Date: 2026-09-12
 - Spec: docs/specs/autonomous-cycle (v0.12.0)
 

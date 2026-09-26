@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Executes .claude/workflows/vulyk-cycle.js for real, against stubbed agent/parallel/
-# pipeline/phase/log and a scripted cycle-clerk - the check `node --check` cannot do,
-# since the driver is bare top-level statements meant to run as an async function body,
-# not a module (round-3 review major 1).
+# Executes .claude/workflows/vulyk-cycle.js for real, against stubbed agent/parallel/phase/log
+# and a scripted cycle-clerk that answers each expected command with a JSON line - the check
+# `node --check` cannot do, since the driver is bare top-level statements meant to run as an
+# async function body, not a module.
 #
 #   Usage: bash tests/driver.test.sh            # from the VULYK repo root
 #
-# No node on PATH -> prints "skipped: node not found" and exits 0 (this suite proves
-# nothing about the driver without a runtime to execute it in).
+# No node on PATH -> prints "skipped: node not found" and exits 0 (this suite proves nothing
+# about the driver without a runtime to execute it in).
 set -u
 
 if ! command -v node >/dev/null 2>&1; then
@@ -16,1166 +16,390 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
-fail=0
-expect() { # expect <label> <needle> <haystack>   (no pipe - a pipe into a function
-  # runs the function in a subshell in bash, and this "fail=1" needs to reach the caller's shell)
-  local label="$1" needle="$2" haystack="$3"
-  if printf '%s' "$haystack" | grep -qF -- "$needle"; then echo "  ok    $label"
-  else echo "::error::$label - expected '$needle' in:"; printf '%s\n' "$haystack" | sed 's/^/        /'; fail=1; fi
-}
-
 export VULYK_DRIVER_PATH="$SRC/.claude/workflows/vulyk-cycle.js"
 
-out="$(node <<'NODE_EOF'
+node <<'NODE_EOF'
 'use strict';
 const fs = require('fs');
-const driverPath = process.env.VULYK_DRIVER_PATH || '.claude/workflows/vulyk-cycle.js';
-const src = fs.readFileSync(driverPath, 'utf8');
+const src = fs.readFileSync(process.env.VULYK_DRIVER_PATH, 'utf8');
 
-// --- compile step: strip `export ` at line start, compile the rest as the body of an
-// async function taking (args, agent, parallel, pipeline, phase, log) - this is the
-// Workflow runtime's own shape for a bare top-level-statement/top-level-return file.
+let passed = 0;
+let failed = 0;
+const check = (cond, label, detail) => {
+  if (cond) { passed++; console.log('  ok    ' + label); }
+  else { failed++; console.log('::error::' + label + (detail === undefined ? '' : ' - got ' + JSON.stringify(detail))); }
+};
+
+// --- compile: strip `export ` at line start and compile the rest as the body of an async
+// function taking the Workflow hooks - the runtime's own shape for a top-level-return file.
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-function compile(body) {
-  const stripped = body.replace(/^export /gm, '');
-  return new AsyncFunction('args', 'agent', 'parallel', 'pipeline', 'phase', 'log', stripped);
-}
+const compile = (body) => new AsyncFunction('args', 'agent', 'parallel', 'phase', 'log', body.replace(/^export /gm, ''));
+let driverFn = null;
+try { driverFn = compile(src); check(true, 'compile: the driver compiles as an async body'); }
+catch (e) { check(false, 'compile: the driver compiles as an async body', String(e)); }
+try { compile('export const meta = {a:1}\nthis is not javascript ((('); check(false, 'compile: garbage is rejected'); }
+catch (e) { check(e instanceof SyntaxError, 'compile: garbage is rejected', String(e)); }
+if (!driverFn) { console.log('FAIL: nothing to run'); process.exit(1); }
 
-let driverFn;
-try {
-  driverFn = compile(src);
-  console.log('ok compile driver');
-} catch (e) {
-  console.log('FAIL compile driver: ' + e);
-}
-
-// garbage: `export ` still stripped, but the remainder is not valid JS - the inverse
-// check that `node --check` cannot perform on an ES-module-shaped file.
-try {
-  compile('export const meta = {a:1}\nthis is not javascript at all (((');
-  console.log('FAIL garbage rejected: no throw');
-} catch (e) {
-  if (e instanceof SyntaxError) console.log('ok garbage rejected');
-  else console.log('FAIL garbage rejected: wrong error type ' + e);
-}
-
-// --- foldReviews harness, ported verbatim from
-// docs/specs/autonomous-cycle/autonomous-cycle-26-driver-fails-closed.md:54
+// --- static checks
 {
-  const s = src;
-  const m = s.match(/^function foldReviews\([\s\S]*?^\}/m);
-  if (!m) throw new Error('no foldReviews');
-  const fold = new Function(m[0] + ';return foldReviews;')();
-  const first = (r) => String(r).split('\n')[0];
-  const ok = (c, w) => { if (!c) { console.error('FAIL ' + w); process.exit(1); } };
-  ok(first(fold('VERDICT: PASS\nA', 'VERDICT: BLOCK\nB')) === 'VERDICT: BLOCK', 'either BLOCK');
-  ok(first(fold('VERDICT: PASS\nA', 'VERDICT: PASS\nB')) === 'VERDICT: PASS', 'both PASS');
-  for (const [a, b, w] of [
-    [null, null, 'null,null'],
-    [null, 'VERDICT: PASS\nB', 'null,PASS'],
-    ['VERDICT: PASS\nA', null, 'PASS,null'],
-    ['', 'VERDICT: PASS\nB', 'empty,PASS'],
-    ['prose\nVERDICT: PASS', 'VERDICT: PASS\nB', 'prose first'],
-  ]) {
-    ok(!/^VERDICT:/.test(first(fold(a, b))), w);
-  }
-  ok(fold(null, 'VERDICT: PASS\nB').includes('VERDICT: PASS\nB'), 'survivor kept');
-  console.log('fold ok');
+  const m = src.match(/^export const meta = (\{[\s\S]*?^\})/m);
+  let literal = false;
+  // a pure literal evaluates with no free identifier in scope
+  try { literal = !!m && typeof new Function('"use strict"; return (' + m[1] + ')')() === 'object'; } catch { literal = false; }
+  check(literal, 'static: meta is a pure literal');
+  check(!src.includes('queen-planner'), 'static: no queen-planner anywhere in the driver');
+  check(!/\bfoldReviews\b/.test(src), 'static: no JS review fold - advance --ingest folds');
+  const advances = src.match(/`advance \$\{spec\}[^`]*`/g) || [];
+  check(advances.length > 0 && advances.every((t) => t.includes('--stamp ${stamp}')), 'static: every advance template carries --stamp', advances);
+  check(/close-story \$\{story\.file\} --commit --stamp \$\{stamp\}/.test(src), 'static: the worker prompt names close-story --commit --stamp');
+  const verbs = ['claim', 'record-seat', 'judge', 'open-round', 'branch', 'close-story'].filter((v) => new RegExp('`' + v + ' ').test(src));
+  check(verbs.length === 0, 'static: the driver sends no per-verb clerk command but advance/status/release', verbs);
+  const shout = src.match(/\b(MUST|NEVER|ALWAYS|CRITICAL|IMPORTANT)\b/g);
+  check(!shout, 'static: no all-caps shouting', shout);
+  const d = src.match(/description:\s*'([^']*)'/);
+  check(!!d && !/ceiling\s*\(?3\b/.test(d[1]), 'static: the description states no flat ceiling 3', d && d[1]);
 }
 
-// --- static check (K3/story 13): the four gated verbs' own command templates all carry
-// --stamp ${stamp} literally in the source - covers judge, which no runtime scenario below
-// exercises directly (open-round/record-seat/close-story are also proved at runtime above).
-{
-  const gated = ['close-story', 'open-round', 'record-seat', 'judge'];
-  const missing = gated.filter((v) => {
-    const re = new RegExp('`' + v + ' [^`]*--stamp \\$\\{stamp\\}');
-    return !re.test(src);
-  });
-  if (missing.length === 0) console.log('ok stamp: all four gated verbs carry --stamp in their template');
-  else console.log('FAIL stamp: all four gated verbs carry --stamp in their template - missing ' + JSON.stringify(missing));
-}
+// --- harness
+const S = '0123456789abcdef';
+const SPEC = 'docs/specs/demo';
+const ADV = `advance ${SPEC} --stamp ${S}`;
+const CLAIM = `${ADV} --claim`;
+const INGEST = `${ADV} --ingest`;
+const STATUS = `status ${SPEC} --json`;
+const RELEASE = `release ${SPEC} ${S}`;
+const ARGS = { spec: SPEC, top_model: 'fable', second_model: 'opus', stamp: S };
+const releaseOk = { ok: true, verb: 'release', exit: 0, next: 'released' };
+const COURT = '/abs/.vulyk/court/demo';
 
-// --- run(args, script) harness: script = { clerk: [...], agents: [...] }
-function run(args, script) {
-  const clerkQueue = (script.clerk || []).slice();
-  const agentsQueue = (script.agents || []).slice();
-  const calls = [];
-  const phases = [];
+const status = (o) => ({
+  spec: SPEC, slug: 'demo', stage: '03', tier: 3, branch: 'vulyk/demo', head: 'h1',
+  wave_stories: [], round: 0, court: null, round_dir: null, since: null, seat_attempt: {}, seats: [], red: [],
+  ...o,
+});
+const adv = (st, extra) => ({ ok: true, verb: 'advance', exit: 0, next: st.next, steps: [], rejected: [], status: st, ...extra });
+const story = (n, o) => ({ file: `${SPEC}/demo-0${n}-x.md`, story: `demo-0${n}`, worker: 'worker-code', model: 'opus', repeat: 1, ...o });
+const build = (stories, o) => status({ next: 'build:1', wave_stories: stories, ...o });
+const round = (seats, o) => status({
+  next: 'dispatch:' + seats, stage: '04', round: 1, court: COURT, round_dir: `${SPEC}/council/round-1`,
+  seats: seats.split(','), seat_attempt: Object.fromEntries(seats.split(',').map((s) => [s, 1])), ...o,
+});
+const green = (o) => status({ next: 'green', stage: '05', ...o });
+
+const everyAgentType = new Set();
+
+// script.clerk: an array of [expected command, answer] pairs, or a function (cmd, n) -> answer.
+// A command that differs from the expected one is recorded as a mismatch.
+async function run(args, script) {
+  const clerk = script.clerk || [];
+  const agents = (script.agents || []).slice();
+  const clerkCmds = [];
+  const mismatches = [];
+  const dispatches = [];
   const logs = [];
-
+  const phases = [];
   const agent = (prompt, opts) => {
     if (opts && opts.agentType === 'cycle-clerk') {
-      const m = prompt.match(/scripts\/cycle\.sh (\S+)/);
-      const verb = m ? m[1] : null;
-      calls.push({ verb, cmd: prompt });
-      let entry = clerkQueue.shift();
-      if (entry === undefined) throw new Error('clerk queue exhausted for: ' + prompt);
-      if (typeof entry !== 'string') entry = JSON.stringify(entry);
-      return Promise.resolve(entry);
+      const m = prompt.match(/^Run exactly: bash scripts\/cycle\.sh (.*)\nReturn the last stdout line verbatim\.$/);
+      const cmd = m ? m[1] : '<malformed clerk prompt> ' + prompt;
+      const n = clerkCmds.length;
+      clerkCmds.push(cmd);
+      let answer;
+      if (typeof clerk === 'function') answer = clerk(cmd, n);
+      else {
+        const entry = clerk[n];
+        if (entry === undefined) return Promise.reject(new Error('clerk script exhausted at: ' + cmd));
+        if (entry[0] !== cmd) mismatches.push({ n, want: entry[0], got: cmd });
+        answer = entry[1];
+      }
+      return Promise.resolve(typeof answer === 'string' ? answer : JSON.stringify(answer));
     }
-    calls.push({ agentType: opts && opts.agentType, model: opts && opts.model, prompt });
-    const entry = agentsQueue.shift();
-    // a dead subagent: an { throw: '<message>' } queue entry rejects instead of resolving,
-    // so the driver's own per-thunk catch (not parallel's) is what the scenario proves.
+    everyAgentType.add(opts && opts.agentType);
+    dispatches.push({ agentType: opts && opts.agentType, model: opts && opts.model, phase: opts && opts.phase, prompt });
+    let entry = agents.shift();
+    if (typeof entry === 'function') entry = entry(prompt, opts);
     if (entry && typeof entry === 'object' && 'throw' in entry) return Promise.reject(new Error(entry.throw));
-    return Promise.resolve(entry === undefined ? null : entry);
+    return Promise.resolve(entry === undefined ? 'a report' : entry);
   };
-
   const parallel = (thunks) => Promise.all(thunks.map((t) => {
     try { return Promise.resolve(t()).catch(() => null); } catch { return Promise.resolve(null); }
   }));
-
-  const pipeline = (items, ...stages) => items.reduce(
-    (p, item) => p.then(async (acc) => {
-      let cur = item;
-      for (const stage of stages) {
-        if (cur === null) break;
-        try { cur = await stage(cur); } catch { cur = null; }
-      }
-      acc.push(cur);
-      return acc;
-    }),
-    Promise.resolve([]),
-  );
-
-  const phase = (name) => { phases.push(name); };
-  const log = (line) => { logs.push(line); };
-
-  return driverFn(args, agent, parallel, pipeline, phase, log).then((result) => ({ result, calls, phases, logs }));
+  const result = await driverFn(args, agent, parallel, (p) => phases.push(p), (l) => logs.push(l));
+  return { result, clerkCmds, mismatches, dispatches, logs, phases };
 }
+const seq = (r) => r.clerkCmds.join(' | ');
+const blindPromptsClean = (r) => r.dispatches
+  .filter((d) => d.agentType === 'council-opus' || d.agentType === 'council-haiku')
+  .every((d) => !d.prompt.includes(SPEC) && !d.prompt.includes('council/round-') && !d.prompt.includes(S));
 
-// --- DRIVER semaphore harness (K3/story 13): claim is the first clerk call after the launch
-// guards, release is the last on every path. Scenarios that reach a terminal or a stop must
-// supply both ends of the clerk queue themselves; this helper does it once.
-const claimOk = { ok: true, verb: 'claim', exit: 0 };
-const releaseOk = { ok: true, verb: 'release', exit: 0 };
-const withClaim = (clerkArr) => [claimOk, ...clerkArr, releaseOk];
+(async () => {
+  // --- launch guards: no clerk call at all
+  for (const [label, args] of [['args undefined', undefined], ['stamp missing', { spec: SPEC }], ['spec missing', { stamp: S }]]) {
+    const r = await run(args, { clerk: [] });
+    check(r.result && r.result.stop && r.result.stop.verb === 'launch' && r.clerkCmds.length === 0, `launch guard: ${label}`, r.result);
+  }
 
-// --- scenario (a): args.stamp missing -> stop.verb === 'launch', no clerk call
-run({}, { clerk: [], agents: [] }).then(({ result, calls }) => {
-  const clerkCalls = calls.filter((c) => 'verb' in c);
-  if (result && result.stop && result.stop.verb === 'launch' && clerkCalls.length === 0) {
-    console.log('ok launch guard: missing stamp');
-  } else {
-    console.log('FAIL launch guard: missing stamp - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-  }
-})
-// --- scenario (b): status next:"green" -> next === 'green', zero agent dispatches
-.then(() => run(
-  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-  { clerk: withClaim([{ next: 'green' }]), agents: [] },
-).then(({ result, calls }) => {
-  const dispatches = calls.filter((c) => !('verb' in c));
-  const gated = calls.filter((c) => 'verb' in c);
-  if (
-    result && result.next === 'green' && dispatches.length === 0
-    && gated[0].verb === 'claim' && gated[gated.length - 1].verb === 'release'
-  ) {
-    console.log('ok status green: terminal, no dispatch');
-    console.log('ok status green: claim/release bracket the run');
-  } else {
-    console.log('FAIL status green: terminal, no dispatch - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-  }
-}))
-// --- scenario (c): build:1 with one wave story -> worker dispatched as worker-test,
-// close-story called once with that file, then status green ends the run
-.then(() => {
-  const file = 'docs/specs/demo/demo-01-first.md';
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    {
-      clerk: withClaim([
-        { next: 'build:1', wave_stories: [{ file, story: 'demo-01', worker: 'worker-test' }] },
-        { ok: true },
-        { next: 'green' },
-      ]),
-      agents: ['a worker report'],
-    },
-  ).then(({ result, calls, logs }) => {
-    const workerCalls = calls.filter((c) => c.agentType === 'worker-test');
-    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
-    if (
-      result && result.next === 'green'
-      && workerCalls.length === 1
-      && closeStoryCalls.length === 1
-      && closeStoryCalls[0].cmd.includes('--stamp 0123456789abcdef')
-      && !logs.includes('worker returned no report')
-    ) {
-      console.log('ok build wave: worker dispatched, close-story called once');
-      console.log('ok build wave: close-story carries --stamp');
-      // ADR-006's third driver scenario: this report carries no STATUS: line at all and the
-      // story still closes on close-story's ok alone - no miss, no "returned no report".
-      console.log('ok ADR-006 no STATUS: line but close-story ok: closes, nothing logged');
-    } else {
-      console.log('FAIL build wave: worker dispatched, close-story called once - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-    }
-  });
-})
-// --- scenario (d): two red close-story misses on the same file -> stop carries the
-// verification line's own error, not a generic message
-.then(() => {
-  const file = 'docs/specs/demo/demo-02-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-02', worker: 'worker-test' }] };
-  const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, redLine, wave, redLine]), agents: ['report 1', 'report 2'] },
-  ).then(({ result, calls }) => {
-    const gated = calls.filter((c) => 'verb' in c);
-    if (
-      result && result.stop && result.stop.verb === 'build' && result.stop.file === file && result.stop.error === 'red: verification failed'
-      && gated[gated.length - 1].verb === 'release'
-    ) {
-      console.log('ok two-miss stop: red+red carries the verification error');
-      console.log('ok two-miss stop: release still called after a stop');
-    } else {
-      console.log('FAIL two-miss stop: red+red carries the verification error - got ' + JSON.stringify(result));
-    }
-  });
-})
-// --- scenario (e): empty report then a red close-story -> the second (verification) error wins
-.then(() => {
-  const file = 'docs/specs/demo/demo-03-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-03', worker: 'worker-test' }] };
-  const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, wave, redLine]), agents: [null, 'report 2'] },
-  ).then(({ result }) => {
-    if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'red: verification failed') {
-      console.log('ok two-miss stop: empty+red carries the verification error');
-    } else {
-      console.log('FAIL two-miss stop: empty+red carries the verification error - got ' + JSON.stringify(result));
-    }
-  });
-})
-// --- scenario (f): a red close-story then an empty report -> the empty return's own reason wins
-.then(() => {
-  const file = 'docs/specs/demo/demo-04-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-04', worker: 'worker-test' }] };
-  const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, redLine, wave]), agents: ['report 1', null] },
-  ).then(({ result }) => {
-    if (result && result.stop && result.stop.verb === 'build' && result.stop.error === 'worker returned empty - turn cap suspected (worker-test, maxTurns 90 in .claude/agents/worker-test.md)') {
-      console.log('ok two-miss stop: red+empty ends with the empty-return reason');
-    } else {
-      console.log('FAIL two-miss stop: red+empty ends with the empty-return reason - got ' + JSON.stringify(result));
-    }
-  });
-})
-// --- scenario (g): a whitespace-only report is a miss - close-story is never called for it
-.then(() => {
-  const file = 'docs/specs/demo/demo-05-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-05', worker: 'worker-test' }] };
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, wave]), agents: ['   ', '   '] },
-  ).then(({ result, calls }) => {
-    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story');
-    if (result && result.stop && result.stop.error === 'worker returned empty - turn cap suspected (worker-test, maxTurns 90 in .claude/agents/worker-test.md)' && closeStoryCalls.length === 0) {
-      console.log('ok whitespace report: a miss, close-story never called');
-    } else {
-      console.log('FAIL whitespace report: a miss, close-story never called - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-    }
-  });
-})
-// --- scenario (h): args undefined -> launch stop, zero clerk calls, no TypeError
-.then(() => run(undefined, { clerk: [], agents: [] }).then(({ result, calls }) => {
-  const clerkCalls = calls.filter((c) => 'verb' in c);
-  if (result && result.stop && result.stop.verb === 'launch' && clerkCalls.length === 0) {
-    console.log('ok launch guard: args undefined');
-  } else {
-    console.log('FAIL launch guard: args undefined - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-  }
-}))
-// --- scenario (i): Tier 4 with no second_model refuses at launch, before any worker dispatch
-.then(() => run(
-  { spec: 'demo', top_model: 'opus', stamp: '0123456789abcdef' },
-  { clerk: withClaim([{ next: 'build:1', tier: 4, wave_stories: [{ file: 'docs/specs/demo/demo-06-x.md', story: 'demo-06', worker: 'worker-test' }] }]), agents: ['report'] },
-).then(({ result, calls }) => {
-  const dispatches = calls.filter((c) => !('verb' in c));
-  if (result && result.stop && result.stop.verb === 'launch' && /second_model/.test(result.stop.error) && dispatches.length === 0) {
-    console.log('ok tier4 guard: second_model missing');
-  } else {
-    console.log('FAIL tier4 guard: second_model missing - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-  }
-}))
-// --- scenario (j): Tier 4 with second_model equal to top_model also refuses
-.then(() => run(
-  { spec: 'demo', top_model: 'opus', second_model: 'opus', stamp: '0123456789abcdef' },
-  { clerk: withClaim([{ next: 'build:1', tier: 4, wave_stories: [] }]), agents: [] },
-).then(({ result }) => {
-  if (result && result.stop && result.stop.verb === 'launch' && /second_model/.test(result.stop.error)) {
-    console.log('ok tier4 guard: second_model equal to top_model');
-  } else {
-    console.log('FAIL tier4 guard: second_model equal to top_model - got ' + JSON.stringify(result));
-  }
-}))
-// --- scenario (k): a Tier 3 run with no second_model proceeds (the guard is Tier-4-only)
-.then(() => {
-  const file = 'docs/specs/demo/demo-07-x.md';
-  return run(
-    { spec: 'demo', top_model: 'opus', stamp: '0123456789abcdef' },
-    {
-      clerk: withClaim([
-        { next: 'build:1', tier: 3, wave_stories: [{ file, story: 'demo-07', worker: 'worker-test' }] },
-        { ok: true },
-        { next: 'green' },
-      ]),
-      agents: ['a worker report'],
-    },
-  ).then(({ result }) => {
-    if (result && result.next === 'green') {
-      console.log('ok tier3: no second_model needed, run proceeds');
-    } else {
-      console.log('FAIL tier3: no second_model needed, run proceeds - got ' + JSON.stringify(result));
-    }
-  });
-})
-// --- scenario (l): any clerk line with exit:3 ends the run paused, no stop shape
-.then(() => run(
-  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+  // --- happy Tier 3: claim -> build -> advance -> dispatch opus+review -> ingest -> green -> release
   {
-    clerk: withClaim([
-      { next: 'dispatch:sonnet', tier: 2, round: 1, round_dir: 'docs/specs/demo/council/round-1' },
-      { ok: false, exit: 3, next: 'paused', error: 'paused: owner requested a pause' },
-    ]),
-    agents: ['a seat report'],
-  },
-).then(({ result, calls }) => {
-  const recordSeatCalls = calls.filter((c) => c.verb === 'record-seat');
-  if (
-    result && result.next === 'paused' && !result.stop
-    && recordSeatCalls.length === 1 && recordSeatCalls[0].cmd.includes('--stamp 0123456789abcdef')
-  ) {
-    console.log('ok record-seat exit 3: ends the run paused, no stop');
-    console.log('ok record-seat: carries --stamp');
-  } else {
-    console.log('FAIL record-seat exit 3: ends the run paused, no stop - got ' + JSON.stringify(result));
+    const a = story(1, { worker: 'worker-code', model: 'opus' });
+    const b = story(2, { worker: 'worker-test', model: 'sonnet' });
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, adv(build([a, b]), { steps: ['branch'] })],
+        [ADV, adv(round('opus,review'), { steps: ['open-round'] })],
+        [INGEST, adv(green(), { steps: ['judge'] })],
+        [RELEASE, releaseOk],
+      ],
+      agents: ['worker a', 'worker b', 'opus report', 'review report'],
+    });
+    const [wa, wb, opus, review] = r.dispatches;
+    check(r.mismatches.length === 0 && r.clerkCmds.length === 4, 'tier 3: exact clerk sequence claim, advance, advance --ingest, release', { seq: seq(r), mm: r.mismatches });
+    check(r.result && r.result.next === 'green' && !r.result.stop, 'tier 3: ends green with the carried status', r.result);
+    check(r.dispatches.length === 4, 'tier 3: two workers and two seats, nothing else', r.dispatches.map((d) => d.agentType));
+    check(wa.agentType === 'worker-code' && wa.model === 'opus' && wb.agentType === 'worker-test' && wb.model === 'sonnet',
+      'tier 3: workers take agentType and model from the story', [wa, wb]);
+    check(wa.prompt.includes(a.file) && wa.prompt.includes(`Stamp: ${S}`)
+      && wa.prompt.includes(`bash scripts/cycle.sh close-story ${a.file} --commit --stamp ${S}`)
+      && !wa.prompt.includes('git diff'), 'tier 3: worker prompt names the story, the stamp and close-story as the last step', wa.prompt);
+    check(opus.agentType === 'council-opus' && opus.model === undefined && opus.prompt.includes(`COURT: ${COURT}`)
+      && opus.prompt.includes('.vulyk/reports/demo/round-1/opus.attempt-1.md'), 'tier 3: opus seat gets COURT and its attempt-1 report path', opus);
+    check(review.agentType === 'lead-review' && review.model === undefined, 'tier 3: lead-review runs on its frontmatter model', review);
+    check(review.prompt.includes(`Spec: ${SPEC}`) && review.prompt.includes('Branch vulyk/demo at h1')
+      && review.prompt.includes('review the whole branch against its base') && !review.prompt.includes('..')
+      && !review.prompt.includes('council/round-') && !/adr\/001/i.test(review.prompt)
+      && review.prompt.includes('.vulyk/reports/demo/round-1/review.attempt-1.md'),
+      'tier 3: round-1 reviewer prompt: spec, branch, head, whole branch, no ADR-001, report path', review.prompt);
+    check(blindPromptsClean(r), 'tier 3: blind seat prompt carries no spec dir, round dir or stamp', opus.prompt);
+    check(r.phases.join(',') === 'Build,Council', 'tier 3: phases Build then Council', r.phases);
+    check(r.clerkCmds.every((c) => !c.startsWith('status')), 'tier 3: no separate status poll', seq(r));
   }
-}))
-// --- scenario (m): next:"briefed" -> the driver refuses, never runs briefed --commit itself
-.then(() => run(
-  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-  { clerk: withClaim([{ next: 'briefed' }]), agents: [] },
-).then(({ result, calls }) => {
-  const briefedCommit = calls.some((c) => c.cmd && c.cmd.includes('briefed --commit'));
-  if (result && result.stop && result.stop.verb === 'briefed' && !briefedCommit) {
-    console.log('ok briefed refusal: stop, never runs briefed --commit');
-  } else {
-    console.log('FAIL briefed refusal: stop, never runs briefed --commit - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+
+  // --- Tier 1/2: review only, one reviewer on its frontmatter model
+  for (const tier of [1, 2]) {
+    const a = story(1);
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, adv(build([a], { tier }))],
+        [ADV, adv(round('review', { tier, court: null }))],
+        [INGEST, adv(green({ tier }))],
+        [RELEASE, releaseOk],
+      ],
+    });
+    const types = r.dispatches.map((d) => d.agentType).join(',');
+    const rev = r.dispatches[1];
+    check(r.mismatches.length === 0 && r.result.next === 'green' && types === 'worker-code,lead-review'
+      && rev.model === undefined && rev.prompt.includes('review.attempt-1.md'),
+      `tier ${tier}: review only, no court needed, reviewer on frontmatter model`, { types, seq: seq(r), result: r.result });
   }
-}))
-// --- scenario (n): an ok:true exit:6 line (escalated) is followed by a status poll
-.then(() => run(
-  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
+
+  // --- story retry: second dispatch on TOP with the git-diff sentence, second miss stops naming the file
   {
-    clerk: withClaim([
-      { next: 'open-round' },
-      { ok: true, verb: 'open-round', exit: 6, next: 'escalated' },
-      { next: 'escalated' },
-    ]),
-    agents: [],
-  },
-).then(({ result, calls }) => {
-  const openRoundCalls = calls.filter((c) => c.verb === 'open-round');
-  if (
-    result && result.next === 'escalated' && !result.stop
-    && openRoundCalls.length === 1 && openRoundCalls[0].cmd.includes('--stamp 0123456789abcdef')
-  ) {
-    console.log('ok exit 6: ok:true is followed by a status poll, ends escalated');
-    console.log('ok open-round: carries --stamp');
-  } else {
-    console.log('FAIL exit 6: ok:true is followed by a status poll, ends escalated - got ' + JSON.stringify(result));
+    const a = story(1, { worker: 'worker-test', model: 'opus' });
+    const sentence = 'a previous attempt may have left uncommitted edits in your files; `git diff` them first';
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, adv(build([a]))],
+        [ADV, adv(build([a]))],
+        [ADV, adv(build([a]))],
+        [RELEASE, releaseOk],
+      ],
+      agents: ['report 1', 'report 2'],
+    });
+    const [w1, w2] = r.dispatches;
+    check(r.dispatches.length === 2 && w1.model === 'opus' && w2.model === 'fable', 'retry: the second attempt runs on TOP', r.dispatches.map((d) => d.model));
+    check(!w1.prompt.includes(sentence) && w2.prompt.includes(sentence), 'retry: only the second prompt carries the git-diff sentence', [w1.prompt, w2.prompt]);
+    check(r.result.stop && r.result.stop.verb === 'build' && r.result.stop.file === a.file
+      && /still todo/.test(r.result.stop.error), 'retry: the second miss stops the run naming the file', r.result);
+    check(r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE, 'retry: the stop still releases', seq(r));
   }
-}))
-// --- scenario (o): a thrown worker agent() is caught by its own build thunk, logged, and
-// counted as the same miss a null report would be - the dead subagent's reason is now the
-// two-miss stop's own error as well as a line in the run journal (C3)
-.then(() => {
-  const file = 'docs/specs/demo/demo-08-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-08', worker: 'worker-test' }] };
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, wave]), agents: [{ throw: 'subagent died' }, { throw: 'subagent died again' }] },
-  ).then(({ result, logs }) => {
-    const threw = logs.some((l) => l.startsWith('worker threw:'));
-    if (result && result.stop && result.stop.error === 'worker threw: subagent died again' && threw) {
-      console.log('ok worker threw: caught by the build thunk, logged, counted as a miss');
-    } else {
-      console.log('FAIL worker threw: caught by the build thunk, logged, counted as a miss - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
-    }
-  });
-})
-// --- scenario (p): the second dispatch of the same story carries the uncommitted-diff
-// sentence; the first dispatch does not; the retry climbs to the gate model (ADR-012)
-.then(() => {
-  const file = 'docs/specs/demo/demo-09-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-09', worker: 'worker-test', model: 'opus' }] };
-  const redLine = { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' };
-  const sentence = 'a previous attempt may have left uncommitted edits in your files; `git diff` them first';
-  return run(
-    { spec: 'demo', top_model: 'fable', second_model: 'opus', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, redLine, wave, { ok: true }, { next: 'green' }]), agents: ['report 1', 'report 2'] },
-  ).then(({ result, calls }) => {
-    const workerCalls = calls.filter((c) => c.agentType === 'worker-test');
-    if (
-      result && result.next === 'green'
-      && workerCalls.length === 2
-      && !workerCalls[0].prompt.includes(sentence)
-      && workerCalls[1].prompt.includes(sentence)
-      && workerCalls[0].model === 'opus'
-      && workerCalls[1].model === 'fable'
-    ) {
-      console.log('ok retry prompt: only the second dispatch mentions uncommitted edits');
-    } else {
-      console.log('FAIL retry prompt: only the second dispatch mentions uncommitted edits - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-    }
-  });
-})
-// --- scenario (q): ADR-006 - a worker report opening STATUS: DONE, but close-story's
-// first answer is exit 4 "returned WALL" (the worker forgot the `returned:` key or wrote
-// the wrong one) - the driver still runs close-story a second time on retry and, once it
-// answers ok:true, the run continues with no stop. This is the proof the driver never
-// read "STATUS: DONE" to decide the story was done - only close-story's own exit code.
-.then(() => {
-  const file = 'docs/specs/demo/demo-10-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-10', worker: 'worker-test' }] };
-  const returnedWall = { ok: false, verb: 'close-story', exit: 4, error: 'returned WALL' };
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, returnedWall, wave, { ok: true }, { next: 'green' }]), agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
-  ).then(({ result, calls }) => {
-    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
-    if (result && result.next === 'green' && !result.stop && closeStoryCalls.length === 2) {
-      console.log('ok ADR-006 returned WALL then ok: close-story called twice, no stop, run continues');
-    } else {
-      console.log('FAIL ADR-006 returned WALL then ok: close-story called twice, no stop, run continues - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-    }
-  });
-})
-// --- scenario (r): same worker report (STATUS: DONE), but close-story answers exit 4
-// "returned WALL" on both attempts - the second miss stops the run, close-story was
-// still called exactly twice, and the stop names this story's file.
-.then(() => {
-  const file = 'docs/specs/demo/demo-11-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-11', worker: 'worker-test' }] };
-  const returnedWall = { ok: false, verb: 'close-story', exit: 4, error: 'returned WALL' };
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, returnedWall, wave, returnedWall]), agents: ['STATUS: DONE\nreport 1', 'STATUS: DONE\nreport 2'] },
-  ).then(({ result, calls }) => {
-    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
-    if (result && result.stop && result.stop.verb === 'build' && result.stop.file === file && closeStoryCalls.length === 2) {
-      console.log('ok ADR-006 returned WALL twice: stops on build, close-story called exactly twice');
-    } else {
-      console.log('FAIL ADR-006 returned WALL twice: stops on build, close-story called exactly twice - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-    }
-  });
-})
-// --- scenario (s): a worker report opening STATUS: WALL, but close-story answers ok:true
-// (the worker set `returned: DONE` regardless of its own STATUS line) - the story closes.
-// This documents, not endorses, that the verb's own field is the gate, not the driver's
-// reading of the report.
-.then(() => {
-  const file = 'docs/specs/demo/demo-12-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-12', worker: 'worker-test' }] };
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, { ok: true }, { next: 'green' }]), agents: ['STATUS: WALL\nreport'] },
-  ).then(({ result, calls }) => {
-    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
-    if (result && result.next === 'green' && !result.stop && closeStoryCalls.length === 1) {
-      console.log('ok ADR-006 STATUS: WALL but close-story ok: the story closes on the verb alone');
-    } else {
-      console.log('FAIL ADR-006 STATUS: WALL but close-story ok: the story closes on the verb alone - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-    }
-  });
-})
-// --- scenario (t): DRIVER semaphore (K3/story 13) - a refused claim ends the run at once,
-// carrying the stop shape verb:'claim', and no further clerk call is ever made (no status
-// poll, no release - claim never succeeded, so there is nothing to release).
-.then(() => run(
-  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-  { clerk: [{ ok: false, verb: 'claim', exit: 2, error: 'held by aaaaaaaaaaaaaaaa; run: bash scripts/cycle.sh release docs/specs/demo aaaaaaaaaaaaaaaa if that driver is dead' }], agents: [] },
-).then(({ result, calls }) => {
-  if (
-    result && result.stop && result.stop.verb === 'claim' && result.stop.exit === 2
-    && /held by/.test(result.stop.error) && calls.length === 1
-  ) {
-    console.log('ok claim refusal: stop verb claim, no further clerk call');
-  } else {
-    console.log('FAIL claim refusal: stop verb claim, no further clerk call - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
+  // retry that lands: the run walks on; TOP falls back to opus when top_model is absent
+  {
+    const a = story(1, { model: 'sonnet' });
+    const r = await run({ spec: SPEC, stamp: S }, {
+      clerk: [[CLAIM, adv(build([a]))], [ADV, adv(build([a]))], [ADV, adv(green())], [RELEASE, releaseOk]],
+    });
+    check(r.result.next === 'green' && r.dispatches[1].model === 'opus', 'retry: a landed retry walks on, TOP falls back to opus', { result: r.result, m: r.dispatches.map((d) => d.model) });
   }
-}))
-// --- scenario (u): C3 - the same throw twice is logged once per miss and is the stop's error
-.then(() => {
-  const file = 'docs/specs/demo/demo-13-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-13', worker: 'worker-test' }] };
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, wave]), agents: [{ throw: 'boom' }, { throw: 'boom' }] },
-  ).then(({ result, logs }) => {
-    const threwLines = logs.filter((l) => l === 'worker threw: boom');
-    if (result && result.stop && result.stop.error === 'worker threw: boom' && threwLines.length === 2) {
-      console.log('ok C3 worker threw: stop.error carries it and both misses are logged');
-    } else {
-      console.log('FAIL C3 worker threw: stop.error carries it and both misses are logged - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
-    }
-  });
-})
-// --- scenario (v): C3 - an empty worker return names the dispatched agent and its cap
-.then(() => {
-  const file = 'docs/specs/demo/demo-14-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-14', worker: 'worker-code' }] };
-  const want = 'worker returned empty - turn cap suspected (worker-code, maxTurns 90 in .claude/agents/worker-code.md)';
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, wave]), agents: ['', ''] },
-  ).then(({ result, logs }) => {
-    const emptyLines = logs.filter((l) => l === want);
-    if (result && result.stop && result.stop.error === want && emptyLines.length === 2) {
-      console.log('ok C3 worker empty: names worker-code and maxTurns 90, logged per miss');
-    } else {
-      console.log('FAIL C3 worker empty: names worker-code and maxTurns 90, logged per miss - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
-    }
-  });
-})
-// --- scenario (v2): C3/story 08 - the third reason comes from close-story's own verdict:
-// every non-empty return reaches the verb, and exit 4 `returned: missing` is what the driver
-// calls "worker returned no report" - once per miss, with close-story called once per miss.
-.then(() => {
-  const file = 'docs/specs/demo/demo-15-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-15', worker: 'worker-test' }] };
-  const missing = { ok: false, verb: 'close-story', exit: 4, error: 'returned: missing' };
-  const want = 'worker returned no report';
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, missing, wave, missing]), agents: ['prose, no report key', 'prose, no report key'] },
-  ).then(({ result, logs, calls }) => {
-    const noReportLines = logs.filter((l) => l === want);
-    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
-    if (
-      result && result.stop && result.stop.error === want
-      && noReportLines.length === 2 && closeStoryCalls.length === 2
-    ) {
-      console.log('ok C3 worker no report: close-story exit 4 returned: missing is the reason, logged per attempt');
-    } else {
-      console.log('FAIL C3 worker no report: close-story exit 4 returned: missing is the reason, logged per attempt - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs) + ' calls=' + JSON.stringify(calls));
-    }
-  });
-})
-// --- scenario (v3): mixed misses - the second miss's own reason is what the stop carries.
-// The empty first return never reaches close-story, so the verb runs exactly once.
-.then(() => {
-  const file = 'docs/specs/demo/demo-16-x.md';
-  const wave = { next: 'build:1', wave_stories: [{ file, story: 'demo-16', worker: 'worker-test' }] };
-  const missing = { ok: false, verb: 'close-story', exit: 4, error: 'returned: missing' };
-  return run(
-    { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-    { clerk: withClaim([wave, wave, missing]), agents: ['', 'prose, no report key'] },
-  ).then(({ result, logs, calls }) => {
-    const emptyWant = 'worker returned empty - turn cap suspected (worker-test, maxTurns 90 in .claude/agents/worker-test.md)';
-    const noReportWant = 'worker returned no report';
-    const closeStoryCalls = calls.filter((c) => c.verb === 'close-story' && c.cmd && c.cmd.includes(file));
-    if (
-      result && result.stop && result.stop.error === noReportWant
-      && logs.includes(emptyWant) && logs.includes(noReportWant)
-      && closeStoryCalls.length === 1
-    ) {
-      console.log('ok C3 worker mixed misses: stop carries the second miss\'s own reason, close-story called once');
-    } else {
-      console.log('FAIL C3 worker mixed misses: stop carries the second miss\'s own reason, close-story called once - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs) + ' calls=' + JSON.stringify(calls));
-    }
-  });
-})
-// --- scenario (ad): C1 - a non-JSON clerk last line is re-asked once, then the run proceeds
-.then(() => run(
-  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-  { clerk: ['{"ok":true,', claimOk, { next: 'green' }, releaseOk], agents: [] },
-).then(({ result, calls, logs }) => {
-  const claimCalls = calls.filter((c) => c.verb === 'claim');
-  const retryLog = logs.find((l) => l.includes('retrying once') && l.includes('claim demo 0123456789abcdef'));
-  if (result && result.next === 'green' && claimCalls.length === 2 && retryLog) {
-    console.log('ok clerk retry: non-JSON line re-asked once, run proceeds');
-  } else {
-    console.log('FAIL clerk retry: non-JSON line re-asked once, run proceeds - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls) + ' logs=' + JSON.stringify(logs));
+  // dead workers: the reasonFor classification is the stop's error; a dead worker whose story closed is no miss
+  {
+    const a = story(1, { worker: 'worker-code' });
+    const r = await run(ARGS, {
+      clerk: [[CLAIM, adv(build([a]))], [ADV, adv(build([a]))], [ADV, adv(build([a]))], [RELEASE, releaseOk]],
+      agents: [{ throw: 'died' }, '   '],
+    });
+    check(r.result.stop && r.result.stop.error === 'worker returned empty - turn cap suspected (worker-code, maxTurns 90 in .claude/agents/worker-code.md)'
+      && r.logs.includes(`miss 1 on ${a.file}: worker threw: died`), 'dead worker: threw then empty - the second reason stops the run', { result: r.result, logs: r.logs });
+    const b = story(2);
+    const r2 = await run(ARGS, {
+      clerk: [[CLAIM, adv(build([a, b]))], [ADV, adv(build([b]))], [ADV, adv(green())], [RELEASE, releaseOk]],
+      agents: [null, 'b report', 'b again'],
+    });
+    const second = r2.dispatches.slice(2).map((d) => d.prompt.includes(b.file));
+    check(r2.result.next === 'green' && r2.dispatches.length === 3 && second.length === 1 && second[0],
+      'dead worker: a closed story is no miss, only the still-todo story is re-dispatched', { result: r2.result, n: r2.dispatches.length });
   }
-}))
-// --- scenario (ae): C1 - two non-JSON lines in a row end the run with the raw second line
-// (today's BadLine shape), calling the stub exactly twice and dispatching no further prompt.
-.then(() => run(
-  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-  { clerk: ['{"ok":true,', '{"ok":true, still bad'], agents: [] },
-).then(({ result, calls }) => {
-  const claimCalls = calls.filter((c) => c.verb === 'claim');
-  if (result === '{"ok":true, still bad' && claimCalls.length === 2) {
-    console.log('ok clerk retry: two non-JSON lines end the run with the raw second line');
-  } else {
-    console.log('FAIL clerk retry: two non-JSON lines end the run with the raw second line - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-  }
-}))
-// --- scenario (af): a Paused result on the retried (second) attempt is still thrown as
-// Paused, not swallowed by the retry's own catch.
-.then(() => run(
-  { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' },
-  { clerk: withClaim(['{"stage":"build",', { exit: 3, next: 'awaiting-review' }]), agents: [] },
-).then(({ result, calls }) => {
-  const statusCalls = calls.filter((c) => c.verb === 'status');
-  if (result && result.next === 'awaiting-review' && statusCalls.length === 2) {
-    console.log('ok clerk retry: Paused on the retried attempt is thrown, not swallowed');
-  } else {
-    console.log('FAIL clerk retry: Paused on the retried attempt is thrown, not swallowed - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(calls));
-  }
-}))
-// --- the shared council status line for the seat/reviewer scenarios below
-.then(() => {
-  const dispatchSt = (seatList) => ({
-    next: 'dispatch:' + seatList, tier: 2, round: 1, slug: 'demo',
-    court: '.vulyk/court/demo', round_dir: 'docs/specs/demo/council/round-1',
-  });
-  const recordOk = { ok: true, verb: 'record-seat', exit: 0 };
-  // record-seat's own refusal of a seat reply (C3/story 08): the driver reads exit 4 off this
-  // JSON - it never looks at the reply's text for a VERDICT: line.
-  const malformed = { ok: false, verb: 'record-seat', exit: 4, error: 'MALFORMED' };
-  const args = { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' };
 
-  // --- scenario (w): C3 - a seat that threw is logged with its seat name, and is still recorded
-  return run(args, {
-    clerk: withClaim([dispatchSt('sonnet'), recordOk, { next: 'green' }]),
-    agents: [{ throw: 'seat died' }],
-  }).then(({ result, logs, calls }) => {
-    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    if (result && result.next === 'green' && logs.includes('seat sonnet threw: seat died') && recordCalls.length === 1) {
-      console.log('ok C3 seat threw: logged by seat name, still recorded, no stop');
-    } else {
-      console.log('FAIL C3 seat threw: logged by seat name, still recorded, no stop - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
-    }
-  })
-  // --- scenario (x): C3 - an empty seat return names council-<seat> and 60
-  .then(() => run(args, {
-    clerk: withClaim([dispatchSt('sonnet'), recordOk, { next: 'green' }]),
-    agents: [''],
-  }).then(({ result, logs, calls }) => {
-    const want = 'seat sonnet returned empty - turn cap suspected (council-sonnet, maxTurns 60 in .claude/agents/council-sonnet.md)';
-    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    if (result && result.next === 'green' && logs.includes(want) && recordCalls.length === 1) {
-      console.log('ok C3 seat empty: names council-sonnet and maxTurns 60, still recorded');
-    } else {
-      console.log('FAIL C3 seat empty: names council-sonnet and maxTurns 60, still recorded - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
-    }
-  }))
-  // --- scenario (y): C3 - the reviewer's own two strings say "reviewer", not "seat review"
-  .then(() => run(args, {
-    clerk: withClaim([dispatchSt('review'), recordOk, { next: 'green' }]),
-    agents: [{ throw: 'reviewer died' }],
-  }).then(({ result, logs, calls }) => {
-    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    if (result && result.next === 'green' && logs.includes('reviewer threw: reviewer died') && recordCalls.length === 1) {
-      console.log('ok C3 reviewer threw: logged as reviewer, still recorded');
-    } else {
-      console.log('FAIL C3 reviewer threw: logged as reviewer, still recorded - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
-    }
-  }))
-  .then(() => run(args, {
-    clerk: withClaim([dispatchSt('review'), recordOk, { next: 'green' }]),
-    agents: [''],
-  }).then(({ result, logs, calls }) => {
-    const want = 'reviewer returned empty - turn cap suspected (lead-review, maxTurns 60 in .claude/agents/lead-review.md)';
-    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    if (result && result.next === 'green' && logs.includes(want) && recordCalls.length === 1) {
-      console.log('ok C3 reviewer empty: names lead-review and maxTurns 60, still recorded');
-    } else {
-      console.log('FAIL C3 reviewer empty: names lead-review and maxTurns 60, still recorded - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
-    }
-  }))
-  // --- scenario (x2): C3/story 08 - a seat whose non-empty return record-seat rejects with
-  // exit 4 is the third reason: the line is logged once, off the verb's answer, and the seat
-  // is re-asked once as today (two record-seat calls, no stop).
-  .then(() => run(args, {
-    clerk: withClaim([dispatchSt('sonnet'), malformed, recordOk, { next: 'green' }]),
-    agents: ['a seat reply the verb rejects', 'seat report 2'],
-  }).then(({ result, logs, calls }) => {
-    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    const lines = logs.filter((l) => l === 'seat sonnet returned no report');
-    if (result && result.next === 'green' && lines.length === 1 && recordCalls.length === 2) {
-      console.log('ok C3 seat no report: record-seat exit 4 on a non-empty return is logged once, seat re-asked');
-    } else {
-      console.log('FAIL C3 seat no report: record-seat exit 4 on a non-empty return is logged once, seat re-asked - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs) + ' calls=' + JSON.stringify(recordCalls));
-    }
-  }))
-  // --- scenario (x3): C3/story 08 - an empty seat return that record-seat also rejects says
-  // only why it was empty: the turn-cap reason is the one reason, never doubled by a second.
-  .then(() => run(args, {
-    clerk: withClaim([dispatchSt('sonnet'), malformed, recordOk, { next: 'green' }]),
-    agents: ['', ''],
-  }).then(({ result, logs }) => {
-    const emptyWant = 'seat sonnet returned empty - turn cap suspected (council-sonnet, maxTurns 60 in .claude/agents/council-sonnet.md)';
-    if (result && result.next === 'green' && logs.includes(emptyWant) && !logs.includes('seat sonnet returned no report')) {
-      console.log('ok C3 seat empty + exit 4: only the turn-cap reason is logged, no second reason');
-    } else {
-      console.log('FAIL C3 seat empty + exit 4: only the turn-cap reason is logged, no second reason - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs));
-    }
-  }))
-  // --- scenario (y3): C3/story 08 - the reviewer's own no-report line says "reviewer"
-  .then(() => run(args, {
-    clerk: withClaim([dispatchSt('review'), malformed, recordOk, { next: 'green' }]),
-    agents: ['a reviewer reply the verb rejects', 'reviewer report 2'],
-  }).then(({ result, logs, calls }) => {
-    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    const lines = logs.filter((l) => l === 'reviewer returned no report');
-    if (result && result.next === 'green' && lines.length === 1 && recordCalls.length === 2) {
-      console.log('ok C3 reviewer no report: record-seat exit 4 is logged once as reviewer, re-asked');
-    } else {
-      console.log('FAIL C3 reviewer no report: record-seat exit 4 is logged once as reviewer, re-asked - got ' + JSON.stringify(result) + ' logs=' + JSON.stringify(logs) + ' calls=' + JSON.stringify(recordCalls));
-    }
-  }))
-  // --- scenario (z): C2 - the seat dispatch prompt ends with the write-your-report sentence
-  // naming this attempt's path; the single re-ask after an exit 4 names attempt-2.
-  .then(() => run(args, {
-    clerk: withClaim([
-      dispatchSt('sonnet'),
-      { ok: false, verb: 'record-seat', exit: 4, error: 'ABSENT: no verdict line' },
-      recordOk,
-      { next: 'green' },
-    ]),
-    agents: ['seat report 1', 'seat report 2'],
-  }).then(({ result, calls }) => {
-    const seatCalls = calls.filter((c) => c.agentType === 'council-sonnet');
-    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    const note = (k) => ' As your last action, write your full report verbatim to .vulyk/reports/demo/round-1/sonnet.attempt-' + k
-      + '.md (mkdir -p its directory); your chat reply is the same text.';
-    if (
-      result && result.next === 'green' && seatCalls.length === 2
-      && seatCalls[0].prompt.endsWith(note(1)) && seatCalls[1].prompt.endsWith(note(2))
-      && recordCalls.length === 2
-      && recordCalls[1].cmd.includes('--file .vulyk/reports/demo/round-1/sonnet.attempt-2.md')
-    ) {
-      console.log('ok C2 prompt: seat dispatch ends with the report path, the re-ask names attempt-2');
-      console.log('ok C2 record: the re-ask is recorded from the attempt-2 file, not a heredoc');
-    } else {
-      console.log('FAIL C2 prompt: seat dispatch ends with the report path, the re-ask names attempt-2 - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(seatCalls));
-    }
-  }))
-  // --- scenario (aa): C2 good case - recording is one --file call, no heredoc at all
-  .then(() => run(args, {
-    clerk: withClaim([dispatchSt('sonnet'), recordOk, { next: 'green' }]),
-    agents: ['the seat chat reply'],
-  }).then(({ result, calls }) => {
-    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    if (
-      result && result.next === 'green' && recordCalls.length === 1
-      && recordCalls[0].cmd.includes('--file .vulyk/reports/demo/round-1/sonnet.attempt-1.md')
-      && !recordCalls[0].cmd.includes('VULYK_')
-    ) {
-      console.log('ok C2 record good: exactly one record-seat --file call, no heredoc delimiter');
-    } else {
-      console.log('FAIL C2 record good: exactly one record-seat --file call, no heredoc delimiter - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(recordCalls));
-    }
-  }))
-  // --- scenario (ab): C2 fallback - exit 2 `file: ` and only that falls back to the heredoc,
-  // which carries the delimiter built from the run stamp and the seat's own chat reply.
-  .then(() => run(args, {
-    clerk: withClaim([
-      dispatchSt('sonnet'),
-      { ok: false, verb: 'record-seat', exit: 2, error: 'file: .vulyk/reports/demo/round-1/sonnet.attempt-1.md not found' },
-      recordOk,
-      { next: 'green' },
-    ]),
-    agents: ['the seat chat reply'],
-  }).then(({ result, calls }) => {
-    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    if (
-      result && result.next === 'green' && recordCalls.length === 2
-      && recordCalls[0].cmd.includes('--file .vulyk/reports/demo/round-1/sonnet.attempt-1.md')
-      && recordCalls[1].cmd.includes("<<'VULYK_0123456789abcdef_sonnet_1'")
-      && recordCalls[1].cmd.includes('the seat chat reply')
-      && !recordCalls[1].cmd.includes('--file')
-    ) {
-      console.log('ok C2 record fallback: exit 2 file: falls back to the stamped heredoc with the chat reply');
-    } else {
-      console.log('FAIL C2 record fallback: exit 2 file: falls back to the stamped heredoc with the chat reply - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(recordCalls));
-    }
-  }))
-  // --- scenario (ac): C2 - an exit 2 that is NOT `file: ` is a real failure: no heredoc
-  // retry, the run ends on the record-seat stop shape after that single call.
-  .then(() => run(args, {
-    clerk: withClaim([
-      dispatchSt('sonnet'),
-      { ok: false, verb: 'record-seat', exit: 2, error: 'stamp mismatch: not the holding driver' },
-    ]),
-    agents: ['the seat chat reply'],
-  }).then(({ result, calls }) => {
-    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    if (
-      result && result.stop && result.stop.verb === 'record-seat' && result.stop.exit === 2
-      && recordCalls.length === 1 && !recordCalls[0].cmd.includes('VULYK_0123456789abcdef_sonnet_1')
-    ) {
-      console.log('ok C2 record other exit 2: stops on record-seat, no heredoc fallback');
-    } else {
-      console.log('FAIL C2 record other exit 2: stops on record-seat, no heredoc fallback - got ' + JSON.stringify(result) + ' calls=' + JSON.stringify(recordCalls));
-    }
-  }));
-})
-// --- C6: the poll rule. The same steady Tier 3 round - claim, branch, one story built and
-// closed, a round opened, four seats dispatched and recorded, judge GREEN - is walked twice:
-// once with every verb carrying its post-verb `status` (C5), once with an older cycle.sh that
-// carries none. The only difference the driver may show is the clerk bill.
-.then(() => {
-  const args = { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' };
-  const file = 'docs/specs/demo/demo-20-x.md';
-  const stBranch = { next: 'branch', tier: 3, slug: 'demo', stage: '02' };
-  const stBuild = { next: 'build:1', tier: 3, slug: 'demo', stage: '03', wave_stories: [{ file, story: 'demo-20', worker: 'worker-code' }] };
-  const stOpen = { next: 'open-round', tier: 3, slug: 'demo', stage: '04' };
-  const stDispatch = {
-    next: 'dispatch:haiku,sonnet,opus,review', tier: 3, round: 1, slug: 'demo', stage: '04',
-    court: '.vulyk/court/demo', round_dir: 'docs/specs/demo/council/round-1',
-  };
-  const stJudge = { next: 'judge', tier: 3, slug: 'demo', stage: '05' };
-  const stGreen = { next: 'green', tier: 3, slug: 'demo', stage: '05' };
-  const seatReports = ['haiku report', 'sonnet report', 'opus report', 'review report'];
-  const verb = (v, next, status) => status
-    ? { ok: true, verb: v, exit: 0, next, status }
-    : { ok: true, verb: v, exit: 0, next };
+  // --- seat rejection: one re-dispatch carrying advance's rejection text, a third dispatch stops
+  {
+    const rej = { seat: 'opus', attempt: 1, error: 'MALFORMED: ASK 2 GREEN with no run:/saw: evidence' };
+    const again = round('opus', { seat_attempt: { opus: 2 } });
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, adv(round('opus,review'))],
+        [INGEST, adv(again, { steps: [], rejected: [rej] })],
+        [INGEST, adv(again, { rejected: [{ ...rej, attempt: 2 }] })],
+        [RELEASE, releaseOk],
+      ],
+    });
+    const opus = r.dispatches.filter((d) => d.agentType === 'council-opus');
+    const reviews = r.dispatches.filter((d) => d.agentType === 'lead-review');
+    check(opus.length === 2 && reviews.length === 1, 'rejection: only the rejected seat is re-dispatched', r.dispatches.map((d) => d.agentType));
+    check(!opus[0].prompt.includes('rejected') && opus[1].prompt.includes('\nYour previous report was rejected: ' + rej.error),
+      'rejection: the re-dispatch carries the rejection text from advance', opus.map((d) => d.prompt));
+    check(opus[0].prompt.includes('opus.attempt-1.md') && opus[1].prompt.includes('opus.attempt-2.md'),
+      'rejection: the report path follows status.seat_attempt', opus.map((d) => d.prompt));
+    check(r.result.stop && r.result.stop.verb === 'dispatch' && r.result.stop.seat === 'opus' && r.result.stop.round === 1,
+      'rejection: a seat needing a third dispatch in one round stops the run', r.result);
+    check(r.mismatches.length === 0 && r.clerkCmds.length === 4, 'rejection: claim, ingest, ingest, release', seq(r));
+    check(blindPromptsClean(r), 'rejection: the re-asked blind seat still gets no spec dir or stamp');
+  }
+  // seat_attempt from disk sets k even on this run's first dispatch, with no rejection note
+  {
+    const r = await run(ARGS, {
+      clerk: [[CLAIM, adv(round('review', { seat_attempt: { review: 2 } }))], [INGEST, adv(green())], [RELEASE, releaseOk]],
+    });
+    const p = r.dispatches[0].prompt;
+    check(p.includes('.vulyk/reports/demo/round-1/review.attempt-2.md') && !p.includes('rejected'),
+      'seat_attempt: k comes from status, a first dispatch in this run carries no rejection note', p);
+  }
 
-  // --- scenario (ag): every verb carries `status` -> 13 clerk calls, 3 status polls
-  return run(args, {
-    clerk: withClaim([
-      stBranch,
-      verb('branch', 'build:1', stBuild),
-      verb('close-story', 'open-round', stOpen),
-      stOpen,
-      verb('open-round', stDispatch.next, stDispatch),
-      verb('record-seat', 'dispatch:sonnet,opus,review', stDispatch),
-      verb('record-seat', 'dispatch:opus,review', stDispatch),
-      verb('record-seat', 'dispatch:review', stDispatch),
-      verb('record-seat', 'judge', stJudge),
-      stJudge,
-      verb('judge', 'green', stGreen),
-    ]),
-    agents: ['a worker report', ...seatReports],
-  }).then(({ result, calls }) => {
-    const clerkCalls = calls.filter((c) => 'verb' in c);
-    const statusCalls = clerkCalls.filter((c) => c.verb === 'status');
-    if (result && result.next === 'green' && clerkCalls.length === 13 && statusCalls.length === 3) {
-      console.log('ok C6 carried: steady Tier 3 round costs 13 clerk calls and 3 status polls');
-    } else {
-      console.log('FAIL C6 carried: steady Tier 3 round costs 13 clerk calls and 3 status polls - got '
-        + JSON.stringify(result) + ' clerk=' + clerkCalls.length + ' status=' + statusCalls.length
-        + ' verbs=' + JSON.stringify(clerkCalls.map((c) => c.verb)));
-    }
-  })
-  // --- scenario (ah): the same walk against an older cycle.sh whose verbs carry no `status`
-  // -> the pre-C5 bill, 16 clerk calls and 6 polls, and the same green ending
-  .then(() => run(args, {
-    clerk: withClaim([
-      stBranch,
-      verb('branch', 'build:1'),
-      stBuild,
-      verb('close-story', 'open-round'),
-      stOpen,
-      verb('open-round', stDispatch.next),
-      stDispatch,
-      verb('record-seat', 'dispatch:sonnet,opus,review'),
-      verb('record-seat', 'dispatch:opus,review'),
-      verb('record-seat', 'dispatch:review'),
-      verb('record-seat', 'judge'),
-      stJudge,
-      verb('judge', 'green'),
-      stGreen,
-    ]),
-    agents: ['a worker report', ...seatReports],
-  }).then(({ result, calls }) => {
-    const clerkCalls = calls.filter((c) => 'verb' in c);
-    const statusCalls = clerkCalls.filter((c) => c.verb === 'status');
-    if (result && result.next === 'green' && clerkCalls.length === 16 && statusCalls.length === 6) {
-      console.log('ok C6 old cycle.sh: verbs without `status` still walk to green on 16 calls, 6 polls');
-    } else {
-      console.log('FAIL C6 old cycle.sh: verbs without `status` still walk to green on 16 calls, 6 polls - got '
-        + JSON.stringify(result) + ' clerk=' + clerkCalls.length + ' status=' + statusCalls.length
-        + ' verbs=' + JSON.stringify(clerkCalls.map((c) => c.verb)));
-    }
-  }))
-  // --- scenario (ai): a non-ok result never carries state - the clerk call right after a
-  // close-story exit 4 (first miss) is the status poll, as before C6
-  .then(() => run(args, {
-    clerk: withClaim([
-      stBuild,
-      { ok: false, verb: 'close-story', exit: 4, error: 'red: verification failed' },
-      stGreen,
-    ]),
-    agents: ['a worker report'],
-  }).then(({ result, calls }) => {
-    const clerkCalls = calls.filter((c) => 'verb' in c);
-    const verbs = clerkCalls.map((c) => c.verb).join(',');
-    if (result && result.next === 'green' && verbs === 'claim,status,close-story,status,release') {
-      console.log('ok C6 miss: a close-story exit 4 is followed by a status poll');
-    } else {
-      console.log('FAIL C6 miss: a close-story exit 4 is followed by a status poll - got '
-        + JSON.stringify(result) + ' verbs=' + verbs);
-    }
-  }))
-  // --- scenario (aj): a judge carrying status next:"repair" routes straight into the repair
-  // dispatch - queen-planner is reached with no status poll between judge and it
-  .then(() => run(args, {
-    clerk: withClaim([
-      stJudge,
-      verb('judge', 'repair', {
-        next: 'repair', tier: 3, slug: 'demo', stage: '05', round: 1, red: [2], review: 'BLOCK',
-        round_dir: 'docs/specs/demo/council/round-1',
-      }),
-      stGreen,
-    ]),
-    agents: ['repair stories cut'],
-  }).then(({ result, calls }) => {
-    const judgeAt = calls.findIndex((c) => c.verb === 'judge');
-    const plannerAt = calls.findIndex((c) => c.agentType === 'queen-planner');
-    const between = calls.slice(judgeAt + 1, plannerAt).filter((c) => c.verb === 'status');
-    const statusCalls = calls.filter((c) => c.verb === 'status');
-    const planner = calls[plannerAt];
-    if (
-      result && result.next === 'green' && judgeAt >= 0 && plannerAt > judgeAt
-      && between.length === 0 && statusCalls.length === 2
-      && planner.prompt.includes('numbered [2]')
-    ) {
-      console.log('ok C6 judge -> repair: the carried status routes the repair with no poll between');
-    } else {
-      console.log('FAIL C6 judge -> repair: the carried status routes the repair with no poll between - got '
-        + JSON.stringify(result) + ' calls=' + JSON.stringify(calls.map((c) => c.verb || c.agentType)));
-    }
-  }))
-  // --- scenario (aj2): a review BLOCK with no RED ask - the repair prompt carries the anchor
-  // rule of vulyk-build.md's repair row: [ask N] or [regression], never an [unanchored] finding
-  .then(() => run(args, {
-    clerk: withClaim([
-      stJudge,
-      verb('judge', 'repair', {
-        next: 'repair', tier: 2, slug: 'demo', stage: '05', round: 1, red: [], review: 'BLOCK',
-        round_dir: 'docs/specs/demo/council/round-1',
-      }),
-      stGreen,
-    ]),
-    agents: ['repair stories cut'],
-  }).then(({ result, calls }) => {
-    const planner = calls.find((c) => c.agentType === 'queen-planner');
-    const p = planner ? planner.prompt : '';
-    const missing = [
-      '[ask N]', "the brief's `## Asks`", '[regression]',
-      'an `[unanchored]` finding never becomes a story', '`/vulyk-ship` step 5',
-      'docs/specs/demo/council/round-1/review.md', "review seat's BLOCK",
-    ].filter((n) => !p.includes(n));
-    if (result && result.next === 'green' && planner && missing.length === 0 && !/numbered \[/.test(p)) {
-      console.log('ok repair anchor: a BLOCK-only repair prompt carries [ask N], [regression] and the [unanchored] exclusion');
-    } else {
-      console.log('FAIL repair anchor: a BLOCK-only repair prompt carries [ask N], [regression] and the [unanchored] exclusion - missing '
-        + JSON.stringify(missing) + ' prompt=' + JSON.stringify(p));
-    }
-  }))
-  // --- static: the launch banner states no flat round ceiling (the tier decides it)
-  .then(() => {
-    const m = src.match(/description:\s*'([^']*)'/);
-    if (m && !/ceiling\s*\(?3\b/.test(m[1])) console.log('ok banner: the description states no flat ceiling 3');
-    else console.log('FAIL banner: the description states no flat ceiling 3 - got ' + (m ? m[1] : 'no description'));
-  });
-})
-// --- C1 revised: a garbled relay of a MUTATING verb is recovered through `status`, never by
-// re-running the verb - the second dispatch of the pair is always the status prompt.
-.then(() => {
-  const args = { spec: 'demo', top_model: 'opus', second_model: 'sonnet', stamp: '0123456789abcdef' };
-  const bad = '{"ok":true,';
-  const stJudge = { next: 'judge', tier: 3, slug: 'demo', stage: '05' };
-  const stGreen = { next: 'green', tier: 3, slug: 'demo', stage: '05' };
-  const verbsOf = (calls) => calls.filter((c) => 'verb' in c).map((c) => c.verb).join(',');
+  // --- round > 1: the reviewer judges since..head and the previous round's findings
+  {
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, adv(round('haiku,review', { round: 2, since: 'abc123', head: 'def456', round_dir: `${SPEC}/council/round-2` }))],
+        [INGEST, adv(green())],
+        [RELEASE, releaseOk],
+      ],
+    });
+    const rev = r.dispatches.find((d) => d.agentType === 'lead-review');
+    const haiku = r.dispatches.find((d) => d.agentType === 'council-haiku');
+    check(rev.prompt.includes('review only abc123..def456') && rev.prompt.includes(`${SPEC}/council/round-1/`)
+      && !rev.prompt.includes('whole branch') && rev.prompt.includes('round-2/review.attempt-1.md'),
+      'round 2: reviewer prompt names since..head and the round-1 findings dir', rev.prompt);
+    check(haiku && haiku.prompt.includes('round-2/haiku.attempt-1.md') && blindPromptsClean(r), 'round 2: haiku stays blind', haiku && haiku.prompt);
+  }
 
-  // --- scenario (ak): judge - the garbled judge line is recovered from status, the judge
-  // prompt is never re-sent, and the loop ends at the recovered status's own `green`
-  return run(args, {
-    clerk: withClaim([stJudge, bad, stGreen]),
-    agents: [],
-  }).then(({ result, calls, logs }) => {
-    const judgeCalls = calls.filter((c) => c.verb === 'judge');
-    const recovery = logs.find((l) => l.includes('asking status instead') && l.includes('judge demo --commit'));
-    if (
-      result && result.next === 'green' && judgeCalls.length === 1 && recovery
-      && verbsOf(calls) === 'claim,status,judge,status,release'
-      && /cycle\.sh status demo --json/.test(calls[3].cmd)
-    ) {
-      console.log('ok C1 judge: garbled judge line recovered through status, judge never re-sent');
-    } else {
-      console.log('FAIL C1 judge: garbled judge line recovered through status, judge never re-sent - got '
-        + JSON.stringify(result) + ' verbs=' + verbsOf(calls) + ' logs=' + JSON.stringify(logs));
+  // --- Tier 4: two reviewers, review-top on TOP and review-second on SECOND, one ingest
+  {
+    const r = await run(ARGS, {
+      clerk: [[CLAIM, adv(round('opus,review', { tier: 4 }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
+    });
+    const revs = r.dispatches.filter((d) => d.agentType === 'lead-review');
+    check(revs.length === 2 && revs[0].model === 'fable' && revs[0].prompt.includes('round-1/review-top.attempt-1.md')
+      && revs[1].model === 'opus' && revs[1].prompt.includes('round-1/review-second.attempt-1.md'),
+      'tier 4: two reviewers, review-top on TOP and review-second on SECOND', revs.map((d) => [d.model, d.prompt]));
+    check(r.mismatches.length === 0 && r.clerkCmds.length === 3 && r.result.next === 'green', 'tier 4: one ingest folds both', seq(r));
+  }
+  for (const [label, args] of [['second_model missing', { spec: SPEC, top_model: 'fable', stamp: S }], ['second_model equal to top_model', { ...ARGS, second_model: 'fable' }]]) {
+    const r = await run(args, { clerk: [[CLAIM, adv(build([story(1)], { tier: 4 }))], [RELEASE, releaseOk]] });
+    check(r.result.stop && r.result.stop.verb === 'launch' && /second_model/.test(r.result.stop.error)
+      && r.dispatches.length === 0 && r.clerkCmds[1] === RELEASE, `tier 4 guard: ${label} refuses before any dispatch, releases`, { result: r.result, seq: seq(r) });
+  }
+
+  // --- unreadable clerk lines: one read-only status, then on from that status
+  {
+    const a = story(1);
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, '{"ok":true,"verb":"adv'],
+        [STATUS, build([a])],
+        [ADV, adv(round('opus'))],
+        [INGEST, 'Done. The command printed a JSON line.'],
+        [STATUS, round('opus', { seat_attempt: { opus: 2 } })],
+        [INGEST, adv(green())],
+        [RELEASE, releaseOk],
+      ],
+    });
+    const opus = r.dispatches.filter((d) => d.agentType === 'council-opus');
+    check(r.mismatches.length === 0 && r.result.next === 'green', 'bad line: recovered through status, the run walks on', { seq: seq(r), mm: r.mismatches, result: r.result });
+    check(r.logs.some((l) => l.includes('reading status instead') && l.includes('--claim')), 'bad line: the recovery is logged', r.logs);
+    check(opus.length === 2 && opus[1].prompt.includes("Your previous report was rejected: no reason reached the driver")
+      && opus[1].prompt.includes('opus.attempt-2.md'), 'bad line: a recovered ingest re-asks with the generic line', opus.map((d) => d.prompt));
+  }
+  {
+    const r = await run(ARGS, { clerk: [[CLAIM, 'garbled'], [STATUS, 'garbled too'], [RELEASE, releaseOk]] });
+    check(r.result === 'garbled too' && r.mismatches.length === 0 && r.clerkCmds.length === 3,
+      'bad line twice: the run ends with the raw second line, still releases', { result: r.result, seq: seq(r) });
+  }
+  {
+    const r = await run(ARGS, { clerk: [[CLAIM, { ok: true, verb: 'advance', exit: 0, next: 'green' }], [STATUS, green()], [RELEASE, releaseOk]] });
+    check(r.result.next === 'green' && r.mismatches.length === 0, 'bad line: an ok line with no status object reads status once', seq(r));
+  }
+  {
+    const r = await run(ARGS, { clerk: [[CLAIM, 'x'], [STATUS, { ok: false, verb: 'status', exit: 1, next: 'error', error: 'usage' }], [RELEASE, releaseOk]] });
+    check(r.result.stop && r.result.stop.verb === 'status' && r.result.stop.error === 'usage', 'bad line: a status error envelope stops the run', r.result);
+  }
+
+  // --- paused
+  {
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, adv(build([story(1)]))],
+        [ADV, { ok: false, verb: 'advance', exit: 3, next: 'paused', error: 'paused: owner', failed: 'open-round', steps: [] }],
+        [RELEASE, releaseOk],
+      ],
+    });
+    check(r.result && r.result.next === 'paused' && !r.result.stop && r.clerkCmds[2] === RELEASE, 'paused: exit 3 ends the run paused and releases', { result: r.result, seq: seq(r) });
+    const r2 = await run(ARGS, { clerk: [[CLAIM, { ok: false, verb: 'claim', exit: 3, next: 'paused', error: 'paused: owner' }]] });
+    check(r2.result.next === 'paused' && r2.clerkCmds.length === 1, 'paused: a paused claim took nothing, so nothing is released', seq(r2));
+    const r3 = await run(ARGS, { clerk: [[CLAIM, adv(status({ next: 'paused' }))], [RELEASE, releaseOk]] });
+    check(r3.result.next === 'paused' && r3.dispatches.length === 0, 'paused: a status next of paused is terminal', r3.result);
+  }
+
+  // --- ok:false: stop with advance's failure, after release
+  {
+    const fail = { ok: false, verb: 'advance', exit: 2, next: 'open-round', error: 'working tree not clean', failed: 'open-round', steps: ['judge'], rejected: [] };
+    const r = await run(ARGS, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, fail], [RELEASE, releaseOk]] });
+    const s = r.result.stop || {};
+    check(s.failed === 'open-round' && s.exit === 2 && s.error === 'working tree not clean' && JSON.stringify(s.steps) === '["judge"]',
+      'ok:false: the stop carries failed, exit, error and steps', r.result);
+    check(r.clerkCmds[r.clerkCmds.length - 1] === RELEASE && r.mismatches.length === 0, 'ok:false: release still runs', seq(r));
+    const r2 = await run(ARGS, { clerk: [[CLAIM, { ok: false, verb: 'claim', exit: 2, next: 'error', error: 'held by aaaaaaaaaaaaaaaa' }]] });
+    check(r2.result.stop && r2.result.stop.verb === 'claim' && /held by/.test(r2.result.stop.error) && r2.clerkCmds.length === 1,
+      'claim refused: stop verb claim, no release, one clerk call', { result: r2.result, seq: seq(r2) });
+  }
+
+  // --- next values the driver does not act on
+  {
+    const r = await run(ARGS, { clerk: [[CLAIM, adv(status({ next: 'repair', round: 1 }))], [RELEASE, releaseOk]] });
+    check(r.result.stop && r.result.stop.verb === 'repair' && r.dispatches.length === 0, 'repair reaching the driver stops it, nothing dispatched', r.result);
+    for (const next of ['escalated', 'shipped', 'green']) {
+      const t = await run(ARGS, { clerk: [[CLAIM, adv(status({ next }))], [RELEASE, releaseOk]] });
+      check(t.result.next === next && !t.result.stop && t.dispatches.length === 0 && t.clerkCmds[1] === RELEASE, `terminal ${next}: returns the status, releases`, t.result);
     }
-  })
-  // --- scenario (al): record-seat - same recovery; the dispatch step then takes its ordinary
-  // post-fan-out poll (C6), so the seat is recorded once and the run walks on
-  .then(() => run(args, {
-    clerk: withClaim([
-      {
-        next: 'dispatch:sonnet', tier: 2, round: 1, slug: 'demo', stage: '04',
-        court: '.vulyk/court/demo', round_dir: 'docs/specs/demo/council/round-1',
-      },
-      bad,
-      { next: 'judge', tier: 2, slug: 'demo', stage: '04' },
-      stGreen,
-    ]),
-    agents: ['sonnet report'],
-  }).then(({ result, calls, logs }) => {
-    const recordCalls = calls.filter((c) => c.verb === 'record-seat');
-    const recovery = logs.find((l) => l.includes('asking status instead') && l.includes('record-seat demo 1 sonnet'));
-    if (
-      result && result.next === 'green' && recordCalls.length === 1 && recovery
-      && verbsOf(calls) === 'claim,status,record-seat,status,status,release'
-    ) {
-      console.log('ok C1 record-seat: garbled line recovered through status, seat recorded once, poll unchanged');
-    } else {
-      console.log('FAIL C1 record-seat: garbled line recovered through status, seat recorded once, poll unchanged - got '
-        + JSON.stringify(result) + ' verbs=' + verbsOf(calls) + ' logs=' + JSON.stringify(logs));
-    }
-  }))
-  // --- scenario (am): close-story - the recovered ok result counts no miss and stops nothing;
-  // close-story is sent exactly once and the build step polls as it always does
-  .then(() => run(args, {
-    clerk: withClaim([
-      {
-        next: 'build:1', tier: 3, slug: 'demo', stage: '03',
-        wave_stories: [{ file: 'docs/specs/demo/demo-20-x.md', story: 'demo-20', worker: 'worker-code' }],
-      },
-      bad,
-      { next: 'build:1', tier: 3, slug: 'demo', stage: '03', wave_stories: [] },
-      stGreen,
-    ]),
-    agents: ['a worker report'],
-  }).then(({ result, calls, logs }) => {
-    const closeCalls = calls.filter((c) => c.verb === 'close-story');
-    const recovery = logs.find((l) => l.includes('asking status instead') && l.includes('close-story docs/specs/demo/demo-20-x.md --commit'));
-    if (
-      result && result.next === 'green' && closeCalls.length === 1 && recovery
-      && !result.stop && verbsOf(calls) === 'claim,status,close-story,status,status,release'
-    ) {
-      console.log('ok C1 close-story: garbled line recovered through status, no miss, no stop, sent once');
-    } else {
-      console.log('FAIL C1 close-story: garbled line recovered through status, no miss, no stop, sent once - got '
-        + JSON.stringify(result) + ' verbs=' + verbsOf(calls) + ' logs=' + JSON.stringify(logs));
-    }
-  }))
-  // --- scenario (an): a garbled verb line followed by a garbled status line ends the run with
-  // the raw SECOND line - two dispatches for that step, nothing further but the release
-  .then(() => run(args, {
-    clerk: [claimOk, stJudge, bad, 'status is garbled too', releaseOk],
-    agents: [],
-  }).then(({ result, calls }) => {
-    if (result === 'status is garbled too' && verbsOf(calls) === 'claim,status,judge,status,release') {
-      console.log('ok C1 double garble: the run ends with the raw second line, two dispatches for the step');
-    } else {
-      console.log('FAIL C1 double garble: the run ends with the raw second line, two dispatches for the step - got '
-        + JSON.stringify(result) + ' verbs=' + verbsOf(calls));
-    }
-  }))
-  // --- scenario (ao): an exit 3 on the recovery status is a Paused, not a recovered result
-  .then(() => run(args, {
-    clerk: withClaim([stJudge, bad, { exit: 3, next: 'awaiting-review' }]),
-    agents: [],
-  }).then(({ result, calls }) => {
-    if (result && result.next === 'awaiting-review' && verbsOf(calls) === 'claim,status,judge,status,release') {
-      console.log('ok C1 recovery paused: exit 3 on the recovery status pauses the run');
-    } else {
-      console.log('FAIL C1 recovery paused: exit 3 on the recovery status pauses the run - got '
-        + JSON.stringify(result) + ' verbs=' + verbsOf(calls));
-    }
-  }))
-  // --- scenario (ap): C6 addendum - a verb result whose `status` is cycle.sh's own error
-  // envelope is not state: the next iteration polls instead of stopping on next:"error"
-  .then(() => run(args, {
-    clerk: withClaim([
-      stJudge,
-      {
-        ok: true, verb: 'judge', exit: 0, next: 'green', error: '',
-        status: { ok: false, verb: 'status', exit: 1, next: 'error', error: 'usage' },
-      },
-      stGreen,
-    ]),
-    agents: [],
-  }).then(({ result, calls }) => {
-    if (
-      result && result.next === 'green' && !result.stop
-      && verbsOf(calls) === 'claim,status,judge,status,release'
-    ) {
-      console.log('ok C6 error envelope: a status error envelope is never carried as state, the loop polls');
-    } else {
-      console.log('FAIL C6 error envelope: a status error envelope is never carried as state, the loop polls - got '
-        + JSON.stringify(result) + ' verbs=' + verbsOf(calls));
-    }
-  }));
-})
-.catch((e) => { console.log('FAIL harness threw: ' + (e && e.stack || e)); process.exitCode = 1; });
+    const u = await run(ARGS, { clerk: [[CLAIM, adv(status({ next: 'briefed' }))], [RELEASE, releaseOk]] });
+    check(u.result.next === 'briefed' && !u.result.stop && u.dispatches.length === 0, 'unknown next: returned as is, no guess', u.result);
+    const v = await run(ARGS, { clerk: [[CLAIM, adv(round('sonnet'))], [RELEASE, releaseOk]] });
+    check(v.result.stop && v.result.stop.verb === 'dispatch' && v.dispatches.length === 0, 'unknown seat: stops instead of dispatching an agent that does not exist', v.result);
+  }
+
+  // --- iteration cap: a fresh story every wave never trips the miss bound, so only the cap ends
+  // it (past 100 calls the clerk garbles, so a driver without the cap ends instead of looping)
+  {
+    const r = await run(ARGS, {
+      clerk: (cmd, n) => cmd === RELEASE ? releaseOk
+        : n > 100 ? 'garbled'
+        : adv(build([story(1, { file: `${SPEC}/demo-${n}.md` })])),
+    });
+    check(r.result.stop && r.result.stop.verb === 'driver' && /iteration cap 40/.test(r.result.stop.error)
+      && r.dispatches.length === 40 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
+      'iteration cap: 40 iterations, then a stop and a release', { stop: r.result.stop, n: r.dispatches.length });
+  }
+
+  check(!everyAgentType.has('queen-planner'), 'no queen-planner dispatch in any scenario', [...everyAgentType]);
+  console.log(`${passed} passed, ${failed} failed`);
+  process.exit(failed === 0 ? 0 : 1);
+})().catch((e) => { console.log('FAIL harness threw: ' + (e && e.stack || e)); process.exit(1); });
 NODE_EOF
-)"
-
-echo "$out"
-
-expect "compile: strips export, compiles async body"    "ok compile driver"                                     "$out"
-expect "compile: garbage without export is rejected"     "ok garbage rejected"                                   "$out"
-expect "fold: foldReviews harness from story 26"         "fold ok"                                               "$out"
-expect "run: launch guard on missing args.stamp"         "ok launch guard: missing stamp"                        "$out"
-expect "run: status green is terminal, no dispatch"      "ok status green: terminal, no dispatch"                "$out"
-expect "run: build wave dispatches worker, closes story" "ok build wave: worker dispatched, close-story called once" "$out"
-expect "run: two-miss stop names the red verification (M2/X-M1)" "ok two-miss stop: red+red carries the verification error" "$out"
-expect "run: two-miss stop, empty then red"                      "ok two-miss stop: empty+red carries the verification error" "$out"
-expect "run: two-miss stop, red then empty"                      "ok two-miss stop: red+empty ends with the empty-return reason" "$out"
-expect "run: whitespace-only report is a miss"                   "ok whitespace report: a miss, close-story never called" "$out"
-expect "run: launch guard on args undefined"                     "ok launch guard: args undefined" "$out"
-expect "run: Tier 4 without second_model refuses at launch"      "ok tier4 guard: second_model missing" "$out"
-expect "run: Tier 4 with second_model == top_model refuses"      "ok tier4 guard: second_model equal to top_model" "$out"
-expect "run: Tier 3 with no second_model proceeds"               "ok tier3: no second_model needed, run proceeds" "$out"
-expect "run: record-seat exit 3 ends the run paused"              "ok record-seat exit 3: ends the run paused, no stop" "$out"
-expect "run: next:briefed refuses instead of stamping"           "ok briefed refusal: stop, never runs briefed --commit" "$out"
-expect "run: exit 6 ok:true is followed by a status poll"        "ok exit 6: ok:true is followed by a status poll, ends escalated" "$out"
-expect "run: a thrown worker agent() is caught and logged"       "ok worker threw: caught by the build thunk, logged, counted as a miss" "$out"
-expect "run: the retry prompt names the uncommitted-diff note, retry on the gate model (ADR-012)" "ok retry prompt: only the second dispatch mentions uncommitted edits" "$out"
-expect "run: ADR-006 returned WALL then ok - close-story x2, no stop" "ok ADR-006 returned WALL then ok: close-story called twice, no stop, run continues" "$out"
-expect "run: ADR-006 returned WALL twice - stops, close-story x2"    "ok ADR-006 returned WALL twice: stops on build, close-story called exactly twice" "$out"
-expect "run: ADR-006 STATUS: WALL but close-story ok - story closes" "ok ADR-006 STATUS: WALL but close-story ok: the story closes on the verb alone" "$out"
-expect "run: DRIVER semaphore - claim/release bracket a green run"        "ok status green: claim/release bracket the run" "$out"
-expect "run: DRIVER semaphore - close-story carries --stamp"              "ok build wave: close-story carries --stamp" "$out"
-expect "run: DRIVER semaphore - release still runs after a stop"          "ok two-miss stop: release still called after a stop" "$out"
-expect "run: DRIVER semaphore - record-seat carries --stamp"              "ok record-seat: carries --stamp" "$out"
-expect "run: DRIVER semaphore - open-round carries --stamp"               "ok open-round: carries --stamp" "$out"
-expect "run: DRIVER semaphore - a refused claim ends the run at once"     "ok claim refusal: stop verb claim, no further clerk call" "$out"
-expect "static: all four gated verbs' templates carry --stamp"            "ok stamp: all four gated verbs carry --stamp in their template" "$out"
-expect "ADR-006: a return with no STATUS: line still closes on the verb" "ok ADR-006 no STATUS: line but close-story ok: closes, nothing logged" "$out"
-expect "C3: worker threw - stop.error and one log line per miss"          "ok C3 worker threw: stop.error carries it and both misses are logged" "$out"
-expect "C3: worker empty - names the agent and its maxTurns"              "ok C3 worker empty: names worker-code and maxTurns 90, logged per miss" "$out"
-expect "C3: worker no report - close-story exit 4 returned: missing"      "ok C3 worker no report: close-story exit 4 returned: missing is the reason, logged per attempt" "$out"
-expect "C3: worker mixed misses - stop carries the second's reason"       "ok C3 worker mixed misses: stop carries the second miss's own reason, close-story called once" "$out"
-expect "C3: a seat that threw is logged and still recorded"               "ok C3 seat threw: logged by seat name, still recorded, no stop" "$out"
-expect "C3: an empty seat return names council-<seat> and 60"             "ok C3 seat empty: names council-sonnet and maxTurns 60, still recorded" "$out"
-expect "C3: a seat no-report return is logged, then re-asked"             "ok C3 seat no report: record-seat exit 4 on a non-empty return is logged once, seat re-asked" "$out"
-expect "C3: an empty seat + exit 4 logs no second reason"                 "ok C3 seat empty + exit 4: only the turn-cap reason is logged, no second reason" "$out"
-expect "C3: a reviewer that threw is logged as 'reviewer'"                "ok C3 reviewer threw: logged as reviewer, still recorded" "$out"
-expect "C3: an empty reviewer return names lead-review and 60"            "ok C3 reviewer empty: names lead-review and maxTurns 60, still recorded" "$out"
-expect "C3: a reviewer no-report return is logged as 'reviewer'"          "ok C3 reviewer no report: record-seat exit 4 is logged once as reviewer, re-asked" "$out"
-expect "C2: the seat prompt ends with its attempt's report path"          "ok C2 prompt: seat dispatch ends with the report path, the re-ask names attempt-2" "$out"
-expect "C2: the re-ask records from the attempt-2 file"                   "ok C2 record: the re-ask is recorded from the attempt-2 file, not a heredoc" "$out"
-expect "C2: the good case records with --file and no heredoc"             "ok C2 record good: exactly one record-seat --file call, no heredoc delimiter" "$out"
-expect "C2: exit 2 'file: ' falls back to the stamped heredoc"            "ok C2 record fallback: exit 2 file: falls back to the stamped heredoc with the chat reply" "$out"
-expect "C2: any other exit 2 stops instead of falling back"               "ok C2 record other exit 2: stops on record-seat, no heredoc fallback" "$out"
-expect "C1: a non-JSON clerk line is re-asked once, then proceeds"        "ok clerk retry: non-JSON line re-asked once, run proceeds" "$out"
-expect "C1: two non-JSON clerk lines end the run with the raw second"     "ok clerk retry: two non-JSON lines end the run with the raw second line" "$out"
-expect "C1: a Paused result on the retried attempt is not swallowed"      "ok clerk retry: Paused on the retried attempt is thrown, not swallowed" "$out"
-expect "C6: a steady Tier 3 round costs 13 clerk calls and 3 polls"       "ok C6 carried: steady Tier 3 round costs 13 clerk calls and 3 status polls" "$out"
-expect "C6: verbs without a status key keep the old 16-call path"         "ok C6 old cycle.sh: verbs without \`status\` still walk to green on 16 calls, 6 polls" "$out"
-expect "C6: a close-story exit 4 is followed by a status poll"            "ok C6 miss: a close-story exit 4 is followed by a status poll" "$out"
-expect "C6: a judge carrying next:repair routes with no poll between"     "ok C6 judge -> repair: the carried status routes the repair with no poll between" "$out"
-expect "repair: a BLOCK-only prompt carries the anchor rule (asks 1, 3)"   "ok repair anchor: a BLOCK-only repair prompt carries [ask N], [regression] and the [unanchored] exclusion" "$out"
-expect "banner: the driver description names no flat ceiling 3"          "ok banner: the description states no flat ceiling 3" "$out"
-expect "C1 revised: a garbled judge line is recovered through status"    "ok C1 judge: garbled judge line recovered through status, judge never re-sent" "$out"
-expect "C1 revised: a garbled record-seat line is recovered through status" "ok C1 record-seat: garbled line recovered through status, seat recorded once, poll unchanged" "$out"
-expect "C1 revised: a garbled close-story line costs no miss"             "ok C1 close-story: garbled line recovered through status, no miss, no stop, sent once" "$out"
-expect "C1 revised: a garbled recovery line ends the run with line two"   "ok C1 double garble: the run ends with the raw second line, two dispatches for the step" "$out"
-expect "C1 revised: exit 3 on the recovery status pauses the run"         "ok C1 recovery paused: exit 3 on the recovery status pauses the run" "$out"
-expect "C6 addendum: a status error envelope makes the loop poll"         "ok C6 error envelope: a status error envelope is never carried as state, the loop polls" "$out"
-
-exit $fail

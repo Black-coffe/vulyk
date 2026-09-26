@@ -3,16 +3,39 @@ description: Stage 06 of the cycle - fix history, merge locally, print the publi
 argument-hint: [spec slug; defaults to the newest spec with a GREEN council row or a human check recorded]
 ---
 
-Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md carries a GREEN `**Council:**` row or a `**Checked:** ACCEPTED` line).
+Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md carries a GREEN
+`**Council:**` row or a `**Checked:** ACCEPTED` line).
 
-1. **Run the gate first - it is free and it decides whether you are here at all.** `bash scripts/ship-check.sh docs/specs/<slug>` and show its output; the script is unchanged since story 02 - it now reads the newest `memory/stats/council.jsonl` row for stages 04+05 together, and only falls back to the pre-council acceptance/human ledgers when this spec has no council row at all. `NOT READY` is a refusal, not a warning: name the open stage and stop. The two refusals worth expecting here are a council `RED` or `ESCALATE` verdict - repair, or the `## Needs a human` section, is not resolved - and a `STALE` verdict, because a repair round or a hand-edit moved the pack or the commit after the council judged it. Both are cured by going back (a new round, or `/vulyk-resume`), never by shipping around them. A `**Checked:**` line is the owner's override in either direction - newer than the council row, it wins over it (`scripts/human-check.sh`, unchanged) - and the owner can also override a plain `NOT READY` outright: it is their release, but the override is said out loud and quoted into the `--record` note below, so the ledger reads "shipped unchecked, by decision" rather than green.
-
-2. **Fix history.** The spec branch (`**Branch:**` in plan.md) holds one commit per story. Do not squash them - each is a rollback point and the review unit, and the story ids in their messages are what joins `scope.jsonl` to the code. Work out the version this ship will carry from this project's convention (*Commit convention* Profile row / a semver bump sized to the change), then check `VERSION` and the top entry of `CHANGELOG.md`: if a story on this branch already wrote both to that exact version - a spec can carry its own release paperwork as a story, the way this very spec's story 13 does for v0.12.0 - there is nothing to bump; skip straight to the merge below rather than restating it in a second commit. Otherwise add one more commit, on the same branch, with the version bump and the CHANGELOG entry in this project's convention. This is release paperwork, not story code - Law 5 does not apply to it, and it does not need a worker. Then merge into the default branch the way the Profile's *Release / deploy* row says the project merges: a local merge is reversible and yours to run.
-
-3. **Publish - print the command, then stop; never wait.** No agent in the hive deploys, publishes, pays or sends, and neither do you here. Under a `to publish, run:` heading, print the publish step exactly as the *Release / deploy* Profile row names it (tag + push, `npm publish`, a CI run on merge, a deploy script) and the version it will carry. That is the end of the step: do not ask whether to run it, do not wait for a reply, and do not check back later in this same run for whether it happened. Whichever remote action the owner takes - tonight, next week, or not at all - `/vulyk-status`'s `merged locally, not pushed: <n>` line is how anyone, including the next `/vulyk-ship`, finds out; nothing here polls for it.
-
-4. **Record it.** `bash scripts/ship-check.sh --record docs/specs/<slug> <version> "merged to <default branch>, publish pending"`. That writes the `**Shipped:**` line beside `**Briefed:**`/`**Approved:**` and `**Council:**`, and a row in `memory/stats/ship.jsonl` - the spec's local work closes the moment it merges, not the moment someone reports back that the remote step ran. Commit the record (`vulyk(<slug>): shipped <version>`). The cycle for this spec is closed on disk, not in this conversation.
-
-5. **Open the next circle.** In one message, dispatch `drone-docs` with the merged diff to refresh map and wiki, and `librarian` for the ADR harvest from `## Plan deltas` (proposed-only; accepting one is the owner's). Then gather what this circle left behind and hand it to the owner as the draft of the next brief - verbatim, not summarised, because the next `brief.md` quotes it: every `UNASKED:` line from the newest round's `docs/specs/<slug>/council/round-N/{haiku,sonnet,opus}.md` seat files, every finding ranked `minor` in that round's `review.md` (the `lead-review` report groups findings critical/major/minor), every finding of a review `BLOCK` that `judge` recorded as `PASS` with note `review BLOCK unanchored` (the newest `memory/stats/council.jsonl` row for this spec carries that note; those findings reached no repair wave), plus every `[unanchored]` critical/major finding in any round's `review.md`, every `## Descoped` entry in plan.md, and - when plan.md carries one - the whole `## Needs a human` section verbatim (an escalation a later round or the owner resolved still belongs in the next brief as the reason the fix exists). Do not open a spec for them; deciding what the next circle is belongs to the human.
-
-6. **Close the session cleanly.** Recommend `/vulyk-handoff` and `/clear`: everything this spec needed is in git, and the context that built it is the most expensive thing still in the room.
+1. Gate. `bash scripts/ship-check.sh docs/specs/<slug>` and show its output. `NOT READY` is a refusal:
+   name the open stage and stop. Expect two kinds: a council `RED` or `ESCALATE` (repair, or
+   `## Needs a human`, is unresolved), and `STALE` (a repair round or a hand edit moved the code after
+   the council judged it; a hand fix reopens a round that re-reviews only the new diff). Both are cured
+   by going back, never by shipping around them. A newer `**Checked:**` line is the owner's override in
+   either direction (`scripts/human-check.sh`), and the owner may also override a plain `NOT READY`:
+   it is their release, but say so out loud and quote the override into the `--record` note below.
+2. History. The spec branch (`**Branch:**`) holds one commit per story; do not squash them, they are
+   the rollback points and the review units. Work out the version from the Profile's *Commit
+   convention* (a semver bump sized to the change). If a story on this branch already wrote `VERSION`
+   and the top `CHANGELOG.md` entry for that version, there is nothing to bump. Otherwise add one commit
+   on the branch with the version bump and the CHANGELOG entry. This is release paperwork: Law 5 does
+   not apply, and `VERSION` and `CHANGELOG.md` are paperwork to the cycle, so this commit does not stale
+   a GREEN round. Then merge into the default branch the way the Profile's *Release / deploy* row says;
+   a local merge is reversible and yours to run.
+3. Publish: print, then stop. Under a `to publish, run:` heading, print the publish step exactly as the
+   *Release / deploy* row names it, with the version. Do not run it, ask about it, or check back on it.
+   `/vulyk-status`'s `merged locally, not pushed: <n>` line is how anyone learns whether it ran.
+4. Record. `bash scripts/ship-check.sh --record docs/specs/<slug> <version> "merged to <default
+   branch>, publish pending"`, then commit it (`vulyk(<slug>): shipped <version>`). The spec is closed
+   on disk.
+5. Next circle. Dispatch only what has work to do, in one message:
+   - `drone-docs`, only when the merged range touches a module listed in `memory/memory.md`'s map. Give
+     it the changed paths (`git diff --name-only <base>..<merge>`) and the map files that cover them,
+     not the diff itself.
+   - `librarian` for the ADR harvest, only when plan.md's `## Plan deltas` or `## Descoped` has entries.
+   Then hand the owner, verbatim, the draft of the next brief: every `UNASKED:` line from the newest
+   round's seat files under `docs/specs/<slug>/council/round-<N>/` (skip "none"), every minor in that
+   round's `review.md`, every `[unanchored]` critical or major finding in any round's `review.md` (and
+   the findings of any BLOCK that `judge` recorded as PASS with the note `review BLOCK unanchored`),
+   every `## Descoped` entry, and plan.md's `## Needs a human` section when it has one. Do not open a
+   spec for them; what the next circle is belongs to the owner.
+6. Close the session. Recommend `/vulyk-handoff` and `/clear`: everything this spec needed is in git.

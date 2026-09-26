@@ -258,4 +258,83 @@ printf '{"n":1}\n' > memory/stats/council.jsonl
 shiph | expect "council.jsonl alone dirty -> 03 not clean" "working tree is not clean"
 rm -f memory/stats/council.jsonl
 
+# --- 0.18 (ADR-013 D4/D5): the three gate scripts -------------------------------------------
+cp "$SRC"/scripts/wave-check.sh "$SRC"/scripts/trace-check.sh scripts/
+git add -A && git commit -qm "0.18 gates: wave-check + trace-check, a clean tree to measure from" >/dev/null
+
+echo "ADR-013 D5: scope-check with no range drops a not-done sibling's declared files and its story file; a done sibling's still count; a range drops nothing"
+mkdir -p docs/specs/sib src/sib
+printf 'a\n' > src/sib/a.txt; printf 'b\n' > src/sib/b.txt; printf 'c\n' > src/sib/c.txt
+sib_story() { # sib_story <nn> <file> <status>
+  printf -- '---\nstory: sib-%s\nspec: sib\nstatus: %s\nwave: 1\n---\n# S%s\n\n## Files\n- %s\n\n## Verification\n`true`\n' \
+    "$1" "$3" "$1" "$2" > "docs/specs/sib/sib-$1-s.md"
+}
+sib_story 01 src/sib/a.txt todo
+sib_story 02 src/sib/b.txt todo
+sib_story 03 src/sib/c.txt done
+git add -A && git commit -qm "sib: three stories, 01 and 02 in flight" >/dev/null
+printf 'a2\n' > src/sib/a.txt; printf 'b2\n' > src/sib/b.txt; printf 'c2\n' > src/sib/c.txt
+sed -i 's/^status: todo/status: todo\nreturned: DONE/' docs/specs/sib/sib-02-s.md
+out="$(bash scripts/scope-check.sh docs/specs/sib/sib-01-s.md)"
+printf '%s' "$out" | expect "sibling 02 (todo) drops out: changed 2 (a + the done sibling's c), out of scope 1" "declared 1, changed 2, out of scope 1"
+printf '%s' "$out" | expect "the done sibling's file still counts" "! src/sib/c.txt"
+printf '%s' "$out" | grep -qF 'b.txt' && { echo "::error::a todo sibling's declared file was counted: $out"; fail=1; } \
+  || echo "  ok    the todo sibling's declared file is not counted"
+printf '%s' "$out" | grep -qF 'sib-02-s.md' && { echo "::error::a todo sibling's own story file was counted: $out"; fail=1; } \
+  || echo "  ok    the todo sibling's own story file is not counted"
+bash scripts/scope-check.sh docs/specs/sib/sib-01-s.md HEAD | expect "an explicit range excludes nothing - the sibling's file counts" "! src/sib/b.txt"
+git checkout -q -- src/sib docs/specs/sib
+git add -A && git commit -qm "sib: scope rows" >/dev/null
+
+echo "ADR-013 D5: wave-check reports every ## Verification segment that is not a ## Commands cell, and nothing else"
+mkdir -p docs/specs/wcell
+wcell_story() { # wcell_story <nn> <wave> <verification-block>
+  printf -- '---\nstory: wcell-%s\nspec: wcell\nstatus: todo\nwave: %s\n---\n# W%s\n\n## Files\n- app.txt\n\n## Verification\n%s\n' \
+    "$1" "$2" "$1" "$3" > "docs/specs/wcell/wcell-$1-w.md"
+}
+wcell_story 01 1 '`true`'
+wcell_story 02 2 '`true && no-such-cell`'
+wcell_story 03 3 'none — reviewed by lead-review'
+wcell_story 04 4 "repeat: 2
+\`sh -c 'not a cell'\`"
+out="$(bash scripts/wave-check.sh docs/specs/wcell)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    wave-check still exits 0 while reporting" || { echo "::error::wave-check exit $ex"; fail=1; }
+printf '%s' "$out" | expect "an && segment that is no cell is named" "verify-cell: wcell-02's verification 'no-such-cell' is not a ## Commands cell of CLAUDE.md"
+printf '%s' "$out" | expect "a whole line that is no cell is named" "verify-cell: wcell-04's verification 'sh -c 'not a cell''"
+n="$(printf '%s\n' "$out" | grep -c 'verify-cell:')"
+[ "$n" -eq 2 ] && echo "  ok    exactly two verify-cell reports (a cell, 'none — reviewed by lead-review' and repeat: pass)" \
+  || { echo "::error::verify-cell count $n: $out"; fail=1; }
+
+echo "ADR-013 D1: a CLAUDE.vulyk.md sidecar is the constitution wave-check reads, not CLAUDE.md"
+cat > CLAUDE.vulyk.md <<'EOF'
+# Sidecar constitution
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Sidecar-only | `no-such-cell` |
+EOF
+out="$(bash scripts/wave-check.sh docs/specs/wcell)"
+printf '%s' "$out" | expect "with a sidecar, CLAUDE.md's own cell 'true' is reported against CLAUDE.vulyk.md" "verify-cell: wcell-01's verification 'true' is not a ## Commands cell of CLAUDE.vulyk.md"
+printf '%s' "$out" | grep -qF "'no-such-cell'" && { echo "::error::the sidecar's own cell was reported: $out"; fail=1; } \
+  || echo "  ok    the sidecar's own cell passes"
+rm -f CLAUDE.vulyk.md
+git add -A && git commit -qm "wcell fixture" >/dev/null
+
+echo "ADR-013 D4: trace-check accepts a quote equal to a whole ## Asks item (digits, dot, text, whitespace-normalized), and only that"
+mkdir -p docs/specs/trc
+printf '# trc\n\n## Request\n> build the trace demo\n\n## Asks\n1. the first ask works\n2. the second   ask works\n' > docs/specs/trc/brief.md
+trc_story() { # trc_story <nn> <quote>
+  printf -- '---\nstory: trc-%s\nspec: trc\nstatus: todo\nwave: 1\n---\n# T%s\n\n## Requirements\n> %s\n' "$1" "$1" "$2" > "docs/specs/trc/trc-$1-t.md"
+}
+trc_story 01 '2.  the second ask works'
+trc_story 02 '2. the second'
+trc_story 03 '3. an ask the brief never had'
+out="$(bash scripts/trace-check.sh docs/specs/trc)"
+printf '%s' "$out" | expect "two quotes unfound: a fragment of an item and an item the brief lacks" "backward: 2 unfound"
+printf '%s' "$out" | grep -qF 'trc-01-t.md' && { echo "::error::a whole ask item was not accepted: $out"; fail=1; } \
+  || echo "  ok    '> 2. the second ask works' traces to ## Asks item 2"
+printf '%s' "$out" | expect "a fragment of an item is not an item" "trc-02-t.md: quote found in NEITHER"
+
 exit $fail

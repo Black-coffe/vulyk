@@ -19,10 +19,10 @@ A model-cascade, memory-first, self-evolving framework for running multi-agent c
 
 **Vulyk** (Ukrainian: *вулик*) means **beehive**. A hive does not send the queen to gather pollen. It routes every job to the cheapest unit that can do it well, keeps shared memory outside any single bee, and continuously adapts the colony to the season. VULYK applies the same economics to AI-assisted software development:
 
-- **Queen** — your main Claude Code session on Opus 5.5 on every plan; the gate above her (`lead-review`, `lead-architect`) runs on the strongest model your plan carries: Fable 5.1 on Max, Opus 5.5 on Pro, resolved from the account, not remembered. Plans, decomposes, integrates. Never reads source code directly.
-- **Leads** — frontier-class subagents on the same model for architecture decisions and adversarial review.
-- **Workers** — Sonnet-class subagents that implement and test individual stories. This is where most tokens are spent.
-- **Drones** — cheap subagents for reconnaissance, documentation updates, and memory upkeep.
+- **Queen** — your main Claude Code session, on Opus 5.5 on every plan. Plans; builds Tier 1–2 work herself; at Tier 3–4 decomposes, dispatches and integrates.
+- **Leads** — `lead-review`, one fresh-context reviewer per council round (Opus 5.5; at Tier 4 the gate model beside a second reviewer), and `lead-architect` for design decisions. The gate model is the strongest one your plan carries: Fable 5.1 on Max, Opus 5.5 on Pro, resolved from the account, not remembered.
+- **Workers** — Opus 5.5 subagents that implement one story each at Tier 3–4, in parallel waves, and close it themselves.
+- **Drones** — cheap subagents (Opus 5.5 at low effort) for reconnaissance, documentation updates, and memory upkeep.
 
 The result: more parallel agents, larger codebases, and — the point of the whole exercise — **a strong model that stays inside the task it was given**. Every story names the files it may touch, and a deterministic gate reports the ones it touched anyway.
 
@@ -88,14 +88,14 @@ git -C /tmp/vulyk pull
 /tmp/vulyk/install.sh /path/to/your/project --upgrade   # add --check to preview
 ```
 
-`--upgrade` replaces changed framework-owned files (agents, commands, hooks, templates, scripts) and touches nothing of yours — not your constitution, memory, specs, ADRs or wiki. The installed version is stamped in `.claude/vulyk-version`; constitution changes are pointed out for you to merge by hand.
+`--upgrade` replaces changed framework-owned files (agents, commands, hooks, templates, scripts), removes retired ones you never edited, and touches nothing of yours — not your constitution, memory, specs, ADRs or wiki. The installed version is stamped in `.claude/vulyk-version`. When the constitution changed, the upgrade prints the size difference and the command that replaces it — `install.sh /path/to/your/project --upgrade --constitution replace` — which carries your Profile and Commands blocks over and keeps the old file as `<name>.pre-0.18.md`. Upgrading from 0.17 or earlier, the replace is what brings the smaller constitution into every agent that loads it.
 
 `/vulyk-bootstrap` runs a short interview (stack, size, conventions, risk tolerance, token budget), then tailors the constitution, prunes the agent roster, builds an initial codebase map with scout drones, and seeds the wiki. **From that point on you work through three commands:**
 
 ```text
 /vulyk-plan  "add OAuth login with refresh tokens"   # Queen plans, scouts recon, stories written
-/vulyk-build                                          # Workers implement stories on Opus 5.5, in parallel
-/vulyk-review                                         # Adversarial top-model review gate before merge
+/vulyk-build                                          # Tier 1-2: the Queen builds; Tier 3-4: workers in parallel waves
+/vulyk-ship                                           # after a green council: merge locally, print the publish command
 ```
 
 > **Tip:** enable Anthropic's experimental Agent Teams for collaborative Tier 3–4 work:
@@ -107,58 +107,58 @@ Every subagent declares its model in YAML frontmatter — the cascade is enforce
 
 | Caste | Agent | Model | Job | Reads source? |
 |---|---|---|---|---|
-| 👑 Queen | *(main session)* + `queen-planner` | `opus` (Opus 5.5); a Tier 4 `queen-planner` gets `TOP_MODEL` | Decompose goals, integrate results, own the roadmap | **Never** — consumes scout reports & memory only |
+| 👑 Queen | *(main session)* + `queen-planner` | `opus` (Opus 5.5); a Tier 4 `queen-planner` gets `TOP_MODEL` | Plan; build Tier 1–2 herself; at Tier 3–4 decompose, dispatch and integrate | Tier 1–2: the story's files; Tier 3–4: scout reports and memory |
 | 🛡 Lead | `lead-architect` | `TOP_MODEL` | Design decisions, ADRs, tradeoff analysis | Targeted excerpts only |
-| 🛡 Lead | `lead-review` | `TOP_MODEL` | Adversarial review gate: correctness, security, invariants | Diffs + tests |
-| 🛡 Lead | *second reviewer, Tier 4* | a different model: `opus` beside Fable, `sonnet` beside Opus on Pro | Recall complement — an ensemble, not a duplicate | Diffs |
-| 🐝 Worker | `worker-code` | `opus` · effort `medium` | Implement exactly one story | Scoped slice via map |
-| 🐝 Worker | `worker-test` | `opus` · effort `medium` | Write/repair tests for one story | Scoped slice |
+| 🛡 Lead | `lead-review` | `opus` at Tier 1–3; `TOP_MODEL` at Tier 4 | The reviewer seat of every round: the brief's asks and correctness; BLOCK only on an anchored finding | The round's diff |
+| 🛡 Lead | *second reviewer, Tier 4* | a different model: `opus` beside Fable, `sonnet` beside Opus on Pro | Recall complement — an ensemble, not a duplicate | The round's diff |
+| 🐝 Worker | `worker-code` | `opus` · effort `medium` | Tier 3–4: implement exactly one story and close it | Scoped slice via map |
+| 🐝 Worker | `worker-test` | `opus` · effort `medium` | Tier 3–4: write or repair the tests of one story and close it | Scoped slice |
 | 🔍 Drone | `drone-scout` | `opus` · effort `low` | Recon: files, symbols, structure → map-format report | Yes — that's the point |
 | 🔍 Drone | `drone-docs` | `opus` · effort `low` | Update wiki & map notes after changes | Diffs |
 | 🔍 Drone | `librarian` | `opus` · effort `low` | Memory consolidation & garbage collection | Memory files only |
 | 🔍 Drone | `drone-coverage` | `opus` · effort `medium` | Plan-time coverage check: brief vs plan, blind to the stories | **Never** — brief + plan only |
-| ⚖️ Council | `council-sonnet` / `council-opus` / `council-haiku` | `sonnet` (kept for model diversity) / `opus` / junior rung (`sonnet` until a Haiku 5.5 ships) — `sonnet` at every tier, `opus` and `haiku` from Tier 3 | Blind verdict on the brief's `## Asks`, from a reduced worktree — suite + each ask / intent & edge cases / black-box client path | Only what a client or the suite would see — never the stories |
-| ⚖️ Council | `cycle-clerk` | junior rung (`sonnet` · effort `low`, until a Haiku 5.5 ships) | The Workflow driver's only shell access — runs one `cycle.sh`/`journal.sh` verb per dispatch, no logic of its own | Never |
+| ⚖️ Council | `council-opus` / `council-haiku` | `opus` · effort `medium` / junior rung (`sonnet` until a Haiku 5.5 ships) — Tier 3–4 only; `haiku` only when the Profile's *Client path* is filled | Blind verdict on the brief's `## Asks`, from a reduced worktree — intent & edge cases / black-box client path | Only what a client would see — never the stories |
+| ⚖️ Council | `cycle-clerk` | junior rung (`sonnet` · effort `low`, until a Haiku 5.5 ships) | The Workflow driver's only shell access — one `cycle.sh advance` per agent boundary, no logic of its own | Never |
 | 🛡 Lead | *any story's second attempt* | `TOP_MODEL` | A story an Opus 5.5 worker missed is retried on the gate model: Fable on Max, the same Opus on Pro (ADR-012) | Scoped slice |
 
-**The gate model follows the plan.** `TOP_MODEL = auto` in the constitution, and `scripts/top-model.sh` reads the account profile Claude Code keeps in `~/.claude.json`: Max 5x / 20x and premium seats resolve to `fable` — Fable 5.1, which those plans carry at no extra cost up to half the weekly limit; Pro, standard seats and API keys resolve to `opus` — on those, every Fable token bills to usage credits on top of the subscription. A SessionStart hook announces the result, and `/vulyk-plan`, `/vulyk-review` and the build driver pass it as the dispatch `model:` to `lead-review`, `lead-architect`, a Tier 4 `queen-planner` and a missed story's retry. `--apply` pins the Queen's own session to `opus`: since v0.16.0 she orchestrates on Opus 5.5 on every plan. The gate agent files keep `opus` as their floor because frontmatter cannot be conditional and must be right on every plan. Pin an alias in place of `auto` to overrule the plan. Why not the native `best` alias: it resolves to Fable wherever it is *available*, and on Pro it is available — for credits. [docs/model-cascade.md](docs/model-cascade.md) has the table and the rejected alternatives.
+**The gate model follows the plan.** `TOP_MODEL = auto` in the constitution, and `scripts/top-model.sh` reads the account profile Claude Code keeps in `~/.claude.json`: Max 5x / 20x and premium seats resolve to `fable` — Fable 5.1, which those plans carry at no extra cost up to half the weekly limit; Pro, standard seats and API keys resolve to `opus` — on those, every Fable token bills to usage credits on top of the subscription. A SessionStart hook announces the result, and `/vulyk-plan`, `/vulyk-build`, `/vulyk-review` and the Workflow driver pass it as the dispatch `model:` to the Tier 4 review, `lead-architect`, a Tier 4 `queen-planner` and a missed story's retry; `lead-review` below Tier 4 runs on its frontmatter `opus` (changed in 0.18.0, ADR-013). `--apply` pins the Queen's own session to `opus`: since v0.16.0 she orchestrates on Opus 5.5 on every plan. The gate agent files keep `opus` as their floor because frontmatter cannot be conditional and must be right on every plan. Pin an alias in place of `auto` to overrule the plan. Why not the native `best` alias: it resolves to Fable wherever it is *available*, and on Pro it is available — for credits. [docs/model-cascade.md](docs/model-cascade.md) has the table and the rejected alternatives.
 
-**The ladder (v0.16, ADR-012).** There are three rungs.
+**The ladder (v0.16, ADR-012; gate narrowed in v0.18, ADR-013).** There are three rungs.
 
-- **Gate = `TOP_MODEL`:** `lead-review`, `lead-architect`, the Tier 4 planner and retries. Fable 5.1 on Max, Opus 5.5 on Pro.
-- **Workhorse = `opus`:** Opus 5.5 for the Queen, the planner, the workers, the drones and `council-opus`.
-- **Junior = `sonnet`:** `council-sonnet`, the black-box seat, the clerk and the distiller. The last three move to `haiku` once Haiku 5.5 ships. Haiku 4.5 is never dispatched.
+- **Gate = `TOP_MODEL`:** the Tier 4 review, `lead-architect`, the Tier 4 planner and retries. Fable 5.1 on Max, Opus 5.5 on Pro.
+- **Workhorse = `opus`:** Opus 5.5 for the Queen, the Tier 3 planner, `lead-review` at Tier 1–3, the workers, the drones and `council-opus`.
+- **Junior = `sonnet`:** the black-box seat and the clerk. Both move to `haiku` once Haiku 5.5 ships. Haiku 4.5 is never dispatched.
 
 On Opus 5.5 launch day, Artificial Analysis measured Opus 5.5 at `medium` matching Fable 5.1 at `high` for about a third of the cost, and beating Sonnet 5 per task outright. [docs/model-cascade.md](docs/model-cascade.md) has the numbers.
 
 **Aliases, not pinned IDs.** `fable`, `opus` and `sonnet` resolve to the current model in each tier — as of 22 September 2026, Fable 5.1, Opus 5.5 and Sonnet 5. That is why the 4.8 → 5 transition cost this framework a three-line diff instead of a rewrite. Pin a full ID only to freeze behaviour deliberately.
 
-**Effort is set per agent.** Since Claude Code 2.1.280, `effort:` in agent frontmatter overrides the session level. In July 2026 it was silently ignored; both results were measured. Drones run at `low`, workers at `medium`, the planner and the gate at `high`. A top-level `effortLevel` does not apply to Opus 5.5. [docs/model-cascade.md](docs/model-cascade.md) has the numbers and the escalation table.
+**Effort is set per agent.** Since Claude Code 2.1.280, `effort:` in agent frontmatter overrides the session level. In July 2026 it was silently ignored; both results were measured. Drones and the clerk run at `low`, workers and the intent seat at `medium`, the planner and the reviewer at `high`. A top-level effort level in `settings.json` does not apply to Opus 5.5, so VULYK sets none. [docs/model-cascade.md](docs/model-cascade.md) has the numbers and the escalation table.
 
 ### The routing matrix
 
 Routing happens **before** any work starts — and the first question is not the tier but the deliverable: a request whose answer is a *document* (an audit, a monitoring report, "make me a spec") is study work and ends at `report.md`, never in stories (ADR-008). Only code gets a tier (the matrix lives in `CLAUDE.md`, so it is enforced on every prompt):
 
-| Tier | Signal | Who works | Cost shape |
+| Tier | Signal | Who works | Council per round |
 |---|---|---|---|
-| 0 | Trivial, single file, obvious | Main session directly | minimal |
-| 1 | One module, clear task | 1 × `worker-code` (+ scout) | cheap |
-| 2 | Feature within a module | 2–4 workers, architect consulted | plan is expensive, body is cheap |
-| 3 | Cross-cutting, multi-module | Full pipeline: plan → fan-out → review | bookend |
-| 4 | Architecture / migration / 200k+ LOC touched | Tier 3 + a second reviewer on a *different* model | deliberately expensive |
+| 0 | Trivial, single file, obvious | The Queen directly, no paperwork | none |
+| 1 | One module, clear task | The Queen, solo — no driver, no clerk | one `lead-review`; 1 round |
+| 2 | Feature within a module | The Queen, solo, in a fresh session after the plan is approved | one `lead-review`; 2 rounds |
+| 3 | Cross-cutting, multi-module | Workers in waves through the Workflow driver | `council-opus` + `lead-review` (+ `council-haiku` with a *Client path*); 3 rounds |
+| 4 | Architecture / migration / 200k+ LOC touched | Tier 3 + `lead-architect` | as Tier 3, the review folded from two reviewers on *different* models; 3 rounds |
 
-**Bookend rule:** spend top-model tokens at the two points where they change everything downstream — planning and final review. Everything in between runs on the cheaper tier.
+**One agent below Tier 3** (changed in 0.18.0, [ADR-013](docs/adr/013-light-vulyk.md)). A token audit over 1,844 sessions found a median task dispatching 67 subagents, 43 of them clerks, with spend split into near-equal thirds between the Queen, the workers and the review machinery. Separate agents for planning, building and reviewing a one-module change cost more coordinating than working, so below Tier 3 one session builds and one fresh-context reviewer judges. **Bookend rule:** the top model is spent where it changes everything downstream — the Tier 4 plan and review, design, and a missed story's retry.
 
 ## The build discipline
 
 Since v0.5.0, the middle of the pipeline — where the tokens are spent and where parallel agents historically eat each other's work — runs under rules absorbed from [Autopilot](https://github.com/nick-vels/skills) (MIT, © Nick Vels), re-grounded in VULYK's deterministic-gates philosophy:
 
 - **Waves.** Every story carries `wave:` and `blocked_by:` frontmatter. One wave = one message, all its workers genuinely concurrent. Stories in a wave must declare **disjoint `## Files`** — `scripts/wave-check.sh` verifies that (plus blocker order and dangling references) before anything is dispatched. Zero tokens, zero model: two concurrent workers on one file silently overwrite each other, and this is the check that makes it impossible to miss.
-- **One story, one commit.** Each returning story is closed individually: scope gate → quiet verification → its own commit. That gives every story a rollback point, and it fixes the scope metric itself — the diff being measured is now exactly that story's, not the pileup of everything before it.
+- **One story, one commit.** Whoever built a story — the Queen at Tier 1–2, the worker at Tier 3–4 — closes it with `cycle.sh close-story`: scope gate → the story's quiet verification, run once, under a 540 s timeout → its own commit. That gives every story a rollback point, and it fixes the scope metric itself — the diff being measured is now exactly that story's, not the pileup of everything before it.
 - **Bounded returns.** A worker's final message is a ≤25-line report (`STATUS` / `FILES` / `TESTS` / `INTERFACES` / `CONCERNS` / `BLOCKERS`) — never a diff, never raw test output. Worker returns live in the Queen's context until the end of the run; this contract is what keeps a 12-story build from drowning the one context that is never refreshed.
-- **Repair with a ceiling.** `NEEDS_CONTEXT` means the *story* was defective — fix the plan, not the worker. A wall gets one fresh worker with the findings attached as conditions to satisfy. The third attempt does not exist: the story goes `blocked` and returns to planning.
-- **The Queen's hands stay off story code** (Law 5). From the moment a story file exists, every edit to its files — the two-line fix included — travels through a worker. Descoping mid-build is recorded in `## Descoped`, never silent.
-- **The cycle closes with a council, and the human stops twice at the start: the grill, then the plan.** The pipeline is the six-stage loop in [docs/cycle.md](docs/cycle.md) - spec, plan, code, tests, council, ship - and a stage is closed by its confirmation on disk: `brief.md`, `**Approved:**` (the default; `**Briefed:**` for `--go` and Tier 1), `**Branch:**`, `council.jsonl`, `**Shipped:**`. `/vulyk-plan` grills once - a single round, recommended options first, closing into the brief's `## Asks` - then shows the plan and waits for one word; nothing is built on a plan the owner has not read (ADR-008). From there the build lives on its own branch, and a three-seat blind council (black-box client path, suite-then-each-ask, intent and edge cases) judges only those asks from a worktree that cannot see the stories - its verdict computed by a model-free script, not read off a person's look. `/vulyk-ship` refuses without a current, GREEN verdict the same way `/vulyk-build` refuses without a briefed plan, and what it publishes is pressed by a human, never by an agent.
+- **Repair with a ceiling.** `NEEDS_CONTEXT` means the *story* was defective — fix the plan, not the worker. A worker that misses its story gets one retry on the gate model; a second miss stops the run, and the story goes `blocked` and back to planning. A RED council round becomes one repair story, written mechanically by `cycle.sh repair` from the RED asks and the anchored findings — no planner in between.
+- **The Queen's hands stay off Tier 3–4 story code** (Law 5). From the moment a Tier 3–4 story file exists, every edit to its files travels through a worker. Below Tier 3 the Queen builds herself. Descoping mid-build is recorded in `## Descoped`, never silent.
+- **The cycle closes with a council, and the human stops twice at the start: the grill, then the plan.** The pipeline is the six-stage loop in [docs/cycle.md](docs/cycle.md) - spec, plan, code, tests, council, ship - and a stage is closed by its confirmation on disk: `brief.md`, `**Approved:**` (the default; `**Briefed:**` for `--go` and Tier 1), `**Branch:**`, `council.jsonl`, `**Shipped:**`. `/vulyk-plan` grills once - a single round, recommended options first, closing into the brief's `## Asks` - then shows the plan and waits for one word; nothing is built on a plan the owner has not read (ADR-008). From there the build lives on its own branch, and the council judges only those asks: one fresh-context `lead-review` at every tier, joined at Tier 3–4 by blind seats (intent and edge cases; the black-box client path where one exists) working from a worktree that cannot see the stories. The verdict is computed by a model-free script, not read off a person's look, and it converges: green seats carry into the next round, and the reviewer re-reads only what changed. `/vulyk-ship` refuses without a current, GREEN verdict the same way `/vulyk-build` refuses without a briefed plan, and what it publishes is pressed by a human, never by an agent.
 - **The request survives verbatim.** Every Tier 2+ spec starts with `brief.md` — the human's words as a blockquote, passed through `redact.sh`, never paraphrased. Stories quote their `## Requirements` from it word-for-word, contracts between concurrent stories are pinned in plan.md at plan time, and `scripts/trace-check.sh` walks the chain both ways before approval: a story that cannot produce its quote is invented work; a brief line nobody quotes is a requirement about to be dropped. Deterministic, model-free, free.
 
 What changed with Opus 5 is the *reason* for the bookend, not its shape. The binding problem is no longer that a frontier model is unaffordable — it is that a frontier model does more than it was asked. Anthropic's system card attributes the dip in coding scores at high effort to the model making more changes than the task required. The cascade now earns its keep by holding scope; the savings are a side effect.
@@ -169,17 +169,17 @@ What changed with Opus 5 is the *reason* for the bookend, not its shape. The bin
 |---|---|
 | `/vulyk-bootstrap` | Interview → tailored constitution, pruned roster, initial map & wiki seed |
 | `/vulyk-plan <goal> [--go] [--study]` | Queen mode: deliverable named first (a document ends at `report.md`), capped recon, a one-round grill (recommended options first, silence safe) closes into the brief's `## Asks`, plan + story files written to `docs/specs/`, then the plan shown for one word of approval; `--go` builds straight through |
-| `/vulyk-build [slug] [--fallback]` | Execute the plan wave by wave: parallel workers on disjoint files, one commit per story, a missed story retried one rung up; the in-session fallback driver only with `--fallback` |
-| `/vulyk-review [slug]` | One council round on demand: `lead-review` ∥ the tier's blind seats (`council-sonnet`; `council-opus` and `council-haiku` from Tier 3), judged by `cycle.sh` from evidenced reports - `RED` routes to `/vulyk-build` as fix stories |
+| `/vulyk-build [slug]` | Build the plan to a council verdict. Tier 1–2 solo: the Queen builds each story and steps `cycle.sh advance`, one `lead-review` per round. Tier 3–4: the Workflow driver runs parallel workers on disjoint files, wave by wave, one commit per story, a missed story retried on the gate model |
+| `/vulyk-review [slug]` | One council round on demand: `lead-review` ∥ the tier's blind seats (`council-opus`, and `council-haiku` with a *Client path*, at Tier 3–4), judged by `cycle.sh` from evidenced reports - `RED` routes to `/vulyk-build` as a repair story |
 | `/vulyk-pause <slug>` | Hand the working tree back to you at any point the loop is running |
 | `/vulyk-resume <slug>` | Clear the pause and relaunch the driver fresh - never a replayed run |
 | `/vulyk-ship [slug]` | Stage 06: refuses without a current, GREEN council verdict, then version + CHANGELOG, a local merge, the publish command printed for a human to press, recorded - and the next circle's draft handed over |
 | `/vulyk-map [path]` | (Re)build the codebase map for a path using parallel scout batches |
-| `/vulyk-evolve` | Weekly self-evolution: mine learnings & usage stats → propose config diffs as a reviewable changeset |
+| `/vulyk-evolve` | Weekly self-evolution: mine learnings, usage stats and the week's token spend → propose config diffs as a reviewable changeset |
 | `/vulyk-gc` | Memory garbage collection: consolidate learnings, prune stale map entries, archive dead skills |
 | `/vulyk-handoff` | Save an enriched session handoff to `.claude/handoff/` before `/clear` or a restart — the next session resumes from it automatically |
-| `/vulyk-status` | Open stories, memory freshness, skill usage stats, budget posture |
-| `/vulyk-update [version]` | Show what a newer release would replace, ask, then upgrade the framework files — never your CLAUDE.md, memory or specs |
+| `/vulyk-status` | Council numbers, token spend per spec (`scripts/token-report.py`), open stories, memory freshness, skill usage stats, budget posture |
+| `/vulyk-update [version]` | Show what a newer release would replace or remove, ask, then upgrade the framework files — never your memory or specs; the constitution only when you choose `--constitution replace` |
 
 Full details: [docs/command-reference.md](docs/command-reference.md)
 
@@ -188,12 +188,12 @@ Full details: [docs/command-reference.md](docs/command-reference.md)
 Nothing important lives only in a context window. VULYK keeps five layers in git:
 
 ```text
-CLAUDE.md            constitution: laws, routing matrix, protocols   (< 150 lines, always loaded)
+CLAUDE.md            constitution: laws, routing, models, Profile, Commands   (~7 KB, < 120 lines, always loaded)
 .claude/rules/       path-scoped rules, loaded only where relevant
 memory/memory.md     pointer index (≤ 60 lines, always loaded) → links to everything below
 memory/map/          one file per module: purpose, entry points, key types, gotchas, last-verified
 docs/wiki/           LLM wiki: one note per domain/invariant, densely linked, Obsidian-compatible
-memory/learnings/    raw session learnings (hook-captured) → fuel for /vulyk-evolve
+memory/learnings/    session learnings, written when something was worth keeping → fuel for /vulyk-evolve
 ```
 
 Two protocols make this safe at scale: **memory is a hint, not truth** (agents verify pointers against real code before acting), and **only the librarian consolidates** (workers append, one drone merges — no concurrent-write races). Hooks snapshot state before every context compaction, so nothing is lost to `/compact`.
@@ -204,7 +204,7 @@ Deep dive: [docs/memory-system.md](docs/memory-system.md)
 
 `/vulyk-evolve` closes the loop most setups leave open:
 
-1. **Harvest** — `insight-harvester` reads `memory/learnings/*` and your `/insights` output; `skill-gardener` reads per-skill usage counters collected by a hook.
+1. **Harvest** — `insight-harvester` reads `memory/learnings/*` and your `/insights` output; `skill-gardener` reads per-skill usage counters collected by a hook; `scripts/token-report.py` prints the week's spend per spec.
 2. **Diagnose** — top friction patterns, unused skills (archive candidates), repeated manual patterns (new-skill candidates).
 3. **Propose** — a changeset against `.claude/` itself: diffs to rules, agents, skills, plus a `CHANGELOG` entry justifying each change.
 4. **Human gate** — nothing self-applies. You review the changeset like any PR.
@@ -218,11 +218,11 @@ Each cycle is a ratchet: the colony clicks forward and never slips back.
 |---|---|---|
 | `session-start-brief.sh` | SessionStart | Injects memory freshness + pending-learnings line into context |
 | `top-model-brief.sh` | SessionStart | Announces the gate model the plan resolved to (`fable` on Max, `opus` on Pro), the Tier 4 pairing, and whether your session is pinned to `opus` — reads only, never writes |
-| `session-end-learnings.sh` | SessionEnd | Captures a structured learnings stub (optional auto-distill with `VULYK_AUTOLEARN=1`) |
+| `anomaly-scan.sh` | SessionEnd | Runs the anomaly detectors once per session into `memory/stats/anomalies.jsonl` — local, silent, fail-open ([docs/telemetry.md](docs/telemetry.md)) |
 | `skill-usage-counter.sh` | PostToolUse (Skill) | Increments per-skill counters → fuel for `skill-gardener` |
 | `context-guard.sh` | PreCompact | Snapshots memory & task state before compaction |
 | `vulyk-update-check.sh` | SessionStart | Compares `.claude/vulyk-version` against the newest tag on the origin (once a day, cached) and asks the model to raise an upgrade with you — never to apply one |
-| `handoff.sh` → `handoff.py` | Stop, UserPromptSubmit, PreCompact, SessionEnd, SessionStart | Context-budget guard + session handoff: measures real context size from the transcript, warns at thresholds, dumps session state to `.claude/handoff/` on `/clear`/exit/compaction, restores it at the next session start |
+| `handoff.sh` → `handoff.py` | Stop, UserPromptSubmit, PreCompact, SessionEnd, SessionStart | Context-budget guard + session handoff: measures real context size from the transcript, warns at thresholds, dumps session state to `.claude/handoff/` on `/clear`/exit/compaction, restores it (≤ 4 000 characters) in the session that follows a `/clear` or a compaction |
 
 Claude Code hooks receive no token counter — `handoff.py` recovers it from the transcript JSONL (`message.usage` of the last non-sidechain assistant entry), which is what makes proactive warnings and pre-`/clear` dumps possible at all. The same entry's `timestamp` gives the age of the prompt cache, so the warning also tells you how long checkpointing stays cheap: re-reading the conversation is a cache hit inside the TTL and a full-price re-prefill after it. Needs Python 3 on PATH; fails open without it. Details: [docs/hooks-reference.md](docs/hooks-reference.md)
 
@@ -232,9 +232,11 @@ A sample `scripts/git-hooks/post-merge` flags the map as stale after merges so `
 
 Most agent frameworks — this one included, until now — ship claims nobody checked. Here is the honest split.
 
-**Measured on this repository.** Where `effort` actually applies (session yes, agent frontmatter no) and what each level costs in output tokens. The numbers and the method are in [docs/model-cascade.md](docs/model-cascade.md); the raw finding is in `memory/learnings/`.
+**Measured on this repository.** Where `effort` actually applies (the session always; agent frontmatter ignored in July 2026, honoured since Claude Code 2.1.280) and what each level costs in output tokens. The numbers and the method are in [docs/model-cascade.md](docs/model-cascade.md).
 
-**Measured from now on, by `scripts/scope-check.sh`.** Two numbers per story, appended to `memory/stats/scope.jsonl`: how many files the story declared, and how many files the diff touched that it never named. Deterministic, no model involved, zero tokens. `/vulyk-review` runs it. The second number is what keeps the first honest — a story that lists half the repository scores a perfect zero and is caught by its own declaration count. Since v0.5.0 the build commits per story, so each measurement covers exactly one story's diff instead of the pileup of everything before it.
+**Measured across hives: what VULYK costs.** The [token audit](docs/specs/token-audit/report.md) read 1,844 sessions of v0.17.0: a median task processed 84.9M raw tokens (13.5M weighted) and dispatched 67 subagents, 43 of them clerks; 23% of all spend was the instruction bundle every subagent re-read; extra council rounds took 29.5% of the spend of the tasks that had them; 56% of driver runs stopped before a verdict. Above 500 changed lines, VULYK tasks cost 2.2–2.3× the weighted tokens of comparable work without it (a weak sample, ±30%). v0.18.0 is the answer ([ADR-013](docs/adr/013-light-vulyk.md)); its expected saving of 40–55% on a median task is an estimate until `python scripts/token-report.py <project>` has measured specs built on it. The `totalTokens` a Workflow run prints is not spend: it sums each agent's final context.
+
+**Measured from now on, by `scripts/scope-check.sh`.** Two numbers per story, appended to `memory/stats/scope.jsonl`: how many files the story declared, and how many files the diff touched that it never named. Deterministic, no model involved, zero tokens. `cycle.sh close-story` runs it on every story. The second number is what keeps the first honest — a story that lists half the repository scores a perfect zero and is caught by its own declaration count. Since v0.5.0 the build commits per story, so each measurement covers exactly one story's diff instead of the pileup of everything before it.
 
 **Checked before every dispatch, by `scripts/wave-check.sh`.** File collisions between concurrently-dispatched stories, blocker ordering, dangling `blocked_by` references — the defects that silently destroy parallel work — plus, since v0.8.0, declared paths that do not exist in the tree and stories whose verification command cannot fail for the files they touch. Same currency: deterministic, model-free, free.
 
@@ -273,7 +275,7 @@ ship with the next release. Full contract: [docs/telemetry.md](docs/telemetry.md
 
 **Do I need Agent Teams?** No. Default orchestration uses subagent fan-out from the main session. Agent Teams (experimental flag) adds peer-to-peer coordination for Tier 3–4 collaborative work.
 
-**Can subagents spawn subagents?** No — a deliberate Claude Code constraint. VULYK's design respects it: all fan-out happens from the Queen (main session); leads and workers are single-purpose.
+**Can subagents spawn subagents?** No — a deliberate Claude Code constraint. VULYK's design respects it: all fan-out happens from the Queen (main session) or, at Tier 3–4, the Workflow driver; leads and workers are single-purpose.
 
 **My repo already has a CLAUDE.md.** `install.sh` never overwrites it — it writes `CLAUDE.vulyk.md` and prints a one-line `@import` to add.
 

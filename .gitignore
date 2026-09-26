@@ -33,3 +33,5 @@ __pycache__/
 .vulyk/
 docs/specs/*/PAUSE
 docs/specs/*/DRIVER
+# Claude Code agent worktrees (isolation: worktree) - transient, one per parallel agent.
+.claude/worktrees/

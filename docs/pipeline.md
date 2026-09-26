@@ -14,14 +14,14 @@ green on the record that describes work nobody shipped.
 
 | Gate | Sees | Structurally cannot see | Currency |
 |---|---|---|---|
-| `wave-check.sh` | every story's frontmatter, `## Files`, `## Verification`, and the tree | whether the code is right; whether a verification command is *meaningful* beyond touching the story's own files | deterministic, free |
-| `trace-check.sh` | every story's `## Requirements` quotes, `brief.md`, `## Plan deltas` | whether a quoted requirement was actually implemented | deterministic, free |
-| `scope-check.sh` | one story's declared files against its own commit's diff | whether the change inside those files is correct | deterministic, free |
+| `wave-check.sh` | every story's frontmatter, `## Files`, `## Verification`, the constitution's `## Commands` cells, and the tree | whether the code is right; whether a verification command is *meaningful* beyond touching the story's own files | deterministic, free |
+| `trace-check.sh` | every story's `## Requirements` quotes, `brief.md` (its `## Asks` items included, which a repair story quotes), `## Plan deltas` | whether a quoted requirement was actually implemented | deterministic, free |
+| `scope-check.sh` | one story's declared files against its own commit's diff; the files of not-done sibling stories in the same spec are not counted against it | whether the change inside those files is correct | deterministic, free |
 | `drone-coverage` | `brief.md` + `plan.md` — **never a story file** | whether the plan was built; it runs before anything exists | opus · effort medium, `maxTurns: 5` |
 | `cycle.sh record-seat` | one seat's report against the C5 label contract (`VERDICT`, one `ASK` line per item of `## Asks`, evidence, taint) | whether the report is honest — only whether it is *well-formed*: it rejects (exit 4) a missing label, an uncovered or extra ask number, `GREEN`/`RED` without `run:`+`saw:` or `url:`+`saw:`, `N/A` without `why:`, a `VERDICT` inconsistent with its own `ASK` lines, or a taint (a story id, `plan.md`, `journal.md`, `council/` named anywhere in the body) | deterministic, free |
-| `cycle.sh judge` | every recorded seat file for the round, plus the newest `**Checked:**` line | whether a seat's evidence is real — only whether the round's recorded verdicts, read together, mean GREEN, RED or ESCALATE (ADR-001 D4, first match wins: `PAUSE` → stop; `**Checked:** REJECTED` newer than the round → RED; three seats ABSENT → ESCALATE `env`; RED on half the asks or more → ESCALATE `half`; a `review` BLOCK or any RED → RED, ESCALATE `ceiling` past the tier's ceiling (Tier 1: 1 round, Tier 2: 2, Tier 3-4: 3; each `reopen` adds the same again); every seat GREEN/N/A and `review` PASS → GREEN) | deterministic, free — the model cost is in producing the seat reports, not in judging them |
-| the court (`.vulyk/court/<slug>/round-N/`) | a git worktree at the pack commit, for the three blind seats to work inside | anything under `docs/specs/<slug>/` except `brief.md` - no stories, no `plan.md`, no `journal.md`, no `council/` directory; `Read`/`Grep` stay in a seat's toolset, there is just nothing left there to find | free - one `git worktree add --detach`, removed by `judge` |
-| `lead-review` | everything: diff, stories, notes, plan, wiki, ADRs | the human's ask *independently* — it reads the plan, so it inherits the plan's framing of what was wanted | `TOP_MODEL` (fable on Max, opus on Pro) |
+| `cycle.sh judge` | every recorded seat file for the round (the seats frozen into `ROUND` at open, carried seats included), plus the newest `**Checked:**` line | whether a seat's evidence is real — only whether the round's recorded verdicts, read together, mean GREEN, RED or ESCALATE (ADR-001 D4, first match wins: `PAUSE` → stop; `**Checked:** REJECTED` newer than the round → RED; a required seat ABSENT with no RED and no BLOCK → ESCALATE `env`; RED on half the asks or more → ESCALATE `half`; an anchored `review` BLOCK or any RED → ESCALATE `no-progress` if the same ask was RED the round before, ESCALATE `ceiling` past the tier's ceiling (Tier 1: 1 round, Tier 2: 2, Tier 3-4: 3; each `reopen` adds the same again), else RED; every required seat GREEN/N/A and `review` PASS → GREEN) | deterministic, free — the model cost is in producing the seat reports, not in judging them |
+| the court (`.vulyk/court/<slug>/round-N/`) | a git worktree at the pack commit, for the Tier 3-4 blind seats to work inside; not built when no blind seat is required | anything under `docs/specs/<slug>/` except `brief.md` - no stories, no `plan.md`, no `journal.md`, no `council/` directory; `Read`/`Grep` stay in a seat's toolset, there is just nothing left there to find | free - one `git worktree add --detach`, removed by `judge` |
+| `lead-review` | the diff (round 1: the branch against its base; round 2+: `since..head` and the previous round's findings), the brief's `## Asks`, plan.md's `## Descoped` | the human's ask *independently* — it reads the plan, so it inherits the plan's framing of what was wanted; code a later round's diff does not touch | `opus` at Tier 1-3; `TOP_MODEL` beside a second reviewer at Tier 4 |
 | `acceptance-log.sh` (pre-council specs only) | the story statuses, the caller's verdict, the pack's identity | anything about quality; it is a ledger, not a judge | deterministic, free |
 | `human-check.sh` (override, not a stage) | the owner's verdict in their own words, pinned to the commit and the pack | anything at all about the software - it is a signature, not a judge; `--check` only says whether the signature is still about what ships | deterministic, free |
 | `ship-check.sh` | all six confirmation artifacts of [the cycle](cycle.md) at once, and whether each is about *this* pack at *this* commit | quality; it counts confirmations, it does not weigh them | deterministic, free |
@@ -49,15 +49,15 @@ and the evidence does not transfer — it just stops being about anything.
 
 | Event | What it invalidates | What to do |
 |---|---|---|
-| A repair story is cut after a council round | the round's verdict, `wave-check` | for specs with a council row, `cycle.sh open-round` once the repair story closes (it re-stamps or opens N+1 per the crash rules below); pre-council specs re-dispatch through `acceptance-log.sh` as before; re-run `bash scripts/wave-check.sh docs/specs/<slug>` before dispatching it |
-| A story's `## Files` changes | `wave-check`, and any concurrency assumption resting on it | re-run `wave-check` before the next dispatch |
+| A repair story is cut after a council round | the round's verdict | `cycle.sh repair` puts it in a wave of its own, so no collision check is needed; `cycle.sh advance` opens the next round once it closes, carrying the green blind seats and re-reviewing only the new diff; pre-council specs re-dispatch through `acceptance-log.sh` as before |
+| A story's `## Files` changes | `wave-check`, and any concurrency assumption resting on it | re-run `bash scripts/wave-check.sh docs/specs/<slug>` before the next dispatch |
 | A plan delta adds or rewords a requirement | `trace-check` backward | re-run `bash scripts/trace-check.sh docs/specs/<slug>` |
-| The tree moved since planning | `wave-check`'s `missing` and `empty-glob` classes | `/vulyk-build` step 2 re-runs it for exactly this reason |
-| A code commit lands while a council round is open | the open round | `cycle.sh open-round` re-stamps it in place with no seat file yet, or writes a `STALE` row and opens round N+1 once one exists — either way the ceiling still counts it |
+| The tree moved since planning | `wave-check`'s `missing` and `empty-glob` classes | re-run `wave-check` before `/vulyk-build`; nothing re-runs it for you |
+| A code commit lands while a council round is open | the open round | `cycle.sh open-round` re-stamps it in place with no seat file yet, or writes a `STALE` row and opens round N+1 once one exists — neither counts against the ceiling |
 | A round is RED for half the asks or more, or the tier's round ceiling is reached (1 / 2 / 3 rounds for Tier 1 / 2 / 3-4, the same again per `reopen`) | readiness to ship | `cycle.sh escalate` writes `## Needs a human`; the owner's three exits are `human-check.sh ACCEPTED`, `cycle.sh reopen "<decision>"`, or leaving the spec open — never a round nobody asked for |
 | Anything at all, before proposing a merge (pre-council specs) | possibly the acceptance verdict | `bash scripts/acceptance-log.sh --check docs/specs/<slug>` → `CURRENT`, `STALE`, or `NO VERDICT RECORDED` |
 | Any commit after the owner looked | the human check | `bash scripts/human-check.sh --check docs/specs/<slug>` reports `STALE (commit)`; the owner looks again at the new HEAD |
-| The owner records `**Checked:** REJECTED` after a GREEN council row | that `**Council:**` row | it is read as RED regardless of what the seats said; fix stories → `/vulyk-build` → a fresh round; `ship-check.sh` stays `NOT READY` until it goes GREEN again |
+| The owner records `**Checked:** REJECTED` after a GREEN council row | that `**Council:**` row | it is read as RED regardless of what the seats said; the repair story → `/vulyk-build` → a fresh round; `ship-check.sh` stays `NOT READY` until it goes GREEN again |
 
 The rule underneath all nine rows is one sentence: **when the pack moves, whatever judged it
 is re-run.** It is written down here because relying on remembering it is what produced the
@@ -66,20 +66,21 @@ that shipped with nine, and a repair round sent against a collision check nobody
 
 ## Only one gate at a time may run the suite
 
-`lead-review` and the three council seats are dispatched in one message because they are
-independent *in information* — one sees everything, the rest almost nothing. They are not
-independent in **machine resources**, and only one of the four runs anything: `council-sonnet`
-does — it is the only seat given the full-suite command from the Profile's `## Commands` table
-(C10); `council-haiku` walks the *Client path* instead, `council-opus` probes ad hoc, and
-`lead-review` only reads.
+At Tier 3-4, `lead-review` and the blind seats are dispatched in one message because they are
+independent *in information* — one sees the diff, the rest only the brief and what a client or
+a probe would see. They are not independent in **machine resources**, and only one of them runs
+the whole suite: `lead-review` runs the constitution's full-suite command once per round, under
+`timeout 540` (changed in 0.18.0, ADR-013: `council-sonnet`, which used to run it, is retired, and
+a story's verification runs once, inside `close-story`). `council-haiku` walks the *Client path*
+instead, and `council-opus` probes ad hoc.
 
-That pairing is therefore safe. What is not safe is judging several specs at once — opening a
-council round for a backlog of specs in parallel. A project whose test suite binds fixed ports
-will hand you `EADDRINUSE` in one round because another round's `council-sonnet` seat has a
-server up, and the failure looks exactly like a defect in the code under test. Observed, back
-when this was `drone-acceptance` rather than `council-sonnet`: two of three concurrent gates
-lost their first runs to it, and only the drone's own honesty about *what it ran* made the
-cause visible at all.
+That pairing is therefore safe as long as the probes stay small. What is not safe is judging
+several specs at once — opening a council round for a backlog of specs in parallel. A project
+whose test suite binds fixed ports will hand you `EADDRINUSE` in one round because another
+round's reviewer has a server up, and the failure looks exactly like a defect in the code under
+test. Observed, back when this was `drone-acceptance`: two of three concurrent gates lost their
+first runs to it, and only the drone's own honesty about *what it ran* made the cause visible at
+all.
 
 Run council rounds one at a time, or give the suite ephemeral ports. And when a gate reports
 an environmental failure, believe it before you believe the code is broken — a gate that

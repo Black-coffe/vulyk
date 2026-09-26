@@ -7,9 +7,10 @@
 #                                      .claude/settings.local.json so her session starts on it
 #   scripts/top-model.sh --check    -> exit 0 if settings.local.json pins the Queen's model, 1 if not
 #
-# The rule (v0.16.0, ADR-012): the resolved alias is the GATE model - lead-review,
-# lead-architect, the Tier 4 planner and a missed story's retry. The Queen and every other
-# rung run on Opus 5.5 whatever the plan. Fable 5.1 holds the gate wherever the plan
+# The rule (v0.18.0, ADR-013 D3): the resolved alias is the GATE model - the Tier 4
+# lead-review (beside the second reviewer), lead-architect, the Tier 4 planner and a missed
+# story's retry. lead-review at Tier 1-3, the Queen and every other rung run on their
+# frontmatter model, Opus 5.5, whatever the plan. Fable 5.1 holds the gate wherever the plan
 # includes it, Opus 5.5 everywhere else. Per Anthropic's plan terms (Sept 2026) that means:
 #
 #   Max 5x / Max 20x, Team & Enterprise premium seats  -> fable   (up to half the weekly limit
@@ -44,7 +45,7 @@ case "${1:-}" in
   --explain)     MODE="explain" ;;
   --apply)       MODE="apply" ;;
   --check)       MODE="check" ;;
-  -h|--help)     sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help)     sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *)             echo "error: unknown flag $1 (try --help)" >&2; exit 2 ;;
 esac
 
@@ -184,6 +185,7 @@ case "$MODE" in
     echo "signal    : ${SIGNAL:-none}"
     echo "profile   : $PROFILE"
     echo "second reviewer (Tier 4): $(second_reviewer "$MODEL")"
+    echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner, a missed story's retry; lead-review at Tier 1-3 runs on its frontmatter (opus)"
     P="$(pinned_model)"
     if [ -z "$P" ]; then
       echo "queen session: not pinned - the session starts on the account default (Opus 5.5 since Claude Code 2.1.280). Run: bash scripts/top-model.sh --apply"

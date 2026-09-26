@@ -1,167 +1,98 @@
 # Scout report: scripts/
 
 ## Purpose
-Every deterministic (model-free) gate and helper VULYK's cycle runs on. Three families: the
-council's state machine (`cycle.sh` + `lib.sh` + `journal.sh`, v0.12.0), the older report-only
-gates beside it (`ship-check.sh`, `human-check.sh`, `acceptance-log.sh`, `scope-check.sh`,
-`wave-check.sh`, `trace-check.sh`, `release-check.sh`), and `telemetry.sh` (v0.14.0, opt-in
-anomaly telemetry, full contract in `docs/telemetry.md`). All are `#!/usr/bin/env bash`,
-`set -u`, safe to re-run.
+Every deterministic (model-free) gate and helper VULYK runs on. Four families: the cycle's state
+machine (`cycle.sh` + `lib.sh` + `journal.sh`; see `memory/map/cycle.md`), the report-only gates
+(`ship-check.sh`, `human-check.sh`, `acceptance-log.sh`, `scope-check.sh`, `wave-check.sh`,
+`trace-check.sh`, `release-check.sh`), `telemetry.sh` (opt-in anomaly telemetry,
+`docs/telemetry.md`) and `token-report.py` (spend per spec, 0.18). Shell scripts are
+`#!/usr/bin/env bash`, `set -u`, safe to re-run.
 
 ## Entry points
-- `cycle.sh <verb> <spec-dir> [...]` - the council's own CLI (below). Called by `cycle-clerk`
-  (Workflow driver) and directly by `/vulyk-build`, `/vulyk-review`, `/vulyk-plan`,
-  `/vulyk-pause`, `/vulyk-resume` (fallback driver / on-demand round).
-- `journal.sh <spec-dir> <stage> "<what>" "<next>"` - appends+prints one line to
-  `<spec-dir>/journal.md`; called by `cycle.sh` itself and by `/vulyk-build` step 1 (the
-  "tree is not yours" line) and `/vulyk-plan` step 9 (the approval path, the default).
-- `lib.sh` - sourced only, never run (`. "$(dirname "$0")/lib.sh"`); no `exit` in it.
-  Consumed by `cycle.sh`, `ship-check.sh`, `human-check.sh`, `acceptance-log.sh`,
-  `release-check.sh`.
-- `ship-check.sh <spec-dir>` / `--record <spec-dir> <version> [note]` - stage 06 gate, run by
-  `/vulyk-ship` step 1 and 4.
-- `human-check.sh <spec-dir> <ACCEPTED|REJECTED> [note]` / `--check <spec-dir>` - the owner's
-  override record; not in any command file's auto-path, run by the Queen after the owner
-  answers, or by `/vulyk-ship`'s STALE-check narrative.
-- `acceptance-log.sh <spec-dir> <ACCEPTED|REJECTED|CANNOT_RUN> [note]` / `--check` - **legacy**:
-  the pre-council stage-04 ledger (`drone-acceptance`, removed this release). `judge` never
-  calls it; `ship-check.sh` falls back to it only for specs with no `council.jsonl` row.
-- `scope-check.sh <story-file> [git-diff-range]` - called by `cycle.sh cmd_close_story`
-  (always, not optional).
-- `wave-check.sh <spec-dir>` - called by `/vulyk-plan` step 7, `/vulyk-build`'s `build:<wave>`
-  action (pre-dispatch), and after every repair round.
-- `trace-check.sh <spec-dir>` - called by `/vulyk-plan` step 7 and after a plan delta.
-- `release-check.sh [target-count]` - standalone meter for the 1.0.0 bar; no caller in
-  `.claude/`, run by hand.
-- `top-model.sh` / `--explain` / `--apply` / `--check` - resolves `fable`|`opus` from
-  `~/.claude.json` `oauthAccount`; `--apply` pins `.claude/settings.local.json`. Called by
-  `/vulyk-bootstrap` (unconditional `--apply` now, v0.12.0), `/vulyk-build`, `/vulyk-review`,
-  `/vulyk-status`, `.claude/hooks/top-model-brief.sh` (SessionStart).
-- `redact.sh` - stdin->stdout secret mask; wired into `session-end-learnings.sh` and
-  `handoff.py`, and into `/vulyk-plan` step 2 before a brief is written.
-- `state.sh [spec-dir]` - writes gitignored `.claude/state.json` (derived story-status view).
-  Read by `/vulyk-status`; never by `cycle.sh` (which derives its own story counts).
-- `vulyk-update.sh [dir] [--check] [--version X]` - upgrade installer wrapper, `set -euo
-  pipefail`; hands off to a fetched release's own `install.sh --upgrade`. Run by hand /
-  the update-check hook's prompt.
-- `git-hooks/post-merge` (sample, not auto-installed) - stamps `memory/map/.stale` after a
-  merge; `/vulyk-status` step 4 checks for it.
-- `telemetry.sh <verb>` (v0.14.0) - `enum` (the 8 codes) / `agents` (the fixed agent-token set,
-  `other` catch-all) / `consent` (reads the `CLAUDE.md` Profile `Telemetry` row, first token
-  only, default `off`) / `record <code> <value> <threshold> [--spec][--story][--ref][--model]
-  [--tier][--agent]` (appends a 12-key row to `memory/stats/anomalies.jsonl`, deduped on
-  `(code,ref)`) / `scan [--transcript <path>] [--final]` (runs the five detectors below; `--final`
-  = SessionEnd, gates `agent_empty`) / `bundle [--week YYYY-Www] [--out <file>]` (local rows ->
-  10-key bundle rows, no `ts`/`spec`/`story`/`ref`; no `--week` = previous+current ISO week) /
-  `check <file>...` (the schema+anonymization gate, always exit reflects pass/fail unlike the
-  other gates) / `publish [--week][--dry-run]` (never sends - writes/`check`s a bundle then
-  PRINTS a copy recipe; local-checkout copy+commit recipe or fork-and-PR recipe, decided by
-  `local_vulyk_repo()`) / `inbox [--clear]` (VULYK-repo-only: `check`s every
-  `telemetry/inbox/<week>/<hive>.jsonl`, prints `<week> <code> <rows> <hives>` counts,
-  `--clear` **stages** `git rm` of emptied week dirs - never commits). Called by
-  `.claude/hooks/anomaly-scan.sh` (`scan`), `/vulyk-build`/`/vulyk-resume` (`record
-  driver_refused`/`driver_relaunched`), `/vulyk-evolve` (`inbox`, the 7-day check-in), and by
-  hand (`publish`).
+- `cycle.sh <verb> <spec-dir> [...]` - the cycle's CLI. Callers: the Queen's own Bash (solo
+  `/vulyk-build` at Tier 1-2, `/vulyk-review`, `/vulyk-plan` `briefed`, `/vulyk-pause`/`resume`),
+  `cycle-clerk` for the Workflow driver (only `advance`, `status`, `release`), workers
+  (`close-story`). `advance` is the loop's one stepping verb since 0.18.
+- `journal.sh <spec-dir> <stage> "<what>" "<next>"` - appends one line to `journal.md`; called by
+  `cycle.sh`, `/vulyk-build` (hive launch line) and `/vulyk-plan` (approval line).
+- `lib.sh` - sourced only. `is_story_file` :16, `pack_fingerprint` :27, `is_paperwork_path` :54,
+  `paperwork_only` :68, `marker` :82, `constitution_file` :94 (`CLAUDE.vulyk.md` if present, else
+  `CLAUDE.md` - every constitution read goes through it), `command_cell_exists` :98,
+  `verification_segments` :114, `profile_value` :125, `client_path_filled` :142, `now_ts`, `slug_of`.
+- `ship-check.sh <spec-dir>` / `--record <spec-dir> <version> [note]` - stage 06, `/vulyk-ship` 1, 4.
+- `human-check.sh <spec-dir> <ACCEPTED|REJECTED> [note]` / `--check` - the owner's override.
+- `acceptance-log.sh` - **legacy** pre-council ledger; `ship-check.sh`'s fallback only.
+- `scope-check.sh <story-file> [range]` - run by `close-story`. Without a range it also excludes
+  the `## Files` (and story files) of not-done sibling stories of the same spec (:27, :103-115).
+- `wave-check.sh <spec-dir>` - `/vulyk-plan` step 7 only (not re-run by the build). Classes include
+  `no-verify`, `verify-gap`, and `verify-cell` (:29): a `## Verification` segment that is not a
+  `## Commands` cell of `constitution_file`.
+- `trace-check.sh <spec-dir>` - `/vulyk-plan` step 7. A `## Requirements` quote may match the
+  brief, a plan delta, or a `## Asks` item (:52-56, what repair stories quote).
+- `token-report.py <project> [--spec <slug>] [--since YYYY-MM-DD] [--json] [--projects-root]` -
+  reads `~/.claude/projects/<encoded>/` (main sessions, subagents incl. workflow agents, Workflow
+  run records) + `memory/stats/council.jsonl`. Dedupes by `message.id`; raw = input + write + read
+  + output; weighted = input + 1.25×write5m + 2×write1h + 0.1×read + output; never uses Workflow
+  `totalTokens`. Attribution `slug_named_by` :104 / `collect` :258; output `print_human` :460.
+  Called by `/vulyk-status` (14 days) and `/vulyk-evolve` (7 days). Stdlib only.
+- `release-check.sh [count]` - the 1.0.0 meter, by hand.
+- `top-model.sh` / `--explain` / `--apply` / `--check` - resolves the gate alias from
+  `~/.claude.json`; `--apply` pins the Queen to `opus`. Callers: `/vulyk-bootstrap`, `/vulyk-plan`
+  (Tier 4), `/vulyk-build` (hive), `/vulyk-status`, `top-model-brief.sh`.
+- `redact.sh` - stdin→stdout secret mask; used by `/vulyk-plan` (brief.md), `handoff.py`, and the
+  note writers in `cycle.sh` (`redact_note` :106), `human-check.sh`, `ship-check.sh`,
+  `acceptance-log.sh`.
+- `state.sh [spec-dir]` - gitignored `.claude/state.json`, read by `/vulyk-status` only.
+- `vulyk-update.sh [dir] [--check] [--version X] [--telemetry ..] [--constitution replace]` -
+  fetches a release and hands off to its own `install.sh --upgrade`, passing `--constitution
+  replace` through.
+- `git-hooks/post-merge` (sample) - stamps `memory/map/.stale`.
+- `telemetry.sh <verb>` - `enum` (8 codes), `agents` (fixed token set incl. retired
+  `council-sonnet`, then `other`), `consent`, `record`, `scan [--final]`, `bundle`, `check`,
+  `publish [--dry-run]` (prints a recipe, never sends), `inbox [--clear]` (VULYK repo only).
+  Callers: `.claude/hooks/anomaly-scan.sh` (SessionEnd only since 0.18), `/vulyk-build`
+  (`driver_refused` when the Workflow call throws), `/vulyk-resume` (`driver_relaunched`),
+  `/vulyk-evolve`.
 
-## Key types / contracts (telemetry.sh)
-- Two schemas (`docs/telemetry.md`): the **local row**, 12 keys incl. `ts/spec/story/ref`,
-  committed to `memory/stats/anomalies.jsonl`; the **bundle row**, 10 keys, codes and numbers
-  only. `check`'s anonymization guard runs first: any string value matching `[/\\@]` or
-  whitespace fails the row, before any shape check.
-- The five detectors `scan` runs: `detect_context` (main-thread tokens vs
-  `VULYK_ANOMALY_CONTEXT_PCT`/`_TOKENS`, via `handoff.sh measure`), `detect_agents`
-  (`agent_prefix_high`/`agent_empty` from each `agent-*.jsonl`, cached in the gitignored
-  per-session seen-list `.vulyk/telemetry/seen/<sid>` keyed by basename+byte-size so an
-  unchanged subagent file is never re-measured), `detect_council` (max round per spec in
-  `council.jsonl`), `detect_stage` (gap between consecutive `journal.md` lines, one awk pass, no
-  `date` spawn per line), `detect_scope` (`scope.jsonl` rows with non-zero `out_of_scope`, one
-  row per story). `SCAN_SEEN` (loaded once per `scan` from `anomalies.jsonl`) short-circuits
-  every detector before it calls `record`.
-- The 8-code `ENUM` is a public contract - append-only, never renamed/removed. The `AGENTS`
-  token set is fixed in this script (not read from `.claude/agents/`) so an owner-added agent
-  never becomes free text in a bundle; anything unrecognized folds to `other`. `MODELS` = the
-  four cascade rungs.
-
-## Key types / contracts
-- Every `cycle.sh` verb's **last stdout line**, on every exit code, is one JSON object
-  `{"ok":bool,"verb":"...","exit":N,"next":"...","error":"..."}` (`emit()`, line 55) - no
-  driver ever parses prose. `status --json` prints only that object (the full status object,
-  see `cycle.md`). `record-seat`'s `--file <path>` (v0.13.1) takes precedence over stdin; a
-  missing/unreadable/empty file is checked before anything is written and emits
-  `error: "file: <path>"` at exit 2 (both drivers fall back to the stdin heredoc on that exit).
-- Exit codes (`cycle.sh`): 0 ok (RED verdict from `judge` is ok:true too) - 1 usage -
-  2 precondition (stderr names it) - 3 paused - 4 `record-seat` MALFORMED / `close-story` red
-  verification only - 5 stale - 6 escalate.
-- The other gates (`ship-check.sh`, `human-check.sh`, `acceptance-log.sh`, `release-check.sh`,
-  `state.sh`, `trace-check.sh`, `wave-check.sh`, `redact.sh`) always `exit 0` - they report,
-  they never block; refusal is the calling command's job. `telemetry.sh check` is the one
-  verb outside `cycle.sh` whose exit code carries meaning (non-zero on any row that fails the
-  schema/anonymization gate) - every other `telemetry.sh` verb is fail-open (`scan` exits 0
-  with no `jq` or no `--transcript`; `publish` exits 0 on consent `off`).
-- `lib.sh` exports: `pack_fingerprint <spec-dir>` (sha256 of sorted story-file basenames,
-  12 hex chars), `is_paperwork_path <repo-relative-path>` (the one whitelist: `plan.md`,
-  `journal.md`, `council/*`, `brief.md` under `docs/specs/*/`, plus **six**
-  `memory/stats/*.jsonl` files - `human`, `acceptance`, `ship`, `council`, `scope`, and
-  `anomalies` (v0.14.0, joined the set because `telemetry.sh record` writes it) - plus, since
-  v0.15.0/ADR-011, `memory/stats/skills.json` (not cycle-owned but hook-written, so a commit
-  touching only it never stales a round) and `memory/learnings/*.md` one level deep only (a
-  `/` past `learnings/<name>.md` fails the predicate)), `paperwork_only <root> <from> <to>`
-  (every caller - `open-round`'s own dirty-tree guard, `ship-check.sh`'s and
-  `human-check.sh`'s staleness checks - inherits both new paths through this one function,
-  ADR-011 D2), `marker <plan.md>
-  <Name>` (a `**Name:**` line's value, empty if placeholder `<...>`), `now_ts`, `slug_of`.
+## Key contracts
+- `cycle.sh`: last stdout line is one JSON object on every exit; exits 0 ok · 1 usage ·
+  2 precondition · 3 paused · 4 malformed report / red verification · 5 stale · 6 escalate.
+- The other gates always exit 0 and report; refusal is the calling command's job.
+  `telemetry.sh check` is the one non-cycle verb whose exit code carries meaning.
+- `is_paperwork_path` whitelist: `docs/specs/*/{plan.md,journal.md,brief.md,council/*}`,
+  `memory/stats/{human,acceptance,ship,council,scope,anomalies}.jsonl`, `memory/stats/skills.json`,
+  `memory/learnings/*.md` (one level), `VERSION`, `CHANGELOG.md` (0.18). `paperwork_only`,
+  `open-round`'s and `claim`'s dirty-tree checks, and the staleness checks all go through it.
+- `telemetry.sh` `ENUM` and `AGENTS` are append-only public contracts; bundle rows have 10 keys,
+  codes and numbers only; `check`'s anonymization guard runs first.
 
 ## Dependencies
-- inbound: `cycle-clerk` agent (Bash, the Workflow driver's only shell access);
-  `/vulyk-build`, `/vulyk-plan`, `/vulyk-review`, `/vulyk-ship`, `/vulyk-pause`,
-  `/vulyk-resume`, `/vulyk-status`, `/vulyk-bootstrap` command files; `.claude/hooks/
-  top-model-brief.sh` (SessionStart).
-- outbound: `cycle.sh` shells to `git` (worktree add/remove/prune, rev-parse, status,
-  diff, commit), sources `lib.sh`, execs `journal.sh` and `scope-check.sh`; reads/writes
-  `memory/stats/council.jsonl`, `memory/stats/human.jsonl` (read-only override check),
-  `docs/specs/<slug>/{plan.md,brief.md,journal.md,PAUSE,council/}`.
-- `telemetry.sh` inbound: `.claude/hooks/anomaly-scan.sh` (Stop+SessionEnd hooks, `scan`,
-  fail-open/silent); `/vulyk-build` and `/vulyk-resume` command files (`record
-  driver_refused`/`driver_relaunched`); `/vulyk-evolve` (`inbox`, its 7-day check-in);
-  `install.sh` (writes/reads the `CLAUDE.md` Profile `Telemetry` row `cmd_consent` reads, wires
-  the hook via `wire_hook`). `telemetry.sh` itself shells to `handoff.sh measure` (context/
-  agent-prefix token counts, fails open), `git rm` (`inbox --clear` only), reads
-  `memory/stats/{council,scope}.jsonl` and `docs/specs/*/journal.md` for its detectors, and
-  never shells to `git push`/`git commit`/`gh` anywhere in the file.
+- inbound: the commands above; `cycle-clerk`; `.claude/hooks/top-model-brief.sh`,
+  `anomaly-scan.sh`; `install.sh` (Telemetry row, hook wiring).
+- outbound: `cycle.sh` → `git` (worktree, rev-parse, status, diff, commit), `lib.sh`,
+  `journal.sh`, `scope-check.sh`, `redact.sh`, GNU `timeout` when it works; `telemetry.sh` →
+  `handoff.sh measure`, `git rm` (`inbox --clear` only), never `git push`/`commit`/`gh`.
+
+## install.sh (1150 lines) - the upgrade contract
+- `--upgrade [--check] [--constitution replace]`. A plain upgrade never writes the constitution:
+  `print_migrate_hint` :373 prints the size difference and the replace command.
+  `replace_constitution` :395 renders the release's `CLAUDE.md` with the hive's `VULYK:PROFILE` and
+  `VULYK:COMMANDS` block bodies (`render_constitution` :312), keeps the old file as
+  `<name>.pre-<major.minor>.md` (`constitution_backup` :337), refuses a file without the markers.
+- Retired framework files (in the old manifest, gone from the release) are removed unless edited
+  since the previous version shipped them (`retired_edited` :918) - `council-sonnet.md`,
+  `session-end-learnings.sh` in 0.18. `unwire_hook` :739 drops `anomaly-scan.sh` from `Stop` and the
+  learnings hook from `SessionEnd` (only if that file went).
+- `ensure_gitignore` :843 adds `.vulyk/`, `.claude/worktrees/`, `PAUSE`, `DRIVER` and others;
+  `clean_seeded_council` :964; `memory/stats/{council,anomalies}.jsonl` never ship.
 
 ## Gotchas
-- `record-seat`'s taint/MALFORMED checks, `close-story`'s verification-command whitelist
-  (must equal a literal cell of the root `CLAUDE.md` `## Commands` table, or the exact string
-  `none — reviewed by lead-review`), and `is_paperwork_path`'s anchoring to `docs/specs/*/`
-  are all security-relevant string matches - a change to any one must stay anchored the same
-  way or the whitelist silently widens.
-- Taint (`taint_reason()` in `cycle.sh`, ADR-011 D4) is a path to a hidden file - a story
-  *file* (`<slug>-NN.md`/`<slug>-NN-<title>.md`/`<slug>/<slug>-NN[.md]`, with or without a
-  `docs/specs/` prefix), `plan.md`, `journal.md` or `council/` under the slug. A bare
-  `<slug>-NN` token with no `.md` and no `<slug>/` prefix (e.g. echoed in a seat's own `run:`
-  line) is **not** taint - see `memory/map/cycle.md` for the full pattern.
-- `acceptance-log.sh` and `drone-acceptance` are **not the same generation** as the council:
-  the agent is gone, the script is kept only as `ship-check.sh`'s fallback for specs recorded
-  before v0.12.0. Do not route new specs through it.
-- `state.sh` and `.claude/state.json` are gitignored and derived - never read as truth by
-  `cycle.sh` (which recomputes story counts itself from frontmatter on every `status` call).
-- `cmd_release` (`release <spec> <stamp>`) is **not** `pause_guard`-ed (v0.13.1, ADR-001 D2's
-  exempt list is `status`, `pause`, `resume`, `release`) - it must clear a dead driver's
-  `DRIVER` semaphore even while the spec is paused; exit 2 only if a different stamp holds it.
-- `telemetry.sh`'s `ENUM` and `AGENTS` sets are append-only public contracts: a code is never
-  renamed/removed (older hives' bundles must still validate), and `AGENTS` is a **fixed list in
-  this script**, not derived from `.claude/agents/` - an owner-added agent under that directory
-  is legal on the hive side but reported as `other` here; `tests/telemetry.test.sh` guards the
-  list against drift from the real roster.
-- `telemetry.sh publish` and `bundle` never send anything themselves - `publish` at most copies
-  a checked bundle into a local checkout's `telemetry/inbox/` and prints a recipe; no `git
-  push`/`git commit`/`gh` call exists in the file, by design not by flag (file header comment).
-- `install.sh` (v0.17.0): `memory/stats/council.jsonl` is excluded from the copy like
-  `anomalies.jsonl` (per-hive runtime ledger); `--upgrade` runs `clean_seeded_council`, which
-  drops only `"spec":"autonomous-cycle"` rows, skips a hive that has
-  `docs/specs/autonomous-cycle/`, and only reports under `--check`.
-- `cycle.sh`'s ceiling default is `tier_ceiling` (1/2/3/3), not a flat 3 - see `cycle.md`.
-- `telemetry/` (the inbox) is VULYK-repo-only - `install.sh`'s `copy_tree` does not walk it, so
-  a hive's own history lives only in its `memory/stats/anomalies.jsonl`.
+- `close-story`'s `## Commands` cell match, `record-seat`'s taint and `is_paperwork_path`'s
+  anchoring are security-relevant string matches: keep them anchored.
+- `close-story`'s timeout wrapper probes `timeout 5 true` first: on Windows a PATH `timeout` can
+  be the cmd.exe one; without a working GNU `timeout` verification runs unbounded.
+- `state.sh` output is derived; `cycle.sh` never reads it.
+- `release` is not PAUSE-guarded, so a dead driver's `DRIVER` stamp can always be cleared.
+- `telemetry/` (the inbox) is VULYK-repo-only; `copy_tree` never ships it.
 
-last-verified: 2026-09-24 (v0.17.0: install.sh council.jsonl, ceiling pointer only)
+last-verified: 2026-09-27 (v0.18.0, ADR-013)

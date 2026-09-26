@@ -77,11 +77,18 @@ jobs:
           CLAUDE_PROJECT_DIR="$t/proj" VULYK_CLAUDE_CONFIG="$t/max20.json" bash scripts/top-model.sh --apply
           CLAUDE_PROJECT_DIR="$t/proj" VULYK_CLAUDE_CONFIG="$t/max20.json" bash scripts/top-model.sh --check || { echo "::error::--check failed after --apply"; fail=1; }
           grep -q '"Bash(ls:\*)"' "$t/proj/.claude/settings.local.json" || { echo "::error::--apply lost the owner's permissions"; fail=1; }
-          grep -q '"model": "fable"' "$t/proj/.claude/settings.local.json" || { echo "::error::--apply did not pin fable"; fail=1; }
+          # --apply pins the Queen's own session, which runs on opus whatever the plan (ADR-012)
+          grep -q '"model": "opus"' "$t/proj/.claude/settings.local.json" || { echo "::error::--apply did not pin the Queen to opus"; fail=1; }
+          # --explain names what the gate model is dispatched for (ADR-013 D3)
+          explain="$(CLAUDE_PROJECT_DIR="$t/proj" VULYK_CLAUDE_CONFIG="$t/max20.json" bash scripts/top-model.sh --explain)"
+          echo "$explain" | grep -q "^dispatched for: the Tier 4 lead-review" || { echo "::error::--explain does not name the Tier 4 lead-review: $explain"; fail=1; }
+          echo "$explain" | grep -q "lead-review at Tier 1-3 runs on its frontmatter (opus)" || { echo "::error::--explain does not say Tier 1-3 review runs on opus"; fail=1; }
           # the hook says the same thing in one line, and says nothing where the resolver is absent
           mkdir -p "$t/proj/scripts" && cp scripts/top-model.sh "$t/proj/scripts/"
           line="$(CLAUDE_PROJECT_DIR="$t/proj" VULYK_CLAUDE_CONFIG="$t/pro.json" bash .claude/hooks/top-model-brief.sh)"
-          echo "$line" | grep -q '^\[VULYK\] top model: opus' || { echo "::error::hook line wrong: $line"; fail=1; }
+          echo "$line" | grep -q '^\[VULYK\] gate model: opus' || { echo "::error::hook line wrong: $line"; fail=1; }
+          echo "$line" | grep -q 'for the Tier 4 lead-review' || { echo "::error::hook line does not scope the gate to Tier 4: $line"; fail=1; }
+          echo "$line" | grep -q 'lead-review at Tier 1-3 and everything else run on their frontmatter' || { echo "::error::hook line does not say Tier 1-3 review runs on opus: $line"; fail=1; }
           rm "$t/proj/scripts/top-model.sh"
           [ -z "$(CLAUDE_PROJECT_DIR="$t/proj" bash .claude/hooks/top-model-brief.sh)" ] || { echo "::error::hook spoke without a resolver"; fail=1; }
           # the hook never spawns the CLI for the Workflow line - a fake `claude` on PATH must sit untouched
@@ -136,8 +143,14 @@ jobs:
         with:
           node-version: 22
 
-      - name: real parse, real foldReviews, stubbed loop scenarios
+      - name: real parse, advance-based loop, stubbed loop scenarios
         run: bash tests/driver.test.sh
+
+      - name: end to end - the real driver against the real cycle.sh in a fixture repo
+        run: bash tests/e2e.test.sh
+
+      - name: the solo path - Tier 1-2 advance loop the Queen runs herself
+        run: bash tests/solo.test.sh
 
   telemetry-inbox:
     name: telemetry.sh suite + check every inbox bundle
@@ -157,6 +170,19 @@ jobs:
           else
             bash scripts/telemetry.sh check "${files[@]}"
           fi
+
+  token-report:
+    name: token-report.py over fixture transcripts (ADR-013 D8)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guarded: the suite arrives with scripts/token-report.py in the same release, and a tree
+      # without it must not turn this job red.
+      - name: token-report.test.sh (when present)
+        run: |
+          if [ -f tests/token-report.test.sh ]; then bash tests/token-report.test.sh
+          else echo "tests/token-report.test.sh not in this tree - skipped"; fi
 
   install-smoke:
     name: install.sh dry-run smoke test
@@ -197,6 +223,7 @@ jobs:
           # ADR-005 D4.1: vulyk's own ADRs/wiki are never planned to ship
           echo "$out" | grep -q "would copy.*docs/adr/" && { echo "::error::--check planned to copy docs/adr/"; exit 1; }
           echo "$out" | grep -q "would copy.*docs/wiki/" && { echo "::error::--check planned to copy docs/wiki/"; exit 1; }
+          true
 
       - name: real install into a clean dir produces a runnable hive
         run: |
@@ -376,25 +403,30 @@ jobs:
           [ "$before" = "$(md5sum "$target/CLAUDE.md")" ] || { echo "::error::--check wrote the Telemetry row"; exit 1; }
           echo "$out" | grep -q "would set      CLAUDE.md Profile row: Telemetry" || { echo "::error::--check did not report the pending Telemetry row"; exit 1; }
 
-      - name: --upgrade wires anomaly-scan.sh on Stop and SessionEnd, idempotently
+      - name: --upgrade wires anomaly-scan.sh on SessionEnd only and unwires what 0.18 retired, idempotently (ADR-013 D7)
         run: |
           target="$(mktemp -d)"
           ./install.sh "$target" >/dev/null
-          jq '.hooks.Stop = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop"}]}] | del(.hooks.SessionEnd)' \
+          # a 0.17-shaped settings.json: the scan on Stop, the learnings hook on SessionEnd
+          jq '.hooks.Stop = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop"},{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh"}]}]
+              | .hooks.SessionEnd = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/session-end-learnings.sh"}]}]' \
             "$target/.claude/settings.json" > "$target/s.json" && mv "$target/s.json" "$target/.claude/settings.json"
           out="$(./install.sh "$target" --upgrade)"
-          echo "$out" | grep -q "wire           .claude/settings.json -> Stop: anomaly-scan.sh" || { echo "::error::--upgrade did not wire anomaly-scan.sh on Stop"; exit 1; }
+          echo "$out" | grep -q "unwire         .claude/settings.json -> Stop: anomaly-scan.sh" || { echo "::error::--upgrade did not unwire anomaly-scan.sh from Stop"; exit 1; }
+          echo "$out" | grep -q "unwire         .claude/settings.json -> SessionEnd: session-end-learnings.sh" || { echo "::error::--upgrade did not unwire the learnings hook"; exit 1; }
           echo "$out" | grep -q "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh" || { echo "::error::--upgrade did not wire anomaly-scan.sh on SessionEnd"; exit 1; }
-          jq -e '([.hooks.Stop[].hooks[].command | select(test("anomaly-scan.sh"))] | length == 1) and
+          jq -e '([.hooks.Stop[].hooks[].command | select(test("anomaly-scan.sh"))] | length == 0) and
                  ([.hooks.SessionEnd[].hooks[].command | select(test("anomaly-scan.sh"))] | length == 1) and
+                 ([.hooks[][].hooks[].command | select(test("session-end-learnings"))] | length == 0) and
                  ([.hooks.Stop[].hooks[].command | select(test("handoff.sh stop"))] | length == 1)' \
             "$target/.claude/settings.json" >/dev/null \
-            || { echo "::error::anomaly-scan.sh is not wired exactly once per event, or an existing entry was lost"; exit 1; }
+            || { echo "::error::settings.json is not SessionEnd-only for the scan, still wires the learnings hook, or lost an existing entry"; exit 1; }
           before="$(md5sum "$target/.claude/settings.json")"
           ./install.sh "$target" --upgrade >/dev/null
           [ "$before" = "$(md5sum "$target/.claude/settings.json")" ] || { echo "::error::a second --upgrade re-wrote settings.json"; exit 1; }
           out3="$(./install.sh "$target" --upgrade --check)"
-          echo "$out3" | grep -q "would wire     .claude/settings.json -> Stop" && { echo "::error::--check reported wiring an already-wired hook"; exit 1; }
+          echo "$out3" | grep -q "would wire     .claude/settings.json -> SessionEnd" && { echo "::error::--check reported wiring an already-wired hook"; exit 1; }
+          echo "$out3" | grep -q "would unwire" && { echo "::error::--check reported unwiring an already-unwired hook"; exit 1; }
           true
 
       - name: --upgrade restores a missing Profile block, at the right position (ADR-005 D4.7)
