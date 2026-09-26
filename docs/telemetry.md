@@ -19,7 +19,7 @@ is local history, not a send.
 | `agent_empty` | a subagent transcript whose last assistant entry has no text block (cap death / empty return), recorded on `SessionEnd` only | assistant entries | 0 |
 | `council_rounds_high` | max `round` per spec in `council.jsonl` at or above threshold | rounds | `VULYK_ANOMALY_COUNCIL_ROUNDS` |
 | `stage_long` | gap between two consecutive `journal.md` lines above threshold | hours (integer) | `VULYK_ANOMALY_STAGE_HOURS` |
-| `driver_refused` | `/vulyk-build` refused (no `Workflow`, no `--fallback`; by-name call threw) | 1 | 0 |
+| `driver_refused` | `/vulyk-build`'s Workflow call threw (since 0.18.0 a session without the Workflow tool runs the loop itself and records nothing) | 1 | 0 |
 | `driver_relaunched` | `/vulyk-resume` relaunched the driver fresh | 1 | 0 |
 | `scope_breach` | a `scope.jsonl` row with non-empty `out_of_scope`, one row per story (first breach wins) | out-of-scope path count | 0 |
 
@@ -30,8 +30,9 @@ overrides it, and every local row records the threshold it was checked against.
 ### The agent token
 
 `agent_prefix_high` and `agent_empty` rows carry an `agent` token from a fixed list shipped in
-`scripts/telemetry.sh` - the framework agent names, e.g. `worker-code`, `council-sonnet` - the
-same list on every machine. Any other agent, including one you add under `.claude/agents/`, is
+`scripts/telemetry.sh` - the framework agent names, e.g. `worker-code`, `lead-review` - the
+same list on every machine. A retired agent stays on it (`council-sonnet`, retired in 0.18.0), so
+an older hive's bundle still validates. Any other agent, including one you add under `.claude/agents/`, is
 reported as `other`, and so is the free-form dispatch `name`, which is owner-chosen text and
 could carry a story name. Print the list with `bash scripts/telemetry.sh agents`. Every other
 code carries an empty `agent`.

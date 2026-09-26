@@ -1,11 +1,13 @@
 # The token economy
 
-Every rule in the constitution's *Token economy* section has a price behind it. This document is
-that price list. Read it once; after that the rules should feel obvious rather than arbitrary.
+Every choice in VULYK's shape — who builds at which tier, how many agents a round dispatches, what
+each subagent loads — has a price behind it. This document is that price list. Read it once;
+after that the rules should feel obvious rather than arbitrary.
 
 Source for the mechanics: Anthropic's
 [Maximizing the value of your Claude Code sessions](https://claude.com/blog/maximizing-the-value-of-your-claude-code-sessions).
-The framework-specific consequences below are ours.
+The framework-specific consequences below are ours; the measured numbers come from the
+[token audit](specs/token-audit/report.md) (1,844 sessions, 13–26 September 2026).
 
 ## Not all tokens cost the same
 
@@ -31,34 +33,40 @@ in the request changes:
 | Event | Effect |
 |---|---|
 | `/model` mid-session | Each model has its own cache — the whole conversation re-prefills at full price |
-| `/effort` mid-session | Part of the cache key; same full re-prefill |
+| `/effort` mid-session | Keeps the cache on Opus 5.5 and Fable 5.1 (a per-message effort change); on other models, and on Bedrock/Vertex, a full re-prefill |
 | Fast mode toggled | Part of the cache key; re-prefill, and turning it *on* is what costs |
 | `/compact` | The conversation is replaced, so nothing matches (the system prompt survives) |
-| Time | Subscription: **1 h**. API key: **5 min**, unless `ENABLE_PROMPT_CACHING_1H=1` |
+| Time, main session | Subscription: **1 h**. API key or usage credits: **5 min**, unless `ENABLE_PROMPT_CACHING_1H=1` |
+| Time, subagents and Workflow agents | **5 min** on every plan, Max included; `subagentPromptCacheTtl` raises it, and a 1 h write bills higher |
 | Resuming an old session | The cache is normally gone by then |
 
 `/rewind` is the exception worth knowing: it cuts turns off the *end*, so everything before the cut
 stays cached. Prefer it over `/compact` when you only need to undo the last few turns.
 
-Two operational consequences:
+Three operational consequences:
 
-- **Set `/model` and `/effort` once, at the start of a session.** Toggling either mid-flight can
-  cost more than the setting saves.
+- **Set `/model` once, at the start of a session.** Toggling it mid-flight can cost more than the
+  switch saves. `/effort` is free to change on Opus 5.5 and Fable 5.1, not elsewhere.
 - **Checkpoint while the cache is still warm.** `/compact` and `/vulyk-handoff` both re-read the
   conversation; inside the 1 h window that read is a cache hit, after it, full price. If you are
-  going for lunch, compact *before* you go, not after.
+  going for lunch, compact *before* you go, not after. The audit counted 58 full re-writes of the
+  Queen's cache after she sat idle for over an hour waiting on a long run: 25M weighted tokens.
+- **A subagent that waits more than five minutes pays for its whole context again.** A worker or
+  reviewer idle on a ten-minute suite re-writes its cache on its next request. That is one
+  reason `close-story` runs verification once, under a 540 s timeout, instead of the worker
+  running the suite and then `close-story` running it again.
 
 ## Why the cascade is cache-safe and `/model` is not
 
-A subagent gets its own context window, its own turns, and its own system prompt, tools and
-`CLAUDE.md` — but **not your conversation**. Only its final answer comes back; everything it read
-along the way is discarded with it.
+A subagent gets its own context window, its own turns, and its own system prompt and tools — but
+**not your conversation**. Only its final answer comes back; everything it read along the way is
+discarded with it.
 
-That is the whole trick behind VULYK's routing. Sending implementation to Sonnet through
-`model: sonnet` in `.claude/agents/worker-code.md` costs the main session nothing in cache terms:
-the Queen's prefix is untouched, and the worker's own prefill happens in a context you never pay to
-re-send. Doing the same thing by typing `/model sonnet` in the main session would re-prefill the
-entire conversation at full price and hand every later turn back to the wrong model.
+That is the whole trick behind VULYK's routing. The black-box seat runs on Sonnet through
+`model: sonnet` in `.claude/agents/council-haiku.md`, and that costs the main session nothing in
+cache terms: the Queen's prefix is untouched, and the seat's own prefill happens in a context you
+never pay to re-send. Doing the same thing by typing `/model sonnet` in the main session would
+re-prefill the entire conversation at full price and hand every later turn back to the wrong model.
 
 **So: route with agent frontmatter, never with `/model`.** This applies to the Tier 4 second
 reviewer too — a reviewer on a different model is a second *subagent*, not a session model switch.
@@ -67,36 +75,70 @@ The same accounting explains when a subagent is *not* worth it. A drone that re-
 the Queen already has in context is pure overhead: it pays a fresh prefill to rediscover what was
 already paid for. Dispatch is a win when the report **replaces** reading that would otherwise land
 in the Queen's window — which is exactly the recon and noisy-output cases, and exactly not the
-"look up one symbol I already have open" case.
+"look up one symbol I already have open" case. It is also why the Queen builds Tier 1-2 herself:
+a small change costs less in the session that already holds the plan than in a worker that has
+to load it again.
 
-## The cost of the council (v0.13.0)
+## What every subagent loads before it starts
 
-An estimate, not a measured number - `memory/stats/council.jsonl` is where the real figure
-accumulates. Per round, by tier (ADR-002/007): Tier 1 - one cold-cache `council-sonnet`; Tier 2 -
-`council-sonnet` + `lead-review` at the gate model; Tier 3-4 - plus `council-opus` and the
-black-box seat; Tier 4 - plus a second reviewer. Add roughly 5 `cycle-clerk` calls (junior rung,
-one verb each). On a RED verdict, add one `queen-planner` dispatch (Opus 5.5; the gate model at Tier 4) plus the
-repair wave. The first recorded spec (Tier 4, v0.12) took three rounds to green with the black-box
-seat returning `N/A` every time - its Profile's *Client path* row was unfilled, so it had nothing
-to walk: a hive that leaves that row blank pays for a seat that can only say `N/A`. v0.13 also
-stopped running the whole suite in `lead-review` on top of `close-story` and `council-sonnet`.
+A subagent does not see your conversation, but it does load every level of `CLAUDE.md` the main
+session loads — `~/.claude/CLAUDE.md`, the project's `CLAUDE.md` and everything it imports,
+`AGENTS.md`, `.claude/rules/` — plus a git-status snapshot, and it writes all of that to a fresh
+5-minute cache of its own. The audit measured a subagent's first request at **27–36k tokens**
+(48k for `council-haiku`, whose browser MCP schemas ride along), about 85% of it that instruction
+bundle, re-read on every turn. The bundle was **23% of all spend**.
 
-**Where the money went before v0.13** - read against the framework's own text, not a guess:
-the plan launched the build with no approval stop; a request whose answer was a document was
-cut into stories anyway; up to seven agents ran before the first line of code; the same suite
-ran up to four times - twice per story (worker, `close-story`) and twice per round
-(`council-sonnet`, `lead-review`). ADR-008 records each fix.
+Two things answer it (changed in 0.18.0, ADR-013 D7):
 
-The fallback driver (Workflow unavailable) pays the same dispatches and additionally carries
-roughly 120 lines of seat reports per round through the Queen's own long-lived session that is stepping
-the loop itself - the most expensive path in this list, because no phase can be handed to a cheaper
-agent while the Queen's own context is carrying it. `/vulyk-build` therefore refuses it without
-`--fallback`; `/vulyk-status`'s `driver:` line says which path a given hive is on.
+- **`omitClaudeMd: true`** (Claude Code ≥ 2.1.271) on the agents that take everything from their
+  dispatch prompt: `cycle-clerk`, `council-opus`, `council-haiku`, `drone-scout`,
+  `drone-coverage`, `drone-docs`, `librarian`. Workers, `lead-review`, `queen-planner` and
+  `lead-architect` keep the constitution, because they need the host's conventions.
+- **A 7 KB constitution.** Laws, routing, models, Secrets, Profile and Commands only (was 16 KB,
+  and 15–31 KB in hives with a sidecar `CLAUDE.vulyk.md`). The ladder, the cycle and this page
+  live in `docs/` and in the `/vulyk-*` commands, which load only into the Queen. A hive gets
+  this saving only after `install.sh --upgrade --constitution replace`.
+
+## The cost of a spec
+
+**Measured, v0.17.0.** A median task (44 tasks with a cycle) processed **84.9M raw tokens, 13.5M
+weighted** (cache read ×0.1, cache write ×1.25 or ×2, input and output ×1) and dispatched **67
+subagents, 43 of them `cycle-clerk`** — an agent that runs one shell command and returns one line.
+Spend split into near-equal thirds: the Queen 30.5%, workers 30.4%, review machinery 30.7%
+(council seats 13.4%, `lead-review` 9.7%, clerks 7.6%). 82% of specs took two rounds or more; a round cost a median 7.3M raw / 1.46M weighted, and extra
+rounds took **29.5%** of the spend of the tasks that had them.
+**56%** of driver runs stopped before a verdict and were relaunched.
+
+**By design, v0.18.0** (ADR-013; the dispatch counts are the code's, the saving is an estimate):
+
+| Tier | Dispatches per spec, v0.17.0 | v0.18.0, happy path |
+|---|---|---|
+| 1 | 14 (10 clerks) | 1 `lead-review` |
+| 2 | 21–33 | 1–2 `lead-review` (one per round) + at most one scout |
+| 3 | 35–53 | the workers + 2 seats (3 with a *Client path*) per round + 4 clerk calls for a one-wave, one-round run |
+| 4 | 52–73 | as Tier 3, with two reviewers per round and a `lead-architect` consult |
+
+The clerk count fell because the driver calls `cycle.sh advance` once per agent boundary —
+`advance --claim`, `advance` after a wave, `advance --ingest` after a council dispatch, `release` —
+instead of once per verb. Each extra wave or round adds one or two calls. Rounds are cheaper as
+well: a green blind seat is carried forward, and from round 2 `lead-review` reads only the diff
+since the last round. The estimate is −40…55% on a median task.
+
+**Measure it, do not trust the printed figure.** The `totalTokens` a Workflow run prints is the
+sum of each agent's *final* context, not what was processed — about 29 times too low on the median
+task. `python scripts/token-report.py . --spec <slug>` reads the transcripts and prints raw and
+weighted tokens, dispatches by agent type and rounds per spec; `/vulyk-status` and `/vulyk-evolve`
+print its lines.
+
+At Tier 3-4 without the Workflow tool, the Queen runs the same `advance` loop and dispatches with
+the `Agent` tool. The dispatches are the same; the difference is that every seat's reply lands in
+her own long-lived context, so that path costs more.
 
 ## What is in the context before you type anything
 
 Tool definitions, the system prompt, `CLAUDE.md` (and everything it imports), plus every loaded MCP
-server. All of it is re-sent every turn, cached, for the life of the session.
+server. All of it is re-sent every turn, cached, for the life of the session — and, `CLAUDE.md`
+included, into every subagent that does not omit it.
 
 Run `/context` in a fresh session, before your first message, and look at the actual numbers. Then:
 
@@ -132,7 +174,9 @@ a separate session, in another terminal.
 
 Turn 40 re-reads turns 1 through 39. The same work done as one long session costs
 disproportionately more than the same work split across several — which is the arithmetic behind
-`/clear` between tiers, and behind the handoff layer that makes clearing cheap.
+`/clear` between tiers, and behind the handoff layer that makes clearing cheap. It is also why a
+Tier 2 build starts in a fresh session after approval: the build needs the files, not the planning
+conversation.
 
 - `/clear` when switching tasks; `/vulyk-handoff` first if the thread has state worth keeping.
 - `/rename` before `/clear` if you intend to come back to the session.
@@ -149,9 +193,12 @@ prefix has left. See [hooks-reference.md](hooks-reference.md).
 ## The levers, in order of how much they cost
 
 1. **Session length.** Nothing else on this list compounds.
-2. **Context size** — files read, command output, unused MCP servers.
-3. **Model and effort** — they multiply every price above.
-4. **Cache breaks** — mid-session `/model` or `/effort` changes, compaction after the window closed.
+2. **Agent count.** Every subagent re-pays its instruction bundle into a fresh cache; a clerk that
+   runs one command costs about as much to start as a worker.
+3. **Context size** — files read, command output, unused MCP servers, the constitution.
+4. **Model and effort** — they multiply every price above.
+5. **Cache breaks** — a mid-session `/model` change, compaction after the window closed, a
+   subagent idle past five minutes.
 
 The order matters more than the individual tactics: a perfectly tuned effort level inside a
 400-turn session is a rounding error against having split it in two.

@@ -9,7 +9,8 @@ What changed in July 2026 is the *reason* for the bookend, not the shape of it. 
 binding problem is no longer that a frontier model is unaffordable — it is that a frontier model
 does more than it was asked. Anthropic's own system card explains the dip in coding scores at high
 effort as the model making more changes than the task required. So the cascade now earns its keep
-by holding scope, and the savings are a side effect.
+by holding scope, and the savings are a side effect. Since v0.18.0 the top-model bookend holds at
+Tier 4; below it Opus 5.5 plans, builds and, in a fresh context, reviews.
 
 ## Where the cascade is enforced
 1. **Agent frontmatter** — every `.claude/agents/*.md` declares `model:`. Committed to the repo:
@@ -27,10 +28,17 @@ Opus 5.5 scores 54, above Fable 5.1 at `max` (53), for $2.00 against $7.63. Anth
 became "start with Claude Opus 5.5 for most workloads", with Fable 5.1 for "demanding reasoning and
 long-horizon agentic work". Its system card (§8.12) has Opus 5.5 ahead of Opus 5 and Fable 5.1 at
 every agent-team size from 1 to 100. So the resolved alias no longer names the Queen. It names
-the **gate**: `lead-review`, `lead-architect`, the Tier 4 `queen-planner` and a missed story's
-retry. The Queen and every other rung run on `opus` on every plan. Two reasons keep Fable at the
-gate. It is a short call where a miss costs most. And once the workers write on Opus 5.5, a gate on
-Opus 5.5 would review code with the model that wrote it.
+the **gate**. The Queen and every other rung run on `opus` on every plan. Two reasons keep Fable at
+the gate. It is a short call where a miss costs most. And once the workers write on Opus 5.5, a gate
+on Opus 5.5 would review code with the model that wrote it.
+
+**v0.18.0 (ADR-013) narrows the gate.** `lead-review` runs on its frontmatter model, `opus`, at
+Tier 1–3: one fresh-context reviewer per round, judging the asks and correctness. The gate model is
+passed only where the stakes justify it: the Tier 4 review (beside a second reviewer on a different
+model), `lead-architect`, the Tier 4 `queen-planner` and a missed story's retry. At Tier 1–3 the
+reviewer is therefore the same model that wrote the code, in a fresh context. That is the accepted
+tradeoff: the audit found `lead-review` BLOCK behind 39 of 64 non-green rounds, and extra rounds
+took 29.5% of the spend of the tasks that had them.
 
 Whether Fable is the *right* gate is a question about money, not capability. Anthropic's plan terms
 (September 2026, [support article][fable-plan]) draw the line: on **Max** plans and on premium
@@ -62,12 +70,13 @@ honest amount of confidence to encode.
 
 **How the resolved alias reaches the work.** Three places, none of them willpower:
 
-- `.claude/hooks/top-model-brief.sh` prints one `[VULYK] top model: ...` line at SessionStart
-  naming the alias, the plan, the Tier 4 pairing, and whether the Queen's own session is pinned
-  to it.
-- `/vulyk-plan` and `/vulyk-review` pass it as the **per-invocation `model:` parameter** when
-  they dispatch `queen-planner`, `lead-architect` and `lead-review`. That parameter takes
-  precedence over the agent file's frontmatter ([sub-agents docs][subagents]).
+- `.claude/hooks/top-model-brief.sh` prints one `[VULYK] gate model: ...` line at SessionStart
+  naming the alias, the plan, the Tier 4 pairing, which dispatches carry it, and whether the
+  Queen's own session is pinned to `opus`.
+- It travels as the **per-invocation `model:` parameter**, which takes precedence over the agent
+  file's frontmatter ([sub-agents docs][subagents]): `/vulyk-plan` passes it to the Tier 4
+  `queen-planner` and `lead-architect`; `/vulyk-build` and `/vulyk-review` to the Tier 4 review
+  (`top_model` and `second_model`); the Workflow driver to a missed story's second attempt.
 - `scripts/top-model.sh --apply` pins `opus` as `"model"` in the gitignored
   `.claude/settings.local.json`, so the Queen's session — the orchestrator itself — starts on it
   from the next launch (v0.16.0: the Queen is not the gate). It merges one key and touches nothing else. The hook never writes this;
@@ -95,7 +104,8 @@ own context window with its own cache; dispatching to `model: sonnet` leaves the
 cached prefix untouched. Typing `/model sonnet` in the main session does the opposite: the model is
 part of the cache key, so the entire conversation re-prefills at full input price on the next turn,
 and every subsequent turn runs on the wrong model until you switch back — paying the re-prefill a
-second time. The same holds for `/effort` and the fast-mode toggle.
+second time. The same holds for the fast-mode toggle, and for `/effort` on models other than
+Opus 5.5 and Fable 5.1 (on those two, an effort change keeps the cache).
 
 This is what makes the Tier 4 "second reviewer on a different model" affordable: it is a second
 subagent, not a session-level switch. See [token-economy.md](token-economy.md).
@@ -106,15 +116,18 @@ that tier, so the next generation is absorbed without editing a single file. Tha
 main reason this framework survived the 4.8 → 5 transition with a three-line diff instead of a
 rewrite. Pin a full ID only when you deliberately want to freeze behaviour.
 
-## The ladder (v0.16.0, ADR-012 — supersedes the rungs of ADR-007)
+## The ladder (v0.16.0, ADR-012; gate narrowed in v0.18.0, ADR-013)
 
 Three rungs. A rung is a job, not a budget line, and each agent's frontmatter fixes it to one.
 
 | Rung | Alias | Agents | Work |
 |---|---|---|---|
-| Gate | `TOP_MODEL` — `fable` → Fable 5.1 on Max and premium seats, `opus` → Opus 5.5 on Pro, standard seats and API | `lead-review`, `lead-architect`, the Tier 4 `queen-planner`, the **second attempt** of any missed story | the gate, design, the hardest plans, retries; the frontmatter floor is `opus`, the dispatch parameter carries the upgrade |
-| Workhorse | `opus` → Opus 5.5 | the Queen, `queen-planner` at Tier 1–3, `worker-code`, `worker-test`, `drone-scout`, `drone-docs`, `drone-coverage`, `librarian`, `council-opus`; the Tier 4 second reviewer beside a Fable gate | orchestration, planning, implementation, recon, memory upkeep, intent |
-| Junior | `sonnet` → Sonnet 5 until a Haiku 5.5 ships | `council-sonnet` (permanently: a different model in the court), `council-haiku` (the black-box seat; the name is the angle, not the model), `cycle-clerk`, the `VULYK_AUTOLEARN` distiller | mechanical, one verb, running what exists |
+| Gate | `TOP_MODEL` — `fable` → Fable 5.1 on Max and premium seats, `opus` → Opus 5.5 on Pro, standard seats and API | the Tier 4 `lead-review` (beside a second reviewer), `lead-architect`, the Tier 4 `queen-planner`, the **second attempt** of any missed story | the Tier 4 gate, design, the hardest plans, retries; the frontmatter floor is `opus`, the dispatch parameter carries the upgrade |
+| Workhorse | `opus` → Opus 5.5 | the Queen, `queen-planner` at Tier 3, `lead-review` at Tier 1–3, `worker-code`, `worker-test`, `drone-scout`, `drone-docs`, `drone-coverage`, `librarian`, `council-opus`; the Tier 4 second reviewer beside a Fable gate | orchestration, planning, building, review below Tier 4, recon, memory upkeep, intent |
+| Junior | `sonnet` → Sonnet 5 until a Haiku 5.5 ships | `council-haiku` (the black-box seat; the name is the angle, not the model), `cycle-clerk` | mechanical, one verb, running what exists |
+
+`council-sonnet` left the ladder in v0.18.0: it returned no RED in 16 rows of VULYK's own ledger,
+and its job, running the suite, is done once by `close-story`.
 
 **Why the workers left Sonnet.** Sonnet 5 costs half as much per token ($2/$10 against $4/$20).
 Per solved task it is not cheaper. Its cache-read price is the same $0.20 as Opus 5.5, and cache
@@ -124,15 +137,14 @@ level it reports) at index 38 with 370M output tokens, about $4.8 a task. Opus 5
 (ADR-007), and that is where a cheaper worker's savings go.
 
 **Why Sonnet stays at all.** Two places need what Sonnet has and Opus 5.5 lacks.
-- *A different model in the court.* Two copies of one model are blind in the same places (see
-  below).
 - *No thinking to pay for.* Opus 5.5 cannot switch thinking off, so a clerk on it would reason
   before every one-verb call.
+- *A different model in the court.* At Tier 3–4 the black-box seat runs on a model other than the
+  one that wrote the code.
 
-When a Haiku 5.5 ships, the clerk, the black-box seat and the distiller flip to `haiku` with one
-word each (`council-haiku.md`, `cycle-clerk.md`, `session-end-learnings.sh`) and a CHANGELOG line.
-`council-sonnet` stays on Sonnet. **Haiku 4.5 is still never dispatched** (the owner's rule,
-ADR-007).
+When a Haiku 5.5 ships, the clerk and the black-box seat flip to `haiku` with one word each
+(`cycle-clerk.md`, `council-haiku.md`) and a CHANGELOG line. **Haiku 4.5 is still never
+dispatched** (the owner's rule, ADR-007).
 
 **The retry climbs to the gate.** A story's second dispatch goes to `TOP_MODEL` whatever its own
 `model:` says. On Max that is Fable, so the second attempt is never the same model reading the same
@@ -140,10 +152,10 @@ wall. On Pro and API the gate is `opus`, so the retry runs on the same model as 
 That is the one rung those plans lack, and it is recorded as a gap rather than hidden. `status --json`
 carries each story's `model` (default `opus`), so the driver never opens the story file to learn it.
 
-`lead-review` and the three council seats are dispatched together, one message, per council round —
-the same "independent in information, so independent in wall-clock cost" reasoning that used to pair
-`lead-review` with the single `drone-acceptance` now pairs it with three; `scripts/cycle.sh judge`
-folds their reports into one verdict, no model does.
+At Tier 3–4, `lead-review` and the blind seats (`council-opus`, and `council-haiku` when the
+Profile's *Client path* is filled) are dispatched together, one message per council round: they
+are independent in information, so they can be independent in wall-clock time. `cycle.sh advance
+--ingest` records their reports and `cycle.sh judge` folds them into one verdict; no model does.
 
 ### Caveat on the recon tier
 Recon on the workhorse rather than the junior rung is a judgment, not a measurement. A scout
@@ -155,14 +167,14 @@ A production review benchmark (CodeRabbit) measured Opus 5 against Opus 4.8: pre
 35.2% → 39.3% while **recall fell 61.1% → 55.2%**, with roughly four times as many minor nitpicks.
 It finds fewer real problems but is more often right about the ones it reports. Two copies of one
 model are blind in the same places, and adversarial framing does not fix that — so the Tier 4 pair
-should not be two copies of one model. The same reasoning is why the gate must not be the model
-that wrote the code, now that the workers write on Opus 5.5.
+should not be two copies of one model. The same reasoning is why the Tier 4 gate should not be the
+model that wrote the code, now that the workers write on Opus 5.5.
 
 Two things to weigh. On plans where Fable bills to credits, the pairing is `sonnet` rather than
 `fable` — the resolver already picks that. More importantly, Fable and Mythos are subject to the
 30-day data-retention requirement and Opus is not ([anthropic.com/claude/fable][fable-page]) — and
-on Max plans, where Fable is now the gate *and* the planner, the reviewer sees the entire diff and
-the planner sees every brief. On a closed codebase that is a deliberate decision: pin
+on Max plans, where Fable is the Tier 4 reviewer and planner, it sees every Tier 4 diff and brief,
+plus the stories a retry needs. On a closed codebase that is a deliberate decision: pin
 `TOP_MODEL = opus` in `CLAUDE.md` to opt out, and the resolver honours the pin over the plan.
 
 [fable-page]: https://www.anthropic.com/claude/fable
@@ -184,7 +196,7 @@ effort level".
 | `effort:` in `.claude/agents/*.md` (2.1.280) | **Yes** | `low` → 613 / 715, `max` → 3 136 / 3 296 output tokens (two runs each, ~4.8×) |
 | `--effort <level>` at launch | Yes | July: low → 1 371, max → 7 434 |
 | `/effort <level>` mid-session | Yes | Same mechanism; but see the cache note |
-| `effortLevel` in `.claude/settings.json` | **Not for Opus 5.5** | Per the model-config docs a top-level `effortLevel` does not apply to Opus 5.5; it starts at its own default, `medium` |
+| a top-level effort level in `.claude/settings.json` | **Not for Opus 5.5** | Per the model-config docs it does not apply to Opus 5.5, which starts at its own default, `medium`; VULYK's settings no longer set it (0.18.0) |
 
 VULYK now writes the level into the frontmatter of the agents whose work has a clear level. A seat
 without one inherits the session level:
@@ -192,9 +204,9 @@ without one inherits the session level:
 | Agents | `effort:` | Why |
 |---|---|---|
 | `drone-scout`, `drone-docs`, `librarian`, `cycle-clerk` | `low` | reading, mapping, one verb |
-| `worker-code`, `worker-test`, `drone-coverage` | `medium` | Opus 5.5's own default; it matched Opus 5 at `high` with fewer tokens |
+| `worker-code`, `worker-test`, `drone-coverage`, `council-opus` | `medium` | Opus 5.5's own default; it matched Opus 5 at `high` with fewer tokens |
 | `queen-planner`, `lead-architect`, `lead-review` | `high` | a wrong plan or a missed defect poisons everything downstream |
-| council seats | — (session) | set per session by the owner |
+| `council-haiku` | — (session) | set per session by the owner |
 
 Frontmatter now outranks the session, so `/effort max` in the session no longer lifts a worker.
 To escalate a story, the retry rule does it with a different model, not a bigger budget.
@@ -209,11 +221,11 @@ Session levels for the Queen herself:
 
 The step from `high` to `max` on Opus 5.5 costs about **5× the output tokens for 4 index points**
 (Artificial Analysis: 53M → 260M, 54 → 58). Simon Willison's `max` runs hit the 128K output cap
-while still reasoning. Changing effort mid-session re-renders the prompt and drops the cached
-prefix, so set the session level once at the start.
+while still reasoning. On Opus 5.5 and Fable 5.1 an effort change keeps the cached prefix; on
+other models it drops it, so there set the session level once at the start.
 
 ## Anti-patterns the cascade exists to kill
 - Opus reading 40 files to "understand the project" (that is a scout's job).
 - Re-dispatching a failed worker with the identical prompt — walls are information; route them.
-- Running the gate on the same model that wrote the code.
+- Running the Tier 4 gate on the same model that wrote the code.
 - Reaching for `max` because the task feels important. Importance is not the signal; a failure is.
