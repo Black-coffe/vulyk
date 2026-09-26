@@ -2,21 +2,26 @@
 # VULYK installer: copy the hive into an existing project. Never overwrites your files.
 #
 #   Install:  ./install.sh /path/to/your/project [--check]
-#   Upgrade:  ./install.sh /path/to/your/project --upgrade [--check]
+#   Upgrade:  ./install.sh /path/to/your/project --upgrade [--check] [--constitution replace]
 #
 # Install copies file-by-file and skips anything that already exists.
 # Upgrade additionally REPLACES framework-owned files that changed between versions
 # (agents, commands, hooks, meta-skills, bootstrap, templates, scripts) - and still
 # never touches what is yours: CLAUDE.md, memory/, docs/specs|adr|wiki, .claude/rules.
+# The one exception is asked for by name: `--constitution replace` writes this release's
+# constitution over yours, carrying your Profile and Commands blocks over verbatim and
+# keeping the old file as <name>.pre-<major.minor>.md (ADR-013 D7).
 # The installed version is stamped into .claude/vulyk-version so an upgrade knows,
 # and shows, what it is upgrading from.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VER="$(cat "$SRC/VERSION" 2>/dev/null || echo unknown)"
+# Whitespace stripped: a Windows checkout (core.autocrlf) gives VERSION a CR, which would ride
+# into the stamp, the messages and the `v$PREV` tag lookup below.
+VER="$(cat "$SRC/VERSION" 2>/dev/null | tr -d '[:space:]' || true)"; VER="${VER:-unknown}"
 
-USAGE="Usage: $0 /path/to/your/project [--upgrade] [--check] [--telemetry on|off|ask]"
-DEST=""; CHECK=""; UPGRADE=""; BLOCK_INSERTED=""
+USAGE="Usage: $0 /path/to/your/project [--upgrade] [--check] [--telemetry on|off|ask] [--constitution replace]"
+DEST=""; CHECK=""; UPGRADE=""; BLOCK_INSERTED=""; CONST_MODE=""; CONST_REPLACED=""
 # Telemetry consent (docs/telemetry.md): the flag wins over the env var, both are optional,
 # and `ask` forces the question even for a hive that already answered it once.
 TEL_MODE="${VULYK_TELEMETRY:-}"
@@ -25,6 +30,8 @@ while [ $# -gt 0 ]; do
     --check)     CHECK="--check" ;;
     --upgrade)   UPGRADE=1 ;;
     --telemetry) shift; TEL_MODE="${1:-}"; [ -n "$TEL_MODE" ] || { echo "error: --telemetry needs a value (on|off|ask)"; exit 1; } ;;
+    --constitution) shift; CONST_MODE="${1:-}"
+                 [ "$CONST_MODE" = "replace" ] || { echo "error: --constitution takes one value: replace (got '$CONST_MODE')"; exit 1; } ;;
     -*)          echo "error: unknown flag $1"; echo "$USAGE"; exit 1 ;;
     *)           DEST="$1" ;;
   esac
@@ -35,6 +42,7 @@ case "$TEL_MODE" in
   *) echo "error: --telemetry/VULYK_TELEMETRY must be on, off or ask (got '$TEL_MODE')"; exit 1 ;;
 esac
 [ -n "$DEST" ] || { echo "$USAGE"; exit 1; }
+[ -z "$CONST_MODE" ] || [ -n "$UPGRADE" ] || { echo "error: --constitution replace works on an installed hive; add --upgrade"; exit 1; }
 [ -d "$DEST" ] || { echo "error: $DEST is not a directory"; exit 1; }
 DEST="$(cd "$DEST" && pwd)"
 [ "$DEST" != "$SRC" ] || { echo "error: source and destination are the same"; exit 1; }
@@ -283,6 +291,131 @@ EOF
   echo "  $name: $n rows still hold <fill in: $joined"
 }
 
+# --- constitution migration (ADR-013 D7) -------------------------------------------------------
+# A constitution is never overwritten on the installer's own initiative. `--constitution replace`
+# is the owner asking for it by name: the release's CLAUDE.md goes in whole, and the hive's two
+# marked blocks - the Profile (with its Telemetry row) and the Commands table - are carried over
+# verbatim. The markers are the ownership boundary ADR-005 D3 set; everything outside them is the
+# framework's text, and the old file is kept beside the new one for whatever the owner wrote there.
+
+has_blocks() { # has_blocks <file> - 0 when both VULYK:PROFILE and VULYK:COMMANDS marker pairs exist
+  local m
+  for m in VULYK:PROFILE:START VULYK:PROFILE:END VULYK:COMMANDS:START VULYK:COMMANDS:END; do
+    grep -q "$m" "$1" 2>/dev/null || return 1
+  done
+}
+
+# render_constitution <hive-constitution> <out> - writes the release's CLAUDE.md with the hive's
+# block bodies between its markers; 1 (nothing written) when either side lacks a marker. Bodies
+# travel through awk's input, never through -v, which would eat their backslashes (`\|`), and take
+# the line ending of the release file they land in.
+render_constitution() {
+  has_blocks "$1" && has_blocks "$SRC/CLAUDE.md" || return 1
+  awk '
+    FNR == 1 { f++ }
+    f == 1 {
+      if (index($0, "VULYK:PROFILE:START"))  { b = "P"; next }
+      if (index($0, "VULYK:COMMANDS:START")) { b = "C"; next }
+      if (index($0, "VULYK:PROFILE:END") || index($0, "VULYK:COMMANDS:END")) { b = ""; next }
+      if (b != "") { sub(/\r$/, ""); body[b, ++n[b]] = $0 }
+      next
+    }
+    skip && (index($0, "VULYK:PROFILE:END") || index($0, "VULYK:COMMANDS:END")) { skip = 0 }
+    skip { next }
+    {
+      print
+      b = index($0, "VULYK:PROFILE:START") ? "P" : (index($0, "VULYK:COMMANDS:START") ? "C" : "")
+      if (b != "") {
+        eol = /\r$/ ? "\r" : ""
+        for (i = 1; i <= n[b]; i++) print body[b, i] eol
+        skip = 1
+      }
+    }
+  ' "$1" "$SRC/CLAUDE.md" > "$2"
+}
+
+constitution_backup() { # constitution_backup <file> - CLAUDE.md -> CLAUDE.pre-0.18.md (never an existing name)
+  local base="${1%.md}" tag
+  tag="pre-$(printf '%s' "$VER" | cut -d. -f1-2)"
+  [ -e "$base.$tag.md" ] && tag="$tag.$(date +%Y%m%d%H%M%S)"
+  printf '%s' "$base.$tag.md"
+}
+
+kb_of() { awk -v b="$(wc -c < "$1" | tr -d ' ')" 'BEGIN { printf "%.1f KB", b / 1024 }'; }
+kb_delta() { # kb_delta <old> <new> - signed size change
+  awk -v o="$(wc -c < "$1" | tr -d ' ')" -v n="$(wc -c < "$2" | tr -d ' ')" \
+    'BEGIN { d = (n - o) / 1024; if (d > -0.05 && d < 0.05) d = 0; printf "%+.1f KB", d }'
+}
+
+pin_of() { # pin_of <file> - the TOP_MODEL alias a constitution pins, or nothing (same match as top-model.sh)
+  grep -m1 -o -E 'TOP_MODEL[[:space:]]*=[[:space:]]*`?[A-Za-z0-9][][A-Za-z0-9._-]*' "$1" 2>/dev/null \
+    | sed -E 's/.*=[[:space:]]*`?//' | head -1
+}
+
+# Plain --upgrade: the size difference and the one command that migrates, printed only when the
+# replace would change something. A constitution without markers gets the old diff hint instead.
+print_migrate_hint() { # print_migrate_hint <constitution-file>
+  local file="$1" name new
+  name="$(basename "$file")"
+  new="$(mktemp)"
+  if render_constitution "$file" "$new"; then
+    if ! cmp -s "$new" "$file"; then
+      echo "  The $VER constitution differs from yours: $name is $(kb_of "$file"); the $VER one, with your"
+      echo "  Profile and Commands blocks carried over, is $(kb_of "$new") ($(kb_delta "$file" "$new")). To migrate, keeping"
+      echo "  the old file as $(basename "$(constitution_backup "$file")"):"
+      echo "      bash \"$SRC/install.sh\" \"$DEST\" --upgrade --constitution replace"
+      echo "  or, from the project: bash scripts/vulyk-update.sh . --constitution replace"
+    fi
+  elif ! cmp -s "$SRC/CLAUDE.md" "$file"; then
+    echo "  The framework constitution changed in $VER, and $name lacks the VULYK:PROFILE /"
+    echo "  VULYK:COMMANDS markers a replace needs. See what changed, then merge by hand:"
+    echo "      diff \"$file\" \"$SRC/CLAUDE.md\""
+  fi
+  rm -f "$new"
+}
+
+# --constitution replace. The preflight before the copy loop already refused a hive without the
+# markers, so the render fails here only if the file changed under this run.
+replace_constitution() { # replace_constitution <constitution-file>
+  local file="$1" name new backup old_pin new_pin
+  name="$(basename "$file")"
+  new="$(mktemp)"
+  if ! render_constitution "$file" "$new"; then
+    rm -f "$new"
+    echo "  WARNING: $name lost its VULYK markers during this run - left as-is."
+    return 0
+  fi
+  if cmp -s "$new" "$file"; then
+    rm -f "$new"
+    echo "  constitution   $name is already the $VER constitution - nothing to replace"
+    return 0
+  fi
+  backup="$(constitution_backup "$file")"
+  old_pin="$(pin_of "$file")"; new_pin="$(pin_of "$new")"
+  # The Telemetry row normally travels inside the Profile block. One that sat outside it would be
+  # lost with the framework text, so ensure_telemetry_row is told to write the hive's answer back.
+  if [ -z "$TEL_WANT" ] && [ -n "$TEL_PRE" ] && [ "$(telemetry_row_value "$new")" != "$TEL_PRE" ]; then
+    TEL_WANT="$TEL_PRE"
+  fi
+  if [ "$CHECK" = "--check" ]; then
+    echo "  would back up  $name -> $(basename "$backup")"
+    echo "  would replace  $name with the $VER constitution ($(kb_of "$file") -> $(kb_of "$new")), Profile and Commands blocks carried over"
+  else
+    cp -p "$file" "$backup"
+    cat "$new" > "$file"
+    CONST_REPLACED=1
+    echo "  back up        $name -> $(basename "$backup")"
+    echo "  replace        $name with the $VER constitution ($(kb_of "$backup") -> $(kb_of "$file")), Profile and Commands blocks carried over"
+    echo "                 Anything you wrote outside those two blocks is in the backup only. Compare, then delete it:"
+    echo "                     diff \"$backup\" \"$file\""
+  fi
+  rm -f "$new"
+  if [ -n "$old_pin" ] && [ "$old_pin" != "auto" ] && [ "$old_pin" != "$new_pin" ]; then
+    echo "  note: the old constitution pinned TOP_MODEL = $old_pin and the new one does not. Add a line"
+    echo "        \`TOP_MODEL = $old_pin\` to it, or set VULYK_TOP_MODEL, to keep that pin."
+  fi
+}
+
 # --- telemetry consent -------------------------------------------------------------------------
 # One question, asked once, on the one surface every hive passes through: this installer.
 # /vulyk-bootstrap only reports the answer (asking twice would silently overwrite the first one).
@@ -391,12 +524,32 @@ ensure_telemetry_row() { # ensure_telemetry_row <constitution-file>
   echo "  profile row    $name: Telemetry = $TEL_WANT"
 }
 
-PREV="$(cat "$DEST/.claude/vulyk-version" 2>/dev/null || echo none)"
+PREV="$(cat "$DEST/.claude/vulyk-version" 2>/dev/null | tr -d '[:space:]' || true)"; PREV="${PREV:-none}"
 if [ -n "$UPGRADE" ]; then
   echo "VULYK upgrade -> $DEST  ($PREV -> $VER) ${CHECK:+(dry run)}"
   [ "$PREV" = "none" ] && echo "  note: no .claude/vulyk-version found - upgrading a pre-0.5.0 install; review the output below with extra care."
 else
   echo "VULYK $VER -> $DEST ${CHECK:+(dry run)}"
+fi
+
+# `--constitution replace` that cannot be honoured is refused here, before the copy loop: an
+# upgrade that has already replaced the framework files and then stops at the constitution
+# leaves the owner with half a migration.
+if [ "$CONST_MODE" = "replace" ]; then
+  CONST_TARGET="$(telemetry_constitution)"
+  if [ -z "$CONST_TARGET" ]; then
+    echo "error: --constitution replace: $DEST has no VULYK constitution (no VULYK CLAUDE.md, no CLAUDE.vulyk.md) - nothing to replace."
+    exit 1
+  fi
+  if ! has_blocks "$CONST_TARGET"; then
+    echo "error: --constitution replace refused: $(basename "$CONST_TARGET") lacks the VULYK:PROFILE and VULYK:COMMANDS"
+    echo "  markers, so its Profile and Commands cannot be carried over. Nothing was written."
+    echo "  Merge by hand:  diff \"$CONST_TARGET\" \"$SRC/CLAUDE.md\""
+    echo "  or put the four marker lines back around those two blocks and run this again. To upgrade"
+    echo "  the framework files alone, run without --constitution replace."
+    exit 1
+  fi
+  has_blocks "$SRC/CLAUDE.md" || { echo "error: this release's CLAUDE.md has no VULYK markers - cannot replace from it"; exit 1; }
 fi
 
 # `.claude/settings.json` is NOT framework-owned: it carries the owner's permissions and any
@@ -461,8 +614,22 @@ with open(path, 'w', encoding='utf-8') as fh:
 PYWIRE
 }
 
+# One backup per run, taken before the first edit, so `.claude/settings.json.vulyk-bak` holds the
+# file as the owner left it however many entries this run adds or removes. A step that changed
+# nothing removes only a backup it took itself - never one an earlier step's edit relies on.
+SETTINGS_BAK_TAKEN=""
+settings_backup() { # settings_backup <file> - 0 when this call took the backup
+  [ -z "$SETTINGS_BAK_TAKEN" ] || return 1
+  cp -p "$1" "$1.vulyk-bak" 2>/dev/null || return 1
+  SETTINGS_BAK_TAKEN=1
+}
+settings_backup_drop() { # settings_backup_drop <file> - undo the backup this call took
+  rm -f "$1.vulyk-bak" 2>/dev/null || true
+  SETTINGS_BAK_TAKEN=""
+}
+
 wire_hook() { # wire_hook <event> <hook-script-name>
-  local event="$1" script="$2" file="$DEST/.claude/settings.json"
+  local event="$1" script="$2" file="$DEST/.claude/settings.json" took=""
   [ -f "$file" ] || return 0                                   # fresh install: ours was copied whole
   PYBIN="$(command -v python3 || command -v python || true)"
   if [ -z "$PYBIN" ]; then
@@ -483,14 +650,14 @@ wire_hook() { # wire_hook <event> <hook-script-name>
       && echo "  would wire     .claude/settings.json -> $event: $script"
     return 0
   fi
-  cp -p "$file" "$file.vulyk-bak" 2>/dev/null || true
+  settings_backup "$file" && took=1
   if py_wire "$file" "$script" "$event"; then
     echo "  wire           .claude/settings.json -> $event: $script"
     echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
   else
     case "$?" in
-      3) rm -f "$file.vulyk-bak" 2>/dev/null || true ;;   # already wired; nothing happened
-      *) rm -f "$file.vulyk-bak" 2>/dev/null || true
+      3) [ -z "$took" ] || settings_backup_drop "$file" ;;   # already wired; nothing happened
+      *) [ -z "$took" ] || settings_backup_drop "$file"
          echo ""
          echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
          echo "  Wire this hook by hand into your $event hooks:"
@@ -501,6 +668,84 @@ wire_hook() { # wire_hook <event> <hook-script-name>
 
 wire_session_hook() { wire_hook SessionStart "$1"; }
 
+# The reverse of py_wire: a release that stops wanting a hook takes it back out of a hive's
+# settings.json, where an earlier installer put it (ADR-013 D7: anomaly-scan.sh on Stop,
+# session-end-learnings.sh on SessionEnd). Only entries under that event whose command runs
+# exactly that script go; a group left empty goes with them, an event left empty too.
+py_unwire() { # py_unwire <settings.json> <script> <event> [--dry]   (exit 3 = not wired there)
+  "$PYBIN" - "$@" <<'PYUNWIRE'
+import json, re, sys
+path, script, event = sys.argv[1], sys.argv[2], sys.argv[3]
+dry = '--dry' in sys.argv[4:]
+try:
+    with open(path, encoding='utf-8') as fh:
+        data = json.load(fh)
+except Exception:
+    sys.exit(4)                                  # unparseable: leave it entirely alone
+if not isinstance(data, dict):
+    sys.exit(4)
+hooks = data.get('hooks')
+groups = hooks.get(event) if isinstance(hooks, dict) else None
+if not isinstance(groups, list):
+    sys.exit(3)
+runs = re.compile(r'(^|[\s"\'/\\])' + re.escape(script) + r'($|[\s"\'])')
+def named(hook):
+    return isinstance(hook, dict) and bool(runs.search(str(hook.get('command', ''))))
+found, kept = False, []
+for group in groups:
+    if isinstance(group, dict) and isinstance(group.get('hooks'), list):
+        left = [h for h in group['hooks'] if not named(h)]
+        if len(left) != len(group['hooks']):
+            found = True
+            if not left:
+                continue                         # the group held only this hook
+            group['hooks'] = left
+    kept.append(group)
+if not found:
+    sys.exit(3)
+if dry:
+    sys.exit(0)                                  # --check: would unwire; nothing written
+if kept:
+    hooks[event] = kept
+else:
+    del hooks[event]
+with open(path, 'w', encoding='utf-8') as fh:
+    json.dump(data, fh, indent=2)
+    fh.write('\n')
+PYUNWIRE
+}
+
+unwire_hook() { # unwire_hook <event> <hook-script-name>
+  local event="$1" script="$2" file="$DEST/.claude/settings.json" took=""
+  [ -f "$file" ] || return 0
+  grep -qF "$script" "$file" 2>/dev/null || return 0         # not mentioned anywhere: nothing to do
+  PYBIN="$(command -v python3 || command -v python || true)"
+  if [ -z "$PYBIN" ]; then
+    echo ""
+    echo "  NOTE: this release no longer runs .claude/hooks/$script on $event, and with no python on"
+    echo "  PATH .claude/settings.json cannot be edited safely. Remove that $event entry by hand."
+    return 0
+  fi
+  if [ "$CHECK" = "--check" ]; then
+    py_unwire "$file" "$script" "$event" --dry \
+      && echo "  would unwire   .claude/settings.json -> $event: $script"
+    return 0
+  fi
+  settings_backup "$file" && took=1
+  if py_unwire "$file" "$script" "$event"; then
+    echo "  unwire         .claude/settings.json -> $event: $script"
+    echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
+  else
+    case "$?" in
+      3) [ -z "$took" ] || settings_backup_drop "$file" ;;   # not wired there; nothing happened
+      *) [ -z "$took" ] || settings_backup_drop "$file"
+         echo ""
+         echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
+         echo "  This release no longer runs $script on $event; remove that entry by hand." ;;
+    esac
+  fi
+}
+
 # The Workflow driver's clerk (`cycle-clerk.md`) runs every verb by shelling out to
 # `scripts/cycle.sh` and `scripts/journal.sh`, and a subagent's Bash tool is deny-by-default -
 # without an explicit `permissions.allow` entry every dispatch stalls on a prompt nobody is
@@ -509,7 +754,7 @@ wire_session_hook() { wire_hook SessionStart "$1"; }
 # wire_session_hook: append only what is missing, in place, after a backup, idempotent by
 # inspection of the file.
 wire_permissions() {
-  local file="$DEST/.claude/settings.json" py=""
+  local file="$DEST/.claude/settings.json" py="" took=""
   [ -f "$file" ] || return 0                                   # nothing to edit
   if grep -q 'Bash(bash scripts/cycle.sh:\*)' "$file" 2>/dev/null && \
      grep -q 'Bash(bash scripts/journal.sh:\*)' "$file" 2>/dev/null; then
@@ -529,7 +774,7 @@ wire_permissions() {
     echo "      \"Bash(bash scripts/journal.sh:*)\""
     return 0
   fi
-  cp -p "$file" "$file.vulyk-bak" 2>/dev/null || true
+  settings_backup "$file" && took=1
   if "$py" - "$file" <<'PYPERM'
 import json, sys
 path = sys.argv[1]
@@ -557,8 +802,8 @@ PYPERM
     echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
   else
     case "$?" in
-      3) rm -f "$file.vulyk-bak" 2>/dev/null || true ;;   # already wired; nothing happened
-      *) rm -f "$file.vulyk-bak" 2>/dev/null || true
+      3) [ -z "$took" ] || settings_backup_drop "$file" ;;   # already wired; nothing happened
+      *) [ -z "$took" ] || settings_backup_drop "$file"
          echo ""
          echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
          echo "  Add these to permissions.allow by hand:"
@@ -643,6 +888,20 @@ LC_ALL=C sort -u -o "$NEW_MANIFEST" "$NEW_MANIFEST"
 # applies to replacement. A dropout outside OWNED is an owner's own file and is only ever
 # reported, never touched. No old manifest at all means this hive predates the manifest:
 # delete nothing, just name what an OWNED tree holds that this release no longer ships.
+#
+# Amended 2026-09-26 (ADR-005 amendment, ADR-013 D7): a retired file the owner provably edited is
+# kept. "Provably" needs the copy that shipped, and the release clone usually holds it - the
+# `v$PREV` tag vulyk-update.sh fetched. Line endings are ignored (a Windows checkout rewrites
+# them). No clone, no such tag or no such file in it: nothing to compare against, so D2's
+# remove-regardless rule stands.
+retired_edited() { # retired_edited <rel-path> - 0 = differs from what v$PREV shipped
+  local f="$1"
+  [ -f "$DEST/$f" ] || return 1
+  git -C "$SRC" rev-parse -q --verify "refs/tags/v$PREV^{commit}" >/dev/null 2>&1 || return 1
+  git -C "$SRC" cat-file -e "v$PREV:$f" 2>/dev/null || return 1
+  [ "$(git -C "$SRC" show "v$PREV:$f" 2>/dev/null | tr -d '\r' | cksum)" != "$(tr -d '\r' < "$DEST/$f" | cksum)" ]
+}
+RETIRED_GONE=""   # paths this run removes (or, under --check, would remove), one per line
 OLD_MANIFEST="$DEST/.claude/vulyk-manifest"
 if [ -n "$UPGRADE" ]; then
   if [ -f "$OLD_MANIFEST" ]; then
@@ -650,11 +909,17 @@ if [ -n "$UPGRADE" ]; then
       [ -n "$f" ] || continue
       grep -qxF "$f" "$NEW_MANIFEST" && continue   # still shipped this run
       if owned "$f"; then
-        if [ "$CHECK" = "--check" ]; then
+        if retired_edited "$f"; then
+          echo "  keep (edited)  $f - retired in $VER, but edited since v$PREV shipped it; yours now, delete it when done"
+        elif [ "$CHECK" = "--check" ]; then
           echo "  would remove   $f"
+          RETIRED_GONE="$RETIRED_GONE$f
+"
         else
           rm -f "$DEST/$f" 2>/dev/null || true
           echo "  remove         $f"
+          RETIRED_GONE="$RETIRED_GONE$f
+"
         fi
       else
         echo "  leave (yours)  $f"
@@ -695,9 +960,17 @@ ensure_gitignore
 ensure_gitattributes
 wire_session_hook vulyk-update-check.sh
 wire_session_hook top-model-brief.sh
-# The anomaly scan runs at the end of a turn and at the end of a session; an existing hive's
-# settings.json knows about neither group until this wires them (A13).
-wire_hook Stop anomaly-scan.sh
+# The anomaly scan runs once, at the end of a session (A13; ADR-013 D7 dropped its per-turn Stop
+# run). On upgrade, the entries this release no longer wants leave the hive's settings.json: the
+# Stop scan, and the learnings hook - wiring follows the file, so a learnings hook kept because
+# the owner edited it (or a hive with no manifest yet) stays wired.
+if [ -n "$UPGRADE" ]; then
+  unwire_hook Stop anomaly-scan.sh
+  if [ ! -e "$DEST/.claude/hooks/session-end-learnings.sh" ] || \
+     grep -qxF ".claude/hooks/session-end-learnings.sh" <<< "$RETIRED_GONE"; then
+    unwire_hook SessionEnd session-end-learnings.sh
+  fi
+fi
 wire_hook SessionEnd anomaly-scan.sh
 wire_permissions
 # The empty trees a fresh hive needs. Guarded like every other write: a dry run that
@@ -716,9 +989,10 @@ fi
 TEL_PRE="$(telemetry_row_value "$(telemetry_constitution)")"
 telemetry_decide
 
-# Constitution: never overwritten - not on install, not on upgrade. A bootstrapped
-# constitution is the user's tailored law; merging framework-side changes into it is a
-# reading decision, not a copying one.
+# Constitution: never overwritten on the installer's own initiative - not on install, not on
+# upgrade. A bootstrapped constitution is the user's tailored law; merging framework-side
+# changes into it is a reading decision, not a copying one. `--constitution replace` is that
+# decision taken by the owner (ADR-013 D7); a plain upgrade prints what it would weigh and how.
 if [ -f "$DEST/CLAUDE.md" ]; then
   if head -3 "$DEST/CLAUDE.md" 2>/dev/null | grep -q '^# VULYK Constitution' || \
      grep -q 'VULYK:COMMANDS:START' "$DEST/CLAUDE.md" 2>/dev/null; then
@@ -727,40 +1001,41 @@ if [ -f "$DEST/CLAUDE.md" ]; then
     # is the durable fingerprint). Writing CLAUDE.vulyk.md next to it would create a
     # second, conflicting constitution.
     echo ""
-    echo "  CLAUDE.md is already a VULYK constitution - left untouched."
-    if ! cmp -s "$SRC/CLAUDE.md" "$DEST/CLAUDE.md"; then
-      echo "  The framework constitution changed in $VER. See what, then merge what you want:"
-      echo "      diff \"$DEST/CLAUDE.md\" \"$SRC/CLAUDE.md\""
+    if [ "$CONST_MODE" = "replace" ]; then
+      replace_constitution "$DEST/CLAUDE.md"
+    else
+      echo "  CLAUDE.md is already a VULYK constitution - left untouched."
+      # Pre-0.10.0 constitutions pin `TOP_MODEL = opus` by default, and the resolver honours a
+      # pin over the plan - so an upgraded hive on Max stays on Opus until this line changes.
+      # Say so here, once, rather than letting the session brief report "by constitution"
+      # forever to an owner who never chose it.
+      if grep -q 'TOP_MODEL = opus' "$DEST/CLAUDE.md" 2>/dev/null; then
+        echo "  Since 0.10.0 the gate model follows the plan (Fable 5.1 on Max, Opus 5.5 on Pro)."
+        echo "  Your constitution still pins \`TOP_MODEL = opus\`; change it to \`TOP_MODEL = auto\` to"
+        echo "  enable that, or keep the pin deliberately. \`scripts/top-model.sh --explain\` shows the pick."
+      fi
+      # The council needs Profile/Commands to exist, not to be filled - an owner who bootstrapped
+      # before this release has a constitution with neither block. Insert what's missing; never
+      # touch a block whose markers, or whose hand-written heading, are already there.
+      print_profile_placeholder | ensure_marked_block "$DEST/CLAUDE.md" "VULYK:PROFILE" "## Profile block"
+      print_commands_placeholder | ensure_marked_block "$DEST/CLAUDE.md" "VULYK:COMMANDS" "## Commands table"
+      print_migrate_hint "$DEST/CLAUDE.md"
     fi
-    # Pre-0.10.0 constitutions pin `TOP_MODEL = opus` by default, and the resolver honours a
-    # pin over the plan - so an upgraded hive on Max stays on Opus until this line changes.
-    # Say so here, once, rather than letting the session brief report "by constitution"
-    # forever to an owner who never chose it.
-    if grep -q 'TOP_MODEL = opus' "$DEST/CLAUDE.md" 2>/dev/null; then
-      echo "  Since 0.10.0 the gate model follows the plan (Fable 5.1 on Max, Opus 5.5 on Pro)."
-      echo "  Your constitution still pins \`TOP_MODEL = opus\`; change it to \`TOP_MODEL = auto\` to"
-      echo "  enable that, or keep the pin deliberately. \`scripts/top-model.sh --explain\` shows the pick."
-    fi
-    # The council needs Profile/Commands to exist, not to be filled - an owner who bootstrapped
-    # before this release has a constitution with neither block. Insert what's missing; never
-    # touch a block whose markers, or whose hand-written heading, are already there.
-    print_profile_placeholder | ensure_marked_block "$DEST/CLAUDE.md" "VULYK:PROFILE" "## Profile block"
-    print_commands_placeholder | ensure_marked_block "$DEST/CLAUDE.md" "VULYK:COMMANDS" "## Commands table"
     report_fill_status "$DEST/CLAUDE.md" "VULYK:PROFILE" "profile"
     report_fill_status "$DEST/CLAUDE.md" "VULYK:COMMANDS" "commands"
   elif [ -e "$DEST/CLAUDE.vulyk.md" ]; then
     echo ""
-    echo "  CLAUDE.vulyk.md exists - left untouched."
-    if ! cmp -s "$SRC/CLAUDE.md" "$DEST/CLAUDE.vulyk.md"; then
-      echo "  The framework constitution changed in $VER. See what, then merge what you want:"
-      echo "      git -C \"$SRC\" log --oneline -- CLAUDE.md   # or simply:"
-      echo "      diff \"$DEST/CLAUDE.vulyk.md\" \"$SRC/CLAUDE.md\""
-    fi
     # Same treatment as the CLAUDE.md branch above - it's the same constitution under a
     # different filename, and the council reads the same blocks from it. The foreign
-    # CLAUDE.md sitting beside the sidecar is never opened.
-    print_profile_placeholder | ensure_marked_block "$DEST/CLAUDE.vulyk.md" "VULYK:PROFILE" "## Profile block"
-    print_commands_placeholder | ensure_marked_block "$DEST/CLAUDE.vulyk.md" "VULYK:COMMANDS" "## Commands table"
+    # CLAUDE.md sitting beside the sidecar is never opened, replace or not.
+    if [ "$CONST_MODE" = "replace" ]; then
+      replace_constitution "$DEST/CLAUDE.vulyk.md"
+    else
+      echo "  CLAUDE.vulyk.md exists - left untouched."
+      print_profile_placeholder | ensure_marked_block "$DEST/CLAUDE.vulyk.md" "VULYK:PROFILE" "## Profile block"
+      print_commands_placeholder | ensure_marked_block "$DEST/CLAUDE.vulyk.md" "VULYK:COMMANDS" "## Commands table"
+      print_migrate_hint "$DEST/CLAUDE.vulyk.md"
+    fi
     report_fill_status "$DEST/CLAUDE.vulyk.md" "VULYK:PROFILE" "profile"
     report_fill_status "$DEST/CLAUDE.vulyk.md" "VULYK:COMMANDS" "commands"
   else
@@ -837,13 +1112,17 @@ chmod +x "$DEST"/scripts/git-hooks/post-merge 2>/dev/null || true
 
 echo ""
 if [ -n "$UPGRADE" ]; then
-  if [ -n "$BLOCK_INSERTED" ]; then
+  if [ -n "$CONST_REPLACED" ]; then
+    echo "Done. Upgraded framework files and replaced the constitution, as asked; the old one is kept"
+    echo "beside it (see above). Your memory/, specs, ADRs and wiki were not touched."
+  elif [ -n "$BLOCK_INSERTED" ]; then
     echo "Done. Upgraded framework files only; inserted a missing Profile/Commands block into your"
     echo "constitution (see note above). Otherwise your CLAUDE.md, memory/, specs, ADRs and wiki were not touched."
   else
     echo "Done. Upgraded framework files only; your CLAUDE.md, memory/, specs, ADRs and wiki were not touched."
   fi
-  echo "If the constitution changed this release, merge those edits by hand (see note above)."
+  [ -n "$CONST_MODE" ] || \
+    echo "If the constitution changed this release, the note above says by how much and how to migrate."
 else
   echo "Done. Next: cd $DEST && claude  ->  /vulyk-bootstrap"
   echo "Optional: cp scripts/git-hooks/post-merge .git/hooks/post-merge && chmod +x .git/hooks/post-merge"
