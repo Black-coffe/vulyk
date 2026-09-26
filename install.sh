@@ -86,6 +86,17 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
   return 0
 }
 
+replace_file() { # replace_file <src> <dest> - copy beside, then rename over. An in-place `cp`
+  # rewrites the file bash is reading when the upgrade runs through the hive's own
+  # scripts/vulyk-update.sh: the old process then executes the new file's bytes from its old
+  # offset (seen upgrading a 0.17 hive to 0.18). A rename leaves the running process its
+  # old inode; if the rename is refused, fall back to the plain copy.
+  local tmp="$2.vulyk-new.$$"
+  if cp -p "$1" "$tmp" 2>/dev/null && mv -f "$tmp" "$2" 2>/dev/null; then return 0; fi
+  rm -f "$tmp" 2>/dev/null
+  cp -p "$1" "$2"
+}
+
 copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading a framework-owned file
   local rel="$1" sc
   ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' -print0 ) | while IFS= read -r -d '' f; do
@@ -101,7 +112,7 @@ copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading 
     if [ -e "$DEST/$f" ]; then
       if [ -n "$UPGRADE" ] && owned "$f" && ! cmp -s "$SRC/$f" "$DEST/$f"; then
         if [ "$CHECK" = "--check" ]; then echo "  would update   $f"
-        else cp -p "$SRC/$f" "$DEST/$f"; echo "  update         $f"; fi
+        else replace_file "$SRC/$f" "$DEST/$f"; echo "  update         $f"; fi
       else
         echo "  skip (exists)  $f"
       fi

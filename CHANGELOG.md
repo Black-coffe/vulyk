@@ -2,6 +2,22 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.18.1] - 2026-09-27
+
+### Fixed
+- **An upgrade no longer corrupts the updater that runs it.** `install.sh --upgrade` overwrote
+  framework files in place. When the upgrade ran through the hive's own `scripts/vulyk-update.sh`,
+  the still-running old script read the new file from its old byte offset and executed its tail.
+  This happened on the first 0.17 → 0.18 upgrade: `v0.18.0: command not found`, then a bogus
+  "publishes no version tags" error, after the upgrade itself had finished. Files are now copied
+  beside the target and renamed over it, so the running process keeps its old file. The fix works
+  whatever version the running updater is. `tests/telemetry.test.sh` reproduces the incident.
+
+### Upgrade notes
+- A hive whose constitution lacks the `VULYK:COMMANDS` markers (katan and skervik among the
+  owner's hives) gets a refusal from `--constitution replace`. Wrap its `## Commands` table in
+  `<!-- VULYK:COMMANDS:START -->` / `<!-- VULYK:COMMANDS:END -->`, then run the replace.
+
 ## [0.18.0] - 2026-09-27
 
 Light VULYK ([ADR-013](docs/adr/013-light-vulyk.md)). A token audit over 1,844 sessions

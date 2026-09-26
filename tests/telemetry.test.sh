@@ -840,6 +840,23 @@ cat "$T/up-check.out" | expect "--check reports the pending row" "would set     
 # a Profile block with no markers: warn, and never write the row (ADR-005: only exception is
 # the Telemetry row itself, and only inside existing markers)
 NOMARK="$T/hive-nomarkers"; mkdir -p "$NOMARK"
+# An upgrade run through the hive's own scripts/vulyk-update.sh replaces that very script. An
+# in-place copy made the old process read the new file from its old offset and execute the
+# tail (upgrading a 0.17 hive to 0.18); install.sh now copies beside and renames over.
+SELF="$T/hive-self"; mkdir -p "$SELF"
+bash "$SRC/install.sh" "$SELF" --telemetry off > "$T/self-install.out" 2>&1
+{
+  printf '#!/usr/bin/env bash\n'
+  printf '# padding line %s - the offset the old process resumes from must land inside the new file\n' $(seq 1 40)
+  printf 'bash "%s/install.sh" "%s" --upgrade --telemetry off > /dev/null 2>&1\n' "$SRC" "$SELF"
+  printf 'echo "updater: after the upgrade"\n'
+  printf 'echo "updater: done"\n'
+} > "$SELF/scripts/vulyk-update.sh"
+expect_eq "an upgrade run from the hive's own updater lets that updater finish cleanly" \
+  "updater: after the upgrade|updater: done" "$(bash "$SELF/scripts/vulyk-update.sh" 2>&1 | paste -sd'|')"
+expect_eq "... and leaves the release's updater in place" "0" \
+  "$(cmp -s "$SRC/scripts/vulyk-update.sh" "$SELF/scripts/vulyk-update.sh"; echo $?)"
+
 bash "$SRC/install.sh" "$NOMARK" --telemetry off > "$T/nomark-install.out" 2>&1
 sed -i '/VULYK:PROFILE:START/d; /VULYK:PROFILE:END/d' "$NOMARK/CLAUDE.md"
 NOMARK_BEFORE="$(cat "$NOMARK/CLAUDE.md")"
