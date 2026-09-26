@@ -347,6 +347,22 @@ kb_delta() { # kb_delta <old> <new> - signed size change
     'BEGIN { d = (n - o) / 1024; if (d > -0.05 && d < 0.05) d = 0; printf "%+.1f KB", d }'
 }
 
+# new_profile_rows <hive-constitution> - Profile row labels the release has and the hive's block
+# lacks. A verbatim carry-over drops them silently, so replace_constitution names them. The
+# Telemetry row is left out: ensure_telemetry_row writes that one itself.
+new_profile_rows() {
+  awk '
+    FNR == 1 { f++ }
+    index($0, "VULYK:PROFILE:START") { on = 1; next }
+    index($0, "VULYK:PROFILE:END")   { on = 0; next }
+    on && /^\|/ {
+      l = $0; sub(/\r$/, "", l); sub(/^\| */, "", l); sub(/ *\|.*/, "", l); gsub(/\*\*/, "", l)
+      if (l == "" || l ~ /^-+$/ || l == "Field" || l == "Telemetry") next
+      if (f == 1) have[l] = 1; else if (!(l in have)) print l
+    }
+  ' "$1" "$SRC/CLAUDE.md"
+}
+
 pin_of() { # pin_of <file> - the TOP_MODEL alias a constitution pins, or nothing (same match as top-model.sh)
   grep -m1 -o -E 'TOP_MODEL[[:space:]]*=[[:space:]]*`?[A-Za-z0-9][][A-Za-z0-9._-]*' "$1" 2>/dev/null \
     | sed -E 's/.*=[[:space:]]*`?//' | head -1
@@ -377,7 +393,7 @@ print_migrate_hint() { # print_migrate_hint <constitution-file>
 # --constitution replace. The preflight before the copy loop already refused a hive without the
 # markers, so the render fails here only if the file changed under this run.
 replace_constitution() { # replace_constitution <constitution-file>
-  local file="$1" name new backup old_pin new_pin
+  local file="$1" name new backup old_pin new_pin rows
   name="$(basename "$file")"
   new="$(mktemp)"
   if ! render_constitution "$file" "$new"; then
@@ -410,6 +426,11 @@ replace_constitution() { # replace_constitution <constitution-file>
     echo "                     diff \"$backup\" \"$file\""
   fi
   rm -f "$new"
+  rows="$(new_profile_rows "$file" | paste -sd, - | sed 's/,/, /g')"   # its Profile body is the hive's either way
+  if [ -n "$rows" ]; then
+    echo "  note: this release's Profile has rows yours lacks: $rows. Copy them from"
+    echo "        $SRC/CLAUDE.md into the Profile block and fill them in."
+  fi
   if [ -n "$old_pin" ] && [ "$old_pin" != "auto" ] && [ "$old_pin" != "$new_pin" ]; then
     echo "  note: the old constitution pinned TOP_MODEL = $old_pin and the new one does not. Add a line"
     echo "        \`TOP_MODEL = $old_pin\` to it, or set VULYK_TOP_MODEL, to keep that pin."

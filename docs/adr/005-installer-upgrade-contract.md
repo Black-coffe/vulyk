@@ -240,3 +240,26 @@ consent`) already depends on must exist for telemetry to function at all, so the
 the only place that can write it, and the exception is scoped to one row inside markers that
 already exist - never to inserting markers, never to a marker-less block. Status line
 unchanged.
+
+### 2026-09-26 (ADR-013 D7, v0.18.0): constitution replace on request, unwiring, edited retirees
+
+1. **`--upgrade --constitution replace`** is the one path on which the installer writes over a
+   constitution, and only because the owner named it. The target is the file D3 already treats
+   as the constitution (`CLAUDE.md` when it is a VULYK constitution, else `CLAUDE.vulyk.md`); a
+   foreign `CLAUDE.md` is never opened. The release's `CLAUDE.md` goes in whole, with the hive's
+   `VULYK:PROFILE` and `VULYK:COMMANDS` bodies carried over verbatim - the markers stay the
+   ownership boundary - and the old file kept as `<name>.pre-<major.minor>.md` (a timestamp is
+   appended if that name exists). A Profile row the release has and the carried block lacks is
+   named, not added. A hive without both marker pairs is refused before the copy
+   loop, so nothing at all is written. `--check` prints `would back up` / `would replace`.
+   Plain `--upgrade` still never writes the constitution; it prints the size difference and the
+   exact command. `scripts/vulyk-update.sh` passes the flag through.
+2. **Unwiring.** On `--upgrade`, entries a release no longer wants leave the hive's
+   `settings.json` through the same python edit as `wire_hook` (0.18: `anomaly-scan.sh` on
+   `Stop`; `session-end-learnings.sh` on `SessionEnd`, only when the file is gone or removed by
+   this run - wiring follows the file). One backup per run, taken before the first edit.
+3. **D2's "removed regardless of content" is narrowed**, as this ADR's *Revisit when* foresaw,
+   without hashes in the manifest: the release clone `vulyk-update.sh` fetched holds the tag the
+   hive was installed from. A retired `OWNED` file that differs from `v<stamp>:<path>` (CR
+   ignored) is kept and printed `keep (edited)  <path> ...`, and it falls out of the manifest -
+   it is the owner's now. With no clone, no such tag or no such path in it, D2 applies unchanged.
