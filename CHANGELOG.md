@@ -19,7 +19,7 @@ them, and 56% of driver runs stopped before a verdict. This release cuts agents,
 - **`cycle.sh repair`: the repair story, written mechanically.** `<slug>-NN-repair-round-<n>.md` quotes the RED and anchored asks as `> N. text`, copies the findings verbatim, and takes Files and Verification from the done stories. It is idempotent, and `trace-check.sh` accepts the `## Asks` quotes. No `queen-planner` in a repair.
 - **`scripts/token-report.py <project> [--spec] [--since] [--json]`.** Raw and weighted tokens, dispatches by agent type and rounds per spec, read from the transcripts; it reproduces the audit's per-spec figures. `/vulyk-status` and `/vulyk-evolve` print it. The `totalTokens` a Workflow run prints is the sum of final contexts, not spend.
 - **`status --json` gains `since`, `seat_attempt` and `seats`** at the end; `ROUND` gains `seats=` and `since=`.
-- **Tests.** `tests/e2e.test.sh` runs the real driver against the real `cycle.sh` (green in one round; anchored BLOCK → mechanical repair → carried seat → green). Also `tests/token-report.test.sh`, and `tests/council.test.sh --quick` (~3 minutes).
+- **Tests.** `tests/e2e.test.sh` runs the real driver against the real `cycle.sh` (green in one round; anchored BLOCK → mechanical repair → carried seat → green). `tests/solo.test.sh` walks the Tier 1–2 loop the Queen runs herself (pass; block → escalate → reopen → repair → pass; an owner's REJECTED). Also `tests/token-report.test.sh`, and `tests/council.test.sh --quick` (~3 minutes).
 
 ### Changed
 - **Routing (ADR-013 D1).**
@@ -64,7 +64,9 @@ them, and 56% of driver runs stopped before a verdict. This release cuts agents,
 - **Unbounded review loop.** A review without `VERDICT:` was re-dispatched with no counter: one Tier 4 spec saw 44 `lead-review` runs. A seat now gets at most two dispatches per round.
 - **Release commit.** It staled a GREEN round.
 - **Dirty tree.** A stray owner file stopped a run at `open-round`, after the build; `claim` now refuses it before the build.
-- **Slow suites.** One could die silently at the Bash tool's 10-minute cap; now `close-story` fails with exit 4, `verification timed out after <N>s`.
+- **Slow suites.** One could die silently at the Bash tool's 10-minute cap; now `close-story` fails with exit 4, `verification timed out after <N>s`. The budget covers the whole run, every line and repeat.
+- **Owner overrides.** A round turned RED by the owner's REJECTED check now puts the owner's note into the repair story; without it the story had no condition to meet.
+- **`## Needs a human`.** It now names the asks the reviewer blocked on, not only seat REDs.
 
 ### Upgrade notes
 - **Replace the constitution to get the saving.** A plain upgrade never touches your constitution; it prints the size difference and the command. Run either:
