@@ -13,13 +13,24 @@
 # only. Not a script in its own right: nothing below runs on its own, so there is no `exit`.
 set -u
 
+is_story_file() { # is_story_file <file> -> 0 iff some line starts with `story:` - the same
+  # answer `grep -q '^story:'` gives, read in bash: on Windows every grep is a process spawn,
+  # and status asks this of every file in the spec several times per call.
+  local l
+  [ -f "$1" ] || return 1
+  while IFS= read -r l || [ -n "$l" ]; do
+    case "$l" in story:*) return 0 ;; esac
+  done < "$1"
+  return 1
+}
+
 pack_fingerprint() { # pack_fingerprint <spec-dir> - must match every caller exactly
   local dir="$1" names hasher=""
   names="$(
     for f in "$dir"/*.md; do
       [ -f "$f" ] || continue
-      grep -q '^story:' "$f" 2>/dev/null || continue
-      basename "$f"
+      is_story_file "$f" || continue
+      printf '%s\n' "${f##*/}"
     done | LC_ALL=C sort | tr '\n' ' '
   )"
   if command -v sha256sum >/dev/null 2>&1; then hasher="sha256sum"

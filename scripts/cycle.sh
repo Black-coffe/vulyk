@@ -135,8 +135,15 @@ marker() { # marker <plan.md> <Name> -> the value of the LAST matching line, emp
   # return the newest round's line, not the first one ever written; every other marker here
   # (Briefed/Approved/Branch/Shipped) is still written at most once, so the change is a no-op
   # for them.
-  local v
-  v="$(grep -E "^\*\*$2:\*\*" "$1" 2>/dev/null | tail -1 | sed "s/^\*\*$2:\*\*[[:space:]]*//")"
+  # Read in bash, not grep|tail|sed: status reads four markers per call (and compute_stage four
+  # more), and on Windows each pipeline stage is a process - same last match, same stripping.
+  local prefix="**$2:**" line v=""
+  [ -f "$1" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in "$prefix"*) v="${line#"$prefix"}" ;; esac
+  done < "$1"
+  v="${v%$'\r'}" # a CRLF plan.md: the old pipeline never returned the CR here either
+  v="${v#"${v%%[![:space:]]*}"}"
   case "$v" in ''|'<'*) return 0 ;; esac
   printf '%s' "$v"
 }
@@ -173,15 +180,30 @@ driver_guard() { # driver_guard <spec> <verb-label> <stamp-opt> - exits 2 before
 
 # --- small parsers shared by status and judge ---------------------------------------------
 
-fm_field() { # fm_field <story-file> <key> - a frontmatter "key: value" line, raw value
-  awk -v k="$2" -F': *' '$1 == k { sub(/[[:space:]]*#.*$/, "", $2); gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit }' "$1"
+fm_field() { # fm_field <story-file> <key> - a frontmatter "key: value" line, raw value. The
+  # first line whose text before its first `:` is exactly <key>; the value runs from past that
+  # colon and its spaces to the next colon, cut at a `#` comment, trimmed - byte for byte what
+  # `awk -F': *' '$1 == k { ... $2 ... }'` printed before 0.18, without a process per call.
+  local k="$2" line v
+  [ -f "$1" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ "${line%%:*}" = "$k" ] || continue
+    case "$line" in *:*) v="${line#*:}" ;; *) v="" ;; esac
+    v="${v#"${v%%[! ]*}"}"
+    v="${v%%:*}"
+    v="${v%%#*}"
+    v="${v#"${v%%[![:space:]]*}"}"
+    v="${v%"${v##*[![:space:]]}"}"
+    printf '%s\n' "$v"
+    return 0
+  done < "$1"
 }
 
 story_status_for_id() { # story_status_for_id <spec> <story-id>
   local spec="$1" id="$2" f
   for f in "$spec"/*.md; do
     [ -f "$f" ] || continue
-    grep -q '^story:' "$f" 2>/dev/null || continue
+    is_story_file "$f" || continue
     [ "$(fm_field "$f" story)" = "$id" ] && { fm_field "$f" status; return; }
   done
 }
@@ -366,8 +388,13 @@ json_num_array() { # json_num_array <json-line> <key> -> "2 5" from "key":[2,5];
   printf '%s' "$1" | sed -n "s/.*\"$2\":\[\([^]]*\)\].*/\1/p" | tr ',' ' '
 }
 
-json_field() { # json_field <json-line> <key> - a flat top-level string or number value
-  printf '%s' "$1" | sed -n "s/.*\"$2\":\"\\([^\"]*\\)\".*/\\1/p; s/.*\"$2\":\\([0-9][0-9]*\\).*/\\1/p" | head -1
+json_field() { # json_field <json-line> <key> - a flat top-level string or number value; like
+  # the sed it replaced, the greedy `.*` takes the LAST "<key>": in the line. A bash regex, so
+  # no process per call (status and emit_status call this on every ledger row they read).
+  local re_s='.*"'"$2"'":"([^"]*)"' re_n='.*"'"$2"'":([0-9]+)'
+  if [[ $1 =~ $re_s ]]; then printf '%s' "${BASH_REMATCH[1]}"
+  elif [[ $1 =~ $re_n ]]; then printf '%s' "${BASH_REMATCH[1]}"
+  fi
 }
 
 json_str_array() { # json_str_array "a b c" -> "a","b","c"  (no embedded spaces per element)
@@ -421,7 +448,7 @@ cmd_status() {
   local TODO=0 PROG=0 DONE=0 BLOCKED=0 f st
   for f in "$SPEC"/*.md; do
     [ -f "$f" ] || continue
-    grep -q '^story:' "$f" 2>/dev/null || continue
+    is_story_file "$f" || continue
     st="$(fm_field "$f" status)"
     case "$st" in
       done) DONE=$((DONE+1)) ;;
@@ -434,7 +461,7 @@ cmd_status() {
   local BUILD_WAVE="" CLOSE_FILE="" WAVE_STORIES="" MAXWAVE=0 wv
   for f in "$SPEC"/*.md; do
     [ -f "$f" ] || continue
-    grep -q '^story:' "$f" 2>/dev/null || continue
+    is_story_file "$f" || continue
     wv="$(fm_field "$f" wave)"; [ -n "$wv" ] || wv=1
     [ "$wv" -gt "$MAXWAVE" ] 2>/dev/null && MAXWAVE="$wv"
   done
@@ -443,7 +470,7 @@ cmd_status() {
     local ready="" any_todo=0 any_prog="" prog_files=""
     for f in "$SPEC"/*.md; do
       [ -f "$f" ] || continue
-      grep -q '^story:' "$f" 2>/dev/null || continue
+      is_story_file "$f" || continue
       wv="$(fm_field "$f" wave)"; [ -n "$wv" ] || wv=1
       [ "$wv" = "$w" ] || continue
       st="$(fm_field "$f" status)"
@@ -595,7 +622,7 @@ compute_stage() { # compute_stage <spec> <plan> - a best-effort mirror of state.
   local total=0 done_n=0 other_n=0 f st
   for f in "$spec"/*.md; do
     [ -f "$f" ] || continue
-    grep -q '^story:' "$f" 2>/dev/null || continue
+    is_story_file "$f" || continue
     total=$((total+1))
     st="$(fm_field "$f" status)"
     [ "$st" = done ] && done_n=$((done_n+1)) || other_n=$((other_n+1))
@@ -2045,7 +2072,7 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
   local f st bad=""
   for f in "$SPEC"/*.md; do
     [ -f "$f" ] || continue
-    grep -q '^story:' "$f" 2>/dev/null || continue
+    is_story_file "$f" || continue
     st="$(fm_field "$f" status)"
     # r2m16/K1: a blocked story is its own named refusal, not a member of the "done or
     # blocked" set that lets open-round proceed - the council never opens a round while a
@@ -2420,7 +2447,7 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   local f
   if [ -n "$N" ]; then
     for f in "$SPEC"/*-repair-round-"$N".md; do
-      [ -f "$f" ] && grep -q '^story:' "$f" 2>/dev/null || continue
+      [ -f "$f" ] && is_story_file "$f" || continue
       [ "$(fm_field "$f" status)" = done ] && continue
       echo "cycle: $SLUG - $f already repairs round $N, nothing written"
       if [ "$DOCOMMIT" = "1" ]; then
@@ -2455,7 +2482,7 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
 
   local maxn=0 maxw=0 sf n w files="" verifs=""
   for sf in "$SPEC"/*.md; do
-    [ -f "$sf" ] && grep -q '^story:' "$sf" 2>/dev/null || continue
+    is_story_file "$sf" || continue
     n="$(story_number "$sf" "$SLUG")"; [ "$n" -gt "$maxn" ] && maxn="$n"
     w="$(fm_field "$sf" wave)"; case "$w" in ''|*[!0-9]*) w=1 ;; esac
     [ "$w" -gt "$maxw" ] && maxw="$w"

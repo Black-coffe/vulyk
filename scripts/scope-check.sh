@@ -23,6 +23,12 @@
 # The story file itself is never counted: the build loop commits it alongside the code
 # (status line, one-commit-per-story), so it is bookkeeping, not scope.
 #
+# With no range given, a path another story of the same spec declares under `## Files` (or
+# that story's own file) is not counted either while that story is not `done` (ADR-013 D5): a
+# wave's workers share one working tree, and a sibling's uncommitted diff is its scope, not
+# this story's excess. A path this story declares itself is always its own. With an explicit
+# range nothing is excluded.
+#
 # Exit status is always 0: this reports, it does not block. Blocking is lead-review's job.
 
 set -u
@@ -41,13 +47,29 @@ cd "$ROOT" || exit 0
 # --- what the story declared -------------------------------------------------
 # The `## Files` block: lines starting with "- " until the next "## " heading.
 # HTML comments are skipped so the template's own guidance never counts as a path.
-DECLARED="$(awk '
-  /^##[[:space:]]+Files[[:space:]]*$/ { inblock=1; next }
-  /^##[[:space:]]/                    { inblock=0 }
-  inblock && /^<!--/                  { incomment=1 }
-  incomment                           { if (/-->/) incomment=0; next }
-  inblock && /^-[[:space:]]+/         { sub(/^-[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); if ($0 != "") print }
-' "$STORY")"
+files_of() {
+  awk '
+    /^##[[:space:]]+Files[[:space:]]*$/ { inblock=1; next }
+    /^##[[:space:]]/                    { inblock=0 }
+    inblock && /^<!--/                  { incomment=1 }
+    incomment                           { if (/-->/) incomment=0; next }
+    inblock && /^-[[:space:]]+/         { sub(/^-[[:space:]]+/, ""); sub(/[[:space:]]+$/, ""); if ($0 != "") print }
+  ' "$1"
+}
+DECLARED="$(files_of "$STORY")"
+
+matches_any() { # matches_any <file> <newline-separated patterns> - declared path, glob, or dir/
+  local file="$1" pattern
+  while IFS= read -r pattern; do
+    [ -z "$pattern" ] && continue
+    case "$pattern" in */) case "$file" in "$pattern"*) return 0 ;; esac ;; esac
+    # shellcheck disable=SC2254
+    case "$file" in $pattern) return 0 ;; esac
+  done <<EOF
+$2
+EOF
+  return 1
+}
 
 DECLARED_N=0
 [ -n "$DECLARED" ] && DECLARED_N="$(printf '%s\n' "$DECLARED" | grep -c .)"
@@ -78,6 +100,33 @@ if ! printf '%s\n' "$DECLARED" | grep -Fxq "$HOOKFILE"; then
   CHANGED="$(printf '%s\n' "$CHANGED" | grep -Fxv "$HOOKFILE")"
 fi
 
+# Siblings (working tree only): every other story file of this spec that is not `done`.
+if [ -z "$RANGE" ]; then
+  SIBLING_DECLARED=""
+  for sib in "$(dirname "$STORY_REL")"/*.md; do
+    [ -f "$sib" ] && [ "$sib" != "$STORY_REL" ] || continue
+    grep -q '^story:' "$sib" 2>/dev/null || continue
+    sst="$(awk -F': *' '$1 == "status" { sub(/[[:space:]]*#.*$/, "", $2); gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit }' "$sib")"
+    [ "$sst" = done ] && continue
+    # the sibling's own story file too: its worker writes `returned:` there, in the same tree
+    SIBLING_DECLARED="${SIBLING_DECLARED}${sib}
+$(files_of "$sib")
+"
+  done
+  if [ -n "$(printf '%s' "$SIBLING_DECLARED" | tr -d '[:space:]')" ]; then
+    KEPT=""
+    while IFS= read -r file; do
+      [ -z "$file" ] && continue
+      if matches_any "$file" "$SIBLING_DECLARED" && ! matches_any "$file" "$DECLARED"; then continue; fi
+      KEPT="${KEPT}${file}
+"
+    done <<EOF
+$CHANGED
+EOF
+    CHANGED="$(printf '%s' "$KEPT" | grep -v '^$')"
+  fi
+fi
+
 CHANGED_N=0
 [ -n "$CHANGED" ] && CHANGED_N="$(printf '%s\n' "$CHANGED" | grep -c .)"
 
@@ -87,16 +136,7 @@ CHANGED_N=0
 OUT_OF_SCOPE=""
 while IFS= read -r file; do
   [ -z "$file" ] && continue
-  hit=0
-  while IFS= read -r pattern; do
-    [ -z "$pattern" ] && continue
-    case "$pattern" in */) case "$file" in "$pattern"*) hit=1; break;; esac ;; esac
-    # shellcheck disable=SC2254
-    case "$file" in $pattern) hit=1; break ;; esac
-  done <<EOF
-$DECLARED
-EOF
-  [ "$hit" -eq 0 ] && OUT_OF_SCOPE="${OUT_OF_SCOPE}${file}
+  matches_any "$file" "$DECLARED" || OUT_OF_SCOPE="${OUT_OF_SCOPE}${file}
 "
 done <<EOF
 $CHANGED
