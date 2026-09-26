@@ -143,8 +143,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: real parse, real foldReviews, stubbed loop scenarios
+      - name: real parse, advance-based loop, stubbed loop scenarios
         run: bash tests/driver.test.sh
+
+      - name: end to end - the real driver against the real cycle.sh in a fixture repo
+        run: bash tests/e2e.test.sh
 
   telemetry-inbox:
     name: telemetry.sh suite + check every inbox bundle

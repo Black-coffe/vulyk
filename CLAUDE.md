@@ -91,6 +91,7 @@ Quiet variants only: their output is resent every turn. A story's `## Verificati
 | Council verdict contract tests | `bash tests/council.test.sh` |
 | Council verdict contract tests, quick | `bash tests/council.test.sh --quick` |
 | Driver contract tests | `bash tests/driver.test.sh` |
+| Driver + cycle end to end | `bash tests/e2e.test.sh` |
 | Anomaly telemetry contract tests | `bash tests/telemetry.test.sh` |
 | Full suite / build | none exists — VULYK has no test runner and no build step |
 
