@@ -184,18 +184,41 @@ fm_field() { # fm_field <story-file> <key> - a frontmatter "key: value" line, ra
   # first line whose text before its first `:` is exactly <key>; the value runs from past that
   # colon and its spaces to the next colon, cut at a `#` comment, trimmed - byte for byte what
   # `awk -F': *' '$1 == k { ... $2 ... }'` printed before 0.18, without a process per call.
-  local k="$2" line v
+  local k="$2" line
   [ -f "$1" ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do
     [ "${line%%:*}" = "$k" ] || continue
-    case "$line" in *:*) v="${line#*:}" ;; *) v="" ;; esac
-    v="${v#"${v%%[! ]*}"}"
-    v="${v%%:*}"
-    v="${v%%#*}"
-    v="${v#"${v%%[![:space:]]*}"}"
-    v="${v%"${v##*[![:space:]]}"}"
-    printf '%s\n' "$v"
+    fm_line_value "$line"
+    printf '%s\n' "$FMV"
     return 0
+  done < "$1"
+}
+
+fm_line_value() { # fm_line_value <line> -> FMV: the value fm_field reads off a matching line
+  local v
+  case "$1" in *:*) v="${1#*:}" ;; *) v="" ;; esac
+  v="${v#"${v%%[! ]*}"}"
+  v="${v%%:*}"
+  v="${v%%#*}"
+  v="${v#"${v%%[![:space:]]*}"}"
+  v="${v%"${v##*[![:space:]]}"}"
+  FMV="$v"
+}
+
+fm_status_wave() { # fm_status_wave <story-file> -> FM_STATUS, FM_WAVE, each by fm_field's rule
+  # (the first line keyed exactly so), in one read and no subshell - status needs both of every
+  # story, and asked per wave it used to spawn four processes per story per wave.
+  local line k got_s=0 got_w=0
+  FM_STATUS=""; FM_WAVE=""
+  [ -f "$1" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    k="${line%%:*}"
+    case "$k" in
+      status) [ "$got_s" = 1 ] && continue; fm_line_value "$line"; FM_STATUS="$FMV"; got_s=1 ;;
+      wave)   [ "$got_w" = 1 ] && continue; fm_line_value "$line"; FM_WAVE="$FMV"; got_w=1 ;;
+      *) continue ;;
+    esac
+    [ "$got_s" = 1 ] && [ "$got_w" = 1 ] && return 0
   done < "$1"
 }
 
@@ -228,8 +251,13 @@ current_round_dir() { # current_round_dir <spec> -> the highest round-N dir, or 
   [ -n "$bestdir" ] && printf '%s' "$bestdir"
 }
 
-round_field() { # round_field <round-dir> <key> - a ROUND file's "key=value" line
-  sed -n "s/^$2=//p" "$1/ROUND" 2>/dev/null | head -1
+round_field() { # round_field <round-dir> <key> - a ROUND file's first "key=value" line, read in
+  # bash (status reads several per call; each sed|head was two processes on Windows)
+  local line
+  [ -f "$1/ROUND" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in "$2="*) printf '%s\n' "${line#"$2="}"; return 0 ;; esac
+  done < "$1/ROUND"
 }
 
 tier_of() { # tier_of <spec> -> the spec's tier 1-4, from plan.md's first "**Tier:**" line
@@ -239,9 +267,17 @@ tier_of() { # tier_of <spec> -> the spec's tier 1-4, from plan.md's first "**Tie
   # autonomous-cycle-19): there is no default tier anymore - a silent 4 used to buy the
   # largest court unasked, and this function never writes (status calls it on every read;
   # m-1 is exactly this journal write, now gone - journal.md is untouched by a status call).
-  local spec="$1" plan
-  plan="$spec/plan.md"
-  grep -m1 '^\*\*Tier:\*\*' "$plan" 2>/dev/null | sed -n 's/^\*\*Tier:\*\* *\([1-4]\).*/\1/p'
+  # Only the first **Tier:** line counts, as grep -m1 did; read in bash, no process.
+  local line
+  [ -f "$1/plan.md" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      '**Tier:**'*)
+        line="${line#'**Tier:**'}"; line="${line#"${line%%[! ]*}"}"
+        case "$line" in [1-4]*) printf '%s\n' "${line:0:1}" ;; esac
+        return 0 ;;
+    esac
+  done < "$1/plan.md"
 }
 
 round_tier() { # round_tier <spec> <round-dir> -> the round's frozen tier= (open-round writes
@@ -281,10 +317,11 @@ round_required_seats() { # round_required_seats <spec> <round-dir> -> the round'
   # list (ADR-013 D3: written once by open-round, so a Profile or plan edit mid-round never
   # changes what an open round requires); a round opened before 0.18 has no seats= line and
   # falls back to the tier's roster.
-  local spec="$1" rd="$2"
-  if grep -q '^seats=' "$rd/ROUND" 2>/dev/null; then
-    round_field "$rd" seats
-    return
+  local spec="$1" rd="$2" line
+  if [ -f "$rd/ROUND" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in seats=*) printf '%s' "${line#seats=}"; return ;; esac
+    done < "$rd/ROUND"
   fi
   required_seats_for_tier "$(round_tier "$spec" "$rd")"
 }
@@ -307,7 +344,11 @@ missing_required_seats() { # missing_required_seats <round-dir> <required-list> 
 }
 
 seat_is_carried() { # seat_is_carried <seat-file> -> 0 iff its header says it was carried forward
-  head -1 "$1" 2>/dev/null | grep -qF 'carried: round '
+  local l=""
+  [ -f "$1" ] || return 1
+  IFS= read -r l < "$1"
+  case "$l" in *'carried: round '*) return 0 ;; esac
+  return 1
 }
 
 seat_attempt_count() { # seat_attempt_count <round-dir> <seat> -> every stored file for the seat
@@ -445,35 +486,30 @@ cmd_status() {
   local BRANCH_JSON="null"; [ -n "$BRANCH_V" ] && BRANCH_JSON="\"$BRANCH_V\""
 
   # --- stories: counts, and the lowest wave that is either dispatchable or closeable -------
+  # One read per story (status and wave together), kept in arrays for the wave walk below -
+  # the same answers the per-wave re-reads gave, without re-reading every story per wave.
   local TODO=0 PROG=0 DONE=0 BLOCKED=0 f st
+  local BUILD_WAVE="" CLOSE_FILE="" WAVE_STORIES="" MAXWAVE=0 wv
+  local -a S_FILE=() S_ST=() S_WV=()
   for f in "$SPEC"/*.md; do
     [ -f "$f" ] || continue
     is_story_file "$f" || continue
-    st="$(fm_field "$f" status)"
+    fm_status_wave "$f"; st="$FM_STATUS"; wv="$FM_WAVE"; [ -n "$wv" ] || wv=1
     case "$st" in
       done) DONE=$((DONE+1)) ;;
       blocked) BLOCKED=$((BLOCKED+1)) ;;
       in-progress) PROG=$((PROG+1)) ;;
       *) TODO=$((TODO+1)) ;;
     esac
-  done
-
-  local BUILD_WAVE="" CLOSE_FILE="" WAVE_STORIES="" MAXWAVE=0 wv
-  for f in "$SPEC"/*.md; do
-    [ -f "$f" ] || continue
-    is_story_file "$f" || continue
-    wv="$(fm_field "$f" wave)"; [ -n "$wv" ] || wv=1
     [ "$wv" -gt "$MAXWAVE" ] 2>/dev/null && MAXWAVE="$wv"
+    S_FILE+=("$f"); S_ST+=("$st"); S_WV+=("$wv")
   done
-  local w
+  local w i
   for w in $(seq 1 "${MAXWAVE:-0}" 2>/dev/null); do
     local ready="" any_todo=0 any_prog="" prog_files=""
-    for f in "$SPEC"/*.md; do
-      [ -f "$f" ] || continue
-      is_story_file "$f" || continue
-      wv="$(fm_field "$f" wave)"; [ -n "$wv" ] || wv=1
-      [ "$wv" = "$w" ] || continue
-      st="$(fm_field "$f" status)"
+    for i in "${!S_FILE[@]}"; do
+      [ "${S_WV[$i]}" = "$w" ] || continue
+      f="${S_FILE[$i]}"; st="${S_ST[$i]}"
       case "$st" in
         todo)
           any_todo=1
@@ -602,7 +638,8 @@ cmd_status() {
   fi
 
   printf '{"spec":"%s","slug":"%s","stage":"%s","next":"%s","briefed":%s,"approved":%s,"branch":%s,"head":"%s","pack":"%s","stories":{"todo":%s,"in-progress":%s,"done":%s,"blocked":%s},"wave":%s,"wave_stories":[%s],"round":%s,"ceiling":%s,"tier":%s,"open":%s,"court":%s,"missing":[%s],"stale":%s,"verdict":%s,"review":%s,"red":[%s],"round_dir":%s,"paused":%s,"shipped":%s,"since":%s,"seat_attempt":{%s},"seats":[%s]}\n' \
-    "$SPEC" "$SLUG" "$(compute_stage "$SPEC" "$PLAN")" "$NEXT" "$BRIEFED_B" "$APPROVED_B" "$BRANCH_JSON" "$HEAD" "$PACK" \
+    "$SPEC" "$SLUG" "$(compute_stage "$SPEC" "$PLAN" "$BRIEFED_B" "$BRANCH_V" "$((TODO+PROG+DONE+BLOCKED))" "$DONE" "$NEWEST_VERDICT" "$SHIPPED_B")" \
+    "$NEXT" "$BRIEFED_B" "$APPROVED_B" "$BRANCH_JSON" "$HEAD" "$PACK" \
     "$TODO" "$PROG" "$DONE" "$BLOCKED" \
     "$WAVE_JSON" "$WAVE_STORIES_JSON" \
     "$ROUND_N" "$CEILING" "$TIER_JSON" "$OPEN_B" "$COURT_JSON" "$(json_str_array "$MISSING")" "$STALE_B" \
@@ -610,32 +647,31 @@ cmd_status() {
     "$SINCE_JSON" "$SEAT_ATTEMPT_JSON" "$(json_str_array "$REQUIRED")"
 }
 
-compute_stage() { # compute_stage <spec> <plan> - a best-effort mirror of state.sh's ladder,
-  # extended with the council stage (C9); not itself read by anything yet in this story.
-  local spec="$1" plan="$2" stage="01-spec"
+compute_stage() { # compute_stage <spec> <plan> <briefed:true|false> <branch> <stories> <done>
+  # <newest-verdict> <shipped:true|false> - a best-effort mirror of state.sh's ladder, extended
+  # with the council stage (C9). cmd_status (its one caller) passes what it has already read -
+  # the markers, the story counts, the newest row's verdict - so none of it is read twice.
+  local spec="$1" plan="$2" briefed="$3" branch="$4" total="$5" done_n="$6" v="$7" shipped="$8"
+  local stage="01-spec" line checked=""
   [ -f "$spec/brief.md" ] || { echo "$stage"; return; }
-  [ -f "$plan" ] && stage="02-planned"
   if [ -f "$plan" ]; then
-    { [ -n "$(marker "$plan" Approved)" ] || [ -n "$(marker "$plan" Briefed)" ]; } && stage="02-approved"
-    [ -n "$(marker "$plan" Branch)" ] && stage="03-building"
+    stage="02-planned"
+    [ "$briefed" = true ] && stage="02-approved"
+    [ -n "$branch" ] && stage="03-building"
   fi
-  local total=0 done_n=0 other_n=0 f st
-  for f in "$spec"/*.md; do
-    [ -f "$f" ] || continue
-    is_story_file "$f" || continue
-    total=$((total+1))
-    st="$(fm_field "$f" status)"
-    [ "$st" = done ] && done_n=$((done_n+1)) || other_n=$((other_n+1))
-  done
-  [ "$stage" = "03-building" ] && [ "$total" -gt 0 ] && [ "$other_n" -eq 0 ] && stage="03-built"
-  local slug row v; slug="$(slug_of "$spec")"
-  row="$(newest_row "$slug")"
-  [ -n "$row" ] && v="$(json_field "$row" verdict)" && [ -n "$v" ] && stage="04-council:$v"
-  case "$(grep '^\*\*Checked:\*\*' "$plan" 2>/dev/null | grep -v '^\*\*Checked:\*\* <' | tail -1)" in
+  [ "$stage" = "03-building" ] && [ "$total" -gt 0 ] && [ "$done_n" -eq "$total" ] && stage="03-built"
+  [ -n "$v" ] && stage="04-council:$v"
+  # the last **Checked:** line that is not the template's `<...>` placeholder
+  if [ -f "$plan" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in '**Checked:** <'*) ;; '**Checked:**'*) checked="$line" ;; esac
+    done < "$plan"
+  fi
+  case "$checked" in
     *ACCEPTED*) stage="05-checked" ;;
     *REJECTED*) stage="05-rejected" ;;
   esac
-  [ -f "$plan" ] && [ -n "$(marker "$plan" Shipped)" ] && stage="06-shipped"
+  [ "$shipped" = true ] && stage="06-shipped"
   [ -f "$spec/PAUSE" ] && stage="paused"
   echo "$stage"
 }
@@ -645,16 +681,30 @@ compute_stage() { # compute_stage <spec> <plan> - a best-effort mirror of state.
 # it currently runs the identical computation (the standalone case - open-round exiting 6
 # before any round is judged - is story 04's, once open-round exists).
 
-seat_field() { # seat_field <file> <LABEL> - value after "LABEL: " on the first matching line
-  sed -n "s/^$2:[[:space:]]*//p" "$1" 2>/dev/null | head -1
+# The report parsers below read in bash, not through printf|grep|sed: record-seat and judge call
+# them per label and per ask, and on Windows each pipeline was a burst of process spawns - a
+# council seat's record-seat cost 3.5 s. Each prints what its sed/grep pipeline printed.
+
+seat_field() { # seat_field <file> <LABEL> - value after "LABEL:" and its blanks on the first matching line
+  [ -f "$1" ] || return 0
+  seat_field_str "$(cat "$1")" "$2"
 }
 
 seat_field_str() { # seat_field_str <text> <LABEL> - same as seat_field, over a string, not a file
-  printf '%s\n' "$1" | sed -n "s/^$2:[[:space:]]*//p" | head -1
+  local line
+  while IFS= read -r line; do
+    case "$line" in "$2:"*) line="${line#"$2:"}"; printf '%s\n' "${line#"${line%%[![:space:]]*}"}"; return ;; esac
+  done <<<"$1"
 }
 
-seat_header_field() { # seat_header_field <file> <key> - from the "<!-- seat: ... -->" header
-  head -1 "$1" 2>/dev/null | grep -oE "$2: [^·]*" | head -1 | sed "s/^$2: *//; s/ *$//"
+seat_header_field() { # seat_header_field <file> <key> - from the "<!-- seat: ... -->" header: the
+  # text after the first "<key>: " up to the next ` · ` separator, trailing spaces dropped
+  local l=""
+  [ -f "$1" ] || return 0
+  IFS= read -r l < "$1"
+  case "$l" in *"$2: "*) ;; *) return 0 ;; esac
+  l="${l#*"$2: "}"; l="${l%%$'\xc2\xb7'*}"; l="${l#"${l%%[! ]*}"}"; l="${l%"${l##*[! ]}"}"
+  printf '%s\n' "$l"
 }
 
 seat_presence() { # seat_presence <round-dir> <seat> -> present | absent | missing
@@ -670,8 +720,8 @@ seat_ask_lines() { # seat_ask_lines <file> -> "n verdict evidenced(1/0)" per ASK
   # header's unevidenced: list and judge's red/red_unevidenced never disagree on one report.
   grep -E '^ASK [0-9]+:' "$1" 2>/dev/null | while IFS= read -r line; do
     local n v ev
-    n="$(printf '%s' "$line" | sed -n 's/^ASK \([0-9][0-9]*\):.*/\1/p')"
-    v="$(printf '%s' "$line" | sed -n 's/^ASK [0-9][0-9]*:[[:space:]]*\(GREEN\|RED\|N\/A\).*/\1/p')"
+    n="$(ask_num_of "$line")"
+    v="$(ask_verdict_of "$line")"
     ev="$(ask_evidenced_of "$line")"
     printf '%s %s %s\n' "$n" "$v" "$ev"
   done
@@ -1341,16 +1391,12 @@ reject_seat_report() { # reject_seat_report <rd> <seat> <model> <n> <head> <pack
   exit 4
 }
 
-missing_label() { # missing_label <report> -> the first required C5 label absent, or ""
-  printf '%s\n' "$1" | grep -q '^COUNCIL:'        || { printf 'COUNCIL:'; return; }
-  printf '%s\n' "$1" | grep -q '^MODEL:'          || { printf 'MODEL:'; return; }
-  printf '%s\n' "$1" | grep -q '^COURT:'          || { printf 'COURT:'; return; }
-  printf '%s\n' "$1" | grep -q '^VERDICT:'        || { printf 'VERDICT:'; return; }
-  printf '%s\n' "$1" | grep -q '^ASSUMED CONFIG:' || { printf 'ASSUMED CONFIG:'; return; }
-  printf '%s\n' "$1" | grep -q '^RAN:'            || { printf 'RAN:'; return; }
-  printf '%s\n' "$1" | grep -q '^PATH:'           || { printf 'PATH:'; return; }
-  printf '%s\n' "$1" | grep -q '^UNASKED:'        || { printf 'UNASKED:'; return; }
-  printf '%s\n' "$1" | grep -q '^BREACH:'         || { printf 'BREACH:'; return; }
+missing_label() { # missing_label <report> -> the first required C5 label absent, or "" - a
+  # label counts only at the start of a line (the report's first line, or after a newline)
+  local lab
+  for lab in 'COUNCIL:' 'MODEL:' 'COURT:' 'VERDICT:' 'ASSUMED CONFIG:' 'RAN:' 'PATH:' 'UNASKED:' 'BREACH:'; do
+    case "$1" in "$lab"*|*$'\n'"$lab"*) ;; *) printf '%s' "$lab"; return ;; esac
+  done
   return 0
 }
 
@@ -1373,10 +1419,28 @@ taint_reason() { # taint_reason <report> <slug> -> the D3 taint description, or 
   return 0
 }
 
-ask_line_of() { printf '%s\n' "$1" | grep -m1 -E "^ASK $2:"; } # ask_line_of <report> <n>
-ask_verdict_of() { printf '%s' "$1" | sed -n 's/^ASK [0-9][0-9]*:[[:space:]]*\(GREEN\|RED\|N\/A\).*/\1/p'; } # <ask-line>
-ask_rest_of() { printf '%s' "$1" | sed -E 's/^ASK [0-9]+: (GREEN|RED|N\/A)( - )?//'; } # <ask-line> -> everything
-  # after the verdict token, interior " - " kept intact (R8 - no truncation at the last dash)
+ask_line_of() { # ask_line_of <report> <n> -> the first line starting "ASK <n>:"
+  local line
+  while IFS= read -r line; do
+    case "$line" in "ASK $2:"*) printf '%s\n' "$line"; return ;; esac
+  done <<<"$1"
+}
+ask_num_of() { # ask_num_of <ask-line> -> its ask number
+  local re='^ASK ([0-9]+):'
+  [[ $1 =~ $re ]] && printf '%s\n' "${BASH_REMATCH[1]}"
+  return 0
+}
+ask_verdict_of() { # ask_verdict_of <ask-line> -> GREEN | RED | N/A | ""
+  local re='^ASK [0-9]+:[[:space:]]*(GREEN|RED|N/A)'
+  [[ $1 =~ $re ]] && printf '%s\n' "${BASH_REMATCH[1]}"
+  return 0
+}
+ask_rest_of() { # ask_rest_of <ask-line> -> everything after "ASK n: <VERDICT>" and an optional
+  # " - ", interior " - " kept intact (R8 - no truncation at the last dash); a line not of that
+  # exact shape comes back whole
+  local re='^ASK [0-9]+: (GREEN|RED|N/A)( - )?'
+  if [[ $1 =~ $re ]]; then printf '%s' "${1:${#BASH_REMATCH[0]}}"; else printf '%s' "$1"; fi
+}
 ask_evidenced_of() { # ask_evidenced_of <ask-line> -> "1" iff run:+saw: or url:+saw: occur
   # anywhere in the remainder, "0" otherwise - the one rule record-seat and judge both use (R8).
   case "$(ask_rest_of "$1")" in
@@ -1434,10 +1498,10 @@ cmd_record_seat_council() { # cmd_record_seat_council <spec> <rd> <n> <seat> <at
   [ -z "$tr" ] || reject_seat_report "$RD" "$SEAT" "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$REPORT" "tainted, $tr"
 
   # --- structural pass: every ASK number exactly once, 1..A ---------------------------------
-  local nums="" n line
+  local nums="" n line re_num='^ASK ([0-9]+):'
   while IFS= read -r line; do
     case "$line" in "ASK "[0-9]*) ;; *) continue ;; esac
-    n="$(printf '%s' "$line" | sed -n 's/^ASK \([0-9][0-9]*\):.*/\1/p')"
+    n=""; [[ $line =~ $re_num ]] && n="${BASH_REMATCH[1]}"
     [ -n "$n" ] || continue
     case " $nums " in
       *" $n "*) reject_seat_report "$RD" "$SEAT" "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$REPORT" "ASK $n appears more than once" ;;
@@ -2272,7 +2336,7 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
   [ "$DOCOMMIT" = "1" ] && commit_paperwork reopen "vulyk($SLUG): reopen after round $N" "$SPEC"
 
   echo "cycle: $SLUG - reopened after round $N, ceiling now $NEWCEIL"
-  emit_status reopen "$SPEC"
+  emit_status reopen "$SPEC" "$REOPEN_NEXT"
   exit 0
 }
 
@@ -2624,9 +2688,11 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
   fi
 
   # --- the loop: status decides, the verb acts, at most 12 steps -----------------------------
-  local st next last="" nsteps=0
+  local st="" next last="" nsteps=0
   while :; do
-    st="$(cmd_status "$SPEC")"
+    # A step's own last line carries the status it left behind (emit_status, C5) - read that
+    # instead of computing it again; a line without one (exit 6) falls back to cmd_status.
+    [ -n "$st" ] || st="$(cmd_status "$SPEC")"
     next="$(json_field "$st" next)"
     case "$next" in branch|open-round|judge|repair) ;; *) break ;; esac
     # A verb that leaves `next` naming itself again made no progress (a repair story that
@@ -2644,6 +2710,8 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
     STEPS="${STEPS:+$STEPS,}\"$next\""
     # exit 6 is ok:true (an escalation was recorded) - status reads `escalated` next time round
     case "$VERB_LINE" in *'"ok":true'*) ;; *) advance_stop "$next" ;; esac
+    st=""
+    case "$VERB_LINE" in *',"status":{'*) st="${VERB_LINE#*,\"status\":}"; st="${st%\}}" ;; esac
   done
 
   echo "cycle: $SLUG - advanced ${nsteps} step(s), next: $next"

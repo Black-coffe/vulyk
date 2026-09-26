@@ -4,13 +4,27 @@
 # `status`/`judge`/`escalate`, scripts/journal.sh, and the verdict table (docs/adr/
 # 001-cycle-state-contract.md D4).
 #
-#   Usage: bash tests/council.test.sh            # from the VULYK repo root
+#   Usage: bash tests/council.test.sh            # from the VULYK repo root - the release gate
+#          bash tests/council.test.sh --quick    # the contract in a few minutes (ADR-013 D5)
 #
 # Mirrors tests/cycle.test.sh: a throwaway git repo, `expect()` on stdout substrings, exit 1
 # on the first wrong answer. Unlike cycle.test.sh's single spec walked through six stages,
 # council verdicts are round-scoped and independent, so each scenario below gets its own spec
 # directory (its own `"spec"` key in council.jsonl) instead of one spec reused throughout.
+#
+# --quick keeps one case per verb and rule and every 0.18 case, and skips what re-proves a
+# shipped fix a kept case already exercises: the variant batteries (anchored BLOCK, taint,
+# evidence, review layout, ceilings), the per-story regression walks (stories 14-17, C5) and
+# every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
+# process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
+QUICK=0
+case "${1:-}" in
+  --quick) QUICK=1 ;;
+  '') ;;
+  *) echo "usage: bash tests/council.test.sh [--quick]" >&2; exit 2 ;;
+esac
+full() { [ "$QUICK" -eq 0 ]; } # `if full; then ... fi` wraps each block --quick skips
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
@@ -355,6 +369,7 @@ printf '%s' "$row" | grep -q '"verdict":"RED"' && printf '%s' "$row" | grep -q '
 grep -qE '^\*\*Council:\*\* RED round 1,.* - red: 2$' docs/specs/red1/plan.md && echo "  ok    plan line ends '- red: 2'" \
   || { echo "::error::plan.md: $(grep '^\*\*Council:\*\*' docs/specs/red1/plan.md)"; fail=1; }
 
+if full; then # --quick skips: the anchored-BLOCK variants, the multi-round ceiling, no-progress and half walks
 # --- judge: an anchored review BLOCK (convergent-judge-02, D4) ------------------------------
 
 write_review_body() { # write_review_body <round-dir> <body...> - a BLOCK review with a given finding line
@@ -592,6 +607,7 @@ out="$(council judge docs/specs/halffloor2b)"; ex=$?
 row="$(grep '"spec":"halffloor2b"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -qF '"escalate":"half"' && echo "  ok    A=2 both-red row escalate:half" || { echo "::error::row: $row"; fail=1; }
 
+fi # --quick: end of the judge-variant skip
 # --- judge: three ABSENT seats -------------------------------------------------------------------
 
 echo "judge: every blind seat exhausted -> ESCALATE env; only the required one (opus) is ABSENT in the row"
@@ -759,6 +775,7 @@ git log -1 --format=%s | grep -qF 'vulyk(branch2): branch vulyk/branch2' && echo
   || { echo "::error::$(git log -1 --format=%s)"; fail=1; }
 git checkout -q main
 
+if full; then # --quick skips: the R17 git-failure proofs (index.lock, a checked-out branch, a failed worktree add)
 # --- git failures are never swallowed into a false success (R17/M-6) -------------------------
 
 echo "branch: checkout fails (branch already checked out in another worktree) -> exit 2, no **Branch:** line (R17/M-6)"
@@ -805,6 +822,7 @@ out="$(council open-round docs/specs/wtfail1 2>&1)"; ex=$?
   || { echo "::error::round-1 exists despite the worktree failure: $(ls docs/specs/wtfail1/council/round-1 2>&1)"; fail=1; }
 rm -f .vulyk/court
 
+fi # --quick: end of the git-failure skip
 # --- record-seat: preconditions (open round, HEAD match) -------------------------------------
 
 echo "record-seat: no open round -> exit 2"
@@ -924,6 +942,7 @@ out="$(report_verdict_mismatch | council record-seat docs/specs/rseat6 1 haiku 2
 [ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'inconsistent' && echo "  ok    VERDICT inconsistent -> exit 4" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+if full; then # --quick skips: the taint battery and the evidence re-ask rules
 echo "record-seat: taint is path-anchored on the slug, not the bare words (R9)"
 mk_spec demo 2
 rd_demo1="$(mk_open_round demo 1)"
@@ -1120,6 +1139,7 @@ out="$(printf 'garbage3\n' | council record-seat docs/specs/rabsent 1 haiku 2>&1
 [ ! -f "$rd_rabsent/haiku.md" ] && [ -f "$rd_rabsent/haiku.attempt-2.md" ] && echo "  ok    no final haiku.md, attempt-2.md remains" \
   || { echo "::error::files: $(ls "$rd_rabsent")"; fail=1; }
 
+fi # --quick: end of the taint/evidence skip
 # --- record-seat: review seat, verdict read from line 1 only (C5 amended, story 27/R28,N-m4) --
 
 echo "record-seat review: VERDICT: BLOCK on line 1 -> recorded BLOCK"
@@ -1167,6 +1187,7 @@ row="$(grep '"spec":"rrev3"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -qF '"escalate":"env"' && printf '%s' "$row" | grep -qF '"review":"ABSENT"' \
   && echo "  ok    row escalate:env, review ABSENT" || { echo "::error::row: $row"; fail=1; }
 
+if full; then # --quick skips: the review layout variants
 # --- review layout at record-seat (convergent-judge-07): a BLOCK needs a tagged finding line --
 # (plan ## Contracts: review.md finding line) - otherwise MALFORMED, exit 4, re-asked once.
 
@@ -1225,6 +1246,8 @@ row="$(grep '"spec":"rlayun"' memory/stats/council.jsonl | tail -1)"
   && printf '%s' "$row" | grep -qF '"note":"review BLOCK unanchored"' \
   && echo "  ok    judge -> GREEN, review PASS, note 'review BLOCK unanchored'" || { echo "::error::rlayun judge: exit=$jex row=$row"; fail=1; }
 
+fi # --quick: end of the review-layout skip
+if full; then # --quick skips: the model-resolution precedence
 # --- record-seat: model resolution (--model > report's MODEL: > unknown) ----------------------
 
 echo "record-seat: --model overrides the report's MODEL: line; falls back to unknown"
@@ -1241,6 +1264,7 @@ printf 'COUNCIL: x\nMODEL: \nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none giv
 grep -qF 'model: unknown' "$rd_rmodel2/sonnet.md" && echo "  ok    falls back to unknown when neither is given" \
   || { echo "::error::header: $(head -1 "$rd_rmodel2/sonnet.md")"; fail=1; }
 
+fi # --quick: end of the model-resolution skip
 # --- record-seat --file: report from a path instead of stdin (C1) ------------------------------
 
 echo "record-seat --file: a report read from a file records a body byte-identical to the stdin-recorded twin"
@@ -1588,6 +1612,7 @@ out="$(council open-round docs/specs/cstory6 --commit 2>&1)"; ex=$?
 [ -z "$(git status --porcelain)" ] && echo "  ok    tree is clean after both verbs" \
   || { echo "::error::tree dirty: $(git status --porcelain)"; fail=1; }
 
+if full; then # --quick skips: the story 08 fix proofs (returned:, r2m2, LR31, r2m9)
 # --- story 16: the four story 08 fixes - cstoryr1..r4 (M3/ADR-006 returned: gate), r2m2 -------
 # (close-story --commit owns its commit), LR31 (wave_stories lists only ready stories), r2m9 --
 # (a ## Commands cell with its own && matches whole) ------------------------------------------
@@ -1817,6 +1842,7 @@ out="$(council close-story docs/specs/cstoryr2m9b/cstoryr2m9b-01-first.md 2>&1)"
   && echo "  ok    r2m9: an extra && true segment is refused, naming the segment" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+fi # --quick: end of the story 16 skip
 # --- open-round: preconditions, the court, D1 idempotency/staleness, orphan cleanup ------------
 
 echo "open-round: preconditions - no Branch line -> exit 2"
@@ -2032,6 +2058,7 @@ out="$(council escalate docs/specs/esc4 2>&1)"; ex=$?
 [ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    PAUSE -> exit 3" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+if full; then # --quick skips: the R15 court-reduction proof
 # --- open-round: the court's reduction is committed inside the worktree (R15/M-1,M-2) ---------
 
 echo "open-round: the court's reduction is committed inside the worktree - clean status, HEAD:plan.md no longer resolves, stays inside the court (R15)"
@@ -2050,6 +2077,8 @@ git log -1 --format=%s | grep -qF "vulyk(courtred1): open-round 1" \
   && echo "  ok    the main repo's HEAD carries only open-round's own commit - the court's reduction commit stayed inside the court" \
   || { echo "::error::main repo HEAD commit message: $(git log -1 --format=%s)"; fail=1; }
 
+fi # --quick: end of the court-reduction skip
+if full; then # --quick skips from here to the 0.18 section: the reopen walk, the ceiling variants, the committed-verb walks, stories 14-17, every pinned-commit replay, the C5 block
 # --- reopen: ceiling +3 after ESCALATE, then a fourth round opens ------------------------------
 
 echo "reopen: three RED rounds escalate (ceiling) on the third, reopen bumps ceiling to 6, a 4th round opens"
@@ -3473,6 +3502,7 @@ last="$(printf '%s\n' "$out" | tail -1)"
 council resume docs/specs/c5dirty >/dev/null 2>&1
 
 
+fi # --quick: end of the skip opened at the reopen walk
 # ============================================================================================
 # 0.18 - Light VULYK (docs/adr/013-light-vulyk.md): the roster and the Client path, the sidecar
 # constitution, frozen seats, no-court rounds, carry-forward, reopen -> repair, the repair and
@@ -3855,4 +3885,5 @@ out="$(VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh close-story docs/specs/r18cs
 echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every pre-0.18 key"
 council status docs/specs/r18nc --json | jq -r 'keys_unsorted | .[-6:] | join(",")' | expect "the last six keys" "round_dir,paused,shipped,since,seat_attempt,seats"
 
+[ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
 exit $fail
