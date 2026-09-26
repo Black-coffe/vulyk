@@ -3,342 +3,211 @@ export const meta = {
   description: 'build → council → repair, round ceiling by tier (1 / 2 / 3 for Tier 1 / 2 / 3-4, the same again per reopen)',
   phases: [
     { title: 'Build' },
-    { title: 'Round' },
-    { title: 'Judge' },
-    { title: 'Repair' },
+    { title: 'Council' },
   ],
 }
 
-// This driver holds no verdict or staleness logic and never parses a dispatch return except to
-// see whether it is empty; the one prose it reads is the first line of a review report it folds
-// itself (VERDICT: PASS|BLOCK, Tier 4 only) - it loops on
-// scripts/cycle.sh's `status --json` and acts on every verb's exit code too (ADR-001 D2):
-// ok:false ends the run with the failure in the returned object, except a record-seat
-// MALFORMED (re-ask that seat once), a second failed close-story for the same file (also
-// ends the run, naming the file instead of an exit code) and a non-JSON clerk last line
-// (one more dispatch, then ends the run). Two-track rule (C1 revised): a garbled line from a
-// read-only or stamp-idempotent verb (`status`, `claim`, `release`) is re-asked with the
-// identical prompt, while one from a mutating verb (`branch`, `close-story`, `open-round`,
-// `record-seat`, `judge`) is recovered by asking `status <spec> --json` once instead - the
-// verb may already have taken effect, and re-running it would exit 2.
-// Everything else it knows about the state comes from `status --json`; a decision that needs more than `next`, `wave_stories`,
-// `court`, `round`, `round_dir`, `spec`, `branch`, `head` or `tier` means the status contract
-// is missing a key, not something to work around here.
-// Poll rule (C6): `status --json` is asked once before the first iteration and again only after
-// an iteration that ran no verb, ran several verbs in parallel, or ran one verb whose result
-// carried no `status` - otherwise that single sequential verb's own post-verb `status` object
-// is the next iteration's state.
+// This driver dispatches agents and decides nothing else: no verdict, ceiling, staleness,
+// branch, round or repair. `scripts/cycle.sh advance` runs every mechanical verb up to the next
+// agent boundary and hands back the state (ADR-013 D2, D6). The runtime has no shell, so each
+// boundary costs one cycle-clerk call - `advance --claim` at the start, `advance` after a wave,
+// `advance --ingest` after a council dispatch - and `release` closes the run. Every state the
+// loop acts on is the `status` object the last `advance` carried; `status` itself is asked only
+// to recover a clerk line that cannot be read, never re-running a verb that may have acted.
+// What the driver remembers is per run and bounds re-dispatch only: misses per story file (two
+// end the run) and dispatches per seat per round (a third ends the run).
+// There is no deadline in here because the runtime has no clock; deadlines live in the verbs
+// (`close-story`'s verification timeout) and in each agent's own Bash timeouts.
 
 const TERMINAL = ['green', 'escalated', 'paused', 'shipped']
-const SEAT_AGENT = { haiku: 'council-haiku', sonnet: 'council-sonnet', opus: 'council-opus', review: 'lead-review' }
-// mirrors maxTurns in .claude/agents/*.md as of 2026-09-14 - update both together
-const CAPS = { 'worker-code': 90, 'worker-test': 90, 'council-haiku': 60, 'council-sonnet': 60, 'council-opus': 60, 'lead-review': 60, 'cycle-clerk': 5, 'drone-scout': 15 }
+// advance runs these itself - one reaching the driver means advance stopped short of a boundary
+const ADVANCE_VERBS = ['branch', 'open-round', 'judge', 'repair']
+const SEAT_AGENT = { haiku: 'council-haiku', opus: 'council-opus', review: 'lead-review' }
+const BLIND = ['haiku', 'opus']
+// mirrors maxTurns in .claude/agents/*.md - update both together
+const CAPS = { 'worker-code': 90, 'worker-test': 90, 'council-haiku': 60, 'council-opus': 60, 'lead-review': 60 }
+const MAX_ITERATIONS = 40
 
-// The three reasons a dispatch comes back dead, told apart for workers, council seats and the
-// reviewer alike (C3): a rejected agent() (the thunk hands back { threw }), an empty resolve -
-// the shape a turn-cap death takes, so name the agent and its cap - and "no report", which is
-// not decided here: a non-empty return is always handed to the verb, and NO_REPORT below is
-// what the driver calls that verb's own exit 4 (ADR-006 - the driver never reads the prose).
-// Returns null when <r> is a non-empty string, whatever its text.
-const NO_REPORT = (who) => `${who} returned no report`
+// Why a dispatch came back dead: a rejected agent() (carried as { threw }) or an empty return,
+// the shape a turn-cap death takes. Null for any non-empty text - the driver never reads it.
 const reasonFor = (who, agentType, r) => {
   if (r && typeof r === 'object' && 'threw' in r) return `${who} threw: ${r.threw}`
   if (typeof r === 'string' && r.trim() !== '') return null
-  if (r === null || r === undefined || typeof r === 'string') {
-    return `${who} returned empty - turn cap suspected (${agentType}, maxTurns ${CAPS[agentType] ?? 'unknown'} in .claude/agents/${agentType}.md)`
-  }
-  return NO_REPORT(who)
+  return `${who} returned empty - turn cap suspected (${agentType}, maxTurns ${CAPS[agentType] ?? 'unknown'} in .claude/agents/${agentType}.md)`
 }
+const caught = (p) => p.catch((e) => ({ threw: e && e.message ? e.message : String(e) }))
 
-const A = args ?? {} // a missing args object reaches this guard instead of throwing on args.spec
+const A = args ?? {}
 const spec = A.spec
-const TOP = A.top_model
+const stamp = A.stamp // workers get it for close-story; blind seats never see it
+const TOP = A.top_model || 'opus'
 const SECOND = A.second_model
-const stamp = A.stamp // a per-run random value the seat is never told - only used to build the record-seat delimiter (R11/R31); never compared, parsed or shown to a seat
 if (typeof stamp !== 'string' || stamp.length < 12) {
   return { stop: { verb: 'launch', error: 'args.stamp missing: launch with the 16-hex random stamp of /vulyk-build step 1' } }
+}
+if (typeof spec !== 'string' || spec === '') {
+  return { stop: { verb: 'launch', error: 'args.spec missing: launch with the spec dir' } }
 }
 log(`vulyk-cycle: ${spec} · stamp ${stamp}`)
 
 class BadLine extends Error {
-  constructor(line) { super('cycle-clerk returned a non-JSON last line'); this.line = line }
+  constructor(line) { super('cycle-clerk returned a line that is not a JSON object'); this.line = line }
 }
-
-// A verb's own ok:false ends the run; Stop carries the full return value so the outer catch
-// needs nothing from the loop's scope.
 class Stop extends Error {
   constructor(result) { super('driver stop'); this.result = result }
 }
-// exit:3 (PAUSE) is a terminal on its own, from any verb - no stop shape, just next:'paused'.
 class Paused extends Error {
-  constructor(next) { super('paused'); this.next = next }
+  constructor() { super('paused') }
 }
-const fail = (st, stop) => { throw new Stop({ ...st, stop }) }
-const asStop = (res) => ({ verb: res.verb, exit: res.exit, error: res.error })
-// C6/C5: the post-verb status a single sequential verb embeds, or null - which is the loop's
-// signal to poll instead. Only an ok:true result can carry state, and an older cycle.sh that
-// emits no `status` key simply falls back to the poll; a status is never synthesised from `next`.
-// An error envelope ({"ok":false,"verb":"status",...}) is not a status object: it carries an
-// `ok` key and no usable `next`, so it makes the loop poll rather than stop on an
-// unrecognised `next` (C6 addendum).
-const carriedStatus = (res) =>
-  (res && res.ok === true && res.status && typeof res.status === 'object'
-    && typeof res.status.next === 'string' && !('ok' in res.status)) ? res.status : null
+const fail = (state, stop) => { throw new Stop({ ...state, stop }) }
 
-// The verbs whose second dispatch is a `status` poll, never the verb again: each one may have
-// taken effect before its relay was garbled, and a re-run then exits 2 (`already done` /
-// `already recorded`) and ends the run. Story 03 makes every one of them carry the same status
-// object on success, so the poll loses nothing (C1 revised).
-const MUTATING = ['branch', 'close-story', 'open-round', 'record-seat', 'judge']
+// A status object, not a verb's error envelope (which carries `ok`).
+const isStatus = (o) => o !== null && typeof o === 'object' && typeof o.next === 'string' && !('ok' in o)
 
-// The Workflow runtime has no shell of its own - cycle-clerk is the only way to reach one.
-// A non-JSON last line costs exactly one more dispatch: the identical prompt for `status`,
-// `claim` and `release`, `status <spec> --json` for the five mutating verbs. If that second
-// line is unparsable too the whole run ends and the Queen reads the raw line at wake.
-const clerk = (cmd) => {
-  const ask = (c) => agent(
-    `Run exactly: bash scripts/cycle.sh ${c}\nReturn the last stdout line verbatim.`,
+const ask = async (cmd) => {
+  const out = await agent(
+    `Run exactly: bash scripts/cycle.sh ${cmd}\nReturn the last stdout line verbatim.`,
     { agentType: 'cycle-clerk', effort: 'low' },
-  ).then((out) => {
-    const line = String(out).trim().split('\n').pop()
-    let parsed
-    try { parsed = JSON.parse(line) } catch { throw new BadLine(line) }
-    if (parsed.exit === 3) throw new Paused(parsed.next)
-    return parsed
-  })
-  const verb = cmd.trim().split(/\s+/)[0]
-  return ask(cmd).catch((e) => {
-    if (!(e instanceof BadLine)) throw e
-    if (!MUTATING.includes(verb)) {
-      log(`cycle-clerk: non-JSON last line, retrying once: ${cmd}`)
-      return ask(cmd)
-    }
-    log(`cycle-clerk: non-JSON last line from "${cmd}", asking status instead`)
-    // the recovered result is shaped like an ok verb result carrying its own post-verb status,
-    // so every branch and carriedStatus() read it exactly as they read a real one; a verb that
-    // never took effect simply shows the same `next` again and the ordinary loop re-runs it.
-    return ask(`status ${spec} --json`)
-      .then((st) => ({ ok: true, verb, exit: 0, next: st.next, error: '', status: st, recovered: 'status' }))
-  })
+  ).catch(() => null)
+  const line = (out === null || out === undefined ? '' : String(out)).trim().split('\n').pop()
+  let parsed = null
+  try { parsed = JSON.parse(line) } catch { /* not JSON */ }
+  if (parsed === null || typeof parsed !== 'object') throw new BadLine(line)
+  return parsed
 }
 
-// A blind seat gets slug/round/court only (R9) - round_dir would let it name the very
-// taint pattern C5 forbids it to repeat. lead-review is never blind, so it gets the full
-// review packet instead: round_dir, the spec (its stories and plan), the branch to diff, ADR-001.
+// Cleared only by an explicit claim refusal. A release the run did not need is harmless -
+// cycle.sh refuses to release a stamp it does not hold - while a skipped one strands the lock.
+let claimed = true
+const refusedClaim = (r) => r.ok === false && (r.verb === 'claim' || r.failed === 'claim')
+
+// One `advance`; its ok:false line comes back for the caller to stop on. A line that is not
+// JSON, or an ok line without a status, costs one read-only `status --json` - the verb may
+// already have acted - and a second unreadable line ends the run with that raw line.
+const advance = async (flags) => {
+  const cmd = `advance ${spec} --stamp ${stamp}${flags}`
+  let res = null
+  try { res = await ask(cmd) } catch (e) { if (!(e instanceof BadLine)) throw e }
+  if (res !== null && refusedClaim(res)) claimed = false
+  if (res !== null && res.exit === 3) throw new Paused()
+  if (res !== null && (res.ok === false || isStatus(res.status))) return res
+  log(`cycle-clerk: unreadable result from "${cmd}", reading status instead`)
+  const st = await ask(`status ${spec} --json`)
+  if (st.exit === 3) throw new Paused()
+  if (st.ok === false) return st
+  if (!isStatus(st)) throw new BadLine(JSON.stringify(st))
+  return { ok: true, verb: 'advance', exit: 0, next: st.next, steps: [], rejected: [], status: st, recovered: 'status' }
+}
+
+const misses = new Map() // story file -> misses this run
+const dispatched = new Map() // `${round}:${seat}` -> dispatches this run
+let rejected = [] // the last advance's `rejected`, for the one re-ask
+
+const build = async (st) => {
+  phase('Build')
+  const stories = st.wave_stories || []
+  const returns = await parallel(stories.map((story) => () => {
+    const retry = (misses.get(story.file) || 0) >= 1
+    const prompt = `Your story: ${story.file}. Stamp: ${stamp}. Implement it per your protocol; your last step is \`bash scripts/cycle.sh close-story ${story.file} --commit --stamp ${stamp}\`.`
+      + (retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
+    return caught(agent(prompt, { agentType: story.worker, model: retry ? TOP : story.model, phase: 'Build', label: story.story }))
+  }))
+  const res = await advance('')
+  if (res.ok === false) return res
+  // a dispatched story still listed is still todo: close-story never closed it
+  const left = new Set((res.status.wave_stories || []).map((s) => s.file))
+  stories.forEach((story, i) => {
+    if (!left.has(story.file)) return
+    const why = reasonFor('worker', story.worker, returns[i]) ?? `worker returned, but ${story.file} is still todo - close-story did not close it`
+    const n = (misses.get(story.file) || 0) + 1
+    misses.set(story.file, n)
+    log(`miss ${n} on ${story.file}: ${why}`)
+    if (n >= 2) fail(res.status, { verb: 'build', file: story.file, error: why })
+  })
+  return res
+}
+
+// A blind seat gets slug, round and COURT only: no spec dir, no round dir (the taint rule), no stamp.
 const seatPrompt = (seat, st) =>
-  `Council round ${st.round} for ${st.slug}, seat ${seat}. Work only inside COURT: ${st.court}. Read COURT/brief.md's ## Asks and COURT/CLAUDE.md's ## Profile, then judge per your seat contract.`
-const reviewPrompt = (st) =>
-  `Adversarial review for ${st.slug}, round ${st.round}. Round dir: ${st.round_dir}. Spec: ${st.spec} - review its stories and plan. Diff the branch ${st.branch} at ${st.head} against its base. See docs/adr/001-cycle-state-contract.md. You do not enter the court.`
-
-// Where a seat or a single reviewer writes its own report (C2) - under .vulyk/ (gitignored,
-// outside docs/specs, so the taint rule is untouched); the clerk then records it with --file.
-const reportPath = (st, seat, attempt) => `.vulyk/reports/${st.slug}/round-${st.round}/${seat}.attempt-${attempt}.md`
-const writeReportNote = (st, seat, attempt) =>
-  ` As your last action, write your full report verbatim to ${reportPath(st, seat, attempt)} (mkdir -p its directory); your chat reply is the same text.`
-
-// Only prose this driver ever reads: a review report's first line (C5's PASS|BLOCK token).
-// Folds two reviewer reports into one; a null/empty/prose report on either side never
-// manufactures a verdict - the driver sends NO VERDICT through unchanged so record-seat
-// rejects it (R28, N-C1).
-function foldReviews(r1, r2) {
-  const isEmpty = (r) => r === null || r === undefined || r === ''
-  const firstLine = (r) => isEmpty(r) ? null : String(r).trim().split('\n')[0]
-  const isVerdict = (line) => line !== null && /^VERDICT:\s*(PASS|BLOCK)\b/.test(line)
-  const f1 = firstLine(r1)
-  const f2 = firstLine(r2)
-  if (isVerdict(f1) && isVerdict(f2)) {
-    const block = /^VERDICT:\s*BLOCK\b/.test(f1) || /^VERDICT:\s*BLOCK\b/.test(f2)
-    return `VERDICT: ${block ? 'BLOCK' : 'PASS'}\n${r1}\n${r2}`
-  }
-  const b1 = isEmpty(r1) ? '(no report)' : r1
-  const b2 = isEmpty(r2) ? '(no report)' : r2
-  return `NO VERDICT: top=${f1 ?? '(no report)'} · second=${f2 ?? '(no report)'}\n${b1}\n${b2}`
+  `Council round ${st.round} for ${st.slug}, seat ${seat}. Work only inside COURT: ${st.court}. Judge COURT/brief.md's ## Asks per your seat contract.`
+// Round 1 reviews the branch; a later round reviews only what changed since the last one.
+const reviewPrompt = (st) => {
+  const scope = st.since
+    ? `review only ${st.since}..${st.head} and whether it fixes the findings in ${st.spec}/council/round-${st.round - 1}/`
+    : 'review the whole branch against its base'
+  return `Review for ${st.slug}, round ${st.round}. Spec: ${st.spec}. Branch ${st.branch} at ${st.head}: ${scope}.`
+}
+// `advance --ingest` records these files; a missing one is recorded empty and spends the attempt.
+const reportNote = (st, name, k) =>
+  ` As your last action, write your full report verbatim to .vulyk/reports/${st.slug}/round-${st.round}/${name}.attempt-${k}.md (mkdir -p its directory); your chat reply is the same text.`
+const rejectionFor = (seat) => {
+  const r = rejected.filter((x) => x && x.seat === seat).pop()
+  return r && r.error ? r.error : 'no reason reached the driver - write the report again, exactly in your contract\'s format.'
 }
 
-// Tier 4 folds a second reviewer on the paired model into the one `review` seat (R12); `note`
-// carries the re-ask text on a record-seat MALFORMED retry, appended to every prompt it builds.
-const dispatchSeat = (seat, st, note, attempt) => (seat === 'review' && st.tier === 4)
-  ? parallel([
-      () => agent(reviewPrompt(st) + note, { agentType: SEAT_AGENT.review, model: TOP, phase: 'Round' }),
-      () => agent(reviewPrompt(st) + note, { agentType: SEAT_AGENT.review, model: SECOND, phase: 'Round' }),
-    ]).then(([r1, r2]) => foldReviews(r1, r2))
-  : agent((seat === 'review' ? reviewPrompt(st) : seatPrompt(seat, st)) + note + writeReportNote(st, seat, attempt), {
-      agentType: SEAT_AGENT[seat],
-      model: seat === 'review' ? TOP : undefined,
-      phase: 'Round',
-    })
+const council = async (st) => {
+  phase('Council')
+  const seats = st.next.slice('dispatch:'.length).split(',').filter(Boolean)
+  for (const seat of seats) {
+    if (!SEAT_AGENT[seat]) fail(st, { verb: 'dispatch', seat, error: `no agent for seat ${seat}` })
+    if (BLIND.includes(seat) && !st.court) fail(st, { verb: 'dispatch', seat, error: `seat ${seat} is blind but status.court is null` })
+    if ((dispatched.get(`${st.round}:${seat}`) || 0) >= 2) {
+      fail(st, { verb: 'dispatch', seat, round: st.round, error: `seat ${seat} still missing after two dispatches in round ${st.round}` })
+    }
+  }
+  const jobs = []
+  for (const seat of seats) {
+    const key = `${st.round}:${seat}`
+    const n = (dispatched.get(key) || 0) + 1
+    dispatched.set(key, n)
+    const k = (st.seat_attempt && st.seat_attempt[seat]) || 1
+    const note = n > 1 ? `\nYour previous report was rejected: ${rejectionFor(seat)}` : ''
+    if (seat === 'review' && st.tier === 4) {
+      // two reviewers on different models; advance --ingest folds their files into one review
+      jobs.push({ who: 'reviewer (top)', agentType: 'lead-review', model: TOP, prompt: reviewPrompt(st) + note + reportNote(st, 'review-top', k) })
+      jobs.push({ who: 'reviewer (second)', agentType: 'lead-review', model: SECOND, prompt: reviewPrompt(st) + note + reportNote(st, 'review-second', k) })
+    } else if (seat === 'review') {
+      jobs.push({ who: 'reviewer', agentType: 'lead-review', model: undefined, prompt: reviewPrompt(st) + note + reportNote(st, 'review', k) })
+    } else {
+      jobs.push({ who: `seat ${seat}`, agentType: SEAT_AGENT[seat], model: undefined, prompt: seatPrompt(seat, st) + note + reportNote(st, seat, k) })
+    }
+  }
+  const returns = await parallel(jobs.map((j) => () =>
+    caught(agent(j.prompt, { agentType: j.agentType, model: j.model, phase: 'Council', label: j.who }))))
+  jobs.forEach((j, i) => {
+    const why = reasonFor(j.who, j.agentType, returns[i])
+    if (why !== null) log(why)
+  })
+  return advance(' --ingest')
+}
 
-const attempts = new Map() // story file -> misses this run: red close-story or empty worker report, together (R6/R29, per-run only - nothing on disk depends on it)
-const lastError = new Map() // story file -> the most recent miss's own reason, carried into the two-miss stop (M2/X-M1)
-const repaired = new Set() // round numbers already sent to queen-planner this run (R30, per-run only)
-
-// The DRIVER semaphore (ADR-004/K3): claim once, right after the launch guards, before any
-// other clerk call; release on every exit path including a stop, a BadLine or a Paused - the
-// `finally` below is the one release point, so a held-by refusal never reaches it (claimed
-// stays false) and every other exit does.
-let claimed = false
+let st = {}
 try {
-  const claimRes = await clerk(`claim ${spec} ${stamp}`)
-  if (!claimRes.ok) return { stop: asStop(claimRes) }
-  claimed = true
-  let st = await clerk(`status ${spec} --json`)
-  for (;;) {
-    log(`${st.slug} · ${st.stage} · next: ${st.next}`)
+  let res = await advance(' --claim')
+  for (let i = 0; ; i++) {
+    if (res.ok === false) {
+      fail(st, { verb: res.verb, failed: res.failed, exit: res.exit, next: res.next, error: res.error, steps: res.steps })
+    }
+    st = res.status
+    rejected = Array.isArray(res.rejected) ? res.rejected : []
+    const ran = Array.isArray(res.steps) && res.steps.length ? ` · ran ${res.steps.join(', ')}` : ''
+    log(`${st.slug} · ${st.stage} · next: ${st.next}${ran}`)
     if (TERMINAL.includes(st.next)) return st
-
-    // second_model missing or equal to top_model on a Tier 4 spec refuses at launch, before
-    // any non-clerk agent() is dispatched (X-M4) - checked every iteration since tier is
-    // unknown before the first status.
+    if (i >= MAX_ITERATIONS) fail(st, { verb: 'driver', error: `iteration cap ${MAX_ITERATIONS} reached at next: ${st.next}` })
+    // before any worker or seat is dispatched: Tier 4's two reviewers need two different models
     if (st.tier === 4 && (!SECOND || SECOND === TOP)) {
       fail(st, { verb: 'launch', error: 'second_model missing or equal to top_model on a Tier 4 spec' })
     }
-
-    // set only where the iteration's action was exactly one sequential verb that carried its
-    // own post-verb status; left null everywhere else, which is what makes the loop poll.
-    let nextSt = null
-
-    if (st.next === 'briefed') {
-      // r2m15: the driver refuses instead of stamping - it never runs briefed --commit itself.
-      fail(st, { verb: 'briefed', error: 'spec not briefed: run /vulyk-plan' })
-    } else if (st.next === 'branch') {
-      const res = await clerk(`${st.next} ${spec} --commit`)
-      if (!res.ok) fail(st, asStop(res))
-      nextSt = carriedStatus(res)
-    } else if (st.next.startsWith('build:')) {
-      phase('Build')
-      const stories = st.wave_stories
-      // status --json now carries "worker" and "repeat" per story (autonomous-cycle-15) -
-      // route agentType from the object; the driver still never opens a story file itself.
-      // A story on its second dispatch (one miss already counted) gets one extra sentence:
-      // a previous attempt may have left an uncommitted diff behind - and goes to the gate
-      // model TOP (ADR-012, was opus under ADR-007): a miss is information, and the same model
-      // retrying the same story is the cheapest way to buy a second miss. The first dispatch
-      // carries the story's own `model` (status --json, opus unless the planner said otherwise).
-      // Where TOP is opus (Pro, API) the retry is the same model - the one rung that plan lacks.
-      const reports = await parallel(stories.map((story) => () => {
-        const retry = (attempts.get(story.file) || 0) >= 1
-        const prompt = `Your story: ${story.file}. Read it fully, including the map slice it names, and implement it per your protocol.`
-          + (retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
-        const model = retry ? (TOP || 'opus') : (story.model || undefined)
-        return agent(prompt, { agentType: story.worker, model, phase: 'Build' })
-          // the rejection is carried, not flattened to null, so the classification below can
-          // tell a dead agent() from an empty resolve (C3); it logs both, once each.
-          .catch((e) => ({ threw: e && e.message ? e.message : String(e) }))
-      }))
-      for (let i = 0; i < stories.length; i++) {
-        const file = stories[i].file
-        const report = reports[i]
-        // a thrown, empty/whitespace-only or unusable worker report is a miss on the same bound
-        // a red close-story is (R29) - close-story never runs on one, and either failure trips
-        // the same count; lastError carries the failing verb's own reason into the stop.
-        const reason = reasonFor('worker', stories[i].worker, report)
-        if (reason === null) {
-          // close-story derives `repeat: N` itself from the story's own ## Verification block
-          // (cycle.sh's cmd_close_story) and takes no --repeat flag, so it is not passed here.
-          const res = await clerk(`close-story ${file} --commit --stamp ${stamp}`)
-          if (res.ok) continue
-          if (res.exit !== 4) fail(st, asStop(res))
-          // ADR-006's third driver scenario: exit 4 with `returned: missing` is a worker that
-          // came back with text but never set the key - the driver's "no report", read off the
-          // clerk's own JSON. Any other exit-4 error is the miss reason verbatim, as before.
-          const noReport = res.error === 'returned: missing' ? NO_REPORT('worker') : null
-          if (noReport !== null) log(noReport)
-          lastError.set(file, noReport ?? res.error)
-        } else {
-          log(reason)
-          lastError.set(file, reason)
-        }
-        const n = (attempts.get(file) || 0) + 1
-        attempts.set(file, n)
-        if (n >= 2) fail(st, { verb: 'build', file, error: lastError.get(file) })
-        // first miss for this file: continue - it stays open, the next status poll re-routes it
-      }
-    } else if (st.next === 'open-round') {
-      phase('Round')
-      const res = await clerk(`open-round ${spec} --commit --stamp ${stamp}`)
-      // exit 6 at the bound: cycle.sh already recorded the escalation (R5) - this driver's job is only to stop
-      if (!res.ok) fail(st, asStop(res))
-      nextSt = carriedStatus(res)
-    } else if (st.next.startsWith('dispatch:')) {
-      phase('Round')
-      const seats = st.next.slice(9).split(',')
-      const delim = (seat, attempt) => `VULYK_${stamp}_${seat}_${attempt}`
-      const recordSeat = (seat, report, attempt) => {
-        const d = delim(seat, attempt)
-        const body = typeof report === 'string' ? report : '' // a dead agent() (null, or the { threw } its catch hands back) is an empty body, never the string "null"
-        return clerk(`record-seat ${spec} ${st.round} ${seat} --stamp ${stamp} <<'${d}'\n${body}\n${d}`)
-      }
-      // C2: one short clerk line reading the file the seat wrote itself; only a missing,
-      // unreadable or empty file (exit 2 `file: `) falls back to today's inline heredoc. A Tier 4
-      // folded review exists in no file and goes straight to the heredoc, as today.
-      const record = async (seat, report, attempt) => {
-        if (!(seat === 'review' && st.tier === 4)) {
-          const res = await clerk(`record-seat ${spec} ${st.round} ${seat} --stamp ${stamp} --file ${reportPath(st, seat, attempt)}`)
-          if (!(res.exit === 2 && /^file: /.test(String(res.error ?? '')))) return res
-        }
-        return recordSeat(seat, report, attempt)
-      }
-      const reports = await parallel(seats.map((seat) => () => dispatchSeat(seat, st, '', 1)
-        .catch((e) => ({ threw: e && e.message ? e.message : String(e) }))))
-      let dispatchStop = null
-      for (let i = 0; i < seats.length; i++) {
-        const seat = seats[i]
-        // the same three reasons as a worker's, one log line each; a seat never stops the run,
-        // and the recording below is unchanged - an empty seat return still goes to record-seat,
-        // whose exit 4 attempt files are how ABSENT is counted (C3).
-        const who = seat === 'review' ? 'reviewer' : `seat ${seat}`
-        const reason = reasonFor(who, SEAT_AGENT[seat], reports[i])
-        if (reason !== null) log(reason)
-        // a seat's report is always recorded, empty or not (R6); clerk() runs in plain loop
-        // code, not inside a pipeline stage, so a BadLine reaches the one catch (R32).
-        const res = await record(seat, reports[i], 1)
-        if (res.ok) continue
-        if (res.exit !== 4) { dispatchStop = dispatchStop || asStop(res); continue }
-        // record-seat's own exit 4 on a non-empty return is the third reason for a seat: text
-        // came back, the verb refused it. An empty or thrown return already said why above, so
-        // it is not named twice. The single re-ask below is unchanged.
-        if (reason === null) log(NO_REPORT(who))
-        const retry = await dispatchSeat(seat, st, `\nYour previous report was rejected: ${res.error}`, 2)
-          .catch((e) => ({ threw: e && e.message ? e.message : String(e) }))
-        await record(seat, retry, 2) // re-asked once (R6) - continue whatever this second result is
-      }
-      if (dispatchStop) fail(st, dispatchStop)
-    } else if (st.next === 'judge') {
-      phase('Judge')
-      const res = await clerk(`judge ${spec} --commit --stamp ${stamp}`)
-      if (!res.ok) fail(st, asStop(res))
-      nextSt = carriedStatus(res)
-    } else if (st.next === 'repair') {
-      phase('Repair')
-      // one queen-planner dispatch per round number per run (R30) - a repeat visit means
-      // the last dispatch landed no story, nothing changed, so re-asking would loop forever.
-      if (repaired.has(st.round)) fail(st, { verb: 'repair', round: st.round, error: `repair landed nothing for round ${st.round}` })
-      repaired.add(st.round)
-      const reason = st.red.length > 0
-        ? `left the asks numbered [${st.red.join(', ')}] unresolved - the seat reports are under ${st.round_dir}`
-        : `has no ask numbered - the review seat's BLOCK (or an owner REJECTED) is why the round failed; see ${st.round_dir}/review.md`
-      const ask = st.red.length > 0
-        ? 'one wave, each addressing exactly one of those asks'
-        : "one wave, one story per critical and per major finding whose fix is local and that carries an anchor - `[ask N]` for an N in the brief's `## Asks`, or `[regression]`; an `[unanchored]` finding never becomes a story, it waits for `/vulyk-ship` step 5"
-      await agent(
-        `Round ${st.round} for ${st.slug} (review: ${st.review}) ${reason}. Cut fix stories under docs/specs/${st.slug}/ following templates/story.md's frontmatter and naming convention, ${ask}, then update plan.md's story index.`,
-        { agentType: 'queen-planner', model: TOP, phase: 'Repair' },
-      )
-    } else {
-      return st // an unrecognised `next` - report it rather than guess at an action
-    }
-
-    // the one poll site left: a fan-out (build, dispatch), a verb-less iteration (repair) or a
-    // verb whose result carried no status all land here; a carried status costs no clerk call.
-    st = nextSt || await clerk(`status ${spec} --json`)
+    if (st.next.startsWith('build:')) res = await build(st)
+    else if (st.next.startsWith('dispatch:')) res = await council(st)
+    else if (ADVANCE_VERBS.includes(st.next)) fail(st, { verb: st.next, error: `advance left ${st.next} to the driver` })
+    else return st // an unrecognised `next` - report it rather than guess at an action
   }
 } catch (e) {
-  if (e instanceof BadLine) return e.line
-  if (e instanceof Paused) return { next: e.next }
   if (e instanceof Stop) return e.result
+  if (e instanceof Paused) return { next: 'paused' }
+  if (e instanceof BadLine) return e.line
   throw e
 } finally {
-  // A release after pause is harmless (DRIVER already absent, exit 0) - not the mechanism,
-  // just a no-op on that path; every other path is where this call matters (K3, Non-goals).
-  if (claimed) await clerk(`release ${spec} ${stamp}`).catch(() => {})
+  if (claimed) await ask(`release ${spec} ${stamp}`).catch(() => {})
 }
