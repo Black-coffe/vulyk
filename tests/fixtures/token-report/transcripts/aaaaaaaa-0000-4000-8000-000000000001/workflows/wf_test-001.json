@@ -1,0 +1,11 @@
+{
+ "runId": "wf_test-001",
+ "workflowName": "vulyk-cycle",
+ "status": "completed",
+ "args": {
+  "spec": "docs/specs/gamma",
+  "top_model": "opus"
+ },
+ "agentCount": 1,
+ "totalTokens": 987654
+}
