@@ -149,6 +149,9 @@ jobs:
       - name: end to end - the real driver against the real cycle.sh in a fixture repo
         run: bash tests/e2e.test.sh
 
+      - name: the solo path - Tier 1-2 advance loop the Queen runs herself
+        run: bash tests/solo.test.sh
+
   telemetry-inbox:
     name: telemetry.sh suite + check every inbox bundle
     runs-on: ubuntu-latest

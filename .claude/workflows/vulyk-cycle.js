@@ -151,13 +151,15 @@ const council = async (st) => {
   for (const seat of seats) {
     if (!SEAT_AGENT[seat]) fail(st, { verb: 'dispatch', seat, error: `no agent for seat ${seat}` })
     if (BLIND.includes(seat) && !st.court) fail(st, { verb: 'dispatch', seat, error: `seat ${seat} is blind but status.court is null` })
-    if ((dispatched.get(`${st.round}:${seat}`) || 0) >= 2) {
+    if ((dispatched.get(`${st.round}:${st.head}:${seat}`) || 0) >= 2) {
       fail(st, { verb: 'dispatch', seat, round: st.round, error: `seat ${seat} still missing after two dispatches in round ${st.round}` })
     }
   }
   const jobs = []
   for (const seat of seats) {
-    const key = `${st.round}:${seat}`
+    // keyed by head too: a round that went stale is re-stamped in place (same N, new head) and its
+    // discarded reports must not count against the fresh round's two dispatches
+    const key = `${st.round}:${st.head}:${seat}`
     const n = (dispatched.get(key) || 0) + 1
     dispatched.set(key, n)
     const k = (st.seat_attempt && st.seat_attempt[seat]) || 1

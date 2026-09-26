@@ -1146,6 +1146,10 @@ ASKS
       for u in $red_e $red_u; do
         printf -- '- ask %s: RED - see %s/*.md for evidence\n' "$u" "$RD"
       done
+      for u in $review_asks; do
+        case " $red_e $red_u " in *" $u "*) continue ;; esac
+        printf -- '- ask %s: BLOCK by the reviewer - see %s/review.md\n' "$u" "$RD"
+      done
       if [ "$escalate_reason" = "no-progress" ]; then
         printf -- '- no progress: ask %s RED in rounds %s and %s\n' "$(json_num_csv "$repeated" | sed 's/,/, /g')" "$((N-1))" "$N"
       fi
@@ -2585,6 +2589,17 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
     # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
     [ -f "$RD/review.md" ] && review_blocking_lines "$RD/review.md" \
       | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
+    # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
+    # finding (judge's override) - its note is then the only condition the repair can meet.
+    local hlast hts ropened
+    ropened="$(round_field "$RD" opened)"
+    hlast="$(grep -F "\"spec\":\"$SLUG\"" memory/stats/human.jsonl 2>/dev/null | tail -1)"
+    if [ -n "$hlast" ] && [ "$(json_field "$hlast" verdict)" = REJECTED ]; then
+      hts="$(json_field "$hlast" ts)"
+      if [ -n "$hts" ] && [ -n "$ropened" ] && { [ "$hts" \> "$ropened" ] || [ "$hts" = "$ropened" ]; }; then
+        printf -- '- owner REJECTED at %s: %s\n' "$hts" "$(printf '%s' "$hlast" | sed -n 's/.*"note":"\(.*\)"}[[:space:]]*$/\1/p')"
+      fi
+    fi
     printf '\n## Files\n'
     printf '%s' "$files" | awk 'NF && !seen[$0]++ { print "- " $0 }'
     printf '\n## Verification\n'

@@ -78,6 +78,7 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
                                    return 2 ;;
     .claude/handoff/*|memory/map/.stale|CLAUDE.local.md)
                                    return 2 ;;
+    .claude/worktrees/*)          return 2 ;;   # Claude Code's per-agent worktrees in a VULYK checkout
     memory/snapshots/*)           case "$f" in */.gitkeep) return 0 ;; esac; return 2 ;;
     memory/stats/anomalies.jsonl) return 2 ;;   # the maintainer's own anomaly log: runtime, per-hive
     memory/stats/council.jsonl)   return 2 ;;   # the maintainer's own council ledger: runtime, per-hive

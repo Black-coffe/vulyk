@@ -76,5 +76,8 @@ Without the Workflow tool, run the solo loop from this session with the stamp, b
   docs/specs/<slug> "<decision>"`, or leaving it open.
 - `paused`: stop; `/vulyk-resume <slug>` continues. `shipped`: nothing to build. `briefed`: point at
   `/vulyk-plan`.
+- `close-story:<file>`: a story from before 0.18 still says `status: in-progress`. Set it to `todo`
+  if its work is unfinished, or run `bash scripts/cycle.sh close-story <file> --commit` if it is done,
+  then build again.
 - `ok:false` from any verb: print `failed` and `error`, run `bash scripts/journal.sh docs/specs/<slug>
   03-building "<failed> exit <exit>" "<error>, stopped for a human"`, and stop.
