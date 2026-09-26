@@ -9,8 +9,9 @@
 # BACKWARD trace (the sharp edge - catches invented stories):
 #   every `> ` quote in a story's `## Requirements` must appear VERBATIM
 #   (whitespace-normalized substring) in brief.md, or in plan.md's `## Plan deltas`
-#   section for stories cut after approval. A quote found nowhere, or a story with no
-#   quotes at all, is reported.
+#   section for stories cut after approval, or equal one of brief.md's `## Asks` items
+#   whole - digits, dot and text (`> 2. text`, the quote `cycle.sh repair` writes). A quote
+#   found nowhere, or a story with no quotes at all, is reported.
 #
 # FORWARD trace (coverage, advisory):
 #   every `> ` blockquote line of brief.md is checked for overlap with at least one
@@ -48,6 +49,15 @@ BRIEF_TEXT="$(sed -n 's/^>[[:space:]]\{0,1\}//p' "$BRIEF" | normalize)"
 BRIEF_LINES="$(sed -n 's/^>[[:space:]]\{0,1\}//p' "$BRIEF" | while IFS= read -r l; do
   printf '%s\n' "$l" | normalize; echo; done | grep -v '^$')"
 
+# brief.md's `## Asks` items, one normalized item per line - the third legitimate quote source
+# (ADR-013 D4). They are numbered list lines, not `> ` quotes, so BRIEF_TEXT never holds them;
+# a quote must equal a whole item, number and all, never a fragment of one.
+ASK_ITEMS="$(awk '
+  /^##[[:space:]]+Asks[[:space:]]*$/ { inblock=1; next }
+  /^##[[:space:]]/                    { if (inblock) exit }
+  inblock && /^[0-9]+\.[[:space:]]/  { print }
+' "$BRIEF" | while IFS= read -r l; do printf '%s\n' "$l" | normalize; echo; done | grep -v '^$')"
+
 # plan.md `## Plan deltas` section - the second legitimate quote source.
 DELTA_TEXT=""
 if [ -f "$PLAN" ]; then
@@ -79,6 +89,7 @@ for story in "$SPEC"/*.md; do
     found_any=1
     QUOTES_N=$((QUOTES_N+1))
     case "$BRIEF_TEXT" in *"$qn"*) continue ;; esac
+    [ -n "$ASK_ITEMS" ] && printf '%s\n' "$ASK_ITEMS" | grep -qxF -- "$qn" && continue
     case "$DELTA_TEXT" in *"$qn"*)
       echo "  ~ $base: quote traces to a plan delta, not the brief: \"$qn\""
       continue ;; esac

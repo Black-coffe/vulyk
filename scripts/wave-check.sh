@@ -26,6 +26,9 @@
 #   verify-gap - the verification command names paths and none of them intersect this
 #                story's `## Files` - the command may not be able to fail for this work
 #   repeat     - a `repeat:` line under `## Verification` that is not a positive integer
+#   verify-cell - a `## Verification` segment that is not a `## Commands` cell of the
+#                constitution (CLAUDE.vulyk.md if present, else CLAUDE.md): close-story
+#                refuses to run it, so the gap surfaces here at plan time, not mid-build
 #
 # Limits, stated rather than hidden: a verification command that names NO path (a whole
 # suite) cannot be judged here, and a path that resolves but is simply the wrong file
@@ -41,6 +44,12 @@
 
 set -u
 shopt -s nullglob globstar 2>/dev/null || true
+
+# lib.sh carries the one ## Commands parser (command_cell_exists) and the one constitution
+# lookup close-story uses - the verify-cell check below must agree with it byte for byte.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/lib.sh
+. "$HERE/lib.sh"
 
 SPEC="${1:-}"
 if [ -z "$SPEC" ] || [ ! -d "$SPEC" ]; then
@@ -58,6 +67,7 @@ if [ -n "$ROOT" ] && cd "$ROOT" 2>/dev/null; then
 else
   RESOLVE=0
 fi
+CONSTITUTION=""; [ "$RESOLVE" -eq 1 ] && CONSTITUTION="$(constitution_file "$ROOT")"
 
 # --- gather stories ----------------------------------------------------------
 STORIES=""
@@ -193,6 +203,25 @@ $cmd_paths
 CMDP_EOF
         [ "$hit" -eq 0 ] && report "verify-gap: $id's verification names paths that do not intersect its '## Files' - check the command can fail for THIS story (an ignore file or a wrong directory makes green vacuous)"
       fi
+    fi
+    # 3. will close-story agree to run it? The same rule it applies (R11/C-4, r2m9): a line is
+    #    a cell whole, or every ` && ` segment is one; "none — reviewed by lead-review" runs
+    #    nothing and passes. `repeat:` is not a command.
+    if [ "$RESOLVE" -eq 1 ]; then
+      while IFS= read -r vl; do
+        [ -n "$vl" ] || continue
+        [ "$vl" = "none — reviewed by lead-review" ] && continue
+        command_cell_exists "$CONSTITUTION" "$vl" && continue
+        while IFS= read -r seg; do
+          [ -n "$seg" ] || continue
+          command_cell_exists "$CONSTITUTION" "$seg" \
+            || report "verify-cell: $id's verification '$seg' is not a ## Commands cell of $(basename "$CONSTITUTION") - close-story will refuse to run it"
+        done <<SEG_EOF
+$(verification_segments "$vl")
+SEG_EOF
+      done <<VL_EOF
+$(printf '%s\n' "$verify" | awk -F': *' '$1 !~ /^repeat$/')
+VL_EOF
     fi
   fi
 

@@ -4,13 +4,27 @@
 # `status`/`judge`/`escalate`, scripts/journal.sh, and the verdict table (docs/adr/
 # 001-cycle-state-contract.md D4).
 #
-#   Usage: bash tests/council.test.sh            # from the VULYK repo root
+#   Usage: bash tests/council.test.sh            # from the VULYK repo root - the release gate
+#          bash tests/council.test.sh --quick    # the contract in a few minutes (ADR-013 D5)
 #
 # Mirrors tests/cycle.test.sh: a throwaway git repo, `expect()` on stdout substrings, exit 1
 # on the first wrong answer. Unlike cycle.test.sh's single spec walked through six stages,
 # council verdicts are round-scoped and independent, so each scenario below gets its own spec
 # directory (its own `"spec"` key in council.jsonl) instead of one spec reused throughout.
+#
+# --quick keeps one case per verb and rule and every 0.18 case, and skips what re-proves a
+# shipped fix a kept case already exercises: the variant batteries (anchored BLOCK, taint,
+# evidence, review layout, ceilings), the per-story regression walks (stories 14-17, C5) and
+# every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
+# process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
+QUICK=0
+case "${1:-}" in
+  --quick) QUICK=1 ;;
+  '') ;;
+  *) echo "usage: bash tests/council.test.sh [--quick]" >&2; exit 2 ;;
+esac
+full() { [ "$QUICK" -eq 0 ]; } # `if full; then ... fi` wraps each block --quick skips
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
@@ -176,7 +190,7 @@ git add -A && git commit -qm "status1: briefed" >/dev/null
 out="$(council status docs/specs/status1 --json)"
 lines="$(printf '%s\n' "$out" | grep -c .)"
 [ "$lines" -eq 1 ] || { echo "::error::status --json printed $lines lines, expected exactly 1"; fail=1; }
-for k in spec slug stage next briefed approved branch head pack stories wave wave_stories round ceiling tier open court missing stale verdict review red round_dir paused shipped; do
+for k in spec slug stage next briefed approved branch head pack stories wave wave_stories round ceiling tier open court missing stale verdict review red round_dir paused shipped since seat_attempt seats; do
   printf '%s' "$out" | jq -e "has(\"$k\")" >/dev/null 2>&1 || { echo "::error::status --json is missing key '$k': $out"; fail=1; }
 done
 printf '%s' "$out" | jq -e '.stories | has("todo") and has("in-progress") and has("done") and has("blocked")' >/dev/null 2>&1 \
@@ -226,7 +240,7 @@ rd1="$(mk_open_round status1 1)"
 out2="$(council status docs/specs/status1 --json)"
 printf '%s' "$out2" | jq -e '.open == true' >/dev/null 2>&1 || { echo "::error::open round not reported open: $out2"; fail=1; }
 printf '%s' "$out2" | jq -e '.round == 1' >/dev/null 2>&1 || { echo "::error::round number wrong: $out2"; fail=1; }
-printf '%s' "$out2" | jq -r '.missing | sort | join(",")' | expect "missing lists all four absent seats" "haiku,opus,review,sonnet"
+printf '%s' "$out2" | jq -r '.missing | sort | join(",")' | expect "missing lists the tier 3-4 roster without a Client path (ADR-013 D1): opus, review" "opus,review"
 printf '%s' "$out2" | jq -r .next | grep -qE '^dispatch:' && echo "  ok    next is dispatch:..." \
   || { echo "::error::next was $(printf '%s' "$out2" | jq -r .next), expected dispatch:..."; fail=1; }
 
@@ -239,30 +253,30 @@ printf '%s' "$(council status docs/specs/status1 --json)" | jq -r .next | expect
 
 # --- C15: the council scales with tier (autonomous-cycle-18) ---------------------------------
 
-echo "C15: Tier 1 requires sonnet only - status missing/next, judge reaches GREEN on one report"
+echo "ADR-013 D1: Tier 1 requires review only - status missing/next, judge reaches GREEN on the one report"
 mk_open_spec tier1a 3
 set_tier tier1a 1
 rdt1="$(mk_open_round tier1a 1)"
 out="$(council status docs/specs/tier1a --json)"
-printf '%s' "$out" | jq -r '.missing | join(",")' | expect "tier 1: missing lists only sonnet" "sonnet"
-printf '%s' "$out" | jq -r .next | expect "tier 1: next is dispatch:sonnet" "dispatch:sonnet"
-write_seat "$rdt1" sonnet NNN
+printf '%s' "$out" | jq -r '.missing | join(",")' | expect "tier 1: missing lists only review" "review"
+printf '%s' "$out" | jq -r .next | expect "tier 1: next is dispatch:review" "dispatch:review"
+write_review "$rdt1" PASS
 out="$(council status docs/specs/tier1a --json)"
 printf '%s' "$out" | jq -r .next | expect "tier 1: next is judge after the one required seat" "judge"
 jout="$(council judge docs/specs/tier1a)"; jex=$?
-[ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"green"' && echo "  ok    tier 1: judge GREEN on sonnet alone" \
+[ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"green"' && echo "  ok    tier 1: judge GREEN on review alone" \
   || { echo "::error::tier1a judge: exit=$jex out=$jout"; fail=1; }
 row="$(grep '"spec":"tier1a"' memory/stats/council.jsonl | tail -1)"
-printf '%s' "$row" | grep -q '"na":1' && printf '%s' "$row" | grep -q '"verdict":"GREEN"' \
-  && echo "  ok    tier 1: row verdict GREEN, na:1 (one seat, not na:3)" || { echo "::error::row: $row"; fail=1; }
+printf '%s' "$row" | grep -q '"na":0' && printf '%s' "$row" | grep -q '"verdict":"GREEN"' && printf '%s' "$row" | grep -q '"sonnet":""' \
+  && echo "  ok    tier 1: row verdict GREEN, na:0, no blind seat asked (sonnet '', not ABSENT)" || { echo "::error::row: $row"; fail=1; }
 
-echo "C15: Tier 2 requires sonnet, review - no haiku or opus seat needed (ADR-007)"
+echo "ADR-013 D1: Tier 2 requires review only - no blind seat at all"
 mk_open_spec tier2a 3
 set_tier tier2a 2
 rdt2="$(mk_open_round tier2a 1)"
 out="$(council status docs/specs/tier2a --json)"
-printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "tier 2: missing lists review,sonnet - not haiku, not opus" "review,sonnet"
-write_seat "$rdt2" sonnet GGG
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "tier 2: missing lists review - not sonnet, not haiku, not opus" "review"
+write_seat "$rdt2" sonnet GGG   # an old-roster seat is still accepted and counted (record-seat keeps sonnet)
 write_review "$rdt2" PASS
 out="$(council status docs/specs/tier2a --json)"
 printf '%s' "$out" | jq -r .next | expect "tier 2: next is judge without a haiku or opus seat" "judge"
@@ -274,20 +288,20 @@ jout="$(council judge docs/specs/tier2a)"; jex=$?
 [ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"green"' && echo "  ok    tier 2: judge GREEN without haiku" \
   || { echo "::error::tier2a judge: exit=$jex out=$jout"; fail=1; }
 
-echo "C15: Tier 3 requires all four seats"
+echo "ADR-013 D1: Tier 3 requires opus and review - haiku only with a filled Client path (this fixture has none), sonnet never"
 mk_open_spec tier3a 3
 set_tier tier3a 3
 mk_round tier3a 1 >/dev/null
 out="$(council status docs/specs/tier3a --json)"
-printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "tier 3: missing lists all four seats" "haiku,opus,review,sonnet"
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "tier 3: missing lists opus, review" "opus,review"
 
-echo "C15: a plan.md without a parsable **Tier:** line -> status tier:null, still dispatches the full court, never writes (R21/m-1)"
+echo "C15: a plan.md without a parsable **Tier:** line -> status tier:null, still dispatches the tier 3-4 roster, never writes (R21/m-1)"
 mk_open_spec tierdefault 3
 mk_round tierdefault 1 >/dev/null
 out="$(council status docs/specs/tierdefault --json)"
 printf '%s' "$out" | jq -e '.tier == null' >/dev/null 2>&1 && echo "  ok    tier:null - no default, no silent 4 (R21)" \
   || { echo "::error::status: $out"; fail=1; }
-printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "no Tier line still dispatches the full (safe) court" "haiku,opus,review,sonnet"
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "no Tier line still dispatches the largest (safe) roster" "opus,review"
 [ ! -f docs/specs/tierdefault/journal.md ] && echo "  ok    status never wrote journal.md (tier_of no longer journals, m-1)" \
   || { echo "::error::journal.md was created by a read-only status call: $(cat docs/specs/tierdefault/journal.md)"; fail=1; }
 
@@ -355,6 +369,7 @@ printf '%s' "$row" | grep -q '"verdict":"RED"' && printf '%s' "$row" | grep -q '
 grep -qE '^\*\*Council:\*\* RED round 1,.* - red: 2$' docs/specs/red1/plan.md && echo "  ok    plan line ends '- red: 2'" \
   || { echo "::error::plan.md: $(grep '^\*\*Council:\*\*' docs/specs/red1/plan.md)"; fail=1; }
 
+if full; then # --quick skips: the anchored-BLOCK variants, the multi-round ceiling, no-progress and half walks
 # --- judge: an anchored review BLOCK (convergent-judge-02, D4) ------------------------------
 
 write_review_body() { # write_review_body <round-dir> <body...> - a BLOCK review with a given finding line
@@ -592,9 +607,10 @@ out="$(council judge docs/specs/halffloor2b)"; ex=$?
 row="$(grep '"spec":"halffloor2b"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -qF '"escalate":"half"' && echo "  ok    A=2 both-red row escalate:half" || { echo "::error::row: $row"; fail=1; }
 
+fi # --quick: end of the judge-variant skip
 # --- judge: three ABSENT seats -------------------------------------------------------------------
 
-echo "judge: three ABSENT council seats -> ESCALATE env"
+echo "judge: every blind seat exhausted -> ESCALATE env; only the required one (opus) is ABSENT in the row"
 mk_spec env1 3
 rde="$(mk_round env1 1 3)"
 write_absent "$rde" haiku
@@ -602,11 +618,11 @@ write_absent "$rde" sonnet
 write_absent "$rde" opus
 write_review "$rde" PASS
 out="$(council judge docs/specs/env1)"; ex=$?
-[ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    three ABSENT escalates" \
+[ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    the required seat ABSENT escalates" \
   || { echo "::error::env test: exit=$ex out=$out"; fail=1; }
 row="$(grep '"spec":"env1"' memory/stats/council.jsonl | tail -1)"
-printf '%s' "$row" | grep -q '"escalate":"env"' && printf '%s' "$row" | grep -q '"haiku":"ABSENT"' \
-  && echo "  ok    row escalate:env, seats ABSENT" || { echo "::error::row: $row"; fail=1; }
+printf '%s' "$row" | grep -q '"escalate":"env"' && printf '%s' "$row" | grep -q '"opus":"ABSENT"' && printf '%s' "$row" | grep -q '"haiku":""' \
+  && echo "  ok    row escalate:env, opus ABSENT, haiku '' (not required, ADR-013 D1)" || { echo "::error::row: $row"; fail=1; }
 
 # --- judge: every seat N/A, review PASS -----------------------------------------------------------
 
@@ -759,6 +775,7 @@ git log -1 --format=%s | grep -qF 'vulyk(branch2): branch vulyk/branch2' && echo
   || { echo "::error::$(git log -1 --format=%s)"; fail=1; }
 git checkout -q main
 
+if full; then # --quick skips: the R17 git-failure proofs (index.lock, a checked-out branch, a failed worktree add)
 # --- git failures are never swallowed into a false success (R17/M-6) -------------------------
 
 echo "branch: checkout fails (branch already checked out in another worktree) -> exit 2, no **Branch:** line (R17/M-6)"
@@ -805,6 +822,7 @@ out="$(council open-round docs/specs/wtfail1 2>&1)"; ex=$?
   || { echo "::error::round-1 exists despite the worktree failure: $(ls docs/specs/wtfail1/council/round-1 2>&1)"; fail=1; }
 rm -f .vulyk/court
 
+fi # --quick: end of the git-failure skip
 # --- record-seat: preconditions (open round, HEAD match) -------------------------------------
 
 echo "record-seat: no open round -> exit 2"
@@ -837,10 +855,10 @@ git add -A && git commit -qm "pwseat1: briefed, branch" >/dev/null
 set_tier pwseat1 3
 council open-round docs/specs/pwseat1 --commit >/dev/null   # open-round's own commit moves HEAD
 rdpw1="docs/specs/pwseat1/council/round-1"
-out="$(seat_report haiku 1 GGG | council record-seat docs/specs/pwseat1 1 haiku)"; ex=$?
-[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:sonnet,opus,review"' && echo "  ok    record-seat right after open-round --commit is not stale" \
+out="$(seat_report opus 1 GGG | council record-seat docs/specs/pwseat1 1 opus)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:review"' && echo "  ok    record-seat right after open-round --commit is not stale" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
-[ -f "$rdpw1/haiku.md" ] && echo "  ok    haiku.md written at attempt 1" || { echo "::error::missing $rdpw1/haiku.md"; fail=1; }
+[ -f "$rdpw1/opus.md" ] && echo "  ok    opus.md written at attempt 1" || { echo "::error::missing $rdpw1/opus.md"; fail=1; }
 out="$(council status docs/specs/pwseat1 --json)"
 printf '%s' "$out" | jq -e '.stale == false' >/dev/null 2>&1 && echo "  ok    status --json stale:false right after open-round's own commit" \
   || { echo "::error::status: $out"; fail=1; }
@@ -848,7 +866,7 @@ printf '%s' "$out" | jq -r .next | grep -qE '^dispatch:' && echo "  ok    next s
   || { echo "::error::next was $(printf '%s' "$out" | jq -r .next)"; fail=1; }
 
 echo "record-seat: still NOT stale after a further paperwork-only commit (a driver committing council/*)"
-git add -- "$rdpw1/haiku.md" && git commit -qm "vulyk(pwseat1): record-seat haiku round 1" >/dev/null
+git add -- "$rdpw1/opus.md" && git commit -qm "vulyk(pwseat1): record-seat opus round 1" >/dev/null
 out="$(council status docs/specs/pwseat1 --json)"
 printf '%s' "$out" | jq -e '.stale == false' >/dev/null 2>&1 && echo "  ok    status --json stale:false after a paperwork-only commit" \
   || { echo "::error::status: $out"; fail=1; }
@@ -924,6 +942,7 @@ out="$(report_verdict_mismatch | council record-seat docs/specs/rseat6 1 haiku 2
 [ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'inconsistent' && echo "  ok    VERDICT inconsistent -> exit 4" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+if full; then # --quick skips: the taint battery and the evidence re-ask rules
 echo "record-seat: taint is path-anchored on the slug, not the bare words (R9)"
 mk_spec demo 2
 rd_demo1="$(mk_open_round demo 1)"
@@ -1120,6 +1139,7 @@ out="$(printf 'garbage3\n' | council record-seat docs/specs/rabsent 1 haiku 2>&1
 [ ! -f "$rd_rabsent/haiku.md" ] && [ -f "$rd_rabsent/haiku.attempt-2.md" ] && echo "  ok    no final haiku.md, attempt-2.md remains" \
   || { echo "::error::files: $(ls "$rd_rabsent")"; fail=1; }
 
+fi # --quick: end of the taint/evidence skip
 # --- record-seat: review seat, verdict read from line 1 only (C5 amended, story 27/R28,N-m4) --
 
 echo "record-seat review: VERDICT: BLOCK on line 1 -> recorded BLOCK"
@@ -1155,7 +1175,7 @@ out="$(printf 'NO VERDICT: top=(no report) \xc2\xb7 second=VERDICT: PASS\n(no re
   || { echo "::error::files: $(ls "$rd_rrev3")"; fail=1; }
 
 out="$(council status docs/specs/rrev3 --json)"
-printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "status: missing excludes the exhausted review seat" "haiku,opus,sonnet"
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "status: missing excludes the exhausted review seat" "opus"
 
 write_seat "$rd_rrev3" haiku GG
 write_seat "$rd_rrev3" sonnet GG
@@ -1167,6 +1187,7 @@ row="$(grep '"spec":"rrev3"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -qF '"escalate":"env"' && printf '%s' "$row" | grep -qF '"review":"ABSENT"' \
   && echo "  ok    row escalate:env, review ABSENT" || { echo "::error::row: $row"; fail=1; }
 
+if full; then # --quick skips: the review layout variants
 # --- review layout at record-seat (convergent-judge-07): a BLOCK needs a tagged finding line --
 # (plan ## Contracts: review.md finding line) - otherwise MALFORMED, exit 4, re-asked once.
 
@@ -1225,6 +1246,8 @@ row="$(grep '"spec":"rlayun"' memory/stats/council.jsonl | tail -1)"
   && printf '%s' "$row" | grep -qF '"note":"review BLOCK unanchored"' \
   && echo "  ok    judge -> GREEN, review PASS, note 'review BLOCK unanchored'" || { echo "::error::rlayun judge: exit=$jex row=$row"; fail=1; }
 
+fi # --quick: end of the review-layout skip
+if full; then # --quick skips: the model-resolution precedence
 # --- record-seat: model resolution (--model > report's MODEL: > unknown) ----------------------
 
 echo "record-seat: --model overrides the report's MODEL: line; falls back to unknown"
@@ -1241,6 +1264,7 @@ printf 'COUNCIL: x\nMODEL: \nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none giv
 grep -qF 'model: unknown' "$rd_rmodel2/sonnet.md" && echo "  ok    falls back to unknown when neither is given" \
   || { echo "::error::header: $(head -1 "$rd_rmodel2/sonnet.md")"; fail=1; }
 
+fi # --quick: end of the model-resolution skip
 # --- record-seat --file: report from a path instead of stdin (C1) ------------------------------
 
 echo "record-seat --file: a report read from a file records a body byte-identical to the stdin-recorded twin"
@@ -1375,9 +1399,9 @@ grep -q '^status: done' docs/specs/cstory1/cstory1-01-first.md && echo "  ok    
 git log -1 --format=%s | grep -qF 'story(cstory1-01):' && echo "  ok    --commit writes story(<id>): <title>" \
   || { echo "::error::$(git log -1 --format=%s)"; fail=1; }
 
-echo "close-story: exit 2 on an already-done story"
+echo "close-story: an already-done story with a clean tree -> exit 0, already done (ADR-013 D5, was exit 2)"
 out="$(council close-story docs/specs/cstory1/cstory1-01-first.md 2>&1)"; ex=$?
-[ "$ex" -eq 2 ] && echo "  ok    already done -> exit 2" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF 'already done' && echo "  ok    already done -> exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
 
 echo "close-story: self-marked status: done with an uncommitted diff -> proceeds, journals the self-mark once with the story's own wave (C3 revised)"
 sed -i -E 's/^wave:.*/wave: 2/' docs/specs/cstory1/cstory1-01-first.md   # Minor 5: a wave-2 story
@@ -1409,13 +1433,13 @@ headafter="$(git rev-parse HEAD)"
   || { echo "::error::journal.md changed on exit 4: $(cat docs/specs/cstory1/journal.md)"; fail=1; }
 git checkout -- docs/specs/cstory1/cstory1-01-first.md
 
-echo "close-story: a third call once the tree is clean again -> exit 2 already done, no new journal line (C3 revised)"
+echo "close-story: a third call once the tree is clean again -> exit 0 already done, no new journal line (C3 revised, ADR-013 D5)"
 git checkout -- docs/specs/cstory1/flag.txt
 jbefore="$(cat docs/specs/cstory1/journal.md)"
 out="$(council close-story docs/specs/cstory1/cstory1-01-first.md 2>&1)"; ex=$?
-[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'already done' && echo "  ok    clean tree after a green close -> exit 2 already done" \
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF 'already done' && echo "  ok    clean tree after a green close -> exit 0 already done" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
-[ "$(cat docs/specs/cstory1/journal.md)" = "$jbefore" ] && echo "  ok    journal.md unchanged by the already-done refusal" \
+[ "$(cat docs/specs/cstory1/journal.md)" = "$jbefore" ] && echo "  ok    journal.md unchanged by the already-done close" \
   || { echo "::error::journal.md changed: $(cat docs/specs/cstory1/journal.md)"; fail=1; }
 
 # --- close-story: the ## Commands gate and one-line-at-a-time execution (R11/R18/C-4/M-3) -----
@@ -1588,6 +1612,7 @@ out="$(council open-round docs/specs/cstory6 --commit 2>&1)"; ex=$?
 [ -z "$(git status --porcelain)" ] && echo "  ok    tree is clean after both verbs" \
   || { echo "::error::tree dirty: $(git status --porcelain)"; fail=1; }
 
+if full; then # --quick skips: the story 08 fix proofs (returned:, r2m2, LR31, r2m9)
 # --- story 16: the four story 08 fixes - cstoryr1..r4 (M3/ADR-006 returned: gate), r2m2 -------
 # (close-story --commit owns its commit), LR31 (wave_stories lists only ready stories), r2m9 --
 # (a ## Commands cell with its own && matches whole) ------------------------------------------
@@ -1817,6 +1842,7 @@ out="$(council close-story docs/specs/cstoryr2m9b/cstoryr2m9b-01-first.md 2>&1)"
   && echo "  ok    r2m9: an extra && true segment is refused, naming the segment" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+fi # --quick: end of the story 16 skip
 # --- open-round: preconditions, the court, D1 idempotency/staleness, orphan cleanup ------------
 
 echo "open-round: preconditions - no Branch line -> exit 2"
@@ -1868,13 +1894,15 @@ set_tier oround1 4
 
 echo "open-round: opens round 1 - ROUND file, court reduced to brief.md, journal, next dispatch:..."
 out="$(council open-round docs/specs/oround1 --commit)"; ex=$?
-[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:haiku,sonnet,opus,review"' && echo "  ok    round 1 opens, next dispatch:..." \
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:opus,review"' && echo "  ok    round 1 opens, next dispatch:opus,review" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 rd1o="docs/specs/oround1/council/round-1"
 [ -f "$rd1o/ROUND" ] && grep -q '^ceiling=3$' "$rd1o/ROUND" && echo "  ok    ROUND file written, ceiling=3 (default)" \
   || { echo "::error::ROUND: $(cat "$rd1o/ROUND" 2>&1)"; fail=1; }
 grep -q '^tier=4$' "$rd1o/ROUND" && echo "  ok    ROUND file freezes tier=4 (from plan.md's explicit Tier line)" \
   || { echo "::error::ROUND: $(cat "$rd1o/ROUND" 2>&1)"; fail=1; }
+grep -qx 'seats=opus review' "$rd1o/ROUND" && ! grep -q '^since=' "$rd1o/ROUND" \
+  && echo "  ok    ROUND freezes seats=opus review, no since= on round 1 (ADR-013 D3)" || { echo "::error::ROUND: $(cat "$rd1o/ROUND" 2>&1)"; fail=1; }
 court1="$(sed -n 's/^court=//p' "$rd1o/ROUND")"
 [ -d "$court1" ] && echo "  ok    court worktree exists on disk" || { echo "::error::no court at $court1"; fail=1; }
 courtfiles="$(ls -A "$court1/docs/specs/oround1" 2>/dev/null)"
@@ -1887,19 +1915,20 @@ git log -1 --format=%s | grep -qF 'vulyk(oround1): open-round 1' && echo "  ok  
 
 echo "open-round: idempotent - HEAD unchanged -> no-op, next lists only missing seats"
 out="$(council open-round docs/specs/oround1)"; ex=$?
-[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:haiku,sonnet,opus,review"' && echo "  ok    HEAD unchanged, no seats yet -> still all four missing" \
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:opus,review"' && echo "  ok    HEAD unchanged, no seats yet -> still both missing" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
-write_seat "$rd1o" haiku GGG
+write_seat "$rd1o" opus GGG
 out="$(council open-round docs/specs/oround1)"; ex=$?
-[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:sonnet,opus,review"' && echo "  ok    HEAD unchanged, one seat present -> next lists only the missing three" \
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:review"' && echo "  ok    HEAD unchanged, one seat present -> next lists only the missing one" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
-echo "open-round: a manual code commit on an open round with a seat file -> STALE row + round N+1"
+echo "open-round: a manual code commit on an open round with a seat file -> STALE row + round N+1, which carries the GREEN opus (ADR-013 D3)"
 echo "code change" > oround1-manual-code.txt
 git add -A && git commit -qm "manual code change while oround1 round 1 is open" >/dev/null
 out="$(council open-round docs/specs/oround1 --commit)"; ex=$?
-[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:haiku,sonnet,opus,review"' && echo "  ok    stale round folded, round 2 opened, next dispatch:..." \
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:review"' && printf '%s' "$out" | grep -qF 'carried from round 1: opus' \
+  && echo "  ok    stale round folded, round 2 opened with opus carried, next dispatch:review" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 row1="$(grep '"spec":"oround1"' memory/stats/council.jsonl | grep '"round":1' | tail -1)"
 printf '%s' "$row1" | grep -q '"verdict":"STALE"' && echo "  ok    round 1 got a STALE row" || { echo "::error::row1: $row1"; fail=1; }
@@ -1911,9 +1940,6 @@ rd2o="docs/specs/oround1/council/round-2"
 echo "judge: removes the court after judging"
 court2="$(sed -n 's/^court=//p' "$rd2o/ROUND")"
 [ -d "$court2" ] && echo "  ok    round 2's court exists before judging" || { echo "::error::no court2 at $court2"; fail=1; }
-write_seat "$rd2o" haiku GGG
-write_seat "$rd2o" sonnet GGG
-write_seat "$rd2o" opus GGG
 write_review "$rd2o" PASS
 council judge docs/specs/oround1 --commit >/dev/null
 [ ! -d "$court2" ] && echo "  ok    judge removed the court directory" || { echo "::error::court2 still present: $(ls "$court2" 2>&1)"; fail=1; }
@@ -2007,7 +2033,7 @@ echo "escalate: --reason and a note override the default"
 mk_open_spec esc2 2
 set_tier esc2 1
 mk_open_round esc2 1 >/dev/null
-# sonnet (the only required seat at tier 1) never dispatched - missing
+# review (the only required seat at tier 1) never dispatched - missing
 out="$(council escalate docs/specs/esc2 --reason half "manual call, two of four RED" 2>&1)"; ex=$?
 [ "$ex" -eq 6 ] && echo "  ok    escalate with explicit reason/note -> exit 6" || { echo "::error::exit=$ex out=$out"; fail=1; }
 row="$(grep '"spec":"esc2"' memory/stats/council.jsonl | tail -1)"
@@ -2018,7 +2044,7 @@ echo "escalate: nothing missing -> behaves exactly like judge"
 mk_open_spec esc3 3
 set_tier esc3 1
 rde3="$(mk_open_round esc3 1)"
-write_seat "$rde3" sonnet GGG
+write_review "$rde3" PASS
 out="$(council escalate docs/specs/esc3)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"verb":"escalate"' && printf '%s' "$out" | grep -qF '"next":"green"' \
   && echo "  ok    nothing missing -> judged like judge (GREEN here), verb label stays escalate" \
@@ -2032,6 +2058,7 @@ out="$(council escalate docs/specs/esc4 2>&1)"; ex=$?
 [ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    PAUSE -> exit 3" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+if full; then # --quick skips: the R15 court-reduction proof
 # --- open-round: the court's reduction is committed inside the worktree (R15/M-1,M-2) ---------
 
 echo "open-round: the court's reduction is committed inside the worktree - clean status, HEAD:plan.md no longer resolves, stays inside the court (R15)"
@@ -2050,6 +2077,8 @@ git log -1 --format=%s | grep -qF "vulyk(courtred1): open-round 1" \
   && echo "  ok    the main repo's HEAD carries only open-round's own commit - the court's reduction commit stayed inside the court" \
   || { echo "::error::main repo HEAD commit message: $(git log -1 --format=%s)"; fail=1; }
 
+fi # --quick: end of the court-reduction skip
+if full; then # --quick skips from here to the 0.18 section: the reopen walk, the ceiling variants, the committed-verb walks, stories 14-17, every pinned-commit replay, the C5 block
 # --- reopen: ceiling +3 after ESCALATE, then a fourth round opens ------------------------------
 
 echo "reopen: three RED rounds escalate (ceiling) on the third, reopen bumps ceiling to 6, a 4th round opens"
@@ -2078,7 +2107,7 @@ for n in 1 2 3; do
 done
 
 out="$(council reopen docs/specs/oreopen1 "ship it after manual review" --commit)"; ex=$?
-[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"open-round"' && echo "  ok    reopen exits 0, next open-round" \
+[ "$ex" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qF '"next":"repair"' && echo "  ok    reopen exits 0, next repair (a ceiling ESCALATE, ADR-013 D3)" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 [ "$(cat docs/specs/oreopen1/council/CEILING)" = "6" ] && echo "  ok    ceiling is now 6" \
   || { echo "::error::CEILING: $(cat docs/specs/oreopen1/council/CEILING 2>&1)"; fail=1; }
@@ -2087,7 +2116,8 @@ grep -qF '**After escalation (round 3,' docs/specs/oreopen1/brief.md && grep -qF
   || { echo "::error::brief.md: $(cat docs/specs/oreopen1/brief.md)"; fail=1; }
 
 out="$(council open-round docs/specs/oreopen1 --commit)"; ex=$?
-[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:haiku,sonnet,opus,review"' && echo "  ok    a fourth round opens past the old ceiling" \
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:review"' && printf '%s' "$out" | grep -qF 'carried from round 3: sonnet, opus' \
+  && echo "  ok    a fourth round opens past the old ceiling, round 3's GREEN sonnet and opus carried (haiku was RED)" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 [ -d docs/specs/oreopen1/council/round-4 ] && echo "  ok    round-4 directory exists" || { echo "::error::round-4 missing"; fail=1; }
 
@@ -2104,7 +2134,7 @@ council open-round docs/specs/tceil1 --commit >/dev/null
 rdn="docs/specs/tceil1/council/round-1"
 grep -q '^ceiling=1$' "$rdn/ROUND" && echo "  ok    tier 1: ROUND ceiling=1" \
   || { echo "::error::ROUND: $(cat "$rdn/ROUND" 2>&1)"; fail=1; }
-write_seat "$rdn" sonnet RG
+write_seat "$rdn" sonnet RG; write_review "$rdn" PASS # tier 1 requires review; the recorded sonnet still counts
 jout="$(council judge docs/specs/tceil1 --commit)"; jex=$?
 [ "$jex" -eq 6 ] && printf '%s' "$jout" | grep -qF '"next":"escalated"' \
   && grep '"spec":"tceil1"' memory/stats/council.jsonl | grep '"round":1' | grep -qF '"escalate":"ceiling"' \
@@ -2155,7 +2185,7 @@ row1="$(grep '"spec":"tstale1"' memory/stats/council.jsonl | grep '"round":1,' |
 [ "$ex" -eq 0 ] && printf '%s' "$row1" | grep -qF '"verdict":"STALE"' && [ -f docs/specs/tstale1/council/round-2/ROUND ] \
   && echo "  ok    tier 1: STALE row for round 1, round 2 opened, exit 0 (not 6)" \
   || { echo "::error::tstale1 open-round: exit=$ex row1=$row1 out=$out"; fail=1; }
-write_seat docs/specs/tstale1/council/round-2 sonnet RG
+write_seat docs/specs/tstale1/council/round-2 sonnet RG; write_review docs/specs/tstale1/council/round-2 PASS
 jout="$(council judge docs/specs/tstale1 --commit)"; jex=$?
 [ "$jex" -eq 6 ] && grep '"spec":"tstale1"' memory/stats/council.jsonl | grep '"round":2,' | grep -qF '"escalate":"ceiling"' \
   && echo "  ok    tier 1: round 2 RED -> ESCALATE ceiling (the one judged round)" \
@@ -2205,17 +2235,17 @@ sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/tgreen1#' docs/specs/tgreen1/pl
 git add -A && git commit -qm "tgreen1: branch" >/dev/null
 set_tier tgreen1 1
 council open-round docs/specs/tgreen1 --commit >/dev/null
-write_seat docs/specs/tgreen1/council/round-1 sonnet GG
+write_seat docs/specs/tgreen1/council/round-1 sonnet GG; write_review docs/specs/tgreen1/council/round-1 PASS
 jout="$(council judge docs/specs/tgreen1 --commit)"; jex=$?
 [ "$jex" -eq 0 ] && printf '%s' "$jout" | grep -qF '"next":"green"' || { echo "::error::tgreen1 round 1: exit=$jex out=$jout"; fail=1; }
 echo "code change" > tgreen1-code.txt
 git add -A && git commit -qm "code commit after tgreen1 round 1 GREEN" >/dev/null
 out="$(council open-round docs/specs/tgreen1 --commit 2>&1)"; ex=$?
-[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF 'round 2 opened' && printf '%s' "$out" | tail -1 | grep -qF '"next":"dispatch:sonnet"' \
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF 'round 2 opened' && printf '%s' "$out" | tail -1 | grep -qF '"next":"dispatch:review"' \
   && ! grep '"spec":"tgreen1"' memory/stats/council.jsonl | grep -qF '"verdict":"ESCALATE"' \
-  && echo "  ok    tier 1: GREEN then a commit -> round 2 opened, next dispatch:sonnet, no ESCALATE row" \
+  && echo "  ok    tier 1: GREEN then a commit -> round 2 opened, next dispatch:review, no ESCALATE row" \
   || { echo "::error::tgreen1 open 2: exit=$ex out=$out"; fail=1; }
-write_seat docs/specs/tgreen1/council/round-2 sonnet RG
+write_seat docs/specs/tgreen1/council/round-2 sonnet RG; write_review docs/specs/tgreen1/council/round-2 PASS
 jout="$(council judge docs/specs/tgreen1 --commit)"; jex=$?
 [ "$jex" -eq 6 ] && grep '"spec":"tgreen1"' memory/stats/council.jsonl | grep '"round":2,' | grep -qF '"escalate":"ceiling"' \
   && echo "  ok    tier 1: round 2 RED -> ESCALATE ceiling (the one RED round)" \
@@ -2255,7 +2285,7 @@ grep '"spec":"tgreen2"' memory/stats/council.jsonl | grep '"round":5,' | grep -q
 # HEAD past what plain-equality checks expected. These walk the real verb sequence with
 # --commit throughout and assert `status` after each step, the same way a driver reads it.
 
-echo "status --json: real --commit sequence - RED judge -> repair, a code commit -> open-round, ceiling -> escalated, reopen -> open-round, round 4 opens (R1/C-1, R7/M-4, R25)"
+echo "status --json: real --commit sequence - RED judge -> repair, a code commit -> open-round, ceiling -> escalated, reopen -> repair (ADR-013 D3), round 4 opens (R1/C-1, R7/M-4, R25)"
 mk_open_spec realverbs 3
 set_tier realverbs 2
 # convergent-judge: Tier 2's own ceiling is 2; this walk needs three rounds before the ceiling,
@@ -2302,7 +2332,7 @@ council reopen docs/specs/realverbs "owner: fix and re-round" --commit >/dev/nul
 [ -f docs/specs/realverbs/council/REOPEN ] && grep -qE '^round=3 ' docs/specs/realverbs/council/REOPEN \
   && echo "  ok    council/REOPEN names round 3 (C4)" || { echo "::error::REOPEN: $(cat docs/specs/realverbs/council/REOPEN 2>&1)"; fail=1; }
 out="$(council status docs/specs/realverbs --json)"
-printf '%s' "$out" | jq -e '.next == "open-round"' >/dev/null 2>&1 && echo "  ok    status --json next:open-round after reopen, not stuck on escalated" \
+printf '%s' "$out" | jq -e '.next == "repair"' >/dev/null 2>&1 && echo "  ok    status --json next:repair after reopen (ADR-013 D3), not stuck on escalated" \
   || { echo "::error::status: $out"; fail=1; }
 
 out="$(council open-round docs/specs/realverbs --commit)"; ex=$?
@@ -2359,30 +2389,29 @@ echo "status --json: an exhausted seat (both attempts malformed) drops out of mi
 mk_open_spec exhaust1 2
 set_tier exhaust1 3
 council open-round docs/specs/exhaust1 --commit >/dev/null
-printf 'garbage attempt 1\n' | council record-seat docs/specs/exhaust1 1 haiku >/dev/null 2>&1
-printf 'garbage attempt 2\n' | council record-seat docs/specs/exhaust1 1 haiku >/dev/null 2>&1
+printf 'garbage attempt 1\n' | council record-seat docs/specs/exhaust1 1 opus >/dev/null 2>&1
+printf 'garbage attempt 2\n' | council record-seat docs/specs/exhaust1 1 opus >/dev/null 2>&1
 rdex="docs/specs/exhaust1/council/round-1"
-[ -f "$rdex/haiku.attempt-2.md" ] && [ ! -f "$rdex/haiku.md" ] && echo "  ok    haiku exhausted both attempts on disk" \
+[ -f "$rdex/opus.attempt-2.md" ] && [ ! -f "$rdex/opus.md" ] && echo "  ok    opus exhausted both attempts on disk" \
   || { echo "::error::files: $(ls "$rdex")"; fail=1; }
 out="$(council status docs/specs/exhaust1 --json)"
-printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "missing excludes the exhausted haiku seat" "opus,review,sonnet"
+printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "missing excludes the exhausted opus seat" "review"
 
 seat_report sonnet 1 GG | council record-seat docs/specs/exhaust1 1 sonnet >/dev/null
-seat_report opus 1 GG | council record-seat docs/specs/exhaust1 1 opus >/dev/null
 printf 'VERDICT: PASS\nReviewed.\n' | council record-seat docs/specs/exhaust1 1 review >/dev/null
 out="$(council status docs/specs/exhaust1 --json)"
 printf '%s' "$out" | jq -r .next | expect "every other required seat recorded -> next reaches judge" "judge"
 
 council judge docs/specs/exhaust1 >/dev/null 2>&1
 row="$(grep '"spec":"exhaust1"' memory/stats/council.jsonl | tail -1)"
-[ -n "$row" ] && printf '%s' "$row" | grep -q '"haiku":"ABSENT"' \
-  && echo "  ok    judge ran and the row carries haiku:ABSENT" || { echo "::error::row: $row"; fail=1; }
+[ -n "$row" ] && printf '%s' "$row" | grep -q '"opus":"ABSENT"' \
+  && echo "  ok    judge ran and the row carries opus:ABSENT" || { echo "::error::row: $row"; fail=1; }
 printf '%s' "$row" | grep -qF '"verdict":"ESCALATE"' && printf '%s' "$row" | grep -qF '"escalate":"env"' \
-  && echo "  ok    Tier 3, haiku ABSENT + sonnet/opus GREEN + review PASS -> ESCALATE env, not RED with nothing to repair (R16/M-5)" \
+  && echo "  ok    Tier 3, opus ABSENT + sonnet GREEN + review PASS -> ESCALATE env, not RED with nothing to repair (R16/M-5)" \
   || { echo "::error::row: $row"; fail=1; }
-printf '%s' "$row" | grep -qE '"note":"[^"]*haiku[^"]*"' && echo "  ok    row note names the absent seat" \
+printf '%s' "$row" | grep -qE '"note":"[^"]*opus[^"]*"' && echo "  ok    row note names the absent seat" \
   || { echo "::error::row note: $row"; fail=1; }
-grep -qF 'haiku.attempt-2.md' docs/specs/exhaust1/plan.md && echo "  ok    ## Needs a human points at haiku's attempt-2.md" \
+grep -qF 'opus.attempt-2.md' docs/specs/exhaust1/plan.md && echo "  ok    ## Needs a human points at opus's attempt-2.md" \
   || { echo "::error::plan.md: $(grep -A6 '^## Needs a human' docs/specs/exhaust1/plan.md)"; fail=1; }
 
 echo "judge: Tier 3, review ABSENT, haiku+sonnet+opus GREEN -> ESCALATE env, not RED with red:[] (R16/M-5, minor 32)"
@@ -2438,8 +2467,8 @@ echo "judge: attempts counts every stored file per seat - a re-ask counts 2, not
 mk_open_spec lr19a 2
 set_tier lr19a 1
 rd19a="$(mk_open_round lr19a 1)"
-write_seat "$rd19a" sonnet GG
-cp "$rd19a/sonnet.md" "$rd19a/sonnet.attempt-1.md"   # a re-asked seat: attempt-1 + the final .md both on disk
+write_review "$rd19a" PASS
+cp "$rd19a/review.md" "$rd19a/review.attempt-1.md"   # a re-asked seat: attempt-1 + the final .md both on disk
 out="$(council judge docs/specs/lr19a)"; ex=$?
 [ "$ex" -eq 0 ] || { echo "::error::lr19a judge: exit=$ex out=$out"; fail=1; }
 row="$(grep '"spec":"lr19a"' memory/stats/council.jsonl | tail -1)"
@@ -2480,7 +2509,7 @@ mk_open_spec lr21a 2
 set_tier lr21a 1
 printf '{"ts":"2020-01-01T00:00:00Z","spec":"lr21a","round":10,"verdict":"ESCALATE","head":"aaaaaaa","pack":"demo-pack","asks":2,"red":[],"red_unevidenced":[],"na":0,"review":"","haiku":"","haiku_model":"unknown","sonnet":"","sonnet_model":"unknown","opus":"","opus_model":"unknown","attempts":0,"escalate":"ceiling","note":""}\n' >> memory/stats/council.jsonl
 rd21a="$(mk_open_round lr21a 1)"
-write_seat "$rd21a" sonnet GG
+write_review "$rd21a" PASS
 out="$(council status docs/specs/lr21a --json)"
 printf '%s' "$out" | jq -e '.open == true and .round == 1' >/dev/null 2>&1 && echo "  ok    status --json: round 1 reported open despite a round-10 row on record" \
   || { echo "::error::status: $out"; fail=1; }
@@ -2495,7 +2524,7 @@ echo "judge: **Council:** replaces the template placeholder in place, before **S
 mk_open_spec lr25a 2
 set_tier lr25a 1
 rd25a="$(mk_open_round lr25a 1)"
-write_seat "$rd25a" sonnet GGG
+write_review "$rd25a" PASS
 council judge docs/specs/lr25a >/dev/null
 cln1="$(grep -n '^\*\*Council:\*\*' docs/specs/lr25a/plan.md | tail -1 | cut -d: -f1)"
 shln1="$(grep -n '^\*\*Shipped:\*\*' docs/specs/lr25a/plan.md | head -1 | cut -d: -f1)"
@@ -2513,7 +2542,7 @@ set_tier lr25b 1
 sed -i 's/^\*\*Council:\*\* <.*/**Council:** GREEN round 1, 2020-01-01, at 1234567, pack demo-pack/' docs/specs/lr25b/plan.md
 git add -A && git commit -qm "lr25b: seed a round-1 Council line" >/dev/null
 rd25b="$(mk_open_round lr25b 2)"
-write_seat "$rd25b" sonnet GGG
+write_review "$rd25b" PASS
 council judge docs/specs/lr25b >/dev/null
 shln2="$(grep -n '^\*\*Shipped:\*\*' docs/specs/lr25b/plan.md | head -1 | cut -d: -f1)"
 newest_cln2="$(grep -n '^\*\*Council:\*\*' docs/specs/lr25b/plan.md | tail -1 | cut -d: -f1)"
@@ -2533,7 +2562,7 @@ mk_open_spec m4a 2
 set_tier m4a 1
 rd4a="$(mk_open_round m4a 1)"
 opened_ts="$(sed -n 's/^opened=//p' "$rd4a/ROUND")"
-write_seat "$rd4a" sonnet GG
+write_review "$rd4a" PASS
 printf '{"ts":"%s","spec":"m4a","verdict":"REJECTED","by":"Test Owner","head":"%s","pack":"demo-pack","note":"same-second override"}\n' \
   "$opened_ts" "$HEAD7" >> memory/stats/human.jsonl
 out="$(council judge docs/specs/m4a)"; ex=$?
@@ -2610,17 +2639,21 @@ pin_cycle 3e200bb "$OLDCYCLE" || OLDCYCLE=""
 probe_lr19() {
   mk_open_spec plr19 2; set_tier plr19 1 >/dev/null
   local rd; rd="$(mk_open_round plr19 1)"
+  # sonnet (Tier 1's seat before 0.18) and review (its seat since, ADR-013 D1) both present, so
+  # the probe reads the same on a pinned pre-0.18 cycle.sh and on the branch: review re-asked
+  # (2 files) + sonnet (1) = 3, where a re-ask counted once would give 2.
   write_seat "$rd" sonnet GG
-  cp "$rd/sonnet.md" "$rd/sonnet.attempt-1.md"
+  write_review "$rd" PASS
+  cp "$rd/review.md" "$rd/review.attempt-1.md"
   council judge docs/specs/plr19 >/dev/null 2>&1
   local row; row="$(grep '"spec":"plr19"' memory/stats/council.jsonl | tail -1)"
-  printf '%s' "$row" | grep -qF '"attempts":2' && echo ok || echo FAIL
+  printf '%s' "$row" | grep -qF '"attempts":3' && echo ok || echo FAIL
 }
 probe_lr21() {
   mk_open_spec plr21 2; set_tier plr21 1 >/dev/null
   printf '{"ts":"2020-01-01T00:00:00Z","spec":"plr21","round":10,"verdict":"ESCALATE","head":"aaaaaaa","pack":"demo-pack","asks":2,"red":[],"red_unevidenced":[],"na":0,"review":"","haiku":"","haiku_model":"unknown","sonnet":"","sonnet_model":"unknown","opus":"","opus_model":"unknown","attempts":0,"escalate":"ceiling","note":""}\n' >> memory/stats/council.jsonl
   local rd; rd="$(mk_open_round plr21 1)"
-  write_seat "$rd" sonnet GG
+  write_seat "$rd" sonnet GG; write_review "$rd" PASS # both rosters' Tier 1 seat (see probe_lr19)
   council judge docs/specs/plr21 >/dev/null 2>&1
   local n; n="$(grep -c '"spec":"plr21".*"round":1,' memory/stats/council.jsonl)"
   [ "$n" -eq 1 ] && echo ok || echo FAIL
@@ -2628,7 +2661,7 @@ probe_lr21() {
 probe_lr25() {
   mk_open_spec plr25 2; set_tier plr25 1 >/dev/null
   local rd; rd="$(mk_open_round plr25 1)"
-  write_seat "$rd" sonnet GGG
+  write_seat "$rd" sonnet GGG; write_review "$rd" PASS # both rosters' Tier 1 seat (see probe_lr19)
   council judge docs/specs/plr25 >/dev/null 2>&1
   local cln shln
   cln="$(grep -n '^\*\*Council:\*\*' docs/specs/plr25/plan.md | tail -1 | cut -d: -f1)"
@@ -2639,7 +2672,7 @@ probe_m4() {
   mk_open_spec pm4 2; set_tier pm4 1 >/dev/null
   local rd; rd="$(mk_open_round pm4 1)"
   local opened; opened="$(sed -n 's/^opened=//p' "$rd/ROUND")"
-  write_seat "$rd" sonnet GG
+  write_seat "$rd" sonnet GG; write_review "$rd" PASS # both rosters' Tier 1 seat (see probe_lr19)
   printf '{"ts":"%s","spec":"pm4","verdict":"REJECTED","by":"t","head":"%s","pack":"demo-pack","note":"x"}\n' "$opened" "$HEAD7" >> memory/stats/human.jsonl
   local out; out="$(council judge docs/specs/pm4 2>&1)"
   printf '%s' "$out" | grep -qF '"next":"repair"' && echo ok || echo FAIL
@@ -2769,7 +2802,7 @@ printf '%s' "$out" | jq -e '.open == false and .next == "open-round"' >/dev/null
   && echo "  ok    status --json: open:false, next:open-round despite the round-1 dir existing" \
   || { echo "::error::status: $out"; fail=1; }
 out="$(council open-round docs/specs/nm3a --commit)"; ex=$?
-[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:sonnet"' \
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:review"' \
   && echo "  ok    open-round writes ROUND into round-1 (fresh dispatch, not a no-op line)" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 [ -f docs/specs/nm3a/council/round-1/ROUND ] && echo "  ok    ROUND file now exists in round-1" \
@@ -3185,16 +3218,16 @@ out="$(council open-round docs/specs/gatedv1 --stamp aaaa1111 2>&1)"; ex=$?
   && echo "  ok    open-round proceeds with the matching --stamp (round-1 created)" \
   || { echo "::error::open-round right-stamp: exit=$ex out=$out"; fail=1; }
 
-out="$(seat_report sonnet 1 NNN | council record-seat docs/specs/gatedv1 1 sonnet 2>&1)"; ex=$?
-[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -f docs/specs/gatedv1/council/round-1/sonnet.md ] \
+out="$(printf 'VERDICT: PASS\nfine\n' | council record-seat docs/specs/gatedv1 1 review 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -f docs/specs/gatedv1/council/round-1/review.md ] \
   && echo "  ok    record-seat refused without --stamp, no seat file written" \
   || { echo "::error::record-seat no-stamp: exit=$ex out=$out"; fail=1; }
-out="$(seat_report sonnet 1 NNN | council record-seat docs/specs/gatedv1 1 sonnet --stamp bbbb2222 2>&1)"; ex=$?
-[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -f docs/specs/gatedv1/council/round-1/sonnet.md ] \
+out="$(printf 'VERDICT: PASS\nfine\n' | council record-seat docs/specs/gatedv1 1 review --stamp bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'held by aaaa1111' && [ ! -f docs/specs/gatedv1/council/round-1/review.md ] \
   && echo "  ok    record-seat refused with a wrong --stamp, no seat file written" \
   || { echo "::error::record-seat wrong-stamp: exit=$ex out=$out"; fail=1; }
-out="$(seat_report sonnet 1 NNN | council record-seat docs/specs/gatedv1 1 sonnet --stamp aaaa1111 2>&1)"; ex=$?
-[ "$ex" -ne 2 ] && [ -f docs/specs/gatedv1/council/round-1/sonnet.md ] \
+out="$(printf 'VERDICT: PASS\nfine\n' | council record-seat docs/specs/gatedv1 1 review --stamp aaaa1111 2>&1)"; ex=$?
+[ "$ex" -ne 2 ] && [ -f docs/specs/gatedv1/council/round-1/review.md ] \
   && echo "  ok    record-seat proceeds with the matching --stamp (seat file written)" \
   || { echo "::error::record-seat right-stamp: exit=$ex out=$out"; fail=1; }
 
@@ -3255,8 +3288,8 @@ set_tier gatedv2 1
 out="$(council open-round docs/specs/gatedv2 2>&1)"; ex=$?
 [ "$ex" -ne 2 ] && [ -d docs/specs/gatedv2/council/round-1 ] && echo "  ok    open-round proceeds without --stamp when no DRIVER exists" \
   || { echo "::error::open-round no-driver no-stamp: exit=$ex out=$out"; fail=1; }
-out="$(seat_report sonnet 1 NN | council record-seat docs/specs/gatedv2 1 sonnet --stamp unrelated9999 2>&1)"; ex=$?
-[ "$ex" -ne 2 ] && [ -f docs/specs/gatedv2/council/round-1/sonnet.md ] \
+out="$(printf 'VERDICT: PASS\nfine\n' | council record-seat docs/specs/gatedv2 1 review --stamp unrelated9999 2>&1)"; ex=$?
+[ "$ex" -ne 2 ] && [ -f docs/specs/gatedv2/council/round-1/review.md ] \
   && echo "  ok    record-seat proceeds with an unrelated --stamp when no DRIVER exists" \
   || { echo "::error::record-seat no-driver with-stamp: exit=$ex out=$out"; fail=1; }
 out="$(council judge docs/specs/gatedv2 --stamp unrelated9999 2>&1)"; ex=$?
@@ -3399,11 +3432,11 @@ last="$(printf '%s\n' "$out" | tail -1)"
 [ "$(printf '%s' "$last" | jq -r .status.head)" = "$(git rev-parse --short HEAD)" ] \
   && echo "  ok    open-round --commit: status.head is the HEAD the commit just created" \
   || { echo "::error::open-round status.head: $last vs $(git rev-parse --short HEAD)"; fail=1; }
-printf '%s' "$last" | jq -e '.status.next == "dispatch:sonnet"' >/dev/null 2>&1 \
+printf '%s' "$last" | jq -e '.status.next == "dispatch:review"' >/dev/null 2>&1 \
   && echo "  ok    open-round --commit: status.next is dispatch:<seats>" \
   || { echo "::error::open-round status.next: $last"; fail=1; }
 
-out="$(seat_report sonnet 1 GG | council record-seat docs/specs/c5verb 1 sonnet 2>&1)"
+out="$(printf 'VERDICT: PASS\nall asks hold\n' | council record-seat docs/specs/c5verb 1 review 2>&1)"
 c5_check "record-seat carries the post-write status" docs/specs/c5verb "$out"
 
 out="$(council judge docs/specs/c5verb --commit 2>&1)"
@@ -3468,4 +3501,389 @@ last="$(printf '%s\n' "$out" | tail -1)"
   || { echo "::error::paused verb: exit=$ex last=$last"; fail=1; }
 council resume docs/specs/c5dirty >/dev/null 2>&1
 
+
+fi # --quick: end of the skip opened at the reopen walk
+# ============================================================================================
+# 0.18 - Light VULYK (docs/adr/013-light-vulyk.md): the roster and the Client path, the sidecar
+# constitution, frozen seats, no-court rounds, carry-forward, reopen -> repair, the repair and
+# advance verbs, claim's clean-tree rule, close-story's idempotency and timeout. --quick runs
+# every case here.
+# ============================================================================================
+
+echo "=== 0.18: Light VULYK (ADR-013) ==="
+git add -A >/dev/null 2>&1; git commit -qm "0.18: snapshot what the sections above left" >/dev/null 2>&1
+cp "$SRC"/scripts/wave-check.sh "$SRC"/scripts/trace-check.sh scripts/
+# The fixture constitution gains a Profile (Client path left as the template's placeholder)
+# and a slow ## Commands cell for the timeout case.
+sed -i '1a\
+\
+## Profile\
+\
+| Field | Value |\
+|---|---|\
+| Client path | `<fill in - how a person reaches the running thing>` |' CLAUDE.md
+printf '| Fixture: slower than VULYK_VERIFY_TIMEOUT=1 | `sleep 3` |\n' >> CLAUDE.md
+git add -A && git commit -qm "0.18: fixture Profile + slow cell" >/dev/null
+
+l18_client() { # l18_client <value> - rewrites the fixture constitution's Client path cell, commits
+  sed -i "s#^| Client path | .*#| Client path | \`$1\` |#" CLAUDE.md
+  git add -A && git commit -qm "constitution: Client path = $1" >/dev/null
+}
+l18_last() { printf '%s\n' "$1" | tail -1; } # l18_last <verb-output> -> its JSON line
+
+echo "ADR-013 D1: the roster - Tier 1-2 review; Tier 3-4 opus review (a round without seats= reads the live roster)"
+for t in 1 2 3 4; do mk_open_spec "r18t$t" 2; set_tier "r18t$t" "$t"; mk_open_round "r18t$t" 1 >/dev/null; done
+# (later fixture commits stale these rounds, so `next` reads open-round here - the roster
+# decides seats and missing, and those are what is checked)
+council status docs/specs/r18t1 --json | jq -c '[.seats, .missing]' | expect "tier 1: seats and missing are [review]" '[["review"],["review"]]'
+council status docs/specs/r18t2 --json | jq -c '[.seats, .missing]' | expect "tier 2: seats and missing are [review]" '[["review"],["review"]]'
+council status docs/specs/r18t3 --json | jq -c '[.seats, .missing]' | expect "tier 3: opus, review - no sonnet, no haiku without a Client path" '[["opus","review"],["opus","review"]]'
+council status docs/specs/r18t4 --json | jq -c '.seats' | expect "tier 4: the same roster as tier 3" '["opus","review"]'
+
+echo "ADR-013 D1: haiku joins at Tier 3-4 only when the Client path is filled - not '<fill...>', not 'none...', any case"
+l18_client "http://localhost:3000 with the test login"
+council status docs/specs/r18t3 --json | jq -c '.seats' | expect "filled -> tier 3 adds haiku" '["haiku","opus","review"]'
+council status docs/specs/r18t4 --json | jq -c '.seats' | expect "filled -> tier 4 adds haiku" '["haiku","opus","review"]'
+council status docs/specs/r18t2 --json | jq -c '.seats' | expect "filled -> tier 2 stays review only" '["review"]'
+l18_client "None: library only"
+council status docs/specs/r18t3 --json | jq -c '.seats' | expect "'None: library only' is not filled" '["opus","review"]'
+l18_client "<FILL IN later>"
+council status docs/specs/r18t3 --json | jq -c '.seats' | expect "'<FILL IN ...>' is not filled" '["opus","review"]'
+
+echo "ADR-013 D3: open-round freezes the roster into seats= - a later Profile edit leaves the open round alone"
+l18_client "http://localhost:3000 with the test login"
+mk_open_spec r18fz 2; set_tier r18fz 3
+out="$(council open-round docs/specs/r18fz --commit 2>&1)"
+grep -qx 'seats=haiku opus review' docs/specs/r18fz/council/round-1/ROUND && echo "  ok    ROUND carries seats=haiku opus review" \
+  || { echo "::error::ROUND: $(cat docs/specs/r18fz/council/round-1/ROUND)"; fail=1; }
+l18_last "$out" | jq -r .next | expect "open-round's own next names the frozen seats" "dispatch:haiku,opus,review"
+l18_client "none: library only"
+council status docs/specs/r18fz --json | jq -c '.seats' | expect "the Profile moved on, the open round did not" '["haiku","opus","review"]'
+
+echo "ADR-013 D1: CLAUDE.vulyk.md, when it exists, is the constitution - for the roster and for close-story's ## Commands"
+cat > CLAUDE.vulyk.md <<'EOF'
+# Sidecar constitution
+
+## Profile
+
+| Field | Value |
+|---|---|
+| Client path | `bash bin/cli --help` |
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Sidecar-only cell | `echo sidecar-only` |
+EOF
+council status docs/specs/r18t3 --json | jq -c '.seats' | expect "the sidecar's filled Client path wins over CLAUDE.md's 'none'" '["haiku","opus","review"]'
+mkdir -p docs/specs/r18sc
+printf -- '---\nstory: r18sc-01\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Sidecar cell\n\n## Files\n- r18sc-a.txt\n\n## Verification\n`echo sidecar-only`\n' > docs/specs/r18sc/r18sc-01-a.md
+printf -- '---\nstory: r18sc-02\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# CLAUDE.md-only cell\n\n## Files\n- r18sc-b.txt\n\n## Verification\n`true`\n' > docs/specs/r18sc/r18sc-02-b.md
+git add -A && git commit -qm "r18sc: two stories" >/dev/null
+out="$(council close-story docs/specs/r18sc/r18sc-01-a.md 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    a cell only the sidecar has closes the story" || { echo "::error::sidecar cell: exit=$ex out=$out"; fail=1; }
+out="$(council close-story docs/specs/r18sc/r18sc-02-b.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF "CLAUDE.vulyk.md's ## Commands: true" \
+  && echo "  ok    a cell only CLAUDE.md has is refused, naming CLAUDE.vulyk.md" || { echo "::error::CLAUDE.md-only cell: exit=$ex out=$out"; fail=1; }
+rm -f CLAUDE.vulyk.md
+l18_client "<fill in - how a person reaches the running thing>"
+
+echo "ADR-013 D3: no blind seat required -> no court: court= empty, status court null, judge closes without one"
+mk_open_spec r18nc 2; set_tier r18nc 2
+out="$(council open-round docs/specs/r18nc --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -qx 'court=' docs/specs/r18nc/council/round-1/ROUND && [ ! -e .vulyk/court/r18nc ] \
+  && echo "  ok    open-round exit 0, court= empty, no worktree under .vulyk/court/r18nc" || { echo "::error::no-court open: exit=$ex out=$out"; fail=1; }
+council status docs/specs/r18nc --json | jq -c '[.court, .seats, .since]' | expect "status: court null, seats [review], since null on round 1" '[null,["review"],null]'
+grep -qF 'round 1 opened, no court' docs/specs/r18nc/journal.md && echo "  ok    the journal says no court" \
+  || { echo "::error::journal: $(cat docs/specs/r18nc/journal.md)"; fail=1; }
+printf 'VERDICT: PASS\nall asks hold\n' | council record-seat docs/specs/r18nc 1 review >/dev/null 2>&1
+out="$(council judge docs/specs/r18nc --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && l18_last "$out" | jq -e '.next == "green"' >/dev/null 2>&1 && echo "  ok    judge GREEN on review alone, no court to remove" \
+  || { echo "::error::no-court judge: exit=$ex out=$out"; fail=1; }
+
+echo "ADR-013 D3: round n>1 carries round n-1's GREEN/N/A blind seats - never review, never a RED seat; since= names round n-1's head"
+mk_open_spec r18cf 2; set_tier r18cf 3
+council open-round docs/specs/r18cf --commit >/dev/null 2>&1
+seat_report opus 1 RG   | council record-seat docs/specs/r18cf 1 opus   >/dev/null 2>&1
+seat_report sonnet 1 GN | council record-seat docs/specs/r18cf 1 sonnet >/dev/null 2>&1
+printf 'VERDICT: PASS\nfine\n' | council record-seat docs/specs/r18cf 1 review >/dev/null 2>&1
+council judge docs/specs/r18cf --commit >/dev/null 2>&1
+h1="$(sed -n 's/^head=//p' docs/specs/r18cf/council/round-1/ROUND)"
+echo "repair" > r18cf-code.txt && git add -A && git commit -qm "r18cf: the repair" >/dev/null
+out="$(council open-round docs/specs/r18cf --commit 2>&1)"
+rd2=docs/specs/r18cf/council/round-2
+head -1 "$rd2/sonnet.md" 2>/dev/null | grep -qE 'carried: round 1 -->$' && echo "  ok    sonnet (GREEN, round 1) carried, header marked inside the comment" \
+  || { echo "::error::sonnet carry: $(head -1 "$rd2/sonnet.md" 2>&1)"; fail=1; }
+[ ! -f "$rd2/opus.md" ] && [ ! -f "$rd2/review.md" ] && echo "  ok    opus (RED) and review are not carried" \
+  || { echo "::error::carried too much: $(ls "$rd2")"; fail=1; }
+grep -qx "since=$h1" "$rd2/ROUND" && echo "  ok    ROUND since= is round 1's head" || { echo "::error::ROUND: $(cat "$rd2/ROUND")"; fail=1; }
+council status docs/specs/r18cf --json | jq -c '[.missing, .since, .seat_attempt]' \
+  | expect "status: missing opus+review, since round 1's head, seat_attempt 1 each" "[[\"opus\",\"review\"],\"$h1\",{\"opus\":1,\"review\":1}]"
+grep -qF 'carried from round 1: sonnet' docs/specs/r18cf/journal.md && echo "  ok    the journal names the carried seat" \
+  || { echo "::error::journal: $(tail -2 docs/specs/r18cf/journal.md)"; fail=1; }
+echo "ADR-013 D3: a round holding only carried seats that goes stale re-stamps in place - no STALE row, no round 3"
+echo "hand fix" > r18cf-code2.txt && git add -A && git commit -qm "r18cf: a hand fix" >/dev/null
+hfix="$(git rev-parse --short HEAD)"
+council open-round docs/specs/r18cf --commit >/dev/null 2>&1
+[ ! -d docs/specs/r18cf/council/round-3 ] && ! grep '"spec":"r18cf"' memory/stats/council.jsonl | grep -qF '"round":2,' \
+  && echo "  ok    re-stamped round 2 in place" || { echo "::error::round-3 or a STALE row appeared"; fail=1; }
+grep -qx "head=$hfix" "$rd2/ROUND" \
+  && echo "  ok    round 2's head moved to the fix" || { echo "::error::ROUND: $(cat "$rd2/ROUND")"; fail=1; }
+seat_report opus 2 GG | council record-seat docs/specs/r18cf 2 opus >/dev/null 2>&1
+printf 'VERDICT: PASS\nthe repair holds\n' | council record-seat docs/specs/r18cf 2 review >/dev/null 2>&1
+out="$(council judge docs/specs/r18cf --commit 2>&1)"
+row="$(grep '"spec":"r18cf"' memory/stats/council.jsonl | tail -1)"
+printf '%s' "$row" | grep -qF '"verdict":"GREEN"' && printf '%s' "$row" | grep -qF '"sonnet":"GREEN"' && printf '%s' "$row" | grep -qF '"attempts":2' \
+  && echo "  ok    round 2 GREEN with the carried sonnet counted, attempts 2 (a carried report is no dispatch)" || { echo "::error::row: $row"; fail=1; }
+
+echo "ADR-013 D3: reopen after a ceiling ESCALATE routes to repair; after env, to open-round"
+mk_open_spec r18ro 2; set_tier r18ro 1
+council open-round docs/specs/r18ro --commit >/dev/null 2>&1
+printf 'VERDICT: BLOCK\n## Major\n- [ask 1] ask 1 fails: run: t saw: f\n' | council record-seat docs/specs/r18ro 1 review >/dev/null 2>&1
+council judge docs/specs/r18ro --commit >/dev/null 2>&1; ex=$?
+[ "$ex" -eq 6 ] && echo "  ok    tier 1, one RED round -> ESCALATE ceiling" || { echo "::error::judge exit $ex"; fail=1; }
+out="$(council reopen docs/specs/r18ro "fix ask 1 anyway" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && l18_last "$out" | jq -e '.next == "repair" and .status.next == "repair"' >/dev/null 2>&1 \
+  && echo "  ok    reopen emits next repair and carries the status that says so" || { echo "::error::reopen: exit=$ex out=$out"; fail=1; }
+mk_open_spec r18re 2; set_tier r18re 1
+council open-round docs/specs/r18re --commit >/dev/null 2>&1
+council record-seat docs/specs/r18re 1 review </dev/null >/dev/null 2>&1
+council record-seat docs/specs/r18re 1 review </dev/null >/dev/null 2>&1
+council judge docs/specs/r18re --commit >/dev/null 2>&1
+grep '"spec":"r18re"' memory/stats/council.jsonl | tail -1 | grep -qF '"escalate":"env"' && echo "  ok    review ABSENT -> ESCALATE env" \
+  || { echo "::error::r18re row: $(grep '"spec":"r18re"' memory/stats/council.jsonl | tail -1)"; fail=1; }
+out="$(council reopen docs/specs/r18re "the reviewer died, run it again" --commit 2>&1)"
+l18_last "$out" | jq -r .next | expect "reopen after env -> open-round" "open-round"
+council status docs/specs/r18re --json | jq -r .next | expect "status agrees: open-round" "open-round"
+
+echo "ADR-013 D4: repair writes the mechanical story - asks from the row and the seats, findings verbatim, Files and Verification of the done stories"
+mkdir -p docs/specs/r18rp
+cp "$SRC/templates/plan.md" docs/specs/r18rp/plan.md
+printf '# r18rp (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n2. ask number 2 works\n3. ask number 3 works\n' > docs/specs/r18rp/brief.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-26/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/r18rp#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rp/plan.md
+printf 'a\n' > r18rp-a.txt; printf 'b\n' > r18rp-b.txt
+cat > docs/specs/r18rp/r18rp-01-a.md <<'EOF'
+---
+story: r18rp-01
+status: done
+wave: 1
+---
+# A
+
+## Requirements
+> build the thing
+
+## Files
+- r18rp-a.txt
+
+## Verification
+repeat: 2
+`true`
+EOF
+cat > docs/specs/r18rp/r18rp-02-b.md <<'EOF'
+---
+story: r18rp-02
+status: done
+wave: 2
+---
+# B
+
+## Requirements
+> build the thing
+
+## Files
+- r18rp-b.txt
+- r18rp-a.txt
+
+## Verification
+`true`
+`sh -c 'true && true'`
+EOF
+git add -A && git commit -qm "r18rp: fixture" >/dev/null
+out="$(council repair docs/specs/r18rp 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'next is open-round, not repair' && echo "  ok    repair refuses while status says anything but repair" \
+  || { echo "::error::repair precondition: exit=$ex out=$out"; fail=1; }
+council open-round docs/specs/r18rp --commit >/dev/null 2>&1
+seat_report opus 1 GRG | council record-seat docs/specs/r18rp 1 opus >/dev/null 2>&1
+printf 'VERDICT: BLOCK\n## Major\n- [ask 3] ask 3 regressed: run: t saw: f\n- [regression] the old path broke: app.sh:12\n- [unanchored] a naming nit no ask names\n## Minor\n- [ask 1] a minor, never copied\n' \
+  | council record-seat docs/specs/r18rp 1 review >/dev/null 2>&1
+council judge docs/specs/r18rp --commit >/dev/null 2>&1
+council status docs/specs/r18rp --json | jq -r .next | expect "RED round 1 -> next repair" "repair"
+out="$(council repair docs/specs/r18rp --commit 2>&1)"; ex=$?
+rp=docs/specs/r18rp/r18rp-03-repair-round-1.md
+mkdir -p .vulyk # gitignored: the expected text must not dirty the tree it is compared in
+cat > .vulyk/r18rp-expected.md <<'EOF'
+---
+story: r18rp-03
+status: todo
+returned:
+worker: worker-code
+model: opus
+wave: 3
+blocked_by: []
+---
+
+# Repair round 1
+
+## Goal
+Make the asks and findings council round 1 left RED pass, and change nothing else.
+
+## Requirements
+> 2. ask number 2 works
+> 3. ask number 3 works
+
+## Findings
+ASK 2: RED - ask 2 - run: check-2 saw: fail
+- [ask 3] ask 3 regressed: run: t saw: f
+- [regression] the old path broke: app.sh:12
+
+## Files
+- r18rp-a.txt
+- r18rp-b.txt
+
+## Verification
+`true`
+`sh -c 'true && true'`
+EOF
+[ "$ex" -eq 0 ] && diff .vulyk/r18rp-expected.md "$rp" >/dev/null 2>&1 && echo "  ok    the repair story is exactly the expected text" \
+  || { echo "::error::repair story: exit=$ex out=$out"; diff .vulyk/r18rp-expected.md "$rp" 2>&1 | sed 's/^/        /'; fail=1; }
+l18_last "$out" | jq -e '.ok == true and .verb == "repair" and .next == "build:3" and .status.wave == 3' >/dev/null 2>&1 \
+  && echo "  ok    last line ok:true, next build:3 (one past the highest wave), carries status" || { echo "::error::repair line: $(l18_last "$out")"; fail=1; }
+[ "$(git log -1 --format=%s)" = "vulyk(r18rp): repair round 1" ] && [ -z "$(git status --porcelain)" ] \
+  && echo "  ok    --commit commits the story, tree clean" || { echo "::error::commit: $(git log -1 --format=%s) / $(git status --porcelain)"; fail=1; }
+before="$(git rev-parse HEAD)"
+out="$(council repair docs/specs/r18rp --commit 2>&1)"; ex=$?
+n="$(ls docs/specs/r18rp/*-repair-round-1.md | wc -l | tr -d ' ')"
+[ "$ex" -eq 0 ] && [ "$n" -eq 1 ] && [ "$(git rev-parse HEAD)" = "$before" ] && printf '%s' "$out" | grep -qF 'already repairs round 1' \
+  && echo "  ok    idempotent: a second run writes nothing, commits nothing, exit 0" || { echo "::error::idempotency: exit=$ex n=$n out=$out"; fail=1; }
+bash scripts/wave-check.sh docs/specs/r18rp | expect "wave-check: the repair story is dispatchable" "3 stories, dispatchable"
+out="$(bash scripts/trace-check.sh docs/specs/r18rp)"
+printf '%s' "$out" | expect "trace-check: its > N. quotes trace to ## Asks" "backward: 0 unfound + 0 storyless"
+
+echo "ADR-013 D2: advance - branch and open-round in one call, stop at the first agent boundary, key order fixed"
+mk_spec r18ad 2
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-26/; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18ad/plan.md
+git add -A && git commit -qm "r18ad: approved, tier 2, no branch yet" >/dev/null
+out="$(council advance docs/specs/r18ad 2>&1)"; ex=$?
+last="$(l18_last "$out")"
+[ "$ex" -eq 0 ] && [ "$(printf '%s' "$last" | jq -r 'keys_unsorted | join(",")')" = "ok,verb,exit,next,steps,rejected,status" ] \
+  && echo "  ok    exit 0, keys ok,verb,exit,next,steps,rejected,status" || { echo "::error::advance: exit=$ex last=$last"; fail=1; }
+printf '%s' "$last" | jq -c '[.steps, .next, .rejected, .status.seat_attempt]' \
+  | expect "steps [branch, open-round], next dispatch:review, seat_attempt review 1" '[["branch","open-round"],"dispatch:review",[],{"review":1}]'
+[ -z "$(git status --porcelain)" ] && echo "  ok    every step committed its own paperwork" || { echo "::error::dirty: $(git status --porcelain)"; fail=1; }
+echo "  sample advance line: $last" | cut -c1-400
+
+echo "ADR-013 D2: advance --ingest records the report the seat wrote, then judges"
+mkdir -p .vulyk/reports/r18ad/round-1
+printf 'VERDICT: PASS\nall asks hold\n' > .vulyk/reports/r18ad/round-1/review.attempt-1.md
+out="$(council advance docs/specs/r18ad --ingest 2>&1)"
+l18_last "$out" | jq -c '[.steps, .next, .rejected]' | expect "steps [judge], next green, nothing rejected" '[["judge"],"green",[]]'
+[ -f docs/specs/r18ad/council/round-1/review.md ] && echo "  ok    review.md recorded from the file" || { echo "::error::no review.md"; fail=1; }
+
+echo "ADR-013 D2: --ingest - a malformed file is rejected with its reason; a missing file spends the attempt on an empty report"
+mk_open_spec r18ig 2; set_tier r18ig 3
+council open-round docs/specs/r18ig --commit >/dev/null 2>&1
+mkdir -p .vulyk/reports/r18ig/round-1
+printf 'not a report\n' > .vulyk/reports/r18ig/round-1/opus.attempt-1.md
+out="$(council advance docs/specs/r18ig --ingest 2>&1)"; ex=$?
+last="$(l18_last "$out")"
+[ "$ex" -eq 0 ] && printf '%s' "$last" | jq -e '.ok and (.steps == []) and .next == "dispatch:opus,review"' >/dev/null 2>&1 \
+  && echo "  ok    rejections are not a stop: ok:true, no step, the seats still missing" || { echo "::error::ingest: exit=$ex last=$last"; fail=1; }
+printf '%s' "$last" | jq -c '[.rejected[] | [.seat, .attempt, (.error | split(":")[0])]]' \
+  | expect "rejected: opus and review, attempt 1, MALFORMED" '[["opus",1,"MALFORMED"],["review",1,"MALFORMED"]]'
+printf '%s' "$last" | jq -c '.status.seat_attempt' | expect "seat_attempt moves both to 2" '{"opus":2,"review":2}'
+[ -f docs/specs/r18ig/council/round-1/review.attempt-1.md ] && echo "  ok    the missing review file still spent attempt 1" \
+  || { echo "::error::no review.attempt-1.md"; fail=1; }
+seat_report opus 1 GG > .vulyk/reports/r18ig/round-1/opus.attempt-2.md
+printf 'VERDICT: PASS\nfine\n' > .vulyk/reports/r18ig/round-1/review.attempt-2.md
+out="$(council advance docs/specs/r18ig --ingest 2>&1)"
+l18_last "$out" | jq -c '[.steps, .next, .rejected]' | expect "attempt-2 files recorded, judged GREEN" '[["judge"],"green",[]]'
+
+echo "ADR-013 D2: advance stops on a failing verb - ok:false, its exit/next/error, failed, steps, rejected, no status"
+mk_open_spec r18st 2; set_tier r18st 2
+echo "stray" > r18st-dirty.txt
+out="$(council advance docs/specs/r18st 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && [ "$(l18_last "$out")" = '{"ok":false,"verb":"advance","exit":2,"next":"error","error":"working tree not clean","failed":"open-round","steps":["open-round"],"rejected":[]}' ] \
+  && echo "  ok    open-round's refusal is advance's stop line, byte for byte" || { echo "::error::stop: exit=$ex out=$out"; fail=1; }
+rm -f r18st-dirty.txt
+
+echo "ADR-013 D2: advance --claim claims first and needs --stamp; a failed claim is the stop; sub-verbs stay DRIVER-guarded"
+out="$(council advance docs/specs/r18st --claim 2>&1)"; ex=$?
+[ "$ex" -eq 1 ] && echo "  ok    --claim without --stamp -> usage, exit 1" || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(council advance docs/specs/r18st --stamp aaaa1111 --claim 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -qx 'stamp=aaaa1111' docs/specs/r18st/DRIVER && l18_last "$out" | jq -e '.steps == ["open-round"]' >/dev/null 2>&1 \
+  && echo "  ok    claimed, then opened the round under the stamp" || { echo "::error::claim+advance: exit=$ex out=$out"; fail=1; }
+out="$(council advance docs/specs/r18st --stamp bbbb2222 --claim 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && l18_last "$out" | jq -e '.failed == "claim" and (.error | startswith("held by aaaa1111")) and (has("status") | not)' >/dev/null 2>&1 \
+  && echo "  ok    a foreign stamp's claim fails -> failed:claim, held by" || { echo "::error::foreign claim: exit=$ex out=$out"; fail=1; }
+out="$(council advance docs/specs/r18st --ingest 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && l18_last "$out" | jq -e '.failed == "record-seat" and (.error | startswith("held by aaaa1111"))' >/dev/null 2>&1 \
+  && echo "  ok    no stamp under a held DRIVER: record-seat refuses, advance stops" || { echo "::error::guard: exit=$ex out=$out"; fail=1; }
+council release docs/specs/r18st aaaa1111 >/dev/null 2>&1
+
+echo "ADR-013 D2: Tier 4 - --ingest folds review-top and review-second into one review (the 0.17 driver's foldReviews)"
+mk_open_spec r18f4 2; set_tier r18f4 4
+council open-round docs/specs/r18f4 --commit >/dev/null 2>&1
+mkdir -p .vulyk/reports/r18f4/round-1
+seat_report opus 1 GG > .vulyk/reports/r18f4/round-1/opus.attempt-1.md
+printf 'VERDICT: PASS\ntop reviewer: fine\n' > .vulyk/reports/r18f4/round-1/review-top.attempt-1.md
+printf 'VERDICT: BLOCK\n## Major\n- [ask 2] second reviewer: ask 2 fails: run: t saw: f\n' > .vulyk/reports/r18f4/round-1/review-second.attempt-1.md
+out="$(council advance docs/specs/r18f4 --ingest 2>&1)"
+rf=docs/specs/r18f4/council/round-1/review.md
+head -1 "$rf" 2>/dev/null | grep -qF 'verdict: BLOCK' && grep -qF 'top reviewer: fine' "$rf" && grep -qF 'second reviewer: ask 2 fails' "$rf" \
+  && echo "  ok    PASS + BLOCK fold to BLOCK, both bodies kept" || { echo "::error::fold: $(cat "$rf" 2>&1)"; fail=1; }
+l18_last "$out" | jq -c '[.steps, .next, .rejected]' | expect "judged RED on the folded review, then straight on to repair" '[["judge","repair"],"build:2",[]]'
+grep -qF -- '- [ask 2] second reviewer: ask 2 fails' docs/specs/r18f4/r18f4-02-repair-round-1.md 2>/dev/null \
+  && echo "  ok    the repair story quotes the second reviewer's anchored finding" \
+  || { echo "::error::repair story: $(cat docs/specs/r18f4/r18f4-02-repair-round-1.md 2>&1)"; fail=1; }
+mk_open_spec r18f4n 2; set_tier r18f4n 4
+council open-round docs/specs/r18f4n --commit >/dev/null 2>&1
+mkdir -p .vulyk/reports/r18f4n/round-1
+seat_report opus 1 GG > .vulyk/reports/r18f4n/round-1/opus.attempt-1.md
+printf 'VERDICT: PASS\nonly the top reviewer came back\n' > .vulyk/reports/r18f4n/round-1/review-top.attempt-1.md
+out="$(council advance docs/specs/r18f4n --ingest 2>&1)"
+l18_last "$out" | jq -c '[.rejected[] | [.seat, .attempt]]' | expect "a missing second report -> NO VERDICT -> review attempt 1 rejected" '[["review",1]]'
+sed -n '2p' docs/specs/r18f4n/council/round-1/review.attempt-1.md | expect "the kept attempt starts NO VERDICT, naming both first lines" 'NO VERDICT: top=VERDICT: PASS · second=(no report)'
+
+echo "ADR-013 D5: claim refuses a tree dirty outside paperwork; paperwork-only dirt passes; the holder's re-claim is exempt"
+mk_spec r18cl 2
+echo "stray" > r18cl-stray.txt
+out="$(council claim docs/specs/r18cl s18a 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && l18_last "$out" | jq -e '.error == "working tree not clean"' >/dev/null 2>&1 && [ ! -f docs/specs/r18cl/DRIVER ] \
+  && echo "  ok    a stray file -> exit 2 working tree not clean, no DRIVER" || { echo "::error::dirty claim: exit=$ex out=$out"; fail=1; }
+rm -f r18cl-stray.txt
+echo "- a journal note" >> docs/specs/r18cl/journal.md
+out="$(council claim docs/specs/r18cl s18a 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    paperwork-only dirt (journal.md) does not block a claim" || { echo "::error::paperwork claim: exit=$ex out=$out"; fail=1; }
+echo "stray" > r18cl-stray.txt
+out="$(council claim docs/specs/r18cl s18a 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    the holder's own re-claim on a dirty tree still exits 0" || { echo "::error::re-claim: exit=$ex out=$out"; fail=1; }
+rm -f r18cl-stray.txt
+council release docs/specs/r18cl s18a >/dev/null 2>&1
+git add -A && git commit -qm "r18cl: journal note" >/dev/null
+
+echo "ADR-013 D5: close-story on a done story with a clean tree -> ok:true exit 0, 'already done', carries status"
+mkdir -p docs/specs/r18cs
+printf -- '---\nstory: r18cs-01\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Twice\n\n## Files\n- r18cs.txt\n\n## Verification\n`true`\n' > docs/specs/r18cs/r18cs-01-a.md
+git add -A && git commit -qm "r18cs: fixture" >/dev/null
+council close-story docs/specs/r18cs/r18cs-01-a.md --commit >/dev/null 2>&1
+before="$(git rev-parse HEAD)"
+out="$(council close-story docs/specs/r18cs/r18cs-01-a.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF 'already done' && l18_last "$out" | jq -e '.ok and .verb == "close-story" and (.status | type == "object")' >/dev/null 2>&1 \
+  && [ "$(git rev-parse HEAD)" = "$before" ] && echo "  ok    second close: exit 0, already done, status carried, no commit" \
+  || { echo "::error::already done: exit=$ex out=$out"; fail=1; }
+
+echo "ADR-013 D5: close-story runs each command under timeout \$VULYK_VERIFY_TIMEOUT - 124 is exit 4 naming the timeout"
+printf -- '---\nstory: r18cs-02\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Slow\n\n## Files\n- r18cs-slow.txt\n\n## Verification\n`sleep 3`\n' > docs/specs/r18cs/r18cs-02-slow.md
+git add -A && git commit -qm "r18cs: a slow story" >/dev/null
+out="$(VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh close-story docs/specs/r18cs/r18cs-02-slow.md 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && [ "$(l18_last "$out")" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"verification timed out after 1s: sleep 3"}' ] \
+  && grep -q '^status: todo' docs/specs/r18cs/r18cs-02-slow.md && echo "  ok    exit 4, error names the timeout and the command, story stays todo" \
+  || { echo "::error::timeout: exit=$ex out=$out"; fail=1; }
+
+echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every pre-0.18 key"
+council status docs/specs/r18nc --json | jq -r 'keys_unsorted | .[-6:] | join(",")' | expect "the last six keys" "round_dir,paused,shipped,since,seat_attempt,seats"
+
+[ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
 exit $fail
