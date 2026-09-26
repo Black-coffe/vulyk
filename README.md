@@ -27,7 +27,7 @@ A model-cascade, memory-first, self-evolving framework for running multi-agent c
 The result: more parallel agents, larger codebases, and — the point of the whole exercise — **a strong model that stays inside the task it was given**. Every story names the files it may touch, and a deterministic gate reports the ones it touched anyway.
 
 <p align="center">
-  <img src="assets/architecture.svg" alt="VULYK architecture: queen, leads, workers, drones and the external memory plane" width="92%" />
+  <img src="assets/architecture.svg" alt="VULYK architecture: the Queen builds Tier 0-2 solo with one reviewer; Tier 3-4 runs workers in waves through the Workflow driver and a council; both share cycle.sh state on disk and the memory plane" width="92%" />
 </p>
 
 ## Why VULYK exists
