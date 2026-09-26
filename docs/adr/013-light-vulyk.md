@@ -201,10 +201,12 @@ implements the repair story like any other.
     that run, recorded. Targeted checks while working are fine.
 - `close-story` on a story that is `done` with a clean tree now returns `ok:true`, exit 0, with a
   note "already done" and `emit_status`. It no longer exits 2.
-- `close-story` wraps each verification command in `timeout "${VULYK_VERIFY_TIMEOUT:-540}"` when
-  `timeout` exists. Exit 124 → exit 4, `error: "verification timed out after <N>s: <cmd>"`.
+- `close-story` runs verification under `timeout` when a working `timeout` exists. The whole run —
+  every line, every `repeat` — shares one budget of `${VULYK_VERIFY_TIMEOUT:-540}` seconds. Exit 124,
+  or a spent budget → exit 4, `error: "verification timed out after <N>s: <cmd>"`.
   - 540 s keeps the verb inside the Bash tool's 10-minute cap, so a slow suite reports instead of
     dying silently.
+  - The budget is per run, not per command, because a repair story unions every story's lines.
 - `claim` refuses a working tree dirty outside paperwork, with the same predicate `open-round`
   uses (factored into one function) and `error: "working tree not clean"`. An owner's stray file
   now stops a run before the build, not after it.
@@ -285,7 +287,8 @@ contexts. `/vulyk-status` and `/vulyk-evolve` show its per-spec lines.
 - **Dispatches per task:**
   - Tier 1: from 14 (10 clerks) to 1 reviewer.
   - Tier 2: from 21–33 to 1–2 reviewers plus scouts.
-  - Tier 3: from 35–53 to about 6 workers + 2 seats + ~5 clerks per round.
+  - Tier 3: from 35–53 to about 6 workers + 2 seats + 3–4 clerk calls per round. `tests/e2e.test.sh`
+    measures 4 clerk calls for a one-wave, one-round run.
 - **What stays:** state on disk, the approval stop, verbatim requirements with `trace-check`, the
   council ledger, the ceiling and no-progress rules, and `reopen`.
 - **Where quality is guarded now:**

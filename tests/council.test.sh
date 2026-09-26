@@ -3882,6 +3882,15 @@ out="$(VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh close-story docs/specs/r18cs
   && grep -q '^status: todo' docs/specs/r18cs/r18cs-02-slow.md && echo "  ok    exit 4, error names the timeout and the command, story stays todo" \
   || { echo "::error::timeout: exit=$ex out=$out"; fail=1; }
 
+echo "ADR-013 D5: the budget covers the whole run - two 2 s lines under a 3 s budget time out on the second"
+printf '| Fixture: two-second line | `sleep 2` |\n' >> CLAUDE.md
+printf -- '---\nstory: r18cs-03\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Two slow lines\n\n## Files\n- r18cs-two.txt\n\n## Verification\n`sleep 2`\n`sleep 2`\n' > docs/specs/r18cs/r18cs-03-two.md
+git add -A && git commit -qm "r18cs: two slow lines" >/dev/null
+out="$(VULYK_VERIFY_TIMEOUT=3 bash scripts/cycle.sh close-story docs/specs/r18cs/r18cs-03-two.md 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && [ "$(l18_last "$out")" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"verification timed out after 3s: sleep 2"}' ] \
+  && echo "  ok    exit 4 on the second line: each line alone fits, the run does not" \
+  || { echo "::error::run budget: exit=$ex out=$out"; fail=1; }
+
 echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every pre-0.18 key"
 council status docs/specs/r18nc --json | jq -r 'keys_unsorted | .[-6:] | join(",")' | expect "the last six keys" "round_dir,paused,shipped,since,seat_attempt,seats"
 

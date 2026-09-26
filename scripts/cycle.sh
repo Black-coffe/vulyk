@@ -1838,11 +1838,13 @@ SEGEOF
 $CMD_LIST
 EOF
 
-  # --- ADR-013 D5: each command runs under `timeout`, so a suite slower than the Bash tool's
-  # 10-minute cap reports exit 4 instead of dying with the tool call. 540 s leaves the verb its
-  # own margin inside that cap. `timeout 5 true` rather than `command -v`: on Windows a PATH
-  # that finds System32's timeout.exe first would otherwise fail every verification line. ------
-  local VT="${VULYK_VERIFY_TIMEOUT:-540}" TIMEOUT_OK=0 vrc
+  # --- ADR-013 D5: the whole run - every line, every repeat - shares one budget under `timeout`,
+  # so verification slower than the Bash tool's 10-minute cap reports exit 4 instead of dying
+  # with the tool call. A per-command budget would not do: a repair story unions every story's
+  # lines, and five 500 s commands still pass five 540 s limits. 540 s leaves the verb its own
+  # margin inside that cap. `timeout 5 true` rather than `command -v`: on Windows a PATH that
+  # finds System32's timeout.exe first would otherwise fail every verification line. ---------
+  local VT="${VULYK_VERIFY_TIMEOUT:-540}" TIMEOUT_OK=0 vrc VSTART="$SECONDS" left
   case "$VT" in ''|*[!0-9]*|0) VT=540 ;; esac
   command -v timeout >/dev/null 2>&1 && timeout 5 true </dev/null >/dev/null 2>&1 && TIMEOUT_OK=1
 
@@ -1854,7 +1856,10 @@ EOF
       [ -n "$vline" ] || continue
       [ "$vline" = "none — reviewed by lead-review" ] && continue
       if [ "$TIMEOUT_OK" -eq 1 ]; then
-        timeout "$VT" bash -c "$vline"; vrc=$?
+        left=$(( VT - (SECONDS - VSTART) ))
+        if [ "$left" -le 0 ]; then vrc=124
+        else timeout "$left" bash -c "$vline"; vrc=$?
+        fi
       else
         bash -c "$vline"; vrc=$?
       fi

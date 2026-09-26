@@ -21,14 +21,14 @@ newest published tag is.
    constitution changed, offer its replacement as a separate choice: `scripts/vulyk-update.sh .
    --constitution replace` writes the new constitution with this hive's `VULYK:PROFILE` and
    `VULYK:COMMANDS` blocks and its telemetry row carried over, and keeps the old file as
-   `<name>.pre-0.18.md`. Hand-written sections outside those blocks stay only in the backup. Say which
+   `<name>.pre-<version>.md` (e.g. `CLAUDE.pre-0.18.md`). Hand-written sections outside those blocks stay only in the backup. Say which
    you recommend and why (little hand-written text outside the two blocks favours replacing); the
    owner decides. A refusal ends the command; do not raise it again this session.
 5. Apply, on yes only: `scripts/vulyk-update.sh .` (add `--version $1` when pinned, and
    `--constitution replace` only when the owner chose it). Report the new `.claude/vulyk-version`.
 6. Name the manual remainder. If the constitution changed and was not replaced, quote the sections
    whose edits did not land; the owner merges them by hand. After a replacement, point at the
-   `.pre-0.18.md` backup for anything hand-written they want back.
+   `.pre-<version>.md` backup for anything hand-written they want back.
 
 Never edit `.claude/vulyk-version` by hand to silence the check, and never widen the upgrade beyond
 what `install.sh --upgrade` does on its own.
