@@ -2,6 +2,41 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.19.1] - 2026-09-27
+
+### Fixed
+- **New hooks are wired in the host's own form, and they run.** 0.19.0 copied a
+  `bash.exe -c '"…/x.sh"'` wrapper but dropped its closing quote. Every new hook then died with
+  "unexpected EOF" and exit 2, and exit 2 on PreToolUse blocks every Edit, Write and Bash.
+  `install.sh` now reads a sibling VULYK hook as head, script, argument and tail. It reproduces that
+  form exactly, with the argument where the host puts it (`… defects-inject.sh" reset'`). That covers
+  plain, quoted bash, `bash -c '…'`, `${CLAUDE_PROJECT_DIR}` and a launcher such as
+  `node …/vulyk-hook.mjs x.sh`. A form that does not parse falls back to the plain one.
+  A `reset'` already in place is read as the argument `reset`, so a second run adds nothing.
+  An entry for one of our hooks whose quotes do not close is repaired in place (`repair` in the output).
+- **A CRLF manifest no longer marks every framework file "remove".** With `core.autocrlf=true`, the
+  removal loop kept each line's `\r`, so no path matched and real retirements were skipped. CRs are now
+  stripped from the manifest, and from the `.gitignore` and constitution lines the installer matches, so
+  a CRLF `.gitignore` no longer gets the runtime block again on every run.
+- **Hooks check out with LF.** `.gitattributes` in a hive now also pins `*.sh`, `.claude/hooks/*.py`
+  and `.claude/vulyk-manifest` to LF, as it already did the Workflow driver. CRs are stripped from
+  every shipped script on each run. VULYK's own `.gitattributes` adds `*.js` and `*.json`.
+- **The gate runs every declared `block` check again.** `defects-check.sh <arg>` ran only effectively
+  `block` cards, so a `status: block` card with a `check:` and fewer than two fixtures was skipped.
+  YouTube_AI's pre-show gate went from all its checks to 0 after the upgrade. The gate now runs the check
+  of every card that declares `block`, and reports the card as
+  `block without fixtures (check runs, not earned)`. Fixtures still decide the audit and debt.
+  `defects-inject.sh` no longer injects such a card either, because its check speaks for it.
+
+### Upgrade notes
+- A hive that took 0.19.0 with a wrapper form (Varto's `bash.exe -c '"…"'`) must run the update
+  again. The run rewrites the three broken `defect-intake.sh` / `defects-inject.sh` entries in the
+  host's form. Until then, every Edit, Write and Bash in that hive is blocked.
+- A launcher host such as fibi-next, whose new hooks 0.19.0 wired bare, still works. To get the
+  launcher form, delete those three entries and re-run the update.
+- A defect library without fixtures runs its `block` checks in the gate again. Those cards still owe
+  debt until they have two fixtures.
+
 ## [0.19.0] - 2026-09-27
 
 Owner corrections become defect classes with failing checks ([ADR-014](docs/adr/014-defect-library.md)).

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The defects-inject hook contract (docs/specs/self-learning/contract.md §1 effective status, §3),
 # driven through a fixture library - no model calls, no network. Covers .claude/hooks/defects-inject.sh:
-# which cards are injected (text only; block with check + 2 fixtures and revoked never), how a target
+# which cards are injected (not a declared block with a check - fixtures or not - nor revoked), how a target
 # matches (path glob on file_path / notebook_path, a path token or a `cmd:` regex on a Bash line),
 # the session + agent dedup, `reset` on SessionStart, the 4000-char budget, and the latency budget.
 #
@@ -133,6 +133,28 @@ paths: ["cmd:edit_build\\.py|draft_cut\\.py"]
 ## Never
 - CMDNEVER build without the check.
 EOF
+cat > "$D/cmd-text.md" <<'EOF'
+---
+id: cmd-text
+title: Build commands
+status: text
+paths: ["cmd:edit_build\\.py|draft_cut\\.py"]
+---
+
+## Never
+- CMDTEXTNEVER build by hand.
+EOF
+cat > "$D/block-nocheck.md" <<'EOF'
+---
+id: block-nocheck
+title: Block with no check
+status: block
+paths: ["cmd:edit_build"]
+---
+
+## Never
+- NOCHECKNEVER is injected: nothing else speaks for it.
+EOF
 # CRLF and the Russian heading must be tolerated.
 printf -- '---\r\nid: json-card\r\ntitle: JSON sheets\r\nstatus: text\r\npaths: ["*.json"]\r\n---\r\n\r\n## Нельзя\r\n\r\n- JSONNEVER hand-edit a sheet.\r\n' \
   > "$D/json-card.md"
@@ -179,7 +201,9 @@ printf '%s' "$c" | expect "a CRLF card with ## Нельзя is read" "✗ JSONNE
 
 o="$(run "$HIVE" "$(bashcall s2 'cd pipeline && py -3 edit_build.py x.json')")"
 c="$(printf '%s' "$o" | ctx)"
-printf '%s' "$c" | expect "Bash injects via a cmd: regex (block with <2 fixtures is text)" "✗ CMDNEVER build without the check."
+printf '%s' "$c" | expect "Bash injects via a cmd: regex" "✗ CMDTEXTNEVER build by hand."
+printf '%s' "$c" | expect_absent "a declared block with a check but <2 fixtures is not injected (the gate runs it)" "CMDNEVER"
+printf '%s' "$c" | expect "a block card with no check is injected" "✗ NOCHECKNEVER is injected"
 printf '%s' "$c" | expect "Bash injects via a path token" "✗ JSONNEVER hand-edit a sheet."
 printf '%s' "$c" | expect_absent "Bash: a card whose globs miss every token stays out" "voice-text"
 printf '%s' "$c" | expect_absent "Bash: a revoked cmd: card stays out" "REVOKEDNEVER"

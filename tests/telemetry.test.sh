@@ -1247,6 +1247,103 @@ bash "$SRC/install.sh" "$DW" --upgrade --telemetry off > "$T/dw2.out" 2>&1
 expect_eq "a second upgrade leaves it byte-identical" "1" "$([ "$DW_BEFORE" = "$(cat "$DWS")" ] && echo 1 || echo 0)"
 cat "$T/dw2.out" | expect_absent "and wires nothing" "wire           .claude/settings.json"
 
+# --- install.sh: the host's hook wrapper, reproduced exactly (0.19.1) ------------------------
+# 0.19.0 copied a Varto-style `bash -c '"...x.sh"'` prefix and dropped the closing quote: every
+# new hook died with "unexpected EOF" and exit 2, which on PreToolUse blocks every tool. Each
+# form below is how a real host wires VULYK; the new entries must take the same form AND run.
+echo "--- install.sh: hook wrapper forms (plain, bash -c, node launcher, mixed)"
+WRAPBIN="$T/Git Bin"; mkdir -p "$WRAPBIN"                     # a launcher path with a space in it
+printf '#!/usr/bin/env bash\nexec bash "$@"\n' > "$WRAPBIN/bash-wrap"; chmod +x "$WRAPBIN/bash-wrap"
+STUBBIN="$T/stub-bin"; mkdir -p "$STUBBIN"                    # fibi's node launcher, as bash
+printf '#!/usr/bin/env bash\nshift; h="$1"; shift\nexec bash "$CLAUDE_PROJECT_DIR/.claude/hooks/$h" "$@"\n' > "$STUBBIN/node"
+chmod +x "$STUBBIN/node"
+STUB="$T/stub-project"; mkdir -p "$STUB/.claude/hooks"         # stub hooks: log how they were called
+for h in defect-intake.sh defects-inject.sh; do
+  printf '#!/usr/bin/env bash\nprintf "%%s %%s\\n" "${0##*/}" "$*" >> "$STUBLOG"\nexit 0\n' > "$STUB/.claude/hooks/$h"
+  chmod +x "$STUB/.claude/hooks/$h"
+done
+STUBLOG="$T/stub.log"
+W='"'"$WRAPBIN/bash-wrap"'"'
+P='$CLAUDE_PROJECT_DIR/.claude/hooks/'
+wrapper_case() { # wrapper_case <name> <cmd-of vulyk-update-check.sh> <cmd-of anomaly-scan.sh> <intake> <inject> <reset>
+  local name="$1" upd="$2" scan="$3" want_in="$4" want_inj="$5" want_rs="$6" d="$T/hive-wrap-$1" s got c
+  mkdir -p "$d"
+  bash "$SRC/install.sh" "$d" --telemetry off > /dev/null 2>&1
+  s="$d/.claude/settings.json"
+  jq -n --arg upd "$upd" --arg scan "$scan" --arg tmb "${upd/vulyk-update-check.sh/top-model-brief.sh}" \
+    '{hooks:{SessionStart:[{hooks:[{type:"command",command:$upd},{type:"command",command:$tmb}]}],
+             SessionEnd:[{hooks:[{type:"command",command:$scan}]}]}}' > "$s"
+  bash "$SRC/install.sh" "$d" --upgrade --telemetry off > "$T/wrap-$name.out" 2>&1
+  got="$(jq -r '[.hooks.UserPromptSubmit[]?.hooks[].command | select(test("defect-intake"))] | join("|")' "$s" | tr -d '\r')"
+  expect_eq "$name: intake wired in the host's form" "$want_in" "$got"
+  got="$(jq -r --arg m "$PRE_M" '[.hooks.PreToolUse[]? | select(.matcher == $m) | .hooks[].command | select(test("defects-inject"))] | join("|")' "$s" | tr -d '\r')"
+  expect_eq "$name: inject wired in the host's form" "$want_inj" "$got"
+  got="$(jq -r '[.hooks.SessionStart[]?.hooks[].command | select(test("defects-inject"))] | join("|")' "$s" | tr -d '\r')"
+  expect_eq "$name: reset wired in the host's form, argument where the host puts it" "$want_rs" "$got"
+  : > "$STUBLOG"
+  for c in "$want_in" "$want_inj" "$want_rs"; do
+    if (export CLAUDE_PROJECT_DIR="$STUB" STUBLOG PATH="$STUBBIN:$PATH"; bash -c "$c" < /dev/null) > "$T/wrap-run.out" 2>&1; then
+      ok "$name: runs through bash -c: $c"
+    else bad "$name: exit $? from bash -c: $c"; sed 's/^/        /' "$T/wrap-run.out"; fi
+  done
+  expect_eq "$name: each stub saw the right script and argument" \
+    "defect-intake.sh |defects-inject.sh |defects-inject.sh reset" "$(tr -d '\r' < "$STUBLOG" | paste -sd'|' -)"
+  got="$(cat "$s")"
+  bash "$SRC/install.sh" "$d" --upgrade --telemetry off > "$T/wrap-$name-2.out" 2>&1
+  expect_eq "$name: a second upgrade leaves settings.json byte-identical" "1" "$([ "$got" = "$(cat "$s")" ] && echo 1 || echo 0)"
+  cat "$T/wrap-$name-2.out" | expect_absent "$name: and wires nothing" "wire           .claude/settings.json"
+}
+wrapper_case plain "${P}vulyk-update-check.sh" "${P}anomaly-scan.sh" \
+  "${P}defect-intake.sh" "${P}defects-inject.sh" "${P}defects-inject.sh reset"
+wrapper_case bash-c "$W -c '\"${P}vulyk-update-check.sh\"'" "$W -c '\"${P}anomaly-scan.sh\"'" \
+  "$W -c '\"${P}defect-intake.sh\"'" "$W -c '\"${P}defects-inject.sh\"'" "$W -c '\"${P}defects-inject.sh\" reset'"
+N='node "${CLAUDE_PROJECT_DIR}/scripts/vulyk-hook.mjs"'
+wrapper_case node-launcher "$N vulyk-update-check.sh" "$N anomaly-scan.sh" \
+  "$N defect-intake.sh" "$N defects-inject.sh" "$N defects-inject.sh reset"
+# our-home: the owner's `bash "${CLAUDE_PROJECT_DIR}/..."` beside plain entries an older installer
+# added - the owner's wrapper wins.
+B='bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/'
+wrapper_case mixed "${B}vulyk-update-check.sh\"" "${P}anomaly-scan.sh" \
+  "${B}defect-intake.sh\"" "${B}defects-inject.sh\"" "${B}defects-inject.sh\" reset"
+# A host 0.19.0 already broke: the three entries lack their closing quote. They count as wired,
+# so re-running the update must repair them in place, not skip them or add a second copy.
+BC="$T/hive-wrap-bash-c"; BCS="$BC/.claude/settings.json"
+cp "$BCS" "$T/bc.good"
+sed -i "/defect/s/'\"\(\r\{0,1\}\)\$/\"\1/" "$BCS"   # Windows python writes CRLF
+expect_eq "fixture: three defect entries lost their closing quote" "3" \
+  "$(jq -r '.hooks[][].hooks[].command | select(test("defect"))' "$BCS" | tr -d '\r' | grep -vc "'\$")"
+bash "$SRC/install.sh" "$BC" --upgrade --check > "$T/bc-check.out" 2>&1
+expect_eq "--check: three would be repaired" "3" "$(grep -c 'would repair   .claude/settings.json' "$T/bc-check.out")"
+bash "$SRC/install.sh" "$BC" --upgrade --telemetry off > "$T/bc.out" 2>&1
+cat "$T/bc.out" | expect "the broken reset is repaired" "repair         .claude/settings.json -> SessionStart: defects-inject.sh reset"
+expect_eq "settings.json is back to the correct form, byte for byte" "1" "$(same "$T/bc.good" "$BCS")"
+bash "$SRC/install.sh" "$BC" --upgrade --telemetry off > "$T/bc2.out" 2>&1
+cat "$T/bc2.out" | expect_absent "a run after the repair wires and repairs nothing" "settings.json ->"
+
+# --- install.sh: CRLF host files (core.autocrlf=true) -----------------------------------------
+# The manifest read with its CRs never matched a shipped path, so every framework file came out
+# "remove" and real retirements were skipped; a CRLF .gitignore grew its block again every run.
+echo "--- install.sh: CRLF manifest and .gitignore"
+CR="$T/hive-crlf"; mkdir -p "$CR"
+bash "$SRC/install.sh" "$CR" --telemetry off > /dev/null 2>&1
+printf '#!/usr/bin/env bash\n' > "$CR/.claude/hooks/retired-old.sh"
+printf '.claude/hooks/retired-old.sh\n' >> "$CR/.claude/vulyk-manifest"
+sed -i 's/$/\r/' "$CR/.claude/vulyk-manifest" "$CR/.gitignore"
+expect_eq "fixture: the manifest is CRLF" "1" "$(grep -qc $'\r' "$CR/.claude/vulyk-manifest" && echo 1 || echo 0)"
+bash "$SRC/install.sh" "$CR" --upgrade --check > "$T/crlf-check.out" 2>&1
+cat "$T/crlf-check.out" | expect "--check: the retired file would go" "would remove   .claude/hooks/retired-old.sh"
+expect_eq "--check: nothing still shipped is marked for removal" "1" \
+  "$(grep -F 'would remove' "$T/crlf-check.out" | grep -c .)"
+bash "$SRC/install.sh" "$CR" --upgrade --telemetry off > "$T/crlf.out" 2>&1
+expect_eq "only the retired file is removed" "1" "$(grep -F 'remove         ' "$T/crlf.out" | grep -c .)"
+expect_eq "and it is gone, the framework files stay" "0 1" \
+  "$([ -e "$CR/.claude/hooks/retired-old.sh" ] && echo 1 || echo 0) $([ -f "$CR/.claude/hooks/defects-inject.sh" ] && echo 1 || echo 0)"
+expect_eq "a CRLF .gitignore does not get the runtime block twice" "1" \
+  "$(grep -c 'VULYK runtime artifacts' "$CR/.gitignore")"
+expect_eq "a fresh hive's .gitattributes pins LF for hooks, drivers and the manifest" "4" \
+  "$(tr -d '\r' < "$CR/.gitattributes" | grep -cxE '(\*\.sh|\.claude/hooks/\*\.py|\.claude/workflows/\*\.js|\.claude/vulyk-manifest) text eol=lf')"
+cat "$T/crlf.out" | expect_absent "and a second run adds no rule" "gitattributes  added"
+
 # Shipping: only the index skeleton, install semantics; VULYK's own cards and hook state never.
 DREL="$T/release-defects"; mkdir -p "$DREL"
 tar -C "$SRC" --exclude=./.git --exclude=./.claude/worktrees -cf - . | tar -C "$DREL" -xf -

@@ -4,5 +4,7 @@
 *.sh text eol=lf
 *.py text eol=lf
 scripts/git-hooks/* text eol=lf
-# Workflow driver scripts: the Workflow tool refuses a script with CR bytes ("control characters").
-.claude/workflows/*.js text eol=lf
+# JavaScript and JSON: the Workflow tool refuses a driver script with CR bytes ("control
+# characters"), and settings.json / the hook fixtures are read byte for byte by the tests.
+*.js text eol=lf
+*.json text eol=lf
