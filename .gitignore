@@ -35,3 +35,6 @@ docs/specs/*/PAUSE
 docs/specs/*/DRIVER
 # Claude Code agent worktrees (isolation: worktree) - transient, one per parallel agent.
 .claude/worktrees/
+
+# Hook state (defect-library dedup keys, per session) - per-machine, derived.
+.claude/state/

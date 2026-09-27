@@ -23,6 +23,39 @@ fi
 final=""
 [ "$event" = "SessionEnd" ] && final="--final"
 
+# `sessionend_llm`: a SessionEnd hook gets at most 60 s (code.claude.com/docs/en/hooks), so a
+# headless model call wired there - in the settings.json command itself or in the script that
+# command runs - is killed before it answers (the old VULYK_AUTOLEARN distillation). One row per
+# such hook, its script's name in the ref. Comment lines of a script do not count.
+LLM_RE='(^|[^A-Za-z0-9_./-])claude[[:space:]]+([^|;&]*[[:space:]])?(-p|--print)([[:space:]"]|$)'
+detect_sessionend_llm() {
+  local settings="$ROOT/.claude/settings.json" cmd tok path name hit
+  local -a toks
+  [ -f "$settings" ] || return 0
+  jq -r '.hooks.SessionEnd[]?.hooks[]?.command? // empty' "$settings" 2>/dev/null | tr -d '\r' |
+  while IFS= read -r cmd; do
+    [ -n "$cmd" ] || continue
+    hit=""; name=""
+    printf '%s\n' "$cmd" | grep -Eq "$LLM_RE" && hit=1
+    read -ra toks <<< "$cmd"
+    for tok in "${toks[@]}"; do
+      tok="${tok//\"/}"; tok="${tok//\'/}"
+      tok="${tok//\$\{CLAUDE_PROJECT_DIR\}/$ROOT}"; tok="${tok//\$CLAUDE_PROJECT_DIR/$ROOT}"
+      case "$tok" in /*|[A-Za-z]:*) path="$tok" ;; *) path="$ROOT/$tok" ;; esac
+      case "$tok" in *.sh|*.bash|*.py|*.js|*.mjs|*.ts) ;; *) continue ;; esac
+      [ -f "$path" ] || continue
+      [ -n "$name" ] || name="$(basename "$path")"
+      if [ -z "$hit" ] && grep -Iv '^[[:space:]]*#' "$path" 2>/dev/null | grep -Eq "$LLM_RE"; then
+        hit=1; name="$(basename "$path")"
+      fi
+    done
+    [ -n "$hit" ] || continue
+    bash "$SCRIPT" record sessionend_llm 1 0 --ref "sessionend:${name:-inline}" >/dev/null 2>&1 < /dev/null
+  done
+  return 0
+}
+[ "${VULYK_TELEMETRY_SCAN:-1}" = "0" ] || detect_sessionend_llm
+
 if [ -n "$transcript" ]; then
   bash "$SCRIPT" scan --transcript "$transcript" $final >/dev/null 2>&1 < /dev/null
 else

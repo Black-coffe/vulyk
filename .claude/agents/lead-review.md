@@ -18,6 +18,10 @@ round judged) and the previous round's directory.
    not delivered.
 2. Correctness. What the diff breaks: wrong results, unhandled error paths, broken invariants,
    security holes, data loss, a test an ask leans on that cannot fail.
+3. Checks that only warn. A check an ask leans on that names the defect (warn, "check", "verify
+   manually") yet exits 0 on it is not verification: a major on that ask, unless the brief or plan records
+   the owner accepting the warning. If `docs/defects/` exists, run `bash scripts/defects-check.sh` once:
+   red debt on a class the diff touches is a major.
 
 Flag only what breaks an ask or correctness. Style, naming, a structure you would have chosen
 differently, or hardening for a configuration the Profile's *Configurations that exist today* does not

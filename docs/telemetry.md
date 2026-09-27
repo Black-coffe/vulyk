@@ -9,8 +9,9 @@ full contract; `scripts/telemetry.sh` is the one script that implements it.
 
 Every hive that installed VULYK writes local rows to `memory/stats/anomalies.jsonl` (committed
 paperwork, like the other `memory/stats/*.jsonl` series) whenever `scripts/telemetry.sh scan`
-sees one of eight anomaly codes. This happens regardless of the telemetry consent setting - it
-is local history, not a send.
+(or, for `sessionend_llm`, the `.claude/hooks/anomaly-scan.sh` hook that runs it) sees one of
+nine anomaly codes. This happens regardless of the telemetry consent setting - it is local
+history, not a send.
 
 | code | detector | value | threshold / env var |
 |---|---|---|---|
@@ -22,6 +23,7 @@ is local history, not a send.
 | `driver_refused` | `/vulyk-build`'s Workflow call threw (since 0.18.0 a session without the Workflow tool runs the loop itself and records nothing) | 1 | 0 |
 | `driver_relaunched` | `/vulyk-resume` relaunched the driver fresh | 1 | 0 |
 | `scope_breach` | a `scope.jsonl` row with non-empty `out_of_scope`, one row per story (first breach wins) | out-of-scope path count | 0 |
+| `sessionend_llm` | a `SessionEnd` hook in `.claude/settings.json` whose command, or the script it runs (comment lines aside), calls `claude -p` / `claude --print` - SessionEnd hooks get at most 60 s ([hooks docs](https://code.claude.com/docs/en/hooks)), so the model call is killed before it answers; one row per hook, `ref` = `sessionend:<script name>` | 1 | 0 |
 
 Print the same list yourself with `bash scripts/telemetry.sh enum`. The thresholds' current
 defaults are v1 calibration, not measured facts - each row above names the env var that

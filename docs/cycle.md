@@ -107,6 +107,12 @@ Solo means no driver, no clerk and no court: the Queen runs `cycle.sh advance` f
 Bash. It performs every mechanical step (branch, open-round, judge, repair) and stops at the
 next thing only an agent can do.
 
+A story can also wait on a hand step: `blocked_by: [manual:<id>]` (0.19). When the earliest wave with
+todo stories has none ready and one waits on an unrecorded step, `next` is `manual:<id,...>` (the ids
+also under `status.manual`); no later wave is built past it, and the driver stops without dispatching.
+`bash scripts/cycle.sh manual-done docs/specs/<slug> <id> [note]` writes and commits
+`docs/specs/<slug>/manual/<id>`, and the wave becomes ready.
+
 Study work - a request whose deliverable is a document - never enters the loop at all: it ends
 at `report.md` (ADR-008). And since v0.13 stage 02 closes on the owner's `**Approved:**` by
 default; `**Briefed:**` is the straight-through opt-in (`--go`) and Tier 1's mini-brief.

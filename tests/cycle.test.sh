@@ -337,4 +337,52 @@ printf '%s' "$out" | grep -qF 'trc-01-t.md' && { echo "::error::a whole ask item
   || echo "  ok    '> 2. the second ask works' traces to ## Asks item 2"
 printf '%s' "$out" | expect "a fragment of an item is not an item" "trc-02-t.md: quote found in NEITHER"
 
+echo "0.19 C: blocked_by manual:<id> - a hand step stops the wave until manual-done records it; no later wave is built past it"
+mkdir -p docs/specs/man
+cp "$SRC"/templates/plan.md docs/specs/man/plan.md
+printf '> build the manual demo\n' > docs/specs/man/brief.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/man/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/man#' docs/specs/man/plan.md
+man_story() { # man_story <nn> <status> <wave> <blocked_by>
+  printf -- '---\nstory: man-%s\nspec: man\nstatus: %s\nwave: %s\nblocked_by: %s   # a comment\n---\n# M%s\n\n## Files\n- app.txt\n\n## Verification\n`true`\n' \
+    "$1" "$2" "$3" "$4" "$1" > "docs/specs/man/man-$1-m.md"
+}
+man_story 01 done 1 '[]'
+man_story 02 todo 2 '[man-01, manual:music]'
+man_story 03 todo 3 '[]'
+git add -A && git commit -qm "man fixture" >/dev/null
+st="$(bash scripts/cycle.sh status docs/specs/man --json)"
+printf '%s' "$st" | expect "a todo waiting on an unrecorded hand step -> next manual:music" '"next":"manual:music"'
+printf '%s' "$st" | expect "status lists the step under manual, after seats" '"seats":[],"manual":["music"]}'
+printf '%s' "$st" | expect "the later wave's ready story is not built past the manual stop" '"wave":null,"wave_stories":[]'
+out="$(bash scripts/cycle.sh advance docs/specs/man 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    advance stops at the hand step with exit 0" || { echo "::error::advance exit $ex: $out"; fail=1; }
+printf '%s' "$out" | expect "advance names the step and the exact command" "waiting on manual step 'music' - do it, then: bash scripts/cycle.sh manual-done docs/specs/man music"
+printf '%s' "$out" | tail -1 | expect "advance's JSON line carries next manual:music" '"ok":true,"verb":"advance","exit":0,"next":"manual:music"'
+for bad in '../x' 'a/b' '..' ''; do
+  out="$(bash scripts/cycle.sh manual-done docs/specs/man "$bad" 2>&1)"; ex=$?
+  [ "$ex" -eq 1 ] && printf '%s' "$out" | tail -1 | grep -qF '"ok":false,"verb":"manual-done"' \
+    && echo "  ok    manual-done refuses the id '$bad'" || { echo "::error::manual-done '$bad' exit $ex: $out"; fail=1; }
+done
+[ -e x ] || [ -e docs/specs/man/manual ] && { echo "::error::a refused id wrote something"; fail=1; } || echo "  ok    a refused id writes nothing"
+out="$(bash scripts/cycle.sh manual-done docs/specs/man music bought the track 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(printf '%s\n' "$out" | wc -l)" -eq 1 ] && echo "  ok    manual-done exits 0 with one line" || { echo "::error::manual-done exit $ex: $out"; fail=1; }
+printf '%s' "$out" | expect "manual-done's line carries the new next: the wave is ready" '"next":"build:2"'
+grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z bought the track$' docs/specs/man/manual/music \
+  && echo "  ok    the step file holds a timestamp and the note" || { echo "::error::step file: $(cat docs/specs/man/manual/music)"; fail=1; }
+[ -z "$(git status --porcelain -- docs/specs/man/manual)" ] && git log -1 --format=%s | grep -qF "manual(man): music done" \
+  && echo "  ok    manual-done commits its file" || { echo "::error::not committed: $(git status --porcelain) / $(git log -1 --format=%s)"; fail=1; }
+before="$(cat docs/specs/man/manual/music)"; head_before="$(git rev-parse HEAD)"
+out="$(bash scripts/cycle.sh manual-done docs/specs/man music again 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(cat docs/specs/man/manual/music)" = "$before" ] && [ "$(git rev-parse HEAD)" = "$head_before" ] \
+  && echo "  ok    manual-done is idempotent: a second call changes nothing" || { echo "::error::second manual-done exit $ex: $out"; fail=1; }
+bash scripts/cycle.sh status docs/specs/man --json | expect "after manual-done the waiting story is dispatchable" '"file":"docs/specs/man/man-02-m.md"'
+out="$(bash scripts/wave-check.sh docs/specs/man)"
+printf '%s' "$out" | grep -qF "dangling" && { echo "::error::wave-check called manual:music dangling: $out"; fail=1; } \
+  || echo "  ok    wave-check accepts manual:music as a blocker"
+printf '%s' "$out" | expect "wave-check lists the declared hand step and its state" "wave-check: manual step 'music' (done)"
+man_story 04 todo 4 '[manual:../x]'
+bash scripts/wave-check.sh docs/specs/man | expect "wave-check reports a manual id with .." "manual:    man-04 is blocked_by 'manual:../x'"
+git add -A && git commit -qm "man: done" >/dev/null
+
 exit $fail

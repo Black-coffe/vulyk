@@ -72,6 +72,8 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     docs/specs/*)                 return 1 ;;   # vulyk's own dev specs (dir is still created)
     docs/adr/*|docs/wiki/*)       case "$f" in */README.md) return 0 ;; esac; return 1 ;;   # vulyk's own ADRs/wiki (dir still created; a skeleton README ships)
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
+    docs/defects/*)               case "$f" in docs/defects/README.md) return 0 ;; esac; return 1 ;;   # vulyk's own defect cards; the index skeleton ships
+    .claude/state/*)              return 2 ;;   # hook state (defect dedup keys): runtime, per-machine
     .claude/settings.local.json|.claude/settings.json.vulyk-bak)
                                    return 2 ;;
     .claude/state.json|.claude/.vulyk-update-cache|.claude/vulyk-version|.claude/vulyk-manifest)
@@ -595,11 +597,16 @@ fi
 # "already wired" test is per EVENT, not per file - a script present under Stop must still be
 # added under SessionEnd. For a single-event script (the two SessionStart ones) this is exactly
 # the old behaviour.
-py_wire() { # py_wire <settings.json> <script> <event> [--dry]   (exit 3 = already wired there)
+#
+# 0.19: an optional matcher (PreToolUse needs one) and an optional argument (one script, two
+# jobs: `defects-inject.sh` on PreToolUse and `defects-inject.sh reset` on SessionStart). The
+# "already wired" test is event + script + argument; the matcher is not part of it, so an owner
+# who narrowed a matcher by hand is not given a second entry.
+py_wire() { # py_wire <settings.json> <script> <event> <matcher> <arg> [--dry]   (exit 3 = already wired there)
   "$PYBIN" - "$@" <<'PYWIRE'
 import json, re, sys
-path, script, event = sys.argv[1], sys.argv[2], sys.argv[3]
-dry = '--dry' in sys.argv[4:]
+path, script, event, matcher, arg = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+dry = '--dry' in sys.argv[6:]
 REL = '$CLAUDE_PROJECT_DIR/.claude/hooks/'
 try:
     with open(path, encoding='utf-8') as fh:
@@ -624,7 +631,20 @@ for groups_any in (data.get('hooks') or {}).values():
             found = re.match(r'^(.*?)("?)' + re.escape(REL) + r'[^"\s]+\.sh"?', str(hook.get('command', '')))
             if found and not prefix:
                 prefix, quoted = found.group(1), found.group(2) == '"'
-cmd = prefix + ('"' if quoted else '') + REL + script + ('"' if quoted else '')
+cmd = prefix + ('"' if quoted else '') + REL + script + ('"' if quoted else '') + (' ' + arg if arg else '')
+
+# The argument a wired command passes the script: the plain words right after it. A redirect or
+# an operator an owner appended (`2>/dev/null || true`) is not an argument.
+def wired_arg(command):
+    found = re.search(r'(?:^|[/\\"\s])' + re.escape(script) + r'"?(.*)$', command)
+    if not found:
+        return None
+    words = []
+    for token in found.group(1).split():
+        if not re.match(r'^[A-Za-z][A-Za-z0-9_-]*$', token):
+            break
+        words.append(token)
+    return ' '.join(words)
 
 groups = data.setdefault('hooks', {}).setdefault(event, [])
 if not isinstance(groups, list):
@@ -632,13 +652,21 @@ if not isinstance(groups, list):
 for group in groups:
     if isinstance(group, dict):
         for hook in group.get('hooks', []) or []:
-            if isinstance(hook, dict) and script in str(hook.get('command', '')):
+            if isinstance(hook, dict) and wired_arg(str(hook.get('command', ''))) == ' '.join(arg.split()):
                 sys.exit(3)                      # already there under any spelling
 if dry:
     sys.exit(0)                                  # --check: would wire; nothing written
 entry = {'type': 'command', 'command': cmd}
-if groups and isinstance(groups[0], dict):
-    groups[0].setdefault('hooks', []).append(entry)
+# The entry joins the first group with the same matcher (no matcher = a group without one, which
+# runs for every source/tool); none such -> a group of its own, so it never inherits a narrower one.
+def same_matcher(group):
+    have = group.get('matcher', '')
+    return have == matcher if matcher else have in ('', '*')
+target = next((g for g in groups if isinstance(g, dict) and same_matcher(g)), None)
+if target is not None:
+    target.setdefault('hooks', []).append(entry)
+elif matcher:
+    groups.append({'matcher': matcher, 'hooks': [entry]})
 else:
     groups.append({'hooks': [entry]})
 with open(path, 'w', encoding='utf-8') as fh:
@@ -661,31 +689,38 @@ settings_backup_drop() { # settings_backup_drop <file> - undo the backup this ca
   SETTINGS_BAK_TAKEN=""
 }
 
-wire_hook() { # wire_hook <event> <hook-script-name>
-  local event="$1" script="$2" file="$DEST/.claude/settings.json" took=""
+wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
+  local event="$1" script="$2" matcher="${3:-}" arg="${4:-}" file="$DEST/.claude/settings.json" took=""
+  local label="$event${matcher:+ [$matcher]}: $script${arg:+ $arg}"
+  local by_hand="{ \"type\": \"command\", \"command\": \"\$CLAUDE_PROJECT_DIR/.claude/hooks/$script${arg:+ $arg}\" }"
+  [ -n "$matcher" ] && by_hand="{ \"matcher\": \"$matcher\", \"hooks\": [ $by_hand ] }"
   [ -f "$file" ] || return 0                                   # fresh install: ours was copied whole
   PYBIN="$(command -v python3 || command -v python || true)"
   if [ -z "$PYBIN" ]; then
-    grep -q "$script" "$file" 2>/dev/null && return 0          # no python: file-wide check is all we have
+    if [ -n "$arg" ]; then                                     # no python: file-wide check is all we have
+      grep -qE "$script\"? $arg" "$file" 2>/dev/null && return 0
+    else
+      grep -q "$script" "$file" 2>/dev/null && return 0
+    fi
     if [ "$CHECK" = "--check" ]; then
-      echo "  would wire     .claude/settings.json -> $event: $script"
+      echo "  would wire     .claude/settings.json -> $label"
       return 0
     fi
     echo ""
     echo "  NOTE: .claude/hooks/$script was installed but could NOT be wired -"
     echo "  no python on PATH to edit .claude/settings.json safely. Add this to your"
     echo "  $event hooks by hand, or that hook will never run:"
-    echo "      { \"type\": \"command\", \"command\": \"\$CLAUDE_PROJECT_DIR/.claude/hooks/$script\" }"
+    echo "      $by_hand"
     return 0
   fi
   if [ "$CHECK" = "--check" ]; then
-    py_wire "$file" "$script" "$event" --dry \
-      && echo "  would wire     .claude/settings.json -> $event: $script"
+    py_wire "$file" "$script" "$event" "$matcher" "$arg" --dry \
+      && echo "  would wire     .claude/settings.json -> $label"
     return 0
   fi
   settings_backup "$file" && took=1
-  if py_wire "$file" "$script" "$event"; then
-    echo "  wire           .claude/settings.json -> $event: $script"
+  if py_wire "$file" "$script" "$event" "$matcher" "$arg"; then
+    echo "  wire           .claude/settings.json -> $label"
     echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
   else
     case "$?" in
@@ -694,7 +729,7 @@ wire_hook() { # wire_hook <event> <hook-script-name>
          echo ""
          echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
          echo "  Wire this hook by hand into your $event hooks:"
-         echo "      { \"type\": \"command\", \"command\": \"\$CLAUDE_PROJECT_DIR/.claude/hooks/$script\" }" ;;
+         echo "      $by_hand" ;;
     esac
   fi
 }
@@ -854,7 +889,7 @@ PYPERM
 # wiring: append only what is missing, in a marked block, and say what was added.
 ensure_gitignore() {
   local file="$DEST/.gitignore" missing=0 line
-  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER"
+  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER .claude/state/"
 
   for line in $wanted; do
     grep -qxF "$line" "$file" 2>/dev/null || missing=$((missing + 1))
@@ -912,7 +947,9 @@ ensure_gitattributes() {
 
 NEW_MANIFEST="$(mktemp)"
 trap 'rm -f "$NEW_MANIFEST"' EXIT
-for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr; do copy_tree "$tree"; done
+for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr docs/defects; do
+  if [ -d "$SRC/$tree" ]; then copy_tree "$tree"; fi
+done
 LC_ALL=C sort -u -o "$NEW_MANIFEST" "$NEW_MANIFEST"
 
 # Removal (ADR-005 D2), after the copy loop and before the new manifest is written: a path
@@ -1005,6 +1042,11 @@ if [ -n "$UPGRADE" ]; then
   fi
 fi
 wire_hook SessionEnd anomaly-scan.sh
+# The defect library (0.19, contract §3): intake on every prompt, the class's Never lines before
+# an edit or a command, and the per-session dedup cleared when /clear or compaction starts over.
+wire_hook UserPromptSubmit defect-intake.sh
+wire_hook PreToolUse defects-inject.sh 'Edit|Write|MultiEdit|NotebookEdit|Bash'
+wire_hook SessionStart defects-inject.sh '' reset
 wire_permissions
 # The empty trees a fresh hive needs. Guarded like every other write: a dry run that
 # creates directories is not a dry run, and this one had been leaving seven of them in

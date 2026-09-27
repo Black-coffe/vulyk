@@ -2,6 +2,78 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.19.0] - 2026-09-27
+
+Owner corrections become defect classes with failing checks ([ADR-014](docs/adr/014-defect-library.md)).
+In YouTube_AI one defect, clipped speech, came back in three videos in a row although the lesson had
+been written down twice. A pilot found why:
+- the code produced the defect;
+- its warning exited 0;
+- the detector measured the wrong edges.
+
+The pilot's defect library then took video 3 to acceptance with no remarks. This release makes that
+library a framework mechanism. Evidence: grill `docs/grill/2026-09-27-self-learning-corrections.md`, pilot feedback
+`docs/grill/2026-09-27-self-learning-pilot-feedback.md`, plan `docs/specs/self-learning/plan.md`.
+
+### Added
+- **Defect library, `docs/defects/`.** One card per defect class holds the owner's verbatim quotes,
+  cause, never/allowed, `check:`, `fixtures:`, `keys:` and `paths:`, with `status: block | text | revoked`.
+  - A card counts as `block` only when it has a `check:` and at least two fixtures: the original case
+    and a neighbour-form negative. Every fixture must fail the check.
+  - There is no warn status.
+  - The skeleton `docs/defects/README.md` ships to every hive and is never overwritten.
+- **`scripts/defects-check.sh [<arg>]`.**
+  - Without an argument it audits the library: effective status, blind fixtures, debt.
+  - With an argument it is the gate before showing work: every `block` check runs against `<arg>`.
+  - **Debt:** a class with two or more quotes, not effectively `block`, and a quote committed after the
+    library was created (git blame time). Debt fails the gate, so a repeat becomes a failing check.
+- **`defect-intake.sh` (UserPromptSubmit).** It reads only the human's text: task-notifications, system
+  reminders, cross-session messages, pasted content and code fences are stripped first. It fires on a
+  timecode, a RU/UK/EN correction lexicon or a card's `keys:`, and adds one line pointing at the
+  matching classes. It never blocks. Median latency is about 70 ms on Windows.
+- **`defects-inject.sh` (PreToolUse on Edit|Write|MultiEdit|NotebookEdit|Bash).**
+  - Before an edit or command that touches a `text` card's `paths:` (file globs or `cmd:` regex over
+    the whole command line), it injects the card's never-lines, within a 4,000-character budget.
+  - It injects once per session and agent, and again after compaction or clear
+    (`defects-inject.sh reset` on SessionStart).
+  - `block` cards are not injected: their check speaks.
+- **Manual wave dependency.**
+  - `blocked_by: [manual:<id>]` holds a wave until `bash scripts/cycle.sh manual-done <spec> <id> [note]`.
+    That command writes and commits `docs/specs/<slug>/manual/<id>`.
+  - `next` reports `manual:<ids>` and never builds a later wave past it. The Workflow driver stops
+    before any dispatch, naming the command.
+  - `wave-check.sh` lists declared manual steps.
+- **Law 6** in the constitution: a correction joins its defect class; a checkable class gets a failing
+  check with two fixtures in the same work; repeated classes without one are debt; a check that only
+  warns is not a check.
+- **Anomaly code `sessionend_llm`.** It fires when a SessionEnd hook calls `claude -p`: SessionEnd
+  hooks get at most 60 s, so such distillation is killed.
+- **litopys offer.** The session-start brief asks the owner once to install litopys at project scope,
+  unless it is installed or the Profile has `| Chronicle | none (declined <date>) |`.
+
+### Changed
+- `lead-review`: a check the asks lean on that names the defect but exits 0 is a major. With
+  `docs/defects/` present, the reviewer runs `defects-check.sh`, and red debt on a touched class is a
+  major.
+- `council-opus`: measures the observable itself; a project gate's green is not its `saw:`.
+- `install.sh`:
+  - `wire_hook <event> <script> [matcher] [arg]`; an entry without a matcher joins the first group
+    that has none;
+  - `docs/defects/README.md` ships;
+  - `.claude/state/` is gitignored and never ships.
+
+### Fixed
+- `blocked_by` parsing in `cycle.sh` and `wave-check.sh` cut a value at its second colon.
+
+### Upgrade notes
+- The three hooks are wired on upgrade. A hive without `docs/defects/` sees no change until it adds
+  cards.
+- Existing libraries in the reference format (YouTube_AI) are read as is. Their `block` cards without
+  `fixtures:` count as `text` until two fixtures are added, and cards without `paths:` are never
+  injected. Expect debt from `defects-check.sh` on first run: fix it by adding fixtures, not by editing
+  quote dates.
+- Law 6 reaches a hive's constitution only through `--constitution replace`.
+
 ## [0.18.1] - 2026-09-27
 
 ### Fixed

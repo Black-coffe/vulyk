@@ -200,6 +200,12 @@ try {
     if (st.tier === 4 && (!SECOND || SECOND === TOP)) {
       fail(st, { verb: 'launch', error: 'second_model missing or equal to top_model on a Tier 4 spec' })
     }
+    // 0.19 C: a hand step (blocked_by manual:<id>) - stop before any dispatch; the Queen does it
+    if (st.next.startsWith('manual:')) {
+      const ids = st.next.slice('manual:'.length).split(',').filter(Boolean)
+      const cmds = ids.map((id) => `bash scripts/cycle.sh manual-done ${spec} ${id}`).join('; ')
+      fail(st, { verb: 'manual', manual: ids, error: `waiting on manual step ${ids.map((id) => `'${id}'`).join(', ')} - do it, then: ${cmds}, and launch again` })
+    }
     if (st.next.startsWith('build:')) res = await build(st)
     else if (st.next.startsWith('dispatch:')) res = await council(st)
     else if (ADVANCE_VERBS.includes(st.next)) fail(st, { verb: st.next, error: `advance left ${st.next} to the driver` })
