@@ -20,15 +20,19 @@
     "last_used": "2026-09-24"
   },
   "fact-check": {
-    "count": 4,
-    "last_used": "2026-09-26"
+    "count": 5,
+    "last_used": "2026-09-27"
   },
   "supergrill": {
-    "count": 1,
-    "last_used": "2026-09-21"
+    "count": 2,
+    "last_used": "2026-09-27"
   },
   "workflow-authoring": {
     "count": 1,
     "last_used": "2026-09-26"
+  },
+  "handoff": {
+    "count": 1,
+    "last_used": "2026-09-27"
   }
 }
