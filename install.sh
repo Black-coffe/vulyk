@@ -236,8 +236,9 @@ ensure_marked_block() {
   fi
   local heading
   heading="$(awk -v m="$marker" '/^## / {h=$0} index($0, m ":START"){print h; exit}' "$SRC/CLAUDE.md")"
+  heading="${heading%$'\r'}"
   [ -n "$heading" ] || return 0   # defensive: source has no such block either
-  if grep -qxF "$heading" "$file" 2>/dev/null; then
+  if grep -qxF "$heading" <<< "$( { tr -d '\r' < "$file"; } 2>/dev/null || true)"; then
     echo ""
     echo "  WARNING: $heading exists without ${marker} markers in $name - left as-is."
     echo ""
@@ -602,12 +603,13 @@ fi
 # jobs: `defects-inject.sh` on PreToolUse and `defects-inject.sh reset` on SessionStart). The
 # "already wired" test is event + script + argument; the matcher is not part of it, so an owner
 # who narrowed a matcher by hand is not given a second entry.
-py_wire() { # py_wire <settings.json> <script> <event> <matcher> <arg> [--dry]   (exit 3 = already wired there)
+py_wire() { # py_wire <settings.json> <script> <event> <matcher> <arg> [--dry]   (exit 3 = already wired there, 5 = repaired)
   "$PYBIN" - "$@" <<'PYWIRE'
-import json, re, sys
+import json, os, re, shlex, sys
 path, script, event, matcher, arg = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
 dry = '--dry' in sys.argv[6:]
 REL = '$CLAUDE_PROJECT_DIR/.claude/hooks/'
+HOOKS_DIR = os.path.join(os.path.dirname(os.path.abspath(path)), 'hooks')
 try:
     with open(path, encoding='utf-8') as fh:
         data = json.load(fh)
@@ -615,10 +617,43 @@ except Exception:
     sys.exit(4)                                  # unparseable: leave it entirely alone
 if not isinstance(data, dict):
     sys.exit(4)
-# How does THIS project invoke its shell hooks? On Windows a bare `.sh` path is not
-# executable, so vulyk installs there wrap every hook in an explicit bash launcher. Copy
-# whatever convention the siblings already use, or the entry we add is one that never runs.
-prefix, quoted = '', False
+# How does THIS project invoke its VULYK hooks? On Windows some hosts wrap every hook in an
+# explicit bash (`"...bash.exe" "$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh" arg`, or
+# `bash.exe -c '"$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh" arg'`), some route them through a
+# launcher of their own (`node "${CLAUDE_PROJECT_DIR}/scripts/vulyk-hook.mjs" x.sh arg`).
+# A sibling command is read as head + script + closing quote + args + tail, and the new entry
+# is the same head and tail around our script and argument - the argument sits where the
+# sibling's did, inside a quoted -c string when that is where it was (0.19.0 dropped the tail
+# and wrote a `-c '...` with no closing quote: exit 2 on every PreToolUse). Only a head that
+# resolves through CLAUDE_PROJECT_DIR counts - an absolute path ties the hook to one checkout.
+# The most used wrapper wins over the plain form; nothing recognisable -> the plain form.
+SIBLING = re.compile(
+    r'^(?P<head>.*?(?:/\.claude/hooks/|\s))(?P<script>[A-Za-z0-9_.-]+\.sh)(?P<q>["\']?)'
+    r'(?P<args>(?:\s+[A-Za-z][A-Za-z0-9_-]*)*)(?P<tail>["\']*)\s*$')
+def template_of(command):
+    found = SIBLING.match(command)
+    if not found or 'CLAUDE_PROJECT_DIR' not in found.group('head'):
+        return None
+    head = found.group('head')
+    if not head.endswith('/.claude/hooks/') and not os.path.isfile(os.path.join(HOOKS_DIR, found.group('script'))):
+        return None                              # a launcher, but not handed a hook of ours
+    return (head, found.group('q'), found.group('tail'))
+def build(tpl):
+    head, q, tail = tpl
+    return head + script + q + (' ' + arg if arg else '') + tail
+def balanced(command):                           # quotes close, no dangling escape
+    try:
+        shlex.split(command)
+    except ValueError:
+        return False
+    return True
+def runs(command):                               # balanced quotes, script still a word of it
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return False
+    return any(w == script or w.endswith('/' + script) for w in re.split(r'[\s"\']+', ' '.join(words)))
+seen = {}
 for groups_any in (data.get('hooks') or {}).values():
     if not isinstance(groups_any, list):
         continue
@@ -628,32 +663,51 @@ for groups_any in (data.get('hooks') or {}).values():
         for hook in group.get('hooks', []) or []:
             if not isinstance(hook, dict):
                 continue
-            found = re.match(r'^(.*?)("?)' + re.escape(REL) + r'[^"\s]+\.sh"?', str(hook.get('command', '')))
-            if found and not prefix:
-                prefix, quoted = found.group(1), found.group(2) == '"'
-cmd = prefix + ('"' if quoted else '') + REL + script + ('"' if quoted else '') + (' ' + arg if arg else '')
+            tpl = template_of(str(hook.get('command', '')))
+            if tpl and tpl != (REL, '', ''):
+                seen[tpl] = seen.get(tpl, 0) + 1
+cmd = REL + script + (' ' + arg if arg else '')
+for tpl in sorted(seen, key=lambda t: -seen[t]):  # stable: the first of equals stays first
+    if runs(build(tpl)):
+        cmd = build(tpl)
+        break
 
 # The argument a wired command passes the script: the plain words right after it. A redirect or
-# an operator an owner appended (`2>/dev/null || true`) is not an argument.
+# an operator an owner appended (`2>/dev/null || true`) is not an argument; a quote closing a
+# `-c '...'` string ends the arguments (`reset'` is the argument `reset`).
 def wired_arg(command):
-    found = re.search(r'(?:^|[/\\"\s])' + re.escape(script) + r'"?(.*)$', command)
+    found = re.search(r'(?:^|[/\\"\'\s])' + re.escape(script) + r'["\']?(.*)$', command)
     if not found:
         return None
     words = []
     for token in found.group(1).split():
-        if not re.match(r'^[A-Za-z][A-Za-z0-9_-]*$', token):
+        word = re.match(r'^([A-Za-z][A-Za-z0-9_-]*)(["\']*)$', token)
+        if not word:
             break
-        words.append(token)
+        words.append(word.group(1))
+        if word.group(2):
+            break
     return ' '.join(words)
 
 groups = data.setdefault('hooks', {}).setdefault(event, [])
 if not isinstance(groups, list):
     sys.exit(4)
+def save():
+    with open(path, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, indent=2)
+        fh.write('\n')
 for group in groups:
     if isinstance(group, dict):
         for hook in group.get('hooks', []) or []:
             if isinstance(hook, dict) and wired_arg(str(hook.get('command', ''))) == ' '.join(arg.split()):
-                sys.exit(3)                      # already there under any spelling
+                if balanced(str(hook.get('command', ''))) or not runs(cmd):
+                    sys.exit(3)                  # already there under any spelling
+                # There, but its quotes do not balance - the entry 0.19.0 wrote into a
+                # `bash -c '...` host. It can only fail, so it is rewritten in place (exit 5).
+                if not dry:
+                    hook['command'] = cmd
+                    save()
+                sys.exit(5)
 if dry:
     sys.exit(0)                                  # --check: would wire; nothing written
 entry = {'type': 'command', 'command': cmd}
@@ -669,9 +723,7 @@ elif matcher:
     groups.append({'matcher': matcher, 'hooks': [entry]})
 else:
     groups.append({'hooks': [entry]})
-with open(path, 'w', encoding='utf-8') as fh:
-    json.dump(data, fh, indent=2)
-    fh.write('\n')
+save()
 PYWIRE
 }
 
@@ -714,8 +766,12 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
     return 0
   fi
   if [ "$CHECK" = "--check" ]; then
-    py_wire "$file" "$script" "$event" "$matcher" "$arg" --dry \
-      && echo "  would wire     .claude/settings.json -> $label"
+    local rc=0
+    py_wire "$file" "$script" "$event" "$matcher" "$arg" --dry || rc=$?
+    case "$rc" in
+      0) echo "  would wire     .claude/settings.json -> $label" ;;
+      5) echo "  would repair   .claude/settings.json -> $label (its quotes do not close)" ;;
+    esac
     return 0
   fi
   settings_backup "$file" && took=1
@@ -725,6 +781,8 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
   else
     case "$?" in
       3) [ -z "$took" ] || settings_backup_drop "$file" ;;   # already wired; nothing happened
+      5) echo "  repair         .claude/settings.json -> $label (its quotes did not close)"
+         echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)" ;;
       *) [ -z "$took" ] || settings_backup_drop "$file"
          echo ""
          echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
@@ -888,11 +946,13 @@ PYPERM
 # whatever the framework left lying around, or did not, by luck. Same treatment as the hook
 # wiring: append only what is missing, in a marked block, and say what was added.
 ensure_gitignore() {
-  local file="$DEST/.gitignore" missing=0 line
+  local file="$DEST/.gitignore" missing=0 line have
   local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER .claude/state/"
 
+  # A CRLF .gitignore (core.autocrlf) must still match line for line, or every run re-appends.
+  have="$( { tr -d '\r' < "$file"; } 2>/dev/null || true)"
   for line in $wanted; do
-    grep -qxF "$line" "$file" 2>/dev/null || missing=$((missing + 1))
+    grep -qxF "$line" <<< "$have" || missing=$((missing + 1))
   done
   [ "$missing" -gt 0 ] || return 0
 
@@ -908,7 +968,7 @@ ensure_gitignore() {
     echo "# something the repository already holds, which is the failure mode the framework"
     echo "# spends most of its checks preventing."
     for line in $wanted; do
-      grep -qxF "$line" "$file" 2>/dev/null || echo "$line"
+      grep -qxF "$line" <<< "$have" || echo "$line"
     done
   } >> "$file"
   echo "  gitignore      added $missing VULYK runtime entries"
@@ -919,29 +979,39 @@ ensure_gitignore() {
 # so a hive without this rule cannot launch the driver at all. Same treatment as .gitignore:
 # the file is the project's, append only the missing line, say what was added. The working
 # copy is re-checked out so the rule takes effect now, not at the next clone.
+#
+# 0.19.1: the same holds for every shell hook (a CRLF `.sh` fails under bash), the Python hooks,
+# and the manifest the removal loop reads line by line. A pattern the file already names is left
+# as the owner has it; only the missing ones are appended.
 ensure_gitattributes() {
-  local file="$DEST/.gitattributes" rule=".claude/workflows/*.js text eol=lf" f n=0
-  if ! grep -qF ".claude/workflows/*.js" "$file" 2>/dev/null; then
+  local file="$DEST/.gitattributes" f n=0 pat missing="" have
+  have="$( { tr -d '\r' < "$file"; } 2>/dev/null || true)"
+  for pat in '*.sh' '.claude/hooks/*.py' '.claude/workflows/*.js' '.claude/vulyk-manifest'; do
+    awk -v p="$pat" '$1 == p { found = 1 } END { exit !found }' <<< "$have" || missing="$missing $pat"
+  done
+  if [ -n "$missing" ]; then
     if [ "$CHECK" = "--check" ]; then
-      echo "  would add      eol=lf rule for .claude/workflows/*.js to .gitattributes"
+      echo "  would add      eol=lf rules to .gitattributes:$missing"
     else
       {
         [ -s "$file" ] && echo ""
-        echo "# --- VULYK: the Workflow driver must check out with LF (added by install.sh) ---"
-        echo "$rule"
+        echo "# --- VULYK: hooks, the Workflow driver and the manifest must check out with LF (added by install.sh) ---"
+        ( set -f; printf '%s text eol=lf\n' $missing )   # set -f: `*.sh` is a pattern here, not a glob
       } >> "$file"
-      echo "  gitattributes  added eol=lf rule for .claude/workflows/*.js"
+      echo "  gitattributes  added eol=lf rules:$missing"
     fi
   fi
   # The bytes copy_tree just wrote came from the source checkout, and on Windows that checkout
   # may itself be CRLF (git does not re-smudge an unchanged file when only .gitattributes moved
-  # between tags). So the rule alone is not enough: strip CR from the copied drivers, every run.
+  # between tags). So the rule alone is not enough: strip CR from every shipped script, every run.
   [ "$CHECK" = "--check" ] && return 0
-  for f in "$DEST"/.claude/workflows/*.js; do
+  while IFS= read -r f; do
+    case "$f" in *.sh|*.py|.claude/workflows/*.js) ;; *) continue ;; esac
+    f="$DEST/$f"
     [ -f "$f" ] || continue
     if grep -q $'' "$f"; then sed -i 's/$//' "$f"; n=$((n + 1)); fi
-  done
-  [ "$n" -gt 0 ] && echo "  gitattributes  normalized $n driver script(s) to LF"
+  done < "$NEW_MANIFEST"
+  [ "$n" -gt 0 ] && echo "  gitattributes  normalized $n shipped script(s) to LF"
   return 0
 }
 
@@ -976,6 +1046,7 @@ OLD_MANIFEST="$DEST/.claude/vulyk-manifest"
 if [ -n "$UPGRADE" ]; then
   if [ -f "$OLD_MANIFEST" ]; then
     while IFS= read -r f; do
+      f="${f%$'\r'}"                             # a CRLF checkout of the manifest (core.autocrlf)
       [ -n "$f" ] || continue
       grep -qxF "$f" "$NEW_MANIFEST" && continue   # still shipped this run
       if owned "$f"; then

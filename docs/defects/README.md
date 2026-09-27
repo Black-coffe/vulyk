@@ -48,8 +48,10 @@ the material and the place, then the words in «». One line per remark; a repea
 
 ## Statuses
 
-- `block` - the class is caught by code. It counts as `block` only when `check:` is set **and** `fixtures:`
-  lists at least two files that exist. Otherwise the gate reports it as `text` with the reason.
+- `block` - the class is caught by code. Whenever `check:` is set, the gate runs it and the card's
+  `## Never` lines are not injected. It has *earned* `block` (no debt, checked in the audit) only when
+  `fixtures:` also lists at least two files that exist; with fewer it is reported as
+  `block without fixtures (check runs, not earned)`. With no `check:` it is reported as `text`.
 - `text` - a rule in words only. Its `## Never` lines are shown to whoever edits the card's `paths:`.
 - `revoked` - the owner lifted it: add their words and the date under `## Revoked`. Ignored by everything.
 
@@ -72,7 +74,7 @@ fixtures. Debt older than the library is reported as old debt and does not fail.
 
 ```
 bash scripts/defects-check.sh           # audit: debt, effective status, every block check against its fixtures
-bash scripts/defects-check.sh <arg>     # before showing work: debt, then every block check with <arg>
+bash scripts/defects-check.sh <arg>     # before showing work: debt, then every declared block check with <arg>
 ```
 
 Exit 0 green, 1 red (new debt, a red check, a blind fixture), 2 no library or no python. The last line is

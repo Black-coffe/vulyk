@@ -7,10 +7,13 @@
 #
 # Audit: debt, effective status, and fixtures - every effective `block` card's `check:` is run
 # once per fixture and must exit non-zero on each (a fixture that passes = the gate is blind to it).
-# Gate: debt, then every effective `block` card's `check:` with <arg>; a non-zero exit is red.
+# Gate: debt, then the `check:` of every card that DECLARES `block` with a check, fixtures or not,
+# with <arg>; a non-zero exit is red.
 #
-# Effective status: `block` only with a non-empty `check:` and >= 2 existing `fixtures:`; any other
-# block (and any status but block/text/revoked) is reported as `text` with the reason. `revoked`
+# Effective status: `block` only with a non-empty `check:` and >= 2 existing `fixtures:`; a block
+# with a check but fewer fixtures is reported as "block without fixtures (check runs, not earned)";
+# any other block (and any status but block/text/revoked) is reported as `text` with the reason.
+# Effective status decides debt and the audit, not whether the gate runs a check. `revoked`
 # cards are ignored. Debt: >= 2 owner quotes, effective status not block, and at least one quote
 # line committed after the commit that added the library's README.md (git blame committer time,
 # not the date written in the quote). Uncommitted quote lines and a library outside git are new.
@@ -27,7 +30,7 @@
 set -uo pipefail
 
 case "${1:-}" in
-  -h|--help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 if [ "$#" -gt 1 ]; then
   echo "defects-check: usage: bash scripts/defects-check.sh [<arg>]" >&2; exit 2
@@ -151,7 +154,10 @@ for name in sorted(os.listdir(d)):
         if not check:
             reason = 'block without check'
         elif len(existing) < 2:
-            reason = 'block with <2 fixtures (%d of %d listed exist)' % (len(existing), len(fixtures))
+            # 0.19.1: the gate still runs a declared check - fixtures earn the status (debt, the
+            # audit), they do not switch the protection off.
+            emit('I', 'block %s: block without fixtures (check runs, not earned) - %d of %d listed exist, counted as text for debt'
+                 % (cid, len(existing), len(fixtures)))
         else:
             eff = 'block'
     elif status != 'text':
@@ -180,8 +186,10 @@ for name in sorted(os.listdir(d)):
         else:
             emit('I', 'old debt  %s: %d quotes, not block, none newer than the library' % (cid, len(quotes)))
 
-    if eff == 'block':
-        for target in (existing if mode == 'audit' else [arg]):
+    if mode == 'gate' and status == 'block' and check:
+        emit('R', cid, arg, placeholder(check, arg), title)
+    elif mode == 'audit' and eff == 'block':
+        for target in existing:
             emit('R', cid, target, placeholder(check, target), title)
 PY
 )" || { echo "defects-check: cards could not be read in $DIR" >&2; exit 2; }

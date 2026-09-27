@@ -6,7 +6,7 @@
 #   defects-inject.sh          PreToolUse: match file_path / notebook_path / the Bash command line
 #   defects-inject.sh reset    SessionStart: source compact|clear forgets what this session was shown
 #
-# Block cards are not injected (their check: speaks), revoked cards never are. Each card is shown once
+# Cards declaring block with a check: are not injected (the gate runs it, fixtures or not), revoked cards never are. Each card is shown once
 # per session_id + agent_id; state: .claude/state/defects/inject-<session>.txt under the repo root
 # ($CLAUDE_PROJECT_DIR, else the input's cwd).
 #
@@ -113,15 +113,15 @@ def load_cards(d):
 # --- end of shared card parsing ---------------------------------------------------------------
 
 
-def effective(fm, root):
-    # §1: block only with a check: and >= 2 fixtures that exist; anything else not revoked is text.
+def injected_as(fm):
+    # A card that DECLARES block with a check: is not injected, fixtures or not - the gate
+    # (defects-check.sh <arg>) runs that check (0.19.1). Fixtures decide debt, not this.
+    # Anything else not revoked - text, block without a check, an unknown status - is text.
     st = fm_scalar(fm.get('status', '')).lower()
     if st == 'revoked':
         return 'revoked'
     if st == 'block' and fm_scalar(fm.get('check', '')):
-        fx = [f for f in fm_list(fm.get('fixtures', '')) if os.path.isfile(os.path.join(root, f))]
-        if len(fx) >= 2:
-            return 'block'
+        return 'block'
     return 'text'
 
 
@@ -248,7 +248,7 @@ def main():
 
     hits = []
     for cid, fm, body in load_cards(d):
-        if agent + '\t' + cid in seen or effective(fm, root) != 'text':
+        if agent + '\t' + cid in seen or injected_as(fm) != 'text':
             continue
         for g in fm_list(fm.get('paths', '')):
             if g.startswith('cmd:'):

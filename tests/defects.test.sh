@@ -51,7 +51,9 @@ card onefix block 'bash check.sh <arg>' '[docs/defects/fixtures/orig.txt, docs/d
 card warned warn 'bash check.sh <arg>' "$FX" 2026-01-05
 run
 ok "block without check -> reported as text" "$(has '^text  nocheck: block without check'; echo $?)"
-ok "block with one existing fixture -> reported as text" "$(has '^text  onefix: block with <2 fixtures'; echo $?)"
+ok "block with one existing fixture -> check runs, not earned" \
+  "$(has '^block onefix: block without fixtures (check runs, not earned) - 1 of 2 listed exist'; echo $?)"
+ok "the audit does not run a check that has not earned block" "$(! has 'onefix: fixture'; echo $?)"
 ok "unknown status (warn) -> reported as text" "$(has "^text  warned: status 'warn'"; echo $?)"
 ok "notes alone stay green with 0 blocking checks" "$([ "$rc" = 0 ] && [ "$last" = 'GREEN: 0 blocking checks' ]; echo $?)"
 
@@ -102,6 +104,29 @@ card rep revoked '' '' 2026-01-01 2026-02-01 2026-09-27
 run; ok "revoked card is ignored (no debt, no line)" "$([ "$rc" = 0 ] && ! has 'rep'; echo $?)"
 card rep block 'bash check.sh <arg>' "$FX" 2026-01-01 2026-02-01 2026-09-27
 run; ok "an effective block card owes no debt" "$([ "$rc" = 0 ] && ! has 'DEBT' && [ "$last" = 'GREEN: 1 blocking checks' ]; echo $?)"
+card rep block 'bash check.sh <arg>' '' 2026-01-01 2026-02-01 2026-09-27
+run good.txt
+ok "a declared block without fixtures owes debt, yet the gate runs its check" \
+  "$([ "$rc" = 1 ] && has '^DEBT  rep: 3 quotes, not block' && has '^ok    rep$' && [ "$last" = 'RED: 1 new debt' ]; echo $?)"
+
+echo "--- the gate runs declared block checks without fixtures (0.19.1)"
+mkrepo "$TMP/nofix"; cm 2026-01-01 docs/defects/README.md
+card bare block 'bash check.sh <arg>' '' 2026-01-05
+card onefx block 'bash check.sh <arg>' '[docs/defects/fixtures/orig.txt]' 2026-01-05
+card nock block '' '' 2026-01-05
+card gone revoked 'bash check.sh <arg>' '' 2026-01-05
+run good.txt
+ok "good argument: both declared checks run, GREEN counts them" \
+  "$([ "$rc" = 0 ] && has '^ok    bare$' && has '^ok    onefx$' && [ "$last" = 'GREEN: 2 blocking checks' ]; echo $?)"
+ok "each is reported as not earned" \
+  "$(has '^block bare: block without fixtures (check runs, not earned)' && has '^block onefx: block without fixtures (check runs, not earned)'; echo $?)"
+ok "a block without a check and a revoked card run nothing" "$(! has '^ok    nock' && ! has 'gone'; echo $?)"
+run bad.txt
+ok "bad argument: each declared check is red" \
+  "$([ "$rc" = 1 ] && has '^RED   bare' && has '^RED   onefx' && [ "$last" = 'RED: 2 red checks' ]; echo $?)"
+run
+ok "the audit still runs only earned checks" \
+  "$([ "$rc" = 0 ] && ! has '^ok    [a-z]*: fixture' && ! has '^BLIND' && [ "$last" = 'GREEN: 0 blocking checks' ]; echo $?)"
 
 mkrepo "$TMP/uncommitted"
 card rep text '' '' 2026-01-01 2026-02-01
