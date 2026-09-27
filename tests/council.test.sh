@@ -3892,7 +3892,7 @@ out="$(VULYK_VERIFY_TIMEOUT=3 bash scripts/cycle.sh close-story docs/specs/r18cs
   || { echo "::error::run budget: exit=$ex out=$out"; fail=1; }
 
 echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every pre-0.18 key"
-council status docs/specs/r18nc --json | jq -r 'keys_unsorted | .[-6:] | join(",")' | expect "the last six keys" "round_dir,paused,shipped,since,seat_attempt,seats"
+council status docs/specs/r18nc --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
 exit $fail
