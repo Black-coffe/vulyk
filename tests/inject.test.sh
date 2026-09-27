@@ -223,6 +223,17 @@ printf '%s' "$o" | expect_silent "no python on PATH is silent, exit 0"
 o="$(edit s9 "$W/pipeline/voiceover.py" | env -u CLAUDE_PROJECT_DIR bash "$HOOK")"
 printf '%s' "$o" | ctx | expect "without CLAUDE_PROJECT_DIR the input cwd is the root" "voice-text"
 
+# --- a python3 that runs nothing (review 0.19, major 1) ---------------------------------------
+echo "--- python3 stub"
+mkdir -p "$T/stubbin"; printf '#!/bin/sh
+exit 9009
+' > "$T/stubbin/python3"; chmod +x "$T/stubbin/python3"
+if command -v python >/dev/null 2>&1; then
+  o="$(printf '%s' "$(edit stub "$W/pipeline/voiceover.py")" | PATH="$T/stubbin:$PATH" CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK")"
+  if printf '%s' "$o" | grep -q additionalContext; then ok "a python3 stub exiting 9009 falls through to python"
+  else bad "a python3 stub silenced the hook"; fi
+else echo "  skip  no python on PATH besides python3"; fi
+
 # --- latency ----------------------------------------------------------------------------------
 echo "--- latency"
 LAT="$HIVE"; LW="$W"; SRCNAME="fixture library"
@@ -232,12 +243,12 @@ if [ -d "D:/YouTube_AI/docs/defects" ]; then
 fi
 m="$(median_ms "$LAT" "{\"session_id\":\"lat\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd pipeline && python edit_build.py EDIT_3.json --check\"},\"cwd\":\"$LW\"}")"
 echo "  median defects-inject.sh (Bash): ${m} ms over 30 calls ($SRCNAME; target <= 200 ms)"
-if [ "$m" -le 400 ]; then ok "median latency, Bash, <= 400 ms"
-else bad "median latency, Bash, ${m} ms > 400 ms"; fi
+if [ "$m" -le 200 ]; then ok "median latency, Bash, <= 200 ms"
+else bad "median latency, Bash, ${m} ms > 200 ms"; fi
 m="$(median_ms "$LAT" "{\"session_id\":\"lat\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$LW/pipeline/voiceover.py\"},\"cwd\":\"$LW\"}")"
 echo "  median defects-inject.sh (Edit): ${m} ms over 30 calls ($SRCNAME; target <= 200 ms)"
-if [ "$m" -le 400 ]; then ok "median latency, Edit, <= 400 ms"
-else bad "median latency, Edit, ${m} ms > 400 ms"; fi
+if [ "$m" -le 200 ]; then ok "median latency, Edit, <= 200 ms"
+else bad "median latency, Edit, ${m} ms > 200 ms"; fi
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

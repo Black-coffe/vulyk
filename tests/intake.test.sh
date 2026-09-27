@@ -155,6 +155,17 @@ printf '%s' "$o" | expect_silent "no python on PATH is silent, exit 0"
 o="$(cd "$HIVE" && printf '%s' "{\"prompt\":\"at 10:04\",\"cwd\":\"$(pwd -W 2>/dev/null || pwd)\"}" | env -u CLAUDE_PROJECT_DIR bash "$HOOK")"
 printf '%s' "$o" | expect "without CLAUDE_PROJECT_DIR the input cwd is the root" "Looks like an owner correction"
 
+# --- a python3 that runs nothing (review 0.19, major 1) ---------------------------------------
+echo "--- python3 stub"
+mkdir -p "$T/stubbin"; printf '#!/bin/sh
+exit 9009
+' > "$T/stubbin/python3"; chmod +x "$T/stubbin/python3"
+if command -v python >/dev/null 2>&1; then
+  o="$(printf '%s' '{"prompt":"опять обрезал голос","session_id":"stub"}' | PATH="$T/stubbin:$PATH" CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK")"
+  if printf '%s' "$o" | grep -q additionalContext; then ok "a python3 stub exiting 9009 falls through to python"
+  else bad "a python3 stub silenced the hook"; fi
+else echo "  skip  no python on PATH besides python3"; fi
+
 # --- latency ----------------------------------------------------------------------------------
 echo "--- latency"
 LAT="$HIVE"; SRCNAME="fixture library"
@@ -163,8 +174,8 @@ if [ -d "D:/YouTube_AI/docs/defects" ]; then
 fi
 m="$(median_ms "$LAT" '{"prompt":"На 01:03 обрів слова после \"глубоко\", опять","session_id":"lat"}')"
 echo "  median defect-intake.sh: ${m} ms over 30 calls ($SRCNAME; target <= 200 ms)"
-if [ "$m" -le 400 ]; then ok "median latency <= 400 ms"
-else bad "median latency ${m} ms > 400 ms"; fi
+if [ "$m" -le 200 ]; then ok "median latency <= 200 ms"
+else bad "median latency ${m} ms > 200 ms"; fi
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

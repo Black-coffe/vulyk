@@ -127,7 +127,8 @@ for name in sorted(os.listdir(d)):
             if lines[i][:1].isspace() or ':' not in lines[i]:
                 continue
             k, _, v = lines[i].partition(':')
-            fm[k.strip().lower()] = v.strip()
+            # An inline ` # comment` is dropped, as the hooks' fm_scalar does (contract section 1 example).
+            fm[k.strip().lower()] = re.sub(r'\s+#(\s.*)?$', '', v).strip()
     cid = fm.get('id') or name[:-3]
     title = fm.get('title', '')
     status = (fm.get('status') or 'text').lower()

@@ -132,6 +132,29 @@ card elsewhere text '' '' 2026-01-05
 printf '\n## Notes\n- 2026-01-06 · video 1 · 00:10 — «not a quote section»\n' >> docs/defects/elsewhere.md
 run; ok "dated lines outside the quotes section are not quotes" "$(! has 'elsewhere'; echo $?)"
 
+echo "--- inline comments in frontmatter (review 0.19 major 2: gate and hooks must agree)"
+mkrepo "$TMP/inline"
+{ printf -- '---
+id: ic
+title: Inline   # the class
+status: block   # block | text
+check: bash check.sh <arg>   # run from root
+'
+  printf -- 'fixtures: %s   # original + neighbour
+---
+
+# ic
+
+## Owner quotes
+- 2026-09-01 · v · 0:01 — «a»
+
+## Never
+- x
+' "$FX"
+} > docs/defects/ic.md
+run; ok "a block card with inline # comments stays block and both fixtures are caught" "$([ "$rc" = 0 ] && [ "$last" = 'GREEN: 1 blocking checks' ]; echo $?)"
+run bad.txt; ok "its check runs in gate mode and goes red on a bad argument" "$([ "$rc" = 1 ]; echo $?)"
+
 echo "--- usage"
 run a b; ok "two arguments -> exit 2" "$([ "$rc" = 2 ]; echo $?)"
 run ''; ok "an empty argument -> exit 2" "$([ "$rc" = 2 ]; echo $?)"

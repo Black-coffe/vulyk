@@ -82,3 +82,7 @@ the verdict. Check output goes to a log under `${TMPDIR:-/tmp}`. `DEFECTS_DIR` p
 
 | id | class | status | quotes | check | last quote |
 |---|---|---|---|---|---|
+
+**Trust.** `defects-check.sh` runs each card's `check:` as a shell command, and `lead-review` runs the gate on the
+branch under review. A card's `check:` is code of this repository, with the same trust as its tests: review a
+changed `check:` line like any other script change.
