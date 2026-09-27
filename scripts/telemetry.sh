@@ -40,7 +40,8 @@ council_rounds_high
 stage_long
 driver_refused
 driver_relaunched
-scope_breach"
+scope_breach
+sessionend_llm"
 
 MODELS="fable
 opus

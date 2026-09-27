@@ -95,7 +95,8 @@ set_consent() { # set_consent <cell text>   ('' removes the row)
 echo "--- enum, agents"
 tel enum | expect "enum prints context_high" "context_high"
 tel enum | expect "enum prints scope_breach"  "scope_breach"
-expect_eq "enum is exactly 8 codes" "8" "$(tel enum | grep -c .)"
+tel enum | expect "enum prints sessionend_llm (0.19)" "sessionend_llm"
+expect_eq "enum is exactly 9 codes" "9" "$(tel enum | grep -c .)"
 tel enum | expect_absent "enum prints codes only, no prose" " "
 tel agents | expect "agents prints a framework agent" "cycle-clerk"
 tel agents | expect "agents prints the catch-all token" "other"
@@ -771,6 +772,66 @@ echo '{}' | CLAUDE_PROJECT_DIR="$T/no-telemetry" VULYK_HIVE="$T/no-telemetry" ba
   >/dev/null 2>&1 || NOSCRIPT_RC=$?
 expect_eq "anomaly-scan.sh exits 0 when scripts/telemetry.sh is missing" "0" "$NOSCRIPT_RC"
 
+# sessionend_llm (0.19): a SessionEnd hook that runs `claude -p` - in its settings.json command
+# or in the script that command runs - is killed at 60 s. The hook names it; nothing else fires.
+echo "--- anomaly-scan.sh: sessionend_llm"
+LLMSET="$HIVE/.claude/settings.json"
+printf '#!/usr/bin/env bash\ntail -c 2000 "$1" | claude -p --model sonnet "distill" > out.md\n' > "$HIVE/.claude/hooks/learn.sh"
+printf '#!/usr/bin/env bash\n# the old way was: claude -p "distill"\necho quiet\n' > "$HIVE/.claude/hooks/quiet.sh"
+llm_hook() { # llm_hook <settings json> - run the hook as a SessionEnd would, print sessionend_llm refs
+  printf '%s\n' "$1" > "$LLMSET"
+  : > "$LOG"
+  echo '{"hook_event_name":"SessionEnd"}' | CLAUDE_PROJECT_DIR="$HIVE" VULYK_HIVE="$HIVE" \
+    bash "$HIVE/.claude/hooks/anomaly-scan.sh" >/dev/null 2>&1
+  grep '"code":"sessionend_llm"' "$LOG" | sed -n 's/.*"ref":"\([^"]*\)".*/\1/p' | paste -sd' '
+}
+expect_eq "fires on a SessionEnd script that calls claude -p, naming it" "sessionend:learn.sh" \
+  "$(llm_hook '{"hooks":{"SessionEnd":[{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh"},{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/learn.sh\""}]}]}}')"
+expect_eq "... and the row is the 12-key local row with value 1" "1" \
+  "$(grep '"code":"sessionend_llm"' "$LOG" | jq -r '[(keys | length == 12), (.value == 1)] | all' | tr -d '\r' | grep -c true)"
+echo '{"hook_event_name":"SessionEnd"}' | CLAUDE_PROJECT_DIR="$HIVE" VULYK_HIVE="$HIVE" \
+  bash "$HIVE/.claude/hooks/anomaly-scan.sh" >/dev/null 2>&1
+expect_eq "a second SessionEnd adds no second row" "1" "$(grep -c '"code":"sessionend_llm"' "$LOG")"
+expect_eq "fires on an inline claude -p command" "sessionend:inline" \
+  "$(llm_hook '{"hooks":{"SessionEnd":[{"hooks":[{"type":"command","command":"claude -p \"summarize\" > notes.md"}]}]}}')"
+expect_eq "silent when the same script is wired on Stop, not SessionEnd" "" \
+  "$(llm_hook '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/learn.sh"}]}]}}')"
+expect_eq "silent when claude -p is only in a comment" "" \
+  "$(llm_hook '{"hooks":{"SessionEnd":[{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/quiet.sh"}]}]}}')"
+expect_eq "silent on VULYK's own settings.json and hooks" "" \
+  "$(llm_hook "$(cat "$SRC/.claude/settings.json")")"
+LLM_OFF="$(printf '%s\n' '{"hooks":{"SessionEnd":[{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/learn.sh"}]}]}}' > "$LLMSET"
+  : > "$LOG"; echo '{}' | VULYK_TELEMETRY_SCAN=0 CLAUDE_PROJECT_DIR="$HIVE" VULYK_HIVE="$HIVE" \
+  bash "$HIVE/.claude/hooks/anomaly-scan.sh" >/dev/null 2>&1; grep -c . "$LOG")"
+expect_eq "VULYK_TELEMETRY_SCAN=0 silences it too" "0" "$LLM_OFF"
+rm -f "$LLMSET" "$HIVE/.claude/hooks/learn.sh" "$HIVE/.claude/hooks/quiet.sh"; : > "$LOG"
+
+# --- session-start-brief.sh: the litopys offer (0.19, plan 1.7) --------------------------------
+# One line, until litopys is in enabledPlugins (either settings file) or the Profile declines it.
+echo "--- session-start-brief.sh: litopys"
+if bash -n "$SRC/.claude/hooks/session-start-brief.sh" 2>/dev/null; then ok "bash -n session-start-brief.sh"
+else bad "bash -n session-start-brief.sh failed"; fi
+BRIEF="$T/hive-brief"; mkdir -p "$BRIEF/memory" "$BRIEF/.claude"
+printf '# Hive\n\n| Field | Value |\n|---|---|\n| Stack | shell |\n' > "$BRIEF/CLAUDE.md"
+brief() { echo '{}' | CLAUDE_PROJECT_DIR="$BRIEF" bash "$SRC/.claude/hooks/session-start-brief.sh" 2>&1; }
+brief | expect "absent: the hive brief line is still first" "[VULYK] no map yet"
+brief | expect "absent: the offer names the install commands" \
+  "claude plugin marketplace add Black-coffe/litopys --scope project\` then \`claude plugin install litopys@litopys --scope project"
+brief | expect "absent: the offer names the decline row" "| Chronicle | none (declined <date>) |"
+expect_eq "absent: exactly one litopys line" "1" "$(brief | grep -c 'litopys (session chronicle plugin) is not installed here')"
+printf '{"enabledPlugins":{"litopys@litopys":true}}\n' > "$BRIEF/.claude/settings.json"
+brief | expect_absent "installed (settings.json): no offer" "litopys (session chronicle plugin)"
+rm -f "$BRIEF/.claude/settings.json"
+printf '{\n  "enabledPlugins": {\n    "litopys@my-fork": true\n  }\n}\n' > "$BRIEF/.claude/settings.local.json"
+brief | expect_absent "installed (settings.local.json, any marketplace): no offer" "litopys (session chronicle plugin)"
+rm -f "$BRIEF/.claude/settings.local.json"
+printf '{"enabledPlugins":{"other@litopys":true}}\n' > "$BRIEF/.claude/settings.json"
+brief | expect "a different plugin from the litopys marketplace is not litopys" "litopys (session chronicle plugin)"
+rm -f "$BRIEF/.claude/settings.json"
+printf '| Chronicle | none (declined 2026-09-27) |\n' >> "$BRIEF/CLAUDE.md"
+brief | expect_absent "declined in the Profile: no offer" "litopys (session chronicle plugin)"
+brief | expect "declined: the hive brief line stays" "[VULYK] no map yet"
+
 # --- install and consent wiring (anomaly-telemetry-05) ----------------------------------------
 # Story 05 adds the Telemetry Profile row, install.sh's /dev/tty question and `wire_hook`.
 # Its local cases belong here, below this marker.
@@ -1127,6 +1188,88 @@ bash "$REL/install.sh" "$RH2" --upgrade > "$T/rh2.out" 2>&1
 cat "$T/rh2.out" | expect "an edited learnings hook is kept" "keep (edited)  .claude/hooks/session-end-learnings.sh"
 expect_eq "and stays wired" "1" "$(grep -c 'session-end-learnings' "$RH2/.claude/settings.json")"
 cat "$T/rh2.out" | expect "the unedited retired agent beside it goes" "remove         .claude/agents/council-sonnet.md"
+
+# --- install.sh: the defect library - wiring and shipping (0.19, contract §5) ------------------
+# wire_hook takes a matcher and an argument; "already wired" is event + script + argument. The
+# hooks' own scripts are package B's - none of this depends on what they contain.
+echo "--- install.sh: defect library wiring and shipping"
+PRE_M='Edit|Write|MultiEdit|NotebookEdit|Bash'
+defect_wiring() { # defect_wiring <settings.json> - "<intake> <inject under the matcher> <reset on SessionStart>"
+  printf '%s %s %s' \
+    "$(jq -r '[.hooks.UserPromptSubmit[]?.hooks[].command | select(test("defect-intake\\.sh\"?$"))] | length' "$1" | tr -d '\r')" \
+    "$(jq -r --arg m "$PRE_M" '[.hooks.PreToolUse[]? | select(.matcher == $m) | .hooks[].command | select(test("defects-inject\\.sh\"?$"))] | length' "$1" | tr -d '\r')" \
+    "$(jq -r '[.hooks.SessionStart[]?.hooks[].command | select(test("defects-inject\\.sh\"? reset$"))] | length' "$1" | tr -d '\r')"
+}
+expect_eq "VULYK's own settings.json carries the three wirings once each" "1 1 1" "$(defect_wiring "$SRC/.claude/settings.json")"
+expect_eq "a fresh hive gets them with the settings.json it is given" "1 1 1" "$(defect_wiring "$TGT/.claude/settings.json")"
+cat "$T/ownset.out" | expect "an owner's settings.json: intake wired" \
+  "wire           .claude/settings.json -> UserPromptSubmit: defect-intake.sh"
+cat "$T/ownset.out" | expect "an owner's settings.json: inject wired under its matcher" \
+  "wire           .claude/settings.json -> PreToolUse [$PRE_M]: defects-inject.sh"
+cat "$T/ownset.out" | expect "an owner's settings.json: reset wired on SessionStart" \
+  "wire           .claude/settings.json -> SessionStart: defects-inject.sh reset"
+expect_eq "... and all three land in the owner's file" "1 1 1" "$(defect_wiring "$OWNSET/.claude/settings.json")"
+
+# A hive whose owner arranged things: a quoted launcher with a redirect on a startup-only group,
+# the inject script already on SessionStart WITHOUT the argument, intake already wired, and an
+# own Bash guard on PreToolUse.
+DW="$T/hive-defect-wire"; mkdir -p "$DW"
+bash "$SRC/install.sh" "$DW" --telemetry off > /dev/null 2>&1
+cat > "$DW/.claude/settings.json" <<'EOF'
+{"hooks":{
+ "SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/vulyk-update-check.sh\" 2>/dev/null || true"}]},
+                 {"hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/defects-inject.sh\""}]}],
+ "PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-guard.sh"}]}],
+ "UserPromptSubmit":[{"hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/defect-intake.sh\""}]}]
+}}
+EOF
+cp "$DW/.claude/settings.json" "$T/dw.before"
+bash "$SRC/install.sh" "$DW" --upgrade --check > "$T/dw-check.out" 2>&1
+cat "$T/dw-check.out" | expect "--check: the reset would be wired" "would wire     .claude/settings.json -> SessionStart: defects-inject.sh reset"
+cat "$T/dw-check.out" | expect "--check: the inject would be wired" "would wire     .claude/settings.json -> PreToolUse [$PRE_M]: defects-inject.sh"
+cat "$T/dw-check.out" | expect_absent "--check: intake is already wired" "-> UserPromptSubmit: defect-intake.sh"
+expect_eq "--check leaves the file alone" "1" "$(same "$T/dw.before" "$DW/.claude/settings.json")"
+bash "$SRC/install.sh" "$DW" --upgrade --telemetry off > "$T/dw.out" 2>&1
+DWS="$DW/.claude/settings.json"
+expect_eq "the three wirings, each once" "1 1 1" "$(defect_wiring "$DWS")"
+expect_eq "the argument-less inject entry the owner had stays, once" "1" \
+  "$(jq -r '[.hooks.SessionStart[].hooks[].command | select(test("defects-inject\\.sh\"?$"))] | length' "$DWS" | tr -d '\r')"
+expect_eq "a redirect after the script is not an argument: no second update check" "1" \
+  "$(jq -r '[.hooks.SessionStart[].hooks[].command | select(test("vulyk-update-check"))] | length' "$DWS" | tr -d '\r')"
+expect_eq "the reset copies the siblings' quoting" "1" \
+  "$(jq -r '.hooks.SessionStart[].hooks[].command' "$DWS" | tr -d '\r' | grep -cxF '"$CLAUDE_PROJECT_DIR/.claude/hooks/defects-inject.sh" reset')"
+expect_eq "nothing joins the owner's startup-only group" "1" \
+  "$(jq -r '.hooks.SessionStart[] | select(.matcher == "startup") | .hooks | length' "$DWS" | tr -d '\r')"
+expect_eq "the owner's Bash guard group is untouched" '["my-guard.sh"]' \
+  "$(jq -c '[.hooks.PreToolUse[] | select(.matcher == "Bash") | .hooks[].command]' "$DWS" | tr -d '\r')"
+DW_BEFORE="$(cat "$DWS")"
+bash "$SRC/install.sh" "$DW" --upgrade --telemetry off > "$T/dw2.out" 2>&1
+expect_eq "a second upgrade leaves it byte-identical" "1" "$([ "$DW_BEFORE" = "$(cat "$DWS")" ] && echo 1 || echo 0)"
+cat "$T/dw2.out" | expect_absent "and wires nothing" "wire           .claude/settings.json"
+
+# Shipping: only the index skeleton, install semantics; VULYK's own cards and hook state never.
+DREL="$T/release-defects"; mkdir -p "$DREL"
+tar -C "$SRC" --exclude=./.git --exclude=./.claude/worktrees -cf - . | tar -C "$DREL" -xf -
+rm -rf "$DREL/docs/defects" "$DREL/.claude/state"
+mkdir -p "$DREL/docs/defects" "$DREL/.claude/state/defects"
+printf '# Defect library\n' > "$DREL/docs/defects/README.md"
+printf -- '---\nid: clipped-speech\n---\n' > "$DREL/docs/defects/clipped-speech.md"
+printf 'k\n' > "$DREL/.claude/state/defects/keys"
+DH="$T/hive-defects"; mkdir -p "$DH"
+bash "$DREL/install.sh" "$DH" --telemetry off > "$T/dh.out" 2>&1
+expect_eq "the defect index skeleton ships" "1" "$(same "$DREL/docs/defects/README.md" "$DH/docs/defects/README.md")"
+expect_eq "VULYK's own defect cards never ship" "0" "$([ -e "$DH/docs/defects/clipped-speech.md" ] && echo 1 || echo 0)"
+expect_eq "hook state never ships" "0" "$([ -e "$DH/.claude/state" ] && echo 1 || echo 0)"
+expect_eq "the manifest lists the index" "1" "$(grep -cxF docs/defects/README.md "$DH/.claude/vulyk-manifest")"
+expect_eq "a hive's .gitignore gets .claude/state/" "1" "$(grep -cxF '.claude/state/' "$DH/.gitignore")"
+expect_eq "VULYK's own .gitignore has .claude/state/" "1" "$(tr -d '\r' < "$SRC/.gitignore" | grep -cxF '.claude/state/')"
+printf '# My index\n- my-card\n' > "$DH/docs/defects/README.md"
+printf '# Defect library v2\n' > "$DREL/docs/defects/README.md"
+bash "$DREL/install.sh" "$DH" --upgrade --telemetry off > "$T/dh-up.out" 2>&1
+expect_eq "--upgrade never overwrites a hive's own index" "# My index" "$(head -1 "$DH/docs/defects/README.md" | tr -d '\r')"
+cat "$T/dh-up.out" | expect "and says it kept it" "skip (exists)  docs/defects/README.md"
+bash "$DREL/install.sh" "$DH" --check > "$T/dh-check.out" 2>&1
+cat "$T/dh-check.out" | expect "--check lists hook state as a runtime skip" "would skip (runtime) .claude/state/defects/keys"
 
 # --- case 17: inbox - distil, then stage the clear (anomaly-telemetry-07) ----------------------
 echo "--- inbox"

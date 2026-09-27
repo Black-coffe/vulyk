@@ -10,6 +10,8 @@ wave: 1                 # dispatch group: at Tier 3-4 one wave's workers run con
                         # Stories in one wave must declare disjoint `## Files` - wave-check.sh reports overlaps.
 blocked_by: []          # story ids that must be `done` first, e.g. [<slug>-01]. A story's wave
                         # must be strictly later than the wave of every story it names here.
+                        # `manual:<id>` names a hand step (a paid generation, an owner upload): the
+                        # driver stops until `cycle.sh manual-done docs/specs/<slug> <id>` records it.
 ---
 
 <!--

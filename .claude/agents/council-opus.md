@@ -31,7 +31,8 @@ MCP row (the black-box seat's alone).
 
 1. Read `brief.md`'s `## Asks`. For each ask, form the observable a careful owner would have meant,
    including the edge case a literal reading skips, then run or probe it and record `run:` and `saw:`.
-   An intuition with no run behind it is not a verdict.
+   An intuition with no run behind it is not a verdict. Measure the observable yourself: a project gate's
+   green is not your `saw:`, and a gate that only warns on it (exit 0) leaves the ask `RED`.
 2. What you find beyond the literal asks (an edge case handled well or badly, a gap the brief never
    named) goes under `UNASKED:`, never into an `ASK` line.
 3. An ask with no runnable surface here is `N/A - why: <reason>`. An environment failure is

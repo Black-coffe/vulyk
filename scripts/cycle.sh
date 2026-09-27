@@ -30,6 +30,11 @@
 # `repair` writes the mechanical repair story (D4). `status --json` keeps every pre-0.18 key in
 # its old order and appends three at the very end, in this order: `since`, `seat_attempt`,
 # `seats` - so no consumer that reads keys by position (or a greedy sed) sees a moved key.
+#
+# 0.19 (self-learning, package C): `blocked_by:` may name `manual:<id>`, a step the Queen or the
+# owner does by hand, satisfied by the file <spec>/manual/<id>. `manual-done` writes and commits it.
+# A wave with nothing ready and a todo waiting on one reports `next` `manual:<ids>` (and a
+# `manual` key after `seats`); no later wave is built past it.
 set -u
 shopt -s nullglob 2>/dev/null || true
 
@@ -229,6 +234,27 @@ story_status_for_id() { # story_status_for_id <spec> <story-id>
     is_story_file "$f" || continue
     [ "$(fm_field "$f" story)" = "$id" ] && { fm_field "$f" status; return; }
   done
+}
+
+blockers_of() { # blockers_of <story-file> -> its `blocked_by:` entries, space-separated. Not
+  # fm_field, which cuts a value at its next colon: `manual:<id>` carries one (0.19, package C).
+  local line v
+  [ -f "$1" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ "${line%%:*}" = blocked_by ] || continue
+    v="${line#*:}"; v="${v%%#*}"; v="${v//$'\r'/}"
+    v="${v//\[/}"; v="${v//\]/}"; v="${v//,/ }"
+    printf '%s\n' "$v"
+    return 0
+  done < "$1"
+}
+
+manual_id_ok() { # manual_id_ok <id> -> 0 iff <id> names one plain file under <spec>/manual/:
+  # no path separator, no `..`, no leading dot or dash, nothing JSON or a shell would need quoted
+  case "$1" in
+    ''|.*|-*|*/*|*\\*|*..*|*\"*|*\'*|*[[:space:]]*|*[[:cntrl:]]*) return 1 ;;
+  esac
+  return 0
 }
 
 asks_count() { # asks_count <spec-dir> -> A, the number of `## Asks` items in brief.md (C8)
@@ -489,7 +515,7 @@ cmd_status() {
   # One read per story (status and wave together), kept in arrays for the wave walk below -
   # the same answers the per-wave re-reads gave, without re-reading every story per wave.
   local TODO=0 PROG=0 DONE=0 BLOCKED=0 f st
-  local BUILD_WAVE="" CLOSE_FILE="" WAVE_STORIES="" MAXWAVE=0 wv
+  local BUILD_WAVE="" CLOSE_FILE="" WAVE_STORIES="" MAXWAVE=0 wv MANUAL_IDS=""
   local -a S_FILE=() S_ST=() S_WV=()
   for f in "$SPEC"/*.md; do
     [ -f "$f" ] || continue
@@ -506,19 +532,30 @@ cmd_status() {
   done
   local w i
   for w in $(seq 1 "${MAXWAVE:-0}" 2>/dev/null); do
-    local ready="" any_todo=0 any_prog="" prog_files=""
+    local ready="" any_todo=0 any_prog="" prog_files="" wave_manual=""
     for i in "${!S_FILE[@]}"; do
       [ "${S_WV[$i]}" = "$w" ] || continue
       f="${S_FILE[$i]}"; st="${S_ST[$i]}"
       case "$st" in
         todo)
           any_todo=1
-          local blockers_done=1 b bb
-          bb="$(fm_field "$f" blocked_by | tr -d '[]' | tr ',' ' ')"
+          local blockers_done=1 b bb mid
+          bb="$(blockers_of "$f")"
           for b in $bb; do
-            b="$(printf '%s' "$b" | sed 's/^ *//; s/ *$//')"
             [ -n "$b" ] || continue
-            [ "$(story_status_for_id "$SPEC" "$b")" = "done" ] || blockers_done=0
+            case "$b" in
+              manual:*)
+                # 0.19 C: a hand step is done iff its file exists; a malformed id never is
+                # (wave-check names it), and is listed so the stop still shows it.
+                mid="${b#manual:}"
+                if ! manual_id_ok "$mid" || [ ! -f "$SPEC/manual/$mid" ]; then
+                  blockers_done=0
+                  mid="${mid//[[:cntrl:]\"\\]/}"
+                  case " $wave_manual " in *" $mid "*) ;; *) wave_manual="${wave_manual:+$wave_manual }$mid" ;; esac
+                fi
+                ;;
+              *) [ "$(story_status_for_id "$SPEC" "$b")" = "done" ] || blockers_done=0 ;;
+            esac
           done
           # LR31: an unready todo (a blocker not yet done) is never listed - it is not
           # dispatchable, and re-dispatching it would just re-fail the same blocker.
@@ -531,6 +568,9 @@ cmd_status() {
       esac
     done
     if [ -n "$ready" ]; then BUILD_WAVE="$w"; WAVE_STORIES="$ready$prog_files"; break; fi
+    # 0.19 C: nothing ready here and a todo waits on a hand step - stop at this wave. Walking on
+    # to a later one dispatched a worker that could only return NEEDS_CONTEXT (the pilot, twice).
+    if [ -n "$wave_manual" ]; then MANUAL_IDS="$wave_manual"; break; fi
     if [ "$any_todo" -eq 0 ] && [ -n "$any_prog" ]; then CLOSE_FILE="$any_prog"; break; fi
   done
   local WAVE_JSON="null"; [ -n "$BUILD_WAVE" ] && WAVE_JSON="$BUILD_WAVE"
@@ -616,6 +656,7 @@ cmd_status() {
   elif [ -z "$BRANCH_V" ]; then NEXT="branch"
   elif [ -n "$BUILD_WAVE" ]; then NEXT="build:$BUILD_WAVE"
   elif [ -n "$CLOSE_FILE" ]; then NEXT="close-story:$CLOSE_FILE"
+  elif [ -n "$MANUAL_IDS" ]; then NEXT="manual:${MANUAL_IDS// /,}"
   elif [ "$OPEN_B" = true ]; then
     if [ "$STALE_B" = true ]; then NEXT="open-round"
     elif [ -n "$MISSING" ]; then NEXT="dispatch:$(printf '%s' "$MISSING" | tr ' ' ',')"
@@ -637,14 +678,14 @@ cmd_status() {
     NEXT="open-round"
   fi
 
-  printf '{"spec":"%s","slug":"%s","stage":"%s","next":"%s","briefed":%s,"approved":%s,"branch":%s,"head":"%s","pack":"%s","stories":{"todo":%s,"in-progress":%s,"done":%s,"blocked":%s},"wave":%s,"wave_stories":[%s],"round":%s,"ceiling":%s,"tier":%s,"open":%s,"court":%s,"missing":[%s],"stale":%s,"verdict":%s,"review":%s,"red":[%s],"round_dir":%s,"paused":%s,"shipped":%s,"since":%s,"seat_attempt":{%s},"seats":[%s]}\n' \
+  printf '{"spec":"%s","slug":"%s","stage":"%s","next":"%s","briefed":%s,"approved":%s,"branch":%s,"head":"%s","pack":"%s","stories":{"todo":%s,"in-progress":%s,"done":%s,"blocked":%s},"wave":%s,"wave_stories":[%s],"round":%s,"ceiling":%s,"tier":%s,"open":%s,"court":%s,"missing":[%s],"stale":%s,"verdict":%s,"review":%s,"red":[%s],"round_dir":%s,"paused":%s,"shipped":%s,"since":%s,"seat_attempt":{%s},"seats":[%s],"manual":[%s]}\n' \
     "$SPEC" "$SLUG" "$(compute_stage "$SPEC" "$PLAN" "$BRIEFED_B" "$BRANCH_V" "$((TODO+PROG+DONE+BLOCKED))" "$DONE" "$NEWEST_VERDICT" "$SHIPPED_B")" \
     "$NEXT" "$BRIEFED_B" "$APPROVED_B" "$BRANCH_JSON" "$HEAD" "$PACK" \
     "$TODO" "$PROG" "$DONE" "$BLOCKED" \
     "$WAVE_JSON" "$WAVE_STORIES_JSON" \
     "$ROUND_N" "$CEILING" "$TIER_JSON" "$OPEN_B" "$COURT_JSON" "$(json_str_array "$MISSING")" "$STALE_B" \
     "$VERDICT_JSON" "$REVIEW_JSON" "$(json_num_csv "$RED_LIST")" "$ROUND_DIR_JSON" "$PAUSED_B" "$SHIPPED_B" \
-    "$SINCE_JSON" "$SEAT_ATTEMPT_JSON" "$(json_str_array "$REQUIRED")"
+    "$SINCE_JSON" "$SEAT_ATTEMPT_JSON" "$(json_str_array "$REQUIRED")" "$(json_str_array "$MANUAL_IDS")"
 }
 
 compute_stage() { # compute_stage <spec> <plan> <briefed:true|false> <branch> <stories> <done>
@@ -2476,6 +2517,35 @@ cmd_release() { # cmd_release <spec> <stamp>
   exit 0
 }
 
+cmd_manual_done() { # cmd_manual_done <spec> <id> [note] - 0.19 C: records a hand step done by
+  # writing <spec>/manual/<id> (a UTC timestamp and the redacted note) and committing that one
+  # path: left uncommitted it would be dirt to claim/open-round and out of scope to the next
+  # story's scope-check. Idempotent: a step already recorded is left as it was. No pause_guard -
+  # it is the owner's own act, not the loop's; driver_guard, so it never commits under a live run.
+  # Its only stdout line is the JSON one.
+  local SPEC="$1" ID="${2:-}" NOTE="${3:-}"
+  [ -n "$SPEC" ] && [ -d "$SPEC" ] && [ -n "$ID" ] || {
+    echo "cycle: usage: $0 manual-done <spec-dir> <id> [note]" >&2
+    emit false manual-done 1 error "usage"
+    exit 1
+  }
+  manual_id_ok "$ID" || {
+    echo "cycle: manual-done - '$ID' is not a plain manual step id (no /, \\, .., quotes, blanks, leading . or -)" >&2
+    emit false manual-done 1 error "bad manual id: $ID"
+    exit 1
+  }
+  driver_guard "$SPEC" manual-done ""
+  local F="$SPEC/manual/$ID"
+  if [ ! -f "$F" ]; then
+    mkdir -p "$SPEC/manual" || { emit false manual-done 2 error "cannot create $SPEC/manual"; exit 2; }
+    [ -n "$NOTE" ] && NOTE=" $(redact_note "$NOTE")"
+    printf '%s%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$NOTE" > "$F"
+  fi
+  commit_paperwork manual-done "manual($(slug_of "$SPEC")): $ID done" "$F"
+  emit_status manual-done "$SPEC"
+  exit 0
+}
+
 # --- repair: the mechanical repair story (ADR-013 D4) - what the council found, quoted, with
 # no planner in between: the asks come from the ledger row and the seat files, the findings
 # verbatim, the scope and the verification from the stories already done -----------------------
@@ -2735,6 +2805,14 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
   done
 
   echo "cycle: $SLUG - advanced ${nsteps} step(s), next: $next"
+  # 0.19 C: the human line for a hand step - what to do and the exact command that records it
+  case "$next" in
+    manual:*)
+      local mid ids="${next#manual:}"
+      for mid in ${ids//,/ }; do
+        echo "cycle: waiting on manual step '$mid' - do it, then: bash scripts/cycle.sh manual-done $SPEC $mid [note]"
+      done ;;
+  esac
   printf '{"ok":true,"verb":"advance","exit":0,"next":"%s","steps":[%s],"rejected":[%s],"status":%s}\n' \
     "$next" "$STEPS" "$REJECTED" "$st"
   exit 0
@@ -2794,6 +2872,9 @@ case "$VERB" in
     ;;
   release)
     cmd_release "$SPEC" "${3:-}"
+    ;;
+  manual-done)
+    cmd_manual_done "$SPEC" "${3:-}" "${*:4}"
     ;;
   close-story)
     COMMIT=0; STAMP=""

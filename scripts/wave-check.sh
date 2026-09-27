@@ -18,6 +18,8 @@
 #   collision  - two stories in the SAME wave declare overlapping paths
 #   order      - a story's wave is not strictly later than each of its blockers' waves
 #   dangling   - a `blocked_by:` id that matches no story file in the spec
+#   manual     - a `blocked_by: manual:<id>` whose id is not one plain file name (0.19): a hand
+#                step, satisfied by <spec>/manual/<id>; every declared step is listed at the end
 #   no-files   - a story with an empty `## Files` block (unmeasurable, uncollidable)
 #   missing    - a declared path whose own parent directory does not exist: a typo, or a
 #                plan that has not noticed it must create that directory first
@@ -86,6 +88,12 @@ fm() { # fm <file> <key> - first frontmatter-style "key: value", value printed r
   awk -v k="$2" -F': *' '$1 == k { sub(/[[:space:]]*#.*$/, "", $2); print $2; exit }' "$1"
 }
 
+blockers_of() { # blockers_of <file> - the `blocked_by:` entries, one per line. Not fm: its
+  # ': *' split cuts `manual:<id>` at the colon (0.19, the same rule as cycle.sh's blockers_of).
+  awk '/^blocked_by:/ { sub(/^blocked_by:/, ""); sub(/#.*$/, ""); gsub(/[][\r]/, ""); gsub(/,/, "\n"); print; exit }' "$1" \
+    | sed 's/^ *//; s/ *$//' | grep -v '^$' || true
+}
+
 files_of() { # the `## Files` block, comments skipped (same parser as scope-check.sh)
   awk '
     /^##[[:space:]]+Files[[:space:]]*$/ { inblock=1; next }
@@ -137,6 +145,7 @@ path_status() { # path_status <declared-path> - ok | new | missing | empty-glob
 }
 
 PROBLEMS=0
+MANUAL=""
 report() { PROBLEMS=$((PROBLEMS+1)); echo "  ! $1"; }
 
 # --- per-story sanity --------------------------------------------------------
@@ -226,8 +235,18 @@ VL_EOF
   fi
 
   wave="$(fm "$f" wave)"; [ -n "$wave" ] || wave=1
-  blockers="$(fm "$f" blocked_by | tr -d '[]' | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -v '^$' || true)"
+  blockers="$(blockers_of "$f")"
   for b in $blockers; do
+    case "$b" in
+      manual:*)
+        mid="${b#manual:}"
+        case "$mid" in
+          ''|.*|-*|*/*|*\\*|*..*|*\"*|*\'*)
+            report "manual:    $id is blocked_by '$b' - a manual step id is one plain file name under $SPEC/manual/ (no /, \\, .., quotes, leading . or -)" ;;
+          *) case " $MANUAL " in *" $mid "*) ;; *) MANUAL="${MANUAL:+$MANUAL }$mid" ;; esac ;;
+        esac
+        continue ;;
+    esac
     bf=""
     for g in $STORIES; do
       [ "$(fm "$g" story)" = "$b" ] && { bf="$g"; break; }
@@ -268,6 +287,11 @@ EOF1
 done
 
 N="$(printf '%s' "$STORIES" | grep -c .)"
+# 0.19: the hand steps this spec waits on - the driver stops at each until manual-done records it
+for mid in $MANUAL; do
+  if [ -f "$SPEC/manual/$mid" ]; then mst=done; else mst=pending; fi
+  echo "wave-check: manual step '$mid' ($mst) - record it with: bash scripts/cycle.sh manual-done $SPEC $mid [note]"
+done
 [ "$RESOLVE" -eq 1 ] || echo "wave-check: not a git repo - path resolution skipped; every other check ran."
 if [ "$PROBLEMS" -eq 0 ]; then
   echo "wave-check: $SPEC - $N stories, dispatchable (no collisions, order holds, paths resolve, every story can turn red)"

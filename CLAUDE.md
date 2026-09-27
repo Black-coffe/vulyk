@@ -10,6 +10,7 @@ agents for large work and integrates. Procedures live in the `/vulyk-*` commands
 3. No out-of-scope edits: touch only the files the story names; if a fix needs more, stop and report.
 4. Surface tradeoffs: say what you chose, what you rejected and why, in a sentence or two.
 5. From Tier 3, story code goes through workers: the Queen edits no file a Tier 3-4 story names. At Tier 0-2 she builds herself.
+6. An owner's correction joins its defect class in `docs/defects/` as a verbatim quote. A class code can check gets a failing `check:` with the original case and a neighbour-form fixture in the same work (inside a Tier 3-4 story naming the file: the next repair story); a repeated class without one is debt that fails `scripts/defects-check.sh`. A check that only warns is not a check.
 
 Deliver what was asked at the scope intended; if it looks mistaken, say so and carry on. Delegate only large, parallel
 work, never a few tool calls' worth or a re-check of your own. Size plans, stories and reports to the task. Do not tell
@@ -94,6 +95,8 @@ Quiet variants only: their output is resent every turn. A story's `## Verificati
 | Driver + cycle end to end | `bash tests/e2e.test.sh` |
 | Solo path, Tier 1-2 | `bash tests/solo.test.sh` |
 | Anomaly telemetry contract tests | `bash tests/telemetry.test.sh` |
+| Defect library gate, before showing work | `bash scripts/defects-check.sh [<arg>]` |
+| Defect library and hooks contract tests | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
 | Full suite / build | none exists — VULYK has no test runner and no build step |
 
 The first four are silent on success and non-zero on failure; run them together as the closest

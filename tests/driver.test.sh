@@ -383,6 +383,12 @@ const blindPromptsClean = (r) => r.dispatches
     check(u.result.next === 'briefed' && !u.result.stop && u.dispatches.length === 0, 'unknown next: returned as is, no guess', u.result);
     const v = await run(ARGS, { clerk: [[CLAIM, adv(round('sonnet'))], [RELEASE, releaseOk]] });
     check(v.result.stop && v.result.stop.verb === 'dispatch' && v.dispatches.length === 0, 'unknown seat: stops instead of dispatching an agent that does not exist', v.result);
+    // 0.19 C: a hand step stops the run cleanly - no worker, a stop naming the ids and the command, a release
+    const m = await run(ARGS, { clerk: [[CLAIM, adv(status({ next: 'manual:music,art', manual: ['music', 'art'] }))], [RELEASE, releaseOk]] });
+    check(m.result.stop && m.result.stop.verb === 'manual' && m.dispatches.length === 0 && m.clerkCmds[1] === RELEASE
+      && JSON.stringify(m.result.stop.manual) === '["music","art"]'
+      && m.result.stop.error.includes(`bash scripts/cycle.sh manual-done ${SPEC} music`) && m.result.stop.error.includes(`manual-done ${SPEC} art`),
+      'manual: stops before any dispatch, names each step and its manual-done command, releases', { result: m.result, seq: seq(m) });
   }
 
   // --- iteration cap: a fresh story every wave never trips the miss bound, so only the cap ends
