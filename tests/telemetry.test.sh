@@ -96,7 +96,8 @@ echo "--- enum, agents"
 tel enum | expect "enum prints context_high" "context_high"
 tel enum | expect "enum prints scope_breach"  "scope_breach"
 tel enum | expect "enum prints sessionend_llm (0.19)" "sessionend_llm"
-expect_eq "enum is exactly 9 codes" "9" "$(tel enum | grep -c .)"
+tel enum | expect "enum prints model_below_floor (0.20)" "model_below_floor"
+expect_eq "enum is exactly 10 codes" "10" "$(tel enum | grep -c .)"
 tel enum | expect_absent "enum prints codes only, no prose" " "
 tel agents | expect "agents prints a framework agent" "cycle-clerk"
 tel agents | expect "agents prints the catch-all token" "other"
@@ -383,6 +384,8 @@ expect_eq "measure --sidechain last_has_text reads the last entry's content" "tr
   "$(printf '%s' "$SIDE_OUT" | jq -r '.last_has_text')"
 expect_eq "measure --sidechain agent_type reads the sibling .meta.json" "cycle-clerk" \
   "$(printf '%s' "$SIDE_OUT" | jq -r '.agent_type')"
+expect_eq "measure --sidechain model is the subagent's own (0.20: the floor check reads it)" "claude-sonnet-4-5" \
+  "$(printf '%s' "$SIDE_OUT" | jq -r '.model')"
 
 MISSING_OUT="$("$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/does-not-exist.jsonl" < /dev/null)"; MISSING_RC=$?
 expect_eq "measure on a missing file prints {}" "{}" "$MISSING_OUT"
@@ -447,7 +450,7 @@ mkdir -p "$SESSION/subagents/workflows/wf1" "$PROJ/subagents"
 agent_file() { # agent_file <path> <prefix tokens> <text|tool_use> <agentType>
   local block
   if [ "$3" = "text" ]; then block='{"type":"text","text":"done"}'; else block='{"type":"tool_use","name":"Bash"}'; fi
-  printf '{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":%s,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":10},"content":[%s]}}\n' \
+  printf '{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":%s,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":10},"content":[%s]}}\n' \
     "$2" "$block" > "$1"
   printf '{"agentType":"%s"}\n' "$4" > "${1%.jsonl}.meta.json"
 }
@@ -455,7 +458,7 @@ agent_file "$SESSION/subagents/agent-a1.jsonl"              60000 text     cycle
 agent_file "$SESSION/subagents/workflows/wf1/agent-a2.jsonl" 70000 tool_use my-custom-agent
 agent_file "$PROJ/subagents/agent-a3.jsonl"                  80000 text     cycle-clerk
 cat > "$PROJ/sid1.jsonl" <<'EOF'
-{"type":"assistant","isSidechain":false,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}
+{"type":"assistant","isSidechain":false,"message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}
 EOF
 
 # Every python start is counted: the bound of a Stop-hook scan is "no python for a file whose
@@ -535,7 +538,7 @@ done
 # cache with no python started for the file.
 agent_file "$SEENSESSION/subagents/agent-big.jsonl" 60000 tool_use cycle-clerk
 cat > "$SEENPROJ/sid2.jsonl" <<'EOF'
-{"type":"assistant","isSidechain":false,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}
+{"type":"assistant","isSidechain":false,"message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}
 EOF
 
 # A shim that logs its argv, not just a tick: "no python for this subagent" is only provable
@@ -585,7 +588,7 @@ expect_eq "the cached agent_empty row carries the cached agentType" "cycle-clerk
   "$(grep '"code":"agent_empty"' "$LOG" | jq -r '.agent')"
 
 # A subagent that grew is measured again - and only it: the key is the byte size, not an age.
-printf '{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-4-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":10},"content":[{"type":"text","text":"more"}]}}\n' \
+printf '{"type":"assistant","isSidechain":true,"message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":10},"content":[{"type":"text","text":"more"}]}}\n' \
   >> "$SEENSESSION/subagents/agent-s7.jsonl"
 GREW_BYTES="$(wc -c < "$SEENSESSION/subagents/agent-s7.jsonl" | tr -d ' ')"
 : > "$PYARGS"
@@ -617,6 +620,82 @@ expect_eq "context_high maps claude-fable-5-1 to fable" "fable" \
   "$(grep '"code":"context_high"' "$LOG" | jq -r '.model')"
 expect_eq "context_high carries an empty agent" "" \
   "$(grep '"code":"context_high"' "$LOG" | jq -r '.agent')"
+
+# --- case 11b: the model floor (0.20.0, ADR-015) ---------------------------------------------------
+echo "--- model floor: lib.sh, top-model.sh --floor, scan"
+floorof() { (. "$SRC/scripts/lib.sh"; model_below_floor "$1") 2>/dev/null || echo ok; }
+expect_eq "claude-sonnet-5 is below the sonnet floor"          "sonnet 5.0 5.5" "$(floorof claude-sonnet-5)"
+expect_eq "claude-opus-5 is below the opus floor"              "opus 5.0 5.5"   "$(floorof claude-opus-5)"
+expect_eq "a dated Haiku 4.5 ID is below the haiku floor"      "haiku 4.5 5.5"  "$(floorof claude-haiku-4-5-20251001)"
+expect_eq "a family-last legacy ID is read too"                "sonnet 3.5 5.5" "$(floorof claude-3-5-sonnet-20241022)"
+expect_eq "a provider-prefixed ID is read too"                 "opus 4.6 5.5"   "$(floorof anthropic.claude-opus-4-6)"
+expect_eq "claude-sonnet-5-5 sits on the floor"                "ok" "$(floorof claude-sonnet-5-5)"
+expect_eq "a newer generation is above the floor"              "ok" "$(floorof claude-opus-6)"
+expect_eq "an alias is never below: only a resolved ID is"     "ok" "$(floorof sonnet)"
+expect_eq "VULYK_MODEL_FLOOR lowers the floor for a hive"      "ok" \
+  "$(VULYK_MODEL_FLOOR='sonnet 4.5; opus 4.6' floorof claude-sonnet-4-5)"
+expect_eq "a partial override keeps the other families' floors" "opus 4.1 5.5" \
+  "$(VULYK_MODEL_FLOOR='sonnet 4.5' floorof claude-opus-4-1)"
+expect_eq "the alias of an unreleased floor is below it"       "haiku alias 5.5" "$(floorof haiku)"
+expect_eq "the override can mark haiku released"               "ok" "$(VULYK_MODEL_FLOOR='haiku 4.5' floorof haiku)"
+
+FLOORHIVE="$T/floorhive"; mkdir -p "$FLOORHIVE/scripts" "$FLOORHIVE/.claude/agents" "$FLOORHIVE/home/.claude" "$FLOORHIVE/templates"
+cp "$SRC/scripts/top-model.sh" "$SRC/scripts/lib.sh" "$FLOORHIVE/scripts/"
+cp "$SRC"/.claude/agents/*.md "$FLOORHIVE/.claude/agents/"
+cp "$SRC/templates/story.md" "$FLOORHIVE/templates/"
+floorcheck() { # floorcheck [VAR=value]... - top-model.sh --floor in a hive with a clean env and an empty home
+  (cd "$FLOORHIVE" && env -u ANTHROPIC_MODEL -u ANTHROPIC_DEFAULT_FABLE_MODEL -u ANTHROPIC_DEFAULT_OPUS_MODEL \
+    -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL -u CLAUDE_CODE_SUBAGENT_MODEL \
+    -u ANTHROPIC_SMALL_FAST_MODEL -u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_VERTEX -u CLAUDE_CODE_USE_FOUNDRY \
+    -u VULYK_MODEL_FLOOR HOME="$FLOORHIVE/home" CLAUDE_CONFIG_DIR="$FLOORHIVE/home/.claude" \
+    CLAUDE_PROJECT_DIR="$FLOORHIVE" "$@" bash scripts/top-model.sh --floor)
+}
+floorcheck >/dev/null 2>&1
+expect_eq "--floor exits 0 on the shipped agents, the story template and a clean env" "0" "$?"
+OUT="$(floorcheck ANTHROPIC_DEFAULT_SONNET_MODEL=claude-sonnet-5 2>&1)"; RC=$?
+expect_eq "--floor exits 1 on an env pin below the floor" "1" "$RC"
+printf '%s\n' "$OUT" | expect "--floor names the env pin" "env ANTHROPIC_DEFAULT_SONNET_MODEL = claude-sonnet-5 is sonnet 5.0, floor 5.5"
+printf '{\n  "env": { "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5" }\n}\n' > "$FLOORHIVE/home/.claude/settings.json"
+floorcheck 2>&1 | expect "--floor reads a user settings.json env block" "ANTHROPIC_DEFAULT_OPUS_MODEL = claude-opus-5 is opus 5.0, floor 5.5"
+rm -f "$FLOORHIVE/home/.claude/settings.json"
+floorcheck CLAUDE_CODE_USE_BEDROCK=1 2>&1 | expect "--floor warns on a provider with no family pin" \
+  "CLAUDE_CODE_USE_BEDROCK is set and ANTHROPIC_DEFAULT_SONNET_MODEL is not"
+floorcheck CLAUDE_CODE_USE_BEDROCK=1 ANTHROPIC_DEFAULT_OPUS_MODEL=anthropic.claude-opus-5-5 \
+  ANTHROPIC_DEFAULT_SONNET_MODEL=anthropic.claude-sonnet-5-5 >/dev/null 2>&1
+expect_eq "--floor is clean on a provider with both families pinned at the floor" "0" "$?"
+floorcheck CLAUDE_CODE_SUBAGENT_MODEL=haiku 2>&1 | expect "--floor names a route to the unreleased haiku floor" \
+  "env CLAUDE_CODE_SUBAGENT_MODEL = haiku - no haiku at its floor 5.5 has shipped"
+mkdir -p "$FLOORHIVE/docs/specs/demo"
+printf -- '---\nstory: demo-01\nmodel: claude-opus-4-6   # pinned\n---\n' > "$FLOORHIVE/docs/specs/demo/demo-01-x.md"
+floorcheck 2>&1 | expect "--floor names a story pinned below the floor" "docs/specs/demo/demo-01-x.md model = claude-opus-4-6 is opus 4.6"
+rm -rf "$FLOORHIVE/docs"
+sed -i 's/^model: sonnet$/model: claude-sonnet-4-5/' "$FLOORHIVE/.claude/agents/worker-code.md"
+floorcheck 2>&1 | expect "--floor names an agent pinned below the floor" "worker-code.md model = claude-sonnet-4-5 is sonnet 4.5"
+
+: > "$LOG"
+FLPROJ="$T/floorproj"; mkdir -p "$FLPROJ/fs1/subagents"
+floor_line() { # floor_line <model> <true|false sidechain>
+  printf '{"type":"assistant","isSidechain":%s,"message":{"model":"%s","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5},"content":[{"type":"text","text":"done"}]}}\n' "$2" "$1"
+}
+floor_line claude-opus-5 false       > "$FLPROJ/fs1.jsonl"
+floor_line claude-sonnet-5 true      > "$FLPROJ/fs1/subagents/agent-b1.jsonl"
+printf '{"agentType":"worker-code"}\n' > "$FLPROJ/fs1/subagents/agent-b1.meta.json"
+floor_line claude-sonnet-5-5 true    > "$FLPROJ/fs1/subagents/agent-b2.jsonl"
+printf '{"agentType":"drone-scout"}\n' > "$FLPROJ/fs1/subagents/agent-b2.meta.json"
+tel scan --transcript "$FLPROJ/fs1.jsonl" >/dev/null 2>&1
+expect_eq "scan records the main session that ran below the floor" "opus 5.0 5.5" \
+  "$(grep '"code":"model_below_floor"' "$LOG" | grep '"ref":"session:' | jq -r '"\(.model) \(.value) \(.threshold)"')"
+expect_eq "scan records the subagent that ran below the floor, with its agent" "sonnet worker-code" \
+  "$(grep '"code":"model_below_floor"' "$LOG" | grep '"ref":"agent:' | jq -r '"\(.model) \(.agent)"')"
+expect_eq "a subagent on the floor yields no row" "0" "$(grep -c 'agent-b2' "$LOG")"
+tel scan --transcript "$FLPROJ/fs1.jsonl" >/dev/null 2>&1
+expect_eq "a second scan adds no model_below_floor row" "2" "$(grep -c '"code":"model_below_floor"' "$LOG")"
+# Review finding: with no .meta.json the agent column is empty, and `read` collapses two tabs in a
+# row - the model must still reach the detector, and the agent stay empty.
+floor_line claude-sonnet-5 true > "$FLPROJ/fs1/subagents/agent-b3.jsonl"
+tel scan --transcript "$FLPROJ/fs1.jsonl" >/dev/null 2>&1
+expect_eq "a subagent with no agentType still records its below-floor model" "sonnet||5.0" \
+  "$(grep '"code":"model_below_floor"' "$LOG" | grep 'agent-b3' | jq -r '"\(.model)|\(.agent)|\(.value)"')"
 
 # --- case 12: scan - council_rounds_high ---------------------------------------------------------
 echo "--- scan: council_rounds_high"

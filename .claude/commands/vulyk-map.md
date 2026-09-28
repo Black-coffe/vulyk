@@ -1,5 +1,5 @@
 ---
-description: Build or refresh the codebase map for a path using scout batches (Opus 5.5 at low effort)
+description: Build or refresh the codebase map for a path using scout batches (Sonnet at low effort)
 argument-hint: <path or module name; "." for full breadth-first pass>
 ---
 

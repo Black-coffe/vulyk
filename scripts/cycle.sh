@@ -1772,10 +1772,10 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
   local f="$1" id worker model
   id="$(fm_field "$f" story)"
   worker="$(fm_field "$f" worker)"; [ -n "$worker" ] || worker="worker-code"
-  # `model` is the planner's per-story call (ADR-012: opus for every story unless the planner
-  # writes another alias); absent means opus. The driver passes it as the dispatch parameter
-  # and never reads the story file to learn it.
-  model="$(fm_field "$f" model)"; [ -n "$model" ] || model="opus"
+  # `model` is the planner's per-story call (ADR-015: sonnet builds, opus only for a judgment-heavy
+  # story); absent means sonnet. The driver passes it as the dispatch parameter and never reads
+  # the story file to learn it.
+  model="$(fm_field "$f" model)"; [ -n "$model" ] || model="sonnet"
   printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$f")"
 }
 
@@ -2638,6 +2638,8 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   local NN; NN="$(printf '%02d' $((maxn+1)))"
   local WAVE=$((maxw+1))
   local STORY="$SPEC/$SLUG-$NN-repair-round-$N.md"
+  # `model: opus` on purpose (ADR-015): first attempts build on Sonnet, and a repair follows a RED
+  # round that judged that work wrong, so it climbs a rung, as a missed story's retry climbs to the gate.
 
   {
     printf -- '---\nstory: %s-%s\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: %s\nblocked_by: []\n---\n\n' "$SLUG" "$NN" "$WAVE"

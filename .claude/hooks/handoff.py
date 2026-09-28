@@ -921,6 +921,16 @@ def mode_measure(argv):
     turns = [e for e in entries
              if e.get("type") == "assistant" and bool(e.get("isSidechain")) == sidechain]
 
+    # context_tokens() reads the main thread only, so a subagent file has no model from it. The
+    # model floor check (telemetry model_below_floor, ADR-015) needs the ID the subagent really
+    # ran on: the newest turn that names a real model (not "<synthetic>").
+    if not model:
+        for e in reversed(turns):
+            m = (e.get("message") or {}).get("model") or ""
+            if m.startswith("claude") or "claude-" in m:
+                model = m
+                break
+
     first_prefix = 0
     if turns:
         usage = (turns[0].get("message") or {}).get("usage") or {}

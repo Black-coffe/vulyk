@@ -1156,7 +1156,7 @@ if [ -f "$DEST/CLAUDE.md" ]; then
       # Say so here, once, rather than letting the session brief report "by constitution"
       # forever to an owner who never chose it.
       if grep -q 'TOP_MODEL = opus' "$DEST/CLAUDE.md" 2>/dev/null; then
-        echo "  Since 0.10.0 the gate model follows the plan (Fable 5.1 on Max, Opus 5.5 on Pro)."
+        echo "  Since 0.10.0 the gate model follows the plan (Fable on Max, Opus on Pro)."
         echo "  Your constitution still pins \`TOP_MODEL = opus\`; change it to \`TOP_MODEL = auto\` to"
         echo "  enable that, or keep the pin deliberately. \`scripts/top-model.sh --explain\` shows the pick."
       fi

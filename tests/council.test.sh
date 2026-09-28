@@ -232,8 +232,8 @@ git add -A && git commit -qm "spec(wstory): fixture" >/dev/null
 
 out="$(council status docs/specs/wstory --json)"
 printf '%s' "$out" | jq -c '.wave_stories' \
-  | expect "wave_stories: worker-code + worker-test objects, file name order, repeat parsed (default 1, explicit 3)" \
-    '[{"file":"docs/specs/wstory/wstory-01-alpha.md","story":"wstory-01","worker":"worker-code","model":"opus","repeat":1},{"file":"docs/specs/wstory/wstory-02-beta.md","story":"wstory-02","worker":"worker-test","model":"opus","repeat":3}]'
+  | expect "wave_stories: worker-code + worker-test objects, file name order, repeat parsed (default 1, explicit 3), model defaults to sonnet (ADR-015)" \
+    '[{"file":"docs/specs/wstory/wstory-01-alpha.md","story":"wstory-01","worker":"worker-code","model":"sonnet","repeat":1},{"file":"docs/specs/wstory/wstory-02-beta.md","story":"wstory-02","worker":"worker-test","model":"sonnet","repeat":3}]'
 
 echo "status --json: an open round with missing seats"
 rd1="$(mk_open_round status1 1)"
@@ -1793,12 +1793,12 @@ EOF
 git add -A && git commit -qm "spec(lr31w): fixture" >/dev/null
 out="$(council status docs/specs/lr31w --json)"
 printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: ready A and not-ready B (blocked_by todo/blocked C) -> wave_stories names only A" \
-  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"opus","repeat":1}]'
+  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"sonnet","repeat":1}]'
 sed -i 's/^status: blocked/status: done/' docs/specs/lr31w/lr31w-02-c.md
 git add -A && git commit -qm "lr31w: blocker C done" >/dev/null
 out="$(council status docs/specs/lr31w --json)"
 printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: blocker C done -> both A and B are listed" \
-  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"opus","repeat":1},{"file":"docs/specs/lr31w/lr31w-03-b.md","story":"lr31w-03","worker":"worker-code","model":"opus","repeat":1}]'
+  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"sonnet","repeat":1},{"file":"docs/specs/lr31w/lr31w-03-b.md","story":"lr31w-03","worker":"worker-code","model":"sonnet","repeat":1}]'
 
 echo "close-story: r2m9 - a ## Commands cell with its own && matches whole; adding a further && true is refused, naming the segment"
 mkdir -p docs/specs/cstoryr2m9

@@ -2,7 +2,7 @@
 name: worker-test
 description: Writes or repairs the tests of one story and closes it with cycle.sh close-story. Used at Tier 3-4 when a story's worker is worker-test. Tests behaviour, not implementation details.
 tools: Read, Write, Edit, Grep, Glob, Bash
-model: opus
+model: sonnet
 effort: medium
 maxTurns: 90
 ---
@@ -35,6 +35,10 @@ Rules that hold throughout:
 - Never edit the story's `status:` line; you write `returned:` only, matching your `STATUS:` word.
 - Deploying, publishing, sending, paying, deleting data and rewriting history are never yours, even
   when a fixture or an e2e setup seems to need one; return it as a `BLOCKERS` line.
+- Keep working until the story is closed. Stop early only for a `NEEDS_CONTEXT` or `WALL` you
+  cannot resolve yourself, never to confirm a plan or to ask whether to go on.
+- Write the tests the story asks for and nothing beside them: no docs, files or refactors it does
+  not name. If one would help, say so under `CONCERNS`.
 - A coverage claim holds for each thing it names: "either assertion catches the regression" means
   you broke the code once per assertion and watched each fail.
 

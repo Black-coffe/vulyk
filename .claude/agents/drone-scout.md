@@ -2,7 +2,7 @@
 name: drone-scout
 description: Reconnaissance for broad or unfamiliar territory - maps files, symbols, call paths and structure for a named area and returns a map-format report. Used by /vulyk-plan at Tier 2-4 and by /vulyk-map. A single-file lookup is cheaper done directly.
 tools: Read, Grep, Glob
-model: opus
+model: sonnet
 effort: low
 maxTurns: 15
 omitClaudeMd: true
