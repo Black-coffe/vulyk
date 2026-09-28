@@ -6,12 +6,14 @@
 #   scripts/top-model.sh --apply    -> pins the Queen's model (always opus, v0.16.0) as "model" in
 #                                      .claude/settings.local.json so her session starts on it
 #   scripts/top-model.sh --check    -> exit 0 if settings.local.json pins the Queen's model, 1 if not
+#   scripts/top-model.sh --floor    -> exit 0 if nothing configured here can resolve a family below
+#                                      the model floor (scripts/lib.sh, ADR-015), 1 with one line each
 #
 # The rule (v0.18.0, ADR-013 D3): the resolved alias is the GATE model - the Tier 4
 # lead-review (beside the second reviewer), lead-architect, the Tier 4 planner and a missed
 # story's retry. lead-review at Tier 1-3, the Queen and every other rung run on their
-# frontmatter model, Opus 5.5, whatever the plan. Fable 5.1 holds the gate wherever the plan
-# includes it, Opus 5.5 everywhere else. Per Anthropic's plan terms (Sept 2026) that means:
+# frontmatter model (`opus` or `sonnet`, ADR-015), whatever the plan. Fable holds the gate wherever
+# the plan includes it, Opus everywhere else. Per Anthropic's plan terms (Sept 2026) that means:
 #
 #   Max 5x / Max 20x, Team & Enterprise premium seats  -> fable   (up to half the weekly limit
 #                                                                  is Fable at no extra cost)
@@ -45,11 +47,13 @@ case "${1:-}" in
   --explain)     MODE="explain" ;;
   --apply)       MODE="apply" ;;
   --check)       MODE="check" ;;
-  -h|--help)     sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  --floor)       MODE="floor" ;;
+  -h|--help)     sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *)             echo "error: unknown flag $1 (try --help)" >&2; exit 2 ;;
 esac
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+. "$(dirname "$0")/lib.sh"
 
 # ---------------------------------------------------------------- the profile
 
@@ -134,22 +138,26 @@ else
     SOURCE="plan"
     case "$PLAN" in
       max|premium-seat)
-        MODEL="fable"; REASON="$DETAIL - Fable 5.1 is inside the plan (up to half the weekly limit at no extra cost)" ;;
+        MODEL="fable"; REASON="$DETAIL - Fable is inside the plan (up to half the weekly limit at no extra cost)" ;;
       pro|standard-seat)
-        MODEL="opus";  REASON="$DETAIL - Fable bills to usage credits on top of the subscription; Opus 5.5 is the frontier model the plan includes" ;;
+        MODEL="opus";  REASON="$DETAIL - Fable bills to usage credits on top of the subscription; Opus is the frontier model the plan includes" ;;
       api)
-        MODEL="opus";  REASON="$DETAIL - Opus 5.5 is the floor; pin TOP_MODEL = fable in CLAUDE.md to spend on Fable per token" ;;
+        MODEL="opus";  REASON="$DETAIL - Opus is the safe gate; pin TOP_MODEL = fable in CLAUDE.md to spend on Fable per token" ;;
       *)
         MODEL="opus";  REASON="$DETAIL - defaulting to the safe floor; pin TOP_MODEL in CLAUDE.md or set VULYK_TOP_MODEL" ;;
     esac
   fi
 fi
 
-label() { # label <alias> - human name for the brief
+label() { # label <alias> - human name for the brief: the family and its floor, never a version
+  # that would go stale the day a newer model ships (ADR-015)
+  local fl
+  fl="$(model_floor | while read -r f v _; do [ "$f" = "$1" ] && { printf '%s' "$v"; break; }; done)"
   case "$1" in
-    fable) echo "Fable 5.1" ;;
-    opus)  echo "Opus 5.5" ;;
-    *)     echo "$1" ;;
+    fable|opus|sonnet|haiku) printf '%s%s
+' "$(printf '%s' "${1:0:1}" | tr '[:lower:]' '[:upper:]')${1:1}" "${fl:+ >= $fl}" ;;
+    *) printf '%s
+' "$1" ;;
   esac
 }
 
@@ -165,8 +173,8 @@ second_reviewer() {
 }
 
 # ---------------------------------------------------------------- the local pin
-# The Queen is not the gate: she orchestrates on Opus 5.5 on every plan (ADR-012) - the same
-# index as Fable 5.1 at high for about a third of the cost, and no half-the-weekly-limit cap.
+# The Queen is not the gate: she orchestrates on Opus on every plan (ADR-012, ADR-015) - at
+# launch Opus 5.5 matched Fable 5.1 at high for about a third of the cost, with no weekly cap.
 
 QUEEN="opus"
 LOCAL="$ROOT/.claude/settings.local.json"
@@ -188,12 +196,94 @@ case "$MODE" in
     echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner, a missed story's retry; lead-review at Tier 1-3 runs on its frontmatter (opus)"
     P="$(pinned_model)"
     if [ -z "$P" ]; then
-      echo "queen session: not pinned - the session starts on the account default (Opus 5.5 since Claude Code 2.1.280). Run: bash scripts/top-model.sh --apply"
+      echo "queen session: not pinned - the session starts on the account default (Opus since Claude Code 2.1.280). Run: bash scripts/top-model.sh --apply"
     elif [ "$P" = "$QUEEN" ]; then
       echo "queen session: pinned $P in .claude/settings.local.json"
     else
       echo "queen session: pinned $P in .claude/settings.local.json, the Queen runs on $QUEEN - re-run --apply, or keep the pin deliberately"
     fi ;;
+
+  floor)
+    # Before the fact (ADR-015): every place an alias can be remapped below the floor. The after-the-
+    # fact half is telemetry's `model_below_floor`, read off the model each transcript really ran on.
+    FOUND=0
+    # Hundreds of story files say `model: sonnet`: each distinct value is judged once, since a fork
+    # per line cost 17 s at session start on Windows.
+    OK_SEEN=" "
+    below() { # below <where> <value> - one line per ID under its family's floor
+      local b
+      [ -n "$2" ] || return 0
+      case "$OK_SEEN" in *" $2 "*) return 0 ;; esac
+      b="$(model_below_floor "$2")" || { OK_SEEN="$OK_SEEN$2 "; return 0; }
+      set -- "$1" "$2" $b
+      if [ "$4" = "alias" ]; then
+        echo "below floor: $1 = $2 - no $3 at its floor $5 has shipped, so the alias runs an older one"
+      else
+        echo "below floor: $1 = $2 is $3 $4, floor $5"
+      fi
+      FOUND=1
+    }
+    # The variables that decide what a session or a dispatch runs on. The Haiku remap and the
+    # small/fast model are left out: they matter only where something routes to `haiku`, and that
+    # route is itself below the floor while Haiku's line is `unreleased`.
+    VARS="ANTHROPIC_MODEL ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL CLAUDE_CODE_SUBAGENT_MODEL"
+    for v in $VARS; do below "env $v" "${!v:-}"; done
+    # Settings files a session reads: the user's, the project's, the local one. Their `env` blocks
+    # set the same variables, and `model` sets the session.
+    # One grep over all three files and bash for the rest: this runs at every session start.
+    USER_DIR="${CLAUDE_CONFIG_DIR:-${HOME:-.}/.claude}"
+    PROVIDER=""; PINS=" "
+    for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY; do
+      case "${!v:-}" in 1|true|TRUE|yes) PROVIDER="$v" ;; esac
+    done
+    for v in ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL; do
+      [ -n "${!v:-}" ] && PINS="$PINS$v "
+    done
+    while IFS= read -r hit; do
+      [ -n "$hit" ] || continue
+      f="${hit%%:\"*}"; kv="${hit#"$f":}"
+      k="${kv#\"}"; k="${k%%\"*}"
+      val="${kv%\"}"; val="${val##*\"}"
+      case "$k" in
+        CLAUDE_CODE_USE_*) case "$val" in 1|true|TRUE|yes) PROVIDER="$k" ;; esac ;;
+        *) case "$k" in ANTHROPIC_DEFAULT_OPUS_MODEL|ANTHROPIC_DEFAULT_SONNET_MODEL) [ -n "$val" ] && PINS="$PINS$k " ;; esac
+           below "$f $k" "$val" ;;
+      esac
+    done <<EOF
+$(for f in "$USER_DIR/settings.json" "$ROOT/.claude/settings.json" "$ROOT/.claude/settings.local.json"; do
+    [ -f "$f" ] && printf '%s\n' "$f"
+  done | while IFS= read -r f; do
+    grep -o -E '"(model|ANTHROPIC_MODEL|ANTHROPIC_DEFAULT_(FABLE|OPUS|SONNET)_MODEL|CLAUDE_CODE_SUBAGENT_MODEL|CLAUDE_CODE_USE_(BEDROCK|VERTEX|FOUNDRY))"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null \
+      | sed "s|^|$f:|; s/\"[[:space:]]*:[[:space:]]*\"/\":\"/"
+  done)
+EOF
+    # The frontmatter that routes a dispatch: framework agents, the story template, and every story
+    # a driver may still dispatch. One grep, not a process per file.
+    while IFS= read -r hit; do
+      [ -n "$hit" ] || continue
+      f="${hit%%:model:*}"; m="${hit#*:model:}"; m="${m%%#*}"; m="${m//[[:space:]]/}"
+      below "${f#"$ROOT"/} model" "$m"
+    done <<EOF
+$(grep -H -m1 '^model:' "$ROOT"/.claude/agents/*.md "$ROOT/templates/story.md" "$ROOT"/docs/specs/*/*.md 2>/dev/null)
+EOF
+    # A third-party provider: Claude Code's own table has `sonnet` and even `opus` resolving to
+    # 4.x there. Only a family pin (ANTHROPIC_DEFAULT_<FAMILY>_MODEL) makes the alias safe.
+    if [ -n "$PROVIDER" ]; then
+      for fam in OPUS SONNET; do
+        v="ANTHROPIC_DEFAULT_${fam}_MODEL"
+        if case "$PINS" in *" $v "*) false ;; *) true ;; esac; then
+          echo "below floor risk: $PROVIDER is set and $v is not - the alias can resolve to a 4.x model there; pin it to the provider's ID at or above the floor"
+          FOUND=1
+        fi
+      done
+    fi
+    SUMMARY="$(model_floor | while read -r f v _; do printf '%s>=%s ' "$f" "$v"; done)"
+    if [ "$FOUND" = 0 ]; then
+      echo "model floor: ${SUMMARY% } - ok"
+      exit 0
+    fi
+    echo "model floor: ${SUMMARY% } - see the lines above (docs/model-cascade.md#the-model-floor)"
+    exit 1 ;;
 
   check)
     P="$(pinned_model)"

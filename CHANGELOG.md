@@ -2,6 +2,75 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.20.0] - 2026-09-28
+
+Sonnet 5.5 shipped, and the ladder is re-cut by kind of work, not by budget
+([ADR-015](docs/adr/015-sonnet-execution-rung-and-model-floor.md)). **Sonnet executes, Opus
+orchestrates and judges, Fable holds the gate.** The family that builds never judges. A model
+floor now makes "never below the newest" a checked rule rather than a hope. Evidence and sources:
+`docs/specs/sonnet-5-5-ladder/report.md`.
+
+### Changed
+- **Workers build on Sonnet.** A story's `model:` defaults to `sonnet`: in the `cycle.sh` default,
+  the story template, `queen-planner` and `/vulyk-plan`. The planner writes `opus` only for a
+  long-horizon or judgment-heavy story, with a one-line reason. `worker-code` and `worker-test` run at
+  `effort: medium`. Their prompts now carry Anthropic's two Sonnet 5.5 remedies:
+  - keep working until the story is closed;
+  - build nothing beside what the story names.
+
+  Why: a story is well-scoped by construction. Sonnet 5.5 led Opus 5.5 on Terminal-Bench 4.0 (70.6%
+  against 66.4%, Anthropic's table) at half the price per token.
+- **A repair story after a RED round is written with `model: opus`** (unchanged, now deliberate): it
+  climbs a rung above the Sonnet work the round judged wrong.
+- **The retry climbs a rung on every plan.** Sonnet goes to Fable on Max, and to Opus on Pro and
+  API, where it used to be the same Opus reading the same wall.
+- **At Tier 3 the reviewer is no longer the writer's model.**
+- **`drone-scout` and `drone-docs` move to Sonnet** (`effort: low`). `cycle-clerk` stays on Sonnet,
+  which now resolves to 5.5.
+- **The black-box seat (`council-haiku`) moves to Opus.** It judges, and the builders are now Sonnet.
+  The old plan to move it to Haiku 5.5 is dropped. Haiku gets only the clerk, and only once a Haiku
+  at or above the floor ships.
+- The SessionStart brief and `top-model.sh --explain` name the family and its floor
+  (`fable (Fable >= 5.1)`) instead of a version that goes stale the day a model ships.
+
+### Added
+- **The model floor.** `model_floor` in `scripts/lib.sh` is the one place versions live today:
+  `fable 5.1 · opus 5.5 · sonnet 5.5 · haiku 5.5 unreleased`. Routing names families only.
+  `unreleased` means no Haiku meets its line yet, so the bare `haiku` alias counts as below it; the
+  day a Haiku 5.5 ships, the word goes. `VULYK_MODEL_FLOOR` overrides line by line for a hive that
+  runs lower on purpose; the families it does not name keep their default.
+- **`bash scripts/top-model.sh --floor`** checks, before the fact, every place an alias can be
+  remapped:
+  - the six model env vars;
+  - the `env` and `model` keys of the user, project and local settings;
+  - the `model:` of agent frontmatter, the story template and every story in `docs/specs/`;
+  - a `CLAUDE_CODE_USE_BEDROCK|VERTEX|FOUNDRY` provider with no family pin. Claude Code's own table
+    has `sonnet` resolving to 4.5 there.
+
+  It exits 1 on a finding. The SessionStart brief prints the result every session.
+- **Telemetry code `model_below_floor`** is the after-the-fact check. `scan` reads the model ID each
+  main and subagent transcript actually ran on. It records one row per transcript below the floor,
+  with the family, the agent, the version run and the floor. The brief counts the last 7 days' rows.
+  The enum grows to 10 codes, and older bundles still validate.
+
+### Fixed
+- **`handoff.py measure --sidechain` returned an empty `model` for every subagent.**
+  `context_tokens()` skips sidechain lines. It now takes the newest real model ID of the subagent's
+  own turns, which is what the floor check reads.
+
+### Upgrade notes
+- A plain upgrade moves routing, because it lives in agent frontmatter and scripts. Your
+  constitution's `## Models and effort` paragraph still says "Opus 5.5 is the workhorse" until you run
+  `--constitution replace`, or edit that paragraph by hand.
+- Stories already written with `model: opus` keep running on Opus. Only new stories, and stories
+  with no `model:` line, default to Sonnet.
+- On Bedrock, Vertex or Foundry, run `bash scripts/top-model.sh --floor` once. Pin
+  `ANTHROPIC_DEFAULT_OPUS_MODEL` / `ANTHROPIC_DEFAULT_SONNET_MODEL` to your provider's 5.5 IDs, or set
+  `VULYK_MODEL_FLOOR` deliberately lower.
+- **Not measured yet:** Sonnet 5.5's cost per closed story. The first Tier 3 spec on 0.20 is the
+  check: `python scripts/token-report.py . --spec <slug>`, against a 0.19 Opus-worker spec. If
+  Sonnet costs more, the story default goes back to `opus`, a two-line change.
+
 ## [0.19.1] - 2026-09-27
 
 ### Fixed

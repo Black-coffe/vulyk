@@ -24,6 +24,7 @@ history, not a send.
 | `driver_relaunched` | `/vulyk-resume` relaunched the driver fresh | 1 | 0 |
 | `scope_breach` | a `scope.jsonl` row with non-empty `out_of_scope`, one row per story (first breach wins) | out-of-scope path count | 0 |
 | `sessionend_llm` | a `SessionEnd` hook in `.claude/settings.json` whose command, or the script it runs (comment lines aside), calls `claude -p` / `claude --print` - SessionEnd hooks get at most 60 s ([hooks docs](https://code.claude.com/docs/en/hooks)), so the model call is killed before it answers; one row per hook, `ref` = `sessionend:<script name>` | 1 | 0 |
+| `model_below_floor` | a main or subagent transcript whose own model ID is below its family's line in `scripts/lib.sh` `model_floor` (ADR-015): an alias, a provider or an env pin resolved lower than VULYK allows; one row per transcript, `model` = the family, `agent` = the subagent's type | the version it ran, e.g. `5.0` | the floor, e.g. `5.5` (`VULYK_MODEL_FLOOR` overrides) |
 
 Print the same list yourself with `bash scripts/telemetry.sh enum`. The thresholds' current
 defaults are v1 calibration, not measured facts - each row above names the env var that

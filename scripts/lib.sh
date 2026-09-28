@@ -148,6 +148,68 @@ client_path_filled() { # client_path_filled <constitution> -> 0 iff the Profile'
   return 0
 }
 
+# The model floor (0.20.0, ADR-015). Routing names families only (`opus`, `sonnet`, ...), so a new
+# generation arrives with no edit; this list is the one place versions live. No dispatch may run
+# below its family's line, whatever an alias, a provider or an env pin resolved to.
+# - A newer model ships: raise its family's line.
+# - `unreleased` marks a floor no model of that family meets yet (today: Haiku, whose newest is 4.5),
+#   so the bare alias itself resolves below the floor. Delete the word the day one ships.
+# VULYK_MODEL_FLOOR overrides line by line, same shape, lines or `;` (`sonnet 4.5; opus 4.6`), for a
+# hive that runs lower on purpose; a family it does not name keeps the default line.
+model_floor() { # model_floor -> "<family> <major.minor> [unreleased]" lines
+  local defaults='fable 5.1
+opus 5.5
+sonnet 5.5
+haiku 5.5 unreleased'
+  local over="" f line
+  [ -n "${VULYK_MODEL_FLOOR:-}" ] || { printf '%s\n' "$defaults"; return 0; } # the common case, no fork
+  over="$(printf '%s\n' "$VULYK_MODEL_FLOOR" | tr ';,' '\n\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d')"
+  printf '%s\n' "$defaults" | while read -r f _; do
+    line="$(printf '%s\n' "$over" | while read -r o rest; do [ "$o" = "$f" ] && { printf '%s %s' "$o" "$rest"; break; }; done)"
+    if [ -n "$line" ]; then printf '%s\n' "$line"; else printf '%s\n' "$defaults" | grep "^$f "; fi
+  done 2>/dev/null # a reader that stops at its family closes the pipe early; EPIPE is not news
+}
+
+model_version() { # model_version <model id> -> "<family> <major.minor>"; empty for an alias or an unknown shape
+  # claude-sonnet-5-5 -> sonnet 5.5, claude-haiku-4-5-20251001 -> haiku 4.5, claude-opus-5 -> opus 5.0,
+  # anthropic.claude-opus-5-5 / claude-opus-4-6@... likewise, claude-3-5-sonnet-20241022 -> sonnet 3.5.
+  local id
+  id="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$id" =~ claude-(fable|opus|sonnet|haiku)-([0-9]+)(-([0-9]{1,2}))?([^0-9]|$) ]]; then
+    printf '%s %s.%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[4]:-0}"
+  elif [[ "$id" =~ claude-([0-9]+)(-([0-9]{1,2}))?-(fable|opus|sonnet|haiku) ]]; then
+    printf '%s %s.%s\n' "${BASH_REMATCH[4]}" "${BASH_REMATCH[1]}" "${BASH_REMATCH[3]:-0}"
+  fi
+}
+
+model_below_floor() { # model_below_floor <model id | alias> -> prints "<family> <version> <floor>", 0 iff below
+  # A resolved ID is compared with its family's line. An alias is below only when its family's line
+  # is `unreleased` (printed as version `alias`); any other alias, an unknown shape or a family with
+  # no line is never below.
+  local fv fam ver fl flag a
+  a="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"; a="${a%%[[]*}"
+  case "$a" in
+    fable|opus|sonnet|haiku)
+      read -r fl flag <<EOF
+$(model_floor | while read -r f v x; do [ "$f" = "$a" ] && { printf '%s %s' "$v" "$x"; break; }; done)
+EOF
+      [ "${flag:-}" = "unreleased" ] || return 1
+      printf '%s alias %s\n' "$a" "$fl"
+      return 0 ;;
+  esac
+  fv="$(model_version "${1:-}")"; [ -n "$fv" ] || return 1
+  fam="${fv% *}"; ver="${fv#* }"
+  fl="$(model_floor | while read -r f v _; do [ "$f" = "$fam" ] && { printf '%s' "$v"; break; }; done)"
+  [ -n "$fl" ] || return 1
+  case "$fl" in *.*) ;; *) fl="$fl.0" ;; esac
+  local vm="${ver%%.*}" vn="${ver#*.}" fm="${fl%%.*}" fn="${fl#*.}"
+  if [ "$vm" -lt "$fm" ] 2>/dev/null || { [ "$vm" -eq "$fm" ] 2>/dev/null && [ "$vn" -lt "$fn" ] 2>/dev/null; }; then
+    printf '%s %s %s\n' "$fam" "$ver" "$fl"
+    return 0
+  fi
+  return 1
+}
+
 now_ts() { date -u +%Y-%m-%dT%H:%M:%SZ; } # the one timestamp shape every ledger row uses
 
 slug_of() { basename "$1"; } # slug_of <spec-dir>

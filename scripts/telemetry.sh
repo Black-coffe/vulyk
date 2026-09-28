@@ -41,7 +41,8 @@ stage_long
 driver_refused
 driver_relaunched
 scope_breach
-sessionend_llm"
+sessionend_llm
+model_below_floor"
 
 MODELS="fable
 opus
@@ -264,6 +265,25 @@ epoch_of() { # epoch_of <UTC ISO-8601 ts> -> unix seconds, empty when unparseabl
   printf '%s' "$e"
 }
 
+# model_below_floor (0.20.0, ADR-015): the model ID a transcript actually ran on, against the floor
+# in lib.sh. The one after-the-fact check: it catches an alias, a provider or an env pin that
+# resolved below the floor, whichever path got there. value = the version run, threshold = the floor.
+FLOOR_OK=" " # model IDs already judged at or above the floor: a Stop scan passes every subagent here
+record_floor() { # record_floor <model id> <ref> [<agent token>]
+  local b fam ver fl
+  [ -n "${1:-}" ] || return 0
+  case "$FLOOR_OK" in *" $1 "*) return 0 ;; esac
+  b="$(model_below_floor "$1")" || { FLOOR_OK="$FLOOR_OK$1 "; return 0; }
+  read -r fam ver fl <<EOF
+$b
+EOF
+  if [ -n "${3:-}" ]; then
+    cmd_record model_below_floor "$ver" "$fl" --model "$fam" --ref "$2" --agent "$3"
+  else
+    cmd_record model_below_floor "$ver" "$fl" --model "$fam" --ref "$2"
+  fi
+}
+
 # context_high: the main-thread transcript's current context size (handoff.py's own
 # context_tokens()) against a threshold that is percent-of-window when a window has actually
 # been observed for this session (handoff's own state file), else the absolute fallback.
@@ -274,6 +294,7 @@ detect_context() { # detect_context <main transcript>
   [ -n "$measured" ] || return 0
   tokens="$(printf '%s' "$measured" | jq -r '.tokens // 0' 2>/dev/null)"
   model="$(printf '%s' "$measured" | jq -r '.model // ""' 2>/dev/null)"
+  record_floor "$model" "session:$(basename "$transcript")"
   is_number "$tokens" || return 0
   [ "$tokens" != "0" ] || return 0
 
@@ -301,9 +322,11 @@ detect_context() { # detect_context <main transcript>
 # 73-subagent session: 74 starts, ~26 s per scan, every run). The key is the file's byte size:
 # exact and content-derived, not an age guard. The list is per-machine and gitignored via
 # `.vulyk/` (A5); the committed log stays anomalies only.
-# The four fields the two agent detectors read, as one tab-separated line - one jq pass instead
-# of four over the same small object.
-MEASURE_FIELDS_JQ='[(.first_prefix // 0), (.assistant_turns // 0), (.last_has_text // false), (.agent_type // "")] | @tsv'
+# The five fields the agent detectors read, as one tab-separated line - one jq pass instead
+# of five over the same small object. `read` treats a tab as IFS whitespace and collapses two in a
+# row, so an empty agent_type would hand its column to the model: the two string fields carry `-`
+# for empty, and the reader turns it back into "".
+MEASURE_FIELDS_JQ='[(.first_prefix // 0), (.assistant_turns // 0), (.last_has_text // false), ((.agent_type // "") | if . == "" then "-" else . end), ((.model // "") | if . == "" then "-" else . end)] | @tsv'
 measure_fields() { # measure_fields <measure json>
   printf '%s' "${1:-}" | jq -r "$MEASURE_FIELDS_JQ" 2>/dev/null | tr -d '\r'
 }
@@ -330,7 +353,8 @@ detect_agents() { # detect_agents <main transcript> <final 0|1>
       | split("\t") as $r
       | ((try ($r[2] | fromjson) catch {}) // {}) as $m
       | [$r[0], $r[1], ($m.first_prefix // 0), ($m.assistant_turns // 0),
-         ($m.last_has_text // false), ($m.agent_type // "")] | @tsv' 2>/dev/null | tr -d '\r' || true)"
+         ($m.last_has_text // false), (($m.agent_type // "") | if . == "" then "-" else . end),
+         (($m.model // "") | if . == "" then "-" else . end)] | @tsv' 2>/dev/null | tr -d '\r' || true)"
   fi
   # Newline-anchored on both ends, like SCAN_SEEN, so one basename never matches inside another.
   list="
@@ -341,7 +365,7 @@ $fields
 "
 
   find "$dir" -type f -name 'agent-*.jsonl' 2>/dev/null | sort | {
-    local f measured first_prefix turns last_has_text agent_type base ref size key rest cached
+    local f measured first_prefix turns last_has_text agent_type model base ref size key rest cached
     local frest fline
     local newlist=""
     while IFS= read -r f; do
@@ -393,9 +417,11 @@ $base$tab$size$tab"
       # A cached file's fields came out of the one jq above; a freshly measured one pays a jq of
       # its own, as does a cached line that batch pass could not parse.
       [ -n "$fline" ] || fline="$(measure_fields "$measured")"
-      IFS="$tab" read -r first_prefix turns last_has_text agent_type <<EOF
+      IFS="$tab" read -r first_prefix turns last_has_text agent_type model <<EOF
 $fline
 EOF
+      [ "$agent_type" = "-" ] && agent_type=""
+      [ "$model" = "-" ] && model=""
 
       if is_number "$first_prefix" && [ "$first_prefix" -gt "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" ] 2>/dev/null; then
         cmd_record agent_prefix_high "$first_prefix" "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" \
@@ -404,6 +430,7 @@ EOF
       if [ "$final" = "1" ] && is_number "$turns" && [ "$turns" != "0" ] && [ "$last_has_text" = "false" ]; then
         cmd_record agent_empty "$turns" 0 --ref "$ref" --agent "$agent_type"
       fi
+      record_floor "$model" "$ref" "$agent_type"
     done
     # One write per scan, holding one line per subagent file present now: a line for a file that
     # is gone is dropped with it. Written only when this session has subagents at all, so a scan

@@ -2,7 +2,7 @@
 name: worker-code
 description: Implements one story from docs/specs and closes it with cycle.sh close-story. Used at Tier 3-4, where workers build in waves. Receives a story file (and a stamp from the driver); touches only the files the story names.
 tools: Read, Write, Edit, Grep, Glob, Bash
-model: opus
+model: sonnet
 effort: medium
 maxTurns: 90
 ---
@@ -38,6 +38,10 @@ Rules that hold throughout:
 - Deploying, publishing, sending, paying, deleting data and rewriting history are never yours; if the
   story seems to need one, return it as a `BLOCKERS` line.
 - You never edit `memory/` or the wiki.
+- Keep working until the story is closed. Stop early only for a `NEEDS_CONTEXT` or `WALL` you
+  cannot resolve yourself, never to confirm a plan or to ask whether to go on.
+- Build what the story asks and nothing beside it: no tests, docs, files or refactors it does not
+  name. If one would help, say so under `CONCERNS`.
 - A claim in your report holds for each thing it names: "removing either guard turns the suite red"
   means you removed each one separately.
 

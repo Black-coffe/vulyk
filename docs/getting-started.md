@@ -25,9 +25,9 @@ cd your-project
 claude
 > /vulyk-bootstrap        # ~10 minutes: interview -> tailored config -> initial map -> wiki seed
 ```
-The first line of every session is the `[VULYK] gate model:` brief. It names the model that holds the gate (the Tier 4 review, `lead-architect`, the Tier 4 planner, a missed story's retry) on this account: Fable 5.1 where the plan carries it (Max, premium seats), Opus 5.5 where Fable would bill to credits (Pro, standard seats). Below Tier 4 the reviewer runs on Opus 5.5 like everything else. The brief also says whether your own session is pinned to `opus`: the Queen runs on Opus 5.5 on every plan. `bash scripts/top-model.sh --apply` pins it; bootstrap does that for you.
+The first line of every session is the `[VULYK] gate model:` brief. It names the model that holds the gate (the Tier 4 review, `lead-architect`, the Tier 4 planner, a missed story's retry) on this account: Fable where the plan carries it (Max, premium seats), Opus where Fable would bill to credits (Pro, standard seats). Below Tier 4 the reviewer runs on Opus, and the workers build on Sonnet. The brief also says whether your own session is pinned to `opus` (the Queen runs on Opus on every plan), and whether any model in reach is below the floor. `bash scripts/top-model.sh --apply` pins it; bootstrap does that for you.
 
-For large repos the initial mapping runs on scout drones in batches (Opus 5.5 at `effort: low`) - cheap by design. A 1000-file repo maps breadth-first: the 8-12 load-bearing modules now, the rest recorded as unmapped territory.
+For large repos the initial mapping runs on scout drones in batches (Sonnet at `effort: low`) - cheap by design. A 1000-file repo maps breadth-first: the 8-12 load-bearing modules now, the rest recorded as unmapped territory.
 
 ## Context hygiene (once, then rarely)
 
@@ -51,7 +51,7 @@ free to change on Opus 5.5 and Fable 5.1). The reasoning is in [token-economy.md
   -> Tier 1-2, solo: the Queen builds each story herself and closes it with close-story (one
      verification run, one commit per story); cycle.sh advance opens the round, one lead-review
      judges the diff, and a RED round comes back as a repair story
-  -> Tier 3-4, hive: the Workflow driver runs parallel Opus 5.5 workers on disjoint files, wave
+  -> Tier 3-4, hive: the Workflow driver runs parallel Sonnet workers on disjoint files, wave
      by wave, each closing its own story; then the council round opens on its own
   -> the terminal shows one line per step; you next see it wake on green or on an escalation
 /vulyk-review

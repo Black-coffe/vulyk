@@ -18,7 +18,9 @@ mechanically by `cycle.sh repair`.
 - `plan.md` follows `templates/plan.md`: goal in your words, assumptions the owner must confirm, the
   story index by wave, `## Contracts` for every interface that crosses a story boundary, and one
   rejected alternative with the reason.
-- One story file per unit of work, from `templates/story.md`, with `model: opus`. Each quotes its
+- One story file per unit of work, from `templates/story.md`, with `model: sonnet` (ADR-015). Write
+  `model: opus` only for a story that is long-horizon or judgment-heavy rather than well-scoped, and
+  give the reason in one line under `## Goal`. Each quotes its
   `## Requirements` verbatim from `brief.md` (`trace-check.sh` matches them literally). A story you
   cannot tie to a quote is speculative: cut it, or list it as an assumption for the owner.
 - Each story names its files, acceptance criteria, a `## Verification` taken from the constitution's

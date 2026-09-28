@@ -10,13 +10,13 @@ In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a su
 ## The castes
 | Caste | Members | Model | Contract |
 |---|---|---|---|
-| Queen | main session, `queen-planner` | opus (Opus 5.5) on every plan; a Tier 4 `queen-planner` gets `TOP_MODEL` (ADR-012) | plans; builds Tier 1-2 stories herself; at Tier 3-4 dispatches and integrates; `queen-planner` plans Tier 3-4 |
+| Queen | main session, `queen-planner` | opus on every plan; a Tier 4 `queen-planner` gets `TOP_MODEL` (ADR-012) | plans; builds Tier 1-2 stories herself; at Tier 3-4 dispatches and integrates; `queen-planner` plans Tier 3-4 |
 | Leads | `lead-review`, `lead-architect` | `lead-review`: opus at Tier 1-3, `TOP_MODEL` at Tier 4 beside a second reviewer; `lead-architect`: `TOP_MODEL` (fable on Max, opus on Pro, resolved by `scripts/top-model.sh`) | the reviewer seat of every round (asks + correctness); design decisions and ADRs |
-| Workers | `worker-code`, `worker-test` | opus, effort medium; a retry goes to `TOP_MODEL` | Tier 3-4 only: one story, scoped files, closes it with `cycle.sh close-story` |
-| Drones | `drone-scout`, `drone-docs`, `librarian` | opus, effort low | recon (capped per tier: 0-1/1/2/4 scouts), memory truth, hygiene |
+| Workers | `worker-code`, `worker-test` | sonnet (the story's `model:`), effort medium; a retry goes to `TOP_MODEL`, always a different family (ADR-015) | Tier 3-4 only: one story, scoped files, closes it with `cycle.sh close-story` |
+| Drones | `drone-scout`, `drone-docs`, `librarian` | sonnet (scout, docs) / opus (librarian), effort low | recon (capped per tier: 0-1/1/2/4 scouts), memory truth, hygiene |
 | Gate | `drone-coverage` | opus, effort medium | plan-time independence at Tier 3-4: sees the brief and the plan, never the stories |
-| Council | `council-opus`, `council-haiku` | opus (effort medium); sonnet until a Haiku 5.5 ships | Tier 3-4 only; blind verdict on `brief.md`'s `## Asks` from a reduced git worktree that cannot see the stories: intent and edge cases; the black-box client path, required only when the Profile's *Client path* is filled |
-| Clerk | `cycle-clerk` | sonnet, effort low | the Workflow driver's only way to reach a shell: one `cycle.sh` command per agent boundary, no logic of its own |
+| Council | `council-opus`, `council-haiku` | opus (effort medium); opus - it judges, the name is the angle | Tier 3-4 only; blind verdict on `brief.md`'s `## Asks` from a reduced git worktree that cannot see the stories: intent and edge cases; the black-box client path, required only when the Profile's *Client path* is filled |
+| Clerk | `cycle-clerk` | sonnet, effort low; haiku once a Haiku at or above the floor ships | the Workflow driver's only way to reach a shell: one `cycle.sh` command per agent boundary, no logic of its own |
 
 Every subagent above except `queen-planner`, the workers, `lead-review` and `lead-architect`
 carries `omitClaudeMd: true`: it takes everything from its dispatch prompt and its own body, so

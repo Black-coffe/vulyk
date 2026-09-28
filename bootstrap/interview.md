@@ -21,7 +21,7 @@ Ask in three batches. Keep it brisk - infer what the repo already answers and co
 
 ## Batch 3 - Posture
 12. Token budget posture: FRUGAL (cap 2 parallel workers) / BALANCED (cap 4) / THROUGHPUT (cap 4+, Teams allowed)? It governs Tier 3-4 waves; Tier 1-2 build solo in the Queen's session whatever the posture.
-13. Gate model policy: `scripts/top-model.sh --explain` has already read the plan - Fable 5.1 holds the gate where the subscription carries it inside its limits (Max, premium seats), Opus 5.5 where it would bill to credits (Pro, standard seats, API). The Queen, the workers and the reviewer run on Opus 5.5 either way; the gate model is passed only for the Tier 4 review and plan, `lead-architect`, and a missed story's retry (ADR-013). Confirm, or pin deliberately (sets TOP_MODEL; `auto` is the default and the right answer for almost everyone).
+13. Gate model policy: `scripts/top-model.sh --explain` has already read the plan - Fable holds the gate where the subscription carries it inside its limits (Max, premium seats), Opus where it would bill to credits (Pro, standard seats, API). The Queen and the reviewer run on Opus and the workers on Sonnet either way; the gate model is passed only for the Tier 4 review and plan, `lead-architect`, and a missed story's retry (ADR-013). Confirm, or pin deliberately (sets TOP_MODEL; `auto` is the default and the right answer for almost everyone).
 14. Risk tolerance: may agents commit to feature branches themselves, or stage-only?
 15. Test reality: is there a runner worth keeping worker-test for? (If no - prune it and say so.)
 16. Anything the previous AI setup kept getting wrong here? (seed for memory/learnings/)

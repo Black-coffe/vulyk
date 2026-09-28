@@ -62,10 +62,11 @@ A subagent gets its own context window, its own turns, and its own system prompt
 **not your conversation**. Only its final answer comes back; everything it read along the way is
 discarded with it.
 
-That is the whole trick behind VULYK's routing. The black-box seat runs on Sonnet through
-`model: sonnet` in `.claude/agents/council-haiku.md`, and that costs the main session nothing in
-cache terms: the Queen's prefix is untouched, and the seat's own prefill happens in a context you
-never pay to re-send. Doing the same thing by typing `/model sonnet` in the main session would
+That is the whole trick behind VULYK's routing. The workers run on Sonnet through the story's
+`model: sonnet` (and the scout through `model: sonnet` in `.claude/agents/drone-scout.md`), and that
+costs the main session nothing in cache terms: the Queen's prefix is untouched, and each subagent's
+own prefill happens in a context you never pay to re-send. Doing the same thing by typing
+`/model sonnet` in the main session would
 re-prefill the entire conversation at full price and hand every later turn back to the wrong model.
 
 **So: route with agent frontmatter, never with `/model`.** This applies to the Tier 4 second

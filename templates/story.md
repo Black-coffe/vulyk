@@ -5,7 +5,8 @@ status: todo            # todo | done | blocked - close-story writes done, a dri
 returned:              # written by whoever builds the story, as its last edit: DONE | NEEDS_CONTEXT | WALL
 tier: 1                 # the spec's routing tier
 worker: worker-code     # worker-code | worker-test - the agent a Tier 3-4 wave dispatches
-model: opus             # the worker's model; the driver reads it, and a second attempt runs on the gate model
+model: sonnet           # the worker's family (ADR-015): sonnet builds, opus only for judgment-heavy work;
+                        # the driver reads it, and a second attempt runs on the gate model
 wave: 1                 # dispatch group: at Tier 3-4 one wave's workers run concurrently in one tree.
                         # Stories in one wave must declare disjoint `## Files` - wave-check.sh reports overlaps.
 blocked_by: []          # story ids that must be `done` first, e.g. [<slug>-01]. A story's wave

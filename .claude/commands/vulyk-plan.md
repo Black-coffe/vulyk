@@ -30,7 +30,8 @@ Plan: "$ARGUMENTS"
    with the brief, scout reports and map pointers; Tier 4 also consults `lead-architect` on the central
    design fork, and both Tier 4 dispatches carry `model: <top_model>` (`bash scripts/top-model.sh`).
    Tier 3 passes no model parameter.
-6. Stories, from `templates/story.md`, each with `model: opus`. At Tier 1-2 you build them yourself in
+6. Stories, from `templates/story.md`, each with `model: sonnet`: `opus` only for a long-horizon or
+   judgment-heavy story, with the reason in one line (ADR-015). At Tier 1-2 you build them yourself in
    order, so cut by review unit: Tier 1 exactly one story, Tier 2 one to three. At Tier 3-4 each story
    is one worker's job, and it earns its own worker only when it runs in parallel with its wave-mates
    on disjoint `## Files`; fold the rest together.
