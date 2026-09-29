@@ -58,7 +58,7 @@ fi
 [ -f "$MEM/map/.stale" ] && due "map (flagged stale after a merge: refresh the modules changed since, then delete memory/map/.stale)" vulyk-map
 
 if [ -n "$items" ]; then
-  echo "[VULYK] maintenance due: $items. After the owner's current task, on ${def:-the default branch} with a clean tree, run each through the Skill tool ($skills) without asking, then tell the owner in one line what changed; otherwise leave it for a later session."
+  echo "[VULYK] maintenance due: $items. After the owner's current task, on ${def:-the default branch} with a clean tree (memory/stats/skills.json aside: the Skill counter rewrites it), run each through the Skill tool ($skills) without asking, then tell the owner in one line what changed; otherwise leave it for a later session."
 fi
 [ -n "$pending" ] && echo "[VULYK] evolve changeset $pending waits for the owner's review (merge = accept, delete the branch = reject): tell the owner once."
 

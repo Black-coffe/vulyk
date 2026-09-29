@@ -1505,6 +1505,18 @@ expect_eq "the inbox README survives the clear" "yes" \
 expect_eq "--clear never commits - HEAD is unchanged" "$HEAD_BEFORE" \
   "$(git -C "$INBOX" rev-parse HEAD)"
 
+# (b2) auto-maintenance round 1: /vulyk-evolve clears inside its worktree, so the deletions ride
+# the evolve branch and reach the default branch only through the owner's merge
+git -C "$INBOX" reset -q --hard HEAD
+WT="$INBOX/.claude/worktrees/evolve-test"
+git -C "$INBOX" worktree add -q "$WT" -b vulyk/evolve-test main >/dev/null 2>&1
+(cd "$INBOX" && PATH="$SHIM:$PATH" VULYK_HIVE="$WT" bash scripts/telemetry.sh inbox --clear) >/dev/null
+expect_eq "VULYK_HIVE=<worktree> --clear stages the three deletions in the worktree" "3" \
+  "$(git -C "$WT" status --porcelain | grep -c '^D  telemetry/inbox/')"
+expect_eq "... and leaves the owner's tree and index untouched" "" \
+  "$(git -C "$INBOX" status --porcelain | grep -v '^?? .claude/' || true)"
+git -C "$INBOX" worktree remove --force "$WT" >/dev/null 2>&1; git -C "$INBOX" branch -q -D vulyk/evolve-test
+
 # (c) a root with no telemetry/inbox/ (every hive): a notice, exit 0
 NOINBOX="$T/hive-no-inbox"; mkdir -p "$NOINBOX/scripts" "$NOINBOX/.claude/agents"
 cp "$SRC/scripts/telemetry.sh" "$SRC/scripts/lib.sh" "$NOINBOX/scripts/"
