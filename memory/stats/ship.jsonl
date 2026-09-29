@@ -7,3 +7,4 @@
 {"ts":"2026-09-24T14:45:15Z","spec":"convergent-judge","version":"0.17.0","head":"3db0999","pack":"7d38d6f5bb1e","note":"merged to main, publish pending; gate READY at 76c38f6 before the release commit (CHANGELOG/VERSION read as code by ship-check - next circle)"}
 {"ts":"2026-09-29T13:52:14Z","spec":"auto-maintenance","version":"0.21.0","head":"4e1f167","pack":"6edcd818434f","note":"merged to main, publish pending"}
 {"ts":"2026-09-29T14:30:06Z","spec":"skills-json-exempt","version":"0.21.1","head":"2eb221b","pack":"12e6bd85e27d","note":"merged to main, published with v0.21.0"}
+{"ts":"2026-09-29T15:24:06Z","spec":"next-circle-0-22","version":"0.22.0","head":"c21bc4c","pack":"a903f3a34b16","note":"merged to main, publish pending"}
