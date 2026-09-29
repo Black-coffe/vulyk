@@ -56,7 +56,7 @@ cap, and CLAUDE.md is trimmed to meet it. The learnings buffer is cleaned once f
 - `auto-maintenance-03-evolve-ledger` — `evolve-ledger.py`, ledger + admission rules + worktree in `/vulyk-evolve`, sunset rule, installer stops shipping runtime ledgers.
 
 ## Contracts
-- `memory/stats/evolve.jsonl`: one JSON object per line. Proposal row `{"ts","kind":"proposal","branch","component","file","hypothesis","evidence","bytes_delta"}`; verdict row `{"ts","kind":"verdict","branch","verdict":"accepted|rejected","reason"}`. `ts` is UTC `YYYY-MM-DDTHH:MM:SSZ`. `component` is one of `constitution rule agent command hook skill defect memory script doc`.
+- `memory/stats/evolve.jsonl`: one JSON object per line. Proposal row `{"ts","kind":"proposal","branch","component","file","hypothesis","evidence","bytes_delta"}`; verdict row `{"ts","kind":"verdict","branch","verdict":"accepted|rejected","reason"}`; run row `{"ts","kind":"run","branch","commit","proposals"}`, one per evolve run. `ts` is UTC `YYYY-MM-DDTHH:MM:SSZ`. `component` is one of `constitution rule agent command hook skill defect memory script doc`.
 - `scripts/evolve-ledger.py <root> last` prints the newest proposal `ts` or nothing; `pending` prints unmerged `vulyk/evolve-*` branches; the brief reads these two.
 
 ## Integration gate
@@ -79,6 +79,7 @@ cap, and CLAUDE.md is trimmed to meet it. The learnings buffer is cleaned once f
 
 ## Plan deltas
 - **2026-09-29, story 01 - the budget premise was half wrong.** The study (report §7) and the approval question said CLAUDE.md breaks ADR-013's cap. Measured while building: the constitution a host receives (both marked blocks swapped for install.sh placeholders) is 6 266 B / 93 lines, inside the cap; only VULYK's own copy was over, because of VULYK-only Commands rows. Decision: the test caps both the repo file (the owner's choice, "Подрезать до 7 KB") and the shipped render (ADR-013's real subject), and the trim came mostly from VULYK-only rows. Also removed two version mentions from `## Models and effort` (the owner's floor rule: versions live only in `model_floor`), crossing story 01's Non-goal on Models wording. Rejected: capping only the shipped render (the owner chose the trim); cutting Laws or Routing (owner-approved text that every host loads).
+- **2026-09-29, story 02 - gc could never delete.** The real gc run returned "I only have Read, Write, Edit and Glob, so I can't delete files". `librarian.md` told an agent without a shell to delete merged learnings and snapshots, so every `/vulyk-gc` would have left the buffer full. Decision: the librarian lists (`Delete:`), the main session deletes (`git rm`, `find -mtime +14`); `.claude/agents/librarian.md` joins story 02's `## Files`. Rejected: giving the librarian Bash (a memory writer that can run anything is a wider blast radius than two shell lines in the command). Also: the Contracts `run` row is added - the evolve clock needs a row per run, a run that proposes nothing included.
 
 **Approved:** <owner, date>
 **Briefed:** via grill, Andrei, 2026-09-29
