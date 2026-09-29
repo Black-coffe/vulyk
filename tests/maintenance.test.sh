@@ -160,6 +160,34 @@ if [ -s "$T/old-brief.sh" ]; then
   else bad "quiet brief grew: $new_b > $old_b B"; fi
 fi
 printf '%s' "$out" | expect_absent "the false learnings counter is gone" "awaiting GC"
+printf '%s' "$out" | expect_absent "a hive without a constitution gets no bootstrap offer" "vulyk-bootstrap now"
+
+# --- the bootstrap offer (next-circle-0-22-03) -----------------------------------------------------
+echo "--- bootstrap offered once in an unfilled hive"
+UNFILLED='| Stack | `<fill in>` |'; FILLED='| Stack | bash |'
+profile() { # profile <hive> <file> <row>... - a constitution with a Profile block holding the rows
+  local h="$1" f="$2"; shift 2
+  { echo "# c"; echo "<!-- VULYK:PROFILE:START -->"; echo "| Field | Value |"; echo "|---|---|"
+    printf '%s\n' "$@"; echo "<!-- VULYK:PROFILE:END -->"; } > "$h/$f"
+}
+H="$(hive boot-unfilled)"; profile "$H" CLAUDE.md "$UNFILLED"
+brief_of "$H" | expect "a <fill in Profile gets the offer" "run /vulyk-bootstrap now"
+brief_of "$H" | expect "the offer tells how a decline is recorded" "| Bootstrap | declined <date> |"
+H="$(hive boot-crlf)"; profile "$H" CLAUDE.md "$UNFILLED"; sed -i 's/$/\r/' "$H/CLAUDE.md"
+brief_of "$H" | expect "a CRLF constitution with <fill in gets the offer" "run /vulyk-bootstrap now"
+H="$(hive boot-filled)"; profile "$H" CLAUDE.md "$FILLED"
+brief_of "$H" | expect_absent "a filled Profile gets no offer" "vulyk-bootstrap now"
+H="$(hive boot-outside)"; profile "$H" CLAUDE.md "$FILLED"; echo "see \`<fill in>\` in the template" >> "$H/CLAUDE.md"
+brief_of "$H" | expect_absent "<fill in outside the Profile block is not an offer" "vulyk-bootstrap now"
+H="$(hive boot-vulyk-repo)"; profile "$H" CLAUDE.md "$UNFILLED"; mkdir -p "$H/telemetry/inbox"
+brief_of "$H" | expect_absent "VULYK's own repo (telemetry/inbox/) gets no offer" "vulyk-bootstrap now"
+H="$(hive boot-declined)"; profile "$H" CLAUDE.md "$UNFILLED" '| Bootstrap | declined 2026-09-29 |'
+brief_of "$H" | expect_absent "a Bootstrap declined row silences the offer" "vulyk-bootstrap now"
+H="$(hive boot-vulyk-md)"; profile "$H" CLAUDE.md "$UNFILLED"; profile "$H" CLAUDE.vulyk.md "$FILLED"
+brief_of "$H" | expect_absent "CLAUDE.vulyk.md is read before CLAUDE.md (filled: no offer)" "vulyk-bootstrap now"
+H="$(hive boot-vulyk-md-open)"; profile "$H" CLAUDE.md "$FILLED"; profile "$H" CLAUDE.vulyk.md "$UNFILLED"
+brief_of "$H" | expect "CLAUDE.vulyk.md is read before CLAUDE.md (unfilled: offer names it)" "Profile in CLAUDE.vulyk.md is not filled in"
+brief_of "$SRC" | expect_absent "this repo's own brief has no offer" "vulyk-bootstrap now"
 
 # --- the evolve ledger (auto-maintenance-03) ------------------------------------------------------
 echo "--- evolve ledger"

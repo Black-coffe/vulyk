@@ -1,8 +1,8 @@
 ---
 story: next-circle-0-22-03
 spec: next-circle-0-22
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 model: sonnet
@@ -38,14 +38,22 @@ to the Profile so it is never asked again.
 `memory/map/scripts.md` - the brief's due rules.
 
 ## Acceptance criteria
-- [ ] Fixtures: a `<fill in` Profile → offer; filled → none; `telemetry/inbox/` present → none; a `Bootstrap | declined` row → none; `CLAUDE.vulyk.md` preferred over `CLAUDE.md`.
-- [ ] This repo's own brief prints no offer.
-- [ ] `/vulyk-bootstrap` says the brief offers it and how a decline is recorded.
+- [x] Fixtures: a `<fill in` Profile → offer; filled → none; `telemetry/inbox/` present → none; a `Bootstrap | declined` row → none; `CLAUDE.vulyk.md` preferred over `CLAUDE.md`.
+- [x] This repo's own brief prints no offer.
+- [x] `/vulyk-bootstrap` says the brief offers it and how a decline is recorded.
 
 ## Verification
 `bash tests/maintenance.test.sh`
 `bash tests/telemetry.test.sh`
 
 ## Implementation notes
+- `session-start-brief.sh`: the offer line sits right after the map line (it is for before the first
+  task). `<fill in` is looked for only between the `VULYK:PROFILE` markers, so a `<fill in` elsewhere in
+  the constitution never offers; the `Bootstrap | declined` row is grepped across the whole file, like the
+  litopys `Chronicle` row. CRLF constitutions work (the marker and row patterns are substrings/prefixes).
+- `tests/maintenance.test.sh`: 11 cases - unfilled, CRLF unfilled, filled, `<fill in` outside the block,
+  `telemetry/inbox/`, declined row, `CLAUDE.vulyk.md` over `CLAUDE.md` both ways, no constitution (the
+  quiet hive, whose size check still holds), and this repo. With the old hook 4 fail; now 65 checks, 0 failed.
+- `docs/hooks-reference.md` and `/vulyk-bootstrap` describe the offer and the decline row.
 
 ## Findings
