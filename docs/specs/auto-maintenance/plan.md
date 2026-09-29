@@ -81,7 +81,7 @@ cap, and CLAUDE.md is trimmed to meet it. The learnings buffer is cleaned once f
 
 **Approved:** <owner, date>
 **Briefed:** via grill, Andrei, 2026-09-29
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/auto-maintenance
 **Checked:** <written by scripts/human-check.sh>
 **Council:** <written by scripts/cycle.sh judge/escalate>
 **Shipped:** <written by scripts/ship-check.sh --record>
