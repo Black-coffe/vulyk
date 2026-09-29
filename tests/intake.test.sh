@@ -177,6 +177,23 @@ echo "  median defect-intake.sh: ${m} ms over 30 calls ($SRCNAME; target <= 200 
 if [ "$m" -le 200 ]; then ok "median latency <= 200 ms"
 else bad "median latency ${m} ms > 200 ms"; fi
 
+# --- --lexicon: the same word list as portable ERE, for litopys corrections (evolve-corrections-count)
+echo "--- --lexicon exports the lexicon as ERE lines"
+timeout 10 bash "$HOOK" --lexicon > "$T/lex.txt" < <(sleep 30)   # an open stdin that never ends: reading it would time out
+[ $? -eq 0 ] && ok "--lexicon exits 0 without reading stdin" || bad "--lexicon read stdin or failed"
+LX=""; for l in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do locale -a 2>/dev/null | grep -qx "$l" && { LX="$l"; break; }; done
+lex() { printf '%s\n' "$1" | LC_ALL="${LX:-C.UTF-8}" grep -Eiq -f "$T/lex.txt"; }
+lex "переделайте это" && ok "a stem matches at a word start (переделайте)" || bad "stem at word start missed"
+lex "непеределай" && bad "a stem inside a word matched (непеределай)" || ok "neighbour: a stem inside a word does not match"
+lex "again!" && ok "a phrase with a punctuation edge matches (again!)" || bad "phrase at an edge missed"
+lex "against it" && bad "a phrase inside a longer word matched (against)" || ok "neighbour: a phrase needs both edges (against)"
+lex "Опять не то" && ok "a capitalised Cyrillic stem matches under a UTF-8 locale" || bad "Cyrillic case not folded"
+[ "$(grep -c . "$T/lex.txt")" -eq "$("$PYBIN" -c "
+import ast,re,sys
+s=open(sys.argv[1],encoding='utf-8').read()
+print(sum(len(ast.literal_eval(re.search(r'^%s = (\[.*\])' % k, s, re.M).group(1))) for k in ('STEMS', 'WORDS')))" "$HOOK")" ] \
+  && ok "one ERE line per stem and phrase of the hook's own lists" || bad "the export and the hook's lists differ in length"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1
