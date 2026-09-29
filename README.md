@@ -219,7 +219,7 @@ Each cycle is a ratchet: the colony clicks forward and never slips back.
 
 | Hook | Event | Effect |
 |---|---|---|
-| `session-start-brief.sh` | SessionStart | Injects memory freshness + pending-learnings line into context |
+| `session-start-brief.sh` | SessionStart | Injects memory freshness, and a `maintenance due` line when gc, evolve or a map refresh is due - the Queen runs them herself |
 | `top-model-brief.sh` | SessionStart | Announces the gate model the plan resolved to (`fable` on Max, `opus` on Pro), the Tier 4 pairing, and whether your session is pinned to `opus` — reads only, never writes |
 | `anomaly-scan.sh` | SessionEnd | Runs the anomaly detectors once per session into `memory/stats/anomalies.jsonl` — local, silent, fail-open ([docs/telemetry.md](docs/telemetry.md)) |
 | `skill-usage-counter.sh` | PostToolUse (Skill) | Increments per-skill counters → fuel for `skill-gardener` |

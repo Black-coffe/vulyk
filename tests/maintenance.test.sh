@@ -16,6 +16,17 @@ PYBIN="$(command -v python3 || command -v python)" || { echo "maintenance.test.s
 LEDGER="$T/checks"; FAILS="$T/fails"; : > "$LEDGER"; : > "$FAILS"
 ok()  { printf 'x\n' >> "$LEDGER"; echo "  ok    $1"; }
 bad() { printf 'x\n' >> "$LEDGER"; printf 'x\n' >> "$FAILS"; echo "::error::$1"; }
+expect() { # expect <label> <needle>   (reads the output to judge from stdin)
+  local label="$1" needle="$2" out; out="$(cat)"
+  if printf '%s' "$out" | grep -qF -- "$needle"; then ok "$label"
+  else bad "$label - expected '$needle' in:"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+}
+expect_absent() { # expect_absent <label> <needle>   (reads the output to judge from stdin)
+  local label="$1" needle="$2" out; out="$(cat)"
+  if printf '%s' "$out" | grep -qF -- "$needle"; then
+    bad "$label - did NOT expect '$needle' in:"; printf '%s\n' "$out" | sed 's/^/        /'
+  else ok "$label"; fi
+}
 
 CONSTITUTION_MAX_BYTES=7168
 CONSTITUTION_MAX_LINES=120
@@ -81,6 +92,74 @@ done
 desc="$(cat "$SRC"/.claude/agents/*.md "$SRC"/.claude/commands/*.md | tr -d '\r' | grep '^description:' | wc -c | tr -d ' ')"
 if [ "$desc" -le "$DESCRIPTIONS_MAX_BYTES" ]; then ok "agent + command descriptions within $DESCRIPTIONS_MAX_BYTES B ($desc B)"
 else bad "agent + command descriptions $desc B > $DESCRIPTIONS_MAX_BYTES B"; fi
+
+# --- due maintenance: the SessionStart brief (auto-maintenance-02) ---------------------------------
+BRIEF_HOOK="$SRC/.claude/hooks/session-start-brief.sh"
+iso_ago() { date -u -d "-$1 days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-"$1"d +%Y-%m-%dT%H:%M:%SZ; }
+hive() { # hive <name> - a fresh fixture hive: git repo on main with one commit, empty memory
+  local h="$T/$1"
+  mkdir -p "$h/memory/learnings" "$h/memory/stats" "$h/memory/map"
+  echo "# learnings" > "$h/memory/learnings/README.md"
+  git -C "$h" init -q -b main 2>/dev/null || { git -C "$h" init -q; git -C "$h" checkout -q -b main; }
+  git -C "$h" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  echo "$h"
+}
+brief_of() { echo '{}' | CLAUDE_PROJECT_DIR="$1" bash "${2:-$BRIEF_HOOK}" 2>&1; }
+stub()   { printf '# Session x\n<!-- Stub captured by VULYK. Replace with 1-6 bullets -->\n' > "$1"; }
+council_row() { printf '{"ts":"%s","spec":"s","round":1,"verdict":"GREEN"}\n' "$2" >> "$1/memory/stats/council.jsonl"; }
+run_row()     { printf '{"ts":"%s","kind":"run","proposals":0}\n' "$2" >> "$1/memory/stats/evolve.jsonl"; }
+
+echo "--- due maintenance: gc"
+H="$(hive gc-stub)"; stub "$H/memory/learnings/2026-09-14_090058.md"
+brief_of "$H" | expect "a stub learning makes gc due" "gc (1 stub, 0 raw learnings)"
+H="$(hive gc-nine)"; for i in 1 2 3 4 5 6 7 8 9; do echo "- real $i" > "$H/memory/learnings/l$i.md"; done
+brief_of "$H" | expect_absent "9 real learnings: gc not due" "maintenance due"
+echo "- real 10" > "$H/memory/learnings/l10.md"
+brief_of "$H" | expect "10 real learnings: gc due" "gc (0 stub, 10 raw learnings)"
+echo "- merged" > "$H/memory/learnings/CONSOLIDATED.md"
+brief_of "$H" | expect "CONSOLIDATED.md is not counted as raw" "gc (0 stub, 10 raw learnings)"
+
+echo "--- due maintenance: evolve"
+H="$(hive ev-never)"; council_row "$H" "$(iso_ago 3)"
+brief_of "$H" | expect "never run + a council round: evolve due" "evolve (never run; 1 council rounds on record)"
+H="$(hive ev-quiet)"
+brief_of "$H" | expect_absent "never run, no council round: nothing to learn from" "evolve ("
+H="$(hive ev-fresh)"; run_row "$H" "$(iso_ago 2)"; council_row "$H" "$(iso_ago 1)"
+brief_of "$H" | expect_absent "last run 2 days ago: not due" "evolve ("
+H="$(hive ev-week)"; run_row "$H" "$(iso_ago 8)"; council_row "$H" "$(iso_ago 1)"
+brief_of "$H" | expect "last run 8 days ago + a newer council round: due" "council rounds since)"
+H="$(hive ev-idle)"; council_row "$H" "$(iso_ago 9)"; run_row "$H" "$(iso_ago 8)"
+brief_of "$H" | expect_absent "last run 8 days ago, no council round since: not due" "evolve ("
+H="$(hive ev-over)"; run_row "$H" "$(iso_ago 30)"; council_row "$H" "$(iso_ago 1)"
+brief_of "$H" | expect "last run 30 days ago: overdue, the sunset question" "overdue: ask the owner once whether to retire it"
+printf '{"ts":"%s","kind":"proposal","branch":"b"}\n' "$(iso_ago 1)" >> "$H/memory/stats/evolve.jsonl"
+brief_of "$H" | expect "a proposal row is not a run" "overdue"
+H="$(hive ev-pending)"; council_row "$H" "$(iso_ago 1)"
+git -C "$H" branch vulyk/evolve-2026-09-20
+git -C "$H" checkout -q vulyk/evolve-2026-09-20
+git -C "$H" -c user.email=t@t -c user.name=t commit -q --allow-empty -m change
+git -C "$H" checkout -q main
+out="$(brief_of "$H")"
+printf '%s' "$out" | expect "an unmerged evolve branch waits for review" "vulyk/evolve-2026-09-20 waits for the owner's review"
+printf '%s' "$out" | expect_absent "a pending changeset is not due again" "evolve (never run"
+git -C "$H" -c user.email=t@t -c user.name=t merge -q --ff-only vulyk/evolve-2026-09-20
+out="$(brief_of "$H")"
+printf '%s' "$out" | expect_absent "a merged evolve branch is not pending" "waits for the owner's review"
+
+echo "--- due maintenance: map, quiet hive, size"
+H="$(hive map-stale)"; date +%Y-%m-%dT%H:%M:%S > "$H/memory/map/.stale"
+brief_of "$H" | expect "the post-merge flag makes map due" "map (flagged stale after a merge"
+brief_of "$H" | expect "the due line names the Skill to run" "Skill tool (vulyk-map)"
+H="$(hive quiet)"; echo "- one real" > "$H/memory/learnings/a.md"
+git -C "$SRC" show d519f22:.claude/hooks/session-start-brief.sh > "$T/old-brief.sh" 2>/dev/null
+out="$(brief_of "$H")"
+printf '%s' "$out" | expect_absent "a quiet hive gets no maintenance line" "maintenance due"
+if [ -s "$T/old-brief.sh" ]; then
+  new_b="$(printf '%s' "$out" | wc -c | tr -d ' ')"; old_b="$(brief_of "$H" "$T/old-brief.sh" | wc -c | tr -d ' ')"
+  if [ "$new_b" -le "$old_b" ]; then ok "quiet brief no longer than v0.20.0's ($new_b <= $old_b B)"
+  else bad "quiet brief grew: $new_b > $old_b B"; fi
+fi
+printf '%s' "$out" | expect_absent "the false learnings counter is gone" "awaiting GC"
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
