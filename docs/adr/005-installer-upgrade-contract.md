@@ -263,3 +263,17 @@ unchanged.
    hive was installed from. A retired `OWNED` file that differs from `v<stamp>:<path>` (CR
    ignored) is kept and printed `keep (edited)  <path> ...`, and it falls out of the manifest -
    it is the owner's now. With no clone, no such tag or no such path in it, D2 applies unchanged.
+
+### 2026-09-30 (spec `hindsight-harvest`, v0.23.0): a renamed or narrowed host field ships with its migration line
+
+What happened: the 0.19 build contract renamed the defect-card field `area:` (the plan's "path masks and/or commands")
+to `paths:` and made `area:` an ignored label. The pilot library had been written against the plan's meaning, and
+nothing in the upgrade said so. As a result, `defects-inject.sh` shipped unable to deliver any `text` card of the library
+it was generalised from, and no gate noticed for two releases (study `docs/specs/hindsight-memory/`, board round 2).
+
+Rule: a release that renames, narrows or retires a field that host-authored files carry must ship, in that same release,
+a check in the host's own gate that names the old form, and a line in the `--upgrade` report that names it too. Host-authored
+fields include defect-card frontmatter, Profile rows, marker names and story frontmatter. The installer still never
+rewrites host-authored content. v0.23.0's `UNDELIVERABLE ... (area: is a label, not a glob)` is the gate half of this
+rule for `area:`. The deciding factor: a silent contract rename turns a host's working configuration into dead text, and
+only the release that makes the rename knows it happened. Status line unchanged.
