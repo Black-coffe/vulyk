@@ -5,3 +5,4 @@
 {"ts":"2026-09-15T11:34:11Z","spec":"anomaly-telemetry","version":"0.14.0","head":"ce2d1f1","pack":"c3cdb6873008","note":"merged to main, publish pending"}
 {"ts":"2026-09-15T18:46:21Z","spec":"driver-hardening","version":"0.15.0","head":"d860312","pack":"3a929636825c","note":"merged to main, publish pending"}
 {"ts":"2026-09-24T14:45:15Z","spec":"convergent-judge","version":"0.17.0","head":"3db0999","pack":"7d38d6f5bb1e","note":"merged to main, publish pending; gate READY at 76c38f6 before the release commit (CHANGELOG/VERSION read as code by ship-check - next circle)"}
+{"ts":"2026-09-29T13:52:14Z","spec":"auto-maintenance","version":"0.21.0","head":"4e1f167","pack":"6edcd818434f","note":"merged to main, publish pending"}
