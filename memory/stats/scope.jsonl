@@ -142,3 +142,4 @@
 {"ts":"2026-09-29T12:42:30Z","story":"auto-maintenance-02-due-maintenance","declared":8,"changed":9,"out_of_scope":1}
 {"ts":"2026-09-29T13:07:13Z","story":"auto-maintenance-03-evolve-ledger","declared":6,"changed":7,"out_of_scope":1}
 {"ts":"2026-09-29T13:32:48Z","story":"auto-maintenance-04-repair-round-1","declared":14,"changed":5,"out_of_scope":1}
+{"ts":"2026-09-29T14:26:46Z","story":"skills-json-exempt-01-ship-gate","declared":2,"changed":3,"out_of_scope":1}
