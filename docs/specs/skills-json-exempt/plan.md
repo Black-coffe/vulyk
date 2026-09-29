@@ -37,4 +37,4 @@ named. Any other dirty path still blocks.
 **Branch:** vulyk/skills-json-exempt
 **Checked:** <written by scripts/human-check.sh>
 **Council:** GREEN round 1, 2026-09-29, at 0a70d51, pack 12e6bd85e27d
-**Shipped:** <written by scripts/ship-check.sh --record>
+**Shipped:** 0.21.1, 2026-09-29, at 2eb221b - merged to main, published with v0.21.0
