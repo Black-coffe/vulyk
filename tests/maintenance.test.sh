@@ -288,6 +288,32 @@ PY
 for t in "${TOKENS[@]}"; do expect "handoff.py fallback masks a ${t%% *} token" "${t%% *} masked" < "$T/fallback"; done
 for t in "${KEEP[@]}"; do expect "handoff.py fallback leaves a ${t%% *} alone" "${t%% *} kept" < "$T/fallback"; done
 
+# --- /vulyk-gc refuses a gutted CONSOLIDATED.md (hindsight-harvest-03) --------------------------------
+echo "--- /vulyk-gc commit line refuses to commit a CONSOLIDATED.md that lost more than half"
+GC_LINE="$(tr -d '\r' < "$SRC/.claude/commands/vulyk-gc.md" | sed -n 's/^`\(f=memory\/learnings\/CONSOLIDATED\.md;.*\)`$/\1/p')"
+[ -n "$GC_LINE" ] && ok "vulyk-gc.md carries the guarded commit line" || bad "no guarded commit line in vulyk-gc.md"
+entries() { local i; printf '# Consolidated learnings\n\n## Topic\n'; for i in $(seq 1 "$1"); do printf '%s. lesson number %s, with a reason\n' "$i" "$i"; done; }
+gc_case() { # gc_case <dir> <entries at HEAD, or new> <entries now> - runs the line, prints its output
+  local g="$T/$1"; mkdir -p "$g/memory/learnings" && cd "$g" || return 1
+  git init -q -b main . && git config user.name t && git config user.email t@t && git config core.autocrlf false
+  printf '# index\n' > memory/memory.md
+  if [ "$2" != new ]; then entries "$2" > memory/learnings/CONSOLIDATED.md; fi
+  git add -A && git commit -q -m base
+  entries "$3" > memory/learnings/CONSOLIDATED.md
+  bash -c "$GC_LINE" 2>&1; echo "commits=$(git rev-list --count HEAD)"
+  cd "$SRC" || return 1
+}
+gc_case cut 10 4 > "$T/gc-cut"
+expect "10 entries -> 4: refused" "gc: refused - CONSOLIDATED.md lost more than half" < "$T/gc-cut"
+expect "a refusal commits nothing" "commits=1" < "$T/gc-cut"
+expect "the counts are printed" "CONSOLIDATED.md: entries 10→4" < "$T/gc-cut"
+gc_case trim 10 7 > "$T/gc-trim"
+expect_absent "10 entries -> 7: not refused" "refused" < "$T/gc-trim"
+expect "10 entries -> 7: committed" "commits=2" < "$T/gc-trim"
+gc_case fresh new 3 > "$T/gc-fresh"
+expect "a file new at HEAD: committed" "commits=2" < "$T/gc-fresh"
+expect "a file new at HEAD prints 0 as the old count" "CONSOLIDATED.md: entries 0→3" < "$T/gc-fresh"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1
