@@ -14,8 +14,8 @@
 ## Unmapped territory
 - `docs/` narrative pages (architecture.md, pipeline.md, cycle.md, token-economy.md,
   model-cascade.md, command-reference.md, getting-started.md) and `docs/adr/` beyond ADR-001
-- `templates/`, `bootstrap/interview.md`, `.claude/hooks/`, `install.sh`, `scripts/vulyk-update.sh`'s
-  own upgrade mechanics, `tests/` harness internals beyond what council.test.sh/cycle.test.sh
+- `templates/`, `bootstrap/interview.md`, `.claude/hooks/` (bar the SessionStart brief, in scripts.md),
+  `install.sh` (upgrade contract in scripts.md), `scripts/vulyk-update.sh`'s own mechanics, `tests/` harness internals beyond what council.test.sh/cycle.test.sh
   cover, `.github/workflows/ci.yml` beyond the two test jobs
 
 ## Wiki domains
@@ -33,6 +33,7 @@
 - Ship gate, per spec: `bash scripts/ship-check.sh docs/specs/<slug>`
 - Cycle status, per spec: `bash scripts/cycle.sh status docs/specs/<slug> --json`
 - Token report, per spec: `python scripts/token-report.py . --spec <slug>`
+- Constitution/brief/evolve-ledger tests: `bash tests/maintenance.test.sh`
 - Cycle state contract tests: `bash tests/cycle.test.sh`
 - Council verdict contract tests: `bash tests/council.test.sh` (`--quick` for ~3 min)
 - Driver contract / end to end: `bash tests/driver.test.sh`, `bash tests/e2e.test.sh`
@@ -44,14 +45,10 @@
 - Next brief's draft (round-2 UNASKED, ten review minors, ship-gate staleness on release paperwork): docs/specs/fable-review-remainders/plan.md `## Next circle`, CHANGELOG 0.13.1; the Fable majors of v0-12-0-remainders are closed there
 - Dispatch failure reasons from verb exit codes, seat reports by file (v0.13.1, proposed): docs/adr/009-dispatch-failure-reasons-and-report-by-file.md
 
-- Anomaly telemetry, opt-in (v0.14.0, 2026-09-15): docs/telemetry.md — `scripts/telemetry.sh`
-  (enum/agents/consent/record/scan/bundle/check/publish/inbox), the `anomaly-scan.sh` hook
-  (SessionEnd only since 0.18), the installer consent question, the `/vulyk-evolve` weekly
-  distil-and-clear; never sends on its own, `publish` only prints a copy recipe
-- Driver hardening (v0.15.0, 2026-09-15): docs/adr/011-driver-hardening.md — clerk retry on a
-  garbled relay, `skills.json`+`memory/learnings/*.md` as cycle paperwork, `close-story`
-  tolerates a self-marked `status: done`, taint is the story file not a bare `<slug>-NN`, five
-  mutating verbs carry post-verb `status`
+- Anomaly telemetry, opt-in (v0.14.0): docs/telemetry.md — `scripts/telemetry.sh`, `anomaly-scan.sh` (SessionEnd); `publish` only prints a copy recipe
+- Driver hardening (v0.15.0): docs/adr/011-driver-hardening.md — clerk retry, self-marked `done`, taint = story file
+- Sonnet executes, Opus judges (v0.20.0, 2026-09-28): docs/adr/015-sonnet-execution-rung-and-model-floor.md — workers/scouts/drone-docs on `sonnet`, repair stories `opus`
+- Auto-maintenance (v0.21.0, 2026-09-29): docs/specs/auto-maintenance/plan.md, docs/self-evolution.md — SessionStart brief runs gc/evolve/map when due, `scripts/evolve-ledger.py`, `tests/maintenance.test.sh` caps
 - Convergent judge (v0.17.0, 2026-09-24): docs/specs/convergent-judge/ + ADR-001 D3/D4 amendments — tier ceiling on RED rounds, no-progress, anchored BLOCK
 - Light VULYK (v0.18.0, 2026-09-27): docs/adr/013-light-vulyk.md + docs/specs/token-audit/ — single agent below Tier 3, advance verb, converging council, token-report
 - Consolidated: memory/learnings/CONSOLIDATED.md (run /vulyk-gc to refresh)
