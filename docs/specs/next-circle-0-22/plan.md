@@ -62,7 +62,7 @@ For each host repository (A3), in this order - Varto first (the one on 0.19.1), 
 
 **Approved:** Andrei, 2026-09-29 - "да" to the next-circle list; grill answers in brief.md
 **Briefed:** <written by scripts/cycle.sh briefed>
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/next-circle-0-22
 **Checked:** <written by scripts/human-check.sh>
 **Council:** <written by scripts/cycle.sh judge/escalate>
 **Shipped:** <written by scripts/ship-check.sh --record>
