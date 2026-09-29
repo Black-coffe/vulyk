@@ -33,9 +33,9 @@ Tier 2-4 plans stop for the owner's approval (`**Approved:**`) unless `/vulyk-pl
 ## Models and effort
 
 Route by family, never by version: Sonnet executes (workers, scout, docs drone, clerk), Opus orchestrates and judges (the Queen, planner, reviewers, council, coverage, librarian), Fable holds the gate, Haiku nothing until one reaches the floor. The family that builds never judges (one recorded gap: the Tier 4 second reviewer is Sonnet where the gate is Opus). A repair story after a RED round climbs to Opus.
-Model floor: no dispatch below `scripts/lib.sh` `model_floor` (today Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5); always the newest of each family. `bash scripts/top-model.sh --floor` checks the config, telemetry `model_below_floor` what really ran. `TOP_MODEL = auto` names the gate model (`scripts/top-model.sh`; replace `auto` with an alias to pin).
+Model floor: no dispatch below `scripts/lib.sh` `model_floor`; always the newest of each family. `bash scripts/top-model.sh --floor` checks the config, telemetry `model_below_floor` what really ran. `TOP_MODEL = auto` names the gate model (`scripts/top-model.sh`; replace `auto` with an alias to pin).
 Pass it as `model:` only on the Tier 4 review, `lead-architect`, the Tier 4 `queen-planner` and a missed story's retry.
-Effort lives in agent frontmatter; on Opus 5.5 and Fable 5.1 changing it keeps the cache, a `/model` switch does not.
+Effort lives in agent frontmatter (cache effects: `docs/model-cascade.md`).
 Details: `docs/model-cascade.md`, `docs/adr/015-sonnet-execution-rung-and-model-floor.md`, `docs/cycle.md`, `docs/token-economy.md`.
 
 ## Secrets
@@ -69,26 +69,15 @@ A filled *Client path* adds the black-box seat, the only reader of *Browser MCP*
 Quiet variants only: their output is resent every turn. A story's `## Verification` must name one.
 
 <!-- VULYK:COMMANDS:START -->
-<!-- Everything between these two markers is VULYK's own and is replaced with blank placeholders
-     by install.sh when the constitution is copied into another project. Keep both markers on
-     their own lines; install.sh warns loudly if it cannot find them. -->
+<!-- install.sh swaps this block for placeholders elsewhere; keep both markers on their own lines. -->
 
-> **Installed VULYK into your own project? These rows are wrong for you.** They are VULYK's own,
-> correct for this repository — a shell + Python + markdown toolkit with no compiler and no test
-> runner — and `/vulyk-bootstrap` replaces every one of them with your project's commands. Until it
-> does, treat a green result here as meaningless: a command that verifies nothing still exits 0.
+> VULYK's own rows: `/vulyk-bootstrap` replaces them in your project; until then a green here proves nothing.
 
 | Purpose | Command |
 |---|---|
 | Shell syntax, all scripts | `git ls-files '*.sh' \| xargs -n1 bash -n` |
 | Python syntax, hooks | `python -m py_compile .claude/hooks/*.py` |
 | JSON validity | `git ls-files '*.json' \| xargs -n1 jq -e . > /dev/null` |
-| Hook self-diagnosis | `bash .claude/hooks/handoff.sh status` |
-| Scope gate, per story | `bash scripts/scope-check.sh <story-file>` |
-| Story gate, per spec | `bash scripts/wave-check.sh docs/specs/<slug>` |
-| Ship gate, per spec | `bash scripts/ship-check.sh docs/specs/<slug>` |
-| Cycle status, per spec | `bash scripts/cycle.sh status docs/specs/<slug> --json` |
-| Token report, per spec | `python scripts/token-report.py . --spec <slug>` |
 | Cycle state contract tests | `bash tests/cycle.test.sh` |
 | Council verdict contract tests | `bash tests/council.test.sh` |
 | Council verdict contract tests, quick | `bash tests/council.test.sh --quick` |
@@ -96,16 +85,12 @@ Quiet variants only: their output is resent every turn. A story's `## Verificati
 | Driver + cycle end to end | `bash tests/e2e.test.sh` |
 | Solo path, Tier 1-2 | `bash tests/solo.test.sh` |
 | Anomaly telemetry contract tests | `bash tests/telemetry.test.sh` |
-| Defect library gate, before showing work | `bash scripts/defects-check.sh [<arg>]` |
-| Defect library and hooks contract tests | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
+| Defect library gate | `bash scripts/defects-check.sh [<arg>]` |
+| Defect library and hook tests | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
+| Maintenance, evolve ledger, context budget | `bash tests/maintenance.test.sh` |
 | Full suite / build | none exists — VULYK has no test runner and no build step |
 
-The first four are silent on success and non-zero on failure; run them together as the closest
-thing this repo has to a suite. The three gates are different on purpose: they always exit 0 and
-report — their output is the signal, blocking is a human's or lead-review's decision. `py_compile` writes a gitignored `__pycache__/` — do not commit it.
-The absent last row is deliberate: VULYK's shipped behaviour is verified by running the hooks
-against real transcripts, not by a suite. Say so plainly rather than inventing a command that
-proves nothing.
+The first three are silent on success. `py_compile` writes a gitignored `__pycache__/`: never commit it.
 
 <!-- VULYK:COMMANDS:END -->
 
