@@ -183,6 +183,12 @@ Plan §Descoped, round-3 Major 3 (`plan.md:157`):
 > record: a session that used a skill leaves the ship gate NOT READY until the owner commits
 > `skills.json` by hand.
 
+> **Reversed 2026-09-29 (0.21.1, `docs/specs/skills-json-exempt`).** Since 0.21.0 maintenance itself
+> runs through the Skill tool, so the `PostToolUse(Skill)` hook dirties `skills.json` in nearly every
+> session. `ship-check` stage 03 now passes a tree dirty only in `memory/stats/skills.json` and/or
+> `anomalies.jsonl` and names them; any other dirty path still blocks. `skills.json` stays outside cycle
+> ownership (no verb stages it) and `scope-check` still counts it. The owner delegated the decision.
+
 **Options:**
 1. `cycle.sh` stages `anomalies.jsonl` on every `--commit` verb; `skills.json` stays outside
    cycle ownership and under the scope gate - chosen (owner: "skills.json back under the scope

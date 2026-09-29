@@ -12,6 +12,16 @@ if [ -n "${newest_map:-}" ]; then
 fi
 echo "[VULYK] $map_age | start at memory/memory.md"
 
+# bootstrap (0.22): offered once, before the first task, while the Profile block still holds a
+# `<fill in` row. Never in VULYK itself (telemetry/inbox/: its Profile is the template); a
+# `| Bootstrap | declined ... |` row in the constitution silences it for good.
+const="$ROOT/CLAUDE.md"; [ -f "$ROOT/CLAUDE.vulyk.md" ] && const="$ROOT/CLAUDE.vulyk.md"
+if [ ! -d "$ROOT/telemetry/inbox" ] && [ -f "$const" ] &&
+   sed -n '/<!-- VULYK:PROFILE:START -->/,/<!-- VULYK:PROFILE:END -->/p' "$const" | grep -q '<fill in' &&
+   ! grep -qE '^\|[[:space:]]*Bootstrap[[:space:]]*\|[[:space:]]*`?declined' "$const"; then
+  echo "[VULYK] the Profile in ${const##*/} is not filled in. Before the owner's first task, ask once: run /vulyk-bootstrap now (the Skill tool, vulyk-bootstrap - an interview, never run without a yes) or decline (then add Profile row \`| Bootstrap | declined <date> |\`)."
+fi
+
 # Maintenance that runs itself (spec auto-maintenance): computed from files and git on every start,
 # printed only when something is due, so a quiet hive pays nothing. The Queen runs what is due after
 # the owner's task; nobody has to know /vulyk-gc, /vulyk-evolve or /vulyk-map exist.

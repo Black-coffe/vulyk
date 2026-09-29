@@ -1,8 +1,8 @@
 ---
 story: next-circle-0-22-02
 spec: next-circle-0-22
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 model: sonnet
@@ -39,14 +39,22 @@ printed-not-run (`/vulyk-ship` step 3 unchanged).
 `memory/map/agents-and-commands.md` - build, review, ship.
 
 ## Acceptance criteria
-- [ ] `vulyk-build.md` `green` names the question, the Skill `vulyk-ship` on yes, and the one-line fallback.
-- [ ] `vulyk-review.md` `green` does the same.
-- [ ] `docs/cycle.md` stage 06 says the build asks.
-- [ ] A contract case in `tests/maintenance.test.sh` fails if either command's green terminal loses the question or the Skill call.
+- [x] `vulyk-build.md` `green` names the question, the Skill `vulyk-ship` on yes, and the one-line fallback.
+- [x] `vulyk-review.md` `green` does the same.
+- [x] `docs/cycle.md` stage 06 says the build asks.
+- [x] A contract case in `tests/maintenance.test.sh` fails if either command's green terminal loses the question or the Skill call.
 
 ## Verification
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- `vulyk-build.md` Terminal `green` and `vulyk-review.md` step 4 `green`: one `AskUserQuestion`
+  («<slug>: council GREEN, round <n>. Выпускаем?», yes first and recommended); yes runs `vulyk-ship`
+  with the Skill tool; no, or no `AskUserQuestion` (`claude -p`), keeps the one-line recommendation.
+  Review's step 1 `green` (already green, owner wants another round) is unchanged: it is not a finish.
+- `docs/cycle.md` stage 06 "who" cell names the question.
+- `tests/maintenance.test.sh`: `green_of` extracts every `green` bullet with its continuation lines; four
+  needles per command. Checked: with `vulyk-build.md` reverted the suite exits 1 with 4 failures; with the
+  change, 54 checks, 0 failed. No `description:` line touched.
 
 ## Findings

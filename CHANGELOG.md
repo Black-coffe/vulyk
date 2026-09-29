@@ -2,6 +2,34 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.22.0] - 2026-09-29
+
+A green build ends with one question, and an unconfigured project is offered its setup. Someone who knows
+only plan, build, update and handoff no longer has to remember `/vulyk-ship` or `/vulyk-bootstrap`.
+
+### Added
+- **«Выпускаем?» after a green council.** The `green` terminal of `/vulyk-build` and `/vulyk-review` asks
+  the owner once with `AskUserQuestion`, in the owner's language, the yes option first. A yes runs
+  `vulyk-ship` through the Skill tool in the same session: merge, version, record. A no, or a session with
+  no `AskUserQuestion` (`claude -p`), gets the old one-line recommendation. Push and publish stay the
+  owner's: ship prints them and never runs them. `tests/maintenance.test.sh` fails if either command's
+  green terminal loses the question, the Skill call or the fallback.
+- **The SessionStart brief offers `/vulyk-bootstrap` once.** While the constitution's Profile block
+  (`CLAUDE.vulyk.md` if present, else `CLAUDE.md`) still holds a `<fill in` row, one line asks the Queen
+  to offer bootstrap before the owner's first task and to run it only on a yes. It is never offered in the
+  VULYK repo itself (`telemetry/inbox/` exists), and a `| Bootstrap | declined <date> |` Profile row
+  silences it for good. A `<fill in` outside the Profile block does not count. 11 new fixture cases.
+
+### Fixed
+- **The failure marker of `tests/cycle.test.sh` lives outside the fixture repo.** It used to sit inside the
+  throwaway repository, where a first failure could dirty later stage-03 cases and be committed by
+  `git add -A`. The story-12 label now says that both `anomalies.jsonl` and `skills.json` pass through.
+
+### Docs
+- ADR-010 §F carries a dated note that 0.21.1 reversed its Story 12 line for `skills.json`.
+- README's roadmap gains the v0.21.0 / v0.21.1 line; `docs/cycle.md` stage 06 and `docs/hooks-reference.md`
+  describe the question and the offer.
+
 ## [0.21.1] - 2026-09-29
 
 ### Changed

@@ -26,7 +26,7 @@ that opens the next stage refuses when the previous stage's artifact is missing.
 | 03 | **Code** — changes live in their own branch | the Queen at Tier 1-2; workers in waves at Tier 3-4 | the branch, one commit per story | `**Branch:**` line in plan.md; git | `/vulyk-build` |
 | 04 | **Tests** — automatic: each story's own `## Verification` command, run once inside `cycle.sh close-story` (under a 540 s timeout) and repeated as the story asks | whoever built the story closes it: the Queen, or the worker itself | every story's verification green | story `## Verification` greens | `/vulyk-build` |
 | 05 | **Council** — `lead-review` judges the diff against the brief's `## Asks`; at Tier 3-4 blind seats judge the same asks from a court that cannot see the hive's stories | `lead-review` (+ `council-opus`, and `council-haiku` when the Client path is filled, at Tier 3-4) | every required seat GREEN or N/A and the review PASS | `**Council:**` line in plan.md; `memory/stats/council.jsonl` | `/vulyk-build` or `/vulyk-review` (one round) |
-| 06 | **Ship** — history fixed, branch merged locally, publish command printed and never pressed, next circle opened | Queen merges and prints; human presses when ready | the local merge, recorded | `**Shipped:**` line in plan.md; git (local merge) | `/vulyk-ship` |
+| 06 | **Ship** — history fixed, branch merged locally, publish command printed and never pressed, next circle opened | a green build or review asks «Выпускаем?» once and a yes runs `/vulyk-ship`; Queen merges and prints; human presses when ready | the local merge, recorded | `**Shipped:**` line in plan.md; git (local merge) | `/vulyk-ship` |
 
 ## Why 05 is red
 

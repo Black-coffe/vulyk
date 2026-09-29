@@ -4,7 +4,9 @@ argument-hint: [--quick to accept defaults]
 ---
 
 You are initializing VULYK for this repository. Follow `bootstrap/interview.md`. The constitution is
-`CLAUDE.vulyk.md` if it exists, else `CLAUDE.md`.
+`CLAUDE.vulyk.md` if it exists, else `CLAUDE.md`. Nobody has to know this command: while the Profile
+still holds a `<fill in` row, the SessionStart brief tells the Queen to offer it once, before the first
+task. A no is recorded as the Profile row `| Bootstrap | declined <date> |`, which silences the offer.
 
 1. Interview. Ask the script's questions in three batches (context, conventions, posture). With
    `--quick` in "$ARGUMENTS", infer the answers from the repo (package files, CI config, lockfiles,

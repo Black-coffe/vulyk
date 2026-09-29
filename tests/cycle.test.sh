@@ -11,12 +11,13 @@
 set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
-trap 'rm -rf "$T"' EXIT
+MARK="$(mktemp -u)"   # failure marker, outside the fixture repo: `git add -A` there must never see it
+trap 'rm -rf "$T" "$MARK"' EXIT
 fail=0
 expect() { # expect <label> <needle>   (reads the output to judge from stdin)
   local label="$1" needle="$2" out; out="$(cat)"
   if printf '%s' "$out" | grep -qF -- "$needle"; then echo "  ok    $label"
-  else echo "::error::$label - expected '$needle' in:"; printf '%s\n' "$out" | sed 's/^/        /'; fail=1; : > "$T/failed"; fi
+  else echo "::error::$label - expected '$needle' in:"; printf '%s\n' "$out" | sed 's/^/        /'; fail=1; : > "$MARK"; fi
 }   # `x | expect` runs in a subshell, where fail=1 is lost - the marker file carries it to the exit
 ship()  { bash scripts/ship-check.sh docs/specs/demo; }
 hcheck(){ bash scripts/human-check.sh --check docs/specs/demo; }
@@ -262,7 +263,7 @@ shiph | expect "skills.json + real code dirt -> 03 still not clean" "working tre
 git checkout -- hook-app.txt
 rm -f memory/stats/skills.json
 
-echo "story 12: council.jsonl alone dirty also blocks stage 03 - only anomalies.jsonl is the pass-through path"
+echo "story 12: council.jsonl alone dirty also blocks stage 03 - only anomalies.jsonl and skills.json pass through"
 printf '{"n":1}\n' > memory/stats/council.jsonl
 shiph | expect "council.jsonl alone dirty -> 03 not clean" "working tree is not clean"
 rm -f memory/stats/council.jsonl
@@ -394,5 +395,5 @@ man_story 04 todo 4 '[manual:../x]'
 bash scripts/wave-check.sh docs/specs/man | expect "wave-check reports a manual id with .." "manual:    man-04 is blocked_by 'manual:../x'"
 git add -A && git commit -qm "man: done" >/dev/null
 
-[ -e "$T/failed" ] && fail=1
+[ -e "$MARK" ] && fail=1
 exit $fail
