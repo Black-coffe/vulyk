@@ -243,6 +243,51 @@ for c in vulyk-build vulyk-review; do
   green_of "$c" | expect "$c green keeps the one-line fallback" "recommend \`/vulyk-ship\` in one line"
 done
 
+# --- redact.sh masks the token shapes Hindsight's list names (hindsight-harvest-02) ----------------
+echo "--- redact.sh and the handoff.py fallback mask nine more token shapes"
+rep() { printf "%${1}s" '' | tr ' ' "$2"; }   # rep <n> <char> - samples are built, never literal tokens
+TOKENS=(
+  "telegram 123456789:AA$(rep 33 b)"
+  "gitlab glpat-$(rep 20 c)"
+  "npm npm_$(rep 36 d)"
+  "pypi pypi-$(rep 60 e)"
+  "huggingface hf_$(rep 34 f)"
+  "groq gsk_$(rep 52 g)"
+  "sendgrid SG.$(rep 22 h).$(rep 43 i)"
+  "stripe s""k_live_$(rep 24 j)"
+  "slack https://hooks.slack.com/services/T0$(rep 9 K)/B0$(rep 9 L)/$(rep 24 m)"
+)
+KEEP=(
+  "git-sha $(rep 40 a)"
+  "base64-word QmFzZTY0V29yZEhlcmVJc05vdEFTZWNyZXQ"
+  "prose sk-learn"
+  "timestamp 2026-09-29T20:30:00+03:00"
+)
+printf '' | sed -E -e 's|a|b|' >/dev/null 2>&1 && ok "this sed takes -E, so redact.sh does not degrade to cat" \
+  || bad "sed -E is refused here: redact.sh passes text through unmasked"
+for t in "${TOKENS[@]}"; do
+  label="${t%% *}"; tok="${t#* }"
+  out="$(printf 'note %s end\n' "$tok" | bash "$SRC/scripts/redact.sh")"
+  case "$out" in *"$tok"*|*"[VULYK:REDACTED]"*"[VULYK:REDACTED]"*) bad "redact.sh $label: not masked once: $out" ;;
+    *"[VULYK:REDACTED]"*) ok "redact.sh masks a $label token" ;; *) bad "redact.sh $label: no mask: $out" ;; esac
+done
+for t in "${KEEP[@]}"; do
+  label="${t%% *}"; s="${t#* }"
+  out="$(printf 'note %s end\n' "$s" | bash "$SRC/scripts/redact.sh")"
+  [ "$out" = "note $s end" ] && ok "redact.sh leaves a $label alone" || bad "redact.sh $label changed: $out"
+done
+printf '%s\n' "${TOKENS[@]}" "${KEEP[@]}" > "$T/samples"
+PYTHONIOENCODING=utf-8 "$PYBIN" - "$SRC/.claude/hooks/handoff.py" "$T/samples" "$T" <<'PY' > "$T/fallback"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('handoff', sys.argv[1]); h = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(h)
+for line in open(sys.argv[2], encoding='utf-8').read().splitlines():
+    label, s = line.split(' ', 1)
+    print(label, 'masked' if '[VULYK:REDACTED]' in h.redact_text(sys.argv[3], 'note ' + s + ' end') else 'kept')
+PY
+for t in "${TOKENS[@]}"; do expect "handoff.py fallback masks a ${t%% *} token" "${t%% *} masked" < "$T/fallback"; done
+for t in "${KEEP[@]}"; do expect "handoff.py fallback leaves a ${t%% *} alone" "${t%% *} kept" < "$T/fallback"; done
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1
