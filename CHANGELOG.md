@@ -2,6 +2,19 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.24.0] - 2026-09-30
+
+The weekly evolve run counts the owner's corrections and how many of them reached `docs/defects/`. It is the first
+filed-rate number (item C3 of the Hindsight board). It needs litopys 0.4.0.
+
+### Added
+- **`defect-intake.sh --lexicon`** prints the hook's own correction lexicon as portable ERE lines. A stem matches at a word
+  start; a phrase needs both edges. There is one word list with two consumers, so the lexicon cannot fork. It reads no stdin.
+- **`/vulyk-evolve` step 1 prints `corrections (7d): <n> by lexicon · <m> in records · <u> not in docs/defects`.** The
+  reader is `litopys corrections --lexicon`. The candidates are PATH's copy, then cached plugin copies newest first, and the
+  first one that has the verb wins. Claude Code puts a user-scope plugin's `bin/` on PATH, which may be an older release.
+  When litopys is absent or too old, it prints one line and blocks nothing. The numbers are a lead with their n, never a gate.
+
 ## [0.23.0] - 2026-09-29
 
 What the editorial board took from Hindsight (study `docs/specs/hindsight-memory/`), turned into checks
