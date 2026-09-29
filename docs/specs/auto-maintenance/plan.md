@@ -85,5 +85,5 @@ cap, and CLAUDE.md is trimmed to meet it. The learnings buffer is cleaned once f
 **Briefed:** via grill, Andrei, 2026-09-29
 **Branch:** vulyk/auto-maintenance
 **Checked:** <written by scripts/human-check.sh>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Council:** RED round 1, 2026-09-29, at 69fc46d, pack bafdd6ffd419
 **Shipped:** <written by scripts/ship-check.sh --record>
