@@ -9,3 +9,4 @@
 {"ts":"2026-09-29T14:30:06Z","spec":"skills-json-exempt","version":"0.21.1","head":"2eb221b","pack":"12e6bd85e27d","note":"merged to main, published with v0.21.0"}
 {"ts":"2026-09-29T15:24:06Z","spec":"next-circle-0-22","version":"0.22.0","head":"c21bc4c","pack":"a903f3a34b16","note":"merged to main, publish pending"}
 {"ts":"2026-09-29T20:59:19Z","spec":"hindsight-harvest","version":"0.23.0","head":"2c6b272","pack":"ec8c9c15610a","note":"merged to main, publish pending"}
+{"ts":"2026-09-29T22:06:44Z","spec":"evolve-corrections-count","version":"0.24.0","head":"c57aeba","pack":"952c09d03dcd","note":"merged to main, published to GitHub"}

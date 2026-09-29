@@ -39,3 +39,4 @@ filed-rate number (the board's C3). The lexicon is the defect-intake hook's own,
 **Council:**
 **Council:** GREEN round 1, 2026-09-29, at 3a27b20, pack 952c09d03dcd
 **Shipped:**
+**Shipped:** 0.24.0, 2026-09-29, at c57aeba - merged to main, published to GitHub
