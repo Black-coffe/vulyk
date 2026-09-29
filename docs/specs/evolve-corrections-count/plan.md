@@ -34,7 +34,7 @@ filed-rate number (the board's C3). The lexicon is the defect-intake hook's own,
 
 **Approved:**
 **Briefed:** via mini-brief, Andrei, 2026-09-29
-**Branch:**
+**Branch:** vulyk/evolve-corrections-count
 **Checked:**
 **Council:**
 **Shipped:**
