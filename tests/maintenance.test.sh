@@ -202,6 +202,19 @@ grep -q '"kind":"run"' "$H/memory/stats/evolve.jsonl" && ok "the script writes c
   || bad "run row not compact: $(tail -1 "$H/memory/stats/evolve.jsonl")"
 brief_of "$H" | expect_absent "after the script's run row: evolve not due" "evolve ("
 
+# --- a green build asks to ship (next-circle-0-22-02) ---------------------------------------------
+echo "--- green terminal asks «Выпускаем?» and ships on yes"
+green_of() { # every `- \`green\`:` bullet of a command, with its continuation lines
+  tr -d '\r' < "$SRC/.claude/commands/$1.md" \
+    | awk '/^ *- `green`:/{on=1; print; next} on && (/^ *- `/ || NF==0){on=0} on{print}'
+}
+for c in vulyk-build vulyk-review; do
+  green_of "$c" | expect "$c green asks through AskUserQuestion" "AskUserQuestion"
+  green_of "$c" | expect "$c green asks «Выпускаем?»" "Выпускаем?"
+  green_of "$c" | expect "$c green runs vulyk-ship with the Skill tool on yes" "run \`vulyk-ship\` with the Skill"
+  green_of "$c" | expect "$c green keeps the one-line fallback" "recommend \`/vulyk-ship\` in one line"
+done
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1

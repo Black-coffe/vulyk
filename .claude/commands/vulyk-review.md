@@ -28,7 +28,9 @@ branch). Every call below that runs `advance` carries `timeout: 600000`.
    `--ingest` again.
 4. Release, whatever happened: `bash scripts/cycle.sh release docs/specs/<slug> $stamp`. Print the
    newest `**Council:**` line of plan.md and act on `next`:
-   - `green`: recommend `/vulyk-ship`.
+   - `green`: ask the owner once with `AskUserQuestion`, in the owner's language: «<slug>: council
+     GREEN, round <n>. Выпускаем?», yes first and recommended. Yes: run `vulyk-ship` with the Skill
+     tool (args `<slug>`). No, or no `AskUserQuestion` (`claude -p`): recommend `/vulyk-ship` in one line.
    - `build:<W>`: the round was RED and the repair story is written; it is built through `/vulyk-build`,
      never by hand in this command.
    - `escalated`: print `## Needs a human` from plan.md verbatim. The owner chooses: `human-check.sh

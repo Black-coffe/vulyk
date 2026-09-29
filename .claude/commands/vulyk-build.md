@@ -70,7 +70,11 @@ Without the Workflow tool, run the solo loop from this session with the stamp, b
 
 ## Terminal
 
-- `green`: print the round count and the newest `**Council:**` line; recommend `/vulyk-ship`.
+- `green`: print the round count and the newest `**Council:**` line, then ask the owner once with
+  `AskUserQuestion`, in the owner's language: «<slug>: council GREEN, round <n>. Выпускаем?», the yes
+  option first and marked recommended. Yes: run `vulyk-ship` with the Skill tool (args `<slug>`) in
+  this session. No, or no `AskUserQuestion` (`claude -p`): recommend `/vulyk-ship` in one line. Push
+  and publish stay the owner's: ship prints them and never runs them.
 - `escalated`: print plan.md's `## Needs a human` verbatim. The owner chooses: `bash
   scripts/human-check.sh docs/specs/<slug> ACCEPTED "<note>"`, `bash scripts/cycle.sh reopen
   docs/specs/<slug> "<decision>"`, or leaving it open.
