@@ -2,6 +2,34 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.23.0] - 2026-09-29
+
+What the editorial board took from Hindsight (study `docs/specs/hindsight-memory/`), turned into checks
+rather than prose. Hindsight itself is not installed: its plugin is deprecated by its own authors, and it
+lets the agent read lessons without ever enforcing them.
+
+### Added
+- **The defect gate sees three things it could not.** `scripts/defects-check.sh` reports each one new = red
+  and older than the library's README = one `old` line, the same rule as debt, so an upgraded host does not
+  go red for cards it already had.
+  - `UNDELIVERABLE`: a card shown as text with no `paths:`. No hook can ever deliver it, and `area:` is a label,
+    not a glob. On YouTube_AI this finds 8 old cards and 1 new one.
+  - `OVERLAP`: one normalised key on two live cards, which splits the class's quotes. A key contained in another
+    card's key is only an `ambiguous key` line.
+  - `ESCAPE`: a block card got an owner quote after its `check:` line, with no fixture or check change since.
+  - The verdict counts each kind, and there are 18 new cases in `tests/defects.test.sh`.
+- **`redact.sh` masks nine more token shapes**: Telegram bot, GitLab `glpat-`, npm, PyPI, HuggingFace, Groq,
+  SendGrid, Stripe `sk_live_`/`rk_live_` and Slack webhook paths. `handoff.py`'s fallback mirrors them. Near-misses stay
+  untouched: a git sha, a base64 word, `sk-learn`, an ISO timestamp. The samples are built at run time, so no
+  token-shaped literal lands in git.
+- **`/vulyk-gc` refuses a gutted `CONSOLIDATED.md`.** Its commit step is one shell line that always prints
+  `entries a→b, bytes a→b` and does not commit when either falls by more than half. `tests/maintenance.test.sh`
+  runs that line from the command file.
+
+### Deferred
+- The count of unfiled owner corrections in `/vulyk-evolve` ships with litopys's `corrections` command.
+- YouTube_AI's own fixes (`paths:` for its text cards, `claude -p` out of SessionEnd) are made in that repo.
+
 ## [0.22.0] - 2026-09-29
 
 A green build ends with one question, and an unconfigured project is offered its setup. Someone who knows
