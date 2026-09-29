@@ -2,6 +2,21 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.21.1] - 2026-09-29
+
+### Changed
+- **The ship gate no longer stops on the skill counter.** `ship-check.sh` stage 03 now passes a tree dirty only in
+  `memory/stats/skills.json` and/or `anomalies.jsonl`, and names them. The `PostToolUse(Skill)` hook rewrites the counter on
+  every Skill call, and since 0.21.0 maintenance itself runs through the Skill tool. This reverses ADR-010's Story 12
+  line ("real dirt"); the owner delegated the decision. Any other dirty path still blocks.
+
+### Fixed
+- **`tests/cycle.test.sh` can fail again.** Its 60 piped `x | expect` checks ran in a subshell, so a failure printed
+  `::error::` and the suite still exited 0. A marker file now carries the failure to the exit. It fails on the old gate
+  (exit 1) and passes on this one (86 checks).
+- The old "skills.json alone blocks" case passed for the wrong reason: `scope-check` had just dirtied `scope.jsonl`.
+  The case now asserts its precondition.
+
 ## [0.21.0] - 2026-09-29
 
 Maintenance runs itself. `/vulyk-gc`, `/vulyk-evolve` and `/vulyk-map` had never run in this repo: 36 of 41
