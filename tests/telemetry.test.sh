@@ -940,6 +940,12 @@ expect_eq "the anomaly log is never shipped into a hive" "0" \
   "$([ -e "$TGT/memory/stats/anomalies.jsonl" ] && echo 1 || echo 0)"
 expect_eq "the council ledger is never shipped into a hive" "0" \
   "$([ -e "$TGT/memory/stats/council.jsonl" ] && echo 1 || echo 0)"
+# auto-maintenance-03: every memory/stats ledger is per-hive runtime - a hive's evolve and SessionStart
+# brief must read its own history, never vulyk's (a shipped evolve.jsonl would stop evolve being due)
+for led in human scope ship evolve; do
+  expect_eq "the $led ledger is never shipped into a hive" "0" \
+    "$([ -e "$TGT/memory/stats/$led.jsonl" ] && echo 1 || echo 0)"
+done
 # ADR-013 D7: a fresh hive gets no learnings hook and no Stop scan
 expect_eq "fresh install: no learnings hook file" "0" \
   "$([ -e "$TGT/.claude/hooks/session-end-learnings.sh" ] && echo 1 || echo 0)"
@@ -1498,6 +1504,18 @@ expect_eq "the inbox README survives the clear" "yes" \
   "$([ -f "$INBOX/telemetry/inbox/README.md" ] && echo yes || echo no)"
 expect_eq "--clear never commits - HEAD is unchanged" "$HEAD_BEFORE" \
   "$(git -C "$INBOX" rev-parse HEAD)"
+
+# (b2) auto-maintenance round 1: /vulyk-evolve clears inside its worktree, so the deletions ride
+# the evolve branch and reach the default branch only through the owner's merge
+git -C "$INBOX" reset -q --hard HEAD
+WT="$INBOX/.claude/worktrees/evolve-test"
+git -C "$INBOX" worktree add -q "$WT" -b vulyk/evolve-test main >/dev/null 2>&1
+(cd "$INBOX" && PATH="$SHIM:$PATH" VULYK_HIVE="$WT" bash scripts/telemetry.sh inbox --clear) >/dev/null
+expect_eq "VULYK_HIVE=<worktree> --clear stages the three deletions in the worktree" "3" \
+  "$(git -C "$WT" status --porcelain | grep -c '^D  telemetry/inbox/')"
+expect_eq "... and leaves the owner's tree and index untouched" "" \
+  "$(git -C "$INBOX" status --porcelain | grep -v '^?? .claude/' || true)"
+git -C "$INBOX" worktree remove --force "$WT" >/dev/null 2>&1; git -C "$INBOX" branch -q -D vulyk/evolve-test
 
 # (c) a root with no telemetry/inbox/ (every hive): a notice, exit 0
 NOINBOX="$T/hive-no-inbox"; mkdir -p "$NOINBOX/scripts" "$NOINBOX/.claude/agents"

@@ -1,8 +1,8 @@
 ---
 story: auto-maintenance-01
 spec: auto-maintenance
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 model: sonnet
@@ -47,5 +47,9 @@ fixtures: the original case (8 531 B) and a neighbour form (bytes in budget, 121
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- CLAUDE.md 8 531 B / 121 lines -> 7 147 B / 106 lines. Cut from the Commands block (VULYK's own, swapped for placeholders in every host): the long disclaimer and closing paragraphs, and six reference rows no story ever named as a `## Verification` cell (handoff status, scope/wave/ship gates, cycle status, token report) - they stay listed in `memory/memory.md:30-35`.
+- Models: removed the version list "(today Fable 5.1, ...)" and the version-specific cache sentence (now a pointer to `docs/model-cascade.md`), per the owner's floor rule that versions live only in `model_floor`. This crosses the story's Non-goal on Models wording - recorded in plan.md `## Plan deltas`.
+- Kept the row name "Anomaly telemetry contract tests": `tests/telemetry.test.sh:351,1170` key on it; renaming it would have made the "own rows never land in a hive" check pass vacuously.
+- `tests/maintenance.test.sh` checks the repo constitution AND the shipped render (both blocks swapped for install.sh's placeholders: 6 189 B / 93 lines), the four markers, and the descriptions cap (4 623 B, today's sum). Checker proven on the v0.20.0 CLAUDE.md (8 531 B -> fails) and a 121-line neighbour (fails).
 
 ## Findings

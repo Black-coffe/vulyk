@@ -2,6 +2,66 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.21.0] - 2026-09-29
+
+Maintenance runs itself. `/vulyk-gc`, `/vulyk-evolve` and `/vulyk-map` had never run in this repo: 36 of 41
+learnings were empty stubs, and no evolve branch had ever existed. Nobody should have to know these commands.
+The study behind it: `docs/specs/rrsi-self-improvement/report.md` (Google Research's RRSI against VULYK, three
+research streams that cross-examined each other). The spec: `docs/specs/auto-maintenance/`.
+
+### Added
+- **The SessionStart brief says what is due, and the Queen does it.** Only when something is due, a second
+  line appears: `maintenance due: gc / evolve / map (...)`. It tells the main session to run each one
+  through the Skill tool once the owner's task is done, on the default branch with a clean tree, without
+  asking, and to report what changed in one line. The triggers:
+  - gc: stub learnings, or 10+ raw ones;
+  - evolve: never run, or 7+ days since the last run, with a council round since then; overdue at 28
+    days, at which point it asks the owner once whether to retire it;
+  - map: the post-merge stale flag.
+
+  An unmerged `vulyk/evolve-*` branch is reported as "waits for the owner's review". A quiet hive gets
+  no extra line, and the brief is shorter than before (384 B against 412 B).
+- **The evolve hypothesis ledger** `memory/stats/evolve.jsonl`, owned by `scripts/evolve-ledger.py`
+  (`add`, `run`, `resolve`, `window`, `last`, `pending`).
+  - The owner's verdict is read from git: a merged branch is accepted, a branch deleted unmerged is
+    rejected.
+  - Evolve reads the last 40 proposals plus every older rejection, one line each. A rejected hypothesis
+    comes back only with newer evidence.
+- **Admission rules in `/vulyk-evolve`.**
+  - Always-loaded text grows only against owner-signed evidence: a verbatim quote in a defect class
+    that code cannot check, or an accepted ADR.
+  - A change with no measurable effect must cut bytes.
+  - Every number is printed with its n.
+  - Each change answers three critic questions: does it remove a safeguard without a replacement, does
+    it add a loop without an exit, is it drawn from a single spec?
+- **Evolve builds in its own worktree** on `vulyk/evolve-<date>`, with one commit per change, and never
+  touches the owner's tree. In the VULYK repo, the telemetry inbox is cleared inside that worktree, so
+  the bundles leave the default branch only through the owner's merge.
+- **`tests/maintenance.test.sh`, a failing context budget.**
+  - The constitution must stay within 7 168 B and 120 lines (ADR-013 D7). This applies to both the repo
+    copy and the render a host receives.
+  - Agent plus command descriptions must stay within 4 623 B.
+  - The checker is proven on the original case (8 531 B) and on a neighbour form (121 lines).
+  - It also covers the due logic and the ledger: 46 checks.
+
+### Changed
+- **CLAUDE.md drops from 8 531 B / 121 lines to 7 147 B / 106 lines.**
+  - The cuts come from VULYK's own Commands block, which every host replaces anyway: the long prose, and
+    six reference rows. Those rows stay in `memory/memory.md`.
+  - The version numbers are gone from Models, per the floor rule: versions live only in `model_floor`.
+  - The constitution a host receives was already within the cap (6 266 B), and is now 6 173 B.
+- **`/vulyk-gc` finally deletes.** The librarian has no shell, so every gc had been told to delete files
+  it could not. The librarian now lists `Delete:`, and the main session runs `git rm` and prunes the
+  snapshots. gc commits its own result with a pathspec.
+- **The noisy `signal:` line in `/vulyk-evolve` is gone.** It compared weekly counts of 0–2.
+- **The installer no longer ships VULYK's own ledgers.** `human`, `scope`, `ship` and `evolve.jsonl` went
+  into every fresh hive and would have fed that hive's evolve with VULYK's history. Hives that already
+  hold them keep them.
+
+### Removed
+- The false `learnings awaiting GC: N` count, which counted stubs and README.
+- This repo's 36 stub learnings. The 4 real ones are merged into `memory/learnings/CONSOLIDATED.md`.
+
 ## [0.20.0] - 2026-09-28
 
 Sonnet 5.5 shipped, and the ladder is re-cut by kind of work, not by budget

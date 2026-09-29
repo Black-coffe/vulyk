@@ -55,5 +55,5 @@
 - Convergent judge (v0.17.0, 2026-09-24): docs/specs/convergent-judge/ + ADR-001 D3/D4 amendments — tier ceiling on RED rounds, no-progress, anchored BLOCK
 - Light VULYK (v0.18.0, 2026-09-27): docs/adr/013-light-vulyk.md + docs/specs/token-audit/ — single agent below Tier 3, advance verb, converging council, token-report
 - Consolidated: memory/learnings/CONSOLIDATED.md (run /vulyk-gc to refresh)
-- Human gates rework (2026-09-12): memory/learnings/2026-09-12-human-gates-rework.md — один стоп в начале, дальше агентный совет; «owner looks» как обязательную стадию не возвращать
+- Human gates rework (2026-09-12): memory/learnings/CONSOLIDATED.md entries 1-4 — один стоп в начале, дальше агентный совет; «owner looks» как обязательную стадию не возвращать
 - Autonomous cycle / council (v0.12.0, 2026-09-13): docs/specs/autonomous-cycle/ — mechanics in docs/adr/001-cycle-state-contract.md (ADR-001), per-spec state in docs/specs/<slug>/journal.md

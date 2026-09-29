@@ -1,8 +1,8 @@
 ---
 story: auto-maintenance-03
 spec: auto-maintenance
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 model: sonnet
@@ -65,5 +65,10 @@ the sunset rule. The installer stops shipping VULYK's runtime ledgers.
 `bash tests/solo.test.sh`
 
 ## Implementation notes
+- `scripts/evolve-ledger.py`: add / run / resolve / window / last / pending over the append-only `memory/stats/evolve.jsonl` (proposal, run, verdict rows). Verdict from git per branch: exists and merged = accepted; exists unmerged = pending (no row); gone = accepted only if the run row's tip commit reached the default branch, else rejected. `window` = last 40 proposals + every older rejection as one line (fixes RRSI's own window-forgetting, `history.py:166-185`).
+- Two defects caught by the test that ties the script to the brief: `json.dumps` default separators wrote `"kind": "run"`, which the brief's grep would never match (evolve due forever); and Windows Python printed `\r\n`, which `$(...)` keeps. Fixed with compact separators and `sys.stdout.reconfigure(encoding="utf-8", newline="\n")`.
+- `/vulyk-evolve`: new step 0 (resolve, window, pending stops the run), the noisy `signal:` sentence replaced by "every number with its n, no trend from a week", new step 4 (admission rules + critic questions), step 5 builds in `.claude/worktrees/evolve-<date>` with one commit and one ledger row per change and always a `run` row, step 6 tells the owner in one line; merge, not squash.
+- `install.sh`: `memory/stats/*.jsonl` is runtime (2). VULYK's own human/scope/ship ledgers were shipping into every fresh hive and would have fed a hive's evolve with VULYK's history. Hives that already hold them keep them; the installer never deletes.
+- `docs/self-evolution.md`: "It runs itself", ledger, judge step, worktree, "Knowledge moves down", "Sunset".
 
 ## Findings
