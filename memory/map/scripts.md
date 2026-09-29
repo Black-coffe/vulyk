@@ -1,48 +1,51 @@
 # Scout report: scripts/
 
 ## Purpose
-Deterministic (model-free) gates and helpers. Families: the cycle state machine (`cycle.sh` + `lib.sh` +
-`journal.sh`; `memory/map/cycle.md`), report-only gates (`ship-check.sh`, `human-check.sh`,
-`acceptance-log.sh`, `scope-check.sh`, `wave-check.sh`, `trace-check.sh`, `release-check.sh`),
-`telemetry.sh` (`docs/telemetry.md`), `token-report.py`, and the maintenance pair `evolve-ledger.py` +
-the SessionStart brief. Shell is `#!/usr/bin/env bash`, `set -u`, safe to re-run.
+Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh`, `lib.sh`, `journal.sh`;
+`memory/map/cycle.md`), report-only gates, `defects-check.sh`, `redact.sh`, `telemetry.sh`
+(`docs/telemetry.md`), `token-report.py`, `evolve-ledger.py` + the SessionStart brief. `set -u`, safe to re-run.
 
 ## Entry points
 - `cycle.sh <verb> <spec-dir> [...]` - the cycle CLI; `advance` is the loop's stepping verb. Callers:
   the Queen (solo T1-2, `/vulyk-review`, `/vulyk-plan`, pause/resume), `cycle-clerk` (only `advance`,
   `status`, `release`), workers (`close-story`).
 - `lib.sh` - sourced only. `is_story_file` :16, `pack_fingerprint` :27, `is_paperwork_path` :54,
-  `paperwork_only` :68, `marker` :82, `constitution_file` :94 (`CLAUDE.vulyk.md` if present, else
-  `CLAUDE.md`), `command_cell_exists` :98, `client_path_filled`, `profile_value`.
+  `paperwork_only` :68, `marker` :82, `constitution_file` :94, `command_cell_exists` :98.
 - `ship-check.sh <spec-dir>` / `--record`; `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`;
   `acceptance-log.sh` legacy. `scope-check.sh <story-file> [range]` runs in `close-story`.
 - `wave-check.sh <spec-dir>` - `/vulyk-plan` step 7; classes `no-verify`, `verify-gap`, `verify-cell`
   (a `## Verification` segment that is not a `## Commands` cell). `trace-check.sh` - a `## Requirements`
   quote may match the brief, a plan delta or a `## Asks` item.
 - `token-report.py <project> [--spec S] [--since D] [--json]` - spend from `~/.claude/projects/` +
-  `council.jsonl`; dedupes by `message.id`; never uses Workflow `totalTokens`. `/vulyk-status` (14d),
-  `/vulyk-evolve` (7d).
-- `evolve-ledger.py <root> <verb>` (0.21) - owns `memory/stats/evolve.jsonl`, rows `proposal` /
-  `run` / `verdict` (ts UTC, compact JSON). Verbs: `add` (component must be in `COMPONENTS` :29),
-  `run --branch --commit --proposals`, `resolve [--reason-for B=TEXT]` (verdict from git: branch tip in
-  the default branch = accepted; branch gone, unmerged = rejected; present, unmerged = `pending`, no row),
-  `window [--n 40]` (last 40 proposals with verdicts + older rejections), `last` (newest run `ts`),
-  `pending` (unmerged `vulyk/evolve-*`). Default branch: `origin/HEAD`, else `main`, `master`. Stdlib.
-- `.claude/hooks/session-start-brief.sh` - prints the map line, then (0.22, :15-23) a bootstrap offer
-  when the Profile block of `constitution_file` still holds `<fill in` (never when `telemetry/inbox/`
-  exists, never after a `| Bootstrap | declined ... |` row), plus, when due, `maintenance due: ...`
-  telling the Queen to run the Skills after the owner's task on the default branch, clean tree. Due:
-  gc = any stub (`Stub captured by VULYK`) or >=10 raw learnings (CONSOLIDATED/README excluded);
-  evolve = no `"kind":"run"` row, or last run >7 days, and a `council.jsonl` row newer than it, and no
-  unmerged `vulyk/evolve-*` branch (that prints a "waits for the owner" line instead); ">28 days" adds
-  the sunset hint; map = `memory/map/.stale`. Reads files with grep/awk on `"ts":"`, not python.
-- `vulyk-update.sh` (fetch, hand off to `install.sh --upgrade`); `release-check.sh`; `top-model.sh` (`--explain/--apply/--check`, gate alias from
-  `~/.claude.json`); `redact.sh` (stdin secret mask); `state.sh` (gitignored `.claude/state.json`);
-  `git-hooks/post-merge` (stamps `memory/map/.stale`).
+  `council.jsonl`; dedupes by `message.id`. `/vulyk-status` (14d), `/vulyk-evolve` (7d).
+- `evolve-ledger.py <root> <verb>` - owns `memory/stats/evolve.jsonl` (`proposal`/`run`/`verdict` rows).
+  Verbs: `add` (component in `COMPONENTS` :29), `run`, `resolve` (verdict from git: tip in default
+  branch = accepted; branch gone, unmerged = rejected; present, unmerged = `pending`, no row), `window
+  [--n 40]`, `last`, `pending`. Default branch: `origin/HEAD`, else `main`, `master`.
+- `.claude/hooks/session-start-brief.sh` - map line; bootstrap offer (:15-23) while the Profile holds
+  `<fill in` (not with `telemetry/inbox/`, not after a `| Bootstrap | declined ... |` row); when due,
+  `maintenance due: ...` (Queen runs the Skills after the owner's task, default branch, clean tree). gc =
+  any stub or >=10 raw learnings (CONSOLIDATED/README excluded); evolve = no `"kind":"run"` row or last
+  run >7 days, plus a newer `council.jsonl` row, no unmerged `vulyk/evolve-*` (else a "waits" line);
+  map = `memory/map/.stale`. grep/awk on `"ts":"`, not python.
+- `vulyk-update.sh` (hands off to `install.sh --upgrade`); `release-check.sh`; `top-model.sh`; `state.sh`
+  (`.claude/state.json`); `git-hooks/post-merge` (stamps `memory/map/.stale`).
+- `defects-check.sh [<arg>]` (0.23; cards `docs/defects/*.md`, rules `docs/defects/README.md`) - no arg =
+  audit (each effective-`block` card's `check:` must fail on every fixture, else `BLIND`); `<arg>` = gate
+  (runs every card that declares `block`+`check`, fixtures or not; non-zero = `RED`). Exit 0 green, 1 red,
+  2 usage/no library/no python3. Red findings (python heredoc records `D`/`U`/`O`/`E`/`I`/`R`, :62-66):
+  `DEBT` (>=2 quotes, not effective block), `UNDELIVERABLE` (text card, no `paths:`, :231), `OVERLAP`
+  (one normalised key on two live cards, :266), `ESCAPE` (quote committed after the block `check:` line,
+  no fixture/check change since, :241). Each is red only when new (line/card newer than the commit that
+  added `README.md`, or uncommitted, `is_new` :137); else an `old ...` info line. A key inside another's
+  key is an `ambiguous key` info line only. `DEFECTS_DIR` overrides the library.
+- `redact.sh` (stdin mask, always exit 0, degrades to `cat`): 19 sed shapes :29-47 (AWS, GitHub, Slack,
+  OpenAI, Google, Telegram, GitLab, npm, PyPI, HF, Groq, SendGrid, Stripe live, Slack webhook, JWT, Bearer,
+  URL creds) + keyword assignments :48 + awk PEM blocks. `handoff.py` `_REDACT_FALLBACK` :580 mirrors it
+  (extend both). Callers: brief.md, handoff dump, ledger notes.
 - `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan [--final]`, `bundle`, `check`, `publish
-  [--dry-run]` (prints a recipe), `inbox [--clear]` (VULYK repo only; `VULYK_HIVE` redirects the tree
-  `--clear` stages in). Callers: `anomaly-scan.sh` (SessionEnd), `/vulyk-build`, `/vulyk-resume`,
-  `/vulyk-evolve`.
+  [--dry-run]`, `inbox [--clear]` (VULYK repo only; `VULYK_HIVE` redirects). Callers: `anomaly-scan.sh`
+  (SessionEnd), `/vulyk-build`, `/vulyk-resume`, `/vulyk-evolve`.
 
 ## Key contracts
 - `cycle.sh`: last stdout line is one JSON object; exits 0 ok · 1 usage · 2 precondition · 3 paused ·
@@ -50,33 +53,26 @@ the SessionStart brief. Shell is `#!/usr/bin/env bash`, `set -u`, safe to re-run
   `telemetry.sh check` is the one exception.
 - `is_paperwork_path` whitelist (lib.sh:54-64): spec `plan/journal/brief/council/*`, `memory/stats/
   {human,acceptance,ship,council,scope,anomalies}.jsonl`, `skills.json`, `memory/learnings/*.md`
-  (one level), `VERSION`, `CHANGELOG.md`. **`evolve.jsonl` is not on it**, so the ledger commit that
-  `/vulyk-evolve` makes on the default branch counts as software for `paperwork_only`, i.e. can stale
-  an open round (the brief's own tree rule keeps evolve away from a mid-build tree).
+  (one level), `VERSION`, `CHANGELOG.md`. **`evolve.jsonl` is not on it**: the `/vulyk-evolve` ledger
+  commit counts as software for `paperwork_only` and can stale an open round.
 - `telemetry.sh` `ENUM`/`AGENTS` are append-only public contracts; bundle rows codes and numbers only.
 
 ## Tests
-`tests/maintenance.test.sh` (0.21; no model, no network; not wired into ci.yml): constitution caps
-`CONSTITUTION_MAX_BYTES=7168` / `_LINES=120` on the repo `CLAUDE.md` and on the shipped render
-(placeholders swapped in), `DESCRIPTIONS_MAX_BYTES=4623` for agent+command `description:` lines
-(:31-33), the brief's due logic on fixture hives (:96), the bootstrap offer (:165), the ledger, the `green`
-terminal of build/review (:233; greps for AskUserQuestion, «Выпускаем?», Skill-tool ship, fallback). Sizes CR-stripped.
+`tests/maintenance.test.sh` (no model/network; not in ci.yml): constitution caps `CONSTITUTION_MAX_BYTES=7168`
+/ `_LINES=120` (repo and shipped render), `DESCRIPTIONS_MAX_BYTES=4623` (:31-33), brief due logic (:96),
+bootstrap offer (:165), ledger, `green` terminal of build/review (:233), the `/vulyk-gc` guarded commit
+line run on temp repos (:291). `tests/defects.test.sh` covers `defects-check.sh`.
 
 ## install.sh - the upgrade contract
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution
-  (`print_migrate_hint` :390); `replace_constitution` :412 renders the release `CLAUDE.md` with the
-  hive's marked blocks (`render_constitution` :329), backs up as `<name>.pre-<major.minor>.md`
-  (`constitution_backup` :354).
-- `copy_tree` filter (:78-88): `memory/stats/*.jsonl` never ship (human, scope, ship, evolve join
-  council and anomalies in 0.21; a host that has them keeps them, the installer deletes nothing).
-- Retired framework files are removed unless edited (`retired_edited` :1039); `unwire_hook` :846;
-  `ensure_gitignore` :950; `clean_seeded_council` :1086; `anomaly-scan.sh` wired on SessionEnd :1117.
+  (`print_migrate_hint` :390); `replace_constitution` :412 renders it (`render_constitution` :329), backs
+  up as `<name>.pre-<major.minor>.md` (`constitution_backup` :354).
+- `copy_tree` filter (:78-88): `memory/stats/*.jsonl` never ship; the installer deletes nothing of a host's.
+- Retired framework files are removed unless edited (`retired_edited` :1039); `unwire_hook` :846.
 
 ## Gotchas
 - `close-story`'s `## Commands` match, `record-seat`'s taint and `is_paperwork_path` are security-relevant
   string matches: keep them anchored. `close-story` probes `timeout 5 true` (Windows cmd `timeout`).
-- `evolve-ledger.py`: merge the changeset branch, never squash - a squash leaves the tip unmerged and
-  reads as rejected.
-- `telemetry/` (the inbox) is VULYK-repo-only; `copy_tree` never ships it.
+- `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 
-last-verified: 2026-09-29 (v0.22.0)
+last-verified: 2026-09-29 (v0.23.0)

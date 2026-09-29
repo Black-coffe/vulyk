@@ -71,7 +71,10 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   runs there, `VULYK_HIVE=`), then `add`/`run` rows and a ledger-only commit on the default branch
   (a `run` row even with 0 proposals). `--dry-run` writes no proposal/run row.
 - **`/vulyk-gc`** - dispatches `librarian`, then the main session `git rm`s its `Delete:` list + stubs,
-  prunes snapshots >14 days, commits `chore(memory): gc` (pathspec `memory/learnings memory/memory.md`).
+  prunes snapshots >14 days, then runs one guarded shell line (vulyk-gc.md:20, run as written): prints
+  `CONSOLIDATED.md: entries a→b, bytes a→b` (HEAD vs now), refuses (`gc: refused - ...lost more than half`,
+  `git diff --stat`, no commit) when entries or bytes fell below half; else commits `chore(memory): gc`
+  (pathspec `memory/learnings memory/memory.md`). A refusal means show the owner the diff.
 - **`/vulyk-pause`** / **`/vulyk-resume`** - wrap `cycle.sh pause`/`resume`; resume relaunches
   `/vulyk-build` fresh (hive path records `driver_relaunched`), never `resumeFromRunId`.
 - **`/vulyk-update`** - `vulyk-update.sh . --check`, CHANGELOG summary, ask; `--constitution replace`
@@ -81,4 +84,4 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
 - **`/vulyk-map`**, **`/vulyk-handoff`** (`handoff.py dump` + summary).
 - gc, evolve, map run themselves: `session-start-brief.sh` prints `maintenance due: ...` (see scripts.md).
 
-last-verified: 2026-09-29 (v0.22.0, ADR-013, ADR-015)
+last-verified: 2026-09-29 (v0.23.0, ADR-013, ADR-015)
