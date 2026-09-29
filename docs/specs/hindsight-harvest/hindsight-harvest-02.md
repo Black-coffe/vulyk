@@ -1,8 +1,8 @@
 ---
 story: hindsight-harvest-02
 spec: hindsight-harvest
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 model: sonnet
@@ -45,5 +45,7 @@ memory/map/scripts.md: the `redact.sh` section.
 `python -m py_compile .claude/hooks/*.py`
 
 ## Implementation notes
+- `redact.sh`: nine prefix-anchored `-e` lines with length floors. The Slack URL keeps its host and masks the path. `handoff.py` `_REDACT_FALLBACK` got the same nine; its Slack rule uses a lookbehind, so only the path is masked.
+- `tests/maintenance.test.sh`: the samples are built at run time (`rep`, and `s""k_live_` split), so no token-shaped literal lands in git for secret scanners. Nine shapes and four near-misses go through both `redact.sh` and the fallback (a root without `scripts/redact.sh`). HEAD's `redact.sh` passes the Telegram, npm and Stripe samples unmasked, so the test can fail.
 
 ## Findings

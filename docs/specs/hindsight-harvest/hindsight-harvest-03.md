@@ -1,8 +1,8 @@
 ---
 story: hindsight-harvest-03
 spec: hindsight-harvest
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 model: sonnet
@@ -44,5 +44,7 @@ memory/map/agents-and-commands.md: the `/vulyk-gc` entry.
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- `vulyk-gc.md`: the commit step is one backticked shell line. It counts `^[0-9]+\. ` entries and bytes at `HEAD` and in the working copy, always echoes `entries a→b, bytes a→b`, refuses (`git diff --stat`, no commit) when either halves, and commits as before otherwise. `$((…))` normalises BSD `wc -c` padding.
+- `tests/maintenance.test.sh` extracts that exact line from the command and runs it in three throwaway repos: 10→4 refused, 10→7 committed, and a file new at `HEAD` committed.
 
 ## Findings

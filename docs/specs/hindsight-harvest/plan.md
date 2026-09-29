@@ -63,7 +63,8 @@ by the owner's answer.
 
 **Approved:** Andrei, 2026-09-29 («Да»)
 **Briefed:**
-**Branch:**
+**Branch:** vulyk/hindsight-harvest
 **Checked:**
 **Council:**
+**Council:** GREEN round 1, 2026-09-29, at 1f30971, pack ec8c9c15610a
 **Shipped:**
