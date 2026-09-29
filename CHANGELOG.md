@@ -62,6 +62,8 @@ research streams that cross-examined each other). The spec: `docs/specs/auto-mai
   `drone-docs` after the merge.
 - **CI runs `tests/maintenance.test.sh`.** In a shallow clone the historical 8 531 B case is skipped,
   and the other 45 checks run.
+- **`evolve-ledger.py add` runs under `MSYS_NO_PATHCONV=1`.** The first real evolve run found that Git Bash on
+  Windows rewrote a hypothesis starting `/vulyk-status` into `C:/Program Files/Git/vulyk-status` in the ledger.
 
 ### Removed
 - The false `learnings awaiting GC: N` count, which counted stubs and README.
