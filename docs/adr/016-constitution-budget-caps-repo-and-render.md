@@ -1,6 +1,6 @@
 # ADR-016: The constitution budget test caps both VULYK's own CLAUDE.md and the shipped render
 
-- Status: proposed
+- Status: accepted (2026-09-29, the Queen under the owner's delegation: Andrei - "Вопросы, которые ты задал, я даю право тебе решить на твоё усмотрение")
 - Date: 2026-09-29
 - Spec: docs/specs/auto-maintenance
 
