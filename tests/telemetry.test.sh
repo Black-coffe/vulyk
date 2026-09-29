@@ -342,6 +342,7 @@ cat "$CALLS" | expect_absent "publish never invokes a fork"     "fork"
 echo "--- is_paperwork_path"
 paper() { ( . "$SRC/scripts/lib.sh"; is_paperwork_path "$1" && echo true || echo false ); }
 expect_eq "memory/stats/anomalies.jsonl is paperwork"  "true"  "$(paper memory/stats/anomalies.jsonl)"
+expect_eq "memory/stats/evolve.jsonl is paperwork"     "true"  "$(paper memory/stats/evolve.jsonl)"
 expect_eq "memory/stats/other.jsonl is not"            "false" "$(paper memory/stats/other.jsonl)"
 expect_eq "the entry stays anchored (no bare basename)" "false" "$(paper anomalies.jsonl)"
 

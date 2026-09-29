@@ -152,6 +152,9 @@ jobs:
       - name: the solo path - Tier 1-2 advance loop the Queen runs herself
         run: bash tests/solo.test.sh
 
+      - name: maintenance - context budget, due brief, evolve ledger
+        run: bash tests/maintenance.test.sh
+
   telemetry-inbox:
     name: telemetry.sh suite + check every inbox bundle
     runs-on: ubuntu-latest

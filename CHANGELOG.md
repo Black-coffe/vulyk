@@ -57,6 +57,11 @@ research streams that cross-examined each other). The spec: `docs/specs/auto-mai
 - **The installer no longer ships VULYK's own ledgers.** `human`, `scope`, `ship` and `evolve.jsonl` went
   into every fresh hive and would have fed that hive's evolve with VULYK's history. Hives that already
   hold them keep them.
+- **The evolve ledger is paperwork** (`is_paperwork_path` in `scripts/lib.sh`), like every other
+  `memory/stats` ledger: its commit on the default branch never stales a council round. Found by
+  `drone-docs` after the merge.
+- **CI runs `tests/maintenance.test.sh`.** In a shallow clone the historical 8 531 B case is skipped,
+  and the other 45 checks run.
 
 ### Removed
 - The false `learnings awaiting GC: N` count, which counted stubs and README.

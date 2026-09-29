@@ -55,7 +55,7 @@ is_paperwork_path() { # is_paperwork_path <repo-relative-path>
   case "$1" in
     docs/specs/*/plan.md|docs/specs/*/journal.md|docs/specs/*/council/*|docs/specs/*/brief.md| \
     memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl|memory/stats/council.jsonl|memory/stats/scope.jsonl| \
-    memory/stats/anomalies.jsonl|memory/stats/skills.json|VERSION|CHANGELOG.md) return 0 ;;
+    memory/stats/anomalies.jsonl|memory/stats/evolve.jsonl|memory/stats/skills.json|VERSION|CHANGELOG.md) return 0 ;;
     memory/learnings/*.md)
       case "${1#memory/learnings/}" in */*) return 1 ;; esac
       return 0 ;;
