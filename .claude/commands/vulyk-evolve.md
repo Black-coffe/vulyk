@@ -11,6 +11,26 @@ Nobody has to remember this command: the SessionStart brief says `maintenance du
 
 1. Harvest. Read `memory/learnings/` (raw + CONSOLIDATED), `memory/stats/skills.json`, and - if the user can paste it - the output of the built-in `/insights` command (ask once; proceed without it if unavailable).
    Then the week's spend: `python scripts/token-report.py . --since "$(date -u -d '-7 days' +%Y-%m-%d)"`, printed as-is - one line per spec with raw and weighted tokens, dispatches and rounds. That report is the spend; the `totalTokens` a Workflow run prints is a sum of final contexts and never counts as spend. A spec whose dispatches or rounds stand out is evidence for step 3's friction list.
+   Then the owner's corrections of the week and how many reached `docs/defects/`. The lexicon is the intake hook's own
+   (`--lexicon`), and the reader is litopys 0.4.0+ `corrections`. Run the block as written. It prints one line and blocks nothing:
+   ```
+   X="$(mktemp)"; bash .claude/hooks/defect-intake.sh --lexicon > "$X"; L=""; OUT=""; seen=0
+   while IFS= read -r c; do   # PATH's copy first, then cached copies newest first: the first with the verb wins
+     [ -f "$c" ] || continue; seen=1
+     if OUT="$(bash "$c" corrections --since "$(date -u -d '-7 days' +%Y-%m-%d)" --lexicon "$X" 2>/dev/null)"; then L="$c"; break; fi
+   done < <(command -v litopys; ls -d "$HOME"/.claude/plugins/cache/litopys/litopys/*/bin/litopys 2>/dev/null | sort -rV)
+   if [ -n "$L" ]; then
+     n=$(printf '%s\n' "$OUT" | grep -c ' · lexicon · '); m=$(printf '%s\n' "$OUT" | grep -c ' · record · '); u=0
+     while IFS= read -r l; do q="${l#*«}"; q="${q%»}"; grep -rqF -- "$q" docs/defects 2>/dev/null || u=$((u+1)); done \
+       < <(printf '%s\n' "$OUT" | grep -E ' · (lexicon|record) · ')
+     echo "corrections (7d): $n by lexicon · $m in records · $u not in docs/defects"
+   elif [ "$seen" = 1 ]; then echo "corrections: no installed litopys has the corrections verb - update it to 0.4.0+"
+   else echo "corrections: litopys not installed - no count"; fi
+   rm -f "$X"
+   ```
+   A line counts as filed when `docs/defects/` holds it verbatim. The lexicon also catches remarks that are not corrections,
+   so treat the three numbers as a lead with its n, never as a rate on their own. A remark that is not filed is evidence for
+   step 3: file its quote into the matching card (Law 6), not a new rule in prose.
 2. Council check-in (read-only; nothing here writes anything). If `memory/stats/council.jsonl` does not exist, print `council: no rounds yet` and skip to step 3. Otherwise run the same `awk` pass `/vulyk-status` step 2 uses, restricted to the last 7 days:
    ```
    SINCE="$(date -u -d '-7 days' +%Y-%m-%dT%H:%M:%SZ)"

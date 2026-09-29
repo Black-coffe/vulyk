@@ -12,7 +12,9 @@
 # it back out of this file (one interpreter start, stdin passes straight through).
 # stdin is read once so a non-working interpreter (the Windows Store `python3` alias exits 9009
 # without running anything) falls through to the next one; 0 or 1 means python itself ran.
-IN="$(cat)"
+# `--lexicon` prints the correction lexicon as portable ERE lines instead (for `litopys corrections
+# --lexicon`, read by /vulyk-evolve) and reads no stdin: one word list, two consumers.
+if [ "${1:-}" = "--lexicon" ]; then IN=""; else IN="$(cat)"; fi
 for PY in python3 python; do
   command -v "$PY" >/dev/null 2>&1 || continue
   printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \
@@ -126,7 +128,21 @@ LEXICON = re.compile(r'(?<!\w)(?:' + '|'.join(map(re.escape, STEMS)) + r')'
 TIMECODE = re.compile(r'\b\d{1,2}:\d{2}\b')
 
 
+def ere(s):
+    return re.sub(r'([.^$*+?()\[\]{}|\\])', r'\\\1', s)
+
+
+def print_lexicon():
+    # grep -E has no lookbehind: a non-word character or a line edge stands in for (?<!\w) / (?!\w).
+    edge_l, edge_r = '(^|[^[:alnum:]_])', '([^[:alnum:]_]|$)'
+    out = [edge_l + ere(s) for s in STEMS] + [edge_l + ere(w) + edge_r for w in WORDS]
+    sys.stdout.buffer.write(('\n'.join(out) + '\n').encode('utf-8'))
+
+
 def main():
+    if sys.argv[1:2] == ['--lexicon']:
+        print_lexicon()
+        return
     raw = sys.stdin.buffer.read().decode('utf-8', 'replace')
     data = json.loads(raw)
     if not isinstance(data, dict):

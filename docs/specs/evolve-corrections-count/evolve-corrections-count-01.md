@@ -1,8 +1,8 @@
 ---
 story: evolve-corrections-count-01
 spec: evolve-corrections-count
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 model: sonnet
@@ -40,5 +40,8 @@ blocks. The count is evidence for step 3; it never files a card itself.
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- `defect-intake.sh --lexicon`: bash skips the stdin read. Python prints `STEMS` / `WORDS` as ERE with `(^|[^[:alnum:]_])` / `([^[:alnum:]_]|$)` edges, and escapes regex specials.
+- `vulyk-evolve.md` step 1: a counter block. Its candidates are PATH's `litopys`, then cached copies newest first, and the first one with the `corrections` verb wins. That order matters because Claude Code puts a user-scope plugin's `bin/` on PATH, and here that copy was the old 0.2.1. There are three fallback lines, and the block never blocks. Dry run on this repo with litopys 0.4.0: `corrections (7d): 18 by lexicon · 0 in records · 18 not in docs/defects`.
+- `tests/intake.test.sh`: 7 cases, including a stdin that never closes under `timeout`, and a length check of the export against the hook's own lists (`ast.literal_eval`).
 
 ## Findings
