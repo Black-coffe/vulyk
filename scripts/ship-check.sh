@@ -113,15 +113,15 @@ if [ -n "$DIRTY" ]; then
   # Story 09: a tree dirty only in the hook-written memory/stats/anomalies.jsonl (the
   # anomaly-scan Stop hook writes it on every run, outside any commit) is not a build in
   # progress - pass it through, named, rather than blocking stage 03 on a file no story owns.
-  # Story 12: skills.json is NOT cycle-owned (owner decision) - it is real dirt like any
-  # other path, so only this one path is exempt.
-  HOOKFILE=memory/stats/anomalies.jsonl
+  # skills.json joins it (spec skills-json-exempt, 2026-09-29, reversing Story 12's "real dirt"
+  # line under the owner's delegation): the PostToolUse(Skill) hook rewrites it on every Skill
+  # call, and since 0.21.0 maintenance itself runs through the Skill tool. Nothing else is exempt.
   ALLHOOK=1
   HOOKPATHS=""
   while IFS= read -r dline; do
     [ -n "$dline" ] || continue
     dp="${dline:3}"
-    if [ "$dp" = "$HOOKFILE" ]; then
+    if [ "$dp" = memory/stats/anomalies.jsonl ] || [ "$dp" = memory/stats/skills.json ]; then
       HOOKPATHS="$HOOKPATHS${HOOKPATHS:+, }$dp"
       continue
     fi

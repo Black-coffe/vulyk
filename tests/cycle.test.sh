@@ -16,8 +16,8 @@ fail=0
 expect() { # expect <label> <needle>   (reads the output to judge from stdin)
   local label="$1" needle="$2" out; out="$(cat)"
   if printf '%s' "$out" | grep -qF -- "$needle"; then echo "  ok    $label"
-  else echo "::error::$label - expected '$needle' in:"; printf '%s\n' "$out" | sed 's/^/        /'; fail=1; fi
-}
+  else echo "::error::$label - expected '$needle' in:"; printf '%s\n' "$out" | sed 's/^/        /'; fail=1; : > "$T/failed"; fi
+}   # `x | expect` runs in a subshell, where fail=1 is lost - the marker file carries it to the exit
 ship()  { bash scripts/ship-check.sh docs/specs/demo; }
 hcheck(){ bash scripts/human-check.sh --check docs/specs/demo; }
 
@@ -245,12 +245,21 @@ printf 'v2\n' >> hook-app.txt
 shiph | expect "hook log + real code dirt -> 03 still not clean" "working tree is not clean"
 git checkout -- hook-app.txt
 
-echo "story 12: skills.json is NOT cycle-owned - scope-check counts it, ship-check stage 03 blocks on it alone"
+echo "skills-json-exempt: scope-check still counts skills.json; ship-check stage 03 passes it like the anomaly log"
 printf '{"n":1}\n' > memory/stats/skills.json
 bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | grep -qF 'memory/stats/skills.json' \
   && echo "  ok    scope-check: skills.json dirty and undeclared is listed as out_of_scope" \
   || { echo "::error::scope-check output: $(bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md)"; fail=1; }
-shiph | expect "skills.json alone dirty -> 03 not clean" "working tree is not clean"
+git checkout -- memory/stats/scope.jsonl   # scope-check logs its run; that log is not this case's dirt
+rm -f memory/stats/anomalies.jsonl; git checkout -- memory/stats/anomalies.jsonl 2>/dev/null
+[ "$(git status --porcelain)" = "?? memory/stats/skills.json" ] && echo "  ok    precondition: skills.json is the only dirty path" \
+  || { echo "::error::precondition: dirty paths are $(git status --porcelain | tr '\n' ' ')"; fail=1; }
+shiph | expect "skills.json alone dirty -> 03 clean, names it" "clean (hook-written stats pending: memory/stats/skills.json)"
+printf '{"ts":"z"}\n' >> memory/stats/anomalies.jsonl
+shiph | expect "anomaly log + skills.json dirty -> 03 clean, names both" "memory/stats/anomalies.jsonl, memory/stats/skills.json"
+printf 'v3\n' >> hook-app.txt
+shiph | expect "skills.json + real code dirt -> 03 still not clean" "working tree is not clean"
+git checkout -- hook-app.txt
 rm -f memory/stats/skills.json
 
 echo "story 12: council.jsonl alone dirty also blocks stage 03 - only anomalies.jsonl is the pass-through path"
@@ -385,4 +394,5 @@ man_story 04 todo 4 '[manual:../x]'
 bash scripts/wave-check.sh docs/specs/man | expect "wave-check reports a manual id with .." "manual:    man-04 is blocked_by 'manual:../x'"
 git add -A && git commit -qm "man: done" >/dev/null
 
+[ -e "$T/failed" ] && fail=1
 exit $fail
