@@ -34,7 +34,7 @@ named. Any other dirty path still blocks.
 
 **Approved:** <owner, date>
 **Briefed:** via mini-brief, Andrei, 2026-09-29
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/skills-json-exempt
 **Checked:** <written by scripts/human-check.sh>
 **Council:** <written by scripts/cycle.sh judge/escalate>
 **Shipped:** <written by scripts/ship-check.sh --record>
