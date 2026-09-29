@@ -161,6 +161,47 @@ if [ -s "$T/old-brief.sh" ]; then
 fi
 printf '%s' "$out" | expect_absent "the false learnings counter is gone" "awaiting GC"
 
+# --- the evolve ledger (auto-maintenance-03) ------------------------------------------------------
+echo "--- evolve ledger"
+EL="$SRC/scripts/evolve-ledger.py"
+H="$(hive ledger)"
+gitc() { git -C "$H" -c user.email=t@t -c user.name=t "$@"; }
+led() { "$PYBIN" "$EL" "$H" "$@"; }
+add() { led add --branch "$1" --component "${3:-rule}" --file "${4:-.claude/rules/x.md}" --hypothesis "$2" --evidence "n=3 specs" --bytes-delta -40; }
+# changeset A: accepted (merged, then the branch deleted); B: rejected (deleted unmerged); C: pending
+for b in A B C; do
+  gitc branch "vulyk/evolve-$b"; gitc checkout -q "vulyk/evolve-$b"; gitc commit -q --allow-empty -m "change $b"
+  tip="$(git -C "$H" rev-parse HEAD)"; gitc checkout -q main
+  add "vulyk/evolve-$b" "hypothesis $b"; led run --branch "vulyk/evolve-$b" --commit "$tip" --proposals 1
+done
+gitc merge -q --ff-only vulyk/evolve-A; gitc branch -q -d vulyk/evolve-A; gitc branch -q -D vulyk/evolve-B
+led pending | expect "pending lists the unmerged branch" "vulyk/evolve-C"
+led pending | expect_absent "pending skips a merged or deleted branch" "vulyk/evolve-A"
+out="$(led resolve --reason-for 'vulyk/evolve-B=owner: not now')"
+printf '%s' "$out" | expect "resolve: merged then deleted = accepted" "accepted  vulyk/evolve-A"
+printf '%s' "$out" | expect "resolve: deleted unmerged = rejected" "rejected  vulyk/evolve-B"
+printf '%s' "$out" | expect "resolve: still on its branch = pending, no row" "pending   vulyk/evolve-C"
+led resolve | expect_absent "resolve is idempotent: a decided branch is not re-decided" "vulyk/evolve-A"
+out="$(led window)"
+printf '%s' "$out" | expect "window shows the accepted proposal" "accepted rule"
+printf '%s' "$out" | expect "window shows the rejection with its reason" "why: owner: not now"
+printf '%s' "$out" | expect "window shows the pending one" "pending  rule"
+for i in $(seq 1 45); do add "vulyk/evolve-N$i" "filler $i" doc docs/x.md; done
+out="$(led window)"
+printf '%s' "$out" | expect "past 40 proposals, an old rejection stays visible as one line" "rejected .claude/rules/x.md: hypothesis B"
+printf '%s' "$out" | expect_absent "the window itself holds only the last 40" "hypothesis A |"
+[ "$(led last)" = "$(grep '"kind":"run"' "$H/memory/stats/evolve.jsonl" | tail -1 | sed 's/.*"ts":"\([^"]*\)".*/\1/')" ] \
+  && ok "last prints the newest run ts" || bad "last: '$(led last)'"
+led add --branch b --component nonsense --file f --hypothesis h --evidence e --bytes-delta 0 2>&1 \
+  | expect "an unknown component is refused" "component must be one of"
+brief_of "$H" | expect "the brief reads the ledger the script writes (C still pending)" "vulyk/evolve-C waits for the owner's review"
+H="$(hive ledger-clock)"; council_row "$H" "$(iso_ago 1)"
+brief_of "$H" | expect "before the script's run row: evolve due" "evolve (never run"
+led run --proposals 0
+grep -q '"kind":"run"' "$H/memory/stats/evolve.jsonl" && ok "the script writes compact JSON the brief can grep" \
+  || bad "run row not compact: $(tail -1 "$H/memory/stats/evolve.jsonl")"
+brief_of "$H" | expect_absent "after the script's run row: evolve not due" "evolve ("
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1

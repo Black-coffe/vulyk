@@ -940,6 +940,12 @@ expect_eq "the anomaly log is never shipped into a hive" "0" \
   "$([ -e "$TGT/memory/stats/anomalies.jsonl" ] && echo 1 || echo 0)"
 expect_eq "the council ledger is never shipped into a hive" "0" \
   "$([ -e "$TGT/memory/stats/council.jsonl" ] && echo 1 || echo 0)"
+# auto-maintenance-03: every memory/stats ledger is per-hive runtime - a hive's evolve and SessionStart
+# brief must read its own history, never vulyk's (a shipped evolve.jsonl would stop evolve being due)
+for led in human scope ship evolve; do
+  expect_eq "the $led ledger is never shipped into a hive" "0" \
+    "$([ -e "$TGT/memory/stats/$led.jsonl" ] && echo 1 || echo 0)"
+done
 # ADR-013 D7: a fresh hive gets no learnings hook and no Stop scan
 expect_eq "fresh install: no learnings hook file" "0" \
   "$([ -e "$TGT/.claude/hooks/session-end-learnings.sh" ] && echo 1 || echo 0)"

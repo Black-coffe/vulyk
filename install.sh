@@ -84,6 +84,8 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     memory/snapshots/*)           case "$f" in */.gitkeep) return 0 ;; esac; return 2 ;;
     memory/stats/anomalies.jsonl) return 2 ;;   # the maintainer's own anomaly log: runtime, per-hive
     memory/stats/council.jsonl)   return 2 ;;   # the maintainer's own council ledger: runtime, per-hive
+    memory/stats/*.jsonl)         return 2 ;;   # every other ledger (human, scope, ship, evolve): runtime, per-hive -
+                                                # a hive's /vulyk-evolve and SessionStart brief read their own, never vulyk's
   esac
   return 0
 }
