@@ -68,3 +68,4 @@ by the owner's answer.
 **Council:**
 **Council:** GREEN round 1, 2026-09-29, at 1f30971, pack ec8c9c15610a
 **Shipped:**
+**Shipped:** 0.23.0, 2026-09-29, at 2c6b272 - merged to main, publish pending
