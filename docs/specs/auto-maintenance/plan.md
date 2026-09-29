@@ -57,7 +57,7 @@ cap, and CLAUDE.md is trimmed to meet it. The learnings buffer is cleaned once f
 
 ## Contracts
 - `memory/stats/evolve.jsonl`: one JSON object per line. Proposal row `{"ts","kind":"proposal","branch","component","file","hypothesis","evidence","bytes_delta"}`; verdict row `{"ts","kind":"verdict","branch","verdict":"accepted|rejected","reason"}`; run row `{"ts","kind":"run","branch","commit","proposals"}`, one per evolve run. `ts` is UTC `YYYY-MM-DDTHH:MM:SSZ`. `component` is one of `constitution rule agent command hook skill defect memory script doc`.
-- `scripts/evolve-ledger.py <root> last` prints the newest proposal `ts` or nothing; `pending` prints unmerged `vulyk/evolve-*` branches; the brief reads these two.
+- `scripts/evolve-ledger.py <root> last` prints the newest run `ts` or nothing; `pending` prints unmerged `vulyk/evolve-*` branches; the brief reads these two.
 
 ## Integration gate
 `git ls-files '*.sh' | xargs -n1 bash -n && python -m py_compile .claude/hooks/*.py && bash tests/maintenance.test.sh && bash tests/telemetry.test.sh && bash tests/solo.test.sh`
