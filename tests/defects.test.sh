@@ -28,8 +28,8 @@ cm() { # cm <YYYY-MM-DD> <paths...> - commit those paths at that date
 }
 card() { # card <id> <status> <check> <fixtures> <quote lines...>
   local id="$1" st="$2" ck="$3" fx="$4"; shift 4
-  { printf -- '---\nid: %s\ntitle: Class %s\nstatus: %s\ncheck: %s\nfixtures: %s\nkeys: [x]\n---\n\n# Class %s\nWhat it is.\n\n## Owner quotes\n\n' \
-      "$id" "$id" "$st" "$ck" "$fx" "$id" "$id"
+  { printf -- '---\nid: %s\ntitle: Class %s\nstatus: %s\ncheck: %s\nfixtures: %s\nkeys: [k-%s]\npaths: ["src/%s/**"]\n---\n\n# Class %s\nWhat it is.\n\n## Owner quotes\n\n' \
+      "$id" "$id" "$st" "$ck" "$fx" "$id" "$id" "$id" "$id"
     for q in "$@"; do printf -- '- %s · video 1 · 00:10 — «words»\n' "$q"; done
     printf '\n## Cause\nWhy.\n\n## Never\n- do it\n'
   } > "docs/defects/$id.md"
@@ -179,6 +179,68 @@ check: bash check.sh <arg>   # run from root
 } > docs/defects/ic.md
 run; ok "a block card with inline # comments stays block and both fixtures are caught" "$([ "$rc" = 0 ] && [ "$last" = 'GREEN: 1 blocking checks' ]; echo $?)"
 run bad.txt; ok "its check runs in gate mode and goes red on a bad argument" "$([ "$rc" = 1 ]; echo $?)"
+
+echo "--- undeliverable text cards (C5)"
+mkrepo "$TMP/undel"; cm 2026-01-01 docs/defects/README.md
+card u text '' '' 2026-01-05; sed -i '/^paths:/d' docs/defects/u.md
+run; ok "a new text card with no paths: -> UNDELIVERABLE, RED" \
+  "$([ "$rc" = 1 ] && has '^UNDELIVERABLE  u: text card with no paths:' && [ "$last" = 'RED: 1 undeliverable' ]; echo $?)"
+sed -i 's/^id: u$/id: u\npaths: []/' docs/defects/u.md
+run; ok "neighbour: paths: [] -> UNDELIVERABLE" "$([ "$rc" = 1 ] && has '^UNDELIVERABLE  u:'; echo $?)"
+sed -i 's/^paths: \[\]$/paths:/' docs/defects/u.md
+run; ok "neighbour: a blank paths: -> UNDELIVERABLE" "$([ "$rc" = 1 ] && has '^UNDELIVERABLE  u:'; echo $?)"
+sed -i 's/^paths:$/paths: ["cmd:edit_build\\\\.py"]/' docs/defects/u.md
+run; ok "a cmd:-only paths: is deliverable -> green" "$([ "$rc" = 0 ] && ! has 'UNDELIVERABLE'; echo $?)"
+sed -i '/^paths:/d; s/^id: u$/id: u\narea: edit/' docs/defects/u.md
+run; ok "an area:-only card names area: as a label" "$(has '^UNDELIVERABLE  u: .*(area: is a label, not a glob)'; echo $?)"
+card u block 'bash check.sh <arg>' "$FX" 2026-01-05; sed -i '/^paths:/d' docs/defects/u.md
+run; ok "block with a check: is delivered by its check -> exempt" "$([ "$rc" = 0 ] && ! has 'undeliverable'; echo $?)"
+mkrepo "$TMP/undel-old"
+card u text '' '' 2026-01-05; sed -i '/^paths:/d' docs/defects/u.md; cm 2026-01-01 docs/defects/u.md
+cm 2026-01-02 docs/defects/README.md
+run; ok "a card older than the library -> old undeliverable, green" \
+  "$([ "$rc" = 0 ] && has '^old undeliverable  u:' && [ "$last" = 'GREEN: 0 blocking checks' ]; echo $?)"
+
+echo "--- key overlap (C4)"
+mkrepo "$TMP/overlap"; cm 2026-01-01 docs/defects/README.md
+card breath text '' '' 2026-01-05; card speech text '' '' 2026-01-05
+sed -i 's/^keys: .*/keys: [не дышит, вдох]/' docs/defects/breath.md
+sed -i 's/^keys: .*/keys: ["Не  дышит", обрыв]/' docs/defects/speech.md
+cm 2026-01-05 docs/defects/breath.md docs/defects/speech.md
+run; ok "one key on two cards (case and spacing differ), newer than the library -> OVERLAP, RED" \
+  "$([ "$rc" = 1 ] && has '^OVERLAP  breath, speech: share key "не дышит"' && [ "$last" = 'RED: 1 overlaps' ]; echo $?)"
+card speech revoked '' '' 2026-01-05; sed -i 's/^keys: .*/keys: [не дышит]/' docs/defects/speech.md
+run; ok "a revoked card never overlaps" "$([ "$rc" = 0 ] && ! has 'OVERLAP'; echo $?)"
+card speech text '' '' 2026-01-05; sed -i 's/^keys: .*/keys: [где не дышит]/' docs/defects/speech.md
+run; ok "neighbour: a key inside another card's key -> ambiguous key line only, green" \
+  "$([ "$rc" = 0 ] && has '^ambiguous key  breath "не дышит" is inside speech "где не дышит"' && ! has 'OVERLAP'; echo $?)"
+mkrepo "$TMP/overlap-old"
+card breath text '' '' 2026-01-05; card speech text '' '' 2026-01-05
+sed -i 's/^keys: .*/keys: [не дышит]/' docs/defects/breath.md docs/defects/speech.md
+cm 2026-01-01 docs/defects/breath.md docs/defects/speech.md; cm 2026-01-02 docs/defects/README.md
+run; ok "an overlap older than the library -> old overlap, green" \
+  "$([ "$rc" = 0 ] && has '^old overlap  breath, speech: share key "не дышит"'; echo $?)"
+
+echo "--- escape after block (C11)"
+mkrepo "$TMP/escape"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
+card cut block 'bash check.sh <arg>' "$FX" 2026-01-05; cm 2026-01-05 docs/defects/cut.md
+run; ok "block card, quotes no newer than its check -> green" "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
+card cut block 'bash check.sh <arg>' "$FX" 2026-01-05 2026-01-10; cm 2026-01-10 docs/defects/cut.md
+run; ok "a quote committed after the block check, no fixture since -> ESCAPE, RED" \
+  "$([ "$rc" = 1 ] && has '^ESCAPE  cut: quote [0-9a-f]\{7\} 2026-01-10' && [ "$last" = 'RED: 1 escapes' ]; echo $?)"
+printf 'bad new form\n' >> docs/defects/fixtures/near.txt
+run; ok "an uncommitted fixture change counts as newest -> green" "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
+cm 2026-01-11 docs/defects/fixtures/near.txt
+run; ok "a fixture committed after the quote -> green" "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
+card cut block 'bash check.sh <arg>' "$FX" 2026-01-05 2026-01-10 2026-01-12
+run; ok "neighbour: an uncommitted quote with committed fixtures -> ESCAPE uncommitted" \
+  "$([ "$rc" = 1 ] && has '^ESCAPE  cut: quote uncommitted'; echo $?)"
+mkrepo "$TMP/escape-prep"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
+card prep text '' '' 2026-01-05 2026-01-06; cm 2026-01-06 docs/defects/prep.md
+card prep block 'bash check.sh <arg>' "$FX" 2026-01-05 2026-01-06; cm 2026-01-08 docs/defects/prep.md
+run; ok "quotes before the card became block (owner-does-prep) -> green" "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
+printf '\n## История\n- 2026-01-09 · v2 · a history line, not a quote\n' >> docs/defects/prep.md; cm 2026-01-09 docs/defects/prep.md
+run; ok "a dated line under ## История is never an escape" "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
 
 echo "--- usage"
 run a b; ok "two arguments -> exit 2" "$([ "$rc" = 2 ]; echo $?)"

@@ -18,19 +18,24 @@
 # line committed after the commit that added the library's README.md (git blame committer time,
 # not the date written in the quote). Uncommitted quote lines and a library outside git are new.
 # Debt with no new quote is "old debt": reported, never red.
+# The same new/old rule holds for three more findings. UNDELIVERABLE: a card shown as text with no
+# `paths:` (no hook can deliver it). OVERLAP: one normalised key on two live cards (a key inside
+# another card's key is only an "ambiguous key" line). ESCAPE: a block card got a quote after its
+# `check:` line and no fixture or check change since. New = the card file / keys line / quote is
+# newer than the library's README.md, or uncommitted.
 #
 # Placeholder: the first <...> token of `check:` (<arg>, or a host's own such as <sheet>.json) is
 # replaced by the argument / fixture path. When the token carries an extension (<sheet>.json) and the
 # argument ends with it, the whole `<sheet>.json` is replaced. A check with no token runs as written.
 # Checks run from the repo root; their output goes to a log under ${TMPDIR:-/tmp}, not the tree.
 #
-# Exit: 0 green, 1 red (new debt, a red check, a blind fixture), 2 usage / no library / no python.
+# Exit: 0 green, 1 red (a new finding, a red check, a blind fixture), 2 usage / no library / no python.
 # Output: one line per finding, the last line is the verdict (GREEN: N blocking checks | RED: ...).
 # DEFECTS_DIR overrides docs/defects (relative to the repo root, or absolute).
 set -uo pipefail
 
 case "${1:-}" in
-  -h|--help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 if [ "$#" -gt 1 ]; then
   echo "defects-check: usage: bash scripts/defects-check.sh [<arg>]" >&2; exit 2
@@ -56,6 +61,7 @@ done
 
 # One record per line, tab-separated:
 #   D <text>                      new debt (red)
+#   U / O / E <text>              new undeliverable card / key overlap / escape after block (red)
 #   I <text>                      information (not red)
 #   R <id> <target> <cmd> <title> a check to run: <target> is the fixture (audit) or <arg> (gate)
 plan="$(PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" "$ARG" <<'PY'
@@ -113,15 +119,48 @@ def placeholder(cmd, target):
 def emit(*f):
     print('\t'.join(str(x).replace('\t', ' ').replace('\n', ' ') for x in f))
 
+_blames = {}
+def blame_of(name):
+    if name not in _blames:
+        _blames[name] = blame(name)
+    return _blames[name]
+
+def when(name, n):
+    """(time, label) of line n: time is inf when the line is uncommitted or the library is outside git."""
+    sha, t = (blame_of(name) or {}).get(n, (None, None))
+    if not in_git:
+        return float('inf'), 'outside git'
+    if sha is None or set(sha) == {'0'} or t is None:
+        return float('inf'), 'uncommitted'
+    return t, '%s %s' % (sha[:7], datetime.datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M'))
+
+def is_new(t):
+    # The debt rule: newer than the commit that added README.md, or uncommitted (inf).
+    return t == float('inf') or (lib_time is not None and t > lib_time)
+
+def touched(path):
+    """Newest time a repo-root path changed: inf when it is dirty or untracked, None when unknown."""
+    r = subprocess.run(['git', 'status', '--porcelain', '--', path], capture_output=True)
+    if r.returncode == 0 and r.stdout.strip():
+        return float('inf')
+    r = subprocess.run(['git', 'log', '-1', '--format=%ct', '--', path], capture_output=True)
+    s = r.stdout.decode('utf-8', 'replace').strip() if r.returncode == 0 else ''
+    return int(s) if s else None
+
+def norm_key(k):
+    return re.sub(r'\s+', ' ', k.strip().lower())
+
 if not in_git:
     emit('I', 'note: %s is outside git - every quote counts as new' % d)
+
+live_keys = []  # (card id, {normalised key}, time of its keys: line)
 
 for name in sorted(os.listdir(d)):
     if not name.endswith('.md') or name == 'README.md' or not os.path.isfile(os.path.join(d, name)):
         continue
     with open(os.path.join(d, name), encoding='utf-8', errors='replace', newline='') as fh:
         lines = [l.rstrip('\r') for l in fh.read().lstrip('﻿').split('\n')]
-    fm, body_from = {}, 0
+    fm, fml, body_from = {}, {}, 0
     if lines and lines[0].strip() == '---':
         for i in range(1, len(lines)):
             if lines[i].strip() == '---':
@@ -132,6 +171,7 @@ for name in sorted(os.listdir(d)):
             k, _, v = lines[i].partition(':')
             # An inline ` # comment` is dropped, as the hooks' fm_scalar does (contract section 1 example).
             fm[k.strip().lower()] = re.sub(r'\s+#(\s.*)?$', '', v).strip()
+            fml[k.strip().lower()] = i + 1
     cid = fm.get('id') or name[:-3]
     title = fm.get('title', '')
     status = (fm.get('status') or 'text').lower()
@@ -186,20 +226,71 @@ for name in sorted(os.listdir(d)):
         else:
             emit('I', 'old debt  %s: %d quotes, not block, none newer than the library' % (cid, len(quotes)))
 
+    # Undeliverable: defects-inject.sh shows a card as text unless it declares block with a check, and
+    # only when a target matches its paths:. With no paths: its Never lines can never reach an agent.
+    if not (status == 'block' and check) and not listval(fm.get('paths', '')):
+        added = (git('log', '--diff-filter=A', '--format=%ct', '--', name) or '').split() if in_git else []
+        t = int(added[-1]) if added else float('inf')
+        hint = ' (area: is a label, not a glob)' if fm.get('area') else ''
+        if is_new(t):
+            emit('U', 'UNDELIVERABLE  %s: text card with no paths: - no hook can show its Never lines; add path globs or cmd:<regex>%s' % (cid, hint))
+        else:
+            emit('I', 'old undeliverable  %s: text card with no paths:, older than the library%s' % (cid, hint))
+
+    # Escape: an owner quote committed after the block check: line, and no fixture or check change since.
+    if eff == 'block' and in_git and 'check' in fml:
+        ct = when(name, fml['check'])[0]
+        newest = None
+        for n in quotes:
+            qt, label = when(name, n)
+            if qt > ct and (newest is None or qt > newest[0]):
+                newest = (qt, label)
+        if newest:
+            fx = [x for x in (touched(f) for f in existing) if x is not None]
+            if not fx or max(fx) < newest[0]:
+                if is_new(newest[0]):
+                    emit('E', 'ESCAPE  %s: quote %s came after the block check, no fixture or check change since - add the new form as a fixture and make the check fail on it' % (cid, newest[1]))
+                else:
+                    emit('I', 'old escape  %s: quote %s after the block check, older than the library' % (cid, newest[1]))
+
+    keys = {norm_key(k) for k in listval(fm.get('keys', '')) if norm_key(k)}
+    if keys:
+        live_keys.append((cid, keys, when(name, fml['keys'])[0] if 'keys' in fml else float('inf')))
+
     if mode == 'gate' and status == 'block' and check:
         emit('R', cid, arg, placeholder(check, arg), title)
     elif mode == 'audit' and eff == 'block':
         for target in existing:
             emit('R', cid, target, placeholder(check, target), title)
+
+# Overlap: one key on two live cards sends one owner remark to two classes, and splits its quotes.
+for i in range(len(live_keys)):
+    a, ka, ta = live_keys[i]
+    for b, kb, tb in live_keys[i + 1:]:
+        same = sorted(ka & kb)
+        if same:
+            shown = ', '.join('"%s"' % k for k in same)
+            if is_new(max(ta, tb)):
+                emit('O', 'OVERLAP  %s, %s: share key %s - sharpen one key or merge the cards' % (a, b, shown))
+            else:
+                emit('I', 'old overlap  %s, %s: share key %s' % (a, b, shown))
+        for x, y, kx, ky in ((a, b, ka, kb), (b, a, kb, ka)):
+            for k in sorted(kx - ky):
+                for m in sorted(ky - kx):
+                    if k in m:
+                        emit('I', 'ambiguous key  %s "%s" is inside %s "%s"' % (x, k, y, m))
 PY
 )" || { echo "defects-check: cards could not be read in $DIR" >&2; exit 2; }
 
 LOG="${TMPDIR:-/tmp}/vulyk-defects-$(date +%Y%m%d-%H%M%S)-$$.log"
-debt=0; red=0; blind=0; runs=0
+debt=0; red=0; blind=0; runs=0; undel=0; overlap=0; escape=0
 seen=" "; n=0
 while IFS=$'\t' read -r kind a b c title; do
   case "$kind" in
     D) echo "$a"; debt=$((debt+1)) ;;
+    U) echo "$a"; undel=$((undel+1)) ;;
+    O) echo "$a"; overlap=$((overlap+1)) ;;
+    E) echo "$a"; escape=$((escape+1)) ;;
     I) echo "$a" ;;
     R)
       id="$a"; target="$b"; cmd="$c"; runs=$((runs+1))
@@ -222,12 +313,15 @@ while IFS=$'\t' read -r kind a b c title; do
 done <<< "$plan"
 
 [ "$runs" -gt 0 ] && echo "log: $LOG"
-if [ $((debt + red + blind)) -eq 0 ]; then
+if [ $((debt + red + blind + undel + overlap + escape)) -eq 0 ]; then
   echo "GREEN: $n blocking checks"; exit 0
 fi
 parts=()
 [ "$debt" -gt 0 ] && parts+=("$debt new debt")
 [ "$red" -gt 0 ] && parts+=("$red red checks")
 [ "$blind" -gt 0 ] && parts+=("$blind blind fixtures")
+[ "$undel" -gt 0 ] && parts+=("$undel undeliverable")
+[ "$overlap" -gt 0 ] && parts+=("$overlap overlaps")
+[ "$escape" -gt 0 ] && parts+=("$escape escapes")
 ( IFS=','; echo "RED: ${parts[*]}" | sed 's/,/, /g' )
 exit 1

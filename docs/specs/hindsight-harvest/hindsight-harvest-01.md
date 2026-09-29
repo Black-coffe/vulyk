@@ -1,8 +1,8 @@
 ---
 story: hindsight-harvest-01
 spec: hindsight-harvest
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 model: sonnet
@@ -51,5 +51,8 @@ memory/map/scripts.md: the `defects-check.sh` section.
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- `defects-check.sh`: new records U/O/E (red) beside D; `when()`/`is_new()` reuse the blame and the README-time rule of debt, `touched()` reads a fixture's newest commit (dirty = newest). The verdict names `N undeliverable`, `N overlaps`, `N escapes`.
+- `tests/defects.test.sh`: the `card` helper now writes `keys: [k-<id>]` and `paths: ["src/<id>/**"]`, otherwise every old fixture card would be undeliverable and share key `x`. There are 18 new cases, each with an original and a neighbour form.
+- Read-only run on D:/YouTube_AI: 8 old undeliverable (info), `review-take-uncut` new → red, old overlap `не дышит`, 2 ambiguous keys, 0 escapes.
 
 ## Findings

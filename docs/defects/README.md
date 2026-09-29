@@ -70,6 +70,18 @@ commit time from `git blame`, not the date in the quote). Uncommitted quote line
 git, count as new. New debt makes the gate red; pay it by giving the card a failing `check:` and two
 fixtures. Debt older than the library is reported as old debt and does not fail.
 
+Three more findings follow the same new/old rule: new is red, older than this README is one `old` line.
+
+- **Undeliverable.** A card shown as `text` (not `block` with a `check:`) with no `paths:` can never be
+  shown to anyone, because the hook matches only `paths:`. `area:` is a label, not a glob. Give the card path globs or
+  `cmd:<regex>`. New = the card file was added after this README.
+- **Overlap.** One key (lowercase, spacing collapsed) on two live cards sends one remark to two classes and
+  splits its quotes, so neither card reaches debt. Sharpen a key or merge the cards; quote lines move and are
+  never rewritten. New = the newer `keys:` line. A key inside another card's key is an `ambiguous key` line, never red.
+- **Escape.** A `block` card got an owner quote after its `check:` line changed, and no fixture or `check:`
+  changed since: the check missed a neighbour form. Add that form as a fixture and make the check fail on it.
+  An uncommitted fixture edit counts as newest.
+
 ## The gate
 
 ```
@@ -77,7 +89,8 @@ bash scripts/defects-check.sh           # audit: debt, effective status, every b
 bash scripts/defects-check.sh <arg>     # before showing work: debt, then every declared block check with <arg>
 ```
 
-Exit 0 green, 1 red (new debt, a red check, a blind fixture), 2 no library or no python. The last line is
+Exit 0 green, 1 red (new debt, a new undeliverable card, overlap or escape, a red check, a blind fixture),
+2 no library or no python. The last line is
 the verdict. Check output goes to a log under `${TMPDIR:-/tmp}`. `DEFECTS_DIR` points it at another library.
 
 ## Cards
