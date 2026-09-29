@@ -78,6 +78,7 @@ cap, and CLAUDE.md is trimmed to meet it. The learnings buffer is cleaned once f
 *(empty)*
 
 ## Plan deltas
+- **2026-09-29, story 01 - the budget premise was half wrong.** The study (report §7) and the approval question said CLAUDE.md breaks ADR-013's cap. Measured while building: the constitution a host receives (both marked blocks swapped for install.sh placeholders) is 6 266 B / 93 lines, inside the cap; only VULYK's own copy was over, because of VULYK-only Commands rows. Decision: the test caps both the repo file (the owner's choice, "Подрезать до 7 KB") and the shipped render (ADR-013's real subject), and the trim came mostly from VULYK-only rows. Also removed two version mentions from `## Models and effort` (the owner's floor rule: versions live only in `model_floor`), crossing story 01's Non-goal on Models wording. Rejected: capping only the shipped render (the owner chose the trim); cutting Laws or Routing (owner-approved text that every host loads).
 
 **Approved:** <owner, date>
 **Briefed:** via grill, Andrei, 2026-09-29
