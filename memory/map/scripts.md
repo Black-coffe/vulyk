@@ -28,7 +28,9 @@ the SessionStart brief. Shell is `#!/usr/bin/env bash`, `set -u`, safe to re-run
   the default branch = accepted; branch gone, unmerged = rejected; present, unmerged = `pending`, no row),
   `window [--n 40]` (last 40 proposals with verdicts + older rejections), `last` (newest run `ts`),
   `pending` (unmerged `vulyk/evolve-*`). Default branch: `origin/HEAD`, else `main`, `master`. Stdlib.
-- `.claude/hooks/session-start-brief.sh` - prints the map line plus, when due, `maintenance due: ...`
+- `.claude/hooks/session-start-brief.sh` - prints the map line, then (0.22, :15-23) a bootstrap offer
+  when the Profile block of `constitution_file` still holds `<fill in` (never when `telemetry/inbox/`
+  exists, never after a `| Bootstrap | declined ... |` row), plus, when due, `maintenance due: ...`
   telling the Queen to run the Skills after the owner's task on the default branch, clean tree. Due:
   gc = any stub (`Stub captured by VULYK`) or >=10 raw learnings (CONSOLIDATED/README excluded);
   evolve = no `"kind":"run"` row, or last run >7 days, and a `council.jsonl` row newer than it, and no
@@ -57,7 +59,8 @@ the SessionStart brief. Shell is `#!/usr/bin/env bash`, `set -u`, safe to re-run
 `tests/maintenance.test.sh` (0.21; no model, no network; not wired into ci.yml): constitution caps
 `CONSTITUTION_MAX_BYTES=7168` / `_LINES=120` on the repo `CLAUDE.md` and on the shipped render
 (placeholders swapped in), `DESCRIPTIONS_MAX_BYTES=4623` for agent+command `description:` lines
-(:31-33), the brief's due logic on fixture hives (:96), the ledger (:164). Sizes CR-stripped.
+(:31-33), the brief's due logic on fixture hives (:96), the bootstrap offer (:165), the ledger, the `green`
+terminal of build/review (:233; greps for AskUserQuestion, «Выпускаем?», Skill-tool ship, fallback). Sizes CR-stripped.
 
 ## install.sh - the upgrade contract
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution
@@ -76,4 +79,4 @@ the SessionStart brief. Shell is `#!/usr/bin/env bash`, `set -u`, safe to re-run
   reads as rejected.
 - `telemetry/` (the inbox) is VULYK-repo-only; `copy_tree` never ships it.
 
-last-verified: 2026-09-29 (v0.21.0)
+last-verified: 2026-09-29 (v0.22.0)

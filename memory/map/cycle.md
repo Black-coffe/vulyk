@@ -47,7 +47,8 @@ verbs on exit 0 carry the post-verb `status` (`emit_status` :86).
 First match in `cmd_status`: `shipped` → `paused` → `briefed` → `branch` → `build:<wave>` →
 `close-story:<file>` → open round: stale → `open-round`, missing seat → `dispatch:<csv>`, else `judge` →
 `escalated` → `green` (GREEN, pack matches, not stale) → `repair` (RED not stale; or reopened non-`env`
-ESCALATE) → `open-round`. Keys end with `seat_attempt{} seats[]` (0.18).
+ESCALATE) → `open-round`. Keys end with `seat_attempt{} seats[]` (0.18). `green` is what
+`/vulyk-build` and `/vulyk-review` turn into the «Выпускаем?» question (0.22); `cycle.sh` is unchanged.
 
 ## Seats by tier and the verdict (`cmd_judge`)
 `required_seats_for_tier` :327: Tier 1-2 → `review`; 3-4 → `opus review`, plus `haiku` when
@@ -91,4 +92,4 @@ ledger) is NOT in ci.yml (run by hand / the spec's integration gate).
 `scripts/telemetry.sh` reads `council.jsonl`, `journal.md`, `scope.jsonl` without writing them. See
 `memory/map/scripts.md`.
 
-last-verified: 2026-09-29 (v0.21.0, ADR-013, ADR-015)
+last-verified: 2026-09-29 (v0.22.0, ADR-013, ADR-015)

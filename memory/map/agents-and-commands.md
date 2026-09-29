@@ -1,4 +1,4 @@
-# Scout report: agents and commands (v0.21.0)
+# Scout report: agents and commands (v0.22.0)
 
 ## Purpose
 Every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (ADR-013 light VULYK, ADR-015 Sonnet
@@ -52,8 +52,11 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   with `scriptPath` (never `name:`); a thrown call records `telemetry.sh record driver_refused`. On
   return: stop with `file` → story `blocked` + `lead-architect`. Without Workflow: the same advance
   loop with `--stamp --claim`, agents via the Agent tool, `release` on every exit.
+  Terminal `green` (0.22): `AskUserQuestion` «<slug>: council GREEN, round <n>. Выпускаем?»; yes runs
+  `vulyk-ship` via the Skill tool, no / no `AskUserQuestion` (`claude -p`) → one-line `/vulyk-ship` advice.
 - **`/vulyk-review`** - claim + `advance --claim`; dispatch the seats `next` names; `advance
-  --ingest`; release. `build:W` = RED, repair story written → `/vulyk-build`.
+  --ingest`; release. `build:W` = RED, repair story written → `/vulyk-build`. Step 4 `green` asks the
+  same «Выпускаем?» question.
 - **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses); release commit; local merge; prints the
   publish command, never runs it; `--record`; `drone-docs`/`librarian` only when they have work;
   next-brief draft (UNASKED, minors, `[unanchored]`, `## Descoped`, `## Needs a human`).
@@ -72,8 +75,10 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
 - **`/vulyk-pause`** / **`/vulyk-resume`** - wrap `cycle.sh pause`/`resume`; resume relaunches
   `/vulyk-build` fresh (hive path records `driver_relaunched`), never `resumeFromRunId`.
 - **`/vulyk-update`** - `vulyk-update.sh . --check`, CHANGELOG summary, ask; `--constitution replace`
-  is a separate choice. **`/vulyk-bootstrap`** - interview, Profile + Commands markers, scouts → map.
+  is a separate choice. **`/vulyk-bootstrap`** - interview, Profile + Commands markers, scouts → map;
+  the SessionStart brief offers it once while the Profile holds `<fill in`; a no is the Profile row
+  `| Bootstrap | declined <date> |`.
 - **`/vulyk-map`**, **`/vulyk-handoff`** (`handoff.py dump` + summary).
 - gc, evolve, map run themselves: `session-start-brief.sh` prints `maintenance due: ...` (see scripts.md).
 
-last-verified: 2026-09-29 (v0.21.0, ADR-013, ADR-015)
+last-verified: 2026-09-29 (v0.22.0, ADR-013, ADR-015)
