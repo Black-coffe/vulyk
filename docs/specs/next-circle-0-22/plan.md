@@ -64,5 +64,5 @@ For each host repository (A3), in this order - Varto first (the one on 0.19.1), 
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/next-circle-0-22
 **Checked:** <written by scripts/human-check.sh>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Council:** GREEN round 1, 2026-09-29, at 28e5a97, pack a903f3a34b16
 **Shipped:** <written by scripts/ship-check.sh --record>
