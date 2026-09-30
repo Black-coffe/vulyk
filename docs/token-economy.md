@@ -21,8 +21,9 @@ conversation so far — is comparatively cheap per token. Decode — thinking, t
 one token at a time — occupies the accelerator far longer, and is priced at roughly **5× input**.
 Thinking tokens are output tokens, which is why effort level shows up in the bill directly.
 
-**Cached or not.** A cache hit costs about **0.1×** the input price; writing to the cache costs up to
-**2×**. A conversation whose prefix stays cached is nearly free to re-send. A conversation whose
+**Cached or not.** A cache hit costs **0.1×** the input price on Sonnet 5.5, **0.05×** on Opus 5.5
+and **0.025×** on Fable 5.1; writing to the cache costs **1.25×** for a 5-minute entry and **2×** for
+a 1-hour one. A conversation whose prefix stays cached is nearly free to re-send. A conversation whose
 prefix was invalidated is re-prefilled at full price on the very next turn.
 
 ## The cache key, and what breaks it
@@ -33,11 +34,11 @@ in the request changes:
 | Event | Effect |
 |---|---|
 | `/model` mid-session | Each model has its own cache — the whole conversation re-prefills at full price |
-| `/effort` mid-session | Keeps the cache on Opus 5.5 and Fable 5.1 (a per-message effort change); on other models, and on Bedrock/Vertex, a full re-prefill |
-| Fast mode toggled | Part of the cache key; re-prefill, and turning it *on* is what costs |
+| `/effort` mid-session | Keeps the cache on Opus 5.5, Sonnet 5.5 and Fable 5.1 (a per-message effort change); on other models, and on Bedrock/Vertex/gateways, a full re-prefill |
+| Fast mode toggled | Part of the cache key: the *first* fast-mode turn of a conversation re-prefills; later toggles keep the cache |
 | `/compact` | The conversation is replaced, so nothing matches (the system prompt survives) |
 | Time, main session | Subscription: **1 h**. API key or usage credits: **5 min**, unless `ENABLE_PROMPT_CACHING_1H=1` |
-| Time, subagents and Workflow agents | **5 min** on every plan, Max included; `subagentPromptCacheTtl` raises it, and a 1 h write bills higher |
+| Time, subagents and Workflow agents | **5 min** on every plan, Max included; an agent's `experimental: {cacheTtl: 1h}` frontmatter raises it for that agent (Claude Code ≥ 2.1.248), and a 1 h write bills higher |
 | Resuming an old session | The cache is normally gone by then |
 
 `/rewind` is the exception worth knowing: it cuts turns off the *end*, so everything before the cut
@@ -54,7 +55,14 @@ Three operational consequences:
 - **A subagent that waits more than five minutes pays for its whole context again.** A worker or
   reviewer idle on a ten-minute suite re-writes its cache on its next request. That is one
   reason `close-story` runs verification once, under a 540 s timeout, instead of the worker
-  running the suite and then `close-story` running it again.
+  running the suite and then `close-story` running it again. It is also why `worker-code` and
+  `worker-test` carry `experimental: {cacheTtl: 1h}`: in 10 days of transcripts, workers lost
+  their prefix 23 times behind a suite, about 40% of `worker-code`'s cost. The other agents stay
+  at 5 minutes. A 1-hour write costs 1.6× a 5-minute one, and on short-turn agents that premium
+  outweighs the rare rebuild: a blanket 1 h for every subagent measured as a net loss
+  (`docs/specs/cache-economy/report.md`). So never set `subagentPromptCacheTtl`,
+  `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL` or `FORCE_PROMPT_CACHING_5M`: each one overrides the
+  per-agent frontmatter.
 
 ## Why the cascade is cache-safe and `/model` is not
 
@@ -85,7 +93,11 @@ to load it again.
 A subagent does not see your conversation, but it does load every level of `CLAUDE.md` the main
 session loads — `~/.claude/CLAUDE.md`, the project's `CLAUDE.md` and everything it imports,
 `AGENTS.md`, `.claude/rules/` — plus a git-status snapshot, and it writes all of that to a fresh
-5-minute cache of its own. The audit measured a subagent's first request at **27–36k tokens**
+5-minute cache of its own. Only the part before the dispatch prompt, the tools and the agent's own
+body, is shared: a second agent of the same type, model, effort, tools and cwd started within the
+TTL reads it from the first one's cache. `CLAUDE.md`, the environment block and the date travel in
+the messages together with the dispatch prompt, so they are written again on every spawn (observed in
+our transcripts and in anthropics/claude-code#98513, not stated in the docs). The audit measured a subagent's first request at **27–36k tokens**
 (48k for `council-haiku`, whose browser MCP schemas ride along), about 85% of it that instruction
 bundle, re-read on every turn. The bundle was **23% of all spend**.
 

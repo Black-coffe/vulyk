@@ -2,6 +2,29 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [Unreleased]
+
+Cache-only token savings from the study `docs/specs/cache-economy/`.
+
+### Changed
+- **`worker-code` and `worker-test` keep a 1-hour prompt cache** (`experimental: {cacheTtl: 1h}`, Claude Code ≥ 2.1.248).
+  A subagent's cache lives 5 minutes on every plan. A worker whose `close-story` suite runs longer than that re-wrote its
+  whole context afterwards: 23 times in 10 days, about 40% of `worker-code`'s cost. The other agents stay at 5 minutes,
+  because a blanket 1 hour for every subagent measured as a net loss (a 1-hour write costs 1.6x a 5-minute one). Never
+  set `subagentPromptCacheTtl`, `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL` or `FORCE_PROMPT_CACHING_5M`: each one overrides
+  the per-agent value.
+
+### Fixed
+- **`token-report.py` weighs a cache read by its model's price**: 0.05 on Opus 5.5, 0.025 on Fable/Mythos 5.1, 0.1
+  otherwise (was 0.1 for all). It overstated the reads of the models VULYK runs most and understated the share of cache
+  writes. Weighted totals of Opus- and Fable-heavy specs drop, so they are not comparable with earlier reports.
+- **`docs/token-economy.md` and `docs/model-cascade.md`:**
+  - the cache read prices above;
+  - `/effort` also keeps the cache on Sonnet 5.5;
+  - only the first fast-mode turn re-prefills;
+  - the per-agent TTL key;
+  - which part of a subagent's prompt siblings share.
+
 ## [0.24.0] - 2026-09-30
 
 The weekly evolve run counts the owner's corrections and how many of them reached `docs/defects/`. It is the first

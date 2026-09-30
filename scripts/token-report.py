@@ -14,8 +14,9 @@ Streams every file line by line, skips malformed lines, standard library only.
 Counting - the method of docs/specs/token-audit/evidence/forensics.md section 0:
   * one API response is written as several lines sharing message.id: kept once, max of each field;
   * raw      = input + cache write + cache read + output;
-  * weighted = input + 1.25 x write(5m) + 2 x write(1h) + 0.1 x read + output; a cache write
-               without the 5m/1h split counts as 5m, and the report says so;
+  * weighted = input + 1.25 x write(5m) + 2 x write(1h) + r x read + output, where r is the read
+               price of the call's model (READ_RATE: 0.05 Opus 5.5, 0.025 Fable/Mythos 5.1, else 0.1);
+               a cache write without the 5m/1h split counts as 5m, and the report says so;
   * the Workflow's totalTokens is never used: it is the sum of each agent's final context size.
 Attribution to a spec slug:
   * a workflow agent -> the run's args.spec;
@@ -46,9 +47,14 @@ EDIT_TOOLS = {'Edit', 'Write', 'MultiEdit', 'NotebookEdit'}
 SHELL_TOOLS = {'Bash', 'PowerShell'}
 GAP_S = 15 * 60
 NONE = '(none)'
-# A call is [ts, input, cache write, write 5m, write 1h, cache read, output, no-split flag, sidechain].
-IN, CW, CW5, CW1H, CR, OUT, NOSPLIT, SIDE = range(1, 9)
-NOTE = ("weighted ≈ cost at API cache prices: input + 1.25×write(5m) + 2×write(1h) + 0.1×read + output.",
+# A call is [ts, input, cache write, write 5m, write 1h, cache read, output, no-split flag,
+# read weighted by its model's price, sidechain].
+IN, CW, CW5, CW1H, CR, OUT, NOSPLIT, CRW, SIDE = range(1, 10)
+# A cache read's price as a share of the model's input price (platform.claude.com prompt-caching
+# pricing, 2026-09-30). A model not listed here reads at the standard 0.1.
+READ_RATE = (('opus-5-5', 0.05), ('fable-5-1', 0.025), ('mythos-5-1', 0.025))
+NOTE = ("weighted ≈ cost at API cache prices: input + 1.25×write(5m) + 2×write(1h) + r×read + output, "
+        "r = 0.05 on Opus 5.5, 0.025 on Fable/Mythos 5.1, 0.1 otherwise.",
         "The Workflow's printed totalTokens is not spend: it adds up each agent's final context, "
         "not the tokens processed.")
 
@@ -142,7 +148,12 @@ def text_of(content):
     return ''
 
 
-def usage_of(u):
+def read_rate(model):
+    m = model if isinstance(model, str) else ''
+    return next((r for k, r in READ_RATE if k in m), 0.1)
+
+
+def usage_of(u, model=None):
     cw = num(u.get('cache_creation_input_tokens'))
     cc = u.get('cache_creation')
     split = isinstance(cc, dict) and ('ephemeral_5m_input_tokens' in cc or 'ephemeral_1h_input_tokens' in cc)
@@ -152,8 +163,9 @@ def usage_of(u):
         c5 = num(c5) if c5 is not None else max(cw - c1h, 0)
     else:
         c5, c1h = cw, 0
-    return [num(u.get('input_tokens')), cw, c5, c1h, num(u.get('cache_read_input_tokens')),
-            num(u.get('output_tokens')), 0 if (split or not cw) else 1]
+    cr = num(u.get('cache_read_input_tokens'))
+    return [num(u.get('input_tokens')), cw, c5, c1h, cr,
+            num(u.get('output_tokens')), 0 if (split or not cw) else 1, cr * read_rate(model)]
 
 
 def read_transcript(path, want_events):
@@ -186,7 +198,7 @@ def read_transcript(path, want_events):
                 u = m.get('usage')
                 if isinstance(u, dict) and m.get('model') != '<synthetic>':
                     mid = m.get('id') or d.get('requestId') or d.get('uuid') or '%s:%d' % (path, n)
-                    v = usage_of(u)
+                    v = usage_of(u, m.get('model'))
                     c = calls.get(mid)
                     if c is None:
                         calls[mid] = [ts] + v + [bool(d.get('isSidechain'))]
@@ -238,15 +250,15 @@ def mtime(path):
 
 class Acc:
     """Spend of one spec: main-session and subagent buckets of [input, write, write5m, write1h, read,
-    output, calls], sessions, dispatches by agent type, event timestamps."""
+    output, calls, read weighted by model], sessions, dispatches by agent type, event timestamps."""
     __slots__ = ('main', 'sub', 'sessions', 'dispatches', 'ts', 'nosplit')
 
     def __init__(self):
-        self.main, self.sub = [0] * 7, [0] * 7
+        self.main, self.sub = [0] * 8, [0] * 8
         self.sessions, self.dispatches, self.ts, self.nosplit = set(), Counter(), [], 0
 
     def merge(self, o):
-        for i in range(7):
+        for i in range(8):
             self.main[i] += o.main[i]
             self.sub[i] += o.sub[i]
         self.sessions |= o.sessions
@@ -280,6 +292,7 @@ def collect(tdir, since_ts):
             for i, k in enumerate((IN, CW, CW5, CW1H, CR, OUT)):
                 bucket[i] += c[k]
             bucket[6] += 1
+            bucket[7] += c[CRW]
             a.nosplit += c[NOSPLIT]
             a.sessions.add(sid)
 
@@ -376,7 +389,7 @@ def council_rounds(project, since_ts):
 
 
 def weighted(b):
-    return b[0] + 1.25 * b[2] + 2 * b[3] + 0.1 * b[4] + b[5]
+    return b[0] + 1.25 * b[2] + 2 * b[3] + b[7] + b[5]
 
 
 def raw(b):
@@ -393,7 +406,7 @@ def day(ts):
 
 
 def row(name, a, rounds):
-    t = [a.main[i] + a.sub[i] for i in range(7)]
+    t = [a.main[i] + a.sub[i] for i in range(8)]
     r = raw(t)
     d = dict(sorted(a.dispatches.items(), key=lambda kv: (-kv[1], kv[0])))
     out = {'spec': name, 'sessions': len(a.sessions), 'api_calls': t[6], 'raw': r, 'weighted': round(weighted(t)),

@@ -102,8 +102,9 @@ own context window with its own cache; dispatching to `model: sonnet` leaves the
 cached prefix untouched. Typing `/model sonnet` in the main session does the opposite: the model is
 part of the cache key, so the entire conversation re-prefills at full input price on the next turn,
 and every subsequent turn runs on the wrong model until you switch back — paying the re-prefill a
-second time. The same holds for the fast-mode toggle, and for `/effort` on models other than
-Opus 5.5 and Fable 5.1 (on those two, an effort change keeps the cache).
+second time. The same holds for the first fast-mode turn, and for `/effort` on models other than
+Opus 5.5, Sonnet 5.5 and Fable 5.1 (on those three, an effort change keeps the cache, except on
+Bedrock, Vertex and gateways).
 
 This is what makes the Tier 4 "second reviewer on a different model" affordable: it is a second
 subagent, not a session-level switch. See [token-economy.md](token-economy.md).
@@ -304,8 +305,8 @@ Session levels for the Queen herself:
 
 The step from `high` to `max` on Opus 5.5 costs about **5× the output tokens for 4 index points**
 (Artificial Analysis: 53M → 260M, 54 → 58). Simon Willison's `max` runs hit the 128K output cap
-while still reasoning. On Opus 5.5 and Fable 5.1 an effort change keeps the cached prefix; on
-other models it drops it, so there set the session level once at the start.
+while still reasoning. On Opus 5.5, Sonnet 5.5 and Fable 5.1 an effort change keeps the cached
+prefix; on other models it drops it, so there set the session level once at the start.
 
 ## Anti-patterns the cascade exists to kill
 - Opus reading 40 files to "understand the project" (that is a scout's job).

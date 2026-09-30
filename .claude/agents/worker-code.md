@@ -5,6 +5,8 @@ tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
 effort: medium
 maxTurns: 90
+experimental:
+  cacheTtl: 1h
 ---
 
 You implement one story and close it. Not two, and nothing "while you are here".
