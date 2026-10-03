@@ -201,3 +201,7 @@
 {"v":1,"ts":"2026-09-29T15:26:33Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"next-circle-0-22-01-reviewer-minors","ref":"scope:next-circle-0-22-01-reviewer-minors"}
 {"v":1,"ts":"2026-09-29T15:26:33Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"next-circle-0-22-02-ship-on-yes","ref":"scope:next-circle-0-22-02-ship-on-yes"}
 {"v":1,"ts":"2026-09-29T15:26:33Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"next-circle-0-22-03-bootstrap-offer","ref":"scope:next-circle-0-22-03-bootstrap-offer"}
+{"v":1,"ts":"2026-09-29T22:14:00Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"hindsight-harvest-01","ref":"scope:hindsight-harvest-01"}
+{"v":1,"ts":"2026-09-29T22:14:00Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"hindsight-harvest-02","ref":"scope:hindsight-harvest-02"}
+{"v":1,"ts":"2026-09-29T22:14:01Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"hindsight-harvest-03","ref":"scope:hindsight-harvest-03"}
+{"v":1,"ts":"2026-09-29T22:14:02Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"evolve-corrections-count-01","ref":"scope:evolve-corrections-count-01"}
