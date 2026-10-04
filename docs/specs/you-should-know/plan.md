@@ -61,3 +61,4 @@ owner's explicit `false` is kept. The installer says how to turn it off, because
 **Council:**
 **Council:** GREEN round 1, 2026-10-04, at dc84473, pack 763044222936
 **Shipped:**
+**Shipped:** 0.25.0, 2026-10-04, at 6be3476 - merged to main, published to GitHub
