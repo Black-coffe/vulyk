@@ -56,7 +56,8 @@ owner's explicit `false` is kept. The installer says how to turn it off, because
 
 **Approved:**
 **Briefed:** via mini-brief, Andrei, 2026-10-03
-**Branch:**
+**Branch:** vulyk/you-should-know
 **Checked:**
 **Council:**
+**Council:** GREEN round 1, 2026-10-04, at dc84473, pack 763044222936
 **Shipped:**

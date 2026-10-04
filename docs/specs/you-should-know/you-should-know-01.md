@@ -1,7 +1,8 @@
 ---
 story: you-should-know-01
 spec: you-should-know
-status: todo
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 model: sonnet
@@ -50,5 +51,15 @@ fresh install copies it and prints no wiring line.
 `git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
 
 ## Implementation notes
+- `install.sh` `wire_plugin` (after `wire_permissions`): one Python edit with exit codes 0 wired / 3 already true / 6 an
+  owner's false (kept line) / 4 unparseable (NOTE, untouched); `--dry` under `--check`; reuses `settings_backup` and drops
+  the backup it took when nothing changed. No python: a quoted `"<id>":` grep, then a by-hand line. After a real wiring it
+  prints the off switch and, when the installing shell sets DISABLE_TELEMETRY / CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC /
+  CLAUDE_CODE_USE_BEDROCK|VERTEX|FOUNDRY, a NOTE that the key will do nothing there.
+- `.claude/settings.json`: `enabledPlugins` with the key, so a fresh hive is enabled by the copy and prints no wire line.
+- `tests/telemetry.test.sh`: 12 checks beside the OWNSET case (own file, fresh, owner file + off switch + permission kept,
+  `--check` byte-identical, other plugin key survives, silent rerun with no backup, false kept with no backup, unparseable
+  byte-identical). Suite: 465 checks, 0 failed.
+- `ci.yml` install-smoke: `jq -e` on the key. ADR-005: amendment 2026-10-04.
 
 ## Findings

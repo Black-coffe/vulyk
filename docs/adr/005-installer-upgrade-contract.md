@@ -277,3 +277,11 @@ fields include defect-card frontmatter, Profile rows, marker names and story fro
 rewrites host-authored content. v0.23.0's `UNDELIVERABLE ... (area: is a label, not a glob)` is the gate half of this
 rule for `area:`. The deciding factor: a silent contract rename turns a host's working configuration into dead text, and
 only the release that makes the rename knows it happened. Status line unchanged.
+
+### 2026-10-04 (spec `you-should-know`): one plugin key joins what the installer appends
+
+`wire_plugin` appends `"enabledPlugins": {"cc-plugin-you-should-know@builtin": true}` to a host's `.claude/settings.json`
+under the same rule as hooks and permissions: only when the key is missing, in place, after the one backup. A key already
+present keeps the owner's value, `false` included, with a `kept` line. The deciding factor: `/plugin enable` writes user
+scope only, so the project file is the one place a hive can carry the mod, and project `true` outranks a user `false`,
+which is why the installer prints the off switch (`.claude/settings.local.json`). Status line unchanged.

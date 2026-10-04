@@ -243,7 +243,10 @@ jobs:
              ([.permissions.allow[] | select(. == $r2)] | length == 1)' \
             "$target/.claude/settings.json" >/dev/null \
             || { echo "::error::permissions.allow does not contain both cycle.sh and journal.sh allow rules exactly once"; exit 1; }
-          test -f "$target/memory/stats/skills.json"           || { echo "::error::skills.json not seeded"; exit 1; }
+          # spec you-should-know: every hive enables Claude Code's built-in "You should know" mod
+          jq -e '.enabledPlugins["cc-plugin-you-should-know@builtin"] == true' "$target/.claude/settings.json" >/dev/null \
+            || { echo "::error::the hive's settings.json does not enable cc-plugin-you-should-know@builtin"; exit 1; }
+          test -f "$target/memory/stats/skills.json"          || { echo "::error::skills.json not seeded"; exit 1; }
           # the blanked Profile placeholder must carry every row the source constitution
           # documents (story 16) - count instead of hardcoding a number, so a row added to
           # CLAUDE.md but not to install.sh's placeholder turns this red.

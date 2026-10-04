@@ -2,9 +2,27 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
-## [Unreleased]
+## [0.25.0] - 2026-10-04
 
-Cache-only token savings from the study `docs/specs/cache-economy/`.
+Every hive turns on Claude Code's built-in "You should know" mod (spec `you-should-know`), plus cache-only token savings
+from the study `docs/specs/cache-economy/`.
+
+### Added
+- **Every hive enables `cc-plugin-you-should-know@builtin`** (Claude Code ≥ 2.1.287). It is a side agent that watches long
+  tasks and shows a note above the prompt when it finds something you or Claude might miss. VULYK's own
+  `.claude/settings.json` carries `"enabledPlugins": {"cc-plugin-you-should-know@builtin": true}`, so a fresh install comes
+  out enabled. On `--upgrade`, the new `wire_plugin` appends the key to a host's existing settings.json under the ADR-005
+  rule: only when it is missing, in place, after the one backup. A key the owner already set keeps its value, and a
+  `false` prints a `kept` line.
+  - **Turning it off in a hive:** add `"cc-plugin-you-should-know@builtin": false` to `.claude/settings.local.json`.
+    `/plugin disable` does not work there: it writes user scope, and the project key outranks it (measured on 2.1.288).
+  - **When it does nothing:** it runs only in first-party sessions with telemetry on. The installer prints a NOTE when the
+    shell sets `DISABLE_TELEMETRY`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` or a Bedrock/Vertex/Foundry provider.
+  - **After the upgrade:** the key shows up as a diff in `.claude/settings.json`. Commit it with your next change.
+  - **Cost:** Anthropic does not publish which model the side agent uses or what it spends. One short `claude -p` turn
+    made no extra model request. The weekly token report and `/vulyk-evolve` will measure interactive sessions.
+  - Council: Fable 5.1, Opus 5.5 and Sonnet 5.5, two rounds. No SessionStart nudge, no version probe, and no VULYK
+    mechanism trimmed: the mod's note is on screen only, and `docs/defects/` stays the durable record. ADR-005 amended.
 
 ### Changed
 - **`worker-code` and `worker-test` keep a 1-hour prompt cache** (`experimental: {cacheTtl: 1h}`, Claude Code ≥ 2.1.248).

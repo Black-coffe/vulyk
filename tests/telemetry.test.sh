@@ -1296,6 +1296,40 @@ cat "$T/ownset.out" | expect "an owner's settings.json: reset wired on SessionSt
   "wire           .claude/settings.json -> SessionStart: defects-inject.sh reset"
 expect_eq "... and all three land in the owner's file" "1 1 1" "$(defect_wiring "$OWNSET/.claude/settings.json")"
 
+# you-should-know: every hive enables Claude Code's built-in "You should know" mod in its project
+# settings; an owner's own value for the key stands
+YSK='cc-plugin-you-should-know@builtin'
+ysk_val() { jq -r --arg k "$YSK" '.enabledPlugins[$k] | tostring' "$1" | tr -d '\r'; }
+expect_eq "VULYK's own settings.json enables the mod" "true" "$(ysk_val "$SRC/.claude/settings.json")"
+expect_eq "a fresh hive gets the key with the settings.json it is given" "true" "$(ysk_val "$TGT/.claude/settings.json")"
+cat "$T/install.out" | expect_absent "... so the fresh install prints no wiring line for it" "enabledPlugins"
+cat "$T/ownset.out" | expect "an owner's settings.json: the mod wired" \
+  "wire           .claude/settings.json -> enabledPlugins: $YSK"
+cat "$T/ownset.out" | expect "... with the off switch that works in a hive" "false in .claude/settings.local.json"
+expect_eq "... the key lands true and the owner's permission stays" "true 1" \
+  "$(ysk_val "$OWNSET/.claude/settings.json") $(jq -r '[.permissions.allow[] | select(. == "Bash(ls:*)")] | length' "$OWNSET/.claude/settings.json" | tr -d '\r')"
+YSK2="$T/hive-ysk"; mkdir -p "$YSK2/.claude"
+printf '{"enabledPlugins":{"other@market":true}}\n' > "$YSK2/.claude/settings.json"
+bash "$SRC/install.sh" "$YSK2" --telemetry off --check > "$T/ysk-check.out" 2>&1
+cat "$T/ysk-check.out" | expect "--check names the mod it would wire" "would wire     .claude/settings.json -> enabledPlugins: $YSK"
+expect_eq "... and leaves the file untouched" '{"enabledPlugins":{"other@market":true}}' "$(tr -d '\r\n' < "$YSK2/.claude/settings.json")"
+bash "$SRC/install.sh" "$YSK2" --telemetry off > /dev/null 2>&1
+expect_eq "another plugin key survives the wiring" "true true" \
+  "$(jq -r '.enabledPlugins["other@market"] | tostring' "$YSK2/.claude/settings.json" | tr -d '\r') $(ysk_val "$YSK2/.claude/settings.json")"
+rm -f "$YSK2/.claude/settings.json.vulyk-bak"
+bash "$SRC/install.sh" "$YSK2" --upgrade > "$T/ysk-again.out" 2>&1
+cat "$T/ysk-again.out" | expect_absent "a second run says nothing about the key" "enabledPlugins"
+expect_eq "... and takes no backup for it" "0" "$([ -e "$YSK2/.claude/settings.json.vulyk-bak" ] && echo 1 || echo 0)"
+jq --arg k "$YSK" '.enabledPlugins[$k] = false' "$YSK2/.claude/settings.json" > "$T/ysk-off.json" && cp "$T/ysk-off.json" "$YSK2/.claude/settings.json"
+bash "$SRC/install.sh" "$YSK2" --upgrade > "$T/ysk-off.out" 2>&1
+cat "$T/ysk-off.out" | expect "an owner's false is kept, and said so" "kept           .claude/settings.json -> enabledPlugins: $YSK is false"
+expect_eq "... the value stays false and no backup is left for it" "false 0" \
+  "$(ysk_val "$YSK2/.claude/settings.json") $([ -e "$YSK2/.claude/settings.json.vulyk-bak" ] && echo 1 || echo 0)"
+YSKBAD="$T/hive-ysk-bad"; mkdir -p "$YSKBAD/.claude"; printf '{"enabledPlugins": [\n' > "$YSKBAD/.claude/settings.json"
+bash "$SRC/install.sh" "$YSKBAD" --telemetry off > "$T/ysk-bad.out" 2>&1
+expect_eq "an unparseable settings.json is left byte for byte" '{"enabledPlugins": [' "$(tr -d '\r\n' < "$YSKBAD/.claude/settings.json")"
+cat "$T/ysk-bad.out" | expect "... with the line to add by hand" "\"enabledPlugins\": { \"$YSK\": true }"
+
 # A hive whose owner arranged things: a quoted launcher with a redirect on a startup-only group,
 # the inject script already on SessionStart WITHOUT the argument, intake already wired, and an
 # own Bash guard on PreToolUse.
