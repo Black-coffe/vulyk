@@ -1,8 +1,8 @@
 ---
 story: haiku-5-5-floor-01
 spec: haiku-5-5-floor
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 model: sonnet
@@ -63,5 +63,22 @@ scripts/top-model.sh `floor)` branch
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- `scripts/lib.sh`: floor line `haiku 5.5 cc>=2.1.293`; new `claude_code_version` (first word of
+  `CLAUDE_CODE_VERSION`, else `claude --version`, empty unless dotted digits) and `version_lt`
+  (numeric, missing parts 0, so 2.1.1000 > 2.1.293 and 2.1.29 < 2.1.293); `model_below_floor` prints
+  `<fam> cc <floor> <have|unknown> <need>` for a `cc>=` line not met. `unreleased` unchanged.
+- `scripts/top-model.sh --floor`: two new messages (old version with `claude update`, unknown version);
+  `ANTHROPIC_DEFAULT_HAIKU_MODEL` joins the env vars, the settings grep and the provider pin check.
+- Measured in this session (Claude Code 2.1.292): `--floor` exits 1 and names the clerk's route - the
+  check now sees exactly the case the owner raised.
+- `tests/telemetry.test.sh`: 13 new checks; stub `claude` binaries on PATH make the unknown and the
+  `claude --version` paths deterministic on any box; `floorcheck` pins `CLAUDE_CODE_VERSION=2.1.293`.
+  478 checks, 0 failed (8 m 52 s). `tests/maintenance.test.sh` (constitution budget): 100, 0 failed.
+- `close-story` under the default 540 s budget: exit 4, "verification timed out after 540s" at 468 of 478
+  checks (the suite alone took 532 s an hour earlier). Closed with `VULYK_VERIFY_TIMEOUT=900` from a
+  background shell, the same full suite - see plan.md `## Plan deltas`.
+- Docs: constitution line, README (clerk row, ladder, floor paragraph), architecture, model-cascade
+  (rung table, why-the-clerk paragraph, floor flags, before-the-fact list, effort table), faq,
+  ADR-015 Status amendment and revisit note.
 
 ## Findings

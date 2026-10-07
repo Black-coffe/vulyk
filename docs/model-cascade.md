@@ -127,8 +127,8 @@ or a story's `model:`, fixes it to one. **The family that builds never judges.**
 |---|---|---|
 | Fable — the gate, `TOP_MODEL` (`fable` on Max and premium seats, `opus` on Pro, standard seats and API) | short, high-stakes calls. It never writes a first attempt and never orchestrates. | the Tier 4 `lead-review` (beside a second reviewer), `lead-architect`, the Tier 4 `queen-planner`, the **second attempt** of any missed story. The frontmatter says `opus`; the dispatch parameter carries the upgrade. |
 | Opus — judgment, `opus` | orchestrate, plan, judge. At Tier 3–4 it writes no story code on a first attempt. | the Queen (who also builds Tier 1–2 herself), `queen-planner`, `lead-review` at Tier 1–3 and as the second reviewer beside Fable, `lead-architect` where the gate is `opus`, `council-opus`, `council-haiku`, `drone-coverage`, `librarian` |
-| Sonnet — execution, `sonnet` | a story, a map, a doc, one verb. It never judges code its own family wrote. | `worker-code`, `worker-test` (story default `model: sonnet`), `drone-scout`, `drone-docs`, `cycle-clerk`; the Tier 4 second reviewer beside an Opus gate |
-| Haiku — mechanical, `haiku` | nothing until a Haiku at or above the floor exists. Then only `cycle-clerk`. | none today |
+| Sonnet — execution, `sonnet` | a story, a map, a doc, one verb. It never judges code its own family wrote. | `worker-code`, `worker-test` (story default `model: sonnet`), `drone-scout`, `drone-docs`; the Tier 4 second reviewer beside an Opus gate |
+| Haiku — mechanical, `haiku` | one verb, no judgment, and only at or above the floor. | `cycle-clerk` (since 0.26.0) |
 
 `council-haiku` is the black-box seat. The name is the angle, not the model; it runs on `opus`
 because it judges. `council-sonnet` left the ladder in v0.18.0: it returned no RED in 16 rows of
@@ -151,10 +151,12 @@ Analysis measured at about $4.8 a task against $1.34 for Opus 5.5 at `medium`.)
 against 46.2) and on HLE. Anthropic's advice is Opus for "complex work requiring careful judgment",
 and "for the hardest long-horizon work, an Opus model is the better choice".
 
-**Why the clerk is on Sonnet.** One verb at `effort: low`, where Sonnet "skips thinking on most
-simple requests". Opus cannot switch thinking off. When a Haiku at or above the floor ships, the
-clerk flips to `haiku` with one word in `cycle-clerk.md` and a CHANGELOG line. Nothing else moves to
-Haiku. **A Haiku below the floor is never dispatched** (the owner's rule, ADR-007).
+**Why the clerk is on Haiku.** One verb at `effort: low`, no judgment. Haiku 5.5 (2026-10-07) is the
+first Haiku at the floor and the first that takes an effort level, so in 0.26.0 the clerk moved off
+Sonnet with one word in `cycle-clerk.md`. Nothing else moves to Haiku: every other agent plans,
+judges or writes code. **A Haiku below the floor is never dispatched** (the owner's rule, ADR-007),
+and the alias alone does not prove it: Claude Code 2.1.292 still ran `haiku` as Haiku 4.5, so the
+haiku floor line carries `cc>=2.1.293` (below).
 
 **The retry climbs to the gate.** A story's second dispatch goes to `TOP_MODEL` whatever its own
 `model:` says. The first attempt runs on Sonnet, so the retry is always a different family: Fable on
@@ -194,11 +196,18 @@ Six env vars can also remap an alias to any ID, from the shell or from a setting
 - `CLAUDE_CODE_SUBAGENT_MODEL`.
 
 **The floor is a few lines of data:** `model_floor` in `scripts/lib.sh`, today
-`fable 5.1 · opus 5.5 · sonnet 5.5 · haiku 5.5 unreleased`. It ships with every upgrade, so a hive
+`fable 5.1 · opus 5.5 · sonnet 5.5 · haiku 5.5 cc>=2.1.293`. It ships with every upgrade, so a hive
 never keeps a stale copy. When a model ships, raising its line is a one-line diff and a CHANGELOG
-line. `unreleased` marks a floor no model of the family meets yet: while it stands, the bare alias
-(`haiku`, which resolves to Haiku 4.5) is itself below the floor. Delete the word the day a Haiku 5.5
-ships. Env `VULYK_MODEL_FLOOR` overrides line by line (`sonnet 4.5; opus 4.6`) for a hive that
+line. A line may carry one flag:
+- `unreleased`: no model of the family meets the floor yet, so the bare alias is itself below it
+  (the haiku line until 0.26.0).
+- `cc>=<version>`: the alias table ships inside Claude Code, and the bare alias reaches the floor
+  only from that version on. On launch day Claude Code 2.1.292 ran `haiku` as Haiku 4.5 and 2.1.293
+  as Haiku 5.5. `--floor` reads the running session's version (`CLAUDE_CODE_VERSION`, else
+  `claude --version`) and reports a `haiku` route on an older or unknown one, with `claude update`
+  as the fix. Drop the flag once no supported Claude Code is older.
+
+Env `VULYK_MODEL_FLOOR` overrides line by line (`sonnet 4.5; opus 4.6`) for a hive that
 deliberately runs lower, for example a Bedrock account without 5.5; a family it does not name keeps
 its default.
 
@@ -215,6 +224,7 @@ remapped:
 - a `CLAUDE_CODE_USE_*` provider flag with no family pin. Using the table above, it names which
   alias falls below the floor there.
 - a pinned ID in agent frontmatter.
+- an alias whose floor line carries `cc>=`, against the running Claude Code's version.
 
 It exits 1 on any finding, and the SessionStart brief prints the result. It warns and never edits
 settings: a provider's model IDs are the owner's to set (`anthropic.claude-sonnet-5-5` on Bedrock).
@@ -272,7 +282,7 @@ without one inherits the session level:
 
 | Agents | `effort:` | Why |
 |---|---|---|
-| `drone-scout`, `drone-docs`, `cycle-clerk` (Sonnet), `librarian` (Opus) | `low` | reading, mapping, one verb |
+| `drone-scout`, `drone-docs` (Sonnet), `cycle-clerk` (Haiku), `librarian` (Opus) | `low` | reading, mapping, one verb |
 | `worker-code`, `worker-test` (Sonnet) | `medium` | Anthropic's Sonnet 5.5 advice: `medium` for well-specified agentic coding, `high` for harder or longer work |
 | `drone-coverage`, `council-opus` (Opus) | `medium` | Opus's own default; Opus 5.5 at `medium` matched Opus 5 at `high` with fewer tokens |
 | `queen-planner`, `lead-architect`, `lead-review` (Opus) | `high` | a wrong plan or a missed defect poisons everything downstream |

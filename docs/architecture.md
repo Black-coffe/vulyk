@@ -16,7 +16,7 @@ In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a su
 | Drones | `drone-scout`, `drone-docs`, `librarian` | sonnet (scout, docs) / opus (librarian), effort low | recon (capped per tier: 0-1/1/2/4 scouts), memory truth, hygiene |
 | Gate | `drone-coverage` | opus, effort medium | plan-time independence at Tier 3-4: sees the brief and the plan, never the stories |
 | Council | `council-opus`, `council-haiku` | opus (effort medium); opus - it judges, the name is the angle | Tier 3-4 only; blind verdict on `brief.md`'s `## Asks` from a reduced git worktree that cannot see the stories: intent and edge cases; the black-box client path, required only when the Profile's *Client path* is filled |
-| Clerk | `cycle-clerk` | sonnet, effort low; haiku once a Haiku at or above the floor ships | the Workflow driver's only way to reach a shell: one `cycle.sh` command per agent boundary, no logic of its own |
+| Clerk | `cycle-clerk` | haiku, effort low (Haiku 5.5 and up, since 0.26.0; sonnet before) | the Workflow driver's only way to reach a shell: one `cycle.sh` command per agent boundary, no logic of its own |
 
 Every subagent above except `queen-planner`, the workers, `lead-review` and `lead-architect`
 carries `omitClaudeMd: true`: it takes everything from its dispatch prompt and its own body, so

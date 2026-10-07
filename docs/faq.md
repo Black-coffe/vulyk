@@ -8,7 +8,7 @@ Yes - by design. The policy restricts subscription OAuth to official clients; VU
 
 **Which model plans, which builds?**
 Since v0.20.0 (ADR-015) the cut is by kind of work. Opus plans, orchestrates and judges on every
-plan. Sonnet builds: the workers, the scout, the docs drone and the clerk. The family that builds
+plan. Sonnet builds: the workers, the scout and the docs drone; the clerk runs on Haiku 5.5. The family that builds
 never judges. Fable is kept for the **gate**: the Tier 4 review, `lead-architect`, the Tier 4
 planner and a missed story's retry. `lead-review` below Tier 4 runs on Opus. The gate goes to
 whichever model your plan carries inside its limits. `scripts/top-model.sh` reads the account profile Claude Code caches in `~/.claude.json`: Max 5x / 20x and premium seats get `fable` (up to half the weekly limit is Fable at no extra cost); Pro, standard seats and API keys get `opus` (Fable would bill to usage credits on top of the subscription). The SessionStart brief announces it; `/vulyk-plan`, `/vulyk-build`, `/vulyk-review` and the Workflow driver pass it as the dispatch `model:` on exactly those calls. Details and the rejected alternatives in [model-cascade.md](model-cascade.md).
@@ -17,7 +17,7 @@ whichever model your plan carries inside its limits. `scripts/top-model.sh` read
 Replace `auto` in the `TOP_MODEL = auto` line of CLAUDE.md with the alias you want; the pin beats the plan. `VULYK_TOP_MODEL=<alias>` does the same for one shell. The cascade is model-agnostic everywhere else.
 
 **The brief says a model is below the floor.**
-VULYK routes by family alias (`opus`, `sonnet`), and an alias brings the newest model on the Anthropic API. It does not on every provider: on Bedrock, Google Cloud and Foundry `sonnet` still resolves to 4.5, and six env vars can remap any alias. The floor (`fable 5.1 · opus 5.5 · sonnet 5.5 · haiku 5.5`, in `scripts/lib.sh`) catches that. `bash scripts/top-model.sh --floor` names the pin or provider responsible; set the family's `ANTHROPIC_DEFAULT_*_MODEL` to your provider's ID for the newest model. To run lower on purpose, set `VULYK_MODEL_FLOOR`. Details in [model-cascade.md](model-cascade.md#the-model-floor).
+VULYK routes by family alias (`opus`, `sonnet`), and an alias brings the newest model on the Anthropic API. It does not on every provider: on Bedrock, Google Cloud and Foundry `sonnet` still resolves to 4.5, and six env vars can remap any alias. Nor on every Claude Code: the alias table ships inside it, and before 2.1.293 `haiku` still ran Haiku 4.5 (fix: `claude update`). The floor (`fable 5.1 · opus 5.5 · sonnet 5.5 · haiku 5.5`, in `scripts/lib.sh`) catches that. `bash scripts/top-model.sh --floor` names the pin or provider responsible; set the family's `ANTHROPIC_DEFAULT_*_MODEL` to your provider's ID for the newest model. To run lower on purpose, set `VULYK_MODEL_FLOOR`. Details in [model-cascade.md](model-cascade.md#the-model-floor).
 
 **The brief says my session is "not pinned".**
 The Queen's own session starts on the account default (Opus 5.5 since Claude Code 2.1.280) unless something pins it. `bash scripts/top-model.sh --apply` writes `"model": "opus"` into the gitignored `.claude/settings.local.json` and the next launch starts there; `/model <alias>` on the first turn does it for the current session, free, because the cache is still cold.

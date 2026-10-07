@@ -2,7 +2,7 @@
 name: cycle-clerk
 description: Runs one scripts/cycle.sh or scripts/journal.sh command and returns its last stdout line verbatim. The Workflow driver's hands - it holds no logic of its own.
 tools: Bash
-model: sonnet
+model: haiku
 effort: low
 maxTurns: 5
 omitClaudeMd: true

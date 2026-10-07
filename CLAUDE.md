@@ -32,7 +32,7 @@ Tier 2-4 plans stop for the owner's approval (`**Approved:**`) unless `/vulyk-pl
 
 ## Models and effort
 
-Route by family, never by version: Sonnet executes (workers, scout, docs drone, clerk), Opus orchestrates and judges (the Queen, planner, reviewers, council, coverage, librarian), Fable holds the gate, Haiku nothing until one reaches the floor. The family that builds never judges (one recorded gap: the Tier 4 second reviewer is Sonnet where the gate is Opus). A repair story after a RED round climbs to Opus.
+Route by family, never by version: Sonnet executes (workers, scout, docs drone), Opus orchestrates and judges (the Queen, planner, reviewers, council, coverage, librarian), Fable holds the gate, Haiku runs the clerk only. The family that builds never judges (one recorded gap: the Tier 4 second reviewer is Sonnet where the gate is Opus). A repair story after a RED round climbs to Opus.
 Model floor: no dispatch below `scripts/lib.sh` `model_floor`; always the newest of each family. `bash scripts/top-model.sh --floor` checks the config, telemetry `model_below_floor` what really ran. `TOP_MODEL = auto` names the gate model (`scripts/top-model.sh`; replace `auto` with an alias to pin).
 Pass it as `model:` only on the Tier 4 review, `lead-architect`, the Tier 4 `queen-planner` and a missed story's retry.
 Effort lives in agent frontmatter (cache effects: `docs/model-cascade.md`).
