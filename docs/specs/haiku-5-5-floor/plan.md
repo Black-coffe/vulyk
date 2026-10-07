@@ -59,7 +59,7 @@ the before-the-fact check, as opus and sonnet already are.
 
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
 **Briefed:** via mini-brief, Andrei, 2026-10-07
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/haiku-5-5-floor
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
 **Council:** <written by scripts/cycle.sh judge/escalate>
 **Shipped:** <written by scripts/ship-check.sh --record>
