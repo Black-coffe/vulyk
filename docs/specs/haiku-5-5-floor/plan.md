@@ -56,6 +56,11 @@ the before-the-fact check, as opus and sonnet already are.
 *(empty)*
 
 ## Plan deltas
+- 2026-10-07, close-story: `bash tests/telemetry.test.sh` outgrew the 540 s verification budget on this Windows box
+  (532 s standalone; timed out at 468/478 checks under `close-story`). Decision: close with
+  `VULYK_VERIFY_TIMEOUT=900` from a background shell, same command, nothing skipped. Rejected: a narrower
+  `## Verification` line (no `## Commands` cell reaches `lib.sh`/`top-model.sh` logic short of the full suite).
+  Evidence for the owner-ordered "fast/full verification" item of 2026-09-23, still unbuilt.
 
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
 **Briefed:** via mini-brief, Andrei, 2026-10-07
