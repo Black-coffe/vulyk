@@ -341,6 +341,24 @@ printf '%s' "$out" | grep -qF "'no-such-cell'" && { echo "::error::the sidecar's
 rm -f CLAUDE.vulyk.md
 git add -A && git commit -qm "wcell fixture" >/dev/null
 
+echo "verify-gap: the first word of each ## Verification segment is the program, not a scope path (field report 2026-10-08, n=3 specs)"
+mkdir -p docs/specs/wgap
+wgap_story() { # wgap_story <nn> <verification-line>
+  printf -- '---\nstory: wgap-%s\nspec: wgap\nstatus: todo\nwave: 1\n---\n# G%s\n\n## Files\n- app.txt\n\n## Verification\n`%s`\n' \
+    "$1" "$1" "$2" > "docs/specs/wgap/wgap-$1-g.md"
+}
+wgap_story 01 'scripts/state.sh --quiet'   # the field case: `vendor/bin/phpunit --no-coverage` on a full suite
+wgap_story 02 'true && scripts/state.sh'   # neighbour: the program of a later && segment
+wgap_story 03 'bash scripts/state.sh'      # an argument path off the story's files is still a gap
+wgap_story 04 'scripts/state.sh app.txt'   # an argument path on the story's files is no gap
+out="$(bash scripts/wave-check.sh docs/specs/wgap)"
+for id in 01 02 04; do
+  printf '%s' "$out" | grep -qF "verify-gap: wgap-$id" && { echo "::error::wgap-$id reported a verify-gap: $out"; fail=1; } \
+    || echo "  ok    wgap-$id: no verify-gap"
+done
+printf '%s' "$out" | expect "an argument path that misses the story's files is still a verify-gap" "verify-gap: wgap-03"
+rm -rf docs/specs/wgap
+
 echo "ADR-013 D4: trace-check accepts a quote equal to a whole ## Asks item (digits, dot, text, whitespace-normalized), and only that"
 mkdir -p docs/specs/trc
 printf '# trc\n\n## Request\n> build the trace demo\n\n## Asks\n1. the first ask works\n2. the second   ask works\n' > docs/specs/trc/brief.md
