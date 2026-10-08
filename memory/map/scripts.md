@@ -10,7 +10,13 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   the Queen (solo T1-2, `/vulyk-review`, `/vulyk-plan`, pause/resume), `cycle-clerk` (only `advance`,
   `status`, `release`), workers (`close-story`).
 - `lib.sh` - sourced only. `is_story_file` :16, `pack_fingerprint` :27, `is_paperwork_path` :54,
-  `paperwork_only` :68, `marker` :82, `constitution_file` :94, `command_cell_exists` :98.
+  `paperwork_only` :68, `marker` :82, `constitution_file` :94, `command_cell_exists` :98. Model floor
+  (ADR-015): `model_floor` :163 (default lines `fable 5.1`, `opus 5.5`, `sonnet 5.5`, `haiku 5.5
+  cc>=2.1.293`; flag `unreleased` or `cc>=<x.y.z>`; `VULYK_MODEL_FLOOR` overrides per family),
+  `model_version` :177, `claude_code_version` :189 (`CLAUDE_CODE_VERSION` env, else `claude --version`;
+  empty if unknown), `version_lt` :199 (numeric dotted compare), `model_below_floor` :210 prints
+  `<family> <ver> <floor>` for an ID, `<family> alias <floor>` for `unreleased`, `<family> cc <floor>
+  <have|unknown> <need>` for `cc>=` when Claude Code is older, unknown or `<need>` malformed (fails closed).
 - `ship-check.sh <spec-dir>` / `--record`; `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`;
   `acceptance-log.sh` legacy. `scope-check.sh <story-file> [range]` runs in `close-story`.
 - `wave-check.sh <spec-dir>` - `/vulyk-plan` step 7; classes `no-verify`, `verify-gap`, `verify-cell`
@@ -28,7 +34,10 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   any stub or >=10 raw learnings (CONSOLIDATED/README excluded); evolve = no `"kind":"run"` row or last
   run >7 days, plus a newer `council.jsonl` row, no unmerged `vulyk/evolve-*` (else a "waits" line);
   map = `memory/map/.stale`. grep/awk on `"ts":"`, not python.
-- `vulyk-update.sh` (hands off to `install.sh --upgrade`); `release-check.sh`; `top-model.sh`; `state.sh`
+- `vulyk-update.sh` (hands off to `install.sh --upgrade`); `release-check.sh`; `top-model.sh` (`--floor` :206: exit 1 + `below floor` lines; env VARS :233 now
+  include `ANTHROPIC_DEFAULT_HAIKU_MODEL`; provider check :276 loops OPUS/SONNET/HAIKU pins, else `below
+  floor risk:`; `below()` :213 adds two `cc` messages: Claude Code version unknown, or older than need
+  -> "Run: claude update"; `/vulyk-build` Hive step 1 gates on it); `state.sh`
   (`.claude/state.json`); `git-hooks/post-merge` (stamps `memory/map/.stale`).
 - `defects-check.sh [<arg>]` (0.23; cards `docs/defects/*.md`, rules `docs/defects/README.md`) - no arg =
   audit (each effective-`block` card's `check:` must fail on every fixture, else `BLIND`); `<arg>` = gate
@@ -39,9 +48,8 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   no fixture/check change since, :241). Each is red only when new (line/card newer than the commit that
   added `README.md`, or uncommitted, `is_new` :137); else an `old ...` info line. A key inside another's
   key is an `ambiguous key` info line only. `DEFECTS_DIR` overrides the library.
-- `redact.sh` (stdin mask, always exit 0, degrades to `cat`): 19 sed shapes :29-47 (AWS, GitHub, Slack,
-  OpenAI, Google, Telegram, GitLab, npm, PyPI, HF, Groq, SendGrid, Stripe live, Slack webhook, JWT, Bearer,
-  URL creds) + keyword assignments :48 + awk PEM blocks. `handoff.py` `_REDACT_FALLBACK` :580 mirrors it
+- `redact.sh` (stdin mask, always exit 0, degrades to `cat`): 19 sed shapes :29-47 (token and
+  credential shapes) + keyword assignments :48 + awk PEM blocks. `handoff.py` `_REDACT_FALLBACK` :580 mirrors it
   (extend both). Callers: brief.md, handoff dump, ledger notes.
 - `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan [--final]`, `bundle`, `check`, `publish
   [--dry-run]`, `inbox [--clear]` (VULYK repo only; `VULYK_HIVE` redirects). Callers: `anomaly-scan.sh`
@@ -52,9 +60,7 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   4 malformed report / red verify · 5 stale · 6 escalate. Other gates exit 0 and report;
   `telemetry.sh check` is the one exception.
 - `is_paperwork_path` whitelist (lib.sh:54-64): spec `plan/journal/brief/council/*`, `memory/stats/
-  {human,acceptance,ship,council,scope,anomalies}.jsonl`, `skills.json`, `memory/learnings/*.md`
-  (one level), `VERSION`, `CHANGELOG.md`. **`evolve.jsonl` is not on it**: the `/vulyk-evolve` ledger
-  commit counts as software for `paperwork_only` and can stale an open round.
+  {human,acceptance,ship,council,scope,anomalies,evolve}.jsonl`, `skills.json`, `evolve.jsonl` (lib.sh:58), `memory/learnings/*.md` (one level), `VERSION`, `CHANGELOG.md`.
 - `telemetry.sh` `ENUM`/`AGENTS` are append-only public contracts; bundle rows codes and numbers only.
 
 ## Tests
@@ -75,4 +81,4 @@ line run on temp repos (:291). `tests/defects.test.sh` covers `defects-check.sh`
   string matches: keep them anchored. `close-story` probes `timeout 5 true` (Windows cmd `timeout`).
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 
-last-verified: 2026-09-29 (v0.23.0)
+last-verified: 2026-10-08 (v0.26.0)

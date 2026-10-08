@@ -1,4 +1,4 @@
-# Scout report: agents and commands (v0.24.0)
+# Scout report: agents and commands (v0.26.0)
 
 ## Purpose
 Every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (ADR-013 light VULYK, ADR-015 Sonnet
@@ -17,8 +17,9 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   outside `COURT`, git history or naming plan/journal/story files is a BREACH.
 - **council-haiku** (`opus` since ADR-015, `maxTurns:60`; Bash/Read + browser MCPs) - black-box seat,
   walks the Profile's *Client path*; required only when `client_path_filled`. Same contract.
-- **cycle-clerk** (`sonnet`, `low`, `maxTurns:5`; Bash only) - runs the one `cycle.sh` command given,
-  returns its last stdout line verbatim. The Workflow driver's only shell.
+- **cycle-clerk** (`haiku` since 0.26.0, `low`, `maxTurns:5`; Bash only) - runs the one `cycle.sh`
+  command given, returns its last stdout line verbatim. The Workflow driver's only shell. `haiku` is
+  at the floor only on Claude Code >= 2.1.293 (`top-model.sh --floor`, scripts.md).
 - **worker-code** / **worker-test** (`sonnet` since ADR-015, `medium`, `maxTurns:90`) - Tier 3-4, one
   story. Close: `returned: DONE`, then `cycle.sh close-story <story> --commit --stamp <S>`; exit 4 →
   fix and rerun, after three failures `## Findings` + `returned: WALL`; other exits →
@@ -42,8 +43,9 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   `**Approved:**` (`--go` opts out).
 - **`/vulyk-build`** - `**Tier:**` picks the path. Solo T1-2: loop `cycle.sh advance`; `build:W` → the
   Queen implements each story, `close-story --commit`; `dispatch:review` → one `lead-review`, then
-  `advance --ingest`, one re-dispatch on rejection. Hive T3-4: `top-model.sh`, `second_model`, 16-hex
-  stamp, journal line, Workflow tool with `scriptPath` (never `name:`); a thrown call records
+  `advance --ingest`, one re-dispatch on rejection. Hive T3-4 (vulyk-build.md:35): step 1 runs `bash scripts/top-model.sh --floor`
+  first, exit 1 prints its `below floor` lines and stops (no journal line, no launch); then `top-model.sh`,
+  `second_model`, 16-hex stamp, journal line, Workflow tool with `scriptPath` (never `name:`); a thrown call records
   `telemetry.sh record driver_refused`; stop with `file` → story `blocked` + `lead-architect`. No
   Workflow: same loop with `--stamp --claim`, Agent tool, `release` on every exit. Terminal `green`:
   `AskUserQuestion` «Выпускаем?»; yes runs `vulyk-ship` via Skill, no / `claude -p` → one-line advice.
@@ -77,4 +79,4 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
 - **`/vulyk-map`**, **`/vulyk-handoff`** (`handoff.py dump` + summary). gc/evolve/map are prompted by
   the SessionStart `maintenance due: ...` line (scripts.md).
 
-last-verified: 2026-09-30 (v0.24.0, ADR-013, ADR-015)
+last-verified: 2026-10-08 (v0.26.0, ADR-013, ADR-015)
