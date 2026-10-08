@@ -246,11 +246,20 @@ printf 'v2\n' >> hook-app.txt
 shiph | expect "hook log + real code dirt -> 03 still not clean" "working tree is not clean"
 git checkout -- hook-app.txt
 
-echo "skills-json-exempt: scope-check still counts skills.json; ship-check stage 03 passes it like the anomaly log"
+echo "skills-json-exempt: scope-check drops skills.json and every memory/stats/*.jsonl ledger (field report 2026-10-08, reverses story 12); ship-check stage 03 passes skills.json like the anomaly log"
 printf '{"n":1}\n' > memory/stats/skills.json
-bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | grep -qF 'memory/stats/skills.json' \
-  && echo "  ok    scope-check: skills.json dirty and undeclared is listed as out_of_scope" \
-  || { echo "::error::scope-check output: $(bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md)"; fail=1; }
+printf '{"n":1}\n' > memory/stats/ship.jsonl      # the field case: a --record leftover scored whole specs out of scope
+printf '{"n":1}\n' > memory/stats/council.jsonl   # neighbour: any other ledger of the series
+mkdir -p memory/stats/sub; printf 'x\n' > memory/stats/sub/x.jsonl; printf 'x\n' > memory/stats/notes.txt
+out="$(bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md)"
+for p in memory/stats/skills.json memory/stats/ship.jsonl memory/stats/council.jsonl; do
+  printf '%s' "$out" | grep -qF "$p" && { echo "::error::scope-check still lists $p: $out"; fail=1; } \
+    || echo "  ok    scope-check: $p dirty and undeclared is not out_of_scope"
+done
+printf '%s' "$out" | expect "a memory/stats/ file that is no ledger still counts" "! memory/stats/notes.txt"
+printf '%s' "$out" | expect "a .jsonl one level deeper is no ledger and still counts" "! memory/stats/sub/x.jsonl"
+rm -rf memory/stats/sub memory/stats/notes.txt
+git checkout -- memory/stats/ship.jsonl memory/stats/council.jsonl   # both tracked by now: restore, not delete
 git checkout -- memory/stats/scope.jsonl   # scope-check logs its run; that log is not this case's dirt
 rm -f memory/stats/anomalies.jsonl; git checkout -- memory/stats/anomalies.jsonl 2>/dev/null
 [ "$(git status --porcelain)" = "?? memory/stats/skills.json" ] && echo "  ok    precondition: skills.json is the only dirty path" \
@@ -331,6 +340,24 @@ printf '%s' "$out" | grep -qF "'no-such-cell'" && { echo "::error::the sidecar's
   || echo "  ok    the sidecar's own cell passes"
 rm -f CLAUDE.vulyk.md
 git add -A && git commit -qm "wcell fixture" >/dev/null
+
+echo "verify-gap: the first word of each ## Verification segment is the program, not a scope path (field report 2026-10-08, n=3 specs)"
+mkdir -p docs/specs/wgap
+wgap_story() { # wgap_story <nn> <verification-line>
+  printf -- '---\nstory: wgap-%s\nspec: wgap\nstatus: todo\nwave: 1\n---\n# G%s\n\n## Files\n- app.txt\n\n## Verification\n`%s`\n' \
+    "$1" "$1" "$2" > "docs/specs/wgap/wgap-$1-g.md"
+}
+wgap_story 01 'scripts/state.sh --quiet'   # the field case: `vendor/bin/phpunit --no-coverage` on a full suite
+wgap_story 02 'true && scripts/state.sh'   # neighbour: the program of a later && segment
+wgap_story 03 'bash scripts/state.sh'      # an argument path off the story's files is still a gap
+wgap_story 04 'scripts/state.sh app.txt'   # an argument path on the story's files is no gap
+out="$(bash scripts/wave-check.sh docs/specs/wgap)"
+for id in 01 02 04; do
+  printf '%s' "$out" | grep -qF "verify-gap: wgap-$id" && { echo "::error::wgap-$id reported a verify-gap: $out"; fail=1; } \
+    || echo "  ok    wgap-$id: no verify-gap"
+done
+printf '%s' "$out" | expect "an argument path that misses the story's files is still a verify-gap" "verify-gap: wgap-03"
+rm -rf docs/specs/wgap
 
 echo "ADR-013 D4: trace-check accepts a quote equal to a whole ## Asks item (digits, dot, text, whitespace-normalized), and only that"
 mkdir -p docs/specs/trc

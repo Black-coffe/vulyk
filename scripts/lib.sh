@@ -51,9 +51,11 @@ pack_fingerprint() { # pack_fingerprint <spec-dir> - must match every caller exa
 # joins the set because `reopen` writes it; scope.jsonl joins the memory/stats series because
 # `close-story` writes it through scope-check.sh (R4/C-3(b)). VERSION and CHANGELOG.md join in
 # 0.18 (ADR-013 D3): the release commit /vulyk-ship makes must not stale a GREEN round.
+# docs/specs/*/smoke-*.md joins for the same reason: live-pass evidence (a smoke run on a
+# preprod between merge and publish) is recorded after GREEN and is not the software.
 is_paperwork_path() { # is_paperwork_path <repo-relative-path>
   case "$1" in
-    docs/specs/*/plan.md|docs/specs/*/journal.md|docs/specs/*/council/*|docs/specs/*/brief.md| \
+    docs/specs/*/plan.md|docs/specs/*/journal.md|docs/specs/*/council/*|docs/specs/*/brief.md|docs/specs/*/smoke-*.md| \
     memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl|memory/stats/council.jsonl|memory/stats/scope.jsonl| \
     memory/stats/anomalies.jsonl|memory/stats/evolve.jsonl|memory/stats/skills.json|VERSION|CHANGELOG.md) return 0 ;;
     memory/learnings/*.md)

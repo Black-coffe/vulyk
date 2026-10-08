@@ -2,6 +2,31 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [Unreleased]
+
+Four gate fixes reported from a production hive (a Telegram MMORPG on PHP), each with its original case and a
+neighbour form in the contract tests.
+
+### Changed
+- **`scope-check` drops every `memory/stats/*.jsonl` ledger and `memory/stats/skills.json` from `out_of_scope`**
+  unless the story names it under `## Files` (was `anomalies.jsonl` only). A `--record` leftover `ship.jsonl` scored
+  whole specs out of scope, and `skill-usage-counter.sh` rewrites `skills.json` on every Skill call: 7 of 7 scope rows
+  in the hive's week to 2026-10-08 were `skills.json` alone, a `scope_breach` rate of 100% that carried no signal.
+  **This reverses story 12** ("`skills.json` counts like any other path", ADR-010 F/A18; amendment recorded there); the
+  owner decided it on 2026-10-08. `ship-check` stage 03 is unchanged: `skills.json` already passes it (0.21.1), other
+  ledgers still block. A `.jsonl` below `memory/stats/` or a non-ledger file there still counts.
+
+### Fixed
+- **`is_paperwork_path` lists `docs/specs/*/smoke-*.md`.** Live-pass evidence recorded after GREEN (a smoke run on a
+  preprod between merge and publish) staled the council verdict it was evidence for.
+- **`wave-check` verify-gap skips the first word of each ` && ` segment.** It is the program (`vendor/bin/phpunit`,
+  `scripts/x.sh`), not a scope path; because it exists in the tree, every full-suite verification line was reported as a
+  verify-gap (n=3 specs). Argument paths are checked as before.
+- **`evolve-ledger.py resolve` records a changeset landed by rebase or cherry-pick as `accepted`** (reason `landed by
+  rebase`): branch deleted, tip not an ancestor of the default branch, but `git cherry` shows every patch upstream.
+  It read `rejected` before (field case: a 4-commit evolve branch rebased onto the default branch). A missing tip object,
+  a partly picked branch, or a changeset that changes nothing still reads `rejected`.
+
 ## [0.26.0] - 2026-10-08
 
 Haiku 5.5 reaches the model floor, and the floor learns that an alias is only as new as the Claude Code that

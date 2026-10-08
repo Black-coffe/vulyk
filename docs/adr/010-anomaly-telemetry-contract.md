@@ -233,4 +233,7 @@ Plan §Descoped, round-3 Major 3 (`plan.md:157`):
 
 ## Amendments
 
-(none yet)
+- **2026-10-08, F (scope-check):** `scope-check` drops every `memory/stats/*.jsonl` ledger and `memory/stats/skills.json`
+  from `out_of_scope` unless the story names it, reversing "`skills.json` counts like any other file" (A18). Field
+  report from a hive: a leftover `ship.jsonl` scored whole specs out of scope, and `skills.json` alone was 7 of 7
+  scope rows in a week, a `scope_breach` rate of 100% that carried no signal. `ship-check` stage 03 is unchanged.

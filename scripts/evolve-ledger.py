@@ -8,9 +8,11 @@ Append-only JSONL, one object per line, three kinds:
   verdict   {"ts","kind":"verdict","branch","verdict":"accepted|rejected","reason"}
 
 The owner's verdict is read from git, per changeset branch: its tip reached the default branch =
-accepted; the branch is gone and its tip never reached the default branch = rejected; the branch is
-still there and unmerged = pending (no row yet). Merge the branch, do not squash it: a squash leaves
-the tip unmerged and reads as rejected.
+accepted; the branch is gone, its tip is not an ancestor of the default branch but every one of its
+patches is (`git cherry` shows no `+`) = accepted, landed by rebase or cherry-pick; the branch is gone
+and its tip never reached the default branch = rejected; the branch is still there and unmerged =
+pending (no row yet). Merge or rebase the branch, do not squash it: a squash of several commits matches
+none of their patches and reads as rejected.
 
   python scripts/evolve-ledger.py <root> add --branch B --component C --file F --hypothesis H --evidence E --bytes-delta N
   python scripts/evolve-ledger.py <root> run --branch B --commit SHA --proposals N
@@ -81,6 +83,16 @@ def is_merged(root, ref, base):
     return git(root, "merge-base", "--is-ancestor", ref, base)[0] == 0
 
 
+def landed_by_rebase(root, ref, base):
+    # every patch of ref is already in base under another sha; a missing ref fails git cherry.
+    # A changeset that changes nothing has no patch to land (empty commits share one patch-id).
+    rc, mb = git(root, "merge-base", base, ref)
+    if rc != 0 or git(root, "diff", "--quiet", mb, ref)[0] == 0:
+        return False
+    rc, out = git(root, "cherry", base, ref)
+    return rc == 0 and not any(l.startswith("+") for l in out.splitlines())
+
+
 def branch_exists(root, b):
     return git(root, "show-ref", "--verify", "--quiet", "refs/heads/" + b)[0] == 0
 
@@ -122,6 +134,7 @@ def cmd_resolve(root, a):
         if r.get("kind") != "proposal" or not b or b in decided or b in seen:
             continue
         seen.append(b)
+        why = ""
         if branch_exists(root, b):
             if not is_merged(root, b, base):
                 print("pending   %s" % b)
@@ -130,8 +143,10 @@ def cmd_resolve(root, a):
         else:
             tip = tips.get(b)
             verdict = "accepted" if tip and is_merged(root, tip, base) else "rejected"
+            if verdict == "rejected" and tip and landed_by_rebase(root, tip, base):
+                verdict, why = "accepted", "landed by rebase"
         append(root, {"ts": now(), "kind": "verdict", "branch": b, "verdict": verdict,
-                      "reason": reasons.get(b, "")})
+                      "reason": reasons.get(b, why)})
         print("%-9s %s" % (verdict, b))
 
 

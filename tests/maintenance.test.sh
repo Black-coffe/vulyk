@@ -210,6 +210,26 @@ printf '%s' "$out" | expect "resolve: merged then deleted = accepted" "accepted 
 printf '%s' "$out" | expect "resolve: deleted unmerged = rejected" "rejected  vulyk/evolve-B"
 printf '%s' "$out" | expect "resolve: still on its branch = pending, no row" "pending   vulyk/evolve-C"
 led resolve | expect_absent "resolve is idempotent: a decided branch is not re-decided" "vulyk/evolve-A"
+# D: both commits cherry-picked onto a moved main, branch deleted (the field case: tip not an
+# ancestor, every patch upstream); F: one of two picked (neighbour); E: the tip object is gone
+gitc checkout -q main; echo m > "$H/m.txt"; gitc add m.txt; gitc commit -q -m "main moves"
+for b in D F; do
+  gitc checkout -q -b "vulyk/evolve-$b"
+  echo "$b 1" > "$H/$b.txt"; gitc add "$b.txt"; gitc commit -q -m "change $b 1"
+  echo "$b 2" >> "$H/$b.txt"; gitc commit -q -am "change $b 2"
+  tip="$(git -C "$H" rev-parse HEAD)"; gitc checkout -q main
+  echo "main $b" > "$H/main-$b.txt"; gitc add "main-$b.txt"; gitc commit -q -m "main moves past $b"
+  if [ "$b" = D ]; then gitc cherry-pick "$tip~1" "$tip" >/dev/null; else gitc cherry-pick "$tip~1" >/dev/null; fi
+  gitc branch -q -D "vulyk/evolve-$b"
+  add "vulyk/evolve-$b" "hypothesis $b"; led run --branch "vulyk/evolve-$b" --commit "$tip" --proposals 1
+done
+add vulyk/evolve-E "hypothesis E"; led run --branch vulyk/evolve-E --commit 0123456789abcdef0123456789abcdef01234567 --proposals 1
+out="$(led resolve)"
+printf '%s' "$out" | expect "resolve: deleted, every patch landed by cherry-pick = accepted" "accepted  vulyk/evolve-D"
+printf '%s' "$out" | expect "resolve: deleted, one of two patches landed = rejected" "rejected  vulyk/evolve-F"
+printf '%s' "$out" | expect "resolve: deleted, tip object missing = rejected" "rejected  vulyk/evolve-E"
+grep -F '"branch":"vulyk/evolve-D"' "$H/memory/stats/evolve.jsonl" | grep -F '"kind":"verdict"' | grep -qF '"reason":"landed by rebase"' \
+  && ok "the landed-by-rebase verdict says so in its reason" || bad "D verdict row: $(grep -F 'vulyk/evolve-D' "$H/memory/stats/evolve.jsonl")"
 out="$(led window)"
 printf '%s' "$out" | expect "window shows the accepted proposal" "accepted rule"
 printf '%s' "$out" | expect "window shows the rejection with its reason" "why: owner: not now"
