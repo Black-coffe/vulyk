@@ -57,5 +57,5 @@ fi
 # enabled). /vulyk-build's own step 1 decides this in-session from the tool list.
 WORKFLOW="Workflow driver: decided in-session (Tier 3-4: Workflow tool present -> vulyk-cycle.js, else the same advance loop run by the Queen; Tier 1-2 build solo)."
 
-echo "[VULYK] gate model: $MODEL ($NAME) - by ${BY:-plan}, plan ${PLAN:-unknown}. Dispatch model: $MODEL for the Tier 4 lead-review (second reviewer: ${SECOND:-opus}), lead-architect, a Tier 4 queen-planner and a missed story's retry; lead-review at Tier 1-3 and everything else run on their frontmatter (judgment on opus, execution on sonnet). ${FLOOR_LINE:+$FLOOR_LINE. }$SESSION $WORKFLOW Details: bash scripts/top-model.sh --explain"
+echo "[VULYK] gate model: $MODEL ($NAME) - by ${BY:-plan}, plan ${PLAN:-unknown}. Dispatch model: $MODEL for the Tier 4 lead-review (second reviewer: ${SECOND:-opus}), lead-architect, a Tier 4 queen-planner and a missed story's retry; lead-review at Tier 1-3 and everything else run on their frontmatter (judgment on opus, execution on sonnet, the clerk on haiku). ${FLOOR_LINE:+$FLOOR_LINE. }$SESSION $WORKFLOW Details: bash scripts/top-model.sh --explain"
 exit 0

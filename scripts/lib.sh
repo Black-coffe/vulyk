@@ -152,15 +152,19 @@ client_path_filled() { # client_path_filled <constitution> -> 0 iff the Profile'
 # generation arrives with no edit; this list is the one place versions live. No dispatch may run
 # below its family's line, whatever an alias, a provider or an env pin resolved to.
 # - A newer model ships: raise its family's line.
-# - `unreleased` marks a floor no model of that family meets yet (today: Haiku, whose newest is 4.5),
-#   so the bare alias itself resolves below the floor. Delete the word the day one ships.
+# - `unreleased` marks a floor no model of that family meets yet, so the bare alias itself resolves
+#   below the floor. Delete the word the day one ships.
+# - `cc>=<x.y.z>` marks a floor the bare alias reaches only from that Claude Code version on: the
+#   alias table ships inside Claude Code, and an older one resolves the alias to the previous model.
+#   Haiku 5.5 shipped on 2026-10-07; Claude Code 2.1.292 still ran `haiku` as Haiku 4.5, 2.1.293 as
+#   5.5. Drop the flag once no supported Claude Code is older.
 # VULYK_MODEL_FLOOR overrides line by line, same shape, lines or `;` (`sonnet 4.5; opus 4.6`), for a
 # hive that runs lower on purpose; a family it does not name keeps the default line.
-model_floor() { # model_floor -> "<family> <major.minor> [unreleased]" lines
+model_floor() { # model_floor -> "<family> <major.minor> [unreleased|cc>=<x.y.z>]" lines
   local defaults='fable 5.1
 opus 5.5
 sonnet 5.5
-haiku 5.5 unreleased'
+haiku 5.5 cc>=2.1.293'
   local over="" f line
   [ -n "${VULYK_MODEL_FLOOR:-}" ] || { printf '%s\n' "$defaults"; return 0; } # the common case, no fork
   over="$(printf '%s\n' "$VULYK_MODEL_FLOOR" | tr ';,' '\n\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d')"
@@ -182,20 +186,51 @@ model_version() { # model_version <model id> -> "<family> <major.minor>"; empty 
   fi
 }
 
+claude_code_version() { # claude_code_version -> "x.y.z" of the Claude Code that resolves aliases; empty if unknown
+  # The running session's own version first: Claude Code sets CLAUDE_CODE_VERSION ("2.1.292 (Claude
+  # Code)") for its hooks and tools, and its alias table is the one a dispatch uses even when a newer
+  # binary is already on disk. `claude --version` covers a plain terminal.
+  local v="${CLAUDE_CODE_VERSION:-}"
+  [ -n "$v" ] || v="$(claude --version 2>/dev/null | head -1)"
+  v="${v%% *}"
+  [[ "$v" =~ ^[0-9]+(\.[0-9]+)*$ ]] && printf '%s\n' "$v"
+}
+
+version_lt() { # version_lt <a> <b> - 0 iff dotted version a < b, numerically, missing parts are 0
+  local IFS=. i x y
+  local -a A=($1) B=($2)
+  for ((i = 0; i < ${#A[@]} || i < ${#B[@]}; i++)); do
+    x="${A[i]:-0}"; y="${B[i]:-0}"
+    [ "$((10#$x))" -lt "$((10#$y))" ] && return 0
+    [ "$((10#$x))" -gt "$((10#$y))" ] && return 1
+  done
+  return 1
+}
+
 model_below_floor() { # model_below_floor <model id | alias> -> prints "<family> <version> <floor>", 0 iff below
-  # A resolved ID is compared with its family's line. An alias is below only when its family's line
-  # is `unreleased` (printed as version `alias`); any other alias, an unknown shape or a family with
-  # no line is never below.
-  local fv fam ver fl flag a
+  # A resolved ID is compared with its family's line. An alias is below when its family's line is
+  # `unreleased` (printed as "<family> alias <floor>"), or carries `cc>=<need>` and the Claude Code
+  # that resolves it is older or unknown (printed as "<family> cc <floor> <have|unknown> <need>"):
+  # an unknown version cannot vouch for the alias, and a `<need>` that is not a dotted version (a
+  # typo in VULYK_MODEL_FLOOR) fails closed the same way. Any other alias, an unknown shape or a
+  # family with no line is never below.
+  local fv fam ver fl flag a have need
   a="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"; a="${a%%[[]*}"
   case "$a" in
     fable|opus|sonnet|haiku)
       read -r fl flag <<EOF
 $(model_floor | while read -r f v x; do [ "$f" = "$a" ] && { printf '%s %s' "$v" "$x"; break; }; done)
 EOF
-      [ "${flag:-}" = "unreleased" ] || return 1
-      printf '%s alias %s\n' "$a" "$fl"
-      return 0 ;;
+      case "${flag:-}" in
+        unreleased) printf '%s alias %s\n' "$a" "$fl"; return 0 ;;
+        'cc>='*)
+          need="${flag#cc>=}"; have="$(claude_code_version)"
+          if [ -z "$have" ] || ! [[ "$need" =~ ^[0-9]+(\.[0-9]+)*$ ]] || version_lt "$have" "$need"; then
+            printf '%s cc %s %s %s\n' "$a" "$fl" "${have:-unknown}" "$need"
+            return 0
+          fi ;;
+      esac
+      return 1 ;;
   esac
   fv="$(model_version "${1:-}")"; [ -n "$fv" ] || return 1
   fam="${fv% *}"; ver="${fv#* }"

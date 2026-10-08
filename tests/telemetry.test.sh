@@ -637,8 +637,32 @@ expect_eq "VULYK_MODEL_FLOOR lowers the floor for a hive"      "ok" \
   "$(VULYK_MODEL_FLOOR='sonnet 4.5; opus 4.6' floorof claude-sonnet-4-5)"
 expect_eq "a partial override keeps the other families' floors" "opus 4.1 5.5" \
   "$(VULYK_MODEL_FLOOR='sonnet 4.5' floorof claude-opus-4-1)"
-expect_eq "the alias of an unreleased floor is below it"       "haiku alias 5.5" "$(floorof haiku)"
+expect_eq "the alias of an unreleased floor is below it"       "haiku alias 5.5" \
+  "$(VULYK_MODEL_FLOOR='haiku 5.5 unreleased' floorof haiku)"
 expect_eq "the override can mark haiku released"               "ok" "$(VULYK_MODEL_FLOOR='haiku 4.5' floorof haiku)"
+# 0.26.0: Haiku 5.5 shipped, but the alias table ships inside Claude Code - 2.1.292 still ran
+# `haiku` as Haiku 4.5, 2.1.293 as 5.5 - so the haiku line reads `cc>=2.1.293`.
+expect_eq "an alias on a Claude Code older than its cc>= line is below" "haiku cc 5.5 2.1.292 2.1.293" \
+  "$(CLAUDE_CODE_VERSION='2.1.292 (Claude Code)' floorof haiku)"
+expect_eq "the first Claude Code that maps the alias sits on the floor" "ok" "$(CLAUDE_CODE_VERSION=2.1.293 floorof haiku)"
+expect_eq "versions compare by number, not by text"            "ok" "$(CLAUDE_CODE_VERSION=2.1.1000 floorof haiku)"
+expect_eq "a newer minor is above the line"                    "ok" "$(CLAUDE_CODE_VERSION=2.2.0 floorof haiku)"
+expect_eq "a shorter patch number is still older"              "haiku cc 5.5 2.1.29 2.1.293" \
+  "$(CLAUDE_CODE_VERSION=2.1.29 floorof haiku)"
+NOCC="$T/nocc"; NEWCC="$T/newcc"; mkdir -p "$NOCC" "$NEWCC" # stub `claude` binaries shadow the real one
+printf '#!/bin/sh\nexit 127\n' > "$NOCC/claude"
+printf '#!/bin/sh\necho "2.1.293 (Claude Code)"\n' > "$NEWCC/claude"
+chmod +x "$NOCC/claude" "$NEWCC/claude"
+expect_eq "an unknown Claude Code cannot vouch for the alias"  "haiku cc 5.5 unknown 2.1.293" \
+  "$(CLAUDE_CODE_VERSION= PATH="$NOCC:$PATH" floorof haiku)"
+expect_eq "outside a session, claude --version is read"        "ok" "$(CLAUDE_CODE_VERSION= PATH="$NEWCC:$PATH" floorof haiku)"
+expect_eq "a resolved Haiku 5.5 ID needs no Claude Code version" "ok" \
+  "$(CLAUDE_CODE_VERSION= PATH="$NOCC:$PATH" floorof claude-haiku-5-5)"
+expect_eq "a malformed cc>= line fails closed, with no shell error" "haiku cc 5.5 2.1.292 2.1.x|rc=0" \
+  "$(VULYK_MODEL_FLOOR='haiku 5.5 cc>=2.1.x' CLAUDE_CODE_VERSION=2.1.292 \
+     bash -c '. "$1/scripts/lib.sh"; model_below_floor haiku; echo "rc=$?"' _ "$SRC" 2>&1 | paste -sd'|')"
+sed -n '/^## Hive/,/^## Terminal/p' "$SRC/.claude/commands/vulyk-build.md" | grep -q 'top-model.sh --floor`. Exit 1' \
+  && ok "the hive launch is gated on --floor" || bad "the hive launch is gated on --floor - Hive step 1 lost the gate"
 
 FLOORHIVE="$T/floorhive"; mkdir -p "$FLOORHIVE/scripts" "$FLOORHIVE/.claude/agents" "$FLOORHIVE/home/.claude" "$FLOORHIVE/templates"
 cp "$SRC/scripts/top-model.sh" "$SRC/scripts/lib.sh" "$FLOORHIVE/scripts/"
@@ -648,11 +672,19 @@ floorcheck() { # floorcheck [VAR=value]... - top-model.sh --floor in a hive with
   (cd "$FLOORHIVE" && env -u ANTHROPIC_MODEL -u ANTHROPIC_DEFAULT_FABLE_MODEL -u ANTHROPIC_DEFAULT_OPUS_MODEL \
     -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL -u CLAUDE_CODE_SUBAGENT_MODEL \
     -u ANTHROPIC_SMALL_FAST_MODEL -u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_VERTEX -u CLAUDE_CODE_USE_FOUNDRY \
-    -u VULYK_MODEL_FLOOR HOME="$FLOORHIVE/home" CLAUDE_CONFIG_DIR="$FLOORHIVE/home/.claude" \
-    CLAUDE_PROJECT_DIR="$FLOORHIVE" "$@" bash scripts/top-model.sh --floor)
+    -u VULYK_MODEL_FLOOR -u CLAUDE_CODE_VERSION HOME="$FLOORHIVE/home" CLAUDE_CONFIG_DIR="$FLOORHIVE/home/.claude" \
+    CLAUDE_PROJECT_DIR="$FLOORHIVE" CLAUDE_CODE_VERSION=2.1.293 "$@" bash scripts/top-model.sh --floor)
 }
 floorcheck >/dev/null 2>&1
 expect_eq "--floor exits 0 on the shipped agents, the story template and a clean env" "0" "$?"
+OUT="$(floorcheck CLAUDE_CODE_VERSION='2.1.292 (Claude Code)' 2>&1)"; RC=$?
+expect_eq "--floor exits 1 while Claude Code still maps haiku below the floor" "1" "$RC"
+printf '%s\n' "$OUT" | expect "--floor names the clerk's route and the fix" \
+  ".claude/agents/cycle-clerk.md model = haiku - Claude Code 2.1.292 resolves the alias to a haiku below its floor 5.5; 2.1.293 is the first that does not. Run: claude update"
+floorcheck CLAUDE_CODE_VERSION= PATH="$NOCC:$PATH" 2>&1 | expect "--floor says when the Claude Code version is unknown" \
+  "cycle-clerk.md model = haiku - the Claude Code version is unknown"
+floorcheck ANTHROPIC_DEFAULT_HAIKU_MODEL=claude-haiku-4-5 2>&1 | expect "--floor names a haiku remap below the floor" \
+  "env ANTHROPIC_DEFAULT_HAIKU_MODEL = claude-haiku-4-5 is haiku 4.5, floor 5.5"
 OUT="$(floorcheck ANTHROPIC_DEFAULT_SONNET_MODEL=claude-sonnet-5 2>&1)"; RC=$?
 expect_eq "--floor exits 1 on an env pin below the floor" "1" "$RC"
 printf '%s\n' "$OUT" | expect "--floor names the env pin" "env ANTHROPIC_DEFAULT_SONNET_MODEL = claude-sonnet-5 is sonnet 5.0, floor 5.5"
@@ -662,9 +694,12 @@ rm -f "$FLOORHIVE/home/.claude/settings.json"
 floorcheck CLAUDE_CODE_USE_BEDROCK=1 2>&1 | expect "--floor warns on a provider with no family pin" \
   "CLAUDE_CODE_USE_BEDROCK is set and ANTHROPIC_DEFAULT_SONNET_MODEL is not"
 floorcheck CLAUDE_CODE_USE_BEDROCK=1 ANTHROPIC_DEFAULT_OPUS_MODEL=anthropic.claude-opus-5-5 \
-  ANTHROPIC_DEFAULT_SONNET_MODEL=anthropic.claude-sonnet-5-5 >/dev/null 2>&1
-expect_eq "--floor is clean on a provider with both families pinned at the floor" "0" "$?"
-floorcheck CLAUDE_CODE_SUBAGENT_MODEL=haiku 2>&1 | expect "--floor names a route to the unreleased haiku floor" \
+  ANTHROPIC_DEFAULT_SONNET_MODEL=anthropic.claude-sonnet-5-5 2>&1 | expect "--floor asks a provider hive for a haiku pin too" \
+  "CLAUDE_CODE_USE_BEDROCK is set and ANTHROPIC_DEFAULT_HAIKU_MODEL is not"
+floorcheck CLAUDE_CODE_USE_BEDROCK=1 ANTHROPIC_DEFAULT_OPUS_MODEL=anthropic.claude-opus-5-5 \
+  ANTHROPIC_DEFAULT_SONNET_MODEL=anthropic.claude-sonnet-5-5 ANTHROPIC_DEFAULT_HAIKU_MODEL=anthropic.claude-haiku-5-5 >/dev/null 2>&1
+expect_eq "--floor is clean on a provider with every family pinned at the floor" "0" "$?"
+floorcheck VULYK_MODEL_FLOOR='haiku 5.5 unreleased' CLAUDE_CODE_SUBAGENT_MODEL=haiku 2>&1 | expect "--floor names a route to an unreleased floor" \
   "env CLAUDE_CODE_SUBAGENT_MODEL = haiku - no haiku at its floor 5.5 has shipped"
 mkdir -p "$FLOORHIVE/docs/specs/demo"
 printf -- '---\nstory: demo-01\nmodel: claude-opus-4-6   # pinned\n---\n' > "$FLOORHIVE/docs/specs/demo/demo-01-x.md"

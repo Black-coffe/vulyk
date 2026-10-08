@@ -218,15 +218,19 @@ case "$MODE" in
       set -- "$1" "$2" $b
       if [ "$4" = "alias" ]; then
         echo "below floor: $1 = $2 - no $3 at its floor $5 has shipped, so the alias runs an older one"
+      elif [ "$4" = "cc" ] && [ "$6" = "unknown" ]; then
+        echo "below floor: $1 = $2 - the Claude Code version is unknown, and only Claude Code $7+ resolves the alias to a $3 at its floor $5"
+      elif [ "$4" = "cc" ]; then
+        echo "below floor: $1 = $2 - Claude Code $6 resolves the alias to a $3 below its floor $5; $7 is the first that does not. Run: claude update"
       else
         echo "below floor: $1 = $2 is $3 $4, floor $5"
       fi
       FOUND=1
     }
-    # The variables that decide what a session or a dispatch runs on. The Haiku remap and the
-    # small/fast model are left out: they matter only where something routes to `haiku`, and that
-    # route is itself below the floor while Haiku's line is `unreleased`.
-    VARS="ANTHROPIC_MODEL ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL CLAUDE_CODE_SUBAGENT_MODEL"
+    # The variables that decide what a session or a dispatch runs on. The Haiku remap is in since
+    # 0.26.0, when `cycle-clerk` moved to `haiku`; the small/fast model stays out: it is Claude Code's
+    # own background model, not a VULYK route.
+    VARS="ANTHROPIC_MODEL ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL CLAUDE_CODE_SUBAGENT_MODEL"
     for v in $VARS; do below "env $v" "${!v:-}"; done
     # Settings files a session reads: the user's, the project's, the local one. Their `env` blocks
     # set the same variables, and `model` sets the session.
@@ -236,7 +240,7 @@ case "$MODE" in
     for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY; do
       case "${!v:-}" in 1|true|TRUE|yes) PROVIDER="$v" ;; esac
     done
-    for v in ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL; do
+    for v in ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL; do
       [ -n "${!v:-}" ] && PINS="$PINS$v "
     done
     while IFS= read -r hit; do
@@ -246,14 +250,14 @@ case "$MODE" in
       val="${kv%\"}"; val="${val##*\"}"
       case "$k" in
         CLAUDE_CODE_USE_*) case "$val" in 1|true|TRUE|yes) PROVIDER="$k" ;; esac ;;
-        *) case "$k" in ANTHROPIC_DEFAULT_OPUS_MODEL|ANTHROPIC_DEFAULT_SONNET_MODEL) [ -n "$val" ] && PINS="$PINS$k " ;; esac
+        *) case "$k" in ANTHROPIC_DEFAULT_OPUS_MODEL|ANTHROPIC_DEFAULT_SONNET_MODEL|ANTHROPIC_DEFAULT_HAIKU_MODEL) [ -n "$val" ] && PINS="$PINS$k " ;; esac
            below "$f $k" "$val" ;;
       esac
     done <<EOF
 $(for f in "$USER_DIR/settings.json" "$ROOT/.claude/settings.json" "$ROOT/.claude/settings.local.json"; do
     [ -f "$f" ] && printf '%s\n' "$f"
   done | while IFS= read -r f; do
-    grep -o -E '"(model|ANTHROPIC_MODEL|ANTHROPIC_DEFAULT_(FABLE|OPUS|SONNET)_MODEL|CLAUDE_CODE_SUBAGENT_MODEL|CLAUDE_CODE_USE_(BEDROCK|VERTEX|FOUNDRY))"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null \
+    grep -o -E '"(model|ANTHROPIC_MODEL|ANTHROPIC_DEFAULT_(FABLE|OPUS|SONNET|HAIKU)_MODEL|CLAUDE_CODE_SUBAGENT_MODEL|CLAUDE_CODE_USE_(BEDROCK|VERTEX|FOUNDRY))"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null \
       | sed "s|^|$f:|; s/\"[[:space:]]*:[[:space:]]*\"/\":\"/"
   done)
 EOF
@@ -267,9 +271,10 @@ EOF
 $(grep -H -m1 '^model:' "$ROOT"/.claude/agents/*.md "$ROOT/templates/story.md" "$ROOT"/docs/specs/*/*.md 2>/dev/null)
 EOF
     # A third-party provider: Claude Code's own table has `sonnet` and even `opus` resolving to
-    # 4.x there. Only a family pin (ANTHROPIC_DEFAULT_<FAMILY>_MODEL) makes the alias safe.
+    # 4.x there, and `haiku` to Haiku 4.5. Only a family pin (ANTHROPIC_DEFAULT_<FAMILY>_MODEL)
+    # makes the alias safe.
     if [ -n "$PROVIDER" ]; then
-      for fam in OPUS SONNET; do
+      for fam in OPUS SONNET HAIKU; do
         v="ANTHROPIC_DEFAULT_${fam}_MODEL"
         if case "$PINS" in *" $v "*) false ;; *) true ;; esac; then
           echo "below floor risk: $PROVIDER is set and $v is not - the alias can resolve to a 4.x model there; pin it to the provider's ID at or above the floor"

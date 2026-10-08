@@ -1,6 +1,11 @@
 # ADR-015: Sonnet executes, Opus judges, Fable holds the gate - and no model runs below the floor
 
-- Status: accepted (2026-09-28, owner: Andrei - "бери в работу и давай делать минорное обновление")
+- Status: accepted (2026-09-28, owner: Andrei - "бери в работу и давай делать минорное обновление");
+  amended 2026-10-07 (0.26.0, spec `haiku-5-5-floor`, owner: "Минимум Hiku 5,5"): Haiku 5.5 shipped,
+  `cycle-clerk` moves to `haiku`, and the haiku floor line reads `haiku 5.5 cc>=2.1.293` - the alias
+  table ships inside Claude Code, and 2.1.292 still ran `haiku` as Haiku 4.5. `--floor` reads the
+  running Claude Code's version, and checks the haiku remap and a provider's haiku pin. `/vulyk-build` now
+  refuses to launch the hive while `--floor` exits 1: the floor is enforced at that launch, not only reported.
 - Date: 2026-09-28 · Version: 0.20.0
 - Spec: docs/specs/sonnet-5-5-ladder (study report and source table; built by the Queen's session
   directly, the Law 5 exception the owner granted on 2026-09-22)
@@ -104,4 +109,5 @@ Sonnet 5.5 shipped on 2026-09-28. The evidence and the source table are in
   Then `model: opus` goes back into the template and the `cycle.sh` default.
 - The `agent_empty` rate rises on Sonnet workers. Then the worker files get `effort: high`.
 - Haiku 5.5 ships. Then `cycle-clerk` moves to `haiku`, after its model is checked against the floor.
+  Done in 0.26.0 (see the Status amendment).
 - Artificial Analysis or another independent source publishes Sonnet 5.5's per-task cost.

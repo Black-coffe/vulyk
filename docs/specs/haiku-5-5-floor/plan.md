@@ -43,6 +43,10 @@ the before-the-fact check, as opus and sonnet already are.
 - `haiku-5-5-floor-01` — floor line `haiku 5.5 cc>=2.1.293`, version gate in `model_below_floor`, haiku pins and
   provider in `--floor`, clerk on `haiku`, tests, and the docs that name the rung
 
+**Wave 2** (cut after round 1, see `## Plan deltas`)
+- `haiku-5-5-floor-02` — `/vulyk-build` refuses to launch the hive while `--floor` fails; a non-numeric `cc>=`
+  value fails closed
+
 ## Contracts
 - `model_floor` lines: `<family> <major.minor> [unreleased | cc>=<x.y.z>]`.
 - `model_below_floor <alias>` prints `<family> alias <floor>` for `unreleased` (unchanged) and
@@ -56,10 +60,24 @@ the before-the-fact check, as opus and sonnet already are.
 *(empty)*
 
 ## Plan deltas
+- 2026-10-07, close-story: `bash tests/telemetry.test.sh` outgrew the 540 s verification budget on this Windows box
+  (532 s standalone; timed out at 468/478 checks under `close-story`). Decision: close with
+  `VULYK_VERIFY_TIMEOUT=900` from a background shell, same command, nothing skipped. Rejected: a narrower
+  `## Verification` line (no `## Commands` cell reaches `lib.sh`/`top-model.sh` logic short of the full suite).
+  Evidence for the owner-ordered "fast/full verification" item of 2026-09-23, still unbuilt.
+- 2026-10-08, after GREEN round 1: the review's minor 1 - the floor only reports, so on Claude Code 2.1.292 a hive
+  launched today would still dispatch `cycle-clerk` on Haiku 4.5, against the owner's "Минимум Hiku 5,5" and the
+  standing rule that Haiku 4.5 is never dispatched. Asked at the ship stop; the owner chose "Сначала закрыть дыру".
+  Decision: story 02 gates the hive launch on `--floor` and makes a malformed `cc>=` fail closed (minor 2). Minor 3
+  (does `CLAUDE_CODE_VERSION` reach hooks?) checked instead of changed: a SessionStart hook under `claude -p` saw
+  `CLAUDE_CODE_VERSION=2.1.292 (Claude Code)`. Rejected: rewording the docs to "reported" (weakens the owner's
+  rule); a clerk fallback to `sonnet` in the driver (frontmatter is not conditional, ADR-007; silent model swap);
+  gating the solo path (it dispatches only `opus`).
 
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
 **Briefed:** via mini-brief, Andrei, 2026-10-07
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/haiku-5-5-floor
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Council:** GREEN round 1, 2026-10-08, at 3ce0531, pack bfe34071d09e
+**Council:** GREEN round 2, 2026-10-08, at ac36455, pack 04dbd42aa837
 **Shipped:** <written by scripts/ship-check.sh --record>
