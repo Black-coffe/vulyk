@@ -66,5 +66,5 @@ the before-the-fact check, as opus and sonnet already are.
 **Briefed:** via mini-brief, Andrei, 2026-10-07
 **Branch:** vulyk/haiku-5-5-floor
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Council:** GREEN round 1, 2026-10-08, at 3ce0531, pack bfe34071d09e
 **Shipped:** <written by scripts/ship-check.sh --record>
