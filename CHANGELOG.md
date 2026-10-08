@@ -2,6 +2,34 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.26.0] - 2026-10-08
+
+Haiku 5.5 reaches the model floor, and the floor learns that an alias is only as new as the Claude Code that
+resolves it (spec `haiku-5-5-floor`).
+
+### Changed
+- **`cycle-clerk` runs on `haiku`** (effort `low`), the one Haiku rung ADR-015 reserved for the day a Haiku at the
+  floor shipped. Claude Haiku 5.5 (`claude-haiku-5-5`) shipped on 2026-10-07; it is the first Haiku that takes an effort
+  level. Nothing else moves to Haiku: every other agent plans, judges or writes code. `council-haiku` stays on `opus`.
+- **The haiku floor line reads `haiku 5.5 cc>=2.1.293`** (was `haiku 5.5 unreleased`). The alias table ships inside
+  Claude Code: on launch day Claude Code 2.1.292 still ran `haiku` as `claude-haiku-4-5-20251001`, and 2.1.293 made
+  Haiku 5.5 the default Haiku (measured with `claude -p --model haiku`, and its CHANGELOG). A `cc>=<version>` flag on a
+  floor line means the bare alias reaches the floor only from that Claude Code on. `top-model.sh --floor` reads the
+  running session's version (`CLAUDE_CODE_VERSION`, which hooks see too; `claude --version` outside a session), and
+  reports a `haiku` route on an older or unknown Claude Code with the fix: `claude update`. A malformed version in
+  `VULYK_MODEL_FLOOR` fails closed.
+- **`--floor` checks the haiku remap**: `ANTHROPIC_DEFAULT_HAIKU_MODEL` in env and settings, and a Bedrock / Vertex /
+  Foundry hive without a haiku pin, as it already did for opus and sonnet.
+- **`/vulyk-build` refuses to launch the hive while `--floor` exits 1.** Until now the floor only reported; on an old
+  Claude Code a Tier 3-4 build would have dispatched the clerk on Haiku 4.5, against the rule that it never runs. The
+  solo path (Tier 1-2) dispatches only `opus` and is not gated.
+- Constitution: the Models line now says "Haiku runs the clerk only". A plain upgrade does not write a hive's
+  constitution; carry the line over by hand until the constitution merge lands.
+
+### Known
+- `tests/telemetry.test.sh` takes about 9 minutes on Windows Git Bash, over `close-story`'s 540 s budget; this spec closed
+  its stories with `VULYK_VERIFY_TIMEOUT=900`. The owner-ordered fast/full verification split (2026-09-23) is next.
+
 ## [0.25.0] - 2026-10-04
 
 Every hive turns on Claude Code's built-in "You should know" mod (spec `you-should-know`), plus cache-only token savings
