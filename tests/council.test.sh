@@ -880,6 +880,20 @@ out="$(council status docs/specs/pwseat1 --json)"
 printf '%s' "$out" | jq -e '.stale == false' >/dev/null 2>&1 && echo "  ok    status --json stale:false after a skills.json + learnings-only commit" \
   || { echo "::error::status: $out"; fail=1; }
 
+echo "record-seat: still NOT stale after a commit touching only docs/specs/*/smoke-*.md (live-pass evidence recorded after GREEN)"
+echo 'preprod smoke: ok' > docs/specs/pwseat1/smoke-preprod.md
+git add -- docs/specs/pwseat1/smoke-preprod.md && git commit -qm "smoke evidence" >/dev/null
+out="$(council status docs/specs/pwseat1 --json)"
+printf '%s' "$out" | jq -e '.stale == false' >/dev/null 2>&1 && echo "  ok    status --json stale:false after a smoke-*.md-only commit" \
+  || { echo "::error::status: $out"; fail=1; }
+paper() { ( . "$SRC/scripts/lib.sh"; is_paperwork_path "$1" && echo true || echo false ); }
+[ "$(paper docs/specs/x/smoke-tier3.md)" = true ] && echo "  ok    is_paperwork_path: docs/specs/x/smoke-tier3.md is paperwork" \
+  || { echo "::error::docs/specs/x/smoke-tier3.md is not paperwork"; fail=1; }
+for p in docs/specs/x/smoke-tier3.sh docs/smoke-tier3.md src/specs/x/smoke-tier3.md; do
+  [ "$(paper "$p")" = false ] && echo "  ok    is_paperwork_path: $p is not paperwork" \
+    || { echo "::error::$p counted as paperwork"; fail=1; }
+done
+
 echo "record-seat: stale (exit 5) once a real non-paperwork file lands on top"
 echo "real code change" > pwseat1-code.txt
 git add -A && git commit -qm "real code change while pwseat1 round 1 is open" >/dev/null
