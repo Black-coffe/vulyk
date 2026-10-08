@@ -211,9 +211,10 @@ model_below_floor() { # model_below_floor <model id | alias> -> prints "<family>
   # A resolved ID is compared with its family's line. An alias is below when its family's line is
   # `unreleased` (printed as "<family> alias <floor>"), or carries `cc>=<need>` and the Claude Code
   # that resolves it is older or unknown (printed as "<family> cc <floor> <have|unknown> <need>"):
-  # an unknown version cannot vouch for the alias. Any other alias, an unknown shape or a family
-  # with no line is never below.
-  local fv fam ver fl flag a have
+  # an unknown version cannot vouch for the alias, and a `<need>` that is not a dotted version (a
+  # typo in VULYK_MODEL_FLOOR) fails closed the same way. Any other alias, an unknown shape or a
+  # family with no line is never below.
+  local fv fam ver fl flag a have need
   a="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"; a="${a%%[[]*}"
   case "$a" in
     fable|opus|sonnet|haiku)
@@ -223,9 +224,9 @@ EOF
       case "${flag:-}" in
         unreleased) printf '%s alias %s\n' "$a" "$fl"; return 0 ;;
         'cc>='*)
-          have="$(claude_code_version)"
-          if [ -z "$have" ] || version_lt "$have" "${flag#cc>=}"; then
-            printf '%s cc %s %s %s\n' "$a" "$fl" "${have:-unknown}" "${flag#cc>=}"
+          need="${flag#cc>=}"; have="$(claude_code_version)"
+          if [ -z "$have" ] || ! [[ "$need" =~ ^[0-9]+(\.[0-9]+)*$ ]] || version_lt "$have" "$need"; then
+            printf '%s cc %s %s %s\n' "$a" "$fl" "${have:-unknown}" "$need"
             return 0
           fi ;;
       esac

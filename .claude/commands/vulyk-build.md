@@ -32,7 +32,10 @@ No driver, no clerk, no court. Loop:
 
 ## Hive (Tier 3-4)
 
-1. Resolve `top_model="$(bash scripts/top-model.sh)"`; `second_model`, the pairing
+1. Floor first, for both launches below: `bash scripts/top-model.sh --floor`. Exit 1 means the hive would dispatch
+   a model below the floor (ADR-015), the clerk on an old Claude Code included: print its `below floor` lines and
+   the fix they name (`claude update`, or the pin), and stop, with no journal line and no launch. Then resolve
+   `top_model="$(bash scripts/top-model.sh)"`; `second_model`, the pairing
    `bash scripts/top-model.sh --explain` prints (opus beside Fable, sonnet beside Opus) unless plan.md's
    Tier 4 line names another; `stamp="$(openssl rand -hex 8 2>/dev/null || python -c 'import secrets; print(secrets.token_hex(8))')"`.
 2. Journal and print the line that hands the tree to the loop: `bash scripts/journal.sh

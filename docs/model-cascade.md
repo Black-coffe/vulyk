@@ -228,6 +228,9 @@ remapped:
 
 It exits 1 on any finding, and the SessionStart brief prints the result. It warns and never edits
 settings: a provider's model IDs are the owner's to set (`anthropic.claude-sonnet-5-5` on Bedrock).
+Since 0.26.0 it also gates: `/vulyk-build` runs it before launching the hive (Tier 3-4, the path that
+dispatches every family, the clerk included) and does not launch on exit 1. The solo path (Tier 1-2)
+dispatches only `lead-review` on `opus` and is not gated.
 
 **After the fact: telemetry code `model_below_floor`.** `scan` reads the model ID each main and
 subagent transcript actually ran on. Below the floor, it records a row with the version and the

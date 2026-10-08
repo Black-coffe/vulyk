@@ -658,6 +658,11 @@ expect_eq "an unknown Claude Code cannot vouch for the alias"  "haiku cc 5.5 unk
 expect_eq "outside a session, claude --version is read"        "ok" "$(CLAUDE_CODE_VERSION= PATH="$NEWCC:$PATH" floorof haiku)"
 expect_eq "a resolved Haiku 5.5 ID needs no Claude Code version" "ok" \
   "$(CLAUDE_CODE_VERSION= PATH="$NOCC:$PATH" floorof claude-haiku-5-5)"
+expect_eq "a malformed cc>= line fails closed, with no shell error" "haiku cc 5.5 2.1.292 2.1.x|rc=0" \
+  "$(VULYK_MODEL_FLOOR='haiku 5.5 cc>=2.1.x' CLAUDE_CODE_VERSION=2.1.292 \
+     bash -c '. "$1/scripts/lib.sh"; model_below_floor haiku; echo "rc=$?"' _ "$SRC" 2>&1 | paste -sd'|')"
+sed -n '/^## Hive/,/^## Terminal/p' "$SRC/.claude/commands/vulyk-build.md" | grep -q 'top-model.sh --floor`. Exit 1' \
+  && ok "the hive launch is gated on --floor" || bad "the hive launch is gated on --floor - Hive step 1 lost the gate"
 
 FLOORHIVE="$T/floorhive"; mkdir -p "$FLOORHIVE/scripts" "$FLOORHIVE/.claude/agents" "$FLOORHIVE/home/.claude" "$FLOORHIVE/templates"
 cp "$SRC/scripts/top-model.sh" "$SRC/scripts/lib.sh" "$FLOORHIVE/scripts/"
