@@ -80,4 +80,4 @@ the before-the-fact check, as opus and sonnet already are.
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
 **Council:** GREEN round 1, 2026-10-08, at 3ce0531, pack bfe34071d09e
 **Council:** GREEN round 2, 2026-10-08, at ac36455, pack 04dbd42aa837
-**Shipped:** <written by scripts/ship-check.sh --record>
+**Shipped:** 0.26.0, 2026-10-08, at 4bcd643 - merged to main, publish pending
