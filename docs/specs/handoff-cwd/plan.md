@@ -13,9 +13,15 @@ card makes the class checkable: a command or skill whose `!` injection names a s
 gate, in both injection forms.
 
 ## Assumptions
-- The quoted `allowed-tools` form `Bash(bash "${CLAUDE_PROJECT_DIR}/...":*)` matches outside bypass mode: not
-  probeable headlessly. The owner's look before shipping covers it: a hive in default permission mode, `cd docs`,
-  then `/vulyk-handoff`.
+- The quoted `allowed-tools` form `Bash(bash "${CLAUDE_PROJECT_DIR}/...":*)` matches in default permission mode:
+  probed 2026-10-13 with `claude -p --setting-sources project --permission-mode default` (the owner's user settings
+  carry `defaultMode: bypassPermissions`, which every earlier probe inherited). A control command with the same
+  injection and no grant failed `Shell command permission check failed ... requires approval`; the fixed
+  `/vulyk-handoff` ran both injections and wrote the handoff. Not probeable headlessly: a `cd` that survives between
+  turns - the owner's look covers it (a hive in default mode, ask for `cd docs`, then `/vulyk-handoff`).
+- Found by that probe, out of scope: in default mode the enrichment `Edit` of `.claude/handoff/*.md` is a Claude Code
+  `safetyCheck` ("a sensitive file") that `allowed-tools: Edit` does not cover - one approval prompt per handoff in an
+  interactive session, a refusal under `-p`. Same for the owner's global `/handoff`. Next circle.
 - `dump` without a session id (an old command file, a manual run) keeps today's lookup, rooted at the hive instead of
   the cwd.
 - A `cd` into a worktree under `.claude/worktrees/` makes `state.sh` snapshot that worktree (it roots itself with
