@@ -85,6 +85,6 @@ line run on temp repos (:291). `tests/defects.test.sh` covers `defects-check.sh`
 - `close-story`'s `## Commands` match, `record-seat`'s taint and `is_paperwork_path` are security-relevant
   string matches: keep them anchored. `close-story` probes `timeout 5 true` (Windows cmd `timeout`).
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
-- Retired framework files are removed unless edited (`retired_edited` :1039); `unwire_hook` :846.
+- Retired framework files are removed unless edited (`retired_edited` :1109); `unwire_hook` :846.
 
 last-verified: 2026-10-13 (v0.26.1)
