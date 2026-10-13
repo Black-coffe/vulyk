@@ -9,8 +9,8 @@
 #
 # Flags, in the given file:
 #   - a path that goes INTO another project, past its root, in any of the shapes a session leaves
-#     behind: E:\Projects\<name>\<more>, E:/Projects/<name>/<more>, /e/Projects/<name>/<more>, and the
-#     transcript slug E--Projects-<name>-docs-... (-src-, -files-, ...). A project's root alone (E:/Projects/<name>) passes, and
+#     behind: <drive>:\Projects\<name>\<more>, <drive>:/Projects/<name>/<more>, /<drive>/Projects/<name>/<more>, and the
+#     transcript slug <D>--Projects-<name>-docs-... (-src-, -files-, ...). A project's root alone (<drive>:/Projects/<name>) passes, and
 #     so does VULYK's own tree.
 #   - any term of the private list, one per line, case-insensitive (`#` comments):
 #     ${VULYK_PRIVATE_TERMS:-$HOME/.vulyk/private-terms}. The list stays on the owner's machine.
