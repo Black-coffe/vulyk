@@ -205,3 +205,5 @@
 {"v":1,"ts":"2026-09-29T22:14:00Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"hindsight-harvest-02","ref":"scope:hindsight-harvest-02"}
 {"v":1,"ts":"2026-09-29T22:14:01Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"hindsight-harvest-03","ref":"scope:hindsight-harvest-03"}
 {"v":1,"ts":"2026-09-29T22:14:02Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"evolve-corrections-count-01","ref":"scope:evolve-corrections-count-01"}
+{"v":1,"ts":"2026-10-08T07:17:52Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"haiku-5-5-floor-01","ref":"scope:haiku-5-5-floor-01"}
+{"v":1,"ts":"2026-10-08T07:17:53Z","code":"scope_breach","value":2,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"haiku-5-5-floor-02","ref":"scope:haiku-5-5-floor-02"}
