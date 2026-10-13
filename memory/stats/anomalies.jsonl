@@ -207,3 +207,5 @@
 {"v":1,"ts":"2026-09-29T22:14:02Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"evolve-corrections-count-01","ref":"scope:evolve-corrections-count-01"}
 {"v":1,"ts":"2026-10-08T07:17:52Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"haiku-5-5-floor-01","ref":"scope:haiku-5-5-floor-01"}
 {"v":1,"ts":"2026-10-08T07:17:53Z","code":"scope_breach","value":2,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"haiku-5-5-floor-02","ref":"scope:haiku-5-5-floor-02"}
+{"v":1,"ts":"2026-10-13T21:22:36Z","code":"context_high","value":759461,"threshold":700000,"vulyk":"0.0.0","tier":0,"model":"opus","agent":"","spec":"","story":"","ref":"session:555c8811-72e5-4a4c-8e84-d5ec863d8f7c.jsonl"}
+{"v":1,"ts":"2026-10-13T21:22:46Z","code":"scope_breach","value":3,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"handoff-cwd-01","ref":"scope:handoff-cwd-01"}
