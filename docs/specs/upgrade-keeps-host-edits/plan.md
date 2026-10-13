@@ -41,6 +41,9 @@ previous install shipped (old manifest) that the hive no longer has stays delete
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Next circle
+- Same class, settings side: `py_wire` wires a NEW hook as `$CLAUDE_PROJECT_DIR/.claude/hooks/<x>.sh` even when the
+  hive routes every VULYK hook through its own launcher (`node .../scripts/<launcher>.mjs <x>.sh`); found on two hives
+  on 2026-10-13 and moved onto the launcher by hand. The wire step should copy the hive's existing pattern.
 - A hive's handoff launcher patch worth taking upstream: `.claude/hooks/handoff.sh` finds `python3` with `command -v`,
   but on Windows that can be the Microsoft Store stub in WindowsApps, which exits 49 and breaks the hook's fail-open;
   check by running `"$PY" -c ''` before `exec`.
