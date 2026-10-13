@@ -66,7 +66,7 @@ user-level hook keeps writing its own handoffs and keeps suggesting `/handoff`.
 
 ## Plan deltas
 
-**Approved:** <owner, date - the approval stop>
+**Approved:** Andrei, 2026-10-13
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** <written by /vulyk-build before wave 1>
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
