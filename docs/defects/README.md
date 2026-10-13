@@ -97,6 +97,7 @@ the verdict. Check output goes to a log under `${TMPDIR:-/tmp}`. `DEFECTS_DIR` p
 
 | id | class | status | quotes | check | last quote |
 |---|---|---|---|---|---|
+| `host-internals-in-public-repo` | A host project's insides quoted into the public VULYK repository | block | 1 | `bash scripts/leak-check.sh <arg>` | 2026-10-13 |
 | `command-injection-follows-cwd` | A command's injection names its script relative to the session cwd | block | 1 | `bash scripts/injection-check.sh <arg>` | 2026-10-13 |
 
 **Trust.** `defects-check.sh` runs each card's `check:` as a shell command, and `lead-review` runs the gate on the

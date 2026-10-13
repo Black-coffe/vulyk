@@ -28,13 +28,13 @@ Sent mid-turn, same session:
 Host `E:/Projects/AI`, sessions `465c0602` (2026-10-12 17:54Z) and `cf1d2449` (2026-10-13 13:14Z). Both
 transcripts record the session `cwd` at the failing `/vulyk-handoff` as a subfolder of the hive
 (`docs/specs/<client>/<folder>`, `docs/specs/<client>/<folder>`); each got
-there through a Bash `cd /e/Projects/AI/docs/specs/<client>/... && ...`. `scripts/state.sh` exists in that hive.
+there through a Bash `cd <hive>/docs/specs/<client>/... && ...`. `scripts/state.sh` exists in that hive.
 
 ## Recon
 
 - Claude Code keeps a Bash `cd` that stays inside the project and resets only one that leaves it
-  (`Shell cwd was reset to ...`); the `cd /e/Projects/<client>/...` calls in the same session were reset, the
-  `cd /e/Projects/AI/docs/...` calls were kept.
+  (`Shell cwd was reset to ...`); the `cd <another project>/...` calls in the same session were reset, the
+  `cd <hive>/docs/...` calls were kept.
 - `.claude/commands/vulyk-handoff.md:9` `!`bash scripts/state.sh`` and `:13` `!`bash .claude/hooks/handoff.sh dump``
   run in that kept cwd. These are the only `!` injections in VULYK's commands.
 - `scripts/state.sh:23` already finds its root with `git rev-parse --show-toplevel`; `handoff.sh:8` finds

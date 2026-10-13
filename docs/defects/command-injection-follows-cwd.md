@@ -18,7 +18,7 @@ from the project root and aborts the whole command the moment the session has dr
 
 ## Cause
 `vulyk-handoff.md` named `scripts/state.sh` and `.claude/hooks/handoff.sh` relative to the cwd (v0.3.0, v0.9.1). The
-model's own `cd /e/Projects/AI/docs/specs/<client>/... && ...` moved the session cwd, Claude Code kept it because it stays
+model's own `cd <hive>/docs/specs/<client>/... && ...` moved the session cwd, Claude Code kept it because it stays
 inside the project, and the injection then ran from that subfolder.
 
 ## Never

@@ -25,7 +25,7 @@ The owner's word on the split, 2026-10-13, answering "Как поступаем 
 
 Host `E:/Projects/AI`, sessions `465c0602` (2026-10-12 17:54Z) and `cf1d2449` (2026-10-13 13:14Z): the session `cwd`
 at the failing `/vulyk-handoff` is a subfolder of the hive (`docs/specs/<client>/...`), reached through the model's own Bash
-`cd /e/Projects/AI/docs/specs/<client>/... && ...`. Claude Code 2.1.296 keeps a `cd` that stays inside the project.
+`cd <hive>/docs/specs/<client>/... && ...`. Claude Code 2.1.296 keeps a `cd` that stays inside the project.
 The same drift happened in the planning session itself (`cd` into `docs/specs/handoff-ownership/plan-review`).
 
 ## Recon

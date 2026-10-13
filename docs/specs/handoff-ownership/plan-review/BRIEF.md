@@ -31,7 +31,7 @@ out-of-scope edits) matter here.
 ## Why the planner (the Queen, Opus 5.5) decided what it decided
 1. Diagnosis. Transcripts of E:/Projects/AI sessions 465c0602 (2026-10-12) and cf1d2449 (2026-10-13) under
    `~/.claude/projects/E--Projects-AI/` record `cwd` at the failing /vulyk-handoff as subfolders
-   (`docs/specs/<client>/...`), reached by the model's own Bash `cd /e/Projects/AI/docs/specs/<client>/... && ...`. In the
+   (`docs/specs/<client>/...`), reached by the model's own Bash `cd <hive>/docs/specs/<client>/... && ...`. In the
    installed Claude Code 2.1.296 binary the cwd-reset function reads roughly
    `h=oVn(); if(h || r!==s && !Kg(r,n)) { reset to original }`, where `oVn()` reads env
    `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR`: a `cd` that stays inside the project is KEPT, one that leaves it is
