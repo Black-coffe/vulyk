@@ -1,0 +1,9 @@
+---
+description: neighbour form - a fenced injection block names its script relative to the cwd
+---
+
+Today's report:
+
+```!
+python .claude/hooks/report.py --today
+```

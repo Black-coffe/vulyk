@@ -1,8 +1,8 @@
 ---
 story: handoff-cwd-01
 spec: handoff-cwd
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 model: sonnet
@@ -71,5 +71,18 @@ memory/map/agents-and-commands.md (`vulyk-handoff`); memory/map/scripts.md (`sta
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- `vulyk-handoff.md`: both injections and both `allowed-tools` grants name `"${CLAUDE_PROJECT_DIR}/..."`; the dump
+  gets `"${CLAUDE_SESSION_ID}"`. Probed in default permission mode with the owner's user settings excluded
+  (`--setting-sources project`): a control injection without a grant was refused, both of these ran.
+- `handoff.py`: `own_hive()` (the `<root>` of `<root>/.claude/hooks/handoff.py`) replaces `os.getcwd()` as the last
+  root fallback; `dump`/`status` set the payload cwd to that root; `dump <sid>` reads `transcript_for_session()` -
+  `<config>/projects/*/<sid>.jsonl` by name - and `_exact_session` stops `write_handoff`/`mode_status` from falling
+  back to the newest file when the id is unknown; `create_unique()` writes with `open(..., "x")` and a `-2`, `-3`
+  suffix, so a same-second file from another tool (the owner's `context_guard.py` uses the same name pattern) survives.
+- `scripts/injection-check.sh`: same two regexes Claude Code uses (inline `` !` `` after whitespace, fenced
+  ```` ```! ````); acts only on `.claude/commands/*.md`, `SKILL.md` and `*.fixture`, so the card that quotes the bad
+  form, and any other file the gate is handed, pass.
+- Tests: the new cases fail on the old `handoff.py` (7 of 9; the other two guard a half-fix that roots at the hive but
+  still borrows the newest transcript - a decoy under the hive's slug catches it). 128 checks green.
 
 ## Findings

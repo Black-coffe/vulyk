@@ -34,13 +34,15 @@ user-level hook keeps writing its own handoffs and keeps suggesting `/handoff`.
   line. VULYK's command stays `/vulyk-handoff`: a project command named `handoff` does not shadow a user-level one
   (probed), and the override would hide both.
 - Teaching VULYK's handoff the folder split ("directions") is the next spec, not this one (owner answer 3).
+- The tests join `tests/telemetry.test.sh`, the installer's existing suite (already in `## Commands` and CI): the
+  constitution sits at its 7168-byte cap (`tests/maintenance.test.sh`), so a new `## Commands` row would breach it.
 - Ships after `constitution-merge` (0.27.0), as 0.28.0.
 
 ## Stories
 
 **Wave 1**
 - `handoff-ownership-01` — `scripts/handoff-owner.sh` (list / own / keep), the installer's question, `/vulyk-update`'s
-  chat question, `tests/handoff-owner.test.sh` + CI step, ADR-005 amendment, command reference
+  chat question, its cases in `tests/telemetry.test.sh`, ADR-005 amendment, command reference
 
 ## Contracts
 - `scripts/handoff-owner.sh <hive> [--check]` -> one line per finding (`skill <name> <path>`, `hook <path>`,
@@ -50,7 +52,7 @@ user-level hook keeps writing its own handoffs and keeps suggesting `/handoff`.
   config folder is `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`.
 
 ## Integration gate
-`bash tests/handoff-owner.test.sh` · `bash tests/maintenance.test.sh` · `bash scripts/defects-check.sh` ·
+`bash tests/telemetry.test.sh` · `bash tests/maintenance.test.sh` · `bash scripts/defects-check.sh` ·
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Next circle

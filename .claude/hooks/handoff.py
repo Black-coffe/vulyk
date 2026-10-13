@@ -81,6 +81,14 @@ DEFAULTS = {
 
 # --------------------------------------------------------------------------- utils
 
+def own_hive():
+    """The project this hook is installed in (<root>/.claude/hooks/handoff.py), or None."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if os.path.basename(here) == "hooks" and os.path.basename(os.path.dirname(here)) == ".claude":
+        return os.path.dirname(os.path.dirname(here))
+    return None
+
+
 def project_root(payload):
     root = os.environ.get("CLAUDE_PROJECT_DIR")
     if root and os.path.isdir(root):
@@ -88,7 +96,9 @@ def project_root(payload):
     cwd = (payload or {}).get("cwd")
     if cwd and os.path.isdir(cwd):
         return cwd
-    return os.getcwd()
+    # dump/status run from a shell with no CLAUDE_PROJECT_DIR, and a Bash `cd` inside the
+    # project survives between tool calls: the cwd can be any subfolder, so it is the last resort.
+    return own_hive() or os.getcwd()
 
 
 def handoff_dir(root):
@@ -431,6 +441,22 @@ def newest_transcript_for_cwd(cwd):
         return None
 
 
+def transcript_for_session(session_id):
+    """<session_id>.jsonl in any project folder: found by name, so neither a long path's
+    shortened slug nor a parallel session's newer transcript can stand in for it."""
+    if not re.match(r"^[A-Za-z0-9-]+$", session_id or ""):
+        return None
+    base = os.path.join(CLAUDE_USER_DIR, "projects")
+    try:
+        found = [os.path.join(base, d, session_id + ".jsonl") for d in os.listdir(base)]
+    except Exception:
+        return None
+    found = [f for f in found if os.path.isfile(f)]
+    if not found:
+        return None
+    return max(found, key=os.path.getmtime)
+
+
 # ------------------------------------------------------------------------- state
 
 def state_path(root, session_id):
@@ -630,11 +656,27 @@ def redact_text(root, text):
     return text
 
 
+def create_unique(target_dir, base, doc):
+    """Write doc to <base>.md, or <base>-2.md, -3 ... when the name is taken: another handoff
+    tool may name its files the same way in the same folder, and one must not erase the other."""
+    n = 1
+    while True:
+        path = os.path.join(target_dir, "%s%s.md" % (base, "" if n == 1 else "-%d" % n))
+        try:
+            with open(path, "x", encoding="utf-8") as fh:
+                fh.write(doc)
+            return path
+        except FileExistsError:
+            n += 1
+
+
 def write_handoff(payload, cfg, reason):
     root = project_root(payload)
     cwd = payload.get("cwd") or root
     session_id = payload.get("session_id") or "unknown"
-    transcript = payload.get("transcript_path") or newest_transcript_for_cwd(cwd)
+    transcript = payload.get("transcript_path")
+    if not transcript and not payload.get("_exact_session"):
+        transcript = newest_transcript_for_cwd(cwd)
     tokens, model, _ = context_tokens(transcript)
     entries = parse_entries(transcript, cfg["dump_tail_bytes"]) if transcript else []
     data = harvest(entries, cfg)
@@ -701,11 +743,9 @@ def write_handoff(payload, cfg, reason):
 
     target_dir = handoff_dir(root)
     os.makedirs(target_dir, exist_ok=True)
-    fname = "%s-%s.md" % (stamp.strftime("%Y%m%d-%H%M%S"), str(session_id)[:8])
-    path = os.path.join(target_dir, fname)
     doc = redact_text(root, "\n".join(lines))
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(doc)
+    path = create_unique(target_dir, "%s-%s" % (stamp.strftime("%Y%m%d-%H%M%S"),
+                                                str(session_id)[:8]), doc)
 
     try:
         with open(index_path(root), "w", encoding="utf-8") as fh:
@@ -866,7 +906,9 @@ def mode_sessionstart(payload, cfg, root):
 
 def mode_status(payload, cfg, root):
     cwd = payload.get("cwd") or os.getcwd()
-    transcript = payload.get("transcript_path") or newest_transcript_for_cwd(cwd)
+    transcript = payload.get("transcript_path")
+    if not transcript and not payload.get("_exact_session"):
+        transcript = newest_transcript_for_cwd(cwd)
     tokens, model, ts = context_tokens(transcript)
     state = load_state(root, payload.get("session_id"))
     limit, source = resolve_window(cfg, tokens, state.get("window"))
@@ -995,11 +1037,19 @@ def main():
         emit(None)
 
     # `dump` and `status` run from a shell with no hook payload; fill in what
-    # the window detector needs to recognise the session before it runs.
+    # the window detector needs to recognise the session before it runs. The cwd is
+    # the project root, not the shell's: a Bash `cd` inside the project survives.
+    # `dump <session-id>` (the /vulyk-handoff command passes ${CLAUDE_SESSION_ID}) reads
+    # exactly that session's transcript, and never falls back to another one.
     if mode in ("dump", "status"):
+        sid = sys.argv[2].strip() if len(sys.argv) > 2 else ""
         if not payload.get("cwd"):
-            payload["cwd"] = os.getcwd()
-        if not payload.get("transcript_path"):
+            payload["cwd"] = root
+        if sid:
+            payload["session_id"] = sid
+            payload["_exact_session"] = True
+            payload["transcript_path"] = transcript_for_session(sid)
+        if not payload.get("transcript_path") and not sid:
             payload["transcript_path"] = newest_transcript_for_cwd(payload["cwd"])
         if not payload.get("session_id") and payload.get("transcript_path"):
             # transcripts are named <session_id>.jsonl

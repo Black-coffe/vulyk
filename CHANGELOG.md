@@ -2,6 +2,34 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.26.1] - 2026-10-13
+
+`/vulyk-handoff` runs from any folder of the hive (spec `handoff-cwd`).
+
+### Fixed
+- **`/vulyk-handoff` no longer fails with `bash: scripts/state.sh: No such file or directory`.** Claude Code keeps a
+  Bash `cd` that stays inside the project, and a command's `!` injections run in that folder: once a session had
+  drifted into a subfolder, both relative injections broke. They now name their scripts through
+  `${CLAUDE_PROJECT_DIR}` (Claude Code substitutes it before the injection runs, and in `allowed-tools`), so the grants
+  still match in default permission mode - probed with `--setting-sources project --permission-mode default`, a control
+  injection without a grant was refused.
+- **`handoff.py dump` roots itself at the hive it is installed in**, not at the shell's cwd, and `dump <session-id>`
+  (the command passes `${CLAUDE_SESSION_ID}`) reads exactly that session's transcript, found by its file name. A
+  parallel session's newer transcript, or a long path's shortened folder name, can no longer stand in for it; an
+  unknown id borrows nothing.
+- **A handoff never overwrites another file of the same name.** The owner's global handoff hook names its files the
+  same way in the same folder; a same-second dump now gets a `-2` suffix.
+
+### Added
+- Defect card `command-injection-follows-cwd` (Law 6) with `scripts/injection-check.sh` as its check: a command's or
+  skill's injection, inline or in a fenced ```` ```! ```` block, that names its script by a relative path fails the
+  gate. `tests/maintenance.test.sh` runs it over every command and skill.
+
+### Known
+- In default permission mode the enrichment `Edit` of `.claude/handoff/*.md` is a Claude Code safety check on
+  `.claude/` ("a sensitive file") that `allowed-tools: Edit` does not cover: one approval prompt per handoff in an
+  interactive session, a refusal under `claude -p`.
+
 ## [0.26.0] - 2026-10-08
 
 Haiku 5.5 reaches the model floor, and the floor learns that an alias is only as new as the Claude Code that

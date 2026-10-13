@@ -314,6 +314,71 @@ gc_case fresh new 3 > "$T/gc-fresh"
 expect "a file new at HEAD: committed" "commits=2" < "$T/gc-fresh"
 expect "a file new at HEAD prints 0 as the old count" "CONSOLIDATED.md: entries 0→3" < "$T/gc-fresh"
 
+echo "--- /vulyk-handoff runs from any folder of the hive (handoff-cwd)"
+# Claude Code keeps a Bash `cd` that stays inside the project, so `dump` can run from any subfolder,
+# with no CLAUDE_PROJECT_DIR. The transcript sits in a folder whose name is NOT the hive's slug (a long
+# path's slug is shortened), so only the session id can find it. HOME and USERPROFILE both point at a
+# temp home: Python on Windows reads USERPROFILE, never HOME.
+W() { cygpath -w "$1" 2>/dev/null || printf '%s' "$1"; }
+H="$T/hive"; TH="$T/handoff-home"; SID="0000aaaa-1111-2222-3333-444455556666"
+mkdir -p "$H/.claude/hooks" "$H/sub/deep" "$TH/.claude/projects/a-shortened-slug-1a2b3c"
+cp "$SRC/.claude/hooks/handoff.py" "$SRC/.claude/hooks/handoff.sh" "$H/.claude/hooks/"
+printf '%s\n' \
+  '{"type":"user","message":{"role":"user","content":"marker prompt"},"timestamp":"2026-10-13T10:00:00Z"}' \
+  '{"type":"assistant","message":{"role":"assistant","model":"claude-test","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":1234,"output_tokens":0}},"timestamp":"2026-10-13T10:00:01Z"}' \
+  > "$TH/.claude/projects/a-shortened-slug-1a2b3c/$SID.jsonl"
+# A decoy: another session's transcript under the hive's own slug - the one a lookup by folder finds.
+HSLUG="$("$PYBIN" -c 'import re, sys; print(re.sub(r"[^A-Za-z0-9]", "-", sys.argv[1]))' "$(W "$H")")"
+mkdir -p "$TH/.claude/projects/$HSLUG"
+printf '%s\n' '{"type":"assistant","message":{"role":"assistant","model":"claude-test","content":[],"usage":{"input_tokens":777,"output_tokens":0}},"timestamp":"2026-10-13T11:00:00Z"}' \
+  > "$TH/.claude/projects/$HSLUG/decoy-session.jsonl"
+dump_from_deep() { ( cd "$H/sub/deep" && env -u CLAUDE_PROJECT_DIR HOME="$(W "$TH")" USERPROFILE="$(W "$TH")" \
+  bash "$H/.claude/hooks/handoff.sh" dump "$@" 2>&1 ) ; }
+dump_from_deep "$SID" > "$T/dump-sid"
+echo "files=$(ls "$H/.claude/handoff/"*.md 2>/dev/null | wc -l | tr -d ' ')" > "$T/dump-files"
+expect "dump from a subfolder writes into the hive's .claude/handoff/" "files=1" < "$T/dump-files"
+[ -d "$H/sub/deep/.claude" ] && echo "subfolder got a .claude/" > "$T/dump-sub" || echo "no .claude/ in the subfolder" > "$T/dump-sub"
+expect "dump from a subfolder leaves the subfolder alone" "no .claude/ in the subfolder" < "$T/dump-sub"
+expect "dump <session-id> reads that session's transcript, whatever its folder's slug" "context_tokens=1234" < "$T/dump-sid"
+cat "$H/.claude/handoff/"*.md > "$T/dump-doc" 2>/dev/null
+expect "the handoff names the session it was given" "session_id: $SID" < "$T/dump-doc"
+rm -rf "$H/.claude/handoff"
+dump_from_deep > "$T/dump-nosid"
+expect "dump without a session id looks the transcript up under the hive's slug, not the cwd's" "context_tokens=777" < "$T/dump-nosid"
+grep -h '^cwd: ' "$H/.claude/handoff/"*.md > "$T/dump-cwd" 2>/dev/null
+expect "dump without a session id writes into the hive" "cwd: " < "$T/dump-cwd"
+expect_absent "dump without a session id records the hive, not the subfolder, as its cwd" "deep" < "$T/dump-cwd"
+dump_from_deep "ffff0000-no-such-session" > "$T/dump-miss"
+expect "an unknown session id never borrows another session's transcript" "context_tokens=0" < "$T/dump-miss"
+PYTHONIOENCODING=utf-8 "$PYBIN" - "$(W "$H/.claude/hooks/handoff.py")" "$(W "$T/clash")" <<'PY' > "$T/clash-out" 2>&1
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("handoff", sys.argv[1]); h = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(h)
+os.makedirs(sys.argv[2])
+a = h.create_unique(sys.argv[2], "20261013-100000-0000aaaa", "first")
+b = h.create_unique(sys.argv[2], "20261013-100000-0000aaaa", "second")
+print("distinct" if a != b else "same path", "|", open(a).read(), "|", os.path.basename(b))
+PY
+expect "a taken handoff name gets a new file beside it" "distinct | first | 20261013-100000-0000aaaa-2.md" < "$T/clash-out"
+
+echo "--- no command or skill injection names its script relative to the cwd (Law 6 card)"
+for f in "$SRC"/.claude/commands/*.md $(find "$SRC/.claude/skills" -name SKILL.md 2>/dev/null); do
+  bash "$SRC/scripts/injection-check.sh" "$f" > "$T/inj" 2>&1 && echo "clean" >> "$T/inj"
+  expect "injection-check: ${f#"$SRC"/}" "clean" < "$T/inj"
+done
+bash "$SRC/scripts/injection-check.sh" "$SRC/docs/defects/command-injection-follows-cwd.md" > "$T/inj-card" 2>&1 && echo "clean" >> "$T/inj-card"
+expect "injection-check ignores a non-command file that quotes the bad form" "clean" < "$T/inj-card"
+PYTHONIOENCODING=utf-8 "$PYBIN" - "$SRC/.claude/commands/vulyk-handoff.md" <<'PY' > "$T/grants" 2>&1
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+grants = re.findall(r"Bash\((.+?):\*\)", re.search(r"^allowed-tools:(.*)$", text, re.M).group(1))
+for cmd in re.findall(r"(?:^|(?<=\s))!`([^`]+)`", text):
+    print(("granted" if any(cmd.startswith(g) for g in grants) else "NOT GRANTED"), cmd)
+PY
+expect "vulyk-handoff: the state view injection has its allowed-tools prefix" 'granted bash "${CLAUDE_PROJECT_DIR}/scripts/state.sh"' < "$T/grants"
+expect "vulyk-handoff: the dump injection has its allowed-tools prefix" 'granted bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/handoff.sh" dump' < "$T/grants"
+expect_absent "vulyk-handoff: no injection lacks a grant" "NOT GRANTED" < "$T/grants"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1

@@ -32,8 +32,7 @@ keeps doing so, and keeps suggesting `/handoff`, after the switch-off.
 - scripts/handoff-owner.sh
 - install.sh
 - .claude/commands/vulyk-update.md
-- tests/handoff-owner.test.sh
-- .github/workflows/ci.yml
+- tests/telemetry.test.sh
 - docs/adr/005-installer-upgrade-contract.md
 - docs/command-reference.md
 
@@ -73,7 +72,7 @@ memory/map/scripts.md (`install.sh - the upgrade contract`, `vulyk-update.sh`); 
 - [ ] ADR-005 has a dated amendment: the one host file the installer may now write on consent, and why.
 
 ## Verification
-`bash tests/handoff-owner.test.sh`
+`bash tests/telemetry.test.sh`
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
