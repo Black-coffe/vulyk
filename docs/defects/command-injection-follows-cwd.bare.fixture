@@ -1,0 +1,6 @@
+---
+description: neighbour form - an injection runs a script with no interpreter, relative to the cwd
+allowed-tools: Bash(scripts/state.sh:*)
+---
+
+!`scripts/state.sh`

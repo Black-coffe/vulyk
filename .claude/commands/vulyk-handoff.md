@@ -1,16 +1,16 @@
 ---
 description: Save session state to .claude/handoff/ before /clear or a restart
-allowed-tools: Bash(bash .claude/hooks/handoff.sh:*), Bash(bash scripts/state.sh:*), Read, Edit
+allowed-tools: Bash(bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/handoff.sh":*), Bash(bash "${CLAUDE_PROJECT_DIR}/scripts/state.sh":*), Read, Edit
 ---
 
 The build-state view, regenerated first so the handoff sits beside a current one rather than
 whatever was last written:
 
-!`bash scripts/state.sh`
+!`bash "${CLAUDE_PROJECT_DIR}/scripts/state.sh"`
 
 The mechanical handoff skeleton has already been written to disk:
 
-!`bash .claude/hooks/handoff.sh dump`
+!`bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/handoff.sh" dump "${CLAUDE_SESSION_ID}"`
 
 The first line of the output above is the absolute path to the handoff `.md` file; the second line is the context size at dump time. If the output is empty, the dump failed (usually: no Python 3 on PATH) — tell the user instead of guessing.
 
