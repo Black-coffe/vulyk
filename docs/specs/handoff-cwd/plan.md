@@ -55,4 +55,4 @@ gate, in both injection forms.
 **Branch:** vulyk/handoff-cwd
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
 **Council:** GREEN round 1, 2026-10-13, at a9676c1, pack 5f09291de695
-**Shipped:** <written by scripts/ship-check.sh --record>
+**Shipped:** 0.26.1, 2026-10-13, at 8ca6337 - merged to main, publish pending
