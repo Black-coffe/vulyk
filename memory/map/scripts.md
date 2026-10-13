@@ -48,8 +48,14 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   no fixture/check change since, :241). Each is red only when new (line/card newer than the commit that
   added `README.md`, or uncommitted, `is_new` :137); else an `old ...` info line. A key inside another's
   key is an `ambiguous key` info line only. `DEFECTS_DIR` overrides the library.
+- `injection-check.sh <file>` (0.26.1) - the `check:` of `docs/defects/command-injection-follows-cwd.md`
+  (also looped over in `tests/maintenance.test.sh`). Reads `!` injections (inline !`cmd`, fenced ```!)
+  in `.claude/commands/*.md`, `SKILL.md`, `*.fixture`; a script path (first arg after an interpreter,
+  else the command if it has a slash) not starting `${CLAUDE_PROJECT_DIR}`/`${CLAUDE_SKILL_DIR}`/
+  `${CLAUDE_PLUGIN_ROOT}`/`$HOME`, `/`, `~` or a drive letter is relative: prints it, exit 1. Exit 0
+  clean or any other file type (the gate passes whatever argument it got); exit 2 no python.
 - `redact.sh` (stdin mask, always exit 0, degrades to `cat`): 19 sed shapes :29-47 (token and
-  credential shapes) + keyword assignments :48 + awk PEM blocks. `handoff.py` `_REDACT_FALLBACK` :580 mirrors it
+  credential shapes) + keyword assignments :48 + awk PEM blocks. `handoff.py` `_REDACT_FALLBACK` :606 mirrors it
   (extend both). Callers: brief.md, handoff dump, ledger notes.
 - `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan [--final]`, `bundle`, `check`, `publish
   [--dry-run]`, `inbox [--clear]` (VULYK repo only; `VULYK_HIVE` redirects). Callers: `anomaly-scan.sh`
@@ -74,11 +80,11 @@ line run on temp repos (:291). `tests/defects.test.sh` covers `defects-check.sh`
   (`print_migrate_hint` :390); `replace_constitution` :412 renders it (`render_constitution` :329), backs
   up as `<name>.pre-<major.minor>.md` (`constitution_backup` :354).
 - `copy_tree` filter (:78-88): `memory/stats/*.jsonl` never ship; the installer deletes nothing of a host's.
-- Retired framework files are removed unless edited (`retired_edited` :1039); `unwire_hook` :846.
 
 ## Gotchas
 - `close-story`'s `## Commands` match, `record-seat`'s taint and `is_paperwork_path` are security-relevant
   string matches: keep them anchored. `close-story` probes `timeout 5 true` (Windows cmd `timeout`).
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
+- Retired framework files are removed unless edited (`retired_edited` :1039); `unwire_hook` :846.
 
-last-verified: 2026-10-08 (v0.26.0)
+last-verified: 2026-10-13 (v0.26.1)

@@ -71,12 +71,19 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   snapshots >14 days, runs one guarded line (vulyk-gc.md:20): refuses (`gc: refused - ...lost more
   than half`, no commit) when entries or bytes of `CONSOLIDATED.md` fell below half, else commits
   `chore(memory): gc`. A refusal means show the owner the diff.
-- **`/vulyk-pause`** / **`/vulyk-resume`** - wrap `cycle.sh pause`/`resume`; resume relaunches fresh.
+- **`/vulyk-pause`** / **`/vulyk-resume`** - wrap `cycle.sh pause`/`resume`.
 - **`/vulyk-update`** - `vulyk-update.sh . --check`, CHANGELOG summary, ask; `--constitution replace`
   is a separate choice. **`/vulyk-bootstrap`** - interview, Profile + Commands markers, scouts → map;
   the SessionStart brief offers it once while the Profile holds `<fill in`; a no is the Profile row
   `| Bootstrap | declined <date> |`.
-- **`/vulyk-map`**, **`/vulyk-handoff`** (`handoff.py dump` + summary). gc/evolve/map are prompted by
-  the SessionStart `maintenance due: ...` line (scripts.md).
+- **`/vulyk-map`**, **`/vulyk-handoff`** (0.26.1: works from any folder). Two `!` injections, both
+  through `${CLAUDE_PROJECT_DIR}`: `bash "${CLAUDE_PROJECT_DIR}/scripts/state.sh"`, then
+  `bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/handoff.sh" dump "${CLAUDE_SESSION_ID}"`; `allowed-tools`
+  use the same prefixes. `handoff.py dump <session-id>` reads exactly that session's transcript
+  (`transcript_for_session`, any project folder, no newest-file fallback, `_exact_session`); root is
+  `CLAUDE_PROJECT_DIR`, else the hook's own hive (`own_hive()`); file names via `create_unique`
+  (`-2`, `-3` on a clash). Rule: an injection never names a script relatively
+  (`scripts/injection-check.sh`, scripts.md). gc/evolve/map are prompted by the SessionStart
+  `maintenance due: ...` line (scripts.md).
 
-last-verified: 2026-10-08 (v0.26.0, ADR-013, ADR-015)
+last-verified: 2026-10-13 (v0.26.1, ADR-013, ADR-015)
