@@ -88,7 +88,6 @@ Quiet variants only: their output is resent every turn. A story's `## Verificati
 | Defect library gate | `bash scripts/defects-check.sh [<arg>]` |
 | Defect library and hook tests | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
 | Merge tests | `bash tests/constitution.test.sh` |
-| Handoff ownership tests | `bash tests/handoff-owner.test.sh` |
 | Maintenance, evolve ledger, context budget | `bash tests/maintenance.test.sh` |
 | Full suite / build | none exists — VULYK has no test runner and no build step |
 
