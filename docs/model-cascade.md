@@ -18,7 +18,8 @@ builds never judges.
    routing by configuration, not willpower.
 2. **The story's `model:`** — the driver dispatches each worker on it (default `sonnet`).
 3. **The routing matrix** in `CLAUDE.md` — tier decided before work starts and announced.
-4. **`TOP_MODEL`** — one line in `CLAUDE.md`. Since v0.10.0 it reads `auto` and the plan decides;
+4. **`TOP_MODEL`** — one line in the constitution (`CLAUDE.vulyk.md` where a project keeps its own
+   `CLAUDE.md` beside it, else `CLAUDE.md`). Since v0.10.0 it reads `auto` and the plan decides;
    see the next section.
 5. **The model floor** — no dispatch may run below it; see [The model floor](#the-model-floor).
 
@@ -61,8 +62,9 @@ credential. The credentials file is never opened; the resolver is grep and sed, 
 machine with neither `jq` nor Python. Every failure mode — no profile, an unrecognised
 `organizationType`, an unreadable file — resolves to `opus` and says why under `--explain`.
 
-Resolution order: `VULYK_TOP_MODEL` in the shell, then a non-`auto` pin in `CLAUDE.md`, then the
-plan, then `opus`. The field names for Max were read off a real profile; the Pro and seat-tier
+Resolution order: `VULYK_TOP_MODEL` in the shell, then a non-`auto` pin in the constitution (only
+that file: a project's own `CLAUDE.md` beside `CLAUDE.vulyk.md` is never read for it), then the
+plan, then `opus`. A pin below the model floor still resolves, and `--floor` fails on it. The field names for Max were read off a real profile; the Pro and seat-tier
 spellings follow the same pattern and are matched loosely (`*pro*`, `*premium*`), which is the
 honest amount of confidence to encode.
 
