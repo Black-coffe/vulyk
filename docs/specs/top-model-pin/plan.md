@@ -11,6 +11,9 @@ in `CLAUDE.vulyk.md` is honoured. `--floor` also judges the resolved gate model,
 `VULYK_TOP_MODEL` below the floor fails it instead of printing "ok" beside it.
 
 ## Assumptions
+- The one hive whose gate this changes is on 0.17 mid-build and would not get the fix by `/vulyk-update` soon; its
+  triggering prose line was removed there by hand on 2026-10-14 (the owner's correction, card
+  `framework-fix-skips-live-hives`).
 - No fallback to the project's `CLAUDE.md` when `CLAUDE.vulyk.md` exists: that fallback is exactly how the prose pin
   got in. Survey of 25 hives: one hive's gate changes (a dead `claude-opus-4-8` -> its constitution's `opus`).
 - A below-floor pin still resolves to itself (no silent swap to `auto`); `--floor`, which the session brief and the
@@ -22,7 +25,8 @@ in `CLAUDE.vulyk.md` is honoured. `--floor` also judges the resolved gate model,
 
 **Wave 1**
 - `top-model-pin-01` — `constitution_pin()` reads the constitution file, `--floor` judges the gate model, the header
-  and `docs/model-cascade.md` name the pin's home, cases in `tests/telemetry.test.sh`
+  and `docs/model-cascade.md` name the pin's home, cases in `tests/telemetry.test.sh`, the Law 6 card for the owner's correction
+  (a fix in VULYK does not reach a live hive on an old version by itself)
 
 ## Contracts
 - `--floor` line for the gate: `below floor: gate model (<constitution|env>) = <id> is <family> <version>, floor <floor>`
