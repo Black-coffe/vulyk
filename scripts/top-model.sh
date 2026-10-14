@@ -143,9 +143,9 @@ else
       pro|standard-seat)
         MODEL="opus";  REASON="$DETAIL - Fable bills to usage credits on top of the subscription; Opus is the frontier model the plan includes" ;;
       api)
-        MODEL="opus";  REASON="$DETAIL - Opus is the safe gate; pin TOP_MODEL = fable in CLAUDE.md to spend on Fable per token" ;;
+        MODEL="opus";  REASON="$DETAIL - Opus is the safe gate; pin TOP_MODEL = fable in ${CONST_FILE##*/} to spend on Fable per token" ;;
       *)
-        MODEL="opus";  REASON="$DETAIL - defaulting to the safe floor; pin TOP_MODEL in CLAUDE.md or set VULYK_TOP_MODEL" ;;
+        MODEL="opus";  REASON="$DETAIL - defaulting to the safe floor; pin TOP_MODEL in ${CONST_FILE##*/} or set VULYK_TOP_MODEL" ;;
     esac
   fi
 fi
