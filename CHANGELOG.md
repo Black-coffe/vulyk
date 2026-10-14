@@ -2,6 +2,28 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.26.2] - 2026-10-14
+
+The gate model is pinned from the constitution only, and `--floor` judges it (spec `top-model-pin`).
+
+### Fixed
+- **A project's own `CLAUDE.md` no longer pins the gate model by accident.** `scripts/top-model.sh` read the first file
+  that existed, `CLAUDE.md`, and took the first `TOP_MODEL = <x>` anywhere in it, prose included. In a hive that keeps
+  its own `CLAUDE.md` beside VULYK's `CLAUDE.vulyk.md`, an old Profile note (`` `TOP_MODEL = claude-opus-4-8` (per
+  constitution) ``) sent every gate dispatch (the Tier 4 lead-review, lead-architect, the Tier 4 planner, a missed
+  story's retry) to a model below the floor, and a pin written in `CLAUDE.vulyk.md` was never read. The pin now comes
+  from the constitution: `CLAUDE.vulyk.md` when it exists, else `CLAUDE.md`.
+- **`--floor` judges the resolved gate model** when a constitution pin or `VULYK_TOP_MODEL` chose it: a pin below the
+  floor fails with `below floor: gate model (<constitution|env>) = <id> ...` instead of "ok" beside it.
+
+### Added
+- Defect card `framework-fix-skips-live-hives` (Law 6, text): a framework fix found in a hive also removes the defect
+  in every live hive that carries it, the same day; `/vulyk-update` does not reach a hive that is old or mid-build.
+
+### Upgrade note
+- Only a hive that pins in its own `CLAUDE.md` beside a `CLAUDE.vulyk.md` changes behaviour: move the pin into
+  `CLAUDE.vulyk.md` (or `VULYK_TOP_MODEL`). Run `bash scripts/top-model.sh --explain` to see what decides.
+
 ## [0.26.1] - 2026-10-13
 
 `/vulyk-handoff` runs from any folder of the hive (spec `handoff-cwd`).
