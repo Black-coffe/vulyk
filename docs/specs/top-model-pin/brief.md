@@ -14,6 +14,10 @@ constitutions):
 
 > «1-5 как рекомендуешь Но с советом фейбл 5.1 и тебя
 
+The owner, 2026-10-14, on the plan's first cut (the fix alone would leave that hive on the dead model):
+
+> Исправление выбора модели в VULYK до <hive> само не дойдёт: модель для самых важных проверок там так и останется старой claude-opus-4-8.
+
 ## Reproduction
 
 A sidecar hive (the project keeps its own `CLAUDE.md`; VULYK's constitution is `CLAUDE.vulyk.md` beside it). The
@@ -57,3 +61,5 @@ clone of the same project) resolves the same way today.
 3. Tests in `tests/telemetry.test.sh`: the original case (prose pin in `CLAUDE.md` + `auto` in `CLAUDE.vulyk.md` ->
    decided by plan), the neighbour (`CLAUDE.vulyk.md` pins a below-floor ID -> `--floor` exit 1 naming it), a sidecar
    pin honoured (today ignored), a single-file hive still pinned from `CLAUDE.md`.
+4. The owner's correction above joins `docs/defects/` (Law 6) as a text card, and the affected hive loses its
+   triggering line now, not at its next upgrade.

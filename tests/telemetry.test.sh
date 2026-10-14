@@ -668,13 +668,16 @@ FLOORHIVE="$T/floorhive"; mkdir -p "$FLOORHIVE/scripts" "$FLOORHIVE/.claude/agen
 cp "$SRC/scripts/top-model.sh" "$SRC/scripts/lib.sh" "$FLOORHIVE/scripts/"
 cp "$SRC"/.claude/agents/*.md "$FLOORHIVE/.claude/agents/"
 cp "$SRC/templates/story.md" "$FLOORHIVE/templates/"
-floorcheck() { # floorcheck [VAR=value]... - top-model.sh --floor in a hive with a clean env and an empty home
+tmrun() { # tmrun <mode|""> [VAR=value]... - top-model.sh in a hive with a clean env and an empty home (unknown plan)
+  local mode="$1"; shift
   (cd "$FLOORHIVE" && env -u ANTHROPIC_MODEL -u ANTHROPIC_DEFAULT_FABLE_MODEL -u ANTHROPIC_DEFAULT_OPUS_MODEL \
     -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL -u CLAUDE_CODE_SUBAGENT_MODEL \
     -u ANTHROPIC_SMALL_FAST_MODEL -u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_VERTEX -u CLAUDE_CODE_USE_FOUNDRY \
-    -u VULYK_MODEL_FLOOR -u CLAUDE_CODE_VERSION HOME="$FLOORHIVE/home" CLAUDE_CONFIG_DIR="$FLOORHIVE/home/.claude" \
-    CLAUDE_PROJECT_DIR="$FLOORHIVE" CLAUDE_CODE_VERSION=2.1.293 "$@" bash scripts/top-model.sh --floor)
+    -u VULYK_MODEL_FLOOR -u CLAUDE_CODE_VERSION -u VULYK_TOP_MODEL -u VULYK_CLAUDE_CONFIG -u ANTHROPIC_API_KEY \
+    HOME="$FLOORHIVE/home" USERPROFILE="$FLOORHIVE/home" CLAUDE_CONFIG_DIR="$FLOORHIVE/home/.claude" \
+    CLAUDE_PROJECT_DIR="$FLOORHIVE" CLAUDE_CODE_VERSION=2.1.293 "$@" bash scripts/top-model.sh $mode)
 }
+floorcheck() { tmrun --floor "$@"; }
 floorcheck >/dev/null 2>&1
 expect_eq "--floor exits 0 on the shipped agents, the story template and a clean env" "0" "$?"
 OUT="$(floorcheck CLAUDE_CODE_VERSION='2.1.292 (Claude Code)' 2>&1)"; RC=$?
@@ -705,6 +708,32 @@ mkdir -p "$FLOORHIVE/docs/specs/demo"
 printf -- '---\nstory: demo-01\nmodel: claude-opus-4-6   # pinned\n---\n' > "$FLOORHIVE/docs/specs/demo/demo-01-x.md"
 floorcheck 2>&1 | expect "--floor names a story pinned below the floor" "docs/specs/demo/demo-01-x.md model = claude-opus-4-6 is opus 4.6"
 rm -rf "$FLOORHIVE/docs"
+
+# The gate pin comes from the constitution only (top-model-pin, 2026-10-14). The original case: a sidecar
+# hive whose own CLAUDE.md carries a July Profile note in prose, beside a constitution that says auto.
+printf '# A project\n\n- **Budget posture:** BALANCED (cap ~4 parallel workers). `TOP_MODEL = claude-opus-4-8` (per constitution).\n' \
+  > "$FLOORHIVE/CLAUDE.md"
+printf '# VULYK Constitution\n\nModel floor: ... `TOP_MODEL = auto` names the gate model.\n' > "$FLOORHIVE/CLAUDE.vulyk.md"
+tmrun --explain 2>&1 | expect "a prose pin in a sidecar hive's own CLAUDE.md does not pin the gate" "decided by: plan"
+floorcheck >/dev/null 2>&1
+expect_eq "--floor stays clean when the prose pin is not the gate" "0" "$?"
+printf '# VULYK Constitution\n\n`TOP_MODEL = fable` names the gate model.\n' > "$FLOORHIVE/CLAUDE.vulyk.md"
+printf '# A project\n' > "$FLOORHIVE/CLAUDE.md"
+expect_eq "a pin in CLAUDE.vulyk.md is honoured beside a project's CLAUDE.md" "fable" "$(tmrun "" 2>/dev/null)"
+tmrun --explain 2>&1 | expect "--explain names the sidecar constitution" "decided by: constitution - CLAUDE.vulyk.md pins TOP_MODEL = fable"
+printf '# VULYK Constitution\n\n`TOP_MODEL = claude-opus-4-8` names the gate model.\n' > "$FLOORHIVE/CLAUDE.vulyk.md"
+OUT="$(floorcheck 2>&1)"; RC=$?
+expect_eq "--floor exits 1 on a constitution pin below the floor" "1" "$RC"
+printf '%s\n' "$OUT" | expect "--floor names the gate pin" "below floor: gate model (constitution) = claude-opus-4-8 is opus 4.8, floor 5.5"
+rm -f "$FLOORHIVE/CLAUDE.vulyk.md"
+OUT="$(floorcheck VULYK_TOP_MODEL=claude-sonnet-4-5 2>&1)"; RC=$?
+expect_eq "--floor exits 1 on a VULYK_TOP_MODEL below the floor" "1" "$RC"
+printf '%s\n' "$OUT" | expect "--floor names the env gate" "below floor: gate model (env) = claude-sonnet-4-5 is sonnet 4.5, floor 5.5"
+printf '# VULYK Constitution\n\n`TOP_MODEL = fable` names the gate model.\n' > "$FLOORHIVE/CLAUDE.md"
+expect_eq "a single-file hive still pins from CLAUDE.md" "fable" "$(tmrun "" 2>/dev/null)"
+tmrun --explain 2>&1 | expect "--explain names CLAUDE.md in a single-file hive" "decided by: constitution - CLAUDE.md pins TOP_MODEL = fable"
+rm -f "$FLOORHIVE/CLAUDE.md"
+
 sed -i 's/^model: sonnet$/model: claude-sonnet-4-5/' "$FLOORHIVE/.claude/agents/worker-code.md"
 floorcheck 2>&1 | expect "--floor names an agent pinned below the floor" "worker-code.md model = claude-sonnet-4-5 is sonnet 4.5"
 

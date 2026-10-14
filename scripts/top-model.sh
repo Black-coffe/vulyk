@@ -29,7 +29,8 @@
 #
 # Resolution order (first hit wins):
 #   1. VULYK_TOP_MODEL=<alias>            env override, this shell only
-#   2. `TOP_MODEL = <alias>` in CLAUDE.md  the constitution's pin; `auto` (the default) defers
+#   2. `TOP_MODEL = <alias>` in the constitution: CLAUDE.vulyk.md beside a project's own
+#      CLAUDE.md, else CLAUDE.md; `auto` (the default) defers
 #   3. the plan, as above
 #   4. opus
 #
@@ -48,7 +49,7 @@ case "${1:-}" in
   --apply)       MODE="apply" ;;
   --check)       MODE="check" ;;
   --floor)       MODE="floor" ;;
-  -h|--help)     sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help)     sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *)             echo "error: unknown flag $1 (try --help)" >&2; exit 2 ;;
 esac
 
@@ -115,16 +116,16 @@ fi
 
 # ---------------------------------------------------------------- resolution
 
+# The constitution is CLAUDE.vulyk.md where a project keeps its own CLAUDE.md beside it, else
+# CLAUDE.md. Only that file pins: a project's CLAUDE.md may mention `TOP_MODEL = <x>` in prose.
+CONST_FILE="$ROOT/CLAUDE.md"
+[ -f "$ROOT/CLAUDE.vulyk.md" ] && CONST_FILE="$ROOT/CLAUDE.vulyk.md"
 constitution_pin() {
-  local f
-  for f in "$ROOT/CLAUDE.md" "$ROOT/CLAUDE.vulyk.md"; do
-    [ -f "$f" ] || continue
-    # `]` first and `[` inside the bracket so ERE reads them as members, not delimiters -
-    # the alias may carry a `[1m]` suffix.
-    grep -m1 -o -E 'TOP_MODEL[[:space:]]*=[[:space:]]*`?[A-Za-z0-9][][A-Za-z0-9._-]*' "$f" 2>/dev/null \
-      | sed -E 's/.*=[[:space:]]*`?//' | head -1
-    return
-  done
+  [ -f "$CONST_FILE" ] || return 0
+  # `]` first and `[` inside the bracket so ERE reads them as members, not delimiters -
+  # the alias may carry a `[1m]` suffix.
+  grep -m1 -o -E 'TOP_MODEL[[:space:]]*=[[:space:]]*`?[A-Za-z0-9][][A-Za-z0-9._-]*' "$CONST_FILE" 2>/dev/null \
+    | sed -E 's/.*=[[:space:]]*`?//' | head -1
 }
 
 SOURCE=""; MODEL=""; REASON=""
@@ -133,7 +134,7 @@ if [ -n "${VULYK_TOP_MODEL:-}" ]; then
 else
   PIN="$(constitution_pin)"
   if [ -n "$PIN" ] && [ "$PIN" != "auto" ]; then
-    MODEL="$PIN"; SOURCE="constitution"; REASON="CLAUDE.md pins TOP_MODEL = $PIN"
+    MODEL="$PIN"; SOURCE="constitution"; REASON="${CONST_FILE##*/} pins TOP_MODEL = $PIN"
   else
     SOURCE="plan"
     case "$PLAN" in
@@ -232,6 +233,8 @@ case "$MODE" in
     # own background model, not a VULYK route.
     VARS="ANTHROPIC_MODEL ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL CLAUDE_CODE_SUBAGENT_MODEL"
     for v in $VARS; do below "env $v" "${!v:-}"; done
+    # The gate itself, when a pin chose it: a plan-chosen alias is judged by the frontmatter lines.
+    case "$SOURCE" in constitution|env) below "gate model ($SOURCE)" "$MODEL" ;; esac
     # Settings files a session reads: the user's, the project's, the local one. Their `env` blocks
     # set the same variables, and `model` sets the session.
     # One grep over all three files and bash for the rest: this runs at every session start.
