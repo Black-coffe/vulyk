@@ -46,5 +46,5 @@ in `CLAUDE.vulyk.md` is honoured. `--floor` also judges the resolved gate model,
 **Briefed:** via mini-brief, Andrei, 2026-10-13
 **Branch:** vulyk/top-model-pin
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Council:** GREEN round 1, 2026-10-14, at ae40209, pack f28b46d7666c
 **Shipped:** <written by scripts/ship-check.sh --record>
