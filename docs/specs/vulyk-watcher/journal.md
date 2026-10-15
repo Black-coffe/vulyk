@@ -12,3 +12,4 @@
 - 2026-10-15T19:47:38Z · 04-council:ESCALATE · reopened after round 2, ceiling now 6 · next: repair
 - 2026-10-15T19:47:54Z · 03-building · repair round 2: vulyk-watcher-05-repair-round-2.md · next: build:4
 - 2026-10-15T19:48:36Z · 03-building · relaunching the hive after reopen (upgrade refresh + spend record) · next: the loop holds the working tree of vulyk/vulyk-watcher; to edit, run /vulyk-pause vulyk-watcher
+- 2026-10-15T20:35:48Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/vulyk-watcher/round-3 · next: dispatch:opus,review
