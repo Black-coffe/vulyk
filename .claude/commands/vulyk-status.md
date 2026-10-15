@@ -45,7 +45,7 @@ Produce the hive status report. Read only metadata; this command stays cheap.
    specs may still carry `in-progress`. Report `unrecognised` counts out loud.
 5. Memory freshness. `memory/map/*` `last-verified` dates against recent git churn in their modules
    (`git log --since` per path); flag stale ones, and a `.stale` flag left by `scripts/git-hooks/post-merge`.
-6. Learnings buffer. Count raw files in `memory/learnings/`; past 10, suggest `/vulyk-gc`.
+6. Maintenance. Print the brief's due lines: `echo '{}' | bash .claude/hooks/session-start-brief.sh | grep -E 'maintenance due|waits for'`, else `maintenance: nothing due`.
 7. Skill usage. Top and bottom entries of `memory/stats/skills.json`; name the candidates the next
    `/vulyk-evolve` will examine.
 8. Budget posture. Show `bash scripts/top-model.sh --explain`: the gate model, the plan it came from,
