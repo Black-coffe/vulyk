@@ -1,0 +1,8 @@
+{
+  "name": "vulyk-watcher",
+  "version": "0.1.0",
+  "description": "VULYK watcher: reads each finished turn beside the built-in You should know mod",
+  "author": {
+    "name": "VULYK"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "vulyk",
+  "owner": {
+    "name": "VULYK"
+  },
+  "plugins": [
+    {
+      "name": "vulyk-watcher",
+      "source": "./",
+      "description": "VULYK watcher mod"
+    }
+  ],
+  "description": "VULYK mods"
+}

@@ -1,8 +1,8 @@
 ---
 story: vulyk-watcher-01
 spec: vulyk-watcher
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -73,5 +73,19 @@ rests on` (how the built-in key was measured).
 `git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
 
 ## Implementation notes
+Files: tests/watcher.test.sh, .claude/mods/vulyk-watcher/{.claude-plugin/plugin.json, .claude-plugin/marketplace.json, hooks/hooks.json, hooks/register.tsx}. `claude plugin validate` passes (build 2.1.300; `"source": "./"` accepted).
+Stub API fact (changes -02): `import type { Register } from 'claude-code'`; `export const register: Register = on => { on('turn.complete', async ($, e, next) => next(e)) }`. The first draft `({ on }) =>` was refused by validate: "the parameter that receives on is not a plain name". Hooks take `($, e, next)` and must return `next(e)`.
+Measured in a synthetic temp hive, `claude -p --debug-file dbg.txt "say ok" </dev/null` (`--debug` swallows the prompt; the file appends, rm it between runs).
+- **M1: NO.** Project `.claude/settings.json` with `extraKnownMarketplaces.vulyk` (`source: directory`) + `enabledPlugins["vulyk-watcher@vulyk"]: true` does not load the mod in `-p`. Lines: `Skipping orphaned enabledPlugins entry vulyk-watcher@vulyk: marketplace not registered`, then `Skipped auto-recording vulyk-watcher@vulyk - enabled only by repo-authored settings`. Same for all four path forms: `./mods/x`, `mods/x`, absolute `C:/...`, `${CLAUDE_PROJECT_DIR}/mods/x`. No "hooks module vulyk-watcher@vulyk loaded" line. The interactive trust question was not measurable here (stays open, plan Open questions). The built-in `cc-plugin-you-should-know@builtin` still loaded beside it (a user-scope key was on, so the built-in's own no-key control was not run).
+- **M2: partly.** `CLAUDE_CODE_PLUGIN_DIRS=<absolute path>` in the shell loads it: `hooks module vulyk-watcher@inline loaded (worker, environment 1, tier user); events: turn.complete`, with no `enabledPlugins` key. Id is `vulyk-watcher@inline`, not `@vulyk`; `{"enabledPlugins":{"vulyk-watcher@inline":false}}` in `.claude/settings.local.json` switches it off (no load line). Relative path refused: `CLAUDE_CODE_PLUGIN_DIRS: skipped ./mods/x: a plugin folder here is an absolute local path or starts with ~`. In the project settings `env` block (absolute or `${CLAUDE_PROJECT_DIR}`): `[WARN] CLAUDE_CODE_PLUGIN_DIRS in .claude/settings.json is ignored - project-scoped settings can't set this key. Set it in ~/.claude/settings.json or managed settings instead.` `claude --plugin-dir <path>` also exists. So a committed project file cannot load the mod by either route; a hive needs a user-scope setting or an interactive marketplace add.
+- **M3** (probe mod on the real engine; names also found in the binary):
+  - text into the main chat: `$.prompt.fill({ text, mode })`, mode `replace|append|insert` (binary: `prompt.fill`, `ui_prompt_fill`: places text as the person's draft, answers `{filled}`, false with no composer). Also present: `$.prompt.suggest`, `$.session.send`, `$.ui.toast`. Not exercised in `-p` (no composer). The built-in's "Chat in main session" is a menu option inside its own output text, not an API name.
+  - `$.fs.list('.')`: yes, returns `[{name, kind: 'file'|'dir', size, mtimeMs, isLink}]`; relative paths resolve against the project dir.
+  - project root: `await $.session.cwd()` returned the hive folder; debug `$.fs.write (vulyk-watcher): <hive>/probe.json`.
+  - `turn.complete` payload keys: `answer, durationMs, isAborted, turnId, reason, usage` (usage: input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens, model). NO tool calls of the turn: collect them with `tool.call` hooks per turn.
+  - `.ts` sibling import from `register.tsx` (`import { marker } from './helper'`): loads, value seen.
+- **M4: YES.** With `DISABLE_TELEMETRY=1`: `hooks module vulyk-watcher@inline loaded` and `vulyk-watcher@inline turn.complete settled in 2.0ms`; the built-in you-should-know is skipped in that run, ours is not.
+- **M5: NO.** `$.model.fork({ prompt })` returned `{isAnswered: true, text: 'FORKED', usage: {input_tokens: 18, output_tokens: 6, cache_read_input_tokens: 21280, cache_creation_input_tokens: 17752}}` (debug: `Forked agent [plugin_model_fork] finished ... totalUsage`). The session transcript JSONL holds no `FORKED`, no fork prompt, no `plugin_model_fork`: fork cost is visible only in the returned `usage`; a cost ledger must write it itself.
+- Temp hive and its transcript folder removed.
 
 ## Findings
