@@ -28,6 +28,8 @@ mkdir -p scripts memory/stats docs/specs/demo .claude
 cp "$SRC"/scripts/lib.sh "$SRC"/scripts/ship-check.sh "$SRC"/scripts/human-check.sh "$SRC"/scripts/acceptance-log.sh "$SRC"/scripts/redact.sh "$SRC"/scripts/state.sh scripts/
 # shellcheck source=scripts/lib.sh
 . scripts/lib.sh   # pack_fingerprint(), used below to build council/human fixture rows
+is_paperwork_path memory/stats/watcher.jsonl && echo "  ok    is_paperwork_path: memory/stats/watcher.jsonl (the vulyk-watcher fork ledger) is paperwork" \
+  || { echo "::error::is_paperwork_path memory/stats/watcher.jsonl returned 1 - claim/open-round would refuse a watcher-dirty tree"; fail=1; }
 cp "$SRC"/templates/plan.md docs/specs/demo/plan.md
 printf -- '---\nstory: demo-01\nspec: demo\nstatus: todo\nwave: 1\n---\n# S1\n' > docs/specs/demo/demo-01-first.md
 printf 'v1\n' > app.txt
