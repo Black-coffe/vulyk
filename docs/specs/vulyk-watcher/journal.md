@@ -15,3 +15,4 @@
 - 2026-10-15T20:35:48Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/vulyk-watcher/round-3 · next: dispatch:opus,review
 - 2026-10-15T20:39:44Z · 04-council:RED · round 3 verdict RED at d9832e3 pack 236a822637e2 · next: repair
 - 2026-10-15T20:39:47Z · 03-building · repair round 3: vulyk-watcher-06-repair-round-3.md · next: build:5
+- 2026-10-15T20:41:56Z · 03-building · relaunching after ruling on story 06 scope (lib.sh paperwork case) · next: the loop holds the working tree of vulyk/vulyk-watcher; to edit, run /vulyk-pause vulyk-watcher
