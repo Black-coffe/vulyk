@@ -1394,6 +1394,31 @@ bash "$SRC/install.sh" "$YSKBAD" --telemetry off > "$T/ysk-bad.out" 2>&1
 expect_eq "an unparseable settings.json is left byte for byte" '{"enabledPlugins": [' "$(tr -d '\r\n' < "$YSKBAD/.claude/settings.json")"
 cat "$T/ysk-bad.out" | expect "... with the line to add by hand" "\"enabledPlugins\": { \"$YSK\": true }"
 
+# vulyk-watcher: the second id goes through the same wire_plugin, marketplace key first
+WID='vulyk-watcher@vulyk'
+wid_val() { jq -r --arg k "$WID" '.enabledPlugins[$k] | tostring' "$1" | tr -d ''; }
+expect_eq "VULYK's own settings.json carries both watcher keys" "true directory"   "$(wid_val "$SRC/.claude/settings.json") $(jq -r '.extraKnownMarketplaces.vulyk.source.source' "$SRC/.claude/settings.json" | tr -d '')"
+expect_eq "a fresh hive gets both watcher keys" "true directory"   "$(wid_val "$TGT/.claude/settings.json") $(jq -r '.extraKnownMarketplaces.vulyk.source.source' "$TGT/.claude/settings.json" | tr -d '')"
+expect_eq "... and the mod tree" "1" "$([ -f "$TGT/.claude/mods/vulyk-watcher/hooks/hooks.json" ] && echo 1 || echo 0)"
+cat "$T/install.out" | expect_absent "... with no wiring line for the marketplace" "extraKnownMarketplaces"
+cat "$T/ownset.out" | expect "an owner's settings.json: the marketplace wired"   "wire           .claude/settings.json -> extraKnownMarketplaces: vulyk"
+cat "$T/ownset.out" | expect "... and the watcher id wired" "wire           .claude/settings.json -> enabledPlugins: $WID"
+expect_eq "... both land, the owner's permission stays" "true directory 1"   "$(wid_val "$OWNSET/.claude/settings.json") $(jq -r '.extraKnownMarketplaces.vulyk.source.source' "$OWNSET/.claude/settings.json" | tr -d '') $(jq -r '[.permissions.allow[] | select(. == "Bash(ls:*)")] | length' "$OWNSET/.claude/settings.json" | tr -d '')"
+cat "$T/ysk-check.out" | expect "--check names the watcher it would wire" "would wire     .claude/settings.json -> enabledPlugins: $WID"
+cat "$T/ysk-again.out" | expect_absent "a second run says nothing about the marketplace" "extraKnownMarketplaces"
+jq --arg k "$WID" '.enabledPlugins[$k] = false' "$YSK2/.claude/settings.json" > "$T/wid-off.json" && cp "$T/wid-off.json" "$YSK2/.claude/settings.json"
+rm -f "$YSK2/.claude/settings.json.vulyk-bak"
+bash "$SRC/install.sh" "$YSK2" --upgrade > "$T/wid-off.out" 2>&1
+cat "$T/wid-off.out" | expect "an owner's false for the watcher is kept, and said so" "kept           .claude/settings.json -> enabledPlugins: $WID is false"
+expect_eq "... it stays false and no backup is left" "false 0"   "$(wid_val "$YSK2/.claude/settings.json") $([ -e "$YSK2/.claude/settings.json.vulyk-bak" ] && echo 1 || echo 0)"
+WMK="$T/hive-wmk"; mkdir -p "$WMK/.claude"
+printf '{"extraKnownMarketplaces":{"vulyk":{"source":{"source":"github","repo":"x/y"}}}}
+' > "$WMK/.claude/settings.json"
+bash "$SRC/install.sh" "$WMK" --telemetry off > "$T/wmk.out" 2>&1
+cat "$T/wmk.out" | expect "an owner's own vulyk marketplace is kept, with one line" "kept           .claude/settings.json -> extraKnownMarketplaces: vulyk"
+expect_eq "... the entry is untouched" "github" "$(jq -r '.extraKnownMarketplaces.vulyk.source.source' "$WMK/.claude/settings.json" | tr -d '')"
+cat "$T/ysk-bad.out" | expect "an unparseable file also gets the watcher line to add by hand" "\"enabledPlugins\": { \"$WID\": true }"
+
 # A hive whose owner arranged things: a quoted launcher with a redirect on a startup-only group,
 # the inject script already on SessionStart WITHOUT the argument, intake already wired, and an
 # own Bash guard on PreToolUse.

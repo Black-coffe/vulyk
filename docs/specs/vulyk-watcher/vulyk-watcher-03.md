@@ -1,8 +1,8 @@
 ---
 story: vulyk-watcher-03
 spec: vulyk-watcher
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -79,5 +79,9 @@ After this story, every hive ships and enables the watcher. The enabling mechani
 `git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
 
 ## Implementation notes
+- Files: install.sh, .claude/settings.json, tests/telemetry.test.sh, .github/workflows/ci.yml, ADR-005, docs/watcher.md.
+- `wire_plugin [section key json-value what]`: no args = the built-in, so its existing cases are unchanged; the marketplace is wired first, then the id. Equal value (same type) = rc 3; any other owner value = rc 6.
+- Plan `## Plan deltas` was empty, so the default mechanism is used. -01 measured M1 = NO (project-scope directory marketplace not loaded in `-p`, "marketplace not registered"), so the committed keys may not load the mod; the marketplace path is `./.claude/mods/vulyk-watcher` (unmeasured form). M4 = yes, so no telemetry NOTE for the watcher.
+- docs/watcher.md carries a one-paragraph "Known limit" about M1.
 
 ## Findings
