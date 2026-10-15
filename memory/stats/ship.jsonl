@@ -14,3 +14,4 @@
 {"ts":"2026-10-08T07:06:55Z","spec":"haiku-5-5-floor","version":"0.26.0","head":"4bcd643","pack":"04dbd42aa837","note":"merged to main, publish pending"}
 {"ts":"2026-10-13T19:01:56Z","spec":"handoff-cwd","version":"0.26.1","head":"8ca6337","pack":"5f09291de695","note":"merged to main, publish pending"}
 {"ts":"2026-10-14T06:26:32Z","spec":"top-model-pin","version":"0.26.2","head":"ee34fdc","pack":"f28b46d7666c","note":"merged to main"}
+{"ts":"2026-10-15T21:38:42Z","spec":"vulyk-watcher","version":"0.27.0","head":"58bf448","pack":"8fbecf2c1dab","note":"merged to main; owner «Да, выпускаем» 2026-10-16; after the acceptance at 8d46bdf only VERSION, CHANGELOG and the mod's version string changed (the watcher test pins plugin.json to VERSION)"}
