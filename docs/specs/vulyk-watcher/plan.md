@@ -185,4 +185,11 @@ with nothing to keep the two in step (Law 2). The cost of choosing local-only: C
 **Checked:**
 **Council:**
 **Council:** RED round 1, 2026-10-15, at c3c49b6, pack 8abd40c22920 - red: 5,6,7
+**Council:** ESCALATE round 2, 2026-10-15, at 6819ff5, pack caa94daaf588 - red: 5
 **Shipped:**
+
+## Needs a human
+- reason: no-progress · round 2 · 2026-10-15
+- ask 5: RED - see docs/specs/vulyk-watcher/council/round-2/*.md for evidence
+- no progress: ask 5 RED in rounds 1 and 2
+- seats: docs/specs/vulyk-watcher/council/round-2/
