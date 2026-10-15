@@ -202,3 +202,4 @@ with nothing to keep the two in step (Law 2). The cost of choosing local-only: C
 - ask 5: RED - see docs/specs/vulyk-watcher/council/round-2/*.md for evidence
 - no progress: ask 5 RED in rounds 1 and 2
 - seats: docs/specs/vulyk-watcher/council/round-2/
+**Checked:** ACCEPTED by Andrei, 2026-10-15, at 8d46bdf - owner, 2026-10-16: «Если всё остальное нормально было, green ... мы одну строку поправили, перепроверили эту строку и всё.» Round 3: opus GREEN, review BLOCK with one finding (lib.sh is_paperwork_path); fixed in 8d46bdf, repro prints 0, other.jsonl still 1, cycle.test.sh green

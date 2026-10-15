@@ -16,3 +16,6 @@
 - 2026-10-15T20:39:44Z · 04-council:RED · round 3 verdict RED at d9832e3 pack 236a822637e2 · next: repair
 - 2026-10-15T20:39:47Z · 03-building · repair round 3: vulyk-watcher-06-repair-round-3.md · next: build:5
 - 2026-10-15T20:41:56Z · 03-building · relaunching after ruling on story 06 scope (lib.sh paperwork case) · next: the loop holds the working tree of vulyk/vulyk-watcher; to edit, run /vulyk-pause vulyk-watcher
+- 2026-10-15T20:44:53Z · driver · driver released · next: paused
+- 2026-10-15T20:44:53Z · paused · owner: one-line fix does not need a full council round; Queen verifies the line herself · next: paused
+- 2026-10-15T21:05:14Z · resumed · resumed · next: status
