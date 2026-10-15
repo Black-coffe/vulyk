@@ -54,7 +54,9 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
 - **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses); release commit; local merge; prints the
   publish command, never runs it; `drone-docs`/`librarian` only with work; next-brief draft.
 - **`/vulyk-status`** - driver line, unpushed merges, council stats, `token-report.py`, `state.sh`
-  table, map freshness. Writes nothing but `.claude/state.json`.
+  table, map freshness, then step 6 prints the brief's `maintenance due|waits for` lines (piped from
+  `session-start-brief.sh`, vulyk-status.md:48; else `maintenance: nothing due`; no raw learnings
+  count). Writes nothing but `.claude/state.json`.
 - **`/vulyk-evolve`** - step 0 `evolve-ledger.py . resolve` + `window` (a rejected hypothesis is not
   re-proposed without newer evidence; a `pending` branch stops the run); step 1 learnings + skills +
   `token-report.py --since <7 days>` + corrections counter (0.24.0, vulyk-evolve.md:17-29: `bash
@@ -86,4 +88,4 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   (`scripts/injection-check.sh`, scripts.md). gc/evolve/map are prompted by the SessionStart
   `maintenance due: ...` line (scripts.md).
 
-last-verified: 2026-10-13 (v0.26.1, ADR-013, ADR-015)
+last-verified: 2026-10-16 (v0.27.0, ADR-013, ADR-015)

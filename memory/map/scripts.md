@@ -23,11 +23,12 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   (a `## Verification` segment that is not a `## Commands` cell). `trace-check.sh` - a `## Requirements`
   quote may match the brief, a plan delta or a `## Asks` item.
 - `token-report.py <project> [--spec S] [--since D] [--json]` - spend from `~/.claude/projects/` +
-  `council.jsonl`; dedupes by `message.id`. `/vulyk-status` (14d), `/vulyk-evolve` (7d).
-- `evolve-ledger.py <root> <verb>` - owns `memory/stats/evolve.jsonl` (`proposal`/`run`/`verdict` rows).
-  Verbs: `add` (component in `COMPONENTS` :29), `run`, `resolve` (verdict from git: tip in default
-  branch = accepted; branch gone, unmerged = rejected; present, unmerged = `pending`, no row), `window
-  [--n 40]`, `last`, `pending`. Default branch: `origin/HEAD`, else `main`, `master`.
+  `council.jsonl`; dedupes by `message.id`. `/vulyk-status` (14d), `/vulyk-evolve` (7d). Prints a
+  `watcher:` line (`watcher_spend` :392, from `memory/stats/watcher.jsonl`, printed :529; the mod's
+  forks, in no transcript, so NOT in TOTAL).
+- `evolve-ledger.py <root> <verb>` - owns `memory/stats/evolve.jsonl`. Verbs: `add` (`COMPONENTS` :29),
+  `run`, `resolve` (tip in default branch = accepted; branch gone, unmerged = rejected; present,
+  unmerged = `pending`, no row), `window`, `last`, `pending`.
 - `.claude/hooks/session-start-brief.sh` - map line; bootstrap offer (:15-23) while the Profile holds
   `<fill in`; when due, `maintenance due: ...` (Queen runs the Skills after the owner's task). gc = any
   stub or >=10 raw learnings; evolve = no `"kind":"run"` row or last run >7 days, plus a newer
@@ -38,49 +39,46 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   `TOP_MODEL = <alias>` in ONE file, `CONST_FILE` :121-122 (`CLAUDE.vulyk.md` if it exists, else
   `CLAUDE.md`; `constitution_pin` :123 reads only it, so prose in a project's own CLAUDE.md never pins),
   then the plan, then opus. Plan-branch hints name `${CONST_FILE##*/}` (:146, :148).
-  `--floor` (case :207; exit 1 + `below floor` lines): env VARS :234 (incl. `ANTHROPIC_DEFAULT_HAIKU_MODEL`);
-  `below()` :214 (two `cc` messages: version unknown, or older than need -> "Run: claude update");
-  gate line :237 `below "gate model ($SOURCE)" "$MODEL"` only when SOURCE is constitution or env (a
-  plan-chosen alias is judged by the frontmatter lines); provider check :279 loops OPUS/SONNET/HAIKU
-  pins, else `below floor risk:`. `/vulyk-build` Hive step 1 gates on `--floor`.
-- `defects-check.sh [<arg>]` (0.23; cards `docs/defects/*.md`, rules `docs/defects/README.md`) - no arg =
-  audit (each effective-`block` card's `check:` must fail on every fixture, else `BLIND`); `<arg>` = gate
+  `--floor` (:207; exit 1 + `below floor` lines): `below()` :214; gate line :237 only when SOURCE is
+  constitution or env; provider pin check :279. `/vulyk-build` Hive step 1 gates on `--floor`.
+- `defects-check.sh [<arg>]` (0.23; cards `docs/defects/*.md`, rules `README.md`) - no arg = audit
+  (each effective-`block` card's `check:` must fail on every fixture, else `BLIND`); `<arg>` = gate
   (runs every `block`+`check` card; non-zero = `RED`). Exit 0 green, 1 red, 2 usage/no library/no
-  python3. Red findings (records `D`/`U`/`O`/`E`/`I`/`R`, :62-66): `DEBT` (>=2 quotes, not effective
-  block), `UNDELIVERABLE` (text card, no `paths:`, :231), `OVERLAP` (one normalised key on two live
-  cards, :266), `ESCAPE` (quote committed after the block `check:` line, :241). Red only when new
-  (newer than the commit that added `README.md`, or uncommitted, `is_new` :137); else an `old ...`
-  info line. `DEFECTS_DIR` overrides the library.
-- `injection-check.sh <file>` (0.26.1) - the `check:` of `docs/defects/command-injection-follows-cwd.md`.
-  Reads `!` injections in `.claude/commands/*.md`, `SKILL.md`, `*.fixture`; a script path not starting
-  `${CLAUDE_PROJECT_DIR}`/`${CLAUDE_SKILL_DIR}`/`${CLAUDE_PLUGIN_ROOT}`/`$HOME`, `/`, `~` or a drive
-  letter is relative: prints it, exit 1. Other file types exit 0; exit 2 no python.
-- `redact.sh` (stdin mask, always exit 0, degrades to `cat`): 19 sed shapes :29-47 + keyword assignments
-  :48 + awk PEM blocks. `handoff.py` `_REDACT_FALLBACK` :606 mirrors it (extend both).
-- `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan [--final]`, `bundle`, `check`, `publish
-  [--dry-run]`, `inbox [--clear]` (VULYK repo only; `VULYK_HIVE` redirects). Callers: `anomaly-scan.sh`
-  (SessionEnd), `/vulyk-build`, `/vulyk-resume`, `/vulyk-evolve`.
+  python3. Red findings: `DEBT`, `UNDELIVERABLE`, `OVERLAP`, `ESCAPE`; red only when new (`is_new`
+  :137), else an `old ...` info line. `DEFECTS_DIR` overrides the library.
+- `injection-check.sh <file>` (0.26.1) - `check:` of `docs/defects/command-injection-follows-cwd.md`: a
+  `!` injection in commands/`SKILL.md` naming a script by a relative path prints it, exit 1; exit 2 no python.
+- `redact.sh` (stdin mask, exit 0, degrades to `cat`); `handoff.py` `_REDACT_FALLBACK` mirrors it (extend both).
+- `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan`, `bundle`, `check`, `publish`, `inbox`
+  (VULYK repo only; `VULYK_HIVE` redirects). Callers: `anomaly-scan.sh`, `/vulyk-build`, `/vulyk-evolve`.
 
 ## Key contracts
 - `cycle.sh`: last stdout line is one JSON object; exits 0 ok · 1 usage · 2 precondition · 3 paused ·
   4 malformed report / red verify · 5 stale · 6 escalate. Other gates exit 0 and report;
   `telemetry.sh check` is the one exception.
 - `is_paperwork_path` whitelist (lib.sh:54-64): spec `plan/journal/brief/council/*`, `memory/stats/
-  {human,acceptance,ship,council,scope,anomalies,evolve}.jsonl`, `skills.json`, `memory/learnings/*.md`
+  {human,acceptance,ship,council,scope,anomalies,watcher,evolve}.jsonl`, `skills.json`, `memory/learnings/*.md`
   (one level), `VERSION`, `CHANGELOG.md`.
 - `telemetry.sh` `ENUM`/`AGENTS` are append-only public contracts; bundle rows codes and numbers only.
 
 ## Tests
-`tests/maintenance.test.sh` (no model/network; not in ci.yml): constitution caps, brief due logic,
-ledger, `/vulyk-gc` commit line. `tests/defects.test.sh` covers `defects-check.sh`.
-`tests/telemetry.test.sh`: `floorcheck` helper plus `tmrun` (runs top-model.sh in a temp project) for
-the gate-pin cases (constitution file choice, `--floor` gate line).
+`tests/maintenance.test.sh` (not in ci.yml): caps, brief due logic, ledger. `tests/defects.test.sh`:
+`defects-check.sh`. `tests/telemetry.test.sh`: `floorcheck`, `tmrun` (top-model.sh gate pins).
+`tests/watcher.test.sh`: the watcher mod.
 
 ## install.sh - the upgrade contract
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution
   (`print_migrate_hint` :390); `replace_constitution` :412 (`render_constitution` :329), backs up as
   `<name>.pre-<major.minor>.md` (`constitution_backup` :354).
-- `copy_tree` filter (:78-88): `memory/stats/*.jsonl` never ship; the installer deletes nothing of a host's.
+- `.claude/mods/vulyk-watcher` is in `OWNED` (:52), so an upgrade syncs the mod's files. `install_watcher`
+  :1031 (called :1262 after `wire_plugin`): user-scope `vulyk-watcher@vulyk` from marketplace
+  `Black-coffe/vulyk` via the `claude plugin` CLI (`VULYK_CLAUDE` overrides the binary); not installed ->
+  `marketplace add` + `install`; installed -> `marketplace update` + `plugin update` each run; no `claude`
+  or a CLI failure -> prints the commands, returns 0. A `false` for the id in project settings is reported
+  as kept, never written. `wire_plugin [section key value what]` :954 now takes the id as 2nd arg
+  (default `YSK_ID`, the You-should-know key); missing is written, an owner value is kept.
+  The mod: `docs/watcher.md`, `tests/watcher.test.sh`.
+- `shippable` filter (:67-91): `memory/stats/*.jsonl` never ship; the installer deletes nothing of a host's.
 
 ## Gotchas
 - `close-story`'s `## Commands` match, `record-seat`'s taint and `is_paperwork_path` are security-relevant
@@ -88,4 +86,4 @@ the gate-pin cases (constitution file choice, `--floor` gate line).
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - Retired framework files are removed unless edited (`retired_edited` :1109); `unwire_hook` :846.
 
-last-verified: 2026-10-14 (v0.26.2)
+last-verified: 2026-10-16 (v0.27.0)

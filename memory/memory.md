@@ -11,6 +11,9 @@
 - every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (model, tools, report
   contract, what each command runs/never does): memory/map/agents-and-commands.md
 
+- the VULYK watcher mod (`.claude/mods/vulyk-watcher/`, marketplace `.claude-plugin/marketplace.json`,
+  installed by `install.sh`; no map slice): docs/watcher.md
+
 ## Unmapped territory
 - `docs/` narrative pages (architecture.md, pipeline.md, cycle.md, token-economy.md,
   model-cascade.md, command-reference.md, getting-started.md) and `docs/adr/` beyond ADR-001
@@ -33,7 +36,8 @@
 - Ship gate, per spec: `bash scripts/ship-check.sh docs/specs/<slug>`
 - Cycle status, per spec: `bash scripts/cycle.sh status docs/specs/<slug> --json`
 - Token report, per spec: `python scripts/token-report.py . --spec <slug>`
-- Constitution/brief/evolve-ledger tests: `bash tests/maintenance.test.sh`
+- Maintenance, evolve ledger, context budget: `bash tests/maintenance.test.sh`
+- Watcher mod: `bash tests/watcher.test.sh`
 - Cycle state contract tests: `bash tests/cycle.test.sh`
 - Council verdict contract tests: `bash tests/council.test.sh` (`--quick` for ~3 min)
 - Driver contract / end to end: `bash tests/driver.test.sh`, `bash tests/e2e.test.sh`

@@ -60,7 +60,8 @@ round → RED; required seat ABSENT with no RED/BLOCK → ESCALATE `env`; eviden
 `[regression]` is recorded PASS, note `review BLOCK unanchored`.
 
 ## Staleness, PAUSE, seat reports
-Stale iff `ROUND.head` != HEAD and the commits between are not `paperwork_only` (lib.sh:68). Stale with
+Stale iff `ROUND.head` != HEAD and the commits between are not `paperwork_only` (lib.sh:68; the list
+incl. `memory/stats/watcher.jsonl` is in scripts.md). Stale with
 no seat file → re-stamp; with one → STALE row, open N+1. `PAUSE` → every mutating verb exits 3.
 Blind seat report: `COUNCIL/MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH`, one `ASK <n>:` per ask with
 `run:`+`saw:` / `url:`+`saw:` / `why:`, `UNASKED:`, `BREACH:`; malformed → exit 4, re-asked once, then
