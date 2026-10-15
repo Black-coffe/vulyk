@@ -25,6 +25,7 @@ case "\$*" in
   "plugin list") [ -f "$T/cc-list" ] && cat "$T/cc-list" ;;
   "plugin marketplace list") [ -f "$T/cc-mkt" ] && cat "$T/cc-mkt" ;;
   "plugin install "*) [ -f "$T/cc-fail" ] && exit 1 ;;
+  "plugin update "*) [ -f "$T/cc-upd-fail" ] && exit 1 ;;
 esac
 exit 0
 STUB
@@ -1441,8 +1442,20 @@ printf '  vulyk\n' > "$T/cc-mkt"; printf '  %s\n    Scope: user\n' "$WID" > "$T/
 jq --arg k "$WID" '.enabledPlugins[$k] = false' "$WI/.claude/settings.json" > "$T/wid-off.json" && cp "$T/wid-off.json" "$WI/.claude/settings.json"
 printf '{"enabledPlugins":{"%s":false}}' "$WID" > "$WI/.claude/settings.local.json"
 VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/wi-again.out" 2>&1
-expect_eq "installed already: the run is idempotent" "0" "$(grep -c 'plugin marketplace add\|plugin install' "$T/cc.log")"
-cat "$T/wi-again.out" | expect_absent "... and says nothing about installing" "$WID (user scope"
+expect_eq "installed already: nothing is added or installed again" "0" "$(grep -c 'plugin marketplace add\|plugin install' "$T/cc.log")"
+expect_eq "... the upgrade refreshes the marketplace, then updates the mod at user scope"   "plugin marketplace update vulyk|plugin update $WID --scope user"   "$(grep 'plugin marketplace update\|plugin update' "$T/cc.log" | tr -d '' | paste -sd'|' -)"
+cat "$T/wi-again.out" | expect "... and says so" "update         $WID (user scope"
+cat "$T/wi-again.out" | expect_absent "... and says nothing about installing" "install        $WID"
+: > "$T/cc.log"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade --check > "$T/wi-upd-check.out" 2>&1
+cat "$T/wi-upd-check.out" | expect "--check on a machine that has it names the update" "would update   $WID (user scope"
+expect_eq "... and the dry run updates nothing" "0" "$(grep -c 'plugin marketplace update\|plugin update' "$T/cc.log")"
+: > "$T/cc-upd-fail"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/wi-upd-fail.out" 2>&1; rc=$?
+expect_eq "a failed plugin update never fails the install" "0" "$rc"
+cat "$T/wi-upd-fail.out" | expect "... it names the update command" "claude plugin update $WID --scope user"
+rm -f "$T/cc-upd-fail"
+expect_eq "the mod's plugin.json version equals VERSION" "$(tr -d '[:space:]' < "$SRC/VERSION")"   "$(jq -r .version "$SRC/.claude/mods/vulyk-watcher/.claude-plugin/plugin.json" | tr -d '')"
 cat "$T/wi-again.out" | expect "an owner's false for the watcher is kept, and said so" "kept           .claude/settings.json -> enabledPlugins: $WID is false"
 cat "$T/wi-again.out" | expect "... the same in settings.local.json" "kept           .claude/settings.local.json -> enabledPlugins: $WID is false"
 expect_eq "... both stay false" "falsefalse" "$(jq -r --arg k "$WID" '.enabledPlugins[$k] | tostring' "$WI/.claude/settings.json" "$WI/.claude/settings.local.json" | tr -d '\r\n')"

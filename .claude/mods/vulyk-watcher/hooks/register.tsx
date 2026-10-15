@@ -2,6 +2,7 @@ import type { Register } from 'claude-code'
 
 import {
   addSeen,
+  appendRow,
   buildPrompt,
   handoffText,
   isCardFile,
@@ -12,14 +13,17 @@ import {
   pickLaws,
   seenKey,
   skipReason,
+  SPEND_FILE,
+  spendRow,
   turnHadToolCall,
 } from './core'
-import type { Card, Note, Row } from './core'
+import type { Card, ForkResult, Note, Row } from './core'
 
 export const register: Register = on => {
   // Session-held: `$.state` would need a types contract in plugin.json (-01's file). A hot reload clears both.
   let onScreen: Note | null = null
   let shownCount = 0
+  let forkCount = 0
 
   // Once per turn, after the turn is settled; a subagent's turn is not judged.
   on('turn.complete', async ($, e, next) => {
@@ -34,6 +38,7 @@ export const register: Register = on => {
         hadToolCall: turnHadToolCall(turn),
         noteOnScreen: onScreen !== null,
         shown: shownCount,
+        forks: forkCount,
       })
       if (skip !== null) return done
 
@@ -54,7 +59,16 @@ export const register: Register = on => {
       const key = seenKey(root)
       const stored = await $.store.get(key)
       const seen = Array.isArray(stored) ? stored.filter((tag): tag is string => typeof tag === 'string') : []
+      forkCount += 1
       const reply = await $.model.fork({ prompt: buildPrompt({ laws, cards, seen }) })
+      try {
+        const ledger = `${root}/${SPEND_FILE}`
+        const before = await $.fs.read(ledger).catch(() => '')
+        const row = spendRow(new Date().toISOString(), String(await $.session.id()), reply as ForkResult)
+        await $.fs.write(ledger, appendRow(typeof before === 'string' ? before : '', row))
+      } catch {
+        // A ledger that cannot be written does not stop the note.
+      }
       if (!reply.isAnswered) return done
       const note = noteToShow(reply.text, seen)
       if (note === null) return done

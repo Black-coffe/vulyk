@@ -8,7 +8,8 @@ Reads the Claude Code transcripts of <project-dir> under ~/.claude/projects/<enc
 (every character of the absolute path that is not a letter or digit becomes '-', so
 E:\\Projects\\vulyk -> E--Projects-vulyk): main sessions <id>.jsonl, their subagents
 <id>/subagents/**/agent-*.jsonl (workflow agents included) and the Workflow run records
-<id>/workflows/*.json; plus the project's council ledger memory/stats/council.jsonl.
+<id>/workflows/*.json; plus the project's council ledger memory/stats/council.jsonl and the watcher
+mod's fork ledger memory/stats/watcher.jsonl (its own line, not in TOTAL: forks are in no transcript).
 Streams every file line by line, skips malformed lines, standard library only.
 
 Counting - the method of docs/specs/token-audit/evidence/forensics.md section 0:
@@ -388,6 +389,37 @@ def council_rounds(project, since_ts):
     return {k: len(v) for k, v in rounds.items()}
 
 
+def watcher_spend(project, since_ts):
+    """The watcher mod's own forks, memory/stats/watcher.jsonl: never in a transcript, so a line of its own,
+    every session in the window, not attributed to a spec and not in TOTAL."""
+    b, sessions = [0] * 8, set()
+    try:
+        f = open(os.path.join(project, 'memory', 'stats', 'watcher.jsonl'), encoding='utf-8', errors='replace')
+    except OSError:
+        f = None
+    if f is not None:
+        with f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(d, dict):
+                    continue
+                if since_ts is not None:
+                    ts = parse_ts(d.get('ts'))
+                    if ts is None or ts < since_ts:
+                        continue
+                v = usage_of(d, d.get('model'))
+                for i in range(6):
+                    b[i] += v[i]
+                b[6] += 1
+                b[7] += v[7]
+                sessions.add(str(d.get('session')))
+    return {'forks': b[6], 'sessions': len(sessions), 'raw': raw(b), 'weighted': round(weighted(b)),
+            'input': b[0], 'cache_write': b[1], 'cache_read': b[4], 'output': b[5]}
+
+
 def weighted(b):
     return b[0] + 1.25 * b[2] + 2 * b[3] + b[7] + b[5]
 
@@ -439,6 +471,7 @@ def report(project, tdir, since, since_ts, spec):
     return {'project': project, 'since': since, 'transcripts': tdir,
             'scanned': {'sessions': scanned[0], 'subagent_transcripts': scanned[1]},
             'specs': rows, 'total': row(None, total, sum(r['rounds'] for r in rows)),
+            'watcher': watcher_spend(project, since_ts),
             'note': ' '.join(NOTE)}
 
 
@@ -492,6 +525,9 @@ def print_human(rep):
     print(fmt(head))
     for x in lines:
         print(fmt(x))
+    wt = rep['watcher']
+    print('watcher: %d forks in %d sessions, raw %s, weighted %s, output %s (memory/stats/watcher.jsonl, not in TOTAL)'
+          % (wt['forks'], wt['sessions'], tok(wt['raw']), tok(wt['weighted']), tok(wt['output'])))
     for n in NOTE:
         print(n)
     ns = rep['total']['writes_without_split']

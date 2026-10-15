@@ -2,6 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import {
   addSeen,
+  appendRow,
   buildPrompt,
   CARD_BUDGET,
   FENCE_HEAD,
@@ -10,12 +11,15 @@ import {
   isHive,
   LABELS,
   labelLang,
+  MAX_FORKS,
   MAX_SEEN,
   noteToShow,
   parseReply,
   pickLaws,
   seenKey,
   skipReason,
+  SPEND_FILE,
+  spendRow,
   turnHadToolCall,
 } from './core'
 import {
@@ -116,21 +120,62 @@ describe('skip', () => {
   test('no tool call in the finished turn', () => {
     expect(turnHadToolCall(talkOnly)).toBe(false)
     expect(turnHadToolCall(russian)).toBe(true)
-    expect(skipReason({ hadToolCall: false, noteOnScreen: false, shown: 0 })).toBe('no-tool-call')
+    expect(skipReason({ hadToolCall: false, noteOnScreen: false, shown: 0, forks: 0 })).toBe('no-tool-call')
   })
 
   test('a note still on screen', () => {
-    expect(skipReason({ hadToolCall: true, noteOnScreen: true, shown: 0 })).toBe('note-on-screen')
+    expect(skipReason({ hadToolCall: true, noteOnScreen: true, shown: 0, forks: 0 })).toBe('note-on-screen')
   })
 
   test('the cap of 3 notes a session', () => {
-    expect(skipReason({ hadToolCall: true, noteOnScreen: false, shown: 2 })).toBeNull()
-    expect(skipReason({ hadToolCall: true, noteOnScreen: false, shown: 3 })).toBe('cap')
+    expect(skipReason({ hadToolCall: true, noteOnScreen: false, shown: 2, forks: 0 })).toBeNull()
+    expect(skipReason({ hadToolCall: true, noteOnScreen: false, shown: 3, forks: 0 })).toBe('cap')
+  })
+
+  test('the ceiling of 30 forks a session: past it, no fork', () => {
+    expect(MAX_FORKS).toBe(30)
+    expect(skipReason({ hadToolCall: true, noteOnScreen: false, shown: 0, forks: 29 })).toBeNull()
+    expect(skipReason({ hadToolCall: true, noteOnScreen: false, shown: 0, forks: 30 })).toBe('fork-cap')
+    expect(skipReason({ hadToolCall: true, noteOnScreen: false, shown: 0, forks: 31 })).toBe('fork-cap')
   })
 
   test('a seen tag', () => {
     expect(noteToShow(REPLY, ['acme-cents-untested'])).toBeNull()
     expect(noteToShow(REPLY, ['other-tag'])).not.toBeNull()
+  })
+})
+
+describe('spend ledger', () => {
+  const usage = { input_tokens: 18, output_tokens: 6, cache_read_input_tokens: 21280, cache_creation_input_tokens: 17752 }
+
+  test('an answered fork: ts, session, the four usage counts, answered', () => {
+    expect(SPEND_FILE).toBe('memory/stats/watcher.jsonl')
+    const row = spendRow('2026-10-15T10:00:00.000Z', 'sess-1', { isAnswered: true, text: 'note: none', usage })
+    expect(JSON.parse(row)).toEqual({ ts: '2026-10-15T10:00:00.000Z', session: 'sess-1', ...usage, answered: true })
+  })
+
+  test('an unanswered fork records its reason; missing counts are 0', () => {
+    const row = spendRow('2026-10-15T10:00:00.000Z', 'sess-1', {
+      isAnswered: false,
+      reason: 'api-error',
+      usage: { input_tokens: 5 },
+    })
+    expect(JSON.parse(row)).toEqual({
+      ts: '2026-10-15T10:00:00.000Z',
+      session: 'sess-1',
+      input_tokens: 5,
+      output_tokens: 0,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+      answered: false,
+      reason: 'api-error',
+    })
+  })
+
+  test('a row is appended as one line', () => {
+    expect(appendRow('', '{"a":1}')).toBe('{"a":1}\n')
+    expect(appendRow('{"a":1}\n', '{"b":2}')).toBe('{"a":1}\n{"b":2}\n')
+    expect(appendRow('{"a":1}', '{"b":2}')).toBe('{"a":1}\n{"b":2}\n')
   })
 })
 

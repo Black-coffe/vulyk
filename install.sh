@@ -1043,7 +1043,23 @@ install_watcher() {
     echo "      $inst"
     return 0
   fi
-  "$cc" plugin list 2>/dev/null | grep -qF "$WATCHER_ID" && return 0          # already on this machine
+  if "$cc" plugin list 2>/dev/null | grep -qF "$WATCHER_ID"; then
+    # Already on this machine: a user-scope GitHub install never refreshes itself, so each run
+    # brings it up to the release's mod (plugin.json version follows VERSION).
+    local mupd="claude plugin marketplace update vulyk" pupd="claude plugin update $WATCHER_ID --scope user"
+    if [ "$CHECK" = "--check" ]; then
+      echo "  would update   $WATCHER_ID (user scope, marketplace $WATCHER_REPO)"
+    elif "$cc" plugin marketplace update vulyk >/dev/null 2>&1 &&
+         "$cc" plugin update "$WATCHER_ID" --scope user >/dev/null 2>&1; then
+      echo "  update         $WATCHER_ID (user scope, marketplace $WATCHER_REPO; a restart of claude applies it)"
+    else
+      echo ""
+      echo "  NOTE: the VULYK watcher mod could not be updated on this machine. Run:"
+      echo "      $mupd"
+      echo "      $pupd"
+    fi
+    return 0
+  fi
   if [ "$CHECK" = "--check" ]; then
     echo "  would install  $WATCHER_ID (user scope, marketplace $WATCHER_REPO)"
     return 0

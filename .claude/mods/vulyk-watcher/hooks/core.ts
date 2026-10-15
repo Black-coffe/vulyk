@@ -18,6 +18,8 @@ export type Note = { note: string; tag: string; cls: string; explain: string; la
 
 export const MAX_NOTES = 3
 export const MAX_SEEN = 200
+/** The forks a session may spend; past it, no fork and no note (the owner's spend decision). */
+export const MAX_FORKS = 30
 export const CARD_BUDGET = 16 * 1024
 
 const isPrompt = (row: Row): boolean =>
@@ -35,12 +37,40 @@ export const skipReason = (s: {
   hadToolCall: boolean
   noteOnScreen: boolean
   shown: number
-}): 'no-tool-call' | 'note-on-screen' | 'cap' | null => {
+  forks: number
+}): 'no-tool-call' | 'note-on-screen' | 'cap' | 'fork-cap' | null => {
   if (!s.hadToolCall) return 'no-tool-call'
   if (s.noteOnScreen) return 'note-on-screen'
   if (s.shown >= MAX_NOTES) return 'cap'
+  if (s.forks >= MAX_FORKS) return 'fork-cap'
   return null
 }
+
+/** Where each fork's spend is appended, relative to the project root. */
+export const SPEND_FILE = 'memory/stats/watcher.jsonl'
+
+/** What `$.model.fork` answers: the text when answered, the reason when not, the usage either way. */
+export type ForkResult = { isAnswered: boolean; text?: string; reason?: string; usage?: Record<string, unknown> }
+
+const count = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) ? x : 0)
+
+/** One fork's spend row: ts, session, the usage's four counts, and answered or the reason it was not. */
+export const spendRow = (ts: string, session: string, r: ForkResult): string => {
+  const u = r.usage ?? {}
+  return JSON.stringify({
+    ts,
+    session,
+    input_tokens: count(u.input_tokens),
+    output_tokens: count(u.output_tokens),
+    cache_read_input_tokens: count(u.cache_read_input_tokens),
+    cache_creation_input_tokens: count(u.cache_creation_input_tokens),
+    ...(r.isAnswered ? { answered: true } : { answered: false, reason: r.reason ?? 'unknown' }),
+  })
+}
+
+/** The ledger's text with one row appended; a last line without its newline gets one first. */
+export const appendRow = (existing: string, row: string): string =>
+  `${existing}${existing === '' || existing.endsWith('\n') ? '' : '\n'}${row}\n`
 
 /** The band and hand-off strings for a reply's `lang:` code: ru and uk have their own, any other language gets en. */
 export const labelLang = (code: string): Lang => (code === 'ru' || code === 'uk' ? code : 'en')

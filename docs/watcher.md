@@ -11,8 +11,15 @@ The mod is installed at user scope, so one install covers every hive on the mach
     claude plugin marketplace add Black-coffe/vulyk
     claude plugin install vulyk-watcher@vulyk --scope user
 
-A machine that has it already is left alone; `--check` prints `would install`; with no `claude` on PATH, or when the
-install fails, the installer prints a NOTE with these two commands and carries on. A hive's settings get no key for
+On a machine that has it already, every run (a fresh install or `--upgrade`) brings it up to the release's mod, since a
+user-scope GitHub install never refreshes itself:
+
+    claude plugin marketplace update vulyk
+    claude plugin update vulyk-watcher@vulyk --scope user
+
+The mod's `plugin.json` version equals VULYK's `VERSION` (a test asserts it). `--check` prints `would install` or
+`would update`; with no `claude` on PATH, or when the install or update fails, the installer prints a NOTE with the
+commands and carries on. A hive's settings get no key for
 the mod. Outside a VULYK hive (no `CLAUDE.vulyk.md` and no `scripts/cycle.sh` at the project root) the mod stays
 silent: no question to the model, no note.
 
@@ -28,12 +35,17 @@ expanded slash command.
 - The turn made no tool call.
 - A note is still on screen.
 - The session already showed 3 notes.
+- The session already asked 30 questions (forks): past that, no question and no note.
 - The model found nothing, or the question failed (API error, empty reply, abort): no retry, no toast.
 - A note with a tag already shown in this project (the last 200 tags are kept) is never shown again.
 
 ## Cost
-Each question is one forked request over the already cached transcript, at most once per turn and at most 3 notes per
-session. Its usage is visible only in the reply the mod gets; the session transcript does not record it.
+Each question is one forked request over the already cached transcript, at most once per turn, at most 30 per session
+and at most 3 notes per session. Its usage is visible only in the reply the mod gets; the session transcript does not
+record it, so after every question the mod appends one row to the hive's `memory/stats/watcher.jsonl`: `ts`,
+`session`, the four usage counts (`input_tokens`, `output_tokens`, `cache_read_input_tokens`,
+`cache_creation_input_tokens`), `answered`, and `reason` when it was not. `scripts/token-report.py` prints the total
+as its own `watcher:` line, every session in the window.
 
 ## The buttons
 - **В defects** puts the note into your prompt draft inside a fenced block marked as the watcher's note, not yours.
