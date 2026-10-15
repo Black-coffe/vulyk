@@ -78,9 +78,9 @@ Quiet variants only: their output is resent every turn. A story's `## Verificati
 | Shell syntax, all scripts | `git ls-files '*.sh' \| xargs -n1 bash -n` |
 | Python syntax, hooks | `python -m py_compile .claude/hooks/*.py` |
 | JSON validity | `git ls-files '*.json' \| xargs -n1 jq -e . > /dev/null` |
-| Cycle state contract tests | `bash tests/cycle.test.sh` |
-| Council verdict contract tests | `bash tests/council.test.sh` |
-| Council verdict contract tests, quick | `bash tests/council.test.sh --quick` |
+| Cycle tests | `bash tests/cycle.test.sh` |
+| Council tests | `bash tests/council.test.sh` |
+| Council tests, quick | `bash tests/council.test.sh --quick` |
 | Driver contract tests | `bash tests/driver.test.sh` |
 | Driver + cycle end to end | `bash tests/e2e.test.sh` |
 | Solo path, Tier 1-2 | `bash tests/solo.test.sh` |
@@ -89,6 +89,7 @@ Quiet variants only: their output is resent every turn. A story's `## Verificati
 | Defect library and hook tests | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
 | Merge tests | `bash tests/constitution.test.sh` |
 | Maintenance, evolve ledger, context budget | `bash tests/maintenance.test.sh` |
+| Watcher mod | `bash tests/watcher.test.sh` |
 | Full suite / build | none exists — VULYK has no test runner and no build step |
 
 The first three are silent on success. `py_compile` writes a gitignored `__pycache__/`: never commit it.
