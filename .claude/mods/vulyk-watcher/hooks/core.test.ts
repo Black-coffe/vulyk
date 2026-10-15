@@ -9,6 +9,7 @@ import {
   handoffText,
   isCardFile,
   isHive,
+  ledgerWanted,
   LABELS,
   labelLang,
   MAX_FORKS,
@@ -86,6 +87,12 @@ describe('hive', () => {
     expect(isHive({ vulyk: false, cycle: false })).toBe(false)
     expect(isHive({ vulyk: true, cycle: false })).toBe(true)
     expect(isHive({ vulyk: false, cycle: true })).toBe(true)
+  })
+
+  test('the spend ledger is written only where lib.sh counts it as paperwork', () => {
+    expect(ledgerWanted('    memory/stats/anomalies.jsonl|memory/stats/watcher.jsonl|memory/stats/evolve.jsonl')).toBe(true)
+    expect(ledgerWanted('    memory/stats/anomalies.jsonl|memory/stats/evolve.jsonl')).toBe(false)
+    expect(ledgerWanted(undefined)).toBe(false)
   })
 })
 

@@ -75,6 +75,10 @@ export const appendRow = (existing: string, row: string): string =>
 /** The band and hand-off strings for a reply's `lang:` code: ru and uk have their own, any other language gets en. */
 export const labelLang = (code: string): Lang => (code === 'ru' || code === 'uk' ? code : 'en')
 
+/** The spend ledger is written only where the hive's `scripts/lib.sh` counts it as cycle paperwork (0.27.0+):
+ * in an older hive the file would leave the tree dirty and `cycle.sh claim`/`open-round` would refuse it. */
+export const ledgerWanted = (lib: string | undefined): boolean => typeof lib === 'string' && lib.includes(SPEND_FILE)
+
 /** A VULYK hive has `CLAUDE.vulyk.md` or `scripts/cycle.sh` at its root; anywhere else the watcher stays silent. */
 export const isHive = (root: { vulyk: boolean; cycle: boolean }): boolean => root.vulyk || root.cycle
 

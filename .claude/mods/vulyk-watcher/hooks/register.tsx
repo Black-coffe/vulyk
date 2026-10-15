@@ -7,6 +7,7 @@ import {
   handoffText,
   isCardFile,
   isHive,
+  ledgerWanted,
   LABELS,
   labelLang,
   noteToShow,
@@ -61,7 +62,7 @@ export const register: Register = on => {
       const seen = Array.isArray(stored) ? stored.filter((tag): tag is string => typeof tag === 'string') : []
       forkCount += 1
       const reply = await $.model.fork({ prompt: buildPrompt({ laws, cards, seen }) })
-      try {
+      if (ledgerWanted(await text('scripts/lib.sh'))) try {
         const ledger = `${root}/${SPEND_FILE}`
         const before = await $.fs.read(ledger).catch(() => '')
         const row = spendRow(new Date().toISOString(), String(await $.session.id()), reply as ForkResult)

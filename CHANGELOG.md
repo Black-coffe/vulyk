@@ -2,6 +2,14 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.27.1] - 2026-10-16
+
+### Fixed
+- **The watcher no longer dirties an older hive.** It writes `memory/stats/watcher.jsonl` only where the hive's
+  `scripts/lib.sh` counts that file as cycle paperwork (0.27.0+). The mod is installed per machine, so it runs in every
+  hive at once; in a hive still on an older `lib.sh` the new file would have left the tree dirty and `cycle.sh
+  claim`/`open-round` would have refused it. Such a hive gets notes but no spend rows until it upgrades.
+
 ## [0.27.0] - 2026-10-16
 
 VULYK's own watcher: a Claude Code mod that reads each finished turn against the hive's Laws and defect cards and
