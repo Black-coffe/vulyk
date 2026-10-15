@@ -194,6 +194,7 @@ with nothing to keep the two in step (Law 2). The cost of choosing local-only: C
 **Council:**
 **Council:** RED round 1, 2026-10-15, at c3c49b6, pack 8abd40c22920 - red: 5,6,7
 **Council:** ESCALATE round 2, 2026-10-15, at 6819ff5, pack caa94daaf588 - red: 5
+**Council:** RED round 3, 2026-10-15, at d9832e3, pack 236a822637e2
 **Shipped:**
 
 ## Needs a human
