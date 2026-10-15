@@ -4,11 +4,12 @@ import {
   addSeen,
   buildPrompt,
   CARD_BUDGET,
-  detectLang,
   FENCE_HEAD,
   handoffText,
   isCardFile,
+  isHive,
   LABELS,
+  labelLang,
   MAX_SEEN,
   noteToShow,
   parseReply,
@@ -21,11 +22,11 @@ import {
   BIG_CARDS,
   CARDS,
   CONSTITUTION,
-  english,
+  german,
   russian,
-  russianOverCode,
+  russianIdentifiers,
+  slashExpansion,
   talkOnly,
-  ukrainian,
   VULYK_CONSTITUTION,
 } from './fixtures/conversations'
 
@@ -36,29 +37,51 @@ const REPLY = [
   'explain: The card says cents must never be lost silently; the turn changed rounding and ran nothing.',
 ].join('\n')
 
+const replyIn = (lang: string, note: string): string => `lang: ${lang}\n${REPLY.replace(/^note: .*$/m, `note: ${note}`)}`
+
 describe('language', () => {
-  test('a Russian conversation gives ru: Russian hint and Russian labels', () => {
-    const lang = detectLang(russian)
-    expect(lang).toBe('ru')
-    const prompt = buildPrompt({ laws: pickLaws({ main: CONSTITUTION }), cards: CARDS, seen: [], lang })
-    expect(prompt).toContain('detected: Russian')
-    expect(prompt).toContain("language of the user's own messages")
-    expect(LABELS[lang].toDefects).toBe('В defects')
-    expect(LABELS[lang].close).toBe('Закрыть')
+  test('no letter counting: the prompt claims no language and asks the model for lang:', () => {
+    const prompt = buildPrompt({ laws: pickLaws({ main: CONSTITUTION }), cards: CARDS, seen: [] })
+    expect(prompt).not.toContain('detected:')
+    expect(prompt).toContain('lang: <the ISO 639-1 code of that language')
+    expect(prompt).toContain('the words the person typed themselves')
+    expect(prompt).toContain('slash-command or skill text expanded into their message')
+    expect(prompt).toContain('identifiers')
   })
 
-  test('a Russian person over mostly English tool output and code still gives ru', () => {
-    expect(detectLang(russianOverCode)).toBe('ru')
-  })
+  // The three council round 1 repros: each turn is judged (it made a tool call), and the language
+  // is the one the model's reply names, whatever the share of Latin letters in the user's row.
+  const cases = [
+    { name: 'Russian around Latin identifiers', rows: russianIdentifiers, lang: 'ru', note: 'Правка не проверена тестом.', labels: 'ru' },
+    { name: 'an English slash-command expansion plus Russian', rows: slashExpansion, lang: 'ru', note: 'План без остановки для владельца.', labels: 'ru' },
+    { name: 'German', rows: german, lang: 'de', note: 'Der Test wurde nicht erneut ausgeführt.', labels: 'en' },
+  ] as const
+  for (const c of cases) {
+    test(`${c.name}: lang ${c.lang}, the note as written, ${c.labels} buttons`, () => {
+      expect(turnHadToolCall(c.rows)).toBe(true)
+      const note = noteToShow(replyIn(c.lang, c.note), [])!
+      expect(note.lang).toBe(c.lang)
+      expect(note.note).toBe(c.note)
+      expect(labelLang(note.lang)).toBe(c.labels)
+      expect(handoffText(note, labelLang(note.lang))).toContain(c.note)
+    })
+  }
 
-  test('a Ukrainian conversation gives uk', () => {
-    expect(detectLang(ukrainian)).toBe('uk')
-    expect(LABELS.uk.close).toBe('Закрити')
+  test('ru and uk get their own labels; German, other codes and a missing lang: get English', () => {
+    expect(LABELS[labelLang('ru')].toDefects).toBe('В defects')
+    expect(LABELS[labelLang('ru')].close).toBe('Закрыть')
+    expect(LABELS[labelLang('uk')].close).toBe('Закрити')
+    expect(LABELS[labelLang('de')].close).toBe('Close')
+    expect(parseReply(REPLY)?.lang).toBe('en')
+    expect(parseReply(`lang: RU\n${REPLY}`)?.lang).toBe('ru')
   })
+})
 
-  test('an English conversation gives en', () => {
-    expect(detectLang(english)).toBe('en')
-    expect(LABELS.en.close).toBe('Close')
+describe('hive', () => {
+  test('silent outside a VULYK hive: no CLAUDE.vulyk.md and no scripts/cycle.sh', () => {
+    expect(isHive({ vulyk: false, cycle: false })).toBe(false)
+    expect(isHive({ vulyk: true, cycle: false })).toBe(true)
+    expect(isHive({ vulyk: false, cycle: true })).toBe(true)
   })
 })
 
@@ -82,6 +105,7 @@ describe('reply', () => {
       tag: 'acme-cents-untested',
       cls: 'acme-cents-lost',
       explain: 'The card says cents must never be lost silently; the turn changed rounding and ran nothing.',
+      lang: 'en',
     })
     const long = parseReply(`${REPLY}\n`.replace(/explain: .*/, `explain: ${'word '.repeat(80)}`))
     expect(long?.explain.split(' ')).toHaveLength(60)
@@ -140,7 +164,7 @@ describe('prompt build', () => {
     expect(isCardFile('README.md')).toBe(false)
     expect(isCardFile('acme-cents-lost.md')).toBe(true)
     expect(isCardFile('acme-cents-lost.original.fixture')).toBe(false)
-    const prompt = buildPrompt({ laws: '', cards: CARDS, seen: [], lang: 'en' })
+    const prompt = buildPrompt({ laws: '', cards: CARDS, seen: [] })
     expect(prompt).toContain('acme-cents-lost')
     expect(prompt).toContain('## Owner quotes')
     expect(prompt).not.toContain('acme-old-rule')
@@ -149,7 +173,7 @@ describe('prompt build', () => {
   test('past the budget, cards are cut to title + ## Never', () => {
     const total = BIG_CARDS.reduce((sum, card) => sum + card.text.length, 0)
     expect(total).toBeGreaterThan(CARD_BUDGET)
-    const prompt = buildPrompt({ laws: '', cards: BIG_CARDS, seen: [], lang: 'en' })
+    const prompt = buildPrompt({ laws: '', cards: BIG_CARDS, seen: [] })
     expect(prompt).toContain('# acme-big-one heading')
     expect(prompt).toContain('- Never do the acme-big-two thing.')
     expect(prompt).not.toContain('Lorem ipsum')
@@ -158,7 +182,7 @@ describe('prompt build', () => {
   })
 
   test('a hive with no docs/defects still gets a prompt, seen tags included', () => {
-    const prompt = buildPrompt({ laws: pickLaws({ main: CONSTITUTION }), cards: [], seen: ['acme-x'], lang: 'en' })
+    const prompt = buildPrompt({ laws: pickLaws({ main: CONSTITUTION }), cards: [], seen: ['acme-x'] })
     expect(prompt).toContain('1. Make routine calls yourself.')
     expect(prompt).toContain('no defect cards')
     expect(prompt).toContain('acme-x')
@@ -195,7 +219,7 @@ describe('В defects hand-off', () => {
   })
 
   test('a backtick in the note cannot close the fence early', () => {
-    const note = { note: 'ran ``` rm -rf ``` again', tag: 't', cls: 'new', explain: 'x' }
+    const note = { note: 'ran ``` rm -rf ``` again', tag: 't', cls: 'new', explain: 'x', lang: 'en' }
     const lines = handoffText(note, 'en').split('\n')
     expect(lines.filter(line => line.includes('```'))).toEqual(['```', '```'])
   })

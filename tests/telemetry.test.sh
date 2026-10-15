@@ -12,6 +12,24 @@ set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
+# install.sh installs the watcher mod per machine through `claude plugin ...`: no run here reaches
+# the real binary and the owner's plugin registry. VULYK_CLAUDE names a missing binary by default
+# (no process spawned, the install prints its NOTE); the watcher block points it at a stub that
+# logs its arguments; `plugin list` / `plugin marketplace list` print $T/cc-list / $T/cc-mkt when
+# present, and `plugin install` fails while $T/cc-fail exists.
+CCSTUB="$T/ccstub"; mkdir -p "$CCSTUB"
+cat > "$CCSTUB/claude" <<STUB
+#!/usr/bin/env bash
+echo "\$*" >> "$T/cc.log"
+case "\$*" in
+  "plugin list") [ -f "$T/cc-list" ] && cat "$T/cc-list" ;;
+  "plugin marketplace list") [ -f "$T/cc-mkt" ] && cat "$T/cc-mkt" ;;
+  "plugin install "*) [ -f "$T/cc-fail" ] && exit 1 ;;
+esac
+exit 0
+STUB
+chmod +x "$CCSTUB/claude"
+export VULYK_CLAUDE="$T/no-claude"
 fail=0
 # Verdicts are tallied on disk, not in a variable: `cmd | expect ...` runs expect in a subshell
 # (the right-hand side of a pipe), so a `fail=1` set there would be lost and a red assertion
@@ -1394,30 +1412,48 @@ bash "$SRC/install.sh" "$YSKBAD" --telemetry off > "$T/ysk-bad.out" 2>&1
 expect_eq "an unparseable settings.json is left byte for byte" '{"enabledPlugins": [' "$(tr -d '\r\n' < "$YSKBAD/.claude/settings.json")"
 cat "$T/ysk-bad.out" | expect "... with the line to add by hand" "\"enabledPlugins\": { \"$YSK\": true }"
 
-# vulyk-watcher: the second id goes through the same wire_plugin, marketplace key first
+# vulyk-watcher: installed once per machine, user scope, from VULYK's GitHub marketplace; no
+# project marketplace key and no enabledPlugins true is written; an owner's false is kept
 WID='vulyk-watcher@vulyk'
-wid_val() { jq -r --arg k "$WID" '.enabledPlugins[$k] | tostring' "$1" | tr -d ''; }
-expect_eq "VULYK's own settings.json carries both watcher keys" "true directory"   "$(wid_val "$SRC/.claude/settings.json") $(jq -r '.extraKnownMarketplaces.vulyk.source.source' "$SRC/.claude/settings.json" | tr -d '')"
-expect_eq "a fresh hive gets both watcher keys" "true directory"   "$(wid_val "$TGT/.claude/settings.json") $(jq -r '.extraKnownMarketplaces.vulyk.source.source' "$TGT/.claude/settings.json" | tr -d '')"
-expect_eq "... and the mod tree" "1" "$([ -f "$TGT/.claude/mods/vulyk-watcher/hooks/hooks.json" ] && echo 1 || echo 0)"
-cat "$T/install.out" | expect_absent "... with no wiring line for the marketplace" "extraKnownMarketplaces"
-cat "$T/ownset.out" | expect "an owner's settings.json: the marketplace wired"   "wire           .claude/settings.json -> extraKnownMarketplaces: vulyk"
-cat "$T/ownset.out" | expect "... and the watcher id wired" "wire           .claude/settings.json -> enabledPlugins: $WID"
-expect_eq "... both land, the owner's permission stays" "true directory 1"   "$(wid_val "$OWNSET/.claude/settings.json") $(jq -r '.extraKnownMarketplaces.vulyk.source.source' "$OWNSET/.claude/settings.json" | tr -d '') $(jq -r '[.permissions.allow[] | select(. == "Bash(ls:*)")] | length' "$OWNSET/.claude/settings.json" | tr -d '')"
-cat "$T/ysk-check.out" | expect "--check names the watcher it would wire" "would wire     .claude/settings.json -> enabledPlugins: $WID"
-cat "$T/ysk-again.out" | expect_absent "a second run says nothing about the marketplace" "extraKnownMarketplaces"
-jq --arg k "$WID" '.enabledPlugins[$k] = false' "$YSK2/.claude/settings.json" > "$T/wid-off.json" && cp "$T/wid-off.json" "$YSK2/.claude/settings.json"
-rm -f "$YSK2/.claude/settings.json.vulyk-bak"
-bash "$SRC/install.sh" "$YSK2" --upgrade > "$T/wid-off.out" 2>&1
-cat "$T/wid-off.out" | expect "an owner's false for the watcher is kept, and said so" "kept           .claude/settings.json -> enabledPlugins: $WID is false"
-expect_eq "... it stays false and no backup is left" "false 0"   "$(wid_val "$YSK2/.claude/settings.json") $([ -e "$YSK2/.claude/settings.json.vulyk-bak" ] && echo 1 || echo 0)"
-WMK="$T/hive-wmk"; mkdir -p "$WMK/.claude"
-printf '{"extraKnownMarketplaces":{"vulyk":{"source":{"source":"github","repo":"x/y"}}}}
-' > "$WMK/.claude/settings.json"
-bash "$SRC/install.sh" "$WMK" --telemetry off > "$T/wmk.out" 2>&1
-cat "$T/wmk.out" | expect "an owner's own vulyk marketplace is kept, with one line" "kept           .claude/settings.json -> extraKnownMarketplaces: vulyk"
-expect_eq "... the entry is untouched" "github" "$(jq -r '.extraKnownMarketplaces.vulyk.source.source' "$WMK/.claude/settings.json" | tr -d '')"
-cat "$T/ysk-bad.out" | expect "an unparseable file also gets the watcher line to add by hand" "\"enabledPlugins\": { \"$WID\": true }"
+WADD='claude plugin marketplace add Black-coffe/vulyk'
+WINST="claude plugin install $WID --scope user"
+wid_keys() { jq -r --arg k "$WID" '"\(.enabledPlugins[$k] | tostring) \(.extraKnownMarketplaces.vulyk | tostring)"' "$1" | tr -d '\r'; }
+expect_eq "VULYK's own settings.json carries no watcher key" "null null" "$(wid_keys "$SRC/.claude/settings.json")"
+expect_eq "a fresh hive gets no watcher key" "null null" "$(wid_keys "$TGT/.claude/settings.json")"
+expect_eq "... nor does an owner's settings.json" "null null" "$(wid_keys "$OWNSET/.claude/settings.json")"
+expect_eq "... the mod tree still ships" "1" "$([ -f "$TGT/.claude/mods/vulyk-watcher/hooks/hooks.json" ] && echo 1 || echo 0)"
+cat "$T/install.out" | expect "no claude on PATH: a NOTE says so, the install goes on" "NOTE: claude is not on PATH"
+cat "$T/install.out" | expect "... and names the marketplace command" "$WADD"
+cat "$T/install.out" | expect "... and the install command" "$WINST"
+WI="$T/hive-watcher"; mkdir -p "$WI"
+: > "$T/cc.log"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --telemetry off --check > "$T/wi-check.out" 2>&1
+cat "$T/wi-check.out" | expect "--check names what it would install" "would install  $WID (user scope"
+expect_eq "... and the dry run adds and installs nothing" "0" "$(grep -c 'plugin marketplace add\|plugin install' "$T/cc.log")"
+: > "$T/cc.log"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --telemetry off > "$T/wi.out" 2>&1
+cat "$T/wi.out" | expect "a fresh install installs the mod for this machine" "install        $WID (user scope, marketplace Black-coffe/vulyk)"
+cat "$T/wi.out" | expect "... with the off switch" "\"$WID\": false in that hive's .claude/settings.local.json"
+expect_eq "... the marketplace is added, then the plugin installed at user scope" \
+  "plugin marketplace add Black-coffe/vulyk|plugin install $WID --scope user" \
+  "$(grep 'plugin marketplace add\|plugin install' "$T/cc.log" | tr -d '\r' | paste -sd'|' -)"
+printf '  vulyk\n' > "$T/cc-mkt"; printf '  %s\n    Scope: user\n' "$WID" > "$T/cc-list"; : > "$T/cc.log"
+jq --arg k "$WID" '.enabledPlugins[$k] = false' "$WI/.claude/settings.json" > "$T/wid-off.json" && cp "$T/wid-off.json" "$WI/.claude/settings.json"
+printf '{"enabledPlugins":{"%s":false}}' "$WID" > "$WI/.claude/settings.local.json"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/wi-again.out" 2>&1
+expect_eq "installed already: the run is idempotent" "0" "$(grep -c 'plugin marketplace add\|plugin install' "$T/cc.log")"
+cat "$T/wi-again.out" | expect_absent "... and says nothing about installing" "$WID (user scope"
+cat "$T/wi-again.out" | expect "an owner's false for the watcher is kept, and said so" "kept           .claude/settings.json -> enabledPlugins: $WID is false"
+cat "$T/wi-again.out" | expect "... the same in settings.local.json" "kept           .claude/settings.local.json -> enabledPlugins: $WID is false"
+expect_eq "... both stay false" "falsefalse" "$(jq -r --arg k "$WID" '.enabledPlugins[$k] | tostring' "$WI/.claude/settings.json" "$WI/.claude/settings.local.json" | tr -d '\r\n')"
+rm -f "$T/cc-list"; : > "$T/cc-fail"; : > "$T/cc.log"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/wi-fail.out" 2>&1; rc=$?
+expect_eq "a marketplace already added is not added again" "0 1" \
+  "$(grep -c 'plugin marketplace add' "$T/cc.log") $(grep -c 'plugin install' "$T/cc.log")"
+expect_eq "a failed plugin install never fails the install" "0" "$rc"
+cat "$T/wi-fail.out" | expect "... it names both commands" "$WADD"
+cat "$T/wi-fail.out" | expect "... the second one too" "$WINST"
+rm -f "$T/cc-fail" "$T/cc-mkt"
 
 # A hive whose owner arranged things: a quoted launcher with a redirect on a startup-only group,
 # the inject script already on SessionStart WITHOUT the argument, intake already wired, and an

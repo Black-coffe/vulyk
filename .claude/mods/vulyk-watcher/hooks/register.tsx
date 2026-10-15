@@ -3,23 +3,22 @@ import type { Register } from 'claude-code'
 import {
   addSeen,
   buildPrompt,
-  detectLang,
   handoffText,
   isCardFile,
+  isHive,
   LABELS,
+  labelLang,
   noteToShow,
   pickLaws,
   seenKey,
   skipReason,
   turnHadToolCall,
 } from './core'
-import type { Card, Lang, Note, Row } from './core'
-
-type Shown = Note & { lang: Lang }
+import type { Card, Note, Row } from './core'
 
 export const register: Register = on => {
   // Session-held: `$.state` would need a types contract in plugin.json (-01's file). A hot reload clears both.
-  let onScreen: Shown | null = null
+  let onScreen: Note | null = null
   let shownCount = 0
 
   // Once per turn, after the turn is settled; a subagent's turn is not judged.
@@ -40,7 +39,10 @@ export const register: Register = on => {
 
       const root = await $.session.root()
       const text = (path: string) => $.fs.read(`${root}/${path}`).catch(() => undefined)
-      const laws = pickLaws({ vulyk: await text('CLAUDE.vulyk.md'), main: await text('CLAUDE.md') })
+      const vulyk = await text('CLAUDE.vulyk.md')
+      const cycle = (await text('scripts/cycle.sh')) !== undefined
+      if (!isHive({ vulyk: vulyk !== undefined, cycle })) return done
+      const laws = pickLaws({ vulyk, main: await text('CLAUDE.md') })
       const entries = await $.fs.list(`${root}/docs/defects`).catch(() => [])
       const cards: Card[] = []
       for (const entry of entries) {
@@ -52,16 +54,14 @@ export const register: Register = on => {
       const key = seenKey(root)
       const stored = await $.store.get(key)
       const seen = Array.isArray(stored) ? stored.filter((tag): tag is string => typeof tag === 'string') : []
-      const lang = detectLang(turn)
-
-      const reply = await $.model.fork({ prompt: buildPrompt({ laws, cards, seen, lang }) })
+      const reply = await $.model.fork({ prompt: buildPrompt({ laws, cards, seen }) })
       if (!reply.isAnswered) return done
       const note = noteToShow(reply.text, seen)
       if (note === null) return done
 
       await $.store.set(key, addSeen(seen, note.tag))
       shownCount += 1
-      onScreen = { ...note, lang }
+      onScreen = note
       $.ui.invalidate('ui.render')
     } catch {
       // A watcher that fails stays silent.
@@ -74,13 +74,14 @@ export const register: Register = on => {
     if (e.props.hasSurvey || shown === null) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
-    const labels = LABELS[shown.lang]
+    const lang = labelLang(shown.lang)
+    const labels = LABELS[lang]
     const dismiss = () => {
       onScreen = null
       $.ui.invalidate('ui.render')
     }
     const toDefects = async () => {
-      await $.prompt.fill({ text: handoffText(shown, shown.lang), mode: 'replace' })
+      await $.prompt.fill({ text: handoffText(shown, lang), mode: 'replace' })
       dismiss()
     }
 

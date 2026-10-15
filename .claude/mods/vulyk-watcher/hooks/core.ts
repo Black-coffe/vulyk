@@ -1,4 +1,4 @@
-// The watcher's pure parts: skip decision, language, prompt build, reply parse, seen-list update,
+// The watcher's pure parts: skip decision, hive check, labels, prompt build, reply parse, seen-list update,
 // band labels and the «В defects» hand-off text. No `$` here: register.tsx reads and writes, this decides.
 
 export type Lang = 'ru' | 'uk' | 'en'
@@ -13,7 +13,8 @@ export type Row = {
 
 export type Card = { id: string; text: string }
 
-export type Note = { note: string; tag: string; cls: string; explain: string }
+/** `lang` is the reply's own code (ISO 639-1, lower case), chosen by the model; `en` when the reply gave none. */
+export type Note = { note: string; tag: string; cls: string; explain: string; lang: string }
 
 export const MAX_NOTES = 3
 export const MAX_SEEN = 200
@@ -41,21 +42,11 @@ export const skipReason = (s: {
   return null
 }
 
-/** The language of the person's own messages: tool output, replies and pasted code are left out. */
-export const detectLang = (rows: readonly Row[]): Lang => {
-  const own = rows
-    .filter(isPrompt)
-    .map(row => row.text.replace(/```[\s\S]*?(?:```|$)/g, ' ').replace(/`[^`\n]*`/g, ' '))
-    .join('\n')
-  const cyrillic = (own.match(/[Ѐ-ӿ]/g) ?? []).length
-  const latin = (own.match(/[A-Za-z]/g) ?? []).length
-  if (cyrillic === 0 || cyrillic <= latin) return 'en'
-  const ukOnly = (own.match(/[іїєґІЇЄҐ]/g) ?? []).length
-  const ruOnly = (own.match(/[ыэъёЫЭЪЁ]/g) ?? []).length
-  return ukOnly > ruOnly ? 'uk' : 'ru'
-}
+/** The band and hand-off strings for a reply's `lang:` code: ru and uk have their own, any other language gets en. */
+export const labelLang = (code: string): Lang => (code === 'ru' || code === 'uk' ? code : 'en')
 
-const LANG_NAME: Record<Lang, string> = { ru: 'Russian', uk: 'Ukrainian', en: 'English' }
+/** A VULYK hive has `CLAUDE.vulyk.md` or `scripts/cycle.sh` at its root; anywhere else the watcher stays silent. */
+export const isHive = (root: { vulyk: boolean; cycle: boolean }): boolean => root.vulyk || root.cycle
 
 export const LABELS: Record<Lang, { title: string; toDefects: string; close: string }> = {
   ru: { title: 'Наблюдатель', toDefects: 'В defects', close: 'Закрыть' },
@@ -100,7 +91,7 @@ export const cardsText = (cards: readonly Card[]): string => {
   return live.map(card => `### card: ${card.id}\n${cutCard(card.text)}`).join('\n\n')
 }
 
-export const buildPrompt = (p: { laws: string; cards: readonly Card[]; seen: readonly string[]; lang: Lang }): string => {
+export const buildPrompt = (p: { laws: string; cards: readonly Card[]; seen: readonly string[] }): string => {
   const cards = cardsText(p.cards)
   return [
     'You are a quiet watcher over this session. Judge ONLY the turn that just finished, the last exchange above.',
@@ -118,8 +109,11 @@ export const buildPrompt = (p: { laws: string; cards: readonly Card[]; seen: rea
     '== Seen tags (never flag these again) ==',
     p.seen.length > 0 ? p.seen.join(', ') : '(none)',
     '',
-    `Write note and explain in the language of the user's own messages (detected: ${LANG_NAME[p.lang]}).`,
-    'Reply with exactly these four lines and nothing else:',
+    'Write note and explain in the language the user writes their own messages in, any language.',
+    'Judge that language from the words the person typed themselves; ignore code, file names, identifiers, commands,',
+    'tool output, and any slash-command or skill text expanded into their message.',
+    'Reply with exactly these five lines and nothing else:',
+    'lang: <the ISO 639-1 code of that language, e.g. ru, uk, en, de>',
     'note: <one line, or none>',
     'tag: <a short kebab-case tag naming this finding>',
     'class: <a card id, law <n>, or new>',
@@ -139,7 +133,8 @@ export const parseReply = (text: string): Note | null => {
   const cls = field('class')
   if (tag === '' || cls === '') return null
   const explain = field('explain').split(/\s+/).filter(Boolean).slice(0, 60).join(' ')
-  return { note, tag, cls, explain }
+  const lang = field('lang').toLowerCase().match(/^[a-z]{2,3}\b/)?.[0] ?? 'en'
+  return { note, tag, cls, explain, lang }
 }
 
 /** The note a fork's reply puts on the band, or null: nothing to say, malformed, or a tag already seen. */

@@ -1,16 +1,30 @@
 # The watcher
 
-`vulyk-watcher` is VULYK's own Claude Code mod. It ships in every hive in `.claude/mods/vulyk-watcher/` and runs
-beside Claude Code's built-in "You should know" mod, not instead of it. `install.sh` installs it, `--upgrade`
-replaces the tree, and both keys are wired into the hive's `.claude/settings.json` (`extraKnownMarketplaces.vulyk`
-and `enabledPlugins["vulyk-watcher@vulyk"]`).
+`vulyk-watcher` is VULYK's own Claude Code mod. It runs beside Claude Code's built-in "You should know" mod, not
+instead of it. Its source lives in `.claude/mods/vulyk-watcher/`, and VULYK's root `.claude-plugin/marketplace.json`
+publishes it as marketplace `vulyk`.
+
+## Install: once per machine
+The mod is installed at user scope, so one install covers every hive on the machine. `install.sh` does it when
+`claude` is on PATH and the mod is not installed yet:
+
+    claude plugin marketplace add Black-coffe/vulyk
+    claude plugin install vulyk-watcher@vulyk --scope user
+
+A machine that has it already is left alone; `--check` prints `would install`; with no `claude` on PATH, or when the
+install fails, the installer prints a NOTE with these two commands and carries on. A hive's settings get no key for
+the mod. Outside a VULYK hive (no `CLAUDE.vulyk.md` and no `scripts/cycle.sh` at the project root) the mod stays
+silent: no question to the model, no note.
 
 ## What it does
 Once per finished turn it asks the session's own model whether that turn broke one of the hive's constitution Laws
 or repeated a class from the hive's own `docs/defects/` cards. The bar is high and the default answer is nothing. When
-there is something to say it draws one note above the prompt, in the language of your messages.
+there is something to say it draws one note above the prompt. The model writes the note in the language you type in
+and names that language in its reply; it judges by your own words, not by code, identifiers, tool output or an
+expanded slash command.
 
 ## When it stays silent
+- The project is not a VULYK hive.
 - The turn made no tool call.
 - A note is still on screen.
 - The session already showed 3 notes.
@@ -28,14 +42,16 @@ session. Its usage is visible only in the reply the mod gets; the session transc
 - **Закрыть** dismisses the note. Labels exist in ru, uk and en; any other language gets English buttons.
 
 ## The off switch
-Per machine: put `{"enabledPlugins": {"vulyk-watcher@vulyk": false}}` in `.claude/settings.local.json` (it is
-gitignored). `/plugin disable` writes user settings, and the project key wins over them. A `false` you set in
-`settings.json` is kept by every upgrade.
+One hive, one machine: put `{"enabledPlugins": {"vulyk-watcher@vulyk": false}}` in the hive's
+`.claude/settings.local.json` (it is gitignored). The same key in `.claude/settings.json` turns it off for everyone
+who works in that hive. Both outrank the user-scope install (measured on 2.1.300: the plugin reads `enabled=false` and
+its hooks module is not loaded). The installer never writes this key and keeps your `false` on every upgrade. Off on
+the whole machine: `claude plugin disable vulyk-watcher@vulyk`.
 
 ## How a note becomes a card
 The mod writes nothing under `docs/defects/`. After you press «В defects» and confirm in your own words, the Queen
 files the card through the normal intake path (`docs/defects/README.md`).
 
 ## Known limit
-Measured on build 2.1.300 in `claude -p`: the project-scope directory marketplace was reported as not registered, so
-the mod may need one approval or a user-scope step in a hive. The rollout checks an interactive start.
+The GitHub marketplace serves what is on VULYK's default branch: a machine gets the mod only once a release carrying
+`.claude-plugin/marketplace.json` is pushed there.

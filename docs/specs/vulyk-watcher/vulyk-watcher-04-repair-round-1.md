@@ -1,7 +1,7 @@
 ---
 story: vulyk-watcher-04
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 3
@@ -74,3 +74,12 @@ Ask 7 is not this story's (plan `## Plan deltas`).
 `git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
 `bash tests/telemetry.test.sh`
 `git ls-files '*.sh' | xargs -n1 bash -n`
+
+## Implementation notes
+- .claude-plugin/marketplace.json: new root marketplace `vulyk`, plugin source `./.claude/mods/vulyk-watcher`; the mod-folder marketplace.json is removed (nothing read it).
+- install.sh: `install_watcher` replaces the two project wire_plugin calls (WATCHER_MKT gone): list -> skip, `--check` -> `would install`, else marketplace add Black-coffe/vulyk (skipped when listed) + install --scope user; no claude / failure -> NOTE with both commands, exit 0; an owner's `false` in settings.json or settings.local.json gets a `kept` line, the key is never written. `VULYK_CLAUDE` names the binary (tests point it at a stub so no suite touches the real plugin registry).
+- .claude/settings.json: dropped `extraKnownMarketplaces.vulyk` and `enabledPlugins["vulyk-watcher@vulyk"]`.
+- core.ts / register.tsx: `detectLang` (letter counting) removed; the prompt asks for a `lang:` line (ISO 639-1, judged from the person's own words, not code/identifiers/slash-command expansions); `labelLang` maps ru/uk to their labels, anything else to en; `isHive` gates the fork on `CLAUDE.vulyk.md` or `scripts/cycle.sh` at the root.
+- core.test.ts + fixtures: the three ASK 6 repros as fixtures, each paired with a model reply (ru, ru, de -> English buttons); a hive-gate test. The tests cannot run the model, so they prove the contract (no claimed language, lang: parsed, labels), not the model's choice.
+- tests/watcher.test.sh also validates the root marketplace; tests/telemetry.test.sh watcher block rewritten around a `claude` stub; ci.yml checks the hive carries no watcher key.
+- Measured (condition 4, build 2.1.300): `claude plugin marketplace add E:/Projects/vulyk` + `install vulyk-watcher@vulyk --scope user`; temp hive with no settings: "hooks module vulyk-watcher@vulyk loaded (worker, environment 1, tier user)"; project settings.json false: "enabled=false; will NOT register", no module line; settings.local.json false: same. Restored: plugin uninstalled, marketplace removed, ~/.claude/plugins/cache/vulyk deleted; ~/.claude/settings.json and known_marketplaces.json byte-identical to the backup, installed_plugins.json equal under `jq -S` (one other entry's keys reordered by the CLI).

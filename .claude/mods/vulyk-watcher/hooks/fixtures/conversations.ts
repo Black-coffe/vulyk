@@ -57,6 +57,38 @@ export const english: Row[] = [
   { role: 'assistant', text: 'Done.' },
 ]
 
+/** Council round 1 repro: Russian words around Latin identifiers outside backticks. */
+export const russianIdentifiers: Row[] = [
+  {
+    role: 'user',
+    text: 'почини install.sh: wire_plugin должен писать enabledPlugins в settings.local.json, а не settings.json',
+  },
+  { role: 'assistant', text: 'Fixing wire_plugin.', toolUses: [tool('Edit')] },
+  { role: 'user', text: '', toolResults: [result('The file was updated.')] },
+]
+
+/** Council round 1 repro: an English slash-command expansion in the user row, then the person's Russian words. */
+export const slashExpansion: Row[] = [
+  {
+    role: 'user',
+    text: [
+      '<command-name>/acme-plan</command-name>',
+      'Plan the work: read the brief, size the task, write the stories, and stop for the owner before building.',
+      'Each story names its files, its acceptance criteria and its verification command.',
+      'ARGUMENTS: сделай наблюдателя',
+    ].join('\n'),
+  },
+  { role: 'assistant', text: 'Planning.', toolUses: [tool('Write')] },
+  { role: 'user', text: '', toolResults: [result('written')] },
+]
+
+/** Council round 1 repro: a German person; the note is German, the buttons English. */
+export const german: Row[] = [
+  { role: 'user', text: 'Bitte repariere den Test' },
+  { role: 'assistant', text: 'Running it.', toolUses: [tool('Bash')] },
+  { role: 'user', text: '', toolResults: [result('FAIL billing.test.ts')] },
+]
+
 /** The last turn only talked: an earlier turn's tool call does not count. */
 export const talkOnly: Row[] = [
   ...english,

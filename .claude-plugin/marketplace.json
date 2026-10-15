@@ -3,12 +3,12 @@
   "owner": {
     "name": "VULYK"
   },
+  "description": "VULYK mods",
   "plugins": [
     {
       "name": "vulyk-watcher",
-      "source": "./",
+      "source": "./.claude/mods/vulyk-watcher",
       "description": "VULYK watcher mod"
     }
-  ],
-  "description": "VULYK mods"
+  ]
 }

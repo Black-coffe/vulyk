@@ -246,8 +246,10 @@ jobs:
           # spec you-should-know: every hive enables Claude Code's built-in "You should know" mod
           jq -e '.enabledPlugins["cc-plugin-you-should-know@builtin"] == true' "$target/.claude/settings.json" >/dev/null \
             || { echo "::error::the hive's settings.json does not enable cc-plugin-you-should-know@builtin"; exit 1; }
-          # spec vulyk-watcher: the watcher mod ships and is enabled in every hive
-          jq -e '.enabledPlugins["vulyk-watcher@vulyk"] == true and .extraKnownMarketplaces.vulyk.source.source == "directory"' "$target/.claude/settings.json" >/dev/null             || { echo "::error::the hive's settings.json does not carry the vulyk-watcher keys"; exit 1; }
+          # spec vulyk-watcher: the mod tree ships; the mod itself is installed per machine (user scope),
+          # so the hive's settings.json carries no marketplace key and no enabledPlugins true for it
+          jq -e '.enabledPlugins["vulyk-watcher@vulyk"] == null and .extraKnownMarketplaces.vulyk == null' "$target/.claude/settings.json" >/dev/null \
+            || { echo "::error::the hive's settings.json carries a vulyk-watcher key"; exit 1; }
           test -f "$target/.claude/mods/vulyk-watcher/hooks/hooks.json" || { echo "::error::watcher mod tree missing after a fresh install"; exit 1; }
           rm -rf "$target/.claude/mods"
           ./install.sh "$target" --upgrade >/dev/null

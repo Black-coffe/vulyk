@@ -949,8 +949,6 @@ PYPERM
 # an owner's `false` is a decision, not a gap. Project `true` beats a user-scope `false`, so the
 # installer names the switch that does work (spec you-should-know, measured on 2.1.288).
 YSK_ID="cc-plugin-you-should-know@builtin"
-WATCHER_ID="vulyk-watcher@vulyk"
-WATCHER_MKT='{"source": {"source": "directory", "path": "./.claude/mods/vulyk-watcher"}}'
 # wire_plugin [<section> <key> <json-value> [<what>]] - default: the built-in's enabledPlugins key.
 # The same rule for every key: missing is written, equal is silent, a different owner value is kept.
 wire_plugin() {
@@ -1021,6 +1019,47 @@ PYPLUG
        echo "  To run the $what here, add by hand:"
        echo "      $byhand" ;;
   esac
+}
+
+# VULYK's own watcher mod (spec vulyk-watcher): a project-scope directory marketplace never loads
+# (measured on 2.1.300: "marketplace not registered"), so the mod is installed once per MACHINE,
+# user scope, from VULYK's GitHub marketplace; outside a VULYK hive it stays silent by itself.
+# Idempotent, never fails the install. A hive turns it off with the project key
+# enabledPlugins["vulyk-watcher@vulyk"]: false, which is the owner's and is never written here.
+WATCHER_ID="vulyk-watcher@vulyk"
+WATCHER_REPO="Black-coffe/vulyk"
+install_watcher() {
+  local cc="${VULYK_CLAUDE:-claude}" f
+  local add="claude plugin marketplace add $WATCHER_REPO" inst="claude plugin install $WATCHER_ID --scope user"
+  for f in settings.json settings.local.json; do
+    grep -Eq "\"$WATCHER_ID\"[[:space:]]*:[[:space:]]*false" "$DEST/.claude/$f" 2>/dev/null &&
+      echo "  kept           .claude/$f -> enabledPlugins: $WATCHER_ID is false (the owner's choice)"
+  done
+  if ! command -v "$cc" >/dev/null 2>&1; then
+    echo ""
+    echo "  NOTE: claude is not on PATH, so the VULYK watcher mod is not installed on this machine."
+    echo "  Run once per machine:"
+    echo "      $add"
+    echo "      $inst"
+    return 0
+  fi
+  "$cc" plugin list 2>/dev/null | grep -qF "$WATCHER_ID" && return 0          # already on this machine
+  if [ "$CHECK" = "--check" ]; then
+    echo "  would install  $WATCHER_ID (user scope, marketplace $WATCHER_REPO)"
+    return 0
+  fi
+  if { "$cc" plugin marketplace list 2>/dev/null | grep -Eq '[[:space:]]vulyk[[:space:]]*$' ||
+       "$cc" plugin marketplace add "$WATCHER_REPO" >/dev/null 2>&1; } &&
+     "$cc" plugin install "$WATCHER_ID" --scope user >/dev/null 2>&1; then
+    echo "  install        $WATCHER_ID (user scope, marketplace $WATCHER_REPO)"
+    echo "                 off in one hive: \"$WATCHER_ID\": false in that hive's .claude/settings.local.json"
+  else
+    echo ""
+    echo "  NOTE: the VULYK watcher mod could not be installed on this machine. Run once:"
+    echo "      $add"
+    echo "      $inst"
+  fi
+  return 0
 }
 
 # VULYK ships runtime artifacts - handoffs, snapshots, the update-check cache, the derived
@@ -1204,8 +1243,7 @@ wire_hook PreToolUse defects-inject.sh 'Edit|Write|MultiEdit|NotebookEdit|Bash'
 wire_hook SessionStart defects-inject.sh '' reset
 wire_permissions
 wire_plugin
-wire_plugin extraKnownMarketplaces vulyk "$WATCHER_MKT" "VULYK watcher mod"
-wire_plugin enabledPlugins "$WATCHER_ID" true "VULYK watcher mod"
+install_watcher
 # The empty trees a fresh hive needs. Guarded like every other write: a dry run that
 # creates directories is not a dry run, and this one had been leaving seven of them in
 # repositories whose owners were only asking what the installer would do.

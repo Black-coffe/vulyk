@@ -286,6 +286,6 @@ present keeps the owner's value, `false` included, with a `kept` line. The decid
 scope only, so the project file is the one place a hive can carry the mod, and project `true` outranks a user `false`,
 which is why the installer prints the off switch (`.claude/settings.local.json`). Status line unchanged.
 
-### 2026-10-15 (spec `vulyk-watcher`): the first mod tree is OWNED, and its marketplace key is wired like `enabledPlugins`
+### 2026-10-15 (spec `vulyk-watcher`): the first mod tree is OWNED, and the mod is installed per machine, not wired per hive
 
-`.claude/mods/vulyk-watcher` joins `OWNED`, and `wire_plugin` appends `extraKnownMarketplaces.vulyk` and `enabledPlugins["vulyk-watcher@vulyk"]` under the same rule as the built-in key: missing is written, equal is silent, an owner's different value is kept with one `kept` line. Status line unchanged.
+`.claude/mods/vulyk-watcher` joins `OWNED`. A project-scope directory marketplace never loads (measured on 2.1.300: "marketplace not registered"), so no project key is wired: with `claude` on PATH and `vulyk-watcher@vulyk` not installed, `install.sh` runs `claude plugin marketplace add Black-coffe/vulyk` and `claude plugin install vulyk-watcher@vulyk --scope user` (root `.claude-plugin/marketplace.json`); installed already is silent, `--check` prints `would install`, no `claude` or a failed install prints a NOTE naming both commands and never fails the install. Outside a VULYK hive (no `CLAUDE.vulyk.md`, no `scripts/cycle.sh`) the mod stays silent. The off switch is the owner's `enabledPlugins["vulyk-watcher@vulyk"]: false` in a hive's `settings.local.json` or `settings.json`; the installer never writes that key and says `kept` when it finds the `false`. Status line unchanged.
