@@ -18,6 +18,8 @@ flags, in a band above the prompt, what the session is about to repeat (spec `vu
 - **Spend is recorded:** every fork appends its usage to the hive's `memory/stats/watcher.jsonl` (cycle paperwork),
   and `scripts/token-report.py` prints a `watcher:` line; fork requests are not in the session transcript.
 - `.claude-plugin/marketplace.json` at the repo root publishes marketplace `vulyk`.
+- Defect card `full-round-for-a-narrow-fix` (Law 6, text): when a round's asks are all green and a finding is one
+  narrow fix, re-run its repro and the fixed file's own tests and offer the owner's acceptance, not a full new round.
 - `tests/watcher.test.sh` (local: needs `claude`), and its `## Commands` row; three of VULYK's own row labels were
   shortened to keep the constitution under its ADR-016 byte cap.
 
