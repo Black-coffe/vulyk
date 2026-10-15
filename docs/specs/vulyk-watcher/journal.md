@@ -7,3 +7,4 @@
 - 2026-10-15T17:56:31Z · 04-council:RED · round 1 verdict RED at c3c49b6 pack 8abd40c22920 · next: repair
 - 2026-10-15T17:56:33Z · 03-building · repair round 1: vulyk-watcher-04-repair-round-1.md · next: build:3
 - 2026-10-15T18:01:32Z · 03-building · relaunching the hive after the owner's ruling on M1 · next: the loop holds the working tree of vulyk/vulyk-watcher; to edit, run /vulyk-pause vulyk-watcher
+- 2026-10-15T19:27:17Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/vulyk-watcher/round-2 · next: dispatch:opus,review
