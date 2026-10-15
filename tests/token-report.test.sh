@@ -50,6 +50,14 @@ print(eval(sys.argv[2]))' "$(native "$1")" "$2"
 PROJ="$T/my_proj.v2"
 mkdir -p "$PROJ/memory/stats"
 cp "$FIX/council.jsonl" "$PROJ/memory/stats/council.jsonl"
+# The watcher mod's fork ledger: two forks in two sessions and a malformed line.
+# Fork 1: 10 in + 100 write + 1000 read + 5 out = raw 1115, weighted 10+125+100+5 = 240 (no model: read 0.1).
+# Fork 2: 20 in + 2000 read + 15 out = raw 2035, weighted 20+200+15 = 235.
+cat > "$PROJ/memory/stats/watcher.jsonl" <<'EOF'
+{"ts":"2026-09-12T10:00:00.000Z","session":"s1","input_tokens":10,"output_tokens":5,"cache_read_input_tokens":1000,"cache_creation_input_tokens":100,"answered":true}
+not json
+{"ts":"2026-09-20T10:00:00.000Z","session":"s2","input_tokens":20,"output_tokens":15,"cache_read_input_tokens":2000,"cache_creation_input_tokens":0,"answered":false,"reason":"api-error"}
+EOF
 PROJ_N="$(native "$PROJ")"
 ENC="$(printf '%s' "$PROJ_N" | sed 's/[^A-Za-z0-9]/-/g')"
 ROOT="$T/projects"
@@ -102,6 +110,7 @@ expect_eq "total active minutes: one merged timeline" "8.6" "$(jget "$T/all.json
 expect_eq "a write without the 5m/1h split is counted and flagged" "1" "$(jget "$T/all.json" 'd["total"]["writes_without_split"]')"
 expect_eq "top-level keys" "['project', 'since', 'specs', 'total']" "$(jget "$T/all.json" '[k for k in ("project","since","specs","total") if k in d]')"
 expect_absent "the Workflow's totalTokens is never reported" "987654" < "$T/all.json"
+expect_eq "watcher: forks/sessions/raw/weighted from memory/stats/watcher.jsonl, malformed line skipped" "2/2/3150/475" "$(jget "$T/all.json" '"%d/%d/%d/%d" % (d["watcher"]["forks"], d["watcher"]["sessions"], d["watcher"]["raw"], d["watcher"]["weighted"])')"
 
 echo "--- --since"
 run "$PROJ_N" --json --since 2026-09-15 > "$T/since.json"
@@ -110,6 +119,7 @@ expect_eq "since drops the 09-12 edit from alpha" "5815/2540/1" "$(jget "$T/sinc
 expect_eq "since drops (none) and the old ledger row" "['beta', 'gamma', 'alpha']" "$(jget "$T/since.json" '[s["spec"] for s in d["specs"]]')"
 expect_eq "since total raw/weighted/rounds" "46334/12459/3" "$(jget "$T/since.json" '"%d/%d/%d" % (d["total"]["raw"], d["total"]["weighted"], d["total"]["rounds"])')"
 expect_eq "a session last written before --since is not opened" "2" "$(jget "$T/since.json" 'd["scanned"]["sessions"]')"
+expect_eq "since drops the 09-12 watcher fork" "1/2035/235" "$(jget "$T/since.json" '"%d/%d/%d" % (d["watcher"]["forks"], d["watcher"]["raw"], d["watcher"]["weighted"])')"
 run "$PROJ_N" --since 2026-9-x > /dev/null 2>&1; RC=$?
 expect_eq "a malformed --since is refused" "2" "$RC"
 
@@ -129,6 +139,7 @@ expect "a TOTAL row" "TOTAL" < "$T/human.txt"
 expect "note, line 1" "weighted ≈ cost at API cache prices" < "$T/human.txt"
 expect "note, line 2" "The Workflow's printed totalTokens is not spend" < "$T/human.txt"
 expect "the no-split fallback is said" "counted as 5m" < "$T/human.txt"
+expect "the watcher's total is its own line" "watcher: 2 forks in 2 sessions, raw 3k, weighted 475" < "$T/human.txt"
 expect_eq "sorted by weighted desc" "beta gamma alpha (none) old-spec" "$(sed -n '3,7p' "$T/human.txt" | awk '{print $1}' | tr '\n' ' ' | sed 's/ $//')"
 
 echo "--- locating the transcripts"

@@ -2,6 +2,38 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.27.0] - 2026-10-16
+
+VULYK's own watcher: a Claude Code mod that reads each finished turn against the hive's Laws and defect cards and
+flags, in a band above the prompt, what the session is about to repeat (spec `vulyk-watcher`).
+
+### Added
+- **`vulyk-watcher@vulyk`**, beside Claude Code's built-in "You should know" mod, not instead of it. Once per turn
+  with a tool call it asks the session's own model (a fork over the cached transcript) whether the turn broke a
+  constitution Law or repeated a class from the hive's own `docs/defects/`; the default answer is nothing. The note is
+  written in the language the user types in, chosen by the model from the user's own words. Silent outside a VULYK
+  hive, after 3 notes or 30 questions a session, and on any failed request. Details: `docs/watcher.md`.
+- **«В defects»** fills the prompt draft with the note inside a fenced block marked as the watcher's, not the owner's:
+  only the owner's own words ever become a card's owner quote (Law 6).
+- **Spend is recorded:** every fork appends its usage to the hive's `memory/stats/watcher.jsonl` (cycle paperwork),
+  and `scripts/token-report.py` prints a `watcher:` line; fork requests are not in the session transcript.
+- `.claude-plugin/marketplace.json` at the repo root publishes marketplace `vulyk`.
+- `tests/watcher.test.sh` (local: needs `claude`), and its `## Commands` row; three of VULYK's own row labels were
+  shortened to keep the constitution under its ADR-016 byte cap.
+
+### Changed
+- **`install.sh` installs the watcher once per machine, at user scope**, from this GitHub repo, and refreshes it on
+  every run where it is already installed (`marketplace update` + `plugin update`); the mod's version follows
+  `VERSION`. Claude Code (2.1.300) does not load a plugin enabled only by a repository's own settings, so no hive key
+  is written. With no `claude` on PATH it prints the two commands. `wire_plugin` takes the plugin id.
+- `/vulyk-status` step 6 prints the SessionStart brief's own `maintenance due` line instead of counting raw files in
+  `memory/learnings/` (accepted evolve changeset 2026-09-29).
+
+### Upgrade note
+- Turning the watcher off in one hive: `{"enabledPlugins": {"vulyk-watcher@vulyk": false}}` in that hive's
+  `.claude/settings.local.json` (one machine) or `.claude/settings.json` (everyone). The installer keeps that `false`.
+- A new session (or `/reload-plugins`) is needed after the install or update.
+
 ## [0.26.2] - 2026-10-14
 
 The gate model is pinned from the constitution only, and `--floor` judges it (spec `top-model-pin`).

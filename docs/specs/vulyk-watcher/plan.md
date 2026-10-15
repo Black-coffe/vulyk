@@ -157,11 +157,49 @@ with nothing to keep the two in step (Law 2). The cost of choosing local-only: C
 
 ## Plan deltas
 
-*(empty - vulyk-watcher-01's measurements M1-M5 are recorded here by the Queen before wave 2 starts)*
+- **2026-10-15, after round 1 RED (review BLOCK, asks 5-7).** Trigger: -01's measurements (its `## Implementation
+  notes`) - M1 NO: a project `extraKnownMarketplaces` + `enabledPlugins` does not load the mod (`Skipped auto-recording
+  vulyk-watcher@vulyk - enabled only by repo-authored settings`); M2: `CLAUDE_CODE_PLUGIN_DIRS` works only from the
+  shell or user settings, id `@inline`; M4 YES (runs with telemetry off); M5 NO (fork spend not in the transcript).
+  The plan's stop rule for M1 was not applied before wave 2 (the Queen was outside the loop; -01 closed DONE); the
+  repair worker raised it as NEEDS_CONTEXT twice. Owner's decision, 2026-10-15, choosing among machine-wide from
+  GitHub / by hand per hive / per-hive registration:
+  > Один раз на машину, из GitHub (Рекомендую)
+  Ruling: a marketplace file at VULYK's repo root (`.claude-plugin/marketplace.json`, marketplace `vulyk`, plugin
+  `vulyk-watcher`, source `./.claude/mods/vulyk-watcher`). `install.sh`, when `claude` is on PATH and the plugin is not
+  installed, registers the marketplace from the GitHub repo and installs `vulyk-watcher@vulyk` at user scope, once per
+  machine, idempotent, `--check` prints `would install`, no `claude` prints a NOTE with the two commands. The mod is
+  silent outside a VULYK hive (no `CLAUDE.vulyk.md` and no `scripts/cycle.sh` in the project). A hive's project
+  `enabledPlugins["vulyk-watcher@vulyk"]: false` (or the machine-local `settings.local.json`) turns it off there; the
+  project `extraKnownMarketplaces` key is dropped (it never loaded anything). Until 0.27.0 is pushed, the measurement
+  uses a directory marketplace at this working copy; the GitHub source is measured after the push, at rollout.
+- **Ask 6 (round 1 RED):** language is chosen by the session model, not by letter counting: the fork's reply carries a
+  `lang:` line (the language of the user's own messages); code only maps it to the button labels.
+- **2026-10-15, spend (after a side-agent note the owner relayed: M5 NO means the weekly token report cannot see the
+  watcher, and the 3-notes cap does not bound forks).** Owner's decision, choosing among own spend record + ceiling /
+  ceiling only / leave as is:
+  > Пишет свой расход + потолок (Рекомендую)
+  Ruling: rows in `memory/stats/watcher.jsonl`, a watcher line in `scripts/token-report.py`, 30 forks per session.
+- **2026-10-15, round 2 ESCALATE (no-progress on ask 5: `--upgrade` never refreshes the machine's installed mod).**
+  Owner chose «Открыть заново и доделать»; reopened, ceiling 6; repair story -05 carries both the upgrade refresh and the
+  spend decision.
+- **Ask 7 (round 1 RED):** the release and the rollout happen after GREEN by `/vulyk-ship` and the Queen (see
+  `## Assumptions`); a round judges the tree, where VERSION/CHANGELOG are untouched by design.
+
 
 **Approved:** Andrei, 2026-10-15
 **Briefed:**
-**Branch:**
+**Branch:** vulyk/vulyk-watcher
 **Checked:**
 **Council:**
+**Council:** RED round 1, 2026-10-15, at c3c49b6, pack 8abd40c22920 - red: 5,6,7
+**Council:** ESCALATE round 2, 2026-10-15, at 6819ff5, pack caa94daaf588 - red: 5
+**Council:** RED round 3, 2026-10-15, at d9832e3, pack 236a822637e2
 **Shipped:**
+
+## Needs a human
+- reason: no-progress · round 2 · 2026-10-15
+- ask 5: RED - see docs/specs/vulyk-watcher/council/round-2/*.md for evidence
+- no progress: ask 5 RED in rounds 1 and 2
+- seats: docs/specs/vulyk-watcher/council/round-2/
+**Checked:** ACCEPTED by Andrei, 2026-10-15, at 8d46bdf - owner, 2026-10-16: «Если всё остальное нормально было, green ... мы одну строку поправили, перепроверили эту строку и всё.» Round 3: opus GREEN, review BLOCK with one finding (lib.sh is_paperwork_path); fixed in 8d46bdf, repro prints 0, other.jsonl still 1, cycle.test.sh green

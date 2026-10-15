@@ -49,7 +49,7 @@ DEST="$(cd "$DEST" && pwd)"
 
 # Framework-owned trees: on --upgrade these are synced to the new version (changed files
 # replaced). Everything else keeps install semantics: new files copied, existing kept.
-OWNED=".claude/agents .claude/commands .claude/hooks .claude/skills/_meta .claude/workflows bootstrap templates scripts"
+OWNED=".claude/agents .claude/commands .claude/hooks .claude/mods/vulyk-watcher .claude/skills/_meta .claude/workflows bootstrap templates scripts"
 owned() { local f="$1" t; for t in $OWNED; do case "$f" in "$t"/*) return 0 ;; esac; done; return 1; }
 
 # VULYK's own working content never ships: its session learnings, its dev specs, and
@@ -949,24 +949,28 @@ PYPERM
 # an owner's `false` is a decision, not a gap. Project `true` beats a user-scope `false`, so the
 # installer names the switch that does work (spec you-should-know, measured on 2.1.288).
 YSK_ID="cc-plugin-you-should-know@builtin"
+# wire_plugin [<section> <key> <json-value> [<what>]] - default: the built-in's enabledPlugins key.
+# The same rule for every key: missing is written, equal is silent, a different owner value is kept.
 wire_plugin() {
+  local section="${1:-enabledPlugins}" id="${2:-$YSK_ID}" val="${3:-true}" what="${4:-\"You should know\" mod}"
   local file="$DEST/.claude/settings.json" py="" took="" rc=0
+  local lbl="$section: $id" byhand="\"$section\": { \"$id\": $val }"
   [ -f "$file" ] || return 0                                   # nothing to edit
   py="$(command -v python3 || command -v python || true)"
   if [ -z "$py" ]; then
-    grep -qF "\"$YSK_ID\":" "$file" 2>/dev/null && return 0
-    [ "$CHECK" = "--check" ] && { echo "  would wire     .claude/settings.json -> enabledPlugins: $YSK_ID"; return 0; }
+    grep -qF "\"$id\":" "$file" 2>/dev/null && return 0
+    [ "$CHECK" = "--check" ] && { echo "  would wire     .claude/settings.json -> $lbl"; return 0; }
     echo ""
-    echo "  NOTE: no python on PATH to edit .claude/settings.json safely. To run Claude Code's"
-    echo "  \"You should know\" mod in this project, add to settings.json by hand:"
-    echo "      \"enabledPlugins\": { \"$YSK_ID\": true }"
+    echo "  NOTE: no python on PATH to edit .claude/settings.json safely. To run the $what"
+    echo "  in this project, add to settings.json by hand:"
+    echo "      $byhand"
     return 0
   fi
   local dry=""
   if [ "$CHECK" = "--check" ]; then dry="--dry"; else settings_backup "$file" && took=1; fi
-  "$py" - "$file" "$YSK_ID" $dry <<'PYPLUG' || rc=$?
+  "$py" - "$file" "$section" "$id" "$val" $dry <<'PYPLUG' || rc=$?
 import json, sys
-path, key, dry = sys.argv[1], sys.argv[2], '--dry' in sys.argv[3:]
+path, section, key, val, dry = sys.argv[1], sys.argv[2], sys.argv[3], json.loads(sys.argv[4]), '--dry' in sys.argv[5:]
 try:
     with open(path, encoding='utf-8') as fh:
         data = json.load(fh)
@@ -974,41 +978,104 @@ except Exception:
     sys.exit(4)                                  # unparseable: leave it entirely alone
 if not isinstance(data, dict):
     sys.exit(4)
-plugins = data.get('enabledPlugins', {})
+plugins = data.get(section, {})
 if not isinstance(plugins, dict):
     sys.exit(4)
 if key in plugins:
-    sys.exit(3 if plugins[key] is True else 6)   # the owner's value stands
+    sys.exit(3 if plugins[key] == val and type(plugins[key]) is type(val) else 6)   # the owner's value stands
 if dry:
     sys.exit(0)
-plugins[key] = True
-data['enabledPlugins'] = plugins
+plugins[key] = val
+data[section] = plugins
 with open(path, 'w', encoding='utf-8') as fh:
     json.dump(data, fh, indent=2)
     fh.write('\n')
 PYPLUG
   if [ "$CHECK" = "--check" ]; then
-    [ "$rc" -eq 0 ] && echo "  would wire     .claude/settings.json -> enabledPlugins: $YSK_ID"
+    [ "$rc" -eq 0 ] && echo "  would wire     .claude/settings.json -> $lbl"
     return 0
   fi
   case "$rc" in
-    0) echo "  wire           .claude/settings.json -> enabledPlugins: $YSK_ID"
+    0) echo "  wire           .claude/settings.json -> $lbl"
        echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
-       echo "                 off for one machine: \"$YSK_ID\": false in .claude/settings.local.json"
-       echo "                 (/plugin disable writes your user settings, and the project key wins over them)"
-       if [ -n "${DISABLE_TELEMETRY:-}${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:-}${CLAUDE_CODE_USE_BEDROCK:-}${CLAUDE_CODE_USE_VERTEX:-}${CLAUDE_CODE_USE_FOUNDRY:-}" ]; then
+       if [ "$section" = "enabledPlugins" ]; then
+         echo "                 off for one machine: \"$id\": false in .claude/settings.local.json"
+         echo "                 (/plugin disable writes your user settings, and the project key wins over them)"
+       fi
+       if [ "$id" = "$YSK_ID" ] && [ -n "${DISABLE_TELEMETRY:-}${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:-}${CLAUDE_CODE_USE_BEDROCK:-}${CLAUDE_CODE_USE_VERTEX:-}${CLAUDE_CODE_USE_FOUNDRY:-}" ]; then
          echo "  NOTE: this shell turns telemetry off or uses Bedrock / Vertex / Foundry; \"You should know\""
          echo "  runs only in first-party sessions with telemetry on, so here the key will do nothing."
        fi ;;
-    3) [ -z "$took" ] || settings_backup_drop "$file" ;;     # already on; nothing happened
+    3) [ -z "$took" ] || settings_backup_drop "$file" ;;     # already set; nothing happened
     6) [ -z "$took" ] || settings_backup_drop "$file"
-       echo "  kept           .claude/settings.json -> enabledPlugins: $YSK_ID is false (the owner's choice)" ;;
+       if [ "$section" = "enabledPlugins" ]; then
+         echo "  kept           .claude/settings.json -> $lbl is false (the owner's choice)"
+       else
+         echo "  kept           .claude/settings.json -> $lbl is the owner's entry"
+       fi ;;
     *) [ -z "$took" ] || settings_backup_drop "$file"
        echo ""
        echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
-       echo "  To run Claude Code's \"You should know\" mod here, add by hand:"
-       echo "      \"enabledPlugins\": { \"$YSK_ID\": true }" ;;
+       echo "  To run the $what here, add by hand:"
+       echo "      $byhand" ;;
   esac
+}
+
+# VULYK's own watcher mod (spec vulyk-watcher): a project-scope directory marketplace never loads
+# (measured on 2.1.300: "marketplace not registered"), so the mod is installed once per MACHINE,
+# user scope, from VULYK's GitHub marketplace; outside a VULYK hive it stays silent by itself.
+# Idempotent, never fails the install. A hive turns it off with the project key
+# enabledPlugins["vulyk-watcher@vulyk"]: false, which is the owner's and is never written here.
+WATCHER_ID="vulyk-watcher@vulyk"
+WATCHER_REPO="Black-coffe/vulyk"
+install_watcher() {
+  local cc="${VULYK_CLAUDE:-claude}" f
+  local add="claude plugin marketplace add $WATCHER_REPO" inst="claude plugin install $WATCHER_ID --scope user"
+  for f in settings.json settings.local.json; do
+    grep -Eq "\"$WATCHER_ID\"[[:space:]]*:[[:space:]]*false" "$DEST/.claude/$f" 2>/dev/null &&
+      echo "  kept           .claude/$f -> enabledPlugins: $WATCHER_ID is false (the owner's choice)"
+  done
+  if ! command -v "$cc" >/dev/null 2>&1; then
+    echo ""
+    echo "  NOTE: claude is not on PATH, so the VULYK watcher mod is not installed on this machine."
+    echo "  Run once per machine:"
+    echo "      $add"
+    echo "      $inst"
+    return 0
+  fi
+  if "$cc" plugin list 2>/dev/null | grep -qF "$WATCHER_ID"; then
+    # Already on this machine: a user-scope GitHub install never refreshes itself, so each run
+    # brings it up to the release's mod (plugin.json version follows VERSION).
+    local mupd="claude plugin marketplace update vulyk" pupd="claude plugin update $WATCHER_ID --scope user"
+    if [ "$CHECK" = "--check" ]; then
+      echo "  would update   $WATCHER_ID (user scope, marketplace $WATCHER_REPO)"
+    elif "$cc" plugin marketplace update vulyk >/dev/null 2>&1 &&
+         "$cc" plugin update "$WATCHER_ID" --scope user >/dev/null 2>&1; then
+      echo "  update         $WATCHER_ID (user scope, marketplace $WATCHER_REPO; a restart of claude applies it)"
+    else
+      echo ""
+      echo "  NOTE: the VULYK watcher mod could not be updated on this machine. Run:"
+      echo "      $mupd"
+      echo "      $pupd"
+    fi
+    return 0
+  fi
+  if [ "$CHECK" = "--check" ]; then
+    echo "  would install  $WATCHER_ID (user scope, marketplace $WATCHER_REPO)"
+    return 0
+  fi
+  if { "$cc" plugin marketplace list 2>/dev/null | grep -Eq '[[:space:]]vulyk[[:space:]]*$' ||
+       "$cc" plugin marketplace add "$WATCHER_REPO" >/dev/null 2>&1; } &&
+     "$cc" plugin install "$WATCHER_ID" --scope user >/dev/null 2>&1; then
+    echo "  install        $WATCHER_ID (user scope, marketplace $WATCHER_REPO)"
+    echo "                 off in one hive: \"$WATCHER_ID\": false in that hive's .claude/settings.local.json"
+  else
+    echo ""
+    echo "  NOTE: the VULYK watcher mod could not be installed on this machine. Run once:"
+    echo "      $add"
+    echo "      $inst"
+  fi
+  return 0
 }
 
 # VULYK ships runtime artifacts - handoffs, snapshots, the update-check cache, the derived
@@ -1192,6 +1259,7 @@ wire_hook PreToolUse defects-inject.sh 'Edit|Write|MultiEdit|NotebookEdit|Bash'
 wire_hook SessionStart defects-inject.sh '' reset
 wire_permissions
 wire_plugin
+install_watcher
 # The empty trees a fresh hive needs. Guarded like every other write: a dry run that
 # creates directories is not a dry run, and this one had been leaving seven of them in
 # repositories whose owners were only asking what the installer would do.

@@ -1,8 +1,8 @@
 ---
 story: vulyk-watcher-02
 spec: vulyk-watcher
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -93,5 +93,12 @@ by `claude plugin test`.
 `bash tests/watcher.test.sh`
 
 ## Implementation notes
+- Files: `hooks/core.ts` (pure parts), `hooks/core.test.ts` (22 tests), `hooks/fixtures/conversations.ts` (Acme stand-ins; fixtures are a `.ts` module because the test environment has no fs), `hooks/register.tsx`; removed `hooks/fixtures/.gitkeep`. `tests/watcher.test.sh` unchanged: it already runs `claude plugin test` once a `*.test.ts` exists.
+- Surprise: `$.state` atoms fail `claude plugin validate` ("vulyk-watcher.note is not declared: the manifest's types contract must name it"), which needs a `"types"` entry in -01's `plugin.json`. The note on screen and the per-session count are module variables plus `$.ui.invalidate('ui.render')` instead; a hot reload clears them (dev only).
+- Tool calls of the turn are read from `$.session.messages()` (assistant `toolUses` after the last user prompt row), not from `tool.call` counters, so the skip rule is pure and fixture-tested. `turn.complete` of a subagent (`agentId` set) is not judged.
+- The hook awaits `next(e)` first, then forks; any failure (fork arm without an answer, fs/store error) stays silent, no retry.
+- Language: Cyrillic must outnumber Latin in the user's own prompt rows (fenced and inline code stripped); `uk` when `іїєґ` outnumber `ыэъё`, else `ru`. Comparison instead of "any `і`" so one quoted Ukrainian word does not flip a Russian conversation.
+- Budget: 16384 chars over the whole live cards' text; past it every card is cut to its `# ` title + its `## Never` section. Cards are prefixed `### card: <id>` so the reply's `class:` can name the id.
+- Hand-off: request line, blank, a ``` fence whose first line is the localized header, then note, explanation, `class:`; backticks in the note become `'` so the note cannot close the fence early (defect-intake strips fences non-greedily). Button labels: ru «В defects»/«Закрыть», uk «В defects»/«Закрити», en "To defects"/"Close".
 
 ## Findings
