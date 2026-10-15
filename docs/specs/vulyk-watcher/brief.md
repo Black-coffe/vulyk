@@ -86,6 +86,9 @@ The owner, 2026-10-15, mid-grill:
 4. Включение - Включён везде + выключатель (Рекомендую): Как встроенный мод в 0.25.0: installer включает его в каждом улье, твоё явное false сохраняется, выключить можно через settings.local.json. Рекомендую, потому что так ты уже решил для встроенного мода («принудительно во всех проектах»), а без потока заметок нечего измерять. Расход покажет еженедельный отчёт по токенам.
 5. Требования - Всё верно, покажи план (Рекомендую): Семь пунктов как есть, план останавливается на твоё одобрение.
 
+
+**After escalation (round 2, 2026-10-15).**
+> Owner, 2026-10-15: reopen. (1) install.sh --upgrade brings the machine's vulyk-watcher@vulyk up to the release (claude plugin marketplace update vulyk + claude plugin update vulyk-watcher@vulyk), the mod's plugin.json version follows VERSION. (2) Owner's spend decision: the mod appends each fork's usage to memory/stats/watcher.jsonl, scripts/token-report.py shows it as its own line, at most 30 forks per session.
 ## Asks
 1. Свой наблюдатель VULYK работает рядом со встроенным «You should know», а не вместо него.
 2. Он сверяет разговор с законами конституции и карточками docs/defects/ самого улья и показывает заметку полосой над полем ввода; если сказать нечего, молчит.

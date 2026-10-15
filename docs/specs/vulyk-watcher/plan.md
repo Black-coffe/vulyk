@@ -175,6 +175,14 @@ with nothing to keep the two in step (Law 2). The cost of choosing local-only: C
   uses a directory marketplace at this working copy; the GitHub source is measured after the push, at rollout.
 - **Ask 6 (round 1 RED):** language is chosen by the session model, not by letter counting: the fork's reply carries a
   `lang:` line (the language of the user's own messages); code only maps it to the button labels.
+- **2026-10-15, spend (after a side-agent note the owner relayed: M5 NO means the weekly token report cannot see the
+  watcher, and the 3-notes cap does not bound forks).** Owner's decision, choosing among own spend record + ceiling /
+  ceiling only / leave as is:
+  > Пишет свой расход + потолок (Рекомендую)
+  Ruling: rows in `memory/stats/watcher.jsonl`, a watcher line in `scripts/token-report.py`, 30 forks per session.
+- **2026-10-15, round 2 ESCALATE (no-progress on ask 5: `--upgrade` never refreshes the machine's installed mod).**
+  Owner chose «Открыть заново и доделать»; reopened, ceiling 6; repair story -05 carries both the upgrade refresh and the
+  spend decision.
 - **Ask 7 (round 1 RED):** the release and the rollout happen after GREEN by `/vulyk-ship` and the Queen (see
   `## Assumptions`); a round judges the tree, where VERSION/CHANGELOG are untouched by design.
 
