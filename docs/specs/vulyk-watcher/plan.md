@@ -161,7 +161,7 @@ with nothing to keep the two in step (Law 2). The cost of choosing local-only: C
 
 **Approved:** Andrei, 2026-10-15
 **Briefed:**
-**Branch:**
+**Branch:** vulyk/vulyk-watcher
 **Checked:**
 **Council:**
 **Shipped:**
