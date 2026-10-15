@@ -9,3 +9,5 @@
 - 2026-10-15T18:01:32Z · 03-building · relaunching the hive after the owner's ruling on M1 · next: the loop holds the working tree of vulyk/vulyk-watcher; to edit, run /vulyk-pause vulyk-watcher
 - 2026-10-15T19:27:17Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/vulyk-watcher/round-2 · next: dispatch:opus,review
 - 2026-10-15T19:39:10Z · 04-council:ESCALATE · round 2 verdict ESCALATE at 6819ff5 pack caa94daaf588 · next: escalated
+- 2026-10-15T19:47:38Z · 04-council:ESCALATE · reopened after round 2, ceiling now 6 · next: repair
+- 2026-10-15T19:47:54Z · 03-building · repair round 2: vulyk-watcher-05-repair-round-2.md · next: build:4
