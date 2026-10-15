@@ -24,7 +24,36 @@ ASK 6: RED - notes in the user's language, auto-detected - run: probe test of de
 ASK 7: RED - minor version released and taken to live hives - run: cat VERSION; grep CHANGELOG.md saw: VERSION 0.26.2, top entry [0.26.2] 2026-10-14, no watcher entry, no minor bump; no rollout evidence in the tree
 1. install.sh:883 [ask 5] the settings install.sh writes into a hive (and VULYK's own .claude/settings.json:3-8) must actually load vulyk-watcher@vulyk, or the shrink must be recorded in plan ## Descoped with the owner's decision; story -01 measured M1 = NO, and the plan's own rule ("if neither loads without a machine path or a question, the Queen stops and asks the owner") was skipped with ## Plan deltas left empty - repro: in a temp dir holding .claude/mods/vulyk-watcher and the exact shipped keys, `claude -p --debug-file dbg.txt "say ok"; grep vulyk dbg.txt` shows "Skipping orphaned enabledPlugins entry vulyk-watcher@vulyk: marketplace not registered" and "Skipped auto-recording vulyk-watcher@vulyk - enabled only by repo-authored settings", with no hooks-module-loaded line, and `claude plugin list` / `claude plugin marketplace list` there show no vulyk entry (asks 1-4 and 6 depend on this: the mod never runs in a hive).
 
+QUESTION (worker, 2026-10-15) on finding 1 / ask 5 - the plan's own stop rule fires, the owner must choose:
+-01 measured that no committed project file loads the mod (M1 NO for all four path forms; M2: CLAUDE_CODE_PLUGIN_DIRS is ignored in project settings, works only from user/managed settings or the shell, and yields id `vulyk-watcher@inline`). The plan says "if neither loads without a machine path or a question, the Queen stops and asks the owner". Options I see, recommended first:
+  (a) install.sh, when `claude` is on PATH, registers the hive's mod per machine: `claude plugin marketplace add <abs hive>/.claude/mods/vulyk-watcher --scope local` then `claude plugin install vulyk-watcher@vulyk --scope local`; this writes an absolute path into the user's ~/.claude plugin registry (a machine-level write outside the hive) and must be re-measured with `--debug-file` before it is trusted;
+  (b) descope: keep the project keys, record in plan `## Descoped` that the owner enables the mod once per hive by hand, docs/watcher.md says how;
+  (c) user-scope CLAUDE_CODE_PLUGIN_DIRS in ~/.claude/settings.json (one absolute path per hive, id changes to @inline, the off-switch key changes).
+Either answer changes the work materially, and (b) needs an edit of plan.md, which is not in this story's `## Files`.
+Ask 7 (minor release + rollout to live hives) is publishing: per the plan it is the Queen's after GREEN, and VERSION / CHANGELOG.md are not in `## Files`; it cannot be met by this story.
+Ask 6 (detectLang: strip backticked/Latin identifiers and slash-command expansions, do not call German "English") is fixable inside core.ts/core.test.ts; left untouched so the tree stays clean until finding 1 is decided.
+Re-dispatch (worker, 2026-10-15, stamp 448d4bdc45ed22ea): the story arrived again with no answer to the question above - plan.md `## Descoped` and `## Plan deltas` are still "(empty)", no new commit on the branch. Nothing in `## Files` can be built until the owner picks (a), (b) or (c); returned NEEDS_CONTEXT again without touching code.
+
+RULING (Queen, 2026-10-15, the owner chose (d) machine-wide from GitHub; see plan `## Plan deltas`): build these
+conditions, then close the story.
+  1. Root `.claude-plugin/marketplace.json` (marketplace `vulyk`, plugin `vulyk-watcher`, source `./.claude/mods/vulyk-watcher`);
+     drop the mod-folder marketplace.json if nothing needs it.
+  2. `install.sh`: with `claude` on PATH and `vulyk-watcher@vulyk` not installed, `claude plugin marketplace add <VULYK GitHub repo>`
+     then `claude plugin install vulyk-watcher@vulyk --scope user`; idempotent; `--check` prints `would install`; no `claude` -> NOTE
+     naming both commands; never fails the install. Drop the project `extraKnownMarketplaces` wiring; keep `enabledPlugins` handling
+     only so an owner's `false` turns a hive off.
+  3. The mod is silent (no fork, no band) outside a VULYK hive: no `CLAUDE.vulyk.md` and no `scripts/cycle.sh` at the project root.
+  4. Measure with `claude -p --debug-file` that a user-scope install from a DIRECTORY marketplace at this working copy loads
+     (`hooks module vulyk-watcher@vulyk loaded`), and that project `enabledPlugins["vulyk-watcher@vulyk"]: false` in a temp hive
+     turns it off; restore your user settings and plugin registry afterwards (uninstall + marketplace remove) and say so.
+  5. Ask 6: drop letter counting; the fork reply carries `lang:` chosen by the model from the user's own messages; tests cover
+     the three repros in finding ASK 6 (mixed Russian+identifiers -> ru, slash-command expansion + Russian -> ru, German -> de
+     with English button labels).
+  6. `docs/watcher.md` and the ADR-005 line describe the machine-wide install and the off switch.
+Ask 7 is not this story's (plan `## Plan deltas`).
+
 ## Files
+- .claude-plugin/marketplace.json
 - tests/watcher.test.sh
 - .claude/mods/vulyk-watcher/.claude-plugin/plugin.json
 - .claude/mods/vulyk-watcher/.claude-plugin/marketplace.json

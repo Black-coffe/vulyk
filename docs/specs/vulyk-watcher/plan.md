@@ -157,7 +157,27 @@ with nothing to keep the two in step (Law 2). The cost of choosing local-only: C
 
 ## Plan deltas
 
-*(empty - vulyk-watcher-01's measurements M1-M5 are recorded here by the Queen before wave 2 starts)*
+- **2026-10-15, after round 1 RED (review BLOCK, asks 5-7).** Trigger: -01's measurements (its `## Implementation
+  notes`) - M1 NO: a project `extraKnownMarketplaces` + `enabledPlugins` does not load the mod (`Skipped auto-recording
+  vulyk-watcher@vulyk - enabled only by repo-authored settings`); M2: `CLAUDE_CODE_PLUGIN_DIRS` works only from the
+  shell or user settings, id `@inline`; M4 YES (runs with telemetry off); M5 NO (fork spend not in the transcript).
+  The plan's stop rule for M1 was not applied before wave 2 (the Queen was outside the loop; -01 closed DONE); the
+  repair worker raised it as NEEDS_CONTEXT twice. Owner's decision, 2026-10-15, choosing among machine-wide from
+  GitHub / by hand per hive / per-hive registration:
+  > Один раз на машину, из GitHub (Рекомендую)
+  Ruling: a marketplace file at VULYK's repo root (`.claude-plugin/marketplace.json`, marketplace `vulyk`, plugin
+  `vulyk-watcher`, source `./.claude/mods/vulyk-watcher`). `install.sh`, when `claude` is on PATH and the plugin is not
+  installed, registers the marketplace from the GitHub repo and installs `vulyk-watcher@vulyk` at user scope, once per
+  machine, idempotent, `--check` prints `would install`, no `claude` prints a NOTE with the two commands. The mod is
+  silent outside a VULYK hive (no `CLAUDE.vulyk.md` and no `scripts/cycle.sh` in the project). A hive's project
+  `enabledPlugins["vulyk-watcher@vulyk"]: false` (or the machine-local `settings.local.json`) turns it off there; the
+  project `extraKnownMarketplaces` key is dropped (it never loaded anything). Until 0.27.0 is pushed, the measurement
+  uses a directory marketplace at this working copy; the GitHub source is measured after the push, at rollout.
+- **Ask 6 (round 1 RED):** language is chosen by the session model, not by letter counting: the fork's reply carries a
+  `lang:` line (the language of the user's own messages); code only maps it to the button labels.
+- **Ask 7 (round 1 RED):** the release and the rollout happen after GREEN by `/vulyk-ship` and the Queen (see
+  `## Assumptions`); a round judges the tree, where VERSION/CHANGELOG are untouched by design.
+
 
 **Approved:** Andrei, 2026-10-15
 **Briefed:**
