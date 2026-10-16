@@ -2,6 +2,14 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.27.2] - 2026-10-16
+
+### Fixed
+- **An unclosed watcher note no longer silences the watcher for the rest of the session.** The note now fades when
+  the next prompt is sent, as the built-in "You should know" band does. Before, a note left on screen kept
+  `note-on-screen` true, so every later turn was skipped and the silence read as "nothing wrong" (council round 3
+  UNASKED (b), raised again by the built-in side agent after 0.27.1 went live).
+
 ## [0.27.1] - 2026-10-16
 
 ### Fixed

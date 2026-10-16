@@ -84,6 +84,16 @@ export const register: Register = on => {
     return done
   })
 
+  // A note fades when the person sends the next prompt, as the built-in's does: an unclosed note must not
+  // keep `note-on-screen` true and silence the watcher for the rest of the session.
+  on('prompt.submit', ($, e, next) => {
+    if (onScreen !== null) {
+      onScreen = null
+      $.ui.invalidate('ui.render')
+    }
+    return next(e)
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const shown = onScreen
     if (e.props.hasSurvey || shown === null) return next(e)
