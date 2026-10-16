@@ -1852,6 +1852,47 @@ else bad "check rejected a bundle row naming the retired council-sonnet:"
   (cd "$SRC" && bash scripts/telemetry.sh check "$RETB") 2>&1 | sed 's/^/        /'; fi
 grep -v '^[[:space:]]*#' "$SRC/scripts/telemetry.sh"   | expect_absent "no code line in telemetry.sh reads .claude/agents" ".claude/agents"
 
+# --- case 21: upgrade keeps a hive's edits and deletions (card upgrade-overwrites-host-edits) -------------------------------------------
+# A release clone with two tags: v9.0.0 installs the hive, v9.0.1 changes three agents. The hive
+# raised one agent's maxTurns (merged onto the release's other change), raised another on the very
+# line the release also changed (kept, new release beside it), deleted a third (stays deleted), and
+# left a fourth alone (replaced as a release copy).
+echo "--- upgrade: release copies replaced, hive edits merged or kept, deletions kept"
+REL="$T/rel"; HIVE="$T/edits-hive"
+mkdir -p "$REL" "$HIVE"
+( cd "$SRC" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$REL"
+git -C "$REL" init -q && git -C "$REL" config user.email t@t && git -C "$REL" config user.name t
+printf '9.0.0\n' > "$REL/VERSION"
+git -C "$REL" add -A >/dev/null 2>&1 && git -C "$REL" commit -qm v9.0.0 && git -C "$REL" tag v9.0.0
+git -C "$HIVE" init -q
+bash "$REL/install.sh" "$HIVE" --telemetry off > "$T/edits-install.out" 2>&1
+A="$HIVE/.claude/agents"
+sed -i 's/^maxTurns: .*/maxTurns: 140/' "$A/worker-code.md"           # an edit the release does not touch
+sed -i 's/^maxTurns: .*/maxTurns: 140/' "$A/lead-review.md"           # an edit on the line the release changes
+rm -f "$A/drone-scout.md"                                             # a deletion
+R="$REL/.claude/agents"
+sed -i '3s/$/ (v9.0.1)/' "$R/worker-code.md" "$R/drone-docs.md"
+sed -i 's/^maxTurns: .*/maxTurns: 70/' "$R/lead-review.md"
+printf '9.0.1\n' > "$REL/VERSION"
+git -C "$REL" commit -qam v9.0.1 && git -C "$REL" tag v9.0.1
+cp "$A/lead-review.md" "$T/lead-review.hive"
+bash "$REL/install.sh" "$HIVE" --upgrade --check --telemetry off > "$T/edits-check.out" 2>&1
+grep -q 'would update   .claude/agents/drone-docs.md' "$T/edits-check.out" && grep -q 'would merge edit .claude/agents/worker-code.md' "$T/edits-check.out" \
+  && grep -q 'would keep + new .claude/agents/lead-review.md' "$T/edits-check.out" && grep -q 'would keep deleted .claude/agents/drone-scout.md' "$T/edits-check.out" \
+  && ok "--check names all four outcomes with 'would'" || { bad "--check outcomes:"; grep -E 'agents/(drone|worker-code|lead-review)' "$T/edits-check.out"; }
+[ ! -e "$A/lead-review.md.vulyk-new" ] && grep -q '^maxTurns: 140' "$A/worker-code.md" && ok "--check writes nothing" || bad "--check wrote files"
+bash "$REL/install.sh" "$HIVE" --upgrade --telemetry off > "$T/edits-up.out" 2>&1
+grep -q '  update         .claude/agents/drone-docs.md' "$T/edits-up.out" && grep -q '(v9.0.1)' "$A/drone-docs.md" \
+  && ok "an untouched release copy is replaced (update)" || bad "drone-docs not updated"
+grep -q '  merged edit    .claude/agents/worker-code.md' "$T/edits-up.out" && grep -q '^maxTurns: 140' "$A/worker-code.md" && grep -q '(v9.0.1)' "$A/worker-code.md" \
+  && ok "a hive edit is merged: the raised maxTurns stays beside the release's change" || { bad "worker-code merge:"; grep -n 'maxTurns\|v9.0.1' "$A/worker-code.md"; }
+grep -q '  kept + new     .claude/agents/lead-review.md' "$T/edits-up.out" && cmp -s "$A/lead-review.md" "$T/lead-review.hive" \
+  && grep -q '^maxTurns: 70' "$A/lead-review.md.vulyk-new" \
+  && ok "a conflicting edit is kept byte for byte, the new release beside it" || bad "lead-review conflict handling"
+grep -q '  kept deleted   .claude/agents/drone-scout.md' "$T/edits-up.out" && [ ! -e "$A/drone-scout.md" ] \
+  && ok "a deleted agent is not put back" || bad "drone-scout came back"
+grep -qxF '*.vulyk-new' "$HIVE/.gitignore" && ok ".vulyk-new is gitignored" || bad ".vulyk-new not in .gitignore"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1

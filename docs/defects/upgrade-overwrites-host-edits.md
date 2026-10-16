@@ -18,7 +18,8 @@ hook, an agent the project removed (copied back). The hive learns about it only 
 
 ## Cause
 `copy_tree` (install.sh :117) replaces on `owned && ! cmp`; nothing compares the hive's copy with the release it was
-installed from, and a path missing from the hive is copied in as new. Fix and check: spec `upgrade-keeps-host-edits`.
+installed from, and a path missing from the hive is copied in as new. Fixed 2026-10-16 (ADR-005 amendment): release
+copies only, edits merged or kept with `.vulyk-new`, deletions kept; covered by `tests/telemetry.test.sh` case 21.
 
 ## Never
 - Replace a framework file in a hive without first telling a release copy from a project edit.

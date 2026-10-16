@@ -12,7 +12,11 @@ newest published tag is.
    given, say so in one line and stop.
 2. Show what would change, before asking. Run `scripts/vulyk-update.sh . --check` and report it as a
    short table: what would be replaced, what would be removed as retired, what is skipped because it is
-   the owner's.
+   the owner's. Say in plain words, by file, the three lists that protect this hive's own decisions:
+   `would merge edit` (a local edit, carried onto the new release by a clean merge), `would keep + new`
+   (a local edit the release also changed: the file stays as it is and the new release lands beside it
+   as `<file>.vulyk-new` to merge by hand), and `would keep deleted` (a framework file this hive removed
+   stays removed). After applying, list every `.vulyk-new` file left to merge; never merge one silently.
 3. Read the release's own account. Summarise the CHANGELOG entries between the two versions in a few
    lines, especially any change to the constitution. A plain upgrade never overwrites the constitution
    (`CLAUDE.md`, or `CLAUDE.vulyk.md` in a sidecar hive); it prints the size difference and the command

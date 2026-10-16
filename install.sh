@@ -101,6 +101,61 @@ replace_file() { # replace_file <src> <dest> - copy beside, then rename over. An
   cp -p "$1" "$2"
 }
 
+# An upgrade replaces a framework-owned file only when the hive's copy is a release copy: it equals
+# (line endings ignored) a blob some v* tag of the release clone shipped. Anything else is the
+# hive's decision (a tuned maxTurns, a patched hook): merged three-way onto the new release, base =
+# what v$PREV shipped, or kept byte for byte with the new release beside it as <f>.vulyk-new on a
+# conflict or with no base. A path the last install shipped that the hive no longer has stays
+# deleted. (ADR-005 amendment 2026-10-16; card upgrade-overwrites-host-edits.)
+SHIPPED_BLOBS=""
+shipped_blobs() { # once per run: every blob id $SRC's history ever held under OWNED - each v* tag
+  # and every commit (a hive hotfixed by hand between releases holds a commit's copy, not a tag's)
+  [ -n "$SHIPPED_BLOBS" ] && return 0
+  SHIPPED_BLOBS="$(mktemp)"
+  git -C "$SRC" rev-parse -q --verify HEAD >/dev/null 2>&1 || return 0
+  local t
+  # shellcheck disable=SC2086
+  {
+    for t in HEAD $(git -C "$SRC" tag -l 'v*' 2>/dev/null); do
+      git -C "$SRC" ls-tree -r "$t" -- $OWNED 2>/dev/null | awk '{ print $3 }'
+    done
+    git -C "$SRC" log --all --no-renames --format= --raw -- $OWNED 2>/dev/null | awk '{ print $4 }'
+  } | sort -u > "$SHIPPED_BLOBS" || true
+}
+release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte some release's
+  shipped_blobs
+  local h; h="$(tr -d '\r' < "$DEST/$1" | git hash-object --stdin 2>/dev/null)" || return 1
+  [ -n "$h" ] && grep -qxF "$h" "$SHIPPED_BLOBS"
+}
+upgrade_edited() { # upgrade_edited <rel> - a hive edit of a framework file: merge, or keep + .vulyk-new
+  local f="$1" base ours theirs out rc
+  if [ "$CHECK" = "--check" ]; then
+    if git -C "$SRC" cat-file -e "v$PREV:$f" 2>/dev/null; then
+      base="$(mktemp)"; ours="$(mktemp)"; theirs="$(mktemp)"
+      git -C "$SRC" show "v$PREV:$f" | tr -d '\r' > "$base"; tr -d '\r' < "$DEST/$f" > "$ours"; tr -d '\r' < "$SRC/$f" > "$theirs"
+      if git merge-file -q -p "$ours" "$base" "$theirs" > /dev/null 2>&1; then echo "  would merge edit $f"
+      else echo "  would keep + new $f -> $f.vulyk-new"; fi
+      rm -f "$base" "$ours" "$theirs"
+    else
+      echo "  would keep + new $f -> $f.vulyk-new"
+    fi
+    return 0
+  fi
+  if git -C "$SRC" cat-file -e "v$PREV:$f" 2>/dev/null; then
+    base="$(mktemp)"; ours="$(mktemp)"; theirs="$(mktemp)"; out="$(mktemp)"
+    git -C "$SRC" show "v$PREV:$f" | tr -d '\r' > "$base"; tr -d '\r' < "$DEST/$f" > "$ours"; tr -d '\r' < "$SRC/$f" > "$theirs"
+    rc=0; git merge-file -q -p "$ours" "$base" "$theirs" > "$out" 2>/dev/null || rc=$?   # set -e: a conflict is an answer, not an error
+    if [ "$rc" -eq 0 ]; then
+      replace_file "$out" "$DEST/$f"; rm -f "$DEST/$f.vulyk-new"
+      echo "  merged edit    $f"
+      rm -f "$base" "$ours" "$theirs" "$out"; return 0
+    fi
+    rm -f "$base" "$ours" "$theirs" "$out"
+  fi
+  cp -p "$SRC/$f" "$DEST/$f.vulyk-new"
+  echo "  kept + new     $f -> $f.vulyk-new   (your edit kept; merge the new release in by hand)"
+}
+
 copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading a framework-owned file
   local rel="$1" sc
   ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' -print0 ) | while IFS= read -r -d '' f; do
@@ -115,11 +170,19 @@ copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading 
     printf '%s\n' "$f" >> "$NEW_MANIFEST"
     if [ -e "$DEST/$f" ]; then
       if [ -n "$UPGRADE" ] && owned "$f" && ! cmp -s "$SRC/$f" "$DEST/$f"; then
-        if [ "$CHECK" = "--check" ]; then echo "  would update   $f"
-        else replace_file "$SRC/$f" "$DEST/$f"; echo "  update         $f"; fi
+        if release_copy "$f"; then
+          if [ "$CHECK" = "--check" ]; then echo "  would update   $f"
+          else replace_file "$SRC/$f" "$DEST/$f"; echo "  update         $f"; fi
+        else
+          upgrade_edited "$f"
+        fi
       else
         echo "  skip (exists)  $f"
       fi
+    elif [ -n "$UPGRADE" ] && owned "$f" && [ -f "$DEST/.claude/vulyk-manifest" ] \
+      && tr -d '\r' < "$DEST/.claude/vulyk-manifest" | grep -qxF "$f"; then
+      if [ "$CHECK" = "--check" ]; then echo "  would keep deleted $f"
+      else echo "  kept deleted   $f   (the last install shipped it and this hive removed it)"; fi
     else
       if [ "$CHECK" = "--check" ]; then echo "  would copy     $f"
       else mkdir -p "$DEST/$(dirname "$f")"; cp -p "$SRC/$f" "$DEST/$f"; echo "  copy           $f"; fi
@@ -1088,7 +1151,7 @@ install_mod() {
 # wiring: append only what is missing, in a marked block, and say what was added.
 ensure_gitignore() {
   local file="$DEST/.gitignore" missing=0 line have
-  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER .claude/state/"
+  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER .claude/state/ *.vulyk-new"
 
   # A CRLF .gitignore (core.autocrlf) must still match line for line, or every run re-appends.
   have="$( { tr -d '\r' < "$file"; } 2>/dev/null || true)"
