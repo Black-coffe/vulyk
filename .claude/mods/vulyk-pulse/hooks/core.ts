@@ -16,7 +16,7 @@ export type Usage = {
 export type Seg = { t: string; kind: 'glyph' | 'sep' | 'text' | 'live' | 'dim' | 'done' }
 
 export type Agent = { type: string; live: boolean }
-export type Task = { start: number; last: number; open: boolean }
+export type Task = { start: number; last: number; open: boolean; idle?: number }
 
 export type View = {
   phase: string
@@ -190,14 +190,16 @@ export const joinable = (t: Task | null, now: number, busy: boolean, owner = fal
 
 /** The task after activity at `now`: the open one extended, or a new one when it cannot be joined. */
 export const touched = (t: Task | null, now: number, busy: boolean, owner = false): Task =>
-  t !== null && joinable(t, now, busy, owner) ? { start: t.start, last: now, open: true } : { start: now, last: now, open: true }
+  t !== null && joinable(t, now, busy, owner)
+    ? { start: t.start, last: now, open: true, idle: (t.idle ?? 0) + (busy ? 0 : now - t.last) }
+    : { start: now, last: now, open: true, idle: 0 }
 
 /** Whether the open task has been quiet (main idle, no agent live) for the whole settle window. */
 export const settled = (t: Task | null, now: number, busy: boolean): boolean =>
   t !== null && t.open && !busy && now - t.last >= SETTLE_MS
 
-/** How long the task has run: to now while anything runs, else to its last activity. */
-export const elapsedOf = (t: Task, now: number, busy: boolean): number => Math.max(0, (busy ? now : t.last) - t.start)
+/** How long the task has run: to now while anything runs, else to its last activity, less the quiet gaps it joined across. */
+export const elapsedOf = (t: Task, now: number, busy: boolean): number => Math.max(0, (busy ? now : t.last) - t.start - (t.idle ?? 0))
 
 // --- hive, spec, status --------------------------------------------------------------------------------------
 

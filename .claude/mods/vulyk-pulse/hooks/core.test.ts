@@ -169,24 +169,32 @@ describe('task', () => {
   const task = { start: 1_000, last: 100_000, open: true }
   test('a spawn 30 s after the last agent ends joins the task', () => {
     expect(joinable(task, 130_000, false)).toBe(true)
-    expect(touched(task, 130_000, false)).toEqual({ start: 1_000, last: 130_000, open: true })
+    expect(touched(task, 130_000, false)).toEqual({ start: 1_000, last: 130_000, open: true, idle: 30_000 })
   })
   test('a spawn at 61 s opens a new one', () => {
     expect(joinable(task, 100_000 + SETTLE_MS + 1_000, false)).toBe(false)
-    expect(touched(task, 161_000, false)).toEqual({ start: 161_000, last: 161_000, open: true })
+    expect(touched(task, 161_000, false)).toEqual({ start: 161_000, last: 161_000, open: true, idle: 0 })
   })
   test('a main turn while agents are live joins', () => {
-    expect(touched(task, 900_000, true)).toEqual({ start: 1_000, last: 900_000, open: true })
+    expect(touched(task, 900_000, true)).toEqual({ start: 1_000, last: 900_000, open: true, idle: 0 })
   })
   test("the owner's message 30 s after the last agent ends opens a new task, while anything runs joins", () => {
     const old = { start: 0, last: 600_000, open: true }
     expect(joinable(old, 630_000, false, true)).toBe(false)
-    expect(touched(old, 630_000, false, true)).toEqual({ start: 630_000, last: 630_000, open: true })
+    expect(touched(old, 630_000, false, true)).toEqual({ start: 630_000, last: 630_000, open: true, idle: 0 })
     expect(elapsedOf(touched(old, 630_000, false, true), 635_000, false)).toBe(0)
-    expect(touched(old, 630_000, true, true)).toEqual({ start: 0, last: 630_000, open: true })
+    expect(touched(old, 630_000, true, true)).toEqual({ start: 0, last: 630_000, open: true, idle: 0 })
+  })
+  test('a main turn joining after a 40 s quiet gap does not count the gap', () => {
+    const ended = { start: 0, last: 300_000, open: true }
+    const joined = touched(ended, 340_000, false)
+    const done = touched(joined, 342_000, true)
+    expect(joined.idle).toBe(40_000)
+    expect(elapsedOf(done, 342_000, false)).toBe(302_000)
+    expect(elapsedOf({ ...done, idle: undefined }, 342_000, false)).toBe(342_000)
   })
   test('no task opens one', () => {
-    expect(touched(null, 5_000, false)).toEqual({ start: 5_000, last: 5_000, open: true })
+    expect(touched(null, 5_000, false)).toEqual({ start: 5_000, last: 5_000, open: true, idle: 0 })
   })
   test('closes after 60 s of quiet, never while busy', () => {
     expect(settled(task, 100_000 + SETTLE_MS - 1, false)).toBe(false)
@@ -236,6 +244,27 @@ describe('pass-through outside a hive', () => {
     for (const site of sites) {
       const ui = await $.ui.mount({ plugin: 'vulyk-pulse', surface: 'terminal', ...site } as never)
       expect(await ui.find({ type: 'Text', text: /VULYK|≈/ })).toBeUndefined()
+    }
+  })
+})
+
+describe('surfaces other than the terminal', () => {
+  test('TurnDuration and AbovePrompt on desktop inside a hive keep the engine drawing', async ($, on) => {
+    on('session.root', () => ({ value: '/hive' }))
+    on('fs.read', (_$: unknown, e: { path: string }) =>
+      e.path.endsWith('CLAUDE.vulyk.md') ? { value: '' } : { deny: 'no such file' },
+    )
+    on('ui.render', () => ({ type: 'engine', ref: 0 }))
+    const sites = [
+      {
+        component: 'AbovePrompt',
+        props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { bodyRows: 5 }, view: { kind: 'main' } },
+      },
+      { component: 'TurnDuration', requestId: 'd1', props: { word: 'Baked', durationMs: 3000 } },
+    ] as const
+    for (const site of sites) {
+      const ui = await $.ui.mount({ plugin: 'vulyk-pulse', surface: 'desktop', ...site } as never)
+      expect(await ui.find({ type: 'Text', text: /VULYK|≈|Baked for/ })).toBeUndefined()
     }
   })
 })
@@ -290,6 +319,6 @@ describe('closing line inside a hive', () => {
     await clock.advance(30_000)
     await $.prompt.submit({ text: '<task-notification>', wait: false, origin: { kind: 'task-notification' } } as never)
     await turn($, clock, 'notice', 3_000)
-    expect(await line($, 'line-notice')).toBe('Baked for 0m 35s · ≈0 tok')
+    expect(await line($, 'line-notice')).toBe('Baked for 0m 05s · ≈0 tok')
   })
 })

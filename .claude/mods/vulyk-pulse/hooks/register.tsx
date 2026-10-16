@@ -249,7 +249,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.isWorking || e.props.hasSurvey || !(await hiveOf($))) return next(e)
+    if (e.props.isWorking || e.props.hasSurvey || e.surface !== 'terminal' || !(await hiveOf($))) return next(e)
     const view = await viewOf($)
     if (view === null || view.live === 0) return next(e)
     // `next(e)` resolves to `{ type: 'engine', ref }` when no other hook drew the band: core's own drawing.
@@ -262,7 +262,7 @@ export const register: Register = (on, options) => {
   // Each closing line draws the task's figures as they stood at its first drawing, then keeps them, so a later turn
   // or task never repaints it. With no task view the line stays the engine's own and nothing is kept.
   on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
-    if (!(await hiveOf($))) return next(e)
+    if (e.surface !== 'terminal' || !(await hiveOf($))) return next(e)
     let tail = lines.get(e.requestId)
     if (tail === undefined) {
       const view = await viewOf($)

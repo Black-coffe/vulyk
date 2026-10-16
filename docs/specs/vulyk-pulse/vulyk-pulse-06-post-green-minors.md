@@ -1,10 +1,11 @@
 ---
 story: vulyk-pulse-06
-status: todo
+status: done
 worker: worker-code
 model: sonnet
 wave: 5
 blocked_by: []
+returned: DONE
 ---
 
 # Post-GREEN minors from council round 4
@@ -54,5 +55,8 @@ Council round 4 was GREEN; the owner chose to fix its minor notes before the rel
 `bash tests/watcher.test.sh`
 
 ## Implementation notes
+- core.ts/index.d.ts: optional `idle` on Task/PulseTask; touched adds now-last when joining while quiet; elapsedOf subtracts it.
+- register.tsx: AbovePrompt and TurnDuration pass through off-terminal. Docs: configure command, resume sentence.
+- core.test.ts: new idle and desktop tests; the notification test now expects 0m 05s (its 30 s gap no longer counts).
 
 ## Findings

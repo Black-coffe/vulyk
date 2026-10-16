@@ -22,7 +22,8 @@ It appears in three places:
   the main place: the Queen's turn ended when the Workflow launched. If the watcher has a note to draw, the note wins.
 - The `Baked for ...` closing line becomes `<word> for <task time> · N agents · ≈X tok`. The agents part is dropped at 0.
   Each line keeps the figures it showed when first drawn (the last 200 lines are kept); a later turn or task does not
-  repaint it. A reload of the mod forgets them: a line drawn again after it shows the figures of that moment.
+  repaint it. A reload of the mod forgets them, and so does a resumed session, which starts with no frozen lines: a line drawn again
+  after it, an older "Baked for" line included, shows the figures of that moment.
 
 ## What a task is
 
@@ -33,7 +34,7 @@ cover the task. The 60 seconds is a first guess.
 
 ## Motion
 
-Set `motion` in `/config`: `on` (125 ms per frame, the glyph ping-pongs over `· ✢ ✳ ✶ ✻ ✽`), `slow` (500 ms) or `off`
+Set `motion` with `claude plugin configure vulyk-pulse` (values go in through `--values-stdin`): `on` (125 ms per frame, the glyph ping-pongs over `· ✢ ✳ ✶ ✻ ✽`), `slow` (500 ms) or `off`
 (a static `✻`, redrawn once a second so the numbers stay live; the dots stop breathing).
 
 ## What `≈tok` counts, and what it misses
