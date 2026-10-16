@@ -12,7 +12,7 @@ declare module 'claude-code' {
       agents: Record<string, PulseAgent>
       spec: string
       place: PulsePlace
-      /** Each "Baked for ..." line's text as first drawn, by the line's render `requestId`. */
+      /** Each main turn's closing figures as frozen at its close ("<word>" left out), by the turn's `durationMs`. */
       lines: Record<string, string>
     }
   }

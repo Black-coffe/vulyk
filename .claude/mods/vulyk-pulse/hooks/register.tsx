@@ -149,11 +149,12 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  // The owner's message opens a new task unless something still runs; a prompt the person did not type (`isMeta`)
-  // is not theirs and joins like any activity.
+  // The owner's message (typed at the composer or sent through the bridge) opens a new task unless something still
+  // runs; anything else (a task notification, a schedule, a peer, an `isMeta` prompt) joins like any activity.
   on('prompt.submit', async ($, e, next) => {
     try {
-      if (e.isMeta !== true && (await hiveOf($))) await begin($, true)
+      const own = e.origin.kind === 'composer' || e.origin.kind === 'bridge'
+      if (own && e.isMeta !== true && (await hiveOf($))) await begin($, true)
     } catch {
       // A gauge that fails stays silent.
     }
@@ -228,6 +229,15 @@ export const register: Register = (on, options) => {
         else await update($, agentsA, a => (a[id] === undefined ? a : { ...a, [id]: { ...a[id], live: false } }))
         const now = await $.clock.now()
         await update($, taskA, t => (t === null ? t : { ...t, last: now }))
+        // The main turn's closing figures, frozen now under its duration: the "Baked for ..." line carries the same
+        // `durationMs`, and a drawing may not write `$.state`. The word is the line's own, added when it is drawn.
+        if (id === undefined) {
+          const view = await viewOf($)
+          if (view !== null) {
+            const tail = closing('', view)
+            await update($, linesA, l => ({ ...l, [String(e.durationMs)]: tail }))
+          }
+        }
       }
     } catch {
       // A gauge that fails stays silent.
@@ -254,20 +264,13 @@ export const register: Register = (on, options) => {
     return drawSegs(Box, Text, row(e.props.bodyColumns, view))
   })
 
-  // Each closing line keeps the figures of its first drawing, at its turn's close, under its `requestId`: the engine
-  // re-runs this hook on every `$.state` write it read and on every invalidate, and a later task must not repaint it.
+  // Each closing line draws the figures `turn.complete` froze at its turn's close, found by the turn's duration; it
+  // only reads, so a later task never repaints it. A line with no frozen figures stays the engine's own.
   on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
     if (!(await hiveOf($))) return next(e)
-    const id = e.requestId
-    let line = (await read($, linesA))[id]
-    if (line === undefined) {
-      const view = await viewOf($)
-      if (view === null) return next(e)
-      const text = closing(e.props.word, view)
-      line = text
-      await update($, linesA, l => (l[id] === undefined ? { ...l, [id]: text } : l))
-    }
+    const tail = (await read($, linesA))[String(e.props.durationMs)]
+    if (tail === undefined) return next(e)
     const { Text } = $.ui.resolve(e)
-    return <Text dimColor>{line}</Text>
+    return <Text dimColor>{`${e.props.word}${tail}`}</Text>
   })
 }

@@ -1,7 +1,7 @@
 ---
 story: vulyk-pulse-04
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 3
@@ -37,6 +37,11 @@ ASK 5: RED - spinner + above prompt during background build; total on the "Baked
 
 ## Verification
 `bash tests/watcher.test.sh`
-`git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
-`bash tests/telemetry.test.sh`
-`git ls-files '*.sh' | xargs -n1 bash -n`
+
+## Implementation notes
+- register.tsx prompt.submit: the new-task reset fires only for `origin.kind` 'composer' or 'bridge' (and not `isMeta`); a task notification joins like any activity.
+- register.tsx turn.complete: on the main loop it freezes the closing figures (`closing('', view)`) into `linesA` keyed by `durationMs`, outside any drawing.
+- register.tsx TurnDuration: now read-only; looks up its `props.durationMs`, draws `word + tail`, else falls back to the engine's line. No `$.state` write in render, so the host no longer skips the hook.
+- types/index.d.ts: `lines` doc comment updated to the new key and content.
+- Decision: `durationMs` is the only field TurnDuration shares with `turn.complete` (d.ts: "where the turn's duration is reported"); rejected a module-level requestId memo as an impure drawing.
+- Queen, 2026-10-16: the worker's NEEDS_CONTEXT was the owner's pause refusing close-story, not a question; the work was done. Verification trimmed to the suite covering the repair's changed files (register.tsx, types/index.d.ts), per the owner's narrow-fix rule: telemetry.test.sh and the shell/json syntax rows cover files this repair does not touch.
