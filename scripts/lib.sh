@@ -51,31 +51,46 @@ pack_fingerprint() { # pack_fingerprint <spec-dir> - must match every caller exa
 # joins the set because `reopen` writes it; scope.jsonl joins the memory/stats series because
 # `close-story` writes it through scope-check.sh (R4/C-3(b)). VERSION and CHANGELOG.md join in
 # 0.18 (ADR-013 D3): the release commit /vulyk-ship makes must not stale a GREEN round.
-is_paperwork_path() { # is_paperwork_path <repo-relative-path>
+# A hive adds its own paperwork in .claude/vulyk-paperwork (hive_paperwork_path below), a file
+# the installer never ships, owns or touches (ADR-010 amendment 2026-10-16).
+# Callers pass a path as itself: read git's lists with -z, never its C-quoted `"docs/\320..."`.
+is_paperwork_path() { # is_paperwork_path <repo-relative-path> [<root>]
   case "$1" in
     docs/specs/*/plan.md|docs/specs/*/journal.md|docs/specs/*/council/*|docs/specs/*/brief.md| \
     memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl|memory/stats/council.jsonl|memory/stats/scope.jsonl| \
     memory/stats/anomalies.jsonl|memory/stats/watcher.jsonl|memory/stats/evolve.jsonl|memory/stats/skills.json|VERSION|CHANGELOG.md) return 0 ;;
     memory/learnings/*.md)
-      case "${1#memory/learnings/}" in */*) return 1 ;; esac
-      return 0 ;;
-    *) return 1 ;;
+      case "${1#memory/learnings/}" in */*) ;; *) return 0 ;; esac ;;
   esac
+  hive_paperwork_path "$1" "${2:-.}"
+}
+
+# The hive's own globs in <root>/.claude/vulyk-paperwork: one per line, `#` comments, `*` crosses
+# `/`, and a trailing `dir/` covers everything beneath it - the `## Files` dialect, as scope-check
+# reads it. ship-check's stage 03 asks this alone: there the built-in list is not exempt.
+hive_paperwork_path() { # hive_paperwork_path <repo-relative-path> <root>
+  local g f="$2/.claude/vulyk-paperwork"
+  [ -f "$f" ] || return 1
+  while IFS= read -r g || [ -n "$g" ]; do
+    g="${g#"${g%%[![:space:]]*}"}"; g="${g%"${g##*[![:space:]]}"}"   # trim, a CRLF checkout's CR too
+    case "$g" in ''|'#'*) continue ;; esac
+    # shellcheck disable=SC2254
+    case "$g" in */) case "$1" in $g*) return 0 ;; esac ;; esac
+    # shellcheck disable=SC2254
+    case "$1" in $g) return 0 ;; esac
+  done < "$f"
+  return 1
 }
 
 # A commit range is paperwork-only iff every changed path is one the cycle writes itself -
 # never the software. See is_paperwork_path() above for the whitelist itself.
 paperwork_only() { # paperwork_only <root> <from-commit> <to-commit>
-  local changed p
+  local p
   git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
-  changed="$(git -C "$1" diff --name-only "$2" "$3" 2>/dev/null)" || return 1
-  [ -n "$changed" ] || return 0
-  while IFS= read -r p; do
-    is_paperwork_path "$p" || return 1
-  done <<EOF
-$changed
-EOF
-  return 0
+  while IFS= read -r -d '' p; do
+    is_paperwork_path "$p" "$1" || return 1
+  done < <(git -C "$1" diff --name-only -z "$2" "$3" 2>/dev/null)
+  wait $! || return 1   # a diff git could not produce is not paperwork
 }
 
 # A marker line is "filled" when it exists and does not still carry the template's `<...>`.
@@ -84,6 +99,22 @@ marker() { # marker <plan.md> <Name> -> prints the line's value, empty if absent
   v="$(grep -m1 "^\*\*$2:\*\*" "$1" 2>/dev/null | sed "s/^\*\*$2:\*\*[[:space:]]*//")"
   case "$v" in ''|'<'*) return 0 ;; esac
   printf '%s' "$v"
+}
+
+# The one `## Asks` parser: cycle.sh counts and quotes the items (asks_count, ask_item) and
+# trace-check.sh traces story quotes to them, so the two can never read a different list. Asks
+# written only as `> ` quotes once passed trace-check, counted zero in cycle.sh and stopped
+# open-round after a finished build.
+brief_asks() { # brief_asks <brief.md> -> the `## Asks` items, one per line, trailing blanks cut:
+  # every `N. text` line as written; a block with no numbered line gives each `> ` line's text
+  awk '
+    /^##[[:space:]]+Asks[[:space:]]*$/ { inblock=1; next }
+    /^##[[:space:]]/                    { if (inblock) exit }
+    !inblock                            { next }
+    /^[0-9]+\.[[:space:]]/              { s=$0; sub(/[[:space:]]+$/, "", s); num[++n]=s; next }
+    /^>/                                { s=$0; sub(/^>[[:space:]]?/, "", s); sub(/[[:space:]]+$/, "", s); if (s != "") quo[++q]=s }
+    END { if (n) for (i=1; i<=n; i++) print num[i]; else for (i=1; i<=q; i++) print quo[i] }
+  ' "$1" 2>/dev/null
 }
 
 # --- the constitution (ADR-013 D1) -----------------------------------------------------------
@@ -95,20 +126,55 @@ constitution_file() { # constitution_file <root> -> <root>/CLAUDE.vulyk.md if it
   if [ -f "$1/CLAUDE.vulyk.md" ]; then printf '%s' "$1/CLAUDE.vulyk.md"; else printf '%s' "$1/CLAUDE.md"; fi
 }
 
-command_cell_exists() { # command_cell_exists <constitution> <command> -> 0 iff <command> equals,
-  # byte for byte, the backticked command cell of some row of the `## Commands` table (a `\|`
-  # inside the cell is a literal `|`, R11/C-4). Reads only that one table's rows - nothing else
-  # in the constitution - by slicing to the section first.
-  local file="$1" want="$2"
-  [ -f "$file" ] || return 1
+command_cells() { # command_cells <constitution> -> each command a `## Commands` row offers, one per
+  # line, `\|` unescaped (R11/C-4): the whole backticked cell, and each backticked span of it on its
+  # own, so a cell holding two commands (`a` or `b`) offers both. Only that table is read.
+  [ -f "$1" ] || return 0
   awk '
     /^## Commands[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/            { if (inblock) exit }
     inblock                     { print }
-  ' "$file" \
-    | sed -n 's/^|[^|]*|[[:space:]]*`\(.*\)`[[:space:]]*|[[:space:]]*$/\1/p' \
-    | sed 's/\\|/|/g' \
-    | grep -qxF "$want"
+  ' "$1" \
+    | sed -n 's/^|[^|]*|[[:space:]]*\(`.*`\)[[:space:]]*|[[:space:]]*$/\1/p' \
+    | while IFS= read -r cell; do
+        whole="${cell#\`}"; whole="${whole%\`}"
+        printf '%s\n' "$whole"
+        case "$whole" in *'`'*) printf '%s\n' "$cell" | grep -o '`[^`]*`' | sed 's/^`//; s/`$//' ;; esac
+      done \
+    | sed 's/\\|/|/g'
+}
+
+command_cell_exists() { # command_cell_exists <constitution> <command> -> 0 iff <command> is one of
+  # command_cells, byte for byte, or matches one with placeholders. A placeholder is `<name>` with a
+  # spaceless name (so the template's `<fill in>` and a `< in > out` redirect are literal text): it
+  # stands for one or more space-separated arguments, `[<name>]` for none or more. An argument holds
+  # no shell control character (; & | ` $ < > ( )) and never starts with `-`, so `pytest <file>`
+  # admits `pytest tests/a.py` and never `pytest a.py; rm x` or `pytest -p evil`. A placeholder
+  # needs command text before it, and only a single backticked command takes placeholders.
+  local want="$2" cells c re s1 s2 arg
+  cells="$(command_cells "$1")"
+  [ -n "$cells" ] || return 1
+  printf '%s\n' "$cells" | grep -qxF -- "$want" && return 0
+  # A belt beside the argument classes: a command holding a control character never matches a
+  # placeholder cell, only a cell that is literally the same.
+  case "$want" in *[\;\&\|\`\$\<\>\(\)]*) return 1 ;; esac
+  s1="$(printf '\001')"; s2="$(printf '\002')"
+  arg='[^-;\&|`$<>() ][^;\&|`$<>() ]*'
+  while IFS= read -r c; do
+    case "$c" in *'`'*|*"$s1"*|*"$s2"*) continue ;; esac
+    # Placeholders become control-byte sentinels first, so escaping cannot touch them and the
+    # argument classes put in last cannot be re-read as placeholders. The name is any run with no
+    # space and no < or > (`<file>`, `<файл>`), never `<fill in>`.
+    re="$(printf '%s' "$c" | sed -e "s/ \[<[^<> ][^<> ]*>\]/$s1/g" -e "s/<[^<> ][^<> ]*>/$s2/g")"
+    case "$re" in "$s1"*|"$s2"*|" "*) continue ;; esac   # nothing but a placeholder: no command
+    case "$re" in *"$s1"*|*"$s2"*) ;; *) continue ;; esac
+    re="$(printf '%s' "$re" | sed -e 's/[][\.*^$+?(){}|/]/\\&/g' \
+      -e "s/$s1/( $arg)*/g" -e "s/$s2/$arg( $arg)*/g")"
+    printf '%s\n' "$want" | grep -qxE -- "$re" && return 0
+  done <<EOF
+$cells
+EOF
+  return 1
 }
 
 verification_segments() { # verification_segments <line> -> one &&-separated segment per line

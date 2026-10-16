@@ -289,3 +289,16 @@ which is why the installer prints the off switch (`.claude/settings.local.json`)
 ### 2026-10-15 (spec `vulyk-watcher`): the first mod tree is OWNED, and the mod is installed per machine, not wired per hive
 
 `.claude/mods/vulyk-watcher` joins `OWNED`. A project-scope directory marketplace never loads (measured on 2.1.300: "marketplace not registered"), so no project key is wired: with `claude` on PATH and `vulyk-watcher@vulyk` not installed, `install.sh` runs `claude plugin marketplace add Black-coffe/vulyk` and `claude plugin install vulyk-watcher@vulyk --scope user` (root `.claude-plugin/marketplace.json`); installed already, every run (fresh or `--upgrade`) refreshes it with `claude plugin marketplace update vulyk` and `claude plugin update vulyk-watcher@vulyk --scope user`, because a user-scope GitHub install never refreshes itself (the mod's `plugin.json` version equals `VERSION`, asserted by `tests/telemetry.test.sh`); `--check` prints `would install` or `would update`, no `claude` or a failed install or update prints a NOTE naming the commands and never fails the install. Outside a VULYK hive (no `CLAUDE.vulyk.md`, no `scripts/cycle.sh`) the mod stays silent. The off switch is the owner's `enabledPlugins["vulyk-watcher@vulyk"]: false` in a hive's `settings.local.json` or `settings.json`; the installer never writes that key and says `kept` when it finds the `false`. Status line unchanged.
+
+### 2026-10-16 (study `hive-feedback-2026-10`, card `upgrade-overwrites-host-edits`): D2 replaces release copies only
+
+D2's "replace changed framework-owned files" now means: replace a hive's copy only when it is a release copy, a blob
+some `v*` tag or commit of the release clone holds under `OWNED` (line endings ignored). Any other differing copy is the
+hive's decision: `copy_tree` merges it three-way onto the new release (base = what `v$PREV` shipped) and prints
+`merged edit`; on a conflict, or with no `v$PREV` copy to merge from, it keeps the hive's file byte for byte, writes
+the new release beside it as `<file>.vulyk-new` (gitignored) and prints `kept + new`. A path the previous install
+shipped (old manifest) that the hive no longer has is not copied back: `kept deleted`. `--check` prints the same with
+`would `. An edited file the release left alone since `v$PREV` has nothing to merge: kept as it is, any pending
+`.vulyk-new` untouched, `keep (edited)`. A release clone with no `v*` tag (a downloaded ZIP, a shallow checkout) cannot
+tell an edit from a release copy: the installer prints a NOTE and replaces as before. Six live hives had kept their own
+patch registers to re-apply what every upgrade overwrote. Status line unchanged.

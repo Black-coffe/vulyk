@@ -115,6 +115,27 @@ redact_note() { # redact_note <text> -> <text> piped through scripts/redact.sh (
   printf '%s' "$1" | bash "$HERE/redact.sh" 2>/dev/null
 }
 
+sed_inplace() { # sed_inplace <sed-args...> <file> - `sed -i` in the one spelling GNU and BSD
+  # (macOS) sed both read, an attached backup suffix; the backup is removed whatever sed returned.
+  local f="${!#}" rc=0
+  sed -i.bak "$@" || rc=$?
+  rm -f "$f.bak"
+  return $rc
+}
+
+commit_subject() { # commit_subject <message> -> <message>, or, when the Profile's Commit convention
+  # names conventional commits, `kind(id): text` rewritten as `chore(kind-id): text`: a hive whose
+  # commitlint allows only conventional types rejected every `story(..)` and `vulyk(..)` subject.
+  local msg="$1" kind rest
+  case "$(profile_value "$(constitution_file "$ROOT")" "Commit convention" | tr '[:upper:]' '[:lower:]')" in
+    *conventional*)
+      case "$msg" in
+        *'('*'): '*) kind="${msg%%(*}"; rest="${msg#*(}"; msg="chore($kind-${rest%%): *}): ${rest#*): }" ;;
+      esac ;;
+  esac
+  printf '%s' "$msg"
+}
+
 council_append_line() { # council_append_line <plan> <text> - C7: the **Council:** line lands
   # right after the last existing one (or replaces the template's unfilled placeholder when
   # there is none yet), never at the file's true EOF - a round can be judged after an earlier
@@ -176,8 +197,8 @@ driver_guard() { # driver_guard <spec> <verb-label> <stamp-opt> - exits 2 before
   holder="$(driver_stamp "$spec")"
   [ -n "$holder" ] || return 0
   [ -n "$stamp" ] && [ "$stamp" = "$holder" ] && return 0
-  echo "cycle: $(slug_of "$spec") - DRIVER held by $holder, $verb refuses to act." >&2
-  emit false "$verb" 2 error "held by $holder"
+  echo "cycle: $(slug_of "$spec") - DRIVER held by $holder, $verb refuses to act. If that driver is dead (its run is gone from the task list): bash scripts/cycle.sh release $spec $holder" >&2
+  emit false "$verb" 2 error "held by $holder; run: bash scripts/cycle.sh release $spec $holder if that driver is dead"
   exit 2
 }
 
@@ -257,13 +278,30 @@ manual_id_ok() { # manual_id_ok <id> -> 0 iff <id> names one plain file under <s
   return 0
 }
 
-asks_count() { # asks_count <spec-dir> -> A, the number of `## Asks` items in brief.md (C8)
-  awk '
-    /^##[[:space:]]+Asks[[:space:]]*$/ { inblock=1; next }
-    /^##[[:space:]]/                    { if (inblock) exit }
-    inblock && /^[0-9]+\.[[:space:]]/   { c++ }
-    END { print c+0 }
-  ' "$1/brief.md" 2>/dev/null
+asks_count() { # asks_count <spec-dir> -> A, the number of `## Asks` items in brief.md (C8), as
+  # lib.sh's brief_asks reads them
+  local n=0 l
+  while IFS= read -r l; do [ -n "$l" ] && n=$((n+1)); done <<ASKS
+$(brief_asks "$1/brief.md")
+ASKS
+  printf '%s\n' "$n"
+}
+
+descoped_entries() { # descoped_entries < plan.md -> its `## Descoped` entries (`- ` lines), CR-free
+  awk '{ sub(/\r$/, "") } /^##[[:space:]]+Descoped[[:space:]]*$/ { f=1; next } /^##[[:space:]]/ { f=0 } f && /^- /'
+}
+
+descope_not_in_brief() { # descope_not_in_brief <spec> -> each `## Descoped` entry of plan.md that
+  # plan.md did not hold yet when brief.md last changed: a descope the brief never took in. The
+  # blind seats read only brief.md, so they judge the dropped ask as unmet (a hive lost three
+  # rounds so). Read from git, not guessed: nothing when brief.md has no commit or is being edited.
+  local spec="$1" rel c
+  # -z: the path comes back as itself; a C-quoted non-ASCII name would miss in `git show`
+  rel="$(git ls-files -z --full-name -- "$spec/brief.md" 2>/dev/null | tr -d '\0')"
+  [ -n "$rel" ] && [ -z "$(git status --porcelain -- "$spec/brief.md" 2>/dev/null)" ] || return 0
+  c="$(git log -1 --format=%H -- "$spec/brief.md" 2>/dev/null)"; [ -n "$c" ] || return 0
+  grep -vxF -f <(git show "$c:${rel%brief.md}plan.md" 2>/dev/null | descoped_entries) \
+    <(descoped_entries < "$spec/plan.md")
 }
 
 current_round_dir() { # current_round_dir <spec> -> the highest round-N dir, or nothing
@@ -397,16 +435,16 @@ dirty_outside_paperwork() { # dirty_outside_paperwork -> the `git status --porce
   # are not the cycle's own paperwork (is_paperwork_path), one per line; empty means clean.
   # The one predicate open-round and claim share (ADR-013 D5). -uall lists a directory with
   # nothing tracked in it (a fresh hive's memory/learnings/) file by file, instead of one
-  # `?? <dir>/` line the one-level whitelist would reject (C2 addendum).
-  local status_out line
-  status_out="$(git status --porcelain -uall 2>/dev/null)"
-  [ -n "$status_out" ] || return 0
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    is_paperwork_path "${line:3}" || printf '%s\n' "$line"
-  done <<EOF
-$status_out
-EOF
+  # `?? <dir>/` line the one-level whitelist would reject (C2 addendum). -z: a non-ASCII or spaced
+  # name comes back as itself, not C-quoted; a rename's source follows as its own entry.
+  local line orig
+  while IFS= read -r -d '' line; do
+    orig=""
+    case "${line:0:2}" in *R*|*C*) IFS= read -r -d '' orig ;; esac
+    if ! is_paperwork_path "${line:3}" || { [ -n "$orig" ] && ! is_paperwork_path "$orig"; }; then
+      printf '%s\n' "${line:0:3}${orig:+$orig -> }${line:3}"
+    fi
+  done < <(git status --porcelain -uall -z 2>/dev/null)
 }
 
 round_is_stale() { # round_is_stale <spec> <n> - the one staleness rule (autonomous-cycle-17):
@@ -856,7 +894,7 @@ commit_paperwork() { # commit_paperwork <verb-label> <message> <path...> - stage
   [ -e memory/stats/anomalies.jsonl ] && paths+=(memory/stats/anomalies.jsonl)
   [ -n "$(git status --porcelain -- "${paths[@]}" 2>/dev/null)" ] || return 0
   git add -A -- "${paths[@]}" >/dev/null 2>&1
-  git_commit_or_fail "$verb" "$msg"
+  git_commit_or_fail "$verb" "$(commit_subject "$msg")"
 }
 
 # --- escalate row/plan-line helpers (R5/C-3, autonomous-cycle-21) -----------------------------
@@ -1341,7 +1379,7 @@ cmd_briefed() { # cmd_briefed <spec> <commit:0|1> <mode: ""|mini-brief|assumed>
     local dateonly; dateonly="$(date -u +%Y-%m-%d)"
     local line="**Briefed:** $variant, $OWNER_V, $dateonly"
     if grep -q '^\*\*Briefed:\*\*' "$PLAN"; then
-      sed -i "s#^\*\*Briefed:\*\*.*#$line#" "$PLAN"
+      sed_inplace "s#^\*\*Briefed:\*\*.*#$line#" "$PLAN"
     else
       printf '%s\n' "$line" >> "$PLAN"
     fi
@@ -1399,7 +1437,7 @@ cmd_branch() { # cmd_branch <spec> <commit:0|1>
     fi
     local line="**Branch:** $BR"
     if grep -q '^\*\*Branch:\*\*' "$PLAN"; then
-      sed -i "s#^\*\*Branch:\*\*.*#$line#" "$PLAN"
+      sed_inplace "s#^\*\*Branch:\*\*.*#$line#" "$PLAN"
     else
       printf '%s\n' "$line" >> "$PLAN"
     fi
@@ -1773,9 +1811,10 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
   id="$(fm_field "$f" story)"
   worker="$(fm_field "$f" worker)"; [ -n "$worker" ] || worker="worker-code"
   # `model` is the planner's per-story call (ADR-015: sonnet builds, opus only for a judgment-heavy
-  # story); absent means sonnet. The driver passes it as the dispatch parameter and never reads
-  # the story file to learn it.
-  model="$(fm_field "$f" model)"; [ -n "$model" ] || model="sonnet"
+  # story); absent is "", and the driver then passes no model, so the worker agent's own frontmatter
+  # `model:` applies, as it does for the seats (a hive's pin there holds). The driver never reads the
+  # story file to learn it.
+  model="$(fm_field "$f" model)"
   printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$f")"
 }
 
@@ -1860,7 +1899,7 @@ EOF
       sp="${sp#  ! }"
       [ -n "$sp" ] || continue
       is_paperwork_path "$sp" && continue
-      [ -n "$(git status --porcelain -uall -- "$sp" 2>/dev/null)" ] && STRAY="${STRAY:+$STRAY, }$sp"
+      [ -n "$(GIT_LITERAL_PATHSPECS=1 git status --porcelain -uall -- "$sp" 2>/dev/null)" ] && STRAY="${STRAY:+$STRAY, }$sp"
     done <<EOF
 $(printf '%s\n' "$SCOPE_OUT" | grep '^  ! ')
 EOF
@@ -1988,18 +2027,35 @@ EOF
     # Story 09: the anomaly-scan hook's log rides this commit too, same as scope.jsonl above.
     [ -n "$(git status --porcelain -- memory/stats/anomalies.jsonl 2>/dev/null)" ] && git add -- memory/stats/anomalies.jsonl >/dev/null 2>&1
 
-    sed -i -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
+    sed_inplace -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
     git add -- "$STORY" >/dev/null 2>&1
 
-    local commit_err
-    if ! commit_err="$(git commit -q -m "story($ID): $TITLE" 2>&1)"; then
-      sed -i -E "s/^(status:[[:space:]]*)done/\1$ST/" "$STORY"
+    # Commit exactly what this story staged (`--only` by pathspec), never whatever else sits in
+    # the index; on a failed commit (a hook, an index.lock) unstage it again, so the next story's
+    # commit does not sweep this one's files in (a hive saw that).
+    local SPECS=("$STORY" memory/stats/scope.jsonl memory/stats/anomalies.jsonl) OWN=() p
+    while IFS= read -r p; do [ -n "$p" ] && SPECS+=("$p"); done <<EOF
+$(files_of "$STORY")
+EOF
+    # -z and quotePath off: a non-ASCII name must come back as itself, not as a C-quoted string
+    # that matches no path. The globs of `## Files` expand here, and only here: the commit and the
+    # resets below read OWN literally (GIT_LITERAL_PATHSPECS), so `app/[id]/p.ts` is one file.
+    while IFS= read -r -d '' p; do OWN+=("$p"); done < <(git -c core.quotePath=false diff --cached \
+      --name-only -z --no-renames -- "${SPECS[@]}" 2>/dev/null)
+    local commit_err="nothing of this story is staged"
+    if [ "${#OWN[@]}" -eq 0 ] \
+      || ! commit_err="$(GIT_LITERAL_PATHSPECS=1 git commit -q -m "$(commit_subject "story($ID): $TITLE")" --only -- "${OWN[@]}" 2>&1)"; then
+      [ "${#OWN[@]}" -eq 0 ] || GIT_LITERAL_PATHSPECS=1 git reset -q -- "${OWN[@]}" >/dev/null 2>&1
+      sed_inplace -E "s/^(status:[[:space:]]*)done/\1$ST/" "$STORY"
       echo "cycle: close-story - git commit failed: $commit_err" >&2
       emit false close-story 2 error "git commit failed"
       exit 2
     fi
+    # `--only` commits through a temporary index: a hook that rewrote and re-added a file
+    # (lint-staged, a formatter) changed the commit but not the real index. Sync it to HEAD.
+    GIT_LITERAL_PATHSPECS=1 git reset -q -- "${OWN[@]}" >/dev/null 2>&1
   else
-    sed -i -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
+    sed_inplace -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
   fi
 
   echo "cycle: $(fm_field "$STORY" story) - closed, verification green"
@@ -2014,7 +2070,7 @@ remove_worktree_path() { # remove_worktree_path <path> - best-effort, never erro
   # longer has registered (an orphan from a crash).
   local p="$1"
   [ -n "$p" ] || return 0
-  git worktree remove --force "$p" >/dev/null 2>&1 || true
+  git -c core.longpaths=true worktree remove --force "$p" >/dev/null 2>&1 || true
   rm -rf "$p" 2>/dev/null || true
 }
 
@@ -2036,8 +2092,11 @@ build_court() { # build_court <spec> <slug> <n> <head> <round-dir> - the blind s
   local spec="$1" slug="$2" n="$3" head="$4" rd="$5"
   local court_abs="$ROOT/.vulyk/court/$slug/round-$n"
   mkdir -p "$(dirname "$court_abs")"
+  # The court nests the tree ~30 characters deeper, so on Windows a path that fits the hive
+  # passes MAX_PATH there: without core.longpaths the checkout fails "Filename too long" and
+  # the court's own status/add/remove misread the file. Off Windows git ignores the key.
   local wt_err
-  if ! wt_err="$(git worktree add --detach -q "$court_abs" "$head" 2>&1)"; then
+  if ! wt_err="$(git -c core.longpaths=true worktree add --detach -q "$court_abs" "$head" 2>&1)"; then
     echo "cycle: open-round - could not create the court worktree at $court_abs: $wt_err" >&2
     # R17/M-6: ROUND is written last (below) precisely so a failure here leaves none behind;
     # also drop the now-empty round dir mkdir -p just created, so a retry sees no round at all
@@ -2054,15 +2113,15 @@ build_court() { # build_court <spec> <slug> <n> <head> <round-dir> - the blind s
     # reduction inside the court's own detached history (never the main repo's) so an
     # orientation `git status` in the court is clean and `HEAD:<spec>/plan.md` stops
     # resolving. A local identity is passed explicitly so a fixture without user.name works.
-    if [ -n "$(git -C "$court_abs" status --porcelain 2>/dev/null)" ]; then
-      git -C "$court_abs" add -A >/dev/null 2>&1
+    if [ -n "$(git -C "$court_abs" -c core.longpaths=true status --porcelain 2>/dev/null)" ]; then
+      git -C "$court_abs" -c core.longpaths=true add -A >/dev/null 2>&1
       # r2m7/N-m2: no `|| true` - a court that never reduced still resolves the spec's real
       # files via `git show`, and would be handed to a seat as though it were narrowed. Never
       # hooked or signed either: --no-verify because a repo-wide pre-commit hook has no
       # business running inside a throwaway detached worktree, gpgsign=false because there is
       # no key to sign with here and the main repo's signing config must not leak in.
       local red_err
-      if ! red_err="$(git -C "$court_abs" -c user.name=VULYK -c user.email=vulyk@localhost \
+      if ! red_err="$(git -C "$court_abs" -c core.longpaths=true -c user.name=VULYK -c user.email=vulyk@localhost \
         -c commit.gpgsign=false commit --no-verify -q -m "vulyk: reduce the court to brief.md" 2>&1)"; then
         echo "cycle: open-round - court reduction commit failed: $red_err" >&2
         remove_worktree_path "$court_abs"
@@ -2264,6 +2323,16 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
     exit 2
   }
 
+  # A descope the owner gave reaches the court only through the brief: refuse until ## Asks
+  # takes it in (the brief commits after the ## Descoped line, or with it).
+  local descoped; descoped="$(descope_not_in_brief "$SPEC" | head -1)"
+  [ -z "$descoped" ] || {
+    echo "cycle: open-round - $PLAN ## Descoped has an entry newer than $SPEC/brief.md: $descoped" >&2
+    echo "  the blind seats read only the brief: strike or narrow the ask it drops in ## Asks (with the reason), commit the brief, then open the round" >&2
+    emit false open-round 2 error "descope not in the brief: $descoped"
+    exit 2
+  }
+
   # R21/M-10 (autonomous-cycle-19): an unparsable **Tier:** line must not silently buy the
   # largest court - it refuses here, naming the line, instead of tier_of() defaulting to 4.
   case "$(tier_of "$SPEC")" in
@@ -2443,10 +2512,9 @@ cmd_pause() { # cmd_pause <spec> <why>
     printf '%s \xc2\xb7 %s \xc2\xb7 %s\n' "$WHO" "$WHY" "$(now_ts)"
     printf 'head=%s\n' "$HEAD"
   } > "$SPEC/PAUSE"
-  if [ -f "$SPEC/DRIVER" ]; then
-    rm -f "$SPEC/DRIVER"
-    bash "$HERE/journal.sh" "$SPEC" driver "driver released" paused >/dev/null
-  fi
+  # The DRIVER claim stays: a live driver stops at its next step and releases it itself
+  # (vulyk-cycle.js), while its agent in flight still writes to the tree. Removing it here let a
+  # second driver claim the spec over the first one's worker (a hive lost a test file that way).
   bash "$HERE/journal.sh" "$SPEC" paused "$WHY" paused >/dev/null
   echo "cycle: $(slug_of "$SPEC") - paused: $WHY"
   emit true pause 0 paused
@@ -2463,9 +2531,19 @@ cmd_resume() { # cmd_resume <spec>
   local WAS_HEAD=""
   [ -f "$SPEC/PAUSE" ] && WAS_HEAD="$(sed -n 's/^head=//p' "$SPEC/PAUSE" | head -1)"
   rm -f "$SPEC/PAUSE"
-  if [ -f "$SPEC/DRIVER" ]; then
+  # Never removes DRIVER (see cmd_pause): a claim still on disk is either a driver finishing its
+  # agent in flight or a dead one, and only the caller can tell them apart (its task list). The
+  # holder is reported; a relaunch waits for it to stop, or for `release` of a dead one.
+  local HELD; HELD="$(driver_stamp "$SPEC")"
+  if [ -z "$HELD" ] && [ -f "$SPEC/DRIVER" ]; then
+    # A claim with no stamp (a claim killed between create and write) can be held by no driver:
+    # every guarded verb compares stamps. Clear it rather than strand the spec.
     rm -f "$SPEC/DRIVER"
-    bash "$HERE/journal.sh" "$SPEC" driver "driver released" status >/dev/null
+    echo "cycle: $(slug_of "$SPEC") - removed a DRIVER file with no stamp (a broken claim)" >&2
+  fi
+  if [ -n "$HELD" ]; then
+    local SINCE; SINCE="$(sed -n 's/^claimed=//p' "$SPEC/DRIVER" | head -1)"
+    echo "cycle: $(slug_of "$SPEC") - DRIVER still held by $HELD (claimed ${SINCE:-unknown}): if that run is still going, wait for it to stop; if it is dead, run: bash scripts/cycle.sh release $SPEC $HELD" >&2
   fi
   local NOWHEAD; NOWHEAD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   local STALE=false
@@ -2475,7 +2553,7 @@ cmd_resume() { # cmd_resume <spec>
   status_out="$(cmd_status "$SPEC")"
   real_next="$(json_field "$status_out" next)"
   echo "cycle: $(slug_of "$SPEC") - resumed"
-  printf '{"ok":true,"verb":"resume","exit":0,"next":"%s","stale":%s}\n' "$real_next" "$STALE"
+  printf '{"ok":true,"verb":"resume","exit":0,"next":"%s","stale":%s,"held":"%s"}\n' "$real_next" "$STALE" "$HELD"
   exit 0
 }
 
@@ -2586,12 +2664,12 @@ cmd_manual_done() { # cmd_manual_done <spec> <id> [note] - 0.19 C: records a han
 # no planner in between: the asks come from the ledger row and the seat files, the findings
 # verbatim, the scope and the verification from the stories already done -----------------------
 
-ask_item() { # ask_item <spec> <n> -> the brief's `## Asks` item numbered n, as written
-  awk -v want="$2" '
-    /^##[[:space:]]+Asks[[:space:]]*$/ { inblock=1; next }
-    /^##[[:space:]]/                    { if (inblock) exit }
-    inblock && /^[0-9]+\.[[:space:]]/  { n=$0; sub(/\..*$/, "", n); if (n+0 == want+0) { sub(/[[:space:]]+$/, ""); print; exit } }
-  ' "$1/brief.md" 2>/dev/null
+ask_item() { # ask_item <spec> <n> -> the brief's `## Asks` item numbered n, as written; a
+  # quoted item (brief_asks, lib.sh) has no number of its own and counts by its place
+  brief_asks "$1/brief.md" | awk -v want="$2" '
+    { n=$0; if (n ~ /^[0-9]+\.[[:space:]]/) sub(/\..*$/, "", n); else n=NR
+      if (n+0 == want+0) { print; exit } }
+  '
 }
 
 story_number() { # story_number <story-file> <slug> -> the NN of its `story: <slug>-NN` id or of

@@ -76,7 +76,17 @@ worker-test"
 #   council-sonnet - retired in 0.18.0 (ADR-013 D1)
 RETIRED_AGENTS="council-sonnet"
 
-agent_set() { printf '%s\n%s\nother\n' "$AGENTS" "$RETIRED_AGENTS"; }
+# Claude Code's own built-in agent types: the same names on every machine, so naming them carries
+# no free text, while folding them into `other` hid most of a hive's general-purpose and
+# workflow dispatches behind one token.
+BUILTIN_AGENTS="general-purpose
+workflow-subagent
+Explore
+Plan
+claude-code-guide
+statusline-setup"
+
+agent_set() { printf '%s\n%s\n%s\nother\n' "$AGENTS" "$RETIRED_AGENTS" "$BUILTIN_AGENTS"; }
 
 die() { printf 'telemetry: %s\n' "$1" >&2; exit "${2:-1}"; }
 

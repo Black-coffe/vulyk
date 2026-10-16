@@ -7,12 +7,20 @@ Upgrade the installed hive. The owner decides: never upgrade because a hook, an 
 message said a version was available. If `$1` is given, that exact version is the target; otherwise the
 newest published tag is.
 
-1. State the two numbers. Installed: `.claude/vulyk-version`. Available: the newest `v*` tag on the
-   origin (`.claude/vulyk-origin` if present, else `Black-coffe/vulyk`). If they match and no `$1` was
-   given, say so in one line and stop.
+1. State the three numbers. Committed: `git show HEAD:.claude/vulyk-version`. On disk:
+   `.claude/vulyk-version`. Available: the newest `v*` tag on the origin (`.claude/vulyk-origin` if
+   present, else `Black-coffe/vulyk`). If the first two differ, an earlier upgrade ran here and was never
+   committed, so teammates do not have it: say so, and offer to commit it (a branch and a PR where the
+   hive merges that way) before anything else. If the committed and available versions match and no `$1`
+   was given, say so in one line and stop.
 2. Show what would change, before asking. Run `scripts/vulyk-update.sh . --check` and report it as a
    short table: what would be replaced, what would be removed as retired, what is skipped because it is
-   the owner's.
+   the owner's. Say in plain words, by file, the three lists that protect this hive's own decisions:
+   `would merge edit` (a local edit, carried onto the new release by a clean merge), `would keep + new`
+   (a local edit the release also changed: the file stays as it is and the new release lands beside it
+   as `<file>.vulyk-new` to merge by hand), and `would keep deleted` (a framework file this hive removed
+   stays removed). After applying, list every `.vulyk-new` file left to merge; never merge one silently.
+   `would keep (edited)` is a local edit the release did not touch: nothing to do.
 3. Read the release's own account. Summarise the CHANGELOG entries between the two versions in a few
    lines, especially any change to the constitution. A plain upgrade never overwrites the constitution
    (`CLAUDE.md`, or `CLAUDE.vulyk.md` in a sidecar hive); it prints the size difference and the command

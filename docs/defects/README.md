@@ -82,6 +82,15 @@ Three more findings follow the same new/old rule: new is red, older than this RE
   changed since: the check missed a neighbour form. Add that form as a fixture and make the check fail on it.
   An uncommitted fixture edit counts as newest.
 
+## Promoted from hives
+
+A class the owner rejected in the work of several hives gets a card here too, so VULYK's own work carries the rule.
+Its hive quotes go under `## Seen in hives`, in the quote-line form, verbatim with people, clients and hives masked,
+one per hive. They are the evidence for the class, and each is still a card in its hive's own library, where it
+counts. They corrected hive work, not VULYK's, so they are not owner quotes here and do not count toward debt:
+the first remark on VULYK's own work goes under `## Owner quotes`, and a second makes the card debt as usual. A
+promoted card says under `## Check` why code cannot see the class, or names its check. `install.sh` ships a hive only this README, not the cards.
+
 ## The gate
 
 ```
@@ -101,6 +110,13 @@ the verdict. Check output goes to a log under `${TMPDIR:-/tmp}`. `DEFECTS_DIR` p
 | `upgrade-overwrites-host-edits` | An upgrade overwrites a hive's own edits and deletions in framework files | text | 1 | (spec `upgrade-keeps-host-edits`) | 2026-10-13 |
 | `host-internals-in-public-repo` | A host project's insides quoted into the public VULYK repository | block | 1 | `bash scripts/leak-check.sh <arg>` | 2026-10-13 |
 | `command-injection-follows-cwd` | A command's injection names its script relative to the session cwd | block | 1 | `bash scripts/injection-check.sh <arg>` | 2026-10-13 |
+| `work-handed-back-to-owner` | Work an agent can do is handed back to the owner as a to-do list | text | 1 (+2 hives) | - | 2026-10-13 |
+| `claim-not-from-source` | A claim made from memory, a docstring or a guess instead of the source that settles it | text | 0 (+4 hives) | - | - |
+| `measurement-unlike-reality` | A test or measurement that does not represent the reality it is used to judge | text | 0 (+4 hives) | - | - |
+| `safeguard-bypassable-or-late` | A safeguard that can be bypassed, passes silently on a missing input, or ships after what it guards | text | 0 (+3 hives) | - | - |
+| `done-without-real-run` | Work reported done without running it where it will really run | text | 0 (+3 hives) | - | - |
+| `outward-artifact-carries-internals` | An artifact going outward carries internal or client content beyond names | text | 0 (+2 hives) | - (name form: `host-internals-in-public-repo`) | - |
+| `owner-words-by-builder` | The owner's words or decision written by the builder | text | 0 (+2 hives) | - | - |
 
 **Trust.** `defects-check.sh` runs each card's `check:` as a shell command, and `lead-review` runs the gate on the
 branch under review. A card's `check:` is code of this repository, with the same trust as its tests: review a

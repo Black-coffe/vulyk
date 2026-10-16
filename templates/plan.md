@@ -39,7 +39,9 @@ wave-check.sh runs before each wave. -->
 
 ## Descoped
 <!-- Mid-build narrowing, appended as it happens - never silent. Each line: what was dropped, why,
-and the owner's line authorizing it, quoted. Only the owner removes a requirement. -->
+and the owner's line authorizing it, quoted. Only the owner removes a requirement. The same commit
+strikes or narrows the ask in brief.md's ## Asks: the blind seats read only the brief, and
+`cycle.sh open-round` refuses a descope the brief has not taken in. -->
 
 *(empty)*
 

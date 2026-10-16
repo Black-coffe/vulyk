@@ -24,16 +24,16 @@ const TERMINAL = ['green', 'escalated', 'paused', 'shipped']
 const ADVANCE_VERBS = ['branch', 'open-round', 'judge', 'repair']
 const SEAT_AGENT = { haiku: 'council-haiku', opus: 'council-opus', review: 'lead-review' }
 const BLIND = ['haiku', 'opus']
-// mirrors maxTurns in .claude/agents/*.md - update both together
-const CAPS = { 'worker-code': 90, 'worker-test': 90, 'council-haiku': 60, 'council-opus': 60, 'lead-review': 60 }
 const MAX_ITERATIONS = 40
 
 // Why a dispatch came back dead: a rejected agent() (carried as { threw }) or an empty return,
 // the shape a turn-cap death takes. Null for any non-empty text - the driver never reads it.
+// The cap is named by file, not by number: agent frontmatter is its one source, and a hive that
+// raises a maxTurns there needs no second edit here (the runtime cannot read the file).
 const reasonFor = (who, agentType, r) => {
   if (r && typeof r === 'object' && 'threw' in r) return `${who} threw: ${r.threw}`
   if (typeof r === 'string' && r.trim() !== '') return null
-  return `${who} returned empty - turn cap suspected (${agentType}, maxTurns ${CAPS[agentType] ?? 'unknown'} in .claude/agents/${agentType}.md)`
+  return `${who} returned empty - turn cap suspected (${agentType}, maxTurns in .claude/agents/${agentType}.md)`
 }
 const caught = (p) => p.catch((e) => ({ threw: e && e.message ? e.message : String(e) }))
 
@@ -110,7 +110,7 @@ const build = async (st) => {
     const retry = (misses.get(story.file) || 0) >= 1
     const prompt = `Your story: ${story.file}. Stamp: ${stamp}. Implement it per your protocol; your last step is \`bash scripts/cycle.sh close-story ${story.file} --commit --stamp ${stamp}\`.`
       + (retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
-    return caught(agent(prompt, { agentType: story.worker, model: retry ? TOP : story.model, phase: 'Build', label: story.story }))
+    return caught(agent(prompt, { agentType: story.worker, model: retry ? TOP : (story.model || undefined), phase: 'Build', label: story.story }))
   }))
   const res = await advance('')
   if (res.ok === false) return res

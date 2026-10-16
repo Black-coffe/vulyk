@@ -5,8 +5,9 @@ status: todo            # todo | done | blocked - close-story writes done, a dri
 returned:              # written by whoever builds the story, as its last edit: DONE | NEEDS_CONTEXT | WALL
 tier: 1                 # the spec's routing tier
 worker: worker-code     # worker-code | worker-test - the agent a Tier 3-4 wave dispatches
-model: sonnet           # the worker's family (ADR-015): sonnet builds, opus only for judgment-heavy work;
-                        # the driver reads it, and a second attempt runs on the gate model
+                        # no model line: the worker's own frontmatter decides (sonnet, or the hive's pin).
+                        # Add `model: opus` only for long-horizon or judgment-heavy work (ADR-015);
+                        # a second attempt runs on the gate model either way
 wave: 1                 # dispatch group: at Tier 3-4 one wave's workers run concurrently in one tree.
                         # Stories in one wave must declare disjoint `## Files` - wave-check.sh reports overlaps.
 blocked_by: []          # story ids that must be `done` first, e.g. [<slug>-01]. A story's wave
@@ -65,8 +66,15 @@ this story invites ("do not also migrate the old callers"), not generic prohibit
 <!--
 One command per line, each `&&` segment a literal cell of the constitution's `## Commands` table
 (`wave-check.sh` reports one that is not) - in its quiet form, because output under 30 000
-characters is pasted into the builder's context and resent every turn. `close-story` runs these
-lines, once, on the record; the builder runs only targeted checks while working.
+characters is pasted into the builder's context and resent every turn. A cell holding several
+backticked commands offers each; `<name>` in a cell stands for one or more arguments and `[<name>]`
+for none or more (no shell control characters, no argument starting with `-`), so `pytest <file>`
+admits `pytest tests/test_a.py`. A placeholder hands the story author that tool's arguments: put one
+only on a tool whose arguments are paths or targets, never on `make`, `npx`, `python -m` or anything
+that runs what its argument names.
+`close-story` runs these lines, once, on the record; the builder runs only targeted checks while
+working. A suite that skips its tests when a service or variable is missing exits 0 and records a
+green it never earned: name a command that fails instead (strict skips, or a check for the service).
 
 The command must be able to fail for this story: its scope has to reach the paths under `## Files`.
 `wave-check.sh` reports the obvious gap, but not an ignore file (`.prettierignore`,

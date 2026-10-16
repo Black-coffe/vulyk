@@ -58,6 +58,11 @@ Sonnet 5.5 shipped on 2026-09-28. The evidence and the source table are in
 2. **Stories default to `model: sonnet`.** Changed in `templates/story.md`, `cycle.sh status --json`,
    `queen-planner` and `/vulyk-plan`. A planner writes `model: opus` for a story that is long-horizon
    or judgment-heavy, and says why in one line.
+   *Amended 2026-10-16:* the default now lives in the worker's frontmatter, not the story. The
+   template carries no `model:` line, `status --json` emits `""` for none, and the driver then passes
+   no model, so `worker-code.md`/`worker-test.md` (`sonnet` as shipped) decide. A hive that pins
+   another model there is no longer overridden by a `sonnet` written into every story (study
+   `hive-feedback-2026-10`). `model: opus` on a story still wins, and the retry still climbs.
 3. **The black-box seat moves to `opus`.** It judges, and the workers now write on Sonnet. The plan to
    move it to Haiku is retired.
 4. **Effort.**

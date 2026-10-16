@@ -46,7 +46,7 @@ A secret that reaches git is rotated, not deleted.
 
 ## Profile
 
-What this project is; `/vulyk-bootstrap` fills it. A reviewer demands nothing beyond *Configurations that exist today*.
+What this project is; `/vulyk-bootstrap` fills it. Write to the owner in *Owner language*. A reviewer demands nothing beyond *Configurations that exist today*.
 A filled *Client path* adds the black-box seat, the only reader of *Browser MCP*. `/vulyk-ship` prints *Release / deploy*.
 
 <!-- VULYK:PROFILE:START -->
@@ -57,10 +57,11 @@ A filled *Client path* adds the black-box seat, the only reader of *Browser MCP*
 | Where source lives | `<fill in>` |
 | Test framework | `<fill in>` |
 | Commit convention | `<fill in>` |
-| **Configurations that exist today** | `<fill in - single node? multi-process? a database at all? what is deferred and to when>` |
-| Client path | `<fill in - how a person reaches the running thing: URL + a test login, a CLI entry point, or a browser runner's quiet command; "none: library only" is an honest answer>` |
-| Browser MCP | `<fill in - chrome-devtools \| claude-in-chrome \| none; optional, read by the council-haiku seat only, read-only, on a separate test profile - none is the honest default without one>` |
-| Release / deploy | `<fill in - default branch; how a version is published (tag + push? npm publish? CI on merge?) and who presses the button>` |
+| **Configurations that exist today** | `<fill in - single node? multi-process? a database? what is deferred, to when>` |
+| Client path | `<fill in - how a person reaches the running thing: URL + test login, CLI entry point, a browser runner's quiet command, or "none: library only">` |
+| Browser MCP | `<fill in - chrome-devtools \| claude-in-chrome \| none (default); read by the council-haiku seat only, read-only, on a separate test profile>` |
+| Release / deploy | `<fill in - default branch; how a version ships (tag + push? CI on merge?) and who presses the button>` |
+| Owner language | `<fill in - ru, uk, en (default)>` |
 | Telemetry | off - anonymized weekly anomaly bundle (codes and numbers only, docs/telemetry.md); on = /vulyk-evolve prints the send command, never sends |
 <!-- VULYK:PROFILE:END -->
 

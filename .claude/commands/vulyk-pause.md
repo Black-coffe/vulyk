@@ -9,7 +9,8 @@ Pause: "$ARGUMENTS" (the first token is the spec slug; anything after it is the 
    given"). Print exactly what it prints: the `cycle: <slug> - paused: <why>` line and its JSON.
 2. Tell the owner what this does to a loop already running. Every mutating `cycle.sh` verb checks
    `PAUSE` first and exits 3 without acting, so:
-   - the Workflow driver stops at its next `advance`; the agent in flight finishes first;
+   - the Workflow driver stops at its next `advance`; the agent in flight finishes first, and the driver then
+     releases its `DRIVER` claim itself (pause never removes it);
    - a solo or agent loop in a session stops at its next `cycle.sh` call;
    - a worker's edits are already on disk; only its `close-story` waits for `/vulyk-resume`;
    - a seat or reviewer report in flight is not recorded while paused; after `/vulyk-resume` the loop

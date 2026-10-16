@@ -73,6 +73,7 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     docs/adr/*|docs/wiki/*)       case "$f" in */README.md) return 0 ;; esac; return 1 ;;   # vulyk's own ADRs/wiki (dir still created; a skeleton README ships)
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
     docs/defects/*)               case "$f" in docs/defects/README.md) return 0 ;; esac; return 1 ;;   # vulyk's own defect cards; the index skeleton ships
+    .claude/vulyk-paperwork)      return 1 ;;   # each hive's own paperwork globs (lib.sh is_paperwork_path): never shipped, owned or removed
     .claude/state/*)              return 2 ;;   # hook state (defect dedup keys): runtime, per-machine
     .claude/settings.local.json|.claude/settings.json.vulyk-bak)
                                    return 2 ;;
@@ -101,6 +102,73 @@ replace_file() { # replace_file <src> <dest> - copy beside, then rename over. An
   cp -p "$1" "$2"
 }
 
+# An upgrade replaces a framework-owned file only when the hive's copy is a release copy: it equals
+# (line endings ignored) a blob some v* tag of the release clone shipped. Anything else is the
+# hive's decision (a tuned maxTurns, a patched hook): merged three-way onto the new release, base =
+# what v$PREV shipped, or kept byte for byte with the new release beside it as <f>.vulyk-new on a
+# conflict or with no base. A path the last install shipped that the hive no longer has stays
+# deleted. (ADR-005 amendment 2026-10-16; card upgrade-overwrites-host-edits.)
+SHIPPED_BLOBS=""; NO_HISTORY=""
+shipped_blobs() { # once per run, in the main shell: every blob id $SRC's history ever held under
+  # OWNED - each v* tag and every commit (a hive hotfixed by hand between releases holds a commit's
+  # copy, not a tag's). A source with no v* tag (a downloaded ZIP, a shallow checkout) cannot tell
+  # an edit from a release copy, so it keeps the old rule - replace - and says so.
+  SHIPPED_BLOBS="$(mktemp)"
+  if [ -z "$(git -C "$SRC" tag -l 'v*' 2>/dev/null)" ]; then
+    NO_HISTORY=1
+    echo "  NOTE: $SRC holds no release history (no v* tag), so this upgrade cannot tell your edits"
+    echo "        from release copies and replaces framework files as before. To keep your edits,"
+    echo "        upgrade from a git clone: scripts/vulyk-update.sh"
+    return 0
+  fi
+  local t
+  # shellcheck disable=SC2086
+  {
+    for t in HEAD $(git -C "$SRC" tag -l 'v*' 2>/dev/null); do
+      git -C "$SRC" ls-tree -r "$t" -- $OWNED 2>/dev/null | awk '{ print $3 }'
+    done
+    git -C "$SRC" log --all --no-renames --no-abbrev --format= --raw -- $OWNED 2>/dev/null | awk '{ print $4 }'
+  } | sort -u > "$SHIPPED_BLOBS" || true
+}
+release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte some release's
+  [ -n "$NO_HISTORY" ] && return 0
+  local h; h="$(tr -d '\r' < "$DEST/$1" | git hash-object --stdin 2>/dev/null)" || return 1
+  [ -n "$h" ] && grep -qxF "$h" "$SHIPPED_BLOBS"
+}
+upgrade_edited() { # upgrade_edited <rel> - a hive edit of a framework file: merge, or keep + .vulyk-new
+  local f="$1" base ours theirs out rc
+  if [ "$CHECK" = "--check" ]; then
+    if git -C "$SRC" cat-file -e "v$PREV:$f" 2>/dev/null; then
+      base="$(mktemp)"; ours="$(mktemp)"; theirs="$(mktemp)"
+      git -C "$SRC" show "v$PREV:$f" | tr -d '\r' > "$base"; tr -d '\r' < "$DEST/$f" > "$ours"; tr -d '\r' < "$SRC/$f" > "$theirs"
+      if cmp -s "$base" "$theirs"; then echo "  would keep (edited) $f"
+      elif git merge-file -q -p "$ours" "$base" "$theirs" > /dev/null 2>&1; then echo "  would merge edit $f"
+      else echo "  would keep + new $f -> $f.vulyk-new"; fi
+      rm -f "$base" "$ours" "$theirs"
+    else
+      echo "  would keep + new $f -> $f.vulyk-new"
+    fi
+    return 0
+  fi
+  if git -C "$SRC" cat-file -e "v$PREV:$f" 2>/dev/null; then
+    base="$(mktemp)"; ours="$(mktemp)"; theirs="$(mktemp)"; out="$(mktemp)"
+    git -C "$SRC" show "v$PREV:$f" | tr -d '\r' > "$base"; tr -d '\r' < "$DEST/$f" > "$ours"; tr -d '\r' < "$SRC/$f" > "$theirs"
+    if cmp -s "$base" "$theirs"; then   # the release left it alone: nothing to merge, and a pending .vulyk-new stays
+      echo "  keep (edited)  $f"
+      rm -f "$base" "$ours" "$theirs" "$out"; return 0
+    fi
+    rc=0; git merge-file -q -p "$ours" "$base" "$theirs" > "$out" 2>/dev/null || rc=$?   # set -e: a conflict is an answer, not an error
+    if [ "$rc" -eq 0 ]; then
+      replace_file "$out" "$DEST/$f"; rm -f "$DEST/$f.vulyk-new"
+      echo "  merged edit    $f"
+      rm -f "$base" "$ours" "$theirs" "$out"; return 0
+    fi
+    rm -f "$base" "$ours" "$theirs" "$out"
+  fi
+  cp -p "$SRC/$f" "$DEST/$f.vulyk-new"
+  echo "  kept + new     $f -> $f.vulyk-new   (your edit kept; merge the new release in by hand)"
+}
+
 copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading a framework-owned file
   local rel="$1" sc
   ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' -print0 ) | while IFS= read -r -d '' f; do
@@ -115,11 +183,19 @@ copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading 
     printf '%s\n' "$f" >> "$NEW_MANIFEST"
     if [ -e "$DEST/$f" ]; then
       if [ -n "$UPGRADE" ] && owned "$f" && ! cmp -s "$SRC/$f" "$DEST/$f"; then
-        if [ "$CHECK" = "--check" ]; then echo "  would update   $f"
-        else replace_file "$SRC/$f" "$DEST/$f"; echo "  update         $f"; fi
+        if release_copy "$f"; then
+          if [ "$CHECK" = "--check" ]; then echo "  would update   $f"
+          else replace_file "$SRC/$f" "$DEST/$f"; echo "  update         $f"; fi
+        else
+          upgrade_edited "$f"
+        fi
       else
         echo "  skip (exists)  $f"
       fi
+    elif [ -n "$UPGRADE" ] && owned "$f" && [ -f "$DEST/.claude/vulyk-manifest" ] \
+      && tr -d '\r' < "$DEST/.claude/vulyk-manifest" | grep -qxF "$f"; then
+      if [ "$CHECK" = "--check" ]; then echo "  would keep deleted $f"
+      else echo "  kept deleted   $f   (the last install shipped it and this hive removed it)"; fi
     else
       if [ "$CHECK" = "--check" ]; then echo "  would copy     $f"
       else mkdir -p "$DEST/$(dirname "$f")"; cp -p "$SRC/$f" "$DEST/$f"; echo "  copy           $f"; fi
@@ -199,10 +275,11 @@ print_profile_placeholder() {
 | Where source lives | `<fill in>` |
 | Test framework | `<fill in>` |
 | Commit convention | `<fill in>` |
-| **Configurations that exist today** | `<fill in - single node? multi-process? a database at all? what is deferred and to when>` |
-| Client path | `<fill in - how a person reaches the running thing: URL + a test login, a CLI entry point, or a browser runner's quiet command; "none: library only" is an honest answer>` |
-| Browser MCP | `<fill in - chrome-devtools \\| claude-in-chrome \\| none; optional, read by the council-haiku seat only, read-only, on a separate test profile - none is the honest default without one>` |
-| Release / deploy | `<fill in - default branch; how a version is published (tag + push? npm publish? CI on merge?) and who presses the button>` |
+| **Configurations that exist today** | `<fill in - single node? multi-process? a database? what is deferred, to when>` |
+| Client path | `<fill in - how a person reaches the running thing: URL + test login, CLI entry point, a browser runner's quiet command, or "none: library only">` |
+| Browser MCP | `<fill in - chrome-devtools \\| claude-in-chrome \\| none (default); read by the council-haiku seat only, read-only, on a separate test profile>` |
+| Release / deploy | `<fill in - default branch; how a version ships (tag + push? CI on merge?) and who presses the button>` |
+| Owner language | `<fill in - ru, uk, en (default)>` |
 PLACEHOLDER
   telemetry_row off
 }
@@ -1021,6 +1098,58 @@ PYPLUG
   esac
 }
 
+# Windows: Claude Code's bundled ripgrep can come back empty there, so Glob and Grep answer
+# "No files found" to the session and every agent. USE_BUILTIN_RIPGREP=0 points Claude Code at
+# the system rg instead (docs: troubleshooting, "Search and discovery issues"); with no rg on
+# PATH it would leave search nothing to run, so the key is written only where one is found. It
+# goes to settings.local.json, never the committed settings.json: whether THIS machine has an
+# rg says nothing about the next clone. A value the hive set in either file stands.
+wire_ripgrep() {
+  case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) ;; *) return 0 ;; esac
+  local file="$DEST/.claude/settings.local.json" py="" rc=0
+  local lbl=".claude/settings.local.json -> env: USE_BUILTIN_RIPGREP = \"0\" (the system rg)"
+  local byhand="\"env\": { \"USE_BUILTIN_RIPGREP\": \"0\" }"
+  grep -qsF '"USE_BUILTIN_RIPGREP"' "$DEST/.claude/settings.json" "$file" && return 0
+  if ! type -P rg >/dev/null 2>&1; then
+    echo "  NOTE: no ripgrep on PATH. If Glob and Grep answer \"No files found\" in this project,"
+    echo "  run: winget install BurntSushi.ripgrep.MSVC   and then this installer again."
+    return 0
+  fi
+  [ "$CHECK" = "--check" ] && { echo "  would wire     $lbl"; return 0; }
+  if [ ! -e "$file" ]; then
+    printf '{\n  "env": {\n    "USE_BUILTIN_RIPGREP": "0"\n  }\n}\n' > "$file"
+    echo "  wire           $lbl"
+    return 0
+  fi
+  py="$(command -v python3 || command -v python || true)"
+  [ -n "$py" ] && "$py" - "$file" <<'PYRG' || rc=$?
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path, encoding='utf-8') as fh:
+        data = json.load(fh)
+except Exception:
+    sys.exit(4)                                  # unparseable: leave it entirely alone
+env = data.get('env', {}) if isinstance(data, dict) else None
+if not isinstance(env, dict):
+    sys.exit(4)
+env['USE_BUILTIN_RIPGREP'] = '0'
+data['env'] = env
+with open(path, 'w', encoding='utf-8') as fh:
+    json.dump(data, fh, indent=2)
+    fh.write('\n')
+PYRG
+  if [ -n "$py" ] && [ "$rc" -eq 0 ]; then
+    echo "  wire           $lbl"
+    echo "                 (the file was re-indented by the edit)"
+    return 0
+  fi
+  echo ""
+  echo "  NOTE: .claude/settings.local.json could not be edited safely - left untouched."
+  echo "  For Glob and Grep to use the system rg here, add by hand:"
+  echo "      $byhand"
+}
+
 # VULYK's own watcher mod (spec vulyk-watcher): a project-scope directory marketplace never loads
 # (measured on 2.1.300: "marketplace not registered"), so the mod is installed once per MACHINE,
 # user scope, from VULYK's GitHub marketplace; outside a VULYK hive it stays silent by itself.
@@ -1088,7 +1217,7 @@ install_mod() {
 # wiring: append only what is missing, in a marked block, and say what was added.
 ensure_gitignore() {
   local file="$DEST/.gitignore" missing=0 line have
-  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER .claude/state/"
+  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER .claude/state/ *.vulyk-new"
 
   # A CRLF .gitignore (core.autocrlf) must still match line for line, or every run re-appends.
   have="$( { tr -d '\r' < "$file"; } 2>/dev/null || true)"
@@ -1157,7 +1286,8 @@ ensure_gitattributes() {
 }
 
 NEW_MANIFEST="$(mktemp)"
-trap 'rm -f "$NEW_MANIFEST"' EXIT
+trap 'rm -f "$NEW_MANIFEST" "$SHIPPED_BLOBS"' EXIT
+[ -n "$UPGRADE" ] && shipped_blobs
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr docs/defects; do
   if [ -d "$SRC/$tree" ]; then copy_tree "$tree"; fi
 done
@@ -1261,6 +1391,7 @@ wire_hook PreToolUse defects-inject.sh 'Edit|Write|MultiEdit|NotebookEdit|Bash'
 wire_hook SessionStart defects-inject.sh '' reset
 wire_permissions
 wire_plugin
+wire_ripgrep
 install_mod vulyk-watcher@vulyk
 install_mod vulyk-pulse@vulyk
 # The empty trees a fresh hive needs. Guarded like every other write: a dry run that

@@ -232,8 +232,8 @@ git add -A && git commit -qm "spec(wstory): fixture" >/dev/null
 
 out="$(council status docs/specs/wstory --json)"
 printf '%s' "$out" | jq -c '.wave_stories' \
-  | expect "wave_stories: worker-code + worker-test objects, file name order, repeat parsed (default 1, explicit 3), model defaults to sonnet (ADR-015)" \
-    '[{"file":"docs/specs/wstory/wstory-01-alpha.md","story":"wstory-01","worker":"worker-code","model":"sonnet","repeat":1},{"file":"docs/specs/wstory/wstory-02-beta.md","story":"wstory-02","worker":"worker-test","model":"sonnet","repeat":3}]'
+  | expect "wave_stories: worker-code + worker-test objects, file name order, repeat parsed (default 1, explicit 3), no model: line -> empty model (the worker frontmatter decides, ADR-015 amended)" \
+    '[{"file":"docs/specs/wstory/wstory-01-alpha.md","story":"wstory-01","worker":"worker-code","model":"","repeat":1},{"file":"docs/specs/wstory/wstory-02-beta.md","story":"wstory-02","worker":"worker-test","model":"","repeat":3}]'
 
 echo "status --json: an open round with missing seats"
 rd1="$(mk_open_round status1 1)"
@@ -1793,12 +1793,12 @@ EOF
 git add -A && git commit -qm "spec(lr31w): fixture" >/dev/null
 out="$(council status docs/specs/lr31w --json)"
 printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: ready A and not-ready B (blocked_by todo/blocked C) -> wave_stories names only A" \
-  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"sonnet","repeat":1}]'
+  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"","repeat":1}]'
 sed -i 's/^status: blocked/status: done/' docs/specs/lr31w/lr31w-02-c.md
 git add -A && git commit -qm "lr31w: blocker C done" >/dev/null
 out="$(council status docs/specs/lr31w --json)"
 printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: blocker C done -> both A and B are listed" \
-  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"sonnet","repeat":1},{"file":"docs/specs/lr31w/lr31w-03-b.md","story":"lr31w-03","worker":"worker-code","model":"sonnet","repeat":1}]'
+  '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"","repeat":1},{"file":"docs/specs/lr31w/lr31w-03-b.md","story":"lr31w-03","worker":"worker-code","model":"","repeat":1}]'
 
 echo "close-story: r2m9 - a ## Commands cell with its own && matches whole; adding a further && true is refused, naming the segment"
 mkdir -p docs/specs/cstoryr2m9
@@ -1891,6 +1891,30 @@ out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'tier' && echo "  ok    unparsable Tier line -> exit 2, naming Tier" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 set_tier oround1 4
+
+echo "open-round: a ## Descoped entry the brief never took in -> exit 2, naming it (a hive lost three rounds to a plan-only descope)"
+sed -i 's/^\*(empty)\*$/- ask 3 narrowed to the happy path - owner: "only the happy path for now"/' docs/specs/oround1/plan.md
+out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"descope not in the brief: - ask 3 narrowed' \
+  && echo "  ok    an uncommitted plan-only descope refuses the round" || { echo "::error::exit=$ex out=$out"; fail=1; }
+git add -A && git commit -qm "oround1: descope in plan.md only" >/dev/null
+out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'strike or narrow the ask' \
+  && echo "  ok    committed in plan.md alone, it still refuses and says what to edit" || { echo "::error::exit=$ex out=$out"; fail=1; }
+sed -i 's/^3\. ask number 3 works$/3. ask number 3 works on the happy path (narrowed by the owner)/' docs/specs/oround1/brief.md
+git add -A && git commit -qm "oround1: the brief takes the descope in" >/dev/null
+
+echo "open-round: a non-ASCII spec whose descope was committed with the brief passes the descope check (quotePath must not C-quote the path)"
+git config core.quotePath true
+mk_spec 'оплата' 3
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/oplata#; s/^\*(empty)\*$/- ask 2 dropped - owner: "not this circle"/' 'docs/specs/оплата/plan.md'
+sed -i 's/^2\. ask number 2 works$/2. (descoped by the owner: not this circle)/' 'docs/specs/оплата/brief.md'
+git add -A && git commit -qm "оплата: descope with the brief" >/dev/null
+out="$(council open-round 'docs/specs/оплата' 2>&1)"; ex=$?
+{ [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'tier' && ! printf '%s' "$out" | grep -qF 'descope not in the brief'; } \
+  && echo "  ok    the descope committed with the brief is not reported; the round stops at the next check (Tier)" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+git rm -rq 'docs/specs/оплата' && git commit -qm "drop the non-ASCII descope fixture" >/dev/null
 
 echo "open-round: opens round 1 - ROUND file, court reduced to brief.md, journal, next dispatch:..."
 out="$(council open-round docs/specs/oround1 --commit)"; ex=$?
@@ -2078,6 +2102,27 @@ git log -1 --format=%s | grep -qF "vulyk(courtred1): open-round 1" \
   || { echo "::error::main repo HEAD commit message: $(git log -1 --format=%s)"; fail=1; }
 
 fi # --quick: end of the court-reduction skip
+
+echo "open-round: a path that fits the hive but passes MAX_PATH inside the court still builds a clean court (Windows: Filename too long)"
+mk_open_spec lplong1 2
+set_tier lplong1 3
+# 248 characters from the drive letter: under Windows' 260 in the hive, over it in
+# .vulyk/court/lplong1/round-1/. Off Windows the case simply passes.
+lproot="$(cygpath -m "$T" 2>/dev/null || printf '%s' "$T")"
+lpn=$((248 - ${#lproot} - 1 - 5))
+lprel="lpsrc/$(printf 'd%.0s' $(seq 1 $((lpn / 2))))/$(printf 'f%.0s' $(seq 1 $((lpn - lpn / 2 - 1))))"
+mkdir -p "$(dirname "$lprel")" && printf 'x\n' > "$lprel"
+git add -A && git commit -qm "lplong1: a long path" >/dev/null
+out="$(council open-round docs/specs/lplong1 --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    open-round builds the court" || { echo "::error::exit=$ex out=$out"; fail=1; }
+courtlp="$(sed -n 's/^court=//p' docs/specs/lplong1/council/round-1/ROUND 2>/dev/null)"
+[ -n "$courtlp" ] && [ -f "$courtlp/$lprel" ] && echo "  ok    the long-path file is checked out in the court" \
+  || { echo "::error::no $lprel in court '$courtlp'"; fail=1; }
+[ -n "$courtlp" ] && [ -z "$(git -C "$courtlp" -c core.longpaths=true status --porcelain 2>&1)" ] \
+  && echo "  ok    and the court's reduction left its status clean" \
+  || { echo "::error::court status: $(git -C "$courtlp" -c core.longpaths=true status --porcelain 2>&1)"; fail=1; }
+[ -n "$courtlp" ] && git -c core.longpaths=true worktree remove --force "$courtlp" >/dev/null 2>&1
+git rm -rq lpsrc && git commit -qm "lplong1: drop the long path" >/dev/null
 if full; then # --quick skips from here to the 0.18 section: the reopen walk, the ceiling variants, the committed-verb walks, stories 14-17, every pinned-commit replay, the C5 block
 # --- reopen: ceiling +3 after ESCALATE, then a fourth round opens ------------------------------
 
@@ -3184,21 +3229,19 @@ out="$(council claim docs/specs/driverrp1 eeee5555 2>&1)"; ex=$?
   || { echo "::error::claim under pause: exit=$ex out=$out"; fail=1; }
 rm -f docs/specs/driverrp1/PAUSE
 
-echo "pause/resume: each removes an existing DRIVER and journal.md gains a driver released line"
+echo "pause/resume: neither removes DRIVER (a live driver releases it itself; a second claim must not slip in under its worker); resume reports the holder"
 mk_spec driverp1 2
 council claim docs/specs/driverp1 aaaa1111 >/dev/null 2>&1
 [ -f docs/specs/driverp1/DRIVER ] || { echo "::error::setup: DRIVER missing before pause"; fail=1; }
 council pause docs/specs/driverp1 "testing" >/dev/null 2>&1
-[ ! -f docs/specs/driverp1/DRIVER ] && grep -qF 'driver released' docs/specs/driverp1/journal.md \
-  && echo "  ok    pause removes DRIVER and journals 'driver released'" \
-  || { echo "::error::pause: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no)"; fail=1; }
-printf 'stamp=aaaa1111\nclaimed=2020-01-01T00:00:00Z\n' > docs/specs/driverp1/DRIVER  # PAUSE already active; write DRIVER directly, claim is itself PAUSE-gated
-before="$(grep -c 'driver released' docs/specs/driverp1/journal.md)"
-council resume docs/specs/driverp1 >/dev/null 2>&1
-after="$(grep -c 'driver released' docs/specs/driverp1/journal.md)"
-[ ! -f docs/specs/driverp1/DRIVER ] && [ "$after" -gt "$before" ] \
-  && echo "  ok    resume removes DRIVER and journals another 'driver released' line" \
-  || { echo "::error::resume: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no) before=$before after=$after"; fail=1; }
+grep -qF 'stamp=aaaa1111' docs/specs/driverp1/DRIVER 2>/dev/null   && echo "  ok    pause keeps DRIVER"   || { echo "::error::pause: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no)"; fail=1; }
+out="$(council resume docs/specs/driverp1 2>&1)"
+grep -qF 'stamp=aaaa1111' docs/specs/driverp1/DRIVER 2>/dev/null && printf '%s' "$out" | tail -1 | grep -qF '"held":"aaaa1111"'   && printf '%s' "$out" | grep -qF 'release docs/specs/driverp1 aaaa1111'   && echo "  ok    resume keeps DRIVER, reports held:<stamp> and the release command for a dead driver"   || { echo "::error::resume: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no) out=$out"; fail=1; }
+out="$(council claim docs/specs/driverp1 bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && echo "  ok    a second driver's claim after resume is refused while the first still holds it"   || { echo "::error::second claim after resume: exit=$ex out=$out"; fail=1; }
+council release docs/specs/driverp1 aaaa1111 >/dev/null 2>&1
+out="$(council resume docs/specs/driverp1 2>&1)"
+printf '%s' "$out" | tail -1 | grep -qF '"held":""' && echo "  ok    with no claim, resume reports held empty"   || { echo "::error::resume without DRIVER: $out"; fail=1; }
 
 echo "gated verbs: open-round, record-seat, judge, close-story each exit 2 held by <holder> without --stamp or with a wrong --stamp, no new file/row/commit; matching --stamp proceeds; PAUSE+DRIVER exits 3, not held by"
 mk_open_spec gatedv1 3
@@ -3336,17 +3379,16 @@ probe_release() {
     && printf '%s' "$out3" | grep -qF 'held by aaaa1111' && echo ok || echo FAIL
 }
 probe_pauserelease() {
+  # pause and resume keep a held DRIVER; resume reports it (a second driver must not claim
+  # under the first one's worker still in flight).
   mk_spec ppause1 2
   council claim docs/specs/ppause1 aaaa1111 >/dev/null 2>&1
   council pause docs/specs/ppause1 "why" >/dev/null 2>&1
-  local ok=true
-  [ -f docs/specs/ppause1/DRIVER ] && ok=false
-  grep -q 'driver released' docs/specs/ppause1/journal.md 2>/dev/null || ok=false
-  printf 'stamp=aaaa1111\nclaimed=now\n' > docs/specs/ppause1/DRIVER
-  council resume docs/specs/ppause1 >/dev/null 2>&1
-  [ -f docs/specs/ppause1/DRIVER ] && ok=false
-  local jcnt; jcnt="$(grep -c 'driver released' docs/specs/ppause1/journal.md 2>/dev/null)"; jcnt="${jcnt:-0}"
-  [ "$jcnt" -eq 2 ] || ok=false
+  local ok=true out
+  [ -f docs/specs/ppause1/DRIVER ] || ok=false
+  out="$(council resume docs/specs/ppause1 2>&1)"
+  [ -f docs/specs/ppause1/DRIVER ] || ok=false
+  printf '%s' "$out" | tail -1 | grep -qF '"held":"aaaa1111"' || ok=false
   $ok && echo ok || echo FAIL
 }
 probe_gated() {
@@ -3760,6 +3802,27 @@ n="$(ls docs/specs/r18rp/*-repair-round-1.md | wc -l | tr -d ' ')"
 bash scripts/wave-check.sh docs/specs/r18rp | expect "wave-check: the repair story is dispatchable" "3 stories, dispatchable"
 out="$(bash scripts/trace-check.sh docs/specs/r18rp)"
 printf '%s' "$out" | expect "trace-check: its > N. quotes trace to ## Asks" "backward: 0 unfound + 0 storyless"
+
+echo "one ## Asks parser (lib.sh brief_asks): Asks written as > lines alone open a round, count by place, and repair quotes the line"
+mkdir -p docs/specs/r18rq
+cp "$SRC/templates/plan.md" docs/specs/r18rq/plan.md
+printf '# r18rq (brief)\n\n## Request\nbuild the thing\n\n## Asks\n> quoted ask one works\n>\n> quoted ask two works\n\n## Answers\n> not an ask\n' > docs/specs/r18rq/brief.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-16/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/r18rq#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rq/plan.md
+printf 'q\n' > r18rq-a.txt
+printf -- '---\nstory: r18rq-01\nstatus: done\nwave: 1\n---\n# A\n\n## Requirements\n> quoted ask one works\n\n## Files\n- r18rq-a.txt\n\n## Verification\n`true`\n' > docs/specs/r18rq/r18rq-01-a.md
+git add -A && git commit -qm "r18rq: fixture" >/dev/null
+out="$(council open-round docs/specs/r18rq --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    open-round counts the quoted asks (it stopped on '## Asks missing or empty' before)" \
+  || { echo "::error::open-round on a quoted ## Asks: exit=$ex out=$out"; fail=1; }
+seat_report opus 1 GR | council record-seat docs/specs/r18rq 1 opus >/dev/null 2>&1
+printf 'VERDICT: PASS\nReviewed.\n' | council record-seat docs/specs/r18rq 1 review >/dev/null 2>&1
+council judge docs/specs/r18rq --commit >/dev/null 2>&1
+grep '"spec":"r18rq"' memory/stats/council.jsonl | tail -1 | jq -c '[.asks, .red]' | expect "the row: 2 asks, ask 2 RED" '[2,[2]]'
+council repair docs/specs/r18rq --commit >/dev/null 2>&1
+sed -n '/^## Requirements$/,/^## Findings$/p' docs/specs/r18rq/r18rq-02-repair-round-1.md 2>/dev/null \
+  | expect "repair quotes ask 2 as the brief's line" "> quoted ask two works"
+out="$(bash scripts/trace-check.sh docs/specs/r18rq)"
+printf '%s' "$out" | expect "trace-check: the repair quote traces to the brief" "backward: 0 unfound + 0 storyless"
 
 echo "ADR-013 D2: advance - branch and open-round in one call, stop at the first agent boundary, key order fixed"
 mk_spec r18ad 2

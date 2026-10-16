@@ -89,6 +89,11 @@ else bad "could not render the shipped constitution: $(cat "$T/render.err")"; fi
 for m in VULYK:PROFILE:START VULYK:PROFILE:END VULYK:COMMANDS:START VULYK:COMMANDS:END; do
   [ "$(grep -c "<!-- $m -->" "$SRC/CLAUDE.md")" -eq 1 ] && ok "marker $m once" || bad "marker $m missing or repeated"
 done
+grep -q '^| Owner language | ' "$T/shipped.md" && tr -d '\r' < "$SRC/CLAUDE.md" | grep -q 'Write to the owner in \*Owner language\*' \
+  && ok "the shipped Profile has an Owner language row and the constitution says to use it" || bad "Owner language row or its rule missing"
+# a hive's /vulyk-update read a stamp an uncommitted upgrade had written and said "nothing to do"
+grep -qF 'git show HEAD:.claude/vulyk-version' "$SRC/.claude/commands/vulyk-update.md" \
+  && ok "/vulyk-update compares the committed stamp, not only the one on disk" || bad "/vulyk-update reads only the stamp on disk"
 desc="$(cat "$SRC"/.claude/agents/*.md "$SRC"/.claude/commands/*.md | tr -d '\r' | grep '^description:' | wc -c | tr -d ' ')"
 if [ "$desc" -le "$DESCRIPTIONS_MAX_BYTES" ]; then ok "agent + command descriptions within $DESCRIPTIONS_MAX_BYTES B ($desc B)"
 else bad "agent + command descriptions $desc B > $DESCRIPTIONS_MAX_BYTES B"; fi
@@ -293,14 +298,16 @@ echo "--- /vulyk-gc commit line refuses to commit a CONSOLIDATED.md that lost mo
 GC_LINE="$(tr -d '\r' < "$SRC/.claude/commands/vulyk-gc.md" | sed -n 's/^`\(f=memory\/learnings\/CONSOLIDATED\.md;.*\)`$/\1/p')"
 [ -n "$GC_LINE" ] && ok "vulyk-gc.md carries the guarded commit line" || bad "no guarded commit line in vulyk-gc.md"
 entries() { local i; printf '# Consolidated learnings\n\n## Topic\n'; for i in $(seq 1 "$1"); do printf '%s. lesson number %s, with a reason\n' "$i" "$i"; done; }
-gc_case() { # gc_case <dir> <entries at HEAD, or new> <entries now> - runs the line, prints its output
-  local g="$T/$1"; mkdir -p "$g/memory/learnings" && cd "$g" || return 1
+gc_case() { # gc_case <dir> <entries at HEAD, or new> <entries now> [index name] - runs the line, prints its output
+  local g="$T/$1" idx="memory/${4:-memory.md}"; mkdir -p "$g/memory/learnings" && cd "$g" || return 1
   git init -q -b main . && git config user.name t && git config user.email t@t && git config core.autocrlf false
-  printf '# index\n' > memory/memory.md
+  printf '# index\n' > "$idx"
   if [ "$2" != new ]; then entries "$2" > memory/learnings/CONSOLIDATED.md; fi
   git add -A && git commit -q -m base
   entries "$3" > memory/learnings/CONSOLIDATED.md
+  printf -- '- a pointer gc added\n' >> "$idx"
   bash -c "$GC_LINE" 2>&1; echo "commits=$(git rev-list --count HEAD)"
+  echo "committed: $(git diff --name-only HEAD~1 HEAD 2>/dev/null | paste -sd' ' -)"
   cd "$SRC" || return 1
 }
 gc_case cut 10 4 > "$T/gc-cut"
@@ -313,6 +320,10 @@ expect "10 entries -> 7: committed" "commits=2" < "$T/gc-trim"
 gc_case fresh new 3 > "$T/gc-fresh"
 expect "a file new at HEAD: committed" "commits=2" < "$T/gc-fresh"
 expect "a file new at HEAD prints 0 as the old count" "CONSOLIDATED.md: entries 0→3" < "$T/gc-fresh"
+expect "the index is committed with the learnings" "committed: memory/learnings/CONSOLIDATED.md memory/memory.md" < "$T/gc-trim"
+gc_case upper 10 7 MEMORY.md > "$T/gc-upper"   # a hive whose index is memory/MEMORY.md failed every gc run
+expect "an index named MEMORY.md: committed" "commits=2" < "$T/gc-upper"
+expect "an index named MEMORY.md: committed with the learnings" "committed: memory/MEMORY.md memory/learnings/CONSOLIDATED.md" < "$T/gc-upper"
 
 echo "--- /vulyk-handoff runs from any folder of the hive (handoff-cwd)"
 # Claude Code keeps a Bash `cd` that stays inside the project, so `dump` can run from any subfolder,

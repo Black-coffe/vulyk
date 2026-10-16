@@ -22,6 +22,9 @@
 # stop, where the human reads the report and decides.
 
 set -u
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/lib.sh
+. "$HERE/lib.sh"   # brief_asks(), the one ## Asks parser, shared with cycle.sh
 
 SPEC="${1:-}"
 if [ -z "$SPEC" ] || [ ! -d "$SPEC" ]; then
@@ -50,13 +53,10 @@ BRIEF_LINES="$(sed -n 's/^>[[:space:]]\{0,1\}//p' "$BRIEF" | while IFS= read -r 
   printf '%s\n' "$l" | normalize; echo; done | grep -v '^$')"
 
 # brief.md's `## Asks` items, one normalized item per line - the third legitimate quote source
-# (ADR-013 D4). They are numbered list lines, not `> ` quotes, so BRIEF_TEXT never holds them;
-# a quote must equal a whole item, number and all, never a fragment of one.
-ASK_ITEMS="$(awk '
-  /^##[[:space:]]+Asks[[:space:]]*$/ { inblock=1; next }
-  /^##[[:space:]]/                    { if (inblock) exit }
-  inblock && /^[0-9]+\.[[:space:]]/  { print }
-' "$BRIEF" | while IFS= read -r l; do printf '%s\n' "$l" | normalize; echo; done | grep -v '^$')"
+# (ADR-013 D4). Read by lib.sh's brief_asks, the parser cycle.sh counts them with. Numbered items
+# are list lines, not `> ` quotes, so BRIEF_TEXT never holds them; a quote must equal a whole
+# item, number and all, never a fragment of one.
+ASK_ITEMS="$(brief_asks "$BRIEF" | while IFS= read -r l; do printf '%s\n' "$l" | normalize; echo; done | grep -v '^$')"
 
 # plan.md `## Plan deltas` section - the second legitimate quote source.
 DELTA_TEXT=""

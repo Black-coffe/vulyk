@@ -144,9 +144,14 @@ agent files on every launch). The Tier 4 fold remains on the older heredoc path,
   triggered only by that verb's exit 2 `file:` error, never a first choice, except for the
   Tier 4 folded review, which stays on the heredoc.
 
+**Amendment, 2026-10-16:** `CAPS` is gone. The empty-return reason now reads `turn cap suspected (<agent>, maxTurns
+in .claude/agents/<agent>.md)`, naming the file, not a number. Hives raise caps in agent frontmatter, and the installer
+keeps that edit on upgrade. One hive raised its council seats to 140 turns after two empty returns and had to patch the
+driver's copy as well (study `hive-feedback-2026-10`, finding 3). A number copied into the driver says 60 while the
+frontmatter says 140, and the driver cannot read the file. `tests/driver.test.sh` fails on any per-agent table in the
+driver.
+
 ## Revisit when
 
-A `CAPS` entry drifts from an agent's actual `maxTurns:` (caught by the plan's mirroring
-comment requiring both to change together) - or a future story folds the Tier 4 review into a
-single file-backed dispatch, at which point the named heredoc exception should be re-examined
-rather than silently carried forward.
+A future story folds the Tier 4 review into a single file-backed dispatch, at which point the
+named heredoc exception should be re-examined rather than silently carried forward.

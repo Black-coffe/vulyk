@@ -248,12 +248,46 @@ printf 'v2\n' >> hook-app.txt
 shiph | expect "hook log + real code dirt -> 03 still not clean" "working tree is not clean"
 git checkout -- hook-app.txt
 
-echo "skills-json-exempt: scope-check still counts skills.json; ship-check stage 03 passes it like the anomaly log"
+echo "skills-json-exempt: scope-check drops skills.json like all paperwork (A18 reversed 2026-10-16); ship-check stage 03 passes it like the anomaly log"
 printf '{"n":1}\n' > memory/stats/skills.json
-bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | grep -qF 'memory/stats/skills.json' \
-  && echo "  ok    scope-check: skills.json dirty and undeclared is listed as out_of_scope" \
-  || { echo "::error::scope-check output: $(bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md)"; fail=1; }
+bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | expect "scope-check: skills.json dirty and undeclared is not out of scope" "changed 0, out of scope 0"
 git checkout -- memory/stats/scope.jsonl   # scope-check logs its run; that log is not this case's dirt
+echo "hive paperwork: .claude/vulyk-paperwork globs are paperwork for scope-check; without the file nothing changes"
+mkdir -p docs/specs/hooklog/smoke
+printf 'ran\n' > docs/specs/hooklog/smoke/run-1.md
+bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | expect "no .claude/vulyk-paperwork: a smoke report still counts" "! docs/specs/hooklog/smoke/run-1.md"
+# open-round's dirty check runs before its ## Asks check: hooklog's brief has no ## Asks, so a
+# tree that passes the dirty check is refused on the Asks line instead.
+bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round without the file: the smoke report is dirt" "?? docs/specs/hooklog/smoke/run-1.md"
+printf '# smoke reports live in the spec\n\n  docs/specs/*/smoke/*  \r\n docs/specs/*/runs/ \r\n' > .claude/vulyk-paperwork
+git add .claude/vulyk-paperwork && git commit -qm "hive paperwork globs" -- .claude/vulyk-paperwork
+out="$(bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md)"
+printf '%s' "$out" | expect "a hive glob (padded, CRLF) drops the smoke report from scope" "changed 0, out of scope 0"
+bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round: the hive glob's smoke report is not dirt" "## Asks"
+is_paperwork_path '# smoke reports live in the spec' && { echo "::error::a comment line matched as a glob"; fail=1; } \
+  || echo "  ok    a # comment line is not a glob"
+is_paperwork_path src/app.txt && { echo "::error::a path no glob names became paperwork"; fail=1; } \
+  || echo "  ok    a path no glob names stays code"
+echo "hive paperwork: a non-ASCII or spaced spec dir and a trailing dir/ glob are paperwork to open-round, ship-check 03 and the staleness rule"
+pw_base="$(git rev-parse HEAD)"
+mkdir -p "docs/specs/оплата/smoke" "docs/specs/a b/smoke" docs/specs/hooklog/runs
+printf 'ran\n' > "docs/specs/оплата/smoke/run-1.md"; printf 'ran\n' > "docs/specs/a b/smoke/run-1.md"
+printf 'ran\n' > docs/specs/hooklog/runs/r.md
+git checkout -- memory/stats/scope.jsonl
+bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round: non-ASCII, spaced and dir/ glob paths are not dirt" "## Asks"
+shiph | expect "ship-check 03: a tree dirty only in hive glob paths is clean" "clean (hook-written stats pending:"
+shiph | expect "ship-check 03 names the non-ASCII path as itself" "docs/specs/оплата/smoke/run-1.md"
+pw_paths=("docs/specs/оплата" "docs/specs/a b" docs/specs/hooklog/runs docs/specs/hooklog/smoke)
+git add -- "${pw_paths[@]}" && git commit -qm "smoke reports after GREEN" -- "${pw_paths[@]}"
+paperwork_only "$PWD" "$pw_base" HEAD && echo "  ok    a commit of only hive glob paths (non-ASCII, spaced, dir/) does not stale a round" \
+  || { echo "::error::paperwork_only called $(git diff --name-only "$pw_base" HEAD | tr '\n' ' ') code"; fail=1; }
+git mv hook-app.txt docs/specs/hooklog/runs/moved.txt
+bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round: code renamed into a hive glob path is still dirt" "hook-app.txt"
+git mv docs/specs/hooklog/runs/moved.txt hook-app.txt
+git rm -rq -- "${pw_paths[@]}" && git commit -qm "drop the smoke reports" -- "${pw_paths[@]}"
+rm -rf docs/specs/hooklog/smoke
+git rm -q .claude/vulyk-paperwork && git commit -qm "drop the hive paperwork globs" -- .claude/vulyk-paperwork
+git checkout -- memory/stats/scope.jsonl
 rm -f memory/stats/anomalies.jsonl; git checkout -- memory/stats/anomalies.jsonl 2>/dev/null
 [ "$(git status --porcelain)" = "?? memory/stats/skills.json" ] && echo "  ok    precondition: skills.json is the only dirty path" \
   || { echo "::error::precondition: dirty paths are $(git status --porcelain | tr '\n' ' ')"; fail=1; }
@@ -349,6 +383,22 @@ printf '%s' "$out" | grep -qF 'trc-01-t.md' && { echo "::error::a whole ask item
   || echo "  ok    '> 2. the second ask works' traces to ## Asks item 2"
 printf '%s' "$out" | expect "a fragment of an item is not an item" "trc-02-t.md: quote found in NEITHER"
 
+echo "one ## Asks parser (lib.sh brief_asks, read by cycle.sh and trace-check.sh): numbered lines when the block has any, else each > line's text"
+mkdir -p docs/specs/qa
+cp "$SRC"/templates/plan.md docs/specs/qa/plan.md
+printf '## Asks\n1. a numbered ask\n> its quoted copy\n2. another ask  \n' > docs/specs/qa/brief.md
+[ "$(brief_asks docs/specs/qa/brief.md | tr '\n' '|')" = "1. a numbered ask|2. another ask|" ] \
+  && echo "  ok    a numbered block reads as before: its > lines are not items" \
+  || { echo "::error::numbered block: $(brief_asks docs/specs/qa/brief.md | tr '\n' '|')"; fail=1; }
+printf '# qa\n\n## Request\n> build the quote demo\n\n## Asks\n> the first ask works  \n>\n> the second ask works\n\n## Answers\n> not an ask\n' > docs/specs/qa/brief.md
+[ "$(brief_asks docs/specs/qa/brief.md | tr '\n' '|')" = "the first ask works|the second ask works|" ] \
+  && echo "  ok    a block of > lines alone: each non-empty line's text, nothing past the next ## heading" \
+  || { echo "::error::quoted block: $(brief_asks docs/specs/qa/brief.md | tr '\n' '|')"; fail=1; }
+out="$(bash scripts/cycle.sh briefed docs/specs/qa 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    briefed counts the quoted asks (it refused '## Asks missing or empty' before)" \
+  || { echo "::error::briefed on a quoted ## Asks: exit=$ex out=$out"; fail=1; }
+rm -rf docs/specs/qa
+
 echo "0.19 C: blocked_by manual:<id> - a hand step stops the wave until manual-done records it; no later wave is built past it"
 mkdir -p docs/specs/man
 cp "$SRC"/templates/plan.md docs/specs/man/plan.md
@@ -396,6 +446,16 @@ printf '%s' "$out" | expect "wave-check lists the declared hand step and its sta
 man_story 04 todo 4 '[manual:../x]'
 bash scripts/wave-check.sh docs/specs/man | expect "wave-check reports a manual id with .." "manual:    man-04 is blocked_by 'manual:../x'"
 git add -A && git commit -qm "man: done" >/dev/null
+
+echo "one source for a worker's model: a story without model: leaves it to the worker agent's frontmatter"
+mkdir -p docs/specs/tpl .claude/agents
+sed -e 's/<slug>/tpl/g' -e 's/tpl-NN/tpl-01/' "$SRC"/templates/story.md > docs/specs/tpl/tpl-01-a.md
+printf -- '---\nname: worker-code\nmodel: opus\n---\n' > .claude/agents/worker-code.md
+bash scripts/cycle.sh status docs/specs/tpl --json | expect "a story from the shipped template carries no model, so a hive's pin in worker-code.md holds" \
+  '"story":"tpl-01","worker":"worker-code","model":"","repeat"'
+sed -i 's/^wave: 2$/wave: 2\nmodel: opus/' docs/specs/man/man-02-m.md
+bash scripts/cycle.sh status docs/specs/man --json | expect "the story's own model: line still wins" '"worker":"worker-code","model":"opus"'
+git checkout -q -- docs/specs/man/man-02-m.md && rm -rf .claude/agents docs/specs/tpl
 
 echo "close-story-scope-refusal: close-story --commit refuses an edit outside ## Files that would leave the tree dirty for open-round"
 mkdir -p docs/specs/stray
@@ -473,6 +533,146 @@ rm -f stray-b-scratch.txt
 out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-05.md --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && [ -z "$(git status --porcelain -- stray-app.txt stray-other.txt)" ] \
   && echo "  ok    scratch removed, the last close exits 0 and the tree is clean" || { echo "::error::exit=$ex out=$out"; fail=1; }
+
+echo "close-story commits only its own paths, and a failed commit leaves nothing of the story staged"
+stray_story 06
+git add -A && git commit -qm "stray: story 06" >/dev/null
+printf 'v6\n' > stray-app.txt
+mkdir -p memory/stats; printf '{"x":6}\n' > memory/stats/skills.json; git add memory/stats/skills.json   # staged by someone else
+mkdir -p .git/hooks; printf '#!/bin/sh\nexit 1\n' > .git/hooks/pre-commit; chmod +x .git/hooks/pre-commit
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-06.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && [ "$(git diff --cached --name-only)" = "memory/stats/skills.json" ] && grep -q '^status: in-progress' docs/specs/stray/stray-06.md \
+  && echo "  ok    a failed commit (hook) unstages the story's paths, keeps others' staging and status:" \
+  || { echo "::error::exit=$ex staged=$(git diff --cached --name-only | tr '\n' ' ') out=$out"; fail=1; }
+rm -f .git/hooks/pre-commit
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-06.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && ! git show --name-only --format= HEAD | grep -qx 'memory/stats/skills.json' && [ "$(git diff --cached --name-only)" = "memory/stats/skills.json" ] \
+  && echo "  ok    close-story's commit leaves a staged path it does not own out of the commit" \
+  || { echo "::error::exit=$ex commit=$(git show --name-only --format= HEAD | tr '\n' ' ') out=$out"; fail=1; }
+git reset -q -- memory/stats/skills.json; rm -f memory/stats/skills.json
+
+echo "close-story --commit: a non-ASCII name and a [bracket] path commit as themselves; a formatting hook leaves the index in sync"
+mkdir -p "докс" "app/[id]"; printf 'v1\n' > "докс/нотатка.md"; printf 'v1\n' > "app/[id]/p.txt"
+cat > docs/specs/stray/stray-07.md <<'EOF'
+---
+story: stray-07
+spec: stray
+status: in-progress
+returned: DONE
+wave: 7
+---
+# Stray fixture 07
+
+## Files
+- stray-app.txt
+- докс/нотатка.md
+- app/[id]/p.txt
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "stray: story 07" >/dev/null
+printf 'v7\n' > stray-app.txt; printf 'v7\n' > "докс/нотатка.md"; printf 'v7\n' > "app/[id]/p.txt"
+printf '#!/bin/sh\nprintf "fmt\\n" >> stray-app.txt && git add stray-app.txt\n' > .git/hooks/pre-commit; chmod +x .git/hooks/pre-commit
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-07.md --commit 2>&1)"; ex=$?
+rm -f .git/hooks/pre-commit
+committed="$(git -c core.quotePath=false show --name-only --format= HEAD)"
+[ "$ex" -eq 0 ] && printf '%s\n' "$committed" | grep -qxF "докс/нотатка.md" && printf '%s\n' "$committed" | grep -qxF "app/[id]/p.txt" \
+  && echo "  ok    the Cyrillic and [bracket] paths are in the story's commit" || { echo "::error::exit=$ex committed=$committed out=$out"; fail=1; }
+[ -z "$(git status --porcelain)" ] && git show HEAD:stray-app.txt | grep -qx fmt \
+  && echo "  ok    the hook's rewrite is in the commit and the tree is clean after (index synced)" || { echo "::error::status=$(git status --porcelain | tr '\n' ' ')"; fail=1; }
+
+echo "cycle.sh under a BSD (macOS) sed, and a Profile whose Commit convention is conventional: chore(...) subjects"
+REAL_SED="$(command -v sed)"; BSD="$(mktemp -d)"
+cat > "$BSD/sed" <<'EOF'
+#!/bin/sh
+# A BSD sed stand-in: there a bare -i reads the next argument as its backup suffix and breaks.
+for a in "$@"; do [ "$a" = "-i" ] && { echo "sed: bare -i (BSD sed takes the next argument as a suffix)" >&2; exit 1; }; done
+exec "$REAL_SED" "$@"
+EOF
+chmod +x "$BSD/sed"
+bsd() { REAL_SED="$REAL_SED" PATH="$BSD:$PATH" bash scripts/cycle.sh "$@"; }
+cp CLAUDE.md "$BSD/CLAUDE.md.orig"
+printf '\n## Profile\n\n| Field | Value |\n|---|---|\n| Commit convention | Conventional Commits, enforced by commitlint |\n' >> CLAUDE.md
+mkdir -p docs/specs/conv
+cp "$SRC"/templates/plan.md docs/specs/conv/plan.md
+printf '> build the conv demo\n\n## Asks\n1. one ask\n' > docs/specs/conv/brief.md
+printf 'v1\n' > conv-app.txt
+cat > docs/specs/conv/conv-01-first.md <<'EOF'
+---
+story: conv-01
+spec: conv
+status: in-progress
+returned: DONE
+wave: 1
+---
+# Conv fixture
+
+## Files
+- conv-app.txt
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "conv: setup, a conventional Commit convention" >/dev/null
+out="$(bsd briefed docs/specs/conv --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^\*\*Briefed:\*\* via' docs/specs/conv/plan.md && [ "$(git log -1 --format=%s)" = "chore(vulyk-conv): briefed" ] \
+  && echo "  ok    briefed under BSD sed rewrites the Briefed line and commits chore(vulyk-<slug>): briefed" \
+  || { echo "::error::exit=$ex subject=$(git log -1 --format=%s) out=$out"; fail=1; }
+out="$(bsd branch docs/specs/conv --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -qx '\*\*Branch:\*\* vulyk/conv' docs/specs/conv/plan.md && [ "$(git log -1 --format=%s)" = "chore(vulyk-conv): branch vulyk/conv" ] \
+  && echo "  ok    branch under BSD sed rewrites the Branch line and commits chore(vulyk-<slug>): branch" \
+  || { echo "::error::exit=$ex subject=$(git log -1 --format=%s) out=$out"; fail=1; }
+printf 'v2\n' > conv-app.txt
+out="$(bsd close-story docs/specs/conv/conv-01-first.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' docs/specs/conv/conv-01-first.md && [ "$(git log -1 --format=%s)" = "chore(story-conv-01): Conv fixture" ] \
+  && echo "  ok    close-story under BSD sed sets status: done and commits chore(story-<id>): <title>" \
+  || { echo "::error::exit=$ex subject=$(git log -1 --format=%s) out=$out"; fail=1; }
+[ -z "$(git status --porcelain)" ] && echo "  ok    no sed backup file is left behind" \
+  || { echo "::error::left behind: $(git status --porcelain | tr '\n' ' ')"; fail=1; }
+git checkout -q -
+cp "$BSD/CLAUDE.md.orig" CLAUDE.md; rm -rf "$BSD"
+git add -A && git commit -qm "conv: back to the default Commit convention" >/dev/null
+
+echo "command_cell_exists: each backticked command of a cell, and <name> / [<name>] placeholders without shell control characters"
+CELLS="$(mktemp)"
+cat > "$CELLS" <<'EOF'
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Defects | `bash scripts/defects-check.sh [<arg>]` |
+| One test | `pytest <file>` |
+| Two | `bash tests/a.sh` or `bash tests/b.sh` |
+| Pipe | `git ls-files '*.sh' \| xargs -n1 bash -n` |
+| Unfilled | `<fill in - the quiet variant>` |
+| Bare | `<cmd>` |
+| Redirect | `sort < in.txt > out.txt` |
+| Multi | `make a` or `make b <z>` |
+| Syntax | `bash -n <файл>.sh` |
+EOF
+cell_case() { # cell_case <yes|no> <command>
+  local got=no; command_cell_exists "$CELLS" "$2" && got=yes
+  [ "$got" = "$1" ] && echo "  ok    $1: $2" || { echo "::error::command_cell_exists '$2': expected $1, got $got"; fail=1; }
+}
+cell_case yes 'bash scripts/defects-check.sh'
+cell_case yes 'bash scripts/defects-check.sh docs/specs/x'
+cell_case yes 'pytest tests/a.py tests/b.py'
+cell_case no  'pytest'
+cell_case no  'pytest a.py; rm -rf x'
+cell_case no  'pytest $(id)'
+cell_case no  'pytest a.py | tee x'
+cell_case yes 'bash tests/b.sh'
+cell_case yes "git ls-files '*.sh' | xargs -n1 bash -n"
+cell_case no  'bash scripts/defects-checkXsh'
+cell_case no  'rm -rf x'
+cell_case no  'sort x y out.txt'
+cell_case yes 'make b foo'
+cell_case no  'make a` or `make b foo'
+cell_case no  'pytest -p evil'
+cell_case no  'pytest a.py -p evil'
+cell_case yes 'bash -n deploy.sh'
+rm -f "$CELLS"
 
 [ -e "$MARK" ] && fail=1
 exit $fail

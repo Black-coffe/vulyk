@@ -55,6 +55,6 @@ UNASKED: <what the owner likely meant but the brief never asked, or "none">
 BREACH: none | <what you read outside COURT, and what you re-verified after>
 ```
 
-One `ASK` line per item of `## Asks`, numbered as the brief numbers them, no extras. `VERDICT` is `RED`
-if any `ASK` is RED, `N/A` if every `ASK` is N/A, else `GREEN`. Rounds and ceilings are `cycle.sh
-judge`'s business, not yours.
+One `ASK` line per item of `## Asks`, numbered as the brief numbers them (a block of `> ` lines
+alone: 1, 2, ... in order), no extras. `VERDICT` is `RED` if any `ASK` is RED, `N/A` if every `ASK`
+is N/A, else `GREEN`. Rounds and ceilings are `cycle.sh judge`'s business, not yours.

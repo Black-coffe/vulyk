@@ -120,8 +120,9 @@ expect_eq "enum is exactly 10 codes" "10" "$(tel enum | grep -c .)"
 tel enum | expect_absent "enum prints codes only, no prose" " "
 tel agents | expect "agents prints a framework agent" "cycle-clerk"
 tel agents | expect "agents prints the catch-all token" "other"
-expect_eq "agents = .claude/agents/*.md basenames + council-sonnet (retired, still legal) + other" \
-  "$(( $(ls "$HIVE"/.claude/agents/*.md | wc -l) + 2 ))" "$(tel agents | grep -c .)"
+expect_eq "agents = .claude/agents/*.md basenames + council-sonnet (retired, still legal) + 6 built-in types + other" \
+  "$(( $(ls "$HIVE"/.claude/agents/*.md | wc -l) + 8 ))" "$(tel agents | grep -c .)"
+tel agents | expect "agents prints a built-in agent type" "general-purpose"
 tel agents | expect "a retired framework agent stays a legal token" "council-sonnet"
 tel agents | expect_absent "agents does not print the .md extension" ".md"
 
@@ -142,6 +143,9 @@ expect_eq "a framework agent token lands as given" "cycle-clerk" \
 tel record agent_prefix_high 60000 50000 --ref agent:b --agent worker-01-core
 expect_eq "a dispatch name outside the set lands as other" "other" \
   "$(grep -F '"ref":"agent:b"' "$LOG" | jq -r '.agent')"
+tel record agent_prefix_high 60000 50000 --ref agent:c --agent Explore
+expect_eq "a built-in agent type lands as given" "Explore" \
+  "$(grep -F '"ref":"agent:c"' "$LOG" | jq -r '.agent')"
 
 BEFORE="$(grep -c . "$LOG")"
 ERR="$(tel record not_a_code 1 0 --ref session:z 2>&1 >/dev/null)"; RC=$?
@@ -530,6 +534,24 @@ expect_eq "agent_empty maps a non-framework agentType to other" "other" \
 FINAL_ROWS="$(grep -c . "$LOG")"
 telpy scan --transcript "$PROJ/sid1.jsonl" --final >/dev/null 2>&1
 expect_eq "a second --final scan appends nothing" "$FINAL_ROWS" "$(grep -c . "$LOG")"
+
+# Claude Code's built-in agent types are named, not folded into other (hive feedback 2026-10:
+# 245 rows in 30 days said only "other"). The case of the name is part of it: `explore` is not one.
+BIPROJ="$T/biproj"; mkdir -p "$BIPROJ/sidb/subagents/workflows/wf1"
+agent_file "$BIPROJ/sidb/subagents/agent-g1.jsonl"              60000 tool_use general-purpose
+agent_file "$BIPROJ/sidb/subagents/workflows/wf1/agent-g2.jsonl" 60000 text     workflow-subagent
+agent_file "$BIPROJ/sidb/subagents/agent-g3.jsonl"              60000 text     explore
+printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}\n' > "$BIPROJ/sidb.jsonl"
+: > "$LOG"
+telpy scan --transcript "$BIPROJ/sidb.jsonl" --final >/dev/null 2>&1
+expect_eq "agent_prefix_high names a general-purpose subagent" "general-purpose" \
+  "$(grep '"code":"agent_prefix_high"' "$LOG" | grep -F '"ref":"agent:agent-g1.jsonl"' | jq -r '.agent')"
+expect_eq "agent_prefix_high names a workflow subagent" "workflow-subagent" \
+  "$(grep -F '"ref":"agent:agent-g2.jsonl"' "$LOG" | jq -r '.agent')"
+expect_eq "agent_empty names a general-purpose subagent" "general-purpose" \
+  "$(grep '"code":"agent_empty"' "$LOG" | jq -r '.agent')"
+expect_eq "a near-miss of a built-in name (wrong case) is other" "other" \
+  "$(grep -F '"ref":"agent:agent-g3.jsonl"' "$LOG" | jq -r '.agent')"
 
 # Major 5, the other half of the bound: with no --transcript there is no session to scope to,
 # so no subagent file is read even though one is above threshold.
@@ -1072,20 +1094,23 @@ cat "$T/up-check.out" | expect "--check reports the pending row" "would set     
 NOMARK="$T/hive-nomarkers"; mkdir -p "$NOMARK"
 # An upgrade run through the hive's own scripts/vulyk-update.sh replaces that very script. An
 # in-place copy made the old process read the new file from its old offset and execute the
-# tail (upgrading a 0.17 hive to 0.18); install.sh now copies beside and renames over.
-SELF="$T/hive-self"; mkdir -p "$SELF"
-bash "$SRC/install.sh" "$SELF" --telemetry off > "$T/self-install.out" 2>&1
+# tail (upgrading a 0.17 hive to 0.18); install.sh now copies beside and renames over. The
+# hand-written updater below is a hive edit to a source with release history (case 21), so the
+# upgrade runs from a copy with none, which replaces as before.
+SELF="$T/hive-self"; SELFSRC="$T/rel-self"; mkdir -p "$SELF" "$SELFSRC"
+( cd "$SRC" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$SELFSRC"
+bash "$SELFSRC/install.sh" "$SELF" --telemetry off > "$T/self-install.out" 2>&1
 {
   printf '#!/usr/bin/env bash\n'
   printf '# padding line %s - the offset the old process resumes from must land inside the new file\n' $(seq 1 40)
-  printf 'bash "%s/install.sh" "%s" --upgrade --telemetry off > /dev/null 2>&1\n' "$SRC" "$SELF"
+  printf 'bash "%s/install.sh" "%s" --upgrade --telemetry off > /dev/null 2>&1\n' "$SELFSRC" "$SELF"
   printf 'echo "updater: after the upgrade"\n'
   printf 'echo "updater: done"\n'
 } > "$SELF/scripts/vulyk-update.sh"
 expect_eq "an upgrade run from the hive's own updater lets that updater finish cleanly" \
   "updater: after the upgrade|updater: done" "$(bash "$SELF/scripts/vulyk-update.sh" 2>&1 | paste -sd'|')"
 expect_eq "... and leaves the release's updater in place" "0" \
-  "$(cmp -s "$SRC/scripts/vulyk-update.sh" "$SELF/scripts/vulyk-update.sh"; echo $?)"
+  "$(cmp -s "$SELFSRC/scripts/vulyk-update.sh" "$SELF/scripts/vulyk-update.sh"; echo $?)"
 
 bash "$SRC/install.sh" "$NOMARK" --telemetry off > "$T/nomark-install.out" 2>&1
 sed -i '/VULYK:PROFILE:START/d; /VULYK:PROFILE:END/d' "$NOMARK/CLAUDE.md"
@@ -1413,6 +1438,57 @@ bash "$SRC/install.sh" "$YSKBAD" --telemetry off > "$T/ysk-bad.out" 2>&1
 expect_eq "an unparseable settings.json is left byte for byte" '{"enabledPlugins": [' "$(tr -d '\r\n' < "$YSKBAD/.claude/settings.json")"
 cat "$T/ysk-bad.out" | expect "... with the line to add by hand" "\"enabledPlugins\": { \"$YSK\": true }"
 
+# wire_ripgrep: on Windows, with a system rg on PATH, USE_BUILTIN_RIPGREP=0 goes to the hive's
+# settings.local.json (the machine's file, never the committed one); off Windows, with no rg, or
+# with the hive's own value in either file, nothing is written. uname and rg are stubbed.
+RGWIN="$T/rg-win"; RGLIN="$T/rg-lin"; RGNONE="$T/rg-none"; mkdir -p "$RGWIN" "$RGLIN" "$RGNONE"
+printf '#!/bin/sh\necho MINGW64_NT-10.0-22631\n' > "$RGWIN/uname"
+printf '#!/bin/sh\necho Linux\n' > "$RGLIN/uname"
+cp "$RGWIN/uname" "$RGNONE/uname"
+printf '#!/bin/sh\nexit 0\n' > "$RGWIN/rg"; cp "$RGWIN/rg" "$RGLIN/rg"
+chmod +x "$RGWIN/uname" "$RGLIN/uname" "$RGNONE/uname" "$RGWIN/rg" "$RGLIN/rg"
+rg_val() { jq -r '.env.USE_BUILTIN_RIPGREP | tostring' "$1" 2>/dev/null | tr -d '\r'; }
+RGLBL="wire           .claude/settings.local.json -> env: USE_BUILTIN_RIPGREP"
+RG1="$T/hive-rg"; mkdir -p "$RG1"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG1" --telemetry off --check > "$T/rg-check.out" 2>&1
+cat "$T/rg-check.out" | expect "Windows + rg: --check names the key it would wire" "would wire     .claude/settings.local.json -> env: USE_BUILTIN_RIPGREP"
+expect_eq "... and writes no settings.local.json" "0" "$([ -e "$RG1/.claude/settings.local.json" ] && echo 1 || echo 0)"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG1" --telemetry off > "$T/rg.out" 2>&1
+cat "$T/rg.out" | expect "Windows + rg: the key is wired, and said so" "$RGLBL"
+expect_eq "... as \"0\" in settings.local.json, not in the committed settings.json" "0 null" \
+  "$(rg_val "$RG1/.claude/settings.local.json") $(rg_val "$RG1/.claude/settings.json")"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG1" --upgrade > "$T/rg-again.out" 2>&1
+cat "$T/rg-again.out" | expect_absent "a second run says nothing about it" "USE_BUILTIN_RIPGREP"
+RG2="$T/hive-rg-own"; mkdir -p "$RG2/.claude"
+printf '{"permissions":{"allow":["Bash(ls:*)"]}}\n' > "$RG2/.claude/settings.local.json"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG2" --telemetry off > /dev/null 2>&1
+expect_eq "an owner's settings.local.json gets the key and keeps its permission" "0 1" \
+  "$(rg_val "$RG2/.claude/settings.local.json") $(jq -r '[.permissions.allow[] | select(. == "Bash(ls:*)")] | length' "$RG2/.claude/settings.local.json" | tr -d '\r')"
+RG3="$T/hive-rg-set"; mkdir -p "$RG3/.claude"
+printf '{"env":{"USE_BUILTIN_RIPGREP":"1"}}\n' > "$RG3/.claude/settings.json"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG3" --telemetry off > "$T/rg-set.out" 2>&1
+expect_eq "the hive's own value in settings.json stands, and none is added locally" "1 null" \
+  "$(rg_val "$RG3/.claude/settings.json") $(rg_val "$RG3/.claude/settings.local.json")"
+RG4="$T/hive-rg-lin"; mkdir -p "$RG4"
+PATH="$RGLIN:$PATH" bash "$SRC/install.sh" "$RG4" --telemetry off > "$T/rg-lin.out" 2>&1
+expect_eq "off Windows nothing is written, rg or not" "null 0" \
+  "$(rg_val "$RG4/.claude/settings.local.json") $(grep -c 'USE_BUILTIN_RIPGREP' "$T/rg-lin.out")"
+# No rg: drop every PATH directory that holds one (a box with rg beside bash cannot run this case).
+NORGPATH="$RGNONE"
+while IFS= read -r d; do [ -e "$d/rg" ] || [ -e "$d/rg.exe" ] || NORGPATH="$NORGPATH:$d"; done <<< "$(printf '%s' "$PATH" | tr ':' '\n')"
+if PATH="$NORGPATH" type -P bash cp jq >/dev/null 2>&1 && ! PATH="$NORGPATH" type -P rg >/dev/null 2>&1; then
+  RG5="$T/hive-rg-none"; mkdir -p "$RG5"
+  PATH="$NORGPATH" bash "$SRC/install.sh" "$RG5" --telemetry off > "$T/rg-none.out" 2>&1
+  cat "$T/rg-none.out" | expect "Windows without rg: a NOTE names the install" "winget install BurntSushi.ripgrep.MSVC"
+  expect_eq "... and nothing is written" "null" "$(rg_val "$RG5/.claude/settings.local.json")"
+else
+  echo "  skip  Windows without rg: rg shares a PATH directory with bash here"
+fi
+RG6="$T/hive-rg-bad"; mkdir -p "$RG6/.claude"; printf '{"env": [\n' > "$RG6/.claude/settings.local.json"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG6" --telemetry off > "$T/rg-bad.out" 2>&1
+expect_eq "an unparseable settings.local.json is left byte for byte" '{"env": [' "$(tr -d '\r\n' < "$RG6/.claude/settings.local.json")"
+cat "$T/rg-bad.out" | expect "... with the line to add by hand" '"env": { "USE_BUILTIN_RIPGREP": "0" }'
+
 # vulyk-watcher: installed once per machine, user scope, from VULYK's GitHub marketplace; no
 # project marketplace key and no enabledPlugins true is written; an owner's false is kept
 WID='vulyk-watcher@vulyk'
@@ -1625,8 +1701,12 @@ mkdir -p "$DREL/docs/defects" "$DREL/.claude/state/defects"
 printf '# Defect library\n' > "$DREL/docs/defects/README.md"
 printf -- '---\nid: clipped-speech\n---\n' > "$DREL/docs/defects/clipped-speech.md"
 printf 'k\n' > "$DREL/.claude/state/defects/keys"
+printf 'release-own/*\n' > "$DREL/.claude/vulyk-paperwork"
 DH="$T/hive-defects"; mkdir -p "$DH"
 bash "$DREL/install.sh" "$DH" --telemetry off > "$T/dh.out" 2>&1
+expect_eq "a release's own .claude/vulyk-paperwork never ships" "0" "$([ -e "$DH/.claude/vulyk-paperwork" ] && echo 1 || echo 0)"
+printf '# smoke reports\ndocs/specs/*/smoke-*.md\n' > "$DH/.claude/vulyk-paperwork"
+cp "$DH/.claude/vulyk-paperwork" "$T/dh-paperwork"
 expect_eq "the defect index skeleton ships" "1" "$(same "$DREL/docs/defects/README.md" "$DH/docs/defects/README.md")"
 expect_eq "VULYK's own defect cards never ship" "0" "$([ -e "$DH/docs/defects/clipped-speech.md" ] && echo 1 || echo 0)"
 expect_eq "hook state never ships" "0" "$([ -e "$DH/.claude/state" ] && echo 1 || echo 0)"
@@ -1638,6 +1718,8 @@ printf '# Defect library v2\n' > "$DREL/docs/defects/README.md"
 bash "$DREL/install.sh" "$DH" --upgrade --telemetry off > "$T/dh-up.out" 2>&1
 expect_eq "--upgrade never overwrites a hive's own index" "# My index" "$(head -1 "$DH/docs/defects/README.md" | tr -d '\r')"
 cat "$T/dh-up.out" | expect "and says it kept it" "skip (exists)  docs/defects/README.md"
+expect_eq "--upgrade keeps the hive's .claude/vulyk-paperwork byte for byte" "1" "$(same "$T/dh-paperwork" "$DH/.claude/vulyk-paperwork")"
+expect_eq "and the manifest never lists it" "0" "$(grep -cxF .claude/vulyk-paperwork "$DH/.claude/vulyk-manifest")"
 bash "$DREL/install.sh" "$DH" --check > "$T/dh-check.out" 2>&1
 cat "$T/dh-check.out" | expect "--check lists hook state as a runtime skip" "would skip (runtime) .claude/state/defects/keys"
 
@@ -1841,9 +1923,27 @@ REPO_BASENAMES="$(for f in "$SRC"/.claude/agents/*.md; do basename "$f" .md; don
 # Retired agents stay in the set (a hive on an older release still bundles them) and are the only
 # names allowed beyond the roster: council-sonnet since 0.18.0 (ADR-013 D1).
 RETIRED="council-sonnet"
-expect_eq "the baked agent list minus other and the retired names = this repo's .claude/agents/*.md basenames (added or renamed a framework agent? edit AGENTS in scripts/telemetry.sh)"   "$REPO_BASENAMES" "$(printf '%s
-' "$BAKED_AGENTS" | grep -vxF other | grep -vxF "$RETIRED" | LC_ALL=C sort)"
+# Claude Code's built-in agent types are the other allowed group: named, never a roster file.
+BUILTIN="general-purpose
+workflow-subagent
+Explore
+Plan
+claude-code-guide
+statusline-setup"
+expect_eq "the baked agent list minus other, the retired and the built-in names = this repo's .claude/agents/*.md basenames (added or renamed a framework agent? edit AGENTS in scripts/telemetry.sh)"   "$REPO_BASENAMES" "$(printf '%s
+' "$BAKED_AGENTS" | grep -vxF other | grep -vxF "$RETIRED" | grep -vxF "$BUILTIN" | LC_ALL=C sort)"
 expect_eq "a retired agent has no file in .claude/agents/" "0" "$([ -e "$SRC/.claude/agents/$RETIRED.md" ] && echo 1 || echo 0)"
+expect_eq "every built-in agent type is in the baked list" "6" "$(printf '%s
+' "$BAKED_AGENTS" | grep -cxF "$BUILTIN")"
+expect_eq "no built-in agent type has a file in .claude/agents/" "0" \
+  "$(printf '%s
+' "$BUILTIN" | while read -r b; do [ -e "$SRC/.claude/agents/$b.md" ] && echo "$b"; done | grep -c .)"
+BUILTB="$T/builtin-agent.jsonl"
+printf '{"v":1,"code":"agent_prefix_high","value":60000,"threshold":50000,"vulyk":"0.28.0","tier":0,"model":"opus","agent":"workflow-subagent","week":"%s","hive":"aaaaaaaaaaaa"}\n' "$WEEK" > "$BUILTB"
+if (cd "$SRC" && bash scripts/telemetry.sh check "$BUILTB") >/dev/null 2>&1; then
+  ok "check accepts a bundle row naming a built-in agent type"
+else bad "check rejected a bundle row naming workflow-subagent:"
+  (cd "$SRC" && bash scripts/telemetry.sh check "$BUILTB") 2>&1 | sed 's/^/        /'; fi
 RETB="$T/retired-agent.jsonl"
 printf '{"v":1,"code":"agent_empty","value":3,"threshold":0,"vulyk":"0.17.0","tier":1,"model":"sonnet","agent":"council-sonnet","week":"%s","hive":"aaaaaaaaaaaa"}\n' "$WEEK" > "$RETB"
 if (cd "$SRC" && bash scripts/telemetry.sh check "$RETB") >/dev/null 2>&1; then
@@ -1851,6 +1951,89 @@ if (cd "$SRC" && bash scripts/telemetry.sh check "$RETB") >/dev/null 2>&1; then
 else bad "check rejected a bundle row naming the retired council-sonnet:"
   (cd "$SRC" && bash scripts/telemetry.sh check "$RETB") 2>&1 | sed 's/^/        /'; fi
 grep -v '^[[:space:]]*#' "$SRC/scripts/telemetry.sh"   | expect_absent "no code line in telemetry.sh reads .claude/agents" ".claude/agents"
+
+# --- case 21: upgrade keeps a hive's edits and deletions (card upgrade-overwrites-host-edits) -------------------------------------------
+# A release clone with two tags: v9.0.0 installs the hive, v9.0.1 changes three agents. The hive
+# raised one agent's maxTurns (merged onto the release's other change), raised another on the very
+# line the release also changed (kept, new release beside it), deleted a third (stays deleted), and
+# left a fourth alone (replaced as a release copy).
+echo "--- upgrade: release copies replaced, hive edits merged or kept, deletions kept"
+REL="$T/rel"; HIVE="$T/edits-hive"
+mkdir -p "$REL" "$HIVE"
+( cd "$SRC" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$REL"
+git -C "$REL" init -q && git -C "$REL" config user.email t@t && git -C "$REL" config user.name t
+printf '9.0.0\n' > "$REL/VERSION"
+git -C "$REL" add -A >/dev/null 2>&1 && git -C "$REL" commit -qm v9.0.0 && git -C "$REL" tag v9.0.0
+git -C "$HIVE" init -q
+bash "$REL/install.sh" "$HIVE" --telemetry off > "$T/edits-install.out" 2>&1
+A="$HIVE/.claude/agents"
+sed -i 's/^maxTurns: .*/maxTurns: 140/' "$A/worker-code.md"           # an edit the release does not touch
+sed -i 's/^maxTurns: .*/maxTurns: 140/' "$A/lead-review.md"           # an edit on the line the release changes
+rm -f "$A/drone-scout.md"                                             # a deletion
+R="$REL/.claude/agents"
+sed -i '3s/$/ (hotfix)/' "$R/worker-test.md"                          # an untagged commit the hive took by hand
+git -C "$REL" commit -qam hotfix
+git -C "$REL" show HEAD:.claude/agents/worker-test.md > "$A/worker-test.md"
+sed -i '3s/$/ (v9.0.1)/' "$R/worker-code.md" "$R/drone-docs.md" "$R/worker-test.md"
+sed -i 's/^maxTurns: .*/maxTurns: 70/' "$R/lead-review.md"
+printf '9.0.1\n' > "$REL/VERSION"
+git -C "$REL" commit -qam v9.0.1 && git -C "$REL" tag v9.0.1
+cp "$A/lead-review.md" "$T/lead-review.hive"
+mkdir -p "$T/edits-tmp"
+TMPDIR="$T/edits-tmp" bash "$REL/install.sh" "$HIVE" --upgrade --check --telemetry off > "$T/edits-check.out" 2>&1
+grep -q 'would update   .claude/agents/drone-docs.md' "$T/edits-check.out" && grep -q 'would merge edit .claude/agents/worker-code.md' "$T/edits-check.out" \
+  && grep -q 'would keep + new .claude/agents/lead-review.md' "$T/edits-check.out" && grep -q 'would keep deleted .claude/agents/drone-scout.md' "$T/edits-check.out" \
+  && ok "--check names all four outcomes with 'would'" || { bad "--check outcomes:"; grep -E 'agents/(drone|worker-code|lead-review)' "$T/edits-check.out"; }
+[ ! -e "$A/lead-review.md.vulyk-new" ] && grep -q '^maxTurns: 140' "$A/worker-code.md" && ok "--check writes nothing" || bad "--check wrote files"
+TMPDIR="$T/edits-tmp" bash "$REL/install.sh" "$HIVE" --upgrade --telemetry off > "$T/edits-up.out" 2>&1
+[ -z "$(ls -A "$T/edits-tmp")" ] && ok "--check and --upgrade leave no temp file behind" || { bad "temp files left:"; ls -A "$T/edits-tmp"; }
+grep -q '  update         .claude/agents/drone-docs.md' "$T/edits-up.out" && grep -q '(v9.0.1)' "$A/drone-docs.md" \
+  && ok "an untouched release copy is replaced (update)" || bad "drone-docs not updated"
+grep -q '  update         .claude/agents/worker-test.md' "$T/edits-up.out" && grep -q '(hotfix) (v9.0.1)' "$A/worker-test.md" \
+  && ok "a copy from an untagged commit is a release copy (update)" || { bad "worker-test hotfix copy:"; grep 'worker-test' "$T/edits-up.out"; }
+grep -q '  merged edit    .claude/agents/worker-code.md' "$T/edits-up.out" && grep -q '^maxTurns: 140' "$A/worker-code.md" && grep -q '(v9.0.1)' "$A/worker-code.md" \
+  && ok "a hive edit is merged: the raised maxTurns stays beside the release's change" || { bad "worker-code merge:"; grep -n 'maxTurns\|v9.0.1' "$A/worker-code.md"; }
+grep -q '  kept + new     .claude/agents/lead-review.md' "$T/edits-up.out" && cmp -s "$A/lead-review.md" "$T/lead-review.hive" \
+  && grep -q '^maxTurns: 70' "$A/lead-review.md.vulyk-new" \
+  && ok "a conflicting edit is kept byte for byte, the new release beside it" || bad "lead-review conflict handling"
+grep -q '  kept deleted   .claude/agents/drone-scout.md' "$T/edits-up.out" && [ ! -e "$A/drone-scout.md" ] \
+  && ok "a deleted agent is not put back" || bad "drone-scout came back"
+grep -qxF '*.vulyk-new' "$HIVE/.gitignore" && ok ".vulyk-new is gitignored" || bad ".vulyk-new not in .gitignore"
+# Again at the same version: the release left lead-review.md alone since v9.0.1, so there is nothing
+# to merge - the edit is kept and the pending .vulyk-new stays for the owner.
+bash "$REL/install.sh" "$HIVE" --upgrade --check --telemetry off > "$T/edits-check2.out" 2>&1
+bash "$REL/install.sh" "$HIVE" --upgrade --telemetry off > "$T/edits-up2.out" 2>&1
+grep -q 'would keep (edited) .claude/agents/lead-review.md' "$T/edits-check2.out" && grep -q '  keep (edited)  .claude/agents/lead-review.md' "$T/edits-up2.out" \
+  && ! grep -qE 'merged? edit' "$T/edits-check2.out" "$T/edits-up2.out" && [ -e "$A/lead-review.md.vulyk-new" ] && cmp -s "$A/lead-review.md" "$T/lead-review.hive" \
+  && ok "an edit the release left alone is kept, its .vulyk-new too" || { bad "second upgrade:"; grep -E 'lead-review|merged? edit' "$T/edits-check2.out" "$T/edits-up2.out"; }
+# A source with no release history (a downloaded ZIP) cannot tell an edit from a release copy: it
+# says so and keeps the old replace rule instead of calling every differing file an edit.
+ZIP="$T/rel-zip"; mkdir -p "$ZIP"
+( cd "$REL" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$ZIP"
+bash "$ZIP/install.sh" "$HIVE" --upgrade --check --telemetry off > "$T/edits-zip.out" 2>&1
+grep -q 'NOTE: .* holds no release history' "$T/edits-zip.out" && grep -q 'would update   .claude/agents/lead-review.md' "$T/edits-zip.out" \
+  && ! grep -q 'keep + new' "$T/edits-zip.out" \
+  && ok "a source with no v* tag says so and replaces as before" || { bad "no-history source:"; grep -E 'NOTE|lead-review|keep' "$T/edits-zip.out"; }
+
+# --- case 22: the example rule ships as a template, never into .claude/rules ------------------------------------------------------------
+# Releases up to 0.28 shipped .claude/rules/example-api.md, and 6 hives deleted it after every install.
+# .claude/rules is the hive's own: an upgrade neither puts the example back nor removes a kept copy.
+echo "--- install.sh: the example rule is a template"
+EXH="$T/example-hive"; mkdir -p "$EXH"; git -C "$EXH" init -q
+bash "$REL/install.sh" "$EXH" --telemetry off > /dev/null 2>&1
+[ ! -e "$EXH/.claude/rules/example-api.md" ] && [ -f "$EXH/templates/rule-example.md" ] && [ -f "$EXH/.claude/rules/README.md" ] \
+  && ok "a fresh install ships the example as templates/rule-example.md, not as a rule" || { bad "example rule placement:"; ls "$EXH/.claude/rules" "$EXH/templates"; }
+EXK="$T/example-kept"; cp -r "$EXH" "$EXK"
+printf '%s\n' .claude/rules/example-api.md >> "$EXH/.claude/vulyk-manifest"   # an old install shipped it; this hive deleted it
+printf '%s\n' .claude/rules/example-api.md >> "$EXK/.claude/vulyk-manifest"   # an old install shipped it; this hive kept and edited it
+printf -- '---\npaths: ["api/**"]\n---\n- my own api rule\n' > "$EXK/.claude/rules/example-api.md"
+cp "$EXK/.claude/rules/example-api.md" "$T/example-kept.md"
+bash "$REL/install.sh" "$EXH" --upgrade --telemetry off > "$T/example-up.out" 2>&1
+[ ! -e "$EXH/.claude/rules/example-api.md" ] && ok "an upgrade does not put a deleted example rule back" \
+  || { bad "the deleted example rule came back:"; grep example "$T/example-up.out"; }
+bash "$REL/install.sh" "$EXK" --upgrade --telemetry off > "$T/example-kept.out" 2>&1
+cmp -s "$EXK/.claude/rules/example-api.md" "$T/example-kept.md" && grep -q 'leave (yours)  .claude/rules/example-api.md' "$T/example-kept.out" \
+  && ok "an upgrade leaves a kept example rule alone (the hive's own)" || { bad "the kept example rule was touched:"; grep example "$T/example-kept.out"; }
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
