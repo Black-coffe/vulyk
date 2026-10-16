@@ -35,7 +35,9 @@ overrides it, and every local row records the threshold it was checked against.
 `agent_prefix_high` and `agent_empty` rows carry an `agent` token from a fixed list shipped in
 `scripts/telemetry.sh` - the framework agent names, e.g. `worker-code`, `lead-review` - the
 same list on every machine. A retired agent stays on it (`council-sonnet`, retired in 0.18.0), so
-an older hive's bundle still validates. Any other agent, including one you add under `.claude/agents/`, is
+an older hive's bundle still validates. Claude Code's built-in agent types are on it too
+(`general-purpose`, `workflow-subagent`, `Explore`, `Plan`, `claude-code-guide`,
+`statusline-setup`): the same names on every machine. Any other agent, including one you add under `.claude/agents/`, is
 reported as `other`, and so is the free-form dispatch `name`, which is owner-chosen text and
 could carry a story name. Print the list with `bash scripts/telemetry.sh agents`. Every other
 code carries an empty `agent`.
