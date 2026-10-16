@@ -28,3 +28,8 @@ The owner's choice, 2026-10-16, among three behaviours (the others: close-story 
 
 ## Asks
 1. close-story refuses a worker's edit outside ## Files: exit 4 listing the paths that scope-check counts out of scope and that would leave the tree dirty for open-round, so the worker reverts or returns NEEDS_CONTEXT in its own turn instead of the driver stopping at open-round later.
+
+## Answers
+
+**After escalation (round 1, 2026-10-16).**
+> Review Major 1 + minors, decided by Andrei 2026-10-16: refuse only when no other not-done story of the same wave is open (solo path, the last close of a wave); while wave-mates are open print a note and close as today. The refusal message says a path may be a closed wave-mate's: undo your own edits, else NEEDS_CONTEXT naming them. Test each stray path with git status -- <path> and is_paperwork_path instead of matching porcelain text (quoted and renamed paths). Add a test case with an open wave-mate's scratch file.
