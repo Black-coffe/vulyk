@@ -110,7 +110,7 @@ const build = async (st) => {
     const retry = (misses.get(story.file) || 0) >= 1
     const prompt = `Your story: ${story.file}. Stamp: ${stamp}. Implement it per your protocol; your last step is \`bash scripts/cycle.sh close-story ${story.file} --commit --stamp ${stamp}\`.`
       + (retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
-    return caught(agent(prompt, { agentType: story.worker, model: retry ? TOP : story.model, phase: 'Build', label: story.story }))
+    return caught(agent(prompt, { agentType: story.worker, model: retry ? TOP : (story.model || undefined), phase: 'Build', label: story.story }))
   }))
   const res = await advance('')
   if (res.ok === false) return res

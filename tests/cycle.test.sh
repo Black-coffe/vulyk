@@ -397,16 +397,15 @@ man_story 04 todo 4 '[manual:../x]'
 bash scripts/wave-check.sh docs/specs/man | expect "wave-check reports a manual id with .." "manual:    man-04 is blocked_by 'manual:../x'"
 git add -A && git commit -qm "man: done" >/dev/null
 
-echo "one source for a worker's model: a story without model: runs on its worker agent's frontmatter model"
-bash scripts/cycle.sh status docs/specs/man --json | expect "no model: line and no agent file -> sonnet" '"worker":"worker-code","model":"sonnet"'
-mkdir -p .claude/agents
-printf -- '---\nname: worker-code\nmodel: opus\nmaxTurns: 140\n---\n' > .claude/agents/worker-code.md
-bash scripts/cycle.sh status docs/specs/man --json | expect "a hive's model: opus in worker-code.md holds" '"worker":"worker-code","model":"opus"'
-printf -- '---\r\nname: worker-code\r\nmodel: opus   # pinned by the hive\r\n---\r\n' > .claude/agents/worker-code.md
-bash scripts/cycle.sh status docs/specs/man --json | expect "a CRLF agent file with a comment reads the same" '"worker":"worker-code","model":"opus","repeat"'
-sed -i 's/^wave: 2$/wave: 2\nmodel: sonnet/' docs/specs/man/man-02-m.md
-bash scripts/cycle.sh status docs/specs/man --json | expect "the story's own model: line still wins" '"worker":"worker-code","model":"sonnet"'
-git checkout -q -- docs/specs/man/man-02-m.md && rm -rf .claude/agents
+echo "one source for a worker's model: a story without model: leaves it to the worker agent's frontmatter"
+mkdir -p docs/specs/tpl .claude/agents
+sed -e 's/<slug>/tpl/g' -e 's/tpl-NN/tpl-01/' "$SRC"/templates/story.md > docs/specs/tpl/tpl-01-a.md
+printf -- '---\nname: worker-code\nmodel: opus\n---\n' > .claude/agents/worker-code.md
+bash scripts/cycle.sh status docs/specs/tpl --json | expect "a story from the shipped template carries no model, so a hive's pin in worker-code.md holds" \
+  '"story":"tpl-01","worker":"worker-code","model":"","repeat"'
+sed -i 's/^wave: 2$/wave: 2\nmodel: opus/' docs/specs/man/man-02-m.md
+bash scripts/cycle.sh status docs/specs/man --json | expect "the story's own model: line still wins" '"worker":"worker-code","model":"opus"'
+git checkout -q -- docs/specs/man/man-02-m.md && rm -rf .claude/agents docs/specs/tpl
 
 echo "close-story-scope-refusal: close-story --commit refuses an edit outside ## Files that would leave the tree dirty for open-round"
 mkdir -p docs/specs/stray

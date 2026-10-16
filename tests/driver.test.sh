@@ -149,7 +149,7 @@ const blindPromptsClean = (r) => r.dispatches
   // --- happy Tier 3: claim -> build -> advance -> dispatch opus+review -> ingest -> green -> release
   {
     const a = story(1, { worker: 'worker-code', model: 'opus' });
-    const b = story(2, { worker: 'worker-test', model: 'sonnet' });
+    const b = story(2, { worker: 'worker-test', model: '' }); // no model: line in the story
     const r = await run(ARGS, {
       clerk: [
         [CLAIM, adv(build([a, b]), { steps: ['branch'] })],
@@ -163,8 +163,8 @@ const blindPromptsClean = (r) => r.dispatches
     check(r.mismatches.length === 0 && r.clerkCmds.length === 4, 'tier 3: exact clerk sequence claim, advance, advance --ingest, release', { seq: seq(r), mm: r.mismatches });
     check(r.result && r.result.next === 'green' && !r.result.stop, 'tier 3: ends green with the carried status', r.result);
     check(r.dispatches.length === 4, 'tier 3: two workers and two seats, nothing else', r.dispatches.map((d) => d.agentType));
-    check(wa.agentType === 'worker-code' && wa.model === 'opus' && wb.agentType === 'worker-test' && wb.model === 'sonnet',
-      'tier 3: workers take agentType and model from the story', [wa, wb]);
+    check(wa.agentType === 'worker-code' && wa.model === 'opus' && wb.agentType === 'worker-test' && wb.model === undefined,
+      'tier 3: workers take agentType and model from the story; no model means none passed, so the frontmatter applies', [wa, wb]);
     check(wa.prompt.includes(a.file) && wa.prompt.includes(`Stamp: ${S}`)
       && wa.prompt.includes(`bash scripts/cycle.sh close-story ${a.file} --commit --stamp ${S}`)
       && !wa.prompt.includes('git diff'), 'tier 3: worker prompt names the story, the stamp and close-story as the last step', wa.prompt);

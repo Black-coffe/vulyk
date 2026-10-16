@@ -59,7 +59,7 @@ Without the Workflow tool, run the solo loop from this session with the stamp, b
 - Begin with `advance --stamp <S> --claim`; every later call carries `--stamp <S>`; every exit runs
   `bash scripts/cycle.sh release docs/specs/<slug> <S>`.
 - `build:<W>`: one message dispatching each `wave_stories` entry to its `worker` with `model: <model>`
-  (`<top_model>` on its second dispatch): `Your story: <file>. Stamp: <S>. Your last step is bash
+  (no model parameter when it is empty, so the worker's frontmatter applies; `<top_model>` on its second dispatch): `Your story: <file>. Stamp: <S>. Your last step is bash
   scripts/cycle.sh close-story <file> --commit --stamp <S>.` Then `advance --stamp <S>`. A story still
   listed is a miss; a second miss is handled as a `stop` with a `file`.
 - `dispatch:<seats>`: one message, every seat, each told to write its report to

@@ -16,7 +16,7 @@ builds never judges.
 ## Where the cascade is enforced
 1. **Agent frontmatter** — every `.claude/agents/*.md` declares `model:`. Committed to the repo:
    routing by configuration, not willpower.
-2. **The story's `model:`** — the driver dispatches each worker on it (default `sonnet`).
+2. **The story's `model:`** — the driver dispatches each worker on it; with no line it passes no model and the worker's frontmatter applies.
 3. **The routing matrix** in `CLAUDE.md` — tier decided before work starts and announced.
 4. **`TOP_MODEL`** — one line in the constitution (`CLAUDE.vulyk.md` where a project keeps its own
    `CLAUDE.md` beside it, else `CLAUDE.md`). Since v0.10.0 it reads `auto` and the plan decides;
@@ -129,7 +129,7 @@ or a story's `model:`, fixes it to one. **The family that builds never judges.**
 |---|---|---|
 | Fable — the gate, `TOP_MODEL` (`fable` on Max and premium seats, `opus` on Pro, standard seats and API) | short, high-stakes calls. It never writes a first attempt and never orchestrates. | the Tier 4 `lead-review` (beside a second reviewer), `lead-architect`, the Tier 4 `queen-planner`, the **second attempt** of any missed story. The frontmatter says `opus`; the dispatch parameter carries the upgrade. |
 | Opus — judgment, `opus` | orchestrate, plan, judge. At Tier 3–4 it writes no story code on a first attempt. | the Queen (who also builds Tier 1–2 herself), `queen-planner`, `lead-review` at Tier 1–3 and as the second reviewer beside Fable, `lead-architect` where the gate is `opus`, `council-opus`, `council-haiku`, `drone-coverage`, `librarian` |
-| Sonnet — execution, `sonnet` | a story, a map, a doc, one verb. It never judges code its own family wrote. | `worker-code`, `worker-test` (story default `model: sonnet`), `drone-scout`, `drone-docs`; the Tier 4 second reviewer beside an Opus gate |
+| Sonnet — execution, `sonnet` | a story, a map, a doc, one verb. It never judges code its own family wrote. | `worker-code`, `worker-test` (their frontmatter `model: sonnet`; a story overrides it only with `model: opus`), `drone-scout`, `drone-docs`; the Tier 4 second reviewer beside an Opus gate |
 | Haiku — mechanical, `haiku` | one verb, no judgment, and only at or above the floor. | `cycle-clerk` (since 0.26.0) |
 
 `council-haiku` is the black-box seat. The name is the angle, not the model; it runs on `opus`
@@ -162,7 +162,7 @@ haiku floor line carries `cc>=2.1.293` (below).
 
 **The retry climbs to the gate.** A story's second dispatch goes to `TOP_MODEL` whatever its own
 `model:` says. The first attempt runs on Sonnet, so the retry is always a different family: Fable on
-Max, Opus on Pro and API. `status --json` carries each story's `model` (default `sonnet`), so the
+Max, Opus on Pro and API. `status --json` carries each story's `model` (`""` with no line: the worker's frontmatter), so the
 driver never opens the story file to learn it.
 
 At Tier 3–4, `lead-review` and the blind seats (`council-opus`, and `council-haiku` when the
