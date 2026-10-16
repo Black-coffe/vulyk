@@ -176,8 +176,8 @@ driver_guard() { # driver_guard <spec> <verb-label> <stamp-opt> - exits 2 before
   holder="$(driver_stamp "$spec")"
   [ -n "$holder" ] || return 0
   [ -n "$stamp" ] && [ "$stamp" = "$holder" ] && return 0
-  echo "cycle: $(slug_of "$spec") - DRIVER held by $holder, $verb refuses to act." >&2
-  emit false "$verb" 2 error "held by $holder"
+  echo "cycle: $(slug_of "$spec") - DRIVER held by $holder, $verb refuses to act. If that driver is dead (its run is gone from the task list): bash scripts/cycle.sh release $spec $holder" >&2
+  emit false "$verb" 2 error "held by $holder; run: bash scripts/cycle.sh release $spec $holder if that driver is dead"
   exit 2
 }
 
@@ -2477,6 +2477,12 @@ cmd_resume() { # cmd_resume <spec>
   # agent in flight or a dead one, and only the caller can tell them apart (its task list). The
   # holder is reported; a relaunch waits for it to stop, or for `release` of a dead one.
   local HELD; HELD="$(driver_stamp "$SPEC")"
+  if [ -z "$HELD" ] && [ -f "$SPEC/DRIVER" ]; then
+    # A claim with no stamp (a claim killed between create and write) can be held by no driver:
+    # every guarded verb compares stamps. Clear it rather than strand the spec.
+    rm -f "$SPEC/DRIVER"
+    echo "cycle: $(slug_of "$SPEC") - removed a DRIVER file with no stamp (a broken claim)" >&2
+  fi
   if [ -n "$HELD" ]; then
     local SINCE; SINCE="$(sed -n 's/^claimed=//p' "$SPEC/DRIVER" | head -1)"
     echo "cycle: $(slug_of "$SPEC") - DRIVER still held by $HELD (claimed ${SINCE:-unknown}): if that run is still going, wait for it to stop; if it is dead, run: bash scripts/cycle.sh release $SPEC $HELD" >&2

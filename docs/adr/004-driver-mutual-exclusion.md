@@ -37,6 +37,15 @@ than to a wave-8/9/10 repair story, explicitly "not built in this round." It is 
 the mechanism is not re-decided from scratch — and not silently reinvented differently — when a
 future spec builds it.
 
+**Amendment, 2026-10-16:** `pause` and `resume` no longer release the claim. Only `release` and the driver's own
+exit path (`vulyk-cycle.js` `finally`) remove `DRIVER`. A claim removed while a worker was still in flight let a second
+driver claim the spec and overwrite that worker's files in a live hive (study `hive-feedback-2026-10`, finding 5).
+`resume` now reports the holder (`"held"` in its JSON) and every `held by` refusal names the `release` command. The
+liveness oracle is the caller's task list, not a heartbeat: a worker can run for an hour without a `cycle.sh` call,
+so no heartbeat age tells a live driver from a dead one. If a `/clear` ever hides a running Workflow from the task
+list, the Queen will call it dead and the old defect returns by that door; `claimed=` is the only evidence on disk.
+A claim file with no stamp is a broken claim no driver can hold, and `resume` clears it.
+
 ## Consequences
 
 - **Easier:** a future implementer has the mechanism's shape settled — a semaphore file, a
