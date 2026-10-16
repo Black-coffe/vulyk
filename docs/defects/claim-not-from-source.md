@@ -21,7 +21,7 @@ Not counted as owner quotes: they corrected hive work, not VULYK's (README, *Pro
 people, clients and hives masked.
 - 2026-10-05 · a video hive · video 5 release, links to earlier videos — «Ссылки на другие ролики вы отменили, потому что главный агент сказал, что ролик 5 ни на один прошлый не опирается. Но в самом ролике прямо звучит «это ролик 2». Добавить в описании и в самом ютюбе на єтой секунде вівести подсказку второго ролика по MCP»
 - 2026-10-08 · a local-RAG hive · a grill question about a speech library's `multilingual` parameter, read from its docstring — «Режим multilingual определяет язык не на каждую фразу, а примерно на 30 секунд аудио, поэтому в быстром диалоге на украинском и русском он может почти не помочь.»
-- 2026-10-07 · a web-app hive · release day, the operator's terminal, in reply to «сейчас около 17:55» derived from GitHub timestamps — «Сейчас 16:51»
+- 2026-10-07 · a web-app hive · release day, the time derived from GitHub timestamps and the machine clock — «Мой Claude жил на два часа в прошлом: часы в терминале врали»
 - 2026-10-15 · a consulting hive · screen descriptions moved into the wiki marked "meaning not confirmed" — «[…] удалить все что было притяно без аргументов, фактчекинга, перекрестной провекри, и ууже в самом конце валидации <name>. Лучше ее создатьь с нуля и по тем истояниам которые уже на 100% прийняты и работают»
 
 ## Cause

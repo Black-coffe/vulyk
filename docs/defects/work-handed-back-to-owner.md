@@ -14,6 +14,7 @@ browser where he is already logged in. The agent could take every one of them wi
 his time for work he delegated, and each hand-copied step is a new chance of error.
 
 ## Owner quotes
+- 2026-10-13 · VULYK, /vulyk-ship report · the publish step and hive upgrades printed as a to-do list for the owner — «Чё ты сам это всё не делаешь, а постоянно просишь меня сделать? Бери и делай, делай git push, делай все эти команды.»
 
 ## Seen in hives
 Not counted as owner quotes: they corrected hive work, not VULYK's (README, *Promoted from hives*). Verbatim, with

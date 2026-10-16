@@ -110,7 +110,7 @@ the verdict. Check output goes to a log under `${TMPDIR:-/tmp}`. `DEFECTS_DIR` p
 | `upgrade-overwrites-host-edits` | An upgrade overwrites a hive's own edits and deletions in framework files | text | 1 | (spec `upgrade-keeps-host-edits`) | 2026-10-13 |
 | `host-internals-in-public-repo` | A host project's insides quoted into the public VULYK repository | block | 1 | `bash scripts/leak-check.sh <arg>` | 2026-10-13 |
 | `command-injection-follows-cwd` | A command's injection names its script relative to the session cwd | block | 1 | `bash scripts/injection-check.sh <arg>` | 2026-10-13 |
-| `work-handed-back-to-owner` | Work an agent can do is handed back to the owner as a to-do list | text | 0 (+2 hives) | - | - |
+| `work-handed-back-to-owner` | Work an agent can do is handed back to the owner as a to-do list | text | 1 (+2 hives) | - | 2026-10-13 |
 | `claim-not-from-source` | A claim made from memory, a docstring or a guess instead of the source that settles it | text | 0 (+4 hives) | - | - |
 | `measurement-unlike-reality` | A test or measurement that does not represent the reality it is used to judge | text | 0 (+4 hives) | - | - |
 | `safeguard-bypassable-or-late` | A safeguard that can be bypassed, passes silently on a missing input, or ships after what it guards | text | 0 (+3 hives) | - | - |
