@@ -1893,6 +1893,26 @@ grep -q '  kept deleted   .claude/agents/drone-scout.md' "$T/edits-up.out" && [ 
   && ok "a deleted agent is not put back" || bad "drone-scout came back"
 grep -qxF '*.vulyk-new' "$HIVE/.gitignore" && ok ".vulyk-new is gitignored" || bad ".vulyk-new not in .gitignore"
 
+# --- case 22: the example rule ships as a template, never into .claude/rules ------------------------------------------------------------
+# Releases up to 0.28 shipped .claude/rules/example-api.md, and 6 hives deleted it after every install.
+# .claude/rules is the hive's own: an upgrade neither puts the example back nor removes a kept copy.
+echo "--- install.sh: the example rule is a template"
+EXH="$T/example-hive"; mkdir -p "$EXH"; git -C "$EXH" init -q
+bash "$REL/install.sh" "$EXH" --telemetry off > /dev/null 2>&1
+[ ! -e "$EXH/.claude/rules/example-api.md" ] && [ -f "$EXH/templates/rule-example.md" ] && [ -f "$EXH/.claude/rules/README.md" ] \
+  && ok "a fresh install ships the example as templates/rule-example.md, not as a rule" || { bad "example rule placement:"; ls "$EXH/.claude/rules" "$EXH/templates"; }
+EXK="$T/example-kept"; cp -r "$EXH" "$EXK"
+printf '%s\n' .claude/rules/example-api.md >> "$EXH/.claude/vulyk-manifest"   # an old install shipped it; this hive deleted it
+printf '%s\n' .claude/rules/example-api.md >> "$EXK/.claude/vulyk-manifest"   # an old install shipped it; this hive kept and edited it
+printf -- '---\npaths: ["api/**"]\n---\n- my own api rule\n' > "$EXK/.claude/rules/example-api.md"
+cp "$EXK/.claude/rules/example-api.md" "$T/example-kept.md"
+bash "$REL/install.sh" "$EXH" --upgrade --telemetry off > "$T/example-up.out" 2>&1
+[ ! -e "$EXH/.claude/rules/example-api.md" ] && ok "an upgrade does not put a deleted example rule back" \
+  || { bad "the deleted example rule came back:"; grep example "$T/example-up.out"; }
+bash "$REL/install.sh" "$EXK" --upgrade --telemetry off > "$T/example-kept.out" 2>&1
+cmp -s "$EXK/.claude/rules/example-api.md" "$T/example-kept.md" && grep -q 'leave (yours)  .claude/rules/example-api.md' "$T/example-kept.out" \
+  && ok "an upgrade leaves a kept example rule alone (the hive's own)" || { bad "the kept example rule was touched:"; grep example "$T/example-kept.out"; }
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1

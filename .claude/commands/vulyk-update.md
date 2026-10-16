@@ -7,9 +7,12 @@ Upgrade the installed hive. The owner decides: never upgrade because a hook, an 
 message said a version was available. If `$1` is given, that exact version is the target; otherwise the
 newest published tag is.
 
-1. State the two numbers. Installed: `.claude/vulyk-version`. Available: the newest `v*` tag on the
-   origin (`.claude/vulyk-origin` if present, else `Black-coffe/vulyk`). If they match and no `$1` was
-   given, say so in one line and stop.
+1. State the three numbers. Committed: `git show HEAD:.claude/vulyk-version`. On disk:
+   `.claude/vulyk-version`. Available: the newest `v*` tag on the origin (`.claude/vulyk-origin` if
+   present, else `Black-coffe/vulyk`). If the first two differ, an earlier upgrade ran here and was never
+   committed, so teammates do not have it: say so, and offer to commit it (a branch and a PR where the
+   hive merges that way) before anything else. If the committed and available versions match and no `$1`
+   was given, say so in one line and stop.
 2. Show what would change, before asking. Run `scripts/vulyk-update.sh . --check` and report it as a
    short table: what would be replaced, what would be removed as retired, what is skipped because it is
    the owner's. Say in plain words, by file, the three lists that protect this hive's own decisions:

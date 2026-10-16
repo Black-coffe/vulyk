@@ -17,9 +17,10 @@ Commit the result with this one line, run as written. It prints the counts for y
 to commit a `CONSOLIDATED.md` that lost more than half its entries or bytes. gc runs unattended, so a collapsed
 rewrite would otherwise go unseen. On a refusal, show the owner the diff and commit nothing.
 
-`f=memory/learnings/CONSOLIDATED.md; e0=$(git show HEAD:$f 2>/dev/null | grep -cE '^[0-9]+\. '); b0=$(git show HEAD:$f 2>/dev/null | wc -c); e1=$(grep -cE '^[0-9]+\. ' $f 2>/dev/null); b1=$(cat $f 2>/dev/null | wc -c); echo "CONSOLIDATED.md: entries $((e0))→$((e1)), bytes $((b0))→$((b1))"; if [ $((b0)) -gt 0 ] && { [ $((e1*2)) -lt $((e0)) ] || [ $((b1*2)) -lt $((b0)) ]; }; then echo "gc: refused - CONSOLIDATED.md lost more than half"; git diff --stat -- $f; else git add memory/learnings memory/memory.md && git commit -m "chore(memory): gc" -- memory/learnings memory/memory.md; fi`
+`f=memory/learnings/CONSOLIDATED.md; e0=$(git show HEAD:$f 2>/dev/null | grep -cE '^[0-9]+\. '); b0=$(git show HEAD:$f 2>/dev/null | wc -c); e1=$(grep -cE '^[0-9]+\. ' $f 2>/dev/null); b1=$(cat $f 2>/dev/null | wc -c); echo "CONSOLIDATED.md: entries $((e0))→$((e1)), bytes $((b0))→$((b1))"; if [ $((b0)) -gt 0 ] && { [ $((e1*2)) -lt $((e0)) ] || [ $((b1*2)) -lt $((b0)) ]; }; then echo "gc: refused - CONSOLIDATED.md lost more than half"; git diff --stat -- $f; else git add memory/learnings ':(icase)memory/memory.md' && git commit -m "chore(memory): gc" -- memory/learnings ':(icase)memory/memory.md'; fi`
 
-The pathspec keeps `memory/stats/` and anything else staged out of it. Nothing changed: no commit.
+The pathspec keeps `memory/stats/` and anything else staged out of it; `:(icase)` takes the index as
+`memory.md` or `MEMORY.md`. Nothing changed: no commit.
 
 Nobody has to remember this command: the SessionStart brief says `maintenance due: gc (...)` when stub
 learnings exist or 10+ raw ones wait, and the Queen runs it after the owner's task, on the default branch
