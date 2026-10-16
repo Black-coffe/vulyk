@@ -1991,8 +1991,19 @@ EOF
     sed -i -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
     git add -- "$STORY" >/dev/null 2>&1
 
+    # Commit exactly what this story staged (`--only` by pathspec), never whatever else sits in
+    # the index; on a failed commit (a hook, an index.lock) unstage it again, so the next story's
+    # commit does not sweep this one's files in (a hive saw that).
+    local SPECS=("$STORY" memory/stats/scope.jsonl memory/stats/anomalies.jsonl) OWN=() p
+    while IFS= read -r p; do [ -n "$p" ] && SPECS+=("$p"); done <<EOF
+$(files_of "$STORY")
+EOF
+    while IFS= read -r p; do [ -n "$p" ] && OWN+=("$p"); done <<EOF
+$(git diff --cached --name-only --no-renames -- "${SPECS[@]}" 2>/dev/null)
+EOF
     local commit_err
-    if ! commit_err="$(git commit -q -m "story($ID): $TITLE" 2>&1)"; then
+    if ! commit_err="$(git commit -q -m "story($ID): $TITLE" --only -- "${OWN[@]}" 2>&1)"; then
+      git reset -q -- "${OWN[@]}" >/dev/null 2>&1
       sed -i -E "s/^(status:[[:space:]]*)done/\1$ST/" "$STORY"
       echo "cycle: close-story - git commit failed: $commit_err" >&2
       emit false close-story 2 error "git commit failed"

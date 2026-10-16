@@ -474,5 +474,22 @@ out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-05.md --commit 2
 [ "$ex" -eq 0 ] && [ -z "$(git status --porcelain -- stray-app.txt stray-other.txt)" ] \
   && echo "  ok    scratch removed, the last close exits 0 and the tree is clean" || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+echo "close-story commits only its own paths, and a failed commit leaves nothing of the story staged"
+stray_story 06
+git add -A && git commit -qm "stray: story 06" >/dev/null
+printf 'v6\n' > stray-app.txt
+mkdir -p memory/stats; printf '{"x":6}\n' > memory/stats/skills.json; git add memory/stats/skills.json   # staged by someone else
+mkdir -p .git/hooks; printf '#!/bin/sh\nexit 1\n' > .git/hooks/pre-commit; chmod +x .git/hooks/pre-commit
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-06.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && [ "$(git diff --cached --name-only)" = "memory/stats/skills.json" ] && grep -q '^status: in-progress' docs/specs/stray/stray-06.md \
+  && echo "  ok    a failed commit (hook) unstages the story's paths, keeps others' staging and status:" \
+  || { echo "::error::exit=$ex staged=$(git diff --cached --name-only | tr '\n' ' ') out=$out"; fail=1; }
+rm -f .git/hooks/pre-commit
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-06.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && ! git show --name-only --format= HEAD | grep -qx 'memory/stats/skills.json' && [ "$(git diff --cached --name-only)" = "memory/stats/skills.json" ] \
+  && echo "  ok    close-story's commit leaves a staged path it does not own out of the commit" \
+  || { echo "::error::exit=$ex commit=$(git show --name-only --format= HEAD | tr '\n' ' ') out=$out"; fail=1; }
+git reset -q -- memory/stats/skills.json; rm -f memory/stats/skills.json
+
 [ -e "$MARK" ] && fail=1
 exit $fail
