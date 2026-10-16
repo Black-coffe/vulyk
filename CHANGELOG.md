@@ -2,7 +2,23 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
-## [Unreleased]
+## [0.28.0] - 2026-10-16
+
+### Added
+- **vulyk-pulse: a live working indicator in VULYK hives** (`.claude/mods/vulyk-pulse/`, `docs/pulse.md`). While the hive
+  works, one row shows an animated `✻`, one dot per live agent, the phase (build, council, plan...), wave or round, the
+  task time and the weighted tokens of every agent together (the Queen, subagents, workflow workers), in the
+  `/vulyk-status` unit: `✻ VULYK · build · wave 2 · ●●●· · 12m 04s · ≈1.8M tok`. It replaces the spinner line during
+  a turn, sits above the prompt while a background build runs, and the `Baked for ...` line carries the task total.
+  Terminal only, VULYK hives only; `motion` on/slow/off via `claude plugin configure vulyk-pulse`. install.sh installs
+  it machine-wide beside the watcher (`install_mod <id>`).
+
+### Changed
+- **close-story refuses an edit outside `## Files`.** With `--commit`, a path scope-check counts out of scope that would
+  stay dirty (not paperwork) now exits 4 before verification and before any commit, so the worker undoes it or returns
+  NEEDS_CONTEXT in its own turn. Before, the commit left it behind and the next `open-round` refused the dirty tree,
+  often hours later with the driver stopping there. While a wave-mate is still open the path may be its in-flight
+  work, so only the wave's last close refuses; the others print a note. Worker agents say what to do with it.
 
 ### Fixed
 - **scope-check no longer counts its own ledger as an out-of-scope edit.** `scripts/scope-check.sh` appends to
