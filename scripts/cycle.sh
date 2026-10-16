@@ -2443,10 +2443,9 @@ cmd_pause() { # cmd_pause <spec> <why>
     printf '%s \xc2\xb7 %s \xc2\xb7 %s\n' "$WHO" "$WHY" "$(now_ts)"
     printf 'head=%s\n' "$HEAD"
   } > "$SPEC/PAUSE"
-  if [ -f "$SPEC/DRIVER" ]; then
-    rm -f "$SPEC/DRIVER"
-    bash "$HERE/journal.sh" "$SPEC" driver "driver released" paused >/dev/null
-  fi
+  # The DRIVER claim stays: a live driver stops at its next step and releases it itself
+  # (vulyk-cycle.js), while its agent in flight still writes to the tree. Removing it here let a
+  # second driver claim the spec over the first one's worker (a hive lost a test file that way).
   bash "$HERE/journal.sh" "$SPEC" paused "$WHY" paused >/dev/null
   echo "cycle: $(slug_of "$SPEC") - paused: $WHY"
   emit true pause 0 paused
@@ -2463,9 +2462,13 @@ cmd_resume() { # cmd_resume <spec>
   local WAS_HEAD=""
   [ -f "$SPEC/PAUSE" ] && WAS_HEAD="$(sed -n 's/^head=//p' "$SPEC/PAUSE" | head -1)"
   rm -f "$SPEC/PAUSE"
-  if [ -f "$SPEC/DRIVER" ]; then
-    rm -f "$SPEC/DRIVER"
-    bash "$HERE/journal.sh" "$SPEC" driver "driver released" status >/dev/null
+  # Never removes DRIVER (see cmd_pause): a claim still on disk is either a driver finishing its
+  # agent in flight or a dead one, and only the caller can tell them apart (its task list). The
+  # holder is reported; a relaunch waits for it to stop, or for `release` of a dead one.
+  local HELD; HELD="$(driver_stamp "$SPEC")"
+  if [ -n "$HELD" ]; then
+    local SINCE; SINCE="$(sed -n 's/^claimed=//p' "$SPEC/DRIVER" | head -1)"
+    echo "cycle: $(slug_of "$SPEC") - DRIVER still held by $HELD (claimed ${SINCE:-unknown}): if that run is still going, wait for it to stop; if it is dead, run: bash scripts/cycle.sh release $SPEC $HELD" >&2
   fi
   local NOWHEAD; NOWHEAD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   local STALE=false
@@ -2475,7 +2478,7 @@ cmd_resume() { # cmd_resume <spec>
   status_out="$(cmd_status "$SPEC")"
   real_next="$(json_field "$status_out" next)"
   echo "cycle: $(slug_of "$SPEC") - resumed"
-  printf '{"ok":true,"verb":"resume","exit":0,"next":"%s","stale":%s}\n' "$real_next" "$STALE"
+  printf '{"ok":true,"verb":"resume","exit":0,"next":"%s","stale":%s,"held":"%s"}\n' "$real_next" "$STALE" "$HELD"
   exit 0
 }
 

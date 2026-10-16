@@ -3184,21 +3184,19 @@ out="$(council claim docs/specs/driverrp1 eeee5555 2>&1)"; ex=$?
   || { echo "::error::claim under pause: exit=$ex out=$out"; fail=1; }
 rm -f docs/specs/driverrp1/PAUSE
 
-echo "pause/resume: each removes an existing DRIVER and journal.md gains a driver released line"
+echo "pause/resume: neither removes DRIVER (a live driver releases it itself; a second claim must not slip in under its worker); resume reports the holder"
 mk_spec driverp1 2
 council claim docs/specs/driverp1 aaaa1111 >/dev/null 2>&1
 [ -f docs/specs/driverp1/DRIVER ] || { echo "::error::setup: DRIVER missing before pause"; fail=1; }
 council pause docs/specs/driverp1 "testing" >/dev/null 2>&1
-[ ! -f docs/specs/driverp1/DRIVER ] && grep -qF 'driver released' docs/specs/driverp1/journal.md \
-  && echo "  ok    pause removes DRIVER and journals 'driver released'" \
-  || { echo "::error::pause: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no)"; fail=1; }
-printf 'stamp=aaaa1111\nclaimed=2020-01-01T00:00:00Z\n' > docs/specs/driverp1/DRIVER  # PAUSE already active; write DRIVER directly, claim is itself PAUSE-gated
-before="$(grep -c 'driver released' docs/specs/driverp1/journal.md)"
-council resume docs/specs/driverp1 >/dev/null 2>&1
-after="$(grep -c 'driver released' docs/specs/driverp1/journal.md)"
-[ ! -f docs/specs/driverp1/DRIVER ] && [ "$after" -gt "$before" ] \
-  && echo "  ok    resume removes DRIVER and journals another 'driver released' line" \
-  || { echo "::error::resume: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no) before=$before after=$after"; fail=1; }
+grep -qF 'stamp=aaaa1111' docs/specs/driverp1/DRIVER 2>/dev/null   && echo "  ok    pause keeps DRIVER"   || { echo "::error::pause: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no)"; fail=1; }
+out="$(council resume docs/specs/driverp1 2>&1)"
+grep -qF 'stamp=aaaa1111' docs/specs/driverp1/DRIVER 2>/dev/null && printf '%s' "$out" | tail -1 | grep -qF '"held":"aaaa1111"'   && printf '%s' "$out" | grep -qF 'release docs/specs/driverp1 aaaa1111'   && echo "  ok    resume keeps DRIVER, reports held:<stamp> and the release command for a dead driver"   || { echo "::error::resume: driver present=$([ -f docs/specs/driverp1/DRIVER ] && echo yes || echo no) out=$out"; fail=1; }
+out="$(council claim docs/specs/driverp1 bbbb2222 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && echo "  ok    a second driver's claim after resume is refused while the first still holds it"   || { echo "::error::second claim after resume: exit=$ex out=$out"; fail=1; }
+council release docs/specs/driverp1 aaaa1111 >/dev/null 2>&1
+out="$(council resume docs/specs/driverp1 2>&1)"
+printf '%s' "$out" | tail -1 | grep -qF '"held":""' && echo "  ok    with no claim, resume reports held empty"   || { echo "::error::resume without DRIVER: $out"; fail=1; }
 
 echo "gated verbs: open-round, record-seat, judge, close-story each exit 2 held by <holder> without --stamp or with a wrong --stamp, no new file/row/commit; matching --stamp proceeds; PAUSE+DRIVER exits 3, not held by"
 mk_open_spec gatedv1 3
@@ -3336,17 +3334,16 @@ probe_release() {
     && printf '%s' "$out3" | grep -qF 'held by aaaa1111' && echo ok || echo FAIL
 }
 probe_pauserelease() {
+  # pause and resume keep a held DRIVER; resume reports it (a second driver must not claim
+  # under the first one's worker still in flight).
   mk_spec ppause1 2
   council claim docs/specs/ppause1 aaaa1111 >/dev/null 2>&1
   council pause docs/specs/ppause1 "why" >/dev/null 2>&1
-  local ok=true
-  [ -f docs/specs/ppause1/DRIVER ] && ok=false
-  grep -q 'driver released' docs/specs/ppause1/journal.md 2>/dev/null || ok=false
-  printf 'stamp=aaaa1111\nclaimed=now\n' > docs/specs/ppause1/DRIVER
-  council resume docs/specs/ppause1 >/dev/null 2>&1
-  [ -f docs/specs/ppause1/DRIVER ] && ok=false
-  local jcnt; jcnt="$(grep -c 'driver released' docs/specs/ppause1/journal.md 2>/dev/null)"; jcnt="${jcnt:-0}"
-  [ "$jcnt" -eq 2 ] || ok=false
+  local ok=true out
+  [ -f docs/specs/ppause1/DRIVER ] || ok=false
+  out="$(council resume docs/specs/ppause1 2>&1)"
+  [ -f docs/specs/ppause1/DRIVER ] || ok=false
+  printf '%s' "$out" | tail -1 | grep -qF '"held":"aaaa1111"' || ok=false
   $ok && echo ok || echo FAIL
 }
 probe_gated() {
