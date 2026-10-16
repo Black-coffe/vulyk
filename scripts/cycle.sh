@@ -1850,24 +1850,36 @@ EOF
 
   # An out-of-scope edit the commit below would leave behind (it stages the declared Files only) is
   # dirt open-round and claim refuse, often hours later with the worker gone: refuse it now, in the
-  # worker's own turn. scope-check decides what is out of scope (siblings, its own ledger);
-  # dirty_outside_paperwork what would stop open-round. Only their intersection refuses.
+  # worker's own turn. scope-check decides what is out of scope (siblings, its own ledger); a path
+  # refuses only if it is still dirty and not paperwork, i.e. what would stop open-round. While a
+  # wave-mate is still open the path may be its in-flight work, so only the wave's last close (and
+  # the solo path) refuses; the others print a note.
   if [ "$DOCOMMIT" = "1" ]; then
-    local STRAY="" sp dl
+    local STRAY="" sp
     while IFS= read -r sp; do
       sp="${sp#  ! }"
-      while IFS= read -r dl; do
-        [ -n "$dl" ] && [ "${dl:3}" = "$sp" ] && { STRAY="${STRAY:+$STRAY, }$sp"; break; }
-      done <<EOF
-$(dirty_outside_paperwork)
-EOF
+      [ -n "$sp" ] || continue
+      is_paperwork_path "$sp" && continue
+      [ -n "$(git status --porcelain -uall -- "$sp" 2>/dev/null)" ] && STRAY="${STRAY:+$STRAY, }$sp"
     done <<EOF
 $(printf '%s\n' "$SCOPE_OUT" | grep '^  ! ')
 EOF
     if [ -n "$STRAY" ]; then
-      echo "cycle: close-story - edited outside ## Files: $STRAY - revert them, or return NEEDS_CONTEXT naming them" >&2
-      emit false close-story 4 repair "edited outside ## Files: $STRAY"
-      exit 4
+      local MYWAVE OPEN="" sib
+      MYWAVE="$(fm_field "$STORY" wave)"
+      for sib in "$SPECDIR"/*.md; do
+        [ -f "$sib" ] && [ "$sib" != "$STORY" ] || continue
+        grep -q '^story:' "$sib" 2>/dev/null || continue
+        [ "$(fm_field "$sib" status)" = done ] && continue
+        [ "$(fm_field "$sib" wave)" = "$MYWAVE" ] && { OPEN="$(fm_field "$sib" story)"; break; }
+      done
+      if [ -n "$OPEN" ]; then
+        echo "cycle: close-story - note: outside ## Files and uncommitted: $STRAY; wave-mate $OPEN is still open, so the wave's last close decides" >&2
+      else
+        echo "cycle: close-story - edited outside ## Files: $STRAY - undo your own edits to them (a closed wave-mate's may be among them); if none are yours, return NEEDS_CONTEXT naming them" >&2
+        emit false close-story 4 repair "edited outside ## Files: $STRAY"
+        exit 4
+      fi
     fi
   fi
 

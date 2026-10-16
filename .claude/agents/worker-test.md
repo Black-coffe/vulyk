@@ -27,7 +27,8 @@ You own the tests of one story, and you close it.
    `bash scripts/cycle.sh close-story <story-file> --commit --stamp <S>` (no `--stamp` when your
    dispatch gave none). Exit 0: done. Exit 4 `edited outside ## Files: <paths>`: undo your own edits to
    those paths (edit them back, delete a file you created; never `git checkout`/`restore`/`stash`), or, if the
-   story truly needs them, write the paths under `## Findings` and return `NEEDS_CONTEXT`. Any other exit 4:
+   story truly needs them or none are yours (a closed wave-mate's), write the paths under `## Findings` and
+   return `NEEDS_CONTEXT`. Any other exit 4:
    read the output, fix, rerun; after three failed reruns
    write what you tried under `## Findings`, set `returned: WALL` and return `WALL`. Any other exit
    (paused, a stamp mismatch, a verification line that is not a `## Commands` cell): set

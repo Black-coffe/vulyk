@@ -1,7 +1,7 @@
 ---
 story: close-story-scope-refusal-02
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 2

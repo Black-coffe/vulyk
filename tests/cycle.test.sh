@@ -441,6 +441,11 @@ out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-02.md --commit 2
 [ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'edited outside ## Files: stray-new.txt' \
   && echo "  ok    an undeclared untracked new file refuses the same way" || { echo "::error::exit=$ex out=$out"; fail=1; }
 rm -f stray-new.txt
+printf 'new\n' > "stray new c.txt"
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-02.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'edited outside ## Files: stray new c.txt' \
+  && echo "  ok    a path with spaces (git C-quotes it in porcelain) refuses too" || { echo "::error::exit=$ex out=$out"; fail=1; }
+rm -f "stray new c.txt"
 mkdir -p memory/stats; printf '{"x":1}\n' > memory/stats/skills.json
 out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-02.md --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && echo "  ok    an out-of-scope paperwork path (memory/stats/skills.json) does not refuse" \
@@ -452,6 +457,22 @@ printf 'v4\n' > stray-app.txt; printf 'v4\n' > stray-other.txt
 out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-03.md 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && echo "  ok    without --commit an undeclared edit does not refuse" || { echo "::error::exit=$ex out=$out"; fail=1; }
 git add -A && git commit -qm "stray: done" >/dev/null
+# Two wave-mates in one tree (the driver runs a wave in parallel): B's in-flight scratch file must not
+# stop A; the wave's last close (B) refuses it.
+stray_story 04; stray_story 05
+sed -i 's/^wave: 05$/wave: 04/; s/^- stray-app.txt$/- stray-other.txt/' docs/specs/stray/stray-05.md
+git add -A && git commit -qm "stray: wave-mates 04 + 05" >/dev/null
+printf 'v5\n' > stray-app.txt; printf 'v5\n' > stray-other.txt; printf 'scratch\n' > stray-b-scratch.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-04.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF 'wave-mate stray-05 is still open' \
+  && echo "  ok    an open wave-mate's scratch file does not stop a story; close-story notes it" || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-05.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'edited outside ## Files: stray-b-scratch.txt' \
+  && echo "  ok    the wave's last close refuses the scratch file" || { echo "::error::exit=$ex out=$out"; fail=1; }
+rm -f stray-b-scratch.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-05.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -z "$(git status --porcelain -- stray-app.txt stray-other.txt)" ] \
+  && echo "  ok    scratch removed, the last close exits 0 and the tree is clean" || { echo "::error::exit=$ex out=$out"; fail=1; }
 
 [ -e "$MARK" ] && fail=1
 exit $fail
