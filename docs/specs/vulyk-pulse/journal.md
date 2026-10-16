@@ -11,3 +11,8 @@
 - 2026-10-16T09:19:00Z · 04-council:ESCALATE · reopened after round 2, ceiling now 6 · next: repair
 - 2026-10-16T09:19:07Z · 03-building · relaunching the hive after reopen · next: the loop holds the working tree of vulyk/vulyk-pulse; to edit, run /vulyk-pause vulyk-pulse
 - 2026-10-16T09:19:16Z · 03-building · repair round 2: vulyk-pulse-04-repair-round-2.md · next: build:3
+- 2026-10-16T09:22:46Z · driver · driver released · next: paused
+- 2026-10-16T09:22:47Z · paused · owner asked for a pause · next: paused
+- 2026-10-16T09:30:33Z · resumed · resumed · next: status
+- 2026-10-16T09:31:07Z · 03-building · relaunching the hive after resume · next: the loop holds the working tree of vulyk/vulyk-pulse; to edit, run /vulyk-pause vulyk-pulse
+- 2026-10-16T09:31:15Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/vulyk-pulse/round-3 · next: dispatch:opus,review
