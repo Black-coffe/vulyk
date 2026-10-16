@@ -7,3 +7,4 @@
 - 2026-10-16T11:28:45Z · 04-council:ESCALATE · reopened after round 1, ceiling now 2 · next: repair
 - 2026-10-16T11:28:48Z · 03-building · repair round 1: close-story-scope-refusal-02-repair-round-1.md · next: build:2
 - 2026-10-16T11:34:42Z · 04-council:open · round 2 opened, no court (no blind seat required) · next: dispatch:review
+- 2026-10-16T11:37:24Z · 04-council:GREEN · round 2 verdict GREEN at 29390b6 pack dfef0fc979bb · next: green

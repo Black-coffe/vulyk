@@ -45,6 +45,7 @@ them. The worker meets it in its own turn; open-round no longer meets it hours l
 **Branch:** vulyk/close-story-scope-refusal
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
 **Council:** ESCALATE round 1, 2026-10-16, at e2d0ad6, pack a0812d9f8d03
+**Council:** GREEN round 2, 2026-10-16, at 29390b6, pack dfef0fc979bb
 **Shipped:** <written by scripts/ship-check.sh --record>
 
 ## Needs a human
