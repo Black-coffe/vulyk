@@ -42,7 +42,7 @@ them. The worker meets it in its own turn; open-round no longer meets it hours l
 
 **Approved:** <owner, date - the approval stop>
 **Briefed:** via mini-brief, Andrei, 2026-10-16
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/close-story-scope-refusal
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
 **Council:** <written by scripts/cycle.sh judge/escalate>
 **Shipped:** <written by scripts/ship-check.sh --record>
