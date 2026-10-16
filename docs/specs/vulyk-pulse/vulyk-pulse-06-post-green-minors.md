@@ -37,6 +37,7 @@ Council round 4 was GREEN; the owner chose to fix its minor notes before the rel
 - .claude/mods/vulyk-pulse/hooks/register.tsx
 - .claude/mods/vulyk-pulse/types/index.d.ts
 - docs/pulse.md
+- tests/watcher.test.sh
 
 ## Non-goals
 - The token padding (`trimStart`) and the `weigh()` fallback rate: left as they are.
