@@ -178,6 +178,7 @@ merge test. -01 holds it at little extra cost, and Ask 1 needs it in v1 anyway.
 **Council:** RED round 1, 2026-10-16, at f483469, pack 1f2f744b6f2b - red: 2
 **Council:** ESCALATE round 2, 2026-10-16, at fbc3455, pack 1a4a725223e7 - red: 5
 **Council:** RED round 3, 2026-10-16, at 602afe7, pack 1ee8daa11392 - red: 5
+**Council:** GREEN round 4, 2026-10-16, at d18ad35, pack ad19d95dd0d2
 **Shipped:**
 
 ## Needs a human
