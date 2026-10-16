@@ -26,6 +26,9 @@ You implement one story and close it. Not two, and nothing "while you are here".
    gave (no `--stamp` when it gave none). Its last stdout line is JSON:
    - exit 0: the story is verified and committed. Done.
    - exit 4: scope or verification failed; `error` names the command. Read the output, fix, rerun.
+     `edited outside ## Files: <paths>`: undo your own edits to those paths (edit them back, delete a file you
+     created; never `git checkout`/`restore`/`stash`), or, if the story truly needs them, write the paths under
+     `## Findings` and return `NEEDS_CONTEXT`.
      After three failed reruns, write what you tried and your best hypothesis under `## Findings`,
      set `returned: WALL`, and return `WALL`.
    - any other exit (paused, another driver's stamp, a verification line that is not a `## Commands`

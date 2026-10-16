@@ -1845,7 +1845,31 @@ EOF
       ;;
   esac
 
-  bash "$HERE/scope-check.sh" "$STORY"
+  local SCOPE_OUT; SCOPE_OUT="$(bash "$HERE/scope-check.sh" "$STORY")"
+  printf '%s\n' "$SCOPE_OUT"
+
+  # An out-of-scope edit the commit below would leave behind (it stages the declared Files only) is
+  # dirt open-round and claim refuse, often hours later with the worker gone: refuse it now, in the
+  # worker's own turn. scope-check decides what is out of scope (siblings, its own ledger);
+  # dirty_outside_paperwork what would stop open-round. Only their intersection refuses.
+  if [ "$DOCOMMIT" = "1" ]; then
+    local STRAY="" sp dl
+    while IFS= read -r sp; do
+      sp="${sp#  ! }"
+      while IFS= read -r dl; do
+        [ -n "$dl" ] && [ "${dl:3}" = "$sp" ] && { STRAY="${STRAY:+$STRAY, }$sp"; break; }
+      done <<EOF
+$(dirty_outside_paperwork)
+EOF
+    done <<EOF
+$(printf '%s\n' "$SCOPE_OUT" | grep '^  ! ')
+EOF
+    if [ -n "$STRAY" ]; then
+      echo "cycle: close-story - edited outside ## Files: $STRAY - revert them, or return NEEDS_CONTEXT naming them" >&2
+      emit false close-story 4 repair "edited outside ## Files: $STRAY"
+      exit 4
+    fi
+  fi
 
   local VERIFY; VERIFY="$(verify_of "$STORY")"
   local REPS; REPS="$(printf '%s\n' "$VERIFY" | awk -F': *' '$1 ~ /^repeat$/ { gsub(/[[:space:]]/, "", $2); print $2; exit }')"
