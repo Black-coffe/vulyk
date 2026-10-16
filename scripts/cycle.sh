@@ -296,7 +296,8 @@ descope_not_in_brief() { # descope_not_in_brief <spec> -> each `## Descoped` ent
   # blind seats read only brief.md, so they judge the dropped ask as unmet (a hive lost three
   # rounds so). Read from git, not guessed: nothing when brief.md has no commit or is being edited.
   local spec="$1" rel c
-  rel="$(git ls-files --full-name -- "$spec/brief.md" 2>/dev/null)"
+  # -z: the path comes back as itself; a C-quoted non-ASCII name would miss in `git show`
+  rel="$(git ls-files -z --full-name -- "$spec/brief.md" 2>/dev/null | tr -d '\0')"
   [ -n "$rel" ] && [ -z "$(git status --porcelain -- "$spec/brief.md" 2>/dev/null)" ] || return 0
   c="$(git log -1 --format=%H -- "$spec/brief.md" 2>/dev/null)"; [ -n "$c" ] || return 0
   grep -vxF -f <(git show "$c:${rel%brief.md}plan.md" 2>/dev/null | descoped_entries) \

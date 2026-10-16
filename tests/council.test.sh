@@ -1904,6 +1904,18 @@ out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
 sed -i 's/^3\. ask number 3 works$/3. ask number 3 works on the happy path (narrowed by the owner)/' docs/specs/oround1/brief.md
 git add -A && git commit -qm "oround1: the brief takes the descope in" >/dev/null
 
+echo "open-round: a non-ASCII spec whose descope was committed with the brief passes the descope check (quotePath must not C-quote the path)"
+git config core.quotePath true
+mk_spec 'оплата' 3
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/oplata#; s/^\*(empty)\*$/- ask 2 dropped - owner: "not this circle"/' 'docs/specs/оплата/plan.md'
+sed -i 's/^2\. ask number 2 works$/2. (descoped by the owner: not this circle)/' 'docs/specs/оплата/brief.md'
+git add -A && git commit -qm "оплата: descope with the brief" >/dev/null
+out="$(council open-round 'docs/specs/оплата' 2>&1)"; ex=$?
+{ [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'tier' && ! printf '%s' "$out" | grep -qF 'descope not in the brief'; } \
+  && echo "  ok    the descope committed with the brief is not reported; the round stops at the next check (Tier)" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+git rm -rq 'docs/specs/оплата' && git commit -qm "drop the non-ASCII descope fixture" >/dev/null
+
 echo "open-round: opens round 1 - ROUND file, court reduced to brief.md, journal, next dispatch:..."
 out="$(council open-round docs/specs/oround1 --commit)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:opus,review"' && echo "  ok    round 1 opens, next dispatch:opus,review" \
