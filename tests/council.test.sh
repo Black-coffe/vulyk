@@ -2078,6 +2078,27 @@ git log -1 --format=%s | grep -qF "vulyk(courtred1): open-round 1" \
   || { echo "::error::main repo HEAD commit message: $(git log -1 --format=%s)"; fail=1; }
 
 fi # --quick: end of the court-reduction skip
+
+echo "open-round: a path that fits the hive but passes MAX_PATH inside the court still builds a clean court (Windows: Filename too long)"
+mk_open_spec lplong1 2
+set_tier lplong1 3
+# 248 characters from the drive letter: under Windows' 260 in the hive, over it in
+# .vulyk/court/lplong1/round-1/. Off Windows the case simply passes.
+lproot="$(cygpath -m "$T" 2>/dev/null || printf '%s' "$T")"
+lpn=$((248 - ${#lproot} - 1 - 5))
+lprel="lpsrc/$(printf 'd%.0s' $(seq 1 $((lpn / 2))))/$(printf 'f%.0s' $(seq 1 $((lpn - lpn / 2 - 1))))"
+mkdir -p "$(dirname "$lprel")" && printf 'x\n' > "$lprel"
+git add -A && git commit -qm "lplong1: a long path" >/dev/null
+out="$(council open-round docs/specs/lplong1 --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    open-round builds the court" || { echo "::error::exit=$ex out=$out"; fail=1; }
+courtlp="$(sed -n 's/^court=//p' docs/specs/lplong1/council/round-1/ROUND 2>/dev/null)"
+[ -n "$courtlp" ] && [ -f "$courtlp/$lprel" ] && echo "  ok    the long-path file is checked out in the court" \
+  || { echo "::error::no $lprel in court '$courtlp'"; fail=1; }
+[ -n "$courtlp" ] && [ -z "$(git -C "$courtlp" -c core.longpaths=true status --porcelain 2>&1)" ] \
+  && echo "  ok    and the court's reduction left its status clean" \
+  || { echo "::error::court status: $(git -C "$courtlp" -c core.longpaths=true status --porcelain 2>&1)"; fail=1; }
+[ -n "$courtlp" ] && git -c core.longpaths=true worktree remove --force "$courtlp" >/dev/null 2>&1
+git rm -rq lpsrc && git commit -qm "lplong1: drop the long path" >/dev/null
 if full; then # --quick skips from here to the 0.18 section: the reopen walk, the ceiling variants, the committed-verb walks, stories 14-17, every pinned-commit replay, the C5 block
 # --- reopen: ceiling +3 after ESCALATE, then a fourth round opens ------------------------------
 
