@@ -25,7 +25,8 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    *Release / deploy* row names it, with the version. Do not run it, ask about it, or check back on it.
    `/vulyk-status`'s `merged locally, not pushed: <n>` line is how anyone learns whether it ran.
 4. Record. `bash scripts/ship-check.sh --record docs/specs/<slug> <version> "merged to <default
-   branch>, publish pending"`, then commit it (`vulyk(<slug>): shipped <version>`). The spec is closed
+   branch>, publish pending"`, then commit it (`vulyk(<slug>): shipped <version>`, or `chore(vulyk-<slug>): ...` under a
+   conventional Commit convention). The spec is closed
    on disk.
 5. Next circle. Dispatch only what has work to do, in one message:
    - `drone-docs`, only when the merged range touches a module listed in `memory/memory.md`'s map. Give

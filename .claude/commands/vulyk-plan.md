@@ -47,7 +47,8 @@ Plan: "$ARGUMENTS"
      by wave (one line each), the `## Assumptions`, and what the build will spend (Tier 2: you build,
      one reviewer per round; Tier 3-4: the workers and seats). Wait. On approval, fill `**Approved:**`
      with the owner and the date, run `bash scripts/journal.sh docs/specs/<slug> 02-approved "approved
-     by <owner>" branch`, and commit the spec directory (`vulyk(<slug>): approved`). A "no" or a change
+     by <owner>" branch`, and commit the spec directory (`vulyk(<slug>): approved`; `chore(vulyk-<slug>): approved` when the
+     Profile's Commit convention names conventional commits, as `cycle.sh` writes it). A "no" or a change
      request reopens steps 5-7 once; a second one is a new brief.
    - Straight-through opt-in, only with `--go` or when the grill's last answer asked for it: instead of
      waiting, `bash scripts/cycle.sh briefed docs/specs/<slug> --commit` (`--mode assumed` in

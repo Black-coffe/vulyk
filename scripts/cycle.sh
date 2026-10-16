@@ -115,6 +115,27 @@ redact_note() { # redact_note <text> -> <text> piped through scripts/redact.sh (
   printf '%s' "$1" | bash "$HERE/redact.sh" 2>/dev/null
 }
 
+sed_inplace() { # sed_inplace <sed-args...> <file> - `sed -i` in the one spelling GNU and BSD
+  # (macOS) sed both read, an attached backup suffix; the backup is removed whatever sed returned.
+  local f="${!#}" rc=0
+  sed -i.bak "$@" || rc=$?
+  rm -f "$f.bak"
+  return $rc
+}
+
+commit_subject() { # commit_subject <message> -> <message>, or, when the Profile's Commit convention
+  # names conventional commits, `kind(id): text` rewritten as `chore(kind-id): text`: a hive whose
+  # commitlint allows only conventional types rejected every `story(..)` and `vulyk(..)` subject.
+  local msg="$1" kind rest
+  case "$(profile_value "$(constitution_file "$ROOT")" "Commit convention" | tr '[:upper:]' '[:lower:]')" in
+    *conventional*)
+      case "$msg" in
+        *'('*'): '*) kind="${msg%%(*}"; rest="${msg#*(}"; msg="chore($kind-${rest%%): *}): ${rest#*): }" ;;
+      esac ;;
+  esac
+  printf '%s' "$msg"
+}
+
 council_append_line() { # council_append_line <plan> <text> - C7: the **Council:** line lands
   # right after the last existing one (or replaces the template's unfilled placeholder when
   # there is none yet), never at the file's true EOF - a round can be judged after an earlier
@@ -264,6 +285,23 @@ asks_count() { # asks_count <spec-dir> -> A, the number of `## Asks` items in br
 $(brief_asks "$1/brief.md")
 ASKS
   printf '%s\n' "$n"
+}
+
+descoped_entries() { # descoped_entries < plan.md -> its `## Descoped` entries (`- ` lines), CR-free
+  awk '{ sub(/\r$/, "") } /^##[[:space:]]+Descoped[[:space:]]*$/ { f=1; next } /^##[[:space:]]/ { f=0 } f && /^- /'
+}
+
+descope_not_in_brief() { # descope_not_in_brief <spec> -> each `## Descoped` entry of plan.md that
+  # plan.md did not hold yet when brief.md last changed: a descope the brief never took in. The
+  # blind seats read only brief.md, so they judge the dropped ask as unmet (a hive lost three
+  # rounds so). Read from git, not guessed: nothing when brief.md has no commit or is being edited.
+  local spec="$1" rel c
+  # -z: the path comes back as itself; a C-quoted non-ASCII name would miss in `git show`
+  rel="$(git ls-files -z --full-name -- "$spec/brief.md" 2>/dev/null | tr -d '\0')"
+  [ -n "$rel" ] && [ -z "$(git status --porcelain -- "$spec/brief.md" 2>/dev/null)" ] || return 0
+  c="$(git log -1 --format=%H -- "$spec/brief.md" 2>/dev/null)"; [ -n "$c" ] || return 0
+  grep -vxF -f <(git show "$c:${rel%brief.md}plan.md" 2>/dev/null | descoped_entries) \
+    <(descoped_entries < "$spec/plan.md")
 }
 
 current_round_dir() { # current_round_dir <spec> -> the highest round-N dir, or nothing
@@ -856,7 +894,7 @@ commit_paperwork() { # commit_paperwork <verb-label> <message> <path...> - stage
   [ -e memory/stats/anomalies.jsonl ] && paths+=(memory/stats/anomalies.jsonl)
   [ -n "$(git status --porcelain -- "${paths[@]}" 2>/dev/null)" ] || return 0
   git add -A -- "${paths[@]}" >/dev/null 2>&1
-  git_commit_or_fail "$verb" "$msg"
+  git_commit_or_fail "$verb" "$(commit_subject "$msg")"
 }
 
 # --- escalate row/plan-line helpers (R5/C-3, autonomous-cycle-21) -----------------------------
@@ -1341,7 +1379,7 @@ cmd_briefed() { # cmd_briefed <spec> <commit:0|1> <mode: ""|mini-brief|assumed>
     local dateonly; dateonly="$(date -u +%Y-%m-%d)"
     local line="**Briefed:** $variant, $OWNER_V, $dateonly"
     if grep -q '^\*\*Briefed:\*\*' "$PLAN"; then
-      sed -i "s#^\*\*Briefed:\*\*.*#$line#" "$PLAN"
+      sed_inplace "s#^\*\*Briefed:\*\*.*#$line#" "$PLAN"
     else
       printf '%s\n' "$line" >> "$PLAN"
     fi
@@ -1399,7 +1437,7 @@ cmd_branch() { # cmd_branch <spec> <commit:0|1>
     fi
     local line="**Branch:** $BR"
     if grep -q '^\*\*Branch:\*\*' "$PLAN"; then
-      sed -i "s#^\*\*Branch:\*\*.*#$line#" "$PLAN"
+      sed_inplace "s#^\*\*Branch:\*\*.*#$line#" "$PLAN"
     else
       printf '%s\n' "$line" >> "$PLAN"
     fi
@@ -1989,7 +2027,7 @@ EOF
     # Story 09: the anomaly-scan hook's log rides this commit too, same as scope.jsonl above.
     [ -n "$(git status --porcelain -- memory/stats/anomalies.jsonl 2>/dev/null)" ] && git add -- memory/stats/anomalies.jsonl >/dev/null 2>&1
 
-    sed -i -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
+    sed_inplace -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
     git add -- "$STORY" >/dev/null 2>&1
 
     # Commit exactly what this story staged (`--only` by pathspec), never whatever else sits in
@@ -2006,9 +2044,9 @@ EOF
       --name-only -z --no-renames -- "${SPECS[@]}" 2>/dev/null)
     local commit_err="nothing of this story is staged"
     if [ "${#OWN[@]}" -eq 0 ] \
-      || ! commit_err="$(GIT_LITERAL_PATHSPECS=1 git commit -q -m "story($ID): $TITLE" --only -- "${OWN[@]}" 2>&1)"; then
+      || ! commit_err="$(GIT_LITERAL_PATHSPECS=1 git commit -q -m "$(commit_subject "story($ID): $TITLE")" --only -- "${OWN[@]}" 2>&1)"; then
       [ "${#OWN[@]}" -eq 0 ] || GIT_LITERAL_PATHSPECS=1 git reset -q -- "${OWN[@]}" >/dev/null 2>&1
-      sed -i -E "s/^(status:[[:space:]]*)done/\1$ST/" "$STORY"
+      sed_inplace -E "s/^(status:[[:space:]]*)done/\1$ST/" "$STORY"
       echo "cycle: close-story - git commit failed: $commit_err" >&2
       emit false close-story 2 error "git commit failed"
       exit 2
@@ -2017,7 +2055,7 @@ EOF
     # (lint-staged, a formatter) changed the commit but not the real index. Sync it to HEAD.
     GIT_LITERAL_PATHSPECS=1 git reset -q -- "${OWN[@]}" >/dev/null 2>&1
   else
-    sed -i -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
+    sed_inplace -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
   fi
 
   echo "cycle: $(fm_field "$STORY" story) - closed, verification green"
@@ -2282,6 +2320,16 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
   { [ -n "$A" ] && [ "$A" -gt 0 ]; } 2>/dev/null || {
     echo "cycle: open-round - $SPEC/brief.md has no '## Asks' section, or it is empty" >&2
     emit false open-round 2 error "## Asks missing or empty"
+    exit 2
+  }
+
+  # A descope the owner gave reaches the court only through the brief: refuse until ## Asks
+  # takes it in (the brief commits after the ## Descoped line, or with it).
+  local descoped; descoped="$(descope_not_in_brief "$SPEC" | head -1)"
+  [ -z "$descoped" ] || {
+    echo "cycle: open-round - $PLAN ## Descoped has an entry newer than $SPEC/brief.md: $descoped" >&2
+    echo "  the blind seats read only the brief: strike or narrow the ask it drops in ## Asks (with the reason), commit the brief, then open the round" >&2
+    emit false open-round 2 error "descope not in the brief: $descoped"
     exit 2
   }
 
