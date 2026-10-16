@@ -3758,6 +3758,27 @@ bash scripts/wave-check.sh docs/specs/r18rp | expect "wave-check: the repair sto
 out="$(bash scripts/trace-check.sh docs/specs/r18rp)"
 printf '%s' "$out" | expect "trace-check: its > N. quotes trace to ## Asks" "backward: 0 unfound + 0 storyless"
 
+echo "one ## Asks parser (lib.sh brief_asks): Asks written as > lines alone open a round, count by place, and repair quotes the line"
+mkdir -p docs/specs/r18rq
+cp "$SRC/templates/plan.md" docs/specs/r18rq/plan.md
+printf '# r18rq (brief)\n\n## Request\nbuild the thing\n\n## Asks\n> quoted ask one works\n>\n> quoted ask two works\n\n## Answers\n> not an ask\n' > docs/specs/r18rq/brief.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-16/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/r18rq#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rq/plan.md
+printf 'q\n' > r18rq-a.txt
+printf -- '---\nstory: r18rq-01\nstatus: done\nwave: 1\n---\n# A\n\n## Requirements\n> quoted ask one works\n\n## Files\n- r18rq-a.txt\n\n## Verification\n`true`\n' > docs/specs/r18rq/r18rq-01-a.md
+git add -A && git commit -qm "r18rq: fixture" >/dev/null
+out="$(council open-round docs/specs/r18rq --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    open-round counts the quoted asks (it stopped on '## Asks missing or empty' before)" \
+  || { echo "::error::open-round on a quoted ## Asks: exit=$ex out=$out"; fail=1; }
+seat_report opus 1 GR | council record-seat docs/specs/r18rq 1 opus >/dev/null 2>&1
+printf 'VERDICT: PASS\nReviewed.\n' | council record-seat docs/specs/r18rq 1 review >/dev/null 2>&1
+council judge docs/specs/r18rq --commit >/dev/null 2>&1
+grep '"spec":"r18rq"' memory/stats/council.jsonl | tail -1 | jq -c '[.asks, .red]' | expect "the row: 2 asks, ask 2 RED" '[2,[2]]'
+council repair docs/specs/r18rq --commit >/dev/null 2>&1
+sed -n '/^## Requirements$/,/^## Findings$/p' docs/specs/r18rq/r18rq-02-repair-round-1.md 2>/dev/null \
+  | expect "repair quotes ask 2 as the brief's line" "> quoted ask two works"
+out="$(bash scripts/trace-check.sh docs/specs/r18rq)"
+printf '%s' "$out" | expect "trace-check: the repair quote traces to the brief" "backward: 0 unfound + 0 storyless"
+
 echo "ADR-013 D2: advance - branch and open-round in one call, stop at the first agent boundary, key order fixed"
 mk_spec r18ad 2
 sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-26/; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18ad/plan.md

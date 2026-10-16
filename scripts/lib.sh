@@ -86,6 +86,22 @@ marker() { # marker <plan.md> <Name> -> prints the line's value, empty if absent
   printf '%s' "$v"
 }
 
+# The one `## Asks` parser: cycle.sh counts and quotes the items (asks_count, ask_item) and
+# trace-check.sh traces story quotes to them, so the two can never read a different list. Asks
+# written only as `> ` quotes once passed trace-check, counted zero in cycle.sh and stopped
+# open-round after a finished build.
+brief_asks() { # brief_asks <brief.md> -> the `## Asks` items, one per line, trailing blanks cut:
+  # every `N. text` line as written; a block with no numbered line gives each `> ` line's text
+  awk '
+    /^##[[:space:]]+Asks[[:space:]]*$/ { inblock=1; next }
+    /^##[[:space:]]/                    { if (inblock) exit }
+    !inblock                            { next }
+    /^[0-9]+\.[[:space:]]/              { s=$0; sub(/[[:space:]]+$/, "", s); num[++n]=s; next }
+    /^>/                                { s=$0; sub(/^>[[:space:]]?/, "", s); sub(/[[:space:]]+$/, "", s); if (s != "") quo[++q]=s }
+    END { if (n) for (i=1; i<=n; i++) print num[i]; else for (i=1; i<=q; i++) print quo[i] }
+  ' "$1" 2>/dev/null
+}
+
 # --- the constitution (ADR-013 D1) -----------------------------------------------------------
 # A hive that keeps its own CLAUDE.md and puts VULYK's constitution in a sidecar has
 # CLAUDE.vulyk.md; every place VULYK reads the constitution - close-story's ## Commands check,

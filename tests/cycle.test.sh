@@ -349,6 +349,22 @@ printf '%s' "$out" | grep -qF 'trc-01-t.md' && { echo "::error::a whole ask item
   || echo "  ok    '> 2. the second ask works' traces to ## Asks item 2"
 printf '%s' "$out" | expect "a fragment of an item is not an item" "trc-02-t.md: quote found in NEITHER"
 
+echo "one ## Asks parser (lib.sh brief_asks, read by cycle.sh and trace-check.sh): numbered lines when the block has any, else each > line's text"
+mkdir -p docs/specs/qa
+cp "$SRC"/templates/plan.md docs/specs/qa/plan.md
+printf '## Asks\n1. a numbered ask\n> its quoted copy\n2. another ask  \n' > docs/specs/qa/brief.md
+[ "$(brief_asks docs/specs/qa/brief.md | tr '\n' '|')" = "1. a numbered ask|2. another ask|" ] \
+  && echo "  ok    a numbered block reads as before: its > lines are not items" \
+  || { echo "::error::numbered block: $(brief_asks docs/specs/qa/brief.md | tr '\n' '|')"; fail=1; }
+printf '# qa\n\n## Request\n> build the quote demo\n\n## Asks\n> the first ask works  \n>\n> the second ask works\n\n## Answers\n> not an ask\n' > docs/specs/qa/brief.md
+[ "$(brief_asks docs/specs/qa/brief.md | tr '\n' '|')" = "the first ask works|the second ask works|" ] \
+  && echo "  ok    a block of > lines alone: each non-empty line's text, nothing past the next ## heading" \
+  || { echo "::error::quoted block: $(brief_asks docs/specs/qa/brief.md | tr '\n' '|')"; fail=1; }
+out="$(bash scripts/cycle.sh briefed docs/specs/qa 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    briefed counts the quoted asks (it refused '## Asks missing or empty' before)" \
+  || { echo "::error::briefed on a quoted ## Asks: exit=$ex out=$out"; fail=1; }
+rm -rf docs/specs/qa
+
 echo "0.19 C: blocked_by manual:<id> - a hand step stops the wave until manual-done records it; no later wave is built past it"
 mkdir -p docs/specs/man
 cp "$SRC"/templates/plan.md docs/specs/man/plan.md

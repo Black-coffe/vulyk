@@ -257,13 +257,13 @@ manual_id_ok() { # manual_id_ok <id> -> 0 iff <id> names one plain file under <s
   return 0
 }
 
-asks_count() { # asks_count <spec-dir> -> A, the number of `## Asks` items in brief.md (C8)
-  awk '
-    /^##[[:space:]]+Asks[[:space:]]*$/ { inblock=1; next }
-    /^##[[:space:]]/                    { if (inblock) exit }
-    inblock && /^[0-9]+\.[[:space:]]/   { c++ }
-    END { print c+0 }
-  ' "$1/brief.md" 2>/dev/null
+asks_count() { # asks_count <spec-dir> -> A, the number of `## Asks` items in brief.md (C8), as
+  # lib.sh's brief_asks reads them
+  local n=0 l
+  while IFS= read -r l; do [ -n "$l" ] && n=$((n+1)); done <<ASKS
+$(brief_asks "$1/brief.md")
+ASKS
+  printf '%s\n' "$n"
 }
 
 current_round_dir() { # current_round_dir <spec> -> the highest round-N dir, or nothing
@@ -2612,12 +2612,12 @@ cmd_manual_done() { # cmd_manual_done <spec> <id> [note] - 0.19 C: records a han
 # no planner in between: the asks come from the ledger row and the seat files, the findings
 # verbatim, the scope and the verification from the stories already done -----------------------
 
-ask_item() { # ask_item <spec> <n> -> the brief's `## Asks` item numbered n, as written
-  awk -v want="$2" '
-    /^##[[:space:]]+Asks[[:space:]]*$/ { inblock=1; next }
-    /^##[[:space:]]/                    { if (inblock) exit }
-    inblock && /^[0-9]+\.[[:space:]]/  { n=$0; sub(/\..*$/, "", n); if (n+0 == want+0) { sub(/[[:space:]]+$/, ""); print; exit } }
-  ' "$1/brief.md" 2>/dev/null
+ask_item() { # ask_item <spec> <n> -> the brief's `## Asks` item numbered n, as written; a
+  # quoted item (brief_asks, lib.sh) has no number of its own and counts by its place
+  brief_asks "$1/brief.md" | awk -v want="$2" '
+    { n=$0; if (n ~ /^[0-9]+\.[[:space:]]/) sub(/\..*$/, "", n); else n=NR
+      if (n+0 == want+0) { print; exit } }
+  '
 }
 
 story_number() { # story_number <story-file> <slug> -> the NN of its `story: <slug>-NN` id or of
