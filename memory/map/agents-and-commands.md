@@ -22,7 +22,8 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   at the floor only on Claude Code >= 2.1.293 (`top-model.sh --floor`, scripts.md).
 - **worker-code** / **worker-test** (`sonnet` since ADR-015, `medium`, `maxTurns:90`) - Tier 3-4, one
   story. Close: `returned: DONE`, then `cycle.sh close-story <story> --commit --stamp <S>`; exit 4 →
-  fix and rerun, after three failures `## Findings` + `returned: WALL`; other exits →
+  fix and rerun (`edited outside ## Files: <paths>` = undo your own edits to those paths; none yours →
+  `NEEDS_CONTEXT` naming them, worker-code.md:28-29), after three failures `## Findings` + `returned: WALL`; other exits →
   `NEEDS_CONTEXT`. Never edit `status:`, never stash/checkout/reset/clean.
 - **queen-planner** (`opus`, `high`, `maxTurns:40`; Read/Write/Grep/Glob) - Tier 3-4 plan + stories
   (`model: sonnet` each, `opus` only for judgment-heavy work: queen-planner.md:21, ADR-015). Never
@@ -88,4 +89,4 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   (`scripts/injection-check.sh`, scripts.md). gc/evolve/map are prompted by the SessionStart
   `maintenance due: ...` line (scripts.md).
 
-last-verified: 2026-10-16 (v0.27.0, ADR-013, ADR-015)
+last-verified: 2026-10-16 (v0.28.0, ADR-013, ADR-015)

@@ -13,6 +13,7 @@
 
 - the VULYK watcher mod (`.claude/mods/vulyk-watcher/`, marketplace `.claude-plugin/marketplace.json`,
   installed by `install.sh`; no map slice): docs/watcher.md
+- the VULYK pulse mod (`.claude/mods/vulyk-pulse/`, same marketplace and installer; no map slice): docs/pulse.md
 
 ## Unmapped territory
 - `docs/` narrative pages (architecture.md, pipeline.md, cycle.md, token-economy.md,

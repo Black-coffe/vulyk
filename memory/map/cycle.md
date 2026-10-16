@@ -2,7 +2,7 @@
 
 ## Purpose
 Truth lives in committed files under `docs/specs/<slug>/`, written only by `scripts/cycle.sh` (~2940
-lines). One verb, `advance` (ADR-013), steps the loop to the next agent boundary; the Queen (Tier 1-2
+lines, 2977 at 0.28.0). One verb, `advance` (ADR-013), steps the loop to the next agent boundary; the Queen (Tier 1-2
 solo, or Tier 3-4 without Workflow) or `.claude/workflows/vulyk-cycle.js` (Tier 3-4) calls it and
 dispatches the agent `next` names. Contract: ADR-001 (D2, D3 superseded) + ADR-013.
 
@@ -10,36 +10,39 @@ dispatches the agent `next` names. Contract: ADR-001 (D2, D3 superseded) + ADR-0
 `brief.md ## Asks` ← `/vulyk-plan` · `plan.md **Briefed:**/**Approved:**` ← `briefed` / the owner ·
 `**Branch:**` ← `branch` · `**Council:**` line per round, `## Needs a human` ← `judge`/`escalate` ·
 `**Checked:**` ← `human-check.sh` · `council/round-N/ROUND` (`head= pack= opened= court= ceiling=
-tier= seats= since=`) ← `build_round` :2065 · `council/REOPEN`, `CEILING` ← `reopen` ·
+tier= seats= since=`) ← `build_round` :2101 · `council/REOPEN`, `CEILING` ← `reopen` ·
 `council/round-N/<seat>.md` (+`.attempt-K.md`) ← `record-seat` · `<slug>-NN-repair-round-<n>.md` ←
 `repair` · `memory/stats/council.jsonl` (1 row/round) ← `judge`/`escalate` · `journal.md` ←
 `journal.sh`. Gitignored: `PAUSE`, `DRIVER` (stamp), `.vulyk/court/`, `.vulyk/reports/`.
 
 ## Verbs (exit 0 ok · 1 usage · 2 precondition · 3 paused · 4 malformed report / red verify · 5 stale · 6 escalate)
-Dispatch `case` `cycle.sh:2826-2941`. Last stdout line is one JSON object (`emit` :69); mutating
+Dispatch `case` `cycle.sh:2861-2977`. Last stdout line is one JSON object (`emit` :69); mutating
 verbs on exit 0 carry the post-verb `status` (`emit_status` :86).
 - `status [--json]` `cmd_status` :487 (read-only) · `briefed` :1307 · `branch` :1358 · `escalate` :1236
-  · `judge` :978 · `record-seat` :1646 · `manual-done` :2520.
-- `close-story <file> [--commit] [--stamp]` :1782 - scope-check; each `## Verification` segment must be a
+  · `judge` :978 · `record-seat` :1646 · `manual-done` :2556.
+- `close-story <file> [--commit] [--stamp]` :1782 - scope-check (:1848); with `--commit`, a path scope-check
+  counts out of scope (`  ! ` lines) that is still dirty and not `is_paperwork_path` → exit 4 `edited
+  outside ## Files: <paths>` (:1857-1884). Only the wave's last open story refuses; with a wave-mate still
+  open (same `wave:`, not done) it prints a note and goes on (0.28). Each `## Verification` segment must be a
   `## Commands` cell of `constitution_file` or `none — reviewed by lead-review`; runs under `timeout
   ${VULYK_VERIFY_TIMEOUT:-540}` when a working `timeout` exists (124 → exit 4); commits. Done + clean
   tree → `ok:true` "already done"; self-marked done with a diff → closes it.
-- `open-round` :2166 - refuses a tree dirty outside paperwork (`dirty_outside_paperwork` :396);
-  `build_round` freezes `seats=`/`since=`, builds the court (`build_court` :1997) only when a blind seat
-  is required, carries round n-1's GREEN/N/A blind seats (`carry_seats` :2042; `review` never carried).
-- `claim <spec> <stamp>` :2448 refuses a dirty tree (a holder's re-claim skips it); `release` :2498,
-  `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"` :2330 appends to `## Answers`,
+- `open-round` :2202 - refuses a tree dirty outside paperwork (`dirty_outside_paperwork` :396);
+  `build_round` freezes `seats=`/`since=`, builds the court (`build_court` :2033) only when a blind seat
+  is required, carries round n-1's GREEN/N/A blind seats (`carry_seats` :2078; `review` never carried).
+- `claim <spec> <stamp>` :2484 refuses a dirty tree (a holder's re-claim skips it); `release` :2534,
+  `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"` :2366 appends to `## Answers`,
   raises `CEILING`, emits `next:"repair"` (`open-round` for an `env` escalation).
-- `repair` :2572 - below. `advance [--stamp] [--claim] [--ingest]` :2733 - below.
+- `repair` :2608 - below. `advance [--stamp] [--claim] [--ingest]` :2769 - below.
 
 ## `advance` (ADR-013 D2)
 1. `--claim` (needs `--stamp`): runs `claim`; a refusal is the stop line.
 2. `--ingest`: each missing required seat of the open, non-stale round is recorded from
    `.vulyk/reports/<slug>/round-<n>/<seat>.attempt-<k>.md` (k=2 if attempt-1 exists); no file → empty
-   report (spends the attempt). Tier 4 `review` = `fold_reviews` :2705 over `review-top`/`review-second`
+   report (spends the attempt). Tier 4 `review` = `fold_reviews` :2741 over `review-top`/`review-second`
    (BLOCK if either). Each exit 4 goes into `rejected:[{seat,attempt,error}]`.
 3. Loop ≤ 12 steps: while `next` ∈ `branch|open-round|judge|repair`, run it with `--commit` (+`--stamp`)
-   via `run_verb` :2724. Exit 6 is ok. A verb leaving `next` unchanged stops (`no progress`, exit 2).
+   via `run_verb` :2760. Exit 6 is ok. A verb leaving `next` unchanged stops (`no progress`, exit 2).
 4. Last line `{"ok":true,"verb":"advance",..,"next","steps","rejected","status"}`; a stop is `ok:false`
    with `failed`, no `status`. After `--ingest` a RED round reads `steps:["judge","repair"]`.
 
@@ -71,10 +74,10 @@ ABSENT. Taint = a path to a story file, `plan.md`, `journal.md` or `council/` (`
 `docs/specs/<slug>/` reduced to `brief.md`, removed by `judge`.
 
 ## Repair (ADR-013 D4)
-`cmd_repair` :2572 runs only when `next == repair`; idempotent. Writes `<slug>-NN-repair-round-<n>.md`:
-`status: todo`, `worker: worker-code`, **`model: opus` on purpose** (ADR-015: cycle.sh:2641; first
+`cmd_repair` :2608 runs only when `next == repair`; idempotent. Writes `<slug>-NN-repair-round-<n>.md`:
+`status: todo`, `worker: worker-code`, **`model: opus` on purpose** (ADR-015: cycle.sh:2677; first
 attempts run on Sonnet, a repair follows a RED), `wave: <max+1>`; `## Requirements` = the row's `red` +
-`review_asks` + seat-file RED asks as `> N. text` (`ask_item` :2553); `## Findings` = RED `ASK` lines +
+`review_asks` + seat-file RED asks as `> N. text` (`ask_item` :2589); `## Findings` = RED `ASK` lines +
 anchored review lines; `## Files`/`## Verification` = union over done stories.
 
 ## The Workflow driver (`.claude/workflows/vulyk-cycle.js`)
@@ -90,7 +93,8 @@ report path; Tier 4 review = two `lead-review`; then `advance --ingest`. `CAPS` 
 ledger) is NOT in ci.yml (run by hand / the spec's integration gate).
 
 ## Telemetry consumers
-`scripts/telemetry.sh` reads `council.jsonl`, `journal.md`, `scope.jsonl` without writing them. See
+`scripts/telemetry.sh` reads `council.jsonl`, `journal.md`, `scope.jsonl` without writing them. `scope-check.sh` drops `memory/stats/scope.jsonl` (its own ledger) from
+the changed set (scope-check.sh:93), so it never reads as out of scope. See
 `memory/map/scripts.md`.
 
-last-verified: 2026-09-29 (v0.22.0, ADR-013, ADR-015)
+last-verified: 2026-10-16 (v0.28.0, ADR-013, ADR-015)

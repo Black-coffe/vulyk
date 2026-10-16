@@ -18,7 +18,8 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   ID, `<family> alias <floor>` for `unreleased`, `<family> cc <floor> <have|unknown> <need>` for `cc>=`
   when Claude Code is older, unknown or `<need>` malformed (fails closed).
 - `ship-check.sh <spec-dir>` / `--record`; `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`;
-  `acceptance-log.sh` legacy. `scope-check.sh <story-file> [range]` runs in `close-story`.
+  `acceptance-log.sh` legacy. `scope-check.sh <story-file> [range]` runs in `close-story`; it filters out
+  the story file and its own `memory/stats/scope.jsonl` (:93); `close-story --commit` exits 4 on its `  ! ` paths.
 - `wave-check.sh <spec-dir>` - `/vulyk-plan` step 7; classes `no-verify`, `verify-gap`, `verify-cell`
   (a `## Verification` segment that is not a `## Commands` cell). `trace-check.sh` - a `## Requirements`
   quote may match the brief, a plan delta or a `## Asks` item.
@@ -64,20 +65,22 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 ## Tests
 `tests/maintenance.test.sh` (not in ci.yml): caps, brief due logic, ledger. `tests/defects.test.sh`:
 `defects-check.sh`. `tests/telemetry.test.sh`: `floorcheck`, `tmrun` (top-model.sh gate pins).
-`tests/watcher.test.sh`: the watcher mod.
+`tests/watcher.test.sh`: the watcher and pulse mods.
 
 ## install.sh - the upgrade contract
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution
   (`print_migrate_hint` :390); `replace_constitution` :412 (`render_constitution` :329), backs up as
   `<name>.pre-<major.minor>.md` (`constitution_backup` :354).
-- `.claude/mods/vulyk-watcher` is in `OWNED` (:52), so an upgrade syncs the mod's files. `install_watcher`
-  :1031 (called :1262 after `wire_plugin`): user-scope `vulyk-watcher@vulyk` from marketplace
+- `.claude/mods/vulyk-watcher` and `.claude/mods/vulyk-pulse` are in `OWNED` (:52), so an upgrade syncs
+  both mods' files. `install_mod <id>` :1030 (called :1264-1265 for `vulyk-watcher@vulyk` and
+  `vulyk-pulse@vulyk`, after `wire_plugin`): user-scope plugin from marketplace
   `Black-coffe/vulyk` via the `claude plugin` CLI (`VULYK_CLAUDE` overrides the binary); not installed ->
   `marketplace add` + `install`; installed -> `marketplace update` + `plugin update` each run; no `claude`
   or a CLI failure -> prints the commands, returns 0. A `false` for the id in project settings is reported
   as kept, never written. `wire_plugin [section key value what]` :954 now takes the id as 2nd arg
   (default `YSK_ID`, the You-should-know key); missing is written, an owner value is kept.
-  The mod: `docs/watcher.md`, `tests/watcher.test.sh`.
+  Mods: `docs/watcher.md`; `docs/pulse.md` (pulse: working indicator, `hooks/hooks.json` -> `register.tsx`,
+  `hooks/core.test.ts`); both checked by `tests/watcher.test.sh` (weights pinned to `token-report.py`).
 - `shippable` filter (:67-91): `memory/stats/*.jsonl` never ship; the installer deletes nothing of a host's.
 
 ## Gotchas
@@ -86,4 +89,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - Retired framework files are removed unless edited (`retired_edited` :1109); `unwire_hook` :846.
 
-last-verified: 2026-10-16 (v0.27.0)
+last-verified: 2026-10-16 (v0.28.0)
