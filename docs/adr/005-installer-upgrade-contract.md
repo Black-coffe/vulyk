@@ -298,5 +298,7 @@ hive's decision: `copy_tree` merges it three-way onto the new release (base = wh
 `merged edit`; on a conflict, or with no `v$PREV` copy to merge from, it keeps the hive's file byte for byte, writes
 the new release beside it as `<file>.vulyk-new` (gitignored) and prints `kept + new`. A path the previous install
 shipped (old manifest) that the hive no longer has is not copied back: `kept deleted`. `--check` prints the same with
-`would `. Six live hives had kept their own patch registers to re-apply what every upgrade overwrote. Status line
-unchanged.
+`would `. An edited file the release left alone since `v$PREV` has nothing to merge: kept as it is, any pending
+`.vulyk-new` untouched, `keep (edited)`. A release clone with no `v*` tag (a downloaded ZIP, a shallow checkout) cannot
+tell an edit from a release copy: the installer prints a NOTE and replaces as before. Six live hives had kept their own
+patch registers to re-apply what every upgrade overwrote. Status line unchanged.
