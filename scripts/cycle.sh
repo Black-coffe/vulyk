@@ -397,16 +397,16 @@ dirty_outside_paperwork() { # dirty_outside_paperwork -> the `git status --porce
   # are not the cycle's own paperwork (is_paperwork_path), one per line; empty means clean.
   # The one predicate open-round and claim share (ADR-013 D5). -uall lists a directory with
   # nothing tracked in it (a fresh hive's memory/learnings/) file by file, instead of one
-  # `?? <dir>/` line the one-level whitelist would reject (C2 addendum).
-  local status_out line
-  status_out="$(git status --porcelain -uall 2>/dev/null)"
-  [ -n "$status_out" ] || return 0
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    is_paperwork_path "${line:3}" || printf '%s\n' "$line"
-  done <<EOF
-$status_out
-EOF
+  # `?? <dir>/` line the one-level whitelist would reject (C2 addendum). -z: a non-ASCII or spaced
+  # name comes back as itself, not C-quoted; a rename's source follows as its own entry.
+  local line orig
+  while IFS= read -r -d '' line; do
+    orig=""
+    case "${line:0:2}" in *R*|*C*) IFS= read -r -d '' orig ;; esac
+    if ! is_paperwork_path "${line:3}" || { [ -n "$orig" ] && ! is_paperwork_path "$orig"; }; then
+      printf '%s\n' "${line:0:3}${orig:+$orig -> }${line:3}"
+    fi
+  done < <(git status --porcelain -uall -z 2>/dev/null)
 }
 
 round_is_stale() { # round_is_stale <spec> <n> - the one staleness rule (autonomous-cycle-17):

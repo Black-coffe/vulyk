@@ -73,6 +73,7 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     docs/adr/*|docs/wiki/*)       case "$f" in */README.md) return 0 ;; esac; return 1 ;;   # vulyk's own ADRs/wiki (dir still created; a skeleton README ships)
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
     docs/defects/*)               case "$f" in docs/defects/README.md) return 0 ;; esac; return 1 ;;   # vulyk's own defect cards; the index skeleton ships
+    .claude/vulyk-paperwork)      return 1 ;;   # each hive's own paperwork globs (lib.sh is_paperwork_path): never shipped, owned or removed
     .claude/state/*)              return 2 ;;   # hook state (defect dedup keys): runtime, per-machine
     .claude/settings.local.json|.claude/settings.json.vulyk-bak)
                                    return 2 ;;

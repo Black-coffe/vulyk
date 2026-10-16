@@ -41,6 +41,9 @@ if [ -z "$STORY" ] || [ ! -f "$STORY" ]; then
   exit 0
 fi
 
+# shellcheck source=scripts/lib.sh
+. "$(dirname "$0")/lib.sh"   # is_paperwork_path
+
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "scope-check: not a git repo" >&2; exit 0; }
 cd "$ROOT" || exit 0
 
@@ -94,14 +97,21 @@ fi
 STORY_REL="${STORY#./}"
 CHANGED="$(printf '%s\n' "$CHANGED" | grep -v '^$' | grep -Fxv -e "$STORY_REL" -e memory/stats/scope.jsonl | sort -u)"
 
-# memory/stats/anomalies.jsonl rides every committing cycle.sh verb on its own schedule,
-# never a story's own edit - drop it from the diff too, unless the story itself names it
-# under '## Files' (same reasoning as the story-file exclusion above). skills.json is NOT
-# cycle-owned (owner decision, story 12) - it counts like any other path.
-HOOKFILE=memory/stats/anomalies.jsonl
-if ! printf '%s\n' "$DECLARED" | grep -Fxq "$HOOKFILE"; then
-  CHANGED="$(printf '%s\n' "$CHANGED" | grep -Fxv "$HOOKFILE")"
-fi
+# Paperwork (is_paperwork_path, lib.sh - the hive's own .claude/vulyk-paperwork globs too) is
+# written by the cycle and its hooks on their own schedule, never a story's own edit: drop it
+# from the diff, unless the story itself names it under '## Files'. skills.json included: the
+# owner reversed A18 on 2026-10-16 (ADR-010 amendment) - the Skill counter rewrites it nearly
+# every turn, so counting it flagged almost every story.
+KEPT=""
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+  is_paperwork_path "$file" && ! matches_any "$file" "$DECLARED" && continue
+  KEPT="${KEPT}${file}
+"
+done <<EOF
+$CHANGED
+EOF
+CHANGED="$(printf '%s' "$KEPT" | grep -v '^$')"
 
 # Siblings (working tree only): every other story file of this spec that is not `done`.
 if [ -z "$RANGE" ]; then

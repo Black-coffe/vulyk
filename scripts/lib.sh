@@ -51,31 +51,46 @@ pack_fingerprint() { # pack_fingerprint <spec-dir> - must match every caller exa
 # joins the set because `reopen` writes it; scope.jsonl joins the memory/stats series because
 # `close-story` writes it through scope-check.sh (R4/C-3(b)). VERSION and CHANGELOG.md join in
 # 0.18 (ADR-013 D3): the release commit /vulyk-ship makes must not stale a GREEN round.
-is_paperwork_path() { # is_paperwork_path <repo-relative-path>
+# A hive adds its own paperwork in .claude/vulyk-paperwork (hive_paperwork_path below), a file
+# the installer never ships, owns or touches (ADR-010 amendment 2026-10-16).
+# Callers pass a path as itself: read git's lists with -z, never its C-quoted `"docs/\320..."`.
+is_paperwork_path() { # is_paperwork_path <repo-relative-path> [<root>]
   case "$1" in
     docs/specs/*/plan.md|docs/specs/*/journal.md|docs/specs/*/council/*|docs/specs/*/brief.md| \
     memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl|memory/stats/council.jsonl|memory/stats/scope.jsonl| \
     memory/stats/anomalies.jsonl|memory/stats/watcher.jsonl|memory/stats/evolve.jsonl|memory/stats/skills.json|VERSION|CHANGELOG.md) return 0 ;;
     memory/learnings/*.md)
-      case "${1#memory/learnings/}" in */*) return 1 ;; esac
-      return 0 ;;
-    *) return 1 ;;
+      case "${1#memory/learnings/}" in */*) ;; *) return 0 ;; esac ;;
   esac
+  hive_paperwork_path "$1" "${2:-.}"
+}
+
+# The hive's own globs in <root>/.claude/vulyk-paperwork: one per line, `#` comments, `*` crosses
+# `/`, and a trailing `dir/` covers everything beneath it - the `## Files` dialect, as scope-check
+# reads it. ship-check's stage 03 asks this alone: there the built-in list is not exempt.
+hive_paperwork_path() { # hive_paperwork_path <repo-relative-path> <root>
+  local g f="$2/.claude/vulyk-paperwork"
+  [ -f "$f" ] || return 1
+  while IFS= read -r g || [ -n "$g" ]; do
+    g="${g#"${g%%[![:space:]]*}"}"; g="${g%"${g##*[![:space:]]}"}"   # trim, a CRLF checkout's CR too
+    case "$g" in ''|'#'*) continue ;; esac
+    # shellcheck disable=SC2254
+    case "$g" in */) case "$1" in $g*) return 0 ;; esac ;; esac
+    # shellcheck disable=SC2254
+    case "$1" in $g) return 0 ;; esac
+  done < "$f"
+  return 1
 }
 
 # A commit range is paperwork-only iff every changed path is one the cycle writes itself -
 # never the software. See is_paperwork_path() above for the whitelist itself.
 paperwork_only() { # paperwork_only <root> <from-commit> <to-commit>
-  local changed p
+  local p
   git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
-  changed="$(git -C "$1" diff --name-only "$2" "$3" 2>/dev/null)" || return 1
-  [ -n "$changed" ] || return 0
-  while IFS= read -r p; do
-    is_paperwork_path "$p" || return 1
-  done <<EOF
-$changed
-EOF
-  return 0
+  while IFS= read -r -d '' p; do
+    is_paperwork_path "$p" "$1" || return 1
+  done < <(git -C "$1" diff --name-only -z "$2" "$3" 2>/dev/null)
+  wait $! || return 1   # a diff git could not produce is not paperwork
 }
 
 # A marker line is "filled" when it exists and does not still carry the template's `<...>`.

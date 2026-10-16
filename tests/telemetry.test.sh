@@ -1628,8 +1628,12 @@ mkdir -p "$DREL/docs/defects" "$DREL/.claude/state/defects"
 printf '# Defect library\n' > "$DREL/docs/defects/README.md"
 printf -- '---\nid: clipped-speech\n---\n' > "$DREL/docs/defects/clipped-speech.md"
 printf 'k\n' > "$DREL/.claude/state/defects/keys"
+printf 'release-own/*\n' > "$DREL/.claude/vulyk-paperwork"
 DH="$T/hive-defects"; mkdir -p "$DH"
 bash "$DREL/install.sh" "$DH" --telemetry off > "$T/dh.out" 2>&1
+expect_eq "a release's own .claude/vulyk-paperwork never ships" "0" "$([ -e "$DH/.claude/vulyk-paperwork" ] && echo 1 || echo 0)"
+printf '# smoke reports\ndocs/specs/*/smoke-*.md\n' > "$DH/.claude/vulyk-paperwork"
+cp "$DH/.claude/vulyk-paperwork" "$T/dh-paperwork"
 expect_eq "the defect index skeleton ships" "1" "$(same "$DREL/docs/defects/README.md" "$DH/docs/defects/README.md")"
 expect_eq "VULYK's own defect cards never ship" "0" "$([ -e "$DH/docs/defects/clipped-speech.md" ] && echo 1 || echo 0)"
 expect_eq "hook state never ships" "0" "$([ -e "$DH/.claude/state" ] && echo 1 || echo 0)"
@@ -1641,6 +1645,8 @@ printf '# Defect library v2\n' > "$DREL/docs/defects/README.md"
 bash "$DREL/install.sh" "$DH" --upgrade --telemetry off > "$T/dh-up.out" 2>&1
 expect_eq "--upgrade never overwrites a hive's own index" "# My index" "$(head -1 "$DH/docs/defects/README.md" | tr -d '\r')"
 cat "$T/dh-up.out" | expect "and says it kept it" "skip (exists)  docs/defects/README.md"
+expect_eq "--upgrade keeps the hive's .claude/vulyk-paperwork byte for byte" "1" "$(same "$T/dh-paperwork" "$DH/.claude/vulyk-paperwork")"
+expect_eq "and the manifest never lists it" "0" "$(grep -cxF .claude/vulyk-paperwork "$DH/.claude/vulyk-manifest")"
 bash "$DREL/install.sh" "$DH" --check > "$T/dh-check.out" 2>&1
 cat "$T/dh-check.out" | expect "--check lists hook state as a runtime skip" "would skip (runtime) .claude/state/defects/keys"
 
