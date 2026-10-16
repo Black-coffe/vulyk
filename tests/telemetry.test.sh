@@ -1437,18 +1437,28 @@ cat "$T/wi.out" | expect "a fresh install installs the mod for this machine" "in
 cat "$T/wi.out" | expect "... with the off switch" "\"$WID\": false in that hive's .claude/settings.local.json"
 expect_eq "... the marketplace is added, then the plugin installed at user scope" \
   "plugin marketplace add Black-coffe/vulyk|plugin install $WID --scope user" \
-  "$(grep 'plugin marketplace add\|plugin install' "$T/cc.log" | tr -d '\r' | paste -sd'|' -)"
-printf '  vulyk\n' > "$T/cc-mkt"; printf '  %s\n    Scope: user\n' "$WID" > "$T/cc-list"; : > "$T/cc.log"
+  "$(grep 'plugin marketplace add\|plugin install' "$T/cc.log" | tr -d '\r' | head -n 2 | paste -sd'|' -)"
+PID='vulyk-pulse@vulyk'
+cat "$T/wi.out" | expect "... and the pulse beside it" "install        $PID (user scope, marketplace Black-coffe/vulyk)"
+expect_eq "... the pulse is installed at user scope" "1" "$(grep -c "plugin install $PID --scope user" "$T/cc.log")"
+cat "$T/wi-check.out" | expect "--check names the pulse too" "would install  $PID (user scope"
+cat "$T/install.out" | expect "no claude on PATH: the pulse's install command is named" "claude plugin install $PID --scope user"
+expect_eq "... under one NOTE for both mods" "1" "$(grep -c 'NOTE: claude is not on PATH' "$T/install.out")"
+expect_eq "OWNED lists the pulse tree" "1" "$(grep -c '^OWNED=.*\.claude/mods/vulyk-pulse' "$SRC/install.sh")"
+printf '  vulyk\n' > "$T/cc-mkt"; printf '  %s\n    Scope: user\n  %s\n    Scope: user\n' "$WID" "$PID" > "$T/cc-list"; : > "$T/cc.log"
 jq --arg k "$WID" '.enabledPlugins[$k] = false' "$WI/.claude/settings.json" > "$T/wid-off.json" && cp "$T/wid-off.json" "$WI/.claude/settings.json"
 printf '{"enabledPlugins":{"%s":false}}' "$WID" > "$WI/.claude/settings.local.json"
 VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/wi-again.out" 2>&1
 expect_eq "installed already: nothing is added or installed again" "0" "$(grep -c 'plugin marketplace add\|plugin install' "$T/cc.log")"
-expect_eq "... the upgrade refreshes the marketplace, then updates the mod at user scope"   "plugin marketplace update vulyk|plugin update $WID --scope user"   "$(grep 'plugin marketplace update\|plugin update' "$T/cc.log" | tr -d '' | paste -sd'|' -)"
+expect_eq "... the upgrade refreshes the marketplace, then updates the mod at user scope"   "plugin marketplace update vulyk|plugin update $WID --scope user"   "$(grep 'plugin marketplace update\|plugin update' "$T/cc.log" | tr -d '' | head -n 2 | paste -sd'|' -)"
 cat "$T/wi-again.out" | expect "... and says so" "update         $WID (user scope"
+cat "$T/wi-again.out" | expect "... for the pulse too" "update         $PID (user scope"
+expect_eq "... a second run installs neither" "0" "$(grep -c 'plugin install' "$T/cc.log")"
 cat "$T/wi-again.out" | expect_absent "... and says nothing about installing" "install        $WID"
 : > "$T/cc.log"
 VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade --check > "$T/wi-upd-check.out" 2>&1
 cat "$T/wi-upd-check.out" | expect "--check on a machine that has it names the update" "would update   $WID (user scope"
+cat "$T/wi-upd-check.out" | expect "... once for the pulse as well" "would update   $PID (user scope"
 expect_eq "... and the dry run updates nothing" "0" "$(grep -c 'plugin marketplace update\|plugin update' "$T/cc.log")"
 : > "$T/cc-upd-fail"
 VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/wi-upd-fail.out" 2>&1; rc=$?
@@ -1459,13 +1469,18 @@ expect_eq "the mod's plugin.json version equals VERSION" "$(tr -d '[:space:]' < 
 cat "$T/wi-again.out" | expect "an owner's false for the watcher is kept, and said so" "kept           .claude/settings.json -> enabledPlugins: $WID is false"
 cat "$T/wi-again.out" | expect "... the same in settings.local.json" "kept           .claude/settings.local.json -> enabledPlugins: $WID is false"
 expect_eq "... both stay false" "falsefalse" "$(jq -r --arg k "$WID" '.enabledPlugins[$k] | tostring' "$WI/.claude/settings.json" "$WI/.claude/settings.local.json" | tr -d '\r\n')"
+printf '{"enabledPlugins":{"%s":false}}' "$PID" > "$WI/.claude/settings.local.json"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/pi-off.out" 2>&1
+cat "$T/pi-off.out" | expect "an owner's false for the pulse is kept, and said so" "kept           .claude/settings.local.json -> enabledPlugins: $PID is false"
+expect_eq "... and stays false" "false" "$(jq -r --arg k "$PID" '.enabledPlugins[$k] | tostring' "$WI/.claude/settings.local.json" | tr -d '\r\n')"
 rm -f "$T/cc-list"; : > "$T/cc-fail"; : > "$T/cc.log"
 VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/wi-fail.out" 2>&1; rc=$?
-expect_eq "a marketplace already added is not added again" "0 1" \
+expect_eq "a marketplace already added is not added again; each mod tries its install" "0 2" \
   "$(grep -c 'plugin marketplace add' "$T/cc.log") $(grep -c 'plugin install' "$T/cc.log")"
 expect_eq "a failed plugin install never fails the install" "0" "$rc"
 cat "$T/wi-fail.out" | expect "... it names both commands" "$WADD"
 cat "$T/wi-fail.out" | expect "... the second one too" "$WINST"
+cat "$T/wi-fail.out" | expect "... and the pulse's" "claude plugin install $PID --scope user"
 rm -f "$T/cc-fail" "$T/cc-mkt"
 
 # A hive whose owner arranged things: a quoted launcher with a redirect on a startup-only group,

@@ -9,6 +9,11 @@
       "name": "vulyk-watcher",
       "source": "./.claude/mods/vulyk-watcher",
       "description": "VULYK watcher mod"
+    },
+    {
+      "name": "vulyk-pulse",
+      "source": "./.claude/mods/vulyk-pulse",
+      "description": "VULYK pulse mod"
     }
   ]
 }

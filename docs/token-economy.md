@@ -215,3 +215,7 @@ prefix has left. See [hooks-reference.md](hooks-reference.md).
 
 The order matters more than the individual tactics: a perfectly tuned effort level inside a
 400-turn session is a rounding error against having split it in two.
+
+The live row of the pulse mod ([pulse.md](pulse.md)) shows `≈tok` in the same weighted unit as `token-report.py`, except
+that every cache write is weighted 1.25, because the live usage does not split 5-minute from 1-hour writes. It is a
+gauge: the transcripts stay the ledger of record.

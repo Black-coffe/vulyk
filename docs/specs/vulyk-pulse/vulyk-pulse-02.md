@@ -1,8 +1,8 @@
 ---
 story: vulyk-pulse-02
 spec: vulyk-pulse
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -85,5 +85,8 @@ same root marketplace.
 `git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
 
 ## Implementation notes
+- Files: marketplace.json, install.sh (install_mod, OWNED), telemetry.test.sh, ci.yml (CRLF kept), docs/pulse.md, docs/token-economy.md.
+- No-claude NOTE prints once for both ids (MOD_NOTE flag); other per-id lines unchanged.
+- Existing watcher cases adapted where a second id changes counts: cc-list lists both ids, add/install and update sequences take the first two lines, failed-install count 0 2.
 
 ## Findings
