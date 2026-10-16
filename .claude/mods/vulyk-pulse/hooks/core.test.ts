@@ -248,27 +248,6 @@ describe('pass-through outside a hive', () => {
   })
 })
 
-describe('surfaces other than the terminal', () => {
-  test('TurnDuration and AbovePrompt on desktop inside a hive keep the engine drawing', async ($, on) => {
-    on('session.root', () => ({ value: '/hive' }))
-    on('fs.read', (_$: unknown, e: { path: string }) =>
-      e.path.endsWith('CLAUDE.vulyk.md') ? { value: '' } : { deny: 'no such file' },
-    )
-    on('ui.render', () => ({ type: 'engine', ref: 0 }))
-    const sites = [
-      {
-        component: 'AbovePrompt',
-        props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { bodyRows: 5 }, view: { kind: 'main' } },
-      },
-      { component: 'TurnDuration', requestId: 'd1', props: { word: 'Baked', durationMs: 3000 } },
-    ] as const
-    for (const site of sites) {
-      const ui = await $.ui.mount({ plugin: 'vulyk-pulse', surface: 'desktop', ...site } as never)
-      expect(await ui.find({ type: 'Text', text: /VULYK|≈|Baked for/ })).toBeUndefined()
-    }
-  })
-})
-
 describe('closing line inside a hive', () => {
   // What stands for the engine beneath the plugin: a hive root holding CLAUDE.vulyk.md, a mocked clock, core's own drawing.
   const hiveBeneath = (on: any, now: number) => {
@@ -320,5 +299,28 @@ describe('closing line inside a hive', () => {
     await $.prompt.submit({ text: '<task-notification>', wait: false, origin: { kind: 'task-notification' } } as never)
     await turn($, clock, 'notice', 3_000)
     expect(await line($, 'line-notice')).toBe('Baked for 0m 05s · ≈0 tok')
+  })
+
+  test('off the terminal, AbovePrompt and TurnDuration keep the engine drawing while the terminal draws the pulse', async ($, on) => {
+    const clock = hiveBeneath(on, 9_000_000)
+    on('agent.spawn', () => ({ model: 'sonnet', agentId: 'a1' }))
+    await $.prompt.submit({ text: 'go', wait: false, origin: { kind: 'composer' } } as never)
+    await turn($, clock, 'x', 2_500)
+    await $.agent.spawn({ subagentType: 'worker-code', prompt: 'p', description: 'd' } as never)
+    const above = {
+      component: 'AbovePrompt',
+      props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { bodyRows: 5 }, view: { kind: 'main' } },
+    }
+    const closingSite = { component: 'TurnDuration', requestId: 'surf', props: { word: 'Baked', durationMs: 2500 } }
+    const drawn = async (surface: string, site: object) => {
+      const ui = await $.ui.mount({ plugin: 'vulyk-pulse', surface, ...site } as never)
+      const found = await ui.find({ type: 'Text', text: /VULYK|Baked for/ })
+      await ui.unmount()
+      return found !== undefined
+    }
+    expect(await drawn('terminal', above)).toBe(true)
+    expect(await drawn('terminal', closingSite)).toBe(true)
+    expect(await drawn('desktop', above)).toBe(false)
+    expect(await drawn('desktop', { ...closingSite, requestId: 'surf2' })).toBe(false)
   })
 })
