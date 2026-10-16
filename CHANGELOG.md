@@ -2,6 +2,46 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [Unreleased]
+
+Fixes from the 30-day feedback of every local hive (study `hive-feedback-2026-10`). Each fix was built by Opus 5.5
+and reviewed by Fable 5.1 (the first three also by Sonnet 5.5); every accepted review item is in.
+
+### Fixed
+- **A second driver no longer claims a spec over the first one's worker.** `pause` and `resume` keep a held `DRIVER`
+  claim: a live driver releases it itself when it stops. `resume` reports the holder (`"held"`), every `held by`
+  refusal names the `release` command for a dead one, and a stampless claim is cleared (ADR-004 amended).
+- **close-story commits only its own paths** (`--only`, literal pathspecs, non-ASCII names as themselves). A failed
+  commit unstages them, so the next story no longer sweeps them in, and a formatting hook leaves the index in sync.
+- **An upgrade replaces release copies only.** A hive's own edit of a framework file is merged three-way onto the
+  new release (`merged edit`). On a conflict it is kept, with the release beside it as `<file>.vulyk-new`
+  (`kept + new`). An edit the release did not touch stays (`keep (edited)`), and a file the hive deleted stays deleted
+  (`kept deleted`). With no release history, the upgrade says so and replaces as before (ADR-005 amended).
+- **`## Verification` against `## Commands`.** A cell holding several backticked commands offers each, and
+  `<name>`/`[<name>]` placeholders admit path or target arguments. An argument may not hold a shell control character
+  or start with `-`, and an unfilled `<fill in>` row stays literal.
+- **scope-check measures code only.** Every paperwork path, `skills.json` included, is dropped (owner reversal of
+  anomaly-telemetry A18). Non-ASCII and `[bracket]` paths match their `## Files` lines. A hive declares its own
+  paperwork globs in `.claude/vulyk-paperwork`, which the installer never touches.
+- **One reading of `## Asks`** for `cycle.sh` and `trace-check.sh`: a block of `> ` lines alone is the items.
+- **Agent frontmatter is the one source** of turn caps and worker models. The driver no longer caps below it, and a
+  story carries no model line unless it means one.
+- **Windows:** court worktrees use `core.longpaths`. A Windows hive with a system `rg` on PATH gets
+  `USE_BUILTIN_RIPGREP=0`, so agents' Glob and Grep find files.
+- **Portable `sed -i`**, `chore(...)` commit subjects when the Profile's Commit convention is conventional, and
+  open-round refuses a descope that plan.md records but the brief's `## Asks` never took in.
+- **Smaller fixes:**
+  - anomaly rows name Claude Code's built-in agent types instead of `other`;
+  - the example rule ships as a template, not into every hive's `.claude/rules/`;
+  - `/vulyk-gc` finds `MEMORY.md`;
+  - a Profile row "Owner language";
+  - `/vulyk-update` compares the committed stamp.
+
+### Added
+- **Seven defect classes seen across hives** become VULYK cards, as text cards with the hive evidence under
+  `## Seen in hives`: claim not from source, measurement unlike reality, safeguard bypassable or late, done without a
+  real run, work handed back to the owner, outward artifact carrying internals, owner words by the builder.
+
 ## [0.28.0] - 2026-10-16
 
 ### Added
