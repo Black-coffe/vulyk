@@ -120,8 +120,9 @@ expect_eq "enum is exactly 10 codes" "10" "$(tel enum | grep -c .)"
 tel enum | expect_absent "enum prints codes only, no prose" " "
 tel agents | expect "agents prints a framework agent" "cycle-clerk"
 tel agents | expect "agents prints the catch-all token" "other"
-expect_eq "agents = .claude/agents/*.md basenames + council-sonnet (retired, still legal) + other" \
-  "$(( $(ls "$HIVE"/.claude/agents/*.md | wc -l) + 2 ))" "$(tel agents | grep -c .)"
+expect_eq "agents = .claude/agents/*.md basenames + council-sonnet (retired, still legal) + 6 built-in types + other" \
+  "$(( $(ls "$HIVE"/.claude/agents/*.md | wc -l) + 8 ))" "$(tel agents | grep -c .)"
+tel agents | expect "agents prints a built-in agent type" "general-purpose"
 tel agents | expect "a retired framework agent stays a legal token" "council-sonnet"
 tel agents | expect_absent "agents does not print the .md extension" ".md"
 
@@ -142,6 +143,9 @@ expect_eq "a framework agent token lands as given" "cycle-clerk" \
 tel record agent_prefix_high 60000 50000 --ref agent:b --agent worker-01-core
 expect_eq "a dispatch name outside the set lands as other" "other" \
   "$(grep -F '"ref":"agent:b"' "$LOG" | jq -r '.agent')"
+tel record agent_prefix_high 60000 50000 --ref agent:c --agent Explore
+expect_eq "a built-in agent type lands as given" "Explore" \
+  "$(grep -F '"ref":"agent:c"' "$LOG" | jq -r '.agent')"
 
 BEFORE="$(grep -c . "$LOG")"
 ERR="$(tel record not_a_code 1 0 --ref session:z 2>&1 >/dev/null)"; RC=$?
@@ -530,6 +534,24 @@ expect_eq "agent_empty maps a non-framework agentType to other" "other" \
 FINAL_ROWS="$(grep -c . "$LOG")"
 telpy scan --transcript "$PROJ/sid1.jsonl" --final >/dev/null 2>&1
 expect_eq "a second --final scan appends nothing" "$FINAL_ROWS" "$(grep -c . "$LOG")"
+
+# Claude Code's built-in agent types are named, not folded into other (hive feedback 2026-10:
+# 245 rows in 30 days said only "other"). The case of the name is part of it: `explore` is not one.
+BIPROJ="$T/biproj"; mkdir -p "$BIPROJ/sidb/subagents/workflows/wf1"
+agent_file "$BIPROJ/sidb/subagents/agent-g1.jsonl"              60000 tool_use general-purpose
+agent_file "$BIPROJ/sidb/subagents/workflows/wf1/agent-g2.jsonl" 60000 text     workflow-subagent
+agent_file "$BIPROJ/sidb/subagents/agent-g3.jsonl"              60000 text     explore
+printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}\n' > "$BIPROJ/sidb.jsonl"
+: > "$LOG"
+telpy scan --transcript "$BIPROJ/sidb.jsonl" --final >/dev/null 2>&1
+expect_eq "agent_prefix_high names a general-purpose subagent" "general-purpose" \
+  "$(grep '"code":"agent_prefix_high"' "$LOG" | grep -F '"ref":"agent:agent-g1.jsonl"' | jq -r '.agent')"
+expect_eq "agent_prefix_high names a workflow subagent" "workflow-subagent" \
+  "$(grep -F '"ref":"agent:agent-g2.jsonl"' "$LOG" | jq -r '.agent')"
+expect_eq "agent_empty names a general-purpose subagent" "general-purpose" \
+  "$(grep '"code":"agent_empty"' "$LOG" | jq -r '.agent')"
+expect_eq "a near-miss of a built-in name (wrong case) is other" "other" \
+  "$(grep -F '"ref":"agent:agent-g3.jsonl"' "$LOG" | jq -r '.agent')"
 
 # Major 5, the other half of the bound: with no --transcript there is no session to scope to,
 # so no subagent file is read even though one is above threshold.
@@ -1841,9 +1863,27 @@ REPO_BASENAMES="$(for f in "$SRC"/.claude/agents/*.md; do basename "$f" .md; don
 # Retired agents stay in the set (a hive on an older release still bundles them) and are the only
 # names allowed beyond the roster: council-sonnet since 0.18.0 (ADR-013 D1).
 RETIRED="council-sonnet"
-expect_eq "the baked agent list minus other and the retired names = this repo's .claude/agents/*.md basenames (added or renamed a framework agent? edit AGENTS in scripts/telemetry.sh)"   "$REPO_BASENAMES" "$(printf '%s
-' "$BAKED_AGENTS" | grep -vxF other | grep -vxF "$RETIRED" | LC_ALL=C sort)"
+# Claude Code's built-in agent types are the other allowed group: named, never a roster file.
+BUILTIN="general-purpose
+workflow-subagent
+Explore
+Plan
+claude-code-guide
+statusline-setup"
+expect_eq "the baked agent list minus other, the retired and the built-in names = this repo's .claude/agents/*.md basenames (added or renamed a framework agent? edit AGENTS in scripts/telemetry.sh)"   "$REPO_BASENAMES" "$(printf '%s
+' "$BAKED_AGENTS" | grep -vxF other | grep -vxF "$RETIRED" | grep -vxF "$BUILTIN" | LC_ALL=C sort)"
 expect_eq "a retired agent has no file in .claude/agents/" "0" "$([ -e "$SRC/.claude/agents/$RETIRED.md" ] && echo 1 || echo 0)"
+expect_eq "every built-in agent type is in the baked list" "6" "$(printf '%s
+' "$BAKED_AGENTS" | grep -cxF "$BUILTIN")"
+expect_eq "no built-in agent type has a file in .claude/agents/" "0" \
+  "$(printf '%s
+' "$BUILTIN" | while read -r b; do [ -e "$SRC/.claude/agents/$b.md" ] && echo "$b"; done | grep -c .)"
+BUILTB="$T/builtin-agent.jsonl"
+printf '{"v":1,"code":"agent_prefix_high","value":60000,"threshold":50000,"vulyk":"0.28.0","tier":0,"model":"opus","agent":"workflow-subagent","week":"%s","hive":"aaaaaaaaaaaa"}\n' "$WEEK" > "$BUILTB"
+if (cd "$SRC" && bash scripts/telemetry.sh check "$BUILTB") >/dev/null 2>&1; then
+  ok "check accepts a bundle row naming a built-in agent type"
+else bad "check rejected a bundle row naming workflow-subagent:"
+  (cd "$SRC" && bash scripts/telemetry.sh check "$BUILTB") 2>&1 | sed 's/^/        /'; fi
 RETB="$T/retired-agent.jsonl"
 printf '{"v":1,"code":"agent_empty","value":3,"threshold":0,"vulyk":"0.17.0","tier":1,"model":"sonnet","agent":"council-sonnet","week":"%s","hive":"aaaaaaaaaaaa"}\n' "$WEEK" > "$RETB"
 if (cd "$SRC" && bash scripts/telemetry.sh check "$RETB") >/dev/null 2>&1; then
