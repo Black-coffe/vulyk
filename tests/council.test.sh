@@ -1892,6 +1892,18 @@ out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 set_tier oround1 4
 
+echo "open-round: a ## Descoped entry the brief never took in -> exit 2, naming it (a hive lost three rounds to a plan-only descope)"
+sed -i 's/^\*(empty)\*$/- ask 3 narrowed to the happy path - owner: "only the happy path for now"/' docs/specs/oround1/plan.md
+out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"descope not in the brief: - ask 3 narrowed' \
+  && echo "  ok    an uncommitted plan-only descope refuses the round" || { echo "::error::exit=$ex out=$out"; fail=1; }
+git add -A && git commit -qm "oround1: descope in plan.md only" >/dev/null
+out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'strike or narrow the ask' \
+  && echo "  ok    committed in plan.md alone, it still refuses and says what to edit" || { echo "::error::exit=$ex out=$out"; fail=1; }
+sed -i 's/^3\. ask number 3 works$/3. ask number 3 works on the happy path (narrowed by the owner)/' docs/specs/oround1/brief.md
+git add -A && git commit -qm "oround1: the brief takes the descope in" >/dev/null
+
 echo "open-round: opens round 1 - ROUND file, court reduced to brief.md, journal, next dispatch:..."
 out="$(council open-round docs/specs/oround1 --commit)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"dispatch:opus,review"' && echo "  ok    round 1 opens, next dispatch:opus,review" \

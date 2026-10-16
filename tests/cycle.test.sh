@@ -522,6 +522,58 @@ committed="$(git -c core.quotePath=false show --name-only --format= HEAD)"
 [ -z "$(git status --porcelain)" ] && git show HEAD:stray-app.txt | grep -qx fmt \
   && echo "  ok    the hook's rewrite is in the commit and the tree is clean after (index synced)" || { echo "::error::status=$(git status --porcelain | tr '\n' ' ')"; fail=1; }
 
+echo "cycle.sh under a BSD (macOS) sed, and a Profile whose Commit convention is conventional: chore(...) subjects"
+REAL_SED="$(command -v sed)"; BSD="$(mktemp -d)"
+cat > "$BSD/sed" <<'EOF'
+#!/bin/sh
+# A BSD sed stand-in: there a bare -i reads the next argument as its backup suffix and breaks.
+for a in "$@"; do [ "$a" = "-i" ] && { echo "sed: bare -i (BSD sed takes the next argument as a suffix)" >&2; exit 1; }; done
+exec "$REAL_SED" "$@"
+EOF
+chmod +x "$BSD/sed"
+bsd() { REAL_SED="$REAL_SED" PATH="$BSD:$PATH" bash scripts/cycle.sh "$@"; }
+cp CLAUDE.md "$BSD/CLAUDE.md.orig"
+printf '\n## Profile\n\n| Field | Value |\n|---|---|\n| Commit convention | Conventional Commits, enforced by commitlint |\n' >> CLAUDE.md
+mkdir -p docs/specs/conv
+cp "$SRC"/templates/plan.md docs/specs/conv/plan.md
+printf '> build the conv demo\n\n## Asks\n1. one ask\n' > docs/specs/conv/brief.md
+printf 'v1\n' > conv-app.txt
+cat > docs/specs/conv/conv-01-first.md <<'EOF'
+---
+story: conv-01
+spec: conv
+status: in-progress
+returned: DONE
+wave: 1
+---
+# Conv fixture
+
+## Files
+- conv-app.txt
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "conv: setup, a conventional Commit convention" >/dev/null
+out="$(bsd briefed docs/specs/conv --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^\*\*Briefed:\*\* via' docs/specs/conv/plan.md && [ "$(git log -1 --format=%s)" = "chore(vulyk-conv): briefed" ] \
+  && echo "  ok    briefed under BSD sed rewrites the Briefed line and commits chore(vulyk-<slug>): briefed" \
+  || { echo "::error::exit=$ex subject=$(git log -1 --format=%s) out=$out"; fail=1; }
+out="$(bsd branch docs/specs/conv --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -qx '\*\*Branch:\*\* vulyk/conv' docs/specs/conv/plan.md && [ "$(git log -1 --format=%s)" = "chore(vulyk-conv): branch vulyk/conv" ] \
+  && echo "  ok    branch under BSD sed rewrites the Branch line and commits chore(vulyk-<slug>): branch" \
+  || { echo "::error::exit=$ex subject=$(git log -1 --format=%s) out=$out"; fail=1; }
+printf 'v2\n' > conv-app.txt
+out="$(bsd close-story docs/specs/conv/conv-01-first.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' docs/specs/conv/conv-01-first.md && [ "$(git log -1 --format=%s)" = "chore(story-conv-01): Conv fixture" ] \
+  && echo "  ok    close-story under BSD sed sets status: done and commits chore(story-<id>): <title>" \
+  || { echo "::error::exit=$ex subject=$(git log -1 --format=%s) out=$out"; fail=1; }
+[ -z "$(git status --porcelain)" ] && echo "  ok    no sed backup file is left behind" \
+  || { echo "::error::left behind: $(git status --porcelain | tr '\n' ' ')"; fail=1; }
+git checkout -q -
+cp "$BSD/CLAUDE.md.orig" CLAUDE.md; rm -rf "$BSD"
+git add -A && git commit -qm "conv: back to the default Commit convention" >/dev/null
+
 echo "command_cell_exists: each backticked command of a cell, and <name> / [<name>] placeholders without shell control characters"
 CELLS="$(mktemp)"
 cat > "$CELLS" <<'EOF'
