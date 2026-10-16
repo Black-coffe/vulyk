@@ -51,16 +51,25 @@ pack_fingerprint() { # pack_fingerprint <spec-dir> - must match every caller exa
 # joins the set because `reopen` writes it; scope.jsonl joins the memory/stats series because
 # `close-story` writes it through scope-check.sh (R4/C-3(b)). VERSION and CHANGELOG.md join in
 # 0.18 (ADR-013 D3): the release commit /vulyk-ship makes must not stale a GREEN round.
-is_paperwork_path() { # is_paperwork_path <repo-relative-path>
+# A hive adds its own paperwork in .claude/vulyk-paperwork (one glob per line, `#` comments; `*`
+# crosses `/`), a file the installer never ships, owns or touches (ADR-010 amendment 2026-10-16).
+is_paperwork_path() { # is_paperwork_path <repo-relative-path> [<root>]
   case "$1" in
     docs/specs/*/plan.md|docs/specs/*/journal.md|docs/specs/*/council/*|docs/specs/*/brief.md| \
     memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl|memory/stats/council.jsonl|memory/stats/scope.jsonl| \
     memory/stats/anomalies.jsonl|memory/stats/watcher.jsonl|memory/stats/evolve.jsonl|memory/stats/skills.json|VERSION|CHANGELOG.md) return 0 ;;
     memory/learnings/*.md)
-      case "${1#memory/learnings/}" in */*) return 1 ;; esac
-      return 0 ;;
-    *) return 1 ;;
+      case "${1#memory/learnings/}" in */*) ;; *) return 0 ;; esac ;;
   esac
+  local g f="${2:-.}/.claude/vulyk-paperwork"
+  [ -f "$f" ] || return 1
+  while IFS= read -r g || [ -n "$g" ]; do
+    g="${g#"${g%%[![:space:]]*}"}"; g="${g%"${g##*[![:space:]]}"}"   # trim, a CRLF checkout's CR too
+    case "$g" in ''|'#'*) continue ;; esac
+    # shellcheck disable=SC2254
+    case "$1" in $g) return 0 ;; esac
+  done < "$f"
+  return 1
 }
 
 # A commit range is paperwork-only iff every changed path is one the cycle writes itself -
@@ -71,7 +80,7 @@ paperwork_only() { # paperwork_only <root> <from-commit> <to-commit>
   changed="$(git -C "$1" diff --name-only "$2" "$3" 2>/dev/null)" || return 1
   [ -n "$changed" ] || return 0
   while IFS= read -r p; do
-    is_paperwork_path "$p" || return 1
+    is_paperwork_path "$p" "$1" || return 1
   done <<EOF
 $changed
 EOF

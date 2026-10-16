@@ -248,12 +248,29 @@ printf 'v2\n' >> hook-app.txt
 shiph | expect "hook log + real code dirt -> 03 still not clean" "working tree is not clean"
 git checkout -- hook-app.txt
 
-echo "skills-json-exempt: scope-check still counts skills.json; ship-check stage 03 passes it like the anomaly log"
+echo "skills-json-exempt: scope-check drops skills.json like all paperwork (A18 reversed 2026-10-16); ship-check stage 03 passes it like the anomaly log"
 printf '{"n":1}\n' > memory/stats/skills.json
-bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | grep -qF 'memory/stats/skills.json' \
-  && echo "  ok    scope-check: skills.json dirty and undeclared is listed as out_of_scope" \
-  || { echo "::error::scope-check output: $(bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md)"; fail=1; }
+bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | expect "scope-check: skills.json dirty and undeclared is not out of scope" "changed 0, out of scope 0"
 git checkout -- memory/stats/scope.jsonl   # scope-check logs its run; that log is not this case's dirt
+echo "hive paperwork: .claude/vulyk-paperwork globs are paperwork for scope-check; without the file nothing changes"
+mkdir -p docs/specs/hooklog/smoke
+printf 'ran\n' > docs/specs/hooklog/smoke/run-1.md
+bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | expect "no .claude/vulyk-paperwork: a smoke report still counts" "! docs/specs/hooklog/smoke/run-1.md"
+# open-round's dirty check runs before its ## Asks check: hooklog's brief has no ## Asks, so a
+# tree that passes the dirty check is refused on the Asks line instead.
+bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round without the file: the smoke report is dirt" "?? docs/specs/hooklog/smoke/run-1.md"
+printf '# smoke reports live in the spec\n\n  docs/specs/*/smoke/*  \r\n' > .claude/vulyk-paperwork
+git add .claude/vulyk-paperwork && git commit -qm "hive paperwork globs" -- .claude/vulyk-paperwork
+out="$(bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md)"
+printf '%s' "$out" | expect "a hive glob (padded, CRLF) drops the smoke report from scope" "changed 0, out of scope 0"
+bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round: the hive glob's smoke report is not dirt" "## Asks"
+is_paperwork_path '# smoke reports live in the spec' && { echo "::error::a comment line matched as a glob"; fail=1; } \
+  || echo "  ok    a # comment line is not a glob"
+is_paperwork_path src/app.txt && { echo "::error::a path no glob names became paperwork"; fail=1; } \
+  || echo "  ok    a path no glob names stays code"
+rm -rf docs/specs/hooklog/smoke
+git rm -q .claude/vulyk-paperwork && git commit -qm "drop the hive paperwork globs" -- .claude/vulyk-paperwork
+git checkout -- memory/stats/scope.jsonl
 rm -f memory/stats/anomalies.jsonl; git checkout -- memory/stats/anomalies.jsonl 2>/dev/null
 [ "$(git status --porcelain)" = "?? memory/stats/skills.json" ] && echo "  ok    precondition: skills.json is the only dirty path" \
   || { echo "::error::precondition: dirty paths are $(git status --porcelain | tr '\n' ' ')"; fail=1; }

@@ -189,6 +189,9 @@ Plan §Descoped, round-3 Major 3 (`plan.md:157`):
 > `anomalies.jsonl` and names them; any other dirty path still blocks. `skills.json` stays outside cycle
 > ownership (no verb stages it) and `scope-check` still counts it. The owner delegated the decision.
 
+> **Reversed again 2026-10-16** (see Amendments): `scope-check` no longer counts `skills.json` or
+> any other `is_paperwork_path` path a story does not name.
+
 **Options:**
 1. `cycle.sh` stages `anomalies.jsonl` on every `--commit` verb; `skills.json` stays outside
    cycle ownership and under the scope gate - chosen (owner: "skills.json back under the scope
@@ -233,4 +236,23 @@ Plan §Descoped, round-3 Major 3 (`plan.md:157`):
 
 ## Amendments
 
-(none yet)
+### 2026-10-16: A18 reversed - scope-check measures code only; hive paperwork globs
+
+Owner: "Берем все" (2026-10-16, on `docs/specs/hive-feedback-2026-10/report.md` finding 1).
+
+- **Why.** Since 0.21.0 the Skill counter rewrites `memory/stats/skills.json` on nearly every turn,
+  and `scope-check` still counted it: across the hives, 815 story rows were flagged `scope_breach`
+  over 30 days while 4 of 851 story commits touched a non-paperwork path outside `## Files`.
+- **Decision.** `scope-check.sh` sources `lib.sh` and drops every path `is_paperwork_path` accepts,
+  `skills.json` included, unless the story names it under `## Files`. `skills.json` is still not
+  staged by any verb; only the measurement changes. §F's "`scope-check` counts it" and the matching
+  invariant no longer hold.
+- **Hive globs.** Five hives patched `is_paperwork_path` itself because their paperwork lives
+  elsewhere (smoke reports inside a spec, a tracker committed after GREEN). `is_paperwork_path` also
+  accepts a path matching any glob in the hive's `.claude/vulyk-paperwork` (one glob per line, `#`
+  comments, `*` crosses `/`), read from the working tree. `install.sh` never ships, owns or removes
+  that file. The globs are the hive's own trust decision: a path they name never stales a GREEN
+  round, never blocks `open-round`/`claim`, and never counts against scope.
+- **Rejected.** Dropping only `skills.json` (the next hook-written file brings the noise back);
+  a hive override of the whole whitelist (a hive could drop the cycle's own files by mistake -
+  the globs only add).
