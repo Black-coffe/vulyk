@@ -44,5 +44,9 @@ them. The worker meets it in its own turn; open-round no longer meets it hours l
 **Briefed:** via mini-brief, Andrei, 2026-10-16
 **Branch:** vulyk/close-story-scope-refusal
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Council:** ESCALATE round 1, 2026-10-16, at e2d0ad6, pack a0812d9f8d03
 **Shipped:** <written by scripts/ship-check.sh --record>
+
+## Needs a human
+- reason: ceiling · round 1 · 2026-10-16
+- seats: docs/specs/close-story-scope-refusal/council/round-1/
