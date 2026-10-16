@@ -24,7 +24,7 @@ import {
 import type { Motion, View } from './core'
 
 // weights-pin: [{"model":"claude-opus-5-5","in":1000,"cw":2000,"cr":40000,"out":500,"want":6000},{"model":"claude-sonnet-5-5","in":2000,"cw":4000,"cr":100000,"out":800,"want":17800},{"model":"claude-fable-5-1","in":500,"cw":1000,"cr":80000,"out":300,"want":4050}]
-// tests/watcher.test.sh reads the line above and computes each `want` through scripts/token-report.py's own functions.
+// tests/mods.test.sh reads the line above and computes each `want` through scripts/token-report.py's own functions.
 const PIN = [
   { model: 'claude-opus-5-5', in: 1000, cw: 2000, cr: 40000, out: 500, want: 6000 },
   { model: 'claude-sonnet-5-5', in: 2000, cw: 4000, cr: 100000, out: 800, want: 17800 },

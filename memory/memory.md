@@ -11,9 +11,8 @@
 - every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (model, tools, report
   contract, what each command runs/never does): memory/map/agents-and-commands.md
 
-- the VULYK watcher mod (`.claude/mods/vulyk-watcher/`, marketplace `.claude-plugin/marketplace.json`,
-  installed by `install.sh`; no map slice): docs/watcher.md
-- the VULYK pulse mod (`.claude/mods/vulyk-pulse/`, same marketplace and installer; no map slice): docs/pulse.md
+- the VULYK pulse mod (`.claude/mods/vulyk-pulse/`, marketplace `.claude-plugin/marketplace.json`,
+  installed by `install.sh`; no map slice): docs/pulse.md (the watcher mod is retired; `install.sh` `retire_mod` removes it)
 
 ## Unmapped territory
 - `docs/` narrative pages (architecture.md, pipeline.md, cycle.md, token-economy.md,
@@ -37,12 +36,12 @@
 - Ship gate, per spec: `bash scripts/ship-check.sh docs/specs/<slug>`
 - Cycle status, per spec: `bash scripts/cycle.sh status docs/specs/<slug> --json`
 - Token report, per spec: `python scripts/token-report.py . --spec <slug>`
-- Maintenance, evolve ledger, context budget: `bash tests/maintenance.test.sh`
-- Watcher mod: `bash tests/watcher.test.sh`
+- Maintenance: `bash tests/maintenance.test.sh`
+- Pulse mod: `bash tests/mods.test.sh`
 - Cycle state contract tests: `bash tests/cycle.test.sh`
 - Council verdict contract tests: `bash tests/council.test.sh` (`--quick` for ~3 min)
 - Driver contract / end to end: `bash tests/driver.test.sh`, `bash tests/e2e.test.sh`
-- Full suite / build: none exists - VULYK has no test runner and no build step
+- Full suite / build: none: no test runner, no build step
 
 ## Learnings
 - Model ladder and no Haiku below generation 5 (v0.13.0, 2026-09-14): docs/adr/007-model-ladder.md

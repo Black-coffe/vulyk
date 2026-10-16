@@ -243,18 +243,17 @@ jobs:
              ([.permissions.allow[] | select(. == $r2)] | length == 1)' \
             "$target/.claude/settings.json" >/dev/null \
             || { echo "::error::permissions.allow does not contain both cycle.sh and journal.sh allow rules exactly once"; exit 1; }
-          # spec you-should-know: every hive enables Claude Code's built-in "You should know" mod
-          jq -e '.enabledPlugins["cc-plugin-you-should-know@builtin"] == true' "$target/.claude/settings.json" >/dev/null \
-            || { echo "::error::the hive's settings.json does not enable cc-plugin-you-should-know@builtin"; exit 1; }
-          # spec vulyk-watcher: the mod tree ships; the mod itself is installed per machine (user scope),
-          # so the hive's settings.json carries no marketplace key and no enabledPlugins true for it
-          jq -e '.enabledPlugins["vulyk-watcher@vulyk"] == null and .extraKnownMarketplaces.vulyk == null' "$target/.claude/settings.json" >/dev/null \
-            || { echo "::error::the hive's settings.json carries a vulyk-watcher key"; exit 1; }
-          test -f "$target/.claude/mods/vulyk-watcher/hooks/hooks.json" || { echo "::error::watcher mod tree missing after a fresh install"; exit 1; }
+          # 0.29.0: Claude Code's built-in "You should know" mod is offered (ysk-offer.sh), never switched on
+          jq -e '.enabledPlugins["cc-plugin-you-should-know@builtin"] == null' "$target/.claude/settings.json" >/dev/null \
+            || { echo "::error::a fresh hive's settings.json switches cc-plugin-you-should-know@builtin itself"; exit 1; }
+          grep -q 'ysk-offer.sh' "$target/.claude/settings.json" || { echo "::error::ysk-offer hook not wired"; exit 1; }
+          # the mods are installed per machine (user scope): the hive's settings.json carries no marketplace key
+          jq -e '.extraKnownMarketplaces.vulyk == null' "$target/.claude/settings.json" >/dev/null \
+            || { echo "::error::the hive's settings.json carries a vulyk marketplace key"; exit 1; }
+          test ! -e "$target/.claude/mods/vulyk-watcher" || { echo "::error::the retired watcher mod tree ships"; exit 1; }
           test -f "$target/.claude/mods/vulyk-pulse/hooks/hooks.json" || { echo "::error::pulse mod tree missing after a fresh install"; exit 1; }
           rm -rf "$target/.claude/mods"
           ./install.sh "$target" --upgrade >/dev/null
-          test -f "$target/.claude/mods/vulyk-watcher/hooks/hooks.json" || { echo "::error::watcher mod tree missing after an upgrade"; exit 1; }
           test -f "$target/.claude/mods/vulyk-pulse/hooks/hooks.json" || { echo "::error::pulse mod tree missing after an upgrade"; exit 1; }
           test -f "$target/memory/stats/skills.json"          || { echo "::error::skills.json not seeded"; exit 1; }
           # the blanked Profile placeholder must carry every row the source constitution

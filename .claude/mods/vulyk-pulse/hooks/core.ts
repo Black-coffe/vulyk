@@ -203,7 +203,7 @@ export const elapsedOf = (t: Task, now: number, busy: boolean): number => Math.m
 
 // --- hive, spec, status --------------------------------------------------------------------------------------
 
-/** A VULYK hive has `CLAUDE.vulyk.md` or `scripts/cycle.sh` at its root (copied from the watcher's core.ts). */
+/** A VULYK hive has `CLAUDE.vulyk.md` or `scripts/cycle.sh` at its root. */
 export const isHive = (root: { vulyk: boolean; cycle: boolean }): boolean => root.vulyk || root.cycle
 
 /** The spec path of a Workflow call's `args`, or null. */

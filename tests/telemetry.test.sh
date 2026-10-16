@@ -12,11 +12,12 @@ set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
-# install.sh installs the watcher mod per machine through `claude plugin ...`: no run here reaches
-# the real binary and the owner's plugin registry. VULYK_CLAUDE names a missing binary by default
-# (no process spawned, the install prints its NOTE); the watcher block points it at a stub that
+# install.sh installs and retires VULYK's mods per machine through `claude plugin ...`: no run here
+# reaches the real binary and the owner's plugin registry. VULYK_CLAUDE names a missing binary by
+# default (no process spawned, the install prints its NOTE); the mods block points it at a stub that
 # logs its arguments; `plugin list` / `plugin marketplace list` print $T/cc-list / $T/cc-mkt when
-# present, and `plugin install` fails while $T/cc-fail exists.
+# present, and `plugin install` / `update` / `uninstall` fail while $T/cc-fail / cc-upd-fail /
+# cc-un-fail exists.
 CCSTUB="$T/ccstub"; mkdir -p "$CCSTUB"
 cat > "$CCSTUB/claude" <<STUB
 #!/usr/bin/env bash
@@ -26,6 +27,7 @@ case "\$*" in
   "plugin marketplace list") [ -f "$T/cc-mkt" ] && cat "$T/cc-mkt" ;;
   "plugin install "*) [ -f "$T/cc-fail" ] && exit 1 ;;
   "plugin update "*) [ -f "$T/cc-upd-fail" ] && exit 1 ;;
+  "plugin uninstall "*) [ -f "$T/cc-un-fail" ] && exit 1 ;;
 esac
 exit 0
 STUB
@@ -1404,39 +1406,77 @@ cat "$T/ownset.out" | expect "an owner's settings.json: reset wired on SessionSt
   "wire           .claude/settings.json -> SessionStart: defects-inject.sh reset"
 expect_eq "... and all three land in the owner's file" "1 1 1" "$(defect_wiring "$OWNSET/.claude/settings.json")"
 
-# you-should-know: every hive enables Claude Code's built-in "You should know" mod in its project
-# settings; an owner's own value for the key stands
+# ysk-offer (0.29.0): Claude Code's built-in "You should know" mod is offered to the user, never switched
+# on. No settings.json the installer writes or edits names its key; the SessionStart hook ysk-offer.sh
+# carries the offer, at most three times per machine and once a day, and stops at any key the user set.
 YSK='cc-plugin-you-should-know@builtin'
 ysk_val() { jq -r --arg k "$YSK" '.enabledPlugins[$k] | tostring' "$1" | tr -d '\r'; }
-expect_eq "VULYK's own settings.json enables the mod" "true" "$(ysk_val "$SRC/.claude/settings.json")"
-expect_eq "a fresh hive gets the key with the settings.json it is given" "true" "$(ysk_val "$TGT/.claude/settings.json")"
-cat "$T/install.out" | expect_absent "... so the fresh install prints no wiring line for it" "enabledPlugins"
-cat "$T/ownset.out" | expect "an owner's settings.json: the mod wired" \
-  "wire           .claude/settings.json -> enabledPlugins: $YSK"
-cat "$T/ownset.out" | expect "... with the off switch that works in a hive" "false in .claude/settings.local.json"
-expect_eq "... the key lands true and the owner's permission stays" "true 1" \
-  "$(ysk_val "$OWNSET/.claude/settings.json") $(jq -r '[.permissions.allow[] | select(. == "Bash(ls:*)")] | length' "$OWNSET/.claude/settings.json" | tr -d '\r')"
+expect_eq "VULYK's own settings.json does not switch the mod" "null" "$(ysk_val "$SRC/.claude/settings.json")"
+expect_eq "a fresh hive gets no key for it" "null" "$(ysk_val "$TGT/.claude/settings.json")"
+expect_eq "... nor does an owner's settings.json" "null" "$(ysk_val "$OWNSET/.claude/settings.json")"
+cat "$T/ownset.out" | expect_absent "... and the install prints no wiring line for it" "enabledPlugins: $YSK"
+expect_eq "a fresh hive has the offer hook on SessionStart" "1" \
+  "$(jq -r '[.hooks.SessionStart[].hooks[].command | select(test("ysk-offer.sh$"))] | length' "$TGT/.claude/settings.json" | tr -d '\r')"
+cat "$T/ownset.out" | expect "an owner's settings.json: the offer hook wired" \
+  "wire           .claude/settings.json -> SessionStart: ysk-offer.sh"
+# 0.25-0.28 wrote the key `true` into every hive: an upgrade drops exactly that `true` (owner, 2026-10-16).
 YSK2="$T/hive-ysk"; mkdir -p "$YSK2/.claude"
-printf '{"enabledPlugins":{"other@market":true}}\n' > "$YSK2/.claude/settings.json"
-bash "$SRC/install.sh" "$YSK2" --telemetry off --check > "$T/ysk-check.out" 2>&1
-cat "$T/ysk-check.out" | expect "--check names the mod it would wire" "would wire     .claude/settings.json -> enabledPlugins: $YSK"
-expect_eq "... and leaves the file untouched" '{"enabledPlugins":{"other@market":true}}' "$(tr -d '\r\n' < "$YSK2/.claude/settings.json")"
-bash "$SRC/install.sh" "$YSK2" --telemetry off > /dev/null 2>&1
-expect_eq "another plugin key survives the wiring" "true true" \
-  "$(jq -r '.enabledPlugins["other@market"] | tostring' "$YSK2/.claude/settings.json" | tr -d '\r') $(ysk_val "$YSK2/.claude/settings.json")"
-rm -f "$YSK2/.claude/settings.json.vulyk-bak"
-bash "$SRC/install.sh" "$YSK2" --upgrade > "$T/ysk-again.out" 2>&1
-cat "$T/ysk-again.out" | expect_absent "a second run says nothing about the key" "enabledPlugins"
-expect_eq "... and takes no backup for it" "0" "$([ -e "$YSK2/.claude/settings.json.vulyk-bak" ] && echo 1 || echo 0)"
-jq --arg k "$YSK" '.enabledPlugins[$k] = false' "$YSK2/.claude/settings.json" > "$T/ysk-off.json" && cp "$T/ysk-off.json" "$YSK2/.claude/settings.json"
-bash "$SRC/install.sh" "$YSK2" --upgrade > "$T/ysk-off.out" 2>&1
-cat "$T/ysk-off.out" | expect "an owner's false is kept, and said so" "kept           .claude/settings.json -> enabledPlugins: $YSK is false"
-expect_eq "... the value stays false and no backup is left for it" "false 0" \
-  "$(ysk_val "$YSK2/.claude/settings.json") $([ -e "$YSK2/.claude/settings.json.vulyk-bak" ] && echo 1 || echo 0)"
-YSKBAD="$T/hive-ysk-bad"; mkdir -p "$YSKBAD/.claude"; printf '{"enabledPlugins": [\n' > "$YSKBAD/.claude/settings.json"
-bash "$SRC/install.sh" "$YSKBAD" --telemetry off > "$T/ysk-bad.out" 2>&1
-expect_eq "an unparseable settings.json is left byte for byte" '{"enabledPlugins": [' "$(tr -d '\r\n' < "$YSKBAD/.claude/settings.json")"
-cat "$T/ysk-bad.out" | expect "... with the line to add by hand" "\"enabledPlugins\": { \"$YSK\": true }"
+printf '{"enabledPlugins":{"other@market":true,"%s":true}}\n' "$YSK" > "$YSK2/.claude/settings.json"
+bash "$SRC/install.sh" "$YSK2" --telemetry off > "$T/ysk-fresh.out" 2>&1
+expect_eq "a fresh install leaves an owner's own true alone" "true" "$(ysk_val "$YSK2/.claude/settings.json")"
+bash "$SRC/install.sh" "$YSK2" --upgrade --check > "$T/ysk-check.out" 2>&1
+cat "$T/ysk-check.out" | expect "--check on an upgrade names the drop" "would drop     .claude/settings.json -> enabledPlugins: $YSK"
+expect_eq "... and writes nothing" "true" "$(ysk_val "$YSK2/.claude/settings.json")"
+bash "$SRC/install.sh" "$YSK2" --upgrade > "$T/ysk-up.out" 2>&1
+cat "$T/ysk-up.out" | expect "an upgrade drops the installer's old true, and says so" "drop           .claude/settings.json -> enabledPlugins: $YSK"
+expect_eq "... the key is gone, another plugin's key stays" "null true" \
+  "$(ysk_val "$YSK2/.claude/settings.json") $(jq -r '.enabledPlugins["other@market"] | tostring' "$YSK2/.claude/settings.json" | tr -d '\r')"
+bash "$SRC/install.sh" "$YSK2" --upgrade > "$T/ysk-up2.out" 2>&1
+cat "$T/ysk-up2.out" | expect_absent "a second upgrade says nothing about it" "$YSK"
+YSK3="$T/hive-ysk-only"; mkdir -p "$YSK3/.claude"
+printf '{"enabledPlugins":{"%s":true}}\n' "$YSK" > "$YSK3/.claude/settings.json"
+bash "$SRC/install.sh" "$YSK3" --telemetry off > /dev/null 2>&1
+bash "$SRC/install.sh" "$YSK3" --upgrade > /dev/null 2>&1
+expect_eq "an enabledPlugins left empty is removed whole" "false" "$(jq -r 'has("enabledPlugins")' "$YSK3/.claude/settings.json" | tr -d '\r')"
+jq --arg k "$YSK" '.enabledPlugins = {($k): false}' "$YSK3/.claude/settings.json" > "$T/ysk-off.json" && cp "$T/ysk-off.json" "$YSK3/.claude/settings.json"
+printf '{"enabledPlugins":{"%s":true}}\n' "$YSK" > "$YSK3/.claude/settings.local.json"
+bash "$SRC/install.sh" "$YSK3" --upgrade > "$T/ysk-off.out" 2>&1
+expect_eq "an owner's false stays, and settings.local.json is never touched" "false true" \
+  "$(ysk_val "$YSK3/.claude/settings.json") $(ysk_val "$YSK3/.claude/settings.local.json")"
+
+# The hook itself, in a sandbox: CLAUDE_CONFIG_DIR stands in for ~/.claude.
+YO="$SRC/.claude/hooks/ysk-offer.sh"
+YH="$T/ysk-hive"; YC="$T/ysk-cfg"; mkdir -p "$YH/.claude" "$YC"
+printf '| Owner language | ru |\n' > "$YH/CLAUDE.md"
+yo() { env -u DISABLE_TELEMETRY -u CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC -u CLAUDE_CODE_USE_BEDROCK \
+  -u CLAUDE_CODE_USE_VERTEX -u CLAUDE_CODE_USE_FOUNDRY -u VULYK_YSK_OFFER \
+  CLAUDE_CONFIG_DIR="$YC" CLAUDE_PROJECT_DIR="$YH" "$@" bash "$YO"; }
+yo_age() { read -r n _ < "$YC/vulyk-ysk-offer"; printf '%s %s\n' "$n" "$(( $(date +%s) - 21 * 3600 ))" > "$YC/vulyk-ysk-offer"; }
+yo > "$T/yo1.json"
+expect_eq "the first session shows the offer, as a message to the user only" "systemMessage" \
+  "$(jq -r 'keys | join(",")' "$T/yo1.json" | tr -d '\r')"
+jq -r .systemMessage "$T/yo1.json" | expect "... in the Profile's owner language, 1 of 3" "Совет 1 из 3"
+jq -r .systemMessage "$T/yo1.json" | expect "... with the command that turns it on" "/plugin enable $YSK"
+jq -r .systemMessage "$T/yo1.json" | expect "... and the one that declines it" "/plugin disable $YSK"
+expect_eq "a second session the same day says nothing" "" "$(yo)"
+yo_age; yo > "$T/yo2.json"
+jq -r .systemMessage "$T/yo2.json" | expect "a day later: 2 of 3" "Совет 2 из 3"
+yo_age; yo > "$T/yo3.json"
+jq -r .systemMessage "$T/yo3.json" | expect "then 3 of 3, said to be the last" "Это последний раз"
+yo_age
+expect_eq "after three offers, never again" "" "$(yo)"
+rm -f "$YC/vulyk-ysk-offer"
+printf '{"enabledPlugins":{"%s":true}}\n' "$YSK" > "$YC/settings.json"
+expect_eq "the user turned it on (/plugin enable): no offer" "" "$(yo)"
+rm -f "$YC/settings.json"
+printf '{"enabledPlugins":{"%s":false}}\n' "$YSK" > "$YH/.claude/settings.local.json"
+expect_eq "the user declined it in the project: no offer" "" "$(yo)"
+rm -f "$YH/.claude/settings.local.json"
+expect_eq "telemetry off: no offer, the mod cannot run" "" "$(yo DISABLE_TELEMETRY=1)"
+expect_eq "VULYK_YSK_OFFER=0: no offer" "" "$(yo VULYK_YSK_OFFER=0)"
+expect_eq "... and none of them counted a showing" "0" "$([ -e "$YC/vulyk-ysk-offer" ] && echo 1 || echo 0)"
+printf '| Owner language | `<fill in - ru, uk, en (default)>` |\n' > "$YH/CLAUDE.md"
+yo | jq -r .systemMessage | expect "an unfilled language row falls back to English" "Tip 1 of 3"
 
 # wire_ripgrep: on Windows, with a system rg on PATH, USE_BUILTIN_RIPGREP=0 goes to the hive's
 # settings.local.json (the machine's file, never the committed one); off Windows, with no rg, or
@@ -1489,75 +1529,95 @@ PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG6" --telemetry off > "$T/rg-bad.o
 expect_eq "an unparseable settings.local.json is left byte for byte" '{"env": [' "$(tr -d '\r\n' < "$RG6/.claude/settings.local.json")"
 cat "$T/rg-bad.out" | expect "... with the line to add by hand" '"env": { "USE_BUILTIN_RIPGREP": "0" }'
 
-# vulyk-watcher: installed once per machine, user scope, from VULYK's GitHub marketplace; no
-# project marketplace key and no enabledPlugins true is written; an owner's false is kept
-WID='vulyk-watcher@vulyk'
-WADD='claude plugin marketplace add Black-coffe/vulyk'
-WINST="claude plugin install $WID --scope user"
-wid_keys() { jq -r --arg k "$WID" '"\(.enabledPlugins[$k] | tostring) \(.extraKnownMarketplaces.vulyk | tostring)"' "$1" | tr -d '\r'; }
-expect_eq "VULYK's own settings.json carries no watcher key" "null null" "$(wid_keys "$SRC/.claude/settings.json")"
-expect_eq "a fresh hive gets no watcher key" "null null" "$(wid_keys "$TGT/.claude/settings.json")"
-expect_eq "... nor does an owner's settings.json" "null null" "$(wid_keys "$OWNSET/.claude/settings.json")"
-expect_eq "... the mod tree still ships" "1" "$([ -f "$TGT/.claude/mods/vulyk-watcher/hooks/hooks.json" ] && echo 1 || echo 0)"
+# VULYK's mods (the pulse): installed once per machine, user scope, from VULYK's GitHub marketplace;
+# no project marketplace key and no enabledPlugins true is written; an owner's false is kept.
+PID='vulyk-pulse@vulyk'
+PADD='claude plugin marketplace add Black-coffe/vulyk'
+PINST="claude plugin install $PID --scope user"
+pid_keys() { jq -r --arg k "$PID" '"\(.enabledPlugins[$k] | tostring) \(.extraKnownMarketplaces.vulyk | tostring)"' "$1" | tr -d '\r'; }
+expect_eq "VULYK's own settings.json carries no pulse key" "null null" "$(pid_keys "$SRC/.claude/settings.json")"
+expect_eq "a fresh hive gets no pulse key" "null null" "$(pid_keys "$TGT/.claude/settings.json")"
+expect_eq "... nor does an owner's settings.json" "null null" "$(pid_keys "$OWNSET/.claude/settings.json")"
+expect_eq "... the mod tree still ships" "1" "$([ -f "$TGT/.claude/mods/vulyk-pulse/hooks/hooks.json" ] && echo 1 || echo 0)"
+expect_eq "OWNED lists the pulse tree" "1" "$(grep -c '^OWNED=.*\.claude/mods/vulyk-pulse' "$SRC/install.sh")"
 cat "$T/install.out" | expect "no claude on PATH: a NOTE says so, the install goes on" "NOTE: claude is not on PATH"
-cat "$T/install.out" | expect "... and names the marketplace command" "$WADD"
-cat "$T/install.out" | expect "... and the install command" "$WINST"
-WI="$T/hive-watcher"; mkdir -p "$WI"
+cat "$T/install.out" | expect "... and names the marketplace command" "$PADD"
+cat "$T/install.out" | expect "... and the install command" "$PINST"
+PI="$T/hive-pulse"; mkdir -p "$PI"
 : > "$T/cc.log"
-VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --telemetry off --check > "$T/wi-check.out" 2>&1
-cat "$T/wi-check.out" | expect "--check names what it would install" "would install  $WID (user scope"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --telemetry off --check > "$T/pi-check.out" 2>&1
+cat "$T/pi-check.out" | expect "--check names what it would install" "would install  $PID (user scope"
 expect_eq "... and the dry run adds and installs nothing" "0" "$(grep -c 'plugin marketplace add\|plugin install' "$T/cc.log")"
 : > "$T/cc.log"
-VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --telemetry off > "$T/wi.out" 2>&1
-cat "$T/wi.out" | expect "a fresh install installs the mod for this machine" "install        $WID (user scope, marketplace Black-coffe/vulyk)"
-cat "$T/wi.out" | expect "... with the off switch" "\"$WID\": false in that hive's .claude/settings.local.json"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --telemetry off > "$T/pi.out" 2>&1
+cat "$T/pi.out" | expect "a fresh install installs the mod for this machine" "install        $PID (user scope, marketplace Black-coffe/vulyk)"
+cat "$T/pi.out" | expect "... with the off switch" "\"$PID\": false in that hive's .claude/settings.local.json"
 expect_eq "... the marketplace is added, then the plugin installed at user scope" \
-  "plugin marketplace add Black-coffe/vulyk|plugin install $WID --scope user" \
+  "plugin marketplace add Black-coffe/vulyk|plugin install $PID --scope user" \
   "$(grep 'plugin marketplace add\|plugin install' "$T/cc.log" | tr -d '\r' | head -n 2 | paste -sd'|' -)"
-PID='vulyk-pulse@vulyk'
-cat "$T/wi.out" | expect "... and the pulse beside it" "install        $PID (user scope, marketplace Black-coffe/vulyk)"
-expect_eq "... the pulse is installed at user scope" "1" "$(grep -c "plugin install $PID --scope user" "$T/cc.log")"
-cat "$T/wi-check.out" | expect "--check names the pulse too" "would install  $PID (user scope"
-cat "$T/install.out" | expect "no claude on PATH: the pulse's install command is named" "claude plugin install $PID --scope user"
-expect_eq "... under one NOTE for both mods" "1" "$(grep -c 'NOTE: claude is not on PATH' "$T/install.out")"
-expect_eq "OWNED lists the pulse tree" "1" "$(grep -c '^OWNED=.*\.claude/mods/vulyk-pulse' "$SRC/install.sh")"
-printf '  vulyk\n' > "$T/cc-mkt"; printf '  %s\n    Scope: user\n  %s\n    Scope: user\n' "$WID" "$PID" > "$T/cc-list"; : > "$T/cc.log"
-jq --arg k "$WID" '.enabledPlugins[$k] = false' "$WI/.claude/settings.json" > "$T/wid-off.json" && cp "$T/wid-off.json" "$WI/.claude/settings.json"
-printf '{"enabledPlugins":{"%s":false}}' "$WID" > "$WI/.claude/settings.local.json"
-VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/wi-again.out" 2>&1
+printf '  vulyk\n' > "$T/cc-mkt"; printf '  %s\n    Scope: user\n' "$PID" > "$T/cc-list"; : > "$T/cc.log"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade > "$T/pi-again.out" 2>&1
 expect_eq "installed already: nothing is added or installed again" "0" "$(grep -c 'plugin marketplace add\|plugin install' "$T/cc.log")"
-expect_eq "... the upgrade refreshes the marketplace, then updates the mod at user scope"   "plugin marketplace update vulyk|plugin update $WID --scope user"   "$(grep 'plugin marketplace update\|plugin update' "$T/cc.log" | tr -d '' | head -n 2 | paste -sd'|' -)"
-cat "$T/wi-again.out" | expect "... and says so" "update         $WID (user scope"
-cat "$T/wi-again.out" | expect "... for the pulse too" "update         $PID (user scope"
-expect_eq "... a second run installs neither" "0" "$(grep -c 'plugin install' "$T/cc.log")"
-cat "$T/wi-again.out" | expect_absent "... and says nothing about installing" "install        $WID"
+expect_eq "... the upgrade refreshes the marketplace, then updates the mod at user scope" \
+  "plugin marketplace update vulyk|plugin update $PID --scope user" \
+  "$(grep 'plugin marketplace update\|plugin update' "$T/cc.log" | tr -d '\r' | head -n 2 | paste -sd'|' -)"
+cat "$T/pi-again.out" | expect "... and says so" "update         $PID (user scope"
 : > "$T/cc.log"
-VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade --check > "$T/wi-upd-check.out" 2>&1
-cat "$T/wi-upd-check.out" | expect "--check on a machine that has it names the update" "would update   $WID (user scope"
-cat "$T/wi-upd-check.out" | expect "... once for the pulse as well" "would update   $PID (user scope"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade --check > "$T/pi-upd-check.out" 2>&1
+cat "$T/pi-upd-check.out" | expect "--check on a machine that has it names the update" "would update   $PID (user scope"
 expect_eq "... and the dry run updates nothing" "0" "$(grep -c 'plugin marketplace update\|plugin update' "$T/cc.log")"
 : > "$T/cc-upd-fail"
-VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/wi-upd-fail.out" 2>&1; rc=$?
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade > "$T/pi-upd-fail.out" 2>&1; rc=$?
 expect_eq "a failed plugin update never fails the install" "0" "$rc"
-cat "$T/wi-upd-fail.out" | expect "... it names the update command" "claude plugin update $WID --scope user"
+cat "$T/pi-upd-fail.out" | expect "... it names the update command" "claude plugin update $PID --scope user"
 rm -f "$T/cc-upd-fail"
-expect_eq "the mod's plugin.json version equals VERSION" "$(tr -d '[:space:]' < "$SRC/VERSION")"   "$(jq -r .version "$SRC/.claude/mods/vulyk-watcher/.claude-plugin/plugin.json" | tr -d '')"
-cat "$T/wi-again.out" | expect "an owner's false for the watcher is kept, and said so" "kept           .claude/settings.json -> enabledPlugins: $WID is false"
-cat "$T/wi-again.out" | expect "... the same in settings.local.json" "kept           .claude/settings.local.json -> enabledPlugins: $WID is false"
-expect_eq "... both stay false" "falsefalse" "$(jq -r --arg k "$WID" '.enabledPlugins[$k] | tostring' "$WI/.claude/settings.json" "$WI/.claude/settings.local.json" | tr -d '\r\n')"
-printf '{"enabledPlugins":{"%s":false}}' "$PID" > "$WI/.claude/settings.local.json"
-VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/pi-off.out" 2>&1
+expect_eq "the mod's plugin.json version equals VERSION" "$(tr -d '[:space:]' < "$SRC/VERSION")" \
+  "$(jq -r .version "$SRC/.claude/mods/vulyk-pulse/.claude-plugin/plugin.json" | tr -d '\r')"
+printf '{"enabledPlugins":{"%s":false}}' "$PID" > "$PI/.claude/settings.local.json"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade > "$T/pi-off.out" 2>&1
 cat "$T/pi-off.out" | expect "an owner's false for the pulse is kept, and said so" "kept           .claude/settings.local.json -> enabledPlugins: $PID is false"
-expect_eq "... and stays false" "false" "$(jq -r --arg k "$PID" '.enabledPlugins[$k] | tostring' "$WI/.claude/settings.local.json" | tr -d '\r\n')"
+expect_eq "... and stays false" "false" "$(jq -r --arg k "$PID" '.enabledPlugins[$k] | tostring' "$PI/.claude/settings.local.json" | tr -d '\r\n')"
 rm -f "$T/cc-list"; : > "$T/cc-fail"; : > "$T/cc.log"
-VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WI" --upgrade > "$T/wi-fail.out" 2>&1; rc=$?
-expect_eq "a marketplace already added is not added again; each mod tries its install" "0 2" \
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade > "$T/pi-fail.out" 2>&1; rc=$?
+expect_eq "a marketplace already added is not added again; the mod tries its install" "0 1" \
   "$(grep -c 'plugin marketplace add' "$T/cc.log") $(grep -c 'plugin install' "$T/cc.log")"
 expect_eq "a failed plugin install never fails the install" "0" "$rc"
-cat "$T/wi-fail.out" | expect "... it names both commands" "$WADD"
-cat "$T/wi-fail.out" | expect "... the second one too" "$WINST"
-cat "$T/wi-fail.out" | expect "... and the pulse's" "claude plugin install $PID --scope user"
+cat "$T/pi-fail.out" | expect "... it names both commands" "$PADD"
+cat "$T/pi-fail.out" | expect "... the second one too" "$PINST"
 rm -f "$T/cc-fail" "$T/cc-mkt"
+
+# The retired watcher mod (0.29.0): its tree no longer ships, an upgrade removes the old one through
+# the manifest, and its user-scope install leaves the machine.
+WID='vulyk-watcher@vulyk'
+expect_eq "the watcher tree no longer ships" "0" "$([ -e "$TGT/.claude/mods/vulyk-watcher" ] && echo 1 || echo 0)"
+expect_eq "... but stays OWNED, so an upgrade may remove it" "1" "$(grep -c '^OWNED=.*\.claude/mods/vulyk-watcher' "$SRC/install.sh")"
+expect_eq "the root marketplace no longer lists it" "0" "$(jq -r '[.plugins[].name | select(. == "vulyk-watcher")] | length' "$SRC/.claude-plugin/marketplace.json" | tr -d '\r')"
+WR="$T/hive-retire"; mkdir -p "$WR"
+bash "$SRC/install.sh" "$WR" --telemetry off > /dev/null 2>&1
+WF=".claude/mods/vulyk-watcher/hooks/hooks.json"
+mkdir -p "$WR/.claude/mods/vulyk-watcher/hooks"
+git -C "$SRC" show "v$(tr -d '[:space:]' < "$WR/.claude/vulyk-version"):$WF" > "$WR/$WF" 2>/dev/null \
+  || printf '{ "modules": ["./register.tsx"] }\n' > "$WR/$WF"
+printf '%s\n' "$WF" >> "$WR/.claude/vulyk-manifest"
+printf '  %s\n    Scope: user\n' "$WID" > "$T/cc-list"; : > "$T/cc.log"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WR" --upgrade --check > "$T/wr-check.out" 2>&1
+cat "$T/wr-check.out" | expect "--check names the retired tree's removal" "would remove   $WF"
+cat "$T/wr-check.out" | expect "... and the machine's uninstall" "would uninstall $WID (user scope, retired)"
+expect_eq "... and the dry run uninstalls nothing" "0" "$(grep -c 'plugin uninstall' "$T/cc.log")"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WR" --upgrade > "$T/wr.out" 2>&1
+cat "$T/wr.out" | expect "an upgrade removes the retired tree" "remove         $WF"
+expect_eq "... the file is gone" "0" "$([ -e "$WR/$WF" ] && echo 1 || echo 0)"
+expect_eq "... and the mod is uninstalled at user scope" "plugin uninstall $WID --scope user" \
+  "$(grep 'plugin uninstall' "$T/cc.log" | tr -d '\r')"
+cat "$T/wr.out" | expect "... and says so" "uninstall      $WID (user scope, retired"
+rm -f "$T/cc-list"; : > "$T/cc.log"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WR" --upgrade > /dev/null 2>&1
+expect_eq "a machine without it: no uninstall is tried" "0" "$(grep -c 'plugin uninstall' "$T/cc.log")"
+printf '  %s\n    Scope: user\n' "$WID" > "$T/cc-list"; : > "$T/cc-un-fail"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$WR" --upgrade > "$T/wr-fail.out" 2>&1; rc=$?
+expect_eq "a failed uninstall never fails the install" "0" "$rc"
+cat "$T/wr-fail.out" | expect "... it names the command" "claude plugin uninstall $WID --scope user"
+rm -f "$T/cc-list" "$T/cc-un-fail"
 
 # A hive whose owner arranged things: a quoted launcher with a redirect on a startup-only group,
 # the inject script already on SessionStart WITHOUT the argument, intake already wired, and an

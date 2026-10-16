@@ -19,7 +19,7 @@ It appears in three places:
 
 - It replaces the `Spinner` line while the main turn runs.
 - It fills the band above the prompt while the main turn is idle and agents are still live. In a Tier 3-4 build this is
-  the main place: the Queen's turn ended when the Workflow launched. If the watcher has a note to draw, the note wins.
+  the main place: the Queen's turn ended when the Workflow launched. If another mod has a note to draw (Claude Code's own "You should know"), the note wins.
 - The `Baked for ...` closing line becomes `<word> for <task time> · N agents · ≈X tok`. The agents part is dropped at 0.
   Each line keeps the figures it showed when first drawn (the last 200 lines are kept); a later turn or task does not
   repaint it. A reload of the mod forgets them, and so does a resumed session, which starts with no frozen lines: a line drawn again
@@ -45,7 +45,7 @@ input + 1.25 x every cache write + the per-model rate x cache read + output. The
 
 It misses:
 
-- A plugin's own forked model calls (the watcher keeps its own ledger).
+- A plugin's own forked model calls ("You should know" runs its own).
 - A response with no usage (an interrupt, an API error).
 - Anything before the mod loaded.
 
@@ -59,7 +59,7 @@ the finer figure. The row is a gauge, not the ledger.
 
 ## Install and off switch
 
-`install.sh` installs `vulyk-pulse@vulyk` beside the watcher, once per machine, at user scope, from the root marketplace;
+`install.sh` installs `vulyk-pulse@vulyk` once per machine, at user scope, from the root marketplace;
 `--upgrade` refreshes it. Restart `claude` to apply it.
 
 To turn it off in one hive, set `"vulyk-pulse@vulyk": false` under `enabledPlugins` in that hive's

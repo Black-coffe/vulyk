@@ -90,7 +90,7 @@ Quiet variants only: their output is resent every turn. A story's `## Verificati
 | Defect and hook tests | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
 | Merge tests | `bash tests/constitution.test.sh` |
 | Maintenance | `bash tests/maintenance.test.sh` |
-| Watcher mod | `bash tests/watcher.test.sh` |
+| Pulse mod | `bash tests/mods.test.sh` |
 | Full suite / build | none: no test runner, no build step |
 
 The first three are silent on success; never commit the `__pycache__/` that `py_compile` writes.

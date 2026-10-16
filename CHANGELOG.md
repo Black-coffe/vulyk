@@ -51,6 +51,22 @@ and reviewed by Fable 5.1 (the first three also by Sonnet 5.5); every accepted r
 
   The constitution stays inside its 7 168-byte cap: VULYK-only Commands rows were shortened to pay for it.
 
+### Changed
+- **"You should know" is offered, not switched on.** Claude Code's built-in side agent
+  (`cc-plugin-you-should-know@builtin`) is no longer enabled by the installer.
+  - A new SessionStart hook, `ysk-offer.sh`, shows the user what it does, with `/plugin enable` and `/plugin disable`.
+  - It shows at most three times per machine and once a day, in the Profile's owner language.
+  - It goes quiet for good as soon as any settings file names the key.
+  - An upgrade drops the key's `true` that 0.25-0.28 wrote into each hive's `settings.json`, so a clone no longer
+    gets the mod on unasked. A `false` and `settings.local.json` stay.
+  - `VULYK_YSK_OFFER=0` silences the offer.
+
+### Removed
+- **The `vulyk-watcher` mod** (0.27.0), at the owner's call after trying it.
+  - The mod tree, its marketplace entry, `docs/watcher.md` and its spend line in `token-report.py` are gone.
+  - An upgrade removes the tree from a hive and uninstalls the mod from the machine.
+  - `tests/watcher.test.sh` is now `tests/mods.test.sh`: it checks the pulse only.
+
 ## [0.28.0] - 2026-10-16
 
 ### Added

@@ -9,8 +9,8 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `cycle.sh <verb> <spec-dir> [...]` - the cycle CLI; `advance` is the loop's stepping verb. Callers:
   the Queen (solo T1-2, `/vulyk-review`, `/vulyk-plan`, pause/resume), `cycle-clerk` (only `advance`,
   `status`, `release`), workers (`close-story`).
-- `lib.sh` - sourced only. `is_story_file` :16, `pack_fingerprint` :27, `is_paperwork_path` :54,
-  `paperwork_only` :68, `marker` :82, `constitution_file` :94, `command_cell_exists` :98. Model floor
+- `lib.sh` - sourced only. `is_story_file` :16, `pack_fingerprint` :27, `is_paperwork_path` :57,
+  `paperwork_only` :87, `marker` :82, `constitution_file` :94, `command_cell_exists` :98. Model floor
   (ADR-015): `model_floor` :163 (default lines `fable 5.1`, `opus 5.5`, `sonnet 5.5`, `haiku 5.5
   cc>=2.1.293`; flag `unreleased` or `cc>=<x.y.z>`; `VULYK_MODEL_FLOOR` overrides per family),
   `model_version` :177, `claude_code_version` :189 (`CLAUDE_CODE_VERSION` env, else `claude --version`;
@@ -24,9 +24,7 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   (a `## Verification` segment that is not a `## Commands` cell). `trace-check.sh` - a `## Requirements`
   quote may match the brief, a plan delta or a `## Asks` item.
 - `token-report.py <project> [--spec S] [--since D] [--json]` - spend from `~/.claude/projects/` +
-  `council.jsonl`; dedupes by `message.id`. `/vulyk-status` (14d), `/vulyk-evolve` (7d). Prints a
-  `watcher:` line (`watcher_spend` :392, from `memory/stats/watcher.jsonl`, printed :529; the mod's
-  forks, in no transcript, so NOT in TOTAL).
+  `council.jsonl`; dedupes by `message.id`. `/vulyk-status` (14d), `/vulyk-evolve` (7d).
 - `evolve-ledger.py <root> <verb>` - owns `memory/stats/evolve.jsonl`. Verbs: `add` (`COMPONENTS` :29),
   `run`, `resolve` (tip in default branch = accepted; branch gone, unmerged = rejected; present,
   unmerged = `pending`, no row), `window`, `last`, `pending`.
@@ -57,30 +55,32 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `cycle.sh`: last stdout line is one JSON object; exits 0 ok · 1 usage · 2 precondition · 3 paused ·
   4 malformed report / red verify · 5 stale · 6 escalate. Other gates exit 0 and report;
   `telemetry.sh check` is the one exception.
-- `is_paperwork_path` whitelist (lib.sh:54-64): spec `plan/journal/brief/council/*`, `memory/stats/
-  {human,acceptance,ship,council,scope,anomalies,watcher,evolve}.jsonl`, `skills.json`, `memory/learnings/*.md`
+- `is_paperwork_path` whitelist (lib.sh:57-66): spec `plan/journal/brief/council/*`, `memory/stats/
+  {human,acceptance,ship,council,scope,anomalies,evolve}.jsonl`, `skills.json`, `memory/learnings/*.md`
   (one level), `VERSION`, `CHANGELOG.md`.
 - `telemetry.sh` `ENUM`/`AGENTS` are append-only public contracts; bundle rows codes and numbers only.
 
 ## Tests
 `tests/maintenance.test.sh` (not in ci.yml): caps, brief due logic, ledger. `tests/defects.test.sh`:
 `defects-check.sh`. `tests/telemetry.test.sh`: `floorcheck`, `tmrun` (top-model.sh gate pins).
-`tests/watcher.test.sh`: the watcher and pulse mods.
+`tests/mods.test.sh`: the pulse mod only.
 
 ## install.sh - the upgrade contract
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution
   (`print_migrate_hint` :390); `replace_constitution` :412 (`render_constitution` :329), backs up as
   `<name>.pre-<major.minor>.md` (`constitution_backup` :354).
-- `.claude/mods/vulyk-watcher` and `.claude/mods/vulyk-pulse` are in `OWNED` (:52), so an upgrade syncs
-  both mods' files. `install_mod <id>` :1030 (called :1264-1265 for `vulyk-watcher@vulyk` and
-  `vulyk-pulse@vulyk`, after `wire_plugin`): user-scope plugin from marketplace
+- `.claude/mods/vulyk-pulse` is in `OWNED` (:54); `.claude/mods/vulyk-watcher` stays there only so an
+  upgrade removes the retired tree. `install_mod <id>` :1081 (called :1337 for `vulyk-pulse@vulyk`
+  only): user-scope plugin from marketplace
   `Black-coffe/vulyk` via the `claude plugin` CLI (`VULYK_CLAUDE` overrides the binary); not installed ->
   `marketplace add` + `install`; installed -> `marketplace update` + `plugin update` each run; no `claude`
   or a CLI failure -> prints the commands, returns 0. A `false` for the id in project settings is reported
-  as kept, never written. `wire_plugin [section key value what]` :954 now takes the id as 2nd arg
-  (default `YSK_ID`, the You-should-know key); missing is written, an owner value is kept.
-  Mods: `docs/watcher.md`; `docs/pulse.md` (pulse: working indicator, `hooks/hooks.json` -> `register.tsx`,
-  `hooks/core.test.ts`); both checked by `tests/watcher.test.sh` (weights pinned to `token-report.py`).
+  as kept, never written. `retire_mod vulyk-watcher@vulyk` :1136 (called :1336) uninstalls the retired
+  mod at user scope (`--check` only says it would); no `claude` or not installed -> no-op. `wire_plugin`
+  and `YSK_ID` are gone: `.claude/hooks/ysk-offer.sh` (SessionStart, `wire_hook` :1333) offers Claude
+  Code's built-in You-should-know mod instead of the installer enabling it.
+  Mod: `docs/pulse.md` (working indicator, `hooks/hooks.json` -> `register.tsx`, `hooks/core.test.ts`),
+  checked by `tests/mods.test.sh`.
 - `shippable` filter (:67-91): `memory/stats/*.jsonl` never ship; the installer deletes nothing of a host's.
 
 ## Gotchas

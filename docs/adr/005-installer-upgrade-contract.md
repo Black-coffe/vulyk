@@ -302,3 +302,21 @@ shipped (old manifest) that the hive no longer has is not copied back: `kept del
 `.vulyk-new` untouched, `keep (edited)`. A release clone with no `v*` tag (a downloaded ZIP, a shallow checkout) cannot
 tell an edit from a release copy: the installer prints a NOTE and replaces as before. Six live hives had kept their own
 patch registers to re-apply what every upgrade overwrote. Status line unchanged.
+
+### 2026-10-16 (owner): the watcher mod is retired, and "You should know" is offered, not switched on
+
+The owner tried VULYK's own watcher (amendment of 2026-10-15) and did not want it. `.claude/mods/vulyk-watcher` ships
+nothing from 0.29.0 and stays in `OWNED`, so an upgrade removes the old tree through the manifest (D2). `retire_mod`
+runs `claude plugin uninstall vulyk-watcher@vulyk --scope user` where `claude plugin list` names it; `--check` prints
+`would uninstall`, and a failure prints a NOTE and never fails the install. The root marketplace lists only the pulse.
+
+The amendment of 2026-10-04 is reversed: `wire_plugin` is gone, VULYK's own `settings.json` carries no
+`cc-plugin-you-should-know@builtin` key, and the installer never writes one. On `--upgrade`, `unwire_ysk` drops that
+key from a hive's `settings.json` when it is exactly `true` (`drop` line, `would drop` under `--check`, one backup):
+0.25-0.28 wrote it into every hive, and the file travels with the repo, so every clone got the mod on unasked. The
+owner chose this over leaving it, knowing an installer cannot tell its own old `true` from a hive's. A `false` stays,
+and `settings.local.json` is never touched. Instead `wire_hook` adds the
+SessionStart hook `ysk-offer.sh`, which shows the user (a `systemMessage`, not model context) the mod, the command
+that turns it on and the one that declines it. It shows at most three times per machine, at most once a day, and
+stops for good at any settings file naming the key. The deciding factor: whether a side agent runs on the
+user's limits is the user's call, not the installer's. Status line unchanged.
