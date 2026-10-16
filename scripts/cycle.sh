@@ -1773,9 +1773,11 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
   id="$(fm_field "$f" story)"
   worker="$(fm_field "$f" worker)"; [ -n "$worker" ] || worker="worker-code"
   # `model` is the planner's per-story call (ADR-015: sonnet builds, opus only for a judgment-heavy
-  # story); absent means sonnet. The driver passes it as the dispatch parameter and never reads
+  # story); absent means the worker agent's own frontmatter `model:` (a hive's pin there holds),
+  # sonnet when that has none. The driver passes it as the dispatch parameter and never reads
   # the story file to learn it.
-  model="$(fm_field "$f" model)"; [ -n "$model" ] || model="sonnet"
+  model="$(fm_field "$f" model)"; [ -n "$model" ] || model="$(fm_field ".claude/agents/$worker.md" model)"
+  [ -n "$model" ] || model="sonnet"
   printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$f")"
 }
 

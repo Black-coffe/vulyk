@@ -52,7 +52,8 @@ Three mechanisms, all in files:
    only then. Frontmatter cannot be conditional, and a resolver that guesses the Haiku
    generation from a local file would be inventing a fact.
 2. **Per-story model.** `status --json`'s `wave_stories` objects carry `"model"`, read from
-   the story's `model:` frontmatter line (`sonnet` when absent). The planner writes `opus` on
+   the story's `model:` frontmatter line; when absent, the worker agent's own frontmatter `model:`, and `sonnet` when
+   that has none too (2026-10-16: before, `sonnet` overrode a hive's pin in `worker-code.md`). The planner writes `opus` on
    a story that is cross-cutting, touches a `## Contracts` entry, or is the tracer. The driver
    passes it as the dispatch parameter and never opens the story file.
 3. **The retry climbs one rung.** A story's second dispatch - after a red `close-story`, an

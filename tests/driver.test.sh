@@ -57,6 +57,12 @@ if (!driverFn) { console.log('FAIL: nothing to run'); process.exit(1); }
   check(verbs.length === 0, 'static: the driver sends no per-verb clerk command but advance/status/release', verbs);
   const shout = src.match(/\b(MUST|NEVER|ALWAYS|CRITICAL|IMPORTANT)\b/g);
   check(!shout, 'static: no all-caps shouting', shout);
+  // agent frontmatter is the one source of maxTurns and model: the driver keeps no per-agent
+  // table of either and passes no turn cap, so a hive raising a seat's cap edits one file
+  const agentsDir = require('path').join(require('path').dirname(process.env.VULYK_DRIVER_PATH), '..', 'agents');
+  const mirrored = fs.readdirSync(agentsDir).filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3))
+    .filter((a) => new RegExp(`['"]${a}['"]\\s*:\\s*['"\\d]`).test(src));
+  check(mirrored.length === 0 && !/maxTurns\s*[:=]/.test(src), 'static: no per-agent cap or model table, no maxTurns option', mirrored);
   const d = src.match(/description:\s*'([^']*)'/);
   check(!!d && !/ceiling\s*\(?3\b/.test(d[1]), 'static: the description states no flat ceiling 3', d && d[1]);
 }
@@ -228,7 +234,7 @@ const blindPromptsClean = (r) => r.dispatches
       clerk: [[CLAIM, adv(build([a]))], [ADV, adv(build([a]))], [ADV, adv(build([a]))], [RELEASE, releaseOk]],
       agents: [{ throw: 'died' }, '   '],
     });
-    check(r.result.stop && r.result.stop.error === 'worker returned empty - turn cap suspected (worker-code, maxTurns 90 in .claude/agents/worker-code.md)'
+    check(r.result.stop && r.result.stop.error === 'worker returned empty - turn cap suspected (worker-code, maxTurns in .claude/agents/worker-code.md)'
       && r.logs.includes(`miss 1 on ${a.file}: worker threw: died`), 'dead worker: threw then empty - the second reason stops the run', { result: r.result, logs: r.logs });
     const b = story(2);
     const r2 = await run(ARGS, {
