@@ -114,22 +114,31 @@ command_cells() { # command_cells <constitution> -> each command a `## Commands`
 }
 
 command_cell_exists() { # command_cell_exists <constitution> <command> -> 0 iff <command> is one of
-  # command_cells, byte for byte, or matches one with placeholders: `<name>` stands for one or
-  # more arguments and `[<name>]` for none or more, made of anything but shell control characters
-  # (; & | ` $ < > ( ) and newlines), so `pytest <file>` admits `pytest tests/a.py` and never
-  # `pytest a.py; rm x`.
-  local want="$2" cells c re
+  # command_cells, byte for byte, or matches one with placeholders. A placeholder is `<name>` with a
+  # spaceless name (so the template's `<fill in>` and a `< in > out` redirect are literal text): it
+  # stands for one or more space-separated arguments, `[<name>]` for none or more. An argument holds
+  # no shell control character (; & | ` $ < > ( )) and never starts with `-`, so `pytest <file>`
+  # admits `pytest tests/a.py` and never `pytest a.py; rm x` or `pytest -p evil`. A placeholder
+  # needs command text before it, and only a single backticked command takes placeholders.
+  local want="$2" cells c re s1 s2 arg
   cells="$(command_cells "$1")"
   [ -n "$cells" ] || return 1
   printf '%s\n' "$cells" | grep -qxF -- "$want" && return 0
+  # A belt beside the argument classes: a command holding a control character never matches a
+  # placeholder cell, only a cell that is literally the same.
+  case "$want" in *[\;\&\|\`\$\<\>\(\)]*) return 1 ;; esac
+  s1="$(printf '\001')"; s2="$(printf '\002')"
+  arg='[^-;\&|`$<>() ][^;\&|`$<>() ]*'
   while IFS= read -r c; do
-    case "$c" in *'<'*'>'*) ;; *) continue ;; esac
-    # Placeholders become @1@ / @2@ first, so escaping cannot touch them and the classes put in
-    # last cannot be re-read as placeholders.
-    re="$(printf '%s' "$c" | sed -e 's/ \[<[^>]*>\]/@1@/g' -e 's/<[^>]*>/@2@/g' \
-      -e 's/[][\.*^$+?(){}|/]/\\&/g' \
-      -e 's/@1@/( [^;\&|`$<>()]+)?/g' \
-      -e 's/@2@/[^;\&|`$<>() ][^;\&|`$<>()]*/g')"
+    case "$c" in *'`'*|*"$s1"*|*"$s2"*) continue ;; esac
+    # Placeholders become control-byte sentinels first, so escaping cannot touch them and the
+    # argument classes put in last cannot be re-read as placeholders. The name is any run with no
+    # space and no < or > (`<file>`, `<файл>`), never `<fill in>`.
+    re="$(printf '%s' "$c" | sed -e "s/ \[<[^<> ][^<> ]*>\]/$s1/g" -e "s/<[^<> ][^<> ]*>/$s2/g")"
+    case "$re" in "$s1"*|"$s2"*|" "*) continue ;; esac   # nothing but a placeholder: no command
+    case "$re" in *"$s1"*|*"$s2"*) ;; *) continue ;; esac
+    re="$(printf '%s' "$re" | sed -e 's/[][\.*^$+?(){}|/]/\\&/g' \
+      -e "s/$s1/( $arg)*/g" -e "s/$s2/$arg( $arg)*/g")"
     printf '%s\n' "$want" | grep -qxE -- "$re" && return 0
   done <<EOF
 $cells

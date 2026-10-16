@@ -533,6 +533,11 @@ cat > "$CELLS" <<'EOF'
 | One test | `pytest <file>` |
 | Two | `bash tests/a.sh` or `bash tests/b.sh` |
 | Pipe | `git ls-files '*.sh' \| xargs -n1 bash -n` |
+| Unfilled | `<fill in - the quiet variant>` |
+| Bare | `<cmd>` |
+| Redirect | `sort < in.txt > out.txt` |
+| Multi | `make a` or `make b <z>` |
+| Syntax | `bash -n <файл>.sh` |
 EOF
 cell_case() { # cell_case <yes|no> <command>
   local got=no; command_cell_exists "$CELLS" "$2" && got=yes
@@ -548,6 +553,13 @@ cell_case no  'pytest a.py | tee x'
 cell_case yes 'bash tests/b.sh'
 cell_case yes "git ls-files '*.sh' | xargs -n1 bash -n"
 cell_case no  'bash scripts/defects-checkXsh'
+cell_case no  'rm -rf x'
+cell_case no  'sort x y out.txt'
+cell_case yes 'make b foo'
+cell_case no  'make a` or `make b foo'
+cell_case no  'pytest -p evil'
+cell_case no  'pytest a.py -p evil'
+cell_case yes 'bash -n deploy.sh'
 rm -f "$CELLS"
 
 [ -e "$MARK" ] && fail=1
