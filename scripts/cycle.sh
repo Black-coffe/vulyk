@@ -1773,9 +1773,10 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
   id="$(fm_field "$f" story)"
   worker="$(fm_field "$f" worker)"; [ -n "$worker" ] || worker="worker-code"
   # `model` is the planner's per-story call (ADR-015: sonnet builds, opus only for a judgment-heavy
-  # story); absent means sonnet. The driver passes it as the dispatch parameter and never reads
-  # the story file to learn it.
-  model="$(fm_field "$f" model)"; [ -n "$model" ] || model="sonnet"
+  # story); absent is "", and the driver then passes no model, so the worker agent's own frontmatter
+  # `model:` applies, as it does for the seats (a hive's pin there holds). The driver never reads the
+  # story file to learn it.
+  model="$(fm_field "$f" model)"
   printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$f")"
 }
 
