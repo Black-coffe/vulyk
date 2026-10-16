@@ -1,7 +1,8 @@
 ---
 story: close-story-scope-refusal-01
 spec: close-story-scope-refusal
-status: todo
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 model: sonnet
@@ -56,5 +57,9 @@ needs them, write the paths under `## Findings` and return `NEEDS_CONTEXT`.
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- scripts/cycle.sh: `cmd_close_story` keeps scope-check's output, prints it as before, and with `--commit` intersects its `  ! <path>` lines with `dirty_outside_paperwork`; a non-empty intersection exits 4 before verification and before any commit (stderr and JSON per plan `## Contracts`). scope-check's own rules (siblings, its ledger, the story file) stay the one source of "out of scope".
+- tests/cycle.test.sh: section `close-story-scope-refusal`, six cases (tracked stray, nothing committed + status kept, undone then exit 0 and clean, untracked new file, paperwork skills.json passes, no `--commit` passes). With the refusal disabled (`if false`) the first case went red: `exit=0`.
+- Worker agents: the exit-4 line says what to do with `edited outside ## Files` (undo own edits without checkout/restore/stash, or NEEDS_CONTEXT).
+- Also ran `bash tests/driver.test.sh`: green (it reads worker-code.md for maxTurns only).
 
 ## Findings

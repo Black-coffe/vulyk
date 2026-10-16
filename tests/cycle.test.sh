@@ -397,5 +397,82 @@ man_story 04 todo 4 '[manual:../x]'
 bash scripts/wave-check.sh docs/specs/man | expect "wave-check reports a manual id with .." "manual:    man-04 is blocked_by 'manual:../x'"
 git add -A && git commit -qm "man: done" >/dev/null
 
+echo "close-story-scope-refusal: close-story --commit refuses an edit outside ## Files that would leave the tree dirty for open-round"
+mkdir -p docs/specs/stray
+cp "$SRC"/templates/plan.md docs/specs/stray/plan.md
+printf '> build the stray demo\n' > docs/specs/stray/brief.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/stray/plan.md
+printf 'v1\n' > stray-app.txt; printf 'v1\n' > stray-other.txt
+stray_story() { # stray_story <nn> - one in-progress story declaring stray-app.txt only
+  cat > "docs/specs/stray/stray-$1.md" <<EOF
+---
+story: stray-$1
+spec: stray
+status: in-progress
+returned: DONE
+wave: $1
+---
+# Stray fixture $1
+
+## Files
+- stray-app.txt
+
+## Verification
+\`true\`
+EOF
+}
+stray_story 01
+git add -A && git commit -qm "stray: setup" >/dev/null
+printf 'v2\n' > stray-app.txt; printf 'v2\n' > stray-other.txt
+head_before="$(git rev-parse HEAD)"
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"edited outside ## Files: stray-other.txt"' \
+  && echo "  ok    an undeclared tracked edit: exit 4, the JSON error names it" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ "$(git rev-parse HEAD)" = "$head_before" ] && grep -q '^status: in-progress' docs/specs/stray/stray-01.md \
+  && echo "  ok    the refusal commits nothing and leaves status: as it was" || { echo "::error::HEAD moved or status changed"; fail=1; }
+printf 'v1\n' > stray-other.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -z "$(git status --porcelain -- stray-app.txt stray-other.txt)" ] \
+  && echo "  ok    the edit undone, close-story --commit exits 0 and the tree is clean" || { echo "::error::exit=$ex out=$out"; fail=1; }
+stray_story 02
+git add -A && git commit -qm "stray: story 02" >/dev/null
+printf 'v3\n' > stray-app.txt; printf 'new\n' > stray-new.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-02.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'edited outside ## Files: stray-new.txt' \
+  && echo "  ok    an undeclared untracked new file refuses the same way" || { echo "::error::exit=$ex out=$out"; fail=1; }
+rm -f stray-new.txt
+printf 'new\n' > "stray new c.txt"
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-02.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'edited outside ## Files: stray new c.txt' \
+  && echo "  ok    a path with spaces (git C-quotes it in porcelain) refuses too" || { echo "::error::exit=$ex out=$out"; fail=1; }
+rm -f "stray new c.txt"
+mkdir -p memory/stats; printf '{"x":1}\n' > memory/stats/skills.json
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-02.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    an out-of-scope paperwork path (memory/stats/skills.json) does not refuse" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+rm -f memory/stats/skills.json
+stray_story 03
+git add -A && git commit -qm "stray: story 03" >/dev/null
+printf 'v4\n' > stray-app.txt; printf 'v4\n' > stray-other.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-03.md 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    without --commit an undeclared edit does not refuse" || { echo "::error::exit=$ex out=$out"; fail=1; }
+git add -A && git commit -qm "stray: done" >/dev/null
+# Two wave-mates in one tree (the driver runs a wave in parallel): B's in-flight scratch file must not
+# stop A; the wave's last close (B) refuses it.
+stray_story 04; stray_story 05
+sed -i 's/^wave: 05$/wave: 04/; s/^- stray-app.txt$/- stray-other.txt/' docs/specs/stray/stray-05.md
+git add -A && git commit -qm "stray: wave-mates 04 + 05" >/dev/null
+printf 'v5\n' > stray-app.txt; printf 'v5\n' > stray-other.txt; printf 'scratch\n' > stray-b-scratch.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-04.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF 'wave-mate stray-05 is still open' \
+  && echo "  ok    an open wave-mate's scratch file does not stop a story; close-story notes it" || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-05.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'edited outside ## Files: stray-b-scratch.txt' \
+  && echo "  ok    the wave's last close refuses the scratch file" || { echo "::error::exit=$ex out=$out"; fail=1; }
+rm -f stray-b-scratch.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-05.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -z "$(git status --porcelain -- stray-app.txt stray-other.txt)" ] \
+  && echo "  ok    scratch removed, the last close exits 0 and the tree is clean" || { echo "::error::exit=$ex out=$out"; fail=1; }
+
 [ -e "$MARK" ] && fail=1
 exit $fail
