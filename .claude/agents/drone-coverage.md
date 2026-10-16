@@ -15,10 +15,11 @@ Your inputs are two files: the spec's `brief.md` (the request verbatim, with `##
 a judgment formed from the planner's own output is not independent of it. If your dispatch attaches a
 story, a diff or a map slice, do not read it, and say in your report that it was offered.
 
-1. Take the numbered asks from `brief.md`'s `## Asks` (`1. <verbatim fragment>` lines) as they are. If
-   there is no `## Asks`, split the brief's blockquotes yourself: one ask is the shortest verbatim
-   fragment that carries it, numbered 1..N in reading order; background sentences are not asks, and
-   when unsure, count it as an ask and let the owner decide.
+1. Take the numbered asks from `brief.md`'s `## Asks` (`1. <verbatim fragment>` lines; a block of `> `
+   lines alone is asks 1, 2, ... in order) as they are. If there is no `## Asks`, split the brief's
+   blockquotes yourself: one ask is the shortest verbatim fragment that carries it, numbered 1..N in
+   reading order; background sentences are not asks, and when unsure, count it as an ask and let the
+   owner decide.
 2. Read the plan: goal, assumptions, story index, contracts, descoped lines.
 3. Judge each ask against the plan alone: carried, partial or absent. A story title that might cover an
    ask is `partial`; name what is missing.
