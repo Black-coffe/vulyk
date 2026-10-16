@@ -1,0 +1,3 @@
+{"ts":"2026-10-15T21:49:16.612Z","session":"d15a59a3-1d98-42d8-98b7-0861ee8af535","input_tokens":4833,"output_tokens":71,"cache_read_input_tokens":47032,"cache_creation_input_tokens":4,"answered":true}
+{"ts":"2026-10-16T07:05:31.477Z","session":"dfe55be1-4d37-437b-b05e-29332e50899e","input_tokens":4833,"output_tokens":282,"cache_read_input_tokens":252393,"cache_creation_input_tokens":76,"answered":true}
+{"ts":"2026-10-16T09:19:10.658Z","session":"dfe55be1-4d37-437b-b05e-29332e50899e","input_tokens":0,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"answered":false,"reason":"api-error"}
