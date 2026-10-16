@@ -2,10 +2,13 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
-## [Unreleased]
+## [0.29.0] - 2026-10-16
 
-Fixes from the 30-day feedback of every local hive (study `hive-feedback-2026-10`). Each fix was built by Opus 5.5
-and reviewed by Fable 5.1 (the first three also by Sonnet 5.5); every accepted review item is in.
+Three changes:
+- Fixes from the 30-day feedback of every local hive (study `hive-feedback-2026-10`). Each fix was built by Opus 5.5
+  and reviewed by Fable 5.1 (the first three also by Sonnet 5.5); every accepted review item is in.
+- Six rules taken from the Ponytail skill.
+- The watcher mod is retired: Claude Code's own "You should know" is offered to the user instead of being switched on.
 
 ### Fixed
 - **A second driver no longer claims a spec over the first one's worker.** `pause` and `resume` keep a held `DRIVER`
