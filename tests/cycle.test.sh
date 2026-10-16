@@ -491,5 +491,33 @@ out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-06.md --commit 2
   || { echo "::error::exit=$ex commit=$(git show --name-only --format= HEAD | tr '\n' ' ') out=$out"; fail=1; }
 git reset -q -- memory/stats/skills.json; rm -f memory/stats/skills.json
 
+echo "command_cell_exists: each backticked command of a cell, and <name> / [<name>] placeholders without shell control characters"
+CELLS="$(mktemp)"
+cat > "$CELLS" <<'EOF'
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Defects | `bash scripts/defects-check.sh [<arg>]` |
+| One test | `pytest <file>` |
+| Two | `bash tests/a.sh` or `bash tests/b.sh` |
+| Pipe | `git ls-files '*.sh' \| xargs -n1 bash -n` |
+EOF
+cell_case() { # cell_case <yes|no> <command>
+  local got=no; command_cell_exists "$CELLS" "$2" && got=yes
+  [ "$got" = "$1" ] && echo "  ok    $1: $2" || { echo "::error::command_cell_exists '$2': expected $1, got $got"; fail=1; }
+}
+cell_case yes 'bash scripts/defects-check.sh'
+cell_case yes 'bash scripts/defects-check.sh docs/specs/x'
+cell_case yes 'pytest tests/a.py tests/b.py'
+cell_case no  'pytest'
+cell_case no  'pytest a.py; rm -rf x'
+cell_case no  'pytest $(id)'
+cell_case no  'pytest a.py | tee x'
+cell_case yes 'bash tests/b.sh'
+cell_case yes "git ls-files '*.sh' | xargs -n1 bash -n"
+cell_case no  'bash scripts/defects-checkXsh'
+rm -f "$CELLS"
+
 [ -e "$MARK" ] && fail=1
 exit $fail

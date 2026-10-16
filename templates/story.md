@@ -65,8 +65,12 @@ this story invites ("do not also migrate the old callers"), not generic prohibit
 <!--
 One command per line, each `&&` segment a literal cell of the constitution's `## Commands` table
 (`wave-check.sh` reports one that is not) - in its quiet form, because output under 30 000
-characters is pasted into the builder's context and resent every turn. `close-story` runs these
-lines, once, on the record; the builder runs only targeted checks while working.
+characters is pasted into the builder's context and resent every turn. A cell holding several
+backticked commands offers each; `<name>` in a cell stands for one or more arguments and `[<name>]`
+for none or more (no shell control characters), so `pytest <file>` admits `pytest tests/test_a.py`.
+`close-story` runs these lines, once, on the record; the builder runs only targeted checks while
+working. A suite that skips its tests when a service or variable is missing exits 0 and records a
+green it never earned: name a command that fails instead (strict skips, or a check for the service).
 
 The command must be able to fail for this story: its scope has to reach the paths under `## Files`.
 `wave-check.sh` reports the obvious gap, but not an ignore file (`.prettierignore`,

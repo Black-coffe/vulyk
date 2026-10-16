@@ -95,20 +95,46 @@ constitution_file() { # constitution_file <root> -> <root>/CLAUDE.vulyk.md if it
   if [ -f "$1/CLAUDE.vulyk.md" ]; then printf '%s' "$1/CLAUDE.vulyk.md"; else printf '%s' "$1/CLAUDE.md"; fi
 }
 
-command_cell_exists() { # command_cell_exists <constitution> <command> -> 0 iff <command> equals,
-  # byte for byte, the backticked command cell of some row of the `## Commands` table (a `\|`
-  # inside the cell is a literal `|`, R11/C-4). Reads only that one table's rows - nothing else
-  # in the constitution - by slicing to the section first.
-  local file="$1" want="$2"
-  [ -f "$file" ] || return 1
+command_cells() { # command_cells <constitution> -> each command a `## Commands` row offers, one per
+  # line, `\|` unescaped (R11/C-4): the whole backticked cell, and each backticked span of it on its
+  # own, so a cell holding two commands (`a` or `b`) offers both. Only that table is read.
+  [ -f "$1" ] || return 0
   awk '
     /^## Commands[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/            { if (inblock) exit }
     inblock                     { print }
-  ' "$file" \
-    | sed -n 's/^|[^|]*|[[:space:]]*`\(.*\)`[[:space:]]*|[[:space:]]*$/\1/p' \
-    | sed 's/\\|/|/g' \
-    | grep -qxF "$want"
+  ' "$1" \
+    | sed -n 's/^|[^|]*|[[:space:]]*\(`.*`\)[[:space:]]*|[[:space:]]*$/\1/p' \
+    | while IFS= read -r cell; do
+        whole="${cell#\`}"; whole="${whole%\`}"
+        printf '%s\n' "$whole"
+        case "$whole" in *'`'*) printf '%s\n' "$cell" | grep -o '`[^`]*`' | sed 's/^`//; s/`$//' ;; esac
+      done \
+    | sed 's/\\|/|/g'
+}
+
+command_cell_exists() { # command_cell_exists <constitution> <command> -> 0 iff <command> is one of
+  # command_cells, byte for byte, or matches one with placeholders: `<name>` stands for one or
+  # more arguments and `[<name>]` for none or more, made of anything but shell control characters
+  # (; & | ` $ < > ( ) and newlines), so `pytest <file>` admits `pytest tests/a.py` and never
+  # `pytest a.py; rm x`.
+  local want="$2" cells c re
+  cells="$(command_cells "$1")"
+  [ -n "$cells" ] || return 1
+  printf '%s\n' "$cells" | grep -qxF -- "$want" && return 0
+  while IFS= read -r c; do
+    case "$c" in *'<'*'>'*) ;; *) continue ;; esac
+    # Placeholders become @1@ / @2@ first, so escaping cannot touch them and the classes put in
+    # last cannot be re-read as placeholders.
+    re="$(printf '%s' "$c" | sed -e 's/ \[<[^>]*>\]/@1@/g' -e 's/<[^>]*>/@2@/g' \
+      -e 's/[][\.*^$+?(){}|/]/\\&/g' \
+      -e 's/@1@/( [^;\&|`$<>()]+)?/g' \
+      -e 's/@2@/[^;\&|`$<>() ][^;\&|`$<>()]*/g')"
+    printf '%s\n' "$want" | grep -qxE -- "$re" && return 0
+  done <<EOF
+$cells
+EOF
+  return 1
 }
 
 verification_segments() { # verification_segments <line> -> one &&-separated segment per line
