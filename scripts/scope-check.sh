@@ -62,6 +62,7 @@ matches_any() { # matches_any <file> <newline-separated patterns> - declared pat
   local file="$1" pattern
   while IFS= read -r pattern; do
     [ -z "$pattern" ] && continue
+    [ "$file" = "$pattern" ] && return 0   # literal first: `app/[id]/page.tsx` names itself
     case "$pattern" in */) case "$file" in "$pattern"*) return 0 ;; esac ;; esac
     # shellcheck disable=SC2254
     case "$file" in $pattern) return 0 ;; esac
@@ -82,9 +83,10 @@ fi
 
 # --- what actually changed ---------------------------------------------------
 if [ -n "$RANGE" ]; then
-  CHANGED="$(git diff --name-only "$RANGE" 2>/dev/null)"
+  CHANGED="$(git -c core.quotePath=false diff --name-only "$RANGE" 2>/dev/null)"
 else
-  CHANGED="$(git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null)"
+  # quotePath off: a non-ASCII name must come back as itself to match its `## Files` line.
+  CHANGED="$(git -c core.quotePath=false diff --name-only HEAD 2>/dev/null; git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null)"
 fi
 # The story file rides along with every per-story commit (its status line changes) -
 # drop it from the measurement entirely so each entry reflects code, not bookkeeping.

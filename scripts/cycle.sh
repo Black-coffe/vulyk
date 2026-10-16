@@ -1860,7 +1860,7 @@ EOF
       sp="${sp#  ! }"
       [ -n "$sp" ] || continue
       is_paperwork_path "$sp" && continue
-      [ -n "$(git status --porcelain -uall -- "$sp" 2>/dev/null)" ] && STRAY="${STRAY:+$STRAY, }$sp"
+      [ -n "$(GIT_LITERAL_PATHSPECS=1 git status --porcelain -uall -- "$sp" 2>/dev/null)" ] && STRAY="${STRAY:+$STRAY, }$sp"
     done <<EOF
 $(printf '%s\n' "$SCOPE_OUT" | grep '^  ! ')
 EOF
@@ -1998,17 +1998,23 @@ EOF
     while IFS= read -r p; do [ -n "$p" ] && SPECS+=("$p"); done <<EOF
 $(files_of "$STORY")
 EOF
-    while IFS= read -r p; do [ -n "$p" ] && OWN+=("$p"); done <<EOF
-$(git diff --cached --name-only --no-renames -- "${SPECS[@]}" 2>/dev/null)
-EOF
-    local commit_err
-    if ! commit_err="$(git commit -q -m "story($ID): $TITLE" --only -- "${OWN[@]}" 2>&1)"; then
-      git reset -q -- "${OWN[@]}" >/dev/null 2>&1
+    # -z and quotePath off: a non-ASCII name must come back as itself, not as a C-quoted string
+    # that matches no path. The globs of `## Files` expand here, and only here: the commit and the
+    # resets below read OWN literally (GIT_LITERAL_PATHSPECS), so `app/[id]/p.ts` is one file.
+    while IFS= read -r -d '' p; do OWN+=("$p"); done < <(git -c core.quotePath=false diff --cached \
+      --name-only -z --no-renames -- "${SPECS[@]}" 2>/dev/null)
+    local commit_err="nothing of this story is staged"
+    if [ "${#OWN[@]}" -eq 0 ] \
+      || ! commit_err="$(GIT_LITERAL_PATHSPECS=1 git commit -q -m "story($ID): $TITLE" --only -- "${OWN[@]}" 2>&1)"; then
+      [ "${#OWN[@]}" -eq 0 ] || GIT_LITERAL_PATHSPECS=1 git reset -q -- "${OWN[@]}" >/dev/null 2>&1
       sed -i -E "s/^(status:[[:space:]]*)done/\1$ST/" "$STORY"
       echo "cycle: close-story - git commit failed: $commit_err" >&2
       emit false close-story 2 error "git commit failed"
       exit 2
     fi
+    # `--only` commits through a temporary index: a hook that rewrote and re-added a file
+    # (lint-staged, a formatter) changed the commit but not the real index. Sync it to HEAD.
+    GIT_LITERAL_PATHSPECS=1 git reset -q -- "${OWN[@]}" >/dev/null 2>&1
   else
     sed -i -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
   fi

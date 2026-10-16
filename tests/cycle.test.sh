@@ -491,6 +491,37 @@ out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-06.md --commit 2
   || { echo "::error::exit=$ex commit=$(git show --name-only --format= HEAD | tr '\n' ' ') out=$out"; fail=1; }
 git reset -q -- memory/stats/skills.json; rm -f memory/stats/skills.json
 
+echo "close-story --commit: a non-ASCII name and a [bracket] path commit as themselves; a formatting hook leaves the index in sync"
+mkdir -p "докс" "app/[id]"; printf 'v1\n' > "докс/нотатка.md"; printf 'v1\n' > "app/[id]/p.txt"
+cat > docs/specs/stray/stray-07.md <<'EOF'
+---
+story: stray-07
+spec: stray
+status: in-progress
+returned: DONE
+wave: 7
+---
+# Stray fixture 07
+
+## Files
+- stray-app.txt
+- докс/нотатка.md
+- app/[id]/p.txt
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "stray: story 07" >/dev/null
+printf 'v7\n' > stray-app.txt; printf 'v7\n' > "докс/нотатка.md"; printf 'v7\n' > "app/[id]/p.txt"
+printf '#!/bin/sh\nprintf "fmt\\n" >> stray-app.txt && git add stray-app.txt\n' > .git/hooks/pre-commit; chmod +x .git/hooks/pre-commit
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-07.md --commit 2>&1)"; ex=$?
+rm -f .git/hooks/pre-commit
+committed="$(git -c core.quotePath=false show --name-only --format= HEAD)"
+[ "$ex" -eq 0 ] && printf '%s\n' "$committed" | grep -qxF "докс/нотатка.md" && printf '%s\n' "$committed" | grep -qxF "app/[id]/p.txt" \
+  && echo "  ok    the Cyrillic and [bracket] paths are in the story's commit" || { echo "::error::exit=$ex committed=$committed out=$out"; fail=1; }
+[ -z "$(git status --porcelain)" ] && git show HEAD:stray-app.txt | grep -qx fmt \
+  && echo "  ok    the hook's rewrite is in the commit and the tree is clean after (index synced)" || { echo "::error::status=$(git status --porcelain | tr '\n' ' ')"; fail=1; }
+
 echo "command_cell_exists: each backticked command of a cell, and <name> / [<name>] placeholders without shell control characters"
 CELLS="$(mktemp)"
 cat > "$CELLS" <<'EOF'
