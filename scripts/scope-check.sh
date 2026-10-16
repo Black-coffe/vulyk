@@ -88,8 +88,9 @@ else
 fi
 # The story file rides along with every per-story commit (its status line changes) -
 # drop it from the measurement entirely so each entry reflects code, not bookkeeping.
+# So does this script's own ledger: a second run in the same tree would count it.
 STORY_REL="${STORY#./}"
-CHANGED="$(printf '%s\n' "$CHANGED" | grep -v '^$' | grep -Fxv "$STORY_REL" | sort -u)"
+CHANGED="$(printf '%s\n' "$CHANGED" | grep -v '^$' | grep -Fxv -e "$STORY_REL" -e memory/stats/scope.jsonl | sort -u)"
 
 # memory/stats/anomalies.jsonl rides every committing cycle.sh verb on its own schedule,
 # never a story's own edit - drop it from the diff too, unless the story itself names it

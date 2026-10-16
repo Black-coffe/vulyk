@@ -2,6 +2,14 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [Unreleased]
+
+### Fixed
+- **scope-check no longer counts its own ledger as an out-of-scope edit.** `scripts/scope-check.sh` appends to
+  `memory/stats/scope.jsonl`, which stays uncommitted until the story's commit, so a second run in the same tree
+  (a close-story retry, a wave sibling's close) counted it: one live hive saw 47 of 72 entries non-zero for that
+  alone. The ledger is now dropped from the diff like the story file. Found by that hive's `/vulyk-evolve`.
+
 ## [0.27.2] - 2026-10-16
 
 ### Fixed
