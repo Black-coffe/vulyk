@@ -250,9 +250,12 @@ Owner: "Берем все" (2026-10-16, on `docs/specs/hive-feedback-2026-10/rep
 - **Hive globs.** Five hives patched `is_paperwork_path` itself because their paperwork lives
   elsewhere (smoke reports inside a spec, a tracker committed after GREEN). `is_paperwork_path` also
   accepts a path matching any glob in the hive's `.claude/vulyk-paperwork` (one glob per line, `#`
-  comments, `*` crosses `/`), read from the working tree. `install.sh` never ships, owns or removes
-  that file. The globs are the hive's own trust decision: a path they name never stales a GREEN
-  round, never blocks `open-round`/`claim`, and never counts against scope.
+  comments, `*` crosses `/`, a trailing `dir/` covers everything beneath it as in `## Files`), read
+  from the working tree. `install.sh` never ships, owns or removes that file. The globs are the
+  hive's own trust decision: a path they name never stales a GREEN round, never blocks
+  `open-round`/`claim`, never counts against scope, and passes `ship-check` stage 03 next to the
+  two hook-written stats files (the built-in list stays blocked there). Every caller reads git's
+  path lists with `-z`, so a non-ASCII or spaced name is matched as itself, not C-quoted.
 - **Rejected.** Dropping only `skills.json` (the next hook-written file brings the noise back);
   a hive override of the whole whitelist (a hive could drop the cycle's own files by mistake -
   the globs only add).

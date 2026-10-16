@@ -259,7 +259,7 @@ bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | expect "no 
 # open-round's dirty check runs before its ## Asks check: hooklog's brief has no ## Asks, so a
 # tree that passes the dirty check is refused on the Asks line instead.
 bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round without the file: the smoke report is dirt" "?? docs/specs/hooklog/smoke/run-1.md"
-printf '# smoke reports live in the spec\n\n  docs/specs/*/smoke/*  \r\n' > .claude/vulyk-paperwork
+printf '# smoke reports live in the spec\n\n  docs/specs/*/smoke/*  \r\n docs/specs/*/runs/ \r\n' > .claude/vulyk-paperwork
 git add .claude/vulyk-paperwork && git commit -qm "hive paperwork globs" -- .claude/vulyk-paperwork
 out="$(bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md)"
 printf '%s' "$out" | expect "a hive glob (padded, CRLF) drops the smoke report from scope" "changed 0, out of scope 0"
@@ -268,6 +268,23 @@ is_paperwork_path '# smoke reports live in the spec' && { echo "::error::a comme
   || echo "  ok    a # comment line is not a glob"
 is_paperwork_path src/app.txt && { echo "::error::a path no glob names became paperwork"; fail=1; } \
   || echo "  ok    a path no glob names stays code"
+echo "hive paperwork: a non-ASCII or spaced spec dir and a trailing dir/ glob are paperwork to open-round, ship-check 03 and the staleness rule"
+pw_base="$(git rev-parse HEAD)"
+mkdir -p "docs/specs/оплата/smoke" "docs/specs/a b/smoke" docs/specs/hooklog/runs
+printf 'ran\n' > "docs/specs/оплата/smoke/run-1.md"; printf 'ran\n' > "docs/specs/a b/smoke/run-1.md"
+printf 'ran\n' > docs/specs/hooklog/runs/r.md
+git checkout -- memory/stats/scope.jsonl
+bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round: non-ASCII, spaced and dir/ glob paths are not dirt" "## Asks"
+shiph | expect "ship-check 03: a tree dirty only in hive glob paths is clean" "clean (hook-written stats pending:"
+shiph | expect "ship-check 03 names the non-ASCII path as itself" "docs/specs/оплата/smoke/run-1.md"
+pw_paths=("docs/specs/оплата" "docs/specs/a b" docs/specs/hooklog/runs docs/specs/hooklog/smoke)
+git add -- "${pw_paths[@]}" && git commit -qm "smoke reports after GREEN" -- "${pw_paths[@]}"
+paperwork_only "$PWD" "$pw_base" HEAD && echo "  ok    a commit of only hive glob paths (non-ASCII, spaced, dir/) does not stale a round" \
+  || { echo "::error::paperwork_only called $(git diff --name-only "$pw_base" HEAD | tr '\n' ' ') code"; fail=1; }
+git mv hook-app.txt docs/specs/hooklog/runs/moved.txt
+bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round: code renamed into a hive glob path is still dirt" "hook-app.txt"
+git mv docs/specs/hooklog/runs/moved.txt hook-app.txt
+git rm -rq -- "${pw_paths[@]}" && git commit -qm "drop the smoke reports" -- "${pw_paths[@]}"
 rm -rf docs/specs/hooklog/smoke
 git rm -q .claude/vulyk-paperwork && git commit -qm "drop the hive paperwork globs" -- .claude/vulyk-paperwork
 git checkout -- memory/stats/scope.jsonl

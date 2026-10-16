@@ -115,20 +115,21 @@ if [ -n "$DIRTY" ]; then
   # progress - pass it through, named, rather than blocking stage 03 on a file no story owns.
   # skills.json joins it (spec skills-json-exempt, 2026-09-29, reversing Story 12's "real dirt"
   # line under the owner's delegation): the PostToolUse(Skill) hook rewrites it on every Skill
-  # call, and since 0.21.0 maintenance itself runs through the Skill tool. Nothing else is exempt.
+  # call, and since 0.21.0 maintenance itself runs through the Skill tool. A path the hive's own
+  # .claude/vulyk-paperwork names (hive_paperwork_path, ADR-010 amendment 2026-10-16) passes too,
+  # read with -z so a non-ASCII name is itself. Nothing else is exempt.
   ALLHOOK=1
   HOOKPATHS=""
-  while IFS= read -r dline; do
-    [ -n "$dline" ] || continue
+  while IFS= read -r -d '' dline; do
     dp="${dline:3}"
-    if [ "$dp" = memory/stats/anomalies.jsonl ] || [ "$dp" = memory/stats/skills.json ]; then
+    case "${dline:0:2}" in *R*|*C*) IFS= read -r -d '' _ ; ALLHOOK=0; continue ;; esac
+    if [ "$dp" = memory/stats/anomalies.jsonl ] || [ "$dp" = memory/stats/skills.json ] \
+      || hive_paperwork_path "$dp" "$ROOT"; then
       HOOKPATHS="$HOOKPATHS${HOOKPATHS:+, }$dp"
       continue
     fi
     ALLHOOK=0
-  done <<EOF
-$DIRTY
-EOF
+  done < <(git status --porcelain -uall -z 2>/dev/null)
   if [ "$ALLHOOK" = "1" ]; then
     ok 03 "code: clean (hook-written stats pending: $HOOKPATHS)"
   else
