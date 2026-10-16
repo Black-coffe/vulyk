@@ -1097,6 +1097,58 @@ PYPLUG
   esac
 }
 
+# Windows: Claude Code's bundled ripgrep can come back empty there, so Glob and Grep answer
+# "No files found" to the session and every agent. USE_BUILTIN_RIPGREP=0 points Claude Code at
+# the system rg instead (docs: troubleshooting, "Search and discovery issues"); with no rg on
+# PATH it would leave search nothing to run, so the key is written only where one is found. It
+# goes to settings.local.json, never the committed settings.json: whether THIS machine has an
+# rg says nothing about the next clone. A value the hive set in either file stands.
+wire_ripgrep() {
+  case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) ;; *) return 0 ;; esac
+  local file="$DEST/.claude/settings.local.json" py="" rc=0
+  local lbl=".claude/settings.local.json -> env: USE_BUILTIN_RIPGREP = \"0\" (the system rg)"
+  local byhand="\"env\": { \"USE_BUILTIN_RIPGREP\": \"0\" }"
+  grep -qsF '"USE_BUILTIN_RIPGREP"' "$DEST/.claude/settings.json" "$file" && return 0
+  if ! type -P rg >/dev/null 2>&1; then
+    echo "  NOTE: no ripgrep on PATH. If Glob and Grep answer \"No files found\" in this project,"
+    echo "  run: winget install BurntSushi.ripgrep.MSVC   and then this installer again."
+    return 0
+  fi
+  [ "$CHECK" = "--check" ] && { echo "  would wire     $lbl"; return 0; }
+  if [ ! -e "$file" ]; then
+    printf '{\n  "env": {\n    "USE_BUILTIN_RIPGREP": "0"\n  }\n}\n' > "$file"
+    echo "  wire           $lbl"
+    return 0
+  fi
+  py="$(command -v python3 || command -v python || true)"
+  [ -n "$py" ] && "$py" - "$file" <<'PYRG' || rc=$?
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path, encoding='utf-8') as fh:
+        data = json.load(fh)
+except Exception:
+    sys.exit(4)                                  # unparseable: leave it entirely alone
+env = data.get('env', {}) if isinstance(data, dict) else None
+if not isinstance(env, dict):
+    sys.exit(4)
+env['USE_BUILTIN_RIPGREP'] = '0'
+data['env'] = env
+with open(path, 'w', encoding='utf-8') as fh:
+    json.dump(data, fh, indent=2)
+    fh.write('\n')
+PYRG
+  if [ -n "$py" ] && [ "$rc" -eq 0 ]; then
+    echo "  wire           $lbl"
+    echo "                 (the file was re-indented by the edit)"
+    return 0
+  fi
+  echo ""
+  echo "  NOTE: .claude/settings.local.json could not be edited safely - left untouched."
+  echo "  For Glob and Grep to use the system rg here, add by hand:"
+  echo "      $byhand"
+}
+
 # VULYK's own watcher mod (spec vulyk-watcher): a project-scope directory marketplace never loads
 # (measured on 2.1.300: "marketplace not registered"), so the mod is installed once per MACHINE,
 # user scope, from VULYK's GitHub marketplace; outside a VULYK hive it stays silent by itself.
@@ -1338,6 +1390,7 @@ wire_hook PreToolUse defects-inject.sh 'Edit|Write|MultiEdit|NotebookEdit|Bash'
 wire_hook SessionStart defects-inject.sh '' reset
 wire_permissions
 wire_plugin
+wire_ripgrep
 install_mod vulyk-watcher@vulyk
 install_mod vulyk-pulse@vulyk
 # The empty trees a fresh hive needs. Guarded like every other write: a dry run that

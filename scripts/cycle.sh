@@ -2032,7 +2032,7 @@ remove_worktree_path() { # remove_worktree_path <path> - best-effort, never erro
   # longer has registered (an orphan from a crash).
   local p="$1"
   [ -n "$p" ] || return 0
-  git worktree remove --force "$p" >/dev/null 2>&1 || true
+  git -c core.longpaths=true worktree remove --force "$p" >/dev/null 2>&1 || true
   rm -rf "$p" 2>/dev/null || true
 }
 
@@ -2054,8 +2054,11 @@ build_court() { # build_court <spec> <slug> <n> <head> <round-dir> - the blind s
   local spec="$1" slug="$2" n="$3" head="$4" rd="$5"
   local court_abs="$ROOT/.vulyk/court/$slug/round-$n"
   mkdir -p "$(dirname "$court_abs")"
+  # The court nests the tree ~30 characters deeper, so on Windows a path that fits the hive
+  # passes MAX_PATH there: without core.longpaths the checkout fails "Filename too long" and
+  # the court's own status/add/remove misread the file. Off Windows git ignores the key.
   local wt_err
-  if ! wt_err="$(git worktree add --detach -q "$court_abs" "$head" 2>&1)"; then
+  if ! wt_err="$(git -c core.longpaths=true worktree add --detach -q "$court_abs" "$head" 2>&1)"; then
     echo "cycle: open-round - could not create the court worktree at $court_abs: $wt_err" >&2
     # R17/M-6: ROUND is written last (below) precisely so a failure here leaves none behind;
     # also drop the now-empty round dir mkdir -p just created, so a retry sees no round at all
@@ -2072,15 +2075,15 @@ build_court() { # build_court <spec> <slug> <n> <head> <round-dir> - the blind s
     # reduction inside the court's own detached history (never the main repo's) so an
     # orientation `git status` in the court is clean and `HEAD:<spec>/plan.md` stops
     # resolving. A local identity is passed explicitly so a fixture without user.name works.
-    if [ -n "$(git -C "$court_abs" status --porcelain 2>/dev/null)" ]; then
-      git -C "$court_abs" add -A >/dev/null 2>&1
+    if [ -n "$(git -C "$court_abs" -c core.longpaths=true status --porcelain 2>/dev/null)" ]; then
+      git -C "$court_abs" -c core.longpaths=true add -A >/dev/null 2>&1
       # r2m7/N-m2: no `|| true` - a court that never reduced still resolves the spec's real
       # files via `git show`, and would be handed to a seat as though it were narrowed. Never
       # hooked or signed either: --no-verify because a repo-wide pre-commit hook has no
       # business running inside a throwaway detached worktree, gpgsign=false because there is
       # no key to sign with here and the main repo's signing config must not leak in.
       local red_err
-      if ! red_err="$(git -C "$court_abs" -c user.name=VULYK -c user.email=vulyk@localhost \
+      if ! red_err="$(git -C "$court_abs" -c core.longpaths=true -c user.name=VULYK -c user.email=vulyk@localhost \
         -c commit.gpgsign=false commit --no-verify -q -m "vulyk: reduce the court to brief.md" 2>&1)"; then
         echo "cycle: open-round - court reduction commit failed: $red_err" >&2
         remove_worktree_path "$court_abs"
