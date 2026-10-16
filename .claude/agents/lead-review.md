@@ -36,6 +36,8 @@ chasing them costs rounds and buys nothing.
   seat files. Answer two questions: are the previous round's blocking findings fixed, and does this
   diff introduce a regression? Code the diff does not touch is out of scope; a finding you could have
   raised on it in round 1 waits for the next circle.
+- When the diff changes a signature, a return value or a behaviour, in any round, read the callers of
+  what it changed. A caller the diff leaves broken is a `[regression]` like any other.
 
 If your constitution's `## Commands` table names a full suite or build, run it once, prefixed with
 `timeout 540` where that command exists and with `timeout: 600000` on the Bash call. A suite that

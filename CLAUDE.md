@@ -6,9 +6,9 @@ agents for large work and integrates. Procedures live in the `/vulyk-*` commands
 ## Laws
 
 1. Make routine calls yourself. Ask only when readings lead to materially different work, naming the assumption you would otherwise make.
-2. No overengineering: the simplest thing that satisfies the story, no speculative abstractions, no unrequested features.
+2. No overengineering: the simplest thing that satisfies the story, no speculative abstractions, no unrequested features. Simplest never drops trust-boundary validation, data-loss handling or security checks.
 3. No out-of-scope edits: touch only the files the story names; if a fix needs more, stop and report.
-4. Surface tradeoffs: say what you chose, what you rejected and why, in a sentence or two.
+4. Surface tradeoffs: say what you chose, what you rejected and why, what you did not check, in a sentence or two.
 5. From Tier 3, story code goes through workers: the Queen edits no file a Tier 3-4 story names. At Tier 0-2 she builds herself.
 6. An owner's correction joins its defect class in `docs/defects/` as a verbatim quote. A class code can check gets a failing `check:` with the original case and a neighbour-form fixture in the same work (inside a Tier 3-4 story naming the file: the next repair story); a repeated class without one is debt that fails `scripts/defects-check.sh`. A check that only warns is not a check.
 
@@ -70,13 +70,13 @@ A filled *Client path* adds the black-box seat, the only reader of *Browser MCP*
 Quiet variants only: their output is resent every turn. A story's `## Verification` must name one.
 
 <!-- VULYK:COMMANDS:START -->
-<!-- install.sh swaps this block for placeholders elsewhere; keep both markers on their own lines. -->
+<!-- install.sh swaps this block for placeholders; keep both markers on their own lines. -->
 
-> VULYK's own rows: `/vulyk-bootstrap` replaces them in your project; until then a green here proves nothing.
+> VULYK's own rows: `/vulyk-bootstrap` replaces them; until then a green here proves nothing.
 
 | Purpose | Command |
 |---|---|
-| Shell syntax, all scripts | `git ls-files '*.sh' \| xargs -n1 bash -n` |
+| Shell syntax | `git ls-files '*.sh' \| xargs -n1 bash -n` |
 | Python syntax, hooks | `python -m py_compile .claude/hooks/*.py` |
 | JSON validity | `git ls-files '*.json' \| xargs -n1 jq -e . > /dev/null` |
 | Cycle tests | `bash tests/cycle.test.sh` |
@@ -87,13 +87,13 @@ Quiet variants only: their output is resent every turn. A story's `## Verificati
 | Solo path, Tier 1-2 | `bash tests/solo.test.sh` |
 | Anomaly telemetry contract tests | `bash tests/telemetry.test.sh` |
 | Defect library gate | `bash scripts/defects-check.sh [<arg>]` |
-| Defect library and hook tests | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
+| Defect and hook tests | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
 | Merge tests | `bash tests/constitution.test.sh` |
-| Maintenance, evolve ledger, context budget | `bash tests/maintenance.test.sh` |
+| Maintenance | `bash tests/maintenance.test.sh` |
 | Watcher mod | `bash tests/watcher.test.sh` |
-| Full suite / build | none exists — VULYK has no test runner and no build step |
+| Full suite / build | none: no test runner, no build step |
 
-The first three are silent on success. `py_compile` writes a gitignored `__pycache__/`: never commit it.
+The first three are silent on success; never commit the `__pycache__/` that `py_compile` writes.
 
 <!-- VULYK:COMMANDS:END -->
 

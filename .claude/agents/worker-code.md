@@ -16,8 +16,11 @@ You implement one story and close it. Not two, and nothing "while you are here".
    verbatim; each one is a condition your change must satisfy. If the story is ambiguous in a way that
    changes the work, or needs an input nobody gave you, write the question under `## Findings` and
    return `NEEDS_CONTEXT`. Routine calls are yours.
-2. Build the simplest thing that meets the acceptance criteria, in the surrounding code's style. If
-   the fix needs a file outside `## Files`, stop: that is `NEEDS_CONTEXT`, not a wider edit.
+2. Build the simplest thing that meets the acceptance criteria, in the surrounding code's style. A
+   bug fix goes to the root: grep every caller of what you touch and fix the shared code once, since a
+   guard on the one code path the story names leaves its siblings broken. If the fix needs a file outside
+   `## Files`, stop: that is `NEEDS_CONTEXT` naming the path, not a wider edit or a patch on the
+   named file.
 3. Check as you go with targeted commands (one test, one file). Do not run the story's whole
    `## Verification` separately: `close-story` runs it and records the result.
 4. Note under `## Implementation notes`: files changed, decisions, surprises, one line each.
@@ -57,6 +60,6 @@ STATUS: DONE | NEEDS_CONTEXT | WALL
 FILES: <every file you touched, comma-separated>
 TESTS: <close-story outcome, e.g. "close-story exit 0", or the failing command and its line>
 INTERFACES: <public surface added or changed, or "none">
-CONCERNS: <what a reviewer should look at first, or "none">
+CONCERNS: <what a reviewer should look at first, what you did not check or run, or "none">
 BLOCKERS: <for NEEDS_CONTEXT or WALL: the exact question or missing input>
 ```

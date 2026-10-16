@@ -41,6 +41,15 @@ and reviewed by Fable 5.1 (the first three also by Sonnet 5.5); every accepted r
 - **Seven defect classes seen across hives** become VULYK cards, as text cards with the hive evidence under
   `## Seen in hives`: claim not from source, measurement unlike reality, safeguard bypassable or late, done without a
   real run, work handed back to the owner, outward artifact carrying internals, owner words by the builder.
+- **Six rules taken from the Ponytail skill** (study `ponytail-adoption`, read by Fable 5.1, Opus 5.5 and Sonnet 5.5):
+  - a bug fix greps every caller and fixes the shared code once; a root outside `## Files` is `NEEDS_CONTEXT`;
+  - Law 2 never drops trust-boundary validation, data-loss handling or security checks, pinned by a maintenance check;
+  - a story adding risky logic names the test that fails when it breaks;
+  - `lead-review` reads the callers of what the diff changed;
+  - `## Files` lists every place a change must reach;
+  - reports say what was not checked (Law 4, worker `CONCERNS`, study reports).
+
+  The constitution stays inside its 7 168-byte cap: VULYK-only Commands rows were shortened to pay for it.
 
 ## [0.28.0] - 2026-10-16
 

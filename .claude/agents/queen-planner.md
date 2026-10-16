@@ -24,7 +24,11 @@ mechanically by `cycle.sh repair`.
   `## Requirements` verbatim from `brief.md` (`trace-check.sh` matches them literally). A story you
   cannot tie to a quote is speculative: cut it, or list it as an assumption for the owner.
 - Each story names its files, acceptance criteria, a `## Verification` taken from the constitution's
-  `## Commands` table, and the map slice sections a worker should load.
+  `## Commands` table, and the map slice sections a worker should load. `## Files` lists every place
+  the change must reach: callers, tests, fixtures, config, exports.
+- A story that adds a branch, a loop, a parser, or handling of money, security or data writes names the
+  test that fails when that logic breaks: a test file in its `## Files`, or a `worker-test` story in a
+  later wave. One such test, not coverage; a trivial change names none.
 - Plan the concurrency: every story gets `wave:` and `blocked_by:`. Stories in one wave run in
   parallel in one tree, so their `## Files` must be disjoint; resolve overlap here by merging stories,
   moving the shared file into an earlier story, or sequencing with `blocked_by`.

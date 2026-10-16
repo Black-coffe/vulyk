@@ -55,6 +55,6 @@ STATUS: DONE | NEEDS_CONTEXT | WALL
 FILES: <every file you touched, comma-separated>
 TESTS: <close-story outcome, and the names of the tests you added>
 INTERFACES: none
-CONCERNS: <criteria covered only weakly, flaky areas, or "none">
+CONCERNS: <criteria covered only weakly, flaky areas, what you did not run, or "none">
 BLOCKERS: <for NEEDS_CONTEXT or WALL: the exact question or missing input>
 ```

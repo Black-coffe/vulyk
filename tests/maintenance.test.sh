@@ -91,6 +91,9 @@ for m in VULYK:PROFILE:START VULYK:PROFILE:END VULYK:COMMANDS:START VULYK:COMMAN
 done
 grep -q '^| Owner language | ' "$T/shipped.md" && tr -d '\r' < "$SRC/CLAUDE.md" | grep -q 'Write to the owner in \*Owner language\*' \
   && ok "the shipped Profile has an Owner language row and the constitution says to use it" || bad "Owner language row or its rule missing"
+# Law 2's floor: a trim to fit the byte cap must not take it out (a bare "be simple" prompt drops guards)
+grep -qF 'Simplest never drops trust-boundary validation, data-loss handling or security checks.' "$T/shipped.md" \
+  && ok "the shipped Law 2 keeps its safety floor" || bad "Law 2 lost its safety floor"
 # a hive's /vulyk-update read a stamp an uncommitted upgrade had written and said "nothing to do"
 grep -qF 'git show HEAD:.claude/vulyk-version' "$SRC/.claude/commands/vulyk-update.md" \
   && ok "/vulyk-update compares the committed stamp, not only the one on disk" || bad "/vulyk-update reads only the stamp on disk"

@@ -9,10 +9,11 @@ Plan: "$ARGUMENTS"
    validate, audit, monitor, assess, research, compare, or "make me a spec / a plan / a report" is study
    work, and so is `--study`. Study work never cuts a story, dispatches a worker or opens a council:
    write `docs/specs/<slug>/brief.md` (step 2), recon as in step 3 with at most two scouts, and write
-   `docs/specs/<slug>/report.md`: findings with `file:line` evidence, options with the recommended one
-   first and why, and the candidate stories the owner could approve next time (a list, not story
-   files). Commit it as `study(<slug>): <title>` and stop. The owner turns a report into code by running
-   `/vulyk-plan` again, in their own words. When both readings are genuinely possible, ask one question.
+   `docs/specs/<slug>/report.md`: findings with `file:line` evidence, what was not read or run,
+   options with the recommended one first and why, and the candidate stories the owner could
+   approve next time (a list, not story files). Commit it as `study(<slug>): <title>` and stop. The
+   owner turns a report into code by running `/vulyk-plan` again, in their own words. When both
+   readings are genuinely possible, ask one question.
 1. Tier. Classify per the constitution's routing table and announce it with a one-line reason. Tier 0:
    do it now, no paperwork. Tier 1-4 continue. The floor: `brief.md` with `## Asks` at Tier 1+,
    verbatim `## Requirements` quotes in stories at Tier 2+, `wave-check.sh` and `trace-check.sh`
@@ -34,7 +35,9 @@ Plan: "$ARGUMENTS"
    `model: opus` only for a long-horizon or judgment-heavy story, with the reason in one line (ADR-015). At Tier 1-2 you build them yourself in
    order, so cut by review unit: Tier 1 exactly one story, Tier 2 one to three. At Tier 3-4 each story
    is one worker's job, and it earns its own worker only when it runs in parallel with its wave-mates
-   on disjoint `## Files`; fold the rest together.
+   on disjoint `## Files`; fold the rest together. A story that adds a branch, a loop, a parser, or
+   handling of money, security or data writes names the test that fails when that logic breaks (a
+   test file in its `## Files`); one such test, not coverage, and a trivial change names none.
 7. Check. `bash scripts/wave-check.sh docs/specs/<slug>` and `bash scripts/trace-check.sh
    docs/specs/<slug>`. Fix what they report in the story files now, including any `## Verification`
    segment that is not a `## Commands` cell.

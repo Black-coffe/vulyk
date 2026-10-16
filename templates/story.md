@@ -43,7 +43,8 @@ owner's grammar inside a quote.
 Machine-readable: one repo-relative path or glob per line, prefixed with "- ", no prose.
 `scripts/scope-check.sh` parses this block against the diff, `close-story` commits exactly these
 paths, and it is the Law 3 boundary: nothing else is touched. It is also the collision key for waves:
-two stories in the same wave must not share a path.
+two stories in the same wave must not share a path. List every place the change must reach: callers,
+tests, fixtures, config, exports. A path missed here comes back as `NEEDS_CONTEXT` and costs a wave.
 -->
 - path/to/file.ext
 
@@ -51,7 +52,7 @@ two stories in the same wave must not share a path.
 <!--
 What a capable builder will be tempted to do here and must not. Models expand scope when the task
 looks small next to their capability; an explicit stop-list is cheaper than a review round. Write what
-this story invites ("do not also migrate the old callers"), not generic prohibitions.
+this story invites ("do not also tidy the neighbouring module"), not generic prohibitions.
 -->
 - <...>
 
