@@ -172,7 +172,7 @@ merge test. -01 holds it at little extra cost, and Ask 1 needs it in v1 anyway.
 
 **Approved:** Andrei, 2026-10-16
 **Briefed:**
-**Branch:**
+**Branch:** vulyk/vulyk-pulse
 **Checked:**
 **Council:**
 **Shipped:**
