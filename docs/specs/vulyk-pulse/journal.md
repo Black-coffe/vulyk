@@ -9,3 +9,5 @@
 - 2026-10-16T09:10:01Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/vulyk-pulse/round-2 · next: dispatch:opus,review
 - 2026-10-16T09:16:24Z · 04-council:ESCALATE · round 2 verdict ESCALATE at fbc3455 pack 1a4a725223e7 · next: escalated
 - 2026-10-16T09:19:00Z · 04-council:ESCALATE · reopened after round 2, ceiling now 6 · next: repair
+- 2026-10-16T09:19:07Z · 03-building · relaunching the hive after reopen · next: the loop holds the working tree of vulyk/vulyk-pulse; to edit, run /vulyk-pause vulyk-pulse
+- 2026-10-16T09:19:16Z · 03-building · repair round 2: vulyk-pulse-04-repair-round-2.md · next: build:3
