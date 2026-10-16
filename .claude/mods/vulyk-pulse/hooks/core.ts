@@ -183,13 +183,14 @@ export const closing = (word: string, v: View): string => {
 
 // --- the task ------------------------------------------------------------------------------------------------
 
-/** Whether activity at `now` joins the task: something is running, or the last activity was within the settle window. */
-export const joinable = (t: Task | null, now: number, busy: boolean): boolean =>
-  t !== null && (busy || now - t.last <= SETTLE_MS)
+/** Whether activity at `now` joins the task: something is running, or the last activity was within the settle window.
+ * The owner's message (`owner`) joins only while something is running: sent with all quiet, it starts a new task. */
+export const joinable = (t: Task | null, now: number, busy: boolean, owner = false): boolean =>
+  t !== null && (busy || (!owner && now - t.last <= SETTLE_MS))
 
 /** The task after activity at `now`: the open one extended, or a new one when it cannot be joined. */
-export const touched = (t: Task | null, now: number, busy: boolean): Task =>
-  t !== null && joinable(t, now, busy) ? { start: t.start, last: now, open: true } : { start: now, last: now, open: true }
+export const touched = (t: Task | null, now: number, busy: boolean, owner = false): Task =>
+  t !== null && joinable(t, now, busy, owner) ? { start: t.start, last: now, open: true } : { start: now, last: now, open: true }
 
 /** Whether the open task has been quiet (main idle, no agent live) for the whole settle window. */
 export const settled = (t: Task | null, now: number, busy: boolean): boolean =>

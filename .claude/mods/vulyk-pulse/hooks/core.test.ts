@@ -178,6 +178,13 @@ describe('task', () => {
   test('a main turn while agents are live joins', () => {
     expect(touched(task, 900_000, true)).toEqual({ start: 1_000, last: 900_000, open: true })
   })
+  test("the owner's message 30 s after the last agent ends opens a new task, while anything runs joins", () => {
+    const old = { start: 0, last: 600_000, open: true }
+    expect(joinable(old, 630_000, false, true)).toBe(false)
+    expect(touched(old, 630_000, false, true)).toEqual({ start: 630_000, last: 630_000, open: true })
+    expect(elapsedOf(touched(old, 630_000, false, true), 635_000, false)).toBe(0)
+    expect(touched(old, 630_000, true, true)).toEqual({ start: 0, last: 630_000, open: true })
+  })
   test('no task opens one', () => {
     expect(touched(null, 5_000, false)).toEqual({ start: 5_000, last: 5_000, open: true })
   })

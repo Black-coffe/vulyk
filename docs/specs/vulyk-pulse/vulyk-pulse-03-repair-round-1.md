@@ -1,7 +1,7 @@
 ---
 story: vulyk-pulse-03
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 2
@@ -41,3 +41,12 @@ ASK 2: RED - timer from the owner's message to the last agent's end - run: bun p
 `git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
 `bash tests/telemetry.test.sh`
 `git ls-files '*.sh' | xargs -n1 bash -n`
+
+## Implementation notes
+- core.ts: `joinable`/`touched` take `owner` (default false); the owner's message joins only while busy, so with all quiet it opens a new task (fresh clock, tally reset by `begin`).
+- core.test.ts: the ASK 2 repro (task{0,600000}, owner at 630000 idle -> new task, elapsed 0 at +5 s; busy -> joins).
+- register.tsx: `prompt.submit` hook (d.ts 4189-4200, skips `isMeta`) calls `begin($, true)`; the misleading "no separate prompt hook" comment replaced.
+- register.tsx: TurnDuration line text frozen at first draw under `e.requestId` (RenderInputOf, d.ts ~10125) in a new `$.state` atom `lines`; redraws return the kept text.
+- types/index.d.ts: `lines: Record<string, string>` added to the state contract.
+- docs/pulse.md: two sentences on the owner-message rule and the frozen closing line.
+- Decision: prompt reset happens before `next(e)`, so a prompt dropped by another hook still opens a task (rare; accepted). `lines` is not capped: one short string per closing line per session.

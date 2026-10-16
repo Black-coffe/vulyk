@@ -21,10 +21,11 @@ It appears in three places:
 - It fills the band above the prompt while the main turn is idle and agents are still live. In a Tier 3-4 build this is
   the main place: the Queen's turn ended when the Workflow launched. If the watcher has a note to draw, the note wins.
 - The `Baked for ...` closing line becomes `<word> for <task time> · N agents · ≈X tok`. The agents part is dropped at 0.
+  Each line keeps the figures it had when its turn closed; a later task does not repaint it.
 
 ## What a task is
 
-A task opens at your message. It closes when two things have both held for 60 seconds: the main loop is idle and no
+A task opens at your message; a message sent while nothing runs always opens a new one. It closes when two things have both held for 60 seconds: the main loop is idle and no
 agent is live. A turn or a spawn inside those 60 seconds joins the open task, so a build's pauses between agents and the
 Workflow's completion notice stay in one task, and the closing line carries the build's total. Timer and tokens both
 cover the task. The 60 seconds is a first guess.

@@ -12,6 +12,8 @@ declare module 'claude-code' {
       agents: Record<string, PulseAgent>
       spec: string
       place: PulsePlace
+      /** Each "Baked for ..." line's text as first drawn, by the line's render `requestId`. */
+      lines: Record<string, string>
     }
   }
 }

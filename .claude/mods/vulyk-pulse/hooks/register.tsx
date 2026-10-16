@@ -24,6 +24,7 @@ const tallyA = atom({ plugin: 'vulyk-pulse', key: 'tally' } as const, 0)
 const agentsA = atom({ plugin: 'vulyk-pulse', key: 'agents' } as const, {} as Record<string, Agent>)
 const specA = atom({ plugin: 'vulyk-pulse', key: 'spec' } as const, '')
 const placeA = atom({ plugin: 'vulyk-pulse', key: 'place' } as const, { wave: 0, round: 0 })
+const linesA = atom({ plugin: 'vulyk-pulse', key: 'lines' } as const, {} as Record<string, string>)
 
 const NO_PLACE = { wave: 0, round: 0 }
 
@@ -45,7 +46,7 @@ const drawSegs = (Box: any, Text: any, segs: readonly Seg[]) => (
 
 let motion: Motion = 'on'
 // Session-held (a hot reload clears them): the motion setting, the main loop's busy flag, the redraw timer and the hive check.
-// The task, tally, agents, spec and place are `$.state`.
+// The task, tally, agents, spec, place and the closing lines are `$.state`.
 let mainBusy = false
 let timer: { cancel: () => void } | null = null
 let hive: Promise<boolean> | null = null
@@ -105,18 +106,19 @@ const arm = ($: EngineInterface) => {
   })
 }
 
-// Activity at now: join the open task, or start a new one with a clean tally.
-const begin = async ($: EngineInterface) => {
+// Activity at now: join the open task, or start a new one with a clean tally. The owner's message (`owner`) joins
+// only while something runs.
+const begin = async ($: EngineInterface, owner = false) => {
   const now = await $.clock.now()
   const task = await read($, taskA)
   const busy = await busyOf($)
-  if (!joinable(task, now, busy)) {
+  if (!joinable(task, now, busy, owner)) {
     await update($, tallyA, () => 0)
     await update($, agentsA, () => ({}))
     await update($, specA, () => '')
     await update($, placeA, () => NO_PLACE)
   }
-  await update($, taskA, () => touched(task, now, busy))
+  await update($, taskA, () => touched(task, now, busy, owner))
   arm($)
 }
 
@@ -147,8 +149,18 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  // The task opens at the owner's message on the main loop. There is no separate prompt hook: a main `turn.start`
-  // while no task can be joined is that message (or a task notification, which joins or opens the same way).
+  // The owner's message opens a new task unless something still runs; a prompt the person did not type (`isMeta`)
+  // is not theirs and joins like any activity.
+  on('prompt.submit', async ($, e, next) => {
+    try {
+      if (e.isMeta !== true && (await hiveOf($))) await begin($, true)
+    } catch {
+      // A gauge that fails stays silent.
+    }
+    return next(e)
+  })
+
+  // A main `turn.start` (the owner's turn, or a task notification) joins the task, or opens one past the settle window.
   on('turn.start', async ($, e, next) => {
     try {
       if (e.agentId === undefined && (await hiveOf($))) {
@@ -242,11 +254,20 @@ export const register: Register = (on, options) => {
     return drawSegs(Box, Text, row(e.props.bodyColumns, view))
   })
 
+  // Each closing line keeps the figures of its first drawing, at its turn's close, under its `requestId`: the engine
+  // re-runs this hook on every `$.state` write it read and on every invalidate, and a later task must not repaint it.
   on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
     if (!(await hiveOf($))) return next(e)
-    const view = await viewOf($)
-    if (view === null) return next(e)
+    const id = e.requestId
+    let line = (await read($, linesA))[id]
+    if (line === undefined) {
+      const view = await viewOf($)
+      if (view === null) return next(e)
+      const text = closing(e.props.word, view)
+      line = text
+      await update($, linesA, l => (l[id] === undefined ? { ...l, [id]: text } : l))
+    }
     const { Text } = $.ui.resolve(e)
-    return <Text dimColor>{closing(e.props.word, view)}</Text>
+    return <Text dimColor>{line}</Text>
   })
 }
