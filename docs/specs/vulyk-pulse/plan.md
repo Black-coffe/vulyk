@@ -186,3 +186,4 @@ merge test. -01 holds it at little extra cost, and Ask 1 needs it in v1 anyway.
 - ask 5: RED - see docs/specs/vulyk-pulse/council/round-2/*.md for evidence
 - no progress: ask 5 RED in rounds 1 and 2
 - seats: docs/specs/vulyk-pulse/council/round-2/
+**Checked:** ACCEPTED by Andrei, 2026-10-16, at 03ae600 - owner 2026-10-16, story 06 cut after GREEN round 4 at his «Сначала поправить мелочи»; merge accepted: «Слить обе в main локально (Рекомендую)»; queen re-ran watcher.test.sh 35/35 and mutation checks for both fixes
