@@ -1413,6 +1413,57 @@ bash "$SRC/install.sh" "$YSKBAD" --telemetry off > "$T/ysk-bad.out" 2>&1
 expect_eq "an unparseable settings.json is left byte for byte" '{"enabledPlugins": [' "$(tr -d '\r\n' < "$YSKBAD/.claude/settings.json")"
 cat "$T/ysk-bad.out" | expect "... with the line to add by hand" "\"enabledPlugins\": { \"$YSK\": true }"
 
+# wire_ripgrep: on Windows, with a system rg on PATH, USE_BUILTIN_RIPGREP=0 goes to the hive's
+# settings.local.json (the machine's file, never the committed one); off Windows, with no rg, or
+# with the hive's own value in either file, nothing is written. uname and rg are stubbed.
+RGWIN="$T/rg-win"; RGLIN="$T/rg-lin"; RGNONE="$T/rg-none"; mkdir -p "$RGWIN" "$RGLIN" "$RGNONE"
+printf '#!/bin/sh\necho MINGW64_NT-10.0-22631\n' > "$RGWIN/uname"
+printf '#!/bin/sh\necho Linux\n' > "$RGLIN/uname"
+cp "$RGWIN/uname" "$RGNONE/uname"
+printf '#!/bin/sh\nexit 0\n' > "$RGWIN/rg"; cp "$RGWIN/rg" "$RGLIN/rg"
+chmod +x "$RGWIN/uname" "$RGLIN/uname" "$RGNONE/uname" "$RGWIN/rg" "$RGLIN/rg"
+rg_val() { jq -r '.env.USE_BUILTIN_RIPGREP | tostring' "$1" 2>/dev/null | tr -d '\r'; }
+RGLBL="wire           .claude/settings.local.json -> env: USE_BUILTIN_RIPGREP"
+RG1="$T/hive-rg"; mkdir -p "$RG1"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG1" --telemetry off --check > "$T/rg-check.out" 2>&1
+cat "$T/rg-check.out" | expect "Windows + rg: --check names the key it would wire" "would wire     .claude/settings.local.json -> env: USE_BUILTIN_RIPGREP"
+expect_eq "... and writes no settings.local.json" "0" "$([ -e "$RG1/.claude/settings.local.json" ] && echo 1 || echo 0)"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG1" --telemetry off > "$T/rg.out" 2>&1
+cat "$T/rg.out" | expect "Windows + rg: the key is wired, and said so" "$RGLBL"
+expect_eq "... as \"0\" in settings.local.json, not in the committed settings.json" "0 null" \
+  "$(rg_val "$RG1/.claude/settings.local.json") $(rg_val "$RG1/.claude/settings.json")"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG1" --upgrade > "$T/rg-again.out" 2>&1
+cat "$T/rg-again.out" | expect_absent "a second run says nothing about it" "USE_BUILTIN_RIPGREP"
+RG2="$T/hive-rg-own"; mkdir -p "$RG2/.claude"
+printf '{"permissions":{"allow":["Bash(ls:*)"]}}\n' > "$RG2/.claude/settings.local.json"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG2" --telemetry off > /dev/null 2>&1
+expect_eq "an owner's settings.local.json gets the key and keeps its permission" "0 1" \
+  "$(rg_val "$RG2/.claude/settings.local.json") $(jq -r '[.permissions.allow[] | select(. == "Bash(ls:*)")] | length' "$RG2/.claude/settings.local.json" | tr -d '\r')"
+RG3="$T/hive-rg-set"; mkdir -p "$RG3/.claude"
+printf '{"env":{"USE_BUILTIN_RIPGREP":"1"}}\n' > "$RG3/.claude/settings.json"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG3" --telemetry off > "$T/rg-set.out" 2>&1
+expect_eq "the hive's own value in settings.json stands, and none is added locally" "1 null" \
+  "$(rg_val "$RG3/.claude/settings.json") $(rg_val "$RG3/.claude/settings.local.json")"
+RG4="$T/hive-rg-lin"; mkdir -p "$RG4"
+PATH="$RGLIN:$PATH" bash "$SRC/install.sh" "$RG4" --telemetry off > "$T/rg-lin.out" 2>&1
+expect_eq "off Windows nothing is written, rg or not" "null 0" \
+  "$(rg_val "$RG4/.claude/settings.local.json") $(grep -c 'USE_BUILTIN_RIPGREP' "$T/rg-lin.out")"
+# No rg: drop every PATH directory that holds one (a box with rg beside bash cannot run this case).
+NORGPATH="$RGNONE"
+while IFS= read -r d; do [ -e "$d/rg" ] || [ -e "$d/rg.exe" ] || NORGPATH="$NORGPATH:$d"; done <<< "$(printf '%s' "$PATH" | tr ':' '\n')"
+if PATH="$NORGPATH" type -P bash cp jq >/dev/null 2>&1 && ! PATH="$NORGPATH" type -P rg >/dev/null 2>&1; then
+  RG5="$T/hive-rg-none"; mkdir -p "$RG5"
+  PATH="$NORGPATH" bash "$SRC/install.sh" "$RG5" --telemetry off > "$T/rg-none.out" 2>&1
+  cat "$T/rg-none.out" | expect "Windows without rg: a NOTE names the install" "winget install BurntSushi.ripgrep.MSVC"
+  expect_eq "... and nothing is written" "null" "$(rg_val "$RG5/.claude/settings.local.json")"
+else
+  echo "  skip  Windows without rg: rg shares a PATH directory with bash here"
+fi
+RG6="$T/hive-rg-bad"; mkdir -p "$RG6/.claude"; printf '{"env": [\n' > "$RG6/.claude/settings.local.json"
+PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG6" --telemetry off > "$T/rg-bad.out" 2>&1
+expect_eq "an unparseable settings.local.json is left byte for byte" '{"env": [' "$(tr -d '\r\n' < "$RG6/.claude/settings.local.json")"
+cat "$T/rg-bad.out" | expect "... with the line to add by hand" '"env": { "USE_BUILTIN_RIPGREP": "0" }'
+
 # vulyk-watcher: installed once per machine, user scope, from VULYK's GitHub marketplace; no
 # project marketplace key and no enabledPlugins true is written; an owner's false is kept
 WID='vulyk-watcher@vulyk'
