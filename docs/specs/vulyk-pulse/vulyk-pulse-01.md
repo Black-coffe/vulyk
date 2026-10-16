@@ -1,8 +1,8 @@
 ---
 story: vulyk-pulse-01
 spec: vulyk-pulse
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: sonnet
@@ -137,5 +137,13 @@ blocked_by: []
 `git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
 
 ## Implementation notes
+- Files: the mod tree under `.claude/mods/vulyk-pulse/` (plugin.json, types/index.d.ts, hooks/{hooks.json,core.ts,core.test.ts,register.tsx}) and `tests/watcher.test.sh` (both mods, version pin, weights pin).
+- Prompt hook used: none, main `turn.start` (`TurnStartInput`, no `agentId`) opens or joins the task; a task notification's turn does the same.
+- Empty band: `next(e)` on `ui.render` resolves to `RenderElement`; when no hook drew, core's own drawing `{ type: 'engine', ref }` (d.ts `RenderElement`). AbovePrompt draws only when `drawn.type === 'engine'`. Not seen live (the test kit's bottom hook returns that shape).
+- Keys: `plugin.json` `userConfig.motion` = `{type: string, options: [on, slow, off], default: on}`, read as `options.motion` in `Register` (`PluginOptions`); `"types": "./types/index.d.ts"` declares `PluginState['vulyk-pulse']` {task, tally, agents, spec, place}.
+- Validator rules met: `$` is passed only to top-level functions of register.tsx (module-level helpers and variables; motion is set in `register`); `atom` refs need literal plugin and key.
+- Weights pin: the one-line `// weights-pin: [...]` in core.test.ts holds three fixtures with `want`; core.test.ts checks `weigh()` against `want`, watcher.test.sh checks token-report.py `weighted(usage_of())` against the same `want`. Changing the write weight in core.ts alone made the plugin test fail (checked); a changed rate or weight in token-report.py alone breaks the `want` match in the shell check (not run).
+- Decisions: the dim walk has a rest step (cycle of live + 1) so a lone live dot blinks instead of staying dim; the row trims the token padding (`fmtTokens` still pads to 5) so the mockup string matches exactly; the sites check the hive before reading state.
+- Gap: the pass-through test cannot isolate the hive gate from the empty task, because `$.state` is not reachable from the kit's `$`; forcing the gate to true kept it green.
 
 ## Findings

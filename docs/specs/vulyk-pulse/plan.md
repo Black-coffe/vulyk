@@ -172,7 +172,18 @@ merge test. -01 holds it at little extra cost, and Ask 1 needs it in v1 anyway.
 
 **Approved:** Andrei, 2026-10-16
 **Briefed:**
-**Branch:**
+**Branch:** vulyk/vulyk-pulse
 **Checked:**
 **Council:**
+**Council:** RED round 1, 2026-10-16, at f483469, pack 1f2f744b6f2b - red: 2
+**Council:** ESCALATE round 2, 2026-10-16, at fbc3455, pack 1a4a725223e7 - red: 5
+**Council:** RED round 3, 2026-10-16, at 602afe7, pack 1ee8daa11392 - red: 5
+**Council:** GREEN round 4, 2026-10-16, at d18ad35, pack ad19d95dd0d2
 **Shipped:**
+
+## Needs a human
+- reason: no-progress · round 2 · 2026-10-16
+- ask 5: RED - see docs/specs/vulyk-pulse/council/round-2/*.md for evidence
+- no progress: ask 5 RED in rounds 1 and 2
+- seats: docs/specs/vulyk-pulse/council/round-2/
+**Checked:** ACCEPTED by Andrei, 2026-10-16, at 03ae600 - owner 2026-10-16, story 06 cut after GREEN round 4 at his «Сначала поправить мелочи»; merge accepted: «Слить обе в main локально (Рекомендую)»; queen re-ran watcher.test.sh 35/35 and mutation checks for both fixes

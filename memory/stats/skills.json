@@ -1,7 +1,7 @@
 {
   "vulyk-build": {
-    "count": 7,
-    "last_used": "2026-10-14"
+    "count": 9,
+    "last_used": "2026-10-16"
   },
   "vulyk-handoff": {
     "count": 6,
@@ -12,12 +12,12 @@
     "last_used": "2026-09-14"
   },
   "vulyk-plan": {
-    "count": 7,
-    "last_used": "2026-10-14"
+    "count": 9,
+    "last_used": "2026-10-16"
   },
   "vulyk-ship": {
-    "count": 8,
-    "last_used": "2026-10-14"
+    "count": 9,
+    "last_used": "2026-10-16"
   },
   "fact-check": {
     "count": 6,
@@ -28,8 +28,8 @@
     "last_used": "2026-10-08"
   },
   "workflow-authoring": {
-    "count": 1,
-    "last_used": "2026-09-26"
+    "count": 2,
+    "last_used": "2026-10-16"
   },
   "handoff": {
     "count": 2,
@@ -42,5 +42,13 @@
   "google-mcp-browser": {
     "count": 1,
     "last_used": "2026-10-14"
+  },
+  "plugin-authoring": {
+    "count": 2,
+    "last_used": "2026-10-16"
+  },
+  "vulyk-pause": {
+    "count": 2,
+    "last_used": "2026-10-16"
   }
 }

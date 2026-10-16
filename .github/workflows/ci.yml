@@ -251,9 +251,11 @@ jobs:
           jq -e '.enabledPlugins["vulyk-watcher@vulyk"] == null and .extraKnownMarketplaces.vulyk == null' "$target/.claude/settings.json" >/dev/null \
             || { echo "::error::the hive's settings.json carries a vulyk-watcher key"; exit 1; }
           test -f "$target/.claude/mods/vulyk-watcher/hooks/hooks.json" || { echo "::error::watcher mod tree missing after a fresh install"; exit 1; }
+          test -f "$target/.claude/mods/vulyk-pulse/hooks/hooks.json" || { echo "::error::pulse mod tree missing after a fresh install"; exit 1; }
           rm -rf "$target/.claude/mods"
           ./install.sh "$target" --upgrade >/dev/null
           test -f "$target/.claude/mods/vulyk-watcher/hooks/hooks.json" || { echo "::error::watcher mod tree missing after an upgrade"; exit 1; }
+          test -f "$target/.claude/mods/vulyk-pulse/hooks/hooks.json" || { echo "::error::pulse mod tree missing after an upgrade"; exit 1; }
           test -f "$target/memory/stats/skills.json"          || { echo "::error::skills.json not seeded"; exit 1; }
           # the blanked Profile placeholder must carry every row the source constitution
           # documents (story 16) - count instead of hardcoding a number, so a row added to

@@ -49,7 +49,7 @@ DEST="$(cd "$DEST" && pwd)"
 
 # Framework-owned trees: on --upgrade these are synced to the new version (changed files
 # replaced). Everything else keeps install semantics: new files copied, existing kept.
-OWNED=".claude/agents .claude/commands .claude/hooks .claude/mods/vulyk-watcher .claude/skills/_meta .claude/workflows bootstrap templates scripts"
+OWNED=".claude/agents .claude/commands .claude/hooks .claude/mods/vulyk-pulse .claude/mods/vulyk-watcher .claude/skills/_meta .claude/workflows bootstrap templates scripts"
 owned() { local f="$1" t; for t in $OWNED; do case "$f" in "$t"/*) return 0 ;; esac; done; return 1; }
 
 # VULYK's own working content never ships: its session learnings, its dev specs, and
@@ -1026,52 +1026,54 @@ PYPLUG
 # user scope, from VULYK's GitHub marketplace; outside a VULYK hive it stays silent by itself.
 # Idempotent, never fails the install. A hive turns it off with the project key
 # enabledPlugins["vulyk-watcher@vulyk"]: false, which is the owner's and is never written here.
-WATCHER_ID="vulyk-watcher@vulyk"
 WATCHER_REPO="Black-coffe/vulyk"
-install_watcher() {
-  local cc="${VULYK_CLAUDE:-claude}" f
-  local add="claude plugin marketplace add $WATCHER_REPO" inst="claude plugin install $WATCHER_ID --scope user"
+install_mod() {
+  local id="$1" cc="${VULYK_CLAUDE:-claude}" f
+  local add="claude plugin marketplace add $WATCHER_REPO" inst="claude plugin install $id --scope user"
   for f in settings.json settings.local.json; do
-    grep -Eq "\"$WATCHER_ID\"[[:space:]]*:[[:space:]]*false" "$DEST/.claude/$f" 2>/dev/null &&
-      echo "  kept           .claude/$f -> enabledPlugins: $WATCHER_ID is false (the owner's choice)"
+    grep -Eq "\"$id\"[[:space:]]*:[[:space:]]*false" "$DEST/.claude/$f" 2>/dev/null &&
+      echo "  kept           .claude/$f -> enabledPlugins: $id is false (the owner's choice)"
   done
   if ! command -v "$cc" >/dev/null 2>&1; then
-    echo ""
-    echo "  NOTE: claude is not on PATH, so the VULYK watcher mod is not installed on this machine."
-    echo "  Run once per machine:"
-    echo "      $add"
+    if [ -z "${MOD_NOTE:-}" ]; then
+      MOD_NOTE=1
+      echo ""
+      echo "  NOTE: claude is not on PATH, so the VULYK mods (watcher, pulse) are not installed on this machine."
+      echo "  Run once per machine:"
+      echo "      $add"
+    fi
     echo "      $inst"
     return 0
   fi
-  if "$cc" plugin list 2>/dev/null | grep -qF "$WATCHER_ID"; then
+  if "$cc" plugin list 2>/dev/null | grep -qF "$id"; then
     # Already on this machine: a user-scope GitHub install never refreshes itself, so each run
     # brings it up to the release's mod (plugin.json version follows VERSION).
-    local mupd="claude plugin marketplace update vulyk" pupd="claude plugin update $WATCHER_ID --scope user"
+    local mupd="claude plugin marketplace update vulyk" pupd="claude plugin update $id --scope user"
     if [ "$CHECK" = "--check" ]; then
-      echo "  would update   $WATCHER_ID (user scope, marketplace $WATCHER_REPO)"
+      echo "  would update   $id (user scope, marketplace $WATCHER_REPO)"
     elif "$cc" plugin marketplace update vulyk >/dev/null 2>&1 &&
-         "$cc" plugin update "$WATCHER_ID" --scope user >/dev/null 2>&1; then
-      echo "  update         $WATCHER_ID (user scope, marketplace $WATCHER_REPO; a restart of claude applies it)"
+         "$cc" plugin update "$id" --scope user >/dev/null 2>&1; then
+      echo "  update         $id (user scope, marketplace $WATCHER_REPO; a restart of claude applies it)"
     else
       echo ""
-      echo "  NOTE: the VULYK watcher mod could not be updated on this machine. Run:"
+      echo "  NOTE: the VULYK mod $id could not be updated on this machine. Run:"
       echo "      $mupd"
       echo "      $pupd"
     fi
     return 0
   fi
   if [ "$CHECK" = "--check" ]; then
-    echo "  would install  $WATCHER_ID (user scope, marketplace $WATCHER_REPO)"
+    echo "  would install  $id (user scope, marketplace $WATCHER_REPO)"
     return 0
   fi
   if { "$cc" plugin marketplace list 2>/dev/null | grep -Eq '[[:space:]]vulyk[[:space:]]*$' ||
        "$cc" plugin marketplace add "$WATCHER_REPO" >/dev/null 2>&1; } &&
-     "$cc" plugin install "$WATCHER_ID" --scope user >/dev/null 2>&1; then
-    echo "  install        $WATCHER_ID (user scope, marketplace $WATCHER_REPO)"
-    echo "                 off in one hive: \"$WATCHER_ID\": false in that hive's .claude/settings.local.json"
+     "$cc" plugin install "$id" --scope user >/dev/null 2>&1; then
+    echo "  install        $id (user scope, marketplace $WATCHER_REPO)"
+    echo "                 off in one hive: \"$id\": false in that hive's .claude/settings.local.json"
   else
     echo ""
-    echo "  NOTE: the VULYK watcher mod could not be installed on this machine. Run once:"
+    echo "  NOTE: the VULYK mod $id could not be installed on this machine. Run once:"
     echo "      $add"
     echo "      $inst"
   fi
@@ -1259,7 +1261,8 @@ wire_hook PreToolUse defects-inject.sh 'Edit|Write|MultiEdit|NotebookEdit|Bash'
 wire_hook SessionStart defects-inject.sh '' reset
 wire_permissions
 wire_plugin
-install_watcher
+install_mod vulyk-watcher@vulyk
+install_mod vulyk-pulse@vulyk
 # The empty trees a fresh hive needs. Guarded like every other write: a dry run that
 # creates directories is not a dry run, and this one had been leaving seven of them in
 # repositories whose owners were only asking what the installer would do.

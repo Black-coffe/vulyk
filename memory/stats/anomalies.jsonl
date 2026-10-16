@@ -213,3 +213,8 @@
 {"v":1,"ts":"2026-10-15T18:16:39Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"vulyk-watcher-01","ref":"scope:vulyk-watcher-01"}
 {"v":1,"ts":"2026-10-15T18:16:39Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"vulyk-watcher-02","ref":"scope:vulyk-watcher-02"}
 {"v":1,"ts":"2026-10-15T18:16:40Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"vulyk-watcher-03","ref":"scope:vulyk-watcher-03"}
+{"v":1,"ts":"2026-10-15T21:48:51Z","code":"council_rounds_high","value":3,"threshold":3,"vulyk":"0.0.0","tier":3,"model":"","agent":"","spec":"vulyk-watcher","story":"","ref":"council:vulyk-watcher"}
+{"v":1,"ts":"2026-10-15T21:48:54Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"vulyk-watcher-04-repair-round-1","ref":"scope:vulyk-watcher-04-repair-round-1"}
+{"v":1,"ts":"2026-10-15T21:48:56Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"vulyk-watcher-05-repair-round-2","ref":"scope:vulyk-watcher-05-repair-round-2"}
+{"v":1,"ts":"2026-10-15T21:48:57Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"vulyk-watcher-06-repair-round-3","ref":"scope:vulyk-watcher-06-repair-round-3"}
+{"v":1,"ts":"2026-10-16T09:31:07Z","code":"driver_relaunched","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"vulyk-pulse","story":"","ref":"relaunch:vulyk-pulse:af76636ff6d599e5"}

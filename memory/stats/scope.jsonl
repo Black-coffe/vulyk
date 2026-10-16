@@ -172,3 +172,15 @@
 {"ts":"2026-10-15T20:42:42Z","story":"vulyk-watcher-06-repair-round-3","declared":19,"changed":3,"out_of_scope":1}
 {"ts":"2026-10-15T21:05:23Z","story":"vulyk-watcher-06-repair-round-3","declared":19,"changed":5,"out_of_scope":3}
 {"ts":"2026-10-15T21:14:34Z","story":"vulyk-watcher-06-repair-round-3","declared":19,"changed":5,"out_of_scope":3}
+{"ts":"2026-10-16T07:18:25Z","story":"vulyk-pulse-01","declared":7,"changed":9,"out_of_scope":2}
+{"ts":"2026-10-16T07:40:33Z","story":"vulyk-pulse-02","declared":6,"changed":8,"out_of_scope":2}
+{"ts":"2026-10-16T07:49:39Z","story":"vulyk-pulse-02","declared":6,"changed":9,"out_of_scope":3}
+{"ts":"2026-10-16T07:58:49Z","story":"vulyk-pulse-02","declared":6,"changed":9,"out_of_scope":3}
+{"ts":"2026-10-16T08:09:04Z","story":"vulyk-pulse-02","declared":6,"changed":9,"out_of_scope":3}
+{"ts":"2026-10-16T08:37:30Z","story":"vulyk-pulse-03-repair-round-1","declared":13,"changed":7,"out_of_scope":2}
+{"ts":"2026-10-16T08:56:58Z","story":"vulyk-pulse-03-repair-round-1","declared":13,"changed":8,"out_of_scope":3}
+{"ts":"2026-10-16T09:30:44Z","story":"vulyk-pulse-04-repair-round-2","declared":13,"changed":5,"out_of_scope":3}
+{"ts":"2026-10-16T09:54:14Z","story":"vulyk-pulse-05-repair-round-3","declared":13,"changed":6,"out_of_scope":2}
+{"ts":"2026-10-16T10:22:58Z","story":"vulyk-pulse-05-repair-round-3","declared":13,"changed":7,"out_of_scope":3}
+{"ts":"2026-10-16T10:50:46Z","story":"vulyk-pulse-06-post-green-minors","declared":6,"changed":7,"out_of_scope":2}
+{"ts":"2026-10-16T10:54:10Z","story":"vulyk-pulse-06-post-green-minors","declared":6,"changed":3,"out_of_scope":2}

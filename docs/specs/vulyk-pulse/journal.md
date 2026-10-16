@@ -1,3 +1,22 @@
 # Journal: vulyk-pulse
 
 - 2026-10-16T07:08:13Z · 02-approved · approved by Andrei · next: branch
+- 2026-10-16T07:08:38Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/vulyk-pulse; to edit, run /vulyk-pause vulyk-pulse
+- 2026-10-16T07:08:45Z · 03-building · branch vulyk/vulyk-pulse created · next: build:1
+- 2026-10-16T08:19:10Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/vulyk-pulse/round-1 · next: dispatch:opus,review
+- 2026-10-16T08:33:39Z · 04-council:RED · round 1 verdict RED at f483469 pack 1f2f744b6f2b · next: repair
+- 2026-10-16T08:33:41Z · 03-building · repair round 1: vulyk-pulse-03-repair-round-1.md · next: build:2
+- 2026-10-16T09:10:01Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/vulyk-pulse/round-2 · next: dispatch:opus,review
+- 2026-10-16T09:16:24Z · 04-council:ESCALATE · round 2 verdict ESCALATE at fbc3455 pack 1a4a725223e7 · next: escalated
+- 2026-10-16T09:19:00Z · 04-council:ESCALATE · reopened after round 2, ceiling now 6 · next: repair
+- 2026-10-16T09:19:07Z · 03-building · relaunching the hive after reopen · next: the loop holds the working tree of vulyk/vulyk-pulse; to edit, run /vulyk-pause vulyk-pulse
+- 2026-10-16T09:19:16Z · 03-building · repair round 2: vulyk-pulse-04-repair-round-2.md · next: build:3
+- 2026-10-16T09:22:46Z · driver · driver released · next: paused
+- 2026-10-16T09:22:47Z · paused · owner asked for a pause · next: paused
+- 2026-10-16T09:30:33Z · resumed · resumed · next: status
+- 2026-10-16T09:31:07Z · 03-building · relaunching the hive after resume · next: the loop holds the working tree of vulyk/vulyk-pulse; to edit, run /vulyk-pause vulyk-pulse
+- 2026-10-16T09:31:15Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/vulyk-pulse/round-3 · next: dispatch:opus,review
+- 2026-10-16T09:49:13Z · 04-council:RED · round 3 verdict RED at 602afe7 pack 1ee8daa11392 · next: repair
+- 2026-10-16T09:49:16Z · 03-building · repair round 3: vulyk-pulse-05-repair-round-3.md · next: build:4
+- 2026-10-16T10:39:34Z · 04-council:open · round 4 opened, court at E:/Projects/vulyk/.vulyk/court/vulyk-pulse/round-4 · next: dispatch:opus,review
+- 2026-10-16T10:46:53Z · 04-council:GREEN · round 4 verdict GREEN at d18ad35 pack ad19d95dd0d2 · next: green
