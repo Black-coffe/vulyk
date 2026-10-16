@@ -175,4 +175,5 @@ merge test. -01 holds it at little extra cost, and Ask 1 needs it in v1 anyway.
 **Branch:** vulyk/vulyk-pulse
 **Checked:**
 **Council:**
+**Council:** RED round 1, 2026-10-16, at f483469, pack 1f2f744b6f2b - red: 2
 **Shipped:**
