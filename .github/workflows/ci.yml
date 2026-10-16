@@ -252,7 +252,11 @@ jobs:
             || { echo "::error::the hive's settings.json carries a vulyk marketplace key"; exit 1; }
           test ! -e "$target/.claude/mods/vulyk-watcher" || { echo "::error::the retired watcher mod tree ships"; exit 1; }
           test -f "$target/.claude/mods/vulyk-pulse/hooks/hooks.json" || { echo "::error::pulse mod tree missing after a fresh install"; exit 1; }
+          # a hive from a release before the pulse: no tree and none of it in the manifest (a tree the
+          # manifest still lists but the hive deleted is the hive's call, kept deleted since 0.29.0)
           rm -rf "$target/.claude/mods"
+          grep -v '^\.claude/mods/' "$target/.claude/vulyk-manifest" > "$RUNNER_TEMP/manifest" || true
+          cp "$RUNNER_TEMP/manifest" "$target/.claude/vulyk-manifest"
           ./install.sh "$target" --upgrade >/dev/null
           test -f "$target/.claude/mods/vulyk-pulse/hooks/hooks.json" || { echo "::error::pulse mod tree missing after an upgrade"; exit 1; }
           test -f "$target/memory/stats/skills.json"          || { echo "::error::skills.json not seeded"; exit 1; }
