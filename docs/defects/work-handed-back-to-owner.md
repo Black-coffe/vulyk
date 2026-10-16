@@ -4,7 +4,7 @@ title: Work an agent can do is handed back to the owner as a to-do list
 status: text
 check:
 fixtures: []
-keys: [сам можешь, бери и делай, постоянно просишь меня]
+keys: [зачем мне это дублировать, бери и делай, постоянно просишь меня]
 paths: [".claude/commands/vulyk-ship.md", ".claude/commands/vulyk-update.md", ".claude/commands/vulyk-build.md", "docs/specs/*/report.md"]
 ---
 
