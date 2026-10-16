@@ -1,7 +1,7 @@
 ---
 story: vulyk-pulse-05
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 4
@@ -41,3 +41,9 @@ ASK 5: RED - spinner + above prompt during background build; total on "Baked for
 `git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
 `bash tests/telemetry.test.sh`
 `git ls-files '*.sh' | xargs -n1 bash -n`
+
+## Implementation notes
+- register.tsx: closing lines now frozen at first drawing in a module-level Map keyed by `e.requestId` (cap 200, oldest dropped), written only when a task view exists; the `lines` $.state atom and the `turn.complete` freezing by `durationMs` are gone (finding 1: the line's durationMs is not the turn's).
+- types/index.d.ts: `lines` removed from the state contract.
+- core.test.ts: new `closing line inside a hive` group (mocked hive root, clock, prompt/turn beneath): a TurnDuration line shows the pulse figures and is not repainted by a later task with the same durationMs; a task-notification prompt joins the owner's task (finding 2). Keying by durationMs, or treating every origin as the owner's, each turns one of them red (checked on a scratch copy).
+- docs/pulse.md: closing-line paragraph says first drawing, 200 kept, a reload forgets them.

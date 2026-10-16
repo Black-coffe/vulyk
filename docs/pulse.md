@@ -21,7 +21,8 @@ It appears in three places:
 - It fills the band above the prompt while the main turn is idle and agents are still live. In a Tier 3-4 build this is
   the main place: the Queen's turn ended when the Workflow launched. If the watcher has a note to draw, the note wins.
 - The `Baked for ...` closing line becomes `<word> for <task time> · N agents · ≈X tok`. The agents part is dropped at 0.
-  Each line keeps the figures it had when its turn closed; a later task does not repaint it.
+  Each line keeps the figures it showed when first drawn (the last 200 lines are kept); a later turn or task does not
+  repaint it. A reload of the mod forgets them: a line drawn again after it shows the figures of that moment.
 
 ## What a task is
 

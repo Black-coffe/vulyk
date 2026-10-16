@@ -24,9 +24,10 @@ const tallyA = atom({ plugin: 'vulyk-pulse', key: 'tally' } as const, 0)
 const agentsA = atom({ plugin: 'vulyk-pulse', key: 'agents' } as const, {} as Record<string, Agent>)
 const specA = atom({ plugin: 'vulyk-pulse', key: 'spec' } as const, '')
 const placeA = atom({ plugin: 'vulyk-pulse', key: 'place' } as const, { wave: 0, round: 0 })
-const linesA = atom({ plugin: 'vulyk-pulse', key: 'lines' } as const, {} as Record<string, string>)
 
 const NO_PLACE = { wave: 0, round: 0 }
+/** Frozen closing lines kept at most; past it the oldest go. */
+const LINES_CAP = 200
 
 // The `Text` constructor of the terminal's element table; the three sites share it, so it is typed loosely here.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,11 +46,14 @@ const drawSegs = (Box: any, Text: any, segs: readonly Seg[]) => (
 )
 
 let motion: Motion = 'on'
-// Session-held (a hot reload clears them): the motion setting, the main loop's busy flag, the redraw timer and the hive check.
-// The task, tally, agents, spec, place and the closing lines are `$.state`.
+// Session-held (a hot reload clears them): the motion setting, the main loop's busy flag, the redraw timer, the hive
+// check and the closing lines. The task, tally, agents, spec and place are `$.state`.
 let mainBusy = false
 let timer: { cancel: () => void } | null = null
 let hive: Promise<boolean> | null = null
+// Each closing line's figures ("<word>" left out), frozen at its first drawing under the line's `requestId`: a drawing
+// may not write `$.state`, and the line's `durationMs` is not the turn's (a background wait counts from the launch).
+const lines = new Map<string, string>()
 
 const hiveOf = ($: EngineInterface): Promise<boolean> => {
   hive ??= (async () => {
@@ -229,15 +233,6 @@ export const register: Register = (on, options) => {
         else await update($, agentsA, a => (a[id] === undefined ? a : { ...a, [id]: { ...a[id], live: false } }))
         const now = await $.clock.now()
         await update($, taskA, t => (t === null ? t : { ...t, last: now }))
-        // The main turn's closing figures, frozen now under its duration: the "Baked for ..." line carries the same
-        // `durationMs`, and a drawing may not write `$.state`. The word is the line's own, added when it is drawn.
-        if (id === undefined) {
-          const view = await viewOf($)
-          if (view !== null) {
-            const tail = closing('', view)
-            await update($, linesA, l => ({ ...l, [String(e.durationMs)]: tail }))
-          }
-        }
       }
     } catch {
       // A gauge that fails stays silent.
@@ -264,12 +259,18 @@ export const register: Register = (on, options) => {
     return drawSegs(Box, Text, row(e.props.bodyColumns, view))
   })
 
-  // Each closing line draws the figures `turn.complete` froze at its turn's close, found by the turn's duration; it
-  // only reads, so a later task never repaints it. A line with no frozen figures stays the engine's own.
+  // Each closing line draws the task's figures as they stood at its first drawing, then keeps them, so a later turn
+  // or task never repaints it. With no task view the line stays the engine's own and nothing is kept.
   on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
     if (!(await hiveOf($))) return next(e)
-    const tail = (await read($, linesA))[String(e.props.durationMs)]
-    if (tail === undefined) return next(e)
+    let tail = lines.get(e.requestId)
+    if (tail === undefined) {
+      const view = await viewOf($)
+      if (view === null) return next(e)
+      tail = closing('', view)
+      lines.set(e.requestId, tail)
+      if (lines.size > LINES_CAP) lines.delete(lines.keys().next().value as string)
+    }
     const { Text } = $.ui.resolve(e)
     return <Text dimColor>{`${e.props.word}${tail}`}</Text>
   })

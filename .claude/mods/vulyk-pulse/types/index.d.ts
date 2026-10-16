@@ -12,8 +12,6 @@ declare module 'claude-code' {
       agents: Record<string, PulseAgent>
       spec: string
       place: PulsePlace
-      /** Each main turn's closing figures as frozen at its close ("<word>" left out), by the turn's `durationMs`. */
-      lines: Record<string, string>
     }
   }
 }

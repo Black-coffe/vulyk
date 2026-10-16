@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'claude-code/testing'
+import { describe, expect, mock, test } from 'claude-code/testing'
 
 import {
   closing,
@@ -237,5 +237,59 @@ describe('pass-through outside a hive', () => {
       const ui = await $.ui.mount({ plugin: 'vulyk-pulse', surface: 'terminal', ...site } as never)
       expect(await ui.find({ type: 'Text', text: /VULYK|≈/ })).toBeUndefined()
     }
+  })
+})
+
+describe('closing line inside a hive', () => {
+  // What stands for the engine beneath the plugin: a hive root holding CLAUDE.vulyk.md, a mocked clock, core's own drawing.
+  const hiveBeneath = (on: any, now: number) => {
+    on('session.root', () => ({ value: '/hive' }))
+    on('fs.read', (_$: unknown, e: { path: string }) =>
+      e.path.endsWith('CLAUDE.vulyk.md') ? { value: '' } : { deny: 'no such file' },
+    )
+    on('prompt.submit', (_$: unknown, e: { text: string; origin: unknown }) => ({ text: e.text, origin: e.origin }))
+    on('turn.start', (_$: unknown, e: { turnId: string }) => ({ turnId: e.turnId }))
+    on('turn.complete', () => ({ text: '' }))
+    on('ui.render', () => ({ type: 'engine', ref: 0 }))
+    return mock.clock(on, { now })
+  }
+  const turn = async ($: any, clock: any, id: string, ms: number) => {
+    await $.turn.start({ text: 'go', turnId: id })
+    await clock.advance(ms)
+    await $.turn.complete({ answer: '', durationMs: ms, isAborted: false, turnId: id, reason: 'answer' })
+  }
+  const line = async ($: any, requestId: string) => {
+    const ui = await $.ui.mount({
+      plugin: 'vulyk-pulse',
+      surface: 'terminal',
+      component: 'TurnDuration',
+      requestId,
+      props: { word: 'Baked', durationMs: 2500 },
+    } as never)
+    const text = (await ui.find({ type: 'Text', text: /Baked for/ }))?.text
+    await ui.unmount()
+    return text
+  }
+
+  test('a turn draws the pulse closing line, and a later task does not repaint it', async ($, on) => {
+    const clock = hiveBeneath(on, 1_000_000)
+    await $.prompt.submit({ text: 'task A', wait: false, origin: { kind: 'composer' } } as never)
+    await turn($, clock, 'a', 2_500)
+    expect(await line($, 'line-a')).toBe('Baked for 0m 02s · ≈0 tok')
+    await clock.advance(120_000)
+    await $.prompt.submit({ text: 'task B', wait: false, origin: { kind: 'composer' } } as never)
+    await turn($, clock, 'b', 7_000)
+    expect(await line($, 'line-b')).toBe('Baked for 0m 07s · ≈0 tok')
+    expect(await line($, 'line-a')).toBe('Baked for 0m 02s · ≈0 tok')
+  })
+
+  test("a task notification joins the owner's task, its closing line carries the task total", async ($, on) => {
+    const clock = hiveBeneath(on, 5_000_000)
+    await $.prompt.submit({ text: 'build it', wait: false, origin: { kind: 'composer' } } as never)
+    await turn($, clock, 'launch', 2_000)
+    await clock.advance(30_000)
+    await $.prompt.submit({ text: '<task-notification>', wait: false, origin: { kind: 'task-notification' } } as never)
+    await turn($, clock, 'notice', 3_000)
+    expect(await line($, 'line-notice')).toBe('Baked for 0m 35s · ≈0 tok')
   })
 })
