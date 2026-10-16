@@ -107,23 +107,30 @@ replace_file() { # replace_file <src> <dest> - copy beside, then rename over. An
 # what v$PREV shipped, or kept byte for byte with the new release beside it as <f>.vulyk-new on a
 # conflict or with no base. A path the last install shipped that the hive no longer has stays
 # deleted. (ADR-005 amendment 2026-10-16; card upgrade-overwrites-host-edits.)
-SHIPPED_BLOBS=""
-shipped_blobs() { # once per run: every blob id $SRC's history ever held under OWNED - each v* tag
-  # and every commit (a hive hotfixed by hand between releases holds a commit's copy, not a tag's)
-  [ -n "$SHIPPED_BLOBS" ] && return 0
+SHIPPED_BLOBS=""; NO_HISTORY=""
+shipped_blobs() { # once per run, in the main shell: every blob id $SRC's history ever held under
+  # OWNED - each v* tag and every commit (a hive hotfixed by hand between releases holds a commit's
+  # copy, not a tag's). A source with no v* tag (a downloaded ZIP, a shallow checkout) cannot tell
+  # an edit from a release copy, so it keeps the old rule - replace - and says so.
   SHIPPED_BLOBS="$(mktemp)"
-  git -C "$SRC" rev-parse -q --verify HEAD >/dev/null 2>&1 || return 0
+  if [ -z "$(git -C "$SRC" tag -l 'v*' 2>/dev/null)" ]; then
+    NO_HISTORY=1
+    echo "  NOTE: $SRC holds no release history (no v* tag), so this upgrade cannot tell your edits"
+    echo "        from release copies and replaces framework files as before. To keep your edits,"
+    echo "        upgrade from a git clone: scripts/vulyk-update.sh"
+    return 0
+  fi
   local t
   # shellcheck disable=SC2086
   {
     for t in HEAD $(git -C "$SRC" tag -l 'v*' 2>/dev/null); do
       git -C "$SRC" ls-tree -r "$t" -- $OWNED 2>/dev/null | awk '{ print $3 }'
     done
-    git -C "$SRC" log --all --no-renames --format= --raw -- $OWNED 2>/dev/null | awk '{ print $4 }'
+    git -C "$SRC" log --all --no-renames --no-abbrev --format= --raw -- $OWNED 2>/dev/null | awk '{ print $4 }'
   } | sort -u > "$SHIPPED_BLOBS" || true
 }
 release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte some release's
-  shipped_blobs
+  [ -n "$NO_HISTORY" ] && return 0
   local h; h="$(tr -d '\r' < "$DEST/$1" | git hash-object --stdin 2>/dev/null)" || return 1
   [ -n "$h" ] && grep -qxF "$h" "$SHIPPED_BLOBS"
 }
@@ -133,7 +140,8 @@ upgrade_edited() { # upgrade_edited <rel> - a hive edit of a framework file: mer
     if git -C "$SRC" cat-file -e "v$PREV:$f" 2>/dev/null; then
       base="$(mktemp)"; ours="$(mktemp)"; theirs="$(mktemp)"
       git -C "$SRC" show "v$PREV:$f" | tr -d '\r' > "$base"; tr -d '\r' < "$DEST/$f" > "$ours"; tr -d '\r' < "$SRC/$f" > "$theirs"
-      if git merge-file -q -p "$ours" "$base" "$theirs" > /dev/null 2>&1; then echo "  would merge edit $f"
+      if cmp -s "$base" "$theirs"; then echo "  would keep (edited) $f"
+      elif git merge-file -q -p "$ours" "$base" "$theirs" > /dev/null 2>&1; then echo "  would merge edit $f"
       else echo "  would keep + new $f -> $f.vulyk-new"; fi
       rm -f "$base" "$ours" "$theirs"
     else
@@ -144,6 +152,10 @@ upgrade_edited() { # upgrade_edited <rel> - a hive edit of a framework file: mer
   if git -C "$SRC" cat-file -e "v$PREV:$f" 2>/dev/null; then
     base="$(mktemp)"; ours="$(mktemp)"; theirs="$(mktemp)"; out="$(mktemp)"
     git -C "$SRC" show "v$PREV:$f" | tr -d '\r' > "$base"; tr -d '\r' < "$DEST/$f" > "$ours"; tr -d '\r' < "$SRC/$f" > "$theirs"
+    if cmp -s "$base" "$theirs"; then   # the release left it alone: nothing to merge, and a pending .vulyk-new stays
+      echo "  keep (edited)  $f"
+      rm -f "$base" "$ours" "$theirs" "$out"; return 0
+    fi
     rc=0; git merge-file -q -p "$ours" "$base" "$theirs" > "$out" 2>/dev/null || rc=$?   # set -e: a conflict is an answer, not an error
     if [ "$rc" -eq 0 ]; then
       replace_file "$out" "$DEST/$f"; rm -f "$DEST/$f.vulyk-new"
@@ -1220,7 +1232,8 @@ ensure_gitattributes() {
 }
 
 NEW_MANIFEST="$(mktemp)"
-trap 'rm -f "$NEW_MANIFEST"' EXIT
+trap 'rm -f "$NEW_MANIFEST" "$SHIPPED_BLOBS"' EXIT
+[ -n "$UPGRADE" ] && shipped_blobs
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr docs/defects; do
   if [ -d "$SRC/$tree" ]; then copy_tree "$tree"; fi
 done

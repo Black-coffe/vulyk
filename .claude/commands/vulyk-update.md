@@ -17,6 +17,7 @@ newest published tag is.
    (a local edit the release also changed: the file stays as it is and the new release lands beside it
    as `<file>.vulyk-new` to merge by hand), and `would keep deleted` (a framework file this hive removed
    stays removed). After applying, list every `.vulyk-new` file left to merge; never merge one silently.
+   `would keep (edited)` is a local edit the release did not touch: nothing to do.
 3. Read the release's own account. Summarise the CHANGELOG entries between the two versions in a few
    lines, especially any change to the constitution. A plain upgrade never overwrites the constitution
    (`CLAUDE.md`, or `CLAUDE.vulyk.md` in a sidecar hive); it prints the size difference and the command

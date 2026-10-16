@@ -1072,20 +1072,23 @@ cat "$T/up-check.out" | expect "--check reports the pending row" "would set     
 NOMARK="$T/hive-nomarkers"; mkdir -p "$NOMARK"
 # An upgrade run through the hive's own scripts/vulyk-update.sh replaces that very script. An
 # in-place copy made the old process read the new file from its old offset and execute the
-# tail (upgrading a 0.17 hive to 0.18); install.sh now copies beside and renames over.
-SELF="$T/hive-self"; mkdir -p "$SELF"
-bash "$SRC/install.sh" "$SELF" --telemetry off > "$T/self-install.out" 2>&1
+# tail (upgrading a 0.17 hive to 0.18); install.sh now copies beside and renames over. The
+# hand-written updater below is a hive edit to a source with release history (case 21), so the
+# upgrade runs from a copy with none, which replaces as before.
+SELF="$T/hive-self"; SELFSRC="$T/rel-self"; mkdir -p "$SELF" "$SELFSRC"
+( cd "$SRC" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$SELFSRC"
+bash "$SELFSRC/install.sh" "$SELF" --telemetry off > "$T/self-install.out" 2>&1
 {
   printf '#!/usr/bin/env bash\n'
   printf '# padding line %s - the offset the old process resumes from must land inside the new file\n' $(seq 1 40)
-  printf 'bash "%s/install.sh" "%s" --upgrade --telemetry off > /dev/null 2>&1\n' "$SRC" "$SELF"
+  printf 'bash "%s/install.sh" "%s" --upgrade --telemetry off > /dev/null 2>&1\n' "$SELFSRC" "$SELF"
   printf 'echo "updater: after the upgrade"\n'
   printf 'echo "updater: done"\n'
 } > "$SELF/scripts/vulyk-update.sh"
 expect_eq "an upgrade run from the hive's own updater lets that updater finish cleanly" \
   "updater: after the upgrade|updater: done" "$(bash "$SELF/scripts/vulyk-update.sh" 2>&1 | paste -sd'|')"
 expect_eq "... and leaves the release's updater in place" "0" \
-  "$(cmp -s "$SRC/scripts/vulyk-update.sh" "$SELF/scripts/vulyk-update.sh"; echo $?)"
+  "$(cmp -s "$SELFSRC/scripts/vulyk-update.sh" "$SELF/scripts/vulyk-update.sh"; echo $?)"
 
 bash "$SRC/install.sh" "$NOMARK" --telemetry off > "$T/nomark-install.out" 2>&1
 sed -i '/VULYK:PROFILE:START/d; /VULYK:PROFILE:END/d' "$NOMARK/CLAUDE.md"
@@ -1871,19 +1874,26 @@ sed -i 's/^maxTurns: .*/maxTurns: 140/' "$A/worker-code.md"           # an edit 
 sed -i 's/^maxTurns: .*/maxTurns: 140/' "$A/lead-review.md"           # an edit on the line the release changes
 rm -f "$A/drone-scout.md"                                             # a deletion
 R="$REL/.claude/agents"
-sed -i '3s/$/ (v9.0.1)/' "$R/worker-code.md" "$R/drone-docs.md"
+sed -i '3s/$/ (hotfix)/' "$R/worker-test.md"                          # an untagged commit the hive took by hand
+git -C "$REL" commit -qam hotfix
+git -C "$REL" show HEAD:.claude/agents/worker-test.md > "$A/worker-test.md"
+sed -i '3s/$/ (v9.0.1)/' "$R/worker-code.md" "$R/drone-docs.md" "$R/worker-test.md"
 sed -i 's/^maxTurns: .*/maxTurns: 70/' "$R/lead-review.md"
 printf '9.0.1\n' > "$REL/VERSION"
 git -C "$REL" commit -qam v9.0.1 && git -C "$REL" tag v9.0.1
 cp "$A/lead-review.md" "$T/lead-review.hive"
-bash "$REL/install.sh" "$HIVE" --upgrade --check --telemetry off > "$T/edits-check.out" 2>&1
+mkdir -p "$T/edits-tmp"
+TMPDIR="$T/edits-tmp" bash "$REL/install.sh" "$HIVE" --upgrade --check --telemetry off > "$T/edits-check.out" 2>&1
 grep -q 'would update   .claude/agents/drone-docs.md' "$T/edits-check.out" && grep -q 'would merge edit .claude/agents/worker-code.md' "$T/edits-check.out" \
   && grep -q 'would keep + new .claude/agents/lead-review.md' "$T/edits-check.out" && grep -q 'would keep deleted .claude/agents/drone-scout.md' "$T/edits-check.out" \
   && ok "--check names all four outcomes with 'would'" || { bad "--check outcomes:"; grep -E 'agents/(drone|worker-code|lead-review)' "$T/edits-check.out"; }
 [ ! -e "$A/lead-review.md.vulyk-new" ] && grep -q '^maxTurns: 140' "$A/worker-code.md" && ok "--check writes nothing" || bad "--check wrote files"
-bash "$REL/install.sh" "$HIVE" --upgrade --telemetry off > "$T/edits-up.out" 2>&1
+TMPDIR="$T/edits-tmp" bash "$REL/install.sh" "$HIVE" --upgrade --telemetry off > "$T/edits-up.out" 2>&1
+[ -z "$(ls -A "$T/edits-tmp")" ] && ok "--check and --upgrade leave no temp file behind" || { bad "temp files left:"; ls -A "$T/edits-tmp"; }
 grep -q '  update         .claude/agents/drone-docs.md' "$T/edits-up.out" && grep -q '(v9.0.1)' "$A/drone-docs.md" \
   && ok "an untouched release copy is replaced (update)" || bad "drone-docs not updated"
+grep -q '  update         .claude/agents/worker-test.md' "$T/edits-up.out" && grep -q '(hotfix) (v9.0.1)' "$A/worker-test.md" \
+  && ok "a copy from an untagged commit is a release copy (update)" || { bad "worker-test hotfix copy:"; grep 'worker-test' "$T/edits-up.out"; }
 grep -q '  merged edit    .claude/agents/worker-code.md' "$T/edits-up.out" && grep -q '^maxTurns: 140' "$A/worker-code.md" && grep -q '(v9.0.1)' "$A/worker-code.md" \
   && ok "a hive edit is merged: the raised maxTurns stays beside the release's change" || { bad "worker-code merge:"; grep -n 'maxTurns\|v9.0.1' "$A/worker-code.md"; }
 grep -q '  kept + new     .claude/agents/lead-review.md' "$T/edits-up.out" && cmp -s "$A/lead-review.md" "$T/lead-review.hive" \
@@ -1892,6 +1902,21 @@ grep -q '  kept + new     .claude/agents/lead-review.md' "$T/edits-up.out" && cm
 grep -q '  kept deleted   .claude/agents/drone-scout.md' "$T/edits-up.out" && [ ! -e "$A/drone-scout.md" ] \
   && ok "a deleted agent is not put back" || bad "drone-scout came back"
 grep -qxF '*.vulyk-new' "$HIVE/.gitignore" && ok ".vulyk-new is gitignored" || bad ".vulyk-new not in .gitignore"
+# Again at the same version: the release left lead-review.md alone since v9.0.1, so there is nothing
+# to merge - the edit is kept and the pending .vulyk-new stays for the owner.
+bash "$REL/install.sh" "$HIVE" --upgrade --check --telemetry off > "$T/edits-check2.out" 2>&1
+bash "$REL/install.sh" "$HIVE" --upgrade --telemetry off > "$T/edits-up2.out" 2>&1
+grep -q 'would keep (edited) .claude/agents/lead-review.md' "$T/edits-check2.out" && grep -q '  keep (edited)  .claude/agents/lead-review.md' "$T/edits-up2.out" \
+  && ! grep -qE 'merged? edit' "$T/edits-check2.out" "$T/edits-up2.out" && [ -e "$A/lead-review.md.vulyk-new" ] && cmp -s "$A/lead-review.md" "$T/lead-review.hive" \
+  && ok "an edit the release left alone is kept, its .vulyk-new too" || { bad "second upgrade:"; grep -E 'lead-review|merged? edit' "$T/edits-check2.out" "$T/edits-up2.out"; }
+# A source with no release history (a downloaded ZIP) cannot tell an edit from a release copy: it
+# says so and keeps the old replace rule instead of calling every differing file an edit.
+ZIP="$T/rel-zip"; mkdir -p "$ZIP"
+( cd "$REL" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$ZIP"
+bash "$ZIP/install.sh" "$HIVE" --upgrade --check --telemetry off > "$T/edits-zip.out" 2>&1
+grep -q 'NOTE: .* holds no release history' "$T/edits-zip.out" && grep -q 'would update   .claude/agents/lead-review.md' "$T/edits-zip.out" \
+  && ! grep -q 'keep + new' "$T/edits-zip.out" \
+  && ok "a source with no v* tag says so and replaces as before" || { bad "no-history source:"; grep -E 'NOTE|lead-review|keep' "$T/edits-zip.out"; }
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
