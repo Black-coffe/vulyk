@@ -24,6 +24,9 @@ The study round asked these before `/vulyk-plan` ran (same session, `AskUserQues
 5. **Полоса (probe):** Видна, не мерцает - an 8 fps band via `$.clock.every(125)` + `$.ui.invalidate` is steady on the owner's terminal.
 6. **Требования:** Верно, покажи план (Рекомендую) - the plan stops for approval.
 
+
+**After escalation (round 2, 2026-10-16).**
+> Ask 5, two defects in .claude/mods/vulyk-pulse/hooks/register.tsx (round 2 opus.md ASK 5 and review.md Major 1). (1) The TurnDuration ui.render hook must not write $.state while drawing (the host denies it: 'state.set: denied ... drawing is pure', so the hook is skipped and the native 'Baked for 3s' stays): freeze each closing line in a module-level Map keyed by e.requestId, written in the render with no $.state call, capped (oldest entries dropped past ~200), and never stored while no task view exists. (2) prompt.submit opens a new task only for the owner's own message, e.origin.kind 'composer' or 'bridge'; any other origin (task-notification, peer, scheduled-trigger, sdk...) joins the open task, so a Workflow's completion notice keeps the build's total on the closing line. Add a claude plugin test that mounts TurnDuration inside a hive after a task and sees the pulse closing line, and one that a task-notification prompt does not reset the task. Fix docs/pulse.md accordingly. Decided by Andrei 2026-10-16.
 ## Asks
 
 1. While VULYK works, a live micro-animation at the prompt: an animated ✻ and one dot per live agent, plus the phase, wave and round.
