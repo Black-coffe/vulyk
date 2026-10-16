@@ -176,4 +176,11 @@ merge test. -01 holds it at little extra cost, and Ask 1 needs it in v1 anyway.
 **Checked:**
 **Council:**
 **Council:** RED round 1, 2026-10-16, at f483469, pack 1f2f744b6f2b - red: 2
+**Council:** ESCALATE round 2, 2026-10-16, at fbc3455, pack 1a4a725223e7 - red: 5
 **Shipped:**
+
+## Needs a human
+- reason: no-progress · round 2 · 2026-10-16
+- ask 5: RED - see docs/specs/vulyk-pulse/council/round-2/*.md for evidence
+- no progress: ask 5 RED in rounds 1 and 2
+- seats: docs/specs/vulyk-pulse/council/round-2/
