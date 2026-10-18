@@ -148,5 +148,5 @@ writes 70%, Haiku 30%" becomes a split by kind of story, not a ratio. The planne
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/model-profiles
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Council:** GREEN round 1, 2026-10-18, at 6b4fab3, pack 9fa4077d3f8e
 **Shipped:** <written by scripts/ship-check.sh --record>
