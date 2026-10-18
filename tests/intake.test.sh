@@ -144,6 +144,12 @@ run "$HIVE" '{"prompt":"<pasted_content id=\"1\">00:01 start\n00:02 end</pasted_
   | expect_silent "a timecode only inside <pasted_content id=\"1\"> is silent"
 run "$HIVE" '{"prompt":"посмотри вывод\n```\n[04:30] ffmpeg done\n```\nи продолжай","session_id":"s"}' \
   | expect_silent "a timecode only inside a \`\`\` fence is silent"
+# evolve 2026-10-19: a relayed side-agent note ("...теперь снова пишет Opus...") was flagged as an owner
+# correction; the owner's own words typed after a note still fire.
+run "$HIVE" '{"prompt":"Here is a note offered by a side agent:\n\n> Heads up · повтор теперь снова пишет Opus\n>\n> - at 10:04 опять","session_id":"s"}' \
+  | expect_silent "a relayed side-agent note is not an owner correction"
+run "$HIVE" '{"prompt":"Here is a note offered by a side agent:\n\n> Heads up · всё ок\n\nопять не так","session_id":"s"}' \
+  | expect "the owner's words after a side-agent note still fire" "Looks like an owner correction"
 run "$HIVE" '{"prompt":"the legacy-word thing, please","session_id":"s"}' | expect_silent "a revoked card's keys do not fire"
 run "$HIVE" '{"prompt":"mention readme-word here","session_id":"s"}' | expect_silent "README.md is not a card"
 run "$NOLIB" '{"prompt":"at 10:04 опять","session_id":"s"}' | expect_silent "no docs/defects/ is silent"

@@ -4,7 +4,7 @@
 # Contract: docs/specs/self-learning/contract.md §1 (card format) and §3 (this hook).
 #
 # Only the human text is read: <task-notification>, <system-reminder>, <cross-session-message>,
-# <pasted_content> blocks and ``` / ~~~ fences are cut out first, so a timecode inside a pasted log
+# <pasted_content> blocks, ``` / ~~~ fences and a relayed side-agent note are cut out first, so a timecode inside a pasted log
 # or a harness notice is not an owner correction.
 #
 # Never blocks: no python, no docs/defects/, bad JSON or any error -> silent exit 0.
@@ -125,6 +125,9 @@ STEMS = ['опять', 'снова', 'я же говорил', 'я же каза
 WORDS = ['не так', 'again', 'i said', 'i told you', 'why did you', 'not what i asked']
 LEXICON = re.compile(r'(?<!\w)(?:' + '|'.join(map(re.escape, STEMS)) + r')'
                      r'|(?<!\w)(?:' + '|'.join(map(re.escape, WORDS)) + r')(?!\w)')
+# A side agent's note relayed as a prompt is model text, not the owner's words: its header line and
+# quoted lines are cut; anything the owner typed after them is still read.
+SIDE_NOTE = re.compile(r'\A\s*Here is a note offered by a side agent:[^\n]*(?:\n[ \t]*(?:>[^\n]*)?(?=\n|\Z))*')
 TIMECODE = re.compile(r'\b\d{1,2}:\d{2}\b')
 
 
@@ -157,6 +160,7 @@ def main():
     text = prompt
     for pat in BLOCKS:
         text = re.sub(pat, ' ', text, flags=re.S | re.I)
+    text = SIDE_NOTE.sub(' ', text)
     low = text.lower()
 
     why = []
