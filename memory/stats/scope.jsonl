@@ -186,3 +186,6 @@
 {"ts":"2026-10-16T10:54:10Z","story":"vulyk-pulse-06-post-green-minors","declared":6,"changed":3,"out_of_scope":2}
 {"ts":"2026-10-16T11:08:51Z","story":"close-story-scope-refusal-01","declared":4,"changed":6,"out_of_scope":2}
 {"ts":"2026-10-16T11:32:56Z","story":"close-story-scope-refusal-02-repair-round-1","declared":4,"changed":6,"out_of_scope":2}
+{"ts":"2026-10-18T18:41:14Z","story":"model-profiles-02","declared":7,"changed":7,"out_of_scope":0}
+{"ts":"2026-10-18T18:46:49Z","story":"model-profiles-01","declared":6,"changed":5,"out_of_scope":0}
+{"ts":"2026-10-18T19:16:22Z","story":"model-profiles-01","declared":6,"changed":5,"out_of_scope":0}

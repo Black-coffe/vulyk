@@ -1,8 +1,8 @@
 ---
 story: model-profiles-01
 spec: model-profiles
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus # owner, 2026-10-18 approval: framework code this spec moves off Sonnet
@@ -78,5 +78,11 @@ constitution budget: CR not counted, the shipped render checked too)
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- `scripts/model-profile.sh` (new): the file's only reader; whole-file whitespace/CR stripped; `--role gate|architect|review-second` asks `top-model.sh` for the active profile, `--explain <other>` shows the no-pin value (plan from `--plan`).
+- `scripts/top-model.sh`: `--plan`; the profile is read (no-arg `model-profile.sh`) only in print/explain modes, after env and constitution pins; second reviewer `sonnet` under non-default profiles unless the gate itself is `sonnet` (then today's rule, so the pair never collapses to one model).
+- `.claude/hooks/top-model-brief.sh`: `decided by:` parse widened to read `profile <name>`; ` · models <p>[ (not chosen)]` appended; omitted if the hive lacks `model-profile.sh`.
+- `tests/model-profile.test.sh` (new): compares no-file output with a hive without `model-profile.sh` and with the `baa5219` resolver (skipped if that commit is absent).
+- `CLAUDE.md`: pointer folded into the "Pass it as" line (now "In `sonnet-builds` (default) pass it as..."), new row; paid by trimming the Details list, the effort/cache aside, the TOP_MODEL pin wording and the install.sh marker comment: 7162 -> 7160 B.
+- `tests/telemetry.test.sh`: not changed; its floor hive lacks `model-profile.sh` and reads as `sonnet-builds`.
 
 ## Findings

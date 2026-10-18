@@ -3,6 +3,7 @@
 #
 #   scripts/top-model.sh            -> prints one alias: fable | opus
 #   scripts/top-model.sh --explain  -> plan, the signal it was read from, and the reason
+#   scripts/top-model.sh --plan     -> "<plan> <premium|standard>": premium is a plan that carries Fable
 #   scripts/top-model.sh --apply    -> pins the Queen's model (always opus, v0.16.0) as "model" in
 #                                      .claude/settings.local.json so her session starts on it
 #   scripts/top-model.sh --check    -> exit 0 if settings.local.json pins the Queen's model, 1 if not
@@ -31,8 +32,10 @@
 #   1. VULYK_TOP_MODEL=<alias>            env override, this shell only
 #   2. `TOP_MODEL = <alias>` in the constitution: CLAUDE.vulyk.md beside a project's own
 #      CLAUDE.md, else CLAUDE.md; `auto` (the default) defers
-#   3. the plan, as above
-#   4. opus
+#   3. the model profile (scripts/model-profile.sh, one per machine): opus-builds -> fable,
+#      economy -> opus, sonnet-builds (the default) defers
+#   4. the plan, as above
+#   5. opus
 #
 # Fails open, always: any missing file, unreadable JSON or unknown plan resolves to `opus`
 # and says why under --explain. A resolver that could break a session start is worse than
@@ -46,10 +49,11 @@ MODE="print"
 case "${1:-}" in
   "")            MODE="print" ;;
   --explain)     MODE="explain" ;;
+  --plan)        MODE="plan" ;;
   --apply)       MODE="apply" ;;
   --check)       MODE="check" ;;
   --floor)       MODE="floor" ;;
-  -h|--help)     sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help)     sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *)             echo "error: unknown flag $1 (try --help)" >&2; exit 2 ;;
 esac
 
@@ -128,6 +132,15 @@ constitution_pin() {
     | sed -E 's/.*=[[:space:]]*`?//' | head -1
 }
 
+# The model profile: model-profile.sh is the only reader of its file; a hive without it reads as sonnet-builds.
+MPROFILE="sonnet-builds"
+case "$MODE" in
+  print|explain)
+    MP="$(dirname "$0")/model-profile.sh"
+    [ -f "$MP" ] && MPROFILE="$(bash "$MP" 2>/dev/null)"
+    [ -n "$MPROFILE" ] || MPROFILE="sonnet-builds" ;;
+esac
+
 SOURCE=""; MODEL=""; REASON=""
 if [ -n "${VULYK_TOP_MODEL:-}" ]; then
   MODEL="$VULYK_TOP_MODEL"; SOURCE="env"; REASON="VULYK_TOP_MODEL is set in this shell"
@@ -135,6 +148,10 @@ else
   PIN="$(constitution_pin)"
   if [ -n "$PIN" ] && [ "$PIN" != "auto" ]; then
     MODEL="$PIN"; SOURCE="constitution"; REASON="${CONST_FILE##*/} pins TOP_MODEL = $PIN"
+  elif [ "$MPROFILE" = "opus-builds" ]; then
+    MODEL="fable"; SOURCE="profile $MPROFILE"; REASON="Opus writes, Fable judges and holds the gate (bash scripts/model-profile.sh --explain)"
+  elif [ "$MPROFILE" = "economy" ]; then
+    MODEL="opus";  SOURCE="profile $MPROFILE"; REASON="no Fable: Opus judges and holds the gate (bash scripts/model-profile.sh --explain)"
   else
     SOURCE="plan"
     case "$PLAN" in
@@ -164,8 +181,9 @@ label() { # label <alias> - human name for the brief: the family and its floor, 
 
 # The Tier 4 second reviewer must be a DIFFERENT model from lead-review, and one the plan
 # carries without credits: the other frontier alias where both are in the plan, sonnet
-# where only Opus is.
+# where only Opus is. Under opus-builds and economy it is sonnet, the builders' family (ADR-020).
 second_reviewer() {
+  if [ "$MPROFILE" != "sonnet-builds" ] && [ "$1" != "sonnet" ]; then echo "sonnet"; return; fi
   case "$1" in
     fable) echo "opus" ;;
     opus)  case "$PLAN" in max|premium-seat) echo "fable" ;; *) echo "sonnet" ;; esac ;;
@@ -186,6 +204,9 @@ pinned_model() { [ -f "$LOCAL" ] && field "$LOCAL" model; }
 case "$MODE" in
   print)
     printf '%s\n' "$MODEL" ;;
+
+  plan)
+    case "$PLAN" in max|premium-seat) echo "$PLAN premium" ;; *) echo "$PLAN standard" ;; esac ;;
 
   explain)
     echo "top model : $MODEL ($(label "$MODEL"))"

@@ -33,10 +33,9 @@ Tier 2-4 plans stop for the owner's approval (`**Approved:**`) unless `/vulyk-pl
 ## Models and effort
 
 Route by family, never by version: Sonnet executes (workers, scout, docs drone), Opus orchestrates and judges (the Queen, planner, reviewers, council, coverage, librarian), Fable holds the gate, Haiku the clerk. The family that builds never judges (one recorded gap: the Tier 4 second reviewer is Sonnet where the gate is Opus). A repair story after a RED round climbs to Opus.
-Model floor: no dispatch below `scripts/lib.sh` `model_floor`; always the newest of each family. `bash scripts/top-model.sh --floor` checks the config, telemetry `model_below_floor` what really ran. `TOP_MODEL = auto` names the gate model (`scripts/top-model.sh`; replace `auto` with an alias to pin).
-Pass it as `model:` only on the Tier 4 review, `lead-architect`, the Tier 4 `queen-planner` and a missed story's retry.
-Effort lives in agent frontmatter (cache effects: `docs/model-cascade.md`).
-Details: `docs/model-cascade.md`, `docs/adr/015-sonnet-execution-rung-and-model-floor.md`, `docs/cycle.md`, `docs/token-economy.md`.
+Model floor: no dispatch below `scripts/lib.sh` `model_floor`; always the newest of each family. `bash scripts/top-model.sh --floor` checks the config, telemetry `model_below_floor` what really ran. `TOP_MODEL = auto` names the gate model (`scripts/top-model.sh`); an alias pins it.
+In `sonnet-builds` (default) pass it as `model:` only on the Tier 4 review, `lead-architect`, the Tier 4 `queen-planner` and a missed story's retry; other profiles: `scripts/model-profile.sh --explain`.
+Effort: agent frontmatter. Details: `docs/model-cascade.md`, ADR-015, `docs/{cycle,token-economy}.md`.
 
 ## Secrets
 
@@ -70,7 +69,7 @@ A filled *Client path* adds the black-box seat, the only reader of *Browser MCP*
 Quiet variants only: their output is resent every turn. A story's `## Verification` must name one.
 
 <!-- VULYK:COMMANDS:START -->
-<!-- install.sh swaps this block for placeholders; keep both markers on their own lines. -->
+<!-- install.sh swaps this block; keep each marker on its own line. -->
 
 > VULYK's own rows: `/vulyk-bootstrap` replaces them; until then a green here proves nothing.
 
@@ -91,6 +90,7 @@ Quiet variants only: their output is resent every turn. A story's `## Verificati
 | Merge tests | `bash tests/constitution.test.sh` |
 | Maintenance | `bash tests/maintenance.test.sh` |
 | Pulse mod | `bash tests/mods.test.sh` |
+| Model profile tests | `bash tests/model-profile.test.sh` |
 | Full suite / build | none: no test runner, no build step |
 
 The first three are silent on success; never commit the `__pycache__/` that `py_compile` writes.
