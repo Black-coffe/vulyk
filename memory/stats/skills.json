@@ -1,7 +1,7 @@
 {
   "vulyk-build": {
-    "count": 9,
-    "last_used": "2026-10-16"
+    "count": 10,
+    "last_used": "2026-10-18"
   },
   "vulyk-handoff": {
     "count": 6,
@@ -12,8 +12,8 @@
     "last_used": "2026-09-14"
   },
   "vulyk-plan": {
-    "count": 9,
-    "last_used": "2026-10-16"
+    "count": 10,
+    "last_used": "2026-10-18"
   },
   "vulyk-ship": {
     "count": 9,
@@ -50,5 +50,9 @@
   "vulyk-pause": {
     "count": 2,
     "last_used": "2026-10-16"
+  },
+  "andrei-voice": {
+    "count": 1,
+    "last_used": "2026-10-18"
   }
 }

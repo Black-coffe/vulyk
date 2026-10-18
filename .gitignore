@@ -38,3 +38,10 @@ docs/specs/*/DRIVER
 
 # Hook state (defect-library dedup keys, per session) - per-machine, derived.
 .claude/state/
+
+# >>> litopys - private session data, kept out of git by the litopys plugin >>>
+# rewritten every session; to commit the chronicle set LITOPYS_TRACK_CHRONICLE=1
+.litopys/
+docs/chronicle/*
+!docs/chronicle/golden-questions.md
+# <<< litopys <<<
