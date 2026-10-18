@@ -30,7 +30,7 @@ expect_absent() { # expect_absent <label> <needle>   (reads the output to judge 
 
 CONSTITUTION_MAX_BYTES=7168
 CONSTITUTION_MAX_LINES=120
-DESCRIPTIONS_MAX_BYTES=4623     # agents 2 907 + commands 1 716, measured 2026-09-29
+DESCRIPTIONS_MAX_BYTES=4983     # agents 2 907 + commands 1 716, measured 2026-09-29; +360 /vulyk-models voice triggers (model-profiles requirement 6, approved plan)
 
 size_of() { tr -d '\r' < "$1" | wc -c | tr -d ' '; }
 lines_of() { tr -d '\r' < "$1" | wc -l | tr -d ' '; }
@@ -112,7 +112,8 @@ hive() { # hive <name> - a fresh fixture hive: git repo on main with one commit,
   git -C "$h" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
   echo "$h"
 }
-brief_of() { echo '{}' | CLAUDE_PROJECT_DIR="$1" bash "${2:-$BRIEF_HOOK}" 2>&1; }
+# The config folder is a temp one, so the owner's real model profile file decides nothing here.
+brief_of() { echo '{}' | CLAUDE_PROJECT_DIR="$1" CLAUDE_CONFIG_DIR="${BRIEF_CONF:-$T/conf-none}" bash "${2:-$BRIEF_HOOK}" 2>&1; }
 stub()   { printf '# Session x\n<!-- Stub captured by VULYK. Replace with 1-6 bullets -->\n' > "$1"; }
 council_row() { printf '{"ts":"%s","spec":"s","round":1,"verdict":"GREEN"}\n' "$2" >> "$1/memory/stats/council.jsonl"; }
 run_row()     { printf '{"ts":"%s","kind":"run","proposals":0}\n' "$2" >> "$1/memory/stats/evolve.jsonl"; }
@@ -196,6 +197,27 @@ brief_of "$H" | expect_absent "CLAUDE.vulyk.md is read before CLAUDE.md (filled:
 H="$(hive boot-vulyk-md-open)"; profile "$H" CLAUDE.md "$FILLED"; profile "$H" CLAUDE.vulyk.md "$UNFILLED"
 brief_of "$H" | expect "CLAUDE.vulyk.md is read before CLAUDE.md (unfilled: offer names it)" "Profile in CLAUDE.vulyk.md is not filled in"
 brief_of "$SRC" | expect_absent "this repo's own brief has no offer" "vulyk-bootstrap now"
+
+# --- the model profile first-run line (model-profiles-03) ------------------------------------------
+echo "--- model profile offered while this machine has no choice"
+MP_LINE="[VULYK] model profile not chosen: after the owner's current task, tell the owner and run /vulyk-models (Skill tool) once; until then sonnet-builds runs."
+H="$(hive mp-unchosen)"; mkdir -p "$H/scripts"; cp "$SRC/scripts/model-profile.sh" "$H/scripts/"
+export BRIEF_CONF="$T/mp-conf"
+n="$(brief_of "$H" | grep -cxF -- "$MP_LINE")"
+[ "$n" = 1 ] && ok "no profile file: the first-run line, exactly once" || bad "no profile file: first-run line printed $n times"
+CLAUDE_CONFIG_DIR="$BRIEF_CONF" bash "$H/scripts/model-profile.sh" --set sonnet-builds > /dev/null
+brief_of "$H" | expect_absent "after --set sonnet-builds: no first-run line" "model profile not chosen"
+unset BRIEF_CONF
+H="$(hive mp-noscript)"
+brief_of "$H" | expect_absent "no model-profile.sh: nothing about models" "model profile"
+H="$(hive mp-broken)"; mkdir -p "$H/scripts"; printf 'exit 3
+' > "$H/scripts/model-profile.sh"
+out="$(brief_of "$H")"; rc=$?
+printf '%s' "$out" | expect_absent "a failing model-profile.sh: nothing about models" "model profile"
+[ "$rc" = 0 ] && ok "a failing model-profile.sh: the hook still exits 0" || bad "a failing model-profile.sh: hook exit $rc"
+H="$(hive mp-usage)"; mkdir -p "$H/scripts"; printf 'exit 2
+' > "$H/scripts/model-profile.sh"
+brief_of "$H" | expect_absent "a usage error (exit 2) is not 'not chosen'" "model profile"
 
 # --- the evolve ledger (auto-maintenance-03) ------------------------------------------------------
 echo "--- evolve ledger"

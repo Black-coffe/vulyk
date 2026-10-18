@@ -22,6 +22,13 @@ if [ ! -d "$ROOT/telemetry/inbox" ] && [ -f "$const" ] &&
   echo "[VULYK] the Profile in ${const##*/} is not filled in. Before the owner's first task, ask once: run /vulyk-bootstrap now (the Skill tool, vulyk-bootstrap - an interview, never run without a yes) or decline (then add Profile row \`| Bootstrap | declined <date> |\`)."
 fi
 
+# model profile (model-profiles-03): offered while this machine has no choice; the hook never picks one.
+# Fails open: only --chosen's "not chosen" exit 1 prints; a missing or failing script prints nothing.
+if [ -f "$ROOT/scripts/model-profile.sh" ]; then
+  bash "$ROOT/scripts/model-profile.sh" --chosen >/dev/null 2>&1
+  [ $? -eq 1 ] && echo "[VULYK] model profile not chosen: after the owner's current task, tell the owner and run /vulyk-models (Skill tool) once; until then sonnet-builds runs."
+fi
+
 # Maintenance that runs itself (spec auto-maintenance): computed from files and git on every start,
 # printed only when something is due, so a quiet hive pays nothing. The Queen runs what is due after
 # the owner's task; nobody has to know /vulyk-gc, /vulyk-evolve or /vulyk-map exist.
