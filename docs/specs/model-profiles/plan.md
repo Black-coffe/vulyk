@@ -148,5 +148,5 @@ writes 70%, Haiku 30%" becomes a split by kind of story, not a ratio. The planne
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/model-profiles
 **Council:** GREEN round 1, 2026-10-18, at 6b4fab3, pack 9fa4077d3f8e
-**Shipped:** <written by scripts/ship-check.sh --record>
 **Checked:** ACCEPTED by Andrei, 2026-10-18, at 3cbc124 - owner picked the option «Поправить 4 мелочи и выпустить (Рекомендую)» (AskUserQuestion, 2026-10-18) after GREEN round 1; the 4 review minors fixed in 3cbc124 without a new round: repro per finding, driver 75 ok, model-profile 76 ok, maintenance 141 ok, sonnet-builds brief/explain byte-identical
+**Shipped:** 0.30.0, 2026-10-18, at 884541f - merged to main, publish pending; owner override none - READY with **Checked:** ACCEPTED (4 review minors fixed in 3cbc124)
