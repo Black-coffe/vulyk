@@ -51,7 +51,8 @@ needs a place to live, a quiz that asks once, and a rule that keeps the builder 
 7. **No arguments under `sonnet-builds`.** The driver, `/vulyk-build`, `/vulyk-review` and `/vulyk-plan` pass
    `worker_model`, `review_model` and `seat_model` only when the profile is not `sonnet-builds`, so a hive that pinned
    its worker or reviewer frontmatter (ADR-015 D2, amended 2026-10-16) is not overridden. A retry still runs on the
-   gate.
+   gate, except where the gate family also reviews (`opus-builds`): there it climbs to `opus`, so Fable never
+   judges code Fable wrote.
 8. **`/vulyk-models` asks once.** One quiz, in the owner's language, the recommended profile first with the plan as the
    reason, each option saying what Fable, Opus, Sonnet and Haiku do and what it costs in limits. The SessionStart brief
    offers it while no profile is chosen and never chooses for the owner. The choice can be changed at any time.

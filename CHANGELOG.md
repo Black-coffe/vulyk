@@ -20,7 +20,8 @@ The owner picks who builds and who judges, once per machine.
   `/vulyk-plan` only when the profile is not `sonnet-builds`. The planner marks routine stories `model: haiku` under
   `opus-builds` and `economy`.
 - **ADR-020** records the profiles; ADR-015 carries an amendment line. Under `economy` the Tier 4 second reviewer is
-  the builders' family, an accepted gap.
+  the builders' family, an accepted gap. Under `opus-builds` a missed story's retry runs on `opus`, not the gate,
+  because Fable reviews it.
 
 ## [0.29.0] - 2026-10-16
 

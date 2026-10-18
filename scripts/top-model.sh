@@ -215,7 +215,11 @@ case "$MODE" in
     echo "signal    : ${SIGNAL:-none}"
     echo "profile   : $PROFILE"
     echo "second reviewer (Tier 4): $(second_reviewer "$MODEL")"
-    echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner, a missed story's retry; lead-review at Tier 1-3 runs on its frontmatter (opus)"
+    case "$MPROFILE" in
+      opus-builds) echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner; a missed story's retry runs on opus (Fable judges it); lead-review at Tier 1-3 and the rest follow the opus-builds profile (bash scripts/model-profile.sh --explain)" ;;
+      economy)     echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner, a missed story's retry; lead-review at Tier 1-3 and the rest follow the economy profile (bash scripts/model-profile.sh --explain)" ;;
+      *)           echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner, a missed story's retry; lead-review at Tier 1-3 runs on its frontmatter (opus)" ;;
+    esac
     P="$(pinned_model)"
     if [ -z "$P" ]; then
       echo "queen session: not pinned - the session starts on the account default (Opus since Claude Code 2.1.280). Run: bash scripts/top-model.sh --apply"

@@ -338,8 +338,13 @@ const blindPromptsClean = (r) => r.dispatches
     const r2 = await run(P, {
       clerk: [[CLAIM, adv(build([c]))], [ADV, adv(build([c]))], [ADV, adv(green())], [RELEASE, releaseOk]],
     });
-    check(r2.dispatches.length === 2 && r2.dispatches[0].model === 'haiku' && r2.dispatches[1].model === 'fable',
-      'profile: a retry still runs on TOP', r2.dispatches.map((d) => d.model));
+    check(r2.dispatches.length === 2 && r2.dispatches[0].model === 'haiku' && r2.dispatches[1].model === 'opus',
+      'profile: a retry climbs to opus when TOP is also the review model (Fable never judges its own code)', r2.dispatches.map((d) => d.model));
+    const r2b = await run({ ...P, review_model: 'opus' }, {
+      clerk: [[CLAIM, adv(build([c]))], [ADV, adv(build([c]))], [ADV, adv(green())], [RELEASE, releaseOk]],
+    });
+    check(r2b.dispatches.length === 2 && r2b.dispatches[1].model === 'fable',
+      'profile: a retry runs on TOP when TOP is not the review model', r2b.dispatches.map((d) => d.model));
     const r3 = await run({ ...P, top_model: 'fable', second_model: 'sonnet' }, {
       clerk: [[CLAIM, adv(round('review', { tier: 4, court: null }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
     });

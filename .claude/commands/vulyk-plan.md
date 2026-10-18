@@ -31,8 +31,8 @@ Plan: "$ARGUMENTS"
    with the brief, scout reports and map pointers; Tier 4 also consults `lead-architect` on the central
    design fork, and both Tier 4 dispatches carry `model: <top_model>` (`bash scripts/top-model.sh`).
    Tier 3 passes `model: <p>` from `p="$(bash scripts/model-profile.sh --role planner)"` only when it is not
-   `opus` (else no model parameter), and when `bash scripts/model-profile.sh --role routine` prints `haiku`,
-   adds the line `routine stories: model: haiku` to the planner's brief.
+   `opus` (else no model parameter). At Tier 3-4, when `bash scripts/model-profile.sh --role routine` prints
+   `haiku`, add the line `routine stories: model: haiku` to the planner's brief.
 6. Stories, from `templates/story.md`, with no `model:` line (the worker's frontmatter decides):
    `model: opus` only for a long-horizon or judgment-heavy story, with the reason in one line (ADR-015);
    `model: haiku` for a routine or reusable story (helpers, boilerplate, a repeated pattern) only when

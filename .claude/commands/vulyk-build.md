@@ -24,8 +24,8 @@ No driver, no clerk, no court. Loop:
    three failed reruns write `## Findings` and stop for the owner. A repair story (`# Repair round <n>`)
    is built the same way; its `## Findings` are the conditions to meet. Back to 1.
 3. `dispatch:review`: dispatch `lead-review` with the Agent tool, with `model: <r>` from
-   `r="$(bash scripts/model-profile.sh --role review)"` only when it differs from the agent's frontmatter
-   `model:`, else no model parameter:
+   `r="$(bash scripts/model-profile.sh --role review)"` only when the profile (`bash scripts/model-profile.sh`)
+   is not `sonnet-builds`, else no model parameter:
    `Review <slug>, round <round>. Spec: <spec>. Branch <branch> at <head>. Report: .vulyk/reports/<slug>/round-<round>/review.attempt-<k>.md`
    with k = `status.seat_attempt.review`; from round 2 add `Since: <since>. Previous round:
    <spec>/council/round-<round-1>.` Then `bash scripts/cycle.sh advance docs/specs/<slug> --ingest`.
@@ -67,7 +67,7 @@ Without the Workflow tool, run the solo loop from this session with the stamp, b
   `bash scripts/cycle.sh release docs/specs/<slug> <S>`.
 - `build:<W>`: one message dispatching each `wave_stories` entry to its `worker` with `model: <model>`
   (when it is empty, `<worker_model>`, or no model parameter when the profile is `sonnet-builds`, so the worker's
-  frontmatter applies; `<top_model>` on its second dispatch): `Your story: <file>. Stamp: <S>. Your last step is bash
+  frontmatter applies; `<top_model>` on its second dispatch, `opus` when `<top_model>` is also `<review_model>`): `Your story: <file>. Stamp: <S>. Your last step is bash
   scripts/cycle.sh close-story <file> --commit --stamp <S>.` Then `advance --stamp <S>`. A story still
   listed is a miss; a second miss is handled as a `stop` with a `file`.
 - `dispatch:<seats>`: one message, every seat, each told to write its report to

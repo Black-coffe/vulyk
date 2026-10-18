@@ -194,7 +194,8 @@ never touch. No file, or a garbled one, reads as `sonnet-builds`.
 The Queen is `opus` in all three. `routine` is a story the planner marks `model: haiku` (helpers, boilerplate, a
 repeated pattern); it is a split by kind of story, not a ratio. The family that builds never judges in any profile:
 under `opus-builds` Fable judges, both blind seats included. The one gap: under `economy` the Tier 4 second reviewer
-is `sonnet`, the builders' family.
+is `sonnet`, the builders' family. A missed story's retry climbs to the gate, but under `opus-builds` the gate family
+is the judge, so there the retry runs on `opus`.
 
 **The resolver.** `scripts/model-profile.sh` is the only reader of the file: no arguments prints the profile,
 `--role <r>` one family, `--recommend` a profile by plan, `--explain [<name>]` the table, `--chosen` whether the owner
