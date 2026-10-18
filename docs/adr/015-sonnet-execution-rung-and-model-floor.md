@@ -6,6 +6,8 @@
   table ships inside Claude Code, and 2.1.292 still ran `haiku` as Haiku 4.5. `--floor` reads the
   running Claude Code's version, and checks the haiku remap and a provider's haiku pin. `/vulyk-build` now
   refuses to launch the hive while `--floor` exits 1: the floor is enforced at that launch, not only reported.
+  amended 2026-10-18 (0.30.0, spec `model-profiles`): this ladder is now the `sonnet-builds` profile, still the
+  default, one of three the owner picks per machine; see ADR-020.
 - Date: 2026-09-28 · Version: 0.20.0
 - Spec: docs/specs/sonnet-5-5-ladder (study report and source table; built by the Queen's session
   directly, the Law 5 exception the owner granted on 2026-09-22)

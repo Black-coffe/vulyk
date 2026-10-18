@@ -64,7 +64,7 @@ machine with neither `jq` nor Python. Every failure mode — no profile, an unre
 
 Resolution order: `VULYK_TOP_MODEL` in the shell, then a non-`auto` pin in the constitution (only
 that file: a project's own `CLAUDE.md` beside `CLAUDE.vulyk.md` is never read for it), then the
-plan, then `opus`. A pin below the model floor still resolves, and `--floor` fails on it. The field names for Max were read off a real profile; the Pro and seat-tier
+model profile (v0.30.0, see [Model profiles](#model-profiles-v0300-adr-020)), then the plan, then `opus`. A pin below the model floor still resolves, and `--floor` fails on it. The field names for Max were read off a real profile; the Pro and seat-tier
 spellings follow the same pattern and are matched loosely (`*pro*`, `*premium*`), which is the
 honest amount of confidence to encode.
 
@@ -174,6 +174,39 @@ are independent in information, so they can be independent in wall-clock time. `
 Recon on Sonnet is a judgment, not a measurement. A scout report feeds planning, where a bad map
 poisons every story downstream. Mapping is read-only, well-scoped work, and the planner that reads
 the map is Opus. If a plan misses because of a bad map, the scout goes back to `opus`.
+
+## Model profiles (v0.30.0, ADR-020)
+
+The ladder above is the `sonnet-builds` profile, the default. Two more exist, and the owner picks one per machine.
+The choice is one word in `${CLAUDE_CONFIG_DIR:-<home>/.claude}/vulyk-model-profile`, which the installer and upgrades
+never touch. No file, or a garbled one, reads as `sonnet-builds`.
+
+| role | sonnet-builds | opus-builds | economy |
+|---|---|---|---|
+| planner (Tier 3) | opus | fable | opus |
+| review (Tier 1-3 `lead-review`) | opus | fable | opus |
+| seat (both blind seats) | opus | fable | opus |
+| worker | sonnet | opus | sonnet |
+| routine | sonnet | haiku | haiku |
+| gate / architect | today's plan rule | fable | opus |
+| review-second (Tier 4) | today's rule | sonnet | sonnet |
+
+The Queen is `opus` in all three. `routine` is a story the planner marks `model: haiku` (helpers, boilerplate, a
+repeated pattern); it is a split by kind of story, not a ratio. The family that builds never judges in any profile:
+under `opus-builds` Fable judges, both blind seats included. The one gap: under `economy` the Tier 4 second reviewer
+is `sonnet`, the builders' family.
+
+**The resolver.** `scripts/model-profile.sh` is the only reader of the file: no arguments prints the profile,
+`--role <r>` one family, `--recommend` a profile by plan, `--explain [<name>]` the table, `--chosen` whether the owner
+picked one, `--set <name>` writes it. The driver and the build, review and plan commands ask it, and pass a model only
+when the profile is not `sonnet-builds`.
+
+**Gate order, now.** `top-model.sh` resolves `VULYK_TOP_MODEL` in the shell, then a non-`auto` pin in the
+constitution, then the profile (`opus-builds` gives `fable`, `economy` gives `opus`, `sonnet-builds` falls through),
+then the plan, then `opus`. When the profile decides, `--explain` reads `decided by: profile <name>`.
+
+**Changing it.** Run `/vulyk-models` (or say "change model distribution") at any time, or run
+`bash scripts/model-profile.sh --set <name>`. The SessionStart brief offers the quiz until a profile is chosen.
 
 ## The model floor
 

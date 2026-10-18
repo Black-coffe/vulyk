@@ -1,8 +1,8 @@
 ---
 story: model-profiles-04
 spec: model-profiles
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
@@ -67,5 +67,8 @@ docs/adr/015-sonnet-execution-rung-and-model-floor.md (whole); docs/model-cascad
 `none — reviewed by lead-review`
 
 ## Implementation notes
+- Added ADR-020, the ADR-015 amendment line, the cascade "Model profiles" section (gate order: env, constitution, profile, plan, opus), README paragraph, command-reference entry, CHANGELOG 0.30.0.
+- The role table is plan.md's, no deltas apply. No figures added; the Opus-limit consequence is marked an estimate.
+- `/vulyk-models` is described from story 03's goal; its file was not in the tree yet.
 
 ## Findings
