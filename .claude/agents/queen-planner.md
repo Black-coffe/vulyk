@@ -20,7 +20,10 @@ mechanically by `cycle.sh repair`.
   rejected alternative with the reason.
 - One story file per unit of work, from `templates/story.md`, with no `model:` line: the worker's own
   frontmatter decides (ADR-015). Write `model: opus` only for a story that is long-horizon or
-  judgment-heavy rather than well-scoped, and give the reason in one line under `## Goal`. Each quotes its
+  judgment-heavy rather than well-scoped, and give the reason in one line under `## Goal`. When the brief
+  says `routine stories: model: haiku`, write `model: haiku` for a routine or reusable story (helpers,
+  boilerplate, a repeated pattern), with the reason in one line under `## Goal`. Every other story gets no
+  model line. Each quotes its
   `## Requirements` verbatim from `brief.md` (`trace-check.sh` matches them literally). A story you
   cannot tie to a quote is speculative: cut it, or list it as an assumption for the owner.
 - Each story names its files, acceptance criteria, a `## Verification` taken from the constitution's

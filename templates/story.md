@@ -5,8 +5,11 @@ status: todo            # todo | done | blocked - close-story writes done, a dri
 returned:              # written by whoever builds the story, as its last edit: DONE | NEEDS_CONTEXT | WALL
 tier: 1                 # the spec's routing tier
 worker: worker-code     # worker-code | worker-test - the agent a Tier 3-4 wave dispatches
-                        # no model line: the worker's own frontmatter decides (sonnet, or the hive's pin).
+                        # no model line: the model profile's worker, else the worker's own frontmatter (sonnet, or the hive's pin).
                         # Add `model: opus` only for long-horizon or judgment-heavy work (ADR-015);
+                        # `model: haiku` for a routine or reusable story (helpers, boilerplate, a repeated
+                        # pattern) only when the brief says `routine stories: model: haiku`; either way
+                        # the reason goes in one line under `## Goal`. Every other story: no model line.
                         # a second attempt runs on the gate model either way
 wave: 1                 # dispatch group: at Tier 3-4 one wave's workers run concurrently in one tree.
                         # Stories in one wave must declare disjoint `## Files` - wave-check.sh reports overlaps.

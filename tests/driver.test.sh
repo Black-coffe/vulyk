@@ -314,6 +314,44 @@ const blindPromptsClean = (r) => r.dispatches
       && r.dispatches.length === 0 && r.clerkCmds[1] === RELEASE, `tier 4 guard: ${label} refuses before any dispatch, releases`, { result: r.result, seq: seq(r) });
   }
 
+  // --- profile models: worker_model / review_model / seat_model fill only what the story or tier leaves open
+  {
+    const P = { ...ARGS, worker_model: 'opus', review_model: 'fable', seat_model: 'fable' };
+    const a = story(1, { model: '' });
+    const b = story(2, { model: 'haiku' });
+    const r = await run(P, {
+      clerk: [
+        [CLAIM, adv(build([a, b]))],
+        [ADV, adv(round('haiku,opus,review'))],
+        [INGEST, adv(green())],
+        [RELEASE, releaseOk],
+      ],
+    });
+    const by = (t) => r.dispatches.filter((d) => d.agentType === t);
+    const [wa, wb] = r.dispatches;
+    check(r.mismatches.length === 0 && wa.model === 'opus' && wb.model === 'haiku',
+      'profile: worker_model runs a story with no model, a story model: haiku stays haiku', [wa.model, wb.model]);
+    check(by('lead-review').length === 1 && by('lead-review')[0].model === 'fable', 'profile: review_model runs the Tier 1-3 reviewer', by('lead-review'));
+    check(by('council-opus')[0].model === 'fable' && by('council-haiku')[0].model === 'fable', 'profile: seat_model runs both blind seats',
+      [by('council-opus')[0].model, by('council-haiku')[0].model]);
+    const c = story(3, { model: 'haiku' });
+    const r2 = await run(P, {
+      clerk: [[CLAIM, adv(build([c]))], [ADV, adv(build([c]))], [ADV, adv(green())], [RELEASE, releaseOk]],
+    });
+    check(r2.dispatches.length === 2 && r2.dispatches[0].model === 'haiku' && r2.dispatches[1].model === 'fable',
+      'profile: a retry still runs on TOP', r2.dispatches.map((d) => d.model));
+    const r3 = await run({ ...P, top_model: 'fable', second_model: 'sonnet' }, {
+      clerk: [[CLAIM, adv(round('review', { tier: 4, court: null }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
+    });
+    const revs = r3.dispatches.filter((d) => d.agentType === 'lead-review');
+    check(revs.length === 2 && revs[0].model === 'fable' && revs[1].model === 'sonnet', 'profile: the Tier 4 pair stays TOP/SECOND, review_model is not used',
+      revs.map((d) => d.model));
+    const r4 = await run({ ...ARGS, review_model: 'haiku' }, {
+      clerk: [[CLAIM, adv(round('review', { tier: 4, court: null }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
+    });
+    check(r4.dispatches.map((d) => d.model).join(',') === 'fable,opus', 'profile: review_model leaves the Tier 4 pair on the launch pair', r4.dispatches.map((d) => d.model));
+  }
+
   // --- unreadable clerk lines: one read-only status, then on from that status
   {
     const a = story(1);
