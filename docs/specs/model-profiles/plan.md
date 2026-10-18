@@ -146,7 +146,7 @@ writes 70%, Haiku 30%" becomes a split by kind of story, not a ratio. The planne
 
 **Approved:** Andrei, 2026-10-18 («Да, строить на Opus (Рекомендую)»: stories 01-03 on `model: opus`, 04 on the worker frontmatter)
 **Briefed:** <written by scripts/cycle.sh briefed>
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/model-profiles
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
 **Council:** <written by scripts/cycle.sh judge/escalate>
 **Shipped:** <written by scripts/ship-check.sh --record>
