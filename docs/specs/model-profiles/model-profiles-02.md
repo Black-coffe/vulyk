@@ -1,8 +1,8 @@
 ---
 story: model-profiles-02
 spec: model-profiles
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus # owner, 2026-10-18 approval: framework code this spec moves off Sonnet
@@ -76,5 +76,19 @@ memory/map/cycle.md (`The Workflow driver`); memory/map/agents-and-commands.md (
 `bash tests/telemetry.test.sh`
 
 ## Implementation notes
+- `vulyk-cycle.js`: `WORKER`/`REVIEW`/`SEAT` from the three optional args, `|| undefined`; worker `story.model || WORKER`, retry still `TOP`; Tier 4 pair untouched.
+- `driver.test.sh`: one new block (worker/review/seat models, haiku story, retry on TOP, Tier 4 pair unchanged); existing assertions untouched.
+- `vulyk-build.md`: hive step 1 resolves the three roles off `sonnet-builds`, step 3 passes them; manual fallback uses them for workers, seats and the Tier 1-3 reviewer; solo reviewer gets `model:` only when `--role review` differs from frontmatter. The `--floor`. Exit 1` text kept.
+- `vulyk-review.md`, `vulyk-plan.md`, `queen-planner.md`, `templates/story.md` (comment only, no `^model:` line): the matching rules.
+- Surprise: the command/agent/template files are CRLF in the working tree (index LF); edited preserving CRLF.
+- `scripts/model-profile.sh` is not in this tree yet (another story of the spec); the commands only name it.
 
 ## Findings
+- close-story exit 4: `verification timed out after 540s: bash tests/telemetry.test.sh`. The 540 s budget is shared by all
+  three `## Verification` lines (cycle.sh ADR-013 D5). Run alone afterwards, `bash tests/telemetry.test.sh` passed
+  (581 checks, 0 failed) but took 1251 s on this box, with wave-mates running. `bash tests/driver.test.sh` passes (74, 0 failed).
+  No code change in `## Files` can make it fit. Question: close with `VULYK_VERIFY_TIMEOUT` raised (run in the background,
+  past the Bash tool's 10-min cap), or trim `## Verification` to driver + e2e and leave telemetry to the integration gate?
+- Second attempt: the question above got no answer and the story was redispatched as is. Decision: keep `## Verification`
+  intact and run close-story with `VULYK_VERIFY_TIMEOUT=3600` (cycle.sh's own knob, ADR-013 D5) in a background Bash call
+  so the three suites run to completion past the tool's 10-min cap. The code was not changed between the attempts.

@@ -22,7 +22,10 @@ branch). Every call below that runs `advance` carries `timeout: 600000`.
    `.vulyk/reports/<slug>/round-<round>/<seat>.attempt-<k>.md` with k from `status.seat_attempt`;
    blind seats get slug, round, `court` and the report path only, never `round_dir`; `lead-review` gets
    the spec, branch, head, report path, and from round 2 `since` and the previous round's directory,
-   with no model parameter at Tier 1-3 and two reviewers (`review-top`, `review-second`) at Tier 4.
+   at Tier 1-3 with `model: <r>` from `r="$(bash scripts/model-profile.sh --role review)"` only when the
+   profile is not `sonnet-builds` (else no model parameter), and two reviewers (`review-top`,
+   `review-second`) at Tier 4. Blind seats get `model: <s>` from `s="$(bash scripts/model-profile.sh --role
+   seat)"` only when the profile (`bash scripts/model-profile.sh`) is not `sonnet-builds`.
 3. Record and judge: `bash scripts/cycle.sh advance docs/specs/<slug> --stamp $stamp --ingest`. A seat
    still listed in `next` was rejected: re-dispatch it once with its `rejected` error appended, then
    `--ingest` again.

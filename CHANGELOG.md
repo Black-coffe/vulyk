@@ -2,6 +2,27 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.30.0] - 2026-10-18
+
+The owner picks who builds and who judges, once per machine.
+
+### Added
+- **Model profiles** `sonnet-builds` (today's ladder, the default), `opus-builds` ("Opus writes, Fable judges") and
+  `economy` (no Fable), named by family only. The choice is one line in `vulyk-model-profile` in the Claude config
+  folder; the installer and upgrades never touch it, and no file means today's behaviour.
+- **`scripts/model-profile.sh`**, the one reader of that file: the profile, a family per role, a recommendation by
+  plan, a table, `--chosen` and `--set`. `top-model.sh` honours the profile after the env and constitution pins and
+  gains `--plan`.
+- **`/vulyk-models`**, a one-question quiz in the owner's language, recommended profile first with the reason and the
+  cost in limits; voice triggers in ru, uk and en.
+- **A first-run line** in the SessionStart brief offers the quiz until a profile is chosen, and never chooses.
+- **Driver arguments** `worker_model`, `review_model` and `seat_model`, passed by `/vulyk-build`, `/vulyk-review` and
+  `/vulyk-plan` only when the profile is not `sonnet-builds`. The planner marks routine stories `model: haiku` under
+  `opus-builds` and `economy`.
+- **ADR-020** records the profiles; ADR-015 carries an amendment line. Under `economy` the Tier 4 second reviewer is
+  the builders' family, an accepted gap. Under `opus-builds` a missed story's retry runs on `opus`, not the gate,
+  because Fable reviews it.
+
 ## [0.29.0] - 2026-10-16
 
 Three changes:

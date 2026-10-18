@@ -42,6 +42,12 @@ const spec = A.spec
 const stamp = A.stamp // workers get it for close-story; blind seats never see it
 const TOP = A.top_model || 'opus'
 const SECOND = A.second_model
+// the model profile's families (/vulyk-build passes them only off sonnet-builds); absent, the frontmatter decides
+const WORKER = A.worker_model || undefined
+const REVIEW = A.review_model || undefined
+const SEAT = A.seat_model || undefined
+// a missed story's retry climbs to the gate, unless the gate family also reviews (opus-builds): then opus, so the judge never judges its own code
+const RETRY = REVIEW && TOP === REVIEW ? 'opus' : TOP
 if (typeof stamp !== 'string' || stamp.length < 12) {
   return { stop: { verb: 'launch', error: 'args.stamp missing: launch with the 16-hex random stamp of /vulyk-build step 1' } }
 }
@@ -110,7 +116,7 @@ const build = async (st) => {
     const retry = (misses.get(story.file) || 0) >= 1
     const prompt = `Your story: ${story.file}. Stamp: ${stamp}. Implement it per your protocol; your last step is \`bash scripts/cycle.sh close-story ${story.file} --commit --stamp ${stamp}\`.`
       + (retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
-    return caught(agent(prompt, { agentType: story.worker, model: retry ? TOP : (story.model || undefined), phase: 'Build', label: story.story }))
+    return caught(agent(prompt, { agentType: story.worker, model: retry ? RETRY : (story.model || WORKER), phase: 'Build', label: story.story }))
   }))
   const res = await advance('')
   if (res.ok === false) return res
@@ -169,9 +175,9 @@ const council = async (st) => {
       jobs.push({ who: 'reviewer (top)', agentType: 'lead-review', model: TOP, prompt: reviewPrompt(st) + note + reportNote(st, 'review-top', k) })
       jobs.push({ who: 'reviewer (second)', agentType: 'lead-review', model: SECOND, prompt: reviewPrompt(st) + note + reportNote(st, 'review-second', k) })
     } else if (seat === 'review') {
-      jobs.push({ who: 'reviewer', agentType: 'lead-review', model: undefined, prompt: reviewPrompt(st) + note + reportNote(st, 'review', k) })
+      jobs.push({ who: 'reviewer', agentType: 'lead-review', model: REVIEW, prompt: reviewPrompt(st) + note + reportNote(st, 'review', k) })
     } else {
-      jobs.push({ who: `seat ${seat}`, agentType: SEAT_AGENT[seat], model: undefined, prompt: seatPrompt(seat, st) + note + reportNote(st, seat, k) })
+      jobs.push({ who: `seat ${seat}`, agentType: SEAT_AGENT[seat], model: SEAT, prompt: seatPrompt(seat, st) + note + reportNote(st, seat, k) })
     }
   }
   const returns = await parallel(jobs.map((j) => () =>

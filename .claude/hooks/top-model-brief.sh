@@ -26,7 +26,18 @@ MODEL="$(printf '%s\n' "$EXPLAIN" | sed -n 's/^top model : \([^ ]*\).*/\1/p' | h
 [ -n "$MODEL" ] || exit 0
 PLAN="$(printf '%s\n' "$EXPLAIN" | sed -n 's/^plan      : //p' | head -1)"
 SECOND="$(printf '%s\n' "$EXPLAIN" | sed -n 's/^second reviewer (Tier 4): //p' | head -1)"
-BY="$(printf '%s\n' "$EXPLAIN" | sed -n 's/^decided by: \([a-z]*\) - .*/\1/p' | head -1)"
+BY="$(printf '%s\n' "$EXPLAIN" | sed -n 's/^decided by: \([a-z]*\( [a-z-]*\)\{0,1\}\) - .*/\1/p' | head -1)"
+
+# The model profile (scripts/model-profile.sh, one per machine): named at the end of the line.
+PROFILE_TAIL=""
+MPROF="$ROOT/scripts/model-profile.sh"
+if [ -f "$MPROF" ]; then
+  MP="$(bash "$MPROF" 2>/dev/null)"
+  if [ -n "$MP" ]; then
+    PROFILE_TAIL=" · models $MP"
+    bash "$MPROF" --chosen 2>/dev/null || PROFILE_TAIL="$PROFILE_TAIL (not chosen)"
+  fi
+fi
 
 NAME="$(printf '%s\n' "$EXPLAIN" | sed -n 's/^top model : [^(]*(\(.*\))$/\1/p' | head -1)"
 [ -n "$NAME" ] || NAME="$MODEL"
@@ -57,5 +68,14 @@ fi
 # enabled). /vulyk-build's own step 1 decides this in-session from the tool list.
 WORKFLOW="Workflow driver: decided in-session (Tier 3-4: Workflow tool present -> vulyk-cycle.js, else the same advance loop run by the Queen; Tier 1-2 build solo)."
 
-echo "[VULYK] gate model: $MODEL ($NAME) - by ${BY:-plan}, plan ${PLAN:-unknown}. Dispatch model: $MODEL for the Tier 4 lead-review (second reviewer: ${SECOND:-opus}), lead-architect, a Tier 4 queen-planner and a missed story's retry; lead-review at Tier 1-3 and everything else run on their frontmatter (judgment on opus, execution on sonnet, the clerk on haiku). ${FLOOR_LINE:+$FLOOR_LINE. }$SESSION $WORKFLOW Details: bash scripts/top-model.sh --explain"
+# Off sonnet-builds the rest of the roster comes from the profile, not the frontmatter.
+RETRY=" and a missed story's retry"
+REST="lead-review at Tier 1-3 and everything else run on their frontmatter (judgment on opus, execution on sonnet, the clerk on haiku)"
+case "${MP:-sonnet-builds}" in
+  opus-builds) RETRY="; a missed story's retry on opus (Fable judges it)"
+    REST="lead-review at Tier 1-3, the blind seats and the Tier 3 planner on fable, story code on opus, routine stories on haiku, the clerk on haiku (bash scripts/model-profile.sh --explain)" ;;
+  economy)
+    REST="lead-review at Tier 1-3, the blind seats and the Tier 3 planner on opus, story code on sonnet, routine stories on haiku, the clerk on haiku (bash scripts/model-profile.sh --explain)" ;;
+esac
+echo "[VULYK] gate model: $MODEL ($NAME) - by ${BY:-plan}, plan ${PLAN:-unknown}. Dispatch model: $MODEL for the Tier 4 lead-review (second reviewer: ${SECOND:-opus}), lead-architect, a Tier 4 queen-planner$RETRY; $REST. ${FLOOR_LINE:+$FLOOR_LINE. }$SESSION $WORKFLOW Details: bash scripts/top-model.sh --explain$PROFILE_TAIL"
 exit 0

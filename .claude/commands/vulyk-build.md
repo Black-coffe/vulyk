@@ -23,7 +23,9 @@ No driver, no clerk, no court. Loop:
    `bash scripts/cycle.sh close-story <file> --commit`. On exit 4, read the error, fix, rerun; after
    three failed reruns write `## Findings` and stop for the owner. A repair story (`# Repair round <n>`)
    is built the same way; its `## Findings` are the conditions to meet. Back to 1.
-3. `dispatch:review`: dispatch `lead-review` with the Agent tool, no model parameter:
+3. `dispatch:review`: dispatch `lead-review` with the Agent tool, with `model: <r>` from
+   `r="$(bash scripts/model-profile.sh --role review)"` only when the profile (`bash scripts/model-profile.sh`)
+   is not `sonnet-builds`, else no model parameter:
    `Review <slug>, round <round>. Spec: <spec>. Branch <branch> at <head>. Report: .vulyk/reports/<slug>/round-<round>/review.attempt-<k>.md`
    with k = `status.seat_attempt.review`; from round 2 add `Since: <since>. Previous round:
    <spec>/council/round-<round-1>.` Then `bash scripts/cycle.sh advance docs/specs/<slug> --ingest`.
@@ -38,12 +40,16 @@ No driver, no clerk, no court. Loop:
    the fix they name (`claude update`, or the pin), and stop, with no journal line and no launch. Then resolve
    `top_model="$(bash scripts/top-model.sh)"`; `second_model`, the pairing
    `bash scripts/top-model.sh --explain` prints (opus beside Fable, sonnet beside Opus) unless plan.md's
-   Tier 4 line names another; `stamp="$(openssl rand -hex 8 2>/dev/null || python -c 'import secrets; print(secrets.token_hex(8))')"`.
+   Tier 4 line names another; the profile's families, only when the profile is not `sonnet-builds`
+   (`bash scripts/model-profile.sh` prints it): `worker_model="$(bash scripts/model-profile.sh --role worker)"`,
+   `review_model="$(bash scripts/model-profile.sh --role review)"`, `seat_model="$(bash scripts/model-profile.sh --role seat)"`;
+   `stamp="$(openssl rand -hex 8 2>/dev/null || python -c 'import secrets; print(secrets.token_hex(8))')"`.
 2. Journal and print the line that hands the tree to the loop: `bash scripts/journal.sh
    docs/specs/<slug> 03-building "launching the hive" "the loop holds the working tree of vulyk/<slug>; to edit, run /vulyk-pause <slug>"`.
 3. Call the Workflow tool with `scriptPath: ".claude/workflows/vulyk-cycle.js"` (never `name:`, which
    its permission handler rejects) and `args: {spec: "docs/specs/<slug>", stamp, top_model,
-   second_model}`. The driver claims the spec itself; run no `claim` first, and nothing else while it
+   second_model}`, plus `worker_model`, `review_model`, `seat_model` only when the profile is not
+   `sonnet-builds` (absent, each agent's frontmatter decides). The driver claims the spec itself; run no `claim` first, and nothing else while it
    runs. If the call itself throws, run `bash scripts/telemetry.sh record driver_refused 1 0 --spec
    <slug> --ref driver:<slug>:$(date -u +%Y-%m-%d)`, print the error and stop.
 4. Wake-up: read the returned object, the `journal.md` lines since launch and the newest round's files
@@ -60,13 +66,16 @@ Without the Workflow tool, run the solo loop from this session with the stamp, b
 - Begin with `advance --stamp <S> --claim`; every later call carries `--stamp <S>`; every exit runs
   `bash scripts/cycle.sh release docs/specs/<slug> <S>`.
 - `build:<W>`: one message dispatching each `wave_stories` entry to its `worker` with `model: <model>`
-  (no model parameter when it is empty, so the worker's frontmatter applies; `<top_model>` on its second dispatch): `Your story: <file>. Stamp: <S>. Your last step is bash
+  (when it is empty, `<worker_model>`, or no model parameter when the profile is `sonnet-builds`, so the worker's
+  frontmatter applies; `<top_model>` on its second dispatch, `opus` when `<top_model>` is also `<review_model>`): `Your story: <file>. Stamp: <S>. Your last step is bash
   scripts/cycle.sh close-story <file> --commit --stamp <S>.` Then `advance --stamp <S>`. A story still
   listed is a miss; a second miss is handled as a `stop` with a `file`.
 - `dispatch:<seats>`: one message, every seat, each told to write its report to
   `.vulyk/reports/<slug>/round-<round>/<seat>.attempt-<k>.md`, k from `status.seat_attempt`. `opus` or
   `haiku`: `council-<seat>` with `Council round <round> for <slug>, seat <seat>. COURT: <court>.
-  Report: <path>.` and nothing more (never `round_dir`). `review`: `lead-review` as in solo; at Tier 4
+  Report: <path>.` and nothing more (never `round_dir`), with `model: <seat_model>` only when the profile is not
+  `sonnet-builds`. `review`: `lead-review` as in solo, with `model: <review_model>` only when the profile is not
+  `sonnet-builds`; at Tier 4
   two dispatches, `model: <top_model>` writing `review-top.attempt-<k>.md` and `model: <second_model>`
   writing `review-second.attempt-<k>.md`, the second told to probe concurrency, security and migration
   safety. Then `advance --stamp <S> --ingest`. A seat still listed is re-dispatched once with its

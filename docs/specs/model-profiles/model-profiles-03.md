@@ -1,8 +1,8 @@
 ---
 story: model-profiles-03
 spec: model-profiles
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus # owner, 2026-10-18 approval: framework code this spec moves off Sonnet
@@ -76,5 +76,10 @@ pattern); the scout report's `ysk-offer.sh` lines (owner-language detection from
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- `.claude/commands/vulyk-models.md`: new quiz; plain Bash calls, no `!` injection (injection-check clean).
+- `.claude/hooks/session-start-brief.sh`: first-run line only on `--chosen` exit 1; missing script or any other exit prints nothing.
+- `tests/maintenance.test.sh`: `brief_of` points `CLAUDE_CONFIG_DIR` at a temp folder; 6 new cases (line once, gone after --set, no script, exit 3, exit 2, hook exit 0).
+- Surprise: the descriptions cap sat at exactly 4623 B, so any new command broke it; raised to 4983 B (+360 B, the new description), commented as paid by requirement 6. Owner should confirm this cap raise.
+- Credits clause keys on `--recommend` not naming `opus-builds` (premium = carries Fable), not on the plan name `max`, so premium Team seats are not told they pay credits.
 
 ## Findings
