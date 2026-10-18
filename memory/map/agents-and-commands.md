@@ -26,7 +26,8 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   `NEEDS_CONTEXT` naming them, worker-code.md:28-29), after three failures `## Findings` + `returned: WALL`; other exits →
   `NEEDS_CONTEXT`. Never edit `status:`, never stash/checkout/reset/clean.
 - **queen-planner** (`opus`, `high`, `maxTurns:40`; Read/Write/Grep/Glob) - Tier 3-4 plan + stories
-  (`model: sonnet` each, `opus` only for judgment-heavy work: queen-planner.md:21, ADR-015). Never
+  (no `model:` line by default; `opus` for judgment-heavy work; `haiku` for routine stories only when the
+  brief says `routine stories: model: haiku`: queen-planner.md:21-26, ADR-015/020). Never
   reads source; never plans repairs (`cmd_repair` writes `model: opus`). T4 dispatch: `<top_model>`.
 - **lead-architect** (`opus`, `high`, `maxTurns:30`) - T4 planning and after a story's second miss;
   every decision an ADR. Dispatched with `model: <top_model>`.
@@ -42,6 +43,14 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   `queen-planner` at T3-4, `lead-architect` at T4); stories; `wave-check.sh` + `trace-check.sh`;
   `drone-coverage` T3-4. T1 → `cycle.sh briefed --mode mini-brief` + `/vulyk-build`. T2-4 stop for
   `**Approved:**` (`--go` opts out).
+- **`/vulyk-models`** (0.30.0) - the quiz: `model-profile.sh --recommend` + `--explain`, one
+  `AskUserQuestion` (recommended profile first), then `--set <name>`; `claude -p` prints a one-line
+  pointer and writes nothing. Offered once by the SessionStart brief while no profile is chosen.
+- **Profile-aware dispatch** (ADR-020, scripts.md): `/vulyk-plan` (planner model at Tier 3; `--role routine`
+  = `haiku` puts `routine stories: model: haiku` in the brief), `/vulyk-build` (:44-51 passes `worker_model`,
+  `review_model`, `seat_model` to the Workflow; solo `lead-review` and seats via `--role review|seat`;
+  a retry is `<top_model>`, `opus` when that is also the reviewer) and `/vulyk-review` (:25-28) pass `model:`
+  only when the profile is not `sonnet-builds`; otherwise no model parameter and frontmatter applies.
 - **`/vulyk-build`** - `**Tier:**` picks the path. Solo T1-2: loop `cycle.sh advance`; `build:W` → the
   Queen implements each story, `close-story --commit`; `dispatch:review` → one `lead-review`, then
   `advance --ingest`, one re-dispatch on rejection. Hive T3-4 (vulyk-build.md:35): step 1 runs `bash scripts/top-model.sh --floor`
@@ -89,4 +98,4 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   (`scripts/injection-check.sh`, scripts.md). gc/evolve/map are prompted by the SessionStart
   `maintenance due: ...` line (scripts.md).
 
-last-verified: 2026-10-16 (v0.28.0, ADR-013, ADR-015)
+last-verified: 2026-10-18 (v0.30.0, ADR-013, ADR-015, ADR-020)

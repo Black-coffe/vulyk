@@ -81,15 +81,17 @@ attempts run on Sonnet, a repair follows a RED), `wave: <max+1>`; `## Requiremen
 anchored review lines; `## Files`/`## Verification` = union over done stories.
 
 ## The Workflow driver (`.claude/workflows/vulyk-cycle.js`)
-Args `{spec, stamp, top_model, second_model}` (`TOP` :43). Shell only via `cycle-clerk`. Starts
-`advance --claim`; `build:W` → workers in parallel (model = the story's, `TOP` on a retry), then `advance`;
+Args `{spec, stamp, top_model, second_model}` (`TOP` :43) plus `worker_model`, `review_model`,
+`seat_model` (:46-48; passed only off `sonnet-builds`, absent = agent frontmatter). Shell only via
+`cycle-clerk`. Starts `advance --claim`; `build:W` → workers in parallel (model = the story's, else
+`WORKER`; on a retry `RETRY` :50 = `TOP`, but `opus` when `TOP` is also `REVIEW`), then `advance`;
 a story still listed is a miss, the second stops the run. `dispatch:` → seats in parallel, each told its
-report path; Tier 4 review = two `lead-review`; then `advance --ingest`. `CAPS` :28 mirrors `maxTurns`;
+report path (`review` on `REVIEW`, blind seats on `SEAT`); Tier 4 review = two `lead-review`; then `advance --ingest`. `CAPS` :28 mirrors `maxTurns`;
 `release` in `finally`.
 
 ## Tests
 `tests/cycle.test.sh`, `council.test.sh` (`--quick`), `driver.test.sh`, `e2e.test.sh`, `solo.test.sh`,
-`telemetry.test.sh` run in `.github/workflows/ci.yml`; `maintenance.test.sh` (budget, due brief, evolve
+`telemetry.test.sh` run in `.github/workflows/ci.yml` (`driver.test.sh` covers the profile args); `maintenance.test.sh` (budget, due brief, evolve
 ledger) is NOT in ci.yml (run by hand / the spec's integration gate).
 
 ## Telemetry consumers
@@ -97,4 +99,4 @@ ledger) is NOT in ci.yml (run by hand / the spec's integration gate).
 the changed set (scope-check.sh:93), so it never reads as out of scope. See
 `memory/map/scripts.md`.
 
-last-verified: 2026-10-16 (v0.28.0, ADR-013, ADR-015)
+last-verified: 2026-10-18 (v0.30.0, ADR-013, ADR-015, ADR-020)

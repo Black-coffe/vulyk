@@ -28,18 +28,28 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `evolve-ledger.py <root> <verb>` - owns `memory/stats/evolve.jsonl`. Verbs: `add` (`COMPONENTS` :29),
   `run`, `resolve` (tip in default branch = accepted; branch gone, unmerged = rejected; present,
   unmerged = `pending`, no row), `window`, `last`, `pending`.
-- `.claude/hooks/session-start-brief.sh` - map line; bootstrap offer (:15-23) while the Profile holds
+- `.claude/hooks/session-start-brief.sh` - map line; `[VULYK] model profile not chosen` line when
+  `model-profile.sh --chosen` exits 1 (:25-29; Queen runs `/vulyk-models` once after the task); bootstrap offer (:15-23) while the Profile holds
   `<fill in`; when due, `maintenance due: ...` (Queen runs the Skills after the owner's task). gc = any
   stub or >=10 raw learnings; evolve = no `"kind":"run"` row or last run >7 days, plus a newer
   `council.jsonl` row, no unmerged `vulyk/evolve-*`; map = `memory/map/.stale`. grep/awk, not python.
 - `vulyk-update.sh` (hands off to `install.sh --upgrade`); `release-check.sh`; `state.sh`
   (`.claude/state.json`); `git-hooks/post-merge` (stamps `memory/map/.stale`).
-- `top-model.sh` (0.26.2) - `--help` prints lines 2-42. Gate model order: `VULYK_TOP_MODEL` env, then
-  `TOP_MODEL = <alias>` in ONE file, `CONST_FILE` :121-122 (`CLAUDE.vulyk.md` if it exists, else
-  `CLAUDE.md`; `constitution_pin` :123 reads only it, so prose in a project's own CLAUDE.md never pins),
-  then the plan, then opus. Plan-branch hints name `${CONST_FILE##*/}` (:146, :148).
-  `--floor` (:207; exit 1 + `below floor` lines): `below()` :214; gate line :237 only when SOURCE is
-  constitution or env; provider pin check :279. `/vulyk-build` Hive step 1 gates on `--floor`.
+- `model-profile.sh` (0.30.0, ADR-020) - which family takes each role on THIS machine. One word
+  (`opus-builds|sonnet-builds|economy`) in `${CLAUDE_CONFIG_DIR:-~/.claude}/vulyk-model-profile`; only
+  `--set` writes it, installers never touch it. Modes: none = print active; `--chosen` (exit 0 known, 1
+  not); `--set <n>`; `--role <role>` (roles `queen planner review seat worker routine gate architect
+  review-second`); `--recommend` = `<profile> <plan>` (premium plan -> opus-builds); `--explain [n]`.
+  No file or an unknown word reads as `sonnet-builds` (fail open). Exit 2 usage. `gate`/`architect`/
+  `review-second` ask `top-model.sh` for the active profile, so pins still win.
+- `top-model.sh` (0.30.0) - `--help` prints lines 2-45. New `--plan` -> `<plan> <premium|standard>`
+  (premium = max, premium-seat). Gate order: `VULYK_TOP_MODEL` env, then `TOP_MODEL = <alias>` in ONE
+  file, `CONST_FILE` :125-126 (`CLAUDE.vulyk.md` if it exists, else `CLAUDE.md`; `constitution_pin` :127
+  reads only it), then the model profile (:135-154: opus-builds -> fable, economy -> opus; sonnet-builds
+  falls through), then the plan, then opus. `second_reviewer` :185: off sonnet-builds it is sonnet.
+  `--explain` "dispatched for" line varies by profile (:218-222). `--floor` (exit 1 + `below floor`
+  lines): gate line only when SOURCE is constitution or env; provider pin check ~:301. `/vulyk-build`
+  Hive step 1 gates on `--floor`.
 - `defects-check.sh [<arg>]` (0.23; cards `docs/defects/*.md`, rules `README.md`) - no arg = audit
   (each effective-`block` card's `check:` must fail on every fixture, else `BLIND`); `<arg>` = gate
   (runs every `block`+`check` card; non-zero = `RED`). Exit 0 green, 1 red, 2 usage/no library/no
@@ -63,7 +73,7 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 ## Tests
 `tests/maintenance.test.sh` (not in ci.yml): caps, brief due logic, ledger. `tests/defects.test.sh`:
 `defects-check.sh`. `tests/telemetry.test.sh`: `floorcheck`, `tmrun` (top-model.sh gate pins).
-`tests/mods.test.sh`: the pulse mod only.
+`tests/mods.test.sh`: the pulse mod only. `tests/model-profile.test.sh`: the resolver (0.30.0).
 
 ## install.sh - the upgrade contract
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution
@@ -89,4 +99,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - Retired framework files are removed unless edited (`retired_edited` :1109); `unwire_hook` :846.
 
-last-verified: 2026-10-16 (v0.28.0)
+last-verified: 2026-10-18 (v0.30.0)
