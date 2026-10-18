@@ -991,8 +991,11 @@ def mode_measure(argv):
     if turns:
         content = (turns[-1].get("message") or {}).get("content")
         if isinstance(content, list):
+            # A Workflow agent with a schema returns through the StructuredOutput tool, not text.
             last_has_text = any(
-                isinstance(b, dict) and b.get("type") == "text" and b.get("text")
+                isinstance(b, dict) and (
+                    (b.get("type") == "text" and b.get("text"))
+                    or (b.get("type") == "tool_use" and b.get("name") == "StructuredOutput"))
                 for b in content)
         elif isinstance(content, str):
             last_has_text = bool(content.strip())

@@ -2,6 +2,13 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [Unreleased]
+
+### Fixed
+- **`agent_empty` no longer fires on a Workflow agent that returned through `StructuredOutput`** (evolve
+  2026-10-19): 22 of 22 rows in the week were such agents, from one study run; `handoff.py measure` now counts
+  that call as a return, and any other last tool call is still an empty one.
+
 ## [0.30.0] - 2026-10-18
 
 The owner picks who builds and who judges, once per machine.
