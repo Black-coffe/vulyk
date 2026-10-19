@@ -206,6 +206,9 @@ All "per ADR-021": the planner's concrete shape; the Queen reconciles with the A
 
 ## Plan deltas
 
+- 2026-10-19 · story 05 · `tests/telemetry.test.sh` added to `## Files`: it pins the 0.19 inject matcher and the count of
+  defect hook entries, which story 05 changes by design (worker NEEDS_CONTEXT; the recon note already allowed the suite).
+
 **Approved:** Andrei, 2026-10-19 («Да, утверждаю (Рекомендую)»)
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/rules-tree
