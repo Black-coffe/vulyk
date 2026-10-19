@@ -1,6 +1,7 @@
 # ADR-018: Every red defect finding splits new from old by git blame
 
 - Status: accepted (owner, 2026-09-30)
+- Amended: 2026-10-19, amended by ADR-021: rules-tree
 - Date: 2026-09-29
 - Spec: docs/specs/hindsight-harvest (v0.23.0)
 

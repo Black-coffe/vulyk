@@ -10,7 +10,7 @@ agents for large work and integrates. Procedures live in the `/vulyk-*` commands
 3. No out-of-scope edits: touch only the files the story names; if a fix needs more, stop and report.
 4. Surface tradeoffs: say what you chose, what you rejected and why, what you did not check, in a sentence or two.
 5. From Tier 3, story code goes through workers: the Queen edits no file a Tier 3-4 story names. At Tier 0-2 she builds herself.
-6. An owner's correction joins its defect class in `docs/defects/` as a verbatim quote. A class code can check gets a failing `check:` with the original case and a neighbour-form fixture in the same work (inside a Tier 3-4 story naming the file: the next repair story); a repeated class without one is debt that fails `scripts/defects-check.sh`. A check that only warns is not a check.
+6. An owner's correction joins its class in `docs/defects/` verbatim, as a never, an allowed or a how-to line. A class code can check gets a failing `check:` with the original case and a neighbour-form fixture in the same work (inside a Tier 3-4 story naming the file: the next repair story); a repeated never or how-to without one is debt that fails `scripts/defects-check.sh`. A check that only warns is not a check.
 
 Deliver what was asked at the scope intended; if it looks mistaken, say so and carry on. Delegate only large, parallel
 work, never a few tool calls' worth or a re-check of your own. Size plans, stories and reports to the task. Do not tell
@@ -71,8 +71,6 @@ Quiet variants only: their output is resent every turn. A story's `## Verificati
 <!-- VULYK:COMMANDS:START -->
 <!-- install.sh swaps this block; keep each marker on its own line. -->
 
-> VULYK's own rows: `/vulyk-bootstrap` replaces them; until then a green here proves nothing.
-
 | Purpose | Command |
 |---|---|
 | Shell syntax | `git ls-files '*.sh' \| xargs -n1 bash -n` |
@@ -87,7 +85,6 @@ Quiet variants only: their output is resent every turn. A story's `## Verificati
 | Anomaly telemetry contract tests | `bash tests/telemetry.test.sh` |
 | Defect library gate | `bash scripts/defects-check.sh [<arg>]` |
 | Defect and hook tests | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
-| Merge tests | `bash tests/constitution.test.sh` |
 | Maintenance | `bash tests/maintenance.test.sh` |
 | Pulse mod | `bash tests/mods.test.sh` |
 | Model profile tests | `bash tests/model-profile.test.sh` |
@@ -107,3 +104,4 @@ walls hit; open questions to the owner. Drop file contents, diffs, command outpu
 Specs, stories, study reports: `docs/specs/<slug>/` · decisions: `docs/adr/` · domain notes: `docs/wiki/` · path rules: `.claude/rules/`.
 `memory/memory.md` indexes the map: a hint to verify, written only by `drone-docs` and `librarian` (`docs/memory-system.md`).
 Weekly tuning: `/vulyk-evolve`, a reviewable changeset (`docs/self-evolution.md`).
+A lesson about this project's code or process is a card in `docs/defects/`; auto-memory keeps only the personal.

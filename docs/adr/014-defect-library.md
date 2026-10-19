@@ -1,6 +1,7 @@
 # ADR-014: Owner corrections become defect classes with failing checks
 
 - Status: accepted (owner, 2026-09-27: «Одобряю. Собирай сам»)
+- Amended: 2026-10-19, amended by ADR-021: rules-tree
 - Date: 2026-09-27 · Version: 0.19.0
 - Evidence:
   - grill `docs/grill/2026-09-27-self-learning-corrections.md` (D1–D16 and its adversarial review);

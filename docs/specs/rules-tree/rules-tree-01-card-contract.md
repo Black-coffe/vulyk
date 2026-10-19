@@ -1,8 +1,8 @@
 ---
 story: rules-tree-01
 spec: rules-tree
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 model: opus
@@ -72,5 +72,18 @@ states the format contract. The inject and intake hooks switch to the parser in 
 `bash scripts/defects-check.sh`
 
 ## Implementation notes
+- `.claude/hooks/defects_lib.py` (new): discovery (root + one area level, `fixtures/`/dot dirs skipped, README/INDEX any case), frontmatter by `
+` split so line numbers match git blame, `fm_scalar`/`fm_list` lifted verbatim from the hooks' shared block, `glob_rx` lifted from inject.
+- Card is a plain attribute object (`vars(card)` = the JSON dump); a dict subclass was dropped because `card.keys` collided with `dict.keys`.
+- Card fields beyond the contract, needed by the gate and story 03: `exception` (frontmatter ref, `.md` stripped, null when absent), `scopes`, `allowed_dates`, `fm_lines` (key -> line), `lines` (line numbers per section incl. `quotes`).
+- `id` = file stem (contract), not frontmatter `id:` as the old gate did; identical on every card whose `id:` equals its stem (all of VULYK's and all test cards).
+- `allowed_except(line)` not built: ADR-021 reconciled the exception to the `exception:` frontmatter key, exposed as `card.exception`.
+- `effective_status(card)` returns `(status, reason)`; the gate keeps its two message forms on top of the reason.
+- `tool:` is `re.fullmatch` on tool_name per the plan contract; ADR-021's example `tool:^(WebFetch|mcp__)` would not match `mcp__x` under it (README shows `tool:mcp__.*`).
+- `scripts/defects-check.sh`: imports the lib from `$(dirname "$0")/../.claude/hooks` (exit 2 if missing), git calls use `card.path`, findings print `card.ref`, new `X`/`DUPLICATE` record and `N duplicate ids` verdict part; `listval` and the hand-rolled loops removed; help range 2,35.
+- Byte-identical check: old vs new gate output on VULYK's own library diffed equal; the new test file run against the old gate fails exactly the 4 folder/duplicate gate cases and passes every pre-existing case.
+- `tests/defects.test.sh`: `mkrepo` copies the lib; new sections area folders, duplicate ids, parser dump (exception, passes, tool, three-language sections, dates, specificity).
+- `docs/defects/README.md`: CRLF working copy kept; added Areas and refs, branch table with aliases, `exception`/`passes`/`tool:` rows, pointer to the generated INDEX.md above the untouched `## Cards` table.
 
 ## Findings
+- close-story exit 4 on a foreign untracked file (`docs/grill/2026-10-19-software-factory.md`, written by a parallel session); the Queen hid it in `.git/info/exclude` and closed the story.

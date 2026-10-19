@@ -30,6 +30,7 @@ expect_absent() { # expect_absent <label> <needle>   (reads the output to judge 
 
 CONSTITUTION_MAX_BYTES=7168
 CONSTITUTION_MAX_LINES=120
+RULES_ALWAYS_MAX_LINES=40      # a .claude/rules/*.md without paths: loads in every session (rules-tree, ADR-021)
 DESCRIPTIONS_MAX_BYTES=4983     # agents 2 907 + commands 1 716, measured 2026-09-29; +360 /vulyk-models voice triggers (model-profiles requirement 6, approved plan)
 
 size_of() { tr -d '\r' < "$1" | wc -c | tr -d ' '; }
@@ -100,6 +101,24 @@ grep -qF 'git show HEAD:.claude/vulyk-version' "$SRC/.claude/commands/vulyk-upda
 desc="$(cat "$SRC"/.claude/agents/*.md "$SRC"/.claude/commands/*.md | tr -d '\r' | grep '^description:' | wc -c | tr -d ' ')"
 if [ "$desc" -le "$DESCRIPTIONS_MAX_BYTES" ]; then ok "agent + command descriptions within $DESCRIPTIONS_MAX_BYTES B ($desc B)"
 else bad "agent + command descriptions $desc B > $DESCRIPTIONS_MAX_BYTES B"; fi
+
+# rules_always_over <dir> - prints each path-less rules file over RULES_ALWAYS_MAX_LINES (one with paths: is exempt)
+rules_always_over() {
+  local f
+  for f in "$1"/*.md; do
+    [ -f "$f" ] || continue
+    tr -d '\r' < "$f" | sed -n '1{/^---$/!q;d};/^---$/q;/^paths:/{p;q}' | grep -q . && continue
+    [ "$(lines_of "$f")" -gt "$RULES_ALWAYS_MAX_LINES" ] && echo "$(basename "$f") $(lines_of "$f") lines"
+  done
+  return 0
+}
+mkdir -p "$T/rules"; { for i in $(seq 1 41); do echo "- rule $i"; done; } > "$T/rules/always.md"
+cp "$SRC/.claude/rules/README.md" "$T/rules/README.md"; { for i in $(seq 1 41); do echo "- scoped $i"; done; } >> "$T/rules/README.md"
+over="$(rules_always_over "$T/rules")"
+case "$over" in "always.md 41 lines") ok "a 41-line path-less rules file fails the $RULES_ALWAYS_MAX_LINES-line cap; paths: is exempt" ;;
+  *) bad "the always-loaded rules cap misjudged the fixture: '$over'" ;; esac
+over="$(rules_always_over "$SRC/.claude/rules")"
+[ -z "$over" ] && ok "path-less rules files within $RULES_ALWAYS_MAX_LINES lines" || bad "always-loaded rules over $RULES_ALWAYS_MAX_LINES lines: $over"
 
 # --- due maintenance: the SessionStart brief (auto-maintenance-02) ---------------------------------
 BRIEF_HOOK="$SRC/.claude/hooks/session-start-brief.sh"
@@ -414,6 +433,26 @@ PY
 expect "vulyk-handoff: the state view injection has its allowed-tools prefix" 'granted bash "${CLAUDE_PROJECT_DIR}/scripts/state.sh"' < "$T/grants"
 expect "vulyk-handoff: the dump injection has its allowed-tools prefix" 'granted bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/handoff.sh" dump' < "$T/grants"
 expect_absent "vulyk-handoff: no injection lacks a grant" "NOT GRANTED" < "$T/grants"
+
+echo "--- memory-triage.sh lists private memory and writes nothing (rules-tree ask 11)"
+MC="$T/mtcfg"; MSLUG="$(git -C "$SRC" rev-parse --show-toplevel | sed 's#[:/\\]#-#g')"
+MD="$MC/projects/$MSLUG/memory"; mkdir -p "$MD"
+printf -- '---\nname: a\nmetadata:\n  type: feedback\n---\n\n# Push only after the remote check\nbody\n' > "$MD/fb-push.md"
+printf '# A loose note\n\ntype: not-frontmatter\n' > "$MD/loose.md"
+printf -- '- [Push](fb-push.md) - push rule\n- [Loose](loose.md) - a note\n- [Other](other.md) - kept\n' > "$MD/MEMORY.md"
+( cd "$SRC" && CLAUDE_CONFIG_DIR="$MC" bash scripts/memory-triage.sh ) > "$T/mt" 2>&1
+expect "memory-triage: a feedback file lists with its type and heading" "$(printf 'fb-push.md\tfeedback\tPush only after the remote check')" < "$T/mt"
+expect "memory-triage: a file without frontmatter lists with type -" "$(printf 'loose.md\t-\tA loose note')" < "$T/mt"
+expect_absent "memory-triage: MEMORY.md is not a row" "MEMORY.md" < "$T/mt"
+[ "$(grep -c . "$T/mt")" -eq 2 ] && ok "memory-triage: exactly two rows" || bad "memory-triage: expected 2 rows, got $(cat "$T/mt")"
+bash "$SRC/scripts/memory-triage.sh" "$T/no-such-dir" > "$T/mt-absent" 2>&1; echo "exit=$?" >> "$T/mt-absent"
+expect "memory-triage: an absent dir says so" "no private memory: $T/no-such-dir" < "$T/mt-absent"
+expect "memory-triage: an absent dir exits 0" "exit=0" < "$T/mt-absent"
+bash "$SRC/scripts/memory-triage.sh" --index-lines "$MD/MEMORY.md" "$MD/fb-push.md" loose.md > "$T/mt-idx" 2>&1
+expect "memory-triage --index-lines: names the moved file's line" "[Push](fb-push.md)" < "$T/mt-idx"
+expect "memory-triage --index-lines: takes a bare file name" "[Loose](loose.md)" < "$T/mt-idx"
+expect_absent "memory-triage --index-lines: leaves other lines out" "other.md" < "$T/mt-idx"
+[ "$(ls "$MD" | wc -l | tr -d ' ')" -eq 3 ] && ok "memory-triage: writes nothing" || bad "memory-triage wrote into $MD: $(ls "$MD")"
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

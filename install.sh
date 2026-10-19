@@ -1372,10 +1372,19 @@ wire_hook SessionEnd anomaly-scan.sh
 # The defect library (0.19, contract §3): intake on every prompt, the class's Never lines before
 # an edit or a command, and the per-session dedup cleared when /clear or compaction starts over.
 wire_hook UserPromptSubmit defect-intake.sh
-wire_hook PreToolUse defects-inject.sh 'Edit|Write|MultiEdit|NotebookEdit|Bash'
+# rules-tree: delivery widened to web, agent and MCP tools. py_wire ignores a changed matcher, so a
+# hive still on the 0.19 matcher is unwired and rewired; a matcher the owner set by hand is kept.
+INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*'
+if grep -qE '"matcher"[[:space:]]*:[[:space:]]*"Edit\|Write\|MultiEdit\|NotebookEdit\|Bash"' \
+     "$DEST/.claude/settings.json" 2>/dev/null; then
+  unwire_hook PreToolUse defects-inject.sh
+fi
+wire_hook PreToolUse defects-inject.sh "$INJECT_MATCHER"
 wire_hook SessionStart defects-inject.sh '' reset
 # Claude Code's built-in "You should know" mod is offered, never switched on: ysk-offer.sh (0.29.0).
 wire_hook SessionStart ysk-offer.sh
+# rules-tree: the owner's answers in AskUserQuestion windows reach the intake (decision or quote).
+wire_hook PostToolUse defect-intake.sh AskUserQuestion answer
 unwire_ysk
 wire_permissions
 wire_ripgrep

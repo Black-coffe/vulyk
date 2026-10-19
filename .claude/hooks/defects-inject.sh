@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# PreToolUse hook (matcher Edit|Write|MultiEdit|NotebookEdit|Bash): before a tool touches a place a
-# `text` defect card names in `paths:`, put that card's "Never" lines in front of the agent.
-# Contract: docs/specs/self-learning/contract.md §1 (card format, effective status) and §3.
+# PreToolUse hook: before a tool touches a place a `text` defect card names in `paths:`, put that
+# card's Never (✗), How-to (→) and Allowed (✓) lines in front of the agent. Cards are read by
+# defects_lib.py beside this file. Contract: docs/specs/rules-tree/plan.md ## Contracts, Delivery.
 #
-#   defects-inject.sh          PreToolUse: match file_path / notebook_path / the Bash command line
+#   defects-inject.sh          PreToolUse: globs match file_path / notebook_path (Edit family) or the Bash
+#                              line's path tokens, `cmd:` the Bash line, `tool:` tool_name (any tool)
 #   defects-inject.sh reset    SessionStart: source compact|clear forgets what this session was shown
 #
+# At most $DEFECTS_INJECT_LINES (12) lines after the header, narrowest scope first, then the freshest
+# dated line; the rest fold into one `+N cards: <ref>, ...` line. An Allowed-only card whose
+# `exception:` does not name a prohibitive card matched here gets one `✓ withheld:` line instead.
 # Cards declaring block with a check: are not injected (the gate runs it, fixtures or not), revoked cards never are. Each card is shown once
 # per session_id + agent_id; state: .claude/state/defects/inject-<session>.txt under the repo root
 # ($CLAUDE_PROJECT_DIR, else the input's cwd).
@@ -28,127 +32,21 @@ exit 0
 #<py>
 import json, os, re, sys
 
-BUDGET = 4000
+sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[0])))
+from defects_lib import fixpath, fm_scalar, load_cards, parse_scope, scope_matches, specificity, allowed_date
+
+EDIT_FAMILY = ('Edit', 'Write', 'MultiEdit', 'NotebookEdit')
 
 
-# --- card parsing: kept identical to .claude/hooks/defect-intake.sh ---------------------------
-def fixpath(p):
-    # A Git Bash path (/e/Projects/x) handed to a native Windows python.
-    if os.name == 'nt':
-        m = re.match(r'^/([A-Za-z])(/.*)?$', p)
-        if m:
-            p = m.group(1) + ':' + (m.group(2) or '/')
-    return p
-
-
-def fm_scalar(v):
-    v = re.sub(r'\s+#(\s.*)?$', '', v or '').strip()
-    if len(v) >= 2 and v[0] == v[-1] and v[0] in '"\'':
-        v = v[1:-1]
-    return v
-
-
-def fm_list(v):
-    # `[a, b, "c, d", 'e']` -> list; a bare scalar -> one item. In double quotes \\ and \" unescape.
-    v = (v or '').strip()
-    if not v.startswith('['):
-        v = fm_scalar(v)
-        return [v] if v else []
-    items, i, n, cur = [], 1, len(v), ''
-    while i < n:
-        c = v[i]
-        if c in '"\'' and not cur.strip():
-            q, i, s = c, i + 1, ''
-            while i < n and v[i] != q:
-                if q == '"' and v[i] == '\\' and i + 1 < n and v[i + 1] in '\\"':
-                    s += v[i + 1]
-                    i += 2
-                    continue
-                s += v[i]
-                i += 1
-            items.append(s)
-            i += 1
-            while i < n and v[i] not in ',]':
-                i += 1
-            if i >= n or v[i] == ']':
-                break
-            i += 1
-            cur = ''
-            continue
-        if c in ',]':
-            items.append(cur.strip())
-            cur = ''
-            if c == ']':
-                break
-        else:
-            cur += c
-        i += 1
-    items.append(cur.strip())
-    return [x for x in items if x]
-
-
-def load_cards(d):
-    cards = []
-    for name in sorted(os.listdir(d)):
-        if not name.endswith('.md') or name.lower() == 'readme.md':
-            continue
-        try:
-            with open(os.path.join(d, name), encoding='utf-8', errors='replace') as f:
-                src = f.read()
-        except OSError:
-            continue
-        src = src.lstrip('﻿').replace('\r\n', '\n').replace('\r', '\n')
-        m = re.match(r'---[ \t]*\n(.*?)\n---[ \t]*(?:\n|$)', src, re.S)
-        if not m:
-            continue
-        fm = {}
-        for line in m.group(1).split('\n'):
-            if not line.strip() or line[:1].isspace() or line.startswith('#'):
-                continue
-            k, sep, v = line.partition(':')
-            if sep:
-                fm[k.strip().lower()] = v.strip()
-        cards.append((name[:-3], fm, src[m.end():]))
-    return cards
-# --- end of shared card parsing ---------------------------------------------------------------
-
-
-def injected_as(fm):
+def injected_as(card):
     # A card that DECLARES block with a check: is not injected, fixtures or not - the gate
     # (defects-check.sh <arg>) runs that check (0.19.1). Fixtures decide debt, not this.
     # Anything else not revoked - text, block without a check, an unknown status - is text.
-    st = fm_scalar(fm.get('status', '')).lower()
-    if st == 'revoked':
+    if card.status == 'revoked':
         return 'revoked'
-    if st == 'block' and fm_scalar(fm.get('check', '')):
+    if card.status == 'block' and card.check:
         return 'block'
     return 'text'
-
-
-def glob_rx(g):
-    # fnmatch semantics (`*` crosses `/`), plus `**/` = any number of directories, zero included.
-    out, i, n = '', 0, len(g)
-    while i < n:
-        if g.startswith('**/', i):
-            out, i = out + '(?:.*/)?', i + 3
-        elif g[i] == '*':
-            while i < n and g[i] == '*':
-                i += 1
-            out += '.*'
-        elif g[i] == '?':
-            out, i = out + '.', i + 1
-        elif g[i] == '[':
-            j = g.find(']', i + 2)
-            if j < 0:
-                out, i = out + '\\[', i + 1
-            else:
-                body = g[i + 1:j]
-                if body.startswith('!'):
-                    body = '^' + body[1:]
-                out, i = out + '[' + body.replace('\\', '\\\\') + ']', j + 1
-        else:
-            out, i = out + re.escape(g[i]), i + 1
-    return re.compile(out + r'\Z', re.I if os.name == 'nt' else 0)
 
 
 def rel(p, root):
@@ -169,25 +67,21 @@ def rel(p, root):
     return p
 
 
-def glob_hits(g, paths):
-    # A glob without `/` also matches the basename: `EDIT_*.json` finds edits/EDIT_3.json.
-    rx = glob_rx(g)
-    for p in paths:
-        if rx.match(p) or ('/' not in g and rx.match(p.rsplit('/', 1)[-1])):
-            return True
+def overlaps(a, b):
+    # The gate's CONFLICT overlap: an identical entry, or one card's glob matches the other's glob as a path.
+    for x in a.paths:
+        for y in b.paths:
+            if x == y or (parse_scope(x)[0] == parse_scope(y)[0] == 'glob'
+                          and (scope_matches(x, '', y, '') or scope_matches(y, '', x, ''))):
+                return True
     return False
 
 
-def never_lines(body):
-    m = re.search(r'^##[ \t]+(?:Never|Нельзя)\b[^\n]*\n(.*?)(?=^##[ \t]|\Z)', body, re.S | re.M)
-    out = []
-    for line in (m.group(1).split('\n') if m else []):
-        b = re.match(r'^[-*][ \t]+(.*\S)', line)
-        if b:
-            out.append(b.group(1))
-        elif out and line[:1].isspace() and line.strip():
-            out[-1] += ' ' + line.strip()
-    return out
+def budget():
+    try:
+        return max(1, int(os.environ.get('DEFECTS_INJECT_LINES') or 12))
+    except ValueError:
+        return 12
 
 
 def main():
@@ -221,8 +115,11 @@ def main():
     ti = data.get('tool_input') or {}
     if not isinstance(ti, dict):
         return
+    tool = data.get('tool_name') or ''
+    if not isinstance(tool, str):
+        return
     cmd, paths = '', []
-    if data.get('tool_name') == 'Bash':
+    if tool == 'Bash':
         cmd = ti.get('command') or ''
         if not isinstance(cmd, str):
             return
@@ -232,11 +129,12 @@ def main():
                 part = rel(part.strip('\'"`'), root)
                 if part:
                     paths.append(part)
-    else:
+    elif tool in EDIT_FAMILY:
         fp = ti.get('file_path') or ti.get('notebook_path') or ''
         if isinstance(fp, str) and fp:
             paths.append(rel(fp, root))
-    if not paths and not cmd:
+    # Any other tool has no path and no command line: only its `tool:` entries can match.
+    if not paths and not cmd and not tool:
         return
 
     agent = str(data.get('agent_id') or '')
@@ -246,43 +144,58 @@ def main():
     except OSError:
         seen = set()
 
-    hits = []
-    for cid, fm, body in load_cards(d):
-        if agent + '\t' + cid in seen or injected_as(fm) != 'text':
+    hits, nevers = [], []
+    for card in load_cards(d):
+        kind = injected_as(card)
+        if kind == 'revoked':
             continue
-        for g in fm_list(fm.get('paths', '')):
-            if g.startswith('cmd:'):
-                try:
-                    ok = bool(cmd) and re.search(g[4:], cmd) is not None
-                except re.error:
-                    ok = False
-            else:
-                ok = glob_hits(g, paths)
-            if ok:
-                hits.append((cid, fm_scalar(fm.get('title', '')), never_lines(body)))
-                break
+        spec = [specificity(g) for g in card.paths if scope_matches(g, tool, paths, cmd)]
+        if not spec:
+            continue
+        if card.never or card.howto:
+            # Every live prohibitive card on this target counts against an unlinked Allowed card,
+            # also one already shown or one the gate runs: the prohibition wins when unlinked.
+            nevers.append(card)
+        if kind == 'text' and agent + '\t' + card.ref not in seen:
+            dates = [x for x in map(allowed_date, card.quotes + card.allowed) if x]
+            hits.append((max(spec), max(dates) if dates else '', card))
     if not hits:
         return
+    # Narrowest scope first, then the freshest dated line, then ref.
+    hits.sort(key=lambda h: h[2].ref)
+    hits.sort(key=lambda h: (h[0], h[1]), reverse=True)
 
     text = 'Defect classes for this target (docs/defects/, text cards - no check guards them):'
-    rest = []
-    for cid, title, nev in hits:
-        block = '\n' + cid + ' — ' + (title or cid)
-        if nev:
-            block += ''.join('\n✗ ' + x for x in nev)
-        else:
-            block += '\n(no Never lines - read docs/defects/' + cid + '.md)'
-        if rest or len(text) + len(block) > BUDGET:
-            rest.append('docs/defects/' + cid + '.md')
-        else:
-            text += block
+    room, shown, rest = budget(), [], []
+    for _, _, card in hits:
+        lines = [card.ref + ' — ' + (fm_scalar(card.fm.get('title', '')) or card.ref)]
+        lines += ['✗ ' + x for x in card.never] + ['→ ' + x for x in card.howto]
+        if card.allowed:
+            clash = [n.ref for n in nevers if n.ref not in (card.ref, card.exception) and overlaps(card, n)]
+            if clash and not (card.never or card.howto):
+                lines.append('✓ withheld: ' + card.ref + ' conflicts with ' + clash[0] + ' (no exception:)')
+            else:
+                exc = ' (exception: ' + card.exception + ')' if card.exception else ''
+                lines += ['✓ ' + x + exc for x in card.allowed]
+        if len(lines) == 1:
+            lines.append('read docs/defects/' + card.path)
+        if rest or len(lines) > room:
+            if not shown and not rest:
+                lines = lines[:room]  # the narrowest card is never folded away whole
+            else:
+                rest.append(card.ref)
+                continue
+        text += ''.join('\n' + x for x in lines)
+        room -= len(lines)
+        shown.append(card.ref)
     if rest:
-        text += '\nAlso matched, not shown (budget) - read before editing: ' + ', '.join(rest)
-    # Listed-only cards count as shown too: the agent has the path, repeating it every call is noise.
+        text += '\n+%d cards: %s' % (len(rest), ', '.join(rest))
+    shown += rest
+    # Folded cards count as shown too: the agent has the refs, repeating them every call is noise.
     try:
         os.makedirs(os.path.dirname(state), exist_ok=True)
         with open(state, 'a', encoding='utf-8') as f:
-            f.write(''.join(agent + '\t' + h[0] + '\n' for h in hits))
+            f.write(''.join(agent + '\t' + r + '\n' for r in shown))
     except OSError:
         pass
     sys.stdout.write(json.dumps({'hookSpecificOutput': {

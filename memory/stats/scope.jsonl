@@ -194,3 +194,16 @@
 {"ts":"2026-10-18T19:57:47Z","story":"model-profiles-03","declared":3,"changed":3,"out_of_scope":0}
 {"ts":"2026-10-19T11:57:16Z","story":"ship-safety-01","declared":3,"changed":3,"out_of_scope":0}
 {"ts":"2026-10-19T12:22:40Z","story":"ship-safety-02","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-10-19T08:32:08Z","story":"rules-tree-02-constitution","declared":6,"changed":5,"out_of_scope":0}
+{"ts":"2026-10-19T08:37:21Z","story":"rules-tree-01-card-contract","declared":4,"changed":5,"out_of_scope":1}
+{"ts":"2026-10-19T08:37:53Z","story":"rules-tree-01-card-contract","declared":4,"changed":5,"out_of_scope":1}
+{"ts":"2026-10-19T08:38:41Z","story":"rules-tree-01-card-contract","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-10-19T08:41:54Z","story":"rules-tree-06-memory-triage","declared":7,"changed":7,"out_of_scope":0}
+{"ts":"2026-10-19T08:44:37Z","story":"rules-tree-04-delivery","declared":2,"changed":2,"out_of_scope":0}
+{"ts":"2026-10-19T08:46:18Z","story":"rules-tree-04-delivery","declared":2,"changed":2,"out_of_scope":0}
+{"ts":"2026-10-19T08:47:09Z","story":"rules-tree-03-gate-and-index","declared":6,"changed":6,"out_of_scope":0}
+{"ts":"2026-10-19T08:49:55Z","story":"rules-tree-05-capture","declared":5,"changed":5,"out_of_scope":0}
+{"ts":"2026-10-19T08:59:08Z","story":"rules-tree-05-capture","declared":5,"changed":5,"out_of_scope":0}
+{"ts":"2026-10-19T10:03:38Z","story":"rules-tree-05-capture","declared":6,"changed":6,"out_of_scope":0}
+{"ts":"2026-10-19T11:35:33Z","story":"rules-tree-07-repair-round-1","declared":26,"changed":6,"out_of_scope":0}
+{"ts":"2026-10-19T12:07:58Z","story":"rules-tree-07-repair-round-1","declared":26,"changed":6,"out_of_scope":0}

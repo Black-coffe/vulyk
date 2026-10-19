@@ -1,8 +1,8 @@
 ---
 story: rules-tree-05
 spec: rules-tree
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 2
@@ -36,6 +36,7 @@ matcher widened by unwire + rewire); `docs/hooks-reference.md` lists both defect
 - .claude/settings.json
 - install.sh
 - docs/hooks-reference.md
+- tests/telemetry.test.sh
 
 ## Non-goals
 - Do not write cards from the hook: it prints one line; the session writes. Do not invent an owner quote for a card
@@ -86,5 +87,26 @@ matcher widened by unwire + rewire); `docs/hooks-reference.md` lists both defect
 `bash tests/telemetry.test.sh`
 
 ## Implementation notes
+- `.claude/hooks/defect-intake.sh`: Python half rewritten; cards via `defects_lib.load_cards` (local parser copy removed); phrase pass, typed/paste auto passes, side-agent strip, `answer` mode; output stays `hookSpecificOutput.additionalContext`, capped at 600 chars.
+- Decision: the phrase scan reads the prompt with side-agent notes and harness blocks (task-notification, system-reminder, cross-session-message) cut, pastes and fences kept: harness text is model text, not an owner channel.
+- Decision: the paste pass uses correction words and card keys, not timecodes, so a pasted log stays silent (`intake.test.sh` paste case at the old :143-144 kept, relabelled); typed text wins over a paste.
+- Decision: several phrases in one prompt print one line per distinct branch; the phrase line takes precedence over the auto lines.
+- `answer`: an option label found in the answer is removed and printed as a decision; the leftover free text (quotes and separators trimmed) goes through phrase then typed passes; the phrase line carries the owner's text.
+- `.claude/settings.json`: inject matcher widened per plan; PostToolUse `AskUserQuestion` -> `defect-intake.sh answer`.
+- `install.sh`: unwire + rewire of the inject only when settings.json still holds the exact 0.19 matcher (keeps hand-set matchers, second upgrade byte-identical, telemetry suite's "no second unwiring" holds); `wire_hook PostToolUse defect-intake.sh AskUserQuestion answer` after ysk-offer.
+- `tests/intake.test.sh`: capture, side-agent, answer and `install.sh --upgrade` scratch-hive cases (upgrade case lives here, not in telemetry.test.sh); every new case fails against the HEAD hook (checked with a copy of the suite pointed at it).
+- `docs/hooks-reference.md`: rows for `defect-intake.sh` and `defects-inject.sh`.
+- `tests/telemetry.test.sh` (Queen ruling): `PRE_M` is the widened matcher; the broken-quote fixture and its `--check` repair count are 4 (the PostToolUse `answer` entry joins).
 
 ## Findings
+- NEEDS_CONTEXT (worker, 2026-10-19): `tests/telemetry.test.sh` (not in `## Files`) pins the old wiring, so the
+  verification line `bash tests/telemetry.test.sh` fails 12 checks after this story's intended change:
+  `:1392` `PRE_M='Edit|Write|MultiEdit|NotebookEdit|Bash'` (used at `:1396`, `:1404`, `:1638`, `:1688`) must become the
+  widened matcher `Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*`; `:1722` and the
+  `--check` count after it expect 3 defect entries to lose their closing quote, now 4 because the new PostToolUse
+  `defect-intake.sh answer` entry also matches `/defect/`. Question: add `tests/telemetry.test.sh` to `## Files`
+  (or a follow-up story) so these assertions move to the new wiring? Everything else is green: intake 67/67,
+  defects/inject suites, syntax rows. Note: the whole verification exceeds the default 540 s budget
+  (telemetry alone ~9 min); a close needs `VULYK_VERIFY_TIMEOUT` raised (1800 used).
+- Queen ruling, 2026-10-19: `tests/telemetry.test.sh` joins `## Files` (plan delta). Move only its assertions that pin
+  the old wiring (`PRE_M`, the defect-entry count) to the new matcher and the added `answer` entry; nothing else in it.

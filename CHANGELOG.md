@@ -4,6 +4,45 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-10-19
+
+The defect library becomes the project's rules tree: one library, three branches (spec `rules-tree`, ADR-021).
+
+### Added
+- **Area folders and three branches.** A card lives in `docs/defects/<id>.md` (area `general`) or one folder level down
+  in `docs/defects/<area>/<id>.md`, so every existing library stays valid. A card carries Never, Allowed and How-to
+  sections (`## Never` / `## Нельзя` / `## Не можна`, `## Allowed` / `## Можно` / `## Можна`, `## How-to` /
+  `## Как надо` / `## Як треба`). An Allowed line is dated in the owner's words and overrides a Never only through an
+  `exception:` link whose `passes:` fixture the Never check passes.
+- **`tool:<regex>` scope** in `paths:` beside globs and `cmd:`. One shared parser, `.claude/hooks/defects_lib.py`,
+  feeds the inject hook, the intake hook and the gate, so no loader is blind to a sub-folder.
+- **12-line delivery.** The inject hook prints at most `DEFECTS_INJECT_LINES` (default 12) lines per action, narrowest
+  scope first, then the freshest quote, with Never, How-to and Allowed lines, and lists the rest in one `+N cards` line.
+- **Three new gate findings and the Allowed counter.** `CONFLICT` (an Allowed and a Never card with overlapping scope
+  and no `exception:` link), `EXCEPTION` (a broken `exception:` link or `passes:` fixture) and `DUPLICATE` (an id used
+  twice); debt counts only Never and How-to repeats, a repeated Allowed is an `allowed repeats` counter line.
+- **`docs/defects/INDEX.md` and `scripts/defects-index.sh`** (generate, `--check`, `--grep`, `--counts`); a stale index
+  is red in the gate, `/vulyk-status` shows the counters.
+- **Capture channels.** An explicit phrase («внеси в запрет / правило / разрешение», UK and EN forms) in typed text or a
+  paste is an order to write the card now; an auto-found correction in typed text is filed at once with a report line
+  and «отмени»; one in a paste waits for the owner's yes (an optional `VULYK_DICTATION_TAG` skips the question); an
+  AskUserQuestion answer is heard by a PostToolUse `answer` mode; a side-agent note is never the owner's words.
+- **`.claude/rules/always.md`**, the one always-loaded rules file, capped at 40 lines in `tests/maintenance.test.sh`.
+- **`/vulyk-gc memory`**: a one-off triage of private auto memory into cards / personal / delete.
+  `scripts/memory-triage.sh` lists the files and writes nothing; the session shows one list, asks once, writes the cards
+  retold under `## Source` (never as owner quotes), runs `leak-check.sh` on them and deletes the moved and dropped files
+  with their `MEMORY.md` lines.
+- **ADR-021** records the rules tree; ADR-014, ADR-018 and ADR-019 carry an amendment line.
+
+### Changed
+- **Law 6** names the three branches; a new line under `## Where things live` sends project lessons to `docs/defects/`
+  and leaves auto memory for the personal.
+
+### Fixed
+- **A side-agent note is cut with its quoted lines under the new capture code**: the 0.31.0 evolve fix (header and
+  `>` lines) and the rules-tree rewrite (header paragraph) are merged into one pattern, so a relayed note whose body
+  sits in `>` lines after a blank line no longer reaches the correction passes.
+
 ## [0.31.0] - 2026-10-19
 
 Shipping is safe from git surprises: a conflict is found before the merge, and a story never lands on the wrong branch.

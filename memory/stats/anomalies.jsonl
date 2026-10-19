@@ -252,3 +252,6 @@
 {"v":1,"ts":"2026-10-17T06:28:34Z","code":"agent_empty","value":34,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"workflow-subagent","spec":"","story":"","ref":"agent:agent-ae3b2e6b3b3bfcebf.jsonl"}
 {"v":1,"ts":"2026-10-17T06:28:35Z","code":"agent_empty","value":26,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"workflow-subagent","spec":"","story":"","ref":"agent:agent-af202353fea24d938.jsonl"}
 {"v":1,"ts":"2026-10-17T06:28:38Z","code":"agent_empty","value":111,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"workflow-subagent","spec":"","story":"","ref":"agent:agent-af5955cad5bff585a.jsonl"}
+{"v":1,"ts":"2026-10-19T08:26:58Z","code":"agent_prefix_high","value":51384,"threshold":50000,"vulyk":"0.0.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-a005524a109c599cd.jsonl"}
+{"v":1,"ts":"2026-10-19T08:27:02Z","code":"agent_prefix_high","value":51777,"threshold":50000,"vulyk":"0.0.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-a891d834c7634f2a1.jsonl"}
+{"v":1,"ts":"2026-10-19T08:27:03Z","code":"agent_prefix_high","value":51783,"threshold":50000,"vulyk":"0.0.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-aa0ff0fd2fc83ee84.jsonl"}

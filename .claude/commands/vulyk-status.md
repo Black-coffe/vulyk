@@ -1,5 +1,5 @@
 ---
-description: Hive dashboard - driver, council numbers, token spend per spec, unpushed merges, open stories, memory freshness, skill stats, budget posture
+description: Hive dashboard - driver, council, defects, spec token spend, unpushed merges, open stories, memory freshness, skill stats, budget posture
 argument-hint: []
 ---
 
@@ -35,23 +35,25 @@ Produce the hive status report. Read only metadata; this command stays cheap.
    when `memory/stats/council.jsonl` holds a `GREEN` row for the slug it names
    (`grep -F "\"spec\":\"<slug>\"" memory/stats/council.jsonl | grep -q '"verdict":"GREEN"'`). Print
    `council: <specs> specs · median <n> rounds to green · <n> escalations · <n> escaped defects`.
-3. Token spend. `python scripts/token-report.py . --since "$(date -u -d '-14 days' +%Y-%m-%d)"` and
+3. Defects. If `docs/defects/` holds no card, print `defects: no library`; otherwise print
+   `defects: ` followed by the output of `bash scripts/defects-index.sh --counts`.
+4. Token spend. `python scripts/token-report.py . --since "$(date -u -d '-14 days' +%Y-%m-%d)"` and
    print its per-spec lines as-is: raw and weighted tokens, dispatches, rounds. The `totalTokens` a
    Workflow run prints is a sum of final contexts, not spend; quote this report instead.
-4. Stories. Run `bash scripts/state.sh` and read `.claude/state.json` into a table: spec, `stage`, story,
+5. Stories. Run `bash scripts/state.sh` and read `.claude/state.json` into a table: spec, `stage`, story,
    status, tier. `stage` is the cycle confirmation reached (`docs/cycle.md`); `study` marks a document
    deliverable; a spec with a council round shows `04-council:<verdict>`; a `PAUSE` file shows `paused`.
    The view is derived: a story file that disagrees wins. Statuses are `todo | done | blocked`; older
    specs may still carry `in-progress`. Report `unrecognised` counts out loud.
-5. Memory freshness. `memory/map/*` `last-verified` dates against recent git churn in their modules
+6. Memory freshness. `memory/map/*` `last-verified` dates against recent git churn in their modules
    (`git log --since` per path); flag stale ones, and a `.stale` flag left by `scripts/git-hooks/post-merge`.
-6. Maintenance. Print the brief's due lines: `echo '{}' | bash .claude/hooks/session-start-brief.sh | grep -E 'maintenance due|waits for'`, else `maintenance: nothing due`.
-7. Skill usage. Top and bottom entries of `memory/stats/skills.json`; name the candidates the next
+7. Maintenance. Print the brief's due lines: `echo '{}' | bash .claude/hooks/session-start-brief.sh | grep -E 'maintenance due|waits for'`, else `maintenance: nothing due`.
+8. Skill usage. Top and bottom entries of `memory/stats/skills.json`; name the candidates the next
    `/vulyk-evolve` will examine.
-8. Budget posture. Show `bash scripts/top-model.sh --explain`: the gate model, the plan it came from,
+9. Budget posture. Show `bash scripts/top-model.sh --explain`: the gate model, the plan it came from,
    the Tier 4 pairing, and whether the Queen's session is pinned to `opus`. On a long session,
    recommend `/vulyk-handoff`, then `/clear`.
-9. Context hygiene, only on a fresh session: suggest `/context` to see what the session starts with,
+10. Context hygiene, only on a fresh session: suggest `/context` to see what the session starts with,
    and `/mcp` to switch off servers this project never calls.
 
 Format: compact tables, no padding. End with the single most useful next action.

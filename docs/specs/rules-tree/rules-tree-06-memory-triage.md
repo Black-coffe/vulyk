@@ -1,8 +1,8 @@
 ---
 story: rules-tree-06
 spec: rules-tree
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 2
@@ -80,5 +80,12 @@ pointing at ADR-021.
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- scripts/memory-triage.sh (new): lister + `--index-lines`; slug from `git rev-parse --show-toplevel` with `[:/\]` → `-`; `type:` read inside the leading frontmatter, nested keys too (real memory files keep it under `metadata:`); reads only.
+- tests/maintenance.test.sh: memory-triage cases (two rows with types, MEMORY.md skipped, absent dir exit 0, `--index-lines` exact lines, nothing written).
+- .claude/commands/vulyk-gc.md: `argument-hint: [memory]`, a 10-step `memory` mode run by the main session; no subagent.
+- CHANGELOG.md: `[Unreleased]` entry for the whole spec, undated, no VERSION bump.
+- ADR-014/018/019: one `- Amended: 2026-10-19, amended by ADR-021: rules-tree` line in the status block (none existed).
+- Surprise: real private memory files have no `#` heading, so the heading column is mostly `-` there; the contract asks for the heading only, kept as is.
+- `scripts/defects-index.sh` is referenced in the protocol but lands in story 03 of this wave.
 
 ## Findings

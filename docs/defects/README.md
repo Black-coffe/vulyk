@@ -2,9 +2,19 @@
 
 One card per **class** of work the owner rejected - not per place it happened. A card holds the owner's
 verbatim words, the cause, what is never done again and, when code can see the class, a command that fails
-on it. Read the cards of your area before you work there. This README is the index; it is never a card.
+on it. Read the cards of your area before you work there. This README is the format contract; it is never a card.
 
-## A card: `docs/defects/<id>.md`
+## Areas and refs
+
+A card is `docs/defects/<id>.md` (area `general`) or `docs/defects/<area>/<id>.md`, one folder level, the
+folder named after an area of the project (`pay/`, `video/`). `fixtures/`, at the root or inside an area, is never
+a card folder; `README.md` and `INDEX.md` (any case) are never cards. The `id` is the file stem and is unique
+across the whole library: two cards with one id are `DUPLICATE`, always red. A card's **ref** is `<id>` for a
+root card and `<area>/<id>` for a foldered one; findings, `exception:` and the index name cards by ref. One
+parser reads the library for the gate and the hooks: `.claude/hooks/defects_lib.py`
+(`python3 .claude/hooks/defects_lib.py docs/defects` prints one JSON object per card).
+
+## A card: `docs/defects/<id>.md` or `docs/defects/<area>/<id>.md`
 
 ```markdown
 ---
@@ -40,10 +50,22 @@ Frontmatter is plain `key: value` lines; a list is `[a, b, "c"]`. A missing fiel
 | `check` | a command run from the repo root that exits non-zero on this defect; the first `<...>` token (`<arg>`) is replaced by the argument or fixture path |
 | `fixtures` | files the check must fail on: the original case first, then neighbour forms |
 | `keys` | words that tie an owner remark to this class |
-| `paths` | where the class lives: path globs from the repo root (`**` allowed), or `cmd:<regex>` matched in a Bash command line |
+| `paths` | the card's scope, any mix of: path globs from the repo root (`**` allowed; a glob without `/` also matches the basename), `cmd:<regex>` searched in a Bash command line, `tool:<regex>` matched against the whole tool name (`tool:WebFetch`, `tool:mcp__.*`) |
+| `exception` | on a permissive card: the ref of the Never card it carves an exception from (`exception: pay/no-refund`); without it an Allowed card never overrides a Never card |
+| `passes` | on a permissive card, a list like `fixtures`: files the `check:` of the `exception:` card must exit 0 on |
 
-Sections: `## Owner quotes` (or `## Цитаты владельца`), `## Cause`, `## Never` (or `## Нельзя`), optional
-`## Allowed` (or `## Можно`) and `## Revoked`. A **quote line** starts `- YYYY-MM-DD · ` and gives the date,
+Sections: `## Owner quotes` (or `## Цитаты владельца`, `## Цитати власника`), `## Cause`, `## Revoked`, and
+the three branches, each under an English, Russian or Ukrainian heading (the first heading of a branch counts):
+
+| Branch | Headings | Lines |
+|---|---|---|
+| Never | `## Never`, `## Нельзя`, `## Не можна` | `- ` one forbidden action per bullet |
+| Allowed | `## Allowed`, `## Можно`, `## Можна` | `- YYYY-MM-DD · «owner words»`, dated, verbatim |
+| How-to | `## How-to`, `## Как надо`, `## Як треба` | `- ` one way of doing it right per bullet |
+
+A bullet continues on indented lines. A card with a Never or How-to line is **prohibitive**; a card with Allowed
+lines only is **permissive**: a standalone record with its own `paths:` and the owner's dated words, which overrides
+a Never card only through its `exception:` key. A **quote line** starts `- YYYY-MM-DD · ` and gives the date,
 the material and the place, then the words in «». One line per remark; a repeat is a new line, never an edit.
 
 ## Statuses
@@ -98,25 +120,32 @@ bash scripts/defects-check.sh           # audit: debt, effective status, every b
 bash scripts/defects-check.sh <arg>     # before showing work: debt, then every declared block check with <arg>
 ```
 
-Exit 0 green, 1 red (new debt, a new undeliverable card, overlap or escape, a red check, a blind fixture),
-2 no library or no python. The last line is
+Exit 0 green, 1 red (new debt, a new undeliverable card, overlap, escape, conflict or exception, a duplicate id, a
+red check, a blind fixture, a stale index), 2 no library or no python. The last line is
 the verdict. Check output goes to a log under `${TMPDIR:-/tmp}`. `DEFECTS_DIR` points it at another library.
+
+The three branches, under the same new/old rule:
+
+- **Debt** is owed only by a prohibitive card. A permissive card with two or more dated Allowed lines is one
+  `allowed repeats <n> <ref>` line: a counter, never red.
+- **Conflict.** A live permissive and a live prohibitive card whose `paths:` overlap (one entry string on both, or
+  one glob matching the other entry as a path; `cmd:`/`tool:` compare as strings) and the permissive card's
+  `exception:` does not name the prohibitive one: `CONFLICT <allowed-ref> <never-ref>`, and the Never wins. New =
+  the newest Allowed line.
+- **Exception.** An `exception:` naming no live card, or (audit) a `passes:` fixture the named card's `check:`
+  exits non-zero on: the Never check fires on the allowed form. New = the `exception:` line.
+- **Index.** When `INDEX.md` exists and differs from the cards, `INDEX` is red; without it, one `no index` line.
 
 ## Cards
 
-| id | class | status | quotes | check | last quote |
-|---|---|---|---|---|---|
-| `framework-fix-skips-live-hives` | A framework fix ships in VULYK while a live hive keeps the defect | text | 1 | - | 2026-10-14 |
-| `upgrade-overwrites-host-edits` | An upgrade overwrites a hive's own edits and deletions in framework files | text | 1 | (spec `upgrade-keeps-host-edits`) | 2026-10-13 |
-| `host-internals-in-public-repo` | A host project's insides quoted into the public VULYK repository | block | 1 | `bash scripts/leak-check.sh <arg>` | 2026-10-13 |
-| `command-injection-follows-cwd` | A command's injection names its script relative to the session cwd | block | 1 | `bash scripts/injection-check.sh <arg>` | 2026-10-13 |
-| `work-handed-back-to-owner` | Work an agent can do is handed back to the owner as a to-do list | text | 1 (+2 hives) | - | 2026-10-13 |
-| `claim-not-from-source` | A claim made from memory, a docstring or a guess instead of the source that settles it | text | 0 (+4 hives) | - | - |
-| `measurement-unlike-reality` | A test or measurement that does not represent the reality it is used to judge | text | 0 (+4 hives) | - | - |
-| `safeguard-bypassable-or-late` | A safeguard that can be bypassed, passes silently on a missing input, or ships after what it guards | text | 0 (+3 hives) | - | - |
-| `done-without-real-run` | Work reported done without running it where it will really run | text | 0 (+3 hives) | - | - |
-| `outward-artifact-carries-internals` | An artifact going outward carries internal or client content beyond names | text | 0 (+2 hives) | - (name form: `host-internals-in-public-repo`) | - |
-| `owner-words-by-builder` | The owner's words or decision written by the builder | text | 0 (+2 hives) | - | - |
+The card list is generated: [INDEX.md](INDEX.md), three tables (Never, Allowed, How-to) by area with counters.
+
+```
+bash scripts/defects-index.sh                  # regenerate INDEX.md after a card changes
+bash scripts/defects-index.sh --check          # exit 1, `index stale`, when INDEX.md differs (the gate runs it)
+bash scripts/defects-index.sh --grep <regex>   # search the cards: <ref>:<line>: <text>
+bash scripts/defects-index.sh --counts         # cards · never · allowed · how-to · allowed repeats
+```
 
 **Trust.** `defects-check.sh` runs each card's `check:` as a shell command, and `lead-review` runs the gate on the
 branch under review. A card's `check:` is code of this repository, with the same trust as its tests: review a
