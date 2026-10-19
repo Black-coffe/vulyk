@@ -18,3 +18,4 @@
 {"ts":"2026-10-16T11:56:25Z","spec":"vulyk-pulse","version":"0.28.0","head":"c97e7b3","pack":"9e09a86d9635","note":"merged to main, publish pending (owner: no GitHub release yet)"}
 {"ts":"2026-10-16T11:56:25Z","spec":"close-story-scope-refusal","version":"0.28.0","head":"c97e7b3","pack":"dfef0fc979bb","note":"merged to main, publish pending (owner: no GitHub release yet)"}
 {"ts":"2026-10-18T20:44:07Z","spec":"model-profiles","version":"0.30.0","head":"884541f","pack":"9fa4077d3f8e","note":"merged to main, publish pending; owner override none - READY with **Checked:** ACCEPTED (4 review minors fixed in 3cbc124)"}
+{"ts":"2026-10-19T12:51:42Z","spec":"ship-safety","version":"0.31.0","head":"1e3e2fa","pack":"c422eb940f63","note":"merged to main, tag v0.31.0 + GitHub release"}
