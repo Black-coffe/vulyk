@@ -46,6 +46,14 @@ so no heartbeat age tells a live driver from a dead one. If a `/clear` ever hide
 list, the Queen will call it dead and the old defect returns by that door; `claimed=` is the only evidence on disk.
 A claim file with no stamp is a broken claim no driver can hold, and `resume` clears it.
 
+**Amendment, 2026-10-19 - accepted (owner: Andrei, spec `ship-safety`, 0.31.0):** `claim` also refuses, exit 2, naming both
+branches, when the plan records a `**Branch:**` and the checkout stands on another (`docs/specs/ship-safety`,
+0.31.0; brief ask 5: "cycle.sh отказывает и называет обе ветки, если захват ... запущены не на ветке спеки").
+It refuses and never switches branches itself. With no `**Branch:**` yet (a fresh `claim` before `branch`), there
+is nothing to compare and the guard does not apply. As ADR-001's 2026-10-19 amendment records, the guard
+has no off switch. This closes the gap where ADR-001 carries rows for `branch`, `close-story` and `open-round` but
+`claim`'s contract lives here.
+
 ## Consequences
 
 - **Easier:** a future implementer has the mechanism's shape settled — a semaphore file, a

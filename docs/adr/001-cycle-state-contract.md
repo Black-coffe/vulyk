@@ -103,6 +103,26 @@ behaviour; nothing else in this ADR moves:
   scope/verify/commit path instead of refusing, and journals the self-mark once verification
   is green (ADR-011 decision 3).
 
+### Amendment (2026-10-19) - accepted (owner: Andrei, picked «Принять обе + строгость merge-tree (Рекомендую)», spec `ship-safety`, 0.31.0)
+
+Source: `docs/specs/ship-safety/plan.md` `## Plan deltas`, quoted verbatim:
+
+> 2026-10-19 · trigger: story 02's branch guard refused 20 fixtures in `tests/council.test.sh` (and one in `tests/cycle.test.sh`) that record `**Branch:** vulyk/<slug>` while running on `main` · decision: `ship-safety-02` also lists `tests/council.test.sh`; each fixture records the branch it actually stands on (`git rev-parse --abbrev-ref HEAD`); the `branch` verb's own tests are untouched · rejected: an env switch that turns the guard off for tests (a bypassable guard), and loosening the guard.
+
+- **D2** - the branch guard on `claim`, `close-story` and `open-round` has no off switch: no
+  environment variable, flag or test mode disables it, and it is not loosened to fit a caller.
+  A test fixture that writes `**Branch:**` records the branch the fixture actually stands on.
+  Reason recorded in the delta: an env switch makes it "a bypassable guard". Options weighed:
+  the two rejected above. Consequences beyond the delta: not recorded. Revisit when: not recorded.
+
+- **D3** - `ship-check.sh` reads `git merge-tree --write-tree` strictly: exit 0 is clean, exit 1 with at least one
+  file named is a conflict, and anything else (a missing ref, which also exits 1 and is checked first; an old git;
+  any error) is "cannot check", never clean. Source: `docs/specs/ship-safety/plan.md` `## Assumptions`, approved
+  with the plan.
+
+Invariant for `## Invariants created`: *the `**Branch:**` guard in `cycle.sh` cannot be
+disabled at runtime; fixtures conform to the guard, never the guard to fixtures.*
+
 Option 1. The loop state is a small set of committed files, each with exactly one writer,
 all written by `scripts/cycle.sh`; the verdict is computed by that script from labelled
 lines in seat reports; both drivers are a `while` loop over `cycle.sh status --json` that
