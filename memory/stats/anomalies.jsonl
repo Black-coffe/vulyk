@@ -255,3 +255,7 @@
 {"v":1,"ts":"2026-10-19T08:26:58Z","code":"agent_prefix_high","value":51384,"threshold":50000,"vulyk":"0.0.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-a005524a109c599cd.jsonl"}
 {"v":1,"ts":"2026-10-19T08:27:02Z","code":"agent_prefix_high","value":51777,"threshold":50000,"vulyk":"0.0.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-a891d834c7634f2a1.jsonl"}
 {"v":1,"ts":"2026-10-19T08:27:03Z","code":"agent_prefix_high","value":51783,"threshold":50000,"vulyk":"0.0.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-aa0ff0fd2fc83ee84.jsonl"}
+{"v":1,"ts":"2026-10-19T13:31:21Z","code":"agent_prefix_high","value":55749,"threshold":50000,"vulyk":"0.0.0","tier":0,"model":"","agent":"other","spec":"","story":"","ref":"agent:agent-aanalyst-fable-422c4add8308dc8d.jsonl"}
+{"v":1,"ts":"2026-10-19T13:31:22Z","code":"agent_prefix_high","value":55366,"threshold":50000,"vulyk":"0.0.0","tier":0,"model":"","agent":"other","spec":"","story":"","ref":"agent:agent-aanalyst-opus-04b514c24d8ea138.jsonl"}
+{"v":1,"ts":"2026-10-19T13:31:23Z","code":"agent_prefix_high","value":55818,"threshold":50000,"vulyk":"0.0.0","tier":0,"model":"","agent":"other","spec":"","story":"","ref":"agent:agent-aanalyst-sonnet-57aeb4592789c493.jsonl"}
+{"v":1,"ts":"2026-10-19T13:31:30Z","code":"scope_breach","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"","story":"rules-tree-01-card-contract","ref":"scope:rules-tree-01-card-contract"}

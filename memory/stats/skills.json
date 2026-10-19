@@ -12,20 +12,20 @@
     "last_used": "2026-09-14"
   },
   "vulyk-plan": {
-    "count": 10,
-    "last_used": "2026-10-18"
+    "count": 12,
+    "last_used": "2026-10-19"
   },
   "vulyk-ship": {
-    "count": 10,
-    "last_used": "2026-10-18"
+    "count": 12,
+    "last_used": "2026-10-19"
   },
   "fact-check": {
     "count": 6,
     "last_used": "2026-10-07"
   },
   "supergrill": {
-    "count": 4,
-    "last_used": "2026-10-08"
+    "count": 6,
+    "last_used": "2026-10-19"
   },
   "workflow-authoring": {
     "count": 4,
@@ -50,5 +50,17 @@
   "vulyk-pause": {
     "count": 2,
     "last_used": "2026-10-16"
+  },
+  "vulyk-models": {
+    "count": 1,
+    "last_used": "2026-10-18"
+  },
+  "vulyk-evolve": {
+    "count": 1,
+    "last_used": "2026-10-19"
+  },
+  "recall": {
+    "count": 1,
+    "last_used": "2026-10-19"
   }
 }
