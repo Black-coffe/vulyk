@@ -200,3 +200,6 @@
 {"ts":"2026-10-19T08:44:37Z","story":"rules-tree-04-delivery","declared":2,"changed":2,"out_of_scope":0}
 {"ts":"2026-10-19T08:46:18Z","story":"rules-tree-04-delivery","declared":2,"changed":2,"out_of_scope":0}
 {"ts":"2026-10-19T08:47:09Z","story":"rules-tree-03-gate-and-index","declared":6,"changed":6,"out_of_scope":0}
+{"ts":"2026-10-19T08:49:55Z","story":"rules-tree-05-capture","declared":5,"changed":5,"out_of_scope":0}
+{"ts":"2026-10-19T08:59:08Z","story":"rules-tree-05-capture","declared":5,"changed":5,"out_of_scope":0}
+{"ts":"2026-10-19T10:03:38Z","story":"rules-tree-05-capture","declared":6,"changed":6,"out_of_scope":0}

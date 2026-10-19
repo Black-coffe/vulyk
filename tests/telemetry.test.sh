@@ -1389,7 +1389,7 @@ cat "$T/rh2.out" | expect "the unedited retired agent beside it goes" "remove   
 # wire_hook takes a matcher and an argument; "already wired" is event + script + argument. The
 # hooks' own scripts are package B's - none of this depends on what they contain.
 echo "--- install.sh: defect library wiring and shipping"
-PRE_M='Edit|Write|MultiEdit|NotebookEdit|Bash'
+PRE_M='Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*'
 defect_wiring() { # defect_wiring <settings.json> - "<intake> <inject under the matcher> <reset on SessionStart>"
   printf '%s %s %s' \
     "$(jq -r '[.hooks.UserPromptSubmit[]?.hooks[].command | select(test("defect-intake\\.sh\"?$"))] | length' "$1" | tr -d '\r')" \
@@ -1719,10 +1719,10 @@ wrapper_case mixed "${B}vulyk-update-check.sh\"" "${P}anomaly-scan.sh" \
 BC="$T/hive-wrap-bash-c"; BCS="$BC/.claude/settings.json"
 cp "$BCS" "$T/bc.good"
 sed -i "/defect/s/'\"\(\r\{0,1\}\)\$/\"\1/" "$BCS"   # Windows python writes CRLF
-expect_eq "fixture: three defect entries lost their closing quote" "3" \
+expect_eq "fixture: four defect entries lost their closing quote" "4" \
   "$(jq -r '.hooks[][].hooks[].command | select(test("defect"))' "$BCS" | tr -d '\r' | grep -vc "'\$")"
 bash "$SRC/install.sh" "$BC" --upgrade --check > "$T/bc-check.out" 2>&1
-expect_eq "--check: three would be repaired" "3" "$(grep -c 'would repair   .claude/settings.json' "$T/bc-check.out")"
+expect_eq "--check: four would be repaired" "4" "$(grep -c 'would repair   .claude/settings.json' "$T/bc-check.out")"
 bash "$SRC/install.sh" "$BC" --upgrade --telemetry off > "$T/bc.out" 2>&1
 cat "$T/bc.out" | expect "the broken reset is repaired" "repair         .claude/settings.json -> SessionStart: defects-inject.sh reset"
 expect_eq "settings.json is back to the correct form, byte for byte" "1" "$(same "$T/bc.good" "$BCS")"

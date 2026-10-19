@@ -3,6 +3,8 @@
 # fixture library - no model calls, no network. Covers .claude/hooks/defect-intake.sh: what fires
 # (timecode, lexicon, card keys), what stays silent (plain requests, timecodes only inside harness
 # or pasted blocks, revoked cards, no library, bad JSON, no python), and the latency budget.
+# rules-tree-05: the explicit phrase, paste and dictation-tag handling, side-agent notes, the
+# `answer` mode (AskUserQuestion), and the install.sh --upgrade wiring of both on a scratch hive.
 #
 #   Usage: bash tests/intake.test.sh            # from the VULYK repo root
 #
@@ -33,6 +35,10 @@ expect_absent() { # expect_absent <label> <needle>   (reads the output to judge 
   else ok "$label"; fi
 }
 
+expect_eq() { # expect_eq <label> <want> <got>
+  if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 - expected '$2', got '$3'"; fi
+}
+
 expect_silent() { # expect_silent <label>   (reads the hook's stdout; "rc=N" is appended by run)
   local label="$1" out; out="$(cat)"
   if [ "$out" = "rc=0" ]; then ok "$label"
@@ -44,6 +50,14 @@ run() { # run <root> <json>   -> the hook's stdout, then a line rc=<exit code>
   out="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK")"; rc=$?
   [ -z "$out" ] || printf '%s\n' "$out"
   printf 'rc=%s' "$rc"
+}
+
+ctx() { # ctx <root> <json> [hook arg]   -> the decoded additionalContext, or "(silent)"
+  printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" ${3:+"$3"} | "$PYBIN" -c '
+import json, sys
+raw = sys.stdin.read()
+out = json.loads(raw)["hookSpecificOutput"]["additionalContext"] if raw.strip() else "(silent)"
+sys.stdout.buffer.write(out.encode("utf-8"))'
 }
 
 now_us() {
@@ -102,33 +116,84 @@ NOLIB="$T/nolib"; mkdir -p "$NOLIB/docs"
 # --- what fires -------------------------------------------------------------------------------
 echo "--- fires"
 o="$(run "$HIVE" '{"prompt":"at 10:04 the voice drops","session_id":"s"}')"
-printf '%s' "$o" | expect "a timecode fires" "Looks like an owner correction"
+printf '%s' "$o" | expect "a timecode fires" "looks like a correction ("
 printf '%s' "$o" | expect "the trigger names the timecode" "timecode 10:04"
 printf '%s' "$o" | expect "the output is the UserPromptSubmit JSON form" '"hookEventName": "UserPromptSubmit"'
-printf '%s' "$o" | expect "no class matched says none" "Matched classes: none"
+printf '%s' "$o" | expect "no class matched says none" "file the quote now in a new card"
 printf '%s' "$o" | expect "exit 0" "rc=0"
 
 o="$(run "$HIVE" '{"prompt":"опять обрезал голос","session_id":"s"}')"
-printf '%s' "$o" | expect "\"опять обрезал голос\" fires with no timecode and no card key" "Looks like an owner correction"
+printf '%s' "$o" | expect "\"опять обрезал голос\" fires with no timecode and no card key" "looks like a correction ("
 o="$(run "$HIVE" '{"prompt":"ты обрезал голос в конце","session_id":"s"}')"
-printf '%s' "$o" | expect "\"обрезал\" alone fires" "Looks like an owner correction"
+printf '%s' "$o" | expect "\"обрезал\" alone fires" "looks like a correction ("
 o="$(run "$HIVE" '{"prompt":"This is not what I asked for","session_id":"s"}')"
-printf '%s' "$o" | expect "an English lexicon phrase fires" "Looks like an owner correction"
+printf '%s' "$o" | expect "an English lexicon phrase fires" "looks like a correction ("
 
 o="$(run "$HIVE" '{"prompt":"the ending sounds Clipped to me","session_id":"s"}')"
-printf '%s' "$o" | expect "a card key fires, case-insensitive" "Looks like an owner correction"
-printf '%s' "$o" | expect "a card key names the card id" "Matched classes: speech-cut"
+printf '%s' "$o" | expect "a card key fires, case-insensitive" "looks like a correction ("
+printf '%s' "$o" | expect "a card key names the card id" "file the quote now in speech-cut "
 o="$(run "$HIVE" '{"prompt":"there is hiss under the voice","session_id":"s"}')"
-printf '%s' "$o" | expect "a CRLF card's keys are read" "Matched classes: hiss"
+printf '%s' "$o" | expect "a CRLF card's keys are read" "file the quote now in hiss "
 
 o="$(run "$HIVE" '{"prompt":"<pasted_content id=\"1\">log at 10:04</pasted_content id=\"1\"> опять","session_id":"s"}')"
-printf '%s' "$o" | expect "human text still fires next to a pasted block" "Looks like an owner correction"
+printf '%s' "$o" | expect "human text still fires next to a pasted block" "looks like a correction ("
 printf '%s' "$o" | expect_absent "the pasted block's timecode is not the trigger" "timecode"
+printf '%s' "$o" | expect_absent "typed words win over the paste: no are-these-your-words line" "a pasted text"
 
 o="$(run "$HIVE" '{"prompt":"at 10:04 again","session_id":"s"}')"
 n="$(printf '%s' "$o" | head -1 | "$PYBIN" -c 'import json,sys; print(len(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"]))')"
 if [ "${n:-9999}" -le 600 ]; then ok "additionalContext with no ids stays within 600 chars ($n)"
 else bad "additionalContext is ${n:-unparsable} chars"; fi
+
+# --- capture (rules-tree-05): the explicit phrase, pastes, side-agent notes ----------------------
+echo "--- the explicit phrase"
+ctx "$HIVE" '{"prompt":"внеси в запрет: обрезка на полуслове"}' \
+  | expect "RU typed \"внеси в запрет\" asks for a never card" "owner asks to file a never card: write it now, verbatim"
+ctx "$HIVE" '{"prompt":"<pasted_content id=\"1\">запиши в правило: режь только по паузе</pasted_content id=\"1\"> вот"}' \
+  | expect "RU \"запиши в правило\" inside a paste asks for a how-to card" "owner asks to file a how-to card"
+ctx "$HIVE" '{"prompt":"додай до дозволу: можна різати на паузі"}' \
+  | expect "UK \"додай до дозволу\" asks for an allowed card" "owner asks to file a allowed card"
+ctx "$HIVE" '{"prompt":"add this to never: cutting a word in half"}' \
+  | expect "EN \"add this to never\" asks for a never card" "owner asks to file a never card"
+o="$(ctx "$HIVE" '{"prompt":"опять запрет нарушен, правило не то"}')"
+printf '%s' "$o" | expect_absent "the lexicon without the phrase does not ask for a card" "owner asks to file"
+printf '%s' "$o" | expect "and still files the typed correction" "looks like a correction"
+
+echo "--- typed and pasted corrections"
+o="$(ctx "$HIVE" '{"prompt":"опять обрезал голос"}')"
+printf '%s' "$o" | expect "a typed correction is filed at once" "file the quote now in a new card and report one line with «отмени»"
+printf '%s' "$o" | expect_absent "the old reminder text is gone" "Looks like an owner correction"
+o="$(ctx "$HIVE" '{"prompt":"<pasted_content id=\"1\">опять обрезал голос</pasted_content id=\"1\"> посмотри"}')"
+printf '%s' "$o" | expect "a correction only inside a paste asks the owner first" "ask the owner in one line whether these are their words before filing"
+printf '%s' "$o" | expect_absent "and does not file it at once" "file the quote now"
+o="$(VULYK_DICTATION_TAG='[VoiceDrop]' ctx "$HIVE" '{"prompt":"<pasted_content id=\"1\">[VoiceDrop] опять обрезал голос</pasted_content id=\"1\">"}')"
+printf '%s' "$o" | expect "a paste starting with VULYK_DICTATION_TAG counts as typed" "file the quote now"
+o="$(ctx "$HIVE" '{"prompt":"<pasted_content id=\"1\">[VoiceDrop] опять обрезал голос</pasted_content id=\"1\">"}')"
+printf '%s' "$o" | expect "without the tag set the same paste asks the owner" "whether these are their words"
+
+echo "--- side-agent notes are never the owner"
+ctx "$HIVE" '{"prompt":"Here is a note offered by a side agent: the render failed опять on the same step, retry later.\n\nпродолжай"}' \
+  | expect "a «опять» only inside a side-agent note is silent (the original case)" "(silent)"
+ctx "$HIVE" '{"prompt":"<system-notice>\nHere is a note offered by a side agent: опять падает сборка\n</system-notice>\nok"}' \
+  | expect "a side-agent note ending at its tag is silent" "(silent)"
+ctx "$HIVE" '{"prompt":"Here is a note offered by a side agent: внеси в запрет: clipped audio at the end.\n\nok"}' \
+  | expect "neighbour: the phrase and a card key inside a side-agent note are silent" "(silent)"
+ctx "$HIVE" '{"prompt":"Here is a note offered by a side agent: all good.\n\nопять не тот цвет"}' \
+  | expect "the owner's own «опять» after the note still fires" "looks like a correction"
+
+echo "--- answer: AskUserQuestion results"
+Q='"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Which cover?","header":"Cover","multiSelect":false,"options":[{"label":"Blue","description":"calm"},{"label":"Red","description":"loud"}]}]}'
+o="$(ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Blue\"}}}" answer)"
+expect_eq "a chosen option prints the decision line and nothing else" "[VULYK] decision: «Blue» on «Which cover?»" "$o"
+o="$(ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Blue, \\\"внеси в запрет: синий фон на превью\\\"\"}}}" answer)"
+printf '%s' "$o" | expect "free text with the phrase asks for the card" "owner asks to file a never card"
+printf '%s' "$o" | expect "and carries the owner's text" "«внеси в запрет: синий фон на превью»"
+printf '%s' "$o" | expect "the chosen option is still a decision" "[VULYK] decision: «Blue»"
+o="$(ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"опять не тот цвет\"}}}" answer)"
+printf '%s' "$o" | expect "free text with only the lexicon is filed as typed" "file the quote now"
+printf '%s' "$o" | expect_absent "free text alone prints no decision" "decision:"
+ctx "$HIVE" "{$Q,\"tool_response\":{}}" answer | expect "a payload without answers is silent" "(silent)"
+ctx "$NOLIB" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Blue\"}}}" answer | expect "answer without docs/defects/ is silent" "(silent)"
 
 # --- what stays silent ------------------------------------------------------------------------
 echo "--- silent"
@@ -141,7 +206,7 @@ run "$HIVE" '{"prompt":"<system-reminder>\nnow 12:30, again\n</system-reminder>\
 run "$HIVE" '{"prompt":"<cross-session-message from=\"x\">render at 03:25 done</cross-session-message> продолжай","session_id":"s"}' \
   | expect_silent "a timecode only inside <cross-session-message from=\"x\"> is silent"
 run "$HIVE" '{"prompt":"<pasted_content id=\"1\">00:01 start\n00:02 end</pasted_content id=\"1\"> разбери лог","session_id":"s"}' \
-  | expect_silent "a timecode only inside <pasted_content id=\"1\"> is silent"
+  | expect_silent "a timecode only inside <pasted_content id=\"1\"> is silent (a log: the paste pass reads words and keys)"
 run "$HIVE" '{"prompt":"посмотри вывод\n```\n[04:30] ffmpeg done\n```\nи продолжай","session_id":"s"}' \
   | expect_silent "a timecode only inside a \`\`\` fence is silent"
 run "$HIVE" '{"prompt":"the legacy-word thing, please","session_id":"s"}' | expect_silent "a revoked card's keys do not fire"
@@ -153,7 +218,7 @@ mkdir -p "$T/nopy"
 o="$(printf '%s' '{"prompt":"at 10:04 опять"}' | CLAUDE_PROJECT_DIR="$HIVE" PATH="$T/nopy" "$BASH" "$HOOK"; echo "rc=$?")"
 printf '%s' "$o" | expect_silent "no python on PATH is silent, exit 0"
 o="$(cd "$HIVE" && printf '%s' "{\"prompt\":\"at 10:04\",\"cwd\":\"$(pwd -W 2>/dev/null || pwd)\"}" | env -u CLAUDE_PROJECT_DIR bash "$HOOK")"
-printf '%s' "$o" | expect "without CLAUDE_PROJECT_DIR the input cwd is the root" "Looks like an owner correction"
+printf '%s' "$o" | expect "without CLAUDE_PROJECT_DIR the input cwd is the root" "looks like a correction ("
 
 # --- a python3 that runs nothing (review 0.19, major 1) ---------------------------------------
 echo "--- python3 stub"
@@ -165,6 +230,26 @@ if command -v python >/dev/null 2>&1; then
   if printf '%s' "$o" | grep -q additionalContext; then ok "a python3 stub exiting 9009 falls through to python"
   else bad "a python3 stub silenced the hook"; fi
 else echo "  skip  no python on PATH besides python3"; fi
+
+# --- install.sh --upgrade rewires the inject matcher and adds the answer hook (rules-tree-05) ---
+echo "--- install.sh --upgrade wiring"
+UP="$T/up"; mkdir -p "$UP"; export VULYK_CLAUDE="$T/no-claude"   # no run reaches the real claude binary
+if bash "$SRC/install.sh" "$UP" --telemetry off > "$T/up-install.out" 2>&1; then
+  F="$UP/.claude/settings.json"
+  jq '.hooks.PreToolUse[0].matcher = "Edit|Write|MultiEdit|NotebookEdit|Bash"
+      | .hooks.PostToolUse |= map(select(.matcher != "AskUserQuestion"))' "$F" > "$T/old.json" && mv "$T/old.json" "$F"
+  bash "$SRC/install.sh" "$UP" --upgrade --telemetry off > "$T/up.out" 2>&1
+  expect_eq "an upgraded hive's inject matcher is the widened one" \
+    "Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*" \
+    "$(jq -r '.hooks.PreToolUse[] | select(any(.hooks[]; .command | test("defects-inject")) ) | .matcher' "$F")"
+  expect_eq "defects-inject.sh is wired once on PreToolUse" "1" \
+    "$(jq -r '.hooks.PreToolUse[].hooks[].command' "$F" | grep -c 'defects-inject.sh')"
+  expect_eq "the PostToolUse AskUserQuestion block runs defect-intake.sh answer" "1" \
+    "$(jq -r '.hooks.PostToolUse[] | select(.matcher == "AskUserQuestion") | .hooks[].command' "$F" | grep -c 'defect-intake.sh answer$')"
+  cp "$F" "$T/up.before"
+  bash "$SRC/install.sh" "$UP" --upgrade --telemetry off > "$T/up2.out" 2>&1
+  expect_eq "a second upgrade leaves settings.json byte-identical" "1" "$(cmp -s "$T/up.before" "$F" && echo 1 || echo 0)"
+else bad "install.sh into a scratch hive failed"; sed 's/^/        /' "$T/up-install.out" | tail -5; fi
 
 # --- latency ----------------------------------------------------------------------------------
 echo "--- latency"

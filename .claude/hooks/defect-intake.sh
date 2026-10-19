@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: an owner remark that looks like a correction (a timecode, a "again / I said"
-# word, or a defect card's `keys:`) gets one reminder to file the verbatim quote in docs/defects/.
-# Contract: docs/specs/self-learning/contract.md §1 (card format) and §3 (this hook).
+# UserPromptSubmit hook: hears the owner in every channel and tells the session to file his words in
+# docs/defects/ (contract: docs/specs/rules-tree/plan.md `## Contracts`, Capture; cards are read by
+# .claude/hooks/defects_lib.py). One line per finding:
+#   - the explicit phrase «внеси в запрет / правило / разрешение» (RU/UK/EN), typed or pasted ->
+#     write the never / how-to / allowed card now, verbatim;
+#   - typed text that looks like a correction (a timecode, a correction word, a card's `keys:`) ->
+#     file the quote now and report one line with «отмени»;
+#   - a correction word or card key only inside <pasted_content> -> ask the owner whether these are
+#     his words first. A paste that starts with $VULYK_DICTATION_TAG (when set) counts as typed.
+# A side-agent note ("Here is a note offered by a side agent", to the end of its paragraph or tag) is
+# cut before every pass: it is model text, never the owner's. <task-notification>, <system-reminder>
+# and <cross-session-message> blocks are cut too; ``` / ~~~ fences are cut from the correction passes.
 #
-# Only the human text is read: <task-notification>, <system-reminder>, <cross-session-message>,
-# <pasted_content> blocks and ``` / ~~~ fences are cut out first, so a timecode inside a pasted log
-# or a harness notice is not an owner correction.
+# `defect-intake.sh answer` (PostToolUse, matcher AskUserQuestion): an answer part equal to an option
+# label prints `[VULYK] decision: «<label>» on «<question>»` (a decision, never a quote); the free text
+# left over runs through the phrase and the typed-correction passes.
 #
 # Never blocks: no python, no docs/defects/, bad JSON or any error -> silent exit 0.
 # The Python half lives below the `exit 0`, inside a no-op heredoc; bash never runs it, python reads
@@ -27,105 +36,30 @@ exit 0
 #<py>
 import json, os, re, sys
 
-
-# --- card parsing: kept identical to .claude/hooks/defects-inject.sh ----------------------------
-def fixpath(p):
-    # A Git Bash path (/e/Projects/x) handed to a native Windows python.
-    if os.name == 'nt':
-        m = re.match(r'^/([A-Za-z])(/.*)?$', p)
-        if m:
-            p = m.group(1) + ':' + (m.group(2) or '/')
-    return p
-
-
-def fm_scalar(v):
-    v = re.sub(r'\s+#(\s.*)?$', '', v or '').strip()
-    if len(v) >= 2 and v[0] == v[-1] and v[0] in '"\'':
-        v = v[1:-1]
-    return v
-
-
-def fm_list(v):
-    # `[a, b, "c, d", 'e']` -> list; a bare scalar -> one item. In double quotes \\ and \" unescape.
-    v = (v or '').strip()
-    if not v.startswith('['):
-        v = fm_scalar(v)
-        return [v] if v else []
-    items, i, n, cur = [], 1, len(v), ''
-    while i < n:
-        c = v[i]
-        if c in '"\'' and not cur.strip():
-            q, i, s = c, i + 1, ''
-            while i < n and v[i] != q:
-                if q == '"' and v[i] == '\\' and i + 1 < n and v[i + 1] in '\\"':
-                    s += v[i + 1]
-                    i += 2
-                    continue
-                s += v[i]
-                i += 1
-            items.append(s)
-            i += 1
-            while i < n and v[i] not in ',]':
-                i += 1
-            if i >= n or v[i] == ']':
-                break
-            i += 1
-            cur = ''
-            continue
-        if c in ',]':
-            items.append(cur.strip())
-            cur = ''
-            if c == ']':
-                break
-        else:
-            cur += c
-        i += 1
-    items.append(cur.strip())
-    return [x for x in items if x]
-
-
-def load_cards(d):
-    cards = []
-    for name in sorted(os.listdir(d)):
-        if not name.endswith('.md') or name.lower() == 'readme.md':
-            continue
-        try:
-            with open(os.path.join(d, name), encoding='utf-8', errors='replace') as f:
-                src = f.read()
-        except OSError:
-            continue
-        src = src.lstrip('﻿').replace('\r\n', '\n').replace('\r', '\n')
-        m = re.match(r'---[ \t]*\n(.*?)\n---[ \t]*(?:\n|$)', src, re.S)
-        if not m:
-            continue
-        fm = {}
-        for line in m.group(1).split('\n'):
-            if not line.strip() or line[:1].isspace() or line.startswith('#'):
-                continue
-            k, sep, v = line.partition(':')
-            if sep:
-                fm[k.strip().lower()] = v.strip()
-        cards.append((name[:-3], fm, src[m.end():]))
-    return cards
-# --- end of shared card parsing ---------------------------------------------------------------
-
-
-BLOCKS = [
+HARNESS = [
     r'<task-notification\b[^>]*>.*?(?:</task-notification\s*>|\Z)',
     r'<system-reminder\b[^>]*>.*?(?:</system-reminder\s*>|\Z)',
     r'<cross-session-message\b[^>]*/>',
     r'<cross-session-message\b[^>]*>.*?(?:</cross-session-message\b[^>]*>|\Z)',
-    r'<pasted_content\b[^>]*/>',
-    r'<pasted_content\b[^>]*>.*?(?:</pasted_content\b[^>]*>|\Z)',
-    r'```.*?(?:```|\Z)',
-    r'~~~.*?(?:~~~|\Z)',
 ]
+FENCES = [r'```.*?(?:```|\Z)', r'~~~.*?(?:~~~|\Z)']
+PASTE = re.compile(r'<pasted_content\b[^>]*?(?:/>|>(.*?)(?:</pasted_content\b[^>]*>|\Z))', re.S | re.I)
+# A side-agent note: from its preamble (at a line start or right after a tag) to a blank line or a closing tag.
+SIDE_NOTE = re.compile(r'(?:^|(?<=>))[ \t]*here is a note offered by a side agent\b.*?(?=\n[ \t]*\n|</|\Z)',
+                       re.S | re.I | re.M)
 # Stems match at a word start ("переделай" also takes "переделайте"); whole phrases need both edges.
 STEMS = ['опять', 'снова', 'я же говорил', 'я же казав', 'знову', 'переделай', 'переделать', 'обрезал']
 WORDS = ['не так', 'again', 'i said', 'i told you', 'why did you', 'not what i asked']
 LEXICON = re.compile(r'(?<!\w)(?:' + '|'.join(map(re.escape, STEMS)) + r')'
                      r'|(?<!\w)(?:' + '|'.join(map(re.escape, WORDS)) + r')(?!\w)')
 TIMECODE = re.compile(r'\b\d{1,2}:\d{2}\b')
+# The explicit phrase (RU, UK, EN); the last group names the branch.
+PHRASES = [
+    re.compile(r'(?<!\w)(?:внеси|запиши|добавь)\s+в\s+(запрет|правило|разрешение)', re.I),
+    re.compile(r'(?<!\w)(?:внеси|запиши|додай)\s+(?:в|до)\s+(заборон\S*|правил\S*|дозв[іо]л\S*)', re.I),
+    re.compile(r'(?<!\w)(?:add|file|put)\s+(?:this\s+)?(?:to|as|in|under)\s+(?:a\s+|the\s+)?(never|rule|allowed)', re.I),
+]
+LIMIT = 600
 
 
 def ere(s):
@@ -139,53 +73,170 @@ def print_lexicon():
     sys.stdout.buffer.write(('\n'.join(out) + '\n').encode('utf-8'))
 
 
-def main():
-    if sys.argv[1:2] == ['--lexicon']:
-        print_lexicon()
-        return
-    raw = sys.stdin.buffer.read().decode('utf-8', 'replace')
-    data = json.loads(raw)
-    if not isinstance(data, dict):
-        return
-    prompt = data.get('prompt')
-    if not isinstance(prompt, str) or not prompt.strip():
-        return
-    root = fixpath(os.environ.get('CLAUDE_PROJECT_DIR') or data.get('cwd') or os.getcwd())
-    d = os.path.join(root, 'docs', 'defects')
-    if not os.path.isdir(d):
-        return
-    text = prompt
-    for pat in BLOCKS:
-        text = re.sub(pat, ' ', text, flags=re.S | re.I)
-    low = text.lower()
+def branch_of(word):
+    w = word.lower()
+    if w.startswith(('запрет', 'заборон', 'never')):
+        return 'never'
+    if w.startswith(('разреш', 'дозв', 'allowed')):
+        return 'allowed'
+    return 'how-to'
 
-    why = []
-    tc = TIMECODE.search(text)
+
+def phrase_branches(text):
+    found = []
+    for rx in PHRASES:
+        for m in rx.finditer(text):
+            found.append((m.start(), branch_of(m.group(1))))
+    out = []
+    for _, b in sorted(found):
+        if b not in out:
+            out.append(b)
+    return out
+
+
+def strip(text, pats):
+    for pat in pats:
+        text = re.sub(pat, ' ', text, flags=re.S | re.I)
+    return text
+
+
+def triggers(text, cards, timecode=True):
+    low = text.lower()
+    why, refs = [], []
+    tc = TIMECODE.search(text) if timecode else None
     if tc:
         why.append('timecode ' + tc.group(0))
     lx = LEXICON.search(low)
     if lx:
         why.append('word "' + lx.group(0) + '"')
-    ids = []
-    for cid, fm, _ in load_cards(d):
-        if fm_scalar(fm.get('status', '')).lower() == 'revoked':
+    for c in cards:
+        if c.status == 'revoked':
             continue
-        for k in fm_list(fm.get('keys', '')):
-            k = k.strip().lower()
-            if k and k in low:
-                ids.append(cid)
-                break
-    if ids:
+        if any(k.strip().lower() and k.strip().lower() in low for k in c.keys):
+            refs.append(c.ref)
+    if refs:
         why.append('card keys')
-    if not why:
+    return why, refs
+
+
+def clip(s, n):
+    s = ' '.join(s.split())
+    return s if len(s) <= n else s[:n - 1] + '…'
+
+
+def phrase_lines(branches, words=''):
+    tail = ' — owner\'s words: «' + clip(words, 200) + '»' if words else ''
+    return ['[VULYK] owner asks to file a ' + b + ' card: write it now, verbatim, in'
+            ' docs/defects/<area>/<id>.md (choose area and scope), then report one line: filed → <ref>' + tail
+            for b in branches]
+
+
+def typed_line(why, refs):
+    return ('[VULYK] looks like a correction (' + ', '.join(why) + '): file the quote now in '
+            + (', '.join(refs) if refs else 'a new card') + ' and report one line with «отмени»'
+            ' (date · material · place — «words»; a class code can check gets a failing check:, Law 6)')
+
+
+def paste_line(why):
+    return ('[VULYK] a pasted text looks like a correction (' + ', '.join(why) + '): ask the owner in one'
+            ' line whether these are their words before filing')
+
+
+def emit(event, lines):
+    if not lines:
         return
-    msg = ('Looks like an owner correction (' + ', '.join(why) + '). Matched classes: '
-           + (', '.join(ids) if ids else 'none') + '. Add the verbatim quote (date · material · place'
-           ' — «words») to the matching card in docs/defects/, or open a new card. If code can check'
-           ' the class, give it a failing `check:` with the original case and a neighbour-form fixture'
-           ' in this same work (a Tier 3-4 story that names the file → the next repair story).')
+    msg = '\n'.join(lines)
+    if len(msg) > LIMIT:
+        msg = msg[:LIMIT - 1] + '…'
     sys.stdout.write(json.dumps({'hookSpecificOutput': {
-        'hookEventName': 'UserPromptSubmit', 'additionalContext': msg}}))
+        'hookEventName': event, 'additionalContext': msg}}))
+
+
+def on_prompt(data, cards):
+    prompt = data.get('prompt')
+    if not isinstance(prompt, str) or not prompt.strip():
+        return []
+    text = strip(SIDE_NOTE.sub(' ', prompt), HARNESS)
+    branches = phrase_branches(text)                     # pastes and fences included
+    if branches:
+        return phrase_lines(branches)
+    tag = os.environ.get('VULYK_DICTATION_TAG', '')
+    pastes = []
+
+    def paste(m):
+        inner = (m.group(1) or '').lstrip()
+        if tag and inner.startswith(tag):
+            return ' ' + inner[len(tag):] + ' '
+        pastes.append(inner)
+        return ' '
+    typed = strip(PASTE.sub(paste, text), FENCES)
+    why, refs = triggers(typed, cards)
+    if why:
+        return [typed_line(why, refs)]
+    # A paste is often a log: its timecodes are not a correction, its words and card keys may be.
+    why, _ = triggers(strip('\n'.join(pastes), FENCES), cards, timecode=False)
+    return [paste_line(why)] if why else []
+
+
+def on_answer(data, cards):
+    ti, tr = data.get('tool_input'), data.get('tool_response')
+    answers = tr.get('answers') if isinstance(tr, dict) else None
+    if not isinstance(answers, dict) or not answers:
+        return []
+    qs = ti.get('questions') if isinstance(ti, dict) else None
+    qs = [q for q in (qs or []) if isinstance(q, dict)]
+
+    def labels(q):
+        return [o.get('label') for o in (q.get('options') or [])
+                if isinstance(o, dict) and isinstance(o.get('label'), str) and o.get('label').strip()]
+    every = [l for q in qs for l in labels(q)]
+    lines, free = [], []
+    for question, answer in answers.items():
+        if isinstance(answer, list):
+            answer = ', '.join(str(a) for a in answer)
+        if not isinstance(answer, str) or not answer.strip():
+            continue
+        q = next((q for q in qs if q.get('question') == question), None)
+        rest = answer
+        for label in sorted(labels(q) if q else every, key=len, reverse=True):
+            if label in rest:
+                rest = rest.replace(label, ' ')
+                lines.append('[VULYK] decision: «' + clip(label, 120) + '» on «' + clip(str(question), 160) + '»')
+        rest = SIDE_NOTE.sub(' ', rest).strip(' \t\r\n,;"\'«»“”')
+        if rest:
+            free.append(rest)
+    words = '\n'.join(free)
+    if words:
+        branches = phrase_branches(words)
+        if branches:
+            lines += phrase_lines(branches, words)
+        else:
+            why, refs = triggers(words, cards)
+            if why:
+                lines.append(typed_line(why, refs))
+    return lines
+
+
+def main():
+    if sys.argv[1:2] == ['--lexicon']:
+        print_lexicon()
+        return
+    mode = 'answer' if sys.argv[1:2] == ['answer'] else 'prompt'
+    raw = sys.stdin.buffer.read().decode('utf-8', 'replace')
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        return
+    sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[0])))
+    import defects_lib
+    root = defects_lib.fixpath(os.environ.get('CLAUDE_PROJECT_DIR') or data.get('cwd') or os.getcwd())
+    d = os.path.join(root, 'docs', 'defects')
+    if not os.path.isdir(d):
+        return
+    cards = defects_lib.load_cards(d)
+    if mode == 'answer':
+        emit('PostToolUse', on_answer(data, cards))
+    else:
+        emit('UserPromptSubmit', on_prompt(data, cards))
 
 
 try:
