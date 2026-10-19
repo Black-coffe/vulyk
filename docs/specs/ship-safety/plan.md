@@ -36,4 +36,4 @@ Make the two git moments of the cycle safe. At ship: `ship-check.sh` proves the 
 ## Plan deltas
 
 **Approved:** Andrei, 2026-10-19
-**Branch:** <written by /vulyk-build>
+**Branch:** vulyk/ship-safety
