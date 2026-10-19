@@ -1,8 +1,8 @@
 ---
 story: ship-safety-01
 spec: ship-safety
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 1
@@ -45,5 +45,8 @@ memory/map slices for scripts (ship-check) and commands (vulyk-ship).
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
+- scripts/ship-check.sh stage 03: branch comparison (a third branch fails, the default branch keeps its note) and a git merge-tree precheck after it.
+- Surprise caught by the test: merge-tree exits 1, not 128, on a missing ref, so both refs are verified first and a conflict that names no file counts as cannot-check.
+- vulyk-ship.md: step 1 names the conflict repair (owner's yes only), step 2 the clean-default merge, merge --abort on failure, git branch -d after.
 
 ## Findings

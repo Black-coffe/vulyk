@@ -13,6 +13,9 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    by going back, never by shipping around them. A newer `**Checked:**` line is the owner's override in
    either direction (`scripts/human-check.sh`), and the owner may also override a plain `NOT READY`:
    it is their release, but say so out loud and quote the override into the `--record` note below.
+   A stage-03 merge conflict (the line names the files) is not overridden: stop and offer the repair,
+   merging the default branch into the spec branch and opening a new council round, because the
+   resolution is code no GREEN round has seen. Run it only on the owner's yes.
 2. History. The spec branch (`**Branch:**`) holds one commit per story; do not squash them, they are
    the rollback points and the review units. Work out the version from the Profile's *Commit
    convention* (a semver bump sized to the change). If a story on this branch already wrote `VERSION`
@@ -20,7 +23,11 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    on the branch with the version bump and the CHANGELOG entry. This is release paperwork: Law 5 does
    not apply, and `VERSION` and `CHANGELOG.md` are paperwork to the cycle, so this commit does not stale
    a GREEN round. Then merge into the default branch the way the Profile's *Release / deploy* row says;
-   a local merge is reversible and yours to run.
+   a local merge is reversible and yours to run. A local merge: switch to the default branch only when
+   `git status --porcelain` prints nothing, then `git merge --no-ff <branch>`. If it fails, run
+   `git merge --abort`, switch back to the spec branch, tell the owner what git printed, and stop. After
+   a clean merge, delete the spec branch with `git branch -d <branch>`, never `-D`; if `-d` refuses,
+   quote what it printed and leave the branch.
 3. Publish: print, then stop. Under a `to publish, run:` heading, print the publish step exactly as the
    *Release / deploy* row names it, with the version. Do not run it, ask about it, or check back on it.
    `/vulyk-status`'s `merged locally, not pushed: <n>` line is how anyone learns whether it ran.

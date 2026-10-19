@@ -189,7 +189,7 @@ mkdir -p docs/specs/hooklog
 cp "$SRC"/templates/plan.md docs/specs/hooklog/plan.md
 printf '> build the hooklog demo\n' > docs/specs/hooklog/brief.md
 sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/hooklog/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/hooklog#' docs/specs/hooklog/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/hooklog/plan.md
 printf 'v1\n' > hook-app.txt
 cat > docs/specs/hooklog/hooklog-01-first.md <<'EOF'
 ---
@@ -671,6 +671,102 @@ cell_case no  'pytest -p evil'
 cell_case no  'pytest a.py -p evil'
 cell_case yes 'bash -n deploy.sh'
 rm -f "$CELLS"
+
+echo "ship-safety: ship-check stage 03 proves the merge into the default branch (git merge-tree) and the branch it runs on"
+SS="$(mktemp -d)"
+(
+  cd "$SS" || exit 1
+  git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
+  mkdir -p scripts docs/specs/ss
+  cp "$SRC"/scripts/lib.sh "$SRC"/scripts/ship-check.sh scripts/
+  printf '> ship it\n' > docs/specs/ss/brief.md
+  cp "$SRC"/templates/plan.md docs/specs/ss/plan.md
+  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-19/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/ss#' docs/specs/ss/plan.md
+  printf -- '---\nstory: ss-01\nspec: ss\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/ss/ss-01.md
+  printf 'base\n' > app.txt
+  git add -A && git commit -qm init
+  git checkout -q -b vulyk/ss && printf 'spec\n' > app.txt && git commit -qam "story(ss-01)"
+  sss() { bash scripts/ship-check.sh docs/specs/ss; }
+  sss | expect "a branch that merges cleanly gets an ok merge line" "vulyk/ss merges into main cleanly"
+  git checkout -q -b elsewhere
+  sss | expect "a third branch is OPEN, naming both" "on elsewhere, but the spec's commits live on vulyk/ss"
+  git checkout -q main
+  sss | expect "neighbour: on the default branch it stays a note, not a refusal" "you are on main"
+  sss | grep -qF "but the spec's commits live on" && { echo "::error::the default branch was refused as a wrong branch"; : > "$MARK"; }
+  printf 'main moved\n' > app.txt && git commit -qam "main touches the same line"
+  git checkout -q vulyk/ss
+  sss | expect "a conflict is OPEN and names the file" "vulyk/ss conflicts with main in: app.txt"
+  sss | expect "a conflict offers the repair" "repair: merge main into vulyk/ss"
+  sss | expect "a conflict is NOT READY" "NOT READY"
+  sed -i 's#^\*\*Branch:\*\* .*#**Branch:** vulyk/gone#' docs/specs/ss/plan.md
+  sss | expect "a merge-tree error is 'cannot check', never clean" "cannot check the merge of vulyk/gone into main"
+  sss | grep -qF "vulyk/gone merges into main cleanly" && { echo "::error::a merge-tree error was read as clean"; : > "$MARK"; }
+  exit 0
+)
+rm -rf "$SS"
+
+echo "ship-safety: cycle.sh refuses claim, close-story and open-round off the spec branch, and branch refuses an old merged spec branch"
+BG_HOME="$(git rev-parse --abbrev-ref HEAD)"
+git add -A && git commit -qm "before bguard" >/dev/null 2>&1
+git branch -f main HEAD && git checkout -q main   # main must carry scripts/ and CLAUDE.md for the verbs below
+mkdir -p docs/specs/bguard
+cp "$SRC"/templates/plan.md docs/specs/bguard/plan.md
+printf '> guard the branch\n' > docs/specs/bguard/brief.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-19/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/bguard#' docs/specs/bguard/plan.md
+cat > docs/specs/bguard/bguard-01.md <<'EOF'
+---
+story: bguard-01
+spec: bguard
+status: todo
+returned: DONE
+wave: 1
+---
+# Branch guard fixture
+
+## Files
+- bguard.txt
+
+## Verification
+`true`
+EOF
+git checkout -q -b vulyk/bguard && git add -A && git commit -qm "bguard: setup" >/dev/null
+git checkout -q -b bg-other
+printf 'x\n' > bguard.txt
+head_before="$(git rev-parse HEAD)"
+for bg_verb in close-story open-round claim; do
+  case "$bg_verb" in
+    close-story) out="$(bash scripts/cycle.sh close-story docs/specs/bguard/bguard-01.md --commit 2>&1)"; ex=$? ;;
+    open-round)  out="$(bash scripts/cycle.sh open-round docs/specs/bguard --commit 2>&1)"; ex=$? ;;
+    claim)       out="$(bash scripts/cycle.sh claim docs/specs/bguard bgstamp 2>&1)"; ex=$? ;;
+  esac
+  [ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"on bg-other, spec branch is vulyk/bguard"' \
+    && echo "  ok    $bg_verb off the spec branch: exit 2, both branches named" || { echo "::error::$bg_verb exit=$ex out=$out"; fail=1; }
+done
+[ "$(git rev-parse HEAD)" = "$head_before" ] && [ ! -e docs/specs/bguard/DRIVER ] && grep -q '^status: todo' docs/specs/bguard/bguard-01.md \
+  && echo "  ok    the refusals commit nothing, claim writes no DRIVER, status: is untouched" || { echo "::error::a refusal mutated state"; fail=1; }
+git checkout -q vulyk/bguard
+out="$(bash scripts/cycle.sh close-story docs/specs/bguard/bguard-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    neighbour: on the recorded branch close-story closes as before" || { echo "::error::close-story on its own branch exit=$ex out=$out"; fail=1; }
+
+git checkout -q main
+git checkout -q -b vulyk/oldspec && printf 'old\n' > oldspec.txt && git add -A && git commit -qm "old spec work" >/dev/null
+git checkout -q main && git merge -q --no-ff vulyk/oldspec -m "merge old spec" >/dev/null
+mkdir -p docs/specs/oldspec docs/specs/freshspec
+for bg_s in oldspec freshspec; do
+  cp "$SRC"/templates/plan.md "docs/specs/$bg_s/plan.md"
+  printf '> reuse\n' > "docs/specs/$bg_s/brief.md"
+  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-19/' "docs/specs/$bg_s/plan.md"
+done
+git add -A && git commit -qm "two specs" >/dev/null
+out="$(bash scripts/cycle.sh branch docs/specs/oldspec 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"vulyk/oldspec already merged into main"' \
+  && [ -z "$(marker docs/specs/oldspec/plan.md Branch)" ] && [ "$(git rev-parse --abbrev-ref HEAD)" = main ] \
+  && echo "  ok    branch on an old merged spec branch: exit 2, no Branch line, still on main" || { echo "::error::branch reuse exit=$ex out=$out"; fail=1; }
+git branch -q vulyk/freshspec main
+out="$(bash scripts/cycle.sh branch docs/specs/freshspec 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/freshspec ] \
+  && echo "  ok    neighbour: a branch cut at the default tip is fresh, branch checks it out" || { echo "::error::fresh branch exit=$ex out=$out"; fail=1; }
+git checkout -q -- . 2>/dev/null; git checkout -q "$BG_HOME"
 
 [ -e "$MARK" ] && fail=1
 exit $fail

@@ -4,6 +4,20 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-10-19
+
+Shipping is safe from git surprises: a conflict is found before the merge, and a story never lands on the wrong branch.
+
+### Added
+- **Merge precheck at ship** (spec `ship-safety`): `ship-check.sh` stage 03 runs `git merge-tree --write-tree` of the
+  spec branch into the default branch. A conflict is NOT READY and names the files and the repair (merge the default
+  branch into the spec branch, then a new council round); a missing ref or an old git is "cannot check", never clean.
+  It also fails stage 03 when the session stands on a third branch.
+- **`/vulyk-ship` merges safely**: only from a clean default branch, `git merge --abort` and a stop on failure, and the
+  spec branch is deleted with `git branch -d` after a clean merge.
+- **Branch guard in `cycle.sh`**: `claim`, `close-story` and `open-round` exit 2 naming both branches when the checkout
+  is not on the plan's `**Branch:**`; `branch` refuses an old spec branch already merged into the default branch.
+
 ### Fixed
 - **`agent_empty` no longer fires on a Workflow agent that returned through `StructuredOutput`** (evolve
   2026-10-19): 22 of 22 rows in the week were such agents, from one study run; `handoff.py measure` now counts

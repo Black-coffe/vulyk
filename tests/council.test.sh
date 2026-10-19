@@ -94,7 +94,7 @@ mk_open_spec() { # mk_open_spec <slug> <n-asks> - mk_spec plus **Approved:**/**B
   local slug="$1" n="$2"
   mk_spec "$slug" "$n"
   sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' "docs/specs/$slug/plan.md"
-  sed -i "s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/$slug#" "docs/specs/$slug/plan.md"
+  sed -i "s#^\*\*Branch:\*\* <.*#**Branch:** $(git rev-parse --abbrev-ref HEAD)#" "docs/specs/$slug/plan.md"
   git add -A && git commit -qm "$slug: approved+branch" >/dev/null
 }
 
@@ -184,7 +184,7 @@ write_absent() { printf 'attempt 2, still nothing usable\n' > "$1/$2.attempt-2.m
 echo "status --json: exactly one JSON object with every C3 key"
 mk_spec status1 3
 sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' docs/specs/status1/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/status1#' docs/specs/status1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/status1/plan.md
 git add -A && git commit -qm "status1: briefed" >/dev/null
 
 out="$(council status docs/specs/status1 --json)"
@@ -307,7 +307,7 @@ printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "no Tier line 
 
 echo "open-round: an unparsable **Tier:** line refuses (exit 2, names the line) instead of buying the largest court (M-10/R21)"
 mk_spec notier1 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/notier1#' docs/specs/notier1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/notier1/plan.md
 git add -A && git commit -qm "notier1: branch, Tier line left as the template placeholder" >/dev/null
 out="$(council open-round docs/specs/notier1 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'tier' && echo "  ok    unparsable Tier line -> exit 2, error names Tier" \
@@ -850,7 +850,7 @@ out="$(seat_report sonnet 1 GG | council record-seat docs/specs/rseat2 1 sonnet 
 echo "record-seat: NOT stale when HEAD only advanced by the cycle's own paperwork since ROUND.head"
 mk_spec pwseat1 3
 sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' docs/specs/pwseat1/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/pwseat1#' docs/specs/pwseat1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/pwseat1/plan.md
 git add -A && git commit -qm "pwseat1: briefed, branch" >/dev/null
 set_tier pwseat1 3
 council open-round docs/specs/pwseat1 --commit >/dev/null   # open-round's own commit moves HEAD
@@ -1851,7 +1851,7 @@ out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'branch' && echo "  ok    missing Branch -> exit 2" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/oround1#' docs/specs/oround1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oround1/plan.md
 git add -A && git commit -qm "oround1: branch" >/dev/null
 
 echo "open-round: preconditions - dirty tree -> exit 2"
@@ -1907,7 +1907,7 @@ git add -A && git commit -qm "oround1: the brief takes the descope in" >/dev/nul
 echo "open-round: a non-ASCII spec whose descope was committed with the brief passes the descope check (quotePath must not C-quote the path)"
 git config core.quotePath true
 mk_spec 'оплата' 3
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/oplata#; s/^\*(empty)\*$/- ask 2 dropped - owner: "not this circle"/' 'docs/specs/оплата/plan.md'
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\*(empty)\*$/- ask 2 dropped - owner: "not this circle"/' 'docs/specs/оплата/plan.md'
 sed -i 's/^2\. ask number 2 works$/2. (descoped by the owner: not this circle)/' 'docs/specs/оплата/brief.md'
 git add -A && git commit -qm "оплата: descope with the brief" >/dev/null
 out="$(council open-round 'docs/specs/оплата' 2>&1)"; ex=$?
@@ -1973,7 +1973,7 @@ git worktree list | grep -qF "$court2" && { echo "::error::git worktree list sti
 echo "open-round: exit 6 at the ceiling, next escalated - no new round created"
 mk_spec oceil1 2
 sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-13/' docs/specs/oceil1/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/oceil1#' docs/specs/oceil1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oceil1/plan.md
 set_tier oceil1 3
 mkdir -p docs/specs/oceil1/council
 printf '1\n' > docs/specs/oceil1/council/CEILING
@@ -2013,7 +2013,7 @@ rowcount_after="$(grep -c '"spec":"oceil1"' memory/stats/council.jsonl)"
 
 echo "open-round --commit: at the ceiling, commits the ESCALATE record (clean tree afterward)"
 mk_spec oceilc1 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/oceilc1#' docs/specs/oceilc1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oceilc1/plan.md
 set_tier oceilc1 3
 mkdir -p docs/specs/oceilc1/council
 printf '1\n' > docs/specs/oceilc1/council/CEILING
@@ -2128,7 +2128,7 @@ if full; then # --quick skips from here to the 0.18 section: the reopen walk, th
 
 echo "reopen: three RED rounds escalate (ceiling) on the third, reopen bumps ceiling to 6, a 4th round opens"
 mk_spec oreopen1 5
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/oreopen1#' docs/specs/oreopen1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oreopen1/plan.md
 git add -A && git commit -qm "oreopen1: branch" >/dev/null
 set_tier oreopen1 3
 
@@ -2172,7 +2172,7 @@ out="$(council open-round docs/specs/oreopen1 --commit)"; ex=$?
 
 echo "tier ceiling: Tier 1 - ROUND ceiling=1, a RED round 1 escalates (ceiling)"
 mk_spec tceil1 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/tceil1#' docs/specs/tceil1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tceil1/plan.md
 git add -A && git commit -qm "tceil1: branch" >/dev/null
 set_tier tceil1 1
 council open-round docs/specs/tceil1 --commit >/dev/null
@@ -2188,7 +2188,7 @@ jout="$(council judge docs/specs/tceil1 --commit)"; jex=$?
 
 echo "tier ceiling: Tier 2 - round 1 RED repairs, round 2 RED escalates (ceiling), reopen gives 4"
 mk_spec tceil2 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/tceil2#' docs/specs/tceil2/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tceil2/plan.md
 git add -A && git commit -qm "tceil2: branch" >/dev/null
 set_tier tceil2 2
 for n in 1 2; do
@@ -2218,7 +2218,7 @@ council reopen docs/specs/tceil2 "owner: one more pass" --commit >/dev/null
 
 echo "judged ceiling: Tier 1 - round 1 goes STALE, round 2 opens (exit 0), round 2 RED escalates (ceiling)"
 mk_spec tstale1 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/tstale1#' docs/specs/tstale1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tstale1/plan.md
 git add -A && git commit -qm "tstale1: branch" >/dev/null
 set_tier tstale1 1
 council open-round docs/specs/tstale1 --commit >/dev/null
@@ -2238,7 +2238,7 @@ jout="$(council judge docs/specs/tstale1 --commit)"; jex=$?
 
 echo "judged ceiling: Tier 2 - STALE, RED (repair), RED (ESCALATE ceiling); after reopen the next RED is repair"
 mk_spec tstale2 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/tstale2#' docs/specs/tstale2/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tstale2/plan.md
 git add -A && git commit -qm "tstale2: branch" >/dev/null
 set_tier tstale2 2
 council open-round docs/specs/tstale2 --commit >/dev/null
@@ -2276,7 +2276,7 @@ jout="$(council judge docs/specs/tstale2 --commit)"; jex=$?
 
 echo "RED ceiling: Tier 1 - round 1 GREEN, a code commit, round 2 opens (exit 0); round 2 RED escalates (ceiling)"
 mk_spec tgreen1 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/tgreen1#' docs/specs/tgreen1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tgreen1/plan.md
 git add -A && git commit -qm "tgreen1: branch" >/dev/null
 set_tier tgreen1 1
 council open-round docs/specs/tgreen1 --commit >/dev/null
@@ -2298,7 +2298,7 @@ jout="$(council judge docs/specs/tgreen1 --commit)"; jex=$?
 
 echo "RED ceiling: Tier 2 - GREEN, RED (repair), RED (ESCALATE ceiling); after reopen (C=4) RED (repair), RED (ESCALATE ceiling)"
 mk_spec tgreen2 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/tgreen2#' docs/specs/tgreen2/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tgreen2/plan.md
 git add -A && git commit -qm "tgreen2: branch" >/dev/null
 set_tier tgreen2 2
 tg2_round() { # tg2_round <n> <sonnet-pattern> <expected-exit> <label> - commit code (n>1), open, seat, judge
@@ -2858,7 +2858,7 @@ out="$(council open-round docs/specs/nm3a --commit)"; ex=$?
 echo "open-round: r2m5/r2m6 - the ceiling block (plain path) carries the RED asks (2,5) of the last judged round"
 mk_spec ceilred1 5
 sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-14/' docs/specs/ceilred1/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/ceilred1#' docs/specs/ceilred1/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/ceilred1/plan.md
 set_tier ceilred1 3
 mkdir -p docs/specs/ceilred1/council
 printf '1\n' > docs/specs/ceilred1/council/CEILING
@@ -2998,7 +2998,7 @@ probe_nm3() {
 probe_ceiling() {
   mk_spec pceil 5
   sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, x/' docs/specs/pceil/plan.md
-  sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/pceil#' docs/specs/pceil/plan.md
+  sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/pceil/plan.md
   set_tier pceil 3 >/dev/null
   mkdir -p docs/specs/pceil/council
   printf '1\n' > docs/specs/pceil/council/CEILING
@@ -3027,7 +3027,7 @@ probe_courtcommit() {
 probe_exit6uniform() {
   mk_spec puni 2
   sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, x/' docs/specs/puni/plan.md
-  sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/puni#' docs/specs/puni/plan.md
+  sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/puni/plan.md
   set_tier puni 1 >/dev/null
   mkdir -p docs/specs/puni/council
   printf '1\n' > docs/specs/puni/council/CEILING
@@ -3703,7 +3703,7 @@ echo "ADR-013 D4: repair writes the mechanical story - asks from the row and the
 mkdir -p docs/specs/r18rp
 cp "$SRC/templates/plan.md" docs/specs/r18rp/plan.md
 printf '# r18rp (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n2. ask number 2 works\n3. ask number 3 works\n' > docs/specs/r18rp/brief.md
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-26/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/r18rp#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rp/plan.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-26/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rp/plan.md
 printf 'a\n' > r18rp-a.txt; printf 'b\n' > r18rp-b.txt
 cat > docs/specs/r18rp/r18rp-01-a.md <<'EOF'
 ---
@@ -3807,7 +3807,7 @@ echo "one ## Asks parser (lib.sh brief_asks): Asks written as > lines alone open
 mkdir -p docs/specs/r18rq
 cp "$SRC/templates/plan.md" docs/specs/r18rq/plan.md
 printf '# r18rq (brief)\n\n## Request\nbuild the thing\n\n## Asks\n> quoted ask one works\n>\n> quoted ask two works\n\n## Answers\n> not an ask\n' > docs/specs/r18rq/brief.md
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-16/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/r18rq#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rq/plan.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-16/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rq/plan.md
 printf 'q\n' > r18rq-a.txt
 printf -- '---\nstory: r18rq-01\nstatus: done\nwave: 1\n---\n# A\n\n## Requirements\n> quoted ask one works\n\n## Files\n- r18rq-a.txt\n\n## Verification\n`true`\n' > docs/specs/r18rq/r18rq-01-a.md
 git add -A && git commit -qm "r18rq: fixture" >/dev/null
