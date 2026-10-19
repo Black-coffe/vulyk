@@ -2,8 +2,9 @@
 # The defects-inject hook contract (docs/specs/self-learning/contract.md §1 effective status, §3),
 # driven through a fixture library - no model calls, no network. Covers .claude/hooks/defects-inject.sh:
 # which cards are injected (not a declared block with a check - fixtures or not - nor revoked), how a target
-# matches (path glob on file_path / notebook_path, a path token or a `cmd:` regex on a Bash line),
-# the session + agent dedup, `reset` on SessionStart, the 4000-char budget, and the latency budget.
+# matches (path glob on file_path / notebook_path, a path token or a `cmd:` regex on a Bash line, a `tool:`
+# regex on tool_name), the session + agent dedup, `reset` on SessionStart, the 12-line budget and its fold
+# line, narrowest-first order, How-to / Allowed rendering, foldered cards, and the latency budget.
 #
 #   Usage: bash tests/inject.test.sh            # from the VULYK repo root
 #
@@ -158,7 +159,7 @@ EOF
 # CRLF and the Russian heading must be tolerated.
 printf -- '---\r\nid: json-card\r\ntitle: JSON sheets\r\nstatus: text\r\npaths: ["*.json"]\r\n---\r\n\r\n## Нельзя\r\n\r\n- JSONNEVER hand-edit a sheet.\r\n' \
   > "$D/json-card.md"
-LONG="$(printf 'x%.0s' $(seq 680))"
+LONG="long line"
 for i in 01 02 03 04 05 06 07 08; do
   printf -- '---\nid: big-%s\ntitle: Big %s\nstatus: text\npaths: ["big/**"]\n---\n\n## Never\n- BIG%s %s\n' \
     "$i" "$i" "$i" "$LONG" > "$D/big-$i.md"
@@ -183,7 +184,7 @@ c="$(printf '%s' "$o" | ctx)"
 printf '%s' "$c" | expect "Edit on a matching glob names the text card" "voice-text — Voice text rule"
 printf '%s' "$c" | expect "its Never lines come prefixed with ✗" "✗ Never A1 cut on the word-end mark."
 printf '%s' "$c" | expect "a wrapped Never line is joined" "✗ Never A2 raise the music before lead_s."
-printf '%s' "$c" | expect_absent "Allowed lines are not injected" "ALLOWEDLINE"
+printf '%s' "$c" | expect "an Allowed line on a card with Never lines prints as ✓" "✓ ALLOWEDLINE is not injected."
 printf '%s' "$c" | expect_absent "a block card (check + 2 fixtures) is not injected" "BLOCKNEVER"
 printf '%s' "$c" | expect_absent "a revoked card is not injected" "REVOKEDNEVER"
 if [ -d "$HIVE/.claude/state/defects" ]; then ok "state lives under .claude/state/defects/"
@@ -227,13 +228,79 @@ run "$HIVE" "$(edit s1 "$W/pipeline/voiceover.py" agent-7)" | ctx | expect "sour
 # --- budget -----------------------------------------------------------------------------------
 echo "--- budget"
 c="$(run "$HIVE" "$(edit s4 "$W/big/x.txt")" | ctx)"
-n="$(printf '%s' "$c" | sed '/^Also matched/d' | wc -m | tr -d ' ')"
-if [ "$n" -le 4000 ]; then ok "the shown cards stay within 4000 chars ($n)"
-else bad "the shown cards are $n chars"; fi
-printf '%s' "$c" | expect "cards past the budget are listed" "Also matched, not shown (budget)"
-printf '%s' "$c" | expect "the list names the last card by path" "docs/defects/big-08.md"
-printf '%s' "$c" | expect_absent "a listed card's lines are not shown" "BIG08"
-printf '%s' "$c" | expect "the first card is shown in full" "BIG01 x"
+n="$(printf '%s\n' "$c" | sed '1d;/^+[0-9]* cards: /d' | grep -c .)"
+if [ "$n" -le 12 ]; then ok "the shown cards stay within 12 lines after the header ($n)"
+else bad "the shown cards are $n lines"; fi
+printf '%s' "$c" | expect "cards past the budget fold into one +N cards line" "+2 cards: big-07, big-08"
+printf '%s' "$c" | expect_absent "a folded card's lines are not shown" "BIG08"
+printf '%s' "$c" | expect "the first card is shown in full" "✗ BIG01 long line"
+run "$HIVE" "$(edit s4 "$W/big/x.txt")" | expect_silent "folded cards are recorded as shown"
+c="$(printf '%s' "$(edit s4b "$W/big/x.txt")" | DEFECTS_INJECT_LINES=3 CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK" | ctx)"
+n="$(printf '%s\n' "$c" | sed '1d;/^+[0-9]* cards: /d' | grep -c .)"
+if [ "$n" -le 3 ]; then ok "DEFECTS_INJECT_LINES=3 shrinks the budget ($n lines)"
+else bad "DEFECTS_INJECT_LINES=3 printed $n lines"; fi
+printf '%s' "$c" | expect "DEFECTS_INJECT_LINES=3 folds the rest" "+7 cards: big-02,"
+
+# --- tool scope, order, branches, folders (rules-tree delivery) -------------------------------
+echo "--- delivery"
+H2="$T/hive2"; D2="$H2/docs/defects"; mkdir -p "$D2/pay"
+W2="$(cd "$H2" && { pwd -W 2>/dev/null || pwd; })"
+card() { # card <file under D2> <paths> <body...>
+  local f="$1" p="$2" id; shift 2; id="$(basename "$f" .md)"
+  { printf -- '---\nid: %s\ntitle: T %s\nstatus: text\npaths: %s\n---\n\n' "$id" "$id" "$p"; printf '%s\n' "$@"; } > "$D2/$f"
+}
+card web.md '["tool:WebFetch"]' '## Never' '- WEBNEVER fetch blind.'
+card chrome.md '["tool:mcp__chrome-devtools__.*"]' '## Never' '- CHROMENEVER click blind.'
+card src-all.md '["src/**"]' '## Never' '- SRCNEVER broad rule.'
+card stripe.md '["src/pay/stripe.py"]' '## Never' '- STRIPENEVER narrow rule.'
+card edit-tool.md '["tool:Edit|Bash"]' '## Never' '- EDITTOOLNEVER on every edit.'
+card a-old.md '["fresh/**"]' '## Never' '- OLDNEVER.' '## Owner quotes' '- 2025-01-01 · «old»'
+card b-new.md '["fresh/**"]' '## Never' '- NEWNEVER.' '## Owner quotes' '- 2026-05-01 · «new»'
+card c-short.md '["cmd:dep"]' '## Never' '- SHORTNEVER.'
+card d-long.md '["cmd:deploy\\s+now"]' '## Never' '- LONGNEVER.'
+card ht.md '["how/**"]' '## How-to' '- HOWLINE do it this way.'
+card perm.md '["how/**"]' '## Allowed' '- 2026-10-01 · «PERMLINE»'
+printf 'exception: ht\n' > "$T/exc"; sed -i '2r '"$T/exc" "$D2/perm.md"
+card perm2.md '["how/x.txt"]' '## Allowed' '- 2026-10-02 · «PERM2LINE»'
+card none.md '["none/**"]' 'No branch sections here.'
+card pay/fold.md '["fold/**"]' '## Never' '- FOLDNEVER in a folder.'
+card pay/bare.md '["fold/**"]' 'Nothing.'
+edit2() { # edit2 <session> <path>   -> an Edit payload in hive2
+  printf '{"session_id":"%s","tool_name":"Edit","tool_input":{"file_path":"%s"},"cwd":"%s"}' "$1" "$2" "$W2"
+}
+tool() { # tool <session> <tool_name>
+  printf '{"session_id":"%s","tool_name":"%s","tool_input":{"url":"https://x"},"cwd":"%s"}' "$1" "$2" "$W2"
+}
+c="$(run "$H2" "$(tool d1 WebFetch)" | ctx)"
+printf '%s' "$c" | expect "tool_name WebFetch matches tool:WebFetch" "✗ WEBNEVER fetch blind."
+printf '%s' "$c" | expect_absent "a glob-only card does not match a non-file tool" "SRCNEVER"
+printf '%s' "$c" | expect_absent "tool:Edit|Bash does not match WebFetch" "EDITTOOLNEVER"
+run "$H2" "$(tool d2 mcp__chrome-devtools__click)" | ctx | expect "an mcp tool matches a tool: regex" "✗ CHROMENEVER click blind."
+run "$H2" "$(tool d2b mcp__other__click)" | expect_silent "a tool no card names is silent"
+c="$(run "$H2" "$(edit2 d3 "$W2/src/pay/stripe.py")" | ctx)"
+printf '%s' "$c" | expect "a tool: entry matches on an Edit call" "EDITTOOLNEVER"
+o1="$(printf '%s' "$c" | grep -n STRIPENEVER | cut -d: -f1)"; o2="$(printf '%s' "$c" | grep -n SRCNEVER | cut -d: -f1)"
+if [ -n "$o1" ] && [ -n "$o2" ] && [ "$o1" -lt "$o2" ]; then ok "the card on src/pay/stripe.py prints before the one on src/**"
+else bad "order narrow-first broken:"; printf '%s\n' "$c" | sed 's/^/        /'; fi
+c="$(printf '{"session_id":"d4","tool_name":"Bash","tool_input":{"command":"deploy now"},"cwd":"%s"}' "$W2" | CLAUDE_PROJECT_DIR="$H2" bash "$HOOK" | ctx)"
+printf '%s' "$c" | expect "a tool: entry matches on a Bash call" "EDITTOOLNEVER"
+o1="$(printf '%s' "$c" | grep -n LONGNEVER | cut -d: -f1)"; o2="$(printf '%s' "$c" | grep -n SHORTNEVER | cut -d: -f1)"
+if [ -n "$o1" ] && [ -n "$o2" ] && [ "$o1" -lt "$o2" ]; then ok "a cmd: entry ranks by its literal characters"
+else bad "cmd: order broken:"; printf '%s\n' "$c" | sed 's/^/        /'; fi
+c="$(run "$H2" "$(edit2 d5 "$W2/fresh/a.txt")" | ctx)"
+o1="$(printf '%s' "$c" | grep -n NEWNEVER | cut -d: -f1)"; o2="$(printf '%s' "$c" | grep -n OLDNEVER | cut -d: -f1)"
+if [ -n "$o1" ] && [ -n "$o2" ] && [ "$o1" -lt "$o2" ]; then ok "equal scope: the card with the newer dated line first"
+else bad "freshness order broken:"; printf '%s\n' "$c" | sed 's/^/        /'; fi
+c="$(run "$H2" "$(edit2 d6 "$W2/how/x.txt")" | ctx)"
+printf '%s' "$c" | expect "a How-to line prints as →" "→ HOWLINE do it this way."
+printf '%s' "$c" | expect "a linked Allowed line prints as ✓ with its exception:" "✓ 2026-10-01 · «PERMLINE» (exception: ht)"
+printf '%s' "$c" | expect "an unlinked Allowed card is withheld in one line" "✓ withheld: perm2 conflicts with ht (no exception:)"
+printf '%s' "$c" | expect_absent "the withheld card's ✓ line is not printed" "PERM2LINE"
+run "$H2" "$(edit2 d7 "$W2/none/a.txt")" | ctx | expect "a card with no branch lines prints read <path>" "read docs/defects/none.md"
+c="$(run "$H2" "$(edit2 d8 "$W2/fold/a.txt")" | ctx)"
+printf '%s' "$c" | expect "a foldered card prints with ref <area>/<id>" "pay/fold — T fold"
+printf '%s' "$c" | expect "its Never line prints" "✗ FOLDNEVER in a folder."
+printf '%s' "$c" | expect "a foldered card with no branch lines points at its real path" "read docs/defects/pay/bare.md"
 
 # --- what stays silent ------------------------------------------------------------------------
 echo "--- silent"

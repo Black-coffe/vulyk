@@ -1,8 +1,8 @@
 ---
 story: rules-tree-04
 spec: rules-tree
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 2
@@ -68,5 +68,12 @@ dedup per session/agent and `reset` after compaction are unchanged.
 `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh`
 
 ## Implementation notes
+- `.claude/hooks/defects-inject.sh`: private parser block, `glob_hits`, `never_lines` and `BUDGET` removed; cards come from `defects_lib` (imported from the hook's own dir), matching is `scope_matches` per entry.
+- Edit family (Edit|Write|MultiEdit|NotebookEdit) feeds file_path/notebook_path, Bash feeds the command; any other tool feeds neither, so only `tool:` entries can match it.
+- Budget: card-granular; once a card does not fit, it and every later card fold into `+N cards: <ref>, ...`; a first card larger than the budget is truncated, not folded, so the narrowest card always shows.
+- Order key: max specificity of the card's matched entries, then newest date over Owner quotes + Allowed lines, then ref.
+- Withheld rule uses the gate's overlap test (identical entry, or glob vs glob as path; same as `scopes_overlap` in defects-check.sh) among matched live prohibitive cards, including already-shown and block cards; a plain both-matched test withheld everything under a broad `tool:Edit` card.
+- `✓` lines carry ` (exception: <ref>)` per line; dedup state now keys by ref (identical to id for flat libraries).
+- `tests/inject.test.sh`: the old "Allowed lines are not injected" and 4000-char cases replaced by the ✓ rendering and 12-line cases; new hive2 fixture covers tool scope, order, How-to/Allowed/withheld, read-path, foldered cards.
 
 ## Findings
