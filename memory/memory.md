@@ -17,13 +17,13 @@
 ## Unmapped territory
 - `docs/` narrative pages (architecture.md, pipeline.md, cycle.md, token-economy.md,
   model-cascade.md, command-reference.md, getting-started.md) and `docs/adr/` beyond ADR-001
-- `templates/`, `bootstrap/interview.md`, `.claude/hooks/` (bar the SessionStart brief, in scripts.md),
+- `templates/`, `bootstrap/interview.md`, `.claude/hooks/` (bar the SessionStart brief and the defect hooks/`defects_lib.py`, in scripts.md and the wiki),
   `install.sh` (upgrade contract in scripts.md), `scripts/vulyk-update.sh`'s own mechanics, `tests/` harness internals beyond what council.test.sh/cycle.test.sh
   cover, `.github/workflows/ci.yml` beyond the two test jobs
 
 ## Wiki domains
 <!-- load-bearing domain notes in docs/wiki/ -->
-- (none yet)
+- the defect library as the rules tree (cards, Never/Allowed/How-to, scope, one parser, delivery, capture, gate): docs/wiki/rules-tree.md (ADR-021)
 
 ## Verification
 <!-- the real ## Commands rows from CLAUDE.md - VULYK's own repo, no compiler, no test runner -->

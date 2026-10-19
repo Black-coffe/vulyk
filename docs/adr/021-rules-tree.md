@@ -1,6 +1,6 @@
 # ADR-021: The defect library becomes the project's rules tree (Нельзя / Можно / Как надо)
 
-- Status: proposed (owner approves at the plan stop)
+- Status: accepted (2026-10-19, owner: Andrei - plan stop of spec `rules-tree`, «Да, утверждаю», release 0.32.0)
 - Date: 2026-10-19
 - Spec: docs/specs/rules-tree
 - Evidence: brief `docs/specs/rules-tree/brief.md` (request verbatim, Asks 1-12); supergrill
@@ -38,7 +38,7 @@ VULYK cards, ~14% personal; almost no verbatim owner words. ADR-014 D12/A13 (27.
    `## Как надо` / `## How-to`. The branch of a card is derived from the sections it has; there is no `kind:` field.
    A «Можно» is a standalone record: its own card with its own `paths:` and verbatim owner words with a date. It cuts
    an exception from a prohibition only by `exception: <id>` (D3 of the grill). Cards live in area sub-folders
-   `docs/defects/<area>/<id>.md`; root-level cards stay valid (area `-`).
+   `docs/defects/<area>/<id>.md`; root-level cards stay valid (area `general`).
 2. **D5 (intake reads only the human) → reads the human across channels.** Typed text as today. Pasted content:
    only through the explicit phrase or after the owner's typed "yes". Question-window answers: a PostToolUse hook on
    `AskUserQuestion`; text the owner typed is a quote, a picked option is a decision, never a quote. Side-agent notes:

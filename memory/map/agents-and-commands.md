@@ -61,26 +61,21 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   `AskUserQuestion` «Выпускаем?»; yes runs `vulyk-ship` via Skill, no / `claude -p` → one-line advice.
 - **`/vulyk-review`** - claim + `advance --claim`; dispatch the seats `next` names; `advance --ingest`;
   release. `build:W` = RED, repair story → `/vulyk-build`. `green` asks the same question.
-- **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses). Stage 03 (ship-check.sh:96-131) fails on a
-  third branch (not the recorded `**Branch:**`, not the default; the default branch only prints a note)
-  and runs `git merge-tree --write-tree` of the spec branch into the default: 0 clean, 1 conflict naming
-  files + repair, other (missing ref checked first, git < 2.38, conflict with no file) = "cannot check".
-  Step 1: a conflict is never overridden; offer the repair (merge default into the spec branch, new
-  council round) only on the owner's yes. Step 2: release commit; local merge only on a clean default
-  tree (`git status --porcelain` empty), `git merge --no-ff`; failure → `git merge --abort`, back to the
-  spec branch, stop; then `git branch -d` (never `-D`). Prints the publish command, never runs it;
-  `drone-docs`/`librarian` only with work; next-brief draft.
+- **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses). Stage 03 fails on a third branch and runs
+  `git merge-tree --write-tree` of the spec branch into the default: 0 clean, 1 conflict naming files +
+  repair, other = "cannot check". A conflict is never overridden; the repair (merge default into the spec
+  branch, new council round) only on the owner's yes. Release commit; local `merge --no-ff` only on a clean
+  default tree, failure → `merge --abort`, stop; then `branch -d` (never `-D`). Prints the publish command,
+  never runs it; `drone-docs`/`librarian` only with work; next-brief draft.
 - **`/vulyk-status`** - driver line, unpushed merges, council stats, `token-report.py`, `state.sh`
-  table, map freshness, then step 6 prints the brief's `maintenance due|waits for` lines (piped from
-  `session-start-brief.sh`, vulyk-status.md:48; else `maintenance: nothing due`; no raw learnings
-  count). Writes nothing but `.claude/state.json`.
+  table, map freshness, step 3 `defects: ` + `defects-index.sh --counts` (or `defects: no library`), then
+  the brief's `maintenance due|waits for` lines (else `maintenance: nothing due`). Writes nothing but
+  `.claude/state.json`.
 - **`/vulyk-evolve`** - step 0 `evolve-ledger.py . resolve` + `window` (a rejected hypothesis is not
   re-proposed without newer evidence; a `pending` branch stops the run); step 1 learnings + skills +
-  `token-report.py --since <7 days>` + corrections counter (0.24.0, vulyk-evolve.md:17-29: `bash
-  .claude/hooks/defect-intake.sh --lexicon` to a temp file, litopys found via PATH then
-  `~/.claude/plugins/cache/litopys/litopys/*/bin/litopys` newest first, first with the `corrections`
-  verb wins; prints `corrections (7d): n by lexicon · m in records · u not in docs/defects`, or a
-  "not installed" / "update to 0.4.0+" line; blocks nothing; "filed" = quote verbatim in `docs/defects/`);
+  `token-report.py --since <7 days>` + corrections counter (`defect-intake.sh --lexicon` to a temp file
+  fed to litopys `corrections`; prints `corrections (7d): n by lexicon · m in records · u not in
+  docs/defects`, or a "not installed" / "update to 0.4.0+" line; blocks nothing);
   7-day council/human/anomaly check-in; telemetry consent/publish (prints, never sends); repo-only
   `telemetry.sh inbox`; step 4 admission rules (caps in `tests/maintenance.test.sh`); step 5 builds
   the changeset in worktree `.claude/worktrees/evolve-<date>` on `vulyk/evolve-<date>` (`inbox --clear`
@@ -98,10 +93,8 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   is a separate choice. **`/vulyk-bootstrap`** - interview, Profile + Commands markers, scouts → map;
   the SessionStart brief offers it once while the Profile holds `<fill in`; a no is the Profile row
   `| Bootstrap | declined <date> |`.
-- **`/vulyk-map`**, **`/vulyk-handoff`** (0.26.1: works from any folder). Two `!` injections, both
-  through `${CLAUDE_PROJECT_DIR}` (`state.sh`; `handoff.sh dump "${CLAUDE_SESSION_ID}"` reads exactly
-  that session's transcript, no newest-file fallback). Rule: an injection never names a script relatively
-  (`scripts/injection-check.sh`, scripts.md). gc/evolve/map are prompted by the SessionStart
-  `maintenance due: ...` line (scripts.md).
+- **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
+  script path (`injection-check.sh`, scripts.md); `handoff.sh dump "${CLAUDE_SESSION_ID}"` reads exactly that
+  session's transcript. gc/evolve/map are prompted by the SessionStart `maintenance due: ...` line.
 
-last-verified: 2026-10-19 (v0.31.0, ADR-013, ADR-015, ADR-020)
+last-verified: 2026-10-19 (v0.32.0, ADR-013, ADR-015, ADR-020)
