@@ -120,28 +120,32 @@ bash scripts/defects-check.sh           # audit: debt, effective status, every b
 bash scripts/defects-check.sh <arg>     # before showing work: debt, then every declared block check with <arg>
 ```
 
-Exit 0 green, 1 red (new debt, a new undeliverable card, overlap or escape, a duplicate id, a red check, a blind fixture),
-2 no library or no python. The last line is
+Exit 0 green, 1 red (new debt, a new undeliverable card, overlap, escape, conflict or exception, a duplicate id, a
+red check, a blind fixture, a stale index), 2 no library or no python. The last line is
 the verdict. Check output goes to a log under `${TMPDIR:-/tmp}`. `DEFECTS_DIR` points it at another library.
+
+The three branches, under the same new/old rule:
+
+- **Debt** is owed only by a prohibitive card. A permissive card with two or more dated Allowed lines is one
+  `allowed repeats <n> <ref>` line: a counter, never red.
+- **Conflict.** A live permissive and a live prohibitive card whose `paths:` overlap (one entry string on both, or
+  one glob matching the other entry as a path; `cmd:`/`tool:` compare as strings) and the permissive card's
+  `exception:` does not name the prohibitive one: `CONFLICT <allowed-ref> <never-ref>`, and the Never wins. New =
+  the newest Allowed line.
+- **Exception.** An `exception:` naming no live card, or (audit) a `passes:` fixture the named card's `check:`
+  exits non-zero on: the Never check fires on the allowed form. New = the `exception:` line.
+- **Index.** When `INDEX.md` exists and differs from the cards, `INDEX` is red; without it, one `no index` line.
 
 ## Cards
 
-The card list is generated, not hand-written: `docs/defects/INDEX.md` (`scripts/defects-index.sh`). Until
-it exists the table below is kept by hand.
+The card list is generated: [INDEX.md](INDEX.md), three tables (Never, Allowed, How-to) by area with counters.
 
-| id | class | status | quotes | check | last quote |
-|---|---|---|---|---|---|
-| `framework-fix-skips-live-hives` | A framework fix ships in VULYK while a live hive keeps the defect | text | 1 | - | 2026-10-14 |
-| `upgrade-overwrites-host-edits` | An upgrade overwrites a hive's own edits and deletions in framework files | text | 1 | (spec `upgrade-keeps-host-edits`) | 2026-10-13 |
-| `host-internals-in-public-repo` | A host project's insides quoted into the public VULYK repository | block | 1 | `bash scripts/leak-check.sh <arg>` | 2026-10-13 |
-| `command-injection-follows-cwd` | A command's injection names its script relative to the session cwd | block | 1 | `bash scripts/injection-check.sh <arg>` | 2026-10-13 |
-| `work-handed-back-to-owner` | Work an agent can do is handed back to the owner as a to-do list | text | 1 (+2 hives) | - | 2026-10-13 |
-| `claim-not-from-source` | A claim made from memory, a docstring or a guess instead of the source that settles it | text | 0 (+4 hives) | - | - |
-| `measurement-unlike-reality` | A test or measurement that does not represent the reality it is used to judge | text | 0 (+4 hives) | - | - |
-| `safeguard-bypassable-or-late` | A safeguard that can be bypassed, passes silently on a missing input, or ships after what it guards | text | 0 (+3 hives) | - | - |
-| `done-without-real-run` | Work reported done without running it where it will really run | text | 0 (+3 hives) | - | - |
-| `outward-artifact-carries-internals` | An artifact going outward carries internal or client content beyond names | text | 0 (+2 hives) | - (name form: `host-internals-in-public-repo`) | - |
-| `owner-words-by-builder` | The owner's words or decision written by the builder | text | 0 (+2 hives) | - | - |
+```
+bash scripts/defects-index.sh                  # regenerate INDEX.md after a card changes
+bash scripts/defects-index.sh --check          # exit 1, `index stale`, when INDEX.md differs (the gate runs it)
+bash scripts/defects-index.sh --grep <regex>   # search the cards: <ref>:<line>: <text>
+bash scripts/defects-index.sh --counts         # cards · never · allowed · how-to · allowed repeats
+```
 
 **Trust.** `defects-check.sh` runs each card's `check:` as a shell command, and `lead-review` runs the gate on the
 branch under review. A card's `check:` is code of this repository, with the same trust as its tests: review a

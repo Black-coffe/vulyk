@@ -1,8 +1,8 @@
 ---
 story: rules-tree-03
 spec: rules-tree
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 2
@@ -82,5 +82,12 @@ cards and prints counts; VULYK's own INDEX.md is committed; the hand-written REA
 `bash scripts/defects-check.sh`
 
 ## Implementation notes
+- scripts/defects-check.sh: debt skipped for permissive cards (`allowed repeats <dated-1> <ref>` info); CONFLICT via defects_lib.parse_scope/scope_matches; EXCEPTION (missing ref, red/old by the exception: line; passes: fixtures run as `P` records in the audit only, like block fixtures); INDEX via defects-index.sh --check, `no index` info otherwise; UNDELIVERABLE hint names tool:.
+- scripts/defects-index.sh (new): write / --check / --grep / --counts; `status` column is the declared status (effective status would make the index drift on a fixture file change); counts are over live cards, tables list revoked cards too.
+- --grep exits 1 on no match (grep convention); --check normalises CRLF in INDEX.md so an autocrlf checkout is not stale.
+- docs/defects/INDEX.md generated and committed; README `## Cards` table replaced by pointer + commands, branch findings added under `## The gate`.
+- .claude/commands/vulyk-status.md: new step 3 `defects:`, later steps renumbered.
+- tests/defects.test.sh: 21 new cases; against HEAD's gate the debt/conflict/exception/index cases fail; the tool-only UNDELIVERABLE cases already passed before (c.paths was non-empty), they pin the behaviour.
+- Existing VULYK cards carry undated `## Allowed` lines inside prohibitive cards: they appear in the Allowed table with repeats 0.
 
 ## Findings
