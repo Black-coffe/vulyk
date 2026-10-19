@@ -4,6 +4,16 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-10-19
+
+### Fixed
+- **A How-to card no longer blocks an Allowed card.** The gate's `CONFLICT` and the inject hook's `✓ withheld:` line
+  counted a How-to card as a prohibition, so an Allowed card sharing a scope with a How-to card turned the gate red and
+  was hidden from the agent. ADR-021 point 7 (and the brief's D7) names only a «Нельзя» scope: a conflict now needs a
+  card with a Never line. The How-to still comes first: the hook shows such an Allowed line marked
+  `(the How-to of <ref> comes first)`, and only `exception:` lifts the mark. Debt is unchanged (a repeated How-to
+  without a check still owes one). Found by the council's opus seat in rules-tree round 2.
+
 ## [0.32.0] - 2026-10-19
 
 The defect library becomes the project's rules tree: one library, three branches (spec `rules-tree`, ADR-021).

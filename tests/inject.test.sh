@@ -262,6 +262,8 @@ card ht.md '["how/**"]' '## How-to' '- HOWLINE do it this way.'
 card perm.md '["how/**"]' '## Allowed' '- 2026-10-01 · «PERMLINE»'
 printf 'exception: ht\n' > "$T/exc"; sed -i '2r '"$T/exc" "$D2/perm.md"
 card perm2.md '["how/x.txt"]' '## Allowed' '- 2026-10-02 · «PERM2LINE»'
+card nv.md '["nv/**"]' '## Never' '- NVLINE never here.'
+card perm3.md '["nv/a.txt"]' '## Allowed' '- 2026-10-03 · «PERM3LINE»'
 card none.md '["none/**"]' 'No branch sections here.'
 card pay/fold.md '["fold/**"]' '## Never' '- FOLDNEVER in a folder.'
 card pay/bare.md '["fold/**"]' 'Nothing.'
@@ -294,8 +296,11 @@ else bad "freshness order broken:"; printf '%s\n' "$c" | sed 's/^/        /'; fi
 c="$(run "$H2" "$(edit2 d6 "$W2/how/x.txt")" | ctx)"
 printf '%s' "$c" | expect "a How-to line prints as →" "→ HOWLINE do it this way."
 printf '%s' "$c" | expect "a linked Allowed line prints as ✓ with its exception:" "✓ 2026-10-01 · «PERMLINE» (exception: ht)"
-printf '%s' "$c" | expect "an unlinked Allowed card is withheld in one line" "✓ withheld: perm2 conflicts with ht (no exception:)"
-printf '%s' "$c" | expect_absent "the withheld card's ✓ line is not printed" "PERM2LINE"
+printf '%s' "$c" | expect "a How-to card prohibits nothing: an unlinked Allowed card beside it prints its ✓ line, the How-to first" "✓ 2026-10-02 · «PERM2LINE» (the How-to of ht comes first)"
+printf '%s' "$c" | expect_absent "no withheld line under a How-to card" "withheld"
+c="$(run "$H2" "$(edit2 d6b "$W2/nv/a.txt")" | ctx)"
+printf '%s' "$c" | expect "an unlinked Allowed card under a Never card is withheld in one line" "✓ withheld: perm3 conflicts with nv (no exception:)"
+printf '%s' "$c" | expect_absent "the withheld card's ✓ line is not printed" "PERM3LINE"
 run "$H2" "$(edit2 d7 "$W2/none/a.txt")" | ctx | expect "a card with no branch lines prints read <path>" "read docs/defects/none.md"
 c="$(run "$H2" "$(edit2 d8 "$W2/fold/a.txt")" | ctx)"
 printf '%s' "$c" | expect "a foldered card prints with ref <area>/<id>" "pay/fold — T fold"

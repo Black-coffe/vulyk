@@ -128,10 +128,11 @@ The three branches, under the same new/old rule:
 
 - **Debt** is owed only by a prohibitive card. A permissive card with two or more dated Allowed lines is one
   `allowed repeats <n> <ref>` line: a counter, never red.
-- **Conflict.** A live permissive and a live prohibitive card whose `paths:` overlap (one entry string on both, or
-  one glob matching the other entry as a path; `cmd:`/`tool:` compare as strings) and the permissive card's
-  `exception:` does not name the prohibitive one: `CONFLICT <allowed-ref> <never-ref>`, and the Never wins. New =
-  the newest Allowed line.
+- **Conflict.** A live permissive card and a live card with a Never line (a How-to line alone prohibits nothing)
+  whose `paths:` overlap (one entry string on both, or one glob matching the other entry as a path; `cmd:`/`tool:`
+  compare as strings) and the permissive card's `exception:` does not name the Never one: `CONFLICT <allowed-ref> <never-ref>`, and the Never wins. New =
+  the newest Allowed line. Beside an unlinked How-to card there is no conflict, but the How-to still comes first: the
+  inject hook shows the Allowed lines marked `(the How-to of <ref> comes first)`, and only `exception:` lifts that.
 - **Exception.** An `exception:` naming no live card, or (audit) a `passes:` fixture the named card's `check:`
   exits non-zero on: the Never check fires on the allowed form. New = the `exception:` line.
 - **Index.** When `INDEX.md` exists and differs from the cards, `INDEX` is red; without it, one `no index` line.

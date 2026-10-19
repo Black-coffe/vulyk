@@ -9,7 +9,8 @@
 #
 # At most $DEFECTS_INJECT_LINES (12) lines after the header, narrowest scope first, then the freshest
 # dated line; the rest fold into one `+N cards: <ref>, ...` line. An Allowed-only card whose
-# `exception:` does not name a prohibitive card matched here gets one `✓ withheld:` line instead.
+# `exception:` does not name a Never card matched here gets one `✓ withheld:` line instead; beside an
+# unlinked How-to card its lines are shown marked `(the How-to of <ref> comes first)`.
 # Cards declaring block with a check: are not injected (the gate runs it, fixtures or not), revoked cards never are. Each card is shown once
 # per session_id + agent_id; state: .claude/state/defects/inject-<session>.txt under the repo root
 # ($CLAUDE_PROJECT_DIR, else the input's cwd).
@@ -144,7 +145,7 @@ def main():
     except OSError:
         seen = set()
 
-    hits, nevers = [], []
+    hits, nevers, howtos = [], [], []
     for card in load_cards(d):
         kind = injected_as(card)
         if kind == 'revoked':
@@ -152,10 +153,12 @@ def main():
         spec = [specificity(g) for g in card.paths if scope_matches(g, tool, paths, cmd)]
         if not spec:
             continue
-        if card.never or card.howto:
-            # Every live prohibitive card on this target counts against an unlinked Allowed card,
+        if card.never:
+            # Every live Never card on this target counts against an unlinked Allowed card (a How-to prohibits nothing),
             # also one already shown or one the gate runs: the prohibition wins when unlinked.
             nevers.append(card)
+        elif card.howto:
+            howtos.append(card)
         if kind == 'text' and agent + '\t' + card.ref not in seen:
             dates = [x for x in map(allowed_date, card.quotes + card.allowed) if x]
             hits.append((max(spec), max(dates) if dates else '', card))
@@ -175,7 +178,10 @@ def main():
             if clash and not (card.never or card.howto):
                 lines.append('✓ withheld: ' + card.ref + ' conflicts with ' + clash[0] + ' (no exception:)')
             else:
+                first = [h.ref for h in howtos if h.ref not in (card.ref, card.exception) and overlaps(card, h)]
                 exc = ' (exception: ' + card.exception + ')' if card.exception else ''
+                if first and not (card.never or card.howto):
+                    exc += ' (the How-to of ' + first[0] + ' comes first)'
                 lines += ['✓ ' + x + exc for x in card.allowed]
         if len(lines) == 1:
             lines.append('read docs/defects/' + card.path)

@@ -25,8 +25,8 @@
 # newer than the library's README.md, or uncommitted. DUPLICATE: two cards with one id - always red.
 # Branches: debt is owed only by a prohibitive card (a Never or How-to line); a permissive card (Allowed
 # lines only) with >= 2 dated Allowed lines is an `allowed repeats` line. CONFLICT: a live permissive and
-# a live prohibitive card with overlapping paths: and no `exception:` naming the latter (new/old by the
-# newest Allowed line). EXCEPTION: an `exception:` naming no live card, or (audit) a `passes:` fixture
+# a live card with a Never line (a How-to line prohibits nothing) with overlapping paths: and no
+# `exception:` naming the latter (new/old by the newest Allowed line). EXCEPTION: an `exception:` naming no live card, or (audit) a `passes:` fixture
 # the named card's check: fails on (new/old by the exception: line). INDEX: INDEX.md exists and
 # `defects-index.sh --check` says stale (no INDEX.md: one `no index` line, never red).
 #
@@ -278,7 +278,7 @@ for p in live.values():
         continue
     t = max([when(p.path, n)[0] for n in p.lines['allowed']] or [float('inf')])
     for n in live.values():
-        if not (n.never or n.howto) or p.exception == n.ref or not scopes_overlap(p.paths, n.paths):
+        if not n.never or p.exception == n.ref or not scopes_overlap(p.paths, n.paths):
             continue
         if is_new(t):
             emit('C', 'CONFLICT %s %s: allowed and never share a scope, no exception: links them - the never wins; add exception: %s to %s or narrow its paths:' % (p.ref, n.ref, n.ref, p.ref))

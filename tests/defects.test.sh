@@ -357,6 +357,11 @@ card never text '' '' 2026-01-05; sed -i 's|^paths: .*|paths: ["src/pay/stripe.p
 pcard allow '["src/pay/**"]' '' '' 2026-01-06; cm 2026-01-01 docs/defects/never.md docs/defects/allow.md
 cm 2026-01-02 docs/defects/README.md
 run; ok "a conflict older than the library -> old conflict, green" "$([ "$rc" = 0 ] && has '^old conflict allow never'; echo $?)"
+mkrepo "$TMP/branches-howto"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
+card howto text '' '' 2026-01-05; sed -i -e 's|^paths: .*|paths: ["src/pay/stripe.py"]|' -e 's|^## Never$|## How-to|' docs/defects/howto.md
+pcard allow '["src/pay/**"]' '' '' 2026-01-06
+run; ok "a How-to card prohibits nothing: allowed over its scope, no exception: -> no CONFLICT, green" \
+  "$([ "$rc" = 0 ] && ! has 'CONFLICT'; echo $?)"
 
 mkrepo "$TMP/passes"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
 card never block 'bash check.sh <arg>' "$FX" 2026-01-05
