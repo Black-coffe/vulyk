@@ -53,10 +53,11 @@ WORDS = ['не так', 'again', 'i said', 'i told you', 'why did you', 'not wha
 LEXICON = re.compile(r'(?<!\w)(?:' + '|'.join(map(re.escape, STEMS)) + r')'
                      r'|(?<!\w)(?:' + '|'.join(map(re.escape, WORDS)) + r')(?!\w)')
 TIMECODE = re.compile(r'\b\d{1,2}:\d{2}\b')
-# The explicit phrase (RU, UK, EN); the last group names the branch.
+# The explicit phrase (RU, UK, EN); the last group names the branch. RU/UK allow up to three words
+# between the verb and the preposition («внеси это / вот это в запрет»).
 PHRASES = [
-    re.compile(r'(?<!\w)(?:внеси|запиши|добавь)\s+в\s+(запрет|правило|разрешение)', re.I),
-    re.compile(r'(?<!\w)(?:внеси|запиши|додай)\s+(?:в|до)\s+(заборон\S*|правил\S*|дозв[іо]л\S*)', re.I),
+    re.compile(r'(?<!\w)(?:внеси|запиши|добавь)(?:\s+[^\s:]+){0,3}?\s+в\s+(запрет|правило|разрешение)', re.I),
+    re.compile(r'(?<!\w)(?:внеси|запиши|додай)(?:\s+[^\s:]+){0,3}?\s+(?:в|до)\s+(заборон\S*|правил\S*|дозв[іо]л\S*)', re.I),
     re.compile(r'(?<!\w)(?:add|file|put)\s+(?:this\s+)?(?:to|as|in|under)\s+(?:a\s+|the\s+)?(never|rule|allowed)', re.I),
 ]
 LIMIT = 600

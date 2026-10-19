@@ -297,10 +297,16 @@ for p in live.values():
         else:
             emit('I', 'old exception %s: exception: %s names no live card' % (p.ref, p.exception))
         continue
-    if not p.passes:
-        continue
     if not target.check:
-        emit('I', 'passes unused  %s: %s has no check:' % (p.ref, target.ref))
+        if p.passes:
+            emit('I', 'passes unused  %s: %s has no check:' % (p.ref, target.ref))
+        continue
+    if not p.passes:
+        # ADR-021 D9: an exception to a checked never needs the fixture that check passes.
+        if new:
+            emit('N', 'EXCEPTION %s: exception: %s has a check: and %s lists no passes: fixture - add one the check exits 0 on' % (p.ref, target.ref, p.ref))
+        else:
+            emit('I', 'old exception %s: exception: %s has a check:, no passes: fixture' % (p.ref, target.ref))
         continue
     if mode == 'audit':
         for f in p.passes:

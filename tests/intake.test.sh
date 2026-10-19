@@ -153,6 +153,8 @@ ctx "$HIVE" '{"prompt":"<pasted_content id=\"1\">запиши в правило:
   | expect "RU \"запиши в правило\" inside a paste asks for a how-to card" "owner asks to file a how-to card"
 ctx "$HIVE" '{"prompt":"додай до дозволу: можна різати на паузі"}' \
   | expect "UK \"додай до дозволу\" asks for an allowed card" "owner asks to file a allowed card"
+ctx "$HIVE" '{"prompt":"вот это внеси это в запрет, обрезка"}'   | expect "RU spoken \"внеси это в запрет\" asks for a never card" "owner asks to file a never card"
+ctx "$HIVE" '{"prompt":"додай оце до заборон"}'   | expect "UK \"додай оце до заборон\" asks for a never card" "owner asks to file a never card"
 ctx "$HIVE" '{"prompt":"add this to never: cutting a word in half"}' \
   | expect "EN \"add this to never\" asks for a never card" "owner asks to file a never card"
 o="$(ctx "$HIVE" '{"prompt":"опять запрет нарушен, правило не то"}')"

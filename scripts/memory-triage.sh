@@ -6,8 +6,8 @@
 #
 # Lists this project's private auto memory so the main session can sort it into cards, personal or
 # stays, and delete. Default dir: ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/<slug>/memory, where
-# <slug> is the repo root path with every `:`, `/` and `\` turned into `-` (E:\Projects\vulyk ->
-# E--Projects-vulyk). Prints one TSV row per *.md except MEMORY.md / memory.md:
+# <slug> is the repo root path with every character but [0-9A-Za-z] turned into `-`, as Claude Code
+# names it (E:\Projects\vulyk -> E--Projects-vulyk, D:/YouTube_AI -> D--YouTube-AI). Prints one TSV row per *.md except MEMORY.md / memory.md:
 #   path<TAB>type<TAB>first heading
 # `type` comes from a `type:` line inside the leading frontmatter (nested or not), else `-`; the
 # heading is the first `#` line, else `-`. An absent dir prints `no private memory: <dir>`, exit 0.
@@ -33,7 +33,7 @@ fi
 dir="${1:-}"
 if [ -z "$dir" ]; then
   root="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "memory-triage: not in a git repo; name the dir" >&2; exit 2; }
-  slug="$(printf '%s' "$root" | sed 's#[:/\\]#-#g')"
+  slug="$(printf '%s' "$root" | LC_ALL=C.UTF-8 sed 's#[^0-9A-Za-z]#-#g')"
   dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$slug/memory"
 fi
 [ -d "$dir" ] || { echo "no private memory: $dir"; exit 0; }

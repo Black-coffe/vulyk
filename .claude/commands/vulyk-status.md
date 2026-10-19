@@ -1,5 +1,5 @@
 ---
-description: Hive dashboard - driver, council numbers, defect counts, token spend per spec, unpushed merges, open stories, memory freshness, skill stats, budget posture
+description: Hive dashboard - driver, council, defects, spec token spend, unpushed merges, open stories, memory freshness, skill stats, budget posture
 argument-hint: []
 ---
 

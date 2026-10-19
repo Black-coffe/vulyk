@@ -367,6 +367,8 @@ pcard allow '["src/never/**"]' never '[docs/defects/fixtures/clean.txt, docs/def
 run; ok "a passes: fixture the never check fails on -> EXCEPTION (blind exception), RED" \
   "$([ "$rc" = 1 ] && has '^EXCEPTION allow: passes: docs/defects/fixtures/orig.txt fails the check of never' && [ "$last" = 'RED: 1 exceptions' ]; echo $?)"
 run good.txt; ok "the gate with an argument does not run passes: fixtures" "$(! has 'passes:'; echo $?)"
+pcard allow '["src/never/**"]' never '' 2026-01-06
+run; ok "an exception to a checked never with no passes: fixture -> EXCEPTION, RED"   "$([ "$rc" = 1 ] && has '^EXCEPTION allow: exception: never has a check: and allow lists no passes: fixture' && [ "$last" = 'RED: 1 exceptions' ]; echo $?)"
 
 echo "--- tool-only scope is deliverable (rules-tree 03)"
 mkrepo "$TMP/toolscope"; cm 2026-01-01 docs/defects/README.md

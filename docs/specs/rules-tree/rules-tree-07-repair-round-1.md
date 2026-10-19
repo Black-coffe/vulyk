@@ -1,7 +1,7 @@
 ---
 story: rules-tree-07
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 3
@@ -52,6 +52,14 @@ ASK 7: RED - explicit phrase in any channel incl. pastes; auto-capture with «о
 - docs/adr/014-defect-library.md
 - docs/adr/018-*.md
 - docs/adr/019-*.md
+
+## Implementation notes
+- .claude/hooks/defect-intake.sh: RU/UK phrase regexes take up to three words between verb and preposition («внеси это / вот это в запрет», «додай оце до заборон»); EN unchanged.
+- tests/intake.test.sh: two probes for the spoken forms (RU, UK).
+- scripts/defects-check.sh: exception to a never card with a check: and no passes: is a red EXCEPTION (old one: info line); passes on an unchecked never still "passes unused".
+- tests/defects.test.sh: fixture for the missing-passes exception, RED.
+- scripts/memory-triage.sh: slug = every char but [0-9A-Za-z] -> `-`, under LC_ALL=C.UTF-8 so a non-ASCII char is one dash (falls back to per-byte where that locale is missing).
+- .claude/commands/vulyk-status.md: description kept "defects", trimmed "council numbers"/"token spend per spec" to fit: 4980 B <= 4983 B.
 
 ## Verification
 `python -m py_compile .claude/hooks/*.py`
