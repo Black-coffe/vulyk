@@ -107,6 +107,27 @@ else
 fi
 if [ "$BRANCH_NOW" = "$DEFAULT" ]; then
   say "" "note" "you are on $DEFAULT: ship-check reads the spec branch; run it there, before the merge"
+elif [ -n "$BRANCH_REC" ] && [ "$BRANCH_NOW" != "$BRANCH_REC" ]; then
+  fail 03 "code: on $BRANCH_NOW, but the spec's commits live on $BRANCH_REC - switch to it before shipping"
+fi
+# ship-safety: prove the spec branch merges into the default branch before /vulyk-ship merges it.
+# merge-tree (git 2.38+) writes no ref and touches no checkout. Exit 0 is clean, 1 is a conflict;
+# anything else (an old git, a missing ref) is "cannot check", never clean. A missing ref also
+# exits 1, so both refs are verified first, and a "conflict" naming no file is "cannot check" too.
+if [ -n "$BRANCH_REC" ]; then
+  MT_RC=0; MT_OUT=""
+  for mt_ref in "$DEFAULT" "$BRANCH_REC"; do
+    git rev-parse --verify -q "$mt_ref^{commit}" >/dev/null 2>&1 || { MT_RC=128; MT_OUT="no branch $mt_ref"; }
+  done
+  [ "$MT_RC" -eq 0 ] && { MT_OUT="$(git merge-tree --write-tree --name-only --no-messages "$DEFAULT" "$BRANCH_REC" 2>&1)"; MT_RC=$?; }
+  MT_FILES=""
+  [ "$MT_RC" -eq 1 ] && MT_FILES="$(printf '%s\n' "$MT_OUT" | sed -n '2,$p' | grep -v '^$' | tr '\n' ' ' | sed 's/ $//')"
+  [ "$MT_RC" -eq 1 ] && [ -z "$MT_FILES" ] && MT_RC=129
+  case "$MT_RC" in
+    0) ok 03 "code: $BRANCH_REC merges into $DEFAULT cleanly (git merge-tree)" ;;
+    1) fail 03 "code: $BRANCH_REC conflicts with $DEFAULT in: $MT_FILES - repair: merge $DEFAULT into $BRANCH_REC, then open a new council round" ;;
+    *) fail 03 "code: cannot check the merge of $BRANCH_REC into $DEFAULT (git merge-tree exit $MT_RC: $(printf '%s' "$MT_OUT" | head -1)) - needs git 2.38+ and both branches" ;;
+  esac
 fi
 DIRTY="$(git status --porcelain 2>/dev/null)"
 if [ -n "$DIRTY" ]; then

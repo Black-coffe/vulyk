@@ -672,5 +672,38 @@ cell_case no  'pytest a.py -p evil'
 cell_case yes 'bash -n deploy.sh'
 rm -f "$CELLS"
 
+echo "ship-safety: ship-check stage 03 proves the merge into the default branch (git merge-tree) and the branch it runs on"
+SS="$(mktemp -d)"
+(
+  cd "$SS" || exit 1
+  git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
+  mkdir -p scripts docs/specs/ss
+  cp "$SRC"/scripts/lib.sh "$SRC"/scripts/ship-check.sh scripts/
+  printf '> ship it\n' > docs/specs/ss/brief.md
+  cp "$SRC"/templates/plan.md docs/specs/ss/plan.md
+  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-19/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/ss#' docs/specs/ss/plan.md
+  printf -- '---\nstory: ss-01\nspec: ss\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/ss/ss-01.md
+  printf 'base\n' > app.txt
+  git add -A && git commit -qm init
+  git checkout -q -b vulyk/ss && printf 'spec\n' > app.txt && git commit -qam "story(ss-01)"
+  sss() { bash scripts/ship-check.sh docs/specs/ss; }
+  sss | expect "a branch that merges cleanly gets an ok merge line" "vulyk/ss merges into main cleanly"
+  git checkout -q -b elsewhere
+  sss | expect "a third branch is OPEN, naming both" "on elsewhere, but the spec's commits live on vulyk/ss"
+  git checkout -q main
+  sss | expect "neighbour: on the default branch it stays a note, not a refusal" "you are on main"
+  sss | grep -qF "but the spec's commits live on" && { echo "::error::the default branch was refused as a wrong branch"; : > "$MARK"; }
+  printf 'main moved\n' > app.txt && git commit -qam "main touches the same line"
+  git checkout -q vulyk/ss
+  sss | expect "a conflict is OPEN and names the file" "vulyk/ss conflicts with main in: app.txt"
+  sss | expect "a conflict offers the repair" "repair: merge main into vulyk/ss"
+  sss | expect "a conflict is NOT READY" "NOT READY"
+  sed -i 's#^\*\*Branch:\*\* .*#**Branch:** vulyk/gone#' docs/specs/ss/plan.md
+  sss | expect "a merge-tree error is 'cannot check', never clean" "cannot check the merge of vulyk/gone into main"
+  sss | grep -qF "vulyk/gone merges into main cleanly" && { echo "::error::a merge-tree error was read as clean"; : > "$MARK"; }
+  exit 0
+)
+rm -rf "$SS"
+
 [ -e "$MARK" ] && fail=1
 exit $fail
