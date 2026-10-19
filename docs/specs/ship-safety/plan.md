@@ -35,5 +35,7 @@ Make the two git moments of the cycle safe. At ship: `ship-check.sh` proves the 
 
 ## Plan deltas
 
+- 2026-10-19 · trigger: story 02's branch guard refused 20 fixtures in `tests/council.test.sh` (and one in `tests/cycle.test.sh`) that record `**Branch:** vulyk/<slug>` while running on `main` · decision: `ship-safety-02` also lists `tests/council.test.sh`; each fixture records the branch it actually stands on (`git rev-parse --abbrev-ref HEAD`); the `branch` verb's own tests are untouched · rejected: an env switch that turns the guard off for tests (a bypassable guard), and loosening the guard.
+
 **Approved:** Andrei, 2026-10-19
 **Branch:** vulyk/ship-safety
