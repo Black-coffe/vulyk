@@ -2,7 +2,7 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
-## [Unreleased]
+## [0.31.0] - 2026-10-19
 
 The defect library becomes the project's rules tree: one library, three branches (spec `rules-tree`, ADR-021).
 
