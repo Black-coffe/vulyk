@@ -7,3 +7,4 @@
 - 2026-10-19T10:37:14Z · 04-council:RED · round 1 verdict RED at 753ad00 pack 58d0b357cff8 · next: repair
 - 2026-10-19T10:37:16Z · 03-building · repair round 1: rules-tree-07-repair-round-1.md · next: build:3
 - 2026-10-19T12:31:35Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/rules-tree/round-2 · next: dispatch:opus,review
+- 2026-10-19T12:43:04Z · 04-council:GREEN · round 2 verdict GREEN at 85d00c6 pack 013c975c5ef4 · next: green
