@@ -434,6 +434,26 @@ expect "vulyk-handoff: the state view injection has its allowed-tools prefix" 'g
 expect "vulyk-handoff: the dump injection has its allowed-tools prefix" 'granted bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/handoff.sh" dump' < "$T/grants"
 expect_absent "vulyk-handoff: no injection lacks a grant" "NOT GRANTED" < "$T/grants"
 
+echo "--- memory-triage.sh lists private memory and writes nothing (rules-tree ask 11)"
+MC="$T/mtcfg"; MSLUG="$(git -C "$SRC" rev-parse --show-toplevel | sed 's#[:/\\]#-#g')"
+MD="$MC/projects/$MSLUG/memory"; mkdir -p "$MD"
+printf -- '---\nname: a\nmetadata:\n  type: feedback\n---\n\n# Push only after the remote check\nbody\n' > "$MD/fb-push.md"
+printf '# A loose note\n\ntype: not-frontmatter\n' > "$MD/loose.md"
+printf -- '- [Push](fb-push.md) - push rule\n- [Loose](loose.md) - a note\n- [Other](other.md) - kept\n' > "$MD/MEMORY.md"
+( cd "$SRC" && CLAUDE_CONFIG_DIR="$MC" bash scripts/memory-triage.sh ) > "$T/mt" 2>&1
+expect "memory-triage: a feedback file lists with its type and heading" "$(printf 'fb-push.md\tfeedback\tPush only after the remote check')" < "$T/mt"
+expect "memory-triage: a file without frontmatter lists with type -" "$(printf 'loose.md\t-\tA loose note')" < "$T/mt"
+expect_absent "memory-triage: MEMORY.md is not a row" "MEMORY.md" < "$T/mt"
+[ "$(grep -c . "$T/mt")" -eq 2 ] && ok "memory-triage: exactly two rows" || bad "memory-triage: expected 2 rows, got $(cat "$T/mt")"
+bash "$SRC/scripts/memory-triage.sh" "$T/no-such-dir" > "$T/mt-absent" 2>&1; echo "exit=$?" >> "$T/mt-absent"
+expect "memory-triage: an absent dir says so" "no private memory: $T/no-such-dir" < "$T/mt-absent"
+expect "memory-triage: an absent dir exits 0" "exit=0" < "$T/mt-absent"
+bash "$SRC/scripts/memory-triage.sh" --index-lines "$MD/MEMORY.md" "$MD/fb-push.md" loose.md > "$T/mt-idx" 2>&1
+expect "memory-triage --index-lines: names the moved file's line" "[Push](fb-push.md)" < "$T/mt-idx"
+expect "memory-triage --index-lines: takes a bare file name" "[Loose](loose.md)" < "$T/mt-idx"
+expect_absent "memory-triage --index-lines: leaves other lines out" "other.md" < "$T/mt-idx"
+[ "$(ls "$MD" | wc -l | tr -d ' ')" -eq 3 ] && ok "memory-triage: writes nothing" || bad "memory-triage wrote into $MD: $(ls "$MD")"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1

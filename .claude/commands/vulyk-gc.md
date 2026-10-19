@@ -25,3 +25,30 @@ The pathspec keeps `memory/stats/` and anything else staged out of it; `:(icase)
 Nobody has to remember this command: the SessionStart brief says `maintenance due: gc (...)` when stub
 learnings exist or 10+ raw ones wait, and the Queen runs it after the owner's task, on the default branch
 with a clean tree, then tells the owner in one line what changed, including the `CONSOLIDATED.md` counts.
+
+## `memory` mode: one-off triage of private memory into cards
+
+Private auto memory (`~/.claude/projects/<slug>/memory/`) is outside the repo and the `librarian` has no shell, so
+the main session does every step itself. Never dispatch a subagent for it: personal files are never opened by one.
+
+1. Run `bash "${CLAUDE_PROJECT_DIR}/scripts/memory-triage.sh"`. It lists `path<TAB>type<TAB>first heading` and
+   writes nothing. `no private memory: <dir>` → say so in one line and stop.
+2. Read each listed file.
+3. Propose three heaps in one table, one row per file: **card** (a project rule: Never / Allowed / How-to),
+   **personal / stays** (servers, access, people, the owner's style, anything with client data: stays in private
+   memory), **delete** (stale, done, or a duplicate of an existing card: `bash scripts/defects-index.sh --grep <word>`).
+   For a card row also give the target `docs/defects/<area>/<id>.md` (or an existing card it joins), the branch and
+   the retold line.
+4. Ask once with AskUserQuestion: the recommended list first, marked recommended; the other options are a changed
+   list or no.
+5. On no, or a changed list: redo the table from the owner's answer and ask again. Nothing is written before a yes.
+6. On yes, write the cards. A card made from memory is retold, never an owner quote: no `## Owner quotes` line, and a
+   `## Source` section with one line per file: `- YYYY-MM-DD · auto memory <file> · retold, not a quote`.
+7. Run `bash scripts/leak-check.sh <card>` on each new or changed card. A hit: rewrite the line without the internal
+   name, or move the file to the personal heap; no card is committed with a hit.
+8. Delete each moved and each dropped file from the private memory dir, and their index lines: `bash
+   scripts/memory-triage.sh --index-lines <dir>/MEMORY.md <file>...` prints exactly the lines to remove from that
+   `MEMORY.md`. Personal files stay, with their lines.
+9. Run `bash scripts/defects-index.sh`, then commit the cards and the index with `chore(defects): memory triage`.
+   The commit message names counts, never a personal file or its content.
+10. Report one line: cards written, files deleted from private memory, files kept.

@@ -1,6 +1,7 @@
 # ADR-019: No external memory engine; owner lessons stay checks
 
 - Status: accepted (owner, 2026-09-30)
+- Amended: 2026-10-19, amended by ADR-021: rules-tree
 - Date: 2026-09-29
 - Spec: docs/specs/hindsight-memory (study), docs/specs/hindsight-harvest (v0.23.0)
 
