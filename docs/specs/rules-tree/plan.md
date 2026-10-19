@@ -212,7 +212,7 @@ All "per ADR-021": the planner's concrete shape; the Queen reconciles with the A
 **Approved:** Andrei, 2026-10-19 («Да, утверждаю (Рекомендую)»)
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/rules-tree
-**Checked:** <written by scripts/human-check.sh>
 **Council:** RED round 1, 2026-10-19, at 753ad00, pack 58d0b357cff8 - red: 7
 **Council:** GREEN round 2, 2026-10-19, at 85d00c6, pack 013c975c5ef4
 **Shipped:** 0.32.0, 2026-10-19, at 8e17049 - merged to main, publish pending
+**Checked:** ACCEPTED by Andrei, 2026-10-19, at 31beeaf - merge-time fix in defect-intake.sh (side-agent note + its > lines) and the evolve test's expected wording, diff 4f891df..8e17049; owner: «Принимаю (Рекомендую)»
