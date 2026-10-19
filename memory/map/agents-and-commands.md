@@ -61,8 +61,15 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   `AskUserQuestion` «Выпускаем?»; yes runs `vulyk-ship` via Skill, no / `claude -p` → one-line advice.
 - **`/vulyk-review`** - claim + `advance --claim`; dispatch the seats `next` names; `advance --ingest`;
   release. `build:W` = RED, repair story → `/vulyk-build`. `green` asks the same question.
-- **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses); release commit; local merge; prints the
-  publish command, never runs it; `drone-docs`/`librarian` only with work; next-brief draft.
+- **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses). Stage 03 (ship-check.sh:96-131) fails on a
+  third branch (not the recorded `**Branch:**`, not the default; the default branch only prints a note)
+  and runs `git merge-tree --write-tree` of the spec branch into the default: 0 clean, 1 conflict naming
+  files + repair, other (missing ref checked first, git < 2.38, conflict with no file) = "cannot check".
+  Step 1: a conflict is never overridden; offer the repair (merge default into the spec branch, new
+  council round) only on the owner's yes. Step 2: release commit; local merge only on a clean default
+  tree (`git status --porcelain` empty), `git merge --no-ff`; failure → `git merge --abort`, back to the
+  spec branch, stop; then `git branch -d` (never `-D`). Prints the publish command, never runs it;
+  `drone-docs`/`librarian` only with work; next-brief draft.
 - **`/vulyk-status`** - driver line, unpushed merges, council stats, `token-report.py`, `state.sh`
   table, map freshness, then step 6 prints the brief's `maintenance due|waits for` lines (piped from
   `session-start-brief.sh`, vulyk-status.md:48; else `maintenance: nothing due`; no raw learnings
@@ -80,22 +87,21 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   runs there), then `add`/`run` rows and a ledger-only commit (a `run` row even with 0 proposals).
   `--dry-run` writes no proposal/run row.
 - **`/vulyk-gc`** - dispatches `librarian`; main session `git rm`s its `Delete:` list + stubs, prunes
-  snapshots >14 days, runs one guarded line (vulyk-gc.md:20): refuses (`gc: refused - ...lost more
-  than half`, no commit) when entries or bytes of `CONSOLIDATED.md` fell below half, else commits
-  `chore(memory): gc`. A refusal means show the owner the diff.
+  snapshots >14 days, one guarded line: refuses (`gc: refused - ...lost more than half`, no commit) when
+  `CONSOLIDATED.md` fell below half, else commits `chore(memory): gc`. **`/vulyk-gc memory`** (0.32.0) - the
+  main session alone, never a subagent: `memory-triage.sh` lists private memory, one table into card /
+  personal / delete, one `AskUserQuestion`, nothing written before a yes; cards are retold (a `## Source`
+  line, no `## Owner quotes`), `leak-check.sh` each, moved files and their `MEMORY.md` lines deleted,
+  `defects-index.sh`, commit `chore(defects): memory triage`.
 - **`/vulyk-pause`** / **`/vulyk-resume`** - wrap `cycle.sh pause`/`resume`.
 - **`/vulyk-update`** - `vulyk-update.sh . --check`, CHANGELOG summary, ask; `--constitution replace`
   is a separate choice. **`/vulyk-bootstrap`** - interview, Profile + Commands markers, scouts → map;
   the SessionStart brief offers it once while the Profile holds `<fill in`; a no is the Profile row
   `| Bootstrap | declined <date> |`.
 - **`/vulyk-map`**, **`/vulyk-handoff`** (0.26.1: works from any folder). Two `!` injections, both
-  through `${CLAUDE_PROJECT_DIR}`: `bash "${CLAUDE_PROJECT_DIR}/scripts/state.sh"`, then
-  `bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/handoff.sh" dump "${CLAUDE_SESSION_ID}"`; `allowed-tools`
-  use the same prefixes. `handoff.py dump <session-id>` reads exactly that session's transcript
-  (`transcript_for_session`, any project folder, no newest-file fallback, `_exact_session`); root is
-  `CLAUDE_PROJECT_DIR`, else the hook's own hive (`own_hive()`); file names via `create_unique`
-  (`-2`, `-3` on a clash). Rule: an injection never names a script relatively
+  through `${CLAUDE_PROJECT_DIR}` (`state.sh`; `handoff.sh dump "${CLAUDE_SESSION_ID}"` reads exactly
+  that session's transcript, no newest-file fallback). Rule: an injection never names a script relatively
   (`scripts/injection-check.sh`, scripts.md). gc/evolve/map are prompted by the SessionStart
   `maintenance due: ...` line (scripts.md).
 
-last-verified: 2026-10-18 (v0.30.0, ADR-013, ADR-015, ADR-020)
+last-verified: 2026-10-19 (v0.31.0, ADR-013, ADR-015, ADR-020)
