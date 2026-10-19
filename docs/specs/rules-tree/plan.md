@@ -213,5 +213,5 @@ All "per ADR-021": the planner's concrete shape; the Queen reconciles with the A
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/rules-tree
 **Checked:** <written by scripts/human-check.sh>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Council:** RED round 1, 2026-10-19, at 753ad00, pack 58d0b357cff8 - red: 7
 **Shipped:** <written by scripts/ship-check.sh --record>
