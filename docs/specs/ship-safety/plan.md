@@ -39,3 +39,4 @@ Make the two git moments of the cycle safe. At ship: `ship-check.sh` proves the 
 
 **Approved:** Andrei, 2026-10-19
 **Branch:** vulyk/ship-safety
+**Council:** GREEN round 1, 2026-10-19, at ded0733, pack c422eb940f63
