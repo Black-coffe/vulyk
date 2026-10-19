@@ -202,6 +202,27 @@ driver_guard() { # driver_guard <spec> <verb-label> <stamp-opt> - exits 2 before
   exit 2
 }
 
+branch_guard() { # branch_guard <spec> <verb-label> - ship-safety: exits 2 before anything mutates
+  # when plan.md records a **Branch:** and the checkout stands on another branch (a second session
+  # switched it): a story commit would land there. Refuses, never switches. No **Branch:** yet
+  # (before `branch` ran): nothing to compare.
+  local rec now
+  rec="$(marker "$1/plan.md" Branch)"
+  [ -n "$rec" ] || return 0
+  now="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+  [ "$now" = "$rec" ] && return 0
+  echo "cycle: $2 - on $now, but the spec's commits live on $rec; switch to $rec first" >&2
+  emit false "$2" 2 error "on $now, spec branch is $rec"
+  exit 2
+}
+
+default_branch() { # default_branch -> origin's HEAD branch, else main, else master, else empty
+  local d; d="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)"; d="${d#origin/}"
+  [ -n "$d" ] || { git show-ref --verify --quiet refs/heads/main && d=main; }
+  [ -n "$d" ] || { git show-ref --verify --quiet refs/heads/master && d=master; }
+  printf '%s' "$d"
+}
+
 [ -n "$VERB" ] || usage
 
 # --- small parsers shared by status and judge ---------------------------------------------
@@ -1424,6 +1445,16 @@ cmd_branch() { # cmd_branch <spec> <commit:0|1>
   if [ -z "$branch_v" ]; then
     local co_err co_status
     if git rev-parse --verify -q "$BR" >/dev/null 2>&1; then
+      # ship-safety: an old spec's branch, merged and behind the default tip, is not a place to
+      # build - a reused slug would build on stale code. A branch at the default tip is fresh.
+      local def; def="$(default_branch)"
+      if [ -n "$def" ] && [ "$BR" != "$def" ] && git rev-parse --verify -q "$def" >/dev/null 2>&1 \
+        && [ "$(git rev-parse "$BR")" != "$(git rev-parse "$def")" ] \
+        && git merge-base --is-ancestor "$BR" "$def" 2>/dev/null; then
+        echo "cycle: branch - $BR is already merged into $def (an old spec's branch); pick a new slug, or delete it with git branch -d $BR" >&2
+        emit false branch 2 error "$BR already merged into $def"
+        exit 2
+      fi
       co_err="$(git checkout -q "$BR" 2>&1)"; co_status=$?
     else
       co_err="$(git checkout -q -b "$BR" 2>&1)"; co_status=$?
@@ -1828,6 +1859,7 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1> [<stamp>]
   local SPECDIR; SPECDIR="$(dirname "$STORY")"
   pause_guard "$SPECDIR" close-story
   driver_guard "$SPECDIR" close-story "$STAMP"
+  branch_guard "$SPECDIR" close-story
 
   local ST SELFMARKED=0; ST="$(fm_field "$STORY" status)"
   case "$ST" in
@@ -2267,6 +2299,7 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
   }
   pause_guard "$SPEC" open-round
   driver_guard "$SPEC" open-round "$STAMP"
+  branch_guard "$SPEC" open-round
 
   local SLUG PLAN; SLUG="$(slug_of "$SPEC")"; PLAN="$SPEC/plan.md"
 
@@ -2567,6 +2600,7 @@ cmd_claim() { # cmd_claim <spec> <stamp>
     exit 1
   }
   pause_guard "$SPEC" claim
+  branch_guard "$SPEC" claim
 
   local holder; holder="$(driver_stamp "$SPEC")"
   if [ -n "$holder" ]; then

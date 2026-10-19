@@ -1,8 +1,8 @@
 ---
 story: ship-safety-02
 spec: ship-safety
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 2
@@ -21,6 +21,7 @@ One helper in `cycle.sh`, called by `claim`, `close-story` and `open-round` afte
 ## Files
 - scripts/cycle.sh
 - tests/cycle.test.sh
+- tests/council.test.sh
 - docs/adr/001-cycle-state-contract.md
 
 ## Non-goals
@@ -41,5 +42,8 @@ memory/map slice for scripts/cycle.sh (claim, close-story, open-round, branch).
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
+- scripts/cycle.sh: branch_guard() after pause/driver guards in claim, close-story, open-round; default_branch(); cmd_branch refuses an existing vulyk/<slug> that is an ancestor of the default branch and not its tip.
+- The guard refused 21 test fixtures that recorded a branch they never stood on (plan delta): they now record `git rev-parse --abbrev-ref HEAD`.
+- Gap left: claim's contract lives in ADR-004, which this story does not name; ADR-001 rows for branch, close-story, open-round are amended.
 
 ## Findings
