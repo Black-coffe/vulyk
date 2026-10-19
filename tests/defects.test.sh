@@ -13,8 +13,9 @@ ok() { if [ "$2" -eq 0 ]; then echo "  ok    $1"; else echo "::error::$1"; fail=
 mkrepo() { # mkrepo <dir> - a git repo with the gate, a check and good/bad fixtures; README not committed yet
   mkdir -p "$1" && cd "$1" || exit 1
   git init -q -b main . && git config user.name t && git config user.email t@t && git config core.autocrlf false
-  mkdir -p scripts docs/defects/fixtures
+  mkdir -p scripts docs/defects/fixtures .claude/hooks
   cp "$SRC/scripts/defects-check.sh" scripts/
+  cp "$SRC/.claude/hooks/defects_lib.py" .claude/hooks/
   printf '# Defect library\n' > docs/defects/README.md
   printf '#!/usr/bin/env bash\n! grep -q bad "$1"\n' > check.sh
   printf 'bad original\n' > docs/defects/fixtures/orig.txt
@@ -37,6 +38,8 @@ card() { # card <id> <status> <check> <fixtures> <quote lines...>
 run() { out="$(bash scripts/defects-check.sh "$@" 2>&1)"; rc=$?; last="$(printf '%s\n' "$out" | tail -1)"; }
 has() { printf '%s\n' "$out" | grep -q -- "$1"; }
 FX='[docs/defects/fixtures/orig.txt, docs/defects/fixtures/near.txt]'
+PYBIN="$(command -v python3 || command -v python)" || { echo "defects.test.sh: needs python3 or python"; exit 1; }
+dump() { "$PYBIN" .claude/hooks/defects_lib.py docs/defects 2>&1; }
 
 echo "--- no library, empty library"
 mkrepo "$TMP/none"; rm -rf docs/defects
@@ -241,6 +244,76 @@ card prep block 'bash check.sh <arg>' "$FX" 2026-01-05 2026-01-06; cm 2026-01-08
 run; ok "quotes before the card became block (owner-does-prep) -> green" "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
 printf '\n## История\n- 2026-01-09 · v2 · a history line, not a quote\n' >> docs/defects/prep.md; cm 2026-01-09 docs/defects/prep.md
 run; ok "a dated line under ## История is never an escape" "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
+
+echo "--- area folders (rules-tree 01)"
+mkrepo "$TMP/area"
+card rep text '' '' 2026-01-01 2025-12-31; mkdir -p docs/defects/pay; mv docs/defects/rep.md docs/defects/pay/
+cm 2026-01-01 docs/defects/README.md; cm 2026-01-03 docs/defects/pay/rep.md
+run
+ok "a foldered card is audited under its ref, blamed by its library path -> DEBT pay/rep with sha" \
+  "$([ "$rc" = 1 ] && has '^DEBT  pay/rep: 2 quotes, not block, new quote [0-9a-f]\{7\} 2026-01-03' && ! has 'fatal' && [ "$last" = 'RED: 1 new debt' ]; echo $?)"
+mkrepo "$TMP/area-old"
+card u text '' '' 2026-01-05; sed -i '/^paths:/d' docs/defects/u.md; mkdir -p docs/defects/pay; mv docs/defects/u.md docs/defects/pay/
+cm 2026-01-01 docs/defects/pay/u.md; cm 2026-01-02 docs/defects/README.md
+run; ok "neighbour: git log finds a foldered card's add-commit (older than the root README) -> old undeliverable" \
+  "$([ "$rc" = 0 ] && has '^old undeliverable  pay/u:' && ! has 'fatal'; echo $?)"
+mkdir -p docs/defects/pay/fixtures
+printf -- '---\nid: fx\npaths: ["x"]\n---\n' > docs/defects/pay/fixtures/fx.md
+cp docs/defects/pay/fixtures/fx.md docs/defects/fixtures/fx2.md; cp docs/defects/pay/fixtures/fx.md docs/defects/pay/index.md
+cp docs/defects/pay/fixtures/fx.md docs/defects/INDEX.md; cp docs/defects/pay/fixtures/fx.md docs/defects/pay/README.md
+o="$(dump)"
+ok "fixtures/ (root and area), README.md and index.md are not cards" \
+  "$([ "$(printf '%s\n' "$o" | grep -c '"ref"')" = 1 ] && printf '%s\n' "$o" | grep -qF '"ref": "pay/u", "id": "u", "area": "pay", "path": "pay/u.md"'; echo $?)"
+card root text '' '' 2026-01-05
+ok "a root card is area general, ref = id" "$(dump | grep -qF '"ref": "root", "id": "root", "area": "general", "path": "root.md"'; echo $?)"
+
+echo "--- duplicate ids (rules-tree 01)"
+mkrepo "$TMP/dup"; cm 2026-01-01 docs/defects/README.md
+card dup text '' '' 2026-01-05; mkdir -p docs/defects/a docs/defects/b
+sed 's/^keys: .*/keys: [k-a]/' docs/defects/dup.md > docs/defects/a/dup.md
+run; ok "a root card and a foldered card with one id -> DUPLICATE, RED, exit 1" \
+  "$([ "$rc" = 1 ] && has '^DUPLICATE  dup: a/dup, dup share one id' && [ "$last" = 'RED: 1 duplicate ids' ]; echo $?)"
+mv docs/defects/dup.md docs/defects/b/dup.md
+run; ok "neighbour: one id in two area folders -> DUPLICATE" "$([ "$rc" = 1 ] && has '^DUPLICATE  dup: a/dup, b/dup'; echo $?)"
+mv docs/defects/b/dup.md docs/defects/b/other.md
+run; ok "distinct ids -> no DUPLICATE" "$([ "$rc" = 0 ] && ! has 'DUPLICATE'; echo $?)"
+
+echo "--- sections and scope in the parser dump (rules-tree 01)"
+mkrepo "$TMP/dump"; mkdir -p docs/defects/pay
+cat > docs/defects/pay/refund-ok.md <<'CARD'
+---
+id: refund-ok
+title: Refunds allowed
+exception: pay/no-refund   # the cut
+passes: [docs/defects/fixtures/clean.txt, "a, b.txt"]
+paths: ["src/pay/stripe.py", "tool:WebFetch", "cmd:stripe\\s+refund"]
+---
+
+## Можно
+- 2026-10-19 · «можно возвращать»
+- undated line
+
+## Як треба
+- do it this way
+  continued
+
+## Не можна
+- never this
+CARD
+o="$(dump)"
+ok "exception: parses as a ref (inline comment dropped)" "$(printf '%s\n' "$o" | grep -qF '"exception": "pay/no-refund"'; echo $?)"
+ok "passes: parses like fixtures: (a quoted item keeps its comma)" \
+  "$(printf '%s\n' "$o" | grep -qF '"passes": ["docs/defects/fixtures/clean.txt", "a, b.txt"]'; echo $?)"
+ok "tool:<regex> parses as kind tool, cmd: as cmd, a path as glob" \
+  "$(printf '%s\n' "$o" | grep -qF '"scopes": [["glob", "src/pay/stripe.py"], ["tool", "WebFetch"], ["cmd", "stripe\\s+refund"]]'; echo $?)"
+ok "ru Allowed, uk How-to and uk Never sections parse; an Allowed line yields its date" \
+  "$(printf '%s\n' "$o" | grep -qF '"never": ["never this"], "allowed": ["2026-10-19 · «можно возвращать»", "undated line"], "howto": ["do it this way continued"]' \
+     && printf '%s\n' "$o" | grep -qF '"allowed_dates": ["2026-10-19", null]'; echo $?)"
+card none text '' '' 2026-01-05
+ok "neighbour: a card with no exception: -> null, English sections parse" \
+  "$(dump | grep '"ref": "none"' | grep -qF '"exception": null' && dump | grep '"ref": "none"' | grep -qF '"never": ["do it"]'; echo $?)"
+ok "specificity: src/pay/stripe.py above src/**, tool:WebFetch above tool:.*" \
+  "$("$PYBIN" -c 'import sys; sys.path.insert(0, ".claude/hooks"); from defects_lib import specificity as s; sys.exit(not (s("src/pay/stripe.py") > s("src/**") and s("tool:WebFetch") > s("tool:.*")))'; echo $?)"
 
 echo "--- usage"
 run a b; ok "two arguments -> exit 2" "$([ "$rc" = 2 ]; echo $?)"

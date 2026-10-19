@@ -2,9 +2,19 @@
 
 One card per **class** of work the owner rejected - not per place it happened. A card holds the owner's
 verbatim words, the cause, what is never done again and, when code can see the class, a command that fails
-on it. Read the cards of your area before you work there. This README is the index; it is never a card.
+on it. Read the cards of your area before you work there. This README is the format contract; it is never a card.
 
-## A card: `docs/defects/<id>.md`
+## Areas and refs
+
+A card is `docs/defects/<id>.md` (area `general`) or `docs/defects/<area>/<id>.md`, one folder level, the
+folder named after an area of the project (`pay/`, `video/`). `fixtures/`, at the root or inside an area, is never
+a card folder; `README.md` and `INDEX.md` (any case) are never cards. The `id` is the file stem and is unique
+across the whole library: two cards with one id are `DUPLICATE`, always red. A card's **ref** is `<id>` for a
+root card and `<area>/<id>` for a foldered one; findings, `exception:` and the index name cards by ref. One
+parser reads the library for the gate and the hooks: `.claude/hooks/defects_lib.py`
+(`python3 .claude/hooks/defects_lib.py docs/defects` prints one JSON object per card).
+
+## A card: `docs/defects/<id>.md` or `docs/defects/<area>/<id>.md`
 
 ```markdown
 ---
@@ -40,10 +50,22 @@ Frontmatter is plain `key: value` lines; a list is `[a, b, "c"]`. A missing fiel
 | `check` | a command run from the repo root that exits non-zero on this defect; the first `<...>` token (`<arg>`) is replaced by the argument or fixture path |
 | `fixtures` | files the check must fail on: the original case first, then neighbour forms |
 | `keys` | words that tie an owner remark to this class |
-| `paths` | where the class lives: path globs from the repo root (`**` allowed), or `cmd:<regex>` matched in a Bash command line |
+| `paths` | the card's scope, any mix of: path globs from the repo root (`**` allowed; a glob without `/` also matches the basename), `cmd:<regex>` searched in a Bash command line, `tool:<regex>` matched against the whole tool name (`tool:WebFetch`, `tool:mcp__.*`) |
+| `exception` | on a permissive card: the ref of the Never card it carves an exception from (`exception: pay/no-refund`); without it an Allowed card never overrides a Never card |
+| `passes` | on a permissive card, a list like `fixtures`: files the `check:` of the `exception:` card must exit 0 on |
 
-Sections: `## Owner quotes` (or `## Цитаты владельца`), `## Cause`, `## Never` (or `## Нельзя`), optional
-`## Allowed` (or `## Можно`) and `## Revoked`. A **quote line** starts `- YYYY-MM-DD · ` and gives the date,
+Sections: `## Owner quotes` (or `## Цитаты владельца`, `## Цитати власника`), `## Cause`, `## Revoked`, and
+the three branches, each under an English, Russian or Ukrainian heading (the first heading of a branch counts):
+
+| Branch | Headings | Lines |
+|---|---|---|
+| Never | `## Never`, `## Нельзя`, `## Не можна` | `- ` one forbidden action per bullet |
+| Allowed | `## Allowed`, `## Можно`, `## Можна` | `- YYYY-MM-DD · «owner words»`, dated, verbatim |
+| How-to | `## How-to`, `## Как надо`, `## Як треба` | `- ` one way of doing it right per bullet |
+
+A bullet continues on indented lines. A card with a Never or How-to line is **prohibitive**; a card with Allowed
+lines only is **permissive**: a standalone record with its own `paths:` and the owner's dated words, which overrides
+a Never card only through its `exception:` key. A **quote line** starts `- YYYY-MM-DD · ` and gives the date,
 the material and the place, then the words in «». One line per remark; a repeat is a new line, never an edit.
 
 ## Statuses
@@ -98,11 +120,14 @@ bash scripts/defects-check.sh           # audit: debt, effective status, every b
 bash scripts/defects-check.sh <arg>     # before showing work: debt, then every declared block check with <arg>
 ```
 
-Exit 0 green, 1 red (new debt, a new undeliverable card, overlap or escape, a red check, a blind fixture),
+Exit 0 green, 1 red (new debt, a new undeliverable card, overlap or escape, a duplicate id, a red check, a blind fixture),
 2 no library or no python. The last line is
 the verdict. Check output goes to a log under `${TMPDIR:-/tmp}`. `DEFECTS_DIR` points it at another library.
 
 ## Cards
+
+The card list is generated, not hand-written: `docs/defects/INDEX.md` (`scripts/defects-index.sh`). Until
+it exists the table below is kept by hand.
 
 | id | class | status | quotes | check | last quote |
 |---|---|---|---|---|---|

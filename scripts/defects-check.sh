@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# VULYK defect library gate - docs/defects/<id>.md, one card per class of owner-rejected work
-# (format and rules: docs/defects/README.md).
+# VULYK defect library gate - docs/defects/<id>.md or docs/defects/<area>/<id>.md, one card per class of
+# owner-rejected work (format and rules: docs/defects/README.md; parser: .claude/hooks/defects_lib.py).
 #
 #   Usage: bash scripts/defects-check.sh           # library audit
 #          bash scripts/defects-check.sh <arg>     # the gate before showing work to the owner
@@ -22,20 +22,21 @@
 # `paths:` (no hook can deliver it). OVERLAP: one normalised key on two live cards (a key inside
 # another card's key is only an "ambiguous key" line). ESCAPE: a block card got a quote after its
 # `check:` line and no fixture or check change since. New = the card file / keys line / quote is
-# newer than the library's README.md, or uncommitted.
+# newer than the library's README.md, or uncommitted. DUPLICATE: two cards with one id - always red.
 #
 # Placeholder: the first <...> token of `check:` (<arg>, or a host's own such as <sheet>.json) is
 # replaced by the argument / fixture path. When the token carries an extension (<sheet>.json) and the
 # argument ends with it, the whole `<sheet>.json` is replaced. A check with no token runs as written.
 # Checks run from the repo root; their output goes to a log under ${TMPDIR:-/tmp}, not the tree.
 #
-# Exit: 0 green, 1 red (a new finding, a red check, a blind fixture), 2 usage / no library / no python.
+# Exit: 0 green, 1 red (a new finding, a duplicate id, a red check, a blind fixture), 2 usage / no library /
+# no python / no parser.
 # Output: one line per finding, the last line is the verdict (GREEN: N blocking checks | RED: ...).
 # DEFECTS_DIR overrides docs/defects (relative to the repo root, or absolute).
 set -uo pipefail
 
 case "${1:-}" in
-  -h|--help) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 if [ "$#" -gt 1 ]; then
   echo "defects-check: usage: bash scripts/defects-check.sh [<arg>]" >&2; exit 2
@@ -45,6 +46,10 @@ if [ "$#" -eq 1 ]; then
   [ -n "$1" ] || { echo "defects-check: <arg> is empty" >&2; exit 2; }
   MODE=gate; ARG="$1"
 fi
+
+# The card parser is shared with the hooks: .claude/hooks/defects_lib.py next to this script's repo.
+LIB="$(cd "$(dirname "$0")/../.claude/hooks" 2>/dev/null && pwd)"
+[ -f "$LIB/defects_lib.py" ] || { echo "defects-check: card parser missing: $(dirname "$0")/../.claude/hooks/defects_lib.py" >&2; exit 2; }
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT" || exit 2
@@ -62,14 +67,19 @@ done
 # One record per line, tab-separated:
 #   D <text>                      new debt (red)
 #   U / O / E <text>              new undeliverable card / key overlap / escape after block (red)
+#   X <text>                      two cards with one id (always red)
 #   I <text>                      information (not red)
 #   R <id> <target> <cmd> <title> a check to run: <target> is the fixture (audit) or <arg> (gate)
-plan="$(PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" "$ARG" <<'PY'
-import datetime, os, re, shlex, subprocess, sys
+plan="$(PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" "$ARG" "$LIB" <<'PY'
+import collections, datetime, os, re, shlex, subprocess, sys
 
 sys.stdout.reconfigure(newline='\n')  # Windows python would end every record with \r
 mode, d, arg = sys.argv[1], sys.argv[2], sys.argv[3]
-QUOTE_HEADS = {'## owner quotes', '## цитаты владельца'}
+hooks = sys.argv[4]
+if os.name == 'nt' and re.match(r'^/[A-Za-z]/', hooks):  # a Git Bash path the shell did not convert
+    hooks = hooks[1] + ':' + hooks[2:]
+sys.path.insert(0, hooks)
+import defects_lib
 
 def git(*a):
     r = subprocess.run(['git', '-C', d] + list(a), capture_output=True)
@@ -81,12 +91,6 @@ if in_git:
     stamps = (git('log', '--diff-filter=A', '--format=%ct', '--', 'README.md') or '').split()
     if stamps:
         lib_time = int(stamps[-1])
-
-def listval(v):
-    v = v.strip()
-    if v.startswith('[') and v.endswith(']'):
-        v = v[1:-1]
-    return [x.strip().strip('"\'') for x in v.split(',') if x.strip().strip('"\'')]
 
 def blame(name):
     """line number (from 1) -> (sha, committer-time); None when the file has no history."""
@@ -155,54 +159,31 @@ if not in_git:
 
 live_keys = []  # (card id, {normalised key}, time of its keys: line)
 
-for name in sorted(os.listdir(d)):
-    if not name.endswith('.md') or name == 'README.md' or not os.path.isfile(os.path.join(d, name)):
-        continue
-    with open(os.path.join(d, name), encoding='utf-8', errors='replace', newline='') as fh:
-        lines = [l.rstrip('\r') for l in fh.read().lstrip('﻿').split('\n')]
-    fm, fml, body_from = {}, {}, 0
-    if lines and lines[0].strip() == '---':
-        for i in range(1, len(lines)):
-            if lines[i].strip() == '---':
-                body_from = i + 1
-                break
-            if lines[i][:1].isspace() or ':' not in lines[i]:
-                continue
-            k, _, v = lines[i].partition(':')
-            # An inline ` # comment` is dropped, as the hooks' fm_scalar does (contract section 1 example).
-            fm[k.strip().lower()] = re.sub(r'\s+#(\s.*)?$', '', v).strip()
-            fml[k.strip().lower()] = i + 1
-    cid = fm.get('id') or name[:-3]
-    title = fm.get('title', '')
-    status = (fm.get('status') or 'text').lower()
+cards = defects_lib.load_cards(d)
+# Ids are unique across the library (revoked cards included): a card in a folder must not shadow another.
+by_id = collections.defaultdict(list)
+for c in cards:
+    by_id[c.id].append(c.ref)
+for cid in sorted(by_id):
+    if len(by_id[cid]) > 1:
+        emit('X', 'DUPLICATE  %s: %s share one id - rename all but one' % (cid, ', '.join(by_id[cid])))
+
+for c in cards:
+    # name: the card's path relative to the library, for git; cid: the ref every finding prints.
+    name, cid, fml = c.path, c.ref, c.fm_lines
+    title = defects_lib.fm_scalar(c.fm.get('title', ''))
+    status, check, fixtures, quotes = c.status, c.check, c.fixtures, c.lines['quotes']
     if status == 'revoked':
         continue
-    check = fm.get('check', '')
-    fixtures = listval(fm.get('fixtures', ''))
     existing = [f for f in fixtures if os.path.isfile(f)]
 
-    quotes, inside = [], False
-    for i in range(body_from, len(lines)):
-        line = lines[i]
-        if line.startswith('## '):
-            inside = line.strip().lower() in QUOTE_HEADS
-        elif inside and re.match(r'^- \d{4}-\d{2}-\d{2} ·', line):
-            quotes.append(i + 1)
-
-    eff, reason = 'text', ''
-    if status == 'block':
-        if not check:
-            reason = 'block without check'
-        elif len(existing) < 2:
-            # 0.19.1: the gate still runs a declared check - fixtures earn the status (debt, the
-            # audit), they do not switch the protection off.
-            emit('I', 'block %s: block without fixtures (check runs, not earned) - %d of %d listed exist, counted as text for debt'
-                 % (cid, len(existing), len(fixtures)))
-        else:
-            eff = 'block'
-    elif status != 'text':
-        reason = "status '%s' is not block|text|revoked" % status
-    if reason:
+    eff, reason = defects_lib.effective_status(c)
+    if reason == 'block without fixtures':
+        # 0.19.1: the gate still runs a declared check - fixtures earn the status (debt, the
+        # audit), they do not switch the protection off.
+        emit('I', 'block %s: block without fixtures (check runs, not earned) - %d of %d listed exist, counted as text for debt'
+             % (cid, len(existing), len(fixtures)))
+    elif reason:
         emit('I', 'text  %s: %s - counted as text' % (cid, reason))
 
     if eff != 'block' and len(quotes) >= 2:
@@ -228,10 +209,10 @@ for name in sorted(os.listdir(d)):
 
     # Undeliverable: defects-inject.sh shows a card as text unless it declares block with a check, and
     # only when a target matches its paths:. With no paths: its Never lines can never reach an agent.
-    if not (status == 'block' and check) and not listval(fm.get('paths', '')):
+    if not (status == 'block' and check) and not c.paths:
         added = (git('log', '--diff-filter=A', '--format=%ct', '--', name) or '').split() if in_git else []
         t = int(added[-1]) if added else float('inf')
-        hint = ' (area: is a label, not a glob)' if fm.get('area') else ''
+        hint = ' (area: is a label, not a glob)' if defects_lib.fm_scalar(c.fm.get('area', '')) else ''
         if is_new(t):
             emit('U', 'UNDELIVERABLE  %s: text card with no paths: - no hook can show its Never lines; add path globs or cmd:<regex>%s' % (cid, hint))
         else:
@@ -253,7 +234,7 @@ for name in sorted(os.listdir(d)):
                 else:
                     emit('I', 'old escape  %s: quote %s after the block check, older than the library' % (cid, newest[1]))
 
-    keys = {norm_key(k) for k in listval(fm.get('keys', '')) if norm_key(k)}
+    keys = {norm_key(k) for k in c.keys if norm_key(k)}
     if keys:
         live_keys.append((cid, keys, when(name, fml['keys'])[0] if 'keys' in fml else float('inf')))
 
@@ -283,7 +264,7 @@ PY
 )" || { echo "defects-check: cards could not be read in $DIR" >&2; exit 2; }
 
 LOG="${TMPDIR:-/tmp}/vulyk-defects-$(date +%Y%m%d-%H%M%S)-$$.log"
-debt=0; red=0; blind=0; runs=0; undel=0; overlap=0; escape=0
+debt=0; red=0; blind=0; runs=0; undel=0; overlap=0; escape=0; dup=0
 seen=" "; n=0
 while IFS=$'\t' read -r kind a b c title; do
   case "$kind" in
@@ -291,6 +272,7 @@ while IFS=$'\t' read -r kind a b c title; do
     U) echo "$a"; undel=$((undel+1)) ;;
     O) echo "$a"; overlap=$((overlap+1)) ;;
     E) echo "$a"; escape=$((escape+1)) ;;
+    X) echo "$a"; dup=$((dup+1)) ;;
     I) echo "$a" ;;
     R)
       id="$a"; target="$b"; cmd="$c"; runs=$((runs+1))
@@ -313,7 +295,7 @@ while IFS=$'\t' read -r kind a b c title; do
 done <<< "$plan"
 
 [ "$runs" -gt 0 ] && echo "log: $LOG"
-if [ $((debt + red + blind + undel + overlap + escape)) -eq 0 ]; then
+if [ $((debt + red + blind + undel + overlap + escape + dup)) -eq 0 ]; then
   echo "GREEN: $n blocking checks"; exit 0
 fi
 parts=()
@@ -323,5 +305,6 @@ parts=()
 [ "$undel" -gt 0 ] && parts+=("$undel undeliverable")
 [ "$overlap" -gt 0 ] && parts+=("$overlap overlaps")
 [ "$escape" -gt 0 ] && parts+=("$escape escapes")
+[ "$dup" -gt 0 ] && parts+=("$dup duplicate ids")
 ( IFS=','; echo "RED: ${parts[*]}" | sed 's/,/, /g' )
 exit 1

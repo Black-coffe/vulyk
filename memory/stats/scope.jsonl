@@ -193,3 +193,6 @@
 {"ts":"2026-10-18T19:56:01Z","story":"model-profiles-04","declared":6,"changed":6,"out_of_scope":0}
 {"ts":"2026-10-18T19:57:47Z","story":"model-profiles-03","declared":3,"changed":3,"out_of_scope":0}
 {"ts":"2026-10-19T08:32:08Z","story":"rules-tree-02-constitution","declared":6,"changed":5,"out_of_scope":0}
+{"ts":"2026-10-19T08:37:21Z","story":"rules-tree-01-card-contract","declared":4,"changed":5,"out_of_scope":1}
+{"ts":"2026-10-19T08:37:53Z","story":"rules-tree-01-card-contract","declared":4,"changed":5,"out_of_scope":1}
+{"ts":"2026-10-19T08:38:41Z","story":"rules-tree-01-card-contract","declared":4,"changed":4,"out_of_scope":0}
