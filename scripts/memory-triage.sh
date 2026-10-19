@@ -7,7 +7,7 @@
 # Lists this project's private auto memory so the main session can sort it into cards, personal or
 # stays, and delete. Default dir: ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/<slug>/memory, where
 # <slug> is the repo root path with every character but [0-9A-Za-z] turned into `-`, as Claude Code
-# names it (E:\Projects\vulyk -> E--Projects-vulyk, D:/YouTube_AI -> D--YouTube-AI). Prints one TSV row per *.md except MEMORY.md / memory.md:
+# names it (E:\Projects\vulyk -> E--Projects-vulyk, D:/My_App -> D--My-App). Prints one TSV row per *.md except MEMORY.md / memory.md:
 #   path<TAB>type<TAB>first heading
 # `type` comes from a `type:` line inside the leading frontmatter (nested or not), else `-`; the
 # heading is the first `#` line, else `-`. An absent dir prints `no private memory: <dir>`, exit 0.
