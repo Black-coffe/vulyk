@@ -4,7 +4,8 @@
 | Layer | File(s) | Loaded | Written by |
 |---|---|---|---|
 | Constitution | `CLAUDE.md` (or `CLAUDE.vulyk.md` beside a project's own `CLAUDE.md`), ~7 KB | always, in the main session and every subagent that does not set `omitClaudeMd` | human + /vulyk-evolve changesets |
-| Path rules | `.claude/rules/*` | on touch | bootstrap, evolve |
+| Path rules | `.claude/rules/*` | on touch; always.md always | bootstrap, evolve |
+| Defect cards | `docs/defects/**/*.md` | by the PreToolUse hook before a matching action, narrowest scope first | the session, on the owner's words |
 | Pointer index | `memory/memory.md` (<=60 lines) | task start | drone-docs, librarian |
 | Codebase map | `memory/map/<module>.md` (~80 lines each) | per relevant slice | drone-scout via /vulyk-map |
 | LLM wiki | `docs/wiki/*` | on pointer follow | drone-docs |

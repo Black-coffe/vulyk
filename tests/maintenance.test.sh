@@ -30,6 +30,7 @@ expect_absent() { # expect_absent <label> <needle>   (reads the output to judge 
 
 CONSTITUTION_MAX_BYTES=7168
 CONSTITUTION_MAX_LINES=120
+RULES_ALWAYS_MAX_LINES=40      # a .claude/rules/*.md without paths: loads in every session (rules-tree, ADR-021)
 DESCRIPTIONS_MAX_BYTES=4983     # agents 2 907 + commands 1 716, measured 2026-09-29; +360 /vulyk-models voice triggers (model-profiles requirement 6, approved plan)
 
 size_of() { tr -d '\r' < "$1" | wc -c | tr -d ' '; }
@@ -100,6 +101,24 @@ grep -qF 'git show HEAD:.claude/vulyk-version' "$SRC/.claude/commands/vulyk-upda
 desc="$(cat "$SRC"/.claude/agents/*.md "$SRC"/.claude/commands/*.md | tr -d '\r' | grep '^description:' | wc -c | tr -d ' ')"
 if [ "$desc" -le "$DESCRIPTIONS_MAX_BYTES" ]; then ok "agent + command descriptions within $DESCRIPTIONS_MAX_BYTES B ($desc B)"
 else bad "agent + command descriptions $desc B > $DESCRIPTIONS_MAX_BYTES B"; fi
+
+# rules_always_over <dir> - prints each path-less rules file over RULES_ALWAYS_MAX_LINES (one with paths: is exempt)
+rules_always_over() {
+  local f
+  for f in "$1"/*.md; do
+    [ -f "$f" ] || continue
+    tr -d '\r' < "$f" | sed -n '1{/^---$/!q;d};/^---$/q;/^paths:/{p;q}' | grep -q . && continue
+    [ "$(lines_of "$f")" -gt "$RULES_ALWAYS_MAX_LINES" ] && echo "$(basename "$f") $(lines_of "$f") lines"
+  done
+  return 0
+}
+mkdir -p "$T/rules"; { for i in $(seq 1 41); do echo "- rule $i"; done; } > "$T/rules/always.md"
+cp "$SRC/.claude/rules/README.md" "$T/rules/README.md"; { for i in $(seq 1 41); do echo "- scoped $i"; done; } >> "$T/rules/README.md"
+over="$(rules_always_over "$T/rules")"
+case "$over" in "always.md 41 lines") ok "a 41-line path-less rules file fails the $RULES_ALWAYS_MAX_LINES-line cap; paths: is exempt" ;;
+  *) bad "the always-loaded rules cap misjudged the fixture: '$over'" ;; esac
+over="$(rules_always_over "$SRC/.claude/rules")"
+[ -z "$over" ] && ok "path-less rules files within $RULES_ALWAYS_MAX_LINES lines" || bad "always-loaded rules over $RULES_ALWAYS_MAX_LINES lines: $over"
 
 # --- due maintenance: the SessionStart brief (auto-maintenance-02) ---------------------------------
 BRIEF_HOOK="$SRC/.claude/hooks/session-start-brief.sh"

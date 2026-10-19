@@ -1,8 +1,8 @@
 ---
 story: rules-tree-02
 spec: rules-tree
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 1
@@ -70,5 +70,14 @@ describe the split (path rules on touch, `always.md` always, cards by the hook b
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- CLAUDE.md: Law 6 reworded to the plan's Constitution contract; lessons line added as the last line of `## Where things live`. Before: 7160 B / 109 lines; after the two additions: 7306 B / 110 lines.
+- Trim (1) dead `| Merge tests | bash tests/constitution.test.sh |` row: 7306 -> 7254 B (still over).
+- Trim (2) `> VULYK's own rows: ...` blockquote and its blank line: 7254 -> 7159 B, 107 lines. Budget holds; trims 3-4 not taken. Shipped render 6356 B / 94 lines.
+- install.sh untouched: the render takes its Laws from `$SRC/CLAUDE.md` and only swaps the marked blocks; no placeholder moved.
+- `.claude/rules/always.md`: 3-line header only; no existing rules file lacks `paths:` (README.md has it).
+- `.claude/rules/README.md`: one paragraph on the split (paths: / always.md / docs/defects cards).
+- `docs/memory-system.md`: Path rules row `on touch; always.md always`; new Defect cards row as specified.
+- `tests/maintenance.test.sh`: `RULES_ALWAYS_MAX_LINES=40`, `rules_always_over` (frontmatter-only `paths:` lookup), fixture case (41-line path-less file red, padded README with paths: exempt) and a check on the shipped `.claude/rules`.
+- `vulyk-evolve.md:83` "(Law 6)" still points at the debt/check law.
 
 ## Findings
