@@ -208,7 +208,7 @@ All "per ADR-021": the planner's concrete shape; the Queen reconciles with the A
 
 **Approved:** Andrei, 2026-10-19 («Да, утверждаю (Рекомендую)»)
 **Briefed:** <written by scripts/cycle.sh briefed>
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/rules-tree
 **Checked:** <written by scripts/human-check.sh>
 **Council:** <written by scripts/cycle.sh judge/escalate>
 **Shipped:** <written by scripts/ship-check.sh --record>
