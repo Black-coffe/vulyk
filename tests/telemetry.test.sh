@@ -413,6 +413,17 @@ expect_eq "measure --sidechain agent_type reads the sibling .meta.json" "cycle-c
 expect_eq "measure --sidechain model is the subagent's own (0.20: the floor check reads it)" "claude-sonnet-4-5" \
   "$(printf '%s' "$SIDE_OUT" | jq -r '.model')"
 
+# evolve 2026-10-19: 22 of 22 agent_empty rows in a week were Workflow agents that returned through
+# StructuredOutput. That call is a return; any other last tool call is still an empty return.
+cat > "$MEASURE/subagents/agent-a3.jsonl" <<'EOF'
+{"type":"assistant","isSidechain":true,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":10,"output_tokens":5},"content":[{"type":"tool_use","name":"StructuredOutput","input":{"ok":true}}]}}
+EOF
+cat > "$MEASURE/subagents/agent-a4.jsonl" <<'EOF'
+{"type":"assistant","isSidechain":true,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":10,"output_tokens":5},"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}
+EOF
+expect_eq "measure --sidechain: a last StructuredOutput call is a return, not an empty one" "true"   "$("$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/subagents/agent-a3.jsonl" --sidechain < /dev/null | jq -r '.last_has_text')"
+expect_eq "measure --sidechain: a last call to any other tool is still an empty return" "false"   "$("$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/subagents/agent-a4.jsonl" --sidechain < /dev/null | jq -r '.last_has_text')"
+
 MISSING_OUT="$("$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/does-not-exist.jsonl" < /dev/null)"; MISSING_RC=$?
 expect_eq "measure on a missing file prints {}" "{}" "$MISSING_OUT"
 expect_eq "measure on a missing file exits 0" "0" "$MISSING_RC"
