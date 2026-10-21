@@ -4,6 +4,17 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+### Changed
+- **The reviewer reads the project's rules (spec `review-md-study`).** VULYK's form of a REVIEW.md: `lead-review` reads
+  the round's diff in one call that names every changed path, so the card hook shows it the `docs/defects/` cards for
+  those paths. A diff line that breaks a card's Never or How-to line is an `[unanchored]` major naming the card. It
+  never blocks on its own and reaches the owner at ship. Until now a text card guarded only the writer.
+- **One finding names the whole class.** In round 1, when the same condition fails in several places of the diff,
+  one finding lists them all, so round 2's delta-only read does not meet a sibling it may no longer raise.
+- **A security hole the diff adds can block.** A security hole or data-loss path that the diff adds breaks the ask
+  whose code carries it (`[ask N]`). Before this, such a hole in new code that no ask named could only be
+  `[unanchored]`, and the round passed.
+
 ## [0.32.1] - 2026-10-19
 
 ### Fixed

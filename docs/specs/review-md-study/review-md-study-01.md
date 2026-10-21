@@ -1,8 +1,8 @@
 ---
 story: review-md-study-01
 spec: review-md-study
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 wave: 1
@@ -41,5 +41,7 @@ memory/map: agents-and-commands.md, the lead-review section.
 `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh`
 
 ## Implementation notes
+- lead-review.md: judge item 4 (cards on touched paths, `[unanchored]` major with the ref), a "What you read" bullet (name-only list, one `git diff <range> -- <paths>` call, open folded cards), the security/data-loss sentence on `[ask N]`, the round-1 class sentence. No script touched.
+- Probe 2026-10-21: the hook fed `git diff f8e4fdc~3..f8e4fdc -- docs/defects/README.md .claude/commands/vulyk-ship.md CHANGELOG.md` returned 2 cards in full + `+4 cards`; the same diff without `--` returned none.
 
 ## Findings
