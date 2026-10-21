@@ -20,3 +20,4 @@
 {"ts":"2026-10-18T20:44:07Z","spec":"model-profiles","version":"0.30.0","head":"884541f","pack":"9fa4077d3f8e","note":"merged to main, publish pending; owner override none - READY with **Checked:** ACCEPTED (4 review minors fixed in 3cbc124)"}
 {"ts":"2026-10-19T12:51:42Z","spec":"ship-safety","version":"0.31.0","head":"1e3e2fa","pack":"c422eb940f63","note":"merged to main, tag v0.31.0 + GitHub release"}
 {"ts":"2026-10-19T13:18:26Z","spec":"rules-tree","version":"0.32.0","head":"8e17049","pack":"013c975c5ef4","note":"merged to main, publish pending"}
+{"ts":"2026-10-21T20:38:25Z","spec":"review-md-study","version":"0.33.0","head":"c4dbd78","pack":"4352ed0c5f64","note":"merged to main, publish pending"}
