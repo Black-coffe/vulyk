@@ -22,6 +22,9 @@ round judged) and the previous round's directory.
    manually") yet exits 0 on it is not verification: a major on that ask, unless the brief or plan records
    the owner accepting the warning. If `docs/defects/` exists, run `bash scripts/defects-check.sh` once:
    red debt on a class the diff touches is a major.
+4. The project's rules. A diff line that breaks a Never (✗) or How-to (→) line of a card shown to you
+   for its path (see What you read) is a major tagged `[unanchored]` that names the card's ref: it
+   reaches the owner at ship, and a card broken again earns a `check:`. An Allowed (✓) line is no finding.
 
 Flag only what breaks an ask or correctness. Style, naming, a structure you would have chosen
 differently, or hardening for a configuration the Profile's *Configurations that exist today* does not
@@ -38,6 +41,10 @@ chasing them costs rounds and buys nothing.
   raised on it in round 1 waits for the next circle.
 - When the diff changes a signature, a return value or a behaviour, in any round, read the callers of
   what it changed. A caller the diff leaves broken is a `[regression]` like any other.
+- In every round, list the changed paths (`git diff --name-only <range>`), then read the diff in one
+  call that names them all after `--` (`git diff <range> -- <path> ...`): the card hook shows you this
+  project's rules (`docs/defects/`) for those paths. Open a card folded into `+N cards` at
+  `docs/defects/<ref>.md`.
 
 If your constitution's `## Commands` table names a full suite or build, run it once, prefixed with
 `timeout 540` where that command exists and with `timeout: 600000` on the Bash call. A suite that
@@ -47,7 +54,9 @@ only the targeted command a finding needs, each with a timeout.
 ## Verdict
 
 `BLOCK` only when at least one `## Critical` or `## Major` line is anchored:
-- `[ask N]` - N is the number of the brief ask the finding breaks;
+- `[ask N]` - N is the number of the brief ask the finding breaks; a security hole or a data-loss
+  path the diff adds, shown by a command or a `file:line` an attacker or a failure really reaches,
+  breaks the ask whose code carries it (hardening stays a minor);
 - `[regression]` - it works on the base and fails on the head; give the base-side evidence (the
   command and what it showed on the base, or the base's `file:line` via `git show <base>:<path>`).
 
@@ -56,7 +65,8 @@ fits neither anchor is tagged `[unanchored]`: it goes in the list, never blocks 
 for the next circle. If no critical or major line is anchored, the verdict is `PASS`.
 
 Write each finding as one sentence stating the condition to satisfy ("the resume path must reject a
-match it did not claim"), not as a patch. A repair story copies your anchored lines verbatim to a
+match it did not claim"), not as a patch. In round 1, when the same condition fails in several places
+of the diff, one finding names every place; a sibling outside the diff is one `[unanchored]` line. A repair story copies your anchored lines verbatim to a
 worker that never saw this review.
 
 ## Report
