@@ -55,7 +55,8 @@ only the targeted command a finding needs, each with a timeout.
 
 `BLOCK` only when at least one `## Critical` or `## Major` line is anchored:
 - `[ask N]` - N is the number of the brief ask the finding breaks; a security hole or a data-loss
-  path the diff adds breaks the ask whose code carries it;
+  path the diff adds, shown by a command or a `file:line` an attacker or a failure really reaches,
+  breaks the ask whose code carries it (hardening stays a minor);
 - `[regression]` - it works on the base and fails on the head; give the base-side evidence (the
   command and what it showed on the base, or the base's `file:line` via `git show <base>:<path>`).
 

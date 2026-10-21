@@ -12,7 +12,8 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 - **One finding names the whole class.** In round 1, when the same condition fails in several places of the diff,
   one finding lists them all, so round 2's delta-only read does not meet a sibling it may no longer raise.
 - **A security hole the diff adds can block.** A security hole or data-loss path that the diff adds breaks the ask
-  whose code carries it (`[ask N]`). Before this, such a hole in new code that no ask named could only be
+  whose code carries it (`[ask N]`), when a command or a `file:line` shows a path that is really reached; hardening
+  stays a minor, so the round ceiling keeps its purpose. Before this, such a hole in new code that no ask named could only be
   `[unanchored]`, and the round passed.
 
 ## [0.32.1] - 2026-10-19
