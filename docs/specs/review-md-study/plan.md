@@ -33,7 +33,7 @@ Teach `lead-review` three things, by text only: read the diff with its paths nam
 
 **Approved:** Andrei, 2026-10-21 («Да, все три (Рекомендую)»)
 **Briefed:**
-**Branch:**
+**Branch:** vulyk/review-md-study
 **Checked:**
 **Council:**
 **Shipped:**
