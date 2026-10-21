@@ -4,6 +4,11 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-10-21
+
+The reviewer reads the project's rules, VULYK's form of REVIEW.md (spec `review-md-study`, a study of the Claude Code
+team's review post).
+
 ### Changed
 - **The reviewer reads the project's rules (spec `review-md-study`).** VULYK's form of a REVIEW.md: `lead-review` reads
   the round's diff in one call that names every changed path, so the card hook shows it the `docs/defects/` cards for
