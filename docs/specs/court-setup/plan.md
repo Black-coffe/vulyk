@@ -35,4 +35,4 @@ The blind seats judge a court that can actually run the hive's code. When the hi
 
 ## Plan deltas
 
-**Approved:** <owner, date>
+**Approved:** Andrei, 2026-10-22 («Да»)
