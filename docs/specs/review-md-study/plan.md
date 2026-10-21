@@ -36,4 +36,5 @@ Teach `lead-review` three things, by text only: read the diff with its paths nam
 **Branch:** vulyk/review-md-study
 **Checked:**
 **Council:**
+**Council:** GREEN round 1, 2026-10-21, at 4963cc4, pack 4352ed0c5f64
 **Shipped:**
