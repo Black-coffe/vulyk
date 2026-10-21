@@ -34,3 +34,4 @@ Teach `lead-review` three things, by text only: read the diff with its paths nam
 **Approved:** Andrei, 2026-10-21 («Да, все три (Рекомендую)»)
 **Branch:** vulyk/review-md-study
 **Council:** GREEN round 1, 2026-10-21, at 4963cc4, pack 4352ed0c5f64
+**Shipped:** 0.33.0, 2026-10-21, at c4dbd78 - merged to main, publish pending
