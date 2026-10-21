@@ -31,7 +31,7 @@ Teach `lead-review` three things, by text only: read the diff with its paths nam
 
 ## Plan deltas
 
-**Approved:** <owner, date>
+**Approved:** Andrei, 2026-10-21 («Да, все три (Рекомендую)»)
 **Briefed:**
 **Branch:**
 **Checked:**
