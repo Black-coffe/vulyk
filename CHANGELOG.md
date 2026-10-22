@@ -4,6 +4,10 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-10-22
+
+The council's court runs the hive's own setup before a Tier 3-4 round (spec `court-setup`).
+
 ### Added
 - **The court runs the hive's setup (spec `court-setup`).** When a hive has `.claude/vulyk-setup`, `open-round`
   runs it inside the council's fresh court before a Tier 3-4 round, with `VULYK_ROOT` and `VULYK_COURT` set, capped
