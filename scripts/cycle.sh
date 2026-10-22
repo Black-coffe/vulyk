@@ -2164,6 +2164,37 @@ build_court() { # build_court <spec> <slug> <n> <head> <round-dir> - the blind s
       fi
     fi
   fi
+  run_court_setup "$slug" "$n" "$court_abs" "$rd"
+}
+
+run_court_setup() { # run_court_setup <slug> <n> <court-abs> <round-dir> - the hive's own
+  # .claude/vulyk-setup (never shipped by the installer), read from the working copy and run
+  # inside the court so a seat's probe finds node_modules or a venv. A failure or a timeout
+  # removes the court and the empty round dir and exits 2: a seat on a broken court writes N/A,
+  # and N/A counts toward unanimity. The cap keeps a hung install inside advance's 600 s.
+  local slug="$1" n="$2" court_abs="$3" rd="$4"
+  local setup="$ROOT/.claude/vulyk-setup"
+  [ -f "$setup" ] || return 0
+  local logdir="$ROOT/.vulyk/reports/$slug/round-$n" st="${VULYK_SETUP_TIMEOUT:-300}" src=0
+  case "$st" in ''|*[!0-9]*|0) st=300 ;; esac
+  mkdir -p "$logdir"
+  local log="$logdir/setup.log"
+  if command -v timeout >/dev/null 2>&1 && timeout 5 true </dev/null >/dev/null 2>&1; then
+    ( cd "$court_abs" && VULYK_ROOT="$ROOT" VULYK_COURT="$court_abs" timeout "$st" bash "$setup" ) </dev/null >"$log" 2>&1 || src=$?
+  else
+    echo "cycle: open-round - no working timeout, court setup runs uncapped" >&2
+    ( cd "$court_abs" && VULYK_ROOT="$ROOT" VULYK_COURT="$court_abs" bash "$setup" ) </dev/null >"$log" 2>&1 || src=$?
+  fi
+  [ "$src" -eq 0 ] && return 0
+  local why="court setup failed (exit $src)"
+  [ "$src" -eq 124 ] && why="court setup timed out after ${st}s"
+  echo "cycle: open-round - $why; last lines of $log:" >&2
+  tail -n 20 "$log" >&2
+  remove_worktree_path "$court_abs"
+  git worktree prune >/dev/null 2>&1 || true
+  rmdir "$rd" 2>/dev/null || true
+  emit false open-round 2 error "$why"
+  exit 2
 }
 
 carry_seats() { # carry_seats <round-dir n> <round-dir n-1> <n-1> -> the space-separated blind

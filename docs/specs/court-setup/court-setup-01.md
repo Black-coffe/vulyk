@@ -1,8 +1,8 @@
 ---
 story: court-setup-01
 spec: court-setup
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 1
@@ -41,5 +41,9 @@ memory/map: the cycle.sh slice, `open-round` / `build_court`.
 `bash tests/council.test.sh`
 
 ## Implementation notes
+- `scripts/cycle.sh`: new `run_court_setup`, called last in `build_court` (after the reduction commit). Reads `$ROOT/.claude/vulyk-setup` from the working copy, runs `bash <file>` with cwd = the court, stdin `/dev/null`, `VULYK_ROOT`/`VULYK_COURT` set, output to `$ROOT/.vulyk/reports/<slug>/round-<n>/setup.log`. Cap: `VULYK_SETUP_TIMEOUT` (default 300, non-numeric or 0 falls back to 300), the same `timeout 5 true` probe as close-story; without a working `timeout` it runs uncapped and says so on stderr. On non-zero/124: log tail (20 lines) on stderr, court removed (`remove_worktree_path` is `--force`, so untracked `node_modules` do not block it), empty round dir removed, `emit false open-round 2 error "court setup failed (exit N)" | "court setup timed out after Ns"`.
+- `tests/council.test.sh`: three cases after the worktree-failure block, outside the `--quick` skip (success with marker + log, exit 3, 2 s timeout on a 10 s sleep). The cwd check uses a relative marker file: on Windows `$PWD` is an MSYS path and `VULYK_COURT` a `C:/` one.
+- `docs/cycle.md`: one passage in the stage 05 paragraph.
+- Rejected: re-running setup on an in-place re-stamp only when the head moved - `build_round` always rebuilds the court, so setup runs with it every time.
 
 ## Findings

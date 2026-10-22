@@ -823,6 +823,47 @@ out="$(council open-round docs/specs/wtfail1 2>&1)"; ex=$?
 rm -f .vulyk/court
 
 fi # --quick: end of the git-failure skip
+
+# --- court setup: the hive's .claude/vulyk-setup runs inside the court before the round opens --
+set_setup() { # set_setup <script body> - commits .claude/vulyk-setup (a dirty tree refuses the round)
+  printf '%s\n' "$1" > .claude/vulyk-setup
+  git add -A && git commit -qm "fixture: vulyk-setup" >/dev/null
+}
+
+echo "open-round: .claude/vulyk-setup exits 0 -> the round opens and the setup ran inside the court"
+mk_open_spec csetup1 2
+set_tier csetup1 3
+# A relative cwd-marker proves the working directory: on Windows $PWD is an MSYS path while
+# VULYK_COURT is C:/..., so comparing the two strings would never match.
+set_setup 'echo "root=$VULYK_ROOT" > "$VULYK_COURT/setup-marker"; touch cwd-marker; echo setup says hi'
+out="$(council open-round docs/specs/csetup1 2>&1)"; ex=$?
+cs1="$(sed -n 's/^court=//p' docs/specs/csetup1/council/round-1/ROUND 2>/dev/null)"
+[ "$ex" -eq 0 ] && [ -n "$cs1" ] && grep -qxF "root=$(git rev-parse --show-toplevel)" "$cs1/setup-marker" 2>/dev/null && [ -f "$cs1/cwd-marker" ] \
+  && echo "  ok    setup ran in the court (cwd = VULYK_COURT, VULYK_ROOT = the hive), round 1 opened" \
+  || { echo "::error::exit=$ex out=$out marker=$(cat "$cs1/setup-marker" 2>&1)"; fail=1; }
+grep -qF 'setup says hi' .vulyk/reports/csetup1/round-1/setup.log 2>/dev/null && echo "  ok    setup output goes to .vulyk/reports/<slug>/round-<n>/setup.log" \
+  || { echo "::error::setup.log: $(cat .vulyk/reports/csetup1/round-1/setup.log 2>&1)"; fail=1; }
+
+echo "open-round: .claude/vulyk-setup exits 3 -> exit 2 naming the exit, no round, no court, log tail on stderr"
+mk_open_spec csetup2 2
+set_tier csetup2 3
+set_setup 'echo "npm ERR! the tail line"; exit 3'
+out="$(council open-round docs/specs/csetup2 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"court setup failed (exit 3)"' && printf '%s' "$out" | grep -qF 'npm ERR! the tail line' \
+  && echo "  ok    exit 2, error names exit 3, the log tail is printed" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -e docs/specs/csetup2/council/round-1/ROUND ] && [ ! -d docs/specs/csetup2/council/round-1 ] && [ ! -d .vulyk/court/csetup2/round-1 ] \
+  && echo "  ok    no ROUND file, no round dir, no court left behind" \
+  || { echo "::error::left: $(ls -R docs/specs/csetup2/council .vulyk/court/csetup2 2>&1)"; fail=1; }
+
+echo "open-round: VULYK_SETUP_TIMEOUT=2 and a setup that sleeps 10 s -> exit 2 naming the timeout, court removed"
+set_setup 'sleep 10'
+out="$(VULYK_SETUP_TIMEOUT=2 council open-round docs/specs/csetup2 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"court setup timed out after 2s"' \
+  && echo "  ok    exit 2, error names the 2 s timeout" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -d docs/specs/csetup2/council/round-1 ] && [ ! -d .vulyk/court/csetup2/round-1 ] \
+  && echo "  ok    the timed-out court is removed, no round left" \
+  || { echo "::error::left: $(ls -R docs/specs/csetup2/council .vulyk/court/csetup2 2>&1)"; fail=1; }
+git rm -q .claude/vulyk-setup && git commit -qm "fixture: drop vulyk-setup" >/dev/null
 # --- record-seat: preconditions (open round, HEAD match) -------------------------------------
 
 echo "record-seat: no open round -> exit 2"
