@@ -48,7 +48,12 @@ the Profile's *Client path* is filled, `council-haiku` (the black-box walk). The
 worktree with `docs/specs/<slug>/` reduced to `brief.md`, so neither can see the hive's own
 account of what it built — the same blindness stage 05 used to buy from a human who had not
 read the stories either. Green requires unanimity: every required seat `GREEN` or `N/A`, and
-`lead-review` `PASS`.
+`lead-review` `PASS`. When the hive has `.claude/vulyk-setup` (its own script; the installer
+never ships it), `open-round` runs it inside the fresh court with `VULYK_ROOT` and
+`VULYK_COURT` set, capped at 300 s (`VULYK_SETUP_TIMEOUT`), logging to
+`.vulyk/reports/<slug>/round-<n>/setup.log`; a failure or a timeout removes the court and opens
+no round (exit 2, log tail on stderr), since a seat on a broken court writes `N/A` and `N/A`
+counts as agreement.
 
 The council converges rather than starting over each round. A blind seat that was `GREEN` or
 `N/A` in round n-1 is carried into round n, and from round 2 `lead-review` reads only

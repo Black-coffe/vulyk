@@ -1,8 +1,8 @@
 ---
 story: court-setup-02
 spec: court-setup
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 2
@@ -41,5 +41,9 @@ memory/map: the install.sh slice (`is_shipped`, upgrade summary).
 `bash tests/telemetry.test.sh`
 
 ## Implementation notes
+- `install.sh`: `shippable` refuses `.claude/vulyk-setup` (return 1, beside `.claude/vulyk-paperwork`), so a release never ships its own, the manifest never lists it and an upgrade never removes or overwrites a hive's. After the `--upgrade` summary, one `Offer:` line when the hive has `package.json`, `pyproject.toml` or `requirements.txt` at its root and no setup file; nothing is created. Edited with the Edit tool: the file holds one intentional literal CR byte (line 1267), untouched.
+- `bootstrap/interview.md`: new question 7 in Batch 2 (install step for a fresh checkout), later questions renumbered 8-18; `.claude/commands/vulyk-bootstrap.md` step 2 says where the answer goes and fixes the one numbered reference (question 14 -> 15, the gate model).
+- `tests/telemetry.test.sh`: a release's own setup never ships; fresh install prints no offer; upgrade with `package.json` and no file prints it once and creates nothing; the hive's file survives an upgrade byte for byte, is not in the manifest, gets no offer and is absent from `--check`; a hive with no manifest file (the CRLF fixture) prints no offer.
+- `CHANGELOG.md`: `[Unreleased]` / Added entry.
 
 ## Findings

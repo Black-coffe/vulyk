@@ -4,6 +4,19 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-10-22
+
+The council's court runs the hive's own setup before a Tier 3-4 round (spec `court-setup`).
+
+### Added
+- **The court runs the hive's setup (spec `court-setup`).** When a hive has `.claude/vulyk-setup`, `open-round`
+  runs it inside the council's fresh court before a Tier 3-4 round, with `VULYK_ROOT` and `VULYK_COURT` set, capped
+  at 300 s (`VULYK_SETUP_TIMEOUT`), logging to `.vulyk/reports/<slug>/round-<n>/setup.log`. A failure or a timeout
+  removes the court and opens no round (exit 2, log tail on stderr). Until now a blind seat on a court without
+  `node_modules` or a venv wrote `N/A`, and `N/A` counts as agreement. The installer never ships or touches the
+  file; `/vulyk-bootstrap` asks for it, and `--upgrade` prints one offer line in a hive with `package.json`,
+  `pyproject.toml` or `requirements.txt` and no setup file.
+
 ## [0.33.0] - 2026-10-21
 
 The reviewer reads the project's rules, VULYK's form of REVIEW.md (spec `review-md-study`, a study of the Claude Code

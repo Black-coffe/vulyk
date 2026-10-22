@@ -1756,6 +1756,7 @@ expect_eq "--check: nothing still shipped is marked for removal" "1" \
   "$(grep -F 'would remove' "$T/crlf-check.out" | grep -c .)"
 bash "$SRC/install.sh" "$CR" --upgrade --telemetry off > "$T/crlf.out" 2>&1
 expect_eq "only the retired file is removed" "1" "$(grep -F 'remove         ' "$T/crlf.out" | grep -c .)"
+cat "$T/crlf.out" | expect_absent "--upgrade of a hive with no dependency manifest prints no setup offer" "Offer: no .claude/vulyk-setup"
 expect_eq "and it is gone, the framework files stay" "0 1" \
   "$([ -e "$CR/.claude/hooks/retired-old.sh" ] && echo 1 || echo 0) $([ -f "$CR/.claude/hooks/defects-inject.sh" ] && echo 1 || echo 0)"
 expect_eq "a CRLF .gitignore does not get the runtime block twice" "1" \
@@ -1773,9 +1774,13 @@ printf '# Defect library\n' > "$DREL/docs/defects/README.md"
 printf -- '---\nid: clipped-speech\n---\n' > "$DREL/docs/defects/clipped-speech.md"
 printf 'k\n' > "$DREL/.claude/state/defects/keys"
 printf 'release-own/*\n' > "$DREL/.claude/vulyk-paperwork"
+printf 'echo release-own setup\n' > "$DREL/.claude/vulyk-setup"
 DH="$T/hive-defects"; mkdir -p "$DH"
 bash "$DREL/install.sh" "$DH" --telemetry off > "$T/dh.out" 2>&1
 expect_eq "a release's own .claude/vulyk-paperwork never ships" "0" "$([ -e "$DH/.claude/vulyk-paperwork" ] && echo 1 || echo 0)"
+expect_eq "a release's own .claude/vulyk-setup never ships" "0" "$([ -e "$DH/.claude/vulyk-setup" ] && echo 1 || echo 0)"
+cat "$T/dh.out" | expect_absent "a fresh install prints no setup offer (bootstrap asks instead)" "Offer: no .claude/vulyk-setup"
+printf '{}\n' > "$DH/package.json"
 printf '# smoke reports\ndocs/specs/*/smoke-*.md\n' > "$DH/.claude/vulyk-paperwork"
 cp "$DH/.claude/vulyk-paperwork" "$T/dh-paperwork"
 expect_eq "the defect index skeleton ships" "1" "$(same "$DREL/docs/defects/README.md" "$DH/docs/defects/README.md")"
@@ -1791,7 +1796,17 @@ expect_eq "--upgrade never overwrites a hive's own index" "# My index" "$(head -
 cat "$T/dh-up.out" | expect "and says it kept it" "skip (exists)  docs/defects/README.md"
 expect_eq "--upgrade keeps the hive's .claude/vulyk-paperwork byte for byte" "1" "$(same "$T/dh-paperwork" "$DH/.claude/vulyk-paperwork")"
 expect_eq "and the manifest never lists it" "0" "$(grep -cxF .claude/vulyk-paperwork "$DH/.claude/vulyk-manifest")"
+expect_eq "--upgrade of a hive with package.json and no .claude/vulyk-setup prints the offer once" "1" \
+  "$(grep -cF 'Offer: no .claude/vulyk-setup' "$T/dh-up.out")"
+expect_eq "and creates nothing" "0" "$([ -e "$DH/.claude/vulyk-setup" ] && echo 1 || echo 0)"
+printf 'ln -s "$VULYK_ROOT/node_modules" node_modules\n' > "$DH/.claude/vulyk-setup"
+cp "$DH/.claude/vulyk-setup" "$T/dh-setup"
+bash "$DREL/install.sh" "$DH" --upgrade --telemetry off > "$T/dh-up2.out" 2>&1
+expect_eq "--upgrade keeps the hive's .claude/vulyk-setup byte for byte" "1" "$(same "$T/dh-setup" "$DH/.claude/vulyk-setup")"
+expect_eq "and the manifest never lists it" "0" "$(grep -cxF .claude/vulyk-setup "$DH/.claude/vulyk-manifest")"
+cat "$T/dh-up2.out" | expect_absent "a hive that has the file gets no offer" "Offer: no .claude/vulyk-setup"
 bash "$DREL/install.sh" "$DH" --check > "$T/dh-check.out" 2>&1
+cat "$T/dh-check.out" | expect_absent "--check does not list the hive's .claude/vulyk-setup" ".claude/vulyk-setup"
 cat "$T/dh-check.out" | expect "--check lists hook state as a runtime skip" "would skip (runtime) .claude/state/defects/keys"
 
 # --- case 17: inbox - distil, then stage the clear (anomaly-telemetry-07) ----------------------
