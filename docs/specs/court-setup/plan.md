@@ -38,3 +38,4 @@ The blind seats judge a court that can actually run the hive's code. When the hi
 **Approved:** Andrei, 2026-10-22 («Да»)
 **Branch:** vulyk/court-setup
 **Council:** GREEN round 1, 2026-10-22, at aba46ee, pack 51f009a1a564
+**Shipped:** 0.34.0, 2026-10-22, at eb9326c - merged to main, publish pending
