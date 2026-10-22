@@ -76,6 +76,7 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
     docs/defects/*)               case "$f" in docs/defects/README.md) return 0 ;; esac; return 1 ;;   # vulyk's own defect cards; the index skeleton ships
     .claude/vulyk-paperwork)      return 1 ;;   # each hive's own paperwork globs (lib.sh is_paperwork_path): never shipped, owned or removed
+    .claude/vulyk-setup)          return 1 ;;   # each hive's own court setup (cycle.sh run_court_setup): never shipped, owned or removed
     .claude/state/*)              return 2 ;;   # hook state (defect dedup keys): runtime, per-machine
     .claude/settings.local.json|.claude/settings.json.vulyk-bak)
                                    return 2 ;;
@@ -1540,6 +1541,11 @@ if [ -n "$UPGRADE" ]; then
   fi
   [ -n "$CONST_MODE" ] || \
     echo "If the constitution changed this release, the note above says by how much and how to migrate."
+  # Offer, never enable: a hive with dependencies and no court setup gets one line; nothing is
+  # created, since only the hive knows its install step.
+  if [ ! -f "$DEST/.claude/vulyk-setup" ] && { [ -f "$DEST/package.json" ] || [ -f "$DEST/pyproject.toml" ] || [ -f "$DEST/requirements.txt" ]; }; then
+    echo "Offer: no .claude/vulyk-setup in a hive with dependencies - put its install step there and the council's court runs it before each Tier 3-4 round (docs/cycle.md)."
+  fi
 else
   echo "Done. Next: cd $DEST && claude  ->  /vulyk-bootstrap"
   echo "Optional: cp scripts/git-hooks/post-merge .git/hooks/post-merge && chmod +x .git/hooks/post-merge"
