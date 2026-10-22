@@ -72,7 +72,10 @@ installer hook wiring (pins the inject matcher and defect hook entries). `tests/
   matcher `AskUserQuestion`, arg `answer`. `unwire_hook <event> <script>` ignores the matcher.
 - `install_mod vulyk-pulse@vulyk` (`claude plugin` CLI, `VULYK_CLAUDE` overrides; failure prints the commands,
   returns 0); `retire_mod vulyk-watcher@vulyk`. Docs `docs/pulse.md`, tests `tests/mods.test.sh`.
-- `shippable` filter: `memory/stats/*.jsonl` never ship; the installer deletes nothing of a host's.
+- `shippable` filter: `memory/stats/*.jsonl` and `.claude/vulyk-setup` (the hive's court setup, install.sh:79)
+  never ship; the installer deletes nothing of a host's.
+- `--upgrade` ends with `Offer: no .claude/vulyk-setup ...` when that file is absent and the host has
+  `package.json`, `pyproject.toml` or `requirements.txt` (install.sh:1546); it creates nothing.
 
 ## Gotchas
 - `close-story`'s `## Commands` match, `record-seat`'s taint and `is_paperwork_path` are security-relevant
@@ -82,4 +85,4 @@ installer hook wiring (pins the inject matcher and defect hook entries). `tests/
 - Card parsing lives only in `defects_lib.py`; the gate, `defects-index.sh`, `defects-inject.sh` and
   `defect-intake.sh` import it. Rules: `docs/wiki/rules-tree.md`.
 
-last-verified: 2026-10-19 (v0.32.0)
+last-verified: 2026-10-22 (v0.34.0)

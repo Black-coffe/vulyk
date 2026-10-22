@@ -1,8 +1,8 @@
 # Scout report: the cycle (build -> council -> repair state contract)
 
 ## Purpose
-Truth lives in committed files under `docs/specs/<slug>/`, written only by `scripts/cycle.sh` (3089
-lines at 0.31.0). One verb, `advance` (ADR-013), steps the loop to the next agent boundary; the Queen (Tier 1-2
+Truth lives in committed files under `docs/specs/<slug>/`, written only by `scripts/cycle.sh` (3120
+lines at 0.34.0). One verb, `advance` (ADR-013), steps the loop to the next agent boundary; the Queen (Tier 1-2
 solo, or Tier 3-4 without Workflow) or `.claude/workflows/vulyk-cycle.js` (Tier 3-4) calls it and
 dispatches the agent `next` names. Contract: ADR-001 (D2, D3 superseded) + ADR-013.
 
@@ -10,20 +10,20 @@ dispatches the agent `next` names. Contract: ADR-001 (D2, D3 superseded) + ADR-0
 `brief.md ## Asks` ← `/vulyk-plan` · `plan.md **Briefed:**/**Approved:**` ← `briefed` / the owner ·
 `**Branch:**` ← `branch` · `**Council:**` line per round, `## Needs a human` ← `judge`/`escalate` ·
 `**Checked:**` ← `human-check.sh` · `council/round-N/ROUND` (`head= pack= opened= court= ceiling=
-tier= seats= since=`) ← `build_round` :2192 · `council/REOPEN`, `CEILING` ← `reopen` ·
+tier= seats= since=`) ← `build_round` :2223 · `council/REOPEN`, `CEILING` ← `reopen` ·
 `council/round-N/<seat>.md` (+`.attempt-K.md`) ← `record-seat` · `<slug>-NN-repair-round-<n>.md` ←
 `repair` · `memory/stats/council.jsonl` (1 row/round) ← `judge`/`escalate` · `journal.md` ←
 `journal.sh`. Gitignored: `PAUSE`, `DRIVER` (stamp), `.vulyk/court/`, `.vulyk/reports/`.
 
 ## Verbs (exit 0 ok · 1 usage · 2 precondition · 3 paused · 4 malformed report / red verify · 5 stale · 6 escalate)
-Dispatch `case` `cycle.sh:2973-3089`. Last stdout line is one JSON object (`emit` :69); mutating
+Dispatch `case` `cycle.sh:3004-3120`. Last stdout line is one JSON object (`emit` :69); mutating
 verbs on exit 0 carry the post-verb `status` (`emit_status` :86).
 - **Branch guard (ship-safety, 0.31):** `branch_guard <spec> <verb>` :205 - when plan.md has a
   `**Branch:**` and `git rev-parse --abbrev-ref HEAD` differs, exit 2 (`on X, spec branch is Y`), never
-  switches; no `**Branch:**` yet = pass. Called by `claim` (:2603), `close-story` (:1862), `open-round`
-  (:2302). `default_branch` :219 = origin/HEAD, else `main`, else `master`, else empty.
+  switches; no `**Branch:**` yet = pass. Called by `claim` (:2634), `close-story` (:1862), `open-round`
+  (:2333). `default_branch` :219 = origin/HEAD, else `main`, else `master`, else empty.
 - `status [--json]` `cmd_status` :546 (read-only) · `briefed` :1366 · `branch` :1417 · `escalate` :1295
-  · `judge` :1037 · `record-seat` :1715 · `manual-done` :2668.
+  · `judge` :1037 · `record-seat` :1715 · `manual-done` :2699.
 - `branch` also refuses (exit 2) an existing `vulyk/<slug>` that is already merged into the default
   branch and strictly behind its tip (:1447-1457; a branch at the default tip is fresh, reused).
 - `close-story <file> [--commit] [--stamp]` :1852 - scope-check (:1919); with `--commit`, a path scope-check
@@ -33,22 +33,29 @@ verbs on exit 0 carry the post-verb `status` (`emit_status` :86).
   `## Commands` cell of `constitution_file` or `none — reviewed by lead-review`; runs under `timeout
   ${VULYK_VERIFY_TIMEOUT:-540}` when a working `timeout` exists (124 → exit 4); commits. Done + clean
   tree → `ok:true` "already done"; self-marked done with a diff → closes it.
-- `open-round` :2293 - refuses a tree dirty outside paperwork (`dirty_outside_paperwork` :455);
+- `open-round` :2324 - refuses a tree dirty outside paperwork (`dirty_outside_paperwork` :455);
   `build_round` freezes `seats=`/`since=`, builds the court (`build_court` :2121) only when a blind seat
-  is required, carries round n-1's GREEN/N/A blind seats (`carry_seats` :2169; `review` never carried).
-- `claim <spec> <stamp>` :2595 refuses a dirty tree (a holder's re-claim skips it); `release` :2646,
-  `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"` :2468 appends to `## Answers`,
+  is required, carries round n-1's GREEN/N/A blind seats (`carry_seats` :2200; `review` never carried).
+- **Court setup (0.34):** `build_court` ends by calling `run_court_setup` :2170. If the hive has
+  `$ROOT/.claude/vulyk-setup` (working copy, never shipped), it runs `bash` of it with cwd = the court,
+  env `VULYK_ROOT`, `VULYK_COURT`, stdin /dev/null, under `timeout ${VULYK_SETUP_TIMEOUT:-300}` (non-numeric
+  or 0 → 300; no working `timeout` → runs uncapped with a stderr note). Log:
+  `.vulyk/reports/<slug>/round-<n>/setup.log`. Non-zero (124 = timeout) → tail 20 lines of the log to stderr,
+  court removed, empty round dir removed, `open-round` exit 2 `court setup failed (exit N)`/`timed out`.
+  No file = no-op. Runs only when a court is built (blind seat required).
+- `claim <spec> <stamp>` :2626 refuses a dirty tree (a holder's re-claim skips it); `release` :2677,
+  `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"` :2499 appends to `## Answers`,
   raises `CEILING`, emits `next:"repair"` (`open-round` for an `env` escalation).
-- `repair` :2720 - below. `advance [--stamp] [--claim] [--ingest]` :2881 - below.
+- `repair` :2751 - below. `advance [--stamp] [--claim] [--ingest]` :2912 - below.
 
 ## `advance` (ADR-013 D2)
 1. `--claim` (needs `--stamp`): runs `claim`; a refusal is the stop line.
 2. `--ingest`: each missing required seat of the open, non-stale round is recorded from
    `.vulyk/reports/<slug>/round-<n>/<seat>.attempt-<k>.md` (k=2 if attempt-1 exists); no file → empty
-   report (spends the attempt). Tier 4 `review` = `fold_reviews` :2853 over `review-top`/`review-second`
+   report (spends the attempt). Tier 4 `review` = `fold_reviews` :2884 over `review-top`/`review-second`
    (BLOCK if either). Each exit 4 goes into `rejected:[{seat,attempt,error}]`.
 3. Loop ≤ 12 steps: while `next` ∈ `branch|open-round|judge|repair`, run it with `--commit` (+`--stamp`)
-   via `run_verb` :2872. Exit 6 is ok. A verb leaving `next` unchanged stops (`no progress`, exit 2).
+   via `run_verb` :2903. Exit 6 is ok. A verb leaving `next` unchanged stops (`no progress`, exit 2).
 4. Last line `{"ok":true,"verb":"advance",..,"next","steps","rejected","status"}`; a stop is `ok:false`
    with `failed`, no `status`. After `--ingest` a RED round reads `steps:["judge","repair"]`.
 
@@ -80,10 +87,10 @@ ABSENT. Taint = a path to a story file, `plan.md`, `journal.md` or `council/` (`
 `docs/specs/<slug>/` reduced to `brief.md`, removed by `judge`.
 
 ## Repair (ADR-013 D4)
-`cmd_repair` :2720 runs only when `next == repair`; idempotent. Writes `<slug>-NN-repair-round-<n>.md`:
-`status: todo`, `worker: worker-code`, **`model: opus` on purpose** (ADR-015: cycle.sh:2793; first
+`cmd_repair` :2751 runs only when `next == repair`; idempotent. Writes `<slug>-NN-repair-round-<n>.md`:
+`status: todo`, `worker: worker-code`, **`model: opus` on purpose** (ADR-015: cycle.sh:2820; first
 attempts run on Sonnet, a repair follows a RED), `wave: <max+1>`; `## Requirements` = the row's `red` +
-`review_asks` + seat-file RED asks as `> N. text` (`ask_item` :2701); `## Findings` = RED `ASK` lines +
+`review_asks` + seat-file RED asks as `> N. text` (`ask_item` :2732); `## Findings` = RED `ASK` lines +
 anchored review lines; `## Files`/`## Verification` = union over done stories.
 
 ## The Workflow driver (`.claude/workflows/vulyk-cycle.js`)
@@ -102,4 +109,4 @@ ledger) is NOT in ci.yml (run by hand / the spec's integration gate).
 
 Telemetry consumers (`telemetry.sh`, `scope-check.sh` ledger): see `memory/map/scripts.md`.
 
-last-verified: 2026-10-19 (v0.31.0, ADR-001 ship-safety rows, ADR-013, ADR-015, ADR-020)
+last-verified: 2026-10-22 (v0.34.0, ADR-001 ship-safety rows, ADR-013, ADR-015, ADR-020)
