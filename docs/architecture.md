@@ -13,7 +13,7 @@ In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a su
 | Queen | main session, `queen-planner` | opus on every plan; a Tier 4 `queen-planner` gets `TOP_MODEL` (ADR-012) | plans; builds Tier 1-2 stories herself; at Tier 3-4 dispatches and integrates; `queen-planner` plans Tier 3-4 |
 | Leads | `lead-review`, `lead-architect` | `lead-review`: opus at Tier 1-3, `TOP_MODEL` at Tier 4 beside a second reviewer; `lead-architect`: `TOP_MODEL` (fable on Max, opus on Pro, resolved by `scripts/top-model.sh`) | the reviewer seat of every round (asks + correctness); design decisions and ADRs |
 | Workers | `worker-code`, `worker-test` | sonnet (the story's `model:`), effort medium; a retry goes to `TOP_MODEL`, always a different family (ADR-015) | Tier 3-4 only: one story, scoped files, closes it with `cycle.sh close-story` |
-| Drones | `drone-scout`, `drone-docs`, `librarian` | sonnet (scout, docs) / opus (librarian), effort low | recon (capped per tier: 0-1/1/2/4 scouts), memory truth, hygiene |
+| Drones | `drone-scout`, `drone-docs`, `drone-horizon`, `librarian` | sonnet (scout, docs, horizon) / opus (librarian), effort low (horizon: medium) | recon (capped per tier: 0-1/1/2/4 scouts), horizon proposals on new ground (three lenses, ADR-022), memory truth, hygiene |
 | Gate | `drone-coverage` | opus, effort medium | plan-time independence at Tier 3-4: sees the brief and the plan, never the stories |
 | Council | `council-opus`, `council-haiku` | opus (effort medium); opus - it judges, the name is the angle | Tier 3-4 only; blind verdict on `brief.md`'s `## Asks` from a reduced git worktree that cannot see the stories: intent and edge cases; the black-box client path, required only when the Profile's *Client path* is filled |
 | Clerk | `cycle-clerk` | haiku, effort low (Haiku 5.5 and up, since 0.26.0; sonnet before) | the Workflow driver's only way to reach a shell: one `cycle.sh` command per agent boundary, no logic of its own |
@@ -30,8 +30,11 @@ goal -> Queen names the deliverable: a document ends at report.md (study, ADR-00
      -> brief.md: the request verbatim, through redact.sh (Tier 2+)
      -> drone-scouts (opus low, capped: 1 at Tier 1-2, 2 at Tier 3, 4 at Tier 4) -- reports --+
      -> memory/map + wiki pointers --------------------------+-> queen-planner (opus Tier 3, TOP_MODEL Tier 4)
+     -> new ground only (no hit on the capability in memory, map or source; ADR-022): drone-horizon x3
+        (altitude, depth, range; sonnet, web as data) -> the Queen cuts to <= 3 -> horizon.md
      -> the grill (templates/grill.md): one round, one question at a time, recommended option
-        first with a recon-grounded reason, closing into brief.md's ## Asks - the first of the
+        first with a recon-grounded reason (horizon proposals asked inside the same cap, adopted only
+        by the owner's words), closing into brief.md's ## Asks - the first of the
         two human stops (the second is the plan approval below, stage 01+02, **Approved:**)
      -> plan.md (+ Contracts) + stories (## Requirements quote the brief)
      -> wave-check.sh: waves dispatchable? (file collisions, blocker order - deterministic)

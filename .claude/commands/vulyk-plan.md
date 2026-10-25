@@ -1,6 +1,6 @@
 ---
 description: Queen planning mode - deliverable check, tier, brief, recon, grill, stories, trace; Tier 1 builds straight through, Tier 2-4 stop for approval (--go opts out; a document deliverable ends at the report)
-argument-hint: <goal description> [--go] [--study]
+argument-hint: <goal description> [--go] [--study] [--horizon | --no-horizon]
 ---
 
 Plan: "$ARGUMENTS"
@@ -25,7 +25,24 @@ Plan: "$ARGUMENTS"
    a file or two: read them yourself. Dispatch `drone-scout` only for broad or unmapped territory:
    Tier 1 none (one if the location is unknown), Tier 2 at most one, Tier 3 at most two, Tier 4 at most
    four, in parallel.
-4. Grill, Tier 2-4. Follow `templates/grill.md`; it owns every rule of the round. Its output lands in
+3a. Horizon, Tier 2-4 on new ground (ADR-022). Skip it for study work, Tier 0-1, no-question mode and
+   `--no-horizon`; `--horizon` runs it anyway. New ground is a recon fact: take two to four terms that name the
+   asked capability (its nouns and verbs, not the project's) and Grep them in `memory/memory.md`, `memory/map/`
+   and the source. Zero hits on the capability fires the step; a hit on its container (a folder or file family,
+   such as `.claude/commands/` for a new command) does not count. An empty repo fires it too. A request inside
+   existing code gets no horizon and no extra question. Announce it in one line in the owner's language: the
+   terms, where they were searched, that the step runs, and that in the default permission mode the three lenses
+   may ask for web search (a refusal is safe: their outside facts come back `не подтверждено`). VULYK grants no
+   web permission itself. Then dispatch `drone-horizon` three times in one
+   message, `lens: altitude`, `depth` and `range`, each with the brief path and a one-paragraph recon summary
+   (what was not found and where it was looked for), with no model parameter. Each returns up to three proposals:
+   `what`, `why`, `cost`, `check`, `sources`, `status`, `kind` (`gap` or `extension`) and an `ask line`. A lens
+   that fails or returns nothing is noted, and the step goes on with the others. Cut the candidates to at most
+   three: merge duplicates, and drop what contradicts the Profile's *Configurations that exist today* or the
+   repo, or is not tied to the owner's goal. Write `docs/specs/<slug>/horizon.md`: the terms and where they were
+   searched, every candidate with its verdict (kept, merged or dropped, one-line reason), and the kept proposals
+   with their fields. Proposals never go into `brief.md` by themselves; only what the owner picks in the grill does.
+4. Grill, Tier 2-4. Follow `templates/grill.md`; it owns every rule of the round, horizon questions included. Its output lands in
    `brief.md` as `## Answers` then `## Asks`. Tier 1 skips it: `## Asks` is the task phrase as item 1.
 5. Plan. Tier 1-2: write plan.md yourself from `templates/plan.md`. Tier 3-4: dispatch `queen-planner`
    with the brief, scout reports and map pointers; Tier 4 also consults `lead-architect` on the central

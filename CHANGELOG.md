@@ -4,6 +4,20 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+### Added
+- **A horizon step in `/vulyk-plan` on new ground (spec `horizon-intake`, ADR-022).** When recon finds no hit on the
+  asked capability in `memory/`, the map or the source (or the repo is empty), a Tier 2-4 interactive plan dispatches
+  the new `drone-horizon` agent three times in parallel, one lens each: altitude (the goal beyond the goal), depth
+  (what a field-leading professional would do, checked by something other than the model) and range (the noun turned
+  into a verb, methods borrowed from other fields), after Felix Rieseberg's essay. Each lens returns at most three
+  proposals with cost, an outside check, dated sources (`не подтверждено` under two) and `kind: gap | extension`. The
+  Queen cuts them to three in `horizon.md`; the grill asks them inside its 3-7 cap, recommending «Добавить» only for a
+  gap, and only the owner's words adopt one. Until now the grill drew every option from recon, so on new ground it
+  asked about details and missed what the owner did not know to ask. `--horizon` / `--no-horizon` force or skip it;
+  inside existing code nothing changes. The lenses are the first VULYK agent with web access: in the default
+  permission mode they may ask for it, VULYK grants none itself, and a refusal leaves outside facts unconfirmed.
+  Measured on a live run: about 25k raw tokens per lens (`docs/specs/horizon-intake/live-run.md`).
+
 ## [0.34.0] - 2026-10-22
 
 The council's court runs the hive's own setup before a Tier 3-4 round (spec `court-setup`).

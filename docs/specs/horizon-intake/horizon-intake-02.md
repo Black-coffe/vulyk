@@ -1,8 +1,8 @@
 ---
 story: horizon-intake-02
 spec: horizon-intake
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 2
@@ -79,5 +79,18 @@ memory/map/agents-and-commands.md: `/vulyk-plan` (steps 3-4) and `drone-scout` d
 `bash tests/solo.test.sh`
 
 ## Implementation notes
+- The step is `3a` in `vulyk-plan.md`, so no later step number moves (`grill.md`, `council.test.sh` and the command
+  reference cite "step 9"). `--horizon` overrides every skip case, no-question mode included: there the proposals are
+  recorded as `(offered, not adopted)`, which is how the grill's no-question rule is reachable at all.
+- Silence: the round's general rule ("silence selects the recommended option") would have let silence adopt a gap.
+  The horizon section overrides it: a silent horizon question is «Не добавлять»; «как рекомендуешь» on a gap adopts.
+- Web permission: a side-agent note (2026-10-25) raised that default-mode owners will see up to three prompts. Chosen:
+  the announcement line says the prompts may come and that a refusal is safe; ADR-022 records that VULYK grants no web
+  permission itself. Rejected: an allow rule from the installer, which would enable network access in every hive
+  silently. Owner told in chat.
+- Live run: the Queen's session could not dispatch an agent created mid-session (`Agent type 'drone-horizon' not
+  found`), so the dispatches ran from headless sessions; `live-run.md` says how. Its findings 1-3 were fixed in
+  `drone-horizon.md` inside `horizon-intake-01`, before that story closed.
+- Not run: the grill questions (no `AskUserQuestion` headless) and an interactive default-mode session.
 
 ## Findings
