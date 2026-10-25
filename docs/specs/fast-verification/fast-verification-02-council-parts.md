@@ -1,8 +1,8 @@
 ---
 story: fast-verification-02
 spec: fast-verification
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-test
 wave: 1
@@ -50,5 +50,32 @@ memory/map/cycle.md `## Tests`; scout-suites.md `## council.test.sh`, `## Gotcha
 `bash tests/council.test.sh --quick`
 
 ## Implementation notes
+
+- Switches: `--part <name>`, `--list-parts` (exits before any fixture is built), `--quick`; any order. Unknown or
+  empty part name: exit 1, list on stderr; an unknown flag stays exit 2 (usage). `part()` wraps each range;
+  every part runs lines 1-~345 (repo, fixture CLAUDE.md, HEAD7, helpers) on its own `mktemp -d` repo.
+- Eight parts, file order: `verbs seats escalate ceilings replays walks driver advance`. The four contract names are
+  kept; two were over 180 s alone (verbs 249 s, replays 432 s) and were cut again:
+  - `verbs` = status/tier/judge/journal/briefed/branch/git failures/court setup + PAUSE guard, pause/resume,
+    close-story (the 1488-1505 refusal site stays here for story 04); `seats` = the record-seat block (was 883-1354).
+  - `escalate` unchanged (story 16 fixes, open-round, the escalate verb, review-ABSENT; story 06 goes here).
+  - The old 2167-3588 block is now `ceilings` (reopen walk, tier/judged/RED ceilings), `replays` (status after
+    committed verbs, LR19-25/m-4/N-m7, story 14 pinned replay), `walks` (stories 15-16 + their pinned replays),
+    `driver` (story 17 DRIVER + its pinned replay, C5). Each is `if part <x> && full` (all --quick-skipped as before).
+  - The pinned-replay toolkit (`pin_cycle`, `check_probe_result`, `probe_lr19..probe_nm7`, `run_wall_probes`) moved
+    unchanged into the shared helpers, since replays/walks/driver all call it. No case text or assertion changed.
+- Cross-part state: grep of every slug a part creates against later parts found only comment/text mentions and
+  escalate's tolerant `git rm ... pwseat1` (2>/dev/null, rm -f). Each part ran green alone, so none depends on another.
+- Exit code: `expect()` also appends its label to `$FAILS` (a `mktemp` outside the fixture repo); the last line sets
+  `fail=1` when it is non-empty. Proven once with a deliberate `echo x | expect ... "y"` in `escalate`: exit 1 with
+  the ledger, exit 0 with the ledger line disabled (the old leak). Both removed.
+- Wall times, each part alone, sequential, this 28-core box: verbs 144 s, seats 83, escalate 45, ceilings 78,
+  replays 115, walks 101, driver 68, advance 138 (all <= 180). All eight at once in this checkout: green, 75-185 s
+  (verbs 184, advance 185 under 8-way load). All eight at once in a fresh `git clone` (test file copied in) + a
+  `--quick` in this checkout simultaneously: green, 62-174 s.
+- Equivalence (in the clone, against `git show HEAD:tests/council.test.sh`): no-arg run 532 ok / 0 error both,
+  identical sorted ok lines (914 s vs 918 s); `--quick` 269 ok both, identical ok lines; `--quick --part` sums to
+  269 (verbs 118, seats 32, escalate 48, advance 71, the four quick-skipped parts 0). Part ok counts sum to 532.
+- Gap: timings are one run each on this box under whatever else was running; a slower machine is not measured.
 
 ## Findings
