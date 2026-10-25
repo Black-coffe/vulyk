@@ -5,3 +5,4 @@
 - 2026-10-25T13:21:29Z · 04-council:open · round 1 opened, no court (no blind seat required) · next: dispatch:review
 - 2026-10-25T13:34:17Z · 04-council:RED · round 1 verdict RED at 33efaae pack 451665e3db2e · next: repair
 - 2026-10-25T13:34:19Z · 03-building · repair round 1: horizon-intake-03-repair-round-1.md · next: build:3
+- 2026-10-25T13:39:29Z · 04-council:open · round 2 opened, no court (no blind seat required) · next: dispatch:review
