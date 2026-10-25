@@ -22,3 +22,4 @@
 {"ts":"2026-10-19T13:18:26Z","spec":"rules-tree","version":"0.32.0","head":"8e17049","pack":"013c975c5ef4","note":"merged to main, publish pending"}
 {"ts":"2026-10-21T20:38:25Z","spec":"review-md-study","version":"0.33.0","head":"c4dbd78","pack":"4352ed0c5f64","note":"merged to main, publish pending"}
 {"ts":"2026-10-22T08:31:31Z","spec":"court-setup","version":"0.34.0","head":"eb9326c","pack":"51f009a1a564","note":"merged to main, publish pending"}
+{"ts":"2026-10-25T13:43:25Z","spec":"horizon-intake","version":"0.35.0","head":"e6ae933","pack":"0584931ba18b","note":"merged to main, publish pending"}
