@@ -54,7 +54,8 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   and `defects-*` are exceptions.
 - `is_paperwork_path` whitelist: spec `plan/journal/brief/council/*`, `memory/stats/*.jsonl` ledgers,
   `skills.json`, `memory/learnings/*.md`, `VERSION`, `CHANGELOG.md`.
-- `telemetry.sh` `ENUM`/`AGENTS` are append-only public contracts.
+- `telemetry.sh` `ENUM`/`AGENTS` are append-only public contracts (`AGENTS` gained `drone-horizon`, 0.35.0,
+  telemetry.sh:65; a removed agent moves to `RETIRED_AGENTS`, :78).
 
 ## Tests
 `tests/maintenance.test.sh` (not in ci.yml): caps (`RULES_ALWAYS_MAX_LINES=40` for path-less
@@ -85,4 +86,4 @@ installer hook wiring (pins the inject matcher and defect hook entries). `tests/
 - Card parsing lives only in `defects_lib.py`; the gate, `defects-index.sh`, `defects-inject.sh` and
   `defect-intake.sh` import it. Rules: `docs/wiki/rules-tree.md`.
 
-last-verified: 2026-10-22 (v0.34.0)
+last-verified: 2026-10-25 (v0.35.0)

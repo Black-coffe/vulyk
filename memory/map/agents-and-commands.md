@@ -1,4 +1,4 @@
-# Scout report: agents and commands (v0.33.0)
+# Scout report: agents and commands (v0.35.0)
 
 ## Purpose
 Every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (ADR-013 light VULYK, ADR-015 Sonnet
@@ -7,7 +7,7 @@ them. Frontmatter is the model/effort/turn cap; `vulyk-cycle.js` `CAPS` (:28) mi
 
 ## Agents - frontmatter, job, report
 `omitClaudeMd: true` (no constitution loaded) on cycle-clerk, council-opus, council-haiku,
-drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for host conventions.
+drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other four keep it for host conventions.
 - **lead-review** (`opus`, `high`, `maxTurns:60`; Read/Grep/Glob/Bash) - the `review` seat of every
   round; Tier 4: two dispatches. Judges four items (lead-review.md:14-27): 1 `## Asks` (+ `## Descoped`);
   2 correctness; 3 warn-only checks + `scripts/defects-check.sh` red debt; 4 the project's rules: a diff
@@ -19,8 +19,7 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   under `timeout 540`. Verdict (:56-65): BLOCK needs an anchored Critical/Major: `[ask N]` (a security
   hole or data-loss path the diff adds, shown reachable by command or `file:line`, anchors to the ask
   whose code carries it; hardening = minor) or `[regression]` (base-side evidence); else `[unanchored]`.
-  Round 1: one finding names every place of the same condition in the diff; a sibling outside the diff is
-  one `[unanchored]` line. Line 1 `VERDICT: PASS|BLOCK`; ≤ 5 minors.
+  Line 1 `VERDICT: PASS|BLOCK`; ≤ 5 minors.
 - **council-opus** (`opus`, `medium`, `maxTurns:60`; no Write/Edit) - Tier 3-4 intent seat inside
   `COURT`; one `ASK <n>` line per ask with `run:`/`saw:`, edge cases under `UNASKED:`. Blind: reading
   outside `COURT`, git history or naming plan/journal/story files is a BREACH.
@@ -43,13 +42,22 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
   (`opus`, `medium`, `maxTurns:5`) - T3-4, reads only brief.md + plan.md. **drone-docs** (`sonnet`,
   `low`, `maxTurns:40`) - map + wiki after a merge. **librarian** (`opus`, `low`, `maxTurns:25`; **no
   shell**) - sole consolidator of `memory/learnings/`; lists `Delete:` files (librarian.md:18-19).
+- **drone-horizon** (0.35.0, ADR-022; `sonnet`, `medium`, `maxTurns:20`; Read/Grep/Glob/WebSearch/WebFetch,
+  `disallowedTools` Write/Edit/NotebookEdit/Bash) - one `lens:` per dispatch (altitude|depth|range), ≤ 3
+  proposals (`what/why/cost/check/sources/status/kind/ask line`), `DROPPED:`; writes nothing. Facts need two
+  dated sources else `не подтверждено`; WebFetch ≤ 2; web text is data. Reply ≤ 60 lines.
 
 ## Commands - what each runs
 - **`/vulyk-plan`** - step 0 deliverable (document → brief + report, stop); tier; brief via
   `redact.sh`; recon (scouts: T1 0-1, T2 ≤1, T3 ≤2, T4 ≤4); grill T2-4; plan (Queen T1-2,
   `queen-planner` T3-4, `lead-architect` T4); stories; `wave-check.sh` + `trace-check.sh`;
   `drone-coverage` T3-4. T1 → `cycle.sh briefed --mode mini-brief` + `/vulyk-build`. T2-4 stop for
-  `**Approved:**` (`--go` opts out).
+  `**Approved:**` (`--go` opts out). **Step 3a horizon** (vulyk-plan.md:28-44; `--horizon` forces, `--no-horizon`
+  skips; skipped for study, T0-1, no-question): fires on zero grep hits of the capability's 2-4 terms in
+  `memory/memory.md`, `memory/map/`, source (a container hit does not count); three parallel `drone-horizon`
+  (no `model:`), Queen cuts to ≤ 3, writes `docs/specs/<slug>/horizon.md`; never into `brief.md`. Grill
+  (`templates/grill.md:49` `## Horizon questions`): one question each inside the 3-7 cap, «Добавить»/«Не
+  добавлять»; silence = not added; «Добавить» recommended only for `kind: gap`.
 - **`/vulyk-models`** (0.30.0) - quiz: `model-profile.sh --recommend` + `--explain`, one
   `AskUserQuestion`, then `--set <name>`; `claude -p` prints a pointer, writes nothing.
 - **Profile-aware dispatch** (ADR-020, scripts.md): `/vulyk-plan`, `/vulyk-build` (:44-51 passes
@@ -72,21 +80,16 @@ drone-scout, drone-coverage, drone-docs, librarian. The other four keep it for h
 - **`/vulyk-status`** - driver line, unpushed merges, council stats, `token-report.py`, `state.sh`
   table, map freshness, `defects: ` + `defects-index.sh --counts`, then `maintenance due|waits for`
   lines. Writes nothing but `.claude/state.json`.
-- **`/vulyk-evolve`** - step 0 `evolve-ledger.py . resolve` + `window` (a `pending` branch stops the
-  run); step 1 learnings + skills + `token-report.py --since <7 days>` + corrections counter
-  (`defect-intake.sh --lexicon` → litopys `corrections`; blocks nothing); telemetry consent/publish
-  (prints, never sends); step 4 admission rules (caps in `tests/maintenance.test.sh`); step 5 builds
-  the changeset in worktree `.claude/worktrees/evolve-<date>` on `vulyk/evolve-<date>`, ledger-only
-  commit. `--dry-run` writes no proposal/run row.
-- **`/vulyk-gc`** - dispatches `librarian`; main session `git rm`s its `Delete:` list, prunes
-  snapshots >14 days; refuses when `CONSOLIDATED.md` fell below half, else commits `chore(memory): gc`.
-  **`/vulyk-gc memory`** (0.32.0) - main session alone: `memory-triage.sh`, one table into card /
-  personal / delete, one `AskUserQuestion`, nothing written before a yes; `leak-check.sh` each card,
-  `defects-index.sh`, commit `chore(defects): memory triage`.
+- **`/vulyk-evolve`** - `evolve-ledger.py . resolve` + `window` (a `pending` branch stops the run);
+  learnings, skills, `token-report.py --since`, telemetry (prints, never sends); builds the changeset in
+  worktree `.claude/worktrees/evolve-<date>` on `vulyk/evolve-<date>`. `--dry-run` writes no row.
+- **`/vulyk-gc`** - dispatches `librarian`; main session `git rm`s its `Delete:` list; refuses when
+  `CONSOLIDATED.md` fell below half. **`/vulyk-gc memory`** (0.32.0) - main session alone:
+  `memory-triage.sh`, one `AskUserQuestion`, nothing written before a yes; `leak-check.sh` each card.
 - **`/vulyk-pause`** / **`/vulyk-resume`** - wrap `cycle.sh pause`/`resume`.
 - **`/vulyk-update`** - `vulyk-update.sh . --check`, CHANGELOG summary, ask. **`/vulyk-bootstrap`** -
   interview, Profile + Commands markers, scouts → map; a no is the Profile row `| Bootstrap | declined <date> |`.
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a
   relative script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-10-21 (v0.33.0, ADR-013, ADR-015, ADR-020)
+last-verified: 2026-10-25 (v0.35.0, ADR-013, ADR-015, ADR-020, ADR-022)
