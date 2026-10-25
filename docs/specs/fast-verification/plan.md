@@ -176,7 +176,7 @@ the command or script that owns it, and scripts/ship-check.sh reads them all.
 -->
 **Approved:** Andrei, 2026-10-25 («да» to the plan as shown, with both recommended items: the maintenance hotfix ships as 0.35.1 before wave 1; at ship the Queen marks the slow `## Commands` rows in every live hive herself)
 **Briefed:** <written by scripts/cycle.sh briefed>
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/fast-verification
 **Checked:** <written by scripts/human-check.sh>
 **Council:** <written by scripts/cycle.sh judge/escalate>
 **Shipped:** <written by scripts/ship-check.sh --record>
