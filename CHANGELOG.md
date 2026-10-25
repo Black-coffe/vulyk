@@ -4,6 +4,10 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-10-25
+
+A horizon step in `/vulyk-plan` proposes what the owner did not know to ask, on new ground only (spec `horizon-intake`).
+
 ### Added
 - **A horizon step in `/vulyk-plan` on new ground (spec `horizon-intake`, ADR-022).** When recon finds no hit on the
   asked capability in `memory/`, the map or the source (or the repo is empty), a Tier 2-4 interactive plan dispatches
