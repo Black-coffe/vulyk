@@ -66,31 +66,33 @@ A filled *Client path* adds the black-box seat, the only reader of *Browser MCP*
 
 ## Commands
 
-Quiet variants only: their output is resent every turn. A story's `## Verification` must name one.
+Quiet variants only: output is resent every turn. A story's `## Verification` names one, never a `round-only` row: wave-check reports it, close-story refuses it.
 
 <!-- VULYK:COMMANDS:START -->
-<!-- install.sh swaps this block; keep each marker on its own line. -->
 
 | Purpose | Command |
 |---|---|
-| Shell syntax | `git ls-files '*.sh' \| xargs -n1 bash -n` |
-| Python syntax, hooks | `python -m py_compile .claude/hooks/*.py` |
-| JSON validity | `git ls-files '*.json' \| xargs -n1 jq -e . > /dev/null` |
-| Cycle tests | `bash tests/cycle.test.sh` |
-| Council tests | `bash tests/council.test.sh` |
-| Council tests, quick | `bash tests/council.test.sh --quick` |
-| Driver contract tests | `bash tests/driver.test.sh` |
-| Driver + cycle end to end | `bash tests/e2e.test.sh` |
-| Solo path, Tier 1-2 | `bash tests/solo.test.sh` |
-| Anomaly telemetry contract tests | `bash tests/telemetry.test.sh` |
-| Defect library gate | `bash scripts/defects-check.sh [<arg>]` |
-| Defect and hook tests | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
+| Shell | `git ls-files '*.sh' \| xargs -n1 bash -n` |
+| Python | `python -m py_compile .claude/hooks/*.py` |
+| JSON | `git ls-files '*.json' \| xargs -n1 jq -e . > /dev/null` |
+| Cycle | `bash tests/cycle.test.sh` |
+| Council (round-only) | `bash tests/council.test.sh` |
+| Council part | `bash tests/council.test.sh --part <topic>` |
+| Council, quick | `bash tests/council.test.sh --quick` |
+| Driver | `bash tests/driver.test.sh` |
+| E2E | `bash tests/e2e.test.sh` |
+| Solo | `bash tests/solo.test.sh` |
+| Anomaly telemetry contract tests (round-only) | `bash tests/telemetry.test.sh` |
+| Telemetry part | `bash tests/telemetry.test.sh --part <topic>` |
+| Defect gate | `bash scripts/defects-check.sh [<arg>]` |
+| Defect hooks | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
 | Maintenance | `bash tests/maintenance.test.sh` |
-| Pulse mod | `bash tests/mods.test.sh` |
+| Mods | `bash tests/mods.test.sh` |
 | Model profile tests | `bash tests/model-profile.test.sh` |
-| Full suite / build | none: no test runner, no build step |
+| Runner | `bash tests/full-suite.test.sh` |
+| Full suite / build (round-only) | `bash tests/full-suite.sh` |
 
-The first three are silent on success; never commit the `__pycache__/` that `py_compile` writes.
+Never commit `__pycache__/`.
 
 <!-- VULYK:COMMANDS:END -->
 

@@ -1,8 +1,8 @@
 ---
 story: fast-verification-01
 spec: fast-verification
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-test
 wave: 1
@@ -58,5 +58,32 @@ sections`, `## Proposed telemetry cut`, `## Gotchas`.
 `git ls-files '*.sh' | xargs -n1 bash -n && bash tests/maintenance.test.sh && bash tests/telemetry.test.sh --part telemetry`
 
 ## Implementation notes
+- Parts are `if part_on <name>; then ... fi` wrappers around the existing blocks, in file order; no case
+  moved, changed or dropped. Shared helpers moved to setup: `rowval`, `profile_rows`, `treesum`, `same`,
+  `PRE_M`, and `install_fixtures` (creates `$TGT` + `$OWNSET` once; install, wiring, library and mods call it).
+- The four contract parts each ran 412-448 s alone, so all three install-heavy ones were cut again (each
+  install.sh run costs ~10 s here). `--list-parts` now prints 11 names; the contract's four names stay:
+  `telemetry` 143 s · `install` (Telemetry row, question, updater, no-terminal/pty) 163 s · `wiring`
+  (wire_hook, council.jsonl exclusion) 164 s · `constitution` (`--constitution replace`) 133 s · `library`
+  (defect wiring, ysk-offer, defect-wire hive) 168 s · `rg` 70 s · `mods` (pulse, retired watcher) 152 s ·
+  `upgrade` (retired files, CRLF host files) 133 s · `wrapper` (plain, bash -c, the repair) 140 s ·
+  `launchers` (node launcher, mixed) 86 s · `edits` (cases 21-22) 109 s. 28 cores, Windows Git Bash,
+  2026-10-25, each part alone but with wave-mate story 02 possibly running council parts on the same box:
+  numbers are an upper-ish reading, not a quiet-box measurement.
+- Contract delta for later stories: `--constitution replace` cases now live in part `constitution`, not
+  `install`; story 05's placeholder case still goes in `install`. The runner reads `--list-parts`, no edit.
+- Check counts: every part's checks minus its 2 setup checks sum to the no-argument run's total. The
+  no-argument run (1383 s) printed the same summary line, `592 checks, 1 failed`: the one red was case 8,
+  which greps CLAUDE.md for the exact old telemetry row. Updated because this story marks that row: case 8
+  now expects `| Anomaly telemetry contract tests (round-only) | ...` and also the new `Telemetry part`
+  row (one check added, 593). After the fix `--part telemetry`: 300 checks, 0 failed, 108 s.
+- Deliberate-failure proof: a copy with `bad` inserted at the top of part `rg` exited 1 with
+  `15 checks, 1 failed`, the two `bash -n` setup checks ran first; copy deleted.
+- `CLAUDE.md`: the size cap is 7168 B (CR not counted); it stood at 7159 B, so Purpose trims alone could
+  not pay for 4 rows, 3 marks and the rule sentence. Also trimmed, all inside the COMMANDS markers (never
+  shipped): the `install.sh swaps this block` comment line, and the footer down to
+  `Never commit __pycache__/.` (dropped "the first three are silent on success"). Result 7165 B; the
+  shipped render 6419 B. `Anomaly telemetry contract tests` and `Model profile tests` keep their Purpose
+  text: telemetry.test.sh and model-profile.test.sh grep those exact strings.
 
 ## Findings
