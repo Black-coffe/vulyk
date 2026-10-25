@@ -1,6 +1,6 @@
 # Grill protocol
 
-Read by `/vulyk-plan` after recon (map + `drone-scout`), before the plan is drafted. Governs
+Read by `/vulyk-plan` after recon (map + `drone-scout`) and, on new ground, its horizon step, before the plan is drafted. Governs
 the one interactive question round before the plan is written (the plan approval that follows
 it is a stop, not a round). Depends on nothing but
 Claude Code's own `AskUserQuestion`, `Agent` and `Bash` - never the personal `grill` skill,
@@ -24,12 +24,12 @@ never a statusbar.
 - Ask only what the recon left ambiguous, or where the code genuinely supports more than one
   implementation. Never ask what the repo, `memory/`, or the brief already answer.
 - An implementation-variant question draws its options from the recon (`drone-scout` reports),
-  never invented. Every option states in one line what happens if it is chosen.
+  never invented (horizon questions, below, are the one exception). Every option states in one line what happens if it is chosen.
 - The first option is always the recommended one, labelled `(Рекомендую)`, with a one-line reason
   drawn from the recon for *this* code - never a generic reason ("faster", "cleaner", "best practice").
 - Every question carries a free-text `Other`.
 - Silence, or any phrasing of "as you recommend", is always a safe answer: it selects the
-  recommended option.
+  recommended option. On a horizon question silence is «Не добавлять» (below).
 - A request that reads as a bug report gets one extra question asking which shipped spec it
   escaped from; the chosen slug is written into `brief.md`'s header as `**Escaped from:** <slug>`.
 - The fixed last question, always asked, always last: show the N candidate requirement lines
@@ -46,18 +46,38 @@ never a statusbar.
 - After the read-back, ask nothing else until the plan is on disk. The approval stop is not a
   question - it is the plan shown once, and one word from the owner.
 
+## Horizon questions
+
+When `/vulyk-plan` ran its horizon step (step 3a), `docs/specs/<slug>/horizon.md` holds at most three proposals.
+Each becomes one question of this round. Every rule of the round above still applies, with these additions:
+
+- They count inside the 3-7 cap. If they do not all fit, ask the `gap` ones first; a proposal not asked stays in
+  `horizon.md` as offered, never adopted.
+- Options: «Добавить» (the proposal, with its cost in one line) and «Не добавлять», always both, plus `Other`. The
+  recommended option comes first with its reason: «Добавить» only for a `kind: gap` proposal; for `kind: extension`
+  «Не добавлять» is recommended and the proposal comes second, with its cost.
+- A `не подтверждено` mark from the proposal stays visible in the question text.
+- The owner's own words adopt a proposal: a picked «Добавить», an `Other` that takes it up, or «как рекомендуешь»
+  on a gap. Silence never adopts one: unlike other questions, a silent horizon question is «Не добавлять».
+- The fixed last question shows each adopted proposal as one more candidate line, `(horizon) <ask line>`. It enters
+  `## Asks` only when the owner confirms that list, as the owner's choice, never as an owner quote.
+
+These are the one exception to "options from the recon, never invented": their options come from `horizon.md`.
+Every other question keeps that rule.
+
 ## Recording answers
 
 Append to `brief.md`, in this order:
 1. `## Answers` - one entry per question asked: the question's label plus the chosen option's
    description, verbatim, in the order asked.
 2. `## Asks` - the confirmed requirement lines from the fixed last question, numbered from 1
-   without gaps (contract C8).
+   without gaps (contract C8). An adopted horizon proposal is one of these lines, `(horizon) <ask line>`.
 
 ## No-question mode (`claude -p`, `AskUserQuestion` unavailable)
 
 Do not wait on anything. For every question the round would have asked, take its recommended
 option and write it to `## Answers` with `(assumed)` appended to the entry. Still derive `## Asks`
 from the same fixed-last-question logic - the N candidate requirement lines, all confirmed by
-default. No-question mode cannot approve a plan either: `/vulyk-plan` writes the plan and stops
+default. A horizon step forced with `--horizon` records its proposals in `## Answers` as
+`(offered, not adopted)` and never adds them to `## Asks`. No-question mode cannot approve a plan either: `/vulyk-plan` writes the plan and stops
 unless `--go` was given, in which case it closes the intake with `--mode assumed`.

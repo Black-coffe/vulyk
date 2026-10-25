@@ -62,6 +62,7 @@ council-opus
 cycle-clerk
 drone-coverage
 drone-docs
+drone-horizon
 drone-scout
 lead-architect
 lead-review
