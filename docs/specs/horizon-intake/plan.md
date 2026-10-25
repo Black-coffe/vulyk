@@ -46,7 +46,7 @@ inside existing code, Tier 0-1, study work and no-question mode are unchanged.
 - `drone-horizon` dispatch: `lens: altitude | depth | range`, the brief path, a one-paragraph recon summary (what
   was not found and where it was looked for). Return: up to three blocks `P<n>` with fields `what`, `why`, `cost`,
   `check`, `sources` (URL + date per external fact) and `status` (`confirmed` or `не подтверждено`), plus one
-  `ask line` per proposal, in the owner's language.
+  `ask line` and one `kind` (`gap` or `extension`) per proposal, in the owner's language.
 
 ## Integration gate
 `bash tests/telemetry.test.sh && bash tests/solo.test.sh`
@@ -56,6 +56,16 @@ inside existing code, Tier 0-1, study work and no-question mode are unchanged.
 *(empty)*
 
 ## Plan deltas
+
+- 2026-10-25 · trigger: an outside review the owner pasted after approval (four points). Decisions:
+  1. The new-ground signal is made concrete in `horizon-intake-02`: two to four capability terms searched in
+     `memory/`, the map and the source; a container hit is not a capability hit; the announcement names the terms.
+  2. Web use is bounded in `horizon-intake-01`: WebSearch first, WebFetch at most twice per dispatch, a denied tool
+     is not retried. The live run records whether permission prompts stall the parallel dispatches.
+  3. Owner's choice: «"Добавить" рекомендую только для дыр (Рекомендую)». A proposal is `kind: gap` or
+     `kind: extension`; «Добавить» is recommended only for a gap, «Не добавлять» for an extension.
+  4. Rejected as stated: the review assumed `wave-check` passed `horizon-intake-02`. It reported `verify-gap` for
+     both stories; the gap is recorded in each story's acceptance criteria (no suite reads prompt text).
 
 <!--
 The lines below are the cycle's confirmation markers (docs/cycle.md); each placeholder is replaced by

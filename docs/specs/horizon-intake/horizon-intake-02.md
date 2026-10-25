@@ -45,13 +45,18 @@ new-ground request is recorded in `live-run.md`.
 memory/map/agents-and-commands.md: `/vulyk-plan` (steps 3-4) and `drone-scout` dispatch rules
 
 ## Acceptance criteria
-- [ ] `vulyk-plan.md` has the step after recon. It names the signal (no `memory/` pointer, no map slice and no code
-      hit for the asked capability, or an empty repo), the one-line announcement, the flags, the skip cases, the
+- [ ] `vulyk-plan.md` has the step after recon. The signal is concrete: the Queen takes two to four terms that name
+      the asked capability (its nouns and verbs, not the project's) and searches `memory/memory.md`, `memory/map/`
+      and the source (Grep). Zero hits on the capability fires the step; a hit on its container (a folder or a file
+      family, such as `.claude/commands/` for a new command) is not a hit. An empty repo fires it too. The one-line
+      announcement names the terms and where they were searched. The step also states the flags, the skip cases, the
       three parallel dispatches with the contract fields, and the Queen's cut to at most three proposals written to
       `horizon.md` with a verdict on every candidate.
 - [ ] `grill.md` has rules for horizon questions:
       - they count inside the 3-7 cap;
       - the first option is the recommended one with its reason, and «Не добавлять» is always present;
+      - «Добавить» is the recommended option only for a `kind: gap` proposal; for `kind: extension` the recommended
+        option is «Не добавлять», and the proposal comes second with its cost;
       - the owner's words adopt a proposal, silence never does;
       - a `не подтверждено` mark stays visible in the question;
       - the fixed last question shows adopted proposals as `(horizon)` ask lines (the upgraded prompt), and they
@@ -63,7 +68,8 @@ memory/map/agents-and-commands.md: `/vulyk-plan` (steps 3-4) and `drone-scout` d
       - a sample new-ground request;
       - the three lens returns and the Queen's cut;
       - the tokens per dispatch from `token-report.py`;
-      - the WebFetch/WebSearch permission result in default mode, against a control;
+      - the WebFetch/WebSearch permission result in default mode, against a control: whether a prompt stalls the
+        three parallel dispatches, and how many fetches each one made;
       - a plain statement that the interactive questions were not run headless.
 - [ ] CHANGELOG `[Unreleased]` describes the step in one entry.
 - [ ] Known gap: no suite reads prompt text. `solo.test.sh` only proves the Tier 1-2 plan-to-build mechanics still

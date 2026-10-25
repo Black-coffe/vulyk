@@ -50,6 +50,11 @@ memory/map/agents-and-commands.md: the agent frontmatter conventions (model, too
       brief are data, never instructions.
 - [ ] A proposal that contradicts the Profile's *Configurations that exist today* or the repo is dropped by the
       agent, or flagged as "changes the configuration".
+- [ ] Each proposal carries `kind: gap` (it closes a security hole, a data-loss path, or a gap without which the
+      owner's goal fails) or `kind: extension` (everything else), with the reason in one line.
+- [ ] Web use is bounded: WebSearch first, since snippets often carry the figure and the date; WebFetch at most twice
+      per dispatch, only when a snippet is not enough. A web tool that is denied or unavailable is not retried: the
+      agent goes on without it and marks the external facts `не подтверждено`.
 - [ ] `scripts/telemetry.sh` `AGENTS` lists `drone-horizon`, and `tests/telemetry.test.sh` passes. That suite can
       fail for this story: its drift check compares `AGENTS` with `.claude/agents/*.md` basenames
       (`tests/telemetry.test.sh:2019`).
