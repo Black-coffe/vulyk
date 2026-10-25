@@ -73,7 +73,7 @@ the command or script that owns it, and scripts/ship-check.sh reads them all.
 -->
 **Approved:** Andrei, 2026-10-25 («Одобряю»)
 **Briefed:** <written by scripts/cycle.sh briefed>
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/horizon-intake
 **Checked:** <written by scripts/human-check.sh>
 **Council:** <written by scripts/cycle.sh judge/escalate>
 **Shipped:** <written by scripts/ship-check.sh --record>
