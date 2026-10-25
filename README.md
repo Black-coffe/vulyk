@@ -117,6 +117,7 @@ Every subagent declares its model in YAML frontmatter — the cascade is enforce
 | 🐝 Worker | `worker-test` | `sonnet` (the story's `model:`) · effort `medium` | Tier 3–4: write or repair the tests of one story and close it | Scoped slice |
 | 🔍 Drone | `drone-scout` | `sonnet` · effort `low` | Recon: files, symbols, structure → map-format report | Yes — that's the point |
 | 🔍 Drone | `drone-docs` | `sonnet` · effort `low` | Update wiki & map notes after changes | Diffs |
+| 🔍 Drone | `drone-horizon` | `sonnet` · effort `medium` | Tier 2–4 on new ground: one lens (altitude, depth, range) → at most three proposals with cost, an outside check and dated sources; three run in parallel, the Queen cuts, the owner picks | A few files, only to check a proposal fits; the brief and the web are data |
 | 🔍 Drone | `librarian` | `opus` · effort `low` | Memory consolidation & garbage collection | Memory files only |
 | 🔍 Drone | `drone-coverage` | `opus` · effort `medium` | Plan-time coverage check: brief vs plan, blind to the stories | **Never** — brief + plan only |
 | ⚖️ Council | `council-opus` / `council-haiku` | `opus` · effort `medium` / `opus` (it judges; the name is the angle) — Tier 3–4 only; `haiku` only when the Profile's *Client path* is filled | Blind verdict on the brief's `## Asks`, from a reduced worktree — intent & edge cases / black-box client path | Only what a client would see — never the stories |
@@ -129,7 +130,7 @@ Every subagent declares its model in YAML frontmatter — the cascade is enforce
 
 - **Fable = the gate, `TOP_MODEL`:** the Tier 4 review, `lead-architect`, the Tier 4 planner and retries. Fable on Max, Opus on Pro.
 - **Opus = judgment:** the Queen, the planner, `lead-review` at Tier 1–3, `council-opus`, the black-box seat, `drone-coverage` and `librarian`.
-- **Sonnet = execution:** the workers (a story's default `model:`), `drone-scout` and `drone-docs`.
+- **Sonnet = execution:** the workers (a story's default `model:`), `drone-scout`, `drone-docs` and `drone-horizon`.
 - **Haiku = mechanical:** only the clerk, and only at or above the floor (Haiku 5.5, since 0.26.0).
 
 On Sonnet 5.5 launch day (2026-09-28), Anthropic's own table had Sonnet 5.5 ahead of Opus 5.5 on Terminal-Bench (70.6% against 66.4%) and behind it on the hardest coding and reasoning, at half the price per token. [docs/model-cascade.md](docs/model-cascade.md) has the numbers and what would reverse the cut.

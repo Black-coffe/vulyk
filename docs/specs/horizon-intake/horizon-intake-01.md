@@ -1,8 +1,8 @@
 ---
 story: horizon-intake-01
 spec: horizon-intake
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 1
@@ -63,5 +63,16 @@ memory/map/agents-and-commands.md: the agent frontmatter conventions (model, too
 `bash tests/telemetry.test.sh`
 
 ## Implementation notes
+- `drone-horizon.md` follows `drone-scout`/`council-opus` conventions: `disallowedTools` adds Bash to the council's
+  Write, Edit, NotebookEdit; it reads `CLAUDE.vulyk.md` else `CLAUDE.md` for the Profile, as `council-opus` does.
+- The output block carries the plan.md contract fields plus `DROPPED:`, so the Queen sees what the lens cut and why.
+  The reply is capped at 60 lines; zero proposals is a valid answer.
+- README: one agent-table row and the Sonnet ladder line only. The "Drones" bullet near the top still says
+  "Sonnet at low effort for recon and docs"; left as is, since the story names only the table and the Sonnet line.
+- The live run (`live-run.md`, eight real dispatches on Sonnet 5.5) found three contract gaps, fixed here before
+  close: `status` was read two ways for repo-only proposals; one dispatch of eight returned four proposals; sources
+  carried the access date. Rules 5 and the closing line now settle all three.
+- First close timed out at 540 s: an orphaned earlier run of the same suite and four headless live-run sessions
+  were running beside it. Rerun alone.
 
 ## Findings
