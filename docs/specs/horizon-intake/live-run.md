@@ -71,16 +71,32 @@ Sample B was added so that the permission question is actually asked.
 | web probe (default mode) | 2 × WebSearch, in parallel | both refused: "Claude requested permissions to use WebSearch, but you haven't granted it yet." | 2 | no retry, no WebFetch; every external fact marked `не подтверждено`; three proposals returned |
 | web control (granted) | 2 × WebSearch, 0 × WebFetch | both answered | 0 | four proposals (over the cap of three); sources cited with the access date |
 
-**What this means for an owner in default mode.** Headless, an ungranted tool is refused at once, so nothing stalls.
-Interactively the same call is a permission prompt per lens, so up to three prompts arrive at once while the lenses
-wait. Nothing in VULYK grants the web tools: an owner who wants the lenses to search answers the prompt, or adds
+Neither lens chose WebFetch on its own (WebSearch first, as the agent is told), so round 1's review asked for WebFetch
+to be probed directly. Four more dispatches (round 1 repair, after the `drone-horizon.md` fixes) told the depth lens
+to read one named page with WebFetch before any search:
+
+| Run | Page | Result | Denials | Agent behaviour |
+|---|---|---|---|---|
+| fetch probe (default mode) | `https://docs.stripe.com/payments/blik` | fetched, no prompt, no refusal | 0 | used the page; one source, so `не подтверждено`; dated `undated, read 2026-10-25` |
+| fetch control (granted) | same | fetched | 0 | same |
+| fetch probe 2 (default mode) | `https://dev.ua/en/news/provaidery-internet-ekvairynhu-1771226277` | refused: "Claude requested permissions to use WebFetch, but you haven't granted it yet." | 1 | no retry, no fallback search; every external fact `не подтверждено` |
+| fetch control 2 (granted) | same | fetched | 0 | dated the page by its own date, 16 February 2026 |
+
+So in the default mode WebFetch is gated per page: the Stripe docs page went through without a grant, the news page
+did not. Why Claude Code lets one domain through was not checked here; the observation is what VULYK can rely on:
+some fetches pass, most outside pages ask.
+
+**What this means for an owner in default mode.** Headless, an ungranted WebSearch, and a WebFetch of an ungranted
+page, are refused at once, so nothing stalls. Interactively the same calls are permission prompts, so up to three
+lenses can ask at once while they wait. Nothing in VULYK grants the web tools: an owner who wants the lenses to search answers the prompt, or adds
 `WebSearch` and `WebFetch` to their own allow list. Without that, the step still returns proposals, marked
 `не подтверждено`. The owner's own machine runs `bypassPermissions`, where nothing prompts.
 
 ## Tokens
 
-`python scripts/token-report.py . --spec horizon-intake --since 2026-10-25`: 8 `drone-horizon` dispatches, 213 331
-raw and 71 619 weighted tokens in the subagents. Per dispatch, counted from each transcript the same way (unique
+`python scripts/token-report.py . --spec horizon-intake --since 2026-10-25`, read before the round 1 review: 8
+`drone-horizon` dispatches, 213 331 raw and 71 619 weighted tokens in the subagents; the four fetch dispatches below
+bring it to 12 dispatches and 307 014 raw. Per dispatch, counted from each transcript the same way (unique
 `message.id`, the max of each field):
 
 | Run | Lens | API calls | Raw | Output |
@@ -93,15 +109,20 @@ raw and 71 619 weighted tokens in the subagents. Per dispatch, counted from each
 | control | range | 3 | 24 879 | 1 978 |
 | web probe | depth | 3 | 25 279 | 2 073 |
 | web control | depth | 3 | 27 622 | 2 946 |
+| fetch probe | depth | 3 | 31 746 | 2 203 |
+| fetch control | depth | 2 | 19 439 | 2 101 |
+| fetch probe 2 | depth | 2 | 16 740 | 2 418 |
+| fetch control 2 | depth | 3 | 25 758 | 1 888 |
 
 One lens costs about 25k raw (about 9k weighted, mostly cache reads); the step's three about 75k raw, before the
 Queen's cut, which runs in her own context. The per-run `total_cost_usd` of the headless sessions, orchestrator
-included, was $0.10-0.30.
+included, was $0.06-0.30.
 
 ## What the run found in the agent
 
-Findings 1-3 were fixed in `drone-horizon.md` inside `horizon-intake-01`, before that story closed; the runs above
-used the agent as it was before the fix.
+Findings 1-3 were fixed in `drone-horizon.md` inside `horizon-intake-01`, before that story closed; the sample A and
+web runs used the agent as it was before the fix, the four fetch runs used the fixed agent (fix 3 shows in their
+dates).
 
 1. **`status` was read two ways.** For a proposal resting on the repo alone, altitude wrote `confirmed` and depth and
    range wrote `не подтверждено`. Fixed: `status` is about external facts; a repo-only proposal is `confirmed`
@@ -119,6 +140,7 @@ used the agent as it was before the fix.
 
 - The grill questions themselves. `AskUserQuestion` does not exist under `claude -p`, so the horizon questions, the
   owner's pick and the `(horizon)` ask lines were not run headless. They run on the first real new-ground plan.
-- An interactive default-mode session, where the prompts would appear on screen. The headless refusal shows the tool
-  is gated; how three simultaneous prompts look to the owner was not seen.
+- An interactive default-mode session, where the prompts would appear on screen. The headless refusals show WebSearch
+  and most WebFetch pages are gated; how three simultaneous prompts look to the owner was not seen, and the first
+  real new-ground plan in default mode should be watched for it.
 - A hive other than VULYK.

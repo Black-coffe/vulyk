@@ -1,7 +1,7 @@
 ---
 story: horizon-intake-03
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 3
@@ -32,5 +32,16 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 - docs/specs/horizon-intake/live-run.md
 
 ## Verification
-`bash tests/telemetry.test.sh`
 `bash tests/solo.test.sh`
+
+## Implementation notes
+- Finding 1: four headless `drone-horizon` dispatches told to WebFetch one named page, default mode against a granted
+  control, on two pages. `docs.stripe.com` was fetched without a grant; `dev.ua` was refused ("Claude requested
+  permissions to use WebFetch, but you haven't granted it yet."), and fetched once granted. Recorded in `live-run.md`
+  (Sample B, the tokens table, "Not run") and in ADR-022's consequence line. The reason one domain passes was not
+  checked; the file says so.
+- Verification trimmed to `solo.test.sh` (card `full-round-for-a-narrow-fix`): this repair changes only
+  `live-run.md` and ADR-022, which no suite reads. `telemetry.test.sh` covers `scripts/telemetry.sh`, untouched since
+  `horizon-intake-01` closed green (592 checks).
+- Round 1 minor "Descoped empty": one `## Descoped` line in plan.md names ask 4's two-family shrink. The README
+  "Drones" bullet and `docs/model-cascade.md` minors are left for the ship's next-brief draft: outside this repair.

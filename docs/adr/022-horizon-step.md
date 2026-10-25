@@ -56,8 +56,8 @@ too much": ADR-008 cut recon that ran on every plan, and Law 2 forbids unrequest
 ## Consequences
 
 - A new-ground plan costs three Sonnet dispatches more; `live-run.md` has the measured tokens.
-- The first VULYK agent with web access. In the default permission mode an ungranted WebSearch is refused headless
-  and prompts interactively, up to three prompts at once (`live-run.md`). VULYK grants no web permission itself: the
+- The first VULYK agent with web access. In the default permission mode an ungranted WebSearch, and a WebFetch of
+  most outside pages, are refused headless and prompt interactively, up to three lenses at once (`live-run.md`). VULYK grants no web permission itself: the
   announcement line says the prompts may come, a refusal leaves outside facts `не подтверждено`, and the owner's
   own allow list decides. Pre-granting it in the installer was rejected: a framework does not enable network access
   in every hive silently.
