@@ -76,4 +76,5 @@ the command or script that owns it, and scripts/ship-check.sh reads them all.
 **Branch:** vulyk/horizon-intake
 **Checked:** <written by scripts/human-check.sh>
 **Council:** RED round 1, 2026-10-25, at 33efaae, pack 451665e3db2e
+**Council:** GREEN round 2, 2026-10-25, at b071aa9, pack 0584931ba18b
 **Shipped:** <written by scripts/ship-check.sh --record>
