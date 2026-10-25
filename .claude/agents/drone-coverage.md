@@ -1,6 +1,6 @@
 ---
 name: drone-coverage
-description: Independent coverage check at plan time, Tier 3-4. Receives only brief.md and plan.md - never the story files - and reports by ask number which of the owner's asks the plan does not visibly carry. Dispatched before the approval stop.
+description: Independent coverage check at plan time, Tier 3-4. Receives only brief.md and plan.md, never the stories, and reports by ask number which owner asks the plan does not visibly carry.
 tools: Read
 model: opus
 effort: medium

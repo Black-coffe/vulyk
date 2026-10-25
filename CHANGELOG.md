@@ -4,6 +4,17 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.35.1] - 2026-10-25
+
+CI on main was red after 0.35.0; this restores it.
+
+### Fixed
+- **The agent and command description budget (`tests/maintenance.test.sh`).** 0.35.0 added `drone-horizon` with a
+  327-byte description, which took the always-loaded descriptions to 5308 B against the 4983 B cap and failed CI on
+  both 0.35.0 pushes. Seven agent descriptions are shorter now (4887 B); no behaviour changes. The 0.35.0 stories were
+  verified with `solo.test.sh` and `telemetry.test.sh` only and the round ran no full suite, which is the gap spec
+  `fast-verification` closes next.
+
 ## [0.35.0] - 2026-10-25
 
 A horizon step in `/vulyk-plan` proposes what the owner did not know to ask, on new ground only (spec `horizon-intake`).

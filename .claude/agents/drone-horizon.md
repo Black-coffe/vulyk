@@ -1,6 +1,6 @@
 ---
 name: drone-horizon
-description: Horizon lens at plan time, Tier 2-4 on new ground. Dispatched three times in parallel by /vulyk-plan, once per lens (altitude, depth, range); reads the brief, the Profile and the web, and returns at most three proposals with cost, an outside check and dated sources. Proposes only: the Queen cuts, the owner picks.
+description: Horizon lens, Tier 2-4 on new ground: /vulyk-plan dispatches it once per lens (altitude, depth, range). Returns at most three sourced proposals. Proposes only: the Queen cuts, the owner picks.
 tools: Read, Grep, Glob, WebSearch, WebFetch
 disallowedTools: Write, Edit, NotebookEdit, Bash
 model: sonnet

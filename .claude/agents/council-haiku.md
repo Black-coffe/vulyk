@@ -1,6 +1,6 @@
 ---
 name: council-haiku
-description: Council seat - black box. Walks the Profile's Client path as a client would, using the Browser MCP server only when the Profile names one. Reads no source. Required at Tier 3-4 only when Client path is filled; dispatched into a court worktree that holds only the brief.
+description: Council seat - black box. Walks the Profile's Client path as a client would, with the Browser MCP only when the Profile names one. Reads no source. Tier 3-4, only when Client path is filled; runs in a court worktree holding only the brief.
 tools: Bash, Read, mcp__chrome-devtools__*, mcp__claude-in-chrome__*
 disallowedTools: Write, Edit, NotebookEdit
 model: opus

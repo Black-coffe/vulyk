@@ -1,6 +1,6 @@
 ---
 name: lead-review
-description: The reviewer seat of a council round. Judges the round's diff against the brief's asks and for correctness, and writes a PASS/BLOCK report that cycle.sh records. Dispatched once per round (twice at Tier 4) by /vulyk-build, /vulyk-review or the Workflow driver.
+description: The reviewer seat of a council round. Judges the round's diff against the brief's asks and for correctness, and writes a PASS/BLOCK report that cycle.sh records. Once per round (twice at Tier 4).
 tools: Read, Grep, Glob, Bash
 model: opus
 effort: high

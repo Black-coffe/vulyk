@@ -1,6 +1,6 @@
 ---
 name: librarian
-description: Memory consolidation and ADR harvest. The single writer that merges memory/learnings and prunes memory files (/vulyk-gc, /vulyk-evolve), and proposes ADRs from a shipped spec's plan deltas (/vulyk-ship). One writer by design, so memory never races.
+description: Memory consolidation and ADR harvest. The single writer that merges memory/learnings and prunes memory (/vulyk-gc, /vulyk-evolve), and proposes ADRs from a shipped spec's plan deltas (/vulyk-ship).
 tools: Read, Write, Edit, Glob
 model: opus
 effort: low

@@ -1,6 +1,6 @@
 ---
 name: drone-docs
-description: Documentation drone. After a spec merges, brings the memory/map slices and docs/wiki notes of the modules it touched in line with the code. Dispatched by /vulyk-ship when the merge touches a mapped module, or when /vulyk-status reports a stale map.
+description: Documentation drone. After a merge, brings the memory/map slices and docs/wiki notes of the touched modules in line with the code. Dispatched by /vulyk-ship, or when /vulyk-status reports a stale map.
 tools: Read, Write, Edit, Grep, Glob
 model: sonnet
 effort: low
