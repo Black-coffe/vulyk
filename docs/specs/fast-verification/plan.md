@@ -187,6 +187,10 @@ by ~490-517 s and the two latency suites, run alone last, need ~50 s more. Budge
 - 2026-10-26, story 08 NEEDS_CONTEXT (full suite ~560 s under round load, 0 failures), owner ruling «Срезать работу,
   лимит 540»: profile CPU across the jobs, cache the biggest repeated fixture build like the install cache; no budget
   raise. Rejected for now: 590 s budget (10 s under the reviewer's 600 s Bash cap) - the fallback if no 60 s lever exists.
+- 2026-10-26, story 08 NEEDS_CONTEXT again (profile: no repeated fixture worth 60 s; 83 install.sh runs each test a
+  distinct case), owner ruling «Вынести в конец только замеры»: inject/intake split into functional and latency parts,
+  only the latency parts run alone last; intake's fresh install cached. Pre-approved fallback: default budget 590 s.
+  Rejected: a faster install.sh (product code, risk to every hive; a separate spec after ship).
 
 <!--
 The lines below are the cycle's confirmation markers (docs/cycle.md); each placeholder is replaced by

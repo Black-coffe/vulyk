@@ -54,7 +54,19 @@ Re-dispatch (stamp 7501ae8ca9d5dfc8): no answer to the question above is on disk
 lever is still open; the uncommitted work is left as it was. Note: the early jobs are throughput-bound (they end at
 ~490-517 s while the slowest single job is 227-269 s), so splitting parts further is unlikely to win ~50 s by itself.
 
+NEEDS_CONTEXT (worker, owner answer «Срезать работу, лимит 540», stamp 87654065dedca511): the profile (table under
+`## Implementation notes`) shows no repeated fixture worth 60 s. ~1500 of 3626 job-s are 83 real `install.sh` runs whose
+inputs differ (the asserts' subject); the one identical repeat (`$OWNSET`, 4 parts) is now cached and saves ~35-40
+job-s, about 6 s of wall at the round's parallelism. Per the answer: the owner chooses the 590 s budget (or names
+another lever: a faster `install.sh`, outside this spec). No round-condition run was made after the cache, since
+6 s cannot close the ~50 s gap.
+Re-dispatch (same stamp): no owner choice between the 590 s budget and another lever is on disk yet; the answer's own
+rule sends this back as NEEDS_CONTEXT. Only change: `seed_ownset` in tests/telemetry.test.sh writes `\n` again instead of
+a literal newline inside the quotes (same bytes written). Uncommitted work left as is.
+
 ## Files
+- tests/inject.test.sh
+- tests/intake.test.sh
 - tests/maintenance.test.sh
 - tests/telemetry.test.sh
 - CLAUDE.md
@@ -92,6 +104,14 @@ end by ~460 s so the ~50 s latency tail fits 540 s with margin; record two round
 If the profile shows no lever worth 60 s or more, return NEEDS_CONTEXT with that table: the owner then chooses a
 590 s budget.
 
+Answer 2 (owner, 2026-10-26, «Вынести в конец только замеры»): the serial tail is the lever. Split
+tests/inject.test.sh and tests/intake.test.sh into a functional part and a latency part (`--part`/`--list-parts`
+like the other suites): the functional parts run among the parallel jobs, only the latency parts (the median
+assertions) run alone at the end. Cache intake's plain fresh install like telemetry's. The medians and every assert
+stay as they are. Keep the `$OWNSET` cache. Then two round-condition runs recorded in plan.md. If they still exceed
+540 s, the owner has already chosen the fallback: set the default `VULYK_SUITE_TIMEOUT` to 590 s everywhere it is
+named, record it in plan.md, and close the story; no further question.
+
 ## Implementation notes
 - scripts/cycle.sh: `full_suite_row_round_only` now also needs a runnable command cell (`<fill in...>`, `none`, empty do not count); record-seat review requires the first `SUITE:` line to be `ok|FAIL|TIMEOUT <N>s[ ...]` whenever that row exists, else MALFORMED exit 4.
 - Decision: `TIMEOUT <N>s` without `budget <B>s` is accepted (judge already defaults the budget); `571 s`, bare `TIMEOUT`, `none` and a missing line are refused.
@@ -101,3 +121,15 @@ If the profile shows no lever worth 60 s or more, return NEEDS_CONTEXT with that
 - tests/telemetry.test.sh: `install_cache` writes the holder pid into the lock; a waiter reclaims a lock whose pid is dead (or has no pid after 10 s). Checked with a planted dead-pid lock: `--part install` built the cache and passed.
 - tests/cycle.test.sh: `--part`/`--list-parts` (ship hooklog gates manual close bsd safety), unknown part exits 1 listing names; the 7 parts alone and the whole run each give 157 oks, exit 0. full-suite.sh expands it via its existing `--list-parts)` probe (comment updated); full-suite.test.sh real-list checks updated.
 - docs/specs/fast-verification/plan.md: two round-condition measurements under `## Integration gate` - both exit 124 at 540 s.
+- Profile (owner answer, 2026-10-26): `VULYK_SUITE_TIMEOUT=0 bash tests/full-suite.sh --jobs 6`, box otherwise idle-ish: 46 ok, wall 767 s, early jobs 3626 job-s; then every job re-run under bash xtrace (exported `SHELLOPTS`, `BASH_XTRACEFD`) to count spawns.
+  | Cost | job-s (of 3626) | spawns | repeated identical fixture? |
+  |---|---|---|---|
+  | telemetry: 83 `install.sh` runs in 14 parts (constitution 11, ysk/mods/rg 8, install/wrapper 7, crlf 6, ...), ~17 s fresh / ~23 s upgrade each alone | ~1500 of telemetry's 1732 | grep 600-1250, cmp 160-560, python3 70-160 per part (inside install.sh) | no: all but 2 are `--upgrade`/`--check` runs or installs over distinct inputs (seeded settings, PATH rg stubs, claude stub, 9.8.0/defects release copies) - the subject of the asserts |
+  | the same, repeated: `$OWNSET` (fresh install over one seeded settings.json) in install, library, ysk, mods | ~70 (4 x ~17) | - | yes: now cached (below), saves ~2 installs net (~35-40 job-s) |
+  | council: 11 parts, `cycle.sh` verbs on per-scenario specs (mk_spec + 2-3 commits each), wall probes on 8 scratch hives | 1324 | git 170-735, grep 140-610, sed 130-470 per part | no: the per-part setup costs 0.6 s, each spec/hive is its own scenario; a cycle.sh call's own startup is 1 git + 1 dirname |
+  | cycle: 7 parts | 206 | git 30-350 per part | no: setup 0.85 s per part |
+  | others (defects, solo, e2e, maintenance, model-profile, full-suite, token-report, mods, driver) | 364 | - | no |
+  | late, alone: inject 25 s, intake 63 s (1 fresh install + 2 upgrades ~50 s of it) | 88 wall | - | intake's fresh install is cacheable, but tests/intake.test.sh is not in `## Files` |
+  Setup per part measured alone (a no-op part): telemetry 0.86 s, council 0.61 s, cycle 0.85 s.
+- tests/telemetry.test.sh: `install_cache [<dir> [ownset]]` now also builds `$ICACHE-ownset` (settings.json seeded, then install.sh), once per run under the same pid lock; library/ysk/mods copy it; the install part keeps the real `$OWNSET` install and asserts `diff -r` equal to the cache. Checked: `--part install|ysk|mods|library` in parallel on one cache, all 0 failed, the new diff check ok. Not committed (story returns NEEDS_CONTEXT).
+- Lever estimate: at the round's effective parallelism (~7: ~3600 job-s end at ~490-517 s) 60 s of wall needs ~400 job-s cut; the only repeated identical fixture left is worth ~35-40 job-s (~6 s wall). No lever worth 60 s exists without making `install.sh` itself faster (product code, plan delta (b) rejected) or cutting asserts.

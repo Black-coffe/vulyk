@@ -134,43 +134,53 @@ treesum() { (cd "$1" && find . -type f -exec md5sum {} + | LC_ALL=C sort | md5su
 same() { cmp -s "$1" "$2" && echo 1 || echo 0; }
 PRE_M='Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*'
 ICACHE="${VULYK_INSTALL_CACHE:-$T/install-cache}"
-install_cache() { # $ICACHE/tree and its install.out, built once; a parallel part waits for the builder,
-  # and reclaims the lock when its holder is gone (died mid-build: no pid alive, or no pid after 10 s)
-  local tmp w=0 holder
-  [ -d "$ICACHE/tree" ] && return 0
-  mkdir -p "$(dirname "$ICACHE")"
-  while [ ! -d "$ICACHE/tree" ] && [ "$w" -lt 300 ]; do
-    if mkdir "$ICACHE.lock" 2>/dev/null; then
-      echo "$$" > "$ICACHE.lock/pid"
-      if [ ! -d "$ICACHE/tree" ]; then
-        tmp="$ICACHE.build.$$"; rm -rf "$tmp"; mkdir -p "$tmp/tree"
+install_cache() { # install_cache [<cache-dir> [ownset]] - <cache-dir>/tree and its install.out (default
+  # $ICACHE: a plain fresh install; `ownset`: the tree is seeded with an owner's settings.json first), built
+  # once; a parallel part waits for the builder, and reclaims the lock when its holder is gone (died
+  # mid-build: no pid alive, or no pid after 10 s)
+  local c="${1:-$ICACHE}" seed="${2:-}" tmp w=0 holder
+  [ -d "$c/tree" ] && return 0
+  mkdir -p "$(dirname "$c")"
+  while [ ! -d "$c/tree" ] && [ "$w" -lt 300 ]; do
+    if mkdir "$c.lock" 2>/dev/null; then
+      echo "$$" > "$c.lock/pid"
+      if [ ! -d "$c/tree" ]; then
+        tmp="$c.build.$$"; rm -rf "$tmp"; mkdir -p "$tmp/tree"
+        [ "$seed" = ownset ] && seed_ownset "$tmp/tree"
         bash "$SRC/install.sh" "$tmp/tree" --telemetry off > "$tmp/install.out" 2>&1
-        mv "$tmp" "$ICACHE"
+        mv "$tmp" "$c"
       fi
-      rm -rf "$ICACHE.lock"; break
+      rm -rf "$c.lock"; break
     fi
-    holder="$(cat "$ICACHE.lock/pid" 2>/dev/null)"
+    holder="$(cat "$c.lock/pid" 2>/dev/null)"
     if { [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; } || { [ -z "$holder" ] && [ "$w" -ge 10 ]; }; then
-      mv "$ICACHE.lock" "$ICACHE.lock.stale.$$" 2>/dev/null && rm -rf "$ICACHE.lock.stale.$$"
+      mv "$c.lock" "$c.lock.stale.$$" 2>/dev/null && rm -rf "$c.lock.stale.$$"
       continue
     fi
     sleep 1; w=$((w + 1))
   done
-  [ -d "$ICACHE/tree" ] || { bad "install cache: $ICACHE/tree was never built"; exit 1; }
+  [ -d "$c/tree" ] || { bad "install cache: $c/tree was never built"; exit 1; }
 }
 fresh_install() { # fresh_install <dir> - what `install.sh <dir> --telemetry off` writes into an empty <dir>
   install_cache; mkdir -p "$1"; cp -a "$ICACHE/tree/." "$1/"
 }
+seed_ownset() { mkdir -p "$1/.claude"; printf '{"permissions":{"allow":["Bash(ls:*)"]}}\n' > "$1/.claude/settings.json"; }
 install_fixtures() { # [tgt] - $TGT (fresh install) and $OWNSET (an owner's own settings.json), each once
-  # per run; `tgt` skips $OWNSET, a real install. The install part asserts on them first, others read them.
+  # per run; `tgt` skips $OWNSET. The install part asserts on them first and installs $OWNSET for real
+  # (checked equal to the cached one there); the other parts copy the cached $ICACHE-ownset.
   if [ -z "${TGT:-}" ]; then
     TGT="$T/hive-install"; fresh_install "$TGT"; cp "$ICACHE/install.out" "$T/install.out"
   fi
   [ "${1:-}" = tgt ] && return 0
   [ -n "${OWNSET:-}" ] && return 0
-  OWNSET="$T/hive-own-settings"; mkdir -p "$OWNSET/.claude"
-  printf '{"permissions":{"allow":["Bash(ls:*)"]}}\n' > "$OWNSET/.claude/settings.json"
-  bash "$SRC/install.sh" "$OWNSET" --telemetry off > "$T/ownset.out" 2>&1
+  OWNSET="$T/hive-own-settings"
+  if part_on install; then
+    seed_ownset "$OWNSET"
+    bash "$SRC/install.sh" "$OWNSET" --telemetry off > "$T/ownset.out" 2>&1
+  else
+    install_cache "$ICACHE-ownset" ownset; mkdir -p "$OWNSET"
+    cp -a "$ICACHE-ownset/tree/." "$OWNSET/"; cp "$ICACHE-ownset/install.out" "$T/ownset.out"
+  fi
 }
 
 # --- case 0: syntax ---------------------------------------------------------------------------
@@ -1208,6 +1218,9 @@ bash "$SRC/install.sh" "$NOMARK" --telemetry off > "$T/nomark-install.out" 2>&1
 # NOMARK is a real plain fresh install: the cached one every fresh_install copies must equal it
 install_cache
 expect_eq "the cached install equals a real install (diff -r)" "" "$(diff -r "$NOMARK" "$ICACHE/tree" 2>&1)"
+# OWNSET is a real install over an owner's settings.json: the cached one the other parts copy must equal it
+install_cache "$ICACHE-ownset" ownset
+expect_eq "the cached owner-settings install equals a real one (diff -r)" "" "$(diff -r "$OWNSET" "$ICACHE-ownset/tree" 2>&1)"
 sed -i '/VULYK:PROFILE:START/d; /VULYK:PROFILE:END/d' "$NOMARK/CLAUDE.md"
 NOMARK_BEFORE="$(cat "$NOMARK/CLAUDE.md")"
 VULYK_TELEMETRY=on bash "$SRC/install.sh" "$NOMARK" --upgrade > "$T/nomark-upgrade.out" 2>&1
