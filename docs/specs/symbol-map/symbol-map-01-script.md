@@ -1,8 +1,8 @@
 ---
 story: symbol-map-01
 spec: symbol-map
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
@@ -53,5 +53,13 @@ After this story `bash scripts/symbol-map.sh <file>...` prints, for each input, 
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- `scripts/symbol-map.py` (stdlib: ast, fnmatch, subprocess git ls-files) + `scripts/symbol-map.sh` wrapper (python3 then python, like defects-index.sh).
+- Fixtures: `tests/fixtures/symbol-map/python` and `.../bash`; the test generates the cap cases (8 extra docs, 70 importers) inside its own temp copies instead of committing them.
+- `tests/symbol-map.test.sh`: 51 checks, about 4 s; `git -c core.autocrlf=false add -A` keeps the CRLF warnings out of the copies.
+- `CLAUDE.md`: one `## Commands` row after Model profile tests (7154 B LF, 109 lines).
+- Decisions: a path is listed once per block, in the first section that claims it; guard tests are capped at 5 like path mentions and textual importers; the `--story` file itself is in scope; a `## Files` glob is scope only, never an input.
+- The `! imports not parsed for <ext>` line is printed for every non-Python, non-bash input, `.md` included (criterion 2 reads 'anything but .py and bash').
+- An unparsed `.py` input still gets exact importers from other files' ASTs; only `imported:` is lost.
+- Bash `source` words are read with quote/paren balancing so `"$(dirname "$0")/lib.sh"` resolves; a `$...)/` or `$VAR/` prefix resolves against the sourcing dir, then root, then a unique basename.
 
 ## Findings

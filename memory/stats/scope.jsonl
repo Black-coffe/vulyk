@@ -225,3 +225,4 @@
 {"ts":"2026-10-26T08:52:40Z","story":"fast-verification-06-suite-verdicts","declared":5,"changed":5,"out_of_scope":0}
 {"ts":"2026-10-26T12:02:28Z","story":"fast-verification-07-repair-round-1","declared":8,"changed":5,"out_of_scope":0}
 {"ts":"2026-10-26T18:27:17Z","story":"fast-verification-08-repair-round-2","declared":24,"changed":5,"out_of_scope":0}
+{"ts":"2026-10-26T20:16:18Z","story":"symbol-map-01-script","declared":5,"changed":19,"out_of_scope":0}
