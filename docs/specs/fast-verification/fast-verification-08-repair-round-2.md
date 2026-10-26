@@ -64,6 +64,24 @@ Re-dispatch (same stamp): no owner choice between the 590 s budget and another l
 rule sends this back as NEEDS_CONTEXT. Only change: `seed_ownset` in tests/telemetry.test.sh writes `\n` again instead of
 a literal newline inside the quotes (same bytes written). Uncommitted work left as is.
 
+Answer (owner, 2026-10-26, «Срезать работу, лимит 540»): the box is throughput-bound, so cut total work, not
+wall per job. First measure where the CPU goes across the 46 jobs (per part: wall, and the count of spawned
+git/bash/jq/python processes or the repeated fixture builds), and write the top costs as a short table under
+`## Implementation notes`. Then remove the biggest repeated cost the way the install cache did: build a repeated
+fixture (council/cycle fixture repos, repeated installs that are still real) once per run and copy it, checked
+equal to a fresh build. Do not loosen any assertion or median. Goal: under round conditions the non-latency jobs
+end by ~460 s so the ~50 s latency tail fits 540 s with margin; record two round-condition runs in plan.md.
+If the profile shows no lever worth 60 s or more, return NEEDS_CONTEXT with that table: the owner then chooses a
+590 s budget.
+
+Answer 2 (owner, 2026-10-26, «Вынести в конец только замеры»): the serial tail is the lever. Split
+tests/inject.test.sh and tests/intake.test.sh into a functional part and a latency part (`--part`/`--list-parts`
+like the other suites): the functional parts run among the parallel jobs, only the latency parts (the median
+assertions) run alone at the end. Cache intake's plain fresh install like telemetry's. The medians and every assert
+stay as they are. Keep the `$OWNSET` cache. Then two round-condition runs recorded in plan.md. If they still exceed
+540 s, the owner has already chosen the fallback: set the default `VULYK_SUITE_TIMEOUT` to 590 s everywhere it is
+named, record it in plan.md, and close the story; no further question.
+
 ## Files
 - tests/inject.test.sh
 - tests/intake.test.sh
@@ -94,23 +112,6 @@ a literal newline inside the quotes (same bytes written). Uncommitted work left 
 `git ls-files '*.sh' | xargs -n1 bash -n && bash tests/maintenance.test.sh && bash tests/model-profile.test.sh && bash tests/full-suite.test.sh && bash tests/council.test.sh --part escalate`
 `bash tests/cycle.test.sh`
 
-Answer (owner, 2026-10-26, «Срезать работу, лимит 540»): the box is throughput-bound, so cut total work, not
-wall per job. First measure where the CPU goes across the 46 jobs (per part: wall, and the count of spawned
-git/bash/jq/python processes or the repeated fixture builds), and write the top costs as a short table under
-`## Implementation notes`. Then remove the biggest repeated cost the way the install cache did: build a repeated
-fixture (council/cycle fixture repos, repeated installs that are still real) once per run and copy it, checked
-equal to a fresh build. Do not loosen any assertion or median. Goal: under round conditions the non-latency jobs
-end by ~460 s so the ~50 s latency tail fits 540 s with margin; record two round-condition runs in plan.md.
-If the profile shows no lever worth 60 s or more, return NEEDS_CONTEXT with that table: the owner then chooses a
-590 s budget.
-
-Answer 2 (owner, 2026-10-26, «Вынести в конец только замеры»): the serial tail is the lever. Split
-tests/inject.test.sh and tests/intake.test.sh into a functional part and a latency part (`--part`/`--list-parts`
-like the other suites): the functional parts run among the parallel jobs, only the latency parts (the median
-assertions) run alone at the end. Cache intake's plain fresh install like telemetry's. The medians and every assert
-stay as they are. Keep the `$OWNSET` cache. Then two round-condition runs recorded in plan.md. If they still exceed
-540 s, the owner has already chosen the fallback: set the default `VULYK_SUITE_TIMEOUT` to 590 s everywhere it is
-named, record it in plan.md, and close the story; no further question.
 
 ## Implementation notes
 - scripts/cycle.sh: `full_suite_row_round_only` now also needs a runnable command cell (`<fill in...>`, `none`, empty do not count); record-seat review requires the first `SUITE:` line to be `ok|FAIL|TIMEOUT <N>s[ ...]` whenever that row exists, else MALFORMED exit 4.

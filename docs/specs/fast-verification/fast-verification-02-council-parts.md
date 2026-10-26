@@ -47,7 +47,7 @@ memory/map/cycle.md `## Tests`; scout-suites.md `## council.test.sh`, `## Gotcha
       that cannot be cut is recorded with the reason.
 
 ## Verification
-`bash tests/council.test.sh --quick`
+`bash tests/council.test.sh --part verbs`
 
 ## Implementation notes
 
@@ -79,3 +79,4 @@ memory/map/cycle.md `## Tests`; scout-suites.md `## council.test.sh`, `## Gotcha
 - Gap: timings are one run each on this box under whatever else was running; a slower machine is not measured.
 
 ## Findings
+- Queen, 2026-10-26: Verification moved from `council.test.sh --quick` to `--part verbs` after story 08 removed the `Council, quick` row (303 s, not a story-sized check).
