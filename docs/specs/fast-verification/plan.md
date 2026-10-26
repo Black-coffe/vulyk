@@ -188,6 +188,7 @@ the command or script that owns it, and scripts/ship-check.sh reads them all.
 **Branch:** vulyk/fast-verification
 **Checked:** <written by scripts/human-check.sh>
 **Council:** ESCALATE round 1, 2026-10-26, at 9788d68, pack bec80b2bffbb - red: 1,2,3
+**Council:** ESCALATE round 2, 2026-10-26, at 004c74c, pack 429959fb505e - red: 1,2,3
 **Shipped:** <written by scripts/ship-check.sh --record>
 
 ## Needs a human
@@ -197,3 +198,9 @@ the command or script that owns it, and scripts/ship-check.sh reads them all.
 - ask 3: RED - see docs/specs/fast-verification/council/round-1/*.md for evidence
 - suite: 541 s, budget 540 s - raise VULYK_SUITE_TIMEOUT or cut the suite
 - seats: docs/specs/fast-verification/council/round-1/
+- reason: suite-timeout · round 2 · 2026-10-26
+- ask 1: RED - see docs/specs/fast-verification/council/round-2/*.md for evidence
+- ask 2: RED - see docs/specs/fast-verification/council/round-2/*.md for evidence
+- ask 3: RED - see docs/specs/fast-verification/council/round-2/*.md for evidence
+- suite: 541 s, budget 540 s - raise VULYK_SUITE_TIMEOUT or cut the suite
+- seats: docs/specs/fast-verification/council/round-2/

@@ -11,3 +11,4 @@
 - 2026-10-26T09:42:49Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/fast-verification; to edit, run /vulyk-pause fast-verification
 - 2026-10-26T09:59:58Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/fast-verification; to edit, run /vulyk-pause fast-verification
 - 2026-10-26T12:05:25Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/fast-verification/round-2 · next: dispatch:opus,review
+- 2026-10-26T12:26:04Z · 04-council:ESCALATE · round 2 verdict ESCALATE at 004c74c pack 429959fb505e · next: escalated
