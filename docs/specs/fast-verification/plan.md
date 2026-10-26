@@ -176,6 +176,13 @@ beside it), default `--jobs` 12, two runs - run 1: exit 124 at wall 540 s, 44 ok
 intake never started, slowest job `council.test.sh --part replays` 269 s; run 2: exit 124 at wall 540 s, 45 ok, 0
 failed, intake cut at 29 s, slowest `council.test.sh --part replays` 227 s. Does not fit 540 s; the other jobs end
 by ~490-517 s and the two latency suites, run alone last, need ~50 s more. Budget unchanged; returned to the owner.
+Repair round 2, after «Вынести в конец только замеры» (story 08, 2026-10-26, 48 jobs: inject/intake split into
+`--part functional` among the parallel jobs and `--part latency` alone last; intake's fresh install and `$OWNSET`
+cached; same box): round conditions (whole `bash tests/council.test.sh` started beside it), default `--jobs` 12, two
+runs - run 1: exit 0, wall 532 s, 48 ok, 0 failed, slowest `council.test.sh --part replays` 255 s, latency parts 13 s
++ 5 s; run 2: exit 0, wall 487 s, 48 ok, 0 failed, slowest `council.test.sh --part replays` 241 s (run 1's council
+was still running, so two council runs were beside it for most of run 2). Fits the 540 s budget; margin 8 s in run 1,
+so the 590 s fallback was not applied.
 
 ## Descoped
 

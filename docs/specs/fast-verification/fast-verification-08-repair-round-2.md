@@ -1,7 +1,7 @@
 ---
 story: fast-verification-08
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 5
@@ -134,3 +134,7 @@ named, record it in plan.md, and close the story; no further question.
   Setup per part measured alone (a no-op part): telemetry 0.86 s, council 0.61 s, cycle 0.85 s.
 - tests/telemetry.test.sh: `install_cache [<dir> [ownset]]` now also builds `$ICACHE-ownset` (settings.json seeded, then install.sh), once per run under the same pid lock; library/ysk/mods copy it; the install part keeps the real `$OWNSET` install and asserts `diff -r` equal to the cache. Checked: `--part install|ysk|mods|library` in parallel on one cache, all 0 failed, the new diff check ok. Not committed (story returns NEEDS_CONTEXT).
 - Lever estimate: at the round's effective parallelism (~7: ~3600 job-s end at ~490-517 s) 60 s of wall needs ~400 job-s cut; the only repeated identical fixture left is worth ~35-40 job-s (~6 s wall). No lever worth 60 s exists without making `install.sh` itself faster (product code, plan delta (b) rejected) or cutting asserts.
+- Answer 2: tests/inject.test.sh and tests/intake.test.sh take `--part functional|latency` and `--list-parts` (unknown part exits 1 listing names); the fixture library builds in both parts, so the latency part also re-runs the one syntax check. Every assert and median unchanged.
+- tests/intake.test.sh: the scratch hive's fresh install copies `$VULYK_INSTALL_CACHE/tree` (same dir, pid lock and layout as telemetry's `install_cache`, built in `$T` when unset); success is judged by the copied `.claude/settings.json` since the cache keeps no install rc.
+- tests/full-suite.sh: `is_late` matches only `--part latency` (or a whole inject/intake command); full-suite.test.sh checks the real list ends with the two latency parts and lists the functional parts.
+- Two round-condition runs recorded in plan.md: exit 0 at 532 s and 487 s (48 jobs); 540 s budget kept, 590 s fallback not applied.

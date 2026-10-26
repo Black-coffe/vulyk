@@ -6,14 +6,15 @@
 # Jobs: every tests/*.test.sh as `bash tests/<x>.test.sh`; a suite that answers `--list-parts`
 # (telemetry, council, cycle) contributes one `--part <name>` job per part instead, so a later re-cut
 # needs no edit here. VULYK_SUITES (newline-separated commands) overrides the list - tests only.
-# The wall-clock latency suites (inject.test.sh, intake.test.sh: 200 ms medians) go last and start
-# only once every other job has ended, one at a time, outside the contended window.
+# The wall-clock latency checks (inject.test.sh, intake.test.sh `--part latency`: 200 ms medians, or
+# either suite listed whole) go last and start only once every other job has ended, one at a time,
+# outside the contended window; their `--part functional` runs among the parallel jobs.
 #
 # --jobs defaults to the core count capped at 12: at 28 parallel jobs the box's load pushed the
 # latency medians past their bound and cut 16 of 31 jobs at the budget (round 1, 2026-10-26); with
 # a council suite beside it, 8 jobs hit the budget at 540 s and 12 ended green at 421 s.
 # VULYK_INSTALL_CACHE is exported as a directory inside the logs dir: the parts that need a plain
-# fresh install copy one install.sh output built once per run (tests/telemetry.test.sh).
+# fresh install copy one install.sh output built once per run (tests/telemetry.test.sh, tests/intake.test.sh).
 #
 # VULYK_SUITE_TIMEOUT: the whole run's budget in seconds, default 540, 0 = uncapped. At the
 # budget running jobs are killed (`timeout`, set to what is left of the budget) and they and
@@ -66,8 +67,8 @@ else
     fi
   done
 fi
-# the latency suites move to the end; FIRST_LATE is the index of the first of them
-is_late() { [[ "$1" =~ (^|[ /])(inject|intake)\.test\.sh( |$) ]]; }
+# the latency checks move to the end; FIRST_LATE is the index of the first of them
+is_late() { [[ "$1" =~ (^|[ /])(inject|intake)\.test\.sh( --part latency)?$ ]]; }
 EARLY=() LATE=()
 for c in "${CMDS[@]}"; do if is_late "$c"; then LATE+=("$c"); else EARLY+=("$c"); fi; done
 CMDS=("${EARLY[@]}" "${LATE[@]}")

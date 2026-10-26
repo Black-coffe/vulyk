@@ -6,12 +6,32 @@
 # regex on tool_name), the session + agent dedup, `reset` on SessionStart, the 12-line budget and its fold
 # line, narrowest-first order, How-to / Allowed rendering, foldered cards, and the latency budget.
 #
-#   Usage: bash tests/inject.test.sh            # from the VULYK repo root
+#   Usage: bash tests/inject.test.sh                  # from the VULYK repo root, every part
+#          bash tests/inject.test.sh --part <name>    # functional (every assert but the medians) or latency
+#          bash tests/inject.test.sh --list-parts     # the part names, one per line
+# tests/full-suite.sh runs the functional part among its parallel jobs and the latency part alone, last.
 #
 # Latency runs against D:/YouTube_AI/docs/defects copied to a temp dir when that library exists
 # (the pilot's 19 real cards), else against the fixture library. Asserted <= 400 ms median; the
 # contract target is <= 200 ms and the measured median is printed either way.
 set -u
+PARTS="functional latency" PART=''
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list-parts) printf '%s
+' $PARTS; exit 0 ;;
+    --part)
+      PART="${2:-}"; shift
+      case " $PARTS " in
+        *" $PART "*) ;;
+        *) echo "unknown part '$PART' - parts:" >&2; printf '%s
+' $PARTS >&2; exit 1 ;;
+      esac ;;
+    *) echo "usage: bash tests/inject.test.sh [--part <name>] [--list-parts]" >&2; exit 2 ;;
+  esac
+  shift
+done
+part() { [ -z "$PART" ] || [ "$PART" = "$1" ]; } # `if part <name>; then ... fi` wraps each part
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 HOOK="$SRC/.claude/hooks/defects-inject.sh"
 T="$(mktemp -d)"
@@ -175,6 +195,7 @@ bashcall() { # bashcall <session> <command>
   printf '{"session_id":"%s","tool_name":"Bash","tool_input":{"command":"%s"},"cwd":"%s"}' "$1" "$2" "$W"
 }
 
+if part functional; then # --- part functional: every case but the latency medians
 # --- what is injected -------------------------------------------------------------------------
 echo "--- inject"
 o="$(run "$HIVE" "$(edit s1 "$W/pipeline/voiceover.py")")"
@@ -329,8 +350,9 @@ if command -v python >/dev/null 2>&1; then
   if printf '%s' "$o" | grep -q additionalContext; then ok "a python3 stub exiting 9009 falls through to python"
   else bad "a python3 stub silenced the hook"; fi
 else echo "  skip  no python on PATH besides python3"; fi
+fi # part functional
 
-# --- latency ----------------------------------------------------------------------------------
+if part latency; then # --- part latency: the two 200 ms medians, on the fixture library above
 echo "--- latency"
 LAT="$HIVE"; LW="$W"; SRCNAME="fixture library"
 if [ -d "D:/YouTube_AI/docs/defects" ]; then
@@ -345,6 +367,7 @@ m="$(median_ms "$LAT" "{\"session_id\":\"lat\",\"tool_name\":\"Edit\",\"tool_inp
 echo "  median defects-inject.sh (Edit): ${m} ms over 30 calls ($SRCNAME; target <= 200 ms)"
 if [ "$m" -le 200 ]; then ok "median latency, Edit, <= 200 ms"
 else bad "median latency, Edit, ${m} ms > 200 ms"; fi
+fi # part latency
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

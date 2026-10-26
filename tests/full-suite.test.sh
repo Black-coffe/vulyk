@@ -124,7 +124,12 @@ expect "real list: a plain suite" "bash tests/driver.test.sh"
 expect "real list: cycle by part" "bash tests/cycle.test.sh --part ship"
 expect "real list: telemetry by part" "bash tests/telemetry.test.sh --part telemetry"
 expect "real list: council by part" "bash tests/council.test.sh --part verbs"
-printf '%s\n' "$OUT" | grep -qxE 'bash tests/(telemetry|council|cycle)\.test\.sh' \
+[ "$(printf '%s\n' "$OUT" | tail -n 2)" = "bash tests/inject.test.sh --part latency
+bash tests/intake.test.sh --part latency" ] && echo "  ok    real list: only the latency parts run last" \
+  || { echo "::error::real list tail: $(printf '%s\n' "$OUT" | tail -n 2)"; fail=1; }
+expect "real list: inject functional among the parallel jobs" "bash tests/inject.test.sh --part functional"
+expect "real list: intake functional among the parallel jobs" "bash tests/intake.test.sh --part functional"
+printf '%s\n' "$OUT" | grep -qxE 'bash tests/(telemetry|council|cycle|inject|intake)\.test\.sh' \
   && { echo "::error::a split suite is also listed whole"; fail=1; } || echo "  ok    split suites are not listed whole"
 
 echo "== the default --jobs is the core count capped at 12"
