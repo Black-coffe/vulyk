@@ -17,3 +17,4 @@
 - 2026-10-26T12:28:31Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/fast-verification; to edit, run /vulyk-pause fast-verification
 - 2026-10-26T13:04:26Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/fast-verification; to edit, run /vulyk-pause fast-verification
 - 2026-10-26T18:00:35Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/fast-verification; to edit, run /vulyk-pause fast-verification
+- 2026-10-26T18:32:47Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/fast-verification/round-3 · next: dispatch:opus,review
