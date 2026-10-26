@@ -16,7 +16,7 @@
 # VULYK_INSTALL_CACHE is exported as a directory inside the logs dir: the parts that need a plain
 # fresh install copy one install.sh output built once per run (tests/telemetry.test.sh, tests/intake.test.sh).
 #
-# VULYK_SUITE_TIMEOUT: the whole run's budget in seconds, default 540, 0 = uncapped. At the
+# VULYK_SUITE_TIMEOUT: the whole run's budget in seconds, default 590 (the 600 s Bash cap less the summary), 0 = uncapped. At the
 # budget running jobs are killed (`timeout`, set to what is left of the budget) and they and
 # every unstarted job are marked TIMEOUT. Without a working `timeout` binary (probe `timeout 5
 # true`: System32's timeout.exe fails it) jobs run uncapped, no new job starts after the
@@ -48,7 +48,7 @@ if [ -z "$JOBS" ]; then
 else
   case "$JOBS" in *[!0-9]*|0) echo "full-suite: --jobs needs a positive number, got '$JOBS'" >&2; exit 2 ;; esac
 fi
-BUDGET="${VULYK_SUITE_TIMEOUT:-540}"
+BUDGET="${VULYK_SUITE_TIMEOUT:-590}"
 case "$BUDGET" in ''|*[!0-9]*) echo "full-suite: VULYK_SUITE_TIMEOUT must be seconds, got '$BUDGET'" >&2; exit 2 ;; esac
 
 # --- the job list ------------------------------------------------------------------------

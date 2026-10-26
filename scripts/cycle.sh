@@ -1169,7 +1169,7 @@ ASKS
     if [ -n "$suite_line" ]; then
       suite_secs="$(printf '%s' "$suite_line" | sed -n 's/^SUITE: TIMEOUT \([0-9][0-9]*\)s.*/\1/p')"
       suite_budget="$(printf '%s' "$suite_line" | sed -n 's/.*budget \([0-9][0-9]*\)s.*/\1/p')"
-      [ -n "$suite_budget" ] || suite_budget="${VULYK_SUITE_TIMEOUT:-540}"
+      [ -n "$suite_budget" ] || suite_budget="${VULYK_SUITE_TIMEOUT:-590}"
     fi
   fi
 

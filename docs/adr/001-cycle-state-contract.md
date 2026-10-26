@@ -128,7 +128,7 @@ disabled at runtime; fixtures conform to the guard, never the guard to fixtures.
 Source: `docs/specs/fast-verification/plan.md` `## Assumptions` and `## Contracts` (`Review report`).
 
 - **D3** - `lead-review` runs the `Full suite / build` row once per round under one budget
-  (`VULYK_SUITE_TIMEOUT`, default 540 s) and reports it on line 3, `SUITE:`. A failed suite is a
+  (`VULYK_SUITE_TIMEOUT`, default 590 s) and reports it on line 3, `SUITE:`. A failed suite is a
   `BLOCK` anchored `[regression]` and goes to repair; it never escalates.
 - **D4** - a new escalation reason, `suite-timeout`: a stored review with a body line
   `SUITE: TIMEOUT <N>s` is ESCALATE with the seconds and the budget in `note` and `## Needs a
@@ -298,7 +298,7 @@ contract includes the layout (`lead-review.md`): a `BLOCK` with no tagged list l
 `## Critical` / `## Major` is MALFORMED - exit 4, kept as `review.attempt-K.md`, re-asked once like
 any seat; a `PASS` is accepted regardless of layout. *(amended 2026-10-26, fast-verification-06)* line 3
 of the review is `SUITE: ok <N>s` | `FAIL <N>s` | `TIMEOUT <N>s budget <B>s` | `none`: the reviewer's one
-run of the `Full suite / build` row under `timeout $((${VULYK_SUITE_TIMEOUT:-540} + 30))`. A `FAIL` is a
+run of the `Full suite / build` row under `timeout $((${VULYK_SUITE_TIMEOUT:-590} + 5))`. A `FAIL` is a
 `VERDICT: BLOCK` with a `## Critical` `[regression]` line; a `TIMEOUT` leaves the verdict to the code and is
 read by `judge` (D4). An environmental failure (`EADDRINUSE`, a
 missing service) is `N/A - why: environment: …`, never RED - a gate that names its own

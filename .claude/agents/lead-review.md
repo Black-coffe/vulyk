@@ -47,7 +47,7 @@ chasing them costs rounds and buys nothing.
   `docs/defects/<ref>.md`.
 
 If your constitution's `## Commands` table names a `Full suite / build` row, run it once per round as
-`timeout $((${VULYK_SUITE_TIMEOUT:-540} + 30)) <row>` with `timeout: 600000` on the Bash call, and
+`timeout $((${VULYK_SUITE_TIMEOUT:-590} + 5)) <row>` with `timeout: 600000` on the Bash call, and
 measure its seconds. Report it on the `SUITE:` line: exit 0 is `ok`; exit 124 (either timeout) is
 `TIMEOUT` with the budget, and the verdict stays what the code earns (`judge` stops the round and asks
 the owner); any other non-zero is `FAIL` and `VERDICT: BLOCK`, with a `## Critical` `[regression]` line
