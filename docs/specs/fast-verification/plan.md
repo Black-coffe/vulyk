@@ -159,10 +159,30 @@ trace-check) is in scope.
 
 ## Integration gate
 `bash tests/full-suite.sh`
-Measured basis (filled by `fast-verification-03`, paperwork edit): all jobs at once, default `--jobs`: `<W> s` on
-`<cores>` cores, `<date>`; `--jobs 4`: `<W4> s`, gap `<W4 - W> s`. Before the split: 13 suites at once 1070 s = telemetry
+Measured basis (filled by `fast-verification-03`, paperwork edit): all jobs at once, default `--jobs`: `425 s` on
+`28` cores, `2026-10-26` (31 jobs, Windows Git Bash; fits the 540 s budget). `--jobs 4`, same box, same day: does not
+fit - the run hit the 540 s budget at 541 s wall with 23 of 31 jobs ended, 4 killed and 4 never started, so its full
+wall was not measured; gap > 116 s. This says nothing about a real four-core machine beyond that run. Before the split: 13 suites at once 1070 s = telemetry
 alone (28 cores, Windows Git Bash, 2026-10-25). Untested on fewer cores before story 03's second run; on a machine that
 cannot fit the budget the round escalates `suite-timeout` with the time, see `## Assumptions`.
+Repair round 1 (story 07, 2026-10-26, 40 jobs, install cache, inject/intake last, same box): round conditions (whole
+`bash tests/council.test.sh` beside it) - default `--jobs` 12: wall 421 s, exit 0, slowest job `tests/cycle.test.sh`
+196 s; `--jobs 8`: exit 124 at 540 s (intake cut). Alone, default `--jobs` 12: wall 444 s, exit 0, slowest
+`tests/cycle.test.sh` 198 s. Gap between the two conditions: -23 s, inside run-to-run noise; against story 03's 425 s
+alone at 28 jobs: +19 s alone, -4 s beside.
+Repair round 2 (story 08, 2026-10-26, 46 jobs: `tests/cycle.test.sh` cut into 7 parts, 22-103 s each, 196 s whole
+before; same box, other projects' sessions also running): round conditions (whole `bash tests/council.test.sh`
+beside it), default `--jobs` 12, two runs - run 1: exit 124 at wall 540 s, 44 ok, 0 failed, inject cut at 23 s and
+intake never started, slowest job `council.test.sh --part replays` 269 s; run 2: exit 124 at wall 540 s, 45 ok, 0
+failed, intake cut at 29 s, slowest `council.test.sh --part replays` 227 s. Does not fit 540 s; the other jobs end
+by ~490-517 s and the two latency suites, run alone last, need ~50 s more. Budget unchanged; returned to the owner.
+Repair round 2, after «Вынести в конец только замеры» (story 08, 2026-10-26, 48 jobs: inject/intake split into
+`--part functional` among the parallel jobs and `--part latency` alone last; intake's fresh install and `$OWNSET`
+cached; same box): round conditions (whole `bash tests/council.test.sh` started beside it), default `--jobs` 12, two
+runs - run 1: exit 0, wall 532 s, 48 ok, 0 failed, slowest `council.test.sh --part replays` 255 s, latency parts 13 s
++ 5 s; run 2: exit 0, wall 487 s, 48 ok, 0 failed, slowest `council.test.sh --part replays` 241 s (run 1's council
+was still running, so two council runs were beside it for most of run 2). Fits the 540 s budget; margin 8 s in run 1,
+so the 590 s fallback was not applied.
 
 ## Descoped
 
@@ -170,13 +190,41 @@ cannot fit the budget the round escalates `suite-timeout` with the time, see `##
 
 ## Plan deltas
 
+- 2026-10-26, story 07 NEEDS_CONTEXT, Queen ruling (a): the repair premise "shared setup is the cost" came from a seat's reading, not a measurement; the worker measured it at 0.5-0.7 s. The cost is repeated `install.sh` runs (16-21 s each, 5-12 per telemetry part). Within the owner's "fix the root, not the budget": keep parts in the runner, cache one pristine `install.sh` output per run (fixtures copy it, checked by `diff -r`), split the parts still over two minutes, run parts at a bounded default `--jobs`, latency suites after the rest. Finding 3's "whole suites" clause is dropped: whole suites cannot fit 540 s. Rejected: (b) a faster `install.sh` (product code, outside this spec), (c) accepting parts over two minutes (contradicts ask 1 and the owner's choice).
+- 2026-10-26, story 08 NEEDS_CONTEXT (full suite ~560 s under round load, 0 failures), owner ruling «Срезать работу,
+  лимит 540»: profile CPU across the jobs, cache the biggest repeated fixture build like the install cache; no budget
+  raise. Rejected for now: 590 s budget (10 s under the reviewer's 600 s Bash cap) - the fallback if no 60 s lever exists.
+- 2026-10-26, story 08 NEEDS_CONTEXT again (profile: no repeated fixture worth 60 s; 83 install.sh runs each test a
+  distinct case), owner ruling «Вынести в конец только замеры»: inject/intake split into functional and latency parts,
+  only the latency parts run alone last; intake's fresh install cached. Pre-approved fallback: default budget 590 s.
+  Rejected: a faster install.sh (product code, risk to every hive; a separate spec after ship).
+
 <!--
 The lines below are the cycle's confirmation markers (docs/cycle.md); each placeholder is replaced by
 the command or script that owns it, and scripts/ship-check.sh reads them all.
 -->
 **Approved:** Andrei, 2026-10-25 («да» to the plan as shown, with both recommended items: the maintenance hotfix ships as 0.35.1 before wave 1; at ship the Queen marks the slow `## Commands` rows in every live hive herself)
 **Briefed:** <written by scripts/cycle.sh briefed>
-**Branch:** <written by /vulyk-build before wave 1>
-**Checked:** <written by scripts/human-check.sh>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Branch:** vulyk/fast-verification
+**Council:** ESCALATE round 1, 2026-10-26, at 9788d68, pack bec80b2bffbb - red: 1,2,3
+**Council:** ESCALATE round 2, 2026-10-26, at 004c74c, pack 429959fb505e - red: 1,2,3
+**Council:** ESCALATE round 3, 2026-10-26, at e7a6f57, pack 18d641637f26
 **Shipped:** <written by scripts/ship-check.sh --record>
+
+## Needs a human
+- reason: suite-timeout · round 1 · 2026-10-26
+- ask 1: RED - see docs/specs/fast-verification/council/round-1/*.md for evidence
+- ask 2: RED - see docs/specs/fast-verification/council/round-1/*.md for evidence
+- ask 3: RED - see docs/specs/fast-verification/council/round-1/*.md for evidence
+- suite: 541 s, budget 540 s - raise VULYK_SUITE_TIMEOUT or cut the suite
+- seats: docs/specs/fast-verification/council/round-1/
+- reason: suite-timeout · round 2 · 2026-10-26
+- ask 1: RED - see docs/specs/fast-verification/council/round-2/*.md for evidence
+- ask 2: RED - see docs/specs/fast-verification/council/round-2/*.md for evidence
+- ask 3: RED - see docs/specs/fast-verification/council/round-2/*.md for evidence
+- suite: 541 s, budget 540 s - raise VULYK_SUITE_TIMEOUT or cut the suite
+- seats: docs/specs/fast-verification/council/round-2/
+- reason: suite-timeout · round 3 · 2026-10-26
+- suite: 542 s, budget 540 s - raise VULYK_SUITE_TIMEOUT or cut the suite
+- seats: docs/specs/fast-verification/council/round-3/
+**Checked:** ACCEPTED by Andrei, 2026-10-26, at 635d6d1 - Owner 2026-10-26 «Лимит 590, принять, выпустить»: round 3 all asks GREEN, review PASS, only suite-timeout 542 s of 540; default budget raised to 590 s in the follow-up commit, checked by its own tests

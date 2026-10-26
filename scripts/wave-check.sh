@@ -31,6 +31,9 @@
 #   verify-cell - a `## Verification` segment that is not a `## Commands` cell of the
 #                constitution (CLAUDE.vulyk.md if present, else CLAUDE.md): close-story
 #                refuses to run it, so the gap surfaces here at plan time, not mid-build
+#   verify-round-only - a `## Verification` segment matching a `## Commands` row whose Purpose
+#                cell carries `round-only` (a slow suite only the council round runs):
+#                close-story refuses it with exit 2, so the story needs a faster row
 #
 # Limits, stated rather than hidden: a verification command that names NO path (a whole
 # suite) cannot be judged here, and a path that resolves but is simply the wrong file
@@ -220,11 +223,17 @@ CMDP_EOF
       while IFS= read -r vl; do
         [ -n "$vl" ] || continue
         [ "$vl" = "none — reviewed by lead-review" ] && continue
-        command_cell_exists "$CONSTITUTION" "$vl" && continue
+        if command_cell_exists "$CONSTITUTION" "$vl"; then
+          command_cell_round_only "$CONSTITUTION" "$vl" && report "verify-round-only: $id $vl"
+          continue
+        fi
         while IFS= read -r seg; do
           [ -n "$seg" ] || continue
-          command_cell_exists "$CONSTITUTION" "$seg" \
-            || report "verify-cell: $id's verification '$seg' is not a ## Commands cell of $(basename "$CONSTITUTION") - close-story will refuse to run it"
+          if command_cell_exists "$CONSTITUTION" "$seg"; then
+            command_cell_round_only "$CONSTITUTION" "$seg" && report "verify-round-only: $id $seg"
+          else
+            report "verify-cell: $id's verification '$seg' is not a ## Commands cell of $(basename "$CONSTITUTION") - close-story will refuse to run it"
+          fi
         done <<SEG_EOF
 $(verification_segments "$vl")
 SEG_EOF

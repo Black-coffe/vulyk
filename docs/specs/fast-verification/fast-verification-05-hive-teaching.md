@@ -1,8 +1,8 @@
 ---
 story: fast-verification-05
 spec: fast-verification
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: haiku
@@ -64,5 +64,8 @@ worker-code/worker-test); memory/map/scripts.md `## install.sh - the upgrade con
 `bash tests/telemetry.test.sh --part install`
 
 ## Implementation notes
+- The edits were already in the working tree, uncommitted, when this story started; I checked each criterion against them and changed nothing.
+- Files: .claude/commands/vulyk-bootstrap.md (quiet per-story rows, `(round-only)` full-suite row, part switch), templates/story.md and templates/plan.md (round-only rules, VULYK_SUITE_TIMEOUT), .claude/agents/queen-planner.md, worker-code.md, worker-test.md (exit 2 round-only = NEEDS_CONTEXT), install.sh (placeholder row and comment only), tests/telemetry.test.sh (install part case).
+- No `description:` line touched. Other modified files in the tree (scripts/cycle.sh, lib.sh, wave-check.sh, tests/cycle.test.sh) belong to other stories and were left alone.
 
 ## Findings

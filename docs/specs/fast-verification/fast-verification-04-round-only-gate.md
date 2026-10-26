@@ -1,8 +1,8 @@
 ---
 story: fast-verification-04
 spec: fast-verification
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
@@ -58,5 +58,12 @@ memory/map/cycle.md `## Verbs` (`close-story`); scout-plumbing.md `## Entry poin
 `bash tests/cycle.test.sh && bash tests/council.test.sh --part verbs`
 
 ## Implementation notes
+- scripts/lib.sh: `command_cell_round_only` copies only the marked rows (Purpose cell holds the `round-only` token) into a temp table and asks the unchanged `command_cell_exists`, so exact/placeholder matching is the one rule; a command also in an unmarked row still matches = round-only.
+- scripts/wave-check.sh: a segment that is a cell gets the round-only test (`verify-round-only: <story> <segment>`, counted by `report`); header documents the code below `verify-cell`.
+- scripts/cycle.sh: inside the close-story cell loop, each whole-line cell or segment that passed the cell check is then refused if round-only (exit 2, before the run block); nothing else in cycle.sh touched.
+- tests/cycle.test.sh: `wro` fixture via a CLAUDE.vulyk.md sidecar - marked row and marked+unmarked text reported, unmarked `--part` row not, no verify-cell.
+- tests/council.test.sh part verbs: `cstoryro` after cstory4 - marked row and neighbour form refused (no file touched, status todo, HEAD unchanged); `--part x` on an unmarked row closes.
+- Decision: a temp file rather than process substitution, because `command_cells` gates on `[ -f ]`, which a /dev/fd path fails.
+- Surprise: the relaunch found the council fixture cstoryro-02 using `true` as a segment, not a fixture cell; changed to the unmarked `--part` row.
 
 ## Findings

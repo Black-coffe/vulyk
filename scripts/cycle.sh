@@ -523,6 +523,19 @@ json_field() { # json_field <json-line> <key> - a flat top-level string or numbe
   fi
 }
 
+escalate_reruns_round() { # escalate_reruns_round <council-row> -> 0 iff a reopened ESCALATE row
+  # goes to a fresh round, not to repair: `env` (the round itself failed), or `suite-timeout` with
+  # nothing else red - no RED ask, evidenced or not, and no review BLOCK (fast-verification-07).
+  # status and reopen both route through this.
+  case "$(json_field "$1" escalate)" in
+    env) return 0 ;;
+    suite-timeout)
+      [ -z "$(json_num_array "$1" red | tr -d ' ')$(json_num_array "$1" red_unevidenced | tr -d ' ')$(json_num_array "$1" review_asks | tr -d ' ')" ] \
+        && [ "$(json_field "$1" review)" != BLOCK ] ;;
+    *) return 1 ;;
+  esac
+}
+
 json_str_array() { # json_str_array "a b c" -> "a","b","c"  (no embedded spaces per element)
   local s="$1" out="" x
   for x in $s; do out="${out:+$out,}\"$x\""; done
@@ -727,11 +740,13 @@ cmd_status() {
     NEXT="green"
   elif [ "$NEWEST_VERDICT" = "RED" ] && ! round_is_stale "$SPEC" "$NEWEST_ROUND"; then
     NEXT="repair"
-  elif [ "$NEWEST_VERDICT" = "ESCALATE" ] && [ "$(json_field "$NEWEST" escalate)" != "env" ] \
+  elif [ "$NEWEST_VERDICT" = "ESCALATE" ] \
+    && ! escalate_reruns_round "$NEWEST" \
     && ! round_is_stale "$SPEC" "$NEWEST_ROUND"; then
     # ADR-013 D3: a reopened ESCALATE (the branch above let it through) is a verdict the owner
     # wants repaired - ceiling, half and no-progress rows name real RED asks. Only `env` (the
-    # round itself failed) and a stale round fall through to a fresh round.
+    # round itself failed), a `suite-timeout` with nothing else red (fast-verification-06/07)
+    # and a stale round fall through to a fresh round.
     NEXT="repair"
   else
     NEXT="open-round"
@@ -1132,10 +1147,30 @@ ASKS
       fi
     fi
     [ -n "$review_v" ] || review_v="BLOCK" # an unreadable stored report stays a block
+    # fast-verification-07: a failed full suite is never green, whatever the VERDICT line says:
+    # `SUITE: FAIL` is the reviewer's BLOCK (a [regression]), anchored or not.
+    if sed '1d' "$rf" 2>/dev/null | grep -qE '^SUITE: FAIL'; then
+      [ "$review_v" = "BLOCK" ] || review_note="review PASS with SUITE: FAIL"
+      review_v="BLOCK"
+    fi
   elif is_required_seat review "$REQUIRED"; then
     review_v="ABSENT"
   else
     review_v="" # C15: review not required at this tier and never recorded - not ABSENT
+  fi
+
+  # --- fast-verification-06: the reviewer's `SUITE: TIMEOUT <N>s [budget <B>s]` line, read
+  # anywhere in the stored review (fold-proof at Tier 4). An over-budget full suite is neither
+  # GREEN nor a repair: the owner raises the budget or cuts the suite.
+  local suite_secs="" suite_budget=""
+  if [ -f "$rf" ]; then
+    local suite_line
+    suite_line="$(sed '1d' "$rf" 2>/dev/null | grep -E '^SUITE: TIMEOUT [0-9]+s' | head -1)"
+    if [ -n "$suite_line" ]; then
+      suite_secs="$(printf '%s' "$suite_line" | sed -n 's/^SUITE: TIMEOUT \([0-9][0-9]*\)s.*/\1/p')"
+      suite_budget="$(printf '%s' "$suite_line" | sed -n 's/.*budget \([0-9][0-9]*\)s.*/\1/p')"
+      [ -n "$suite_budget" ] || suite_budget="${VULYK_SUITE_TIMEOUT:-590}"
+    fi
   fi
 
   # --- env escalation is "at least one REQUIRED seat is ABSENT" (R16/M-5), not "all three" -
@@ -1191,6 +1226,8 @@ ASKS
   local half=$(( (A+1)/2 )); [ "$half" -lt 2 ] && half=2  # R10: max(2, ceil(A/2))
   if [ "$override_red" -eq 1 ]; then
     overall="RED"; next_val="repair"
+  elif [ -n "$suite_secs" ]; then
+    overall="ESCALATE"; escalate_reason="suite-timeout"; next_val="escalated"
   elif [ -n "$absent_seats" ] && [ "$red_e_count" -eq 0 ] && [ "$red_u_count" -eq 0 ] && [ "$review_v" != "BLOCK" ]; then
     overall="ESCALATE"; escalate_reason="env"; next_val="escalated"
   elif [ "$red_e_count" -gt 0 ] && [ "$red_e_count" -ge "$half" ]; then
@@ -1225,6 +1262,7 @@ ASKS
     done
     local noteval=""
     [ "$escalate_reason" = "env" ] && noteval="$(redact_note "$(printf '%s' "$absent_seats" | sed 's/ /, /g') ABSENT")"
+    [ "$escalate_reason" = "suite-timeout" ] && noteval="$(redact_note "full suite timed out: ${suite_secs}s, budget ${suite_budget}s")"
     [ -n "$review_note" ] && noteval="${noteval:+$noteval; }$review_note"
     printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"review_asks":[%s],"na":%s,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":%s,"note":"%s"}\n' \
       "$(now_ts)" "$SLUG" "$N" "$overall" "$head7" "$RPACK" "$A" \
@@ -1252,6 +1290,9 @@ ASKS
       done
       if [ "$escalate_reason" = "no-progress" ]; then
         printf -- '- no progress: ask %s RED in rounds %s and %s\n' "$(json_num_csv "$repeated" | sed 's/,/, /g')" "$((N-1))" "$N"
+      fi
+      if [ "$escalate_reason" = "suite-timeout" ]; then
+        printf -- '- suite: %s s, budget %s s - raise VULYK_SUITE_TIMEOUT or cut the suite\n' "$suite_secs" "$suite_budget"
       fi
       if [ "$escalate_reason" = "env" ]; then
         local aseat att
@@ -1292,7 +1333,7 @@ ASKS
   exit "$exit_code"
 }
 
-cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress>] ["<note>"]
+cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress|suite-timeout>] ["<note>"]
   # A verb of its own now (R5/C-3, autonomous-cycle-21), not an alias of judge: judge refuses
   # outright on a missing seat (its presence pass, above), so ADR D2's "the driver calls
   # escalate on exit 6, or on its own initiative" had nowhere to land. This records an
@@ -1308,8 +1349,8 @@ cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|en
       *) NOTE="$1"; shift ;;
     esac
   done
-  case "$REASON" in ''|ceiling|half|env|no-progress) ;; *)
-    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress>] [\"<note>\"]" >&2
+  case "$REASON" in ''|ceiling|half|env|no-progress|suite-timeout) ;; *)
+    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress|suite-timeout>] [\"<note>\"]" >&2
     emit false escalate 1 error "usage"
     exit 1
     ;;
@@ -1317,7 +1358,7 @@ cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|en
   [ -n "$REASON" ] || REASON="env"
 
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
-    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress>] [\"<note>\"]" >&2
+    echo "cycle: usage: $0 escalate <spec-dir> [--commit] [--reason <ceiling|half|env|no-progress|suite-timeout>] [\"<note>\"]" >&2
     emit false escalate 1 error "usage"
     exit 1
   }
@@ -1563,6 +1604,27 @@ ask_evidenced_of() { # ask_evidenced_of <ask-line> -> "1" iff run:+saw: or url:+
   esac
 }
 
+full_suite_row_round_only() { # full_suite_row_round_only <constitution> -> 0 iff its ## Commands
+  # has a row whose Purpose cell names the full suite and carries `round-only` (fast-verification-07)
+  # and whose command cell is runnable: `<fill in...>`, `none` or an empty cell is no suite to run
+  # (fast-verification-08), so `SUITE: none` is the right report for it.
+  [ -f "$1" ] || return 1
+  awk '
+    /^## Commands[[:space:]]*$/ { inblock=1; next }
+    /^##[[:space:]]/            { if (inblock) exit }
+    inblock && /^\|/ {
+      line = $0; sub(/^\|/, "", line); i = index(line, "|"); if (!i) next
+      p = tolower(substr(line, 1, i - 1))
+      if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) {
+        c = tolower(substr(line, i + 1)); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c)
+        if (c == "" || c ~ /^\|/ || c ~ /^<fill in/ || c ~ /^none([^[:alnum:]_-]|$)/) next
+        found = 1; exit
+      }
+    }
+    END { exit !found }
+  ' "$1"
+}
+
 cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <report> <model-opt> <head>
   local SPEC="$1" RD="$2" N="$3" ATTEMPT="$4" REPORT="$5" MODEL_OPT="$6" HEAD="$7"
   local RPACK; RPACK="$(round_field "$RD" pack)"
@@ -1585,6 +1647,24 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
     echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
     emit false record-seat 4 error "MALFORMED: $why"
     exit 4
+  fi
+
+  # fast-verification-07/08: when the constitution has a round-only full-suite row with a runnable
+  # command, the reviewer ran it and says so: the first `SUITE:` line must be `ok <N>s`, `FAIL <N>s`
+  # or `TIMEOUT <N>s [budget <B>s]`. A missing line, `SUITE: none`, or a malformed form (no seconds,
+  # `571 s`) is MALFORMED - re-asked, never recorded, never judged green.
+  if full_suite_row_round_only "$(constitution_file "$ROOT")"; then
+    local sline; sline="$(printf '%s\n' "$REPORT" | grep -E '^SUITE:' | head -1 | tr -d '\r')"
+    if ! printf '%s\n' "$sline" | grep -qE '^SUITE: (ok|FAIL|TIMEOUT) [0-9]+s([[:space:]].*)?$'; then
+      local why
+      if [ -z "$sline" ]; then why="review: no SUITE: line, but ## Commands has a round-only Full suite row - run it and report its SUITE: line"
+      else why="review: $sline, but ## Commands has a round-only Full suite row - report SUITE: ok <N>s | FAIL <N>s | TIMEOUT <N>s budget <B>s"
+      fi
+      write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
+      echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
+      emit false record-seat 4 error "MALFORMED: $why"
+      exit 4
+    fi
   fi
 
   local extra; extra="$(printf ' \xc2\xb7 verdict: %s' "$verdict")"
@@ -1975,12 +2055,26 @@ EOF
     [ "$vline" = "none — reviewed by lead-review" ] && continue
     # r2m9: a line matching a `## Commands` cell whole (its own `&&` and all) is one unit -
     # only a line that is NOT itself a cell gets split and checked segment by segment.
-    command_cell_exists "$CONSTITUTION" "$vline" && continue
+    # fast-verification-04: a cell whose row is marked `round-only` is a slow suite the round runs,
+    # never close-story - refused before anything runs, so the worker returns NEEDS_CONTEXT.
+    if command_cell_exists "$CONSTITUTION" "$vline"; then
+      command_cell_round_only "$CONSTITUTION" "$vline" && {
+        echo "cycle: close-story - verification is round-only in $CONSTITUTION's ## Commands: $vline" >&2
+        emit false close-story 2 error "verification is round-only: $vline"
+        exit 2
+      }
+      continue
+    fi
     while IFS= read -r seg; do
       [ -n "$seg" ] || continue
       command_cell_exists "$CONSTITUTION" "$seg" || {
         echo "cycle: close-story - verification command not in $CONSTITUTION's ## Commands: $seg" >&2
         emit false close-story 2 error "verification not in ## Commands: $seg"
+        exit 2
+      }
+      command_cell_round_only "$CONSTITUTION" "$seg" && {
+        echo "cycle: close-story - verification is round-only in $CONSTITUTION's ## Commands: $seg" >&2
+        emit false close-story 2 error "verification is round-only: $seg"
         exit 2
       }
     done <<SEGEOF
@@ -2534,7 +2628,10 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
   # decided about. `env` means the round itself failed, and a stale round is judged again
   # first; both re-run the round instead. `status` applies the same rule from disk.
   local REOPEN_NEXT="repair"
-  if [ "$(json_field "$NEWEST" escalate)" = "env" ] || round_is_stale "$SPEC" "$N"; then
+  # fast-verification-06/07: a `suite-timeout` with nothing else red re-runs the suite; one
+  # whose row also holds a RED ask or a review BLOCK goes to repair.
+  escalate_reruns_round "$NEWEST" && REOPEN_NEXT="open-round"
+  if round_is_stale "$SPEC" "$N"; then
     REOPEN_NEXT="open-round"
   fi
 

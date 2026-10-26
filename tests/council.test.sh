@@ -6,6 +6,8 @@
 #
 #   Usage: bash tests/council.test.sh            # from the VULYK repo root - the release gate
 #          bash tests/council.test.sh --quick    # the contract in a few minutes (ADR-013 D5)
+#          bash tests/council.test.sh --part <name> [--quick]   # one topic on its own fresh fixture repo
+#          bash tests/council.test.sh --list-parts    # the part names, one per line
 #
 # Mirrors tests/cycle.test.sh: a throwaway git repo, `expect()` on stdout substrings, exit 1
 # on the first wrong answer. Unlike cycle.test.sh's single spec walked through six stages,
@@ -18,21 +20,34 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-QUICK=0
-case "${1:-}" in
-  --quick) QUICK=1 ;;
-  '') ;;
-  *) echo "usage: bash tests/council.test.sh [--quick]" >&2; exit 2 ;;
-esac
+PARTS="verbs judge seats close escalate ceilings replays walks driver roster advance" # one topic each; every part rebuilds the shared setup below
+QUICK=0 PART=''
+usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --quick) QUICK=1 ;;
+    --list-parts) printf '%s\n' $PARTS; exit 0 ;;
+    --part)
+      PART="${2:-}"; shift
+      case " $PARTS " in
+        *" $PART "*) ;;
+        *) echo "unknown part '$PART' - parts:" >&2; printf '%s\n' $PARTS >&2; exit 1 ;;
+      esac ;;
+    *) usage; exit 2 ;;
+  esac
+  shift
+done
 full() { [ "$QUICK" -eq 0 ]; } # `if full; then ... fi` wraps each block --quick skips
+part() { [ -z "$PART" ] || [ "$PART" = "$1" ]; } # `if part <name>; then ... fi` wraps each part
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
-trap 'rm -rf "$T"' EXIT
+FAILS="$(mktemp)" # expect() records here too: a failure inside a pipe's subshell still reaches the exit code
+trap 'rm -rf "$T" "$FAILS"' EXIT
 fail=0
 expect() { # expect <label> <needle>   (reads the output to judge from stdin)
   local label="$1" needle="$2" out; out="$(cat)"
   if printf '%s' "$out" | grep -qF -- "$needle"; then echo "  ok    $label"
-  else echo "::error::$label - expected '$needle' in:"; printf '%s\n' "$out" | sed 's/^/        /'; fail=1; fi
+  else echo "::error::$label - expected '$needle' in:"; printf '%s\n' "$out" | sed 's/^/        /'; fail=1; echo "$label" >> "$FAILS"; fi
 }
 
 cd "$T" || exit 1
@@ -178,7 +193,166 @@ write_review() { # write_review <round-dir> <PASS|BLOCK>
 }
 
 write_absent() { printf 'attempt 2, still nothing usable\n' > "$1/$2.attempt-2.md"; } # <round-dir> <seat>
+write_review_body() { # write_review_body <round-dir> <body...> - a BLOCK review with a given finding line
+  local rd="$1" n="${1##*/round-}"; shift
+  {
+    printf '<!-- seat: review \xc2\xb7 model: test \xc2\xb7 round: %s \xc2\xb7 head: %s \xc2\xb7 pack: demo-pack \xc2\xb7 attempt: 1 \xc2\xb7 recorded: 2020-01-01T00:00:01Z -->\n' "$n" "$HEAD7"
+    printf 'VERDICT: BLOCK\n'
+    printf '%s\n' "$@"
+  } > "$rd/review.md"
+}
 
+# --- pinned-commit replay toolkit (stories 14-17): defined here so each part that replays has it
+
+# --- regression proof: the same six checks run against 3e200bb's cycle.sh (no working-tree ---
+# checkout/stash - a second fixture copy per story 14's own instruction) and against the
+# branch's own scripts/cycle.sh, so ## Implementation notes can quote observed FAIL/ok labels.
+# A `[branch]` result other than ok now sets $fail (C5); a pinned `[<sha>]` result only sets
+# $fail when the probe's name is listed in $PIN_MUST_FAIL for that run - empty by default, so
+# the pre-fix runs above stay print-only exactly as before unless a story explicitly pins one.
+
+pin_cycle() { # pin_cycle <sha> <dest> - wraps `git -C "$SRC" show <sha>:scripts/cycle.sh`
+  # (C5): on a non-zero exit or an empty result, prints "  [<sha>] unavailable: <reason>",
+  # sets $fail, and returns 1 so the caller skips that block's probes instead of running them
+  # against a truncated/empty cycle.sh.
+  local sha="$1" dest="$2" errfile reason gex
+  errfile="$(mktemp)"
+  git -C "$SRC" show "$sha:scripts/cycle.sh" > "$dest" 2>"$errfile"; gex=$?
+  if [ "$gex" -ne 0 ] || [ ! -s "$dest" ]; then
+    reason="$(head -1 "$errfile")"
+    [ -n "$reason" ] || reason="empty"
+    echo "  [$sha] unavailable: $reason"
+    fail=1
+    rm -f "$errfile"
+    return 1
+  fi
+  rm -f "$errfile"
+  return 0
+}
+
+check_probe_result() { # check_probe_result <wlabel> <probe-name> <result> (C5) - branch: any
+  # non-ok result sets $fail; a pinned label: only probes named in $PIN_MUST_FAIL must be FAIL.
+  local wlabel="$1" name="$2" result="$3"
+  if [ "$wlabel" = branch ]; then
+    [ "$result" = ok ] || { echo "::error::[$wlabel] $name: expected ok, got $result"; fail=1; }
+  else
+    case " ${PIN_MUST_FAIL:-} " in
+      *" $name "*) [ "$result" = FAIL ] || { echo "::error::[$wlabel] $name: expected FAIL (PIN_MUST_FAIL), got $result"; fail=1; } ;;
+    esac
+  fi
+}
+
+probe_lr19() {
+  mk_open_spec plr19 2; set_tier plr19 1 >/dev/null
+  local rd; rd="$(mk_open_round plr19 1)"
+  # sonnet (Tier 1's seat before 0.18) and review (its seat since, ADR-013 D1) both present, so
+  # the probe reads the same on a pinned pre-0.18 cycle.sh and on the branch: review re-asked
+  # (2 files) + sonnet (1) = 3, where a re-ask counted once would give 2.
+  write_seat "$rd" sonnet GG
+  write_review "$rd" PASS
+  cp "$rd/review.md" "$rd/review.attempt-1.md"
+  council judge docs/specs/plr19 >/dev/null 2>&1
+  local row; row="$(grep '"spec":"plr19"' memory/stats/council.jsonl | tail -1)"
+  printf '%s' "$row" | grep -qF '"attempts":3' && echo ok || echo FAIL
+}
+probe_lr21() {
+  mk_open_spec plr21 2; set_tier plr21 1 >/dev/null
+  printf '{"ts":"2020-01-01T00:00:00Z","spec":"plr21","round":10,"verdict":"ESCALATE","head":"aaaaaaa","pack":"demo-pack","asks":2,"red":[],"red_unevidenced":[],"na":0,"review":"","haiku":"","haiku_model":"unknown","sonnet":"","sonnet_model":"unknown","opus":"","opus_model":"unknown","attempts":0,"escalate":"ceiling","note":""}\n' >> memory/stats/council.jsonl
+  local rd; rd="$(mk_open_round plr21 1)"
+  write_seat "$rd" sonnet GG; write_review "$rd" PASS # both rosters' Tier 1 seat (see probe_lr19)
+  council judge docs/specs/plr21 >/dev/null 2>&1
+  local n; n="$(grep -c '"spec":"plr21".*"round":1,' memory/stats/council.jsonl)"
+  [ "$n" -eq 1 ] && echo ok || echo FAIL
+}
+probe_lr25() {
+  mk_open_spec plr25 2; set_tier plr25 1 >/dev/null
+  local rd; rd="$(mk_open_round plr25 1)"
+  write_seat "$rd" sonnet GGG; write_review "$rd" PASS # both rosters' Tier 1 seat (see probe_lr19)
+  council judge docs/specs/plr25 >/dev/null 2>&1
+  local cln shln
+  cln="$(grep -n '^\*\*Council:\*\*' docs/specs/plr25/plan.md | tail -1 | cut -d: -f1)"
+  shln="$(grep -n '^\*\*Shipped:\*\*' docs/specs/plr25/plan.md | head -1 | cut -d: -f1)"
+  [ -n "$cln" ] && [ -n "$shln" ] && [ "$cln" -lt "$shln" ] && echo ok || echo FAIL
+}
+probe_m4() {
+  mk_open_spec pm4 2; set_tier pm4 1 >/dev/null
+  local rd; rd="$(mk_open_round pm4 1)"
+  local opened; opened="$(sed -n 's/^opened=//p' "$rd/ROUND")"
+  write_seat "$rd" sonnet GG; write_review "$rd" PASS # both rosters' Tier 1 seat (see probe_lr19)
+  printf '{"ts":"%s","spec":"pm4","verdict":"REJECTED","by":"t","head":"%s","pack":"demo-pack","note":"x"}\n' "$opened" "$HEAD7" >> memory/stats/human.jsonl
+  local out; out="$(council judge docs/specs/pm4 2>&1)"
+  printf '%s' "$out" | grep -qF '"next":"repair"' && echo ok || echo FAIL
+}
+probe_m10() {
+  local sites; sites="$(grep -c '>> memory/stats/council.jsonl' scripts/cycle.sh)"
+  [ "$sites" -eq 3 ] && echo ok || echo FAIL
+}
+probe_nm7() {
+  mk_open_spec pnm7 2; set_tier pnm7 1 >/dev/null
+  mk_open_round pnm7 1 >/dev/null
+  local secret="sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+  council escalate docs/specs/pnm7 --reason ceiling "leaked token $secret" >/dev/null 2>&1
+  local row; row="$(grep '"spec":"pnm7"' memory/stats/council.jsonl | tail -1)"
+  if printf '%s' "$row" | grep -qF "$secret"; then echo FAIL
+  else printf '%s' "$row" | grep -qF '[VULYK:REDACTED]' && echo ok || echo FAIL
+  fi
+}
+
+run_wall_probes() { # run_wall_probes <label> <cycle.sh-path> [extra-probe-fn ...] - a scratch
+  # hive with the given cycle.sh swapped in, reusing this suite's own mk_spec/mk_round/
+  # write_seat/council helpers (they only touch $T/$HEAD7/cwd) by rebinding those two globals
+  # for the duration. Story 14's own six probes always run; story 15 extends this same runner
+  # with a second pinned version (b9f36e8) by passing its own probe function names as extra
+  # args, rather than writing a second copy of this scaffolding.
+  local wlabel="$1" cyclesrc="$2" wt; shift 2
+  wt="$(mktemp -d)"
+  local save_t="$T" save_head7="$HEAD7" save_pwd="$PWD"
+  T="$wt"
+  cd "$wt" || { echo "::error::wall probe [$wlabel]: cannot cd to $wt"; fail=1; return; }
+  git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
+  mkdir -p scripts memory/stats docs/specs .claude
+  cp "$SRC"/scripts/lib.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh scripts/
+  cp "$cyclesrc" scripts/cycle.sh
+  # Story 17 adds DRIVER here too: without it, an untracked DRIVER file dirties open-round's
+  # whole-tree "clean" precondition (L1778) and probe_gated's matching-stamp call fails for an
+  # unrelated reason instead of proceeding.
+  printf '.vulyk/\ndocs/specs/*/PAUSE\ndocs/specs/*/DRIVER\n' > .gitignore
+  # Story 16's close-story probes (returned:/r2m2/r2m9) need a ## Commands table too - the six
+  # story 14/15 probes above never call close-story, so this was never needed until now.
+  cat > CLAUDE.md <<'MDEOF'
+# Fixture hive
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Fixture: always succeeds | `true` |
+| r2m9 fixture: a cell that is itself an &&-joined command | `sh -c 'true && true'` |
+MDEOF
+  git add -A && git commit -qm init >/dev/null
+  HEAD7="$(git rev-parse --short HEAD)"
+
+  local r
+  r="$(probe_lr19)";  echo "  [$wlabel] LR19 attempts (cmd_judge):        $r"; check_probe_result "$wlabel" probe_lr19 "$r"
+  r="$(probe_lr21)";  echo "  [$wlabel] LR21/r2m1 round-number match:      $r"; check_probe_result "$wlabel" probe_lr21 "$r"
+  r="$(probe_lr25)";  echo "  [$wlabel] LR25/C7 Council line placement:    $r"; check_probe_result "$wlabel" probe_lr25 "$r"
+  r="$(probe_m4)";    echo "  [$wlabel] m-4 same-second override:          $r"; check_probe_result "$wlabel" probe_m4 "$r"
+  r="$(probe_m10)";   echo "  [$wlabel] m-10 atomic ledger append:         $r"; check_probe_result "$wlabel" probe_m10 "$r"
+  r="$(probe_nm7)";   echo "  [$wlabel] N-m7 note through redact:          $r"; check_probe_result "$wlabel" probe_nm7 "$r"
+
+  local extra
+  for extra in "$@"; do
+    r="$($extra)"
+    echo "  [$wlabel] $extra:  $r"
+    check_probe_result "$wlabel" "$extra" "$r"
+  done
+
+  cd "$save_pwd" || true
+  T="$save_t"; HEAD7="$save_head7"
+  rm -rf "$wt"
+}
+
+if part verbs; then # --- part verbs: status --json, tier, judge, journal, briefed, branch, git failures, court setup
 # --- status --json: shape and the next vocabulary ---------------------------------------------
 
 echo "status --json: exactly one JSON object with every C3 key"
@@ -369,17 +543,8 @@ printf '%s' "$row" | grep -q '"verdict":"RED"' && printf '%s' "$row" | grep -q '
 grep -qE '^\*\*Council:\*\* RED round 1,.* - red: 2$' docs/specs/red1/plan.md && echo "  ok    plan line ends '- red: 2'" \
   || { echo "::error::plan.md: $(grep '^\*\*Council:\*\*' docs/specs/red1/plan.md)"; fail=1; }
 
-if full; then # --quick skips: the anchored-BLOCK variants, the multi-round ceiling, no-progress and half walks
+if full; then # --quick skips: the anchored-BLOCK variants
 # --- judge: an anchored review BLOCK (convergent-judge-02, D4) ------------------------------
-
-write_review_body() { # write_review_body <round-dir> <body...> - a BLOCK review with a given finding line
-  local rd="$1" n="${1##*/round-}"; shift
-  {
-    printf '<!-- seat: review \xc2\xb7 model: test \xc2\xb7 round: %s \xc2\xb7 head: %s \xc2\xb7 pack: demo-pack \xc2\xb7 attempt: 1 \xc2\xb7 recorded: 2020-01-01T00:00:01Z -->\n' "$n" "$HEAD7"
-    printf 'VERDICT: BLOCK\n'
-    printf '%s\n' "$@"
-  } > "$rd/review.md"
-}
 
 echo "judge: review BLOCK anchored [ask 2], seats GREEN -> RED/repair, review_asks:[2]"
 mk_spec anch1 3
@@ -477,7 +642,10 @@ printf '{"ts":"2020-01-01T00:00:00Z","spec":"oldrow1","round":1,"verdict":"GREEN
 out="$(council status docs/specs/oldrow1 --json)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | jq -e '.review == "PASS"' >/dev/null 2>&1 \
   && echo "  ok    status reads a pre-review_asks row" || { echo "::error::oldrow1: exit=$ex out=$out"; fail=1; }
-
+fi # --quick: end of the anchored-BLOCK skip
+fi # part verbs
+if part judge; then # --- part judge: the ceiling, no-progress and half walks, ABSENT/N/A/REJECTED, journal, briefed, branch, git failures, court setup
+if full; then # --quick skips: the multi-round ceiling, no-progress and half walks
 # --- judge: three RED rounds hit the ceiling on the third -------------------------------------
 
 echo "judge: three RED rounds (a different ask each) escalate (ceiling) on the third, not the second"
@@ -607,7 +775,7 @@ out="$(council judge docs/specs/halffloor2b)"; ex=$?
 row="$(grep '"spec":"halffloor2b"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -qF '"escalate":"half"' && echo "  ok    A=2 both-red row escalate:half" || { echo "::error::row: $row"; fail=1; }
 
-fi # --quick: end of the judge-variant skip
+fi # --quick: end of the ceiling/no-progress/half skip
 # --- judge: three ABSENT seats -------------------------------------------------------------------
 
 echo "judge: every blind seat exhausted -> ESCALATE env; only the required one (opus) is ABSENT in the row"
@@ -864,6 +1032,8 @@ out="$(VULYK_SETUP_TIMEOUT=2 council open-round docs/specs/csetup2 2>&1)"; ex=$?
   && echo "  ok    the timed-out court is removed, no round left" \
   || { echo "::error::left: $(ls -R docs/specs/csetup2/council .vulyk/court/csetup2 2>&1)"; fail=1; }
 git rm -q .claude/vulyk-setup && git commit -qm "fixture: drop vulyk-setup" >/dev/null
+fi # part judge
+if part seats; then # --- part seats: record-seat (preconditions, MALFORMED, taint, evidence, review layout, --model, --file)
 # --- record-seat: preconditions (open round, HEAD match) -------------------------------------
 
 echo "record-seat: no open round -> exit 2"
@@ -1336,6 +1506,8 @@ out="$(council record-seat docs/specs/rfile1 1 haiku --file .vulyk/reports/empty
   && echo "  ok    empty --file path behaves as missing: exit 2, no attempt file" \
   || { echo "::error::--file empty: exit=$ex out=$out"; fail=1; }
 
+fi # part seats
+if part close; then # --- part close: the PAUSE guard, pause/resume, close-story
 # --- PAUSE guard: every mutating verb refuses before touching anything ------------------------
 
 echo "PAUSE: briefed, branch, record-seat, close-story, open-round, reopen all exit 3"
@@ -1526,6 +1698,45 @@ git add -A && git commit -qm "spec(cstory4): fixture" >/dev/null
 out="$(council close-story docs/specs/cstory4/cstory4-01-first.md --commit)"; ex=$?
 [ "$ex" -eq 0 ] && echo "  ok    both && segments matched ## Commands, ran, exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+echo "close-story: a verification naming a round-only row -> exit 2, nothing run; its unmarked --part neighbour runs (fast-verification-04)"
+cat > CLAUDE.vulyk.md <<'EOF'
+# Sidecar constitution
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Slow suite (round-only) | `touch ro-suite-ran.txt` |
+| Slow suite part | `touch ro-suite-ran.txt --part <topic>` |
+| Shared text, marked (round-only) | `touch ro-both-ran.txt` |
+| Shared text, unmarked | `touch ro-both-ran.txt` |
+| Fast part | `echo ro-suite --part <topic>` |
+EOF
+mkdir -p docs/specs/cstoryro
+cstoryro() { # cstoryro <nn> <verification line>
+  printf -- '---\nstory: cstoryro-%s\nspec: cstoryro\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Round-only fixture\n\n## Files\n- ro-%s.txt\n\n## Verification\n%s\n' \
+    "$1" "$1" "$2" > "docs/specs/cstoryro/cstoryro-$1-r.md"
+}
+cstoryro 01 '`touch ro-suite-ran.txt`'
+cstoryro 02 '`echo ro-suite --part y && touch ro-both-ran.txt`'
+cstoryro 03 '`echo ro-suite --part x`'
+git add -A -- docs/specs/cstoryro && git commit -qm "spec(cstoryro): fixture" >/dev/null
+hbefore="$(git rev-parse HEAD)"
+out="$(council close-story docs/specs/cstoryro/cstoryro-01-r.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"verification is round-only: touch ro-suite-ran.txt"' \
+  && echo "  ok    the marked row -> exit 2, verification is round-only: <segment>" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -e ro-suite-ran.txt ] && grep -q '^status: todo' docs/specs/cstoryro/cstoryro-01-r.md && [ "$(git rev-parse HEAD)" = "$hbefore" ] \
+  && echo "  ok    nothing ran, status stays todo, nothing committed" || { echo "::error::round-only story ran or moved: $(git log --oneline -1)"; fail=1; }
+out="$(council close-story docs/specs/cstoryro/cstoryro-02-r.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"verification is round-only: touch ro-both-ran.txt"' \
+  && [ ! -e ro-both-ran.txt ] && [ "$(git rev-parse HEAD)" = "$hbefore" ] \
+  && echo "  ok    neighbour form: the text in a marked and an unmarked row is refused, nothing ran" || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(council close-story docs/specs/cstoryro/cstoryro-03-r.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' docs/specs/cstoryro/cstoryro-03-r.md \
+  && echo "  ok    a --part placeholder match on an unmarked row still runs and closes" || { echo "::error::exit=$ex out=$out"; fail=1; }
+rm -f CLAUDE.vulyk.md
+git add -A && git commit -qm "cstoryro: done" >/dev/null
+
 echo "close-story: a multi-command block runs one line at a time - false before true -> exit 4 naming the failing line (R18/M-3)"
 mkdir -p docs/specs/cstory2
 cat > docs/specs/cstory2/cstory2-01-first.md <<'EOF'
@@ -1653,6 +1864,8 @@ out="$(council open-round docs/specs/cstory6 --commit 2>&1)"; ex=$?
 [ -z "$(git status --porcelain)" ] && echo "  ok    tree is clean after both verbs" \
   || { echo "::error::tree dirty: $(git status --porcelain)"; fail=1; }
 
+fi # part close
+if part escalate; then # --- part escalate: story 16 fixes, open-round, the escalate verb, review-ABSENT
 if full; then # --quick skips: the story 08 fix proofs (returned:, r2m2, LR31, r2m9)
 # --- story 16: the four story 08 fixes - cstoryr1..r4 (M3/ADR-006 returned: gate), r2m2 -------
 # (close-story --commit owns its commit), LR31 (wave_stories lists only ready stories), r2m9 --
@@ -2123,6 +2336,126 @@ out="$(council escalate docs/specs/esc4 2>&1)"; ex=$?
 [ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    PAUSE -> exit 3" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+# --- fast-verification-06: the reviewer's SUITE: line - a timeout escalates, a failure is RED ---
+
+write_review_suite() { # write_review_suite <round-dir> <PASS|BLOCK> <suite-line> [critical-line]
+  local rd="$1" v="$2" sl="$3" crit="${4:-None.}" n="${1##*/round-}"
+  {
+    printf '<!-- seat: review \xc2\xb7 model: test \xc2\xb7 round: %s \xc2\xb7 head: %s \xc2\xb7 pack: demo-pack \xc2\xb7 attempt: 1 \xc2\xb7 recorded: 2020-01-01T00:00:01Z -->\n' "$n" "$HEAD7"
+    printf 'VERDICT: %s\nMODEL: test\n%s\n\n## Critical\n%s\n## Major\nNone.\n## Minor\nNone.\n' "$v" "$sl" "$crit"
+  } > "$rd/review.md"
+}
+
+echo "judge: review PASS + SUITE: TIMEOUT 571s budget 540s -> ESCALATE suite-timeout, exit 6, the seconds in the note and ## Needs a human (fast-verification-06)"
+mk_open_spec suto1 2
+set_tier suto1 1
+rdst1="$(mk_open_round suto1 1)"
+write_review_suite "$rdst1" PASS 'SUITE: TIMEOUT 571s budget 540s'
+out="$(council judge docs/specs/suto1 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    suite timeout -> exit 6, next escalated" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"suto1"' memory/stats/council.jsonl | tail -1)"
+[ "$(printf '%s' "$row" | jq -r '.verdict + " " + .escalate')" = "ESCALATE suite-timeout" ] \
+  && printf '%s' "$row" | jq -e '.note == "full suite timed out: 571s, budget 540s"' >/dev/null \
+  && echo "  ok    row ESCALATE, escalate suite-timeout, note carries 571s and the budget" || { echo "::error::row: $row"; fail=1; }
+grep -qE '^\*\*Council:\*\* ESCALATE round 1,' docs/specs/suto1/plan.md && grep -qF 'reason: suite-timeout · round 1' docs/specs/suto1/plan.md \
+  && grep -qF -- '- suite: 571 s, budget 540 s - raise VULYK_SUITE_TIMEOUT or cut the suite' docs/specs/suto1/plan.md \
+  && grep -qF -- "- seats: $rdst1/" docs/specs/suto1/plan.md \
+  && echo "  ok    plan.md: Council ESCALATE, ## Needs a human with the reason, the suite line (571) and the seats line" \
+  || { echo "::error::plan.md: $(cat docs/specs/suto1/plan.md)"; fail=1; }
+
+echo "judge: review BLOCK anchored [regression] + SUITE: FAIL 300s -> RED, next repair (a failure never escalates)"
+mk_open_spec sufail1 2
+set_tier sufail1 1
+rdsf1="$(mk_open_round sufail1 1)"
+write_review_suite "$rdsf1" BLOCK 'SUITE: FAIL 300s' '1. tests/full-suite.sh [regression] full suite failed: tests/cycle.test.sh red - repro: `bash tests/full-suite.sh`'
+out="$(council judge docs/specs/sufail1 2>&1)"; ex=$?
+row="$(grep '"spec":"sufail1"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && printf '%s' "$row" | jq -e '.verdict == "RED" and .escalate == null' >/dev/null \
+  && echo "  ok    suite failure -> RED, next repair, no escalate" || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
+
+echo "judge: review PASS + SUITE: FAIL 300s -> never GREEN: RED, next repair, review BLOCK (fast-verification-07)"
+mk_open_spec sufail2 2
+set_tier sufail2 1
+rdsf2="$(mk_open_round sufail2 1)"
+write_review_suite "$rdsf2" PASS 'SUITE: FAIL 300s'
+out="$(council judge docs/specs/sufail2 2>&1)"; ex=$?
+row="$(grep '"spec":"sufail2"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' \
+  && printf '%s' "$row" | jq -e '.verdict == "RED" and .review == "BLOCK" and (.note | contains("SUITE: FAIL"))' >/dev/null \
+  && echo "  ok    PASS + SUITE: FAIL -> RED, review BLOCK, the note names SUITE: FAIL" || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
+
+echo "record-seat review: a round-only Full suite row with a runnable command -> the SUITE line is enforced; each refused form beside its accepted neighbour (fast-verification-07/08)"
+printf '| Full suite / build (round-only) | `bash tests/no-such-runner.sh` |\n' >> CLAUDE.md
+git add -A && git commit -qm "fixture: a round-only full-suite row" >/dev/null
+sui=0
+suite_case() { # suite_case <want-exit> <label> <report body after MODEL line>
+  sui=$((sui + 1)); mk_spec "suline$sui" 2
+  local rd; rd="$(mk_open_round "suline$sui" 1)"
+  local out ex
+  out="$(printf 'VERDICT: PASS\nMODEL: test\n%b' "$3" | council record-seat "docs/specs/suline$sui" 1 review 2>&1)"; ex=$?
+  if [ "$1" -eq 4 ]; then
+    [ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'MALFORMED' && [ ! -f "$rd/review.md" ] && [ -f "$rd/review.attempt-1.md" ] \
+      && echo "  ok    $2 -> exit 4, kept as attempt-1, not recorded" || { echo "::error::$2: exit=$ex out=$out"; fail=1; }
+  else
+    [ "$ex" -eq 0 ] && [ -f "$rd/review.md" ] && echo "  ok    $2 -> recorded, exit 0" || { echo "::error::$2: exit=$ex out=$out"; fail=1; }
+  fi
+}
+suite_case 4 'SUITE: none' 'SUITE: none\n'
+suite_case 0 'SUITE: ok 300s' 'SUITE: ok 300s\n'
+suite_case 4 'no SUITE line' '\n## Critical\nNone.\n'
+suite_case 0 'SUITE: FAIL 300s' 'SUITE: FAIL 300s\n'
+suite_case 4 'SUITE: TIMEOUT without seconds' 'SUITE: TIMEOUT\n'
+suite_case 4 'SUITE: TIMEOUT 571 s (space)' 'SUITE: TIMEOUT 571 s budget 540s\n'
+suite_case 0 'SUITE: TIMEOUT 571s budget 540s' 'SUITE: TIMEOUT 571s budget 540s\n'
+grep -v 'no-such-runner' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+git add -A && git commit -qm "fixture: drop the round-only full-suite row" >/dev/null
+
+echo "record-seat review: a round-only Full suite row holding <fill in> or none -> SUITE: none is recorded (fast-verification-08 finding 1)"
+for cell in '`<fill in>`' 'none'; do
+  printf '| Full suite / build (round-only) | %s |\n' "$cell" >> CLAUDE.md
+  git add -A && git commit -qm "fixture: an unrunnable round-only full-suite row" >/dev/null
+  suite_case 0 "SUITE: none beside a $cell row" 'SUITE: none\n'
+  grep -v '^| Full suite / build (round-only)' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+  git add -A && git commit -qm "fixture: drop it" >/dev/null
+done
+
+echo "reopen after a suite-timeout row -> next open-round; status never answers repair for it"
+git add -A && git commit -qm "suto1: judged suite-timeout" >/dev/null
+out="$(council reopen docs/specs/suto1 "owner: raised the budget" 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qF '"next":"open-round"' && echo "  ok    reopen -> next open-round" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(council status docs/specs/suto1 --json)"
+printf '%s' "$out" | jq -e '.next == "open-round"' >/dev/null 2>&1 && echo "  ok    status after the reopen -> open-round, not repair" \
+  || { echo "::error::status: $out"; fail=1; }
+
+echo "reopen after a suite-timeout row that also holds a RED ask and a review BLOCK -> next repair, status and repair agree (fast-verification-07)"
+mk_open_spec suto2 2
+set_tier suto2 3
+rdst2="$(mk_open_round suto2 1)"
+write_seat "$rdst2" opus RG
+write_review_suite "$rdst2" BLOCK 'SUITE: TIMEOUT 541s budget 540s' '1. tests/full-suite.sh [ask 2] the runner misses the budget - repro: `bash tests/full-suite.sh`'
+out="$(council judge docs/specs/suto2 2>&1)"; ex=$?
+row="$(grep '"spec":"suto2"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 6 ] && printf '%s' "$row" | jq -e '.escalate == "suite-timeout" and .review == "BLOCK" and .red == [1]' >/dev/null \
+  && echo "  ok    judged ESCALATE suite-timeout, the row keeps red [1] and the BLOCK" || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
+git add -A && git commit -qm "suto2: judged suite-timeout with RED" >/dev/null
+out="$(council reopen docs/specs/suto2 "owner: fix the root" 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qF '"next":"repair"' && echo "  ok    reopen -> next repair" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(council status docs/specs/suto2 --json)"
+printf '%s' "$out" | jq -e '.next == "repair"' >/dev/null 2>&1 && echo "  ok    status after the reopen -> repair" \
+  || { echo "::error::status: $out"; fail=1; }
+
+echo "escalate --reason suite-timeout passes the usage check"
+mk_open_spec suesc1 2
+set_tier suesc1 1
+mk_open_round suesc1 1 >/dev/null
+out="$(council escalate docs/specs/suesc1 --reason suite-timeout "manual: suite over budget" 2>&1)"; ex=$?
+row="$(grep '"spec":"suesc1"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 6 ] && printf '%s' "$row" | grep -qF '"escalate":"suite-timeout"' && echo "  ok    escalate --reason suite-timeout -> exit 6, row reason suite-timeout" \
+  || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
+
 if full; then # --quick skips: the R15 court-reduction proof
 # --- open-round: the court's reduction is committed inside the worktree (R15/M-1,M-2) ---------
 
@@ -2164,7 +2497,8 @@ courtlp="$(sed -n 's/^court=//p' docs/specs/lplong1/council/round-1/ROUND 2>/dev
   || { echo "::error::court status: $(git -C "$courtlp" -c core.longpaths=true status --porcelain 2>&1)"; fail=1; }
 [ -n "$courtlp" ] && git -c core.longpaths=true worktree remove --force "$courtlp" >/dev/null 2>&1
 git rm -rq lpsrc && git commit -qm "lplong1: drop the long path" >/dev/null
-if full; then # --quick skips from here to the 0.18 section: the reopen walk, the ceiling variants, the committed-verb walks, stories 14-17, every pinned-commit replay, the C5 block
+fi # part escalate
+if part ceilings && full; then # --- part ceilings (--quick skips it): the reopen walk, tier, judged-rounds and RED-rounds ceilings
 # --- reopen: ceiling +3 after ESCALATE, then a fourth round opens ------------------------------
 
 echo "reopen: three RED rounds escalate (ceiling) on the third, reopen bumps ceiling to 6, a 4th round opens"
@@ -2365,6 +2699,8 @@ tg2_round 5 GR 6 "tier 2 after reopen: round 5 RED -> ESCALATE ceiling (exactly 
 grep '"spec":"tgreen2"' memory/stats/council.jsonl | grep '"round":5,' | grep -qF '"escalate":"ceiling"' \
   || { echo "::error::tgreen2 round 5 is not ESCALATE ceiling"; fail=1; }
 
+fi # part ceilings
+if part replays && full; then # --- part replays (--quick skips it): status after committed verbs, LR19-25/m-4/N-m7, story 14 pinned replay
 # --- status --json after committed verbs (autonomous-cycle-19: R1, R2, R3, R7, R25) -----------
 # The council round found the suite asserted only each verb's own emit, never `status --json`
 # afterward - which is exactly the seam where `--commit` (used by both drivers, always) moved
@@ -2679,158 +3015,10 @@ grep -qF "$secret" docs/specs/nm7a/plan.md && { echo "::error::raw token leaked 
 grep -qF '[VULYK:REDACTED]' docs/specs/nm7a/plan.md && echo "  ok    plan.md's ## Needs a human note is masked too" \
   || { echo "::error::plan.md: $(cat docs/specs/nm7a/plan.md)"; fail=1; }
 
-# --- regression proof: the same six checks run against 3e200bb's cycle.sh (no working-tree ---
-# checkout/stash - a second fixture copy per story 14's own instruction) and against the
-# branch's own scripts/cycle.sh, so ## Implementation notes can quote observed FAIL/ok labels.
-# A `[branch]` result other than ok now sets $fail (C5); a pinned `[<sha>]` result only sets
-# $fail when the probe's name is listed in $PIN_MUST_FAIL for that run - empty by default, so
-# the pre-fix runs above stay print-only exactly as before unless a story explicitly pins one.
-
-pin_cycle() { # pin_cycle <sha> <dest> - wraps `git -C "$SRC" show <sha>:scripts/cycle.sh`
-  # (C5): on a non-zero exit or an empty result, prints "  [<sha>] unavailable: <reason>",
-  # sets $fail, and returns 1 so the caller skips that block's probes instead of running them
-  # against a truncated/empty cycle.sh.
-  local sha="$1" dest="$2" errfile reason gex
-  errfile="$(mktemp)"
-  git -C "$SRC" show "$sha:scripts/cycle.sh" > "$dest" 2>"$errfile"; gex=$?
-  if [ "$gex" -ne 0 ] || [ ! -s "$dest" ]; then
-    reason="$(head -1 "$errfile")"
-    [ -n "$reason" ] || reason="empty"
-    echo "  [$sha] unavailable: $reason"
-    fail=1
-    rm -f "$errfile"
-    return 1
-  fi
-  rm -f "$errfile"
-  return 0
-}
-
-check_probe_result() { # check_probe_result <wlabel> <probe-name> <result> (C5) - branch: any
-  # non-ok result sets $fail; a pinned label: only probes named in $PIN_MUST_FAIL must be FAIL.
-  local wlabel="$1" name="$2" result="$3"
-  if [ "$wlabel" = branch ]; then
-    [ "$result" = ok ] || { echo "::error::[$wlabel] $name: expected ok, got $result"; fail=1; }
-  else
-    case " ${PIN_MUST_FAIL:-} " in
-      *" $name "*) [ "$result" = FAIL ] || { echo "::error::[$wlabel] $name: expected FAIL (PIN_MUST_FAIL), got $result"; fail=1; } ;;
-    esac
-  fi
-}
-
 echo "=== regression proof: story 14's six checks replayed against 3e200bb's cycle.sh vs. the branch's ==="
 OLDCYCLE="$(mktemp)"
 PIN_MUST_FAIL=""
 pin_cycle 3e200bb "$OLDCYCLE" || OLDCYCLE=""
-
-probe_lr19() {
-  mk_open_spec plr19 2; set_tier plr19 1 >/dev/null
-  local rd; rd="$(mk_open_round plr19 1)"
-  # sonnet (Tier 1's seat before 0.18) and review (its seat since, ADR-013 D1) both present, so
-  # the probe reads the same on a pinned pre-0.18 cycle.sh and on the branch: review re-asked
-  # (2 files) + sonnet (1) = 3, where a re-ask counted once would give 2.
-  write_seat "$rd" sonnet GG
-  write_review "$rd" PASS
-  cp "$rd/review.md" "$rd/review.attempt-1.md"
-  council judge docs/specs/plr19 >/dev/null 2>&1
-  local row; row="$(grep '"spec":"plr19"' memory/stats/council.jsonl | tail -1)"
-  printf '%s' "$row" | grep -qF '"attempts":3' && echo ok || echo FAIL
-}
-probe_lr21() {
-  mk_open_spec plr21 2; set_tier plr21 1 >/dev/null
-  printf '{"ts":"2020-01-01T00:00:00Z","spec":"plr21","round":10,"verdict":"ESCALATE","head":"aaaaaaa","pack":"demo-pack","asks":2,"red":[],"red_unevidenced":[],"na":0,"review":"","haiku":"","haiku_model":"unknown","sonnet":"","sonnet_model":"unknown","opus":"","opus_model":"unknown","attempts":0,"escalate":"ceiling","note":""}\n' >> memory/stats/council.jsonl
-  local rd; rd="$(mk_open_round plr21 1)"
-  write_seat "$rd" sonnet GG; write_review "$rd" PASS # both rosters' Tier 1 seat (see probe_lr19)
-  council judge docs/specs/plr21 >/dev/null 2>&1
-  local n; n="$(grep -c '"spec":"plr21".*"round":1,' memory/stats/council.jsonl)"
-  [ "$n" -eq 1 ] && echo ok || echo FAIL
-}
-probe_lr25() {
-  mk_open_spec plr25 2; set_tier plr25 1 >/dev/null
-  local rd; rd="$(mk_open_round plr25 1)"
-  write_seat "$rd" sonnet GGG; write_review "$rd" PASS # both rosters' Tier 1 seat (see probe_lr19)
-  council judge docs/specs/plr25 >/dev/null 2>&1
-  local cln shln
-  cln="$(grep -n '^\*\*Council:\*\*' docs/specs/plr25/plan.md | tail -1 | cut -d: -f1)"
-  shln="$(grep -n '^\*\*Shipped:\*\*' docs/specs/plr25/plan.md | head -1 | cut -d: -f1)"
-  [ -n "$cln" ] && [ -n "$shln" ] && [ "$cln" -lt "$shln" ] && echo ok || echo FAIL
-}
-probe_m4() {
-  mk_open_spec pm4 2; set_tier pm4 1 >/dev/null
-  local rd; rd="$(mk_open_round pm4 1)"
-  local opened; opened="$(sed -n 's/^opened=//p' "$rd/ROUND")"
-  write_seat "$rd" sonnet GG; write_review "$rd" PASS # both rosters' Tier 1 seat (see probe_lr19)
-  printf '{"ts":"%s","spec":"pm4","verdict":"REJECTED","by":"t","head":"%s","pack":"demo-pack","note":"x"}\n' "$opened" "$HEAD7" >> memory/stats/human.jsonl
-  local out; out="$(council judge docs/specs/pm4 2>&1)"
-  printf '%s' "$out" | grep -qF '"next":"repair"' && echo ok || echo FAIL
-}
-probe_m10() {
-  local sites; sites="$(grep -c '>> memory/stats/council.jsonl' scripts/cycle.sh)"
-  [ "$sites" -eq 3 ] && echo ok || echo FAIL
-}
-probe_nm7() {
-  mk_open_spec pnm7 2; set_tier pnm7 1 >/dev/null
-  mk_open_round pnm7 1 >/dev/null
-  local secret="sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-  council escalate docs/specs/pnm7 --reason ceiling "leaked token $secret" >/dev/null 2>&1
-  local row; row="$(grep '"spec":"pnm7"' memory/stats/council.jsonl | tail -1)"
-  if printf '%s' "$row" | grep -qF "$secret"; then echo FAIL
-  else printf '%s' "$row" | grep -qF '[VULYK:REDACTED]' && echo ok || echo FAIL
-  fi
-}
-
-run_wall_probes() { # run_wall_probes <label> <cycle.sh-path> [extra-probe-fn ...] - a scratch
-  # hive with the given cycle.sh swapped in, reusing this suite's own mk_spec/mk_round/
-  # write_seat/council helpers (they only touch $T/$HEAD7/cwd) by rebinding those two globals
-  # for the duration. Story 14's own six probes always run; story 15 extends this same runner
-  # with a second pinned version (b9f36e8) by passing its own probe function names as extra
-  # args, rather than writing a second copy of this scaffolding.
-  local wlabel="$1" cyclesrc="$2" wt; shift 2
-  wt="$(mktemp -d)"
-  local save_t="$T" save_head7="$HEAD7" save_pwd="$PWD"
-  T="$wt"
-  cd "$wt" || { echo "::error::wall probe [$wlabel]: cannot cd to $wt"; fail=1; return; }
-  git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
-  mkdir -p scripts memory/stats docs/specs .claude
-  cp "$SRC"/scripts/lib.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh scripts/
-  cp "$cyclesrc" scripts/cycle.sh
-  # Story 17 adds DRIVER here too: without it, an untracked DRIVER file dirties open-round's
-  # whole-tree "clean" precondition (L1778) and probe_gated's matching-stamp call fails for an
-  # unrelated reason instead of proceeding.
-  printf '.vulyk/\ndocs/specs/*/PAUSE\ndocs/specs/*/DRIVER\n' > .gitignore
-  # Story 16's close-story probes (returned:/r2m2/r2m9) need a ## Commands table too - the six
-  # story 14/15 probes above never call close-story, so this was never needed until now.
-  cat > CLAUDE.md <<'MDEOF'
-# Fixture hive
-
-## Commands
-
-| Purpose | Command |
-|---|---|
-| Fixture: always succeeds | `true` |
-| r2m9 fixture: a cell that is itself an &&-joined command | `sh -c 'true && true'` |
-MDEOF
-  git add -A && git commit -qm init >/dev/null
-  HEAD7="$(git rev-parse --short HEAD)"
-
-  local r
-  r="$(probe_lr19)";  echo "  [$wlabel] LR19 attempts (cmd_judge):        $r"; check_probe_result "$wlabel" probe_lr19 "$r"
-  r="$(probe_lr21)";  echo "  [$wlabel] LR21/r2m1 round-number match:      $r"; check_probe_result "$wlabel" probe_lr21 "$r"
-  r="$(probe_lr25)";  echo "  [$wlabel] LR25/C7 Council line placement:    $r"; check_probe_result "$wlabel" probe_lr25 "$r"
-  r="$(probe_m4)";    echo "  [$wlabel] m-4 same-second override:          $r"; check_probe_result "$wlabel" probe_m4 "$r"
-  r="$(probe_m10)";   echo "  [$wlabel] m-10 atomic ledger append:         $r"; check_probe_result "$wlabel" probe_m10 "$r"
-  r="$(probe_nm7)";   echo "  [$wlabel] N-m7 note through redact:          $r"; check_probe_result "$wlabel" probe_nm7 "$r"
-
-  local extra
-  for extra in "$@"; do
-    r="$($extra)"
-    echo "  [$wlabel] $extra:  $r"
-    check_probe_result "$wlabel" "$extra" "$r"
-  done
-
-  cd "$save_pwd" || true
-  T="$save_t"; HEAD7="$save_head7"
-  rm -rf "$wt"
-}
 
 if [ -n "$OLDCYCLE" ]; then
   run_wall_probes "3e200bb" "$OLDCYCLE"
@@ -2838,6 +3026,8 @@ if [ -n "$OLDCYCLE" ]; then
 fi
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh"
 
+fi # part replays
+if part walks && full; then # --- part walks (--quick skips it): stories 15 and 16, their scenarios and pinned replays
 # ============================================================================================
 # Story 15: one scenario per story 05 criterion (r2m3, r2m16, N-m3, r2m5/r2m6 x2, r2m7/N-m2 x2,
 # r2m4/N-m1 structural). The code is already on the branch (story 05); this proves it.
@@ -3209,6 +3399,8 @@ fi
 PIN_MUST_FAIL=""
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
 
+fi # part walks
+if part driver && full; then # --- part driver (--quick skips it): story 17 DRIVER semaphore and its pinned replay, the C5 status block
 # ============================================================================================
 # Story 17: one scenario per story 11 criterion - the DRIVER semaphore (ADR-004/K3): claim,
 # release, pause/resume release, --stamp on open-round/record-seat/judge/close-story. The code
@@ -3585,7 +3777,8 @@ last="$(printf '%s\n' "$out" | tail -1)"
 council resume docs/specs/c5dirty >/dev/null 2>&1
 
 
-fi # --quick: end of the skip opened at the reopen walk
+fi # part driver
+if part roster || part advance; then # --- the 0.18 section's shared fixture (ADR-013): parts roster and advance
 # ============================================================================================
 # 0.18 - Light VULYK (docs/adr/013-light-vulyk.md): the roster and the Client path, the sidecar
 # constitution, frozen seats, no-court rounds, carry-forward, reopen -> repair, the repair and
@@ -3613,6 +3806,8 @@ l18_client() { # l18_client <value> - rewrites the fixture constitution's Client
   git add -A && git commit -qm "constitution: Client path = $1" >/dev/null
 }
 l18_last() { printf '%s\n' "$1" | tail -1; } # l18_last <verb-output> -> its JSON line
+fi # the 0.18 fixture
+if part roster; then # --- part roster: the roster, the sidecar, frozen and carried seats, reopen -> repair, the repair verb
 
 echo "ADR-013 D1: the roster - Tier 1-2 review; Tier 3-4 opus review (a round without seats= reads the live roster)"
 for t in 1 2 3 4; do mk_open_spec "r18t$t" 2; set_tier "r18t$t" "$t"; mk_open_round "r18t$t" 1 >/dev/null; done
@@ -3865,6 +4060,8 @@ sed -n '/^## Requirements$/,/^## Findings$/p' docs/specs/r18rq/r18rq-02-repair-r
 out="$(bash scripts/trace-check.sh docs/specs/r18rq)"
 printf '%s' "$out" | expect "trace-check: the repair quote traces to the brief" "backward: 0 unfound + 0 storyless"
 
+fi # part roster
+if part advance; then # --- part advance: advance, --ingest, claim's clean-tree rule, close-story's idempotency and timeout
 echo "ADR-013 D2: advance - branch and open-round in one call, stop at the first agent boundary, key order fixed"
 mk_spec r18ad 2
 sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-26/; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18ad/plan.md
@@ -3996,7 +4193,9 @@ out="$(VULYK_VERIFY_TIMEOUT=3 bash scripts/cycle.sh close-story docs/specs/r18cs
   || { echo "::error::run budget: exit=$ex out=$out"; fail=1; }
 
 echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every pre-0.18 key"
-council status docs/specs/r18nc --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
+council status docs/specs/r18ad --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
+fi # part advance
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
+[ -s "$FAILS" ] && fail=1 # an expect() that ran on the right of a pipe
 exit $fail

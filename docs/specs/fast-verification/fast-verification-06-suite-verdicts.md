@@ -1,8 +1,8 @@
 ---
 story: fast-verification-06
 spec: fast-verification
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 3
@@ -69,5 +69,12 @@ memory/map/cycle.md `## Seats by tier and the verdict`, `## Staleness, PAUSE, se
 `bash tests/council.test.sh --part escalate`
 
 ## Implementation notes
+- scripts/cycle.sh: `judge` reads the first `^SUITE: TIMEOUT <N>s` body line of the stored review (budget from `budget <B>s`, else `${VULYK_SUITE_TIMEOUT:-540}`); new verdict row right after the REJECTED override -> ESCALATE `suite-timeout`, redacted note, `- suite:` line in `## Needs a human`.
+- scripts/cycle.sh: `escalate --reason` admits `suite-timeout` (case + three usage strings); `reopen` and `status` treat it like `env` (open-round, never repair).
+- record-seat needed no change: a PASS was already accepted regardless of body, a BLOCK still needs a tagged Critical/Major line.
+- .claude/agents/lead-review.md: suite rule rewritten (runs the row once under `VULYK_SUITE_TIMEOUT + 30`, ok/FAIL/TIMEOUT/none mapping), `SUITE:` as report line 3; the "minor, never a BLOCK" sentence removed.
+- .claude/commands/vulyk-build.md: the `escalated` print names the `suite-timeout` `- suite:` line.
+- docs/adr/001-cycle-state-contract.md: D1 (:141, :161), D2 (:63, :204, :205), D3, D4 row, D6 amended inline; dated 2026-10-26 amendment section with the rejected "rank it last" option. The file was already mixed CRLF/LF in the working tree; written back CRLF (text=auto normalises).
+- tests/council.test.sh part escalate: four cases (timeout ESCALATE, FAIL+[regression] RED, reopen/status open-round, escalate --reason). Disabling the new judge branch turned case (1) red (checked).
 
 ## Findings

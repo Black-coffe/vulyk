@@ -435,7 +435,7 @@ expect "vulyk-handoff: the dump injection has its allowed-tools prefix" 'granted
 expect_absent "vulyk-handoff: no injection lacks a grant" "NOT GRANTED" < "$T/grants"
 
 echo "--- memory-triage.sh lists private memory and writes nothing (rules-tree ask 11)"
-MC="$T/mtcfg"; MSLUG="$(git -C "$SRC" rev-parse --show-toplevel | sed 's#[:/\\]#-#g')"
+MC="$T/mtcfg"; MSLUG="$(git -C "$SRC" rev-parse --show-toplevel | LC_ALL=C.UTF-8 sed 's#[^0-9A-Za-z]#-#g')" # memory-triage.sh's own rule
 MD="$MC/projects/$MSLUG/memory"; mkdir -p "$MD"
 printf -- '---\nname: a\nmetadata:\n  type: feedback\n---\n\n# Push only after the remote check\nbody\n' > "$MD/fb-push.md"
 printf '# A loose note\n\ntype: not-frontmatter\n' > "$MD/loose.md"

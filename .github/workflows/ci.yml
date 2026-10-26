@@ -104,25 +104,21 @@ jobs:
           rm -f "$t/proj/scripts/top-model.sh"
           exit $fail
 
-  cycle:
-    name: the cycle's gates - human-check.sh and ship-check.sh through every stage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: synthetic spec -> six confirmations, stale on code, current on paperwork
-        run: bash tests/cycle.test.sh
-
-  council:
-    name: the council's verdict machinery - cycle.sh judge/escalate over hand-written fixtures
+  full-suite:
+    name: every tests/*.test.sh at once (tests/full-suite.sh, uncapped)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # council parts read history
 
-      - name: fixture rounds -> GREEN, RED, ESCALATE (ceiling/half/env), N/A, owner override
-        run: bash tests/council.test.sh
+      - uses: actions/setup-node@v4   # driver and e2e run the real Workflow driver
+        with:
+          node-version: 22
+
+      # Uncapped: a hosted runner has fewer cores than the review box the 540 s budget is tuned to.
+      - name: full suite - cycle, council, driver, e2e, solo, maintenance, telemetry, token-report, ...
+        run: VULYK_SUITE_TIMEOUT=0 bash tests/full-suite.sh
 
   handoff-window:
     name: handoff.py resolves the context window
@@ -133,36 +129,11 @@ jobs:
       - name: synthetic windows -> right denominator, right silence
         run: python3 tests/handoff-window.test.py .claude/hooks/handoff.py
 
-  driver:
-    name: the Workflow driver executes for real against stubbed agent/parallel/clerk
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: real parse, advance-based loop, stubbed loop scenarios
-        run: bash tests/driver.test.sh
-
-      - name: end to end - the real driver against the real cycle.sh in a fixture repo
-        run: bash tests/e2e.test.sh
-
-      - name: the solo path - Tier 1-2 advance loop the Queen runs herself
-        run: bash tests/solo.test.sh
-
-      - name: maintenance - context budget, due brief, evolve ledger
-        run: bash tests/maintenance.test.sh
-
   telemetry-inbox:
-    name: telemetry.sh suite + check every inbox bundle
+    name: check every telemetry inbox bundle
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: telemetry.sh test suite
-        run: bash tests/telemetry.test.sh
 
       - name: check every telemetry/inbox bundle (green with none present)
         run: |
@@ -173,19 +144,6 @@ jobs:
           else
             bash scripts/telemetry.sh check "${files[@]}"
           fi
-
-  token-report:
-    name: token-report.py over fixture transcripts (ADR-013 D8)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # Guarded: the suite arrives with scripts/token-report.py in the same release, and a tree
-      # without it must not turn this job red.
-      - name: token-report.test.sh (when present)
-        run: |
-          if [ -f tests/token-report.test.sh ]; then bash tests/token-report.test.sh
-          else echo "tests/token-report.test.sh not in this tree - skipped"; fi
 
   install-smoke:
     name: install.sh dry-run smoke test

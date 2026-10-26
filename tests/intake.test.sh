@@ -6,12 +6,32 @@
 # rules-tree-05: the explicit phrase, paste and dictation-tag handling, side-agent notes, the
 # `answer` mode (AskUserQuestion), and the install.sh --upgrade wiring of both on a scratch hive.
 #
-#   Usage: bash tests/intake.test.sh            # from the VULYK repo root
+#   Usage: bash tests/intake.test.sh                  # from the VULYK repo root, every part
+#          bash tests/intake.test.sh --part <name>    # functional (every assert but the medians) or latency
+#          bash tests/intake.test.sh --list-parts     # the part names, one per line
+# tests/full-suite.sh runs the functional part among its parallel jobs and the latency part alone, last.
 #
 # Latency runs against D:/YouTube_AI/docs/defects copied to a temp dir when that library exists
 # (the pilot's 19 real cards), else against the fixture library. Asserted <= 400 ms median; the
 # contract target is <= 200 ms and the measured median is printed either way.
 set -u
+PARTS="functional latency" PART=''
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list-parts) printf '%s
+' $PARTS; exit 0 ;;
+    --part)
+      PART="${2:-}"; shift
+      case " $PARTS " in
+        *" $PART "*) ;;
+        *) echo "unknown part '$PART' - parts:" >&2; printf '%s
+' $PARTS >&2; exit 1 ;;
+      esac ;;
+    *) echo "usage: bash tests/intake.test.sh [--part <name>] [--list-parts]" >&2; exit 2 ;;
+  esac
+  shift
+done
+part() { [ -z "$PART" ] || [ "$PART" = "$1" ]; } # `if part <name>; then ... fi` wraps each part
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 HOOK="$SRC/.claude/hooks/defect-intake.sh"
 T="$(mktemp -d)"
@@ -113,6 +133,7 @@ printf -- '---\r\nid: hiss\r\ntitle: Hiss on the track\r\nstatus: text\r\nkeys: 
   > "$HIVE/docs/defects/hiss.md"
 NOLIB="$T/nolib"; mkdir -p "$NOLIB/docs"
 
+if part functional; then # --- part functional: every case but the latency median
 # --- what fires -------------------------------------------------------------------------------
 echo "--- fires"
 o="$(run "$HIVE" '{"prompt":"at 10:04 the voice drops","session_id":"s"}')"
@@ -242,7 +263,28 @@ else echo "  skip  no python on PATH besides python3"; fi
 # --- install.sh --upgrade rewires the inject matcher and adds the answer hook (rules-tree-05) ---
 echo "--- install.sh --upgrade wiring"
 UP="$T/up"; mkdir -p "$UP"; export VULYK_CLAUDE="$T/no-claude"   # no run reaches the real claude binary
-if bash "$SRC/install.sh" "$UP" --telemetry off > "$T/up-install.out" 2>&1; then
+# The plain fresh install is the one tests/telemetry.test.sh caches (same dir, lock and layout; its install
+# part asserts the cache equals a real install): built once per run under VULYK_INSTALL_CACHE, else here.
+ICACHE="${VULYK_INSTALL_CACHE:-$T/install-cache}" w=0
+while [ ! -d "$ICACHE/tree" ] && [ "$w" -lt 300 ]; do
+  mkdir -p "$(dirname "$ICACHE")"
+  if mkdir "$ICACHE.lock" 2>/dev/null; then
+    echo "$$" > "$ICACHE.lock/pid"
+    if [ ! -d "$ICACHE/tree" ]; then
+      tmp="$ICACHE.build.$$"; rm -rf "$tmp"; mkdir -p "$tmp/tree"
+      bash "$SRC/install.sh" "$tmp/tree" --telemetry off > "$tmp/install.out" 2>&1
+      mv "$tmp" "$ICACHE"
+    fi
+    rm -rf "$ICACHE.lock"; break
+  fi
+  holder="$(cat "$ICACHE.lock/pid" 2>/dev/null)"
+  if { [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; } || { [ -z "$holder" ] && [ "$w" -ge 10 ]; }; then
+    mv "$ICACHE.lock" "$ICACHE.lock.stale.$$" 2>/dev/null && rm -rf "$ICACHE.lock.stale.$$"; continue
+  fi
+  sleep 1; w=$((w + 1))
+done
+[ -d "$ICACHE/tree" ] && cp -a "$ICACHE/tree/." "$UP/" && cp "$ICACHE/install.out" "$T/up-install.out"
+if [ -f "$UP/.claude/settings.json" ]; then
   F="$UP/.claude/settings.json"
   jq '.hooks.PreToolUse[0].matcher = "Edit|Write|MultiEdit|NotebookEdit|Bash"
       | .hooks.PostToolUse |= map(select(.matcher != "AskUserQuestion"))' "$F" > "$T/old.json" && mv "$T/old.json" "$F"
@@ -258,8 +300,9 @@ if bash "$SRC/install.sh" "$UP" --telemetry off > "$T/up-install.out" 2>&1; then
   bash "$SRC/install.sh" "$UP" --upgrade --telemetry off > "$T/up2.out" 2>&1
   expect_eq "a second upgrade leaves settings.json byte-identical" "1" "$(cmp -s "$T/up.before" "$F" && echo 1 || echo 0)"
 else bad "install.sh into a scratch hive failed"; sed 's/^/        /' "$T/up-install.out" | tail -5; fi
+fi # part functional
 
-# --- latency ----------------------------------------------------------------------------------
+if part latency; then # --- part latency: the 200 ms median, on the fixture library above
 echo "--- latency"
 LAT="$HIVE"; SRCNAME="fixture library"
 if [ -d "D:/YouTube_AI/docs/defects" ]; then
@@ -269,7 +312,9 @@ m="$(median_ms "$LAT" '{"prompt":"На 01:03 обрів слова после \"
 echo "  median defect-intake.sh: ${m} ms over 30 calls ($SRCNAME; target <= 200 ms)"
 if [ "$m" -le 200 ]; then ok "median latency <= 200 ms"
 else bad "median latency ${m} ms > 200 ms"; fi
+fi # part latency
 
+if part functional; then
 # --- --lexicon: the same word list as portable ERE, for litopys corrections (evolve-corrections-count)
 echo "--- --lexicon exports the lexicon as ERE lines"
 timeout 10 bash "$HOOK" --lexicon > "$T/lex.txt" < <(sleep 30)   # an open stdin that never ends: reading it would time out
@@ -286,6 +331,7 @@ import ast,re,sys
 s=open(sys.argv[1],encoding='utf-8').read()
 print(sum(len(ast.literal_eval(re.search(r'^%s = (\[.*\])' % k, s, re.M).group(1))) for k in ('STEMS', 'WORDS')))" "$HOOK")" ] \
   && ok "one ERE line per stem and phrase of the hook's own lists" || bad "the export and the hook's lists differ in length"
+fi # part functional
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
