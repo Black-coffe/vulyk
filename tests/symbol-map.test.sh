@@ -134,6 +134,25 @@ expect_eq "exactly one final ... N more line" "1" "$(grep -cE '^\.\.\. [0-9]+ mo
 if tail -n1 "$T/busy.out" | grep -qE '^\.\.\. [0-9]+ more'; then ok "the count line ends the output"
 else bad "the count line is not last: $(tail -n1 "$T/busy.out")"; fi
 
+echo "--- replay runner"
+RPY=""
+for p in python3 python; do
+  if command -v "$p" >/dev/null 2>&1 && "$p" -c 'import sys; sys.exit(sys.version_info[0] != 3)' >/dev/null 2>&1; then RPY="$p"; break; fi
+done
+winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
+tree python "$T/rp"
+printf '# story\n\n## Files\n- pkg/core.py\n' > "$T/rp/story.md"
+mkdir -p "$T/norepo"; printf '# story\n' > "$T/norepo/story.md"
+printf '{"cases": [{"story_file": "%s", "files": ["pkg/core.py"], "missed": ["tests/test_core.py", "docs/other.md"]}]}\n' \
+  "$(winpath "$T/rp/story.md")" > "$T/cases.json"
+printf '{"cases": [{"story_file": "%s", "files": ["pkg/core.py"], "missed": []}]}\n' \
+  "$(winpath "$T/norepo/story.md")" > "$T/cases-norepo.json"
+"$RPY" "$SRC/docs/specs/symbol-map/replay.py" "$(winpath "$T/cases.json")" > "$T/replay.out" 2>&1; RC=$?
+expect_eq "the replay exits 0" "0" "$RC"
+expect_eq "the replay ends with hits, misses and the fixture's noise" "replay: hits 1/2 noise 9 over 1 stories" "$(tail -n1 "$T/replay.out")"
+"$RPY" "$SRC/docs/specs/symbol-map/replay.py" "$(winpath "$T/cases-norepo.json")" > /dev/null 2>&1; RC=$?
+expect_eq "a story outside any git repo exits 2" "2" "$RC"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 echo "symbol-map.test.sh: $CHECKS checks, $FAILED failed"
