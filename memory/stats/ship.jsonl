@@ -24,3 +24,4 @@
 {"ts":"2026-10-22T08:31:31Z","spec":"court-setup","version":"0.34.0","head":"eb9326c","pack":"51f009a1a564","note":"merged to main, publish pending"}
 {"ts":"2026-10-25T13:43:25Z","spec":"horizon-intake","version":"0.35.0","head":"e6ae933","pack":"0584931ba18b","note":"merged to main, publish pending"}
 {"ts":"2026-10-26T19:06:09Z","spec":"fast-verification","version":"0.36.0","head":"08e0f77","pack":"18d641637f26","note":"merged to main, publish pending"}
+{"ts":"2026-10-26T21:19:53Z","spec":"symbol-map","version":"0.37.0","head":"9ca62ea","pack":"84b25466d1d3","note":"merged to main, publish pending"}

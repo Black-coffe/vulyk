@@ -101,3 +101,4 @@ is missing or unparsable.
 **Shipped:**
 **Checked:** ACCEPTED by Andrei, 2026-10-26, at 3f5fe9a - Принимаю, выпускай (Рекомендую) - narrow fix after GREEN round 2: replay.md per-file 6/13 + in-sample caveat, no code change
 **Checked:** ACCEPTED by Andrei, 2026-10-26, at ef21b7c - Принимаю, выпускай (Рекомендую) - planner line narrowed after GREEN (ef21b7c): exact lines weighed, only reached paths listed
+**Shipped:** 0.37.0, 2026-10-26, at 9ca62ea - merged to main, publish pending
