@@ -46,10 +46,13 @@ chasing them costs rounds and buys nothing.
   project's rules (`docs/defects/`) for those paths. Open a card folded into `+N cards` at
   `docs/defects/<ref>.md`.
 
-If your constitution's `## Commands` table names a full suite or build, run it once, prefixed with
-`timeout 540` where that command exists and with `timeout: 600000` on the Bash call. A suite that
-times out is a minor, never a BLOCK. Beyond that, run
-only the targeted command a finding needs, each with a timeout.
+If your constitution's `## Commands` table names a `Full suite / build` row, run it once per round as
+`timeout $((${VULYK_SUITE_TIMEOUT:-540} + 30)) <row>` with `timeout: 600000` on the Bash call, and
+measure its seconds. Report it on the `SUITE:` line: exit 0 is `ok`; exit 124 (either timeout) is
+`TIMEOUT` with the budget, and the verdict stays what the code earns (`judge` stops the round and asks
+the owner); any other non-zero is `FAIL` and `VERDICT: BLOCK`, with a `## Critical` `[regression]` line
+naming the suite and the failing check (red on the base too is still a BLOCK). No such row: `SUITE: none`.
+Beyond that, run only the targeted command a finding needs, each with a timeout.
 
 ## Verdict
 
@@ -76,6 +79,7 @@ worker that never saw this review.
 ```
 VERDICT: PASS | BLOCK
 MODEL: <your model id>
+SUITE: ok <N>s | FAIL <N>s | TIMEOUT <N>s budget <B>s | none
 
 ## Critical
 None.
@@ -87,7 +91,7 @@ None.
 
 Minors are optional: at most five, one line each.
 
-- Line 1 is exactly `VERDICT: PASS` or `VERDICT: BLOCK`.
+- Line 1 is exactly `VERDICT: PASS` or `VERDICT: BLOCK`; line 3 is the `SUITE:` line, one of its four forms.
 - `## Critical`, `## Major`, `## Minor` in that order; an empty one holds `None.`.
 - One finding per list line (`1. ` or `- `), tag and evidence on that same line. No `###` severity
   headings, no tables, no wrapped findings: a tag anywhere else is not an anchor.

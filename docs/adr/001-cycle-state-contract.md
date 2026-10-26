@@ -60,7 +60,7 @@ above stay as first written.
   index while seats run in parallel.
 - **D2** - `open-round` writes the ESCALATE row, `**Council:**` line and `## Needs a human`
   itself, idempotently, before exiting 6 at the ceiling (R5); `escalate` is a standalone verb
-  - `escalate <spec> [--commit] [--reason <ceiling|half|env|no-progress>] ["<note>"]` - for an open round
+  - `escalate <spec> [--commit] [--reason <ceiling|half|env|no-progress|suite-timeout>] ["<note>"]` - for an open round
   with seats missing (court removed, no seat precondition), and behaves as `judge` when
   nothing is missing; `close-story`'s precondition now names the `## Commands` rule that
   keeps an untrusted `## Verification` line from reaching a shell as anything but a known
@@ -123,6 +123,23 @@ Source: `docs/specs/ship-safety/plan.md` `## Plan deltas`, quoted verbatim:
 Invariant for `## Invariants created`: *the `**Branch:**` guard in `cycle.sh` cannot be
 disabled at runtime; fixtures conform to the guard, never the guard to fixtures.*
 
+### Amendment (2026-10-26) - spec `fast-verification`, story 06
+
+Source: `docs/specs/fast-verification/plan.md` `## Assumptions` and `## Contracts` (`Review report`).
+
+- **D3** - `lead-review` runs the `Full suite / build` row once per round under one budget
+  (`VULYK_SUITE_TIMEOUT`, default 540 s) and reports it on line 3, `SUITE:`. A failed suite is a
+  `BLOCK` anchored `[regression]` and goes to repair; it never escalates.
+- **D4** - a new escalation reason, `suite-timeout`: a stored review with a body line
+  `SUITE: TIMEOUT <N>s` is ESCALATE with the seconds and the budget in `note` and `## Needs a
+  human`. It ranks right after the owner's `REJECTED` and before `env`: a repair story cannot fix
+  the machine, and the owner asked to be stopped and asked with the time. Neither a timeout nor a
+  failure is ever GREEN. Rejected: ranking it last, so REDs are repaired first and the timeout
+  escalates only once all else is green - cheaper in rounds for a hung test, but it pays a
+  full-budget reviewer run every round for a question only the owner can answer.
+- **D2/D6** - `escalate --reason` admits `suite-timeout`; `reopen` after it goes to `open-round`,
+  and `status` never answers `repair` for it, as after `env`.
+
 Option 1. The loop state is a small set of committed files, each with exactly one writer,
 all written by `scripts/cycle.sh`; the verdict is computed by that script from labelled
 lines in seat reports; both drivers are a `while` loop over `cycle.sh status --json` that
@@ -138,7 +155,7 @@ parallel step (ADR-011).
 | `plan.md` `**Briefed:** via grill, <owner>, <date>` | `cycle.sh briefed` (called by `/vulyk-plan`) | stage 01+02 in autonomous mode; `**Approved:**` stays for the two-stop mode; `/vulyk-build` and `ship-check.sh` accept either | yes |
 | `plan.md` `**Branch:** vulyk/<slug>` | `cycle.sh branch` (called by `/vulyk-build` / the driver) | unchanged meaning | yes |
 | `plan.md` `**Council:** <GREEN\|RED\|ESCALATE\|STALE> round <N>, <date>, at <head>, pack <fp>[ - red: 2,5]` | `cycle.sh judge` / `escalate` | appended, never replaced, one line per round - a mirror of the ledger row, human-readable | yes |
-| `plan.md` `## Needs a human` | `cycle.sh escalate` | reason (`ceiling` / `half` / `env` / `no-progress`), one row per RED ask with its evidence across rounds, paths of the seat files | yes |
+| `plan.md` `## Needs a human` | `cycle.sh escalate` | reason (`ceiling` / `half` / `env` / `no-progress` / `suite-timeout` *(amended 2026-10-26, fast-verification-06)*), one row per RED ask with its evidence across rounds, for `suite-timeout` a `- suite: <N> s, budget <B> s` line, paths of the seat files | yes |
 | `plan.md` `**Checked:**` | `human-check.sh` (unchanged) | optional override: `ACCEPTED` outranks a RED/ESCALATE, `REJECTED` outranks a GREEN | yes |
 | `docs/specs/<slug>/council/round-N/ROUND` | `cycle.sh open-round` | **the open marker**: `head=<sha>` `pack=<fp>` `opened=<ts>` `court=<path>` `ceiling=<C>` (the tier ceiling - 1 / 2 / 3 for Tier 1 / 2 / 3-4 - plus that step per `reopen`) `tier=<1\|2\|3\|4>`; `mkdir` of the directory is the atomic act | yes |
 | `docs/specs/<slug>/council/REOPEN` | `cycle.sh reopen` | one line per cleared ESCALATE round, never rewritten: `round=<N> · <ts>`; `status` reads it to tell an ESCALATE row a human already reopened from one still waiting | yes |
@@ -158,7 +175,7 @@ parallel step (ADR-011).
  "head":"abc1234","pack":"1a2b3c4d5e6f","asks":7,"red":[2,5],"red_unevidenced":[],"review_asks":[],"na":1,
  "review":"PASS|BLOCK|ABSENT","haiku":"GREEN|RED|N/A|ABSENT","haiku_model":"<id or alias>",
  "sonnet":"…","sonnet_model":"…","opus":"…","opus_model":"…","attempts":4,
- "escalate":"ceiling|half|env|no-progress|null","note":"<one line, redacted>"}
+ "escalate":"ceiling|half|env|no-progress|suite-timeout|null","note":"<one line, redacted>"}
 ```
 
 *Amended 2026-09-23 (convergent-judge-02):* `review_asks` follows `red_unevidenced` - the
@@ -201,8 +218,8 @@ last stdout line is always one JSON object so no driver parses prose.
 | `open-round <spec> [--commit]` | Branch, and the checkout stands on it, else exit 2 naming both (*ship-safety*); all stories `done`/`blocked`; clean tree; `## Asks`; not paused; rounds that ended RED < ceiling *(amended 2026-09-24, convergent-judge-05; narrowed to RED rounds by convergent-judge-07)* | `mkdir round-N`, `ROUND`, opens the court, journal; at the ceiling, writes the ESCALATE row, `**Council:**` line, `## Needs a human` and the journal line itself (idempotently), then exits 6 `ESCALATE` instead |
 | `record-seat <spec> <N> <seat> [--model <id>] [--stamp <s>] [--file <path>] [< report]` | open round; not stale by `round_is_stale` | validates the report contract (D3); writes the seat file; exit 4 `MALFORMED` (kept as `attempt-K`) when a label is missing, an ask number is uncovered, a RED lacks evidence, a `review` `VERDICT: BLOCK` carries no list line under `## Critical` / `## Major` tagged `[ask N]`, `[regression]` or `[unanchored]` *(amended 2026-09-24, convergent-judge-07)*, or the report is **tainted** - contains `docs/specs/<slug>/plan.md`, `docs/specs/<slug>/journal.md`, `docs/specs/<slug>/council/`, the same three with `docs/specs/` omitted, or a story *file* - `<slug>-NN[-<title>].md` (with or without the `docs/specs/<slug>/` prefix) or `<slug>/<slug>-NN` (with or without `.md`); bare `plan.md`, `journal.md`, `council/`, another directory's `journal.md`, command-file names and a bare `<slug>-NN` token are not taint (ADR-011) |
 | `judge <spec> [--commit]` | four seat files present, or a seat exhausted its two attempts (`ABSENT`) | computes the verdict (D4), row -> line -> journal, removes the court |
-| `escalate <spec> [--commit] [--reason <ceiling\|half\|env\|no-progress>] ["<note>"]` | a standalone verb: an open round with seats missing (court removed, no seat precondition) | records the escalation - row, `**Council:** ESCALATE`, `## Needs a human`, journal; behaves as `judge` when nothing is missing |
-| `reopen <spec> "<owner's decision>" [--commit]` | last row is ESCALATE | appends the decision verbatim to `brief.md` `## Answers`, raises `ceiling` by the tier ceiling (1 / 2 / 3) in the next `ROUND`, journal *(amended 2026-09-24, convergent-judge-05)* |
+| `escalate <spec> [--commit] [--reason <ceiling\|half\|env\|no-progress\|suite-timeout>] ["<note>"]` | a standalone verb: an open round with seats missing (court removed, no seat precondition) | records the escalation - row, `**Council:** ESCALATE`, `## Needs a human`, journal; behaves as `judge` when nothing is missing |
+| `reopen <spec> "<owner's decision>" [--commit]` | last row is ESCALATE | appends the decision verbatim to `brief.md` `## Answers`, raises `ceiling` by the tier ceiling (1 / 2 / 3) in the next `ROUND`, journal *(amended 2026-09-24, convergent-judge-05)*; `next` is `repair`, or `open-round` after an `env` or `suite-timeout` row or a stale round *(amended 2026-10-26, fast-verification-06)* |
 | `pause <spec> ["why"]` / `resume <spec>` | - | creates / removes `PAUSE`; journal; `resume` prints `stale: true` if HEAD moved while paused |
 
 Every mutating verb checks `PAUSE` first and exits **3 `PAUSED`** without acting; `status`,
@@ -279,7 +296,11 @@ GREEN becomes N/A. `lead-review` keeps its own contract; `record-seat … review
 only `PASS`/`BLOCK` and stores the whole report. *(amended 2026-09-24, convergent-judge-07)* that
 contract includes the layout (`lead-review.md`): a `BLOCK` with no tagged list line under
 `## Critical` / `## Major` is MALFORMED - exit 4, kept as `review.attempt-K.md`, re-asked once like
-any seat; a `PASS` is accepted regardless of layout. An environmental failure (`EADDRINUSE`, a
+any seat; a `PASS` is accepted regardless of layout. *(amended 2026-10-26, fast-verification-06)* line 3
+of the review is `SUITE: ok <N>s` | `FAIL <N>s` | `TIMEOUT <N>s budget <B>s` | `none`: the reviewer's one
+run of the `Full suite / build` row under `timeout $((${VULYK_SUITE_TIMEOUT:-540} + 30))`. A `FAIL` is a
+`VERDICT: BLOCK` with a `## Critical` `[regression]` line; a `TIMEOUT` leaves the verdict to the code and is
+read by `judge` (D4). An environmental failure (`EADDRINUSE`, a
 missing service) is `N/A - why: environment: …`, never RED - a gate that names its own
 interference is believed, as `docs/pipeline.md` already says.
 
@@ -298,6 +319,7 @@ ESCALATE `env`/`half` rows never count), plus this one.
 |---|---|---|
 | `PAUSE` exists | none - `judge` exits 3 | `paused` |
 | `**Checked:** REJECTED` newer than this round's `ROUND` | RED (owner outranks council) | `repair` |
+| the stored review has a body line `^SUITE: TIMEOUT <N>s` *(amended 2026-10-26, fast-verification-06)* | ESCALATE, `escalate:"suite-timeout"`, `note:"full suite timed out: <N>s, budget <B>s"`, `## Needs a human` gets the `- suite:` line | `escalated` |
 | any required seat (C15) ABSENT, RED_e ∪ RED_u empty, review != BLOCK | ESCALATE, `escalate:"env"`, `note` names the absent seats | `escalated` |
 | \|RED_e\| >= max(2, ceil(A / 2)) | ESCALATE, `escalate:"half"` - the plan is wrong, rounds are not burnt | `escalated` |
 | review = BLOCK (anchored, see below), or RED_e ∪ RED_u non-empty, and (RED_e ∪ review_asks) ∩ (round N-1's `red` ∪ `review_asks`) non-empty, N-1's row RED | ESCALATE, `escalate:"no-progress"`, `## Needs a human` names the repeated asks | `escalated` |
@@ -369,7 +391,8 @@ only rounds that ended RED, so a GREEN round followed by a code commit never spe
 *(amended 2026-09-24, convergent-judge-07)*. After `ESCALATE` the owner has three exits, all on
 the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen "<decision>"`
 (the tier's ceiling again - one, two or three more RED rounds *(amended 2026-09-24, convergent-judge-07)* - the decision quoted into
-`## Answers`), or leaving the spec open.
+`## Answers`), or leaving the spec open. *(amended 2026-10-26, fast-verification-06)* `reopen` after a
+`suite-timeout` row exits with `next: open-round`, as after `env`: no ask is RED, the suite runs again.
 
 ## Consequences
 

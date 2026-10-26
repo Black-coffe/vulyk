@@ -2334,6 +2334,62 @@ out="$(council escalate docs/specs/esc4 2>&1)"; ex=$?
 [ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    PAUSE -> exit 3" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+# --- fast-verification-06: the reviewer's SUITE: line - a timeout escalates, a failure is RED ---
+
+write_review_suite() { # write_review_suite <round-dir> <PASS|BLOCK> <suite-line> [critical-line]
+  local rd="$1" v="$2" sl="$3" crit="${4:-None.}" n="${1##*/round-}"
+  {
+    printf '<!-- seat: review \xc2\xb7 model: test \xc2\xb7 round: %s \xc2\xb7 head: %s \xc2\xb7 pack: demo-pack \xc2\xb7 attempt: 1 \xc2\xb7 recorded: 2020-01-01T00:00:01Z -->\n' "$n" "$HEAD7"
+    printf 'VERDICT: %s\nMODEL: test\n%s\n\n## Critical\n%s\n## Major\nNone.\n## Minor\nNone.\n' "$v" "$sl" "$crit"
+  } > "$rd/review.md"
+}
+
+echo "judge: review PASS + SUITE: TIMEOUT 571s budget 540s -> ESCALATE suite-timeout, exit 6, the seconds in the note and ## Needs a human (fast-verification-06)"
+mk_open_spec suto1 2
+set_tier suto1 1
+rdst1="$(mk_open_round suto1 1)"
+write_review_suite "$rdst1" PASS 'SUITE: TIMEOUT 571s budget 540s'
+out="$(council judge docs/specs/suto1 2>&1)"; ex=$?
+[ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    suite timeout -> exit 6, next escalated" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+row="$(grep '"spec":"suto1"' memory/stats/council.jsonl | tail -1)"
+[ "$(printf '%s' "$row" | jq -r '.verdict + " " + .escalate')" = "ESCALATE suite-timeout" ] \
+  && printf '%s' "$row" | jq -e '.note == "full suite timed out: 571s, budget 540s"' >/dev/null \
+  && echo "  ok    row ESCALATE, escalate suite-timeout, note carries 571s and the budget" || { echo "::error::row: $row"; fail=1; }
+grep -qE '^\*\*Council:\*\* ESCALATE round 1,' docs/specs/suto1/plan.md && grep -qF 'reason: suite-timeout · round 1' docs/specs/suto1/plan.md \
+  && grep -qF -- '- suite: 571 s, budget 540 s - raise VULYK_SUITE_TIMEOUT or cut the suite' docs/specs/suto1/plan.md \
+  && grep -qF -- "- seats: $rdst1/" docs/specs/suto1/plan.md \
+  && echo "  ok    plan.md: Council ESCALATE, ## Needs a human with the reason, the suite line (571) and the seats line" \
+  || { echo "::error::plan.md: $(cat docs/specs/suto1/plan.md)"; fail=1; }
+
+echo "judge: review BLOCK anchored [regression] + SUITE: FAIL 300s -> RED, next repair (a failure never escalates)"
+mk_open_spec sufail1 2
+set_tier sufail1 1
+rdsf1="$(mk_open_round sufail1 1)"
+write_review_suite "$rdsf1" BLOCK 'SUITE: FAIL 300s' '1. tests/full-suite.sh [regression] full suite failed: tests/cycle.test.sh red - repro: `bash tests/full-suite.sh`'
+out="$(council judge docs/specs/sufail1 2>&1)"; ex=$?
+row="$(grep '"spec":"sufail1"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && printf '%s' "$row" | jq -e '.verdict == "RED" and .escalate == null' >/dev/null \
+  && echo "  ok    suite failure -> RED, next repair, no escalate" || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
+
+echo "reopen after a suite-timeout row -> next open-round; status never answers repair for it"
+git add -A && git commit -qm "suto1: judged suite-timeout" >/dev/null
+out="$(council reopen docs/specs/suto1 "owner: raised the budget" 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qF '"next":"open-round"' && echo "  ok    reopen -> next open-round" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(council status docs/specs/suto1 --json)"
+printf '%s' "$out" | jq -e '.next == "open-round"' >/dev/null 2>&1 && echo "  ok    status after the reopen -> open-round, not repair" \
+  || { echo "::error::status: $out"; fail=1; }
+
+echo "escalate --reason suite-timeout passes the usage check"
+mk_open_spec suesc1 2
+set_tier suesc1 1
+mk_open_round suesc1 1 >/dev/null
+out="$(council escalate docs/specs/suesc1 --reason suite-timeout "manual: suite over budget" 2>&1)"; ex=$?
+row="$(grep '"spec":"suesc1"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 6 ] && printf '%s' "$row" | grep -qF '"escalate":"suite-timeout"' && echo "  ok    escalate --reason suite-timeout -> exit 6, row reason suite-timeout" \
+  || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
+
 if full; then # --quick skips: the R15 court-reduction proof
 # --- open-round: the court's reduction is committed inside the worktree (R15/M-1,M-2) ---------
 
