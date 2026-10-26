@@ -89,7 +89,7 @@ is missing or unparsable.
 -->
 **Approved:** Andrei, 2026-10-26
 **Briefed:**
-**Branch:**
+**Branch:** vulyk/symbol-map
 **Checked:**
 **Council:**
 **Shipped:**

@@ -265,3 +265,5 @@
 {"v":1,"ts":"2026-10-26T12:28:31Z","code":"driver_relaunched","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"fast-verification","story":"","ref":"relaunch:fast-verification:7501ae8ca9d5dfc8"}
 {"v":1,"ts":"2026-10-26T13:04:26Z","code":"driver_relaunched","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"fast-verification","story":"","ref":"relaunch:fast-verification:87654065dedca511"}
 {"v":1,"ts":"2026-10-26T18:00:35Z","code":"driver_relaunched","value":1,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"","spec":"fast-verification","story":"","ref":"relaunch:fast-verification:893dcee2a4d97986"}
+{"v":1,"ts":"2026-10-26T19:29:00Z","code":"agent_empty","value":172,"threshold":0,"vulyk":"0.0.0","tier":0,"model":"","agent":"worker-code","spec":"","story":"","ref":"agent:agent-a10720bb11546d11e.jsonl"}
+{"v":1,"ts":"2026-10-26T19:29:03Z","code":"council_rounds_high","value":3,"threshold":3,"vulyk":"0.0.0","tier":3,"model":"","agent":"","spec":"fast-verification","story":"","ref":"council:fast-verification"}
