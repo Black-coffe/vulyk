@@ -29,6 +29,9 @@
 
 **After escalation (round 1, 2026-10-26).**
 > Owner 2026-10-26: fix the root, not the budget. (1) Shared test setup is built once and reused by every part, so a part costs its own tests, not the suite's fixture again - targets ask 1 (a part in one to two minutes) and ask 2 together. (2) full-suite.sh runs whole suites (not every part) at a bounded --jobs, and the wall-clock latency suites (inject, intake) run after the rest, outside the contended window. (3) CLAUDE.md back under the model-profile.test.sh size cap. (4) judge treats SUITE: FAIL like SUITE: TIMEOUT - never green regardless of VERDICT. Then measure the full suite under round conditions (another seat running) and record it; VULYK_SUITE_TIMEOUT stays 540.
+
+**After escalation (round 2, 2026-10-26).**
+> Owner 2026-10-26, round 2: one more repair, budget stays 540 s. Fix the four bugs (record-seat SUITE: none in a hive whose round-only full-suite row has no runnable command; SUITE line forms enforced at record-seat - a missing line or TIMEOUT without seconds is never green; maintenance.test.sh slug rule vs memory-triage.sh on a checkout path with a dot; a stale install_cache lock). Mark the Council, quick row round-only. Split tests/cycle.test.sh, the longest job (293 s under round load), into --part topics so the runner fits 540 s with the latency tail under round conditions.
 ## Asks
 
 1. Каждая строка проверки истории укладывается в минуту-две; telemetry и council получают быстрые части по темам, история берёт часть под свои файлы.
