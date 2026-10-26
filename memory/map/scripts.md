@@ -22,30 +22,34 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   [--spec S] [--since D] [--json]` (dedupes by `message.id`), `evolve-ledger.py <root> <verb>` (owns
   `memory/stats/evolve.jsonl`; `resolve`: tip in default branch = accepted, unmerged branch gone = rejected).
 - `.claude/hooks/session-start-brief.sh` - map line; `[VULYK] model profile not chosen`; bootstrap offer
-  while the Profile holds `<fill in`; `maintenance due: ...` when gc (any stub or >=10 raw learnings), evolve
-  (no `run` row or >7 days, newer `council.jsonl` row) or map (`memory/map/.stale`) is due. grep/awk only.
+  while the Profile holds `<fill in`; `maintenance due: ...` for gc, evolve or map (`memory/map/.stale`). grep/awk only.
 - `vulyk-update.sh` (-> `install.sh --upgrade`); `release-check.sh`; `state.sh`; `git-hooks/post-merge`.
 - `model-profile.sh` (ADR-020) - `opus-builds|sonnet-builds|economy` in `${CLAUDE_CONFIG_DIR:-~/.claude}/
-  vulyk-model-profile`; only `--set` writes. `--chosen`, `--role`, `--recommend`, `--explain`. Unknown =
-  `sonnet-builds`. `top-model.sh`: `VULYK_TOP_MODEL`, `TOP_MODEL =` pin, profile, `--plan`, opus; `--floor`
-  exit 1 prints `below floor` (`/vulyk-build` Hive step 1 gates on it).
-- `defects-index.sh [--check|--grep <regex>|--counts]` (0.32.0, ADR-021) - no arg writes
-  `docs/defects/INDEX.md` (generated; tables Never/Allowed/How-to). `--check` exit 1 + `index stale`;
-  `--grep` = `<ref>:<line>: <text>`, exit 1 no match; `--counts` = `cards n · never n · allowed n · how-to n ·
-  allowed repeats n` (`/vulyk-status` prints it). Exit 2 usage/no library/no python.
+  vulyk-model-profile`; only `--set` writes; unknown = `sonnet-builds`. `top-model.sh`: `VULYK_TOP_MODEL`,
+  `TOP_MODEL =` pin, profile, `--plan`, opus; `--floor` exit 1 prints `below floor`.
+- `defects-index.sh [--check|--grep <regex>|--counts]` (0.32.0, ADR-021) - no arg writes generated
+  `docs/defects/INDEX.md`. `--check` exit 1 + `index stale`; `--grep` = `<ref>:<line>: <text>`, exit 1 no
+  match; `--counts` (`/vulyk-status` prints it). Exit 2 usage/no library/no python.
 - `defects-check.sh [<arg>]` - cards `docs/defects/<id>.md` or `<area>/<id>.md`, parsed by
   `.claude/hooks/defects_lib.py` (exit 2 if missing). No arg = audit (each effective-`block` check must fail
   on every fixture else `BLIND`; each `passes:` fixture must pass the excepted never's check); `<arg>` = gate
   (every `block`+`check` card, non-zero = `RED`). Red only when new (`is_new`), else an `old ...` info line:
   `DEBT` (prohibitive cards only), `UNDELIVERABLE` (`cmd:`/`tool:` count as paths), `OVERLAP`, `ESCAPE`,
   `CONFLICT` (permissive vs prohibitive, overlapping `paths:`, no `exception:`), `EXCEPTION` (ref names no live
-  card, or a checked never with no `passes:`). Always red: `DUPLICATE` (id unique across folders), `INDEX`
-  (INDEX.md present and stale; absent = one `no index` info line). Allowed with >=2 dated lines = info
-  `allowed repeats`. Exit 0/1/2. `DEFECTS_DIR` overrides the library.
+  card, or a checked never with no `passes:`). Always red: `DUPLICATE`, `INDEX` (INDEX.md present and
+  stale; absent = `no index` info). Exit 0/1/2. `DEFECTS_DIR` overrides the library.
 - `memory-triage.sh [<memory-dir>]` - read-only lister behind `/vulyk-gc memory`: TSV `path<TAB>type<TAB>
-  first heading` per `*.md` bar `MEMORY.md`/`memory.md`; default `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/
-  <slug>/memory` (slug = root path, non-alnum -> `-`); absent = `no private memory: <dir>`, exit 0.
-  `--index-lines <MEMORY.md> <file>...` prints the index lines naming those files; exit 2 bad input.
+  first heading`; default dir under `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<slug>/memory`; absent =
+  `no private memory: <dir>`, exit 0. `--index-lines <MEMORY.md> <file>...`; exit 2 bad input.
+- `symbol-map.sh [--story <story.md>] [--scope <path>]... <file>...` (0.37.0) - picks python3|python (none: exit
+  2), execs `symbol-map.py` (stdlib; repo = `git ls-files`). Per input a `## <path>` block of sections `tests`,
+  `importers`, `imported`, `guard tests` (tests using os.walk/rglob/glob(/git ls-files/listdir/iterdir),
+  `path mentions`; each line `exact` (Python `ast` import, bash `source`/`.`, also via a re-exporting
+  `__init__`) or `textual` (stem as whole word, path as substring). Scope (inputs, `--scope`, story `## Files`
+  globs, the story) is never listed. Non-py/non-shell input: `! imports not parsed for <ext>`; unparseable
+  py: `! unparsed`. Section cap 5 + `... N more`; stdout <= 1536 bytes (symbol-map.py:22) ending in one
+  `... N more` line. Exit 0 / 1 an input missing (all still reported) / 2 usage, no python, not in git.
+  Reports only. Callers: recon (`vulyk-plan` step 3), `worker-code`, solo build (agents-and-commands.md).
 - `injection-check.sh <file>` - `check:` of `command-injection-follows-cwd`; exit 1 on a relative script path.
 - `redact.sh` (stdin mask); `handoff.py` `_REDACT_FALLBACK` mirrors it (extend both).
 - `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan`, `bundle`, `check`, `publish`, `inbox`.
@@ -59,19 +63,20 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `telemetry.sh` `ENUM`/`AGENTS` are append-only public contracts (`AGENTS` gained `drone-horizon`, 0.35.0,
   telemetry.sh:65; a removed agent moves to `RETIRED_AGENTS`, :78).
 
-## Tests (0.36.0)
+## Tests (0.37.0)
 - `tests/full-suite.sh [--jobs N] [--list]` - every `tests/*.test.sh` once, in parallel (`--jobs` = cores,
   cap 12); a suite answering `--list-parts` (telemetry, council, cycle) contributes one `--part` job per
   part. Latency checks (`inject`/`intake` `--part latency`) run alone at the end. Budget
   `VULYK_SUITE_TIMEOUT` (default 590 s; 0 = uncapped); output `ok|FAIL|TIMEOUT <N>s <cmd>` per job + a
   `full suite:` summary; exit 0 / 1 FAIL / 124 TIMEOUT (outranks) / 2 usage (full-suite.sh:19-29).
-  `tests/full-suite.test.sh` tests it. These are the `(round-only)` rows in CLAUDE.md `## Commands`; a story
+  `tests/full-suite.test.sh` tests it; `tests/symbol-map.test.sh` (CLAUDE.md `Symbol map` row, not round-only)
+  runs on copies of `tests/fixtures/symbol-map/{python,bash}` and `docs/specs/symbol-map/replay.py`, and rides
+  the suite as a plain job. These are the `(round-only)` rows in CLAUDE.md `## Commands`; a story
   verifies with a `--part` row instead. CI runs it as one job (ci.yml:107).
-- `telemetry` (17 parts), `council` (11), `cycle` (7), `inject`/`intake` (`functional`, `latency`) take
-  `--part <topic>` / `--list-parts`; unknown part exits 1. `VULYK_INSTALL_CACHE` = one pristine install copied.
+- `telemetry` (17 parts), `council` (11), `cycle` (7), `inject`/`intake` take `--part <topic>` /
+  `--list-parts`; unknown part exits 1. `VULYK_INSTALL_CACHE` = one pristine install copied.
 - `tests/maintenance.test.sh`: caps (`RULES_ALWAYS_MAX_LINES=40`), brief due logic, ledger,
-  `memory-triage.sh`. `tests/defects.test.sh`: gate + index. `tests/telemetry.test.sh`: `floorcheck`,
-  `tmrun`, installer hook wiring. `tests/model-profile.test.sh`.
+  `memory-triage.sh`. `tests/defects.test.sh`: gate + index. `tests/model-profile.test.sh`.
 
 ## install.sh - the upgrade contract
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution
@@ -81,19 +86,16 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   `INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*'` (an old narrower
   matcher is unwired and rewired); SessionStart `defects-inject.sh reset`; PostToolUse `defect-intake.sh`
   matcher `AskUserQuestion`, arg `answer`. `unwire_hook <event> <script>` ignores the matcher.
-- `install_mod vulyk-pulse@vulyk` (`claude plugin` CLI, `VULYK_CLAUDE` overrides; failure prints the commands,
-  returns 0); `retire_mod vulyk-watcher@vulyk`. Docs `docs/pulse.md`, tests `tests/mods.test.sh`.
-- `shippable` filter: `memory/stats/*.jsonl` and `.claude/vulyk-setup` (the hive's court setup, install.sh:79)
-  never ship; the installer deletes nothing of a host's.
-- `--upgrade` ends with `Offer: no .claude/vulyk-setup ...` when that file is absent and the host has
-  `package.json`, `pyproject.toml` or `requirements.txt` (install.sh:1546); it creates nothing.
+- `install_mod vulyk-pulse@vulyk` (`VULYK_CLAUDE` overrides the CLI; failure returns 0); `retire_mod
+  vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup` (install.sh:79).
+- `--upgrade` ends with `Offer: no .claude/vulyk-setup ...` when absent and the host has a manifest
+  (install.sh:1546); it creates nothing.
 
 ## Gotchas
 - `close-story`'s `## Commands` match, `record-seat`'s taint and `is_paperwork_path` are security-relevant
   string matches: keep them anchored. `close-story` probes `timeout 5 true` (Windows cmd `timeout`).
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - Retired framework files are removed unless edited (`retired_edited`).
-- Card parsing lives only in `defects_lib.py`; the gate, `defects-index.sh`, `defects-inject.sh` and
-  `defect-intake.sh` import it. Rules: `docs/wiki/rules-tree.md`.
+- Card parsing lives only in `defects_lib.py` (`docs/wiki/rules-tree.md`).
 
-last-verified: 2026-10-26 (v0.36.0)
+last-verified: 2026-10-26 (v0.37.0)

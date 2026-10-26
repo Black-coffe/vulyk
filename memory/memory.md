@@ -40,6 +40,7 @@
 - Pulse mod: `bash tests/mods.test.sh`
 - Cycle state contract tests, per part: `bash tests/cycle.test.sh --part <topic>` (`--list-parts`); council and telemetry alike
 - Driver contract / end to end: `bash tests/driver.test.sh`, `bash tests/e2e.test.sh`
+- Symbol map: `bash tests/symbol-map.test.sh`
 - Runner: `bash tests/full-suite.test.sh`
 - Full suite (round-only; every suite once, budget `VULYK_SUITE_TIMEOUT` 590 s): `bash tests/full-suite.sh`; no build step
 
