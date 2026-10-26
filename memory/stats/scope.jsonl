@@ -223,3 +223,4 @@
 {"ts":"2026-10-26T08:41:41Z","story":"fast-verification-04-round-only-gate","declared":5,"changed":1,"out_of_scope":0}
 {"ts":"2026-10-26T08:47:33Z","story":"fast-verification-03-full-suite-runner","declared":4,"changed":3,"out_of_scope":0}
 {"ts":"2026-10-26T08:52:40Z","story":"fast-verification-06-suite-verdicts","declared":5,"changed":5,"out_of_scope":0}
+{"ts":"2026-10-26T12:02:28Z","story":"fast-verification-07-repair-round-1","declared":8,"changed":5,"out_of_scope":0}

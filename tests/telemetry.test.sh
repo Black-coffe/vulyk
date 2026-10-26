@@ -8,26 +8,39 @@
 #          bash tests/telemetry.test.sh --part <name>    # one part; each pays the shared setup
 #          bash tests/telemetry.test.sh --list-parts     # the part names, one per line
 #
-# Parts (each stays near 3 minutes; install.sh runs are the cost): telemetry (cases 1-16, the litopys
-# offer, cases 17-20; no installs), install (the Telemetry row and its question), wiring (wire_hook,
-# council.jsonl exclusion), constitution (--constitution replace), library (defect library wiring,
-# ysk-offer), rg (wire_ripgrep), mods (pulse, retired watcher), upgrade (retired files, CRLF host
-# files), wrapper (hook wrapper: plain, bash -c, the repair), launchers (hook wrapper: node launcher,
-# mixed), edits (cases 21-22). install, wiring, library and mods share $TGT/$OWNSET through
+# Parts (each under two minutes alone; install.sh runs are the cost): telemetry (cases 1-8, 17-20;
+# no installs), scan (cases 9-16, the litopys offer), install (the Telemetry row, a marker-less
+# Profile), terminal (the hive's own updater, the question with and without a terminal), wiring
+# (wire_hook), ledger (council.jsonl exclusion), constitution (--constitution replace), library (defect
+# library wiring), ysk (ysk-offer), rg (wire_ripgrep), mods (pulse), watcher (the retired watcher),
+# upgrade (retired files), crlf (CRLF host files, defect library shipping), wrapper (hook wrapper:
+# plain, bash -c, the repair), launchers (hook wrapper: node launcher, mixed), edits (cases 21-22).
+# install, terminal, wiring, ledger, library, ysk, mods and watcher share $TGT/$OWNSET through
 # install_fixtures; with no --part every part runs, in file order.
+#
+# A plain fresh install (`install.sh <empty dir> --telemetry off` from $SRC) is a copy of one cached
+# install.sh output (fresh_install), built once per run: VULYK_INSTALL_CACHE names its directory
+# (tests/full-suite.sh points every part at one), else it lives under this run's mktemp -d. The
+# install part checks the cache equal to a real install with diff -r.
 #
 # Mirrors tests/council.test.sh: a throwaway git repo under mktemp -d, `expect()` on stdout
 # substrings, a non-zero exit on the first wrong answer, one summary line at the end.
 set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 PARTS="telemetry
+scan
 install
+terminal
 wiring
+ledger
 constitution
 library
+ysk
 rg
 mods
+watcher
 upgrade
+crlf
 wrapper
 launchers
 edits"
@@ -120,10 +133,33 @@ profile_rows() { awk '/VULYK:PROFILE:START/{f=1;next}/VULYK:PROFILE:END/{f=0}f' 
 treesum() { (cd "$1" && find . -type f -exec md5sum {} + | LC_ALL=C sort | md5sum); }
 same() { cmp -s "$1" "$2" && echo 1 || echo 0; }
 PRE_M='Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*'
-install_fixtures() { # $TGT (fresh install) and $OWNSET (an owner's own settings.json), once per run:
-  [ -n "${TGT:-}" ] && return 0   # the install part asserts on them first, the library part reads them
-  TGT="$T/hive-install"; mkdir -p "$TGT"
-  bash "$SRC/install.sh" "$TGT" --telemetry off > "$T/install.out" 2>&1
+ICACHE="${VULYK_INSTALL_CACHE:-$T/install-cache}"
+install_cache() { # $ICACHE/tree and its install.out, built once; a parallel part waits for the builder
+  local tmp w=0
+  [ -d "$ICACHE/tree" ] && return 0
+  mkdir -p "$(dirname "$ICACHE")"
+  if mkdir "$ICACHE.lock" 2>/dev/null; then
+    if [ ! -d "$ICACHE/tree" ]; then
+      tmp="$ICACHE.build.$$"; rm -rf "$tmp"; mkdir -p "$tmp/tree"
+      bash "$SRC/install.sh" "$tmp/tree" --telemetry off > "$tmp/install.out" 2>&1
+      mv "$tmp" "$ICACHE"
+    fi
+    rmdir "$ICACHE.lock"
+  else
+    while [ ! -d "$ICACHE/tree" ] && [ "$w" -lt 300 ]; do sleep 1; w=$((w + 1)); done
+  fi
+  [ -d "$ICACHE/tree" ] || { bad "install cache: $ICACHE/tree was never built"; exit 1; }
+}
+fresh_install() { # fresh_install <dir> - what `install.sh <dir> --telemetry off` writes into an empty <dir>
+  install_cache; mkdir -p "$1"; cp -a "$ICACHE/tree/." "$1/"
+}
+install_fixtures() { # [tgt] - $TGT (fresh install) and $OWNSET (an owner's own settings.json), each once
+  # per run; `tgt` skips $OWNSET, a real install. The install part asserts on them first, others read them.
+  if [ -z "${TGT:-}" ]; then
+    TGT="$T/hive-install"; fresh_install "$TGT"; cp "$ICACHE/install.out" "$T/install.out"
+  fi
+  [ "${1:-}" = tgt ] && return 0
+  [ -n "${OWNSET:-}" ] && return 0
   OWNSET="$T/hive-own-settings"; mkdir -p "$OWNSET/.claude"
   printf '{"permissions":{"allow":["Bash(ls:*)"]}}\n' > "$OWNSET/.claude/settings.json"
   bash "$SRC/install.sh" "$OWNSET" --telemetry off > "$T/ownset.out" 2>&1
@@ -433,7 +469,9 @@ cat "$SRC/CLAUDE.md" | expect "CLAUDE.md ## Commands names this suite, round-onl
   '| Anomaly telemetry contract tests (round-only) | `bash tests/telemetry.test.sh` |'
 cat "$SRC/CLAUDE.md" | expect "CLAUDE.md ## Commands names its parts" \
   '| Telemetry part | `bash tests/telemetry.test.sh --part <topic>` |'
+fi # telemetry
 
+if part_on scan; then
 # --- detectors (anomaly-telemetry-02) ---------------------------------------------------------
 # Story 02 adds the `scan` verb's five detectors, .claude/hooks/anomaly-scan.sh and
 # `handoff.py measure`. Its cases belong here, below this marker.
@@ -1087,7 +1125,7 @@ rm -f "$BRIEF/.claude/settings.json"
 printf '| Chronicle | none (declined 2026-09-27) |\n' >> "$BRIEF/CLAUDE.md"
 brief | expect_absent "declined in the Profile: no offer" "litopys (session chronicle plugin)"
 brief | expect "declined: the hive brief line stays" "[VULYK] no map yet"
-fi # telemetry
+fi # scan
 
 if part_on install; then
 # --- install and consent wiring (anomaly-telemetry-05) ----------------------------------------
@@ -1158,6 +1196,24 @@ cat "$T/up-check.out" | expect "--check reports the pending row" "would set     
 # a Profile block with no markers: warn, and never write the row (ADR-005: only exception is
 # the Telemetry row itself, and only inside existing markers)
 NOMARK="$T/hive-nomarkers"; mkdir -p "$NOMARK"
+bash "$SRC/install.sh" "$NOMARK" --telemetry off > "$T/nomark-install.out" 2>&1
+# NOMARK is a real plain fresh install: the cached one every fresh_install copies must equal it
+install_cache
+expect_eq "the cached install equals a real install (diff -r)" "" "$(diff -r "$NOMARK" "$ICACHE/tree" 2>&1)"
+sed -i '/VULYK:PROFILE:START/d; /VULYK:PROFILE:END/d' "$NOMARK/CLAUDE.md"
+NOMARK_BEFORE="$(cat "$NOMARK/CLAUDE.md")"
+VULYK_TELEMETRY=on bash "$SRC/install.sh" "$NOMARK" --upgrade > "$T/nomark-upgrade.out" 2>&1
+cat "$T/nomark-upgrade.out" | expect "marker-less Profile: warns and names the row and value" \
+  "warning: Profile block has no markers - not writing | Telemetry | on |; add the row by hand"
+expect_eq "marker-less Profile: the file is unchanged" "1" \
+  "$([ "$NOMARK_BEFORE" = "$(cat "$NOMARK/CLAUDE.md")" ] && echo 1 || echo 0)"
+fi # install
+
+if part_on terminal; then
+# The hive's own updater, then the Telemetry question with and without a terminal. The question
+# needs $TGT without its row, as the install part leaves it (the sed is a no-op in a whole run).
+install_fixtures tgt
+sed -i '/^| Telemetry |/d' "$TGT/CLAUDE.md"
 # An upgrade run through the hive's own scripts/vulyk-update.sh replaces that very script. An
 # in-place copy made the old process read the new file from its old offset and execute the
 # tail (upgrading a 0.17 hive to 0.18); install.sh now copies beside and renames over. The
@@ -1177,15 +1233,6 @@ expect_eq "an upgrade run from the hive's own updater lets that updater finish c
   "updater: after the upgrade|updater: done" "$(bash "$SELF/scripts/vulyk-update.sh" 2>&1 | paste -sd'|')"
 expect_eq "... and leaves the release's updater in place" "0" \
   "$(cmp -s "$SELFSRC/scripts/vulyk-update.sh" "$SELF/scripts/vulyk-update.sh"; echo $?)"
-
-bash "$SRC/install.sh" "$NOMARK" --telemetry off > "$T/nomark-install.out" 2>&1
-sed -i '/VULYK:PROFILE:START/d; /VULYK:PROFILE:END/d' "$NOMARK/CLAUDE.md"
-NOMARK_BEFORE="$(cat "$NOMARK/CLAUDE.md")"
-VULYK_TELEMETRY=on bash "$SRC/install.sh" "$NOMARK" --upgrade > "$T/nomark-upgrade.out" 2>&1
-cat "$T/nomark-upgrade.out" | expect "marker-less Profile: warns and names the row and value" \
-  "warning: Profile block has no markers - not writing | Telemetry | on |; add the row by hand"
-expect_eq "marker-less Profile: the file is unchanged" "1" \
-  "$([ "$NOMARK_BEFORE" = "$(cat "$NOMARK/CLAUDE.md")" ] && echo 1 || echo 0)"
 
 # A run with no controlling terminal: setsid is what makes /dev/tty unopenable even when the
 # suite itself is driven from a real one. Without setsid the case is only honest when this
@@ -1223,10 +1270,10 @@ else
   echo "  skip  terminal case: no util-linux \`script\` on PATH to drive a pseudo-terminal"
 fi
 
-fi # install
+fi # terminal
 
 if part_on wiring; then
-install_fixtures
+install_fixtures tgt
 # wire_hook / unwire_hook (ADR-013 D7): a 0.17-shaped settings.json - the scan on Stop, the
 # learnings hook on SessionEnd, no scan there yet - loses the two entries this release no longer
 # wants, gains the SessionEnd scan once, keeps everything else, and a second upgrade is
@@ -1268,7 +1315,10 @@ cat "$T/wire2.out" | expect_absent "and no second unwiring" "unwire"
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire3.out" 2>&1
 cat "$T/wire3.out" | expect_absent "--check reports no wiring for an already-wired hook" "would wire     .claude/settings.json -> SessionEnd"
 cat "$T/wire3.out" | expect_absent "--check reports no unwiring once it is done" "would unwire"
+fi # wiring
 
+if part_on ledger; then
+install_fixtures tgt
 # council.jsonl (convergent-judge-03): excluded as runtime; --upgrade strips the seeded
 # autonomous-cycle rows an older release shipped, and nothing else.
 echo "--- install.sh: council.jsonl exclusion and seeded-row cleanup"
@@ -1308,7 +1358,7 @@ expect_eq "a hive with its own autonomous-cycle spec: ledger untouched" "1" \
   "$(cmp -s "$T/ledger.before" "$LEDG" && echo 1 || echo 0)"
 rmdir "$TGT/docs/specs/autonomous-cycle"
 
-fi # wiring
+fi # ledger
 
 if part_on constitution; then
 # --- install.sh: --constitution replace (ADR-013 D7) ------------------------------------------
@@ -1379,8 +1429,7 @@ expect_eq "the sidecar's Telemetry row keeps its answer" "off" "$(rowval "$SC/CL
 cat "$T/sc.out" | expect "a release Profile row the hive lacks is named, not dropped silently" "this release's Profile has rows yours lacks: Browser MCP."
 
 # refused, before anything is written, when the markers are gone
-NMR="$T/hive-replace-nomarkers"; mkdir -p "$NMR"
-bash "$SRC/install.sh" "$NMR" --telemetry off > /dev/null 2>&1
+NMR="$T/hive-replace-nomarkers"; fresh_install "$NMR"
 sed -i '/VULYK:COMMANDS:START/d; /VULYK:COMMANDS:END/d' "$NMR/CLAUDE.md"
 S1="$(treesum "$NMR")"
 RC=0; bash "$SRC/install.sh" "$NMR" --upgrade --constitution replace > "$T/nmr.out" 2>&1 || RC=$?
@@ -1478,7 +1527,10 @@ cat "$T/ownset.out" | expect "an owner's settings.json: inject wired under its m
 cat "$T/ownset.out" | expect "an owner's settings.json: reset wired on SessionStart" \
   "wire           .claude/settings.json -> SessionStart: defects-inject.sh reset"
 expect_eq "... and all three land in the owner's file" "1 1 1" "$(defect_wiring "$OWNSET/.claude/settings.json")"
+fi # library
 
+if part_on ysk; then
+install_fixtures
 # ysk-offer (0.29.0): Claude Code's built-in "You should know" mod is offered to the user, never switched
 # on. No settings.json the installer writes or edits names its key; the SessionStart hook ysk-offer.sh
 # carries the offer, at most three times per machine and once a day, and stops at any key the user set.
@@ -1551,7 +1603,7 @@ expect_eq "... and none of them counted a showing" "0" "$([ -e "$YC/vulyk-ysk-of
 printf '| Owner language | `<fill in - ru, uk, en (default)>` |\n' > "$YH/CLAUDE.md"
 yo | jq -r .systemMessage | expect "an unfilled language row falls back to English" "Tip 1 of 3"
 
-fi # library
+fi # ysk
 
 if part_on rg; then
 # wire_ripgrep: on Windows, with a system rg on PATH, USE_BUILTIN_RIPGREP=0 goes to the hive's
@@ -1665,15 +1717,18 @@ expect_eq "a failed plugin install never fails the install" "0" "$rc"
 cat "$T/pi-fail.out" | expect "... it names both commands" "$PADD"
 cat "$T/pi-fail.out" | expect "... the second one too" "$PINST"
 rm -f "$T/cc-fail" "$T/cc-mkt"
+fi # mods
 
+if part_on watcher; then
+install_fixtures tgt
 # The retired watcher mod (0.29.0): its tree no longer ships, an upgrade removes the old one through
 # the manifest, and its user-scope install leaves the machine.
 WID='vulyk-watcher@vulyk'
 expect_eq "the watcher tree no longer ships" "0" "$([ -e "$TGT/.claude/mods/vulyk-watcher" ] && echo 1 || echo 0)"
 expect_eq "... but stays OWNED, so an upgrade may remove it" "1" "$(grep -c '^OWNED=.*\.claude/mods/vulyk-watcher' "$SRC/install.sh")"
 expect_eq "the root marketplace no longer lists it" "0" "$(jq -r '[.plugins[].name | select(. == "vulyk-watcher")] | length' "$SRC/.claude-plugin/marketplace.json" | tr -d '\r')"
-WR="$T/hive-retire"; mkdir -p "$WR"
-bash "$SRC/install.sh" "$WR" --telemetry off > /dev/null 2>&1
+WR="$T/hive-watcher"   # its own directory: in a whole run the upgrade part's $T/hive-retire already exists
+fresh_install "$WR"
 WF=".claude/mods/vulyk-watcher/hooks/hooks.json"
 mkdir -p "$WR/.claude/mods/vulyk-watcher/hooks"
 git -C "$SRC" show "v$(tr -d '[:space:]' < "$WR/.claude/vulyk-version"):$WF" > "$WR/$WF" 2>/dev/null \
@@ -1699,14 +1754,13 @@ expect_eq "a failed uninstall never fails the install" "0" "$rc"
 cat "$T/wr-fail.out" | expect "... it names the command" "claude plugin uninstall $WID --scope user"
 rm -f "$T/cc-list" "$T/cc-un-fail"
 
-fi # mods
+fi # watcher
 
 if part_on library; then
 # A hive whose owner arranged things: a quoted launcher with a redirect on a startup-only group,
 # the inject script already on SessionStart WITHOUT the argument, intake already wired, and an
 # own Bash guard on PreToolUse.
-DW="$T/hive-defect-wire"; mkdir -p "$DW"
-bash "$SRC/install.sh" "$DW" --telemetry off > /dev/null 2>&1
+DW="$T/hive-defect-wire"; fresh_install "$DW"
 cat > "$DW/.claude/settings.json" <<'EOF'
 {"hooks":{
  "SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/vulyk-update-check.sh\" 2>/dev/null || true"}]},
@@ -1761,8 +1815,7 @@ W='"'"$WRAPBIN/bash-wrap"'"'
 P='$CLAUDE_PROJECT_DIR/.claude/hooks/'
 wrapper_case() { # wrapper_case <name> <cmd-of vulyk-update-check.sh> <cmd-of anomaly-scan.sh> <intake> <inject> <reset>
   local name="$1" upd="$2" scan="$3" want_in="$4" want_inj="$5" want_rs="$6" d="$T/hive-wrap-$1" s got c
-  mkdir -p "$d"
-  bash "$SRC/install.sh" "$d" --telemetry off > /dev/null 2>&1
+  fresh_install "$d"
   s="$d/.claude/settings.json"
   jq -n --arg upd "$upd" --arg scan "$scan" --arg tmb "${upd/vulyk-update-check.sh/top-model-brief.sh}" \
     '{hooks:{SessionStart:[{hooks:[{type:"command",command:$upd},{type:"command",command:$tmb}]}],
@@ -1825,13 +1878,12 @@ cat "$T/bc2.out" | expect_absent "a run after the repair wires and repairs nothi
 
 fi # wrapper
 
-if part_on upgrade; then
+if part_on crlf; then
 # --- install.sh: CRLF host files (core.autocrlf=true) -----------------------------------------
 # The manifest read with its CRs never matched a shipped path, so every framework file came out
 # "remove" and real retirements were skipped; a CRLF .gitignore grew its block again every run.
 echo "--- install.sh: CRLF manifest and .gitignore"
-CR="$T/hive-crlf"; mkdir -p "$CR"
-bash "$SRC/install.sh" "$CR" --telemetry off > /dev/null 2>&1
+CR="$T/hive-crlf"; fresh_install "$CR"
 printf '#!/usr/bin/env bash\n' > "$CR/.claude/hooks/retired-old.sh"
 printf '.claude/hooks/retired-old.sh\n' >> "$CR/.claude/vulyk-manifest"
 sed -i 's/$/\r/' "$CR/.claude/vulyk-manifest" "$CR/.gitignore"
@@ -1894,7 +1946,7 @@ cat "$T/dh-up2.out" | expect_absent "a hive that has the file gets no offer" "Of
 bash "$DREL/install.sh" "$DH" --check > "$T/dh-check.out" 2>&1
 cat "$T/dh-check.out" | expect_absent "--check does not list the hive's .claude/vulyk-setup" ".claude/vulyk-setup"
 cat "$T/dh-check.out" | expect "--check lists hook state as a runtime skip" "would skip (runtime) .claude/state/defects/keys"
-fi # upgrade
+fi # crlf
 
 if part_on telemetry; then
 # --- case 17: inbox - distil, then stage the clear (anomaly-telemetry-07) ----------------------

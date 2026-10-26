@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs seats escalate ceilings replays walks driver advance" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs judge seats close escalate ceilings replays walks driver roster advance" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -193,6 +193,14 @@ write_review() { # write_review <round-dir> <PASS|BLOCK>
 }
 
 write_absent() { printf 'attempt 2, still nothing usable\n' > "$1/$2.attempt-2.md"; } # <round-dir> <seat>
+write_review_body() { # write_review_body <round-dir> <body...> - a BLOCK review with a given finding line
+  local rd="$1" n="${1##*/round-}"; shift
+  {
+    printf '<!-- seat: review \xc2\xb7 model: test \xc2\xb7 round: %s \xc2\xb7 head: %s \xc2\xb7 pack: demo-pack \xc2\xb7 attempt: 1 \xc2\xb7 recorded: 2020-01-01T00:00:01Z -->\n' "$n" "$HEAD7"
+    printf 'VERDICT: BLOCK\n'
+    printf '%s\n' "$@"
+  } > "$rd/review.md"
+}
 
 # --- pinned-commit replay toolkit (stories 14-17): defined here so each part that replays has it
 
@@ -535,17 +543,8 @@ printf '%s' "$row" | grep -q '"verdict":"RED"' && printf '%s' "$row" | grep -q '
 grep -qE '^\*\*Council:\*\* RED round 1,.* - red: 2$' docs/specs/red1/plan.md && echo "  ok    plan line ends '- red: 2'" \
   || { echo "::error::plan.md: $(grep '^\*\*Council:\*\*' docs/specs/red1/plan.md)"; fail=1; }
 
-if full; then # --quick skips: the anchored-BLOCK variants, the multi-round ceiling, no-progress and half walks
+if full; then # --quick skips: the anchored-BLOCK variants
 # --- judge: an anchored review BLOCK (convergent-judge-02, D4) ------------------------------
-
-write_review_body() { # write_review_body <round-dir> <body...> - a BLOCK review with a given finding line
-  local rd="$1" n="${1##*/round-}"; shift
-  {
-    printf '<!-- seat: review \xc2\xb7 model: test \xc2\xb7 round: %s \xc2\xb7 head: %s \xc2\xb7 pack: demo-pack \xc2\xb7 attempt: 1 \xc2\xb7 recorded: 2020-01-01T00:00:01Z -->\n' "$n" "$HEAD7"
-    printf 'VERDICT: BLOCK\n'
-    printf '%s\n' "$@"
-  } > "$rd/review.md"
-}
 
 echo "judge: review BLOCK anchored [ask 2], seats GREEN -> RED/repair, review_asks:[2]"
 mk_spec anch1 3
@@ -643,7 +642,10 @@ printf '{"ts":"2020-01-01T00:00:00Z","spec":"oldrow1","round":1,"verdict":"GREEN
 out="$(council status docs/specs/oldrow1 --json)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | jq -e '.review == "PASS"' >/dev/null 2>&1 \
   && echo "  ok    status reads a pre-review_asks row" || { echo "::error::oldrow1: exit=$ex out=$out"; fail=1; }
-
+fi # --quick: end of the anchored-BLOCK skip
+fi # part verbs
+if part judge; then # --- part judge: the ceiling, no-progress and half walks, ABSENT/N/A/REJECTED, journal, briefed, branch, git failures, court setup
+if full; then # --quick skips: the multi-round ceiling, no-progress and half walks
 # --- judge: three RED rounds hit the ceiling on the third -------------------------------------
 
 echo "judge: three RED rounds (a different ask each) escalate (ceiling) on the third, not the second"
@@ -773,7 +775,7 @@ out="$(council judge docs/specs/halffloor2b)"; ex=$?
 row="$(grep '"spec":"halffloor2b"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -qF '"escalate":"half"' && echo "  ok    A=2 both-red row escalate:half" || { echo "::error::row: $row"; fail=1; }
 
-fi # --quick: end of the judge-variant skip
+fi # --quick: end of the ceiling/no-progress/half skip
 # --- judge: three ABSENT seats -------------------------------------------------------------------
 
 echo "judge: every blind seat exhausted -> ESCALATE env; only the required one (opus) is ABSENT in the row"
@@ -1030,7 +1032,7 @@ out="$(VULYK_SETUP_TIMEOUT=2 council open-round docs/specs/csetup2 2>&1)"; ex=$?
   && echo "  ok    the timed-out court is removed, no round left" \
   || { echo "::error::left: $(ls -R docs/specs/csetup2/council .vulyk/court/csetup2 2>&1)"; fail=1; }
 git rm -q .claude/vulyk-setup && git commit -qm "fixture: drop vulyk-setup" >/dev/null
-fi # part verbs
+fi # part judge
 if part seats; then # --- part seats: record-seat (preconditions, MALFORMED, taint, evidence, review layout, --model, --file)
 # --- record-seat: preconditions (open round, HEAD match) -------------------------------------
 
@@ -1505,7 +1507,7 @@ out="$(council record-seat docs/specs/rfile1 1 haiku --file .vulyk/reports/empty
   || { echo "::error::--file empty: exit=$ex out=$out"; fail=1; }
 
 fi # part seats
-if part verbs; then # --- part verbs, continued: the PAUSE guard, pause/resume, close-story
+if part close; then # --- part close: the PAUSE guard, pause/resume, close-story
 # --- PAUSE guard: every mutating verb refuses before touching anything ------------------------
 
 echo "PAUSE: briefed, branch, record-seat, close-story, open-round, reopen all exit 3"
@@ -1862,7 +1864,7 @@ out="$(council open-round docs/specs/cstory6 --commit 2>&1)"; ex=$?
 [ -z "$(git status --porcelain)" ] && echo "  ok    tree is clean after both verbs" \
   || { echo "::error::tree dirty: $(git status --porcelain)"; fail=1; }
 
-fi # part verbs
+fi # part close
 if part escalate; then # --- part escalate: story 16 fixes, open-round, the escalate verb, review-ABSENT
 if full; then # --quick skips: the story 08 fix proofs (returned:, r2m2, LR31, r2m9)
 # --- story 16: the four story 08 fixes - cstoryr1..r4 (M3/ADR-006 returned: gate), r2m2 -------
@@ -3758,7 +3760,7 @@ council resume docs/specs/c5dirty >/dev/null 2>&1
 
 
 fi # part driver
-if part advance; then # --- part advance: the 0.18 section (ADR-013)
+if part roster || part advance; then # --- the 0.18 section's shared fixture (ADR-013): parts roster and advance
 # ============================================================================================
 # 0.18 - Light VULYK (docs/adr/013-light-vulyk.md): the roster and the Client path, the sidecar
 # constitution, frozen seats, no-court rounds, carry-forward, reopen -> repair, the repair and
@@ -3786,6 +3788,8 @@ l18_client() { # l18_client <value> - rewrites the fixture constitution's Client
   git add -A && git commit -qm "constitution: Client path = $1" >/dev/null
 }
 l18_last() { printf '%s\n' "$1" | tail -1; } # l18_last <verb-output> -> its JSON line
+fi # the 0.18 fixture
+if part roster; then # --- part roster: the roster, the sidecar, frozen and carried seats, reopen -> repair, the repair verb
 
 echo "ADR-013 D1: the roster - Tier 1-2 review; Tier 3-4 opus review (a round without seats= reads the live roster)"
 for t in 1 2 3 4; do mk_open_spec "r18t$t" 2; set_tier "r18t$t" "$t"; mk_open_round "r18t$t" 1 >/dev/null; done
@@ -4038,6 +4042,8 @@ sed -n '/^## Requirements$/,/^## Findings$/p' docs/specs/r18rq/r18rq-02-repair-r
 out="$(bash scripts/trace-check.sh docs/specs/r18rq)"
 printf '%s' "$out" | expect "trace-check: the repair quote traces to the brief" "backward: 0 unfound + 0 storyless"
 
+fi # part roster
+if part advance; then # --- part advance: advance, --ingest, claim's clean-tree rule, close-story's idempotency and timeout
 echo "ADR-013 D2: advance - branch and open-round in one call, stop at the first agent boundary, key order fixed"
 mk_spec r18ad 2
 sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-26/; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18ad/plan.md
@@ -4169,7 +4175,7 @@ out="$(VULYK_VERIFY_TIMEOUT=3 bash scripts/cycle.sh close-story docs/specs/r18cs
   || { echo "::error::run budget: exit=$ex out=$out"; fail=1; }
 
 echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every pre-0.18 key"
-council status docs/specs/r18nc --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
+council status docs/specs/r18ad --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
 fi # part advance
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"

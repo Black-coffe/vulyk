@@ -6,6 +6,14 @@
 # Jobs: every tests/*.test.sh as `bash tests/<x>.test.sh`; a suite that answers `--list-parts`
 # (telemetry, council) contributes one `--part <name>` job per part instead, so a later re-cut
 # needs no edit here. VULYK_SUITES (newline-separated commands) overrides the list - tests only.
+# The wall-clock latency suites (inject.test.sh, intake.test.sh: 200 ms medians) go last and start
+# only once every other job has ended, one at a time, outside the contended window.
+#
+# --jobs defaults to the core count capped at 12: at 28 parallel jobs the box's load pushed the
+# latency medians past their bound and cut 16 of 31 jobs at the budget (round 1, 2026-10-26); with
+# a council suite beside it, 8 jobs hit the budget at 540 s and 12 ended green at 421 s.
+# VULYK_INSTALL_CACHE is exported as a directory inside the logs dir: the parts that need a plain
+# fresh install copy one install.sh output built once per run (tests/telemetry.test.sh).
 #
 # VULYK_SUITE_TIMEOUT: the whole run's budget in seconds, default 540, 0 = uncapped. At the
 # budget running jobs are killed (`timeout`, set to what is left of the budget) and they and
@@ -35,6 +43,7 @@ done
 if [ -z "$JOBS" ]; then
   JOBS="$(nproc 2>/dev/null)"
   case "$JOBS" in ''|*[!0-9]*|0) JOBS=4 ;; esac
+  [ "$JOBS" -gt 12 ] && JOBS=12
 else
   case "$JOBS" in *[!0-9]*|0) echo "full-suite: --jobs needs a positive number, got '$JOBS'" >&2; exit 2 ;; esac
 fi
@@ -57,6 +66,12 @@ else
     fi
   done
 fi
+# the latency suites move to the end; FIRST_LATE is the index of the first of them
+is_late() { [[ "$1" =~ (^|[ /])(inject|intake)\.test\.sh( |$) ]]; }
+EARLY=() LATE=()
+for c in "${CMDS[@]}"; do if is_late "$c"; then LATE+=("$c"); else EARLY+=("$c"); fi; done
+CMDS=("${EARLY[@]}" "${LATE[@]}")
+FIRST_LATE=${#EARLY[@]}
 if [ "$LIST" -eq 1 ]; then printf '%s\n' "${CMDS[@]}"; exit 0; fi
 NJ=${#CMDS[@]}
 [ "$NJ" -gt 0 ] || { echo "full-suite: no jobs found" >&2; exit 2; }
@@ -66,6 +81,7 @@ TIMEOUT_OK=0
 command -v timeout >/dev/null 2>&1 && timeout 5 true </dev/null >/dev/null 2>&1 && TIMEOUT_OK=1
 [ "$BUDGET" -gt 0 ] && [ "$TIMEOUT_OK" -eq 0 ] && echo "full-suite: no working timeout - jobs run uncapped, over-budget ones are reported by their time" >&2
 LOGS="$(mktemp -d)"
+export VULYK_INSTALL_CACHE="$LOGS/install-cache"
 SECONDS=0
 declare -a PID STATE START   # STATE: pending | running | done
 for ((i = 0; i < NJ; i++)); do STATE[i]=pending; done
@@ -105,7 +121,9 @@ while :; do
   if [ "$over" -eq 1 ]; then
     while [ "$next" -lt "$NJ" ]; do report "$next" TIMEOUT 0; next=$((next + 1)); done
   fi
+  # a late job starts only when nothing else runs, so the latency suites run alone, in turn
   while [ "$running" -lt "$JOBS" ] && [ "$next" -lt "$NJ" ]; do
+    [ "$next" -ge "$FIRST_LATE" ] && [ "$running" -gt 0 ] && break
     start_job "$next"; next=$((next + 1)); running=$((running + 1))
   done
   for ((i = 0; i < next; i++)); do

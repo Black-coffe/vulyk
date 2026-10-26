@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # The full-suite runner's contract (tests/full-suite.sh), driven through VULYK_SUITES with stub
 # scripts: ok / FAIL / TIMEOUT lines, the summary, exit 0/1/124, the --jobs cap, the budget,
-# the uncapped modes and --list. No real suite runs here except the --list of the real tree.
+# the uncapped modes, --list, the capped default --jobs, the latency suites last and the shared
+# install cache. No real suite runs here except the --list of the real tree.
 #
-#   Usage: bash tests/full-suite.test.sh     # from anywhere, well under 30 s
+#   Usage: bash tests/full-suite.test.sh     # from anywhere, about 30 s
 set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 RUN="$SRC/tests/full-suite.sh"
@@ -124,6 +125,40 @@ expect "real list: telemetry by part" "bash tests/telemetry.test.sh --part telem
 expect "real list: council by part" "bash tests/council.test.sh --part verbs"
 printf '%s\n' "$OUT" | grep -qxE 'bash tests/(telemetry|council)\.test\.sh' \
   && { echo "::error::a split suite is also listed whole"; fail=1; } || echo "  ok    split suites are not listed whole"
+
+echo "== the default --jobs is the core count capped at 12"
+mkdir -p "$T/nproc28"; printf '#!/bin/sh\necho 28\n' > "$T/nproc28/nproc"; chmod +x "$T/nproc28/nproc"
+OUT="$(PATH="$T/nproc28:$PATH" VULYK_SUITE_TIMEOUT=540 VULYK_SUITES="bash $S/ok.sh" bash "$RUN" 2>&1)"; RC=$?
+code "28 cores -> exit 0" 0 "$RC"
+expect "28 cores run 12 jobs" "jobs 12"
+mkdir -p "$T/nproc3"; printf '#!/bin/sh\necho 3\n' > "$T/nproc3/nproc"; chmod +x "$T/nproc3/nproc"
+OUT="$(PATH="$T/nproc3:$PATH" VULYK_SUITE_TIMEOUT=540 VULYK_SUITES="bash $S/ok.sh" bash "$RUN" 2>&1)"
+expect "3 cores run 3 jobs" "jobs 3"
+
+echo "== the latency suites run last, alone, one at a time"
+L="$T/late"; mkdir -p "$L"
+printf 'sleep 2; : > "%s/early-done"\n' "$T" > "$L/early.sh"
+for n in inject intake; do
+  printf '[ -e "%s/early-done" ] || { echo "%s started beside another job"; exit 1; }\nmkdir "%s/late-lock" 2>/dev/null || { echo "%s overlap"; exit 1; }\nsleep 1\nrmdir "%s/late-lock"\n' \
+    "$T" "$n" "$T" "$n" "$T" > "$L/$n.test.sh"
+done
+LATE_SUITES="bash $L/inject.test.sh
+bash $L/intake.test.sh
+bash $L/early.sh"
+run 540 "$LATE_SUITES" --list
+[ "$OUT" = "bash $L/early.sh
+bash $L/inject.test.sh
+bash $L/intake.test.sh" ] && echo "  ok    --list puts the latency suites last" || { echo "::error::--list order: $OUT"; fail=1; }
+run 540 "$LATE_SUITES" --jobs 4
+code "latency suites after the rest, no overlap -> exit 0" 0 "$RC"
+line "inject ok" ok "bash $L/inject.test.sh"
+line "intake ok" ok "bash $L/intake.test.sh"
+LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+
+echo "== jobs share one install cache inside the logs dir"
+printf 'case "$VULYK_INSTALL_CACHE" in */install-cache) ;; *) echo "cache: [$VULYK_INSTALL_CACHE]"; exit 1 ;; esac\n' > "$S/cache.sh"
+run 540 "bash $S/cache.sh"
+code "VULYK_INSTALL_CACHE is exported to every job -> exit 0" 0 "$RC"
 
 echo "== bad usage"
 run 540 "bash $S/ok.sh" --jobs 0

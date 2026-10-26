@@ -165,6 +165,11 @@ fit - the run hit the 540 s budget at 541 s wall with 23 of 31 jobs ended, 4 kil
 wall was not measured; gap > 116 s. This says nothing about a real four-core machine beyond that run. Before the split: 13 suites at once 1070 s = telemetry
 alone (28 cores, Windows Git Bash, 2026-10-25). Untested on fewer cores before story 03's second run; on a machine that
 cannot fit the budget the round escalates `suite-timeout` with the time, see `## Assumptions`.
+Repair round 1 (story 07, 2026-10-26, 40 jobs, install cache, inject/intake last, same box): round conditions (whole
+`bash tests/council.test.sh` beside it) - default `--jobs` 12: wall 421 s, exit 0, slowest job `tests/cycle.test.sh`
+196 s; `--jobs 8`: exit 124 at 540 s (intake cut). Alone, default `--jobs` 12: wall 444 s, exit 0, slowest
+`tests/cycle.test.sh` 198 s. Gap between the two conditions: -23 s, inside run-to-run noise; against story 03's 425 s
+alone at 28 jobs: +19 s alone, -4 s beside.
 
 ## Descoped
 

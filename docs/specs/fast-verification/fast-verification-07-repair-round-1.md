@@ -1,7 +1,7 @@
 ---
 story: fast-verification-07
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 4
@@ -80,4 +80,9 @@ to fix the root, not the budget: `VULYK_SUITE_TIMEOUT` stays 540.
 - scripts/cycle.sh: judge turns any `SUITE: FAIL` review into BLOCK (note "review PASS with SUITE: FAIL"); record-seat rejects `SUITE: none` as MALFORMED when ## Commands has a round-only Full suite row (`full_suite_row_round_only`) (finding 4).
 - scripts/cycle.sh: `escalate_reruns_round` shared by status and reopen: suite-timeout goes to open-round only with no RED ask and no review BLOCK in the row, otherwise to repair (finding 5).
 - tests/council.test.sh (part escalate): PASS+SUITE: FAIL -> RED; SUITE: none vs SUITE: ok at record-seat; reopen of a suite-timeout+RED+BLOCK row -> repair. `--part escalate` green, 62 s alone.
-- Findings 2, 3, 6 not started: see Findings item 7.
+- Findings 2, 3, 6 done after ruling (a).
+- tests/telemetry.test.sh: `install_cache`/`fresh_install` (one `install.sh` output per run under `VULYK_INSTALL_CACHE` or the run's tmp, mkdir lock for parallel parts); plain fresh installs copy it; install part checks it with `diff -r` against a real install. Parts re-cut: + scan, terminal, ledger, ysk, watcher, crlf (16 parts). Installs into dirs with pre-seeded files (ysk, sidecar, rg, mods stubs) stay real: not plain.
+- tests/council.test.sh: + judge, close, roster parts (11); `write_review_body` moved to shared setup; roster/advance share the 0.18 fixture; the last-seven-keys check reads r18ad (r18nc lives in roster).
+- tests/full-suite.sh: default `--jobs` = cores capped at 12 (8 measured exit 124 at 540 s under round load); inject/intake last, each alone; exports `VULYK_INSTALL_CACHE`. full-suite.test.sh covers all three.
+- Part times alone (one at a time, 2026-10-26): council verbs 47, judge 63, seats 87, close 31, escalate 66, ceilings 82, replays 112, walks 107, driver 78, roster 89, advance 58 s; telemetry telemetry 37, scan 81, install 80, terminal 55, wiring 61, ledger 63, constitution 111, library 63, ysk 110, rg 76, mods 102, watcher 65, upgrade 53, crlf 65, wrapper 106, launchers 70, edits 98 s (most measured with the other suite's loop beside; the three over 115 s re-timed truly alone).
+- Full-suite measurements in plan.md `## Integration gate` (finding 6): 421 s beside a council run, 444 s alone, both exit 0.
