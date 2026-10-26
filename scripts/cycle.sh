@@ -523,6 +523,19 @@ json_field() { # json_field <json-line> <key> - a flat top-level string or numbe
   fi
 }
 
+escalate_reruns_round() { # escalate_reruns_round <council-row> -> 0 iff a reopened ESCALATE row
+  # goes to a fresh round, not to repair: `env` (the round itself failed), or `suite-timeout` with
+  # nothing else red - no RED ask, evidenced or not, and no review BLOCK (fast-verification-07).
+  # status and reopen both route through this.
+  case "$(json_field "$1" escalate)" in
+    env) return 0 ;;
+    suite-timeout)
+      [ -z "$(json_num_array "$1" red | tr -d ' ')$(json_num_array "$1" red_unevidenced | tr -d ' ')$(json_num_array "$1" review_asks | tr -d ' ')" ] \
+        && [ "$(json_field "$1" review)" != BLOCK ] ;;
+    *) return 1 ;;
+  esac
+}
+
 json_str_array() { # json_str_array "a b c" -> "a","b","c"  (no embedded spaces per element)
   local s="$1" out="" x
   for x in $s; do out="${out:+$out,}\"$x\""; done
@@ -728,11 +741,11 @@ cmd_status() {
   elif [ "$NEWEST_VERDICT" = "RED" ] && ! round_is_stale "$SPEC" "$NEWEST_ROUND"; then
     NEXT="repair"
   elif [ "$NEWEST_VERDICT" = "ESCALATE" ] \
-    && case "$(json_field "$NEWEST" escalate)" in env|suite-timeout) false ;; *) true ;; esac \
+    && ! escalate_reruns_round "$NEWEST" \
     && ! round_is_stale "$SPEC" "$NEWEST_ROUND"; then
     # ADR-013 D3: a reopened ESCALATE (the branch above let it through) is a verdict the owner
     # wants repaired - ceiling, half and no-progress rows name real RED asks. Only `env` (the
-    # round itself failed), `suite-timeout` (the full suite never finished, fast-verification-06)
+    # round itself failed), a `suite-timeout` with nothing else red (fast-verification-06/07)
     # and a stale round fall through to a fresh round.
     NEXT="repair"
   else
@@ -1134,6 +1147,12 @@ ASKS
       fi
     fi
     [ -n "$review_v" ] || review_v="BLOCK" # an unreadable stored report stays a block
+    # fast-verification-07: a failed full suite is never green, whatever the VERDICT line says:
+    # `SUITE: FAIL` is the reviewer's BLOCK (a [regression]), anchored or not.
+    if sed '1d' "$rf" 2>/dev/null | grep -qE '^SUITE: FAIL'; then
+      [ "$review_v" = "BLOCK" ] || review_note="review PASS with SUITE: FAIL"
+      review_v="BLOCK"
+    fi
   elif is_required_seat review "$REQUIRED"; then
     review_v="ABSENT"
   else
@@ -1585,6 +1604,21 @@ ask_evidenced_of() { # ask_evidenced_of <ask-line> -> "1" iff run:+saw: or url:+
   esac
 }
 
+full_suite_row_round_only() { # full_suite_row_round_only <constitution> -> 0 iff its ## Commands
+  # has a row whose Purpose cell names the full suite and carries `round-only` (fast-verification-07).
+  [ -f "$1" ] || return 1
+  awk '
+    /^## Commands[[:space:]]*$/ { inblock=1; next }
+    /^##[[:space:]]/            { if (inblock) exit }
+    inblock && /^\|/ {
+      line = $0; sub(/^\|/, "", line); i = index(line, "|"); if (!i) next
+      p = tolower(substr(line, 1, i - 1))
+      if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) { found = 1; exit }
+    }
+    END { exit !found }
+  ' "$1"
+}
+
 cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <report> <model-opt> <head>
   local SPEC="$1" RD="$2" N="$3" ATTEMPT="$4" REPORT="$5" MODEL_OPT="$6" HEAD="$7"
   local RPACK; RPACK="$(round_field "$RD" pack)"
@@ -1603,6 +1637,16 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
   # is not validated further here (ask range, regression claim: judge's business).
   if [ "$verdict" = BLOCK ] && ! review_blocking_lines_text "$REPORT" | grep -qE '\[ask [0-9]+\]|\[regression\]|\[unanchored\]'; then
     local why="review: BLOCK has no tagged finding - no list line under ## Critical / ## Major carries [ask N], [regression] or [unanchored]"
+    write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
+    echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
+    emit false record-seat 4 error "MALFORMED: $why"
+    exit 4
+  fi
+
+  # fast-verification-07: `SUITE: none` means "no full-suite row"; when the constitution has a
+  # round-only one, the reviewer skipped the run - MALFORMED, re-asked, never judged.
+  if printf '%s\n' "$REPORT" | grep -qE '^SUITE: none' && full_suite_row_round_only "$(constitution_file "$ROOT")"; then
+    local why="review: SUITE: none, but ## Commands has a round-only Full suite row - run it and report its SUITE: line"
     write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
     echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
     emit false record-seat 4 error "MALFORMED: $why"
@@ -2570,8 +2614,9 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
   # decided about. `env` means the round itself failed, and a stale round is judged again
   # first; both re-run the round instead. `status` applies the same rule from disk.
   local REOPEN_NEXT="repair"
-  # fast-verification-06: `suite-timeout` names no RED ask either - the suite is run again.
-  case "$(json_field "$NEWEST" escalate)" in env|suite-timeout) REOPEN_NEXT="open-round" ;; esac
+  # fast-verification-06/07: a `suite-timeout` with nothing else red re-runs the suite; one
+  # whose row also holds a RED ask or a review BLOCK goes to repair.
+  escalate_reruns_round "$NEWEST" && REOPEN_NEXT="open-round"
   if round_is_stale "$SPEC" "$N"; then
     REOPEN_NEXT="open-round"
   fi

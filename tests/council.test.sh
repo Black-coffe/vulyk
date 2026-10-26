@@ -2372,6 +2372,34 @@ row="$(grep '"spec":"sufail1"' memory/stats/council.jsonl | tail -1)"
 [ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' && printf '%s' "$row" | jq -e '.verdict == "RED" and .escalate == null' >/dev/null \
   && echo "  ok    suite failure -> RED, next repair, no escalate" || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
 
+echo "judge: review PASS + SUITE: FAIL 300s -> never GREEN: RED, next repair, review BLOCK (fast-verification-07)"
+mk_open_spec sufail2 2
+set_tier sufail2 1
+rdsf2="$(mk_open_round sufail2 1)"
+write_review_suite "$rdsf2" PASS 'SUITE: FAIL 300s'
+out="$(council judge docs/specs/sufail2 2>&1)"; ex=$?
+row="$(grep '"spec":"sufail2"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' \
+  && printf '%s' "$row" | jq -e '.verdict == "RED" and .review == "BLOCK" and (.note | contains("SUITE: FAIL"))' >/dev/null \
+  && echo "  ok    PASS + SUITE: FAIL -> RED, review BLOCK, the note names SUITE: FAIL" || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
+
+echo "record-seat review: SUITE: none while ## Commands has a round-only Full suite row -> MALFORMED, exit 4; SUITE: ok is recorded (fast-verification-07)"
+printf '| Full suite / build (round-only) | `bash tests/no-such-runner.sh` |\n' >> CLAUDE.md
+git add -A && git commit -qm "fixture: a round-only full-suite row" >/dev/null
+mk_spec sunone1 2
+rdsn1="$(mk_open_round sunone1 1)"
+out="$(printf 'VERDICT: PASS\nMODEL: test\nSUITE: none\n' | council record-seat docs/specs/sunone1 1 review 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'SUITE: none' && [ ! -f "$rdsn1/review.md" ] && [ -f "$rdsn1/review.attempt-1.md" ] \
+  && echo "  ok    SUITE: none with a round-only full-suite row -> exit 4, kept as attempt-1, not recorded" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+mk_spec suok1 2
+rdso1="$(mk_open_round suok1 1)"
+out="$(printf 'VERDICT: PASS\nMODEL: test\nSUITE: ok 300s\n' | council record-seat docs/specs/suok1 1 review 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -f "$rdso1/review.md" ] && echo "  ok    SUITE: ok with the same row -> recorded, exit 0" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+grep -v 'no-such-runner' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+git add -A && git commit -qm "fixture: drop the round-only full-suite row" >/dev/null
+
 echo "reopen after a suite-timeout row -> next open-round; status never answers repair for it"
 git add -A && git commit -qm "suto1: judged suite-timeout" >/dev/null
 out="$(council reopen docs/specs/suto1 "owner: raised the budget" 2>&1)"; ex=$?
@@ -2379,6 +2407,24 @@ out="$(council reopen docs/specs/suto1 "owner: raised the budget" 2>&1)"; ex=$?
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 out="$(council status docs/specs/suto1 --json)"
 printf '%s' "$out" | jq -e '.next == "open-round"' >/dev/null 2>&1 && echo "  ok    status after the reopen -> open-round, not repair" \
+  || { echo "::error::status: $out"; fail=1; }
+
+echo "reopen after a suite-timeout row that also holds a RED ask and a review BLOCK -> next repair, status and repair agree (fast-verification-07)"
+mk_open_spec suto2 2
+set_tier suto2 3
+rdst2="$(mk_open_round suto2 1)"
+write_seat "$rdst2" opus RG
+write_review_suite "$rdst2" BLOCK 'SUITE: TIMEOUT 541s budget 540s' '1. tests/full-suite.sh [ask 2] the runner misses the budget - repro: `bash tests/full-suite.sh`'
+out="$(council judge docs/specs/suto2 2>&1)"; ex=$?
+row="$(grep '"spec":"suto2"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 6 ] && printf '%s' "$row" | jq -e '.escalate == "suite-timeout" and .review == "BLOCK" and .red == [1]' >/dev/null \
+  && echo "  ok    judged ESCALATE suite-timeout, the row keeps red [1] and the BLOCK" || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
+git add -A && git commit -qm "suto2: judged suite-timeout with RED" >/dev/null
+out="$(council reopen docs/specs/suto2 "owner: fix the root" 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qF '"next":"repair"' && echo "  ok    reopen -> next repair" \
+  || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(council status docs/specs/suto2 --json)"
+printf '%s' "$out" | jq -e '.next == "repair"' >/dev/null 2>&1 && echo "  ok    status after the reopen -> repair" \
   || { echo "::error::status: $out"; fail=1; }
 
 echo "escalate --reason suite-timeout passes the usage check"

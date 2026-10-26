@@ -172,6 +172,8 @@ cannot fit the budget the round escalates `suite-timeout` with the time, see `##
 
 ## Plan deltas
 
+- 2026-10-26, story 07 NEEDS_CONTEXT, Queen ruling (a): the repair premise "shared setup is the cost" came from a seat's reading, not a measurement; the worker measured it at 0.5-0.7 s. The cost is repeated `install.sh` runs (16-21 s each, 5-12 per telemetry part). Within the owner's "fix the root, not the budget": keep parts in the runner, cache one pristine `install.sh` output per run (fixtures copy it, checked by `diff -r`), split the parts still over two minutes, run parts at a bounded default `--jobs`, latency suites after the rest. Finding 3's "whole suites" clause is dropped: whole suites cannot fit 540 s. Rejected: (b) a faster `install.sh` (product code, outside this spec), (c) accepting parts over two minutes (contradicts ask 1 and the owner's choice).
+
 <!--
 The lines below are the cycle's confirmation markers (docs/cycle.md); each placeholder is replaced by
 the command or script that owns it, and scripts/ship-check.sh reads them all.
