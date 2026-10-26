@@ -1,8 +1,8 @@
 ---
 story: fast-verification-03
 spec: fast-verification
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-test
 wave: 2
@@ -63,5 +63,16 @@ memory/map/scripts.md `## Key contracts` (exit codes), `## Gotchas` (the `timeou
 `git ls-files '*.sh' | xargs -n1 bash -n && bash tests/full-suite.test.sh`
 
 ## Implementation notes
+- Runner and contract test came from the dead run's wip commit c4dc7c2; kept as is except the test. The old budget
+  scenario put the "unstarted" job behind a FAIL that freed its slot at 0 s, so it started before the budget: split
+  into hang+FAIL (`--jobs 2`, exit 124) and hang+queued (`--jobs 1`, never starts). Per-job seconds are matched as
+  `<N>s` (a job can cross a second boundary). Mutations watched failing: 1 outranking 124, no `timeout` kill.
+- CI: one `full-suite` job (fetch-depth 0, node 22, `VULYK_SUITE_TIMEOUT=0`) replaces cycle, council, driver
+  (driver/e2e/solo/maintenance), the telemetry suite step and token-report; the inbox-bundle check stays in
+  `telemetry-inbox`. YAML parsed with PyYAML locally (no actionlint on this box).
+- Measurements (plan.md `## Integration gate`): default 28 jobs 425 s; `--jobs 4` hit the 540 s budget.
+- Not the runner's, seen in both runs: `council --part verbs` fails on wave-mate 04's wip test (scope-check names
+  `CLAUDE.vulyk.md`); `model-profile` fails on CLAUDE.md 7165 B > 7162 B (story 01). In the 28-job run only,
+  inject/intake fail their 200 ms latency medians (360-444 ms under load); both pass at `--jobs 4`.
 
 ## Findings

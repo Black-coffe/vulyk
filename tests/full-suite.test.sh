@@ -22,6 +22,10 @@ reject() { # reject <label> <needle>   (judges $OUT)
 code() { # code <label> <want> <got>
   if [ "$2" = "$3" ]; then echo "  ok    $1"; else echo "::error::$1 - exit $3, want $2"; fail=1; fi
 }
+line() { # line <label> <verdict> <command> - a `<verdict> <N>s <command>` line, any N (seconds round)
+  if printf '%s\n' "$OUT" | sed -E 's/^(ok|FAIL|TIMEOUT) [0-9]+s /\1 Ns /' | grep -qxF -- "$2 Ns $3"; then echo "  ok    $1"
+  else echo "::error::$1 - expected '$2 <N>s $3' in:"; printf '%s\n' "$OUT" | sed 's/^/        /'; fail=1; fi
+}
 run() { # run <VULYK_SUITE_TIMEOUT> <suites> [runner args...] - sets OUT and RC
   local b="$1" s="$2"; shift 2
   OUT="$(VULYK_SUITE_TIMEOUT="$b" VULYK_SUITES="$s" bash "$RUN" "$@" 2>&1)"; RC=$?
@@ -40,7 +44,7 @@ echo "== all ok"
 run 540 "bash $S/ok.sh
 bash $S/ok.sh"
 code "all ok -> exit 0" 0 "$RC"
-expect "an ok line per job" "ok 0s bash $S/ok.sh"
+line "an ok line per job" ok "bash $S/ok.sh"
 expect "summary line" "full suite: 2 ok, 0 failed, 0 timed out, wall "
 expect "summary names budget and jobs" "s, budget 540s, jobs "
 reject "logs removed on exit 0" "logs: "
@@ -49,7 +53,7 @@ echo "== one failing"
 run 540 "bash $S/ok.sh
 bash $S/bad.sh"
 code "a FAIL -> exit 1" 1 "$RC"
-expect "FAIL line" "FAIL 0s bash $S/bad.sh"
+line "FAIL line" FAIL "bash $S/bad.sh"
 expect "tail of the failed log" "fail-line-30"
 expect "tail reaches 20 lines back" "fail-line-11"
 reject "tail stops at 20 lines" "fail-line-10"
@@ -58,21 +62,27 @@ LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"
 if [ -n "$LOGDIR" ] && [ -d "$LOGDIR" ]; then echo "  ok    logs kept and named on exit 1"; rm -rf "$LOGDIR"
 else echo "::error::logs not kept/named: '$LOGDIR'"; fail=1; fi
 
-echo "== the budget: a hang beside a FAIL, an unstarted job"
+echo "== the budget: a hang beside a FAIL"
 before=$SECONDS
 run 2 "bash $S/hang.sh
-bash $S/bad.sh
-bash $S/mark.sh late" --jobs 2
+bash $S/bad.sh" --jobs 2
 took=$(( SECONDS - before ))
 code "TIMEOUT outranks FAIL -> exit 124" 124 "$RC"
 expect "TIMEOUT line for the hang" "s bash $S/hang.sh"
 printf '%s\n' "$OUT" | grep -q "^TIMEOUT [0-9]*s bash $S/hang.sh\$" && echo "  ok    hang marked TIMEOUT" \
   || { echo "::error::hang not marked TIMEOUT"; printf '%s\n' "$OUT"; fail=1; }
-expect "FAIL line beside it" "FAIL 0s bash $S/bad.sh"
+line "FAIL line beside it" FAIL "bash $S/bad.sh"
+expect "summary still printed" "full suite: 0 ok, 1 failed, 1 timed out"
+[ "$took" -lt 20 ] && echo "  ok    the hang was killed (${took}s)" || { echo "::error::runner waited ${took}s for a 30 s hang"; fail=1; }
+LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+
+echo "== the budget: a job still queued at the budget never starts"
+run 2 "bash $S/hang.sh
+bash $S/mark.sh late" --jobs 1
+code "queued job -> exit 124" 124 "$RC"
 expect "unstarted job marked TIMEOUT" "TIMEOUT 0s bash $S/mark.sh late"
 [ -e "$T/started-late" ] && { echo "::error::a job started past the budget"; fail=1; } || echo "  ok    no job starts past the budget"
-expect "summary still printed" "full suite: 0 ok, 1 failed, 2 timed out"
-[ "$took" -lt 20 ] && echo "  ok    the hang was killed (${took}s)" || { echo "::error::runner waited ${took}s for a 30 s hang"; fail=1; }
+expect "summary counts both" "full suite: 0 ok, 0 failed, 2 timed out"
 LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
 
 echo "== --jobs 1 runs one at a time, --jobs 2 does not"
@@ -99,7 +109,7 @@ bash $S/mark.sh done" bash "$RUN" --jobs 2 2>&1)"; RC=$?
 code "over-budget job -> exit 124" 124 "$RC"
 printf '%s\n' "$OUT" | grep -q "^TIMEOUT [3-9]s bash $S/slow.sh\$" && echo "  ok    reported TIMEOUT by its measured time, ran to the end" \
   || { echo "::error::slow job not TIMEOUT by measured time"; printf '%s\n' "$OUT"; fail=1; }
-expect "a job inside the budget is ok" "ok 0s bash $S/mark.sh done"
+line "a job inside the budget is ok" ok "bash $S/mark.sh done"
 expect "says it runs uncapped" "no working timeout"
 LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
 

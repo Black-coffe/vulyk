@@ -159,8 +159,10 @@ trace-check) is in scope.
 
 ## Integration gate
 `bash tests/full-suite.sh`
-Measured basis (filled by `fast-verification-03`, paperwork edit): all jobs at once, default `--jobs`: `<W> s` on
-`<cores>` cores, `<date>`; `--jobs 4`: `<W4> s`, gap `<W4 - W> s`. Before the split: 13 suites at once 1070 s = telemetry
+Measured basis (filled by `fast-verification-03`, paperwork edit): all jobs at once, default `--jobs`: `425 s` on
+`28` cores, `2026-10-26` (31 jobs, Windows Git Bash; fits the 540 s budget). `--jobs 4`, same box, same day: does not
+fit - the run hit the 540 s budget at 541 s wall with 23 of 31 jobs ended, 4 killed and 4 never started, so its full
+wall was not measured; gap > 116 s. This says nothing about a real four-core machine beyond that run. Before the split: 13 suites at once 1070 s = telemetry
 alone (28 cores, Windows Git Bash, 2026-10-25). Untested on fewer cores before story 03's second run; on a machine that
 cannot fit the budget the round escalates `suite-timeout` with the time, see `## Assumptions`.
 
