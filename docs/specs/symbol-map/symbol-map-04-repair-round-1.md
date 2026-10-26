@@ -1,7 +1,7 @@
 ---
 story: symbol-map-04
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 3
@@ -37,3 +37,8 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 `git ls-files '*.sh' | xargs -n1 bash -n`
 `bash tests/maintenance.test.sh`
 `bash tests/symbol-map.test.sh`
+
+## Implementation notes
+- .claude/commands/vulyk-plan.md step 3: recon runs `symbol-map.sh <file>` once per candidate file and keeps every output, so the per-run 1536-byte cap no longer cuts later files.
+- Chose the protocol fix over a per-block cap: the script contract (whole stdout <= 1536 B) and its tests stay as story 01 built them.
+- Repro: each of the 8 scripts run alone prints no `inputs not shown` tail.

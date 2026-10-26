@@ -24,8 +24,8 @@ Plan: "$ARGUMENTS"
 3. Recon. Read `memory/memory.md` and the relevant `memory/map/` slices first. A targeted question about
    a file or two: read them yourself. Dispatch `drone-scout` only for broad or unmapped territory:
    Tier 1 none (one if the location is unknown), Tier 2 at most one, Tier 3 at most two, Tier 4 at most
-   four, in parallel. Tier 2-4: run `bash scripts/symbol-map.sh <candidate files>` on the files the plan is
-   likely to name and keep its output for the plan. Checklist, Tier 2-4: meta-tests, docs/ADR, `.env.example`,
+   four, in parallel. Tier 2-4: run `bash scripts/symbol-map.sh <file>` once per file the plan is likely
+   to name (one call on many files is cut at 1536 bytes after a few) and keep every output for the plan. Checklist, Tier 2-4: meta-tests, docs/ADR, `.env.example`,
    re-exports, sibling files with the same pattern.
 3a. Horizon, Tier 2-4 on new ground (ADR-022). Skip it for study work, Tier 0-1, no-question mode and
    `--no-horizon`; `--horizon` runs it anyway. New ground is a recon fact: take two to four terms that name the
