@@ -29,7 +29,8 @@ mechanically by `cycle.sh repair`.
 - Each story names its files, acceptance criteria, a `## Verification` taken from the rows of the constitution's
   `## Commands` table that carry no `round-only` mark (close-story exit 2 `verification is round-only` refuses a marked one), and the map slice sections a worker should load. `## Files` lists every place
   the change must reach: callers, tests, fixtures, config, exports. The symbol-map output in your brief is a
-  source for it: take its `exact` lines in, judge each `textual` one.
+  source for it: weigh its `exact` lines first, its `textual` ones after, and list only the paths the change
+  actually reaches; an importer that keeps working unchanged stays out.
 - A story that adds a branch, a loop, a parser, or handling of money, security or data writes names the
   test that fails when that logic breaks: a test file in its `## Files`, or a `worker-test` story in a
   later wave. One such test, not coverage; a trivial change names none.

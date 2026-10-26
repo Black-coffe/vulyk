@@ -18,7 +18,7 @@ A plan names every file a change reaches, from a deterministic script instead of
   when an input is missing (every input still reported), 2 on usage. It reports; it blocks nothing.
 - **Recon runs it.** `/vulyk-plan` step 3 (Tier 2-4) runs it once per file the plan is likely to name, adds a checklist
   line (meta-tests, docs/ADR, `.env.example`, re-exports, sibling files with the same pattern) and hands the output to
-  `queen-planner`, which takes `exact` lines into `## Files` and judges `textual` ones.
+  `queen-planner`, which weighs `exact` lines first and lists only the paths the change actually reaches.
 - **Builders run it.** `worker-code` step 2 and the solo build in `/vulyk-build`: before editing a root file, run it,
   then grep only what it cannot vouch for (`textual` names, files whose imports are not parsed).
 - `tests/symbol-map.test.sh` and the `Symbol map` row in `## Commands`.
