@@ -12,11 +12,13 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `lib.sh` - sourced only: `is_story_file`, `pack_fingerprint`, `is_paperwork_path`, `paperwork_only`,
   `marker`, `constitution_file`, `command_cell_exists`. Model floor (ADR-015): `model_floor` (default `fable
   5.1`, `opus 5.5`, `sonnet 5.5`, `haiku 5.5 cc>=2.1.293`; `VULYK_MODEL_FLOOR` overrides), `model_version`,
-  `claude_code_version` (`CLAUDE_CODE_VERSION` env, else `claude --version`), `version_lt`,
+  `command_cell_round_only` (:180; a command in a `round-only` Purpose-marked row), `claude_code_version`
+  (`CLAUDE_CODE_VERSION` env, else `claude --version`), `version_lt`,
   `model_below_floor` (prints `<family> <ver> <floor>` / `alias` / `cc ... <have|unknown> <need>`; fails closed).
 - `ship-check.sh <spec-dir>` / `--record`; `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`.
   `scope-check.sh <story-file> [range]` runs in `close-story`; `close-story --commit` exits 4 on its `  ! ` paths.
-- `wave-check.sh` (`no-verify`, `verify-gap`, `verify-cell`), `trace-check.sh`, `token-report.py <project>
+- `wave-check.sh` (`no-verify`, `verify-gap`, `verify-cell`, `verify-round-only`: a segment matching a
+  `## Commands` row marked `round-only`, wave-check.sh:34,227), `trace-check.sh`, `token-report.py <project>
   [--spec S] [--since D] [--json]` (dedupes by `message.id`), `evolve-ledger.py <root> <verb>` (owns
   `memory/stats/evolve.jsonl`; `resolve`: tip in default branch = accepted, unmerged branch gone = rejected).
 - `.claude/hooks/session-start-brief.sh` - map line; `[VULYK] model profile not chosen`; bootstrap offer
@@ -57,11 +59,19 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `telemetry.sh` `ENUM`/`AGENTS` are append-only public contracts (`AGENTS` gained `drone-horizon`, 0.35.0,
   telemetry.sh:65; a removed agent moves to `RETIRED_AGENTS`, :78).
 
-## Tests
-`tests/maintenance.test.sh` (not in ci.yml): caps (`RULES_ALWAYS_MAX_LINES=40` for path-less
-`.claude/rules/*.md`), brief due logic, ledger, `memory-triage.sh`. `tests/defects.test.sh`: gate + index.
-`tests/inject.test.sh`, `tests/intake.test.sh`: the hooks. `tests/telemetry.test.sh`: `floorcheck`, `tmrun`,
-installer hook wiring (pins the inject matcher and defect hook entries). `tests/model-profile.test.sh`.
+## Tests (0.36.0)
+- `tests/full-suite.sh [--jobs N] [--list]` - every `tests/*.test.sh` once, in parallel (`--jobs` = cores,
+  cap 12); a suite answering `--list-parts` (telemetry, council, cycle) contributes one `--part` job per
+  part. Latency checks (`inject`/`intake` `--part latency`) run alone at the end. Budget
+  `VULYK_SUITE_TIMEOUT` (default 590 s; 0 = uncapped); output `ok|FAIL|TIMEOUT <N>s <cmd>` per job + a
+  `full suite:` summary; exit 0 / 1 FAIL / 124 TIMEOUT (outranks) / 2 usage (full-suite.sh:19-29).
+  `tests/full-suite.test.sh` tests it. These are the `(round-only)` rows in CLAUDE.md `## Commands`; a story
+  verifies with a `--part` row instead. CI runs it as one job (ci.yml:107).
+- `telemetry` (17 parts), `council` (11), `cycle` (7), `inject`/`intake` (`functional`, `latency`) take
+  `--part <topic>` / `--list-parts`; unknown part exits 1. `VULYK_INSTALL_CACHE` = one pristine install copied.
+- `tests/maintenance.test.sh`: caps (`RULES_ALWAYS_MAX_LINES=40`), brief due logic, ledger,
+  `memory-triage.sh`. `tests/defects.test.sh`: gate + index. `tests/telemetry.test.sh`: `floorcheck`,
+  `tmrun`, installer hook wiring. `tests/model-profile.test.sh`.
 
 ## install.sh - the upgrade contract
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution
@@ -86,4 +96,4 @@ installer hook wiring (pins the inject matcher and defect hook entries). `tests/
 - Card parsing lives only in `defects_lib.py`; the gate, `defects-index.sh`, `defects-inject.sh` and
   `defect-intake.sh` import it. Rules: `docs/wiki/rules-tree.md`.
 
-last-verified: 2026-10-25 (v0.35.0)
+last-verified: 2026-10-26 (v0.36.0)

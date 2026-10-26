@@ -1,4 +1,4 @@
-# Scout report: agents and commands (v0.35.0)
+# Scout report: agents and commands (v0.36.0)
 
 ## Purpose
 Every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (ADR-013 light VULYK, ADR-015 Sonnet
@@ -19,7 +19,9 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   under `timeout 540`. Verdict (:56-65): BLOCK needs an anchored Critical/Major: `[ask N]` (a security
   hole or data-loss path the diff adds, shown reachable by command or `file:line`, anchors to the ask
   whose code carries it; hardening = minor) or `[regression]` (base-side evidence); else `[unanchored]`.
-  Line 1 `VERDICT: PASS|BLOCK`; ≤ 5 minors.
+  Line 1 `VERDICT: PASS|BLOCK`; line 3 `SUITE: ok|FAIL|TIMEOUT <N>s budget <B>s|none` (lead-review.md:49-54,82,94):
+  runs the constitution's `Full suite / build` row once per round under `timeout $((VULYK_SUITE_TIMEOUT:-590)+5)`;
+  FAIL = BLOCK with a `[regression]` Critical; TIMEOUT leaves the verdict, `judge` escalates. ≤ 5 minors.
 - **council-opus** (`opus`, `medium`, `maxTurns:60`; no Write/Edit) - Tier 3-4 intent seat inside
   `COURT`; one `ASK <n>` line per ask with `run:`/`saw:`, edge cases under `UNASKED:`. Blind: reading
   outside `COURT`, git history or naming plan/journal/story files is a BREACH.
@@ -31,10 +33,12 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
 - **worker-code** / **worker-test** (`sonnet`, `medium`, `maxTurns:90`) - Tier 3-4, one story. Close:
   `returned: DONE`, then `cycle.sh close-story <story> --commit --stamp <S>`; exit 4 → fix and rerun
   (`edited outside ## Files: <paths>` = undo your own edits; none yours → `NEEDS_CONTEXT`,
-  worker-code.md:28-29), after three failures `## Findings` + `returned: WALL`. Never edit `status:`,
+  worker-code.md:28-29; exit 2 `verification is round-only` = the story named a `round-only` row,
+  worker-code.md:37 - `NEEDS_CONTEXT`), after three failures `## Findings` + `returned: WALL`. Never edit `status:`,
   never stash/checkout/reset/clean.
 - **queen-planner** (`opus`, `high`, `maxTurns:40`; Read/Write/Grep/Glob) - Tier 3-4 plan + stories
-  (`model:` per story: queen-planner.md:21-26, ADR-015/020). Never reads source; never plans repairs
+  (`model:` per story: queen-planner.md:21-26, ADR-015/020; `## Verification` cites only `## Commands`
+  rows without `round-only`, queen-planner.md:30). Never reads source; never plans repairs
   (`cmd_repair` writes `model: opus`). T4 dispatch: `<top_model>`.
 - **lead-architect** (`opus`, `high`, `maxTurns:30`) - T4 planning and after a story's second miss;
   every decision an ADR. Dispatched with `model: <top_model>`.
@@ -92,4 +96,4 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a
   relative script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-10-25 (v0.35.0, ADR-013, ADR-015, ADR-020, ADR-022)
+last-verified: 2026-10-26 (v0.36.0, ADR-013, ADR-015, ADR-020, ADR-022)

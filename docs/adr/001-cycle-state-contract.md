@@ -140,6 +140,36 @@ Source: `docs/specs/fast-verification/plan.md` `## Assumptions` and `## Contract
 - **D2/D6** - `escalate --reason` admits `suite-timeout`; `reopen` after it goes to `open-round`,
   and `status` never answers `repair` for it, as after `env`.
 
+### Amendment (2026-10-26) - proposed - spec `fast-verification`, the budget contract
+
+Status: proposed (ADR harvest; only the owner writes `accepted`). The 2026-10-26 amendment above
+names `## Assumptions` and `## Contracts` as its source, but both say 540 s and `+ 30`; the 590 s
+default and the `+ 5` came from the plan deltas and the ship ruling, quoted verbatim:
+
+> 2026-10-26, story 08 NEEDS_CONTEXT (full suite ~560 s under round load, 0 failures), owner ruling «Срезать работу,
+> лимит 540»: profile CPU across the jobs, cache the biggest repeated fixture build like the install cache; no budget
+> raise. Rejected for now: 590 s budget (10 s under the reviewer's 600 s Bash cap) - the fallback if no 60 s lever exists.
+
+> 2026-10-26, story 08 NEEDS_CONTEXT again (profile: no repeated fixture worth 60 s; 83 install.sh runs each test a
+> distinct case), owner ruling «Вынести в конец только замеры»: inject/intake split into functional and latency parts,
+> only the latency parts run alone last; intake's fresh install cached. Pre-approved fallback: default budget 590 s.
+> Rejected: a faster install.sh (product code, risk to every hive; a separate spec after ship).
+
+`**Checked:**`: «Лимит 590, принять, выпустить» - "default budget raised to 590 s in the follow-up commit".
+
+- **D3** - one variable, `VULYK_SUITE_TIMEOUT`, is the budget of both the runner and `lead-review`;
+  default 590 s. The budget stays under the Bash tool's 600 s cap in `lead-review.md`
+  (`timeout: 600000`): reason recorded, "10 s under the reviewer's 600 s Bash cap". A higher default
+  needs that cap raised in the same change. `lead-review`'s outer `timeout` is the budget `+ 5`, so the
+  runner's own budget fires first and prints its summary. Reason for `+ 5` (replacing the plan's `+ 30`): 590 + 30 = 620 s is past the 600 s Bash cap, so that outer guard could never fire before the tool killed the call; 595 s stays under the cap (Queen, commit 635d6d1).
+- **D3** - the owner's order of levers, recorded twice: cut the work first, raise the budget only
+  when no lever is left. Rejected: a faster `install.sh` (product code, risk to every hive).
+- Options: those quoted above. Consequences: not recorded. Revisit when: not recorded (the plan's
+  `## Assumptions` names the slow-machine case: the round escalates `suite-timeout` every time).
+
+Invariant for `## Invariants created`: *`VULYK_SUITE_TIMEOUT` default + `lead-review`'s outer margin
+< the Bash tool cap set in `lead-review.md`; one variable governs both runner and reviewer.*
+
 Option 1. The loop state is a small set of committed files, each with exactly one writer,
 all written by `scripts/cycle.sh`; the verdict is computed by that script from labelled
 lines in seat reports; both drivers are a `while` loop over `cycle.sh status --json` that

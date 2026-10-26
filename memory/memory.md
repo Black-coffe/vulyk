@@ -18,8 +18,8 @@
 - `docs/` narrative pages (architecture.md, pipeline.md, cycle.md, token-economy.md,
   model-cascade.md, command-reference.md, getting-started.md) and `docs/adr/` beyond ADR-001
 - `templates/`, `bootstrap/interview.md`, `.claude/hooks/` (bar the SessionStart brief and the defect hooks/`defects_lib.py`, in scripts.md and the wiki),
-  `install.sh` (upgrade contract in scripts.md), `scripts/vulyk-update.sh`'s own mechanics, `tests/` harness internals beyond what council.test.sh/cycle.test.sh
-  cover, `.github/workflows/ci.yml` beyond the two test jobs
+  `install.sh` (upgrade contract in scripts.md), `scripts/vulyk-update.sh`'s own mechanics, `tests/` harness internals beyond full-suite.sh and the `--part` flags (scripts.md),
+  `.github/workflows/ci.yml` beyond the `full-suite` job
 
 ## Wiki domains
 <!-- load-bearing domain notes in docs/wiki/ -->
@@ -38,10 +38,10 @@
 - Token report, per spec: `python scripts/token-report.py . --spec <slug>`
 - Maintenance: `bash tests/maintenance.test.sh`
 - Pulse mod: `bash tests/mods.test.sh`
-- Cycle state contract tests: `bash tests/cycle.test.sh`
-- Council verdict contract tests: `bash tests/council.test.sh` (`--quick` for ~3 min)
+- Cycle state contract tests, per part: `bash tests/cycle.test.sh --part <topic>` (`--list-parts`); council and telemetry alike
 - Driver contract / end to end: `bash tests/driver.test.sh`, `bash tests/e2e.test.sh`
-- Full suite / build: none: no test runner, no build step
+- Runner: `bash tests/full-suite.test.sh`
+- Full suite (round-only; every suite once, budget `VULYK_SUITE_TIMEOUT` 590 s): `bash tests/full-suite.sh`; no build step
 
 ## Learnings
 - Model ladder and no Haiku below generation 5 (v0.13.0, 2026-09-14): docs/adr/007-model-ladder.md
