@@ -92,4 +92,5 @@ is missing or unparsable.
 **Branch:** vulyk/symbol-map
 **Checked:**
 **Council:**
+**Council:** RED round 1, 2026-10-26, at f463897, pack 3fd2e984986b
 **Shipped:**
