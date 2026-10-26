@@ -4,6 +4,44 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-10-26
+
+A story is checked by the fast part of a suite. The full suite runs once per council round (spec `fast-verification`).
+
+### Added
+- **Fast suite parts.** `tests/telemetry.test.sh` (17 parts), `tests/council.test.sh` (11), `tests/cycle.test.sh` (7),
+  `tests/inject.test.sh` and `tests/intake.test.sh` (`functional` and `latency`) take `--part <topic>` and
+  `--list-parts`. An unknown part exits 1 and lists the names. A story names the part that covers its `## Files`.
+  Alone, every part ran in 22-121 s on the reference box. Before this, `telemetry.test.sh` alone ran 18 minutes,
+  against a 9-minute `close-story` limit. One pristine `install.sh` output is built per run and copied by the plain
+  fresh-install fixtures, checked equal to a real install with `diff -r`.
+- **`tests/full-suite.sh`: every suite at once under one budget.** It runs 48 jobs (parts plus whole suites).
+  `--jobs` defaults to the core count, capped at 12. The latency parts run alone at the end, outside the contended
+  window. `VULYK_SUITE_TIMEOUT` sets the budget (default 590 s, the 600 s Bash cap less the summary; 0 = uncapped).
+  At the budget, running and unstarted jobs are marked `TIMEOUT`. CI runs it uncapped in one job, which replaces
+  the per-suite jobs.
+- **`(round-only)` rows in `## Commands`.** `wave-check.sh` reports a story that names one (`verify-round-only`),
+  and `close-story` refuses to run it. Bootstrap, `install.sh`, the plan and story templates, `queen-planner` and the
+  workers teach hives the same fast/full split.
+
+### Changed
+- **The council's full suite counts.** `lead-review` runs the `Full suite / build` row once per round and reports
+  `SUITE: ok|FAIL|TIMEOUT <N>s` on line 3; `record-seat` refuses a missing or malformed line. A `FAIL` is never green,
+  whatever the verdict says. A `TIMEOUT` escalates `suite-timeout` and asks the owner, with the seconds.
+  `reopen` after such an escalation goes to repair when the round also has a RED ask or a BLOCK. A hive whose
+  full-suite row is still `<fill in>` or `none` reports `SUITE: none`.
+- The `Council, quick` row is gone (303 s, not a story-sized check).
+
+### Fixed
+- `tests/maintenance.test.sh` derives the memory-triage slug by the script's own rule. Before, it failed in any
+  checkout path with a dot, every council court included.
+
+### Known
+- On the reference box under round load, the full suite ran 487-542 s, so the default budget is 590 s. Owner
+  accepted round 3 over a 542 s `suite-timeout`, with every ask GREEN and no test failing.
+- CI job names changed (`cycle`, `council`, `driver`, `token-report` -> one full-suite job). A branch protection rule
+  that requires the old names must be updated.
+
 ## [0.35.1] - 2026-10-25
 
 CI on main was red after 0.35.0; this restores it.
