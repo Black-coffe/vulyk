@@ -1,8 +1,8 @@
 ---
 story: symbol-map-03
 spec: symbol-map
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
@@ -44,5 +44,11 @@ After this story `docs/specs/symbol-map/replay.py` replays the script on the loc
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- docs/specs/symbol-map/replay.py: new runner; finds `bash` via `shutil.which` (avoids the System32 WSL bash on Windows), checks every repo root before running anything, prints `case i: missed m hits h lines l` plus local-only `unfound` lines, then the `replay:` line.
+- tests/symbol-map.test.sh: appended a replay case on its own copy of the Python fixture (noise 9 = the nine path lines `pkg/core.py` yields) and a no-repo case (exit 2); paths go through `cygpath -m` when present.
+- docs/specs/symbol-map/replay.md: real run 2026-10-26, `replay: hits 3/13 noise 662 over 23 stories`; leak-checked for `:/`, `/Users`, `/home`, `E:` and every host path segment from cases.json.
+- `over <n> stories` counts all 23 cases in cases.json (11 carry the 13 missed paths), as the contract says.
 
 ## Findings
+- Replay number for the release decision: 3 of 13 missed paths found. In 8 of the 9 stories with an unfound path, the 1536-byte per-run cap cut stdout after 1-3 of 8-73 inputs, so the cap (not the edge finder) decides most of the misses. Not fixed here (Non-goals).
+- One cut line reported more hidden inputs (84) than the case had positional files (56, 2 of them globs); likely globs expanded into inputs. Not investigated.

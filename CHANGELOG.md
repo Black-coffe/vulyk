@@ -4,6 +4,36 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-10-26
+
+A plan names every file a change reaches, from a deterministic script instead of a model's memory (spec `symbol-map`).
+
+### Added
+- **`scripts/symbol-map.sh <file>...`** (core `scripts/symbol-map.py`, python stdlib, no model). For each input it
+  prints the repo paths linked to it that lie outside the scope (`--scope`, `--story <story.md>` `## Files`): tests,
+  importers, what it imports, guard tests (tests that walk the repo) and files naming its path as a string. Every line
+  is `exact` (a Python `ast` import, a bash `source`/`.`) or `textual` (a name or path match). Python and bash get
+  import edges; any other file gets the language-independent sections and `! imports not parsed for <ext>: search
+  callers yourself`, so an empty answer never reads as "no callers". The whole output stays under 1536 bytes. Exit 1
+  when an input is missing (every input still reported), 2 on usage. It reports; it blocks nothing.
+- **Recon runs it.** `/vulyk-plan` step 3 (Tier 2-4) runs it once per file the plan is likely to name, adds a checklist
+  line (meta-tests, docs/ADR, `.env.example`, re-exports, sibling files with the same pattern) and hands the output to
+  `queen-planner`, which weighs `exact` lines first and lists only the paths the change actually reaches.
+- **Builders run it.** `worker-code` step 2 and the solo build in `/vulyk-build`: before editing a root file, run it,
+  then grep only what it cannot vouch for (`textual` names, files whose imports are not parsed).
+- `tests/symbol-map.test.sh` and the `Symbol map` row in `## Commands`.
+
+### Measured
+- Before the build: workers ran a median of one repo-wide search each (735 transcripts in 10 hives), so the token
+  saving is small; the gap is plan-side, 23 stories whose needed path was outside `## Files`. Replay on their 13 missed
+  paths, one call per file: 6/13 found, about 17 lines per file. In-sample (the rules came from these cases, most from
+  one Python hive): not evidence for a close-time gate or more languages (`docs/specs/symbol-map/replay.md`).
+
+### Fixed
+- **`drone-horizon` loads again.** Claude Code dropped it from the Agent tool in every session (`Agent type
+  'drone-horizon' not found`), so the 0.35 horizon step could not run. Shortened description, redundant
+  `disallowedTools` removed. The cause inside Claude Code is not established.
+
 ## [0.36.0] - 2026-10-26
 
 A story is checked by the fast part of a suite. The full suite runs once per council round (spec `fast-verification`).

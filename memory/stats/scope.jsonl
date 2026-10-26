@@ -225,3 +225,7 @@
 {"ts":"2026-10-26T08:52:40Z","story":"fast-verification-06-suite-verdicts","declared":5,"changed":5,"out_of_scope":0}
 {"ts":"2026-10-26T12:02:28Z","story":"fast-verification-07-repair-round-1","declared":8,"changed":5,"out_of_scope":0}
 {"ts":"2026-10-26T18:27:17Z","story":"fast-verification-08-repair-round-2","declared":24,"changed":5,"out_of_scope":0}
+{"ts":"2026-10-26T20:16:18Z","story":"symbol-map-01-script","declared":5,"changed":19,"out_of_scope":0}
+{"ts":"2026-10-26T20:18:51Z","story":"symbol-map-02-protocol","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-10-26T20:23:25Z","story":"symbol-map-03-replay","declared":3,"changed":3,"out_of_scope":0}
+{"ts":"2026-10-26T20:35:35Z","story":"symbol-map-04-repair-round-1","declared":11,"changed":1,"out_of_scope":0}

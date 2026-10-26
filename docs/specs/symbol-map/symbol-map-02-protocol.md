@@ -1,8 +1,8 @@
 ---
 story: symbol-map-02
 spec: symbol-map
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
@@ -47,5 +47,9 @@ After this story the Queen's recon step in `/vulyk-plan` runs `bash scripts/symb
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- vulyk-plan.md: step 3 gains the Tier 2-4 symbol-map run on candidate files and the five-item checklist line; step 5 passes "the symbol-map output" to queen-planner beside the scout reports.
+- queen-planner.md: the `## Files` bullet names the symbol-map output as a source: `exact` in, `textual` judged.
+- worker-code.md step 2 and vulyk-build.md solo build: the grep-every-caller sentence now runs symbol-map first and greps only `textual` names and `imports not parsed` files.
+- No description: lines touched; maintenance.test.sh 153/0 locally.
 
 ## Findings

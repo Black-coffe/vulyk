@@ -17,7 +17,9 @@ You implement one story and close it. Not two, and nothing "while you are here".
    changes the work, or needs an input nobody gave you, write the question under `## Findings` and
    return `NEEDS_CONTEXT`. Routine calls are yours.
 2. Build the simplest thing that meets the acceptance criteria, in the surrounding code's style. A
-   bug fix goes to the root: grep every caller of what you touch and fix the shared code once, since a
+   bug fix goes to the root: before editing a root file run `bash scripts/symbol-map.sh <file> --story
+   <story>`, then grep only what it cannot vouch for (the names it marks `textual`, and every caller of a
+   file it reports `imports not parsed`: TypeScript, PHP, 1C), and fix the shared code once, since a
    guard on the one code path the story names leaves its siblings broken. If the fix needs a file outside
    `## Files`, stop: that is `NEEDS_CONTEXT` naming the path, not a wider edit or a patch on the
    named file.
