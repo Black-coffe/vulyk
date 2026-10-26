@@ -1716,7 +1716,7 @@ cstoryro() { # cstoryro <nn> <verification line>
     "$1" "$1" "$2" > "docs/specs/cstoryro/cstoryro-$1-r.md"
 }
 cstoryro 01 '`touch ro-suite-ran.txt`'
-cstoryro 02 '`true && touch ro-both-ran.txt`'
+cstoryro 02 '`echo ro-suite --part y && touch ro-both-ran.txt`'
 cstoryro 03 '`echo ro-suite --part x`'
 git add -A -- docs/specs/cstoryro && git commit -qm "spec(cstoryro): fixture" >/dev/null
 hbefore="$(git rev-parse HEAD)"

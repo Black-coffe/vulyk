@@ -1,8 +1,8 @@
 ---
 story: fast-verification-04
 spec: fast-verification
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
@@ -64,5 +64,6 @@ memory/map/cycle.md `## Verbs` (`close-story`); scout-plumbing.md `## Entry poin
 - tests/cycle.test.sh: `wro` fixture via a CLAUDE.vulyk.md sidecar - marked row and marked+unmarked text reported, unmarked `--part` row not, no verify-cell.
 - tests/council.test.sh part verbs: `cstoryro` after cstory4 - marked row and neighbour form refused (no file touched, status todo, HEAD unchanged); `--part x` on an unmarked row closes.
 - Decision: a temp file rather than process substitution, because `command_cells` gates on `[ -f ]`, which a /dev/fd path fails.
+- Surprise: the relaunch found the council fixture cstoryro-02 using `true` as a segment, not a fixture cell; changed to the unmarked `--part` row.
 
 ## Findings
