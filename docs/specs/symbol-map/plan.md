@@ -100,3 +100,4 @@ is missing or unparsable.
 **Council:** GREEN round 2, 2026-10-26, at 70a8e41, pack 84b25466d1d3
 **Shipped:**
 **Checked:** ACCEPTED by Andrei, 2026-10-26, at 3f5fe9a - Принимаю, выпускай (Рекомендую) - narrow fix after GREEN round 2: replay.md per-file 6/13 + in-sample caveat, no code change
+**Checked:** ACCEPTED by Andrei, 2026-10-26, at ef21b7c - Принимаю, выпускай (Рекомендую) - planner line narrowed after GREEN (ef21b7c): exact lines weighed, only reached paths listed
