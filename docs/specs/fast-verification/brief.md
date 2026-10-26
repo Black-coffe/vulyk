@@ -26,6 +26,9 @@
 3. Метка - «Метка в таблице команд (Рекомендую)»: Строки медленных наборов в таблице команд помечаются как «только для раунда». План, назвавший такую строку, ловится ещё до сборки: ту же таблицу уже проверяет wave-check, правило встаёт рядом. close-story такую строку тоже откажется запускать. Медленный набор получает быстрые части по темам (например `--part install`), и история берёт часть под свои файлы.
 4. Требования - «Подтверждаю (Рекомендую)»: plan stops for approval.
 
+
+**After escalation (round 1, 2026-10-26).**
+> Owner 2026-10-26: fix the root, not the budget. (1) Shared test setup is built once and reused by every part, so a part costs its own tests, not the suite's fixture again - targets ask 1 (a part in one to two minutes) and ask 2 together. (2) full-suite.sh runs whole suites (not every part) at a bounded --jobs, and the wall-clock latency suites (inject, intake) run after the rest, outside the contended window. (3) CLAUDE.md back under the model-profile.test.sh size cap. (4) judge treats SUITE: FAIL like SUITE: TIMEOUT - never green regardless of VERDICT. Then measure the full suite under round conditions (another seat running) and record it; VULYK_SUITE_TIMEOUT stays 540.
 ## Asks
 
 1. Каждая строка проверки истории укладывается в минуту-две; telemetry и council получают быстрые части по темам, история берёт часть под свои файлы.
