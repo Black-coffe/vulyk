@@ -1,7 +1,7 @@
 ---
 story: fast-verification-08
 status: todo
-returned: NEEDS_CONTEXT
+returned:
 worker: worker-code
 model: opus
 wave: 5
@@ -81,6 +81,16 @@ lever is still open; the uncommitted work is left as it was. Note: the early job
 ## Verification
 `git ls-files '*.sh' | xargs -n1 bash -n && bash tests/maintenance.test.sh && bash tests/model-profile.test.sh && bash tests/full-suite.test.sh && bash tests/council.test.sh --part escalate`
 `bash tests/cycle.test.sh`
+
+Answer (owner, 2026-10-26, «Срезать работу, лимит 540»): the box is throughput-bound, so cut total work, not
+wall per job. First measure where the CPU goes across the 46 jobs (per part: wall, and the count of spawned
+git/bash/jq/python processes or the repeated fixture builds), and write the top costs as a short table under
+`## Implementation notes`. Then remove the biggest repeated cost the way the install cache did: build a repeated
+fixture (council/cycle fixture repos, repeated installs that are still real) once per run and copy it, checked
+equal to a fresh build. Do not loosen any assertion or median. Goal: under round conditions the non-latency jobs
+end by ~460 s so the ~50 s latency tail fits 540 s with margin; record two round-condition runs in plan.md.
+If the profile shows no lever worth 60 s or more, return NEEDS_CONTEXT with that table: the owner then chooses a
+590 s budget.
 
 ## Implementation notes
 - scripts/cycle.sh: `full_suite_row_round_only` now also needs a runnable command cell (`<fill in...>`, `none`, empty do not count); record-seat review requires the first `SUITE:` line to be `ok|FAIL|TIMEOUT <N>s[ ...]` whenever that row exists, else MALFORMED exit 4.
