@@ -19,11 +19,14 @@ Nobody has to remember this command: the SessionStart brief says `maintenance du
      [ -f "$c" ] || continue; seen=1
      if OUT="$(bash "$c" corrections --since "$(date -u -d '-7 days' +%Y-%m-%d)" --lexicon "$X" 2>/dev/null)"; then L="$c"; break; fi
    done < <(command -v litopys; ls -d "$HOME"/.claude/plugins/cache/litopys/litopys/*/bin/litopys 2>/dev/null | sort -rV)
-   if [ -n "$L" ]; then
+   if [ -n "$L" ]; then   # a quote opening with ">" is a relayed side-agent note: model text, not the owner's
+     r=$(printf '%s
+' "$OUT" | grep -c ' · «> '); OUT="$(printf '%s
+' "$OUT" | grep -v ' · «> ')"
      n=$(printf '%s\n' "$OUT" | grep -c ' · lexicon · '); m=$(printf '%s\n' "$OUT" | grep -c ' · record · '); u=0
      while IFS= read -r l; do q="${l#*«}"; q="${q%»}"; grep -rqF -- "$q" docs/defects 2>/dev/null || u=$((u+1)); done \
        < <(printf '%s\n' "$OUT" | grep -E ' · (lexicon|record) · ')
-     echo "corrections (7d): $n by lexicon · $m in records · $u not in docs/defects"
+     echo "corrections (7d): $n by lexicon · $m in records · $u not in docs/defects · $r relayed notes left out"
    elif [ "$seen" = 1 ]; then echo "corrections: no installed litopys has the corrections verb - update it to 0.4.0+"
    else echo "corrections: litopys not installed - no count"; fi
    rm -f "$X"
