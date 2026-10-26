@@ -134,20 +134,28 @@ treesum() { (cd "$1" && find . -type f -exec md5sum {} + | LC_ALL=C sort | md5su
 same() { cmp -s "$1" "$2" && echo 1 || echo 0; }
 PRE_M='Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*'
 ICACHE="${VULYK_INSTALL_CACHE:-$T/install-cache}"
-install_cache() { # $ICACHE/tree and its install.out, built once; a parallel part waits for the builder
-  local tmp w=0
+install_cache() { # $ICACHE/tree and its install.out, built once; a parallel part waits for the builder,
+  # and reclaims the lock when its holder is gone (died mid-build: no pid alive, or no pid after 10 s)
+  local tmp w=0 holder
   [ -d "$ICACHE/tree" ] && return 0
   mkdir -p "$(dirname "$ICACHE")"
-  if mkdir "$ICACHE.lock" 2>/dev/null; then
-    if [ ! -d "$ICACHE/tree" ]; then
-      tmp="$ICACHE.build.$$"; rm -rf "$tmp"; mkdir -p "$tmp/tree"
-      bash "$SRC/install.sh" "$tmp/tree" --telemetry off > "$tmp/install.out" 2>&1
-      mv "$tmp" "$ICACHE"
+  while [ ! -d "$ICACHE/tree" ] && [ "$w" -lt 300 ]; do
+    if mkdir "$ICACHE.lock" 2>/dev/null; then
+      echo "$$" > "$ICACHE.lock/pid"
+      if [ ! -d "$ICACHE/tree" ]; then
+        tmp="$ICACHE.build.$$"; rm -rf "$tmp"; mkdir -p "$tmp/tree"
+        bash "$SRC/install.sh" "$tmp/tree" --telemetry off > "$tmp/install.out" 2>&1
+        mv "$tmp" "$ICACHE"
+      fi
+      rm -rf "$ICACHE.lock"; break
     fi
-    rmdir "$ICACHE.lock"
-  else
-    while [ ! -d "$ICACHE/tree" ] && [ "$w" -lt 300 ]; do sleep 1; w=$((w + 1)); done
-  fi
+    holder="$(cat "$ICACHE.lock/pid" 2>/dev/null)"
+    if { [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; } || { [ -z "$holder" ] && [ "$w" -ge 10 ]; }; then
+      mv "$ICACHE.lock" "$ICACHE.lock.stale.$$" 2>/dev/null && rm -rf "$ICACHE.lock.stale.$$"
+      continue
+    fi
+    sleep 1; w=$((w + 1))
+  done
   [ -d "$ICACHE/tree" ] || { bad "install cache: $ICACHE/tree was never built"; exit 1; }
 }
 fresh_install() { # fresh_install <dir> - what `install.sh <dir> --telemetry off` writes into an empty <dir>

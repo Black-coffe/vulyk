@@ -4,7 +4,7 @@
 #   Usage: bash tests/full-suite.sh [--jobs N] [--list]     # from anywhere; runs from the repo root
 #
 # Jobs: every tests/*.test.sh as `bash tests/<x>.test.sh`; a suite that answers `--list-parts`
-# (telemetry, council) contributes one `--part <name>` job per part instead, so a later re-cut
+# (telemetry, council, cycle) contributes one `--part <name>` job per part instead, so a later re-cut
 # needs no edit here. VULYK_SUITES (newline-separated commands) overrides the list - tests only.
 # The wall-clock latency suites (inject.test.sh, intake.test.sh: 200 ms medians) go last and start
 # only once every other job has ended, one at a time, outside the contended window.

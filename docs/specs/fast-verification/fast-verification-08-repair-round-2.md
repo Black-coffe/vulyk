@@ -1,7 +1,7 @@
 ---
 story: fast-verification-08
 status: todo
-returned:
+returned: NEEDS_CONTEXT
 worker: worker-code
 model: opus
 wave: 5
@@ -41,6 +41,19 @@ ASK 3: RED - FAIL blocks, TIMEOUT stops and asks with seconds, neither green - r
 6. tests/telemetry.test.sh:143 a builder that dies inside `install_cache` leaves `$ICACHE.lock` behind and every
    other part waits 300 s and fails "never built": reclaim a lock whose holder is gone.
 
+NEEDS_CONTEXT (worker, finding 5): with `tests/cycle.test.sh` split (7 parts, 46 runner jobs) the full suite still
+does not fit 540 s under round conditions (whole `bash tests/council.test.sh` beside it, default `--jobs` 12, box also
+carrying other projects' sessions). Run 1: exit 124, wall 540 s, 44 ok / 0 failed, inject cut at 23 s, intake never
+started, slowest `council.test.sh --part replays` 269 s. Run 2: exit 124, wall 540 s, 45 ok / 0 failed, intake cut at
+29 s, slowest `council.test.sh --part replays` 227 s. Non-latency jobs end at ~490-517 s; inject + intake, run alone
+last, need ~50 s more. No test failed in either run. Budget left at 540 s as the story says. The question: which lever
+- start the latency suites earlier / together, cut the council `replays`/`walks` and telemetry `constitution`/`ysk`
+parts further, or raise `VULYK_SUITE_TIMEOUT`? Findings 1, 2, 3, 4, 6 and the cycle split are built and checked
+(the story's `## Verification` lines pass when run separately); nothing is committed.
+Re-dispatch (stamp 7501ae8ca9d5dfc8): no answer to the question above is on disk (story, plan, journal), so the
+lever is still open; the uncommitted work is left as it was. Note: the early jobs are throughput-bound (they end at
+~490-517 s while the slowest single job is 227-269 s), so splitting parts further is unlikely to win ~50 s by itself.
+
 ## Files
 - tests/maintenance.test.sh
 - tests/telemetry.test.sh
@@ -68,3 +81,13 @@ ASK 3: RED - FAIL blocks, TIMEOUT stops and asks with seconds, neither green - r
 ## Verification
 `git ls-files '*.sh' | xargs -n1 bash -n && bash tests/maintenance.test.sh && bash tests/model-profile.test.sh && bash tests/full-suite.test.sh && bash tests/council.test.sh --part escalate`
 `bash tests/cycle.test.sh`
+
+## Implementation notes
+- scripts/cycle.sh: `full_suite_row_round_only` now also needs a runnable command cell (`<fill in...>`, `none`, empty do not count); record-seat review requires the first `SUITE:` line to be `ok|FAIL|TIMEOUT <N>s[ ...]` whenever that row exists, else MALFORMED exit 4.
+- Decision: `TIMEOUT <N>s` without `budget <B>s` is accepted (judge already defaults the budget); `571 s`, bare `TIMEOUT`, `none` and a missing line are refused.
+- tests/council.test.sh (part escalate): one fixture per refused form beside its accepted neighbour, plus `SUITE: none` recorded beside a `<fill in>` and a `none` row.
+- tests/maintenance.test.sh: memory-triage slug built with the script's own `[^0-9A-Za-z]` rule.
+- CLAUDE.md: `Council, quick` row removed (nothing reads it; marking it would have broken the 7162 B cap); now 7104 B.
+- tests/telemetry.test.sh: `install_cache` writes the holder pid into the lock; a waiter reclaims a lock whose pid is dead (or has no pid after 10 s). Checked with a planted dead-pid lock: `--part install` built the cache and passed.
+- tests/cycle.test.sh: `--part`/`--list-parts` (ship hooklog gates manual close bsd safety), unknown part exits 1 listing names; the 7 parts alone and the whole run each give 157 oks, exit 0. full-suite.sh expands it via its existing `--list-parts)` probe (comment updated); full-suite.test.sh real-list checks updated.
+- docs/specs/fast-verification/plan.md: two round-condition measurements under `## Integration gate` - both exit 124 at 540 s.

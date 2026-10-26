@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # The cycle's two deterministic gates, driven through every stage on a synthetic spec.
 #
-#   Usage: bash tests/cycle.test.sh            # from the VULYK repo root
+#   Usage: bash tests/cycle.test.sh                  # from the VULYK repo root, every part
+#          bash tests/cycle.test.sh --part <name>    # one topic on its own fresh fixture repo
+#          bash tests/cycle.test.sh --list-parts     # the part names, one per line
 #
 # Builds a throwaway git repo holding one spec and walks it: nothing confirmed -> approved
 # -> branch -> stories closed -> blind gate verdict -> owner rejects -> owner accepts ->
@@ -9,6 +11,24 @@
 # owner looks again -> READY -> --record. Each step asserts what ship-check.sh and
 # human-check.sh must say. Exit 1 on the first wrong answer.
 set -u
+PARTS="ship hooklog gates manual close bsd safety" # one topic each; every part rebuilds the shared setup below
+PART=''
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list-parts) printf '%s
+' $PARTS; exit 0 ;;
+    --part)
+      PART="${2:-}"; shift
+      case " $PARTS " in
+        *" $PART "*) ;;
+        *) echo "unknown part '$PART' - parts:" >&2; printf '%s
+' $PARTS >&2; exit 1 ;;
+      esac ;;
+    *) echo "usage: bash tests/cycle.test.sh [--part <name>] [--list-parts]" >&2; exit 2 ;;
+  esac
+  shift
+done
+part() { [ -z "$PART" ] || [ "$PART" = "$1" ]; } # `if part <name>; then ... fi` wraps each part
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
 MARK="$(mktemp -u)"   # failure marker, outside the fixture repo: `git add -A` there must never see it
@@ -33,6 +53,7 @@ printf -- '---\nstory: demo-01\nspec: demo\nstatus: todo\nwave: 1\n---\n# S1\n' 
 printf 'v1\n' > app.txt
 git add -A && git commit -qm init
 
+if part ship; then # --- part ship: ship-check stages 01-06, council row vs **Checked:**, the paperwork anchor
 echo "stages 01-02: nothing confirmed yet"
 ship | expect "no brief is OPEN"                 "01   OPEN"
 ship | expect "placeholder Approved is OPEN"     "02   OPEN"
@@ -173,8 +194,12 @@ printf 'not a spec journal either\n' > src/journal.md
 git add -A && git commit -qm "a real code change under src/council/ and src/journal.md - not paperwork" >/dev/null
 bash scripts/human-check.sh --check docs/specs/anchor-demo | expect "src/council/x and src/journal.md are not paperwork -> STALE" "STALE"
 
-echo "story 09: memory/stats/anomalies.jsonl (the anomaly-scan Stop hook's log) rides close-story --commit, ship-check stage 03 passes a hook-only-dirty tree, scope-check drops it from out_of_scope - no separate ship-check suite exists, so these cases live here"
-cp "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh scripts/
+fi # part ship
+
+# --- every other part: cycle.sh and the gate scripts on the spec branch, a ## Commands cell
+if [ "$PART" != ship ]; then
+[ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/demo ] || git checkout -q -b vulyk/demo
+cp "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/wave-check.sh "$SRC"/scripts/trace-check.sh scripts/
 cat >> CLAUDE.md <<'EOF'
 
 ## Commands
@@ -184,6 +209,9 @@ cat >> CLAUDE.md <<'EOF'
 | Trivial pass | `true` |
 EOF
 git add -A && git commit -qm "add cycle.sh + a ## Commands cell for the hook-log tests" >/dev/null
+fi
+if part hooklog; then # --- part hooklog: hook-written stats, commit_paperwork, hive paperwork globs
+echo "story 09: memory/stats/anomalies.jsonl (the anomaly-scan Stop hook's log) rides close-story --commit, ship-check stage 03 passes a hook-only-dirty tree, scope-check drops it from out_of_scope - no separate ship-check suite exists, so these cases live here"
 
 mkdir -p docs/specs/hooklog
 cp "$SRC"/templates/plan.md docs/specs/hooklog/plan.md
@@ -302,9 +330,10 @@ printf '{"n":1}\n' > memory/stats/council.jsonl
 shiph | expect "council.jsonl alone dirty -> 03 not clean" "working tree is not clean"
 rm -f memory/stats/council.jsonl
 
+fi # part hooklog
+if part gates; then # --- part gates: scope-check siblings, wave-check, trace-check, the ## Asks parser
 # --- 0.18 (ADR-013 D4/D5): the three gate scripts -------------------------------------------
-cp "$SRC"/scripts/wave-check.sh "$SRC"/scripts/trace-check.sh scripts/
-git add -A && git commit -qm "0.18 gates: wave-check + trace-check, a clean tree to measure from" >/dev/null
+git add -A && git commit -qm "0.18 gates: a clean tree to measure from" >/dev/null 2>&1
 
 echo "ADR-013 D5: scope-check with no range drops a not-done sibling's declared files and its story file; a done sibling's still count; a range drops nothing"
 mkdir -p docs/specs/sib src/sib
@@ -431,6 +460,8 @@ out="$(bash scripts/cycle.sh briefed docs/specs/qa 2>&1)"; ex=$?
   || { echo "::error::briefed on a quoted ## Asks: exit=$ex out=$out"; fail=1; }
 rm -rf docs/specs/qa
 
+fi # part gates
+if part manual; then # --- part manual: blocked_by manual:<id>, the worker model source
 echo "0.19 C: blocked_by manual:<id> - a hand step stops the wave until manual-done records it; no later wave is built past it"
 mkdir -p docs/specs/man
 cp "$SRC"/templates/plan.md docs/specs/man/plan.md
@@ -489,6 +520,8 @@ sed -i 's/^wave: 2$/wave: 2\nmodel: opus/' docs/specs/man/man-02-m.md
 bash scripts/cycle.sh status docs/specs/man --json | expect "the story's own model: line still wins" '"worker":"worker-code","model":"opus"'
 git checkout -q -- docs/specs/man/man-02-m.md && rm -rf .claude/agents docs/specs/tpl
 
+fi # part manual
+if part close; then # --- part close: close-story scope refusal, own-path commits, odd path names
 echo "close-story-scope-refusal: close-story --commit refuses an edit outside ## Files that would leave the tree dirty for open-round"
 mkdir -p docs/specs/stray
 cp "$SRC"/templates/plan.md docs/specs/stray/plan.md
@@ -614,6 +647,8 @@ committed="$(git -c core.quotePath=false show --name-only --format= HEAD)"
 [ -z "$(git status --porcelain)" ] && git show HEAD:stray-app.txt | grep -qx fmt \
   && echo "  ok    the hook's rewrite is in the commit and the tree is clean after (index synced)" || { echo "::error::status=$(git status --porcelain | tr '\n' ' ')"; fail=1; }
 
+fi # part close
+if part bsd; then # --- part bsd: cycle.sh under a BSD sed, conventional subjects, command_cell_exists
 echo "cycle.sh under a BSD (macOS) sed, and a Profile whose Commit convention is conventional: chore(...) subjects"
 REAL_SED="$(command -v sed)"; BSD="$(mktemp -d)"
 cat > "$BSD/sed" <<'EOF'
@@ -706,6 +741,8 @@ cell_case no  'pytest a.py -p evil'
 cell_case yes 'bash -n deploy.sh'
 rm -f "$CELLS"
 
+fi # part bsd
+if part safety; then # --- part safety: ship-check merge proof, the spec-branch guard
 echo "ship-safety: ship-check stage 03 proves the merge into the default branch (git merge-tree) and the branch it runs on"
 SS="$(mktemp -d)"
 (
@@ -801,6 +838,7 @@ out="$(bash scripts/cycle.sh branch docs/specs/freshspec 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/freshspec ] \
   && echo "  ok    neighbour: a branch cut at the default tip is fresh, branch checks it out" || { echo "::error::fresh branch exit=$ex out=$out"; fail=1; }
 git checkout -q -- . 2>/dev/null; git checkout -q "$BG_HOME"
+fi # part safety
 
 [ -e "$MARK" ] && fail=1
 exit $fail

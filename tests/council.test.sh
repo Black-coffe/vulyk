@@ -2385,22 +2385,40 @@ row="$(grep '"spec":"sufail2"' memory/stats/council.jsonl | tail -1)"
   && printf '%s' "$row" | jq -e '.verdict == "RED" and .review == "BLOCK" and (.note | contains("SUITE: FAIL"))' >/dev/null \
   && echo "  ok    PASS + SUITE: FAIL -> RED, review BLOCK, the note names SUITE: FAIL" || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
 
-echo "record-seat review: SUITE: none while ## Commands has a round-only Full suite row -> MALFORMED, exit 4; SUITE: ok is recorded (fast-verification-07)"
+echo "record-seat review: a round-only Full suite row with a runnable command -> the SUITE line is enforced; each refused form beside its accepted neighbour (fast-verification-07/08)"
 printf '| Full suite / build (round-only) | `bash tests/no-such-runner.sh` |\n' >> CLAUDE.md
 git add -A && git commit -qm "fixture: a round-only full-suite row" >/dev/null
-mk_spec sunone1 2
-rdsn1="$(mk_open_round sunone1 1)"
-out="$(printf 'VERDICT: PASS\nMODEL: test\nSUITE: none\n' | council record-seat docs/specs/sunone1 1 review 2>&1)"; ex=$?
-[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'SUITE: none' && [ ! -f "$rdsn1/review.md" ] && [ -f "$rdsn1/review.attempt-1.md" ] \
-  && echo "  ok    SUITE: none with a round-only full-suite row -> exit 4, kept as attempt-1, not recorded" \
-  || { echo "::error::exit=$ex out=$out"; fail=1; }
-mk_spec suok1 2
-rdso1="$(mk_open_round suok1 1)"
-out="$(printf 'VERDICT: PASS\nMODEL: test\nSUITE: ok 300s\n' | council record-seat docs/specs/suok1 1 review 2>&1)"; ex=$?
-[ "$ex" -eq 0 ] && [ -f "$rdso1/review.md" ] && echo "  ok    SUITE: ok with the same row -> recorded, exit 0" \
-  || { echo "::error::exit=$ex out=$out"; fail=1; }
+sui=0
+suite_case() { # suite_case <want-exit> <label> <report body after MODEL line>
+  sui=$((sui + 1)); mk_spec "suline$sui" 2
+  local rd; rd="$(mk_open_round "suline$sui" 1)"
+  local out ex
+  out="$(printf 'VERDICT: PASS\nMODEL: test\n%b' "$3" | council record-seat "docs/specs/suline$sui" 1 review 2>&1)"; ex=$?
+  if [ "$1" -eq 4 ]; then
+    [ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'MALFORMED' && [ ! -f "$rd/review.md" ] && [ -f "$rd/review.attempt-1.md" ] \
+      && echo "  ok    $2 -> exit 4, kept as attempt-1, not recorded" || { echo "::error::$2: exit=$ex out=$out"; fail=1; }
+  else
+    [ "$ex" -eq 0 ] && [ -f "$rd/review.md" ] && echo "  ok    $2 -> recorded, exit 0" || { echo "::error::$2: exit=$ex out=$out"; fail=1; }
+  fi
+}
+suite_case 4 'SUITE: none' 'SUITE: none\n'
+suite_case 0 'SUITE: ok 300s' 'SUITE: ok 300s\n'
+suite_case 4 'no SUITE line' '\n## Critical\nNone.\n'
+suite_case 0 'SUITE: FAIL 300s' 'SUITE: FAIL 300s\n'
+suite_case 4 'SUITE: TIMEOUT without seconds' 'SUITE: TIMEOUT\n'
+suite_case 4 'SUITE: TIMEOUT 571 s (space)' 'SUITE: TIMEOUT 571 s budget 540s\n'
+suite_case 0 'SUITE: TIMEOUT 571s budget 540s' 'SUITE: TIMEOUT 571s budget 540s\n'
 grep -v 'no-such-runner' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
 git add -A && git commit -qm "fixture: drop the round-only full-suite row" >/dev/null
+
+echo "record-seat review: a round-only Full suite row holding <fill in> or none -> SUITE: none is recorded (fast-verification-08 finding 1)"
+for cell in '`<fill in>`' 'none'; do
+  printf '| Full suite / build (round-only) | %s |\n' "$cell" >> CLAUDE.md
+  git add -A && git commit -qm "fixture: an unrunnable round-only full-suite row" >/dev/null
+  suite_case 0 "SUITE: none beside a $cell row" 'SUITE: none\n'
+  grep -v '^| Full suite / build (round-only)' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+  git add -A && git commit -qm "fixture: drop it" >/dev/null
+done
 
 echo "reopen after a suite-timeout row -> next open-round; status never answers repair for it"
 git add -A && git commit -qm "suto1: judged suite-timeout" >/dev/null

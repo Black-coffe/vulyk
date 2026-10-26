@@ -120,10 +120,11 @@ code "--list -> exit 0" 0 "$RC"
 [ "$OUT" = "bash $S/mark.sh listed" ] && echo "  ok    --list prints the commands" || { echo "::error::--list printed: $OUT"; fail=1; }
 [ -e "$T/started-listed" ] && { echo "::error::--list ran a job"; fail=1; } || echo "  ok    --list runs nothing"
 OUT="$(env -u VULYK_SUITES bash "$RUN" --list 2>&1)"
-expect "real list: a plain suite" "bash tests/cycle.test.sh"
+expect "real list: a plain suite" "bash tests/driver.test.sh"
+expect "real list: cycle by part" "bash tests/cycle.test.sh --part ship"
 expect "real list: telemetry by part" "bash tests/telemetry.test.sh --part telemetry"
 expect "real list: council by part" "bash tests/council.test.sh --part verbs"
-printf '%s\n' "$OUT" | grep -qxE 'bash tests/(telemetry|council)\.test\.sh' \
+printf '%s\n' "$OUT" | grep -qxE 'bash tests/(telemetry|council|cycle)\.test\.sh' \
   && { echo "::error::a split suite is also listed whole"; fail=1; } || echo "  ok    split suites are not listed whole"
 
 echo "== the default --jobs is the core count capped at 12"

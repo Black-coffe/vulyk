@@ -78,7 +78,6 @@ Quiet variants only: output is resent each turn. A story's `## Verification` nam
 | Cycle | `bash tests/cycle.test.sh` |
 | Council (round-only) | `bash tests/council.test.sh` |
 | Council part | `bash tests/council.test.sh --part <topic>` |
-| Council, quick | `bash tests/council.test.sh --quick` |
 | Driver | `bash tests/driver.test.sh` |
 | E2E | `bash tests/e2e.test.sh` |
 | Solo | `bash tests/solo.test.sh` |

@@ -1605,7 +1605,9 @@ ask_evidenced_of() { # ask_evidenced_of <ask-line> -> "1" iff run:+saw: or url:+
 }
 
 full_suite_row_round_only() { # full_suite_row_round_only <constitution> -> 0 iff its ## Commands
-  # has a row whose Purpose cell names the full suite and carries `round-only` (fast-verification-07).
+  # has a row whose Purpose cell names the full suite and carries `round-only` (fast-verification-07)
+  # and whose command cell is runnable: `<fill in...>`, `none` or an empty cell is no suite to run
+  # (fast-verification-08), so `SUITE: none` is the right report for it.
   [ -f "$1" ] || return 1
   awk '
     /^## Commands[[:space:]]*$/ { inblock=1; next }
@@ -1613,7 +1615,11 @@ full_suite_row_round_only() { # full_suite_row_round_only <constitution> -> 0 if
     inblock && /^\|/ {
       line = $0; sub(/^\|/, "", line); i = index(line, "|"); if (!i) next
       p = tolower(substr(line, 1, i - 1))
-      if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) { found = 1; exit }
+      if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) {
+        c = tolower(substr(line, i + 1)); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c)
+        if (c == "" || c ~ /^\|/ || c ~ /^<fill in/ || c ~ /^none([^[:alnum:]_-]|$)/) next
+        found = 1; exit
+      }
     }
     END { exit !found }
   ' "$1"
@@ -1643,14 +1649,22 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
     exit 4
   fi
 
-  # fast-verification-07: `SUITE: none` means "no full-suite row"; when the constitution has a
-  # round-only one, the reviewer skipped the run - MALFORMED, re-asked, never judged.
-  if printf '%s\n' "$REPORT" | grep -qE '^SUITE: none' && full_suite_row_round_only "$(constitution_file "$ROOT")"; then
-    local why="review: SUITE: none, but ## Commands has a round-only Full suite row - run it and report its SUITE: line"
-    write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
-    echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
-    emit false record-seat 4 error "MALFORMED: $why"
-    exit 4
+  # fast-verification-07/08: when the constitution has a round-only full-suite row with a runnable
+  # command, the reviewer ran it and says so: the first `SUITE:` line must be `ok <N>s`, `FAIL <N>s`
+  # or `TIMEOUT <N>s [budget <B>s]`. A missing line, `SUITE: none`, or a malformed form (no seconds,
+  # `571 s`) is MALFORMED - re-asked, never recorded, never judged green.
+  if full_suite_row_round_only "$(constitution_file "$ROOT")"; then
+    local sline; sline="$(printf '%s\n' "$REPORT" | grep -E '^SUITE:' | head -1 | tr -d '\r')"
+    if ! printf '%s\n' "$sline" | grep -qE '^SUITE: (ok|FAIL|TIMEOUT) [0-9]+s([[:space:]].*)?$'; then
+      local why
+      if [ -z "$sline" ]; then why="review: no SUITE: line, but ## Commands has a round-only Full suite row - run it and report its SUITE: line"
+      else why="review: $sline, but ## Commands has a round-only Full suite row - report SUITE: ok <N>s | FAIL <N>s | TIMEOUT <N>s budget <B>s"
+      fi
+      write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
+      echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
+      emit false record-seat 4 error "MALFORMED: $why"
+      exit 4
+    fi
   fi
 
   local extra; extra="$(printf ' \xc2\xb7 verdict: %s' "$verdict")"

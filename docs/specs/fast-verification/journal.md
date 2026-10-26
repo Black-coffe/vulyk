@@ -14,3 +14,4 @@
 - 2026-10-26T12:26:04Z · 04-council:ESCALATE · round 2 verdict ESCALATE at 004c74c pack 429959fb505e · next: escalated
 - 2026-10-26T12:27:38Z · 04-council:ESCALATE · reopened after round 2, ceiling now 9 · next: repair
 - 2026-10-26T12:27:42Z · 03-building · repair round 2: fast-verification-08-repair-round-2.md · next: build:5
+- 2026-10-26T12:28:31Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/fast-verification; to edit, run /vulyk-pause fast-verification

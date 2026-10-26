@@ -170,6 +170,12 @@ Repair round 1 (story 07, 2026-10-26, 40 jobs, install cache, inject/intake last
 196 s; `--jobs 8`: exit 124 at 540 s (intake cut). Alone, default `--jobs` 12: wall 444 s, exit 0, slowest
 `tests/cycle.test.sh` 198 s. Gap between the two conditions: -23 s, inside run-to-run noise; against story 03's 425 s
 alone at 28 jobs: +19 s alone, -4 s beside.
+Repair round 2 (story 08, 2026-10-26, 46 jobs: `tests/cycle.test.sh` cut into 7 parts, 22-103 s each, 196 s whole
+before; same box, other projects' sessions also running): round conditions (whole `bash tests/council.test.sh`
+beside it), default `--jobs` 12, two runs - run 1: exit 124 at wall 540 s, 44 ok, 0 failed, inject cut at 23 s and
+intake never started, slowest job `council.test.sh --part replays` 269 s; run 2: exit 124 at wall 540 s, 45 ok, 0
+failed, intake cut at 29 s, slowest `council.test.sh --part replays` 227 s. Does not fit 540 s; the other jobs end
+by ~490-517 s and the two latency suites, run alone last, need ~50 s more. Budget unchanged; returned to the owner.
 
 ## Descoped
 
