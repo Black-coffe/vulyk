@@ -206,7 +206,6 @@ the command or script that owns it, and scripts/ship-check.sh reads them all.
 **Approved:** Andrei, 2026-10-25 («да» to the plan as shown, with both recommended items: the maintenance hotfix ships as 0.35.1 before wave 1; at ship the Queen marks the slow `## Commands` rows in every live hive herself)
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/fast-verification
-**Checked:** <written by scripts/human-check.sh>
 **Council:** ESCALATE round 1, 2026-10-26, at 9788d68, pack bec80b2bffbb - red: 1,2,3
 **Council:** ESCALATE round 2, 2026-10-26, at 004c74c, pack 429959fb505e - red: 1,2,3
 **Council:** ESCALATE round 3, 2026-10-26, at e7a6f57, pack 18d641637f26
@@ -228,3 +227,4 @@ the command or script that owns it, and scripts/ship-check.sh reads them all.
 - reason: suite-timeout · round 3 · 2026-10-26
 - suite: 542 s, budget 540 s - raise VULYK_SUITE_TIMEOUT or cut the suite
 - seats: docs/specs/fast-verification/council/round-3/
+**Checked:** ACCEPTED by Andrei, 2026-10-26, at 635d6d1 - Owner 2026-10-26 «Лимит 590, принять, выпустить»: round 3 all asks GREEN, review PASS, only suite-timeout 542 s of 540; default budget raised to 590 s in the follow-up commit, checked by its own tests
