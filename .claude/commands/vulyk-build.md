@@ -18,7 +18,9 @@ No driver, no clerk, no court. Loop:
 1. `bash scripts/cycle.sh advance docs/specs/<slug>`. It runs every mechanical step (branch,
    open-round, judge, the repair story) up to the next thing only an agent can do, and names it `next`.
 2. `build:<W>`: take `status.wave_stories` in order. For each, implement it yourself (its `## Files`
-   only; a bug fix greps every caller and fixes the shared code once; targeted checks while
+   only; a bug fix runs `bash scripts/symbol-map.sh <file> --story <story>` on a root file before
+   editing it, greps only what it cannot vouch for (names marked `textual`, every caller of a file it
+   reports `imports not parsed`) and fixes the shared code once; targeted checks while
    working), add `## Implementation notes`, set `returned: DONE`, and run
    `bash scripts/cycle.sh close-story <file> --commit`. On exit 4, read the error, fix, rerun; after
    three failed reruns write `## Findings` and stop for the owner. A repair story (`# Repair round <n>`)

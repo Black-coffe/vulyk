@@ -24,7 +24,9 @@ Plan: "$ARGUMENTS"
 3. Recon. Read `memory/memory.md` and the relevant `memory/map/` slices first. A targeted question about
    a file or two: read them yourself. Dispatch `drone-scout` only for broad or unmapped territory:
    Tier 1 none (one if the location is unknown), Tier 2 at most one, Tier 3 at most two, Tier 4 at most
-   four, in parallel.
+   four, in parallel. Tier 2-4: run `bash scripts/symbol-map.sh <candidate files>` on the files the plan is
+   likely to name and keep its output for the plan. Checklist, Tier 2-4: meta-tests, docs/ADR, `.env.example`,
+   re-exports, sibling files with the same pattern.
 3a. Horizon, Tier 2-4 on new ground (ADR-022). Skip it for study work, Tier 0-1, no-question mode and
    `--no-horizon`; `--horizon` runs it anyway. New ground is a recon fact: take two to four terms that name the
    asked capability (its nouns and verbs, not the project's) and Grep them in `memory/memory.md`, `memory/map/`
@@ -45,7 +47,7 @@ Plan: "$ARGUMENTS"
 4. Grill, Tier 2-4. Follow `templates/grill.md`; it owns every rule of the round, horizon questions included. Its output lands in
    `brief.md` as `## Answers` then `## Asks`. Tier 1 skips it: `## Asks` is the task phrase as item 1.
 5. Plan. Tier 1-2: write plan.md yourself from `templates/plan.md`. Tier 3-4: dispatch `queen-planner`
-   with the brief, scout reports and map pointers; Tier 4 also consults `lead-architect` on the central
+   with the brief, scout reports, the symbol-map output and map pointers; Tier 4 also consults `lead-architect` on the central
    design fork, and both Tier 4 dispatches carry `model: <top_model>` (`bash scripts/top-model.sh`).
    Tier 3 passes `model: <p>` from `p="$(bash scripts/model-profile.sh --role planner)"` only when it is not
    `opus` (else no model parameter). At Tier 3-4, when `bash scripts/model-profile.sh --role routine` prints
