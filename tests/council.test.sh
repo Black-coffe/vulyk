@@ -1696,6 +1696,45 @@ git add -A && git commit -qm "spec(cstory4): fixture" >/dev/null
 out="$(council close-story docs/specs/cstory4/cstory4-01-first.md --commit)"; ex=$?
 [ "$ex" -eq 0 ] && echo "  ok    both && segments matched ## Commands, ran, exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+echo "close-story: a verification naming a round-only row -> exit 2, nothing run; its unmarked --part neighbour runs (fast-verification-04)"
+cat > CLAUDE.vulyk.md <<'EOF'
+# Sidecar constitution
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Slow suite (round-only) | `touch ro-suite-ran.txt` |
+| Slow suite part | `touch ro-suite-ran.txt --part <topic>` |
+| Shared text, marked (round-only) | `touch ro-both-ran.txt` |
+| Shared text, unmarked | `touch ro-both-ran.txt` |
+| Fast part | `echo ro-suite --part <topic>` |
+EOF
+mkdir -p docs/specs/cstoryro
+cstoryro() { # cstoryro <nn> <verification line>
+  printf -- '---\nstory: cstoryro-%s\nspec: cstoryro\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Round-only fixture\n\n## Files\n- ro-%s.txt\n\n## Verification\n%s\n' \
+    "$1" "$1" "$2" > "docs/specs/cstoryro/cstoryro-$1-r.md"
+}
+cstoryro 01 '`touch ro-suite-ran.txt`'
+cstoryro 02 '`true && touch ro-both-ran.txt`'
+cstoryro 03 '`echo ro-suite --part x`'
+git add -A -- docs/specs/cstoryro && git commit -qm "spec(cstoryro): fixture" >/dev/null
+hbefore="$(git rev-parse HEAD)"
+out="$(council close-story docs/specs/cstoryro/cstoryro-01-r.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"verification is round-only: touch ro-suite-ran.txt"' \
+  && echo "  ok    the marked row -> exit 2, verification is round-only: <segment>" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ ! -e ro-suite-ran.txt ] && grep -q '^status: todo' docs/specs/cstoryro/cstoryro-01-r.md && [ "$(git rev-parse HEAD)" = "$hbefore" ] \
+  && echo "  ok    nothing ran, status stays todo, nothing committed" || { echo "::error::round-only story ran or moved: $(git log --oneline -1)"; fail=1; }
+out="$(council close-story docs/specs/cstoryro/cstoryro-02-r.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"verification is round-only: touch ro-both-ran.txt"' \
+  && [ ! -e ro-both-ran.txt ] && [ "$(git rev-parse HEAD)" = "$hbefore" ] \
+  && echo "  ok    neighbour form: the text in a marked and an unmarked row is refused, nothing ran" || { echo "::error::exit=$ex out=$out"; fail=1; }
+out="$(council close-story docs/specs/cstoryro/cstoryro-03-r.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' docs/specs/cstoryro/cstoryro-03-r.md \
+  && echo "  ok    a --part placeholder match on an unmarked row still runs and closes" || { echo "::error::exit=$ex out=$out"; fail=1; }
+rm -f CLAUDE.vulyk.md
+git add -A && git commit -qm "cstoryro: done" >/dev/null
+
 echo "close-story: a multi-command block runs one line at a time - false before true -> exit 4 naming the failing line (R18/M-3)"
 mkdir -p docs/specs/cstory2
 cat > docs/specs/cstory2/cstory2-01-first.md <<'EOF'

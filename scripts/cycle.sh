@@ -1975,12 +1975,26 @@ EOF
     [ "$vline" = "none — reviewed by lead-review" ] && continue
     # r2m9: a line matching a `## Commands` cell whole (its own `&&` and all) is one unit -
     # only a line that is NOT itself a cell gets split and checked segment by segment.
-    command_cell_exists "$CONSTITUTION" "$vline" && continue
+    # fast-verification-04: a cell whose row is marked `round-only` is a slow suite the round runs,
+    # never close-story - refused before anything runs, so the worker returns NEEDS_CONTEXT.
+    if command_cell_exists "$CONSTITUTION" "$vline"; then
+      command_cell_round_only "$CONSTITUTION" "$vline" && {
+        echo "cycle: close-story - verification is round-only in $CONSTITUTION's ## Commands: $vline" >&2
+        emit false close-story 2 error "verification is round-only: $vline"
+        exit 2
+      }
+      continue
+    fi
     while IFS= read -r seg; do
       [ -n "$seg" ] || continue
       command_cell_exists "$CONSTITUTION" "$seg" || {
         echo "cycle: close-story - verification command not in $CONSTITUTION's ## Commands: $seg" >&2
         emit false close-story 2 error "verification not in ## Commands: $seg"
+        exit 2
+      }
+      command_cell_round_only "$CONSTITUTION" "$seg" && {
+        echo "cycle: close-story - verification is round-only in $CONSTITUTION's ## Commands: $seg" >&2
+        emit false close-story 2 error "verification is round-only: $seg"
         exit 2
       }
     done <<SEGEOF

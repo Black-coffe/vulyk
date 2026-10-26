@@ -177,6 +177,27 @@ EOF
   return 1
 }
 
+command_cell_round_only() { # command_cell_round_only <constitution> <command> -> 0 iff <command>
+  # matches (command_cell_exists' rule) the Command cell of a `## Commands` row whose Purpose cell
+  # carries `round-only`: a slow suite only the council round runs. A command found in a marked row
+  # and an unmarked one is round-only. The marked rows alone are fed to command_cell_exists.
+  [ -f "$1" ] || return 1
+  local marked rc
+  marked="$(mktemp)" || return 1
+  awk '
+    /^## Commands[[:space:]]*$/ { inblock=1; print; next }
+    /^##[[:space:]]/            { if (inblock) exit }
+    inblock && /^\|/ {
+      line = $0; sub(/^\|/, "", line)
+      i = index(line, "|"); if (!i) next
+      if (substr(line, 1, i - 1) ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) print
+    }
+  ' "$1" > "$marked"
+  command_cell_exists "$marked" "$2"; rc=$?
+  rm -f "$marked"
+  return "$rc"
+}
+
 verification_segments() { # verification_segments <line> -> one &&-separated segment per line
   # (R11/C-4): every segment of a ## Verification line that is not itself a cell must be one.
   local rest="$1" seg

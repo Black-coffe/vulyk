@@ -366,6 +366,40 @@ printf '%s' "$out" | grep -qF "'no-such-cell'" && { echo "::error::the sidecar's
 rm -f CLAUDE.vulyk.md
 git add -A && git commit -qm "wcell fixture" >/dev/null
 
+echo "fast-verification-04: wave-check reports a segment naming a round-only row, not its unmarked --part neighbour"
+cat > CLAUDE.vulyk.md <<'EOF'
+# Sidecar constitution
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Slow suite (round-only) | `bash ro-suite.sh` |
+| Slow suite part | `bash ro-suite.sh --part <topic>` |
+| Shared text, marked (round-only) | `bash ro-both.sh` |
+| Shared text, unmarked | `bash ro-both.sh` |
+EOF
+mkdir -p docs/specs/wro
+wro_story() { # wro_story <nn> <verification-block>
+  printf -- '---\nstory: wro-%s\nspec: wro\nstatus: todo\nwave: %s\n---\n# R%s\n\n## Files\n- app.txt\n\n## Verification\n%s\n' \
+    "$1" "$1" "$1" "$2" > "docs/specs/wro/wro-$1-r.md"
+}
+wro_story 01 '`bash ro-suite.sh`'
+wro_story 02 '`bash ro-suite.sh --part verbs`'
+wro_story 03 '`bash ro-suite.sh --part verbs && bash ro-both.sh`'
+out="$(bash scripts/wave-check.sh docs/specs/wro)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    wave-check still exits 0 while reporting round-only" || { echo "::error::wave-check exit $ex"; fail=1; }
+printf '%s' "$out" | expect "a story naming the marked row is reported" "verify-round-only: wro-01 bash ro-suite.sh"
+printf '%s' "$out" | expect "a segment in a marked and an unmarked row is reported" "verify-round-only: wro-03 bash ro-both.sh"
+printf '%s' "$out" | grep -qF 'verify-round-only: wro-02' && { echo "::error::the unmarked --part row was reported: $out"; fail=1; } \
+  || echo "  ok    the unmarked --part row is not reported"
+n="$(printf '%s\n' "$out" | grep -c 'verify-round-only:')"
+[ "$n" -eq 2 ] && echo "  ok    exactly two verify-round-only reports" || { echo "::error::verify-round-only count $n: $out"; fail=1; }
+printf '%s' "$out" | grep -qF 'verify-cell:' && { echo "::error::a round-only cell was also reported verify-cell: $out"; fail=1; } \
+  || echo "  ok    a round-only cell is still a cell (no verify-cell)"
+rm -f CLAUDE.vulyk.md
+git add -A && git commit -qm "wro fixture" >/dev/null
+
 echo "ADR-013 D4: trace-check accepts a quote equal to a whole ## Asks item (digits, dot, text, whitespace-normalized), and only that"
 mkdir -p docs/specs/trc
 printf '# trc\n\n## Request\n> build the trace demo\n\n## Asks\n1. the first ask works\n2. the second   ask works\n' > docs/specs/trc/brief.md
