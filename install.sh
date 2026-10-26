@@ -252,10 +252,11 @@ print_commands_placeholder() {
 | Purpose | Command |
 |---|---|
 | Single test file | `<fill in - the quiet variant>` |
-| Full test suite | `<fill in>` |
+| Full suite / build (round-only) | `<fill in>` |
 | Lint | `<fill in>` |
 | Build / typecheck | `<fill in>` |
 
+`round-only` marks the full suite: the reviewer runs it once per round, and no story names it.
 Filled in by `/vulyk-bootstrap`. Verify each command actually runs before writing it
 down, and write "none" where this project genuinely lacks one - a verification that
 always exits 0 is worse than an admitted gap.

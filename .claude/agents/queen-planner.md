@@ -26,8 +26,8 @@ mechanically by `cycle.sh repair`.
   model line. Each quotes its
   `## Requirements` verbatim from `brief.md` (`trace-check.sh` matches them literally). A story you
   cannot tie to a quote is speculative: cut it, or list it as an assumption for the owner.
-- Each story names its files, acceptance criteria, a `## Verification` taken from the constitution's
-  `## Commands` table, and the map slice sections a worker should load. `## Files` lists every place
+- Each story names its files, acceptance criteria, a `## Verification` taken from the rows of the constitution's
+  `## Commands` table that carry no `round-only` mark (close-story exit 2 `verification is round-only` refuses a marked one), and the map slice sections a worker should load. `## Files` lists every place
   the change must reach: callers, tests, fixtures, config, exports.
 - A story that adds a branch, a loop, a parser, or handling of money, security or data writes names the
   test that fails when that logic breaks: a test file in its `## Files`, or a `worker-test` story in a

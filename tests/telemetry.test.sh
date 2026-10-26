@@ -1105,6 +1105,8 @@ expect_eq "the repo's own constitution consents to nothing" "off" "$(cd "$SRC" &
 # no case can block on a prompt when the suite is run from a real terminal.
 install_fixtures
 expect_eq "fresh install writes the Telemetry row as off" "off" "$(rowval "$TGT/CLAUDE.md")"
+awk '/VULYK:COMMANDS:START/{f=1;next}/VULYK:COMMANDS:END/{f=0}f' "$TGT/CLAUDE.md" \
+  | expect "fresh install: the Commands block names the round-only mark" "round-only"
 expect_eq "the row is the last row inside the Profile block" "1" \
   "$(profile_rows "$TGT/CLAUDE.md" | tail -1 | grep -c '^| Telemetry |')"
 expect_eq "the installed hive's own consent verb reads it" "off" \

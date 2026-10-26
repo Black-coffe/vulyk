@@ -34,6 +34,8 @@ You implement one story and close it. Not two, and nothing "while you are here".
      wave-mate's), write the paths under `## Findings` and return `NEEDS_CONTEXT`.
      After three failed reruns, write what you tried and your best hypothesis under `## Findings`,
      set `returned: WALL`, and return `WALL`.
+   - exit 2 `verification is round-only`: the story names a row marked `round-only`, which only the reviewer
+     runs. Set `returned: NEEDS_CONTEXT`, name the row, and return it.
    - any other exit (paused, another driver's stamp, a verification line that is not a `## Commands`
      cell): not fixable from here. Set `returned: NEEDS_CONTEXT` and return it with the `error`.
 

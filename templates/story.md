@@ -81,6 +81,8 @@ working. A suite that skips its tests when a service or variable is missing exit
 green it never earned: name a command that fails instead (strict skips, or a check for the service).
 
 The command must be able to fail for this story: its scope has to reach the paths under `## Files`.
+Never name a row marked `round-only`: wave-check reports a segment of one, and close-story refuses it (exit 2).
+Name the part of that suite that covers `## Files` instead.
 `wave-check.sh` reports the obvious gap, but not an ignore file (`.prettierignore`,
 `testPathIgnorePatterns`, a lint excludes list) that removes exactly these files - check that here.
 

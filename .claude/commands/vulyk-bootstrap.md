@@ -33,8 +33,10 @@ task. A no is recorded as the Profile row `| Bootstrap | declined <date> |`, whi
      real commands in their quiet form (`--reporter=dot`, `-q`, `--silent`), because their output is
      resent on every later turn. Run each one; where the project lacks one (no build step, no test
      runner), write that instead of a plausible command, since a verification that always exits 0 is
-     worse than an admitted gap. Name the full suite in its own row: the reviewer runs it once per
-     round.
+     worse than an admitted gap. Per-story rows run in a minute or two. Name the full suite in its own
+     row with `(round-only)` in its Purpose cell: the reviewer runs it once per round and no story names
+     it. A suite that runs longer gets a part switch (`--part <topic>` or the runner's equivalent), and
+     each story names the part covering its `## Files`.
    - Court setup: question 7's install step goes verbatim into `.claude/vulyk-setup` (a bash script; it
      runs with the court as its working directory and `VULYK_ROOT`, `VULYK_COURT` set, capped at 300 s).
      Run it once in a scratch checkout before committing it. "None" writes no file. The installer never
