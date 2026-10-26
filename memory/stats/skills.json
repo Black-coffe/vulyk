@@ -1,6 +1,6 @@
 {
   "vulyk-build": {
-    "count": 13,
+    "count": 14,
     "last_used": "2026-10-26"
   },
   "vulyk-handoff": {
@@ -16,12 +16,12 @@
     "last_used": "2026-10-25"
   },
   "vulyk-ship": {
-    "count": 16,
+    "count": 17,
     "last_used": "2026-10-26"
   },
   "fact-check": {
-    "count": 7,
-    "last_used": "2026-10-21"
+    "count": 8,
+    "last_used": "2026-10-26"
   },
   "supergrill": {
     "count": 6,
@@ -64,7 +64,7 @@
     "last_used": "2026-10-19"
   },
   "crossgrill": {
-    "count": 1,
-    "last_used": "2026-10-21"
+    "count": 2,
+    "last_used": "2026-10-26"
   }
 }
