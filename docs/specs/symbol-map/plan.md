@@ -59,6 +59,10 @@ Add one deterministic script, `scripts/symbol-map.sh <file>...`, that prints for
 - Git co-change block (H2): 1 of 13 misses, already caught by the import graph; drowns long `## Files` lists in noise.
 - JS/TS/PHP import edges, tree-sitter/ctags/LSP: the default path must need no extra tool (public-repo rule); the language-independent sections already apply to every stack.
 - A cache of the parsed graph: 1.2 s measured on a 445-file repo, nothing to save yet.
+- After the round (owner, 2026-10-26, «Да, сначала узкая правка»): the per-file replay gives 6/13 at about 17 lines
+  per file; next circle, a tighter planner hand-off (`exact` lines plus counts, `tests/fixtures/**` excluded) and a
+  decision on the close-time gate or new languages only from misses in stories planned after this release, never from
+  `replay.md` (in-sample).
 
 ## Integration gate
 `bash tests/full-suite.sh`
