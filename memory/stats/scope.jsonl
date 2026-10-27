@@ -229,3 +229,4 @@
 {"ts":"2026-10-26T20:18:51Z","story":"symbol-map-02-protocol","declared":4,"changed":4,"out_of_scope":0}
 {"ts":"2026-10-26T20:23:25Z","story":"symbol-map-03-replay","declared":3,"changed":3,"out_of_scope":0}
 {"ts":"2026-10-26T20:35:35Z","story":"symbol-map-04-repair-round-1","declared":11,"changed":1,"out_of_scope":0}
+{"ts":"2026-10-27T10:05:50Z","story":"post-037-tails-02-telemetry-version","declared":2,"changed":2,"out_of_scope":0}

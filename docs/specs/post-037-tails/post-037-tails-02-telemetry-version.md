@@ -1,8 +1,8 @@
 ---
 story: post-037-tails-02
 spec: post-037-tails
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: haiku
@@ -42,5 +42,8 @@ After this story `scripts/telemetry.sh`'s `vulyk_version()` returns the content 
 `bash tests/telemetry.test.sh --part telemetry`
 
 ## Implementation notes
+- scripts/telemetry.sh: `vulyk_version()` reads `.claude/vulyk-version` when present (unchanged rule); else reads `$ROOT/VERSION` only when `install.sh` and `VERSION` both exist; else `0.0.0`.
+- tests/telemetry.test.sh: new block `--- vulyk version` inside the `telemetry` part, after the record cases, in its own temp repo (`$T/vrepo`); three assertions (VERSION with whitespace, VERSION without install.sh, stamp wins).
+- The first assertion reads `0.0.0` against the 0.37 function (it had no VERSION branch), so it is red there by construction.
 
 ## Findings
