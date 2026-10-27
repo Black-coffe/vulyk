@@ -5,7 +5,9 @@
 #
 # Fixtures: tests/fixtures/symbol-map/python (a package with a re-exporting __init__, a test, a guard test,
 # a doc naming the path, two false friends, a .ts file, a broken .py) and tests/fixtures/symbol-map/bash
-# (a script sourcing lib.sh through $(dirname "$0"), a test sourcing it by literal path). Each tree is copied
+# (a script sourcing lib.sh through $(dirname "$0"), a test sourcing it by literal path, two scripts running a
+# sibling .py, a tests/fixtures file that must never show) and tests/fixtures/symbol-map/mentions (one dotfile
+# named by code, a test, an ADR and the three root docs, for the ranking). Each tree is copied
 # into a temp dir and made a git repo there; the cap cases add generated files to their own copy.
 set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
@@ -117,6 +119,41 @@ expect_in "a literal-path source from a test is exact" "$T/lib.out" tests "  exa
 (cd "$T/sh" && bash "$SM" scripts/run.sh) > "$T/run.out" 2>&1
 expect_in "what run.sh sources is exact" "$T/run.out" imported "  exact    scripts/lib.sh"
 
+echo "--- bash runs python"
+for x in rt:run-tool.sh rh:run-helper.sh tp:tool.py hp:helper.py; do
+  (cd "$T/sh" && bash "$SM" "scripts/${x#*:}") > "$T/${x%%:*}.out" 2>&1
+done
+expect_in "a \"\$(dirname \"\$0\")/tool.py\" run is exact under imported" "$T/rt.out" imported "  exact    scripts/tool.py"
+expect_in "a \"\$DIR/helper.py\" run is exact under imported" "$T/rh.out" imported "  exact    scripts/helper.py"
+expect_in "the running script is exact under importers of tool.py" "$T/tp.out" importers "  exact    scripts/run-tool.sh"
+expect_in "the running script is exact under importers of helper.py" "$T/hp.out" importers "  exact    scripts/run-helper.sh"
+
+echo "--- fixtures never listed"
+(cd "$T/sh" && bash "$SM" scripts/lib.sh) > "$T/fx.out" 2>&1
+expect_absent "a tests/fixtures file that sources and names the input is never listed" "tests/fixtures/" "$T/fx.out"
+expect_in "the real test is still listed" "$T/fx.out" tests "  exact    tests/run.test.sh"
+(cd "$SRC" && bash "$SM" scripts/lib.sh) > "$T/own.out" 2>&1
+expect_absent "scripts/lib.sh in this repo lists no tests/fixtures path" "tests/fixtures/" "$T/own.out"
+
+echo "--- path mention ranking"
+tree mentions "$T/men6"
+(cd "$T/men6" && bash "$SM" etc/.toolrc) > "$T/men6.out" 2>&1
+got="$(awk '$0=="path mentions:"{on=1;next} /^[a-z][a-z ]*:$/{on=0} on' "$T/men6.out" | sed 's/^ *//' | tr '\n' '|')"
+expect_eq "code and tests, then ADR, then the root files; the tail hides a root file" \
+  "textual  src/other.py|textual  tests/test_other.py|textual  docs/adr/001-x.md|textual  CHANGELOG.md|textual  CLAUDE.md|... 1 more|" "$got"
+
+echo "--- --exact"
+(cd "$T/py" && bash "$SM" --exact pkg/core.py) > "$T/ex.out" 2>&1; RC=$?
+expect_eq "--exact exits 0" "0" "$RC"
+expect_in "--exact keeps an exact test" "$T/ex.out" tests "  exact    tests/test_core.py"
+expect_in "--exact keeps the via importer" "$T/ex.out" importers "  exact    app.py (via pkg/__init__.py)"
+expect_in "--exact folds textual importers into a count" "$T/ex.out" importers "  textual  2 not shown"
+expect_absent "--exact prints no textual path" "textual  misc/" "$T/ex.out"
+got="$(awk '$0=="guard tests:"{on=1;next} /^[a-z][a-z ]*:$/{on=0} on' "$T/ex.out" | tr '\n' '|')"
+expect_eq "a textual-only section prints only its count line" "  textual  1 not shown|" "$got"
+bash "$SM" --help > "$T/help.out" 2>&1
+expect "--help names --exact" "--exact" "$T/help.out"
+
 echo "--- caps"
 tree python "$T/mentions"
 for i in 1 2 3 4 5 6 7 8; do printf 'see pkg/core.py\n' > "$T/mentions/docs/m$i.md"; done
@@ -133,6 +170,11 @@ if [ "$size" -le 1536 ]; then ok "the whole stdout stays at or under 1536 bytes 
 expect_eq "exactly one final ... N more line" "1" "$(grep -cE '^\.\.\. [0-9]+ more' "$T/busy.out")"
 if tail -n1 "$T/busy.out" | grep -qE '^\.\.\. [0-9]+ more'; then ok "the count line ends the output"
 else bad "the count line is not last: $(tail -n1 "$T/busy.out")"; fi
+(cd "$T/busy" && bash "$SM" pkg/core.py pkg/util.py nope.sh) > "$T/busym.out" 2>&1; RC=$?
+expect_eq "a missing input past the cap exits 1" "1" "$RC"
+expect_eq "the missing block opens the output" "## nope.sh|  ! missing" "$(head -n2 "$T/busym.out" | tr '\n' '|' | sed 's/|$//')"
+if tail -n1 "$T/busym.out" | grep -qE '^\.\.\. [0-9]+ more'; then ok "and the cap tail still ends it"
+else bad "the cap tail is not last: $(tail -n1 "$T/busym.out")"; fi
 
 echo "--- replay runner"
 RPY=""

@@ -1,4 +1,4 @@
-"""Replay scripts/symbol-map.sh on stories that missed a path outside ## Files (stdlib only).
+"""Replay scripts/symbol-map.py on stories that missed a path outside ## Files (stdlib only).
 
 Usage: python docs/specs/symbol-map/replay.py <cases.json>
 
@@ -12,12 +12,11 @@ Last line: replay: hits <h>/<m> noise <lines> over <n> stories. Exit 2 on a miss
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SM = os.path.normpath(os.path.join(HERE, '..', '..', '..', 'scripts', 'symbol-map.sh'))
+SM = os.path.normpath(os.path.join(HERE, '..', '..', '..', 'scripts', 'symbol-map.py'))
 PATH_LINE = re.compile(r'^\s+(exact|textual)\s+\S')
 
 
@@ -49,13 +48,12 @@ def main(argv):
             print('replay: case %d: no repo root above its story file' % i, file=sys.stderr)
             return 2
         roots.append(root)
-    bash = shutil.which('bash') or 'bash'
     hits = missed = noise = 0
     for i, (c, root) in enumerate(zip(cases, roots), 1):
         files = list(c.get('files') or [])
         lines = []
         if files:
-            cmd = [bash, SM]
+            cmd = [sys.executable, SM]  # no bash: MSYS would glob-expand the arguments
             for f in files:
                 cmd += ['--scope', f]
             cmd += files
