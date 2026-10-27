@@ -4,6 +4,25 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+### Added (spec `fable-fallback`)
+- **A Fable-limit refusal no longer stalls a build.** The role whose Fable ran out (a judge, the planner, the
+  architect, a worker on Fable) runs once more on Opus with the same prompt, and the event is recorded three ways: a
+  journal line, the telemetry code `fable_limit_fallback`, one sentence to the owner. A second refusal stops as before.
+  Inside a Workflow the refusal comes back as an empty result, so the driver asks Fable one ping and falls back only
+  when that ping fails too; in a session (`/vulyk-build` solo, `/vulyk-review`, `/vulyk-plan`) the refusal text is read.
+  Checked live on an account with Fable exhausted: the Fable call and its ping failed, the Opus redispatch answered.
+  A report that quotes the refusal text is a report, not a refusal (short text, no report header).
+- **`lead-review` keeps its prompt cache for an hour** (`experimental: cacheTtl: 1h`), the only judge that does;
+  `worker-code` and `worker-test` have had it since the cache-economy release. On 2026-11-03 its spend per dispatch
+  is compared with the week before, and the owner decides whether it spreads.
+- **The gate model's scope is written down.** `docs/model-cascade.md`, ADR-015 and `top-model.sh`'s hint: the gate
+  model is for the Tier 4 review, the Tier 4 planner, `lead-architect` and a missed story's retry; a hive's own judge
+  script asks `model-profile.sh --role seat` and passes `--effort` explicitly.
+
+### Dropped
+- **The reviewer does not start the suite in the background.** A probe showed a subagent returns before its
+  background command ends and is never told it ended; the one-hour cache above carries the cost it was meant to cut.
+
 - **evolve: relayed side-agent notes no longer count as owner corrections.** The corrections block drops quotes that
   open with `>` and prints how many it left out. Evidence: 8 of 8 lexicon hits in the week to 2026-10-26 were relayed
   side-agent notes, none an owner correction (class `owner-words-by-builder`).
