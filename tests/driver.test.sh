@@ -489,6 +489,31 @@ const blindPromptsClean = (r) => r.dispatches
     const prefixed = await reviewRun(F, ['"Council review round 2" failed: ' + REFUSED + ' Run /usage-credits to continue.', 'review report']);
     check(prefixed.dispatches.length === 2 && prefixed.dispatches[1].model === 'opus' && prefixed.result.fallbacks.length === 1,
       'fallback: the real refusal with a description prefix is redispatched', { m: prefixed.dispatches.map((d) => d.model), f: prefixed.result.fallbacks });
+    // the 2026-10-27 live probe: inside a Workflow the refusal is agent() -> null; one ping on the same model decides
+    const nul = await reviewRun(F, [null, null, 'review report']);
+    const [n1, np, n2] = nul.dispatches;
+    check(nul.dispatches.length === 3 && n1.model === 'fable' && np.model === 'fable' && np.agentType === undefined
+      && np.prompt === 'Reply with the single word OK.' && n2.model === 'opus' && n2.agentType === 'lead-review' && n2.prompt === n1.prompt
+      && nul.result.next === 'green' && nul.mismatches.length === 0
+      && JSON.stringify(nul.result.fallbacks) === JSON.stringify([{ agent: 'lead-review', where: 'round-1/review', from: 'fable', to: 'opus' }]),
+      'fallback: a null fable return with a null ping is redispatched once on opus, the round goes on',
+      { m: nul.dispatches.map((d) => [d.agentType, d.model]), f: nul.result.fallbacks, next: nul.result.next });
+    const pong = await reviewRun(F, [null, 'OK', 'never asked']);
+    check(pong.dispatches.length === 2 && pong.dispatches[1].model === 'fable' && pong.result.fallbacks.length === 0
+      && pong.result.next === 'green' && pong.mismatches.length === 0,
+      'fallback: a null fable return with an answering ping is not redispatched, the empty return goes on as before',
+      { m: pong.dispatches.map((d) => d.model), f: pong.result.fallbacks });
+    const wn = await run(ARGS, { clerk: [[CLAIM, adv(build([story(1, { model: 'fable' })]))], [ADV, adv(build([story(1, { model: 'fable' })]))], [ADV, adv(build([story(1, { model: 'fable' })]))], [RELEASE, releaseOk]],
+      agents: [null, 'OK', '   ', 'OK'] });
+    check(wn.result.stop && wn.result.stop.error === 'worker returned empty - turn cap suspected (worker-code, maxTurns in .claude/agents/worker-code.md)'
+      && wn.result.fallbacks.length === 0 && wn.dispatches.map((d) => d.model).join(',') === 'fable,fable,fable,fable',
+      'fallback: an answering ping leaves the turn-cap stop as before', { stop: wn.result.stop, m: wn.dispatches.map((d) => d.model) });
+    for (const [label, args] of [['opus passed', { ...ARGS, review_model: 'opus' }], ['no model passed', ARGS]]) {
+      const n = await reviewRun(args, [null, 'never asked']);
+      check(n.dispatches.length === 1 && n.result.fallbacks.length === 0, `fallback: a null return with ${label} makes no ping`, n.dispatches.map((d) => d.model));
+    }
+    const nn = await reviewRun(F, [null, null, null, 'never asked']);
+    check(nn.dispatches.length === 3 && nn.result.fallbacks.length === 1, 'fallback: a null redispatch makes no second ping', nn.dispatches.map((d) => d.model));
     const sw = story(1, { model: 'fable' });
     const done = await run(ARGS, { clerk: [[CLAIM, adv(build([sw]))], [ADV, adv(green())], [RELEASE, releaseOk]],
       agents: ['STATUS: DONE\nFILES: .claude/workflows/vulyk-cycle.js\nCONCERNS: refused() now matches model_requires_usage_credits in a short string', 'never asked'] });

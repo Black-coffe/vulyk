@@ -125,9 +125,18 @@ const advance = async (flags) => {
 // Every worker and seat dispatch: on a Fable refusal with a model other than FALLBACK_MODEL passed,
 // the same prompt and agent once more on FALLBACK_MODEL. Not an attempt - the refused call wrote no
 // report - and never a third call: a second refusal goes down the dead-dispatch path as before.
+// Inside a Workflow the refusal comes back as null (live probe 2026-10-27), so an empty return asks
+// one cheap ping on the same model: an empty or refused ping is the limit, an answer keeps the empty
+// result for the turn-cap path. One ping per dispatch, none on the redispatch.
+const empty = (r) => r === null || r === undefined || (typeof r === 'string' && r.trim() === '')
 const dispatch = async (prompt, opts, where) => {
   const r = await caught(agent(prompt, opts))
-  if (!refused(r) || !opts.model || opts.model === FALLBACK_MODEL) return r
+  if (!opts.model || opts.model === FALLBACK_MODEL) return r
+  if (!refused(r)) {
+    if (!empty(r)) return r
+    const ping = await caught(agent('Reply with the single word OK.', { label: `ping:${where}`, model: opts.model }))
+    if (!empty(ping) && !refused(ping)) return r
+  }
   fallbacks.push({ agent: opts.agentType, where, from: opts.model, to: FALLBACK_MODEL })
   log(`fallback: ${opts.agentType} ${where} ${opts.model} -> ${FALLBACK_MODEL} (Fable limit)`)
   return caught(agent(prompt, { ...opts, model: FALLBACK_MODEL }))

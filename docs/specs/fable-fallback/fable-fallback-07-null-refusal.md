@@ -1,7 +1,7 @@
 ---
 story: fable-fallback-07
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 5
@@ -36,3 +36,8 @@ Ask 1 works on the hive path. A live probe on 2026-10-27 (account 1, Fable exhau
 
 ## Verification
 `bash tests/driver.test.sh`
+
+## Implementation notes
+- .claude/workflows/vulyk-cycle.js: `dispatch()` pings once on the same model when a non-opus dispatch returns empty (null, undefined, blank) and is not `refused()`; an empty or refused ping takes the existing fallback path, an answer returns the original empty result. New helper `empty()`.
+- The ping goes through `agent()` with no `agentType` (label `ping:<where>`, the passed model), so the frontmatter of no agent applies; the redispatch never pings (it returns `caught(agent(...))` directly, as before).
+- tests/driver.test.sh: null+null ping -> one opus redispatch and one fallback; null+OK ping -> no redispatch (review round and worker turn-cap stop); null with opus or no model -> no ping; null redispatch -> no second ping.
