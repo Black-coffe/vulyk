@@ -4,6 +4,11 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-10-28
+
+A build no longer stalls when Fable runs out: the refused role runs once more on Opus, recorded (spec
+`fable-fallback`). The horizon step says what the court sees and labels its answers (spec `horizon-audit`).
+
 ### Added (spec `fable-fallback`)
 - **A Fable-limit refusal no longer stalls a build.** The role whose Fable ran out (a judge, the planner, the
   architect, a worker on Fable) runs once more on Opus with the same prompt, and the event is recorded three ways: a
@@ -30,7 +35,6 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
   dispatch; questions inside the cap go build-changing first, then gaps, then extensions. ADR-022 records that the
   in-session three-lens run has not happened yet and two triggers; `/vulyk-evolve` counts the picks from the third
   `horizon.md` on.
-
 - **evolve: relayed side-agent notes no longer count as owner corrections.** The corrections block drops quotes that
   open with `>` and prints how many it left out. Evidence: 8 of 8 lexicon hits in the week to 2026-10-26 were relayed
   side-agent notes, none an owner correction (class `owner-words-by-builder`).
