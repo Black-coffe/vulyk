@@ -28,8 +28,8 @@ A build no longer stalls when Fable runs out: the refused role runs once more on
 - **The reviewer does not start the suite in the background.** A probe showed a subagent returns before its
   background command ends and is never told it ended; the one-hour cache above carries the cost it was meant to cut.
 
-### Changed (spec `horizon-audit`)
-- **The horizon step says what the court sees and keeps its answers countable.** The court sees no proposal, only
+### Changed
+- (spec `horizon-audit`) **The horizon step says what the court sees and keeps its answers countable.** The court sees no proposal, only
   the owner's decisions on them in `## Answers`; each horizon answer carries `(horizon H<n>)` and its pick. A `gap`
   stays a gap only with the request fragment that fails without it; the lenses get the Profile rows in their
   dispatch; questions inside the cap go build-changing first, then gaps, then extensions. ADR-022 records that the
