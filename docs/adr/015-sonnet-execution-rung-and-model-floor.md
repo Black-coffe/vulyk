@@ -89,8 +89,8 @@ Sonnet 5.5 shipped on 2026-09-28. The evidence and the source table are in
 
 *Amended 2026-10-27:* a Fable-limit refusal redispatches the role once on `opus`; under `opus-builds` the family that built judges that one dispatch; recorded by journal + `fable_limit_fallback` (spec `fable-fallback`).
 
-*Amendment, status: proposed (2026-10-28, ADR harvest of spec `fable-fallback`, 0.39.0 at 427ff2c; the owner
-writes `accepted`):* **the Fable-limit fallback and how a refusal is detected.**
+*Amendment, status: accepted (2026-10-28, owner: Andrei, «принимаю»; ADR harvest of spec `fable-fallback`, 0.39.0
+at 427ff2c):* **the Fable-limit fallback and how a refusal is detected.**
 
 - *Context, verbatim.* plan.md `## Assumptions`: "The fallback family is a constant, `opus`, for every
   Fable role ... Under `opus-builds` this means Opus judges Opus code for that one dispatch: the owner's

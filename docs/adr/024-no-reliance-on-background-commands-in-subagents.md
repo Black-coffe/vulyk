@@ -1,6 +1,6 @@
 # ADR-024: A subagent's protocol never relies on a background command finishing
 
-- Status: proposed
+- Status: accepted (2026-10-28, owner: Andrei, «принимаю»)
 - Date: 2026-10-28
 - Spec: docs/specs/fable-fallback (story 03, `## Descoped`)
 
