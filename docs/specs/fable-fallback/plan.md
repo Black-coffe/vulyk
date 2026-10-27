@@ -72,5 +72,5 @@ is missing or unparsable.
 **Council:** RED round 1, 2026-10-27, at 546d094, pack a378f5d8d650
 **Council:** GREEN round 2, 2026-10-27, at 97d29a8, pack a68d9a9f4309
 **Council:** GREEN round 3, 2026-10-27, at e6a64c3, pack 97a6ebcd0a8f
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 **Checked:** ACCEPTED by Andrei, 2026-10-27, at e599bfd - owner chose «Принимаю, выпускай» (AskUserQuestion, option text by the Queen) for story 06 narrow fix after GREEN round 2; Queen ran the live prefixed refusal, the round-2 Fable report and a thrown credits error through refused(): true/false/true; driver.test.sh 90/0
+**Shipped:** 0.39.0, 2026-10-27, at 427ff2c - merged to main, publish pending (0.39.0 rides with horizon-audit, owner's answer 3)
