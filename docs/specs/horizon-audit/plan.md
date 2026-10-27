@@ -51,5 +51,5 @@ the command or script that owns it, and scripts/ship-check.sh reads them all.
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/horizon-audit
 **Checked:** <written by scripts/human-check.sh>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Council:** GREEN round 1, 2026-10-27, at b4ce15d, pack a69cc8878fb6
 **Shipped:** <written by scripts/ship-check.sh --record>
