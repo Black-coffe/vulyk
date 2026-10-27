@@ -15,3 +15,4 @@
 - 2026-10-27T21:57:08Z · 03-building · relaunching the hive for story 07 and round 3 · next: the loop holds the working tree of vulyk/fable-fallback; to edit, run /vulyk-pause fable-fallback
 - 2026-10-27T21:58:17Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/fable-fallback/round-3, carried from round 2: opus · next: dispatch:review
 - 2026-10-27T22:07:22Z · 04-council:GREEN · round 3 verdict GREEN at e6a64c3 pack 97a6ebcd0a8f · next: green
+- 2026-10-27T22:08:06Z · 05-checked · live probe of the round-3 driver dispatch() on account 1 (Fable exhausted): fable call failed, ping failed, opus redispatch answered OK, one fallbacks entry · next: ship
