@@ -51,8 +51,9 @@ never a statusbar.
 When `/vulyk-plan` ran its horizon step (step 3a), `docs/specs/<slug>/horizon.md` holds at most three proposals.
 Each becomes one question of this round. Every rule of the round above still applies, with these additions:
 
-- They count inside the 3-7 cap. If they do not all fit, ask the `gap` ones first; a proposal not asked stays in
-  `horizon.md` as offered, never adopted.
+- They count inside the 3-7 cap, in this order: ordinary questions whose answer changes what gets built, then
+  horizon `gap` proposals, then `extension` ones (the fixed last question stays last). A proposal the cap leaves
+  out stays in `horizon.md` as offered, never adopted.
 - Options: «Добавить» (the proposal, with its cost in one line) and «Не добавлять», always both, plus `Other`. The
   recommended option comes first with its reason: «Добавить» only for a `kind: gap` proposal; for `kind: extension`
   «Не добавлять» is recommended and the proposal comes second, with its cost.
@@ -69,15 +70,20 @@ Every other question keeps that rule.
 
 Append to `brief.md`, in this order:
 1. `## Answers` - one entry per question asked: the question's label plus the chosen option's
-   description, verbatim, in the order asked.
+   description, verbatim, in the order asked. A horizon entry opens with `(horizon H<n>)`, `H<n>` the
+   proposal's number in `horizon.md`, and ends with its pick: `adopted`, `declined`, or
+   `(offered, not adopted)` in no-question mode.
 2. `## Asks` - the confirmed requirement lines from the fixed last question, numbered from 1
    without gaps (contract C8). An adopted horizon proposal is one of these lines, `(horizon) <ask line>`.
+
+The blind court never sees a proposal or `horizon.md`. It does see the owner's recorded decisions on
+them, because `## Answers` is part of `brief.md`; its verdicts stay on `## Asks`.
 
 ## No-question mode (`claude -p`, `AskUserQuestion` unavailable)
 
 Do not wait on anything. For every question the round would have asked, take its recommended
 option and write it to `## Answers` with `(assumed)` appended to the entry. Still derive `## Asks`
 from the same fixed-last-question logic - the N candidate requirement lines, all confirmed by
-default. A horizon step forced with `--horizon` records its proposals in `## Answers` as
-`(offered, not adopted)` and never adds them to `## Asks`. No-question mode cannot approve a plan either: `/vulyk-plan` writes the plan and stops
+default. The horizon step is skipped here unless `--horizon` forces it; a forced step records each
+proposal in `## Answers` as `(horizon H<n>) ... (offered, not adopted)` and never adds it to `## Asks`. No-question mode cannot approve a plan either: `/vulyk-plan` writes the plan and stops
 unless `--go` was given, in which case it closes the intake with `--mode assumed`.

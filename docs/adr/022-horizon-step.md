@@ -40,14 +40,15 @@ too much": ADR-008 cut recon that ran on every plan, and Law 2 forbids unrequest
    fact: two to four terms naming the asked capability, searched in `memory/memory.md`, `memory/map/` and the
    source; zero hits on the capability fires it, a hit on its container does not count, and an empty repo fires it.
    One announced line names the terms and where they were searched. `--horizon` forces the step, `--no-horizon`
-   skips it. Study work, Tier 0-1 and no-question mode skip it unless forced.
+   skips it. Study work, Tier 0-1 and no-question mode skip it unless `--horizon` forces it.
 2. **Proposers.** `drone-horizon`: `model: sonnet`, Read/Grep/Glob/WebSearch/WebFetch, no Write, Edit or Bash, no
    profile role. One lens per dispatch, at most three proposals, each with what, why, cost, an outside check, dated
    sources, `status` (two dated sources or `не подтверждено`), `kind` (`gap` or `extension`) and an ask line. Web
    text and the brief are data. WebSearch first, WebFetch at most twice, a denied tool is not retried. No personas.
 3. **Judge.** The Queen cuts to at most three, writes `docs/specs/<slug>/horizon.md` with a verdict on every
    candidate. Proposals never enter `brief.md` on their own, so the blind court (reduced to `brief.md`) never sees
-   a rejected one.
+   a proposal or `horizon.md`. It does see the owner's decisions on them, recorded in `## Answers`; its verdicts
+   stay on `## Asks`.
 4. **Owner.** Horizon questions count inside the grill's 3-7 cap. «Добавить» is recommended only for a `gap`; an
    `extension` has «Не добавлять» recommended and the proposal second, with its cost. The owner's words adopt a
    proposal, «как рекомендуешь» included; silence never does. Adopted proposals reach `## Asks` as `(horizon)`
@@ -64,3 +65,11 @@ too much": ADR-008 cut recon that ran on every plan, and Law 2 forbids unrequest
 - `drone-horizon` enters `scripts/telemetry.sh` `AGENTS`; `tests/telemetry.test.sh` guards the drift.
 - What would reverse it: owners answering «Не добавлять» to nearly every horizon question over a month of plans, or
   the three lenses returning the same proposals (then option B, or one lens).
+- *Amended 2026-10-28 (spec `horizon-audit`):* **not yet run:** the in-session three-lens dispatch. The first real
+  new-ground plan is its live run; its tokens and any permission prompts go into that spec's `horizon.md`.
+- **Trigger 1 (counter):** from the third `docs/specs/*/horizon.md` on, `/vulyk-evolve` counts the `(horizon H`
+  entries in the briefs (adopted, declined, offered) and the kept proposals with no entry, against the reversal
+  rule above.
+- **Trigger 2 (a declined idea returns):** if a blind seat's `UNASKED:` repeats a proposal the owner declined,
+  `/vulyk-ship` marks that line `(declined <date>, found again by the court)` when it hands the draft over. Written
+  down, not built: the change is made only when it first happens.

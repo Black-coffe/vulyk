@@ -23,6 +23,14 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 - **The reviewer does not start the suite in the background.** A probe showed a subagent returns before its
   background command ends and is never told it ended; the one-hour cache above carries the cost it was meant to cut.
 
+### Changed (spec `horizon-audit`)
+- **The horizon step says what the court sees and keeps its answers countable.** The court sees no proposal, only
+  the owner's decisions on them in `## Answers`; each horizon answer carries `(horizon H<n>)` and its pick. A `gap`
+  stays a gap only with the request fragment that fails without it; the lenses get the Profile rows in their
+  dispatch; questions inside the cap go build-changing first, then gaps, then extensions. ADR-022 records that the
+  in-session three-lens run has not happened yet and two triggers; `/vulyk-evolve` counts the picks from the third
+  `horizon.md` on.
+
 - **evolve: relayed side-agent notes no longer count as owner corrections.** The corrections block drops quotes that
   open with `>` and prints how many it left out. Evidence: 8 of 8 lexicon hits in the week to 2026-10-26 were relayed
   side-agent notes, none an owner correction (class `owner-words-by-builder`).
