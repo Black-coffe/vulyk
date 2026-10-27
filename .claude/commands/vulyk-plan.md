@@ -24,31 +24,35 @@ Plan: "$ARGUMENTS"
 3. Recon. Read `memory/memory.md` and the relevant `memory/map/` slices first. A targeted question about
    a file or two: read them yourself. Dispatch `drone-scout` only for broad or unmapped territory:
    Tier 1 none (one if the location is unknown), Tier 2 at most one, Tier 3 at most two, Tier 4 at most
-   four, in parallel. Tier 2-4: run `bash scripts/symbol-map.sh <file>` once per file the plan is likely
-   to name (one call on many files is cut at 1536 bytes after a few) and keep every output for the plan. Checklist, Tier 2-4: meta-tests, docs/ADR, `.env.example`,
-   re-exports, sibling files with the same pattern.
+   four, in parallel. Tier 2-4: run `bash scripts/symbol-map.sh --exact <file>` once per file the plan is
+   likely to name (one call on many files is cut at 1536 bytes after a few) and keep every output: the
+   planner dispatch receives it. Checklist, Tier 2-4: meta-tests, docs/ADR, `.env.example`, re-exports,
+   sibling files with the same pattern.
 3a. Horizon, Tier 2-4 on new ground (ADR-022). Skip it for study work, Tier 0-1, no-question mode and
-   `--no-horizon`; `--horizon` runs it anyway. New ground is a recon fact: take two to four terms that name the
-   asked capability (its nouns and verbs, not the project's) and Grep them in `memory/memory.md`, `memory/map/`
-   and the source. Zero hits on the capability fires the step; a hit on its container (a folder or file family,
-   such as `.claude/commands/` for a new command) does not count. An empty repo fires it too. A request inside
-   existing code gets no horizon and no extra question. Announce it in one line in the owner's language: the
-   terms, where they were searched, that the step runs, and that in the default permission mode the three lenses
-   may ask for web search (a refusal is safe: their outside facts come back `не подтверждено`). VULYK grants no
-   web permission itself. Then dispatch `drone-horizon` three times in one
-   message, `lens: altitude`, `depth` and `range`, each with the brief path and a one-paragraph recon summary
-   (what was not found and where it was looked for), with no model parameter. Each returns up to three proposals:
-   `what`, `why`, `cost`, `check`, `sources`, `status`, `kind` (`gap` or `extension`) and an `ask line`. A lens
-   that fails or returns nothing is noted, and the step goes on with the others. Cut the candidates to at most
-   three: merge duplicates, and drop what contradicts the Profile's *Configurations that exist today* or the
-   repo, or is not tied to the owner's goal. Write `docs/specs/<slug>/horizon.md`: the terms and where they were
-   searched, every candidate with its verdict (kept, merged or dropped, one-line reason), and the kept proposals
-   with their fields. Proposals never go into `brief.md` by themselves; only what the owner picks in the grill does.
-4. Grill, Tier 2-4. Follow `templates/grill.md`; it owns every rule of the round, horizon questions included. Its output lands in
-   `brief.md` as `## Answers` then `## Asks`. Tier 1 skips it: `## Asks` is the task phrase as item 1.
+   `--no-horizon`; `--horizon` runs it anyway. New ground is a recon fact: take two to four terms that
+   name the asked capability (its nouns and verbs, not the project's) and Grep them in `memory/memory.md`,
+   `memory/map/` and the source. Zero hits on the capability fires the step; a hit on its container (a
+   folder or file family, such as `.claude/commands/` for a new command) does not count. An empty repo
+   fires it too. A request inside existing code gets no horizon and no extra question. Announce it in one
+   line in the owner's language: the terms, where they were searched, that the step runs, and that in the
+   default permission mode the three lenses may ask for web search (a refusal is safe: their outside
+   facts come back `не подтверждено`). VULYK grants no web permission itself. Then dispatch
+   `drone-horizon` three times in one message, `lens: altitude`, `depth` and `range`, each with the brief
+   path and a one-paragraph recon summary (what was not found and where it was looked for), with no model
+   parameter. Each returns up to three proposals: `what`, `why`, `cost`, `check`, `sources`, `status`,
+   `kind` (`gap` or `extension`) and an `ask line`. A lens that fails or returns nothing is noted, and the
+   step goes on with the others. Cut the candidates to at most three: merge duplicates, and drop what
+   contradicts the Profile's *Configurations that exist today* or the repo, or is not tied to the owner's
+   goal. Write `docs/specs/<slug>/horizon.md`: the terms and where they were searched, every candidate
+   with its verdict (kept, merged or dropped, one-line reason), and the kept proposals with their fields.
+   Proposals never go into `brief.md` by themselves; only what the owner picks in the grill does.
+4. Grill, Tier 2-4. Follow `templates/grill.md`; it owns every rule of the round, horizon questions
+   included. Its output lands in `brief.md` as `## Answers` then `## Asks`. Tier 1 skips it: `## Asks`
+   is the task phrase as item 1.
 5. Plan. Tier 1-2: write plan.md yourself from `templates/plan.md`. Tier 3-4: dispatch `queen-planner`
-   with the brief, scout reports, the symbol-map output and map pointers; Tier 4 also consults `lead-architect` on the central
-   design fork, and both Tier 4 dispatches carry `model: <top_model>` (`bash scripts/top-model.sh`).
+   with the brief, scout reports, the symbol-map output and map pointers; Tier 4 also consults
+   `lead-architect` on the central design fork, and both Tier 4 dispatches carry `model: <top_model>`
+   (`bash scripts/top-model.sh`).
    Tier 3 passes `model: <p>` from `p="$(bash scripts/model-profile.sh --role planner)"` only when it is not
    `opus` (else no model parameter). At Tier 3-4, when `bash scripts/model-profile.sh --role routine` prints
    `haiku`, add the line `routine stories: model: haiku` to the planner's brief.
@@ -73,9 +77,9 @@ Plan: "$ARGUMENTS"
      by wave (one line each), the `## Assumptions`, and what the build will spend (Tier 2: you build,
      one reviewer per round; Tier 3-4: the workers and seats). Wait. On approval, fill `**Approved:**`
      with the owner and the date, run `bash scripts/journal.sh docs/specs/<slug> 02-approved "approved
-     by <owner>" branch`, and commit the spec directory (`vulyk(<slug>): approved`; `chore(vulyk-<slug>): approved` when the
-     Profile's Commit convention names conventional commits, as `cycle.sh` writes it). A "no" or a change
-     request reopens steps 5-7 once; a second one is a new brief.
+     by <owner>" branch`, and commit the spec directory (`vulyk(<slug>): approved`;
+     `chore(vulyk-<slug>): approved` when the Profile's Commit convention names conventional commits, as
+     `cycle.sh` writes it). A "no" or a change request reopens steps 5-7 once; a second one is a new brief.
    - Straight-through opt-in, only with `--go` or when the grill's last answer asked for it: instead of
      waiting, `bash scripts/cycle.sh briefed docs/specs/<slug> --commit` (`--mode assumed` in
      no-question mode) and continue.
