@@ -1,7 +1,7 @@
 ---
 story: fable-fallback-06
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 4
@@ -31,6 +31,12 @@ The driver's `refused()` catches the real Fable refusal also when the runtime pu
 - [ ] `tests/driver.test.sh` gains the original case: the prefixed real sample above (`"<description>" failed: Agent terminated early ...`) is redispatched on opus with a `fallbacks` entry.
 - [ ] And a neighbour: a short `STATUS: DONE` worker return that mentions `model_requires_usage_credits` is not redispatched, no `fallbacks` entry.
 - [ ] The existing fallback cases (refused reviewer, refusal twice, thrown `model_requires_usage_credits`, quoting report, U+2019) pass.
+
+## Implementation notes
+- .claude/workflows/vulyk-cycle.js: `REFUSAL_TEXT` (anchored) replaced by `REFUSAL` + `REFUSAL_MAX = 600` + `REPORT_HEADER`; the `threw` arm is unchanged.
+- Decision: the header check looks at every line (`/^\s*(VERDICT|COUNCIL|STATUS)\b/m`), not just the first: the existing quoting case opens with `COUNCIL REPORT` and has `VERDICT:` on line 2, and a wider guard only errs towards keeping a report.
+- tests/driver.test.sh: added the prefixed real sample (redispatched on opus, one fallback) and a fable worker's short `STATUS: DONE` return naming `model_requires_usage_credits` (one dispatch, no fallback).
+- Mutation: dropping `!REPORT_HEADER.test(r)` turns 2 checks red (the quoting case and the new neighbour).
 
 ## Verification
 `bash tests/driver.test.sh`

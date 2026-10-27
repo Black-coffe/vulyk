@@ -485,6 +485,15 @@ const blindPromptsClean = (r) => r.dispatches
     const curly = await reviewRun(F, ['  Agent terminated early due to an API error: You’ve reached your Fable limit. Switch to another model.\n', 'review report']);
     check(curly.dispatches.length === 2 && curly.dispatches[1].model === 'opus' && curly.result.fallbacks.length === 1,
       'fallback: the real refusal with a U+2019 apostrophe is redispatched', curly.dispatches.map((d) => d.model));
+    // the round-2 live case: the runtime puts the dispatch description before the early-stop line
+    const prefixed = await reviewRun(F, ['"Council review round 2" failed: ' + REFUSED + ' Run /usage-credits to continue.', 'review report']);
+    check(prefixed.dispatches.length === 2 && prefixed.dispatches[1].model === 'opus' && prefixed.result.fallbacks.length === 1,
+      'fallback: the real refusal with a description prefix is redispatched', { m: prefixed.dispatches.map((d) => d.model), f: prefixed.result.fallbacks });
+    const sw = story(1, { model: 'fable' });
+    const done = await run(ARGS, { clerk: [[CLAIM, adv(build([sw]))], [ADV, adv(green())], [RELEASE, releaseOk]],
+      agents: ['STATUS: DONE\nFILES: .claude/workflows/vulyk-cycle.js\nCONCERNS: refused() now matches model_requires_usage_credits in a short string', 'never asked'] });
+    check(done.dispatches.length === 1 && done.result.fallbacks.length === 0,
+      'fallback: a short STATUS: DONE return naming model_requires_usage_credits is not redispatched', { m: done.dispatches.map((d) => d.model), f: done.result.fallbacks });
     const other = await reviewRun(F, [{ throw: 'usage_limit_reached: five-hour limit' }, 'never asked']);
     check(other.dispatches.length === 1 && other.result.fallbacks.length === 0, 'fallback: another limit is not redispatched', other.dispatches.map((d) => d.model));
     // workers and the retry on top_model go through the same helper

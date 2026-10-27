@@ -37,15 +37,18 @@ const reasonFor = (who, agentType, r) => {
 }
 const caught = (p) => p.catch((e) => ({ threw: e && e.message ? e.message : String(e) }))
 // The Fable-limit refusal. A caught error (caught() swallowed it) matches either form anywhere; a
-// returned string only when it is the refusal itself - it starts with the runtime's early-stop line
-// and names the Fable limit - so a report that quotes the refusal (a judge reviewing this very
+// returned string only when it names the limit AND is not a report: it is short (the real refusal,
+// '"<description>" failed: Agent terminated early due to an API error: You've reached your Fable
+// limit. ...', runs about 250 characters; REFUSAL_MAX = 600) and no line opens with a report header
+// (VERDICT, COUNCIL, STATUS), so a report that quotes the refusal (a judge reviewing this very
 // feature) is a report. Nothing else matches: an Opus or Sonnet limit, usage_limit_reached or any
 // other API error behaves as before.
 const REFUSAL = /You['\u2019]ve reached your Fable limit|model_requires_usage_credits/
-const REFUSAL_TEXT = /^Agent terminated early due to an API error[\s\S]*reached your Fable limit/
+const REFUSAL_MAX = 600
+const REPORT_HEADER = /^\s*(VERDICT|COUNCIL|STATUS)\b/m
 const refused = (r) => {
   if (r && typeof r === 'object' && 'threw' in r) return typeof r.threw === 'string' && REFUSAL.test(r.threw)
-  return typeof r === 'string' && REFUSAL_TEXT.test(r.trim())
+  return typeof r === 'string' && r.trim().length <= REFUSAL_MAX && REFUSAL.test(r) && !REPORT_HEADER.test(r)
 }
 
 const A = args ?? {}
