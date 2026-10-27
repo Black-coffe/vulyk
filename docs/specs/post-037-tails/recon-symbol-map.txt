@@ -1,0 +1,132 @@
+## scripts/ship-check.sh
+tests:
+  textual  tests/cycle.test.sh
+  textual  tests/e2e.test.sh
+  textual  tests/solo.test.sh
+importers:
+  textual  scripts/acceptance-log.sh
+  textual  scripts/cycle.sh
+  textual  scripts/human-check.sh
+  textual  scripts/lib.sh
+  textual  scripts/redact.sh
+    ... 2 more
+guard tests:
+  textual  tests/fixtures/symbol-map/python/tests/test_tree.py
+  textual  tests/telemetry.test.sh
+path mentions:
+  textual  .claude/commands/vulyk-ship.md
+  textual  CHANGELOG.md
+  textual  docs/command-reference.md
+  textual  docs/cycle.md
+  textual  docs/specs/anomaly-telemetry/anomaly-telemetry-09-cycle-owns-hook-log.md
+    ... 44 more
+
+## scripts/telemetry.sh
+tests:
+  textual  tests/council.test.sh
+  textual  tests/full-suite.sh
+  textual  tests/full-suite.test.sh
+  textual  tests/intake.test.sh
+  textual  tests/maintenance.test.sh
+    ... 1 more
+importers:
+  textual  .claude/hooks/anomaly-scan.sh
+  textual  .claude/hooks/session-start-brief.sh
+  textual  .claude/hooks/top-model-brief.sh
+  textual  .claude/hooks/ysk-offer.sh
+  textual  install.sh
+    ... 2 more
+imported:
+  exact    scripts/lib.sh
+guard tests:
+  textual  tests/cycle.test.sh
+  textual  tests/fixtures/symbol-map/python/tests/test_tree.py
+path mentions:
+  textual  .claude/commands/vulyk-bootstrap.md
+  textual  .claude/commands/vulyk-build.md
+  textual  .claude/commands/vulyk-evolve.md
+  textual  .claude/commands/vulyk-resume.md
+  textual  .claude/hooks/handoff.py
+    ... 66 more
+
+## scripts/symbol-map.py
+tests:
+  textual  tests/symbol-map.test.sh
+importers:
+  textual  docs/specs/symbol-map/replay.py
+guard tests:
+  textual  tests/cycle.test.sh
+  textual  tests/fixtures/symbol-map/python/tests/test_tree.py
+  textual  tests/telemetry.test.sh
+path mentions:
+  textual  CHANGELOG.md
+  textual  docs/specs/symbol-map/council/round-1/opus.md
+  textual  docs/specs/symbol-map/council/round-1/review.md
+  textual  docs/specs/symbol-map/council/round-2/opus.md
+  textual  docs/specs/symbol-map/plan.md
+    ... 3 more
+
+## scripts/lib.sh
+tests:
+  exact    tests/cycle.test.sh
+  exact    tests/fixtures/symbol-map/bash/tests/run.test.sh
+  exact    tests/telemetry.test.sh
+  textual  tests/council.test.sh
+  textual  tests/fixtures/symbol-map/bash/scripts/run.sh
+  textual  tests/model-profile.test.sh
+  textual  tests/symbol-map.test.sh
+importers:
+  exact    scripts/acceptance-log.sh
+  exact    scripts/cycle.sh
+  exact    scripts/human-check.sh
+  exact    scripts/release-check.sh
+  exact    scripts/scope-check.sh
+  exact    scripts/ship-check.sh
+  exact    scripts/telemetry.sh
+  exact    scripts/top-model.sh
+  exact    scripts/trace-check.sh
+  exact    scripts/wave-check.sh
+  textual  install.sh
+guard tests:
+  textual  tests/fixtures/symbol-map/python/tests/test_tree.py
+path mentions:
+  textual  CHANGELOG.md
+  textual  CLAUDE.md
+  textual  README.md
+  textual  docs/adr/003-shared-scripts-lib.md
+  textual  docs/adr/011-driver-hardening.md
+    ... 55 more
+
+## .claude/commands/vulyk-ship.md
+  ! imports not parsed for .md: search callers yourself
+tests:
+  textual  tests/maintenance.test.sh
+  textual  tests/telemetry.test.sh
+guard tests:
+  textual  tests/cycle.test.sh
+  textual  tests/fixtures/symbol-map/python/tests/test_tree.py
+path mentions:
+  textual  docs/defects/done-without-real-run.md
+  textual  docs/defects/framework-fix-skips-live-hives.md
+  textual  docs/defects/work-handed-back-to-owner.md
+  textual  docs/specs/anomaly-telemetry/plan.md
+  textual  docs/specs/anomaly-telemetry/recon/weekly-and-publish.md
+    ... 22 more
+
+## .claude/agents/queen-planner.md
+  ! imports not parsed for .md: search callers yourself
+tests:
+  textual  tests/driver.test.sh
+  textual  tests/e2e.test.sh
+guard tests:
+  textual  tests/cycle.test.sh
+  textual  tests/fixtures/symbol-map/python/tests/test_tree.py
+  textual  tests/telemetry.test.sh
+path mentions:
+  textual  .github/workflows/ci.yml
+  textual  docs/specs/fast-verification/fast-verification-05-hive-teaching.md
+  textual  docs/specs/fast-verification/fast-verification-08-repair-round-2.md
+  textual  docs/specs/fast-verification/scout-plumbing.md
+  textual  docs/specs/model-profiles/model-profiles-02.md
+    ... 6 more
+
