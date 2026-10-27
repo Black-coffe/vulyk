@@ -12,7 +12,7 @@ When a Fable dispatch comes back with the Fable-limit refusal, the build goes on
 - **Detection is the refusal text only**: `You've reached your Fable limit` or `model_requires_usage_credits` in the dispatch's returned text or in the error `caught()` swallowed. An Opus or Sonnet limit, a five-hour limit (`usage_limit_reached`) or any other API error is not matched and behaves as today.
 - **One redispatch per dispatch, never a third call.** The refused call wrote no seat report, so the redispatch is not a second attempt: the `attempt-<k>` numbering and the rejected-report redispatch are untouched. A refusal on the redispatch is the existing path (absent seat, missed story).
 - **On the Workflow path the record is written when the driver returns.** The driver has no shell but `cycle-clerk`, whose verbs stay `advance|status|release`; it reports every fallback in its return value and console, and `/vulyk-build` writes the journal line, runs `telemetry.sh record` and tells the owner then. On the solo path and the no-Workflow hive loop the Queen does all three right after the redispatch. Widening the clerk's verbs was rejected (below).
-- **Only `lead-review` gets `experimental:` / `  cacheTtl: 1h`** (ask 3), in story 02 beside the other protocol edits. Measurement, not a story: on **2026-11-03** the Queen compares `lead-review`'s spend per dispatch (API-price-weighted, the study's yardstick) for the week since the merge against the week before, with the rewrite share beside it (baseline 31% of cache writes, break-even 37.5%), tells the owner the result and recommends whether the field spreads; the owner decides; the note must say which account ran it, because `1h` is ignored while a subscription is on usage credits (`## Recon`).
+- **Only `lead-review` among the judges gets `experimental:` / `  cacheTtl: 1h`** (ask 3; `worker-code` and `worker-test` already carry it since ab4f8aa, cache-economy 2026-10-01, a measured decision this spec leaves alone - Queen, after round 1), in story 02 beside the other protocol edits. Measurement, not a story: on **2026-11-03** the Queen compares `lead-review`'s spend per dispatch (API-price-weighted, the study's yardstick) for the week since the merge against the week before, with the rewrite share beside it (baseline 31% of cache writes, break-even 37.5%), tells the owner the result and recommends whether the field spreads; the owner decides; the note must say which account ran it, because `1h` is ignored while a subscription is on usage credits (`## Recon`).
 - **Ask 2 rests on a probe whose stop rule is inside story 03**: step 1 measures whether the parent receives a subagent's return only after that subagent's background Bash command ends; a failed probe ends the story with `returned: NEEDS_CONTEXT`, the measurement under `## Findings`, and no edit to the suite step. The Queen then tells the owner and proposes the alternative herself (brief, ask 2): the driver or the Queen runs the suite before dispatching the reviewer, at the cost the study names (the reviewer no longer measures the suite itself). `maxTurns` of `lead-review` and `CAPS` in the driver do not change in this spec.
 - **The fallback fires on any dispatch that ran on Fable** (ask 1 names the judge, planner and architect; under `sonnet-builds` a missed story's retry also runs on the Fable gate, so the one helper covers it too). A dispatch on another family never receives the Fable refusal, so for workers and Haiku the helper is a no-op. The ADR-015 line in story 04 is the record of the owner's exception (Opus judging Opus), not a new rule.
 - **The gate list is stated as it is, not as the ask shortened it** (ask 4): `lead-architect` also runs on the gate when a story misses twice at any tier (`.claude/commands/vulyk-build.md`), so the hint names it with that condition.
@@ -50,7 +50,7 @@ When a Fable dispatch comes back with the Fable-limit refusal, the build goes on
 
 ## Descoped
 
-*(empty)*
+- Ask 2, the background suite in `lead-review`: the story 03 probe failed (a subagent returns before its background command ends and is never told it ended); the owner chose to drop the ask on 2026-10-27. The suite step stays as it is; story 02's one-hour cache carries F3, and the 3.11 spend comparison checks it.
 
 ## Plan deltas
 
@@ -68,7 +68,9 @@ is missing or unparsable.
 -->
 **Approved:** Andrei, 2026-10-27 («Одобряю»)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
-**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
-**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
+**Branch:** vulyk/fable-fallback
+**Council:** RED round 1, 2026-10-27, at 546d094, pack a378f5d8d650
+**Council:** GREEN round 2, 2026-10-27, at 97d29a8, pack a68d9a9f4309
+**Council:** GREEN round 3, 2026-10-27, at e6a64c3, pack 97a6ebcd0a8f
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Checked:** ACCEPTED by Andrei, 2026-10-27, at e599bfd - owner chose «Принимаю, выпускай» (AskUserQuestion, option text by the Queen) for story 06 narrow fix after GREEN round 2; Queen ran the live prefixed refusal, the round-2 Fable report and a thrown credits error through refused(): true/false/true; driver.test.sh 90/0

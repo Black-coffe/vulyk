@@ -32,9 +32,13 @@ against $3.91. From then on the resolved alias named the **gate**, not the Queen
 reviewer per round. The audit behind it found `lead-review` BLOCK behind 39 of 64 non-green rounds,
 and extra rounds took 29.5% of the spend of the tasks that had them.
 
-Today the gate model is passed only where the stakes justify it: the Tier 4 review (beside a second
-reviewer on a different model), `lead-architect`, the Tier 4 `queen-planner` and a missed story's
-retry. Fable stays there because it is a short call where a miss costs most. Since v0.20.0 the
+Today the gate model is passed only where the stakes justify it, and these four uses are the whole
+list: the Tier 4 review (beside a second reviewer on a different model), `lead-architect` (Tier 4, or
+a story missed twice), the Tier 4 `queen-planner` and a missed story's retry. A hive's own judge
+script is none of them: it asks `bash scripts/model-profile.sh --role seat` for its family and passes
+`--effort` explicitly, because one hive's scripts that took the gate model ran it at the account's
+`xhigh` effort on every routine check (study `fable-budget`, F1). `top-model.sh --help` and
+`--explain` print the same rule in one line. Fable stays there because it is a short call where a miss costs most. Since v0.20.0 the
 workers write on Sonnet, so at Tier 3 the Opus reviewer judges code a different family wrote. At
 Tier 1–2 the Queen builds on Opus and an Opus reviewer judges in a fresh context. That tradeoff is
 unchanged.
@@ -92,6 +96,24 @@ weighed and rejected: the `best` alias resolves to Fable "where available to you
 *is* available — for credits — so it implements exactly the rule this framework exists to avoid;
 `CLAUDE_CODE_SUBAGENT_MODEL` only applies to agents with no `model:` of their own, which is none of
 VULYK's.
+
+### When Fable runs out
+
+A gate dispatch can come back refused: `You've reached your Fable limit` (or
+`model_requires_usage_credits` in the error). The role is then redispatched once, with the same
+prompt, on `opus` (`.claude/workflows/vulyk-cycle.js` in a Workflow build; `/vulyk-build`,
+`/vulyk-review` and `/vulyk-plan` where the Queen dispatches herself). Three records follow: a
+journal line `fallback: <agent> <where> <from> -> opus (Fable limit; ADR-015 exception)`, the
+telemetry code `fable_limit_fallback` (written by `telemetry.sh record`, never by `scan`), and one
+sentence to the owner. The build goes on. A second refusal stops as it did before: an absent seat,
+a missed story. Under `opus-builds` this means Opus judges Opus code for that one dispatch: the
+family that built judges, the owner's recorded exception (ADR-015).
+
+`worker-code` and `worker-test` carry `experimental:` / `cacheTtl: 1h` since cache-economy
+(`docs/token-economy.md`); in the same spec `lead-review` became the only judge that does, since the
+reviewer waits longest on tests. The other agents stay at 5 minutes. On 2026-11-03 `lead-review`'s
+spend per dispatch is compared with the week before (the rewrite share beside it), and the owner
+decides whether the field spreads to the remaining roles.
 
 [fable-plan]: https://support.claude.com/en/articles/15424964-claude-fable-models-on-your-plan
 [subagents]: https://code.claude.com/docs/en/sub-agents

@@ -1,8 +1,8 @@
 ---
 story: fable-fallback-03
 spec: fable-fallback
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -45,5 +45,13 @@ After this story `lead-review` no longer sits idle for 5-13 minutes while `tests
 `bash tests/telemetry.test.sh --part telemetry && bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- Probe ran 2026-10-27, Claude Code 2.1.312, parent `claude -p --model sonnet --permission-mode bypassPermissions` in a scratchpad dir, subagent `probe` (`tools: Bash`, `model: sonnet`), command `bash -c 'sleep 45; date -u > <scratch>/probe-done'` with `run_in_background: true`.
+- Result: FAIL. Subagent `duration_ms` 9687; parent's wall time around the Agent call 15.4 s (t0 1793135108.70, t1 1793135124.13); `probe-done` ABSENT at return.
+- Text the parent received, verbatim: `STARTED` followed by `agentId: a7e182050e7130f61 (use SendMessage ...)` and a `<usage>` block (subagent_tokens 10820, tool_uses 1, duration_ms 9687). No completion notice of the background command.
+- The background command was not killed: `probe-done` appeared at 21:06:02 UTC (~54 s after t0), after the subagent had returned and the whole `claude -p` session had exited (33 s). The subagent's turn simply does not wait for it.
+- Probe vs reality: the probe returns on purpose right after the start. A real reviewer would read the diff next, so it would keep its turn alive longer. Still, nothing tells it when the suite ends unless it blocks or polls, so the test does decide the question the story asks.
+- Stop rule applied: lead-review.md and tests/telemetry.test.sh untouched, close-story not run. Recon: no telemetry.test.sh assertion reads lead-review.md's suite-step lines.
+- Owner decision 2026-10-27 (AskUserQuestion, option chosen: drop ask 2; the option text was the Queen's, not an owner quote): the suite step stays as it is. Reason given with the option: the background start was a means to F3 (cache rewrites after the wait), and story 02's `cacheTtl: 1h` on `lead-review` already targets F3 without touching the `SUITE:` path; the background start would have saved wall time only. The 3.11 spend comparison checks whether the one-hour cache alone is enough. The story closes with the probe as its only deliverable; criteria 2-4 are dropped by that decision, criterion 5 holds (record-seat untouched).
 
 ## Findings
+- Probe FAIL (numbers above): a subagent that starts a command with `run_in_background: true` returns when its own turn ends, before the command finishes, and nothing reports the command's completion to it or to the parent. The process outlives the subagent. Owner decides the alternative. My recommendation: keep the background start, read the diff, then do one blocking Bash call `until [ -e <exit-file> ]; do sleep 5; done` with `timeout: 600000` to wait for the exit-code file. That is one wait step, the shape the Non-goals already allow, and it needs a second probe to confirm the wait holds in a subagent. Rejected: moving the suite into the driver/cycle.sh (Non-goals forbid it).

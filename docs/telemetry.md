@@ -10,7 +10,7 @@ full contract; `scripts/telemetry.sh` is the one script that implements it.
 Every hive that installed VULYK writes local rows to `memory/stats/anomalies.jsonl` (committed
 paperwork, like the other `memory/stats/*.jsonl` series) whenever `scripts/telemetry.sh scan`
 (or, for `sessionend_llm`, the `.claude/hooks/anomaly-scan.sh` hook that runs it) sees one of
-nine anomaly codes. This happens regardless of the telemetry consent setting - it is local
+eleven anomaly codes (the table names who writes each). This happens regardless of the telemetry consent setting - it is local
 history, not a send.
 
 | code | detector | value | threshold / env var |
@@ -25,6 +25,7 @@ history, not a send.
 | `scope_breach` | a `scope.jsonl` row with non-empty `out_of_scope`, one row per story (first breach wins) | out-of-scope path count | 0 |
 | `sessionend_llm` | a `SessionEnd` hook in `.claude/settings.json` whose command, or the script it runs (comment lines aside), calls `claude -p` / `claude --print` - SessionEnd hooks get at most 60 s ([hooks docs](https://code.claude.com/docs/en/hooks)), so the model call is killed before it answers; one row per hook, `ref` = `sessionend:<script name>` | 1 | 0 |
 | `model_below_floor` | a main or subagent transcript whose own model ID is below its family's line in `scripts/lib.sh` `model_floor` (ADR-015): an alias, a provider or an env pin resolved lower than VULYK allows; one row per transcript, `model` = the family, `agent` = the subagent's type | the version it ran, e.g. `5.0` | the floor, e.g. `5.5` (`VULYK_MODEL_FLOOR` overrides) |
+| `fable_limit_fallback` | a Fable dispatch came back with the Fable-limit refusal (`You've reached your Fable limit` / `model_requires_usage_credits`) and the role was redispatched once on `opus`; written by `/vulyk-build`, `/vulyk-review` or `/vulyk-plan` with `record` after the refused dispatch (on the Workflow path once per entry of the driver's returned `fallbacks`), never by `scan`; `model` = `fable`, `agent` = the refused agent type, `ref` = `<slug>:<where>:<agent>` | 1 | 0 |
 
 Print the same list yourself with `bash scripts/telemetry.sh enum`. The thresholds' current
 defaults are v1 calibration, not measured facts - each row above names the env var that
@@ -39,8 +40,8 @@ an older hive's bundle still validates. Claude Code's built-in agent types are o
 (`general-purpose`, `workflow-subagent`, `Explore`, `Plan`, `claude-code-guide`,
 `statusline-setup`): the same names on every machine. Any other agent, including one you add under `.claude/agents/`, is
 reported as `other`, and so is the free-form dispatch `name`, which is owner-chosen text and
-could carry a story name. Print the list with `bash scripts/telemetry.sh agents`. Every other
-code carries an empty `agent`.
+could carry a story name. Print the list with `bash scripts/telemetry.sh agents`. `model_below_floor` and
+`fable_limit_fallback` rows carry it too. Every other code carries an empty `agent`.
 
 ### The local row - 12 keys
 

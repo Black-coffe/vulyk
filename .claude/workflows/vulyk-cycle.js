@@ -36,6 +36,20 @@ const reasonFor = (who, agentType, r) => {
   return `${who} returned empty - turn cap suspected (${agentType}, maxTurns in .claude/agents/${agentType}.md)`
 }
 const caught = (p) => p.catch((e) => ({ threw: e && e.message ? e.message : String(e) }))
+// The Fable-limit refusal. A caught error (caught() swallowed it) matches either form anywhere; a
+// returned string only when it names the limit AND is not a report: it is short (the real refusal,
+// '"<description>" failed: Agent terminated early due to an API error: You've reached your Fable
+// limit. ...', runs about 250 characters; REFUSAL_MAX = 600) and no line opens with a report header
+// (VERDICT, COUNCIL, STATUS), so a report that quotes the refusal (a judge reviewing this very
+// feature) is a report. Nothing else matches: an Opus or Sonnet limit, usage_limit_reached or any
+// other API error behaves as before.
+const REFUSAL = /You['\u2019]ve reached your Fable limit|model_requires_usage_credits/
+const REFUSAL_MAX = 600
+const REPORT_HEADER = /^\s*(VERDICT|COUNCIL|STATUS)\b/m
+const refused = (r) => {
+  if (r && typeof r === 'object' && 'threw' in r) return typeof r.threw === 'string' && REFUSAL.test(r.threw)
+  return typeof r === 'string' && r.trim().length <= REFUSAL_MAX && REFUSAL.test(r) && !REPORT_HEADER.test(r)
+}
 
 const A = args ?? {}
 const spec = A.spec
@@ -48,6 +62,9 @@ const REVIEW = A.review_model || undefined
 const SEAT = A.seat_model || undefined
 // a missed story's retry climbs to the gate, unless the gate family also reviews (opus-builds): then opus, so the judge never judges its own code
 const RETRY = REVIEW && TOP === REVIEW ? 'opus' : TOP
+// a Fable-refused dispatch runs once more on this family (the owner's ADR-015 exception); no model passed means the frontmatter's opus
+const FALLBACK_MODEL = 'opus'
+const fallbacks = [] // {agent, where, from, to}, carried in the return value for /vulyk-build to record
 if (typeof stamp !== 'string' || stamp.length < 12) {
   return { stop: { verb: 'launch', error: 'args.stamp missing: launch with the 16-hex random stamp of /vulyk-build step 1' } }
 }
@@ -105,6 +122,26 @@ const advance = async (flags) => {
   return { ok: true, verb: 'advance', exit: 0, next: st.next, steps: [], rejected: [], status: st, recovered: 'status' }
 }
 
+// Every worker and seat dispatch: on a Fable refusal with a model other than FALLBACK_MODEL passed,
+// the same prompt and agent once more on FALLBACK_MODEL. Not an attempt - the refused call wrote no
+// report - and never a third call: a second refusal goes down the dead-dispatch path as before.
+// Inside a Workflow the refusal comes back as null (live probe 2026-10-27), so an empty return asks
+// one cheap ping on the same model: an empty or refused ping is the limit, an answer keeps the empty
+// result for the turn-cap path. One ping per dispatch, none on the redispatch.
+const empty = (r) => r === null || r === undefined || (typeof r === 'string' && r.trim() === '')
+const dispatch = async (prompt, opts, where) => {
+  const r = await caught(agent(prompt, opts))
+  if (!opts.model || opts.model === FALLBACK_MODEL) return r
+  if (!refused(r)) {
+    if (!empty(r)) return r
+    const ping = await caught(agent('Reply with the single word OK.', { label: `ping:${where}`, model: opts.model }))
+    if (!empty(ping) && !refused(ping)) return r
+  }
+  fallbacks.push({ agent: opts.agentType, where, from: opts.model, to: FALLBACK_MODEL })
+  log(`fallback: ${opts.agentType} ${where} ${opts.model} -> ${FALLBACK_MODEL} (Fable limit)`)
+  return caught(agent(prompt, { ...opts, model: FALLBACK_MODEL }))
+}
+
 const misses = new Map() // story file -> misses this run
 const dispatched = new Map() // `${round}:${seat}` -> dispatches this run
 let rejected = [] // the last advance's `rejected`, for the one re-ask
@@ -116,7 +153,7 @@ const build = async (st) => {
     const retry = (misses.get(story.file) || 0) >= 1
     const prompt = `Your story: ${story.file}. Stamp: ${stamp}. Implement it per your protocol; your last step is \`bash scripts/cycle.sh close-story ${story.file} --commit --stamp ${stamp}\`.`
       + (retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
-    return caught(agent(prompt, { agentType: story.worker, model: retry ? RETRY : (story.model || WORKER), phase: 'Build', label: story.story }))
+    return dispatch(prompt, { agentType: story.worker, model: retry ? RETRY : (story.model || WORKER), phase: 'Build', label: story.story }, story.story)
   }))
   const res = await advance('')
   if (res.ok === false) return res
@@ -172,16 +209,16 @@ const council = async (st) => {
     const note = n > 1 ? `\nYour previous report was rejected: ${rejectionFor(seat)}` : ''
     if (seat === 'review' && st.tier === 4) {
       // two reviewers on different models; advance --ingest folds their files into one review
-      jobs.push({ who: 'reviewer (top)', agentType: 'lead-review', model: TOP, prompt: reviewPrompt(st) + note + reportNote(st, 'review-top', k) })
-      jobs.push({ who: 'reviewer (second)', agentType: 'lead-review', model: SECOND, prompt: reviewPrompt(st) + note + reportNote(st, 'review-second', k) })
+      jobs.push({ who: 'reviewer (top)', agentType: 'lead-review', model: TOP, name: 'review-top', prompt: reviewPrompt(st) + note + reportNote(st, 'review-top', k) })
+      jobs.push({ who: 'reviewer (second)', agentType: 'lead-review', model: SECOND, name: 'review-second', prompt: reviewPrompt(st) + note + reportNote(st, 'review-second', k) })
     } else if (seat === 'review') {
-      jobs.push({ who: 'reviewer', agentType: 'lead-review', model: REVIEW, prompt: reviewPrompt(st) + note + reportNote(st, 'review', k) })
+      jobs.push({ who: 'reviewer', agentType: 'lead-review', model: REVIEW, name: 'review', prompt: reviewPrompt(st) + note + reportNote(st, 'review', k) })
     } else {
-      jobs.push({ who: `seat ${seat}`, agentType: SEAT_AGENT[seat], model: SEAT, prompt: seatPrompt(seat, st) + note + reportNote(st, seat, k) })
+      jobs.push({ who: `seat ${seat}`, agentType: SEAT_AGENT[seat], model: SEAT, name: seat, prompt: seatPrompt(seat, st) + note + reportNote(st, seat, k) })
     }
   }
   const returns = await parallel(jobs.map((j) => () =>
-    caught(agent(j.prompt, { agentType: j.agentType, model: j.model, phase: 'Council', label: j.who }))))
+    dispatch(j.prompt, { agentType: j.agentType, model: j.model, phase: 'Council', label: j.who }, `round-${st.round}/${j.name}`)))
   jobs.forEach((j, i) => {
     const why = reasonFor(j.who, j.agentType, returns[i])
     if (why !== null) log(why)
@@ -200,7 +237,7 @@ try {
     rejected = Array.isArray(res.rejected) ? res.rejected : []
     const ran = Array.isArray(res.steps) && res.steps.length ? ` · ran ${res.steps.join(', ')}` : ''
     log(`${st.slug} · ${st.stage} · next: ${st.next}${ran}`)
-    if (TERMINAL.includes(st.next)) return st
+    if (TERMINAL.includes(st.next)) return { ...st, fallbacks }
     if (i >= MAX_ITERATIONS) fail(st, { verb: 'driver', error: `iteration cap ${MAX_ITERATIONS} reached at next: ${st.next}` })
     // before any worker or seat is dispatched: Tier 4's two reviewers need two different models
     if (st.tier === 4 && (!SECOND || SECOND === TOP)) {
@@ -215,11 +252,12 @@ try {
     if (st.next.startsWith('build:')) res = await build(st)
     else if (st.next.startsWith('dispatch:')) res = await council(st)
     else if (ADVANCE_VERBS.includes(st.next)) fail(st, { verb: st.next, error: `advance left ${st.next} to the driver` })
-    else return st // an unrecognised `next` - report it rather than guess at an action
+    else return { ...st, fallbacks } // an unrecognised `next` - report it rather than guess at an action
   }
 } catch (e) {
-  if (e instanceof Stop) return e.result
-  if (e instanceof Paused) return { next: 'paused' }
+  if (e instanceof Stop) return { ...e.result, fallbacks }
+  if (e instanceof Paused) return { next: 'paused', fallbacks }
+  // the raw line stays a string; a fallback before it is in the console log only
   if (e instanceof BadLine) return e.line
   throw e
 } finally {

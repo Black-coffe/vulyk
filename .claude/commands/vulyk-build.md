@@ -33,6 +33,9 @@ No driver, no clerk, no court. Loop:
    <spec>/council/round-<round-1>.` Then `bash scripts/cycle.sh advance docs/specs/<slug> --ingest`.
    If `next` is still `dispatch:review`, the report was rejected: dispatch once more with the
    `rejected` entry's `error` appended, and `--ingest` again. Then act on the new `next`.
+   A dispatch that returns the Fable-limit refusal (`You've reached your Fable limit` /
+   `model_requires_usage_credits`) gets the Fable-limit fallback (below), `<where>` = `round-<round>/review`,
+   before `--ingest`.
 4. Any other `next` is terminal (below).
 
 ## Hive (Tier 3-4)
@@ -57,6 +60,9 @@ No driver, no clerk, no court. Loop:
 4. Wake-up: read the returned object, the `journal.md` lines since launch and the newest round's files
    under `docs/specs/<slug>/council/`; never the run transcript. The run's printed `totalTokens` sums
    final contexts and is not spend; `python scripts/token-report.py . --spec <slug>` measures spend.
+   - First, every entry `{agent, where, from, to}` of the returned `fallbacks`: the driver already
+     redispatched that role on `opus` after the Fable-limit refusal; write the journal line, the
+     telemetry row and the owner sentence of the Fable-limit fallback (below), once per entry.
    - `stop` with a `file` (a story missed twice): set that story's `status: blocked`, append the error
      under `## Findings`, dispatch `lead-architect` (`model: <top_model>`) with the story and both
      failures, and stop.
@@ -82,6 +88,24 @@ Without the Workflow tool, run the solo loop from this session with the stamp, b
   writing `review-second.attempt-<k>.md`, the second told to probe concurrency, security and migration
   safety. Then `advance --stamp <S> --ingest`. A seat still listed is re-dispatched once with its
   `rejected` error; one needing a third dispatch in a round stops the loop.
+- Any dispatch above (worker, retry, seat, reviewer, architect) that returns the Fable-limit refusal
+  (`You've reached your Fable limit` / `model_requires_usage_credits`) gets the Fable-limit fallback
+  (below) before the next `advance`, `<where>` = the story id or `round-<round>/<seat>`.
+
+## Fable-limit fallback
+
+A dispatch refused for the Fable limit: an error that carries `You've reached your Fable limit` or
+`model_requires_usage_credits`, or a returned text that, trimmed, starts with `Agent terminated early
+due to an API error` and carries `reached your Fable limit` (a report quoting the refusal is a report),
+and whose model was not already `opus`, is redispatched once with the
+same prompt and agent type and `model: opus`. Nothing else is retried this way. Then, with `<from>` the
+model it was passed (`""` when none):
+1. `bash scripts/journal.sh docs/specs/<slug> 03-building "fallback: <agent> <where> <from> -> opus
+   (Fable limit; ADR-015 exception)" "<what runs next>"`, as the launch line is written.
+2. `bash scripts/telemetry.sh record fable_limit_fallback 1 0 --spec <slug> --ref <slug>:<where>:<agent>
+   --model fable --agent <agent>`.
+3. One sentence to the owner, in the owner's language: which role ran on Opus instead of Fable and why.
+Then go on. A refusal on the redispatch is the existing stop: an absent seat, a missed story.
 
 ## Terminal
 

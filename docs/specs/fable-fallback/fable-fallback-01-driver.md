@@ -1,8 +1,8 @@
 ---
 story: fable-fallback-01
 spec: fable-fallback
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
@@ -45,5 +45,10 @@ After this story `.claude/workflows/vulyk-cycle.js` no longer lets one Fable-lim
 `bash tests/driver.test.sh`
 
 ## Implementation notes
+- `.claude/workflows/vulyk-cycle.js`: `REFUSAL`/`refused()` beside `caught()`; `FALLBACK_MODEL = 'opus'` and `fallbacks` beside `RETRY`; one `dispatch(prompt, opts, where)` helper replaces both `caught(agent(...))` calls (workers incl. the retry, every council job); `where` = story id or `round-<n>/<report name>` (review, review-top, review-second, opus, haiku).
+- Return values carry `fallbacks`: terminal and unknown-`next` status (as a copy, `{...st, fallbacks}`), every Stop, paused. Not the BadLine raw string (it stays a string so the existing test holds; a fallback before it is only in the console). Launch guards return before any dispatch, unchanged.
+- No model passed means no redispatch (AC 4): every judge frontmatter is `model: opus`, so a no-model dispatch never runs on Fable.
+- Detection is "contains" per the plan's contract, so a real report that quotes the refusal text verbatim would also be redispatched once (cost: one extra opus call; the redispatch rewrites the same attempt file).
+- `tests/driver.test.sh`: one fallback block (reviewer text form, refused twice, thrown `model_requires_usage_credits`, opus / no model passed, `usage_limit_reached`, worker, retry on top_model, `fallbacks: []` on stop and green). Ran it against a copy of the 0.38.0 driver (after writing the change, from a saved copy): 5 checks red, then the harness throws on `result.fallbacks`; 86/86 green on the new driver.
 
 ## Findings

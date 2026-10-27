@@ -453,6 +453,93 @@ const blindPromptsClean = (r) => r.dispatches
       'iteration cap: 40 iterations, then a stop and a release', { stop: r.result.stop, n: r.dispatches.length });
   }
 
+  // --- Fable-limit fallback: a refused dispatch runs once more on opus, same prompt and agent; never a third call
+  {
+    const REFUSED = "Agent terminated early due to an API error: You've reached your Fable limit. Switch to another model, or manage usage credits.";
+    const reviewRun = (args, agents) => run(args, {
+      clerk: [[CLAIM, adv(round('review', { tier: 1, court: null }))], [INGEST, adv(green())], [RELEASE, releaseOk]], agents,
+    });
+    const F = { ...ARGS, review_model: 'fable' };
+    const r = await reviewRun(F, [REFUSED, 'review report']);
+    const [d1, d2] = r.dispatches;
+    check(r.dispatches.length === 2 && d1.model === 'fable' && d2.model === 'opus' && d2.agentType === 'lead-review' && d2.prompt === d1.prompt,
+      'fallback: a Fable-refused reviewer runs once more on opus with the same prompt and agent', r.dispatches.map((d) => [d.agentType, d.model]));
+    check(r.mismatches.length === 0 && r.result.next === 'green' && Array.isArray(r.result.fallbacks) && r.result.fallbacks.length === 1
+      && JSON.stringify(r.result.fallbacks[0]) === JSON.stringify({ agent: 'lead-review', where: 'round-1/review', from: 'fable', to: 'opus' }),
+      'fallback: the round goes on and the return value carries the one fallback', r.result);
+    check(r.logs.includes('fallback: lead-review round-1/review fable -> opus (Fable limit)'), 'fallback: one console line', r.logs);
+    const twice = await reviewRun(F, [REFUSED, REFUSED, 'never asked']);
+    check(twice.dispatches.length === 2 && twice.result.next === 'green' && twice.result.fallbacks.length === 1 && twice.mismatches.length === 0,
+      'fallback: a refusal on the redispatch makes no third call, the ingest records the seat as before', { n: twice.dispatches.length, result: twice.result });
+    const thrown = await reviewRun(F, [{ throw: 'API Error: {"type":"error","error":{"type":"model_requires_usage_credits"}}' }, 'review report']);
+    check(thrown.dispatches.length === 2 && thrown.dispatches[1].model === 'opus' && thrown.result.fallbacks.length === 1,
+      'fallback: model_requires_usage_credits in a caught error is the same refusal', thrown.dispatches.map((d) => d.model));
+    for (const [label, args] of [['opus passed', { ...ARGS, review_model: 'opus' }], ['no model passed', ARGS]]) {
+      const n = await reviewRun(args, [REFUSED, 'never asked']);
+      check(n.dispatches.length === 1 && n.result.fallbacks.length === 0, `fallback: ${label} is not redispatched`, n.dispatches.map((d) => d.model));
+    }
+    // the round-1 live case: a full report that quotes the refusal mid-text is a report, not a refusal
+    const quoting = await reviewRun(F, ["COUNCIL REPORT\nVERDICT: GREEN\nASK 1: PASS - the driver redispatches on `model_requires_usage_credits` and on \"You've reached your Fable limit\"; see vulyk-cycle.js:41", 'never asked']);
+    check(quoting.dispatches.length === 1 && quoting.result.fallbacks.length === 0,
+      'fallback: a report quoting the refusal text mid-text is not redispatched', { m: quoting.dispatches.map((d) => d.model), f: quoting.result.fallbacks });
+    const curly = await reviewRun(F, ['  Agent terminated early due to an API error: You’ve reached your Fable limit. Switch to another model.\n', 'review report']);
+    check(curly.dispatches.length === 2 && curly.dispatches[1].model === 'opus' && curly.result.fallbacks.length === 1,
+      'fallback: the real refusal with a U+2019 apostrophe is redispatched', curly.dispatches.map((d) => d.model));
+    // the round-2 live case: the runtime puts the dispatch description before the early-stop line
+    const prefixed = await reviewRun(F, ['"Council review round 2" failed: ' + REFUSED + ' Run /usage-credits to continue.', 'review report']);
+    check(prefixed.dispatches.length === 2 && prefixed.dispatches[1].model === 'opus' && prefixed.result.fallbacks.length === 1,
+      'fallback: the real refusal with a description prefix is redispatched', { m: prefixed.dispatches.map((d) => d.model), f: prefixed.result.fallbacks });
+    // the 2026-10-27 live probe: inside a Workflow the refusal is agent() -> null; one ping on the same model decides
+    const nul = await reviewRun(F, [null, null, 'review report']);
+    const [n1, np, n2] = nul.dispatches;
+    check(nul.dispatches.length === 3 && n1.model === 'fable' && np.model === 'fable' && np.agentType === undefined
+      && np.prompt === 'Reply with the single word OK.' && n2.model === 'opus' && n2.agentType === 'lead-review' && n2.prompt === n1.prompt
+      && nul.result.next === 'green' && nul.mismatches.length === 0
+      && JSON.stringify(nul.result.fallbacks) === JSON.stringify([{ agent: 'lead-review', where: 'round-1/review', from: 'fable', to: 'opus' }]),
+      'fallback: a null fable return with a null ping is redispatched once on opus, the round goes on',
+      { m: nul.dispatches.map((d) => [d.agentType, d.model]), f: nul.result.fallbacks, next: nul.result.next });
+    const pong = await reviewRun(F, [null, 'OK', 'never asked']);
+    check(pong.dispatches.length === 2 && pong.dispatches[1].model === 'fable' && pong.result.fallbacks.length === 0
+      && pong.result.next === 'green' && pong.mismatches.length === 0,
+      'fallback: a null fable return with an answering ping is not redispatched, the empty return goes on as before',
+      { m: pong.dispatches.map((d) => d.model), f: pong.result.fallbacks });
+    const wn = await run(ARGS, { clerk: [[CLAIM, adv(build([story(1, { model: 'fable' })]))], [ADV, adv(build([story(1, { model: 'fable' })]))], [ADV, adv(build([story(1, { model: 'fable' })]))], [RELEASE, releaseOk]],
+      agents: [null, 'OK', '   ', 'OK'] });
+    check(wn.result.stop && wn.result.stop.error === 'worker returned empty - turn cap suspected (worker-code, maxTurns in .claude/agents/worker-code.md)'
+      && wn.result.fallbacks.length === 0 && wn.dispatches.map((d) => d.model).join(',') === 'fable,fable,fable,fable',
+      'fallback: an answering ping leaves the turn-cap stop as before', { stop: wn.result.stop, m: wn.dispatches.map((d) => d.model) });
+    for (const [label, args] of [['opus passed', { ...ARGS, review_model: 'opus' }], ['no model passed', ARGS]]) {
+      const n = await reviewRun(args, [null, 'never asked']);
+      check(n.dispatches.length === 1 && n.result.fallbacks.length === 0, `fallback: a null return with ${label} makes no ping`, n.dispatches.map((d) => d.model));
+    }
+    const nn = await reviewRun(F, [null, null, null, 'never asked']);
+    check(nn.dispatches.length === 3 && nn.result.fallbacks.length === 1, 'fallback: a null redispatch makes no second ping', nn.dispatches.map((d) => d.model));
+    const sw = story(1, { model: 'fable' });
+    const done = await run(ARGS, { clerk: [[CLAIM, adv(build([sw]))], [ADV, adv(green())], [RELEASE, releaseOk]],
+      agents: ['STATUS: DONE\nFILES: .claude/workflows/vulyk-cycle.js\nCONCERNS: refused() now matches model_requires_usage_credits in a short string', 'never asked'] });
+    check(done.dispatches.length === 1 && done.result.fallbacks.length === 0,
+      'fallback: a short STATUS: DONE return naming model_requires_usage_credits is not redispatched', { m: done.dispatches.map((d) => d.model), f: done.result.fallbacks });
+    const other = await reviewRun(F, [{ throw: 'usage_limit_reached: five-hour limit' }, 'never asked']);
+    check(other.dispatches.length === 1 && other.result.fallbacks.length === 0, 'fallback: another limit is not redispatched', other.dispatches.map((d) => d.model));
+    // workers and the retry on top_model go through the same helper
+    const a = story(1, { model: 'fable' });
+    const w = await run(ARGS, { clerk: [[CLAIM, adv(build([a]))], [ADV, adv(green())], [RELEASE, releaseOk]], agents: [REFUSED, 'worker report'] });
+    check(w.dispatches.map((d) => d.model).join(',') === 'fable,opus'
+      && JSON.stringify(w.result.fallbacks) === JSON.stringify([{ agent: 'worker-code', where: 'demo-01', from: 'fable', to: 'opus' }]),
+      'fallback: a refused worker is redispatched, where is the story id', { m: w.dispatches.map((d) => d.model), f: w.result.fallbacks });
+    const b = story(1, { model: 'sonnet' });
+    const rt = await run(ARGS, {
+      clerk: [[CLAIM, adv(build([b]))], [ADV, adv(build([b]))], [ADV, adv(green())], [RELEASE, releaseOk]], agents: ['missed', REFUSED, 'retry report'],
+    });
+    check(rt.dispatches.map((d) => d.model).join(',') === 'sonnet,fable,opus' && rt.result.next === 'green' && rt.result.fallbacks.length === 1,
+      'fallback: the retry on top_model is redispatched on opus when Fable refuses', rt.dispatches.map((d) => d.model));
+    // a stop carries the list too; a run with no refusal carries an empty one
+    const st = await run(ARGS, { clerk: [[CLAIM, adv(round('sonnet'))], [RELEASE, releaseOk]] });
+    const ok = await run(ARGS, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(green())], [RELEASE, releaseOk]] });
+    check(st.result.stop && Array.isArray(st.result.fallbacks) && st.result.fallbacks.length === 0
+      && Array.isArray(ok.result.fallbacks) && ok.result.fallbacks.length === 0, 'fallback: no refusal returns fallbacks: [] on a stop and on green', [st.result, ok.result]);
+  }
+
   check(!everyAgentType.has('queen-planner'), 'no queen-planner dispatch in any scenario', [...everyAgentType]);
   console.log(`${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);

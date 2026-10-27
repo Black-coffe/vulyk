@@ -228,7 +228,8 @@ tel enum | expect "enum prints context_high" "context_high"
 tel enum | expect "enum prints scope_breach"  "scope_breach"
 tel enum | expect "enum prints sessionend_llm (0.19)" "sessionend_llm"
 tel enum | expect "enum prints model_below_floor (0.20)" "model_below_floor"
-expect_eq "enum is exactly 10 codes" "10" "$(tel enum | grep -c .)"
+tel enum | expect "enum prints fable_limit_fallback (0.39)" "fable_limit_fallback"
+expect_eq "enum is exactly 11 codes" "11" "$(tel enum | grep -c .)"
 tel enum | expect_absent "enum prints codes only, no prose" " "
 tel agents | expect "agents prints a framework agent" "cycle-clerk"
 tel agents | expect "agents prints the catch-all token" "other"
@@ -258,6 +259,25 @@ expect_eq "a dispatch name outside the set lands as other" "other" \
 tel record agent_prefix_high 60000 50000 --ref agent:c --agent Explore
 expect_eq "a built-in agent type lands as given" "Explore" \
   "$(grep -F '"ref":"agent:c"' "$LOG" | jq -r '.agent')"
+
+# fable_limit_fallback: written by the commands after a refused Fable dispatch, in the
+# driver_refused argument form; ref = <slug>:<where>:<agent> is the dedupe key.
+tel record fable_limit_fallback 1 0 --spec ff --ref ff:round-1/review:lead-review --model fable --agent lead-review
+FFROW="$(grep -F '"code":"fable_limit_fallback"' "$LOG")"
+expect_eq "a fable_limit_fallback row carries the 12 keys" \
+  '["v","ts","code","value","threshold","vulyk","tier","model","agent","spec","story","ref"]' \
+  "$(printf '%s\n' "$FFROW" | jq -c 'keys_unsorted')"
+expect_eq "fable_limit_fallback: value 1, threshold 0, model fable, the agent, the ref" \
+  "1|0|fable|lead-review|ff:round-1/review:lead-review" \
+  "$(printf '%s\n' "$FFROW" | jq -r '"\(.value)|\(.threshold)|\(.model)|\(.agent)|\(.ref)"' | tr -d '\r')"
+tel record fable_limit_fallback 1 0 --spec ff --ref ff:round-1/review:lead-review --model fable --agent lead-review
+expect_eq "a repeated fable_limit_fallback (code, ref) appends nothing" "1" \
+  "$(grep -c '"code":"fable_limit_fallback"' "$LOG")"
+tel bundle > "$T/ff-bundle.jsonl"
+expect_eq "a week holding fable_limit_fallback bundles it" "1" \
+  "$(grep -c '"code":"fable_limit_fallback"' "$T/ff-bundle.jsonl")"
+if tel check "$T/ff-bundle.jsonl" >/dev/null 2>&1; then ok "check accepts a week holding fable_limit_fallback"
+else bad "check rejected a week holding fable_limit_fallback:"; tel check "$T/ff-bundle.jsonl" 2>&1 | sed 's/^/        /'; fi
 
 BEFORE="$(grep -c . "$LOG")"
 ERR="$(tel record not_a_code 1 0 --ref session:z 2>&1 >/dev/null)"; RC=$?
