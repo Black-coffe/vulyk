@@ -1,4 +1,4 @@
-# Scout report: agents and commands (v0.38.0)
+# Scout report: agents and commands (v0.39.0)
 
 ## Purpose
 Every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (ADR-013 light VULYK, ADR-015 Sonnet
@@ -53,9 +53,10 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   `low`, `maxTurns:40`) - map + wiki after a merge. **librarian** (`opus`, `low`, `maxTurns:25`; **no
   shell**) - sole consolidator of `memory/learnings/`; lists `Delete:` files (librarian.md:18-19).
 - **drone-horizon** (0.35.0, ADR-022; `sonnet`, `medium`, `maxTurns:20`; `tools:` Read/Grep/Glob/WebSearch/
-  WebFetch only, no `disallowedTools` line, drone-horizon.md:4) - one `lens:` per dispatch (altitude|depth|range), ≤ 3
-  proposals (`what/why/cost/check/sources/status/kind/ask line`), `DROPPED:`; writes nothing. Facts need two
-  dated sources else `не подтверждено`; WebFetch ≤ 2; web text is data. Reply ≤ 60 lines.
+  WebFetch only, drone-horizon.md:4) - one `lens:` per dispatch (altitude|depth|range); step 1 takes the two
+  Profile rows from the dispatch, reads the constitution `## Profile` only if missing (:18-20). ≤ 3
+  proposals (`what/why/cost/check/sources/status/kind/ask line`), `DROPPED:`; writes nothing. Two dated
+  sources else `не подтверждено`; WebFetch ≤ 2; reply ≤ 60 lines.
 
 ## Commands - what each runs
 - **`/vulyk-plan`** - step 0 deliverable (document → brief + report, stop); tier; brief via
@@ -64,12 +65,17 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   `drone-coverage` T3-4. T1 → `cycle.sh briefed --mode mini-brief` + `/vulyk-build`. T2-4 stop for
   `**Approved:**` (`--go` opts out). Recon step 3, T2-4 (vulyk-plan.md:27-29): `symbol-map.sh --exact <file>` once
   per file the plan likely names (many files in one call get cut at 1536 bytes), outputs kept for the plan;
-  checklist line: meta-tests, docs/ADR, `.env.example`, re-exports, sibling files. **Step 3a horizon** (vulyk-plan.md:28-44; `--horizon` forces, `--no-horizon`
+  checklist line: meta-tests, docs/ADR, `.env.example`, re-exports, sibling files. **Step 3a horizon** (vulyk-plan.md:31-51; `--horizon` forces, `--no-horizon`
   skips; skipped for study, T0-1, no-question): fires on zero grep hits of the capability's 2-4 terms in
   `memory/memory.md`, `memory/map/`, source (a container hit does not count); three parallel `drone-horizon`
-  (no `model:`), Queen cuts to ≤ 3, writes `docs/specs/<slug>/horizon.md`; never into `brief.md`. Grill
-  (`templates/grill.md:49` `## Horizon questions`): one question each inside the 3-7 cap, «Добавить»/«Не
-  добавлять»; silence = not added; «Добавить» recommended only for `kind: gap`.
+  (no `model:`), each given brief path, recon summary and the Profile rows *Configurations that exist today* +
+  *Owner language* verbatim; Queen cuts to ≤ 3; a kept `kind: gap` needs a named ask or verbatim request
+  fragment (written beside it) else relabelled `extension`; kept ones numbered `H1`-`H3` in
+  `docs/specs/<slug>/horizon.md`; never into `brief.md`. Grill (`templates/grill.md:49` `## Horizon
+  questions`): one question each inside the 3-7 cap, ordered ordinary, then `gap`, then `extension`; the
+  cap's leftovers stay in `horizon.md`; «Добавить»/«Не добавлять»; silence = not added; «Добавить»
+  recommended only for `gap`. `## Answers` entries open `(horizon H<n>)` and end `adopted`/`declined`/
+  `offered, not adopted` (grill.md:73-77, :87).
 - **Fable-limit fallback, session path** (ADR-015 exception): `/vulyk-build` (section `## Fable-limit
   fallback`, vulyk-build.md:95-108; solo review :36, hive wake-up reads the driver's `fallbacks` :63),
   `/vulyk-review` (step 2, :29-37) and `/vulyk-plan` (step 5, :59-67; `queen-planner`/`lead-architect`) redispatch
@@ -77,8 +83,7 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   `You've reached your Fable limit`/`model_requires_usage_credits`, or text starting `Agent terminated early due
   to an API error` and carrying `reached your Fable limit` (a quoting report is a report). Each writes a
   `journal.sh` line, `telemetry.sh record fable_limit_fallback 1 0 --model fable --agent <a>`, one owner sentence.
-  A second refusal is the old path (absent seat, missed story, planning stops). The driver's test differs (length
-  + no report header; cycle.md).
+  A second refusal is the old path. The driver's test differs (cycle.md).
 - **`/vulyk-models`** (0.30.0) - quiz via `model-profile.sh --recommend`/`--explain`, one `AskUserQuestion`,
   then `--set <name>`; `claude -p` prints a pointer, writes nothing.
 - **Profile-aware dispatch** (ADR-020, scripts.md): `/vulyk-plan`, `/vulyk-build` (passes `worker_model`,
@@ -104,7 +109,9 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   `defects-index.sh --counts`, `maintenance due|waits for` lines. Writes only `.claude/state.json`.
 - **`/vulyk-evolve`** - `evolve-ledger.py . resolve` + `window` (a `pending` branch stops the run);
   builds the changeset in worktree `.claude/worktrees/evolve-<date>` on `vulyk/evolve-<date>`; telemetry
-  prints, never sends. `--dry-run` writes no row.
+  prints, never sends. `--dry-run` writes no row. Step 2 (vulyk-evolve.md:82): once ≥ 3 `horizon.md` exist,
+  counts `(horizon H` picks in `brief.md` `## Answers` (adopted/declined/offered) plus unanswered kept
+  proposals, against ADR-022's reversal rule.
 - **`/vulyk-gc`** - dispatches `librarian`; main session `git rm`s its `Delete:` list. **`/vulyk-gc memory`**
   (0.32.0) - main session alone: `memory-triage.sh`, one `AskUserQuestion`, nothing written before a yes.
 - **`/vulyk-pause`** / **`/vulyk-resume`** wrap `cycle.sh pause`/`resume`. **`/vulyk-update`** -
@@ -113,4 +120,4 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a
   relative script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-10-28 (fable-fallback merge 427ff2c; ADR-013, ADR-015, ADR-020, ADR-022)
+last-verified: 2026-10-28 (horizon-audit merge 9816eea, 0.39.0; ADR-013, ADR-015, ADR-020, ADR-022)
