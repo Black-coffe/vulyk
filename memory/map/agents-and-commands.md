@@ -1,4 +1,4 @@
-# Scout report: agents and commands (v0.37.0)
+# Scout report: agents and commands (v0.38.0)
 
 ## Purpose
 Every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (ADR-013 light VULYK, ADR-015 Sonnet
@@ -41,8 +41,9 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   (`model:` per story: queen-planner.md:21-26, ADR-015/020; `## Verification` cites only `## Commands`
   rows without `round-only`, queen-planner.md:30). Never reads source; never plans repairs
   (`cmd_repair` writes `model: opus`). T4 dispatch: `<top_model>`. `## Files` lists every reached path; the
-  brief's symbol-map output is a source: `exact` lines weighed first, `textual` after, unchanged importers
-  stay out (queen-planner.md:31-33).
+  brief's symbol-map output (`--exact`) is a source: `exact` lines go into `## Files` when the change reaches
+  them, a non-zero `textual <N> not shown` under `tests`/`importers` is a recon question for `drone-scout`,
+  unchanged importers stay out (queen-planner.md:31-35).
 - **lead-architect** (`opus`, `high`, `maxTurns:30`) - T4 planning and after a story's second miss;
   every decision an ADR. Dispatched with `model: <top_model>`.
 - **drone-scout** (`sonnet`, `low`, `maxTurns:15`) - recon; `# Scout report:` format. **drone-coverage**
@@ -59,7 +60,7 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   `redact.sh`; recon (scouts: T1 0-1, T2 ≤1, T3 ≤2, T4 ≤4); grill T2-4; plan (Queen T1-2,
   `queen-planner` T3-4, `lead-architect` T4); stories; `wave-check.sh` + `trace-check.sh`;
   `drone-coverage` T3-4. T1 → `cycle.sh briefed --mode mini-brief` + `/vulyk-build`. T2-4 stop for
-  `**Approved:**` (`--go` opts out). Recon step 3, T2-4 (vulyk-plan.md:27-29): `symbol-map.sh <file>` once
+  `**Approved:**` (`--go` opts out). Recon step 3, T2-4 (vulyk-plan.md:27-29): `symbol-map.sh --exact <file>` once
   per file the plan likely names (many files in one call get cut at 1536 bytes), outputs kept for the plan;
   checklist line: meta-tests, docs/ADR, `.env.example`, re-exports, sibling files. **Step 3a horizon** (vulyk-plan.md:28-44; `--horizon` forces, `--no-horizon`
   skips; skipped for study, T0-1, no-question): fires on zero grep hits of the capability's 2-4 terms in
@@ -86,7 +87,8 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   of the spec branch into the default: 0 clean, 1 conflict (never overridden; repair only on the
   owner's yes), other = "cannot check". Release commit; local `merge --no-ff` only on a clean default
   tree, failure → `merge --abort`; then `branch -d` (never `-D`). Prints the publish command, never
-  runs it; `drone-docs`/`librarian` only with work; next-brief draft.
+  runs it; when it pushes and tags and `.github/workflows/` exists, the printed order is push, green CI on
+  that commit, then tag + push tag (red = no tag; vulyk-ship.md:31-35); `drone-docs`/`librarian` only with work; next-brief draft.
 - **`/vulyk-status`** - driver line, council stats, `token-report.py`, `state.sh` table, map freshness,
   `defects-index.sh --counts`, `maintenance due|waits for` lines. Writes only `.claude/state.json`.
 - **`/vulyk-evolve`** - `evolve-ledger.py . resolve` + `window` (a `pending` branch stops the run);
@@ -100,4 +102,4 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a
   relative script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-10-26 (v0.37.0, ADR-013, ADR-015, ADR-020, ADR-022)
+last-verified: 2026-10-27 (v0.38.0, ADR-013, ADR-015, ADR-020, ADR-022)

@@ -15,6 +15,10 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   `command_cell_round_only` (:180; a command in a `round-only` Purpose-marked row), `claude_code_version`
   (`CLAUDE_CODE_VERSION` env, else `claude --version`), `version_lt`,
   `model_below_floor` (prints `<family> <ver> <floor>` / `alias` / `cc ... <have|unknown> <need>`; fails closed).
+  `verdict_stale <spec> <head-sha> <pack-fp>` (lib.sh:109; prints `CURRENT` rc 0 / `STALE (pack)` / `STALE (commit)`
+  rc 1; pack first, then a `<sha>..HEAD` that is `paperwork_only` stays current): the human-check record's rule,
+  called by `human-check.sh --check` (:57) and ship-check.sh (:255 ACCEPTED override, :302 no-council branch).
+  The council GREEN row's pack/commit test is still inline (ship-check.sh:225-228).
 - `ship-check.sh <spec-dir>` / `--record`; `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`.
   `scope-check.sh <story-file> [range]` runs in `close-story`; `close-story --commit` exits 4 on its `  ! ` paths.
 - `wave-check.sh` (`no-verify`, `verify-gap`, `verify-cell`, `verify-round-only`: a segment matching a
@@ -41,18 +45,23 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `memory-triage.sh [<memory-dir>]` - read-only lister behind `/vulyk-gc memory`: TSV `path<TAB>type<TAB>
   first heading`; default dir under `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<slug>/memory`; absent =
   `no private memory: <dir>`, exit 0. `--index-lines <MEMORY.md> <file>...`; exit 2 bad input.
-- `symbol-map.sh [--story <story.md>] [--scope <path>]... <file>...` (0.37.0) - picks python3|python (none: exit
-  2), execs `symbol-map.py` (stdlib; repo = `git ls-files`). Per input a `## <path>` block of sections `tests`,
-  `importers`, `imported`, `guard tests` (tests using os.walk/rglob/glob(/git ls-files/listdir/iterdir),
-  `path mentions`; each line `exact` (Python `ast` import, bash `source`/`.`, also via a re-exporting
-  `__init__`) or `textual` (stem as whole word, path as substring). Scope (inputs, `--scope`, story `## Files`
-  globs, the story) is never listed. Non-py/non-shell input: `! imports not parsed for <ext>`; unparseable
-  py: `! unparsed`. Section cap 5 + `... N more`; stdout <= 1536 bytes (symbol-map.py:22) ending in one
-  `... N more` line. Exit 0 / 1 an input missing (all still reported) / 2 usage, no python, not in git.
-  Reports only. Callers: recon (`vulyk-plan` step 3), `worker-code`, solo build (agents-and-commands.md).
+- `symbol-map.sh [--exact] [--story <story.md>] [--scope <path>]... <file>...` (0.37.0, `--exact` 0.38.0) - picks
+  python3|python (none: exit 2), execs `symbol-map.py` (stdlib; repo = `git ls-files`). Per input a `## <path>`
+  block of sections `tests`, `importers`, `imported`, `guard tests` (tests using os.walk/rglob/glob(/git
+  ls-files/listdir/iterdir), `path mentions` (ranked code, docs/adr, other docs, root CHANGELOG/CLAUDE/README);
+  each line `exact` (Python `ast` import, bash `source`/`.`, a bash-run `.py` (`$DIR/x.py` or after a runner),
+  also via a re-exporting `__init__`) or `textual` (stem as whole word, path as substring). `--exact` keeps
+  `exact` lines, folds textual ones into `textual  <N> not shown`. Never listed: scope (inputs, `--scope`,
+  story `## Files` globs, the story) and a `fixtures` path after a `tests`/`test` segment. A missing input's
+  block prints first. Non-py/non-shell input: `! imports not parsed for <ext>`; unparseable py: `! unparsed`.
+  Section cap 5 + `... N more`; stdout <= 1536 bytes (symbol-map.py:32) ending in one `... N more` line.
+  Exit 0 / 1 an input missing (all still reported) / 2 usage, no python, not in git. Reports only. Edges parse
+  per kind on first need. Callers: recon (`vulyk-plan` step 3, `--exact`), `worker-code`, solo build.
 - `injection-check.sh <file>` - `check:` of `command-injection-follows-cwd`; exit 1 on a relative script path.
 - `redact.sh` (stdin mask); `handoff.py` `_REDACT_FALLBACK` mirrors it (extend both).
 - `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan`, `bundle`, `check`, `publish`, `inbox`.
+  `vulyk_version`: `.claude/vulyk-version`, else `VERSION` only when `install.sh` sits beside it (the VULYK
+  repo itself), else `0.0.0` (telemetry.sh:156-168).
 
 ## Key contracts
 - `cycle.sh`: last stdout line is one JSON object; exits 0 ok · 1 usage · 2 precondition · 3 paused ·
@@ -98,4 +107,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - Retired framework files are removed unless edited (`retired_edited`).
 - Card parsing lives only in `defects_lib.py` (`docs/wiki/rules-tree.md`).
 
-last-verified: 2026-10-26 (v0.37.0)
+last-verified: 2026-10-27 (v0.38.0)
