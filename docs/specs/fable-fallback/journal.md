@@ -11,3 +11,6 @@
 - 2026-10-27T21:31:02Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/fable-fallback/round-2, carried from round 1: opus · next: dispatch:review
 - 2026-10-27T21:50:25Z · 04-council:GREEN · round 2 verdict GREEN at 97d29a8 pack a68d9a9f4309 · next: green
 - 2026-10-27T21:51:05Z · 04-council:GREEN · fallback: lead-review round-2/review fable -> opus was a false positive again (the launch-time driver still had the old detector); Fable's discarded report was PASS too, saved at scratchpad round2-review-fable-discarded.md; no telemetry row · next: owner: ship or narrow detector fix first
+- 2026-10-27T21:55:09Z · 04-council:GREEN · live probe on account 1 (Fable exhausted): Agent tool returns the 317-char 'Agent terminated early ... Fable limit' text (refused()=true); Workflow agent() returns null and the refusal shows only in the run's Failures, so the driver never sees it - ask 1 does not work on the hive path · next: ship held; owner decides the repair
+- 2026-10-27T21:57:08Z · 03-building · relaunching the hive for story 07 and round 3 · next: the loop holds the working tree of vulyk/fable-fallback; to edit, run /vulyk-pause fable-fallback
+- 2026-10-27T21:58:17Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/fable-fallback/round-3, carried from round 2: opus · next: dispatch:review
