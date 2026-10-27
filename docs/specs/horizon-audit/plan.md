@@ -52,4 +52,4 @@ the command or script that owns it, and scripts/ship-check.sh reads them all.
 **Branch:** vulyk/horizon-audit
 **Checked:** <written by scripts/human-check.sh>
 **Council:** GREEN round 1, 2026-10-27, at b4ce15d, pack a69cc8878fb6
-**Shipped:** <written by scripts/ship-check.sh --record>
+**Shipped:** 0.39.0, 2026-10-27, at 1cb04c2 - merged to main, publish pending
