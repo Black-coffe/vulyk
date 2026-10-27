@@ -269,3 +269,6 @@
 {"v":1,"ts":"2026-10-26T19:29:03Z","code":"council_rounds_high","value":3,"threshold":3,"vulyk":"0.0.0","tier":3,"model":"","agent":"","spec":"fast-verification","story":"","ref":"council:fast-verification"}
 {"v":1,"ts":"2026-10-27T05:14:32Z","code":"agent_prefix_high","value":53548,"threshold":50000,"vulyk":"0.0.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-a31f3b998fdfe22f7.jsonl"}
 {"v":1,"ts":"2026-10-27T05:14:34Z","code":"agent_prefix_high","value":53548,"threshold":50000,"vulyk":"0.0.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-ab0bcb85d2ad7470f.jsonl"}
+{"v":1,"ts":"2026-10-27T20:57:38Z","code":"agent_prefix_high","value":50378,"threshold":50000,"vulyk":"0.38.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-a33f653228b92f7a0.jsonl"}
+{"v":1,"ts":"2026-10-27T20:57:40Z","code":"agent_prefix_high","value":50378,"threshold":50000,"vulyk":"0.38.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-a6d752d6a2d63fc1f.jsonl"}
+{"v":1,"ts":"2026-10-27T20:57:43Z","code":"agent_prefix_high","value":50384,"threshold":50000,"vulyk":"0.38.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-afc1e18b09bb442d6.jsonl"}
