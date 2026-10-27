@@ -72,4 +72,4 @@ is missing or unparsable.
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-10-27, at 6fb8192, pack 3aae21b89464 - red: 4
 **Council:** GREEN round 2, 2026-10-27, at 0ca06f8, pack 8a0155be4330
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Shipped:** 0.38.0, 2026-10-27, at c7f8f90 - merged to main, publish pending
