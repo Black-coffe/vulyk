@@ -71,4 +71,5 @@ is missing or unparsable.
 **Branch:** vulyk/fable-fallback
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-10-27, at 546d094, pack a378f5d8d650
+**Council:** GREEN round 2, 2026-10-27, at 97d29a8, pack a68d9a9f4309
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
