@@ -4,6 +4,34 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-10-27
+
+The tails of 0.37.0: the ship gate checks the owner's acceptance for staleness, a release waits for green CI before
+its tag, and symbol-map gets tighter and faster (spec `post-037-tails`).
+
+### Fixed
+- **The ship gate no longer passes a stale acceptance.** Under a council row, a newer `**Checked:** ACCEPTED`
+  overrode to READY without checking that the pack and the code were still what the owner saw (0.37.0 shipped with
+  `human-check.sh --check` saying STALE). One rule now, `verdict_stale` in `scripts/lib.sh`, used by both branches of
+  `ship-check.sh` and by `human-check.sh --check`; release paperwork after the acceptance still passes.
+- **Telemetry rows in VULYK's own repo carry the real version.** With no `.claude/vulyk-version` stamp, but
+  `install.sh` and `VERSION` side by side, `scripts/telemetry.sh` reads `VERSION` instead of writing `0.0.0`.
+- **symbol-map:** a `.py` run from a bash script (`"$(dirname "$0")/x.py"`) is an `exact` link; `tests/**/fixtures/**`
+  never shows; path mentions list code, ADR and tests before `CHANGELOG.md`, `CLAUDE.md`, `README.md`; a missing input
+  is printed first, so the byte cap cannot hide it; `replay.py` runs the script through `sys.executable` (MSYS bash
+  glob-expanded its arguments).
+
+### Changed
+- **`/vulyk-ship` publish step:** when it pushes and tags and the repo has CI, it prints push, then green CI on the
+  release commit, then the tag; a red run means no tag (0.36.0 and 0.37.0 were tagged on red).
+- **`symbol-map.sh --exact`:** keeps the `exact` lines and folds each section's `textual` ones into a count. Recon
+  hands this to `queen-planner`; builders keep the full output.
+
+### Measured
+- symbol-map on a bash input, warm cache, one Windows box, median of 3: `scripts/lib.sh` 1.55 s before (one run, from
+  the brief) to 0.245 s after through the wrapper (direct 0.264 s to 0.170 s). Fix: edges are parsed per language on
+  first need, so a bash input parses no Python. The owner's wish was about 0.2 s. A cold first run is file I/O.
+
 ## [0.37.0] - 2026-10-26
 
 A plan names every file a change reaches, from a deterministic script instead of a model's memory (spec `symbol-map`).
