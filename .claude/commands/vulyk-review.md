@@ -26,8 +26,9 @@ branch). Every call below that runs `advance` carries `timeout: 600000`.
    profile is not `sonnet-builds` (else no model parameter), and two reviewers (`review-top`,
    `review-second`) at Tier 4. Blind seats get `model: <s>` from `s="$(bash scripts/model-profile.sh --role
    seat)"` only when the profile (`bash scripts/model-profile.sh`) is not `sonnet-builds`.
-   A seat whose dispatch returns the Fable-limit refusal (`You've reached your Fable limit` /
-   `model_requires_usage_credits`) and was not already on `opus` is redispatched once with the same
+   A seat whose dispatch returns the Fable-limit refusal (an error carrying `You've reached your Fable
+   limit` / `model_requires_usage_credits`, or a text that starts with `Agent terminated early due to an
+   API error` and carries `reached your Fable limit`; a report quoting it is a report) and was not already on `opus` is redispatched once with the same
    prompt and agent type and `model: opus`; then, `<from>` the model it was passed (`""` when none):
    `bash scripts/journal.sh docs/specs/<slug> 04-council "fallback: <agent> round-<round>/<seat> <from>
    -> opus (Fable limit; ADR-015 exception)" "ingest"`, `bash scripts/telemetry.sh record

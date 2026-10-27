@@ -1,7 +1,7 @@
 ---
 story: fable-fallback-05
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 3
@@ -47,3 +47,9 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 `bash tests/driver.test.sh`
 `bash tests/telemetry.test.sh --part telemetry && bash tests/maintenance.test.sh`
 `bash tests/model-profile.test.sh && bash tests/maintenance.test.sh`
+
+## Implementation notes
+- .claude/workflows/vulyk-cycle.js: `refused()` matches a caught error anywhere (straight or U+2019 apostrophe, or `model_requires_usage_credits`); a returned string only when, trimmed, it starts with `Agent terminated early due to an API error` and carries `reached your Fable limit`.
+- tests/driver.test.sh: original case (GREEN report quoting both refusal forms mid-text: one dispatch, no fallback) and neighbour (real refusal, U+2019, leading whitespace: redispatched on opus).
+- .claude/commands/vulyk-build.md, vulyk-review.md, vulyk-plan.md: rule text narrowed the same way.
+- docs/model-cascade.md:112 and docs/token-economy.md:59-62: workers carry 1h since cache-economy, `lead-review` the only judge since this spec, others at 5 min, 2026-11-03 compares `lead-review`'s spend with the week before (option B; agent files untouched).

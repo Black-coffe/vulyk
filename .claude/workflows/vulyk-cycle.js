@@ -36,12 +36,16 @@ const reasonFor = (who, agentType, r) => {
   return `${who} returned empty - turn cap suspected (${agentType}, maxTurns in .claude/agents/${agentType}.md)`
 }
 const caught = (p) => p.catch((e) => ({ threw: e && e.message ? e.message : String(e) }))
-// The Fable-limit refusal, in the returned text or in the error caught() swallowed. Nothing else matches:
-// an Opus or Sonnet limit, usage_limit_reached or any other API error behaves as before.
-const REFUSAL = /You've reached your Fable limit|model_requires_usage_credits/
+// The Fable-limit refusal. A caught error (caught() swallowed it) matches either form anywhere; a
+// returned string only when it is the refusal itself - it starts with the runtime's early-stop line
+// and names the Fable limit - so a report that quotes the refusal (a judge reviewing this very
+// feature) is a report. Nothing else matches: an Opus or Sonnet limit, usage_limit_reached or any
+// other API error behaves as before.
+const REFUSAL = /You['\u2019]ve reached your Fable limit|model_requires_usage_credits/
+const REFUSAL_TEXT = /^Agent terminated early due to an API error[\s\S]*reached your Fable limit/
 const refused = (r) => {
-  const text = r && typeof r === 'object' && 'threw' in r ? r.threw : r
-  return typeof text === 'string' && REFUSAL.test(text)
+  if (r && typeof r === 'object' && 'threw' in r) return typeof r.threw === 'string' && REFUSAL.test(r.threw)
+  return typeof r === 'string' && REFUSAL_TEXT.test(r.trim())
 }
 
 const A = args ?? {}

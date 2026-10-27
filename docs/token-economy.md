@@ -57,9 +57,10 @@ Three operational consequences:
   reason `close-story` runs verification once, under a 540 s timeout, instead of the worker
   running the suite and then `close-story` running it again. It is also why `worker-code` and
   `worker-test` carry `experimental: {cacheTtl: 1h}`: in 10 days of transcripts, workers lost
-  their prefix 23 times behind a suite, about 40% of `worker-code`'s cost. The other agents stay
-  at 5 minutes. A 1-hour write costs 1.6× a 5-minute one, and on short-turn agents that premium
-  outweighs the rare rebuild: a blanket 1 h for every subagent measured as a net loss
+  their prefix 23 times behind a suite, about 40% of `worker-code`'s cost. Since fable-fallback
+  `lead-review` is the only judge that carries it too, and on 2026-11-03 its spend per dispatch is
+  compared with the week before. The other agents stay at 5 minutes. A 1-hour write costs 1.6×
+  a 5-minute one, and on short-turn agents that premium outweighs the rare rebuild: a blanket 1 h for every subagent measured as a net loss
   (`docs/specs/cache-economy/report.md`). So never set `subagentPromptCacheTtl`,
   `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL` or `FORCE_PROMPT_CACHING_5M`: each one overrides the
   per-agent frontmatter.

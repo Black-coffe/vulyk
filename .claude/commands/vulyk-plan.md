@@ -56,8 +56,9 @@ Plan: "$ARGUMENTS"
    Tier 3 passes `model: <p>` from `p="$(bash scripts/model-profile.sh --role planner)"` only when it is not
    `opus` (else no model parameter). At Tier 3-4, when `bash scripts/model-profile.sh --role routine` prints
    `haiku`, add the line `routine stories: model: haiku` to the planner's brief.
-   A `queen-planner` or `lead-architect` dispatch that returns the Fable-limit refusal (`You've reached
-   your Fable limit` / `model_requires_usage_credits`) and was not already on `opus` is redispatched
+   A `queen-planner` or `lead-architect` dispatch that returns the Fable-limit refusal (an error carrying
+   `You've reached your Fable limit` / `model_requires_usage_credits`, or a text that starts with `Agent
+   terminated early due to an API error` and carries `reached your Fable limit`; a quote is not it) and was not already on `opus` is redispatched
    once with the same prompt and `model: opus`; then, `<from>` the model it was passed (`""` when none):
    `bash scripts/journal.sh docs/specs/<slug> 01-spec "fallback: <agent> plan <from> -> opus (Fable
    limit; ADR-015 exception)" "plan"`, `bash scripts/telemetry.sh record fable_limit_fallback 1 0 --spec

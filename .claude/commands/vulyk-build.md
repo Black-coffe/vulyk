@@ -94,8 +94,10 @@ Without the Workflow tool, run the solo loop from this session with the stamp, b
 
 ## Fable-limit fallback
 
-A dispatch whose returned text or error carries `You've reached your Fable limit` or
-`model_requires_usage_credits`, and whose model was not already `opus`, is redispatched once with the
+A dispatch refused for the Fable limit: an error that carries `You've reached your Fable limit` or
+`model_requires_usage_credits`, or a returned text that, trimmed, starts with `Agent terminated early
+due to an API error` and carries `reached your Fable limit` (a report quoting the refusal is a report),
+and whose model was not already `opus`, is redispatched once with the
 same prompt and agent type and `model: opus`. Nothing else is retried this way. Then, with `<from>` the
 model it was passed (`""` when none):
 1. `bash scripts/journal.sh docs/specs/<slug> 03-building "fallback: <agent> <where> <from> -> opus

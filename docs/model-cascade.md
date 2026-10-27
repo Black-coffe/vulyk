@@ -109,9 +109,11 @@ sentence to the owner. The build goes on. A second refusal stops as it did befor
 a missed story. Under `opus-builds` this means Opus judges Opus code for that one dispatch: the
 family that built judges, the owner's recorded exception (ADR-015).
 
-In the same spec `lead-review` alone carries `experimental:` / `cacheTtl: 1h`, since the reviewer
-waits longest on tests. On 2026-11-03 its spend per dispatch is compared with the week before (the
-rewrite share beside it), and the owner decides whether the field spreads to other agents.
+`worker-code` and `worker-test` carry `experimental:` / `cacheTtl: 1h` since cache-economy
+(`docs/token-economy.md`); in the same spec `lead-review` became the only judge that does, since the
+reviewer waits longest on tests. The other agents stay at 5 minutes. On 2026-11-03 `lead-review`'s
+spend per dispatch is compared with the week before (the rewrite share beside it), and the owner
+decides whether the field spreads to the remaining roles.
 
 [fable-plan]: https://support.claude.com/en/articles/15424964-claude-fable-models-on-your-plan
 [subagents]: https://code.claude.com/docs/en/sub-agents

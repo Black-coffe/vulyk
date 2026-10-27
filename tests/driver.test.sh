@@ -478,6 +478,13 @@ const blindPromptsClean = (r) => r.dispatches
       const n = await reviewRun(args, [REFUSED, 'never asked']);
       check(n.dispatches.length === 1 && n.result.fallbacks.length === 0, `fallback: ${label} is not redispatched`, n.dispatches.map((d) => d.model));
     }
+    // the round-1 live case: a full report that quotes the refusal mid-text is a report, not a refusal
+    const quoting = await reviewRun(F, ["COUNCIL REPORT\nVERDICT: GREEN\nASK 1: PASS - the driver redispatches on `model_requires_usage_credits` and on \"You've reached your Fable limit\"; see vulyk-cycle.js:41", 'never asked']);
+    check(quoting.dispatches.length === 1 && quoting.result.fallbacks.length === 0,
+      'fallback: a report quoting the refusal text mid-text is not redispatched', { m: quoting.dispatches.map((d) => d.model), f: quoting.result.fallbacks });
+    const curly = await reviewRun(F, ['  Agent terminated early due to an API error: You’ve reached your Fable limit. Switch to another model.\n', 'review report']);
+    check(curly.dispatches.length === 2 && curly.dispatches[1].model === 'opus' && curly.result.fallbacks.length === 1,
+      'fallback: the real refusal with a U+2019 apostrophe is redispatched', curly.dispatches.map((d) => d.model));
     const other = await reviewRun(F, [{ throw: 'usage_limit_reached: five-hour limit' }, 'never asked']);
     check(other.dispatches.length === 1 && other.result.fallbacks.length === 0, 'fallback: another limit is not redispatched', other.dispatches.map((d) => d.model));
     // workers and the retry on top_model go through the same helper
