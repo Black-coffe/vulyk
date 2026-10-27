@@ -101,6 +101,23 @@ marker() { # marker <plan.md> <Name> -> prints the line's value, empty if absent
   printf '%s' "$v"
 }
 
+# The one staleness rule for a recorded verdict (post-037-tails): is a check given at <head-sha>
+# against <pack-fp> still about this pack at this commit? ship-check.sh (both stage-05 branches)
+# and human-check.sh --check call it, so an ACCEPTED override can never skip the rule the
+# no-council branch applies. Pack first; a <head-sha>..HEAD range that is paperwork_only stays
+# current, so /vulyk-ship's own release-paperwork commit does not stale the gate.
+verdict_stale() { # verdict_stale <spec-dir> <head-sha> <pack-fp> -> CURRENT (0) | STALE (pack) | STALE (commit) (1)
+  local root now was
+  [ "$3" = "$(pack_fingerprint "$1")" ] || { echo "STALE (pack)"; return 1; }
+  case "$2" in ''|-*) echo "STALE (commit)"; return 1 ;; esac   # never hand git an option
+  root="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "STALE (commit)"; return 1; }
+  now="$(git -C "$root" rev-parse --verify -q 'HEAD^{commit}' 2>/dev/null)"
+  was="$(git -C "$root" rev-parse --verify -q "$2^{commit}" 2>/dev/null)"
+  if [ -n "$now" ] && [ "$was" = "$now" ]; then echo "CURRENT"; return 0; fi
+  if [ -n "$was" ] && paperwork_only "$root" "$was" "$now"; then echo "CURRENT"; return 0; fi
+  echo "STALE (commit)"; return 1
+}
+
 # The one `## Asks` parser: cycle.sh counts and quotes the items (asks_count, ask_item) and
 # trace-check.sh traces story quotes to them, so the two can never read a different list. Asks
 # written only as `> ` quotes once passed trace-check, counted zero in cycle.sh and stopped

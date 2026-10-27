@@ -266,6 +266,19 @@ printf '%s' "$ERR" | expect "an unknown code names itself on stderr" "not_a_code
 expect_eq "an unknown code is one line on stderr" "1" "$(printf '%s\n' "$ERR" | grep -c .)"
 expect_eq "an unknown code writes nothing" "$BEFORE" "$(grep -c . "$LOG")"
 
+# --- record: the vulyk field - VERSION in the VULYK tree, a stamp wins, 0.0.0 elsewhere -------
+echo "--- vulyk version"
+VR="$T/vrepo"; mkdir -p "$VR/scripts"
+cp "$SRC/scripts/telemetry.sh" "$SRC/scripts/lib.sh" "$VR/scripts/"
+vrec() { (cd "$VR" && VULYK_HIVE="$VR" bash scripts/telemetry.sh record context_high 150000 140000 --ref "$1" >/dev/null 2>&1); }
+vrow() { jq -r '.vulyk' < "$VR/memory/stats/anomalies.jsonl" | tail -1; }
+printf '  1.2.3 \n' > "$VR/VERSION"; : > "$VR/install.sh"
+vrec v1; expect_eq "install.sh + VERSION records VERSION (whitespace stripped)" "1.2.3" "$(vrow)"
+rm -f "$VR/install.sh"
+vrec v2; expect_eq "VERSION without install.sh records 0.0.0" "0.0.0" "$(vrow)"
+: > "$VR/install.sh"; mkdir -p "$VR/.claude"; printf '9.9.9\n' > "$VR/.claude/vulyk-version"
+vrec v3; expect_eq "a stamp beside install.sh and VERSION wins" "9.9.9" "$(vrow)"
+
 # --- case 3: bundle - the anonymization guard -------------------------------------------------
 echo "--- bundle"
 SPEC="secret-spec-slug"

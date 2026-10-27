@@ -1,16 +1,26 @@
 """VULYK symbol map: the repo paths linked to a file that lie outside a story's scope (stdlib only).
 
-Usage: bash scripts/symbol-map.sh [--story <story.md>] [--scope <path>]... <file>...
+Usage: bash scripts/symbol-map.sh [--exact] [--story <story.md>] [--scope <path>]... <file>...
 
 For each input prints a block `## <path>` with the sections tests, importers, imported, guard tests,
-path mentions (an empty one omitted). Every line is `exact` (a Python `ast` import or a bash
-`source`/`.` resolved to the file) or `textual` (the stem as a whole word, the path as a substring).
-The scope set (inputs, every --scope, the `## Files` lines of --story, globs by fnmatch) never appears.
+path mentions (an empty one omitted). Every line is `exact` (a Python `ast` import, a bash
+`source`/`.` or a bash-run `.py` resolved to the file) or `textual` (the stem as a whole word, the path
+as a substring). Path mentions rank code, docs/adr, other docs, then the root CHANGELOG/CLAUDE/README.
+The scope set (inputs, every --scope, the `## Files` lines of --story, globs by fnmatch) never appears,
+nor does a path with a `fixtures` segment after a `tests`/`test` segment.
 Python and bash get importers/imported; any other file gets tests, guard tests and path mentions only.
-The whole stdout stays at or under 1536 bytes, cut with one final `... N more` line.
+--exact: each section keeps its `exact` lines and folds the rest into `  textual  <N> not shown`.
+A missing input's block comes first. The whole stdout stays at or under 1536 bytes, cut with one
+final `... N more` line.
 Exit: 0 done, 1 an input is missing (every input is still reported), 2 usage or not inside a git repo.
 The script reports; it blocks nothing.
 """
+# Speed on a bash input (post-037-tails, profiled with cProfile; warm OS file cache, one Windows box,
+# median of 3 `time` runs). Before: `bash scripts/symbol-map.sh scripts/lib.sh` 1.55 s, a .py 0.34 s;
+# direct `python scripts/symbol-map.py`: scripts/lib.sh 0.264 s, scripts/symbol-map.py 0.271 s.
+# Fix: edges are parsed per kind on first need (a bash input parses no Python), comment lines skip
+# the source regex. After, direct: scripts/lib.sh 0.170 s, scripts/symbol-map.py 0.233 s; through the
+# wrapper: scripts/lib.sh 0.245 s, scripts/symbol-map.py 0.311 s. A cold first run (5.3 s) is file I/O.
 import ast
 import fnmatch
 import os
@@ -24,7 +34,7 @@ SECTION_CAP = 5
 MAX_FILE = 1024 * 1024
 GUARD_MARKERS = ('os.walk', 'rglob', 'glob(', 'git ls-files', 'listdir', 'iterdir')
 SHELL_EXT = ('.sh', '.bash')
-USAGE = 'usage: bash scripts/symbol-map.sh [--story <story.md>] [--scope <path>]... <file>...'
+USAGE = 'usage: bash scripts/symbol-map.sh [--exact] [--story <story.md>] [--scope <path>]... <file>...'
 
 
 def native(p):
@@ -43,12 +53,14 @@ def usage(code):
 
 
 def parse_args(argv):
-    story, scope, files = None, [], []
+    story, scope, files, exact = None, [], [], False
     i = 0
     while i < len(argv):
         a = argv[i]
         if a in ('-h', '--help'):
             usage(0)
+        elif a == '--exact':
+            exact = True
         elif a in ('--story', '--scope'):
             if i + 1 >= len(argv) or not argv[i + 1]:
                 usage(2)
@@ -65,7 +77,7 @@ def parse_args(argv):
         i += 1
     if not files and not story:
         usage(2)
-    return story, scope, files
+    return story, scope, files, exact
 
 
 def story_files(path):
@@ -257,29 +269,64 @@ class Repo:
         same = self.basenames.get(posixpath.basename(s), [])
         return same[0] if len(same) == 1 else None
 
+    RUNNER = re.compile(r'^(?:python3?|exec|\$\{?\w+\}?)$')
+
+    def sh_words(self, code):
+        """(word, previous word) for each shell word of a line, quotes kept."""
+        i, prev = 0, ''
+        while i < len(code):
+            if code[i].isspace() or code[i] in ';&|()':
+                i += 1
+                continue
+            w = self.word_at(code, i)
+            if not w:
+                i += 1
+                continue
+            yield w, prev
+            prev = w
+            i += len(w)
+
     def sh_edges(self, p):
         t = self.text(p)
         out = set()
         if not t:
             return out
         for line in t.splitlines():
-            code = line.split('#', 1)[0] if line.lstrip().startswith('#') else line
-            for m in self.SOURCE_RE.finditer(code):
-                r = self.sh_resolve(self.word_at(code, m.end()), p)
-                if r:
-                    out.add(r)
+            if line.lstrip().startswith('#'):
+                continue
+            if 'source' in line or '.' in line:
+                for m in self.SOURCE_RE.finditer(line):
+                    r = self.sh_resolve(self.word_at(line, m.end()), p)
+                    if r:
+                        out.add(r)
+            if '.py' in line:
+                # a bash-run python file: "$(dirname "$0")/x.py", "$DIR/x.py", or a literal path after a runner
+                for w, prev in self.sh_words(line):
+                    s = w.replace('"', '').replace("'", '')
+                    if not s.endswith('.py'):
+                        continue
+                    if '$' not in s and not self.RUNNER.match(prev.replace('"', '').replace("'", '')):
+                        continue
+                    r = self.sh_resolve(w, p)
+                    if r:
+                        out.add(r)
         out.discard(p)
         return out
 
-    def edges(self):
-        """path -> (set of imported tracked files, parsed?) for every Python and bash file."""
+    def edges(self, kinds=('py', 'sh')):
+        """path -> (set of imported tracked files, parsed?) for every Python ('py') and bash ('sh') file
+        of the kinds asked; each kind is parsed once per run, on first need."""
         if self._edges is None:
-            self._edges = {}
+            self._edges, self._kinds = {}, set()
+        for k in kinds:
+            if k in self._kinds:
+                continue
+            self._kinds.add(k)
             for p in self.files:
-                if p.endswith('.py'):
+                if k == 'py' and p.endswith('.py'):
                     e = self.py_edges(p)
                     self._edges[p] = (e or set(), e is not None)
-                elif self.is_shell(p):
+                elif k == 'sh' and not p.endswith('.py') and self.is_shell(p):
                     self._edges[p] = (self.sh_edges(p), True)
         return self._edges
 
@@ -291,6 +338,29 @@ def is_test(p):
     b = parts[-1]
     return (fnmatch.fnmatch(b, 'test_*') or fnmatch.fnmatch(b, '*_test.*')
             or fnmatch.fnmatch(b, '*.test.*') or fnmatch.fnmatch(b, '*.spec.*'))
+
+
+def is_fixture(p):
+    """A path with a `fixtures` segment after a `tests`/`test` segment: never listed."""
+    seen_tests = False
+    for part in p.split('/')[:-1]:
+        if part in ('tests', 'test'):
+            seen_tests = True
+        elif part == 'fixtures' and seen_tests:
+            return True
+    return False
+
+
+ROOT_DOCS = ('CHANGELOG.md', 'CLAUDE.md', 'README.md')
+
+
+def mention_rank(p):
+    """0 code/config/tests, 1 docs/adr, 2 other docs, 3 the root CHANGELOG/CLAUDE/README."""
+    if p in ROOT_DOCS:
+        return 3
+    if not p.lower().endswith(('.md', '.rst', '.txt')):
+        return 0
+    return 1 if p.startswith('docs/adr/') else 2
 
 
 def in_scope(p, scope):
@@ -314,13 +384,13 @@ def line(label, path):
     return '  %-7s  %s' % (label, path)
 
 
-def block(repo, p, scope):
+def block(repo, p, scope, exact=False):
     out = ['## ' + p]
     if p not in repo.fileset and not os.path.isfile(os.path.join(repo.root, p)):
         out.append('  ! missing')
         return out, True
-    edges = repo.edges()
     lang = 'py' if p.endswith('.py') else ('sh' if repo.is_shell(p) else None)
+    edges = repo.edges({'py': ('py', 'sh'), 'sh': ('sh',), None: ()}[lang])
     if lang is None:
         ext = posixpath.splitext(p)[1] or posixpath.basename(p)
         out.append('  ! imports not parsed for %s: search callers yourself' % ext)
@@ -329,7 +399,7 @@ def block(repo, p, scope):
     seen = set()
 
     def ok(q):
-        return q != p and q not in seen and not in_scope(q, scope)
+        return q != p and q not in seen and not is_fixture(q) and not in_scope(q, scope)
 
     stem = stem_of(p)
     word = re.compile(r'(?<![\w])' + re.escape(stem) + r'(?![\w])') if stem else None
@@ -360,9 +430,8 @@ def block(repo, p, scope):
     rows = [line('exact', q + v) for q, v in sorted(exact_imp.items()) if is_test(q) and ok(q)]
     seen.update(q for q in exact_imp if is_test(q))
     tt = textual_hits([q for q in repo.files if is_test(q)])
-    rows += capped([line('textual', q) for q in tt])
     seen.update(tt)
-    sections.append(('tests', rows))
+    sections.append(('tests', rows, tt))
 
     # importers
     if lang:
@@ -371,12 +440,11 @@ def block(repo, p, scope):
         same = [q for q in repo.files if not is_test(q) and q in edges
                 and (q.endswith('.py') if lang == 'py' else not q.endswith('.py'))]
         ti = textual_hits(same)
-        rows += capped([line('textual', q) for q in ti])
         seen.update(ti)
-        sections.append(('importers', rows))
+        sections.append(('importers', rows, ti))
         imp = sorted(q for q in edges.get(p, (set(), True))[0] if ok(q))
         seen.update(imp)
-        sections.append(('imported', [line('exact', q) for q in imp]))
+        sections.append(('imported', [line('exact', q) for q in imp], []))
 
     # guard tests
     gt = []
@@ -386,7 +454,7 @@ def block(repo, p, scope):
             if t and any(m in t for m in GUARD_MARKERS):
                 gt.append(q)
     seen.update(gt)
-    sections.append(('guard tests', capped([line('textual', q) for q in gt])))
+    sections.append(('guard tests', [], gt))
 
     # path mentions
     pm = []
@@ -395,10 +463,16 @@ def block(repo, p, scope):
             t = repo.text(q)
             if t and p in t:
                 pm.append(q)
-    sections.append(('path mentions', capped([line('textual', q) for q in pm])))
+    pm.sort(key=lambda q: (mention_rank(q), q))
+    sections.append(('path mentions', [], pm))
 
     printed = False
-    for name, rows in sections:
+    for name, rows, textual in sections:
+        if textual:
+            if exact:
+                rows = rows + [line('textual', '%d not shown' % len(textual))]
+            else:
+                rows = rows + capped([line('textual', q) for q in textual])
         if rows:
             out.append(name + ':')
             out.extend(rows)
@@ -417,7 +491,7 @@ def capped(rows):
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', newline='\n')
-    story, scope_args, files = parse_args(sys.argv[1:])
+    story, scope_args, files, exact = parse_args(sys.argv[1:])
     listed = story_files(story) if story else []
     if files:
         start = os.path.dirname(os.path.abspath(native(files[0])))
@@ -438,10 +512,12 @@ def main():
         scope.add(rel_to_root(root, story))
     repo = Repo(root, tracked(root))
 
-    lines, blocks_of, missing = [], [], False
-    for i, p in enumerate(inputs):
-        b, miss = block(repo, p, scope)
-        missing = missing or miss
+    blocks = [block(repo, p, scope, exact) for p in inputs]
+    missing = any(miss for _, miss in blocks)
+    # a missing input's block first, so the byte cap can never cut it; the rest keep input order
+    blocks = [b for b, miss in blocks if miss] + [b for b, miss in blocks if not miss]
+    lines, blocks_of = [], []
+    for i, b in enumerate(blocks):
         if i:
             lines.append('')
             blocks_of.append(i)

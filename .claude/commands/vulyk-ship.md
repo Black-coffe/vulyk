@@ -29,7 +29,10 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    a clean merge, delete the spec branch with `git branch -d <branch>`, never `-D`; if `-d` refuses,
    quote what it printed and leave the branch.
 3. Publish: print, then stop. Under a `to publish, run:` heading, print the publish step exactly as the
-   *Release / deploy* row names it, with the version. Do not run it, ask about it, or check back on it.
+   *Release / deploy* row names it, with the version. When that step pushes and tags and the repo has CI
+   (`.github/workflows/`), print it in this order: push the release commit, wait for CI on that commit
+   to be green, then tag and push the tag; a red run means no tag. Do not run it, ask about it, or check
+   back on it.
    `/vulyk-status`'s `merged locally, not pushed: <n>` line is how anyone learns whether it ran.
 4. Record. `bash scripts/ship-check.sh --record docs/specs/<slug> <version> "merged to <default
    branch>, publish pending"`, then commit it (`vulyk(<slug>): shipped <version>`, or `chore(vulyk-<slug>): ...` under a

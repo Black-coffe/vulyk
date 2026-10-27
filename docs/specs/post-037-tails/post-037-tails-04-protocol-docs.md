@@ -1,8 +1,8 @@
 ---
 story: post-037-tails-04
 spec: post-037-tails
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
@@ -49,5 +49,10 @@ After this story `/vulyk-plan` step 3 runs `bash scripts/symbol-map.sh --exact <
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- vulyk-plan.md: step 3 runs `symbol-map.sh --exact <file>` once per file, output goes to the planner dispatch; the 163-char line rewrapped.
+- vulyk-plan.md: every other body line over 110 chars (steps 3a, 4, 5, 9) reflowed without rewording, to meet the 110-char AC; line 2 (`description:`, 214) left alone per Non-goals.
+- queen-planner.md: `## Files` bullet reads `exact` lines plus `textual <N> not shown`; non-zero tests/importers count is a drone-scout question.
+- vulyk-ship.md: publish step prints push commit -> green CI -> tag when the row pushes and tags and `.github/workflows/` exists.
+- README.md: one bold-led symbol-map paragraph after trace-check; command-reference.md: recon sentence names `symbol-map.sh --exact`.
 
 ## Findings

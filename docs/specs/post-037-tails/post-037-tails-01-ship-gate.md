@@ -1,8 +1,8 @@
 ---
 story: post-037-tails-01
 spec: post-037-tails
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
@@ -45,5 +45,10 @@ After this story `scripts/ship-check.sh` prints `NOT READY` for the 0.37 case: a
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
+- scripts/lib.sh: `verdict_stale` added after `marker()` (no reorder); resolves both shas with `rev-parse --verify` so short/full heads compare equal; an empty or `-`-led head is `STALE (commit)` without reaching git.
+- scripts/ship-check.sh: council branch parses the human row's `pack`/`head`; an ACCEPTED override is `ok` only when `verdict_stale` is CURRENT, else 05 `OPEN` naming the STALE word and 04 falls back to the council row alone. No-council branch now calls `verdict_stale`; messages unchanged.
+- scripts/human-check.sh: `--check` pack/commit comparison replaced by `verdict_stale`; printed words unchanged.
+- tests/cycle.test.sh: new `gate-demo` block in `--part ship` (code commit -> STALE (commit)/NOT READY, VERSION+CHANGELOG -> READY, new story -> STALE (pack)/NOT READY); run against the HEAD (0.37) scripts the two STALE cases fail (5 errors), with the new scripts all 45 pass.
+- ship-check.sh always exits 0 (header contract); "exit non-zero as the other NOT READY cases exit" read as "the same as they do", so exit status unchanged.
 
 ## Findings

@@ -1,8 +1,8 @@
 ---
 story: post-037-tails-03
 spec: post-037-tails
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
@@ -52,5 +52,15 @@ After this story `scripts/symbol-map.py` (through `scripts/symbol-map.sh`) (a) l
 `bash tests/symbol-map.test.sh`
 
 ## Implementation notes
+- Files: scripts/symbol-map.py, scripts/symbol-map.sh (usage comment), tests/symbol-map.test.sh, docs/specs/symbol-map/replay.py, new fixtures tests/fixtures/symbol-map/bash/{scripts/run-tool.sh,scripts/run-helper.sh,scripts/tool.py,scripts/helper.py,tests/fixtures/sample/use.sh} and tests/fixtures/symbol-map/mentions/**.
+- (a) `sh_edges` also walks shell words on lines holding `.py`: a word ending `.py` with a `$`-prefix (`$(dirname "$0")/`, `$DIR/`, `${BASH_SOURCE[0]%/*}/`) or a literal after `python`/`python3`/`exec`/`$VAR` resolves through the existing `sh_resolve`. A `.py` input now asks for shell edges too.
+- (b) `is_fixture()` filtered in `ok()`, so every section drops it; edge resolution itself is unchanged (a fixture still counts in the unique-basename fallback).
+- (c) `mention_rank()` sorts path mentions before the cap. The ranking fixture's input is a dotfile (`etc/.toolrc`, no stem) so the test and the code file are not claimed earlier by the stem-word tests/importers sections and all 6 mentions reach `path mentions`.
+- (d) missing blocks are moved to the front in `main()` before the cap; non-missing keep input order.
+- (e) sections are built as (name, exact rows, textual paths) and rendered per mode; exact rows keep today's (uncapped) behaviour, textual rows are capped or folded to `  textual  <N> not shown`.
+- Profile before (`python -m cProfile -s cumtime scripts/symbol-map.py scripts/lib.sh`, warm): top cumulative below main: `block` 0.322 s, `edges` 0.233 s (all Python and bash files parsed for a bash input), `py_edges` 0.146 s (44 ast parses, `ast.walk` 0.090 s); `sh_edges` 0.079 s, 0.061 s of it own time on the per-line regex. A cold first run was 5.3 s, all in `_io.open` (784 files, OS file cache), not fixable in the script.
+- Fixes: edges are parsed per kind on first need (a bash input parses no Python, a non-Python/bash input parses nothing); `sh_edges` skips comment lines outright and runs the source regex only on lines that can hold it. Profile after: `block` 0.130 s, `edges` 0.049 s.
+- Timing, median of 3 (`time python scripts/symbol-map.py <f>`, warm, this box): scripts/lib.sh 0.264 s -> 0.170 s; scripts/symbol-map.py 0.271 s -> 0.233 s.
+- Replay (`.vulyk/symbol-map-replay/cases.json`, local, glob cases): case 6 lines 29 -> 35, case 8 31 -> 32, case 17 26 -> 19; totals hits 3/13 both, noise 663 -> 659. The after figures include this story's other changes (fixture exclusion, ranking, py edges), not the glob fix alone.
 
 ## Findings
