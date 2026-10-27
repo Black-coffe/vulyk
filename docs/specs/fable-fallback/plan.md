@@ -50,7 +50,7 @@ When a Fable dispatch comes back with the Fable-limit refusal, the build goes on
 
 ## Descoped
 
-*(empty)*
+- Ask 2, the background suite in `lead-review`: the story 03 probe failed (a subagent returns before its background command ends and is never told it ended); the owner chose to drop the ask on 2026-10-27. The suite step stays as it is; story 02's one-hour cache carries F3, and the 3.11 spend comparison checks it.
 
 ## Plan deltas
 
