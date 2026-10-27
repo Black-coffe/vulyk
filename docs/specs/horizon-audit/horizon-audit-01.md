@@ -1,8 +1,8 @@
 ---
 story: horizon-audit-01
 spec: horizon-audit
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 1
@@ -73,5 +73,13 @@ memory/map/agents-and-commands.md: `/vulyk-plan` steps 3a-4, `drone-horizon`, `/
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- Ask 1: `templates/grill.md` `## Recording answers` gains the court paragraph (no proposal, no `horizon.md`; the owner's decisions in `## Answers` are visible; verdicts stay on `## Asks`); ADR-022 Decision 3 says the same. Skip wording: `vulyk-plan.md` 3a already said `--horizon` runs it anyway; ADR-022 Decision 1 and grill no-question mode now say "unless `--horizon`".
+- Ask 2: grill `## Answers` rule: `(horizon H<n>)` first, pick last (`adopted`, `declined`, `(offered, not adopted)`); step 3a numbers the kept proposals `H1`-`H3` so the label has a source.
+- Ask 3: step 3a keeps `kind: gap` only with a named ask or verbatim fragment, written beside it in `horizon.md`; otherwise `extension`.
+- Ask 4: step 3a's dispatch carries the two Profile rows verbatim; `drone-horizon` step 1 takes them from the dispatch and reads the constitution only when missing.
+- Ask 5: grill orders inside the cap: build-changing ordinary questions, then gaps, then extensions; the fixed last question stays last.
+- Ask 6: ADR-022 Consequences gain the dated amendment: not yet run, trigger 1, trigger 2 (written down, not built).
+- Ask 7: `/vulyk-evolve` step 2 ends with the horizon count paragraph, silent below three `horizon.md` files.
+- CHANGELOG `[Unreleased]` has one `### Changed (spec horizon-audit)` entry.
 
 ## Findings

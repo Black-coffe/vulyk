@@ -38,13 +38,16 @@ Plan: "$ARGUMENTS"
    default permission mode the three lenses may ask for web search (a refusal is safe: their outside
    facts come back `не подтверждено`). VULYK grants no web permission itself. Then dispatch
    `drone-horizon` three times in one message, `lens: altitude`, `depth` and `range`, each with the brief
-   path and a one-paragraph recon summary (what was not found and where it was looked for), with no model
-   parameter. Each returns up to three proposals: `what`, `why`, `cost`, `check`, `sources`, `status`,
+   path, a one-paragraph recon summary (what was not found and where it was looked for) and the Profile rows
+   *Configurations that exist today* and *Owner language* copied verbatim, with no model parameter. Each returns up to three proposals: `what`, `why`, `cost`, `check`, `sources`, `status`,
    `kind` (`gap` or `extension`) and an `ask line`. A lens that fails or returns nothing is noted, and the
    step goes on with the others. Cut the candidates to at most three: merge duplicates, and drop what
    contradicts the Profile's *Configurations that exist today* or the repo, or is not tied to the owner's
-   goal. Write `docs/specs/<slug>/horizon.md`: the terms and where they were searched, every candidate
-   with its verdict (kept, merged or dropped, one-line reason), and the kept proposals with their fields.
+   goal. A kept `kind: gap` stays a gap only when you name the ask or the verbatim request fragment that
+   fails without it, and write that fragment beside it; otherwise relabel it `extension`. Number the kept
+   proposals `H1`-`H3`. Write `docs/specs/<slug>/horizon.md`: the terms and where they were searched, every candidate
+   with its verdict (kept, merged or dropped, one-line reason), and the kept proposals, numbered, with their
+   fields and, for a gap, the fragment it rests on.
    Proposals never go into `brief.md` by themselves; only what the owner picks in the grill does.
 4. Grill, Tier 2-4. Follow `templates/grill.md`; it owns every rule of the round, horizon questions
    included. Its output lands in `brief.md` as `## Answers` then `## Asks`. Tier 1 skips it: `## Asks`
