@@ -7,3 +7,4 @@
 - 2026-10-27T10:24:01Z · 04-council:RED · round 1 verdict RED at 6fb8192 pack 3aae21b89464 · next: repair
 - 2026-10-27T10:24:04Z · 03-building · repair round 1: post-037-tails-05-repair-round-1.md · next: build:3
 - 2026-10-27T10:28:37Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/post-037-tails/round-2 · next: dispatch:opus,review
+- 2026-10-27T10:43:06Z · 04-council:GREEN · round 2 verdict GREEN at 0ca06f8 pack 8a0155be4330 · next: green
