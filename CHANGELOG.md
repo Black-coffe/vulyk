@@ -4,6 +4,10 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+- **evolve: relayed side-agent notes no longer count as owner corrections.** The corrections block drops quotes that
+  open with `>` and prints how many it left out. Evidence: 8 of 8 lexicon hits in the week to 2026-10-26 were relayed
+  side-agent notes, none an owner correction (class `owner-words-by-builder`).
+
 ## [0.38.0] - 2026-10-27
 
 The tails of 0.37.0: the ship gate checks the owner's acceptance for staleness, a release waits for green CI before
