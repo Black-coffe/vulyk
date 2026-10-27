@@ -69,7 +69,7 @@ is missing or unparsable.
 **Approved:** Andrei, 2026-10-27 («Одобряю»)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
 **Branch:** vulyk/fable-fallback
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-10-27, at 546d094, pack a378f5d8d650
 **Council:** GREEN round 2, 2026-10-27, at 97d29a8, pack a68d9a9f4309
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Checked:** ACCEPTED by Andrei, 2026-10-27, at e599bfd - owner chose «Принимаю, выпускай» (AskUserQuestion, option text by the Queen) for story 06 narrow fix after GREEN round 2; Queen ran the live prefixed refusal, the round-2 Fable report and a thrown credits error through refused(): true/false/true; driver.test.sh 90/0

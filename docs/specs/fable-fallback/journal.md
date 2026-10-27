@@ -10,3 +10,4 @@
 - 2026-10-27T21:26:18Z · 03-building · fallback: council-opus round-1/opus fable -> opus was a false positive (its GREEN report quoted the refusal text); no telemetry row, repair finding 5 fixes the detector · next: relaunching the hive for repair round 1
 - 2026-10-27T21:31:02Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/fable-fallback/round-2, carried from round 1: opus · next: dispatch:review
 - 2026-10-27T21:50:25Z · 04-council:GREEN · round 2 verdict GREEN at 97d29a8 pack a68d9a9f4309 · next: green
+- 2026-10-27T21:51:05Z · 04-council:GREEN · fallback: lead-review round-2/review fable -> opus was a false positive again (the launch-time driver still had the old detector); Fable's discarded report was PASS too, saved at scratchpad round2-review-fable-discarded.md; no telemetry row · next: owner: ship or narrow detector fix first
