@@ -53,11 +53,14 @@ for fx in max pro missing; do
       "$(run "$BARE" scripts/top-model.sh $mode)" "$(tm $mode)"
     if [ "$HAVE_BASE" = 1 ]; then
       expect_eq "[$fx] top-model.sh $mode matches the base (baa5219) resolver" \
-        "$(run "$BASE" scripts/top-model.sh $mode)" "$(tm $mode)"
+        "$(run "$BASE" scripts/top-model.sh $mode)" "$(tm $mode | grep -v '^gate: ')"
     fi
   done
 done
 [ "$HAVE_BASE" = 1 ] || ok "the base resolver comparison skipped: baa5219 not in this clone"
+GATE_HINT="gate: the Tier 4 review, the Tier 4 planner, lead-architect (Tier 4, or a story missed twice), a missed story's retry. A hive's own judge: bash scripts/model-profile.sh --role seat, and pass --effort explicitly."
+tm --help | expect "top-model.sh --help prints the gate hint (fable-fallback-04; the base comparison drops it)" "$GATE_HINT"
+tm --explain | expect "top-model.sh --explain prints the gate hint" "$GATE_HINT"
 PLANFILE="$T/max.json"
 expect_eq "[max] sonnet-builds column" \
   "queen=opus planner=opus review=opus seat=opus worker=sonnet routine=sonnet gate=fable architect=fable review-second=opus" \

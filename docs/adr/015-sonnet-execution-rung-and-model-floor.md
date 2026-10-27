@@ -87,6 +87,8 @@ Sonnet 5.5 shipped on 2026-09-28. The evidence and the source table are in
    was judged wrong by a RED round, so the repair climbs a rung, as a missed story's retry climbs to
    the gate.
 
+*Amended 2026-10-27:* a Fable-limit refusal redispatches the role once on `opus`; under `opus-builds` the family that built judges that one dispatch; recorded by journal + `fable_limit_fallback` (spec `fable-fallback`).
+
 ## Rejected
 
 - **Workers stay on Opus.** It is simpler, but it keeps the reviewer at Tier 3 on the builder's

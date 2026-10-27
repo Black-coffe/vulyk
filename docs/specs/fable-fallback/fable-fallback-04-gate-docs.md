@@ -1,8 +1,8 @@
 ---
 story: fable-fallback-04
 spec: fable-fallback
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
@@ -45,5 +45,9 @@ After this story a hive owner who runs `bash scripts/top-model.sh --help` (or `-
 `bash tests/model-profile.test.sh && bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- scripts/top-model.sh: `GATE_HINT` defined once before the flag parse; echoed after the header under `--help` and after the `dispatched for:` line under `--explain`. Versus HEAD, `--help` differs by that one line only; exit codes unchanged.
+- tests/model-profile.test.sh: recon found it pins `--explain` against the baa5219 resolver; that comparison now drops the `gate: ` line, and two checks pin the hint in `--help` and `--explain` (78 checks ok).
+- docs/model-cascade.md: gate section states the four uses as the whole list plus the hive-judge sentence (F1 described by shape, no hive named); new `### When Fable runs out` subsection (refusal text, one `opus` redispatch, journal line, `fable_limit_fallback`, owner sentence, second refusal = old stop, `opus-builds` exception, `lead-review` `cacheTtl: 1h` with the 2026-11-03 measurement).
+- docs/adr/015: one dated *Amended 2026-10-27* line after Decision item 6.
 
 ## Findings
