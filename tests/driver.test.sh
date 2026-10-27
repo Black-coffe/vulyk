@@ -453,6 +453,52 @@ const blindPromptsClean = (r) => r.dispatches
       'iteration cap: 40 iterations, then a stop and a release', { stop: r.result.stop, n: r.dispatches.length });
   }
 
+  // --- Fable-limit fallback: a refused dispatch runs once more on opus, same prompt and agent; never a third call
+  {
+    const REFUSED = "Agent terminated early due to an API error: You've reached your Fable limit. Switch to another model, or manage usage credits.";
+    const reviewRun = (args, agents) => run(args, {
+      clerk: [[CLAIM, adv(round('review', { tier: 1, court: null }))], [INGEST, adv(green())], [RELEASE, releaseOk]], agents,
+    });
+    const F = { ...ARGS, review_model: 'fable' };
+    const r = await reviewRun(F, [REFUSED, 'review report']);
+    const [d1, d2] = r.dispatches;
+    check(r.dispatches.length === 2 && d1.model === 'fable' && d2.model === 'opus' && d2.agentType === 'lead-review' && d2.prompt === d1.prompt,
+      'fallback: a Fable-refused reviewer runs once more on opus with the same prompt and agent', r.dispatches.map((d) => [d.agentType, d.model]));
+    check(r.mismatches.length === 0 && r.result.next === 'green' && Array.isArray(r.result.fallbacks) && r.result.fallbacks.length === 1
+      && JSON.stringify(r.result.fallbacks[0]) === JSON.stringify({ agent: 'lead-review', where: 'round-1/review', from: 'fable', to: 'opus' }),
+      'fallback: the round goes on and the return value carries the one fallback', r.result);
+    check(r.logs.includes('fallback: lead-review round-1/review fable -> opus (Fable limit)'), 'fallback: one console line', r.logs);
+    const twice = await reviewRun(F, [REFUSED, REFUSED, 'never asked']);
+    check(twice.dispatches.length === 2 && twice.result.next === 'green' && twice.result.fallbacks.length === 1 && twice.mismatches.length === 0,
+      'fallback: a refusal on the redispatch makes no third call, the ingest records the seat as before', { n: twice.dispatches.length, result: twice.result });
+    const thrown = await reviewRun(F, [{ throw: 'API Error: {"type":"error","error":{"type":"model_requires_usage_credits"}}' }, 'review report']);
+    check(thrown.dispatches.length === 2 && thrown.dispatches[1].model === 'opus' && thrown.result.fallbacks.length === 1,
+      'fallback: model_requires_usage_credits in a caught error is the same refusal', thrown.dispatches.map((d) => d.model));
+    for (const [label, args] of [['opus passed', { ...ARGS, review_model: 'opus' }], ['no model passed', ARGS]]) {
+      const n = await reviewRun(args, [REFUSED, 'never asked']);
+      check(n.dispatches.length === 1 && n.result.fallbacks.length === 0, `fallback: ${label} is not redispatched`, n.dispatches.map((d) => d.model));
+    }
+    const other = await reviewRun(F, [{ throw: 'usage_limit_reached: five-hour limit' }, 'never asked']);
+    check(other.dispatches.length === 1 && other.result.fallbacks.length === 0, 'fallback: another limit is not redispatched', other.dispatches.map((d) => d.model));
+    // workers and the retry on top_model go through the same helper
+    const a = story(1, { model: 'fable' });
+    const w = await run(ARGS, { clerk: [[CLAIM, adv(build([a]))], [ADV, adv(green())], [RELEASE, releaseOk]], agents: [REFUSED, 'worker report'] });
+    check(w.dispatches.map((d) => d.model).join(',') === 'fable,opus'
+      && JSON.stringify(w.result.fallbacks) === JSON.stringify([{ agent: 'worker-code', where: 'demo-01', from: 'fable', to: 'opus' }]),
+      'fallback: a refused worker is redispatched, where is the story id', { m: w.dispatches.map((d) => d.model), f: w.result.fallbacks });
+    const b = story(1, { model: 'sonnet' });
+    const rt = await run(ARGS, {
+      clerk: [[CLAIM, adv(build([b]))], [ADV, adv(build([b]))], [ADV, adv(green())], [RELEASE, releaseOk]], agents: ['missed', REFUSED, 'retry report'],
+    });
+    check(rt.dispatches.map((d) => d.model).join(',') === 'sonnet,fable,opus' && rt.result.next === 'green' && rt.result.fallbacks.length === 1,
+      'fallback: the retry on top_model is redispatched on opus when Fable refuses', rt.dispatches.map((d) => d.model));
+    // a stop carries the list too; a run with no refusal carries an empty one
+    const st = await run(ARGS, { clerk: [[CLAIM, adv(round('sonnet'))], [RELEASE, releaseOk]] });
+    const ok = await run(ARGS, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(green())], [RELEASE, releaseOk]] });
+    check(st.result.stop && Array.isArray(st.result.fallbacks) && st.result.fallbacks.length === 0
+      && Array.isArray(ok.result.fallbacks) && ok.result.fallbacks.length === 0, 'fallback: no refusal returns fallbacks: [] on a stop and on green', [st.result, ok.result]);
+  }
+
   check(!everyAgentType.has('queen-planner'), 'no queen-planner dispatch in any scenario', [...everyAgentType]);
   console.log(`${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
