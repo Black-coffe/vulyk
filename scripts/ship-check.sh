@@ -209,9 +209,11 @@ if [ -n "$CLAST" ]; then
   CROUND="$(printf '%s' "$CLAST" | sed -n 's/.*"round":\([0-9]*\).*/\1/p')"
   CTS="$(printf '%s' "$CLAST" | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')"
 
-  HV=""; HTS=""; HB=""
+  HV=""; HTS=""; HB=""; HP=""; HH=""
   if [ -n "$HLAST" ]; then
     HV="$(printf '%s' "$HLAST" | sed -n 's/.*"verdict":"\([^"]*\)".*/\1/p')"
+    HP="$(printf '%s' "$HLAST" | sed -n 's/.*"pack":"\([^"]*\)".*/\1/p')"
+    HH="$(printf '%s' "$HLAST" | sed -n 's/.*"head":"\([^"]*\)".*/\1/p')"
     HTS="$(printf '%s' "$HLAST" | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')"
     HB="$(printf '%s' "$HLAST" | sed -n 's/.*"by":"\([^"]*\)".*/\1/p')"
   fi
@@ -250,9 +252,15 @@ if [ -n "$CLAST" ]; then
   if [ "$OVERRIDE" = REJECTED ]; then
     fail 04 "tests+human: $COUNCIL_LINE, but $CHECKED_LINE is newer and overrides to OPEN"
     fail 05 "tests+human: $CHECKED_LINE - newer than the council row, overrides $CV"
-  elif [ "$OVERRIDE" = ACCEPTED ]; then
+  elif [ "$OVERRIDE" = ACCEPTED ] && HSTALE="$(verdict_stale "$SPEC" "$HH" "$HP")"; then
     ok 04 "tests+human: $COUNCIL_LINE, $CHECKED_LINE overrides"
     ok 05 "tests+human: $CHECKED_LINE - newer than the council row, overrides $CV"
+  elif [ "$OVERRIDE" = ACCEPTED ]; then
+    # The override is the owner's look at $HH: once the pack or the code moved past it, it no
+    # longer speaks for what ships (the 0.37 miss), and 04 falls back to the council row alone.
+    if [ "$COUNCIL_OK" -eq 1 ]; then ok 04 "tests+human: $COUNCIL_LINE, current for this pack"
+    else fail 04 "tests+human: $COUNCIL_REASON"; fi
+    fail 05 "tests+human: $CHECKED_LINE is $HSTALE - accepted pack $HP at $HH, now $NOW_P at $HEAD_NOW; what the owner saw is not what ships"
   elif [ "$COUNCIL_OK" -eq 1 ]; then
     ok 04 "tests+human: $COUNCIL_LINE, current for this pack ($CHECKED_LINE)"
     ok 05 "tests+human: $COUNCIL_LINE closes both stages ($CHECKED_LINE)"
@@ -290,12 +298,12 @@ else
     HB="$(printf '%s' "$HLAST" | sed -n 's/.*"by":"\([^"]*\)".*/\1/p')"
     if [ "$HV" != ACCEPTED ]; then
       fail 05 "human: the owner REJECTED - route what they named into fix stories and look again"
-    elif [ "$HP" != "$NOW_P" ]; then
-      fail 05 "human: check is STALE (pack) - accepted $HP, now $NOW_P"
-    elif [ "$HH" != "$HEAD_NOW" ] && ! paperwork_only "$ROOT" "$HH" "$HEAD_NOW"; then
-      fail 05 "human: check is STALE (commit) - $HB looked at $HH, HEAD is $HEAD_NOW with code changed since; what they saw is not what ships"
     else
-      ok 05 "human: ACCEPTED by $HB at $HH - this pack, this code (only cycle records landed since, if anything)"
+      case "$(verdict_stale "$SPEC" "$HH" "$HP")" in
+        "STALE (pack)") fail 05 "human: check is STALE (pack) - accepted $HP, now $NOW_P" ;;
+        "STALE (commit)") fail 05 "human: check is STALE (commit) - $HB looked at $HH, HEAD is $HEAD_NOW with code changed since; what they saw is not what ships" ;;
+        *) ok 05 "human: ACCEPTED by $HB at $HH - this pack, this code (only cycle records landed since, if anything)" ;;
+      esac
     fi
   fi
 fi

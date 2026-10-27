@@ -54,16 +54,16 @@ if [ "${1:-}" = "--check" ]; then
     echo "  Route the findings into fix stories and re-run the cycle from /vulyk-build; then look again."
     exit 0
   fi
-  if [ "$WAS_P" != "$NOW_P" ]; then
-    echo "human-check: $CNAME - STALE (pack). The owner accepted a different set of stories"
-    echo "  (recorded $WAS_P, now $NOW_P). Stories were added, removed or renamed since - look again."
-    exit 0
-  fi
-  if [ "$WAS_H" != "$NOW_H" ] && ! paperwork_only "$CROOT" "$WAS_H" "$NOW_H"; then
-    echo "human-check: $CNAME - STALE (commit). The owner accepted at $WAS_H; HEAD is now $NOW_H."
-    echo "  Something was committed after they looked. What they saw is not what ships - look again."
-    exit 0
-  fi
+  case "$(verdict_stale "$CSPEC" "$WAS_H" "$WAS_P")" in
+    "STALE (pack)")
+      echo "human-check: $CNAME - STALE (pack). The owner accepted a different set of stories"
+      echo "  (recorded $WAS_P, now $NOW_P). Stories were added, removed or renamed since - look again."
+      exit 0 ;;
+    "STALE (commit)")
+      echo "human-check: $CNAME - STALE (commit). The owner accepted at $WAS_H; HEAD is now $NOW_H."
+      echo "  Something was committed after they looked. What they saw is not what ships - look again."
+      exit 0 ;;
+  esac
   echo "human-check: $CNAME - CURRENT. The owner accepted this exact pack at commit $WAS_H, and nothing but cycle paperwork has landed since."
   exit 0
 fi

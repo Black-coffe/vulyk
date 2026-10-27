@@ -178,6 +178,42 @@ human_row ACCEPTED "2026-01-01T00:00:07Z"
 git add -A && git commit -qm "record: Checked ACCEPTED same second as RED"
 shipc | expect "Checked ACCEPTED same second as RED outranks it to READY" "READY."
 
+echo "post-037-tails: an ACCEPTED override over a GREEN row is current only while verdict_stale says so (the 0.37 miss)"
+mkdir -p docs/specs/gate-demo
+printf '> build the gate demo\n' > docs/specs/gate-demo/brief.md
+cp "$SRC"/templates/plan.md docs/specs/gate-demo/plan.md
+sed -i 's/^\*\*Briefed:\*\* <.*/**Briefed:** via grill, owner, 2026-01-02/' docs/specs/gate-demo/plan.md
+sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/gate-demo/plan.md
+printf -- '---\nstory: gate-demo-01\nspec: gate-demo\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/gate-demo/gate-demo-01-first.md
+git add -A && git commit -qm "gate-demo: setup"
+shipg() { bash scripts/ship-check.sh docs/specs/gate-demo; }
+gate_rows() { # gate_rows <n>: a GREEN council row, then a later ACCEPTED human row, both at HEAD for this pack
+  local h p; h="$(git rev-parse --short HEAD)"; p="$(pack_fingerprint docs/specs/gate-demo)"
+  printf '{"ts":"2026-01-02T00:00:%s0Z","spec":"gate-demo","round":%s,"verdict":"GREEN","head":"%s","pack":"%s","asks":1,"red":[],"red_unevidenced":[],"na":0,"review":"PASS","haiku":"GREEN","haiku_model":"sonnet","sonnet":"GREEN","sonnet_model":"sonnet","opus":"GREEN","opus_model":"opus","attempts":1,"escalate":null,"note":""}\n' \
+    "$1" "$1" "$h" "$p" >> memory/stats/council.jsonl
+  printf '{"ts":"2026-01-02T00:00:%s5Z","spec":"gate-demo","verdict":"ACCEPTED","by":"Test Owner","head":"%s","pack":"%s","note":""}\n' \
+    "$1" "$h" "$p" >> memory/stats/human.jsonl
+  git add -A && git commit -qm "gate-demo: council GREEN + Checked ACCEPTED ($1)"
+}
+gate_rows 1
+shipg | expect "GREEN + newer ACCEPTED at HEAD is READY" "READY."
+printf 'v3\n' > app.txt
+git add -A && git commit -qm "a code change after the ACCEPTED override"
+G="$(shipg)"
+printf '%s' "$G" | expect "code after ACCEPTED: stage 05 is OPEN" "05   OPEN"
+printf '%s' "$G" | expect "code after ACCEPTED: 05 names STALE (commit)" "STALE (commit)"
+printf '%s' "$G" | expect "code after ACCEPTED: NOT READY" "NOT READY"
+gate_rows 2
+printf '9.9.9\n' > VERSION; printf '# changelog\n' > CHANGELOG.md
+git add -A && git commit -qm "release paperwork after the ACCEPTED override"
+shipg | expect "VERSION + CHANGELOG.md after ACCEPTED stays READY" "READY."
+gate_rows 3
+printf -- '---\nstory: gate-demo-02\nspec: gate-demo\nstatus: done\nwave: 2\n---\n# S2\n' > docs/specs/gate-demo/gate-demo-02-repair.md
+git add -A && git commit -qm "story(gate-demo-02): repair after the ACCEPTED override"
+G="$(shipg)"
+printf '%s' "$G" | expect "a new story after ACCEPTED: 05 names STALE (pack)" "STALE (pack)"
+printf '%s' "$G" | expect "a new story after ACCEPTED: NOT READY" "NOT READY"
+
 echo "the paperwork whitelist is anchored to docs/specs/*/ (R23/m-2): a commit under src/council/ or a bare src/journal.md is never paperwork, even though it shares the names"
 mkdir -p docs/specs/anchor-demo
 cp "$SRC"/templates/plan.md docs/specs/anchor-demo/plan.md
