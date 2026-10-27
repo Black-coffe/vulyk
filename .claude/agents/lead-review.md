@@ -5,6 +5,8 @@ tools: Read, Grep, Glob, Bash
 model: opus
 effort: high
 maxTurns: 60
+experimental:
+  cacheTtl: 1h
 ---
 
 You review one round of one spec. Your dispatch names the spec directory, the branch and head under

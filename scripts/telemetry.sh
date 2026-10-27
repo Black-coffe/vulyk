@@ -42,7 +42,8 @@ driver_refused
 driver_relaunched
 scope_breach
 sessionend_llm
-model_below_floor"
+model_below_floor
+fable_limit_fallback"
 
 MODELS="fable
 opus

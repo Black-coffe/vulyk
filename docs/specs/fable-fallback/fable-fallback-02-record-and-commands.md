@@ -1,8 +1,8 @@
 ---
 story: fable-fallback-02
 spec: fable-fallback
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
@@ -50,5 +50,13 @@ After this story a Fable-limit fallback leaves three traces. `scripts/telemetry.
 `bash tests/telemetry.test.sh --part telemetry && bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- scripts/telemetry.sh: `fable_limit_fallback` appended to `ENUM` (append-only, last).
+- tests/telemetry.test.sh (part telemetry): enum count 10 -> 11 plus a record case (12 keys, value/threshold/model/agent/ref, dedupe on repeat, bundle + check of the week). Run once against the 0.38.0 `ENUM` (code line reverted temporarily): 6 checks failed; with the code: 147 checks, 0 failed.
+- docs/telemetry.md: new table row (who writes it: the three commands via `record`, never `scan`), "nine" -> "eleven anomaly codes" (the table already had ten), the agent-token paragraph names `model_below_floor` and `fable_limit_fallback` as carrying `agent`.
+- .claude/commands/vulyk-build.md: one `## Fable-limit fallback` section holds the rule (detector, one `opus` redispatch, journal line, `record` in the driver_refused form plus `--model fable --agent`, owner sentence, second refusal = existing stop); the solo `dispatch:review` step, the Workflow wake-up (once per `fallbacks` entry, no redispatch since the driver did it) and the no-Workflow loop each name the refusal text and point at it.
+- vulyk-review.md / vulyk-plan.md: the rule inline (journal stages `04-council` and `01-spec`; plan `<where>` = `plan`).
+- .claude/agents/lead-review.md: `experimental:` / `  cacheTtl: 1h` after `maxTurns`; no other line changed.
+- Decision: a single section in vulyk-build.md rather than three copies, to keep the command short; the three places still state the trigger text.
+
 
 ## Findings
