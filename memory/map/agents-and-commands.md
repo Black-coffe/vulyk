@@ -3,12 +3,14 @@
 ## Purpose
 Every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (ADR-013 light VULYK, ADR-015 Sonnet
 executes / Opus judges). Retired: `council-sonnet.md`, `drone-acceptance.md` - do not dispatch
-them. Frontmatter is the model/effort/turn cap; `vulyk-cycle.js` `CAPS` (:28) mirrors `maxTurns`.
+them. Frontmatter is the model/effort/turn cap; `vulyk-cycle.js` has no `CAPS` table, its empty-result
+message points at the agent file's `maxTurns` (`reasonFor` :33).
 
 ## Agents - frontmatter, job, report
 `omitClaudeMd: true` (no constitution loaded) on cycle-clerk, council-opus, council-haiku,
 drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other four keep it for host conventions.
-- **lead-review** (`opus`, `high`, `maxTurns:60`; Read/Grep/Glob/Bash) - the `review` seat of every
+- **lead-review** (`opus`, `high`, `maxTurns:60`, `experimental: cacheTtl: 1h` frontmatter,
+  lead-review.md:8-9; Read/Grep/Glob/Bash) - the `review` seat of every
   round; Tier 4: two dispatches. Judges four items (lead-review.md:14-27): 1 `## Asks` (+ `## Descoped`);
   2 correctness; 3 warn-only checks + `scripts/defects-check.sh` red debt; 4 the project's rules: a diff
   line breaking a Never (✗) / How-to (→) line of a card shown for its path = a major `[unanchored]`
@@ -68,6 +70,15 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   (no `model:`), Queen cuts to ≤ 3, writes `docs/specs/<slug>/horizon.md`; never into `brief.md`. Grill
   (`templates/grill.md:49` `## Horizon questions`): one question each inside the 3-7 cap, «Добавить»/«Не
   добавлять»; silence = not added; «Добавить» recommended only for `kind: gap`.
+- **Fable-limit fallback, session path** (ADR-015 exception): `/vulyk-build` (section `## Fable-limit
+  fallback`, vulyk-build.md:95-108; solo review :36, hive wake-up reads the driver's `fallbacks` :63),
+  `/vulyk-review` (step 2, :29-37) and `/vulyk-plan` (step 5, :59-67; `queen-planner`/`lead-architect`) redispatch
+  a refused dispatch once on `model: opus` (not when already opus). Session test: an error carrying
+  `You've reached your Fable limit`/`model_requires_usage_credits`, or text starting `Agent terminated early due
+  to an API error` and carrying `reached your Fable limit` (a quoting report is a report). Each writes a
+  `journal.sh` line, `telemetry.sh record fable_limit_fallback 1 0 --model fable --agent <a>`, one owner sentence.
+  A second refusal is the old path (absent seat, missed story, planning stops). The driver's test differs (length
+  + no report header; cycle.md).
 - **`/vulyk-models`** (0.30.0) - quiz via `model-profile.sh --recommend`/`--explain`, one `AskUserQuestion`,
   then `--set <name>`; `claude -p` prints a pointer, writes nothing.
 - **Profile-aware dispatch** (ADR-020, scripts.md): `/vulyk-plan`, `/vulyk-build` (passes `worker_model`,
@@ -102,4 +113,4 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a
   relative script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-10-27 (v0.38.0, ADR-013, ADR-015, ADR-020, ADR-022)
+last-verified: 2026-10-28 (fable-fallback merge 427ff2c; ADR-013, ADR-015, ADR-020, ADR-022)

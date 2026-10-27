@@ -107,7 +107,14 @@ anchored review lines; `## Files`/`## Verification` = union over done stories.
 Args `{spec, stamp, top_model, second_model}` plus `worker_model`, `review_model`, `seat_model` (only off
 `sonnet-builds`). Shell only via `cycle-clerk`. `advance --claim`; `build:W` → workers in parallel, a
 story still listed is a miss, the second stops the run; `dispatch:` → seats in parallel (Tier 4 review =
-two `lead-review`), then `advance --ingest`. `CAPS` :28 mirrors `maxTurns`; `release` in `finally`.
+two `lead-review`), then `advance --ingest`. `release` in `finally`.
+- **Fable-limit fallback** (vulyk-cycle.js:125-143): every worker/seat call goes through `dispatch`. With a
+  `model` other than `opus` passed, a `refused(r)` result (:49; a thrown error matching `REFUSAL` anywhere, or
+  a returned string <= `REFUSAL_MAX` 600 chars matching it with no `VERDICT|COUNCIL|STATUS` line) - or an empty
+  result whose one same-model ping (`ping:<where>`) is also empty/refused (a Workflow returns the refusal as
+  null) - is rerun once with `model: 'opus'`. Not an attempt; no third call; no model passed = no fallback.
+  Entries `{agent, where, from, to}` go in `fallbacks`, spread into every return except the `BadLine` raw
+  string (:261); `/vulyk-build` journals them and records telemetry `fable_limit_fallback`.
 
 ## Tests
 `cycle.test.sh` (7 parts), `council.test.sh` (11), `telemetry.test.sh` (17) take `--part <topic>` /
@@ -118,4 +125,4 @@ profile args.
 
 Telemetry consumers (`telemetry.sh`, `scope-check.sh` ledger): see `memory/map/scripts.md`.
 
-last-verified: 2026-10-26 (v0.36.0, ADR-001, ADR-013, ADR-015, ADR-020)
+last-verified: 2026-10-28 (fable-fallback merge 427ff2c; ADR-001, ADR-013, ADR-015, ADR-020)

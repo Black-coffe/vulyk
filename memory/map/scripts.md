@@ -30,7 +30,9 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `vulyk-update.sh` (-> `install.sh --upgrade`); `release-check.sh`; `state.sh`; `git-hooks/post-merge`.
 - `model-profile.sh` (ADR-020) - `opus-builds|sonnet-builds|economy` in `${CLAUDE_CONFIG_DIR:-~/.claude}/
   vulyk-model-profile`; only `--set` writes; unknown = `sonnet-builds`. `top-model.sh`: `VULYK_TOP_MODEL`,
-  `TOP_MODEL =` pin, profile, `--plan`, opus; `--floor` exit 1 prints `below floor`.
+  `TOP_MODEL =` pin, profile, `--plan`, opus; `--floor` exit 1 prints `below floor`. `GATE_HINT` (top-model.sh:49, under `--help` and `--explain`)
+  names the gate's scope: Tier 4 review/planner, lead-architect, a missed story's retry; a hive's own judge uses
+  `model-profile.sh --role seat` with explicit `--effort`.
 - `defects-index.sh [--check|--grep <regex>|--counts]` (0.32.0, ADR-021) - no arg writes generated
   `docs/defects/INDEX.md`. `--check` exit 1 + `index stale`; `--grep` = `<ref>:<line>: <text>`, exit 1 no
   match; `--counts` (`/vulyk-status` prints it). Exit 2 usage/no library/no python.
@@ -70,7 +72,8 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `is_paperwork_path` whitelist: spec `plan/journal/brief/council/*`, `memory/stats/*.jsonl` ledgers,
   `skills.json`, `memory/learnings/*.md`, `VERSION`, `CHANGELOG.md`.
 - `telemetry.sh` `ENUM`/`AGENTS` are append-only public contracts (`AGENTS` gained `drone-horizon`, 0.35.0,
-  telemetry.sh:65; a removed agent moves to `RETIRED_AGENTS`, :78).
+  telemetry.sh:65; a removed agent moves to `RETIRED_AGENTS`, :78). `ENUM` (:36-46) now ends
+  `model_below_floor`, `fable_limit_fallback` (recorded by the session commands, not by a scan).
 
 ## Tests (0.37.0)
 - `tests/full-suite.sh [--jobs N] [--list]` - every `tests/*.test.sh` once, in parallel (`--jobs` = cores,
@@ -107,4 +110,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - Retired framework files are removed unless edited (`retired_edited`).
 - Card parsing lives only in `defects_lib.py` (`docs/wiki/rules-tree.md`).
 
-last-verified: 2026-10-27 (v0.38.0)
+last-verified: 2026-10-28 (fable-fallback merge 427ff2c)

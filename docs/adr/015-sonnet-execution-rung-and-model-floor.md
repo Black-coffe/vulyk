@@ -89,6 +89,60 @@ Sonnet 5.5 shipped on 2026-09-28. The evidence and the source table are in
 
 *Amended 2026-10-27:* a Fable-limit refusal redispatches the role once on `opus`; under `opus-builds` the family that built judges that one dispatch; recorded by journal + `fable_limit_fallback` (spec `fable-fallback`).
 
+*Amendment, status: proposed (2026-10-28, ADR harvest of spec `fable-fallback`, 0.39.0 at 427ff2c; the owner
+writes `accepted`):* **the Fable-limit fallback and how a refusal is detected.**
+
+- *Context, verbatim.* plan.md `## Assumptions`: "The fallback family is a constant, `opus`, for every
+  Fable role ... Under `opus-builds` this means Opus judges Opus code for that one dispatch: the owner's
+  choice (brief, Request)". plan.md `## Rejected`: "`model-profile.sh --role <role> --fallback` ... A
+  second profile that wants another fallback adds the flag then; today it is a constant and a documented
+  exception." and "Claude Code's own `fallbackModel` chain: by the docs ... it never fires on billing or
+  rate-limit errors, and this is one." Repair story 05, finding 5: "the refusal detector fires on a
+  normal report that quotes the refusal text ... A returned string counts as a refusal only when it is
+  the refusal". Journal, 2026-10-27T21:55:09Z: "Agent tool returns the 317-char 'Agent terminated early
+  ... Fable limit' text (refused()=true); Workflow agent() returns null and the refusal shows only in
+  the run's Failures, so the driver never sees it". Journal, 2026-10-27T22:08:06Z: "live probe of the
+  round-3 driver dispatch() on account 1 (Fable exhausted): fable call failed, ping failed, opus
+  redispatch answered OK, one fallbacks entry".
+- *Decision.*
+  1. A dispatch refused by the Fable limit is redispatched once, same prompt and agent type, on the
+     constant `opus`, for every Fable role (both review seats, the Tier 4 reviewer and planner,
+     `lead-architect`, a missed story's retry). Never a third call; a second refusal takes the existing
+     path (absent seat, missed story). Nothing else (Opus/Sonnet limits, `usage_limit_reached`, other
+     API errors) is retried.
+  2. This is the one sanctioned exception to "the family that builds never judges": under
+     `opus-builds` Opus judges Opus code for that dispatch. Every occurrence is recorded three ways:
+     a journal line, telemetry code `fable_limit_fallback`, one sentence to the owner.
+  3. Detection of a refusal in text (the Agent tool in a session returns the 317-character
+     `Agent terminated early due to an API error: You've reached your Fable limit. ...`): a returned
+     string is a refusal when it carries `reached your Fable limit` (straight or U+2019 apostrophe) or
+     `model_requires_usage_credits`, is at most 600 characters trimmed (`REFUSAL_MAX`), and no line opens
+     with a report header (`VERDICT`, `COUNCIL`, `STATUS`). A caught error matches either form anywhere.
+     A report that quotes the text is never a refusal (story 05 found the live false positive; story 06
+     dropped the first version's `^Agent terminated` anchor, which missed a prefixed refusal).
+  4. Detection, Workflow path: `agent()` returns `null` on a refusal and the reason is not visible to
+     the driver, so a `null` from a Fable dispatch is followed by one ping on the same model; a failed
+     ping decides the refusal and the `opus` redispatch follows. Live-probed 2026-10-27 on an exhausted
+     account (journal above).
+  5. On the Workflow path the record rides the driver's return value (`fallbacks`), written by
+     `/vulyk-build` when the driver returns; `cycle-clerk`'s verbs are not widened (ADR-011).
+- *Options.* Rejected and recorded in plan.md: a `--fallback` flag in `model-profile.sh` (a flag, a
+  test and a driver argument for one fixed word); Claude Code's `fallbackModel` (does not fire on
+  billing/rate-limit errors); the driver writing the record through `cycle-clerk` (ADR-011 whitelist).
+  For point 4 the owner chose the ping (2026-10-27, AskUserQuestion, option text by the Queen) over
+  "every empty Fable return is a refusal", rejected because a turn-cap death would then be logged as a
+  Fable limit and counted in `fable_limit_fallback`.
+- *Consequences.* Recorded: the Workflow-path record is a few minutes late but never lost (plan.md
+  `## Rejected`). The ping costs 0 tokens on a refusal (probe: `subagent_tokens: 0`); on a non-refusal
+  empty return (a turn-cap death) it costs one short Fable call, the ping answers, and the empty result
+  takes the turn-cap path unchanged. That answering branch has no live sample yet, only tests.
+- *Invariants created.* No retry path matches on substrings of a returned report. The fallback model
+  is one named constant (`FALLBACK_MODEL` in `.claude/workflows/vulyk-cycle.js`, the word `opus` in
+  `/vulyk-build`, `/vulyk-review`, `/vulyk-plan`); the three must agree. No fallback is silent.
+- *Revisit when.* A second profile wants a fallback other than `opus` (plan.md: "adds the flag
+  then"). Claude Code changes the refusal text or makes `agent()` expose the error: not recorded as a
+  trigger, but points 3-4 are bound to both.
+
 ## Rejected
 
 - **Workers stay on Opus.** It is simpler, but it keeps the reviewer at Tier 3 on the builder's
