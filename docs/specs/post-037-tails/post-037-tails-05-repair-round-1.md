@@ -1,7 +1,7 @@
 ---
 story: post-037-tails-05
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 3
@@ -42,3 +42,7 @@ ASK 4: RED - speed profiled, cheap fixes, before/after figures recorded - run: `
 `bash tests/telemetry.test.sh --part telemetry`
 `bash tests/symbol-map.test.sh`
 `bash tests/maintenance.test.sh`
+
+## Implementation notes
+- scripts/symbol-map.py: a comment block under the docstring records the before/after speed figures (brief 1.55 s wrapper on lib.sh; story 03 direct medians 0.264->0.170 s lib.sh, 0.271->0.233 s symbol-map.py; wrapper after 0.245 / 0.311 s measured now).
+- Comment, not docstring: the docstring is the --help text. CHANGELOG.md is outside ## Files (plan: the Queen copies figures there at ship).

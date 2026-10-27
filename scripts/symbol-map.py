@@ -15,6 +15,12 @@ final `... N more` line.
 Exit: 0 done, 1 an input is missing (every input is still reported), 2 usage or not inside a git repo.
 The script reports; it blocks nothing.
 """
+# Speed on a bash input (post-037-tails, profiled with cProfile; warm OS file cache, one Windows box,
+# median of 3 `time` runs). Before: `bash scripts/symbol-map.sh scripts/lib.sh` 1.55 s, a .py 0.34 s;
+# direct `python scripts/symbol-map.py`: scripts/lib.sh 0.264 s, scripts/symbol-map.py 0.271 s.
+# Fix: edges are parsed per kind on first need (a bash input parses no Python), comment lines skip
+# the source regex. After, direct: scripts/lib.sh 0.170 s, scripts/symbol-map.py 0.233 s; through the
+# wrapper: scripts/lib.sh 0.245 s, scripts/symbol-map.py 0.311 s. A cold first run (5.3 s) is file I/O.
 import ast
 import fnmatch
 import os
