@@ -585,6 +585,13 @@ printf '#!/bin/sh\necho "Python was not found; run without arguments to install 
 chmod +x "$FB/python3"
 ( cd "$T" && PATH="$FB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status > /dev/null 2>&1; echo "exit=$?;" ) > "$T/hs-stub"
 expect "handoff.sh status with a stub python3 first on PATH reaches a working Python or exits 0" "exit=0;" < "$T/hs-stub"
+# A real python3 starts once per call: telemetry.sh's scan bounds its python starts through this hook (round 1 major 1).
+CB="$T/countpy"; mkdir -p "$CB"; : > "$T/hs-calls"
+printf '#!/usr/bin/env bash\nprintf "py\\n" >> "%s"\nexec "%s" "$@"\n' "$T/hs-calls" "$PYBIN" > "$CB/python3"
+chmod +x "$CB/python3"
+( cd "$T" && PATH="$CB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status > /dev/null 2>&1 )
+echo "starts=$(grep -c . "$T/hs-calls");" > "$T/hs-count"
+expect "handoff.sh starts a working python3 once per call, never a probe beside it" "starts=1;" < "$T/hs-count"
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
