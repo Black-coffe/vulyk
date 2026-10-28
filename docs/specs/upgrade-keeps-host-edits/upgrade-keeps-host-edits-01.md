@@ -1,7 +1,7 @@
 ---
 story: upgrade-keeps-host-edits-01
 spec: upgrade-keeps-host-edits
-status: todo
+status: done
 returned:
 tier: 2
 worker: worker-code
@@ -57,5 +57,8 @@ memory/map/scripts.md (`install.sh - the upgrade contract`); `install.sh` `copy_
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+Superseded, not built from this story: the same change shipped in 0.29.0 as `5239eb0` (fix(install): an upgrade
+replaces release copies only; hive edits merged or kept beside, deletions kept), inside hive-feedback-2026-10. This spec
+was never approved; closed by post-043-tails-03 with `ship-check.sh --record`.
 
 ## Findings

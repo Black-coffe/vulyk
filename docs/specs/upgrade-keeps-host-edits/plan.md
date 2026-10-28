@@ -59,4 +59,4 @@ previous install shipped (old manifest) that the hive no longer has stays delete
 **Branch:** <written by /vulyk-build before wave 1>
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
 **Council:** <written by scripts/cycle.sh judge/escalate>
-**Shipped:** <written by scripts/ship-check.sh --record>
+**Shipped:** 0.29.0, 2026-10-28, at 04b1bbd - superseded: built in 0.29.0 by 5239eb0 (hive-feedback-2026-10) outside this spec; never approved

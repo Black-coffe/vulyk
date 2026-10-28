@@ -1,8 +1,8 @@
 ---
 story: post-043-tails-03
 spec: post-043-tails
-status: todo            # todo | done | blocked - close-story writes done, a driver writes blocked
-returned:              # written by whoever builds the story, as its last edit: DONE | NEEDS_CONTEXT | WALL
+status: done            # todo | done | blocked - close-story writes done, a driver writes blocked
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 2
@@ -45,5 +45,11 @@ none
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- `docs/architecture.md`: "Those four" became "Those five" (`queen-planner`, `worker-code`, `worker-test`, `lead-review`,
+  `lead-architect`). The `except ... carries` sentence is unchanged, and `prompt-check: ok (33 files)`.
+- `upgrade-keeps-host-edits-01`: `status: done` plus a note naming `5239eb0`. `**Approved:**` keeps its placeholder.
+- Both `ship-check.sh --record` commands were run exactly as plan.md `## Assumptions` gives them. They stamp today's
+  date and HEAD `04b1bbd`, and the note carries the real commit. `state.json` now shows upgrade-keeps-host-edits as
+  `06-shipped` with `todo 0`.
 
 ## Findings
