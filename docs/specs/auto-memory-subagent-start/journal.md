@@ -6,3 +6,4 @@
 - 2026-10-28T15:41:27Z · 04-council:RED · round 1 verdict RED at 395573e pack 7d8be8e223bf · next: repair
 - 2026-10-28T15:41:30Z · 03-building · repair round 1: auto-memory-subagent-start-03-repair-round-1.md · next: build:2
 - 2026-10-28T15:59:05Z · 03-building · plan delta: story 04 (triage quiet until growth), owner's choice · next: build:3
+- 2026-10-28T16:05:51Z · 04-council:open · round 2 opened, no court (no blind seat required) · next: dispatch:review
