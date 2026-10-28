@@ -1397,9 +1397,10 @@ wire_hook SessionEnd anomaly-scan.sh
 # an edit or a command, and the per-session dedup cleared when /clear or compaction starts over.
 wire_hook UserPromptSubmit defect-intake.sh
 # rules-tree: delivery widened to web, agent and MCP tools. py_wire ignores a changed matcher, so a
-# hive still on the 0.19 matcher is unwired and rewired; a matcher the owner set by hand is kept.
-INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*'
-if grep -qE '"matcher"[[:space:]]*:[[:space:]]*"Edit\|Write\|MultiEdit\|NotebookEdit\|Bash"' \
+# hive still on the 0.19 or the 0.32 matcher is unwired and rewired; a matcher the owner set by hand is
+# kept. 0.41: Read joins it, for the cards of a story's ## Files when the story file is read.
+INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*'
+if grep -qE '"matcher"[[:space:]]*:[[:space:]]*"Edit\|Write\|MultiEdit\|NotebookEdit\|Bash(\|WebFetch\|WebSearch\|Agent\|mcp__\.\*)?"' \
      "$DEST/.claude/settings.json" 2>/dev/null; then
   unwire_hook PreToolUse defects-inject.sh
 fi

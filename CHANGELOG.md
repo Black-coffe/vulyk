@@ -4,6 +4,30 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-10-28
+
+Defect cards reach a builder when it opens its story, and Claude Code's own auto memory gets a size signal
+(spec `auto-memory-subagent-start`).
+
+### Added
+- **Cards when a story is read.** `defects-inject.sh` now also runs on `Read`. When an agent opens a story file
+  (`docs/specs/<slug>/<name>.md` with `story:`), it shows the cards whose `paths:` match the story's `## Files`.
+  The builder (a Workflow worker, a subagent or the Queen) sees the Never / How-to / Allowed lines before its first
+  edit. A card folded into `+N cards` there is still shown in full at the first matching edit. Any other `Read`
+  exits in bash before python starts (median 71 ms here). `SubagentStart` was considered and not used: its input
+  carries no prompt, and Workflow-driver agents are not `Agent` calls it could look up.
+- **`memory triage` due by size.** The SessionStart brief reads Claude Code's own auto memory index
+  (`~/.claude/projects/<slug>/memory/MEMORY.md`, loaded up to 200 lines / 25 KB). At 160 lines or 20 KB it adds
+  `memory triage (MEMORY.md <n> lines, <k> KB ...)` to `maintenance due` (`/vulyk-gc memory`). The triage ends with
+  `memory-triage.sh --mark`, and the signal then stays quiet until the index grows 20 lines or 2 KB past the mark.
+  `memory-triage.sh --dir` prints the dir it reads.
+- **`docs/memory-system.md`: Claude Code's own auto memory.** How to turn it off (`autoMemoryEnabled: false`,
+  `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`) and what is lost: the owner's personal lessons. VULYK never sets this switch.
+
+### Changed
+- **Inject matcher** is `Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*`. An upgrade
+  rewires a hive still on the 0.19 or 0.32 matcher; a matcher set by hand is kept.
+
 ## [0.40.1] - 2026-10-28
 
 A repair that only fixes prose no longer stalls on the red receipt of 0.40.0 (spec `red-repair-mark`).

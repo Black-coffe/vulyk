@@ -22,8 +22,10 @@ Format contract: `docs/defects/README.md`. Mechanics per script: `memory/map/scr
 - **One parser.** `.claude/hooks/defects_lib.py` is read by `defects-check.sh`, `defects-index.sh`,
   `defects-inject.sh`, `defect-intake.sh`: no loader is blind to a sub-folder. The gate imports it from the repo's
   own hooks dir, never from `DEFECTS_DIR`.
-- **Delivery.** `defects-inject.sh` (PreToolUse on `Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|
+- **Delivery.** `defects-inject.sh` (PreToolUse on `Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|
   mcp__.*`) shows at most `DEFECTS_INJECT_LINES` (default 12) lines per action and lists the overflow in one line.
+  A Read of a story file matches by the story's `## Files` (0.41), so a builder sees the cards before its first edit;
+  any other Read leaves in bash. `SubagentStart` was weighed and not used: its input carries no prompt.
   Block-with-check and revoked cards are not injected.
 - **Capture.** `defect-intake.sh` hears an explicit "внеси в запрет / правило / разрешение" anywhere (pastes
   included), files typed corrections at once with a report line and "отмени", asks first for a correction inside a

@@ -350,6 +350,52 @@ if command -v python >/dev/null 2>&1; then
   if printf '%s' "$o" | grep -q additionalContext; then ok "a python3 stub exiting 9009 falls through to python"
   else bad "a python3 stub silenced the hook"; fi
 else echo "  skip  no python on PATH besides python3"; fi
+
+# --- cards on reading a story (0.41): a Read of a story file delivers the cards for its ## Files ------
+echo "--- story read"
+mkdir -p "$HIVE/docs/specs/demo" "$HIVE/docs/notes"
+cat > "$HIVE/docs/specs/demo/demo-01-voice.md" <<'EOF'
+---
+story: demo-01-voice
+spec: demo
+status: todo
+---
+
+# Voice fix
+
+## Files
+<!--
+- not/a/path.py
+-->
+- pipeline/voiceover.py
+- `tests/test_voice.py`
+
+## Verification
+`pytest`
+EOF
+printf -- '# Demo (brief)\n\n## Files\n- pipeline/voiceover.py\n' > "$HIVE/docs/specs/demo/brief.md"
+printf -- '---\nstory: x\n---\n\n## Files\n- pipeline/voiceover.py\n' > "$HIVE/docs/notes/not-a-story.md"
+readcall() { # readcall <session> <path> [agent]   -> a Read PreToolUse payload
+  local a=""; [ -n "${3:-}" ] && a=",\"agent_id\":\"$3\""
+  printf '{"session_id":"%s","tool_name":"Read","tool_input":{"file_path":"%s"},"cwd":"%s"%s}' "$1" "$2" "$W" "$a"
+}
+o="$(run "$HIVE" "$(readcall r1 "$W/docs/specs/demo/demo-01-voice.md" w1)")"
+printf '%s' "$o" | ctx | expect "a story Read shows the card for its ## Files" "voice-text — Voice text rule"
+printf '%s' "$o" | ctx | expect_absent "a ## Files line inside a comment is not a path" "not/a/path.py"
+run "$HIVE" "$(readcall r1 "$W/docs/specs/demo/demo-01-voice.md" w1)" | expect_silent "the same agent reading the story again: silent"
+run "$HIVE" "$(edit r1 "$W/pipeline/voiceover.py" w1)" | expect_silent "its first Edit of that path: the card is not repeated"
+o="$(run "$HIVE" "$(readcall r1 "docs/specs/demo/demo-01-voice.md" w2)")"
+printf '%s' "$o" | ctx | expect "a relative story path works for another agent" "voice-text — Voice text rule"
+run "$HIVE" "$(readcall r2 "$W/docs/specs/demo/brief.md")" | expect_silent "a brief.md Read is silent"
+run "$HIVE" "$(readcall r2 "$W/docs/notes/not-a-story.md")" | expect_silent "a story-shaped file outside docs/specs/ is silent"
+run "$HIVE" "$(readcall r2 "$W/pipeline/voiceover.py")" | expect_silent "a source file Read is silent"
+# Round 1: a card folded into `+N cards` on the story Read is only named there; its lines still come at the Edit.
+printf -- '---\nstory: demo-02-big\n---\n\n## Files\n- big/x.py\n' > "$HIVE/docs/specs/demo/demo-02-big.md"
+o="$(run "$HIVE" "$(readcall r3 "$W/docs/specs/demo/demo-02-big.md" f1)")"
+printf '%s' "$o" | ctx | expect "eight big cards on a story Read fold the rest" "+2 cards: big-07, big-08"
+o="$(run "$HIVE" "$(edit r3 "$W/big/x.py" f1)")"
+printf '%s' "$o" | ctx | expect "a card folded on a story Read arrives in full at the first Edit" "✗ BIG08 long line"
+printf '%s' "$o" | ctx | expect_absent "a card shown in full on the story Read is not repeated at the Edit" "BIG01"
 fi # part functional
 
 if part latency; then # --- part latency: the two 200 ms medians, on the fixture library above
@@ -367,6 +413,11 @@ m="$(median_ms "$LAT" "{\"session_id\":\"lat\",\"tool_name\":\"Edit\",\"tool_inp
 echo "  median defects-inject.sh (Edit): ${m} ms over 30 calls ($SRCNAME; target <= 200 ms)"
 if [ "$m" -le 200 ]; then ok "median latency, Edit, <= 200 ms"
 else bad "median latency, Edit, ${m} ms > 200 ms"; fi
+# Read joined the matcher (0.41): a Read of anything but a story must stay in bash, far under the Edit cost.
+m="$(median_ms "$LAT" "{\"session_id\":\"lat\",\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$LW/pipeline/voiceover.py\"},\"cwd\":\"$LW\"}")"
+echo "  median defects-inject.sh (Read, not a story): ${m} ms over 30 calls ($SRCNAME; target <= 100 ms)"
+if [ "$m" -le 100 ]; then ok "median latency, non-story Read, <= 100 ms"
+else bad "median latency, non-story Read, ${m} ms > 100 ms"; fi
 fi # part latency
 
 CHECKS="$(grep -c . "$LEDGER" || true)"

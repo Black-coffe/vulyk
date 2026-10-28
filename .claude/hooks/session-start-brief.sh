@@ -74,6 +74,23 @@ fi
 # map: the post-merge git hook's flag.
 [ -f "$MEM/map/.stale" ] && due "map (flagged stale after a merge: refresh the modules changed since, then delete memory/map/.stale)" vulyk-map
 
+# memory triage: Claude Code's own auto memory index loads its first 200 lines / 25 KB into every session;
+# at 80% of either the private memory is sorted into cards / personal / delete before the tail is dropped.
+tri="$(dirname "${BASH_SOURCE[0]}")/../../scripts/memory-triage.sh"
+adir="$( [ -f "$tri" ] && cd "$ROOT" 2>/dev/null && bash "$tri" --dir 2>/dev/null)"
+idx="$adir/MEMORY.md"
+if [ -n "$adir" ] && [ -f "$idx" ]; then
+  lines=$(awk 'END { print NR }' "$idx"); bytes=$(wc -c < "$idx" | tr -d ' ')   # NR: a last line without \n counts
+  # The last triage's mark (memory-triage.sh --mark): what it left behind is not due again until it grows.
+  ml="" mb=""; mk="$ROOT/.claude/state/memory-triage.txt"
+  [ -f "$mk" ] && read -r ml mb < "$mk"
+  [[ $ml =~ ^[0-9]+$ && $mb =~ ^[0-9]+$ ]] || ml=""
+  if { [ "$lines" -ge 160 ] || [ "$bytes" -ge 20480 ]; } &&
+     { [ -z "$ml" ] || [ "$lines" -ge $((ml + 20)) ] || [ "$bytes" -ge $((mb + 2048)) ]; }; then
+    due "memory triage (MEMORY.md $lines lines, $((bytes / 1024)) KB of 200 lines / 25 KB)" "vulyk-gc memory"
+  fi
+fi
+
 if [ -n "$items" ]; then
   echo "[VULYK] maintenance due: $items. After the owner's current task, on ${def:-the default branch} with a clean tree (memory/stats/skills.json aside: the Skill counter rewrites it), run each through the Skill tool ($skills) without asking, then tell the owner in one line what changed; otherwise leave it for a later session."
 fi

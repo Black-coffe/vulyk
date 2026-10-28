@@ -3,8 +3,10 @@
 # card's Never (✗), How-to (→) and Allowed (✓) lines in front of the agent. Cards are read by
 # defects_lib.py beside this file. Contract: docs/specs/rules-tree/plan.md ## Contracts, Delivery.
 #
-#   defects-inject.sh          PreToolUse: globs match file_path / notebook_path (Edit family) or the Bash
-#                              line's path tokens, `cmd:` the Bash line, `tool:` tool_name (any tool)
+#   defects-inject.sh          PreToolUse: globs match file_path / notebook_path (Edit family), the Bash
+#                              line's path tokens, or the `## Files` entries of a story file being Read
+#                              (docs/specs/<slug>/<name>.md with `story:`); `cmd:` the Bash line, `tool:`
+#                              tool_name (any tool). Any other Read leaves in bash, before python starts.
 #   defects-inject.sh reset    SessionStart: source compact|clear forgets what this session was shown
 #
 # At most $DEFECTS_INJECT_LINES (12) lines after the header, narrowest scope first, then the freshest
@@ -21,6 +23,11 @@
 # stdin is read once so a non-working interpreter (the Windows Store `python3` alias exits 9009
 # without running anything) falls through to the next one; 0 or 1 means python itself ran.
 IN="$(cat)"
+# Read is on the matcher for story files only: every other Read exits here, without a python start.
+re='"tool_name"[[:space:]]*:[[:space:]]*"Read"'
+if [[ $IN =~ $re ]]; then
+  case "$IN" in *docs/specs/*|*'docs\\specs\\'*) ;; *) exit 0 ;; esac
+fi
 for PY in python3 python; do
   command -v "$PY" >/dev/null 2>&1 || continue
   printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \
@@ -37,6 +44,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[0])))
 from defects_lib import fixpath, fm_scalar, load_cards, parse_scope, scope_matches, specificity, allowed_date
 
 EDIT_FAMILY = ('Edit', 'Write', 'MultiEdit', 'NotebookEdit')
+STORY = re.compile(r'docs/specs/[^/]+/[^/]+\.md')
 
 
 def injected_as(card):
@@ -66,6 +74,37 @@ def rel(p, root):
     while p.startswith('./'):
         p = p[2:]
     return p
+
+
+def story_files(fp, root):
+    # A story file being Read -> its `## Files` entries, so the builder meets the cards before its first
+    # edit. Anything else (brief.md, plan.md, a file outside docs/specs/<slug>/) -> [].
+    r = rel(fp if isinstance(fp, str) else '', root)
+    if not STORY.fullmatch(r):
+        return []
+    try:
+        with open(os.path.join(root, r), encoding='utf-8') as f:
+            lines = f.read().replace('\r\n', '\n').split('\n')
+    except (OSError, UnicodeDecodeError):
+        return []
+    end = next((i for i, x in enumerate(lines) if i and x.strip() == '---'), 0)
+    if lines[0].strip() != '---' or not end or not any(re.match(r'story:\s*\S', x) for x in lines[1:end]):
+        return []
+    out, inside, comment = [], False, False
+    for x in lines[end + 1:]:
+        if x.startswith('## '):
+            if inside:
+                break
+            inside = x.strip() == '## Files'
+        elif not inside:
+            continue
+        elif comment or x.lstrip().startswith('<!--'):
+            comment = '-->' not in x
+        elif x.startswith('- '):
+            p = x[2:].strip().strip('`').strip()
+            if p:
+                out.append(p)
+    return out
 
 
 def overlaps(a, b):
@@ -134,6 +173,10 @@ def main():
         fp = ti.get('file_path') or ti.get('notebook_path') or ''
         if isinstance(fp, str) and fp:
             paths.append(rel(fp, root))
+    elif tool == 'Read':
+        paths = story_files(ti.get('file_path'), root)
+        if not paths:
+            return
     # Any other tool has no path and no command line: only its `tool:` entries can match.
     if not paths and not cmd and not tool:
         return
@@ -196,8 +239,10 @@ def main():
         shown.append(card.ref)
     if rest:
         text += '\n+%d cards: %s' % (len(rest), ', '.join(rest))
-    shown += rest
     # Folded cards count as shown too: the agent has the refs, repeating them every call is noise.
+    # Not on a story Read: there the fold is a preview, and the full lines come at the first matching edit.
+    if tool != 'Read':
+        shown += rest
     try:
         os.makedirs(os.path.dirname(state), exist_ok=True)
         with open(state, 'a', encoding='utf-8') as f:

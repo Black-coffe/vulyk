@@ -1,14 +1,15 @@
 ---
 story: auto-memory-subagent-start-02-memory-size-due
 spec: auto-memory-subagent-start
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
-red_reason: memory triage not due at 160 lines
+red_reason: ::error::memory triage due at 160 lines
+red_verified_at: 2026-10-28T15:30:15Z 251e81f6af1c25954db8418b25c50deacf6bf9283d91b73502cf922078a80f98
 ---
 
 # Native MEMORY.md size makes memory triage due
@@ -44,13 +45,36 @@ then lost (the owner's personal lessons stop loading); VULYK never sets it. `/vu
 memory/map/scripts.md: `memory-triage.sh`, the SessionStart brief.
 
 ## Acceptance criteria
-- [ ] A fixture `MEMORY.md` of 159 lines and 20479 bytes: no `memory triage`; 160 lines: due; 20480 bytes in fewer lines: due, with the size in the line.
-- [ ] No auto memory dir, or no `MEMORY.md`: the brief prints what it printed before.
-- [ ] `memory-triage.sh --dir` prints the same dir the listing reads, and the listing output is unchanged.
+- [x] A fixture `MEMORY.md` of 159 lines and 20479 bytes: no `memory triage`; 160 lines: due; 20480 bytes in fewer lines: due, with the size in the line.
+- [x] No auto memory dir, or no `MEMORY.md`: the brief prints what it printed before.
+- [x] `memory-triage.sh --dir` prints the same dir the listing reads, and the listing output is unchanged.
 
 ## Verification
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- `memory-triage.sh --dir`: the same derivation, printed and exit 0; the brief calls it beside the hook (`../../scripts/`) from `$ROOT`, so a hive without the script or outside git stays silent.
+- Size: `wc -l` lines, `wc -c` bytes, KB floored (20480 B -> 20 KB). On this repo's own index (47 lines, 9.8 KB) nothing is due.
+- Docs: `docs/memory-system.md` § Claude Code's own auto memory (signal, off switch, what is lost); `/vulyk-gc` names the trigger.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: 251e81f6af1c25954db8418b25c50deacf6bf9283d91b73502cf922078a80f98 (tests/maintenance.test.sh)
+- impl: a4fca4b346afa7c8866aa52ba6d834feefde84e0e854922e0e5b402dab27c954
+- stamped: 2026-10-28T15:30:15Z
+
+```
+  ok    memory-triage: a file without frontmatter lists with type -
+  ok    memory-triage: MEMORY.md is not a row
+  ok    memory-triage: exactly two rows
+  ok    memory-triage: an absent dir says so
+  ok    memory-triage: an absent dir exits 0
+  ok    memory-triage --index-lines: names the moved file's line
+  ok    memory-triage --index-lines: takes a bare file name
+  ok    memory-triage --index-lines: leaves other lines out
+  ok    memory-triage: writes nothing
+maintenance.test.sh: 160 checks, 4 failed
+```
