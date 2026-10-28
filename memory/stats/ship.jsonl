@@ -30,3 +30,4 @@
 {"ts":"2026-10-27T22:31:28Z","spec":"horizon-audit","version":"0.39.0","head":"1cb04c2","pack":"a69cc8878fb6","note":"merged to main, publish pending"}
 {"ts":"2026-10-28T08:55:30Z","spec":"suite-row-upgrade","version":"0.39.1","head":"a1951e9","pack":"75e0e88eae3e","note":"merged to main, publish pending; owner override: «ACCEPTED и выпуск (Рекомендую)» after round-1 ESCALATE"}
 {"ts":"2026-10-28T11:49:25Z","spec":"red-receipt","version":"0.40.0","head":"e56b2d8","pack":"d0e2cbf3d988","note":"merged to main, publish pending"}
+{"ts":"2026-10-28T13:01:34Z","spec":"red-repair-mark","version":"0.40.1","head":"6f54768","pack":"af520a191020","note":"merged to main, publish pending"}

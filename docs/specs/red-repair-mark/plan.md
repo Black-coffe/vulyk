@@ -64,4 +64,4 @@ is missing or unparsable.
 **Branch:** vulyk/red-repair-mark
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** GREEN round 1, 2026-10-28, at 9205ecc, pack af520a191020
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Shipped:** 0.40.1, 2026-10-28, at 6f54768 - merged to main, publish pending
