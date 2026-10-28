@@ -4,6 +4,10 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-10-28
+
+A bug report with a stack trace gets the repo lines and their last commits before planning (spec `trace-autopsy`).
+
 ### Added
 - **Stack trace autopsy for bug-fix briefs** (spec `trace-autopsy`). When the request carries a stack trace,
   `/vulyk-plan` step 2 runs `scripts/trace-autopsy.sh` on the fresh brief. It reads only the quoted request, resolves
