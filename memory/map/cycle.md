@@ -1,153 +1,102 @@
 # Scout report: the cycle (build -> council -> repair state contract)
 
 ## Purpose
-Truth lives in committed files under `docs/specs/<slug>/`, written only by `scripts/cycle.sh` (3400+
-lines at 0.40.0). One verb, `advance` (ADR-013), steps the loop to the next agent boundary; the Queen (Tier 1-2
-solo, or Tier 3-4 without Workflow) or `.claude/workflows/vulyk-cycle.js` (Tier 3-4) calls it and
-dispatches the agent `next` names. Contract: ADR-001 (D2, D3 superseded) + ADR-013.
+Truth lives in committed files under `docs/specs/<slug>/`, written only by `scripts/cycle.sh`. One verb,
+`advance` (ADR-013), steps the loop to the next agent boundary; the Queen (Tier 1-2 solo, or Tier 3-4 without
+Workflow) or `.claude/workflows/vulyk-cycle.js` (Tier 3-4) calls it and dispatches the agent `next` names.
+Contract: ADR-001 (D2, D3 superseded) + ADR-013. No line numbers: `grep -n '^cmd_name()'`.
 
 ## Files, one writer each
 `brief.md ## Asks` ← `/vulyk-plan` · `plan.md **Briefed:**/**Approved:**` ← `briefed` / the owner ·
-`**Branch:**` ← `branch` · `**Council:**` line per round, `## Needs a human` ← `judge`/`escalate` ·
-`**Checked:**` ← `human-check.sh` · `council/round-N/ROUND` (`head= pack= opened= court= ceiling=
-tier= seats= since=`) ← `build_round` :2550 · `council/REOPEN`, `CEILING` ← `reopen` ·
-`council/round-N/<seat>.md` (+`.attempt-K.md`) ← `record-seat` · `<slug>-NN-repair-round-<n>.md` ←
-`repair` · `memory/stats/council.jsonl` (1 row/round) ← `judge`/`escalate` · `journal.md` ←
-`journal.sh`. Gitignored: `PAUSE`, `DRIVER` (stamp), `.vulyk/court/`, `.vulyk/reports/`.
+`**Branch:**` ← `branch` · `**Council:**`, `## Needs a human` ← `judge`/`escalate` · `**Checked:**` ←
+`human-check.sh` · `council/round-N/ROUND` ← `build_round` · `council/REOPEN`, `CEILING` ← `reopen` ·
+`council/round-N/<seat>.md` ← `record-seat` · `<slug>-NN-repair-round-<n>.md` ← `repair` · `council.jsonl` ←
+`judge`/`escalate` · `journal.md` ← `journal.sh`. Gitignored: `PAUSE`, `DRIVER`, `.vulyk/court/`, `.vulyk/reports/`.
 
 ## Verbs (exit 0 ok · 1 usage · 2 precondition · 3 paused · 4 malformed report / red verify · 5 stale · 6 escalate)
-Dispatch `case "$VERB"` `cycle.sh:3349`. Last stdout line is one JSON object (`emit` :69); mutating
-verbs on exit 0 carry the post-verb `status` (`emit_status` :86).
-- **Branch guard (ship-safety, 0.31):** `branch_guard <spec> <verb>` :205 - when plan.md has a
-  `**Branch:**` and `git rev-parse --abbrev-ref HEAD` differs, exit 2 (`on X, spec branch is Y`), never
-  switches; no `**Branch:**` yet = pass. Called by `claim` (`cmd_claim` :2956, call :2964), `close-story` (:2237), `open-round`
-  (:2660), `stamp-red` (:2150). `default_branch` :219 = origin/HEAD, else `main`, else `master`, else empty.
-- `status [--json]` `cmd_status` :559 (read-only) · `briefed` :1407 · `branch` :1458 · `escalate` :1336
-  · `judge` :1052 · `record-seat` :1795 · `manual-done` :3029.
-- `branch` also refuses (exit 2) an existing `vulyk/<slug>` that is already merged into the default
-  branch and strictly behind its tip (:1495; a branch at the default tip is fresh, reused).
-- **Red receipt (0.40.0, ADR-025):** a story with frontmatter `red: required` (planner-marked; any other
-  `red:` value = unmarked, `wave-check` `red-value`) closes only on a receipt. Since 0.40.1 the mark is read
-  by `fm_red` :2044 (frontmatter only, over `fm_raw` :2035, cut at `#`): a body line `red: required` marks
-  nothing; stamp-red (:2153), close-story gate (:2334) and `cmd_repair` (:3142) all use it. `stamp-red <story> [--stamp S]`
-  (`cmd_stamp_red` :2138; dispatch :3405; pause/driver/branch guards; commits nothing) runs the story's
-  `## Verification` once via `verify_run` and writes frontmatter `red_verified_at: <ts> <test-hash>` (after
-  `red_reason:`) plus a `## Red receipt` section (`command/exit/tests/impl/stamped` + 10 redacted tail lines;
-  a re-stamp replaces it). Exit 4 + nothing written: not `red: required`, empty `red_reason`, no sealed test,
-  nothing but tests in `## Files`, every line exits 0, 126/127 launch failure, timeout, or `red_reason` (`grep
-  -F`) absent from every failing line's output; exit 2 no sha256 tool / `redact.sh`. Sets: `red_sets` :2070 -
-  `RED_SEALED` = `sealed_tests` (lib.sh:235: literal tokens of `## Verification` that are `## Files` entries
-  or match a `## Files` glob), `RED_IMPL` = the other `## Files` paths expanded like close-story's commit;
-  `red_hash` = `set_hash` (lib.sh:261). `close-story` calls `red_gate` :2112 (call :2334) after scope-check,
-  before verification: exit 4 `no red receipt: run cycle.sh stamp-red ...` / `test changed after red receipt:
-  re-run stamp-red` (sealed hash differs) / `no implementation change since red receipt` (impl hash equals the
-  stamped `- impl:`); exit 2 without a sha256 tool. Unmarked stories skip it.
-- **prompt-check gate (0.43.0):** after `red_gate`, before verification (cycle.sh:2336-2354), when `## Files`
-  has a path under `scripts/`, `.claude/agents/`, `.claude/commands/` or `templates/` and `prompt-check.sh`
-  exists, `close-story` runs `prompt-check.sh --touched <## Files>`. Exit 0: `warn` lines to stderr; 1: exit 4
-  (emit error = first `error` line); any other (2 no python/usage) is a stderr note, not a refusal.
-- `close-story <file> [--commit] [--stamp]` :2227 - scope-check; with `--commit`, a path scope-check
-  counts out of scope (`  ! ` lines) that is still dirty and not `is_paperwork_path` → exit 4 `edited
-  outside ## Files: <paths>`. A `## Verification` segment matching a `## Commands` row marked
-  `round-only` → exit 2 `verification is round-only` (`verify_cells_check`, shared with stamp-red). Only the wave's last open story refuses; with a wave-mate still
-  open (same `wave:`, not done) it prints a note and goes on (0.28). Each `## Verification` segment must be a
-  `## Commands` cell of `constitution_file` or `none — reviewed by lead-review`; runs under `timeout
-  ${VULYK_VERIFY_TIMEOUT:-540}` when a working `timeout` exists (124 → exit 4); commits. Done + clean
-  tree → `ok:true` "already done"; self-marked done with a diff → closes it.
-- `open-round` :2651 - refuses a tree dirty outside paperwork (`dirty_outside_paperwork` :455);
-  `build_round` :2550 freezes `seats=`/`since=`, builds the court (`build_court` :2448) only when a blind seat
-  is required, carries round n-1's GREEN/N/A blind seats (`carry_seats` :2527; `review` never carried).
-- **Court setup (0.34):** `build_court` ends by calling `run_court_setup` :2497. If the hive has
-  `$ROOT/.claude/vulyk-setup` (working copy, never shipped), it runs `bash` of it with cwd = the court,
-  env `VULYK_ROOT`, `VULYK_COURT`, stdin /dev/null, under `timeout ${VULYK_SETUP_TIMEOUT:-300}` (non-numeric
-  or 0 → 300; no working `timeout` → runs uncapped with a stderr note). Log:
-  `.vulyk/reports/<slug>/round-<n>/setup.log`. Non-zero (124 = timeout) → tail 20 lines of the log to stderr,
-  court removed, empty round dir removed, `open-round` exit 2 `court setup failed (exit N)`/`timed out`.
-  No file = no-op. Runs only when a court is built (blind seat required).
-- `claim <spec> <stamp>` :2956 refuses a dirty tree (a holder's re-claim skips it); `release` :3007,
-  `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"` :2826 appends to `## Answers`,
-  raises `CEILING`, emits `next:"repair"`; `open-round` when `escalate_reruns_round` :526 (an `env`
-  escalation, or `suite-timeout` with nothing else red: the suite re-runs) or the round is stale.
-- **Full-suite line (0.36, fast-verification):** the `review` seat's line 3 is `SUITE: ok|FAIL|TIMEOUT <N>s
-  [budget <B>s]|none`. `record-seat` (:1652-1661) refuses (exit 4) a missing/malformed line when the
-  constitution has a `round-only` row whose Purpose names the full suite (:1608-1618); no such row =
-  `SUITE: none` accepted. `judge` (:1151-1172, :1230): `SUITE: FAIL` = BLOCK as `[regression]` (a PASS
-  verdict gets note `review PASS with SUITE: FAIL`); `SUITE: TIMEOUT` → ESCALATE `suite-timeout`
-  (`## Needs a human` says seconds + budget; `VULYK_SUITE_TIMEOUT` default 590); `escalate --reason`
-  accepts `suite-timeout`. `reopen` of it re-runs the round unless the row also has a RED ask/BLOCK.
-- `repair` :3081 - below. `advance [--stamp] [--claim] [--ingest]` :3257 - below.
+Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the post-verb `status`.
+- **Branch guard (0.31):** `branch_guard <spec> <verb>` - plan.md has a `**Branch:**` and HEAD differs: exit 2
+  `on X, spec branch is Y`, never switches; no `**Branch:**` yet = pass. Called by `claim`, `close-story`,
+  `open-round`, `stamp-red`. `default_branch` = origin/HEAD, else `main`, else `master`.
+- `status [--json]` (read-only) · `briefed` · `branch` · `escalate` · `judge` · `record-seat` · `manual-done`.
+  `branch` refuses (exit 2) an existing `vulyk/<slug>` already merged into the default and strictly behind it.
+- **Red receipt (ADR-025):** frontmatter `red: required` (planner-marked; other `red:` value = unmarked) closes
+  only on a receipt. `fm_red` reads the mark (frontmatter only, over `fm_raw`, cut at `#`); a body line marks
+  nothing. `stamp-red <story> [--stamp S]` (pause/driver/branch guards; commits nothing) runs `## Verification`
+  once and writes `red_verified_at: <ts> <test-hash>` plus a `## Red receipt` section (command/exit/tests/impl/
+  stamped + 10 redacted tail lines; re-stamp replaces). Exit 4, nothing written: not `red: required`, empty
+  `red_reason`, no sealed test, only tests in `## Files`, every line exits 0, 126/127, timeout, or `red_reason`
+  (`grep -F`) absent from every failing line; exit 2 no sha256 tool. `red_sets`: `RED_SEALED` = `sealed_tests`,
+  `RED_IMPL` = the other `## Files`. `close-story` calls `red_gate` after scope-check, before verification: exit 4
+  `no red receipt` / `test changed after red receipt` / `no implementation change since red receipt`.
+- **prompt-check gate (0.43.0/0.43.1):** after `red_gate`, before verification, when `## Files` has a path under
+  `scripts/`, `.claude/agents/`, `.claude/commands/` or `templates/` and `prompt-check.sh` exists, `close-story`
+  runs `prompt-check.sh --touched <## Files>`. Exit 0: `warn` lines to stderr; 1 with an `error` line: exit 4
+  (reason = first `error` line); 1 with no `prompt-check: error` line: exit 4 `prompt-check crashed: <last output
+  line>` (or `exit 1 with no output`); any other (2 no python/usage) is a stderr note, not a refusal.
+- `close-story <file> [--commit] [--stamp]` - scope-check; with `--commit`, a dirty path counted out of scope
+  and not `is_paperwork_path` → exit 4 `edited outside ## Files: <paths>`. A `## Verification` segment matching a
+  `round-only` `## Commands` row → exit 2 `verification is round-only`. Each segment must be a `## Commands` cell
+  of `constitution_file` or `none — reviewed by lead-review`; runs under `timeout ${VULYK_VERIFY_TIMEOUT:-540}`
+  (124 → exit 4); commits. Only the wave's last open story refuses; with a wave-mate open it notes and goes on.
+  Done + clean tree → `ok:true` "already done"; self-marked done with a diff → closes it.
+- `open-round` refuses a tree dirty outside paperwork; `build_round` freezes `seats=`/`since=`, builds the court
+  only for a blind seat, carries round n-1's GREEN/N/A blind seats (`review` never).
+- **Court setup (0.34):** `build_court` runs `$ROOT/.claude/vulyk-setup` if present (cwd = court, `timeout
+  ${VULYK_SETUP_TIMEOUT:-300}`); non-zero → court removed, `open-round` exit 2 `court setup failed`/`timed out`.
+- `claim` refuses a dirty tree; `release`, `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"`
+  appends to `## Answers`, raises `CEILING`, emits `next:"repair"` (or re-runs on an `env`/`suite-timeout` escalation).
+- **Full-suite line (0.36; ADR-023):** the `review` seat's line 3 is `SUITE: ok|FAIL|TIMEOUT <N>s [budget <B>s]|none`.
+  `record-seat` refuses (exit 4) a missing/malformed line when the constitution has a `round-only` row whose
+  Purpose names the full suite; no such row = `SUITE: none`. `judge`: `FAIL` = BLOCK `[regression]`; `TIMEOUT` →
+  ESCALATE `suite-timeout` (`VULYK_SUITE_TIMEOUT` default 590).
 
 ## `advance` (ADR-013 D2)
 1. `--claim` (needs `--stamp`): runs `claim`; a refusal is the stop line.
 2. `--ingest`: each missing required seat of the open, non-stale round is recorded from
-   `.vulyk/reports/<slug>/round-<n>/<seat>.attempt-<k>.md` (k=2 if attempt-1 exists); no file → empty
-   report (spends the attempt). Tier 4 `review` = `fold_reviews` :3229 over `review-top`/`review-second`
-   (BLOCK if either). Each exit 4 goes into `rejected:[{seat,attempt,error}]`.
-3. Loop ≤ 12 steps: while `next` ∈ `branch|open-round|judge|repair`, run it with `--commit` (+`--stamp`)
-   via `run_verb` :3248. Exit 6 is ok. A verb leaving `next` unchanged stops (`no progress`, exit 2).
-4. Last line `{"ok":true,"verb":"advance",..,"next","steps","rejected","status"}`; a stop is `ok:false`
-   with `failed`, no `status`. After `--ingest` a RED round reads `steps:["judge","repair"]`.
+   `.vulyk/reports/<slug>/round-<n>/<seat>.attempt-<k>.md`; no file → empty report (spends the attempt). Tier 4
+   `review` = `fold_reviews` over `review-top`/`review-second` (BLOCK if either). Exit 4s go into `rejected[]`.
+3. Loop ≤ 12 steps: while `next` ∈ `branch|open-round|judge|repair`, run it with `--commit` (+`--stamp`). Exit 6
+   is ok. A verb leaving `next` unchanged stops (`no progress`, exit 2).
+4. Last line `{"ok":true,"verb":"advance",..,"next","steps","rejected","status"}`; a stop is `ok:false` with `failed`.
 
 ## `status --json` `next`
-First match in `cmd_status`: `shipped` → `paused` → `briefed` → `branch` → `build:<wave>` →
-`close-story:<file>` → open round: stale → `open-round`, missing seat → `dispatch:<csv>`, else `judge` →
-`escalated` → `green` (GREEN, pack matches, not stale) → `repair` (RED not stale; or reopened non-`env`
-ESCALATE) → `open-round`. Keys end with `seat_attempt{} seats[]` (0.18). `green` is what
-`/vulyk-build` and `/vulyk-review` turn into the «Выпускаем?» question (0.22); `cycle.sh` is unchanged.
+First match: `shipped` → `paused` → `briefed` → `branch` → `build:<wave>` → `close-story:<file>` → open round:
+stale → `open-round`, missing seat → `dispatch:<csv>`, else `judge` → `escalated` → `green` (GREEN, pack matches,
+not stale) → `repair` (RED not stale; or reopened non-`env` ESCALATE) → `open-round`. `green` becomes
+«Выпускаем?» in `/vulyk-build` and `/vulyk-review`.
 
 ## Seats by tier and the verdict (`cmd_judge`)
-`required_seats_for_tier` :386: Tier 1-2 → `review`; 3-4 → `opus review`, plus `haiku` when
-`client_path_filled`. `round_required_seats` :401 reads `seats=` (pre-0.18 rounds: tier roster).
-`tier_ceiling` :376 is 1/2/3/3; `CEILING` wins. Verdict, first match: human REJECTED newer than the
-round → RED; required seat ABSENT with no RED/BLOCK → ESCALATE `env`; `SUITE: TIMEOUT` with nothing
-RED → ESCALATE `suite-timeout` (:1230); evidenced RED ≥ max(2, ceil(A/2))
-→ `half`; anchored review BLOCK or any RED → `no-progress` if the same ask was RED in round n-1,
-`ceiling` if `red_rounds`+1 ≥ ceiling, else RED; else GREEN. A BLOCK with no in-range `[ask N]`/
-`[regression]` is recorded PASS, note `review BLOCK unanchored`.
+`required_seats_for_tier`: Tier 1-2 → `review`; 3-4 → `opus review`, plus `haiku` when `client_path_filled`.
+`round_required_seats` reads `seats=`. `tier_ceiling` 1/2/3/3; `CEILING` wins. Verdict, first match: human REJECTED
+newer than the round → RED; required seat ABSENT with no RED/BLOCK → ESCALATE `env`; `SUITE: TIMEOUT` with nothing
+RED → ESCALATE `suite-timeout`; evidenced RED ≥ max(2, ceil(A/2)) → `half`; anchored review BLOCK or any RED →
+`no-progress` if the same ask was RED in round n-1, `ceiling` if `red_rounds`+1 ≥ ceiling, else RED; else GREEN.
+A BLOCK with no in-range `[ask N]`/`[regression]` is recorded PASS, note `review BLOCK unanchored`.
 
 ## Staleness, PAUSE, seat reports
-Stale iff `ROUND.head` != HEAD and the commits between are not `paperwork_only` (lib.sh:87; the list
-is in scripts.md). Stale with
-no seat file → re-stamp; with one → STALE row, open N+1. `PAUSE` → every mutating verb exits 3.
-Blind seat report: `COUNCIL/MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH`, one `ASK <n>:` per ask with
-`run:`+`saw:` / `url:`+`saw:` / `why:`, `UNASKED:`, `BREACH:`; malformed → exit 4, re-asked once, then
-ABSENT. Taint = a path to a story file, `plan.md`, `journal.md` or `council/` (`taint_reason` :1558).
-`lead-review`: line 1 `VERDICT: PASS|BLOCK`, then `## Critical/Major/Minor`, blocking lines tagged
-`[ask N]`/`[regression]`/`[unanchored]`. Court = `git worktree add --detach` at the pack commit,
-`docs/specs/<slug>/` reduced to `brief.md`, removed by `judge`.
+Stale iff `ROUND.head` != HEAD and the commits between are not `paperwork_only`. Stale with no seat file →
+re-stamp; with one → STALE row, open N+1. `PAUSE` → every mutating verb exits 3. Blind seat report: `COUNCIL/
+MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH`, one `ASK <n>:` per ask, `UNASKED:`, `BREACH:`; malformed → exit 4,
+re-asked once, then ABSENT. Taint = a path to a story file, `plan.md`, `journal.md` or `council/`. Court =
+`git worktree add --detach` at the pack commit, spec dir reduced to `brief.md`, removed by `judge`.
 
 ## Repair (ADR-013 D4)
-`cmd_repair` :3081 runs only when `next == repair`; idempotent. Writes `<slug>-NN-repair-round-<n>.md`:
-`status: todo`, `worker: worker-code`, **`model: opus` on purpose** (ADR-015; first
-attempts run on Sonnet, a repair follows a RED), `wave: <max+1>`; if any done story it unions is
-`red: required` (`fm_red`), the repair carries `red: required` + an empty `red_reason:` (:3184; the builder
-writes the reason anew and stamps) - unless `repair_unmarks` :2050 (call :3179; `## Findings` text is built
-before the frontmatter) says every finding line names a path of the union `## Files` and none names a
-marked story's path: then the mark is dropped. No findings, or a finding naming no path = mark kept
-(fail closed; ADR-025 D4); `## Requirements` = the row's `red` +
-`review_asks` + seat-file RED asks as `> N. text` (`ask_item` :2829); `## Findings` = RED `ASK` lines +
-anchored review lines; `## Files`/`## Verification` = union over done stories.
+`cmd_repair` runs only when `next == repair`; idempotent. Writes `<slug>-NN-repair-round-<n>.md`: `status: todo`,
+`worker: worker-code`, **`model: opus` on purpose** (ADR-015), `wave: <max+1>`. If a done story it unions is `red:
+required`, the repair carries `red: required` + empty `red_reason:` unless `repair_unmarks` says every finding
+line names a path of the union `## Files` and none names a marked story's path; no findings or a pathless finding
+= mark kept (fail closed). `## Requirements` = the row's `red` + `review_asks` + seat RED asks as `> N. text`;
+`## Findings` = RED `ASK` lines + anchored review lines; `## Files`/`## Verification` = union over done stories.
 
 ## The Workflow driver (`.claude/workflows/vulyk-cycle.js`)
 Args `{spec, stamp, top_model, second_model}` plus `worker_model`, `review_model`, `seat_model` (only off
-`sonnet-builds`). Shell only via `cycle-clerk`. `advance --claim`; `build:W` → workers in parallel, a
-story still listed is a miss, the second stops the run; `dispatch:` → seats in parallel (Tier 4 review =
-two `lead-review`), then `advance --ingest`. `release` in `finally`.
-- **Fable-limit fallback** (vulyk-cycle.js:125-143): every worker/seat call goes through `dispatch`. With a
-  `model` other than `opus` passed, a `refused(r)` result (:49; a thrown error matching `REFUSAL` anywhere, or
-  a returned string <= `REFUSAL_MAX` 600 chars matching it with no `VERDICT|COUNCIL|STATUS` line) - or an empty
-  result whose one same-model ping (`ping:<where>`) is also empty/refused (a Workflow returns the refusal as
-  null) - is rerun once with `model: 'opus'`. Not an attempt; no third call; no model passed = no fallback.
-  Entries `{agent, where, from, to}` go in `fallbacks`, spread into every return except the `BadLine` raw
-  string (:261); `/vulyk-build` journals them and records telemetry `fable_limit_fallback`.
+`sonnet-builds`). Shell only via `cycle-clerk`. `advance --claim`; `build:W` → workers in parallel, a story still
+listed is a miss, the second stops the run; `dispatch:` → seats in parallel (Tier 4 review = two `lead-review`),
+then `advance --ingest`. `release` in `finally`.
+- **Fable-limit fallback:** with a `model` other than `opus`, a `refused(r)` result (error matching `REFUSAL`, or
+  a short string matching it with no `VERDICT|COUNCIL|STATUS` line) or an empty result whose same-model ping is
+  also empty is rerun once on `opus`; not an attempt. Entries go in `fallbacks`; `/vulyk-build` journals them.
+- Tests: `cycle|council|telemetry.test.sh --part <topic>` / `--list-parts`; full set once per round (scripts.md).
 
-## Tests
-`cycle.test.sh` (7 parts), `council.test.sh` (11), `telemetry.test.sh` (17) take `--part <topic>` /
-`--list-parts` (unknown part: exit 1 + names). A story's `## Verification` names a part; the full set
-runs once per round via `tests/full-suite.sh` (scripts.md). CI runs that in one uncapped `full-suite`
-job (`.github/workflows/ci.yml:107-121`), replacing the per-suite jobs. `driver.test.sh` covers the
-profile args.
-
-Telemetry consumers (`telemetry.sh`, `scope-check.sh` ledger): see `memory/map/scripts.md`.
-
-last-verified: 2026-10-28 (prompt-check merge 44933bf, 0.43.0; line numbers after :2336 may have shifted; red-repair-mark 1135d70, 0.40.1; ADR-001, ADR-013, ADR-015, ADR-020, ADR-025)
+last-verified: 2026-10-28 (post-043-tails, 0.43.1; trimmed to the cap, line numbers dropped; ADR-001, 013, 015, 023, 025)
