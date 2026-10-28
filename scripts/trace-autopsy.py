@@ -120,7 +120,9 @@ def main():
         hit, cands = resolve(path, by_name)
         if hit is None:
             (ambiguous if cands else outside).append((path, n, cands))
-        elif 1 <= n <= MAX_LINE_NO and (hit, n) not in seen:
+        elif not 1 <= n <= MAX_LINE_NO:
+            past_end.append('%s:%d (no such line)' % (hit, n))
+        elif (hit, n) not in seen:
             seen.add((hit, n))
             resolved.append((hit, n))
     if not resolved:
@@ -141,9 +143,10 @@ def main():
             continue
         code = lines[n - 1].strip()
         block = ['%s:%d  %s' % (path, n, code[:CODE_WIDTH])]
-        _, log = git(root, 'log', '-n', '3', '-s', '--date=short', '--format=%h %ad %an - %s',
-                     '-L%d,%d:%s' % (n, n, path), 'HEAD')
-        block += ['  last touched: ' + c for c in log.splitlines() if c.strip()][:3]
+        rc, log = git(root, 'log', '-n', '3', '-s', '--date=short', '--format=%h %ad %an - %s',
+                      '-L%d,%d:%s' % (n, n, path), 'HEAD')
+        block += ['  last touched: ' + c for c in log.splitlines() if c.strip()][:3] if rc == 0 else \
+            ['  git log -L failed: exit %d' % rc]
         blocks.append(block)
 
     marks = []

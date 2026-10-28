@@ -265,6 +265,7 @@ Traceback (most recent call last):
   File "/srv/util.py", line 1, in <module>
   File "/app/src/app/core.py", line 999, in calc
   File "/app/src/app/core.py", line 2, in calc
+  File "/app/web/server.js", line 0, in f
 EOF
 bash "$TA" "$R/docs/specs/marks/brief.md" > "$T/ta-marks.out" 2>&1; RC=$?
 touch "$R/docs/specs/marks/autopsy.md"
@@ -272,6 +273,7 @@ expect_eq "trace-autopsy: marks only, still exit 0" "0" "$RC"
 expect "trace-autopsy: a frame outside the repo is marked" "outside the repo" "$R/docs/specs/marks/autopsy.md"
 expect "trace-autopsy: a suffix two files share is marked" "ambiguous" "$R/docs/specs/marks/autopsy.md"
 expect "trace-autopsy: a line past the end is marked" "past end" "$R/docs/specs/marks/autopsy.md"
+expect "trace-autopsy: line 0 is marked, not dropped" "web/server.js:0 (no such line)" "$R/docs/specs/marks/autopsy.md"
 
 brief hostile <<'EOF'
 -L1,1:lib/run.sh:2
