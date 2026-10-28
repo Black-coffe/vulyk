@@ -567,6 +567,11 @@ pc_run --touched "$CMDF"
 expect "prompt-check --touched: a finding in a touched prompt exits 1" "exit=1;" < "$T/pc-out"
 pc_run --touched scripts/cycle.sh
 expect "prompt-check --touched: a finding naming a touched script exits 1" "exit=1;" < "$T/pc-out"
+pc_run --touched "./$CMDF"
+expect "prompt-check --touched: a ./-prefixed touched prompt still owns its finding (round 1 major 1)" "exit=1;" < "$T/pc-out"
+pc_case hivedel; rm "$PCD/.claude/agents/worker-test.md"; echo 0.42.0 > "$PCD/.claude/vulyk-version"; pc_run
+expect "prompt-check: a framework agent a hive deleted exits 0 (upgrade keeps host deletions)" "exit=0;" < "$T/pc-out"
+expect "prompt-check: the hive deletion is a warn line" "prompt-check: warn scripts/telemetry.sh:1: telemetry: AGENTS names worker-test" < "$T/pc-out"
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

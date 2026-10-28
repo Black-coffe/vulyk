@@ -106,7 +106,12 @@ def main(argv):
         print(__doc__.strip())
         return 0
     if args and args[0] == "--touched":
-        touched = [a.replace("\\", "/").lstrip("./") if a.startswith("./") else a.replace("\\", "/") for a in args[1:]]
+        touched = []
+        for a in args[1:]:
+            a = a.replace("\\", "/")
+            while a.startswith("./"):  # a prefix, never lstrip: `./.claude/...` keeps its own dot
+                a = a[2:]
+            touched.append(a)
         args = []
     if args:
         print("prompt-check: usage: bash scripts/prompt-check.sh [--touched <path>...]", file=sys.stderr)
@@ -156,10 +161,12 @@ def main(argv):
                 rule = "carries" if want else "keeps the constitution and must not carry"
                 add(f, 1, "omit-claude-md", f"{name} {rule} omitClaudeMd: true (docs/architecture.md)", ["docs/architecture.md"])
 
-    # telemetry.sh AGENTS one way: every name has a file; a file outside AGENTS is an error here, a warning in a hive.
+    # telemetry.sh AGENTS against the files: a mismatch is an error here, a warning in a hive, which may add its own
+    # agents (ADR-005) and delete framework ones (an upgrade keeps host deletions).
     for name in agents:
         if name not in agent_files:
-            add(tel, 1, "telemetry", f"AGENTS names {name}, but .claude/agents/{name}.md does not exist", [f".claude/agents/{name}.md"])
+            add(tel, 1, "telemetry", f"AGENTS names {name}, but .claude/agents/{name}.md does not exist"
+                + (" (deleted by the hive)" if hive else ""), [f".claude/agents/{name}.md"], soft=hive)
     for name, f in sorted(agent_files.items()):
         if name not in agents and name not in retired:
             add(f, 1, "telemetry", f"{name} is not in scripts/telemetry.sh AGENTS" + (" (a hive's own agent)" if hive else ""), [tel], soft=hive)
