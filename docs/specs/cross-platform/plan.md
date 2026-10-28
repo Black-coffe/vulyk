@@ -132,6 +132,11 @@ Python fallback, so no timeout test skips.
 
 ## Plan deltas
 
+- 2026-10-29, story 05: the gate's tree scan found six sites stories 01, 02 and 04 missed (`tests/cycle.test.sh:802`,
+  `tests/inject.test.sh:350`, `tests/intake.test.sh:259`, `.claude/commands/vulyk-evolve.md:20,37,58`). Two NEEDS_CONTEXT
+  returns; ruled by the Queen as a plan delta, not a `lead-architect` dispatch (no design fork - the worker named the
+  fix): story 05's `## Files` gains those four files, six lines only. The gate did its job on its first run.
+
 <!--
 The lines below are the cycle's confirmation markers (docs/cycle.md); each placeholder is replaced by
 the command or script that owns it, and scripts/ship-check.sh reads them all. Approved is the owner's

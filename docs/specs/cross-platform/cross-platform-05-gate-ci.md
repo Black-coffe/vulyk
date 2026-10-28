@@ -2,13 +2,14 @@
 story: cross-platform-05
 spec: cross-platform
 status: todo
-returned:
+returned: NEEDS_CONTEXT
 tier: 3
 worker: worker-code
 wave: 3
 blocked_by: [cross-platform-02, cross-platform-03, cross-platform-04]
 red: required
-red_reason:
+red_reason: portability-check: the tree exits 0
+red_verified_at: 2026-10-28T22:10:40Z 83a704f8f43911ef798f5062e3d2e81f64db07fb8505f21520e71dd57e7fdf71
 # red_verified_at:      # written by `cycle.sh stamp-red`, never by hand
 ---
 
@@ -40,6 +41,10 @@ gate script exists (a `red_reason` such as `portability-check` - the «No such f
 - docs/defects/INDEX.md
 - tests/maintenance.test.sh
 - .github/workflows/ci.yml
+- tests/cycle.test.sh
+- tests/inject.test.sh
+- tests/intake.test.sh
+- .claude/commands/vulyk-evolve.md
 
 ## Non-goals
 - No new `## Commands` row and no `CLAUDE.md` edit: the gate is reached through the `Maintenance` row and CI.
@@ -80,5 +85,47 @@ pattern), «Tests» (`tests/maintenance.test.sh` caps); `docs/wiki/rules-tree.md
 `bash tests/maintenance.test.sh && bash scripts/defects-check.sh`
 
 ## Implementation notes
+- `tests/maintenance.test.sh`: written first and stamped red. It has the gate section (tree run, 28 hit and 9 clean cases read from a heredoc so the file passes its own tree scan, the `# portable:` count, the Python heredoc, an .md sentence, the `CLAUDE.md:76` cell, exit 2 for a missing file and for an empty repo). It now sources `lib.sh`: `vulyk_python` resolves `PYBIN` (full path, because the counting `python3` stub would otherwise exec itself), `date_shift` for `iso_ago`, `sed_inplace` at the four `pc_case` sites, an awk CRLF rewrite instead of `sed -i 's/$/\r/'`, and `${a[@]+...}` at the five array sites.
+- `scripts/portability-check.sh`: a bash wrapper around one Python pass (`vulyk_python`). It tracks quotes across lines, so `timeout`/`python`/`mapfile`/`|&`/heredoc openers count only as code, never inside a quoted message. A Python crash exits 2, not 1.
+- Decision: `stat-c` gets the same same-line `||` exemption as `date-d` (the contract names `||` only for `date-d`). Without it, `state.sh:130` and `session-start-brief.sh:11` count as hits, and both already try `date -r` first, which works on BSD.
+- Decision: in .md files a one-word inline span (`` `timeout` ``, the Bash tool parameter in 4 agent files) names something and is not a command. Only spans of two or more words and shell fences are read.
+- BRE rule: only an odd run of backslashes before `|+?` counts, so `lib.sh:161`'s `s/\\|/|/g` (a literal backslash, then a bar) is not a hit.
+- Card, 4 fixtures (each exits 1), `INDEX.md` regenerated; `defects-check.sh` GREEN (3 blocking checks).
+- `ci.yml`: `shell` runs the gate; `full-suite` and `install-smoke` use a matrix of `[ubuntu-latest, macos-latest]` with `fail-fast: false`. A macOS-only step pins `/bin/bash` through `GITHUB_PATH` and asserts 3.2, BSD sed and no `timeout`, and installs `jq` only if it is missing. install-smoke: `sed -i.bak ... && rm -f ...bak`, `md5sum` -> `cksum`.
 
 ## Findings
+- Tree run is red on 6 leftovers of stories 01-04, all in files outside this story's `## Files` (Non-goals: report, do not fix):
+  - `tests/cycle.test.sh:802` (sed-bre): the deliberate BRE alternation fed to the BSD sed stub. It needs a same-line
+    `# portable: <reason>`, but the line ends in a `\` continuation, so it has to become one line first.
+  - `tests/inject.test.sh:350` and `tests/intake.test.sh:259` (python): `if python -c 'import sys' ...` probes a bare
+    `python`; probe through `vulyk_python`/`scripts/py.sh` or mark the line `# portable:`.
+  - `.claude/commands/vulyk-evolve.md:20,37,58` (date-d): `date -u -d '-7 days'` with no fallback. Use `date_shift -7`
+    or a same-line `|| date -u -v-7d ...`.
+  Once these are fixed, `bash tests/maintenance.test.sh` passes (its other 283 checks are green) and `defects-check.sh` is GREEN.
+
+## Red receipt
+- command: bash tests/maintenance.test.sh && bash scripts/defects-check.sh
+- exit: 1
+- tests: 83a704f8f43911ef798f5062e3d2e81f64db07fb8505f21520e71dd57e7fdf71 (tests/maintenance.test.sh)
+- impl: bc37e106e66af991a94b59fc139dcded4189aa789f70d60abd65da555bbdbbf3
+- stamped: 2026-10-28T22:10:40Z
+
+```
+::error::portability-check: the bare python cell of CLAUDE.md:76 is a hit - expected ': python: ' in:
+        bash: /e/Projects/vulyk/scripts/portability-check.sh: No such file or directory
+        exit=127;
+::error::portability-check: a missing named file exits 2 - expected 'exit=2;' in:
+        bash: /e/Projects/vulyk/scripts/portability-check.sh: No such file or directory
+        exit=127;
+::error::portability-check: nothing to scan exits 2 - expected 'exit=2;' in:
+        bash: /e/Projects/vulyk/scripts/portability-check.sh: No such file or directory
+        exit=127;
+maintenance.test.sh: 285 checks, 74 failed
+```
+
+**Queen's ruling, 2026-10-29 (after two NEEDS_CONTEXT returns):** `## Files` widened by the four files that hold the six
+tree-scan hits stories 01, 02 and 04 left (`tests/cycle.test.sh:802` sed-bre - join the continuation and mark it
+`# portable:` as the deliberate BSD-stub case; `tests/inject.test.sh:350`, `tests/intake.test.sh:259` - probe through
+`vulyk_python`; `.claude/commands/vulyk-evolve.md:20,37,58` - same-line `|| date -u -v-7d ...` fallback, the idiom the
+plan keeps for prose). Fix those six lines only, nothing else in those files; then close as written. The two contract
+calls (`stat-c` same-line `||`, one-word inline span not a command) go to the reviewer as they are.
