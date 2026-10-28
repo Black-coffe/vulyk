@@ -132,7 +132,7 @@ rowval() { # rowval <constitution> - the first token of the Telemetry row's valu
 profile_rows() { awk '/VULYK:PROFILE:START/{f=1;next}/VULYK:PROFILE:END/{f=0}f' "$1" | grep '^| '; }
 treesum() { (cd "$1" && find . -type f -exec md5sum {} + | LC_ALL=C sort | md5sum); }
 same() { cmp -s "$1" "$2" && echo 1 || echo 0; }
-PRE_M='Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*'
+PRE_M='Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*'
 ICACHE="${VULYK_INSTALL_CACHE:-$T/install-cache}"
 install_cache() { # install_cache [<cache-dir> [ownset]] - <cache-dir>/tree and its install.out (default
   # $ICACHE: a plain fresh install; `ownset`: the tree is seeded with an owner's settings.json first), built

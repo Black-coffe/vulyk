@@ -247,3 +247,4 @@
 {"ts":"2026-10-28T10:32:01Z","story":"red-receipt-03-docs","declared":4,"changed":4,"out_of_scope":0}
 {"ts":"2026-10-28T10:32:43Z","story":"red-receipt-02-prompts-and-template","declared":7,"changed":7,"out_of_scope":0}
 {"ts":"2026-10-28T12:46:54Z","story":"red-repair-mark-01-findings-carry-the-mark","declared":5,"changed":5,"out_of_scope":0}
+{"ts":"2026-10-28T15:22:17Z","story":"auto-memory-subagent-start-01-story-read-cards","declared":8,"changed":8,"out_of_scope":0}
