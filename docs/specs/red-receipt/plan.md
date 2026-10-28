@@ -188,4 +188,4 @@ is missing or unparsable.
 **Branch:** vulyk/red-receipt
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** GREEN round 1, 2026-10-28, at 0353e48, pack d0e2cbf3d988
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Shipped:** 0.40.0, 2026-10-28, at e56b2d8 - merged to main, publish pending
