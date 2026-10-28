@@ -76,6 +76,8 @@ fi
 
 # memory triage: Claude Code's own auto memory index loads its first 200 lines / 25 KB into every session;
 # at 80% of either the private memory is sorted into cards / personal / delete before the tail is dropped.
+# Offered, never run as maintenance (0.41.1): the triage reads every private memory file, the owner decides.
+memline=""
 tri="$(dirname "${BASH_SOURCE[0]}")/../../scripts/memory-triage.sh"
 adir="$( [ -f "$tri" ] && cd "$ROOT" 2>/dev/null && bash "$tri" --dir 2>/dev/null)"
 idx="$adir/MEMORY.md"
@@ -87,13 +89,14 @@ if [ -n "$adir" ] && [ -f "$idx" ]; then
   [[ $ml =~ ^[0-9]+$ && $mb =~ ^[0-9]+$ ]] || ml=""
   if { [ "$lines" -ge 160 ] || [ "$bytes" -ge 20480 ]; } &&
      { [ -z "$ml" ] || [ "$lines" -ge $((ml + 20)) ] || [ "$bytes" -ge $((mb + 2048)) ]; }; then
-    due "memory triage (MEMORY.md $lines lines, $((bytes / 1024)) KB of 200 lines / 25 KB)" "vulyk-gc memory"
+    memline="[VULYK] memory triage (MEMORY.md $lines lines, $((bytes / 1024)) KB of 200 lines / 25 KB) - Claude Code's own auto memory. After the owner's current task, ask them once whether to run /vulyk-gc memory now (Skill tool; it reads every private memory file). On a no, run bash scripts/memory-triage.sh --mark, which keeps the signal quiet until the index grows."
   fi
 fi
 
 if [ -n "$items" ]; then
   echo "[VULYK] maintenance due: $items. After the owner's current task, on ${def:-the default branch} with a clean tree (memory/stats/skills.json aside: the Skill counter rewrites it), run each through the Skill tool ($skills) without asking, then tell the owner in one line what changed; otherwise leave it for a later session."
 fi
+[ -n "$memline" ] && echo "$memline"
 [ -n "$pending" ] && echo "[VULYK] evolve changeset $pending waits for the owner's review (merge = accept, delete the branch = reject): tell the owner once."
 
 # litopys, the session chronicle plugin (0.19, plan 1.7): offered once. Installed = an

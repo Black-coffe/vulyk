@@ -25,9 +25,10 @@ Outside the layers above, Claude Code keeps a private auto memory per repository
 `~/.claude/projects/<slug>/memory/` (per machine, not in git). It loads the first 200 lines or 25 KB of
 its `MEMORY.md` into every session, and on some installs into subagents too. VULYK reads it, and the
 owner decides what happens to it:
-- **The signal.** At 160 lines or 20 KB (80% of either limit) the SessionStart brief adds `memory triage
-  (MEMORY.md <n> lines, <k> KB ...)` to `maintenance due`, and the Queen runs `/vulyk-gc memory`. That
-  triage asks the owner before it writes a card or deletes a file. Project lessons become cards in
+- **The signal.** At 160 lines or 20 KB (80% of either limit) the SessionStart brief prints its own `memory
+  triage (MEMORY.md <n> lines, <k> KB ...)` line. It is not maintenance: the triage reads every private
+  memory file, so after the current task the Queen asks the owner once whether to run `/vulyk-gc memory`. A no
+  runs `memory-triage.sh --mark`. The triage itself asks again before it writes a card or deletes a file. Project lessons become cards in
   `docs/defects/`, personal ones stay, and stale ones go. The triage ends with `memory-triage.sh --mark`
   (`.claude/state/memory-triage.txt`, per machine). After that the signal stays quiet until `MEMORY.md` grows
   20 lines or 2 KB past the mark, so personal rules left over the threshold do not bring it back every session.

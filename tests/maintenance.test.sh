@@ -207,6 +207,10 @@ BRIEF_CONF="$MC" brief_of "$H" | expect_absent "159 lines and 20479 bytes: memor
 lines_of 160 10 > "$M/MEMORY.md"
 BRIEF_CONF="$MC" brief_of "$H" | expect "memory triage due at 160 lines" "memory triage (MEMORY.md 160 lines, 1 KB of 200 lines / 25 KB)"
 BRIEF_CONF="$MC" brief_of "$H" | expect "the due line names /vulyk-gc memory" "vulyk-gc memory"
+# 0.41.1: the triage reads every private memory file, so it is offered to the owner, never run as maintenance.
+BRIEF_CONF="$MC" brief_of "$H" | expect_absent "memory triage is offered on its own line, not in maintenance due" "maintenance due"
+BRIEF_CONF="$MC" brief_of "$H" | expect "the owner is asked once before the triage runs" "ask them once whether to run /vulyk-gc memory"
+BRIEF_CONF="$MC" brief_of "$H" | expect "a no leaves a mark" "On a no, run bash scripts/memory-triage.sh --mark"
 { lines_of 159 10; printf 'mmmmmmmmm'; } > "$M/MEMORY.md"   # 160 lines, the last with no newline
 BRIEF_CONF="$MC" brief_of "$H" | expect "a last line without a newline still counts" "memory triage (MEMORY.md 160 lines"
 lines_of 80 256 > "$M/MEMORY.md"                           # 80 lines, 20480 bytes
