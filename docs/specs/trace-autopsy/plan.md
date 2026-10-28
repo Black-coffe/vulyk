@@ -68,3 +68,4 @@ location counts as known and step 3 sends no scout.
 **Branch:** vulyk/trace-autopsy
 **Council:** GREEN round 1, 2026-10-28, at dba32f4, pack d12770efbfef
 **Checked:** ACCEPTED by Andrei, 2026-10-28, at c73c3fa - owner picked «Да, но сначала два замечания (Рекомендую)» after GREEN round 1; narrow fix of review minors 2-3 (c73c3fa), repro + bash tests/symbol-map.test.sh 107/0, no new round
+**Shipped:** 0.42.0, 2026-10-28, at 30cddc2 - merged to main, publish pending

@@ -33,3 +33,4 @@
 {"ts":"2026-10-28T13:01:34Z","spec":"red-repair-mark","version":"0.40.1","head":"6f54768","pack":"af520a191020","note":"merged to main, publish pending"}
 {"ts":"2026-10-28T16:17:36Z","spec":"auto-memory-subagent-start","version":"0.41.0","head":"87d8a4d","pack":"4af56f510894","note":"merged to main, publish pending"}
 {"ts":"2026-10-28T17:19:14Z","spec":"memory-triage-offer","version":"0.41.1","head":"ac3a56c","pack":"2ec64a17116f","note":"merged to main, publish pending"}
+{"ts":"2026-10-28T18:00:37Z","spec":"trace-autopsy","version":"0.42.0","head":"30cddc2","pack":"d12770efbfef","note":"merged to main, publish pending"}
