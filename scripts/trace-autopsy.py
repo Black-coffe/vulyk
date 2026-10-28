@@ -49,18 +49,22 @@ def quoted_lines(brief):
 
 
 def frames_of(lines):
-    found = []
+    """Python traceback frames innermost first (`most recent call last` is reversed), then every other frame in its
+    written order: a `path:N` noted after a traceback must not push the traceback's own frames off the shown three."""
+    found, py, other = [], [], []
     for line in lines:
-        for form in FRAME_FORMS:
+        for i, form in enumerate(FRAME_FORMS):
             m = form.search(line)
             if m:
                 found.append((m.group(1), m.group(2)))
+                (py if i == 0 else other).append(found[-1])
                 break
         else:
             found.extend(m.groups() for m in PLAIN.finditer(line))
-    if any('most recent call last' in l for l in lines):
-        found.reverse()
-    return found
+            other.extend(m.groups() for m in PLAIN.finditer(line))
+    if not any('most recent call last' in l for l in lines):
+        return found
+    return py[::-1] + other
 
 
 def resolve(raw, by_name):

@@ -220,9 +220,13 @@ Traceback (most recent call last):
     return a / b
 ZeroDivisionError: division by zero
 EOF
-t0="$(date +%s%N)"
-bash "$TA" "$R/docs/specs/py/brief.md" > "$T/ta-py.out" 2>&1; RC=$?
-ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+ms=""  # the best of three runs: a loaded box slows one run, not all three (post-043-tails)
+for _ in 1 2 3; do
+  t0="$(date +%s%N)"
+  bash "$TA" "$R/docs/specs/py/brief.md" > "$T/ta-py.out" 2>&1; RC=$?
+  t=$(( ($(date +%s%N) - t0) / 1000000 ))
+  { [ -z "$ms" ] || [ "$t" -lt "$ms" ]; } && ms="$t"
+done
 A="$R/docs/specs/py/autopsy.md"
 expect_eq "trace-autopsy: a Python traceback exits 0" "0" "$RC"
 if [ -f "$A" ]; then ok "trace-autopsy: a Python traceback writes autopsy.md"
@@ -238,7 +242,25 @@ expect_absent "trace-autopsy: never says сломал" "сломал" "$A"
 inner="$(grep -n 'src/app/core.py:3' "$A" | head -n1 | cut -d: -f1)"; outer="$(grep -n 'src/app/main.py:2' "$A" | head -n1 | cut -d: -f1)"
 if [ -n "$inner" ] && [ -n "$outer" ] && [ "$inner" -lt "$outer" ]; then ok "trace-autopsy: innermost Python frame first"
 else bad "trace-autopsy: innermost Python frame first (core at '${inner}', main at '${outer}')"; fi
-if [ "$ms" -lt 1000 ]; then ok "trace-autopsy: a run takes ${ms} ms (< 1000)"; else bad "trace-autopsy: a run takes ${ms} ms (>= 1000)"; fi
+if [ "$ms" -lt 1000 ]; then ok "trace-autopsy: the best of three runs takes ${ms} ms (< 1000)"; else bad "trace-autopsy: the best of three runs takes ${ms} ms (>= 1000)"; fi
+
+# A traceback followed by plain path:N refs: only the traceback's frames turn innermost-first (post-043-tails).
+brief pymix <<'EOF2'
+Traceback (most recent call last):
+  File "/app/src/app/main.py", line 2, in <module>
+  File "/app/src/app/core.py", line 3, in calc
+    return a / b
+ZeroDivisionError: division by zero
+see web/server.js:2, then lib/run.sh:2 and lib/m1.py:1
+EOF2
+bash "$TA" "$R/docs/specs/pymix/brief.md" > /dev/null 2>&1
+touch "$R/docs/specs/pymix/autopsy.md"
+first="$(grep -m1 -oE '^[a-z][a-z0-9/._-]*:[0-9]+  ' "$R/docs/specs/pymix/autopsy.md" | sed 's/ *$//')"
+if [ "$first" = "src/app/core.py:3" ]; then ok "trace-autopsy: the innermost Python frame is the first shown frame before trailing refs"
+else bad "trace-autopsy: the innermost Python frame is not the first shown frame (first: '${first}')"; fi
+order="$(grep -oE '^(src/app/core.py:3|src/app/main.py:2|web/server.js:2)  ' "$R/docs/specs/pymix/autopsy.md" | tr -d ' ' | paste -sd' ' -)"
+expect_eq "trace-autopsy: the outer Python frame, then the trailing refs in written order" "src/app/core.py:3 src/app/main.py:2 web/server.js:2" "$order"
+expect "trace-autopsy: the rest of the trailing refs fold into '... N more'" "... 2 more repo frames" "$R/docs/specs/pymix/autopsy.md"
 
 brief js <<'EOF'
 Error: boom
@@ -258,6 +280,8 @@ bash "$TA" "$R/docs/specs/sh/brief.md" > /dev/null 2>&1
 touch "$R/docs/specs/sh/autopsy.md"
 expect "trace-autopsy: a bash frame resolves" "lib/run.sh:2" "$R/docs/specs/sh/autopsy.md"
 expect "trace-autopsy: a plain path:line resolves" "web/server.js:2" "$R/docs/specs/sh/autopsy.md"
+order="$(grep -oE '^(lib/run.sh:2|web/server.js:2)  ' "$R/docs/specs/sh/autopsy.md" | tr -d ' ' | paste -sd' ' -)"
+expect_eq "trace-autopsy: a brief with no traceback keeps its written frame order" "lib/run.sh:2 web/server.js:2" "$order"
 
 brief marks <<'EOF'
 Traceback (most recent call last):

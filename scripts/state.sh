@@ -45,9 +45,15 @@ j() {
   printf '%s' "${v:0:120}"
 }
 
-field() { # field <file> <name>
+field() { # field <file> <name> - from the leading --- frontmatter block only: a report quoting the story
+  # template in its body is not a story. Exit 1 when the block has no such key.
   awk -F': *' -v k="$2" '
-    $1 == k { v = $2; sub(/[[:space:]]*#.*$/, "", v); gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); print v; exit }
+    BEGIN { r = 1 }
+    { sub(/\r$/, "") }
+    NR == 1 { if ($0 !~ /^---[[:space:]]*$/) exit; next }
+    /^---[[:space:]]*$/ { exit }
+    $1 == k { v = $2; sub(/[[:space:]]*#.*$/, "", v); gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); print v; r = 0; exit }
+    END { exit r }
   ' "$1"
 }
 
@@ -75,7 +81,7 @@ for dir in $( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirn
   stories=""
   for f in "$dir"/*.md; do
     [ -f "$f" ] || continue
-    grep -q '^story:' "$f" 2>/dev/null || continue
+    field "$f" story >/dev/null 2>&1 || continue
     stories="$stories $f"
   done
   if [ -z "$stories" ]; then

@@ -20,7 +20,7 @@ In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a su
 
 Every subagent above except `queen-planner`, the workers (`worker-code`, `worker-test`), `lead-review` and `lead-architect`
 carries `omitClaudeMd: true`: it takes everything from its dispatch prompt and its own body, so
-it does not load the constitution. Those four keep it because they need the host's conventions.
+it does not load the constitution. Those five keep it because they need the host's conventions.
 
 ## Data flow of one Tier 3 feature
 The shape is the six-stage cycle in [cycle.md](cycle.md) - spec, plan, code, tests+human, ship -

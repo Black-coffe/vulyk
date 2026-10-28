@@ -572,6 +572,26 @@ expect "prompt-check --touched: a ./-prefixed touched prompt still owns its find
 pc_case hivedel; rm "$PCD/.claude/agents/worker-test.md"; echo 0.42.0 > "$PCD/.claude/vulyk-version"; pc_run
 expect "prompt-check: a framework agent a hive deleted exits 0 (upgrade keeps host deletions)" "exit=0;" < "$T/pc-out"
 expect "prompt-check: the hive deletion is a warn line" "prompt-check: warn scripts/telemetry.sh:1: telemetry: AGENTS names worker-test" < "$T/pc-out"
+pc_case agentspan; printf '\nDispatch it with `Agent drone-ghost` here.\n' >> "$PCD/$CMDF"; pc_run
+pc_bites "an agent name inside a longer span (post-043-tails)" agent
+pc_case noverbs; sed -i 's/^case "\$VERB" in/case "$CMD" in/' "$PCD/scripts/cycle.sh"; pc_run
+expect "prompt-check: a cycle.sh without a verb dispatcher exits 0" "exit=0;" < "$T/pc-out"
+grep -c '^prompt-check: warn scripts/cycle.sh:1: verb: ' "$T/pc-out" > "$T/pc-nv" 2>&1
+expect "prompt-check: a cycle.sh without a verb dispatcher is one warn line, not a silent skip" "1" < "$T/pc-nv"
+
+echo "--- handoff.sh: a python3 that is a stub (the Windows Store alias, exit 49) is passed over (post-043-tails)"
+FB="$T/fakepy"; mkdir -p "$FB"
+printf '#!/bin/sh\necho "Python was not found; run without arguments to install from the Microsoft Store" >&2\nexit 49\n' > "$FB/python3"
+chmod +x "$FB/python3"
+( cd "$T" && PATH="$FB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status > /dev/null 2>&1; echo "exit=$?;" ) > "$T/hs-stub"
+expect "handoff.sh status with a stub python3 first on PATH reaches a working Python or exits 0" "exit=0;" < "$T/hs-stub"
+# A real python3 starts once per call: telemetry.sh's scan bounds its python starts through this hook (round 1 major 1).
+CB="$T/countpy"; mkdir -p "$CB"; : > "$T/hs-calls"
+printf '#!/usr/bin/env bash\nprintf "py\\n" >> "%s"\nexec "%s" "$@"\n' "$T/hs-calls" "$PYBIN" > "$CB/python3"
+chmod +x "$CB/python3"
+( cd "$T" && PATH="$CB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status > /dev/null 2>&1 )
+echo "starts=$(grep -c . "$T/hs-calls");" > "$T/hs-count"
+expect "handoff.sh starts a working python3 once per call, never a probe beside it" "starts=1;" < "$T/hs-count"
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

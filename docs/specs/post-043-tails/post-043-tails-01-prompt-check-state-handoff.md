@@ -1,14 +1,15 @@
 ---
 story: post-043-tails-01
 spec: post-043-tails
-status: todo            # todo | done | blocked - close-story writes done, a driver writes blocked
-returned:              # written by whoever builds the story, as its last edit: DONE | NEEDS_CONTEXT | WALL
+status: done            # todo | done | blocked - close-story writes done, a driver writes blocked
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
-red_reason:           # the expected failure text, written by the builder before `stamp-red`
+red_reason: state.sh listed a story for a study spec whose report quotes story: lines
+red_verified_at: 2026-10-28T20:01:57Z a69d2d16b2e66aca3118d3df2f3e7f903efe580f5fc092c453380efa3e991867
 # red_verified_at:      # written by `cycle.sh stamp-red`, never by hand
 ---
 
@@ -59,5 +60,44 @@ tests fail in the same `stamp-red` run; for each, copy its failure line from tha
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
+All five tests were written before any code. The receipt is on `state.sh` (`bash tests/cycle.test.sh`). The four other
+failure lines come from a run of the same tree just before `stamp-red`. `stamp-red` keeps only the tail of the line it
+seals, so these were taken with `bash tests/maintenance.test.sh` and `bash tests/cycle.test.sh --part close`:
+- agent in a long span: `::error::prompt-check: an agent name inside a longer span (post-043-tails) exits 1 - expected 'exit=1;' in:`
+- no dispatcher: `::error::prompt-check: a cycle.sh without a verb dispatcher is one warn line, not a silent skip - expected '1' in:` (count `0`)
+- handoff probe: `::error::handoff.sh status with a stub python3 first on PATH reaches a working Python or exits 0 - expected 'exit=0;' in:` (`exit=49;`)
+- linter crash: `::error::prompt-check crash: exit=4 out=...` (exit 4 already, but the JSON line carried no `error` key, so the reason was empty)
+
+Code:
+- `prompt-check.py` checks each whitespace token of a span, with surrounding punctuation stripped, against `AGENT_SHAPE`.
+  The repo still prints `prompt-check: ok (33 files)`.
+- A `cycle.sh` that exists but has no `case "$VERB" in` gives a soft `verb` finding on `scripts/cycle.sh:1`.
+- In `close-story`, rc 1 with no `prompt-check: error` line becomes `prompt-check crashed: <last non-blank output line>`,
+  or `exit 1 with no output` when there is none. The story is still refused with exit 4.
+- `state.sh` `field()` reads only the leading `---` block and exits 1 when the key is absent. A file is a story only
+  when its frontmatter has `story:`. Checked against the old `state.sh` over the whole repo: one spec changed.
+  `architecture-passport` (its `report.md` quotes the story template) used to show as `01-spec` with one fake story;
+  it now shows as `study`.
+- `handoff.sh` runs `"$PY" -c ''` (stdin from `/dev/null`) before `exec`. A stub moves on to the next name.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/cycle.test.sh
+- exit: 1
+- tests: a69d2d16b2e66aca3118d3df2f3e7f903efe580f5fc092c453380efa3e991867 (tests/cycle.test.sh, tests/maintenance.test.sh)
+- impl: 9e0f4217537e15bf582513736bbe309759ad44e0b7966f473a71420e8838ecf8
+- stamped: 2026-10-28T20:01:57Z
+
+```
+red-receipt: an unmarked story built from templates/story.md closes as before
+  ok    the template story closes and commits, no receipt asked
+red-receipt: close-story on a marked story - the sealed test edited, no implementation change, then a real change closes
+  ok    red-12 stamped
+  ok    a sealed test edited after the stamp: exit 4
+  ok    the implementation unchanged since the stamp: exit 4
+  ok    receipt + changed implementation + green: closed, the receipt in the commit
+red-receipt: close-story on a marked story that was never stamped
+  ok    the unstamped story: exit 4, nothing committed
+  ok    the refusal names stamp-red and the story
+```

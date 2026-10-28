@@ -4,6 +4,25 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.43.1] - 2026-10-28
+
+Review tails of 0.42.0 and 0.43.0, and the paperwork that made `/vulyk-status` show finished work as open (spec `post-043-tails`).
+
+### Fixed
+- **prompt-check** catches an agent name anywhere in a backticked span (`` `Agent drone-x` ``). A `cycle.sh` with no
+  `case "$VERB" in` dispatcher now gives a warning instead of silently skipping the verb check. In `close-story`, a
+  linter crash (exit 1 with no `prompt-check: error` line) refuses the story with `prompt-check crashed: <last line>`
+  instead of an empty reason.
+- **`state.sh`** reads `story:`, `status:`, `wave:` and `tier:` from the leading frontmatter block only. A study report
+  that quotes the story template no longer shows up as an open story; `architecture-passport` now shows as `study`.
+- **`handoff.sh`** passes over a `python3` that is the Windows Store stub (exit 49) or fails to launch, and still
+  starts a working Python only once per call. The telemetry scan counts these starts.
+- **trace-autopsy** reverses only the Python traceback's own frames. `path:N` refs written after a traceback keep their
+  order behind the traceback and no longer push its innermost frame out of the three shown. The speed check takes the
+  best of three runs under the same 1000 ms.
+- Paperwork: `docs/architecture.md` says "Those five". `upgrade-keeps-host-edits` is recorded as superseded by 0.29.0
+  (`5239eb0`). `self-learning` carries its 0.19.0 `**Shipped:**` line.
+
 ## [0.43.0] - 2026-10-28
 
 Agent, command and template prose is checked against the scripts and agents it names, with no model (spec `prompt-check`).
