@@ -99,7 +99,7 @@ Never commit `__pycache__/`.
 ## Compact instructions
 
 Keep: the deliverable, tier and goal; the spec slug and each story's `status:`; decisions with reasons and rejected options;
-walls hit; open questions to the owner. Drop file contents, diffs, command output and scout reports: they are on disk.
+walls hit; open questions to the owner. Drop file contents, diffs, command output and scout reports: on disk.
 
 ## Where things live
 

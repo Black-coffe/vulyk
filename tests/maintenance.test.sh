@@ -85,6 +85,12 @@ echo "--- budget: this tree"
 if why="$(within_budget "$SRC/CLAUDE.md" "$CONSTITUTION_MAX_BYTES" "$CONSTITUTION_MAX_LINES")"; then
   ok "CLAUDE.md within $CONSTITUTION_MAX_BYTES B / $CONSTITUTION_MAX_LINES lines ($(size_of "$SRC/CLAUDE.md") B, $(lines_of "$SRC/CLAUDE.md") lines)"
 else bad "CLAUDE.md over budget: $why"; fi
+# tests/model-profile.test.sh holds the constitution at its baa5219 size too: the tighter of the two caps binds
+if git -C "$SRC" show baa5219:CLAUDE.md > "$T/claude.baa5219" 2>/dev/null; then
+  [ "$(size_of "$SRC/CLAUDE.md")" -le "$(size_of "$T/claude.baa5219")" ] \
+    && ok "CLAUDE.md no bigger than at baa5219 ($(size_of "$SRC/CLAUDE.md") <= $(size_of "$T/claude.baa5219") B)" \
+    || bad "CLAUDE.md grew past its baa5219 size"
+else ok "the baa5219 size comparison skipped: baa5219 not in this clone"; fi
 if shipped_render "$SRC/CLAUDE.md" "$T/shipped.md" 2>"$T/render.err"; then
   if why="$(within_budget "$T/shipped.md" "$CONSTITUTION_MAX_BYTES" "$CONSTITUTION_MAX_LINES")"; then
     ok "shipped constitution within budget ($(size_of "$T/shipped.md") B, $(lines_of "$T/shipped.md") lines)"
