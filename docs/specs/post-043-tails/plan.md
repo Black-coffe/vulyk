@@ -93,5 +93,5 @@ is missing or unparsable.
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
 **Branch:** vulyk/post-043-tails
 **Council:** RED round 1, 2026-10-28, at efaf1af, pack b83a52b31a38
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 **Checked:** ACCEPTED by Andrei, 2026-10-28, at b188b8a - narrow repair of round-1 major 1 (handoff.sh single python start, b188b8a): reviewer repro telemetry --part scan 164/0, maintenance/cycle/symbol-map green; owner chose ACCEPTED without round 2
+**Shipped:** 0.43.1, 2026-10-28, at 3e3ac1d - merged to main (a5d8e67), publish pending; human-check ACCEPTED after a narrow round-1 repair, no round 2
