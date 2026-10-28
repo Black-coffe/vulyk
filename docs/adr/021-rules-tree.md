@@ -137,9 +137,10 @@ month = new quote lines on existing «Нельзя» / «Как надо» text 
 if any «Можно» card reaches 3 quote lines (the agent still re-asks the allowed), or if the overflow line «ещё N
 карточек» appears in more than one action in five (the 12-line budget starves delivery).
 
-## Amendment 2026-10-28: story-read delivery and native auto memory (status: proposed)
+## Amendment 2026-10-28: story-read delivery and native auto memory (status: accepted)
 
-- Status: proposed (harvested from spec `auto-memory-subagent-start`, release 0.41.0; only the owner writes accepted)
+- Status: accepted (2026-10-28, owner: Andrei - chose the Queen's option «Принять как есть (Рекомендую)»; harvested
+  from spec `auto-memory-subagent-start`, release 0.41.0, D15 revised in 0.41.1)
 - Evidence: `docs/specs/auto-memory-subagent-start/brief.md` (Recon facts, Answers 1-3),
   `docs/specs/auto-memory-subagent-start/plan.md` (Goal, Assumptions, Plan deltas).
 
