@@ -34,10 +34,10 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   [--spec S] [--since D] [--json]` (dedupes by `message.id`), `evolve-ledger.py <root> <verb>` (owns
   `memory/stats/evolve.jsonl`; `resolve`: tip in default branch = accepted, unmerged branch gone = rejected).
 - `.claude/hooks/session-start-brief.sh` - map line; `[VULYK] model profile not chosen`; bootstrap offer
-  while the Profile holds `<fill in`; `maintenance due: ...` for gc, evolve, map (`memory/map/.stale`) or
-  `vulyk-gc memory` (0.41.0): Claude Code's auto-memory MEMORY.md (path from `memory-triage.sh --dir`) at >= 160
-  lines or >= 20480 bytes, quiet until +20 lines / +2048 bytes past `.claude/state/memory-triage.txt`
-  (session-start-brief.sh:77-92). grep/awk only.
+  while the Profile holds `<fill in`; `maintenance due: ...` for gc, evolve, map (`memory/map/.stale`); its own
+  `[VULYK] memory triage (...)` ask-once line, never in `maintenance due` (0.41.1): Claude Code's auto-memory
+  MEMORY.md (path from `memory-triage.sh --dir`) at >= 160 lines or >= 20480 bytes, quiet until +20 lines /
+  +2048 bytes past `.claude/state/memory-triage.txt`; a no runs `--mark` (session-start-brief.sh:77-101). grep/awk only.
 - `vulyk-update.sh` (-> `install.sh --upgrade`); `release-check.sh`; `state.sh`; `git-hooks/post-merge`.
 - `model-profile.sh` (ADR-020) - `opus-builds|sonnet-builds|economy` in `${CLAUDE_CONFIG_DIR:-~/.claude}/
   vulyk-model-profile`; only `--set` writes; unknown = `sonnet-builds`. `top-model.sh`: `VULYK_TOP_MODEL`,
