@@ -69,6 +69,12 @@ whenever a story touches scripts or prompts; in a hive an owner-added agent is a
 *(empty)*
 
 ## Plan deltas
+- 2026-10-28, repair round 1 (`prompt-check-03`). Trigger: a side-agent note relayed during round 1 (model text, not an
+  owner quote): a hive that deleted a framework agent on purpose (an upgrade keeps host deletions) would turn a full run
+  red. Decision (the Queen's): in a hive an AGENTS name without a file is a `warn`, as an extra hive agent already was;
+  in the VULYK repo both stay errors. Rejected: keep it an error everywhere (fights the owner's keep-host-deletions rule).
+  Round 1 minors (an agent name inside a longer span, a silent skip when `cycle.sh` has no dispatcher, a traceback
+  reported as a finding with an empty error, «Those four» in architecture.md) are left for the next circle.
 
 **Approved:** Andrei, 2026-10-28 («/vulyk-build prompt-check»)
 **Briefed:** <written by scripts/cycle.sh briefed>
