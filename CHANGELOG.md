@@ -4,14 +4,18 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-10-28
+
+Agent, command and template prose is checked against the scripts and agents it names, with no model (spec `prompt-check`).
+
 ### Added
 - **Prompt check** (spec `prompt-check`). `scripts/prompt-check.sh` reads every `.claude/agents/*.md`, `.claude/commands/*.md`
   and `templates/*.md` with no model and fails on drift between that prose and the code: an agent frontmatter without a
   matching `name`, a `model` alias, a positive `maxTurns` or `tools`; an `omitClaudeMd` that is not `true`/`false` or
   disagrees with `docs/architecture.md`; a backticked `scripts/` path, `cycle.sh` verb or `--flag` the named script does
   not define on a non-comment line (a wrapper's same-stem `.py` counts); an agent name without a file; a
-  `scripts/telemetry.sh` AGENTS name without a file. In a hive (`.claude/vulyk-version`) an agent outside AGENTS is a
-  warning. `close-story` runs it on a story touching `scripts/` or prompts and refuses (exit 4) only on a finding in the
+  `scripts/telemetry.sh` AGENTS name without a file. In a hive (`.claude/vulyk-version`) an agent outside AGENTS, or an
+  AGENTS name whose file the hive deleted, is a warning. `close-story` runs it on a story touching `scripts/` or prompts and refuses (exit 4) only on a finding in the
   story's own `## Files`; CI's shell job runs it over the whole tree. Tests in `tests/maintenance.test.sh` and
   `tests/cycle.test.sh --part close`.
 
