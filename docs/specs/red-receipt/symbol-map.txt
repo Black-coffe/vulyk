@@ -1,0 +1,26 @@
+### scripts/cycle.sh
+## scripts/cycle.sh
+tests:
+  exact    tests/council.test.sh
+  textual  9 not shown
+importers:
+  textual  15 not shown
+path mentions:
+  textual  193 not shown
+### scripts/wave-check.sh
+## scripts/wave-check.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  3 not shown
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  27 not shown
+### templates/story.md
+## templates/story.md
+  ! imports not parsed for .md: search callers yourself
+tests:
+  textual  8 not shown
+path mentions:
+  textual  28 not shown
