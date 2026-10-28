@@ -103,16 +103,43 @@ code "a 3 s job under budget 0 -> exit 0" 0 "$RC"
 expect "ok line" "ok "
 expect "budget 0 in the summary" "budget 0s"
 
-echo "== no working timeout binary"
-mkdir -p "$T/fakebin"; printf '#!/bin/sh\nexit 1\n' > "$T/fakebin/timeout"; chmod +x "$T/fakebin/timeout"
-OUT="$(PATH="$T/fakebin:$PATH" VULYK_SUITE_TIMEOUT=1 VULYK_SUITES="bash $S/slow.sh
+echo "== dead timeout and gtimeout stubs, Python present: the budget still caps"
+mkdir -p "$T/deadbin"
+for b in timeout gtimeout; do printf '#!/bin/sh\nexit 1\n' > "$T/deadbin/$b"; chmod +x "$T/deadbin/$b"; done
+OUT="$(PATH="$T/deadbin:$PATH" VULYK_SUITE_TIMEOUT=1 VULYK_SUITES="bash $S/slow.sh
 bash $S/mark.sh done" bash "$RUN" --jobs 2 2>&1)"; RC=$?
-code "over-budget job -> exit 124" 124 "$RC"
-printf '%s\n' "$OUT" | grep -q "^TIMEOUT [3-9]s bash $S/slow.sh\$" && echo "  ok    reported TIMEOUT by its measured time, ran to the end" \
+code "over-budget job with dead stubs -> exit 124" 124 "$RC"
+printf '%s\n' "$OUT" | grep -q "^TIMEOUT [0-2]s bash $S/slow.sh\$" && echo "  ok    the slow job is killed at the budget" \
+  || { echo "::error::slow job not capped at the budget"; printf '%s\n' "$OUT"; fail=1; }
+line "a job inside the budget is ok" ok "bash $S/mark.sh done"
+reject "no uncapped warning while python caps" "no working timeout"
+LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+
+echo "== dead stubs and no Python on PATH: the run is uncapped and says so"
+nopy_path() { # the PATH minus every directory holding a python3, python or py (with or without .exe)
+  local d out=""
+  while IFS= read -r d; do
+    [ -e "$d/python3" ] || [ -e "$d/python" ] || [ -e "$d/py" ] || [ -e "$d/python3.exe" ] || [ -e "$d/python.exe" ] || [ -e "$d/py.exe" ] || out="$out:$d"
+  done < <(printf '%s\n' "$PATH" | tr ':' '\n')
+  printf '%s' "${out#:}"
+}
+NOPY="$(nopy_path)"
+[ -z "$(PATH="$NOPY" "$BASH" -c 'for p in python3 python py; do command -v "$p"; done' 2>/dev/null)" ] \
+  && echo "  ok    the test PATH holds no python" || { echo "::error::the test PATH still finds a python"; fail=1; }
+OUT="$(PATH="$T/deadbin:$NOPY" VULYK_PY= VULYK_SUITE_TIMEOUT=1 VULYK_SUITES="bash $S/slow.sh
+bash $S/mark.sh done" "$BASH" "$RUN" --jobs 2 2>&1)"; RC=$?
+code "uncapped run over the budget -> exit 124 by measured time" 124 "$RC"
+expect "warns that it runs uncapped" "no working timeout"
+printf '%s\n' "$OUT" | grep -q "^TIMEOUT [3-9]s bash $S/slow.sh\$" && echo "  ok    the slow job ran to the end, reported by its time" \
   || { echo "::error::slow job not TIMEOUT by measured time"; printf '%s\n' "$OUT"; fail=1; }
 line "a job inside the budget is ok" ok "bash $S/mark.sh done"
-expect "says it runs uncapped" "no working timeout"
 LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+
+echo "== only latency suites: the parallel list is empty, the run still works"
+mkdir -p "$T/only"; printf 'echo fine\n' > "$T/only/inject.test.sh"
+run 540 "bash $T/only/inject.test.sh"
+code "a latency-only list -> exit 0" 0 "$RC"
+line "the latency suite ran" ok "bash $T/only/inject.test.sh"
 
 echo "== --list"
 run 540 "bash $S/mark.sh listed" --list

@@ -33,11 +33,13 @@ while [ $# -gt 0 ]; do
 done
 part() { [ -z "$PART" ] || [ "$PART" = "$1" ]; } # `if part <name>; then ... fi` wraps each part
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
+. "$SRC/scripts/lib.sh"   # vulyk_python, run_capped
 HOOK="$SRC/.claude/hooks/defect-intake.sh"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 fail=0
-PYBIN="$(command -v python3 || command -v python)" || { echo "intake.test.sh: needs python3 or python"; exit 1; }
+vulyk_python || { echo "intake.test.sh: needs python3 or python"; exit 1; }
+PYBIN="$VULYK_PY"
 LEDGER="$T/checks"; FAILS="$T/fails"; : > "$LEDGER"; : > "$FAILS"
 ok()  { printf 'x\n' >> "$LEDGER"; echo "  ok    $1"; }
 bad() { printf 'x\n' >> "$LEDGER"; printf 'x\n' >> "$FAILS"; echo "::error::$1"; }
@@ -254,7 +256,7 @@ echo "--- python3 stub"
 mkdir -p "$T/stubbin"; printf '#!/bin/sh
 exit 9009
 ' > "$T/stubbin/python3"; chmod +x "$T/stubbin/python3"
-if command -v python >/dev/null 2>&1; then
+if python -c 'import sys' </dev/null >/dev/null 2>&1; then
   o="$(printf '%s' '{"prompt":"опять обрезал голос","session_id":"stub"}' | PATH="$T/stubbin:$PATH" CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK")"
   if printf '%s' "$o" | grep -q additionalContext; then ok "a python3 stub exiting 9009 falls through to python"
   else bad "a python3 stub silenced the hook"; fi
@@ -330,7 +332,7 @@ fi # part latency
 if part functional; then
 # --- --lexicon: the same word list as portable ERE, for litopys corrections (evolve-corrections-count)
 echo "--- --lexicon exports the lexicon as ERE lines"
-timeout 10 bash "$HOOK" --lexicon > "$T/lex.txt" < <(sleep 30)   # an open stdin that never ends: reading it would time out
+run_capped 10 bash "$HOOK" --lexicon > "$T/lex.txt" < <(sleep 30)   # an open stdin that never ends: reading it would time out
 [ $? -eq 0 ] && ok "--lexicon exits 0 without reading stdin" || bad "--lexicon read stdin or failed"
 LX=""; for l in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do locale -a 2>/dev/null | grep -qx "$l" && { LX="$l"; break; }; done
 lex() { printf '%s\n' "$1" | LC_ALL="${LX:-C.UTF-8}" grep -Eiq -f "$T/lex.txt"; }

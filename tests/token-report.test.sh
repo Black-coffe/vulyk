@@ -11,6 +11,7 @@
 # ledger with a repeated round. Every expected number below is worked out by hand in the comments.
 set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
+. "$SRC/scripts/lib.sh"   # vulyk_python
 FIX="$SRC/tests/fixtures/token-report"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
@@ -34,7 +35,8 @@ expect_eq() { # expect_eq <label> <expected> <actual>
   if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 - expected '$2', got '$3'"; fi
 }
 
-PY="$(command -v python3 || command -v python || true)"
+vulyk_python || true
+PY="$VULYK_PY"
 if [ -z "$PY" ]; then echo "::error::no python on PATH"; exit 1; fi
 native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 # jget <json-file> <python expression over d (the report) and S (specs by slug)>

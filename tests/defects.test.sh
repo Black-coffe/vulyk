@@ -6,6 +6,7 @@
 set -u
 
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
+. "$SRC/scripts/lib.sh"   # vulyk_python, sed_inplace
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 fail=0
 ok() { if [ "$2" -eq 0 ]; then echo "  ok    $1"; else echo "::error::$1"; fail=1; fi; }
@@ -38,7 +39,8 @@ card() { # card <id> <status> <check> <fixtures> <quote lines...>
 run() { out="$(bash scripts/defects-check.sh "$@" 2>&1)"; rc=$?; last="$(printf '%s\n' "$out" | tail -1)"; }
 has() { printf '%s\n' "$out" | grep -q -- "$1"; }
 FX='[docs/defects/fixtures/orig.txt, docs/defects/fixtures/near.txt]'
-PYBIN="$(command -v python3 || command -v python)" || { echo "defects.test.sh: needs python3 or python"; exit 1; }
+vulyk_python || { echo "defects.test.sh: needs python3 or python"; exit 1; }
+PYBIN="$VULYK_PY"
 dump() { "$PYBIN" .claude/hooks/defects_lib.py docs/defects 2>&1; }
 
 echo "--- no library, empty library"
@@ -146,14 +148,15 @@ echo "--- card parsing"
 mkrepo "$TMP/parse"; cm 2026-01-01 docs/defects/README.md
 card crlf block 'bash check.sh <arg>' "$FX" 2026-01-05
 card crlftext text '' '' 2026-01-05 2026-01-06
-sed -i 's/$/\r/' docs/defects/crlf.md docs/defects/crlftext.md
+sed_inplace 's/$/\r/' docs/defects/crlf.md
+sed_inplace 's/$/\r/' docs/defects/crlftext.md
 run
 ok "CRLF card: frontmatter and fixtures parsed (effective block, both fixtures fail)" \
   "$([ "$(printf '%s\n' "$out" | grep -c '^ok    crlf: fixture')" = 2 ]; echo $?)"
 ok "CRLF card: quote lines counted (2 uncommitted -> DEBT)" "$(has '^DEBT  crlftext: 2 quotes'; echo $?)"
 rm -f docs/defects/crlf*.md
 card ru text '' '' 2026-01-05 2026-01-06
-sed -i 's/^## Owner quotes$/## Цитаты владельца/; s/^## Never$/## Нельзя/' docs/defects/ru.md
+sed_inplace 's/^## Owner quotes$/## Цитаты владельца/; s/^## Never$/## Нельзя/' docs/defects/ru.md
 run
 ok "Russian quotes heading accepted" "$(grep -q '^## Цитаты владельца' docs/defects/ru.md && has '^DEBT  ru: 2 quotes'; echo $?)"
 card elsewhere text '' '' 2026-01-05
@@ -185,21 +188,21 @@ run bad.txt; ok "its check runs in gate mode and goes red on a bad argument" "$(
 
 echo "--- undeliverable text cards (C5)"
 mkrepo "$TMP/undel"; cm 2026-01-01 docs/defects/README.md
-card u text '' '' 2026-01-05; sed -i '/^paths:/d' docs/defects/u.md
+card u text '' '' 2026-01-05; sed_inplace '/^paths:/d' docs/defects/u.md
 run; ok "a new text card with no paths: -> UNDELIVERABLE, RED" \
   "$([ "$rc" = 1 ] && has '^UNDELIVERABLE  u: text card with no paths:' && [ "$last" = 'RED: 1 undeliverable' ]; echo $?)"
-sed -i 's/^id: u$/id: u\npaths: []/' docs/defects/u.md
+sed_inplace 's/^id: u$/id: u\npaths: []/' docs/defects/u.md
 run; ok "neighbour: paths: [] -> UNDELIVERABLE" "$([ "$rc" = 1 ] && has '^UNDELIVERABLE  u:'; echo $?)"
-sed -i 's/^paths: \[\]$/paths:/' docs/defects/u.md
+sed_inplace 's/^paths: \[\]$/paths:/' docs/defects/u.md
 run; ok "neighbour: a blank paths: -> UNDELIVERABLE" "$([ "$rc" = 1 ] && has '^UNDELIVERABLE  u:'; echo $?)"
-sed -i 's/^paths:$/paths: ["cmd:edit_build\\\\.py"]/' docs/defects/u.md
+sed_inplace 's/^paths:$/paths: ["cmd:edit_build\\\\.py"]/' docs/defects/u.md
 run; ok "a cmd:-only paths: is deliverable -> green" "$([ "$rc" = 0 ] && ! has 'UNDELIVERABLE'; echo $?)"
-sed -i '/^paths:/d; s/^id: u$/id: u\narea: edit/' docs/defects/u.md
+sed_inplace '/^paths:/d; s/^id: u$/id: u\narea: edit/' docs/defects/u.md
 run; ok "an area:-only card names area: as a label" "$(has '^UNDELIVERABLE  u: .*(area: is a label, not a glob)'; echo $?)"
-card u block 'bash check.sh <arg>' "$FX" 2026-01-05; sed -i '/^paths:/d' docs/defects/u.md
+card u block 'bash check.sh <arg>' "$FX" 2026-01-05; sed_inplace '/^paths:/d' docs/defects/u.md
 run; ok "block with a check: is delivered by its check -> exempt" "$([ "$rc" = 0 ] && ! has 'undeliverable'; echo $?)"
 mkrepo "$TMP/undel-old"
-card u text '' '' 2026-01-05; sed -i '/^paths:/d' docs/defects/u.md; cm 2026-01-01 docs/defects/u.md
+card u text '' '' 2026-01-05; sed_inplace '/^paths:/d' docs/defects/u.md; cm 2026-01-01 docs/defects/u.md
 cm 2026-01-02 docs/defects/README.md
 run; ok "a card older than the library -> old undeliverable, green" \
   "$([ "$rc" = 0 ] && has '^old undeliverable  u:' && [ "$last" = 'GREEN: 0 blocking checks' ]; echo $?)"
@@ -207,19 +210,20 @@ run; ok "a card older than the library -> old undeliverable, green" \
 echo "--- key overlap (C4)"
 mkrepo "$TMP/overlap"; cm 2026-01-01 docs/defects/README.md
 card breath text '' '' 2026-01-05; card speech text '' '' 2026-01-05
-sed -i 's/^keys: .*/keys: [не дышит, вдох]/' docs/defects/breath.md
-sed -i 's/^keys: .*/keys: ["Не  дышит", обрыв]/' docs/defects/speech.md
+sed_inplace 's/^keys: .*/keys: [не дышит, вдох]/' docs/defects/breath.md
+sed_inplace 's/^keys: .*/keys: ["Не  дышит", обрыв]/' docs/defects/speech.md
 cm 2026-01-05 docs/defects/breath.md docs/defects/speech.md
 run; ok "one key on two cards (case and spacing differ), newer than the library -> OVERLAP, RED" \
   "$([ "$rc" = 1 ] && has '^OVERLAP  breath, speech: share key "не дышит"' && [ "$last" = 'RED: 1 overlaps' ]; echo $?)"
-card speech revoked '' '' 2026-01-05; sed -i 's/^keys: .*/keys: [не дышит]/' docs/defects/speech.md
+card speech revoked '' '' 2026-01-05; sed_inplace 's/^keys: .*/keys: [не дышит]/' docs/defects/speech.md
 run; ok "a revoked card never overlaps" "$([ "$rc" = 0 ] && ! has 'OVERLAP'; echo $?)"
-card speech text '' '' 2026-01-05; sed -i 's/^keys: .*/keys: [где не дышит]/' docs/defects/speech.md
+card speech text '' '' 2026-01-05; sed_inplace 's/^keys: .*/keys: [где не дышит]/' docs/defects/speech.md
 run; ok "neighbour: a key inside another card's key -> ambiguous key line only, green" \
   "$([ "$rc" = 0 ] && has '^ambiguous key  breath "не дышит" is inside speech "где не дышит"' && ! has 'OVERLAP'; echo $?)"
 mkrepo "$TMP/overlap-old"
 card breath text '' '' 2026-01-05; card speech text '' '' 2026-01-05
-sed -i 's/^keys: .*/keys: [не дышит]/' docs/defects/breath.md docs/defects/speech.md
+sed_inplace 's/^keys: .*/keys: [не дышит]/' docs/defects/breath.md
+sed_inplace 's/^keys: .*/keys: [не дышит]/' docs/defects/speech.md
 cm 2026-01-01 docs/defects/breath.md docs/defects/speech.md; cm 2026-01-02 docs/defects/README.md
 run; ok "an overlap older than the library -> old overlap, green" \
   "$([ "$rc" = 0 ] && has '^old overlap  breath, speech: share key "не дышит"'; echo $?)"
@@ -253,7 +257,7 @@ run
 ok "a foldered card is audited under its ref, blamed by its library path -> DEBT pay/rep with sha" \
   "$([ "$rc" = 1 ] && has '^DEBT  pay/rep: 2 quotes, not block, new quote [0-9a-f]\{7\} 2026-01-03' && ! has 'fatal' && [ "$last" = 'RED: 1 new debt' ]; echo $?)"
 mkrepo "$TMP/area-old"
-card u text '' '' 2026-01-05; sed -i '/^paths:/d' docs/defects/u.md; mkdir -p docs/defects/pay; mv docs/defects/u.md docs/defects/pay/
+card u text '' '' 2026-01-05; sed_inplace '/^paths:/d' docs/defects/u.md; mkdir -p docs/defects/pay; mv docs/defects/u.md docs/defects/pay/
 cm 2026-01-01 docs/defects/pay/u.md; cm 2026-01-02 docs/defects/README.md
 run; ok "neighbour: git log finds a foldered card's add-commit (older than the root README) -> old undeliverable" \
   "$([ "$rc" = 0 ] && has '^old undeliverable  pay/u:' && ! has 'fatal'; echo $?)"
@@ -336,14 +340,14 @@ card rep text '' '' 2026-01-05 2026-01-06
 run; ok "neighbour: a prohibitive card with 2 quotes is still DEBT" "$([ "$rc" = 1 ] && has '^DEBT  rep: 2 quotes'; echo $?)"
 rm -f docs/defects/rep.md docs/defects/ok.md
 
-card never text '' '' 2026-01-05; sed -i 's|^paths: .*|paths: ["src/pay/stripe.py"]|' docs/defects/never.md
+card never text '' '' 2026-01-05; sed_inplace 's|^paths: .*|paths: ["src/pay/stripe.py"]|' docs/defects/never.md
 pcard allow '["src/pay/stripe.py"]' '' '' 2026-01-06
 run; ok "identical scope, no exception: -> CONFLICT allow never, RED" \
   "$([ "$rc" = 1 ] && has '^CONFLICT allow never:' && [ "$last" = 'RED: 1 conflicts' ]; echo $?)"
 pcard allow '["src/pay/**"]' '' '' 2026-01-06
 run; ok "overlap form: allowed src/pay/** over never src/pay/stripe.py, no exception: -> CONFLICT" \
   "$([ "$rc" = 1 ] && has '^CONFLICT allow never:'; echo $?)"
-pcard allow '["tool:WebFetch"]' '' '' 2026-01-06; sed -i 's|^paths: .*|paths: ["tool:WebFetch"]|' docs/defects/never.md
+pcard allow '["tool:WebFetch"]' '' '' 2026-01-06; sed_inplace 's|^paths: .*|paths: ["tool:WebFetch"]|' docs/defects/never.md
 run; ok "a tool: entry compared as a string -> CONFLICT" "$([ "$rc" = 1 ] && has '^CONFLICT allow never:'; echo $?)"
 pcard allow '["src/other/**"]' '' '' 2026-01-06
 run; ok "disjoint scopes -> no CONFLICT" "$([ "$rc" = 0 ] && ! has 'CONFLICT'; echo $?)"
@@ -353,12 +357,12 @@ pcard allow '["tool:WebFetch"]' gone '' 2026-01-06
 run; ok "exception: naming no live card -> EXCEPTION, RED" \
   "$([ "$rc" = 1 ] && has '^EXCEPTION allow: exception: gone names no live card' && has '^CONFLICT allow never'; echo $?)"
 mkrepo "$TMP/branches-old"
-card never text '' '' 2026-01-05; sed -i 's|^paths: .*|paths: ["src/pay/stripe.py"]|' docs/defects/never.md
+card never text '' '' 2026-01-05; sed_inplace 's|^paths: .*|paths: ["src/pay/stripe.py"]|' docs/defects/never.md
 pcard allow '["src/pay/**"]' '' '' 2026-01-06; cm 2026-01-01 docs/defects/never.md docs/defects/allow.md
 cm 2026-01-02 docs/defects/README.md
 run; ok "a conflict older than the library -> old conflict, green" "$([ "$rc" = 0 ] && has '^old conflict allow never'; echo $?)"
 mkrepo "$TMP/branches-howto"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
-card howto text '' '' 2026-01-05; sed -i -e 's|^paths: .*|paths: ["src/pay/stripe.py"]|' -e 's|^## Never$|## How-to|' docs/defects/howto.md
+card howto text '' '' 2026-01-05; sed_inplace -e 's|^paths: .*|paths: ["src/pay/stripe.py"]|' -e 's|^## Never$|## How-to|' docs/defects/howto.md
 pcard allow '["src/pay/**"]' '' '' 2026-01-06
 run; ok "a How-to card prohibits nothing: allowed over its scope, no exception: -> no CONFLICT, green" \
   "$([ "$rc" = 0 ] && ! has 'CONFLICT'; echo $?)"
@@ -377,9 +381,9 @@ run; ok "an exception to a checked never with no passes: fixture -> EXCEPTION, R
 
 echo "--- tool-only scope is deliverable (rules-tree 03)"
 mkrepo "$TMP/toolscope"; cm 2026-01-01 docs/defects/README.md
-card t text '' '' 2026-01-05; sed -i 's|^paths: .*|paths: ["tool:WebFetch", "cmd:curl"]|' docs/defects/t.md
+card t text '' '' 2026-01-05; sed_inplace 's|^paths: .*|paths: ["tool:WebFetch", "cmd:curl"]|' docs/defects/t.md
 run; ok "a text card scoped only tool:/cmd: -> no UNDELIVERABLE" "$([ "$rc" = 0 ] && ! has 'UNDELIVERABLE'; echo $?)"
-sed -i 's|^paths: .*|paths: ["tool:WebFetch"]|' docs/defects/t.md
+sed_inplace 's|^paths: .*|paths: ["tool:WebFetch"]|' docs/defects/t.md
 run; ok "neighbour: tool: alone -> no UNDELIVERABLE" "$([ "$rc" = 0 ] && ! has 'UNDELIVERABLE'; echo $?)"
 
 echo "--- the generated index (rules-tree 03)"
@@ -399,7 +403,7 @@ run; ok "a fresh index -> --check 0, gate green" "$([ "$irc" = 0 ] && [ -z "$o" 
 printf -- '- 2026-01-09 · v · 00:10 — «again»\n' >> docs/defects/rep.md
 o="$(bash scripts/defects-index.sh --check)"; irc=$?
 ok "a card changed after the index -> --check exit 1, index stale" "$([ "$irc" = 1 ] && printf '%s' "$o" | grep -q '^index stale'; echo $?)"
-sed -i '/«again»/d' docs/defects/rep.md; sed -i 's/Class rep/Class rip/' docs/defects/INDEX.md
+sed_inplace '/«again»/d' docs/defects/rep.md; sed_inplace 's/Class rep/Class rip/' docs/defects/INDEX.md
 run; ok "neighbour: a hand edit of INDEX.md -> gate RED INDEX" "$([ "$rc" = 1 ] && has '^INDEX  index stale' && [ "$last" = 'RED: index stale' ]; echo $?)"
 bash scripts/defects-index.sh >/dev/null
 o="$(bash scripts/defects-index.sh --grep 'ALLOWED al')"

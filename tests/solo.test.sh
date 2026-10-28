@@ -8,6 +8,7 @@
 set -u
 
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
+. "$SRC/scripts/lib.sh"   # sed_inplace
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 fail=0
 ok() { if [ "$2" -eq 0 ]; then echo "  ok    $1"; else echo "::error::$1"; fail=1; fi; }
@@ -48,7 +49,7 @@ EOF
 adv() { bash scripts/cycle.sh advance docs/specs/demo "$@" 2>/dev/null; }
 build() { # build <story> <app.txt text> - what the Queen does for one story
   printf '%s\n' "$2" > app.txt
-  sed -i 's/^returned:.*/returned: DONE/' "$1"
+  sed_inplace 's/^returned:.*/returned: DONE/' "$1"
   bash scripts/cycle.sh close-story "$1" --commit 2>/dev/null
 }
 review() { # review <round> <PASS|BLOCK> - the reviewer's report where the solo loop names it
