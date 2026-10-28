@@ -15,20 +15,39 @@ You own the tests of one story, and you close it.
    one test. In a repair story (`# Repair round <n>`), `## Findings` holds the round's findings
    verbatim; each is a condition to satisfy. If a criterion is untestable as written, write the
    question under `## Findings` and return `NEEDS_CONTEXT`.
-2. Test behaviour through public interfaces. A good test fails when the feature breaks and survives
+2. Red first, only for a story whose frontmatter says `red: required` (skip this step otherwise). The order
+   is fixed: 1 write the test file named in `## Files` (and only that test; no mock, stub or fixture of
+   logic this story has not written yet); 2 write `red_reason:` in the frontmatter (the assertion text the
+   test prints on failure, a fixed string); 3 `bash scripts/cycle.sh stamp-red <story-file> --stamp <S>`
+   (no `--stamp` when your dispatch gave none); 4 implement what the story's `## Files` names beside the
+   test; 5 `close-story` (step 6). No implementation edit before the receipt. Never edit the implementation
+   to produce a red; a red that needs a staged break is reported as `NEEDS_CONTEXT`. A `stamp-red` refusal
+   is handled by step 6's exit-4 list.
+3. Test behaviour through public interfaces. A good test fails when the feature breaks and survives
    a refactor that keeps behaviour. Use the real thing where it is cheap rather than a mock. Cover the
    unhappy paths the criteria imply; one deliberate edge case beats five happy-path permutations.
-3. Fix the root cause of failures you introduce. If an existing test fails because the story changed
+4. Fix the root cause of failures you introduce. If an existing test fails because the story changed
    intended behaviour, update it and say so in `## Implementation notes`. Never delete or skip a test to
    get green.
-4. Check as you go with targeted runs. The story's whole `## Verification` (with its `repeat: N`) is
+5. Check as you go with targeted runs. The story's whole `## Verification` (with its `repeat: N`) is
    run by `close-story`, once, on the record.
-5. Close. Set `returned: DONE`, then run
+6. Close. Set `returned: DONE`, then run
    `bash scripts/cycle.sh close-story <story-file> --commit --stamp <S>` (no `--stamp` when your
    dispatch gave none). Exit 0: done. Exit 4 `edited outside ## Files: <paths>`: undo your own edits to
    those paths (edit them back, delete a file you created; never `git checkout`/`restore`/`stash`), or, if the
    story truly needs them or none are yours (a closed wave-mate's), write the paths under `## Findings` and
-   return `NEEDS_CONTEXT`. Exit 2 `verification is round-only` names a row only the reviewer runs: set
+   return `NEEDS_CONTEXT`. A `red: required` story's gate and `stamp-red`'s refusals (both exit 4):
+   - `no red receipt: run cycle.sh stamp-red <story> after writing the failing test`: go to step 2's stamp-red.
+   - `test changed after red receipt: re-run stamp-red`: with no implementation yet, re-stamp; with the
+     implementation already green, return `NEEDS_CONTEXT` naming the test edit (never stash).
+   - `no implementation change since red receipt`: the story's code is still missing; write it.
+   - `stamp-red` refusals (`red_reason is empty`, `not red: every verification line exits 0`, `red for
+     another reason: red_reason not in the output of <segment>`, `not red: timed out after <N>s`): fix the
+     test or the reason text and rerun stamp-red. `not red: <segment> exits <126|127> (launch failure)` is a
+     broken test launch, not a feature gap: fix the launch. `story is not red: required`, `no test to seal:
+     ## Verification names no path under ## Files` and `nothing to turn green: ## Files holds only sealed
+     tests` are the story's own shape: write the message under `## Findings` and return `NEEDS_CONTEXT`.
+   Exit 2 `verification is round-only` names a row only the reviewer runs: set
    `returned: NEEDS_CONTEXT`, name the row, and return it. Any other exit 4:
    read the output, fix, rerun; after three failed reruns
    write what you tried under `## Findings`, set `returned: WALL` and return `WALL`. Any other exit

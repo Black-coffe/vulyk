@@ -1,8 +1,8 @@
 ---
 story: red-receipt-02-prompts-and-template
 spec: red-receipt
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
@@ -81,5 +81,12 @@ queen-planner, lead-review items 1-4), `## Commands - what each runs` (`/vulyk-p
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
+- worker-code.md, worker-test.md: new step 2 "Red first" (five-step order, both prohibitions, staged-break = NEEDS_CONTEXT); later steps renumbered, so the close step is now step 6; its exit-4 list carries the three gate messages and every stamp-red refusal with its action.
+- Decision: `story is not red: required`, `no test to seal`, `nothing to turn green` route to NEEDS_CONTEXT (the story's shape is the planner's), the rest to "fix the test or reason and rerun" per the contract.
+- queen-planner.md, vulyk-plan.md step 6: the planner marks `red: required`, test in the same story's `## Files` and `## Verification`, `red_reason` prefilled when known, no later-wave worker-test story for a marked one (kept for unmarked in queen-planner).
+- vulyk-build.md solo step 2: test + red_reason, `stamp-red <file>` without `--stamp`, then implement; exit-4 handling points to worker-code.md step 6.
+- lead-review.md: judged item 5 "Red receipts".
+- templates/story.md: three commented frontmatter lines after blocked_by (column 0 `# `, so `^red:` never matches), `## Findings` comment names `## Red receipt`.
+- Messages quoted from plan.md `## Contracts`; story 01's notes changed none.
 
 ## Findings

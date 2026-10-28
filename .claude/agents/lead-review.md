@@ -27,6 +27,10 @@ round judged) and the previous round's directory.
 4. The project's rules. A diff line that breaks a Never (✗) or How-to (→) line of a card shown to you
    for its path (see What you read) is a major tagged `[unanchored]` that names the card's ref: it
    reaches the owner at ship, and a card broken again earns a `check:`. An Allowed (✓) line is no finding.
+5. Red receipts. For every story in the diff whose frontmatter says `red: required`, read its
+   `## Red receipt` tail and its `red_reason`. A tail that shows a staged break (an error inside the
+   implementation rather than the missing behaviour) is a major `[ask N]` naming the story. A marked
+   story closed without a receipt cannot occur (close-story's gate refuses it), so ask for none.
 
 Flag only what breaks an ask or correctness. Style, naming, a structure you would have chosen
 differently, or hardening for a configuration the Profile's *Configurations that exist today* does not

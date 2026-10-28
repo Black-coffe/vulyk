@@ -17,7 +17,12 @@ No driver, no clerk, no court. Loop:
 
 1. `bash scripts/cycle.sh advance docs/specs/<slug>`. It runs every mechanical step (branch,
    open-round, judge, the repair story) up to the next thing only an agent can do, and names it `next`.
-2. `build:<W>`: take `status.wave_stories` in order. For each, implement it yourself (its `## Files`
+2. `build:<W>`: take `status.wave_stories` in order. For a `red: required` story, first write its test
+   (the file `## Files` names) and `red_reason:`, then run `bash scripts/cycle.sh stamp-red <file>` (no
+   `--stamp`), and only then implement: no implementation edit before the receipt, never a staged break
+   to produce a red. Its exit-4 messages are the workers' (`.claude/agents/worker-code.md` step 6) and
+   handled the same way; where a worker returns `NEEDS_CONTEXT`, stop for the owner. For each story,
+   implement it yourself (its `## Files`
    only; a bug fix runs `bash scripts/symbol-map.sh <file> --story <story>` on a root file before
    editing it, greps only what it cannot vouch for (names marked `textual`, every caller of a file it
    reports `imports not parsed`) and fixes the shared code once; targeted checks while

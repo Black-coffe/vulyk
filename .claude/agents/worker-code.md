@@ -16,17 +16,25 @@ You implement one story and close it. Not two, and nothing "while you are here".
    verbatim; each one is a condition your change must satisfy. If the story is ambiguous in a way that
    changes the work, or needs an input nobody gave you, write the question under `## Findings` and
    return `NEEDS_CONTEXT`. Routine calls are yours.
-2. Build the simplest thing that meets the acceptance criteria, in the surrounding code's style. A
+2. Red first, only for a story whose frontmatter says `red: required` (skip this step otherwise). The order
+   is fixed: 1 write the test file named in `## Files` (and only that test; no mock, stub or fixture of
+   logic this story has not written yet); 2 write `red_reason:` in the frontmatter (the assertion text the
+   test prints on failure, a fixed string); 3 `bash scripts/cycle.sh stamp-red <story-file> --stamp <S>`
+   (no `--stamp` when your dispatch gave none); 4 implement (step 3); 5 `close-story` (step 6). No
+   implementation edit before the receipt. Never edit the implementation to produce a red; a red that
+   needs a staged break is reported as `NEEDS_CONTEXT`. The test is a file `## Files` names, so it is not
+   one of the "tests it does not name" below. A `stamp-red` refusal is handled by step 6's exit-4 list.
+3. Build the simplest thing that meets the acceptance criteria, in the surrounding code's style. A
    bug fix goes to the root: before editing a root file run `bash scripts/symbol-map.sh <file> --story
    <story>`, then grep only what it cannot vouch for (the names it marks `textual`, and every caller of a
    file it reports `imports not parsed`: TypeScript, PHP, 1C), and fix the shared code once, since a
    guard on the one code path the story names leaves its siblings broken. If the fix needs a file outside
    `## Files`, stop: that is `NEEDS_CONTEXT` naming the path, not a wider edit or a patch on the
    named file.
-3. Check as you go with targeted commands (one test, one file). Do not run the story's whole
+4. Check as you go with targeted commands (one test, one file). Do not run the story's whole
    `## Verification` separately: `close-story` runs it and records the result.
-4. Note under `## Implementation notes`: files changed, decisions, surprises, one line each.
-5. Close. Set `returned: DONE` in the frontmatter, then run
+5. Note under `## Implementation notes`: files changed, decisions, surprises, one line each.
+6. Close. Set `returned: DONE` in the frontmatter, then run
    `bash scripts/cycle.sh close-story <story-file> --commit --stamp <S>` with the stamp your dispatch
    gave (no `--stamp` when it gave none). Its last stdout line is JSON:
    - exit 0: the story is verified and committed. Done.
@@ -34,6 +42,17 @@ You implement one story and close it. Not two, and nothing "while you are here".
      `edited outside ## Files: <paths>`: undo your own edits to those paths (edit them back, delete a file you
      created; never `git checkout`/`restore`/`stash`), or, if the story truly needs them or none are yours (a closed
      wave-mate's), write the paths under `## Findings` and return `NEEDS_CONTEXT`.
+     A `red: required` story's gate and `stamp-red`'s refusals (both exit 4), each with its action:
+     - `no red receipt: run cycle.sh stamp-red <story> after writing the failing test`: go to step 2's stamp-red.
+     - `test changed after red receipt: re-run stamp-red`: with no implementation yet, re-stamp; with the
+       implementation already green, return `NEEDS_CONTEXT` naming the test edit (never stash).
+     - `no implementation change since red receipt`: the story's code is still missing; build it (step 3).
+     - `stamp-red` refusals (`red_reason is empty`, `not red: every verification line exits 0`, `red for
+       another reason: red_reason not in the output of <segment>`, `not red: timed out after <N>s`): fix the
+       test or the reason text and rerun stamp-red. `not red: <segment> exits <126|127> (launch failure)` is a
+       broken test launch, not a feature gap: fix the launch. `story is not red: required`, `no test to seal:
+       ## Verification names no path under ## Files` and `nothing to turn green: ## Files holds only sealed
+       tests` are the story's own shape: write the message under `## Findings` and return `NEEDS_CONTEXT`.
      After three failed reruns, write what you tried and your best hypothesis under `## Findings`,
      set `returned: WALL`, and return `WALL`.
    - exit 2 `verification is round-only`: the story names a row marked `round-only`, which only the reviewer

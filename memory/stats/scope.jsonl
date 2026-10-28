@@ -245,3 +245,4 @@
 {"ts":"2026-10-28T08:29:29Z","story":"suite-row-upgrade-01","declared":5,"changed":5,"out_of_scope":0}
 {"ts":"2026-10-28T10:27:16Z","story":"red-receipt-01-stamp-red-verb","declared":4,"changed":4,"out_of_scope":0}
 {"ts":"2026-10-28T10:32:01Z","story":"red-receipt-03-docs","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-10-28T10:32:43Z","story":"red-receipt-02-prompts-and-template","declared":7,"changed":7,"out_of_scope":0}
