@@ -47,3 +47,4 @@ none
 **Approved:** Andrei, 2026-10-28 («да»)
 **Branch:** vulyk/auto-memory-subagent-start
 **Council:** RED round 1, 2026-10-28, at 395573e, pack 7d8be8e223bf
+**Council:** GREEN round 2, 2026-10-28, at 85c9f02, pack 4af56f510894
