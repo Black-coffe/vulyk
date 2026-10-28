@@ -23,12 +23,14 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   Red-receipt helpers (0.40.0): `verify_path_tokens` (:229), `sealed_tests <verification> <files>` (:235),
   `sha256_tool` (:255; sha256sum, else `shasum -a 256`), `set_hash <path>...` (:261; a missing file hashes as
   `missing <path>`). `cycle.sh stamp-red` and `close-story` use them (cycle.md).
+  cycle.sh mark helpers (0.40.1): `fm_raw` (:2035), `fm_red` (:2044; frontmatter-only `red:`, the one reader of
+  the mark), `repair_unmarks` (:2050; repair drops the mark only if every finding names a union `## Files` path).
 - `ship-check.sh <spec-dir>` / `--record`; `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`.
   `scope-check.sh <story-file> [range]` runs in `close-story`; `close-story --commit` exits 4 on its `  ! ` paths.
 - `wave-check.sh` (`no-verify`, `verify-gap`, `verify-cell`, `verify-round-only`: a segment matching a
   `## Commands` row marked `round-only`, wave-check.sh:34,227; 0.40.0 report-only `red-no-test`: a
   `red: required` story whose `## Verification` seals no `## Files` path, and `red-value`: a `red:` value
-  other than `required`, wave-check.sh:249-259), `trace-check.sh`, `token-report.py <project>
+  other than `required`; 0.40.1 the red block opens only on a `red:` line inside the frontmatter, wave-check.sh:249-259), `trace-check.sh`, `token-report.py <project>
   [--spec S] [--since D] [--json]` (dedupes by `message.id`), `evolve-ledger.py <root> <verb>` (owns
   `memory/stats/evolve.jsonl`; `resolve`: tip in default branch = accepted, unmerged branch gone = rejected).
 - `.claude/hooks/session-start-brief.sh` - map line; `[VULYK] model profile not chosen`; bootstrap offer
@@ -119,4 +121,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - Retired framework files are removed unless edited (`retired_edited`).
 - Card parsing lives only in `defects_lib.py` (`docs/wiki/rules-tree.md`).
 
-last-verified: 2026-10-28 (red-receipt merge 879e67e, 0.40.0)
+last-verified: 2026-10-28 (red-repair-mark merge 1135d70, 0.40.1)
