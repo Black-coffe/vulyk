@@ -119,6 +119,17 @@ ship | expect "still READY after the ship record" "READY."
 bash scripts/state.sh >/dev/null
 grep -q '"stage": "06-shipped"' .claude/state.json || { echo "::error::state.sh did not derive stage 06-shipped:"; cat .claude/state.json; fail=1; }
 echo "  ok    state.sh derives the stage"
+# A study spec whose report quotes a story template in its body: the quoted lines are not a story (post-043-tails).
+mkdir -p docs/specs/study1
+printf '> study the template\n' > docs/specs/study1/brief.md
+printf '# Study report\n\nThe template reads:\n\nstory: quoted-01\nstatus: todo\n' > docs/specs/study1/report.md
+bash scripts/state.sh >/dev/null
+st_study="$(sed -n '/"spec": "study1"/,/"stage"/p' .claude/state.json | tr -d ' \n')"
+case "$st_study" in
+  *'"stories":0,'*'"stage":"study"'*) echo "  ok    state.sh lists no story for a study spec quoting story: lines" ;;
+  *) echo "::error::state.sh listed a story for a study spec whose report quotes story: lines: ${st_study:-absent}"; fail=1 ;;
+esac
+rm -rf docs/specs/study1
 
 # A stale pack (a story cut after the look) reopens 04 and 05 both.
 printf -- '---\nstory: demo-02\nspec: demo\nstatus: done\nwave: 2\n---\n# S2\n' > docs/specs/demo/demo-02-repair.md
@@ -709,6 +720,16 @@ printf '#!/bin/sh\n' > scripts/helper.sh
 out="$(bash scripts/cycle.sh close-story docs/specs/pcs/pcs-03.md --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF 'prompt-check: warn .claude/commands/x.md:3: flag:' \
   && echo "  ok    a story touching scripts/ while the drift sits in an untouched prompt: exit 0, the finding as a warn" || { echo "::error::helper story: exit=$ex out=$out"; fail=1; }
+# A linter that crashes (exit 1, no `prompt-check: error` line) refuses the story with its own reason (post-043-tails).
+printf 'raise RuntimeError("linter boom")\n' > scripts/prompt-check.py
+pcs_story 04 scripts/helper4.sh
+git add -A && git commit -qm "pcs: a crashing linter" >/dev/null
+printf '#!/bin/sh\n' > scripts/helper4.sh
+out="$(bash scripts/cycle.sh close-story docs/specs/pcs/pcs-04.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"prompt-check crashed: ' && printf '%s' "$out" | tail -1 | grep -qF 'linter boom' \
+  && echo "  ok    a crashing prompt-check: exit 4, the reason names the crash" || { echo "::error::prompt-check crash: exit=$ex out=$out"; fail=1; }
+rm -f scripts/helper4.sh; cp "$SRC"/scripts/prompt-check.py scripts/
+git add -A && git commit -qm "pcs: the linter restored" >/dev/null
 
 fi # part close
 if part bsd; then # --- part bsd: cycle.sh under a BSD sed, conventional subjects, command_cell_exists

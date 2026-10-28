@@ -2346,8 +2346,15 @@ EOF
       0) printf '%s\n' "$PC_OUT" | grep '^prompt-check: warn ' >&2 ;;
       1)
         printf '%s\n' "$PC_OUT" >&2
-        echo "cycle: close-story - prompt-check: a prompt and the script or agent it names disagree in this story's files" >&2
-        emit false close-story 4 repair "$(printf '%s\n' "$PC_OUT" | grep -m1 '^prompt-check: error ')"
+        local PC_ERR; PC_ERR="$(printf '%s\n' "$PC_OUT" | grep -m1 '^prompt-check: error ')"
+        if [ -z "$PC_ERR" ]; then # exit 1 with no finding is the linter crashing (a traceback), never a pass
+          PC_ERR="prompt-check crashed: $(printf '%s\n' "$PC_OUT" | sed '/^[[:space:]]*$/d' | tail -1)"
+          [ "$PC_ERR" != "prompt-check crashed: " ] || PC_ERR="prompt-check crashed: exit 1 with no output"
+          echo "cycle: close-story - $PC_ERR" >&2
+        else
+          echo "cycle: close-story - prompt-check: a prompt and the script or agent it names disagree in this story's files" >&2
+        fi
+        emit false close-story 4 repair "$PC_ERR"
         exit 4 ;;
       *) echo "cycle: close-story - note: prompt-check did not run (exit $PC_RC): $(printf '%s' "$PC_OUT" | head -1)" >&2 ;;
     esac

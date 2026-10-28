@@ -173,13 +173,16 @@ def main(argv):
 
     # Backticked spans: scripts, cycle.sh verbs, flags, agent names.
     verbs = cycle_verbs()
+    if verbs is None and read("scripts/cycle.sh") is not None:
+        add("scripts/cycle.sh", 1, "verb", 'no `case "$VERB" in` dispatcher found: the cycle.sh verb check is skipped', [], soft=True)
     known_agents = set(agent_files) | set(agents) | retired
     code_cache = {}
     for f in files:
         for n, span in spans(read(f) or ""):
-            word = span.strip()
-            if re.match(r"^[a-z][a-z0-9-]*$", word) and AGENT_SHAPE.match(word) and word not in known_agents:
-                add(f, n, "agent", f"`{word}` has no file in .claude/agents/", [])
+            for tok in span.split():  # `Agent drone-x` names an agent as surely as `drone-x` alone
+                word = tok.strip(".,;:!?()[]{}'\"")
+                if re.match(r"^[a-z][a-z0-9-]*$", word) and AGENT_SHAPE.match(word) and word not in known_agents:
+                    add(f, n, "agent", f"`{word}` has no file in .claude/agents/", [])
             for seg in SPLIT_RE.split(span):
                 toks = seg.split()
                 script = None
