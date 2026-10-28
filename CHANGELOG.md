@@ -4,6 +4,17 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.41.1] - 2026-10-28
+
+The memory triage of 0.41.0 is offered to the owner, not run by itself (spec `memory-triage-offer`).
+
+### Fixed
+- **Memory triage asks first.** In 0.41.0 a large `MEMORY.md` put `memory triage` into `maintenance due`, which the
+  Queen runs without asking after the owner's task. That triage reads every private memory file (75-270 in large
+  projects), so the first session after an upgrade spent a lot of context on it. The brief now prints its own
+  `[VULYK] memory triage (...)` line instead: after the current task the Queen asks the owner once, and a no runs
+  `memory-triage.sh --mark`, so the signal stays quiet until the index grows. Thresholds are unchanged.
+
 ## [0.41.0] - 2026-10-28
 
 Defect cards reach a builder when it opens its story, and Claude Code's own auto memory gets a size signal
