@@ -72,7 +72,7 @@ whenever a story touches scripts or prompts; in a hive an owner-added agent is a
 
 **Approved:** Andrei, 2026-10-28 («/vulyk-build prompt-check»)
 **Briefed:** <written by scripts/cycle.sh briefed>
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/prompt-check
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
 **Council:** <written by scripts/cycle.sh judge/escalate>
 **Shipped:** <written by scripts/ship-check.sh --record>
