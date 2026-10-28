@@ -66,7 +66,8 @@ whenever a story touches scripts or prompts; in a hive an owner-added agent is a
 
 ## Descoped
 
-*(empty)*
+- Ask 4 in a hive: an AGENTS name without a file (a framework agent the hive deleted) is a `warn`, not an error;
+  the VULYK repo keeps the error (plan delta of repair round 1). Owner, 2026-10-28, on the ship question: «Да, выпускаем, сужение принять (Рекомендую)».
 
 ## Plan deltas
 - 2026-10-28, repair round 1 (`prompt-check-03`). Trigger: a side-agent note relayed during round 1 (model text, not an

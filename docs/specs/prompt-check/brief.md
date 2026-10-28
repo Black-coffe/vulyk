@@ -36,6 +36,6 @@
 1. scripts/prompt-check.sh проверяет все .claude/agents/*.md, .claude/commands/*.md и templates/*.md без токенов, за доли секунды (цель 0.2 с).
 2. Frontmatter каждого агента валиден: есть model, maxTurns, tools; omitClaudeMd корректен.
 3. Все скрипты и флаги (cycle.sh <verb>, --flag) в обратных кавычках промптов агентов и команд реально существуют в scripts/.
-4. Имена агентов в промптах команд совпадают с файлами в .claude/agents/ и списком в telemetry.sh.
+4. Имена агентов в промптах команд совпадают с файлами в .claude/agents/ и списком в telemetry.sh. В улье агент из списка без файла — предупреждение (plan.md ## Descoped).
 5. Линтер работает в CI и close-story.
 6. (horizon) Имена сверяются в одну сторону: лишний агент улья — предупреждение, не ошибка.
