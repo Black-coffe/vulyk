@@ -1,14 +1,15 @@
 ---
 story: prompt-check-01
 spec: prompt-check
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
-red_reason:
+red_reason: ::error::prompt-check: today's repo exits 0
+red_verified_at: 2026-10-28T18:29:24Z 75bc7bcc77da32bde83875a79733d8420fbdb082bd3ff96b9c4bc1b272319cef
 ---
 
 # prompt-check.sh: agent and command prose checked against the scripts and agents it names
@@ -60,5 +61,31 @@ listed paths to `warn`. Every rule detail: plan.md `## Assumptions`.
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- `scripts/prompt-check.{sh,py}` (trace-autopsy wrapper pattern); root = the script's parent's parent, so a fixture copy checks itself. 33 files on today's repo, 0 findings.
+- A `.sh` wrapper's same-stem `.py` counts as its code: the first run flagged `symbol-map.sh --exact` / `--story`, which `symbol-map.py` parses.
+- Verbs: the labels of the last `case "$VERB" in` block of `cycle.sh` up to `esac`, so a subshell's `done)` is not a verb. Fenced-block lines count as spans.
+- Test: `tests/maintenance.test.sh` block, 9 seeded drifts + neighbours + hive + `--touched`; exit codes carry a `;` terminator, since `exit=1` as a substring matched `exit=127` (the missing script) during red.
+- `docs/architecture.md`: the workers named in backticks inside the existing sentence.
+- Wall time, `bash scripts/prompt-check.sh` on this Windows box (Git Bash, Python 3): 149-162 ms over five runs, Python alone 90 ms; target 0.2 s. Not asserted in the test.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: 75bc7bcc77da32bde83875a79733d8420fbdb082bd3ff96b9c4bc1b272319cef (tests/maintenance.test.sh)
+- impl: e2306a4b4f50d1be10baa16dcfc4739dbe990dc2fdcd7f9f6c0284476ec3b354
+- stamped: 2026-10-28T18:29:24Z
+
+```
+::error::prompt-check --touched: it prints as warn - expected 'prompt-check: warn .claude/commands/vulyk-plan.md' in:
+        bash: /tmp/tmp.c1Z6kNFZsO/pc-touched/scripts/prompt-check.sh: No such file or directory
+        exit=127;
+::error::prompt-check --touched: a finding in a touched prompt exits 1 - expected 'exit=1;' in:
+        bash: /tmp/tmp.c1Z6kNFZsO/pc-touched/scripts/prompt-check.sh: No such file or directory
+        exit=127;
+::error::prompt-check --touched: a finding naming a touched script exits 1 - expected 'exit=1;' in:
+        bash: /tmp/tmp.c1Z6kNFZsO/pc-touched/scripts/prompt-check.sh: No such file or directory
+        exit=127;
+maintenance.test.sh: 202 checks, 29 failed
+```

@@ -509,6 +509,65 @@ expect "memory-triage --index-lines: takes a bare file name" "[Loose](loose.md)"
 expect_absent "memory-triage --index-lines: leaves other lines out" "other.md" < "$T/mt-idx"
 [ "$(ls "$MD" | wc -l | tr -d ' ')" -eq 3 ] && ok "memory-triage: writes nothing" || bad "memory-triage wrote into $MD: $(ls "$MD")"
 
+echo "--- prompt-check.sh: agent and command prose against the scripts and agents it names (docs/specs/prompt-check)"
+# Each case runs the checker of a fixture copy, whose root is the copy: the repo's own prompts, scripts and
+# architecture page, with one drift seeded. The repo itself must hold none.
+bash "$SRC/scripts/prompt-check.sh" > "$T/pc-repo" 2>&1; echo "exit=$?;" >> "$T/pc-repo"
+expect "prompt-check: today's repo exits 0" "exit=0;" < "$T/pc-repo"
+expect "prompt-check: today's repo prints ok" "prompt-check: ok (" < "$T/pc-repo"
+PCB="$T/pcbase"; mkdir -p "$PCB/.claude" "$PCB/docs"
+cp -r "$SRC/.claude/agents" "$SRC/.claude/commands" "$PCB/.claude/"
+cp -r "$SRC/templates" "$SRC/scripts" "$PCB/"
+cp "$SRC/docs/architecture.md" "$PCB/docs/"; cp "$SRC/install.sh" "$PCB/"
+pc_case() { # pc_case <name> - a fresh fixture copy at $T/pc-<name>, its path in PCD
+  PCD="$T/pc-$1"; rm -rf "$PCD"; cp -r "$PCB" "$PCD"
+}
+pc_run() { # pc_run [args...] - run the fixture's checker into $T/pc-out, exit code appended
+  bash "$PCD/scripts/prompt-check.sh" "$@" > "$T/pc-out" 2>&1; echo "exit=$?;" >> "$T/pc-out"
+}
+pc_bites() { # pc_bites <label> <rule> - the seeded drift exits 1 naming the rule
+  expect "prompt-check: $1 exits 1" "exit=1;" < "$T/pc-out"
+  expect "prompt-check: $1 names rule $2" ": $2: " < "$T/pc-out"
+}
+CMDF=".claude/commands/vulyk-plan.md"
+pc_case nomaxturns; sed -i '/^maxTurns:/d' "$PCD/.claude/agents/drone-scout.md"; pc_run
+pc_bites "an agent without maxTurns" frontmatter
+pc_case omitbad; sed -i 's/^omitClaudeMd: true/omitClaudeMd: yes/' "$PCD/.claude/agents/drone-scout.md"; pc_run
+pc_bites "omitClaudeMd: yes" omit-claude-md
+pc_case omitrule; sed -i 's/^maxTurns:/omitClaudeMd: true\nmaxTurns:/' "$PCD/.claude/agents/lead-review.md"; pc_run
+pc_bites "omitClaudeMd: true on lead-review, which keeps the constitution" omit-claude-md
+pc_case verb; printf '\nRun `bash scripts/cycle.sh no-such-verb docs/specs/x`.\n' >> "$PCD/$CMDF"; pc_run
+pc_bites "a backticked cycle.sh verb the dispatcher lacks" verb
+pc_case flag; printf '\nRun `bash scripts/cycle.sh close-story <file> --no-such-flag`.\n' >> "$PCD/$CMDF"; pc_run
+pc_bites "a backticked flag the script lacks" flag
+pc_case commentflag; printf '# --ghost-flag was removed\n' >> "$PCD/scripts/cycle.sh"
+printf '\nRun `bash scripts/cycle.sh close-story <file> --ghost-flag`.\n' >> "$PCD/$CMDF"; pc_run
+pc_bites "a flag left only in a comment line" flag
+pc_case script; printf '\nRun `bash scripts/gone.sh --x`.\n' >> "$PCD/.claude/agents/drone-docs.md"; pc_run
+pc_bites "a backticked scripts/ path that does not exist" script
+pc_case nofile; rm "$PCD/.claude/agents/drone-coverage.md"; pc_run
+pc_bites "a telemetry.sh AGENTS name without its file" telemetry
+pc_case ghost; printf '\nDispatch `drone-ghost` here.\n' >> "$PCD/$CMDF"; pc_run
+pc_bites "a backticked agent name without a file" agent
+pc_case neighbours
+printf '\ncycle.sh no-such-verb in prose, the `worker` field, `cycle.sh <verb>`, `council-sonnet` (retired), `npm.sh --x`.\n' >> "$PCD/$CMDF"
+pc_run
+expect "prompt-check: neighbour forms (prose, a field, a placeholder, a retired agent, a host tool) exit 0" "exit=0;" < "$T/pc-out"
+printf -- '---\nname: my-helper\ndescription: a hive agent\ntools: Read\nmodel: sonnet\nmaxTurns: 5\n---\n\nBody.\n' > "$T/my-helper.md"
+pc_case framework; cp "$T/my-helper.md" "$PCD/.claude/agents/"; pc_run
+pc_bites "an agent file outside AGENTS in the VULYK repo" telemetry
+pc_case hive; cp "$T/my-helper.md" "$PCD/.claude/agents/"; echo 0.42.0 > "$PCD/.claude/vulyk-version"; pc_run
+expect "prompt-check: a hive's own agent exits 0" "exit=0;" < "$T/pc-out"
+expect "prompt-check: a hive's own agent is a warn line" "prompt-check: warn " < "$T/pc-out"
+pc_case touched; printf '\nRun `bash scripts/cycle.sh close-story <file> --no-such-flag`.\n' >> "$PCD/$CMDF"
+pc_run --touched README.md
+expect "prompt-check --touched: a finding outside the touched files exits 0" "exit=0;" < "$T/pc-out"
+expect "prompt-check --touched: it prints as warn" "prompt-check: warn $CMDF" < "$T/pc-out"
+pc_run --touched "$CMDF"
+expect "prompt-check --touched: a finding in a touched prompt exits 1" "exit=1;" < "$T/pc-out"
+pc_run --touched scripts/cycle.sh
+expect "prompt-check --touched: a finding naming a touched script exits 1" "exit=1;" < "$T/pc-out"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1
