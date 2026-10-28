@@ -30,3 +30,4 @@ none
 **Briefed:** via mini-brief, Andrei, 2026-10-28
 **Branch:** vulyk/memory-triage-offer
 **Council:** GREEN round 1, 2026-10-28, at 5b98b84, pack 2ec64a17116f
+**Shipped:** 0.41.1, 2026-10-28, at ac3a56c - merged to main, publish pending
