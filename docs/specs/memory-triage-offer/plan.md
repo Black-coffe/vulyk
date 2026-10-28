@@ -28,3 +28,4 @@ none
 
 ## Plan deltas
 **Briefed:** via mini-brief, Andrei, 2026-10-28
+**Branch:** vulyk/memory-triage-offer
