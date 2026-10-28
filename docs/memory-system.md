@@ -28,7 +28,9 @@ owner decides what happens to it:
 - **The signal.** At 160 lines or 20 KB (80% of either limit) the SessionStart brief adds `memory triage
   (MEMORY.md <n> lines, <k> KB ...)` to `maintenance due`, and the Queen runs `/vulyk-gc memory`. That
   triage asks the owner before it writes a card or deletes a file. Project lessons become cards in
-  `docs/defects/`, personal ones stay, and stale ones go.
+  `docs/defects/`, personal ones stay, and stale ones go. The triage ends with `memory-triage.sh --mark`
+  (`.claude/state/memory-triage.txt`, per machine). After that the signal stays quiet until `MEMORY.md` grows
+  20 lines or 2 KB past the mark, so personal rules left over the threshold do not bring it back every session.
 - **The off switch.** `"autoMemoryEnabled": false` in a project's `.claude/settings.json` (or
   `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`) turns auto memory off for that project: nothing is read from it or
   written to it. The owner's personal lessons (servers, access, people, their style, rules their own

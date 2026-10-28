@@ -53,4 +53,6 @@ the main session does every step itself. Never dispatch a subagent for it: perso
    `MEMORY.md`. Personal files stay, with their lines.
 9. Run `bash scripts/defects-index.sh`, then commit the cards and the index with `chore(defects): memory triage`.
    The commit message names counts, never a personal file or its content.
-10. Report one line: cards written, files deleted from private memory, files kept.
+10. Run `bash scripts/memory-triage.sh --mark`, also when nothing was moved: it records the size the triage left,
+    and the brief stays quiet until `MEMORY.md` grows 20 lines or 2 KB past it.
+11. Report one line: cards written, files deleted from private memory, files kept.

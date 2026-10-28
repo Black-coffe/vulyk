@@ -3,6 +3,7 @@
 #
 #   Usage: bash scripts/memory-triage.sh [<memory-dir>]
 #          bash scripts/memory-triage.sh --dir
+#          bash scripts/memory-triage.sh --mark
 #          bash scripts/memory-triage.sh --index-lines <MEMORY.md> <file>...
 #
 # Lists this project's private auto memory so the main session can sort it into cards, personal or
@@ -15,10 +16,15 @@
 #
 # --dir prints that default dir and lists nothing (the SessionStart brief sizes its MEMORY.md).
 #
+# --mark, the last step of a triage, writes `<lines> <bytes>` of that MEMORY.md to the repo's
+# .claude/state/memory-triage.txt; the brief stays quiet until the index grows 20 lines or 2048 bytes
+# past it. No MEMORY.md: nothing written, exit 0.
+#
 # --index-lines prints the lines of the given MEMORY.md that name any of the given files (by base
 # name), so the session deletes exactly those lines and no other.
 #
-# The script reads only: it never writes, moves or deletes. The session acts after the owner's yes.
+# Besides that one mark, the script reads only: it never writes, moves or deletes. The session acts
+# after the owner's yes.
 set -u
 
 if [ "${1:-}" = "--index-lines" ]; then
@@ -33,8 +39,8 @@ if [ "${1:-}" = "--index-lines" ]; then
   exit 0
 fi
 
-only_dir=""
-[ "${1:-}" = "--dir" ] && { only_dir=1; shift; }
+only_dir="" mark=""
+case "${1:-}" in --dir) only_dir=1; shift ;; --mark) mark=1; shift ;; esac
 dir="${1:-}"
 if [ -z "$dir" ]; then
   root="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "memory-triage: not in a git repo; name the dir" >&2; exit 2; }
@@ -42,6 +48,14 @@ if [ -z "$dir" ]; then
   dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$slug/memory"
 fi
 [ -n "$only_dir" ] && { printf '%s\n' "$dir"; exit 0; }
+if [ -n "$mark" ]; then
+  [ -f "$dir/MEMORY.md" ] || exit 0
+  root="${root:-$(git rev-parse --show-toplevel 2>/dev/null)}" || { echo "memory-triage: not in a git repo" >&2; exit 2; }
+  mkdir -p "$root/.claude/state" &&
+    printf '%s %s\n' "$(awk 'END { print NR }' "$dir/MEMORY.md")" "$(wc -c < "$dir/MEMORY.md" | tr -d ' ')" \
+      > "$root/.claude/state/memory-triage.txt"
+  exit
+fi
 [ -d "$dir" ] || { echo "no private memory: $dir"; exit 0; }
 
 for f in "$dir"/*.md; do

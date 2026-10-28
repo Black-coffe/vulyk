@@ -81,7 +81,12 @@ adir="$( [ -f "$tri" ] && cd "$ROOT" 2>/dev/null && bash "$tri" --dir 2>/dev/nul
 idx="$adir/MEMORY.md"
 if [ -n "$adir" ] && [ -f "$idx" ]; then
   lines=$(awk 'END { print NR }' "$idx"); bytes=$(wc -c < "$idx" | tr -d ' ')   # NR: a last line without \n counts
-  if [ "$lines" -ge 160 ] || [ "$bytes" -ge 20480 ]; then
+  # The last triage's mark (memory-triage.sh --mark): what it left behind is not due again until it grows.
+  ml="" mb=""; mk="$ROOT/.claude/state/memory-triage.txt"
+  [ -f "$mk" ] && read -r ml mb < "$mk"
+  [[ $ml =~ ^[0-9]+$ && $mb =~ ^[0-9]+$ ]] || ml=""
+  if { [ "$lines" -ge 160 ] || [ "$bytes" -ge 20480 ]; } &&
+     { [ -z "$ml" ] || [ "$lines" -ge $((ml + 20)) ] || [ "$bytes" -ge $((mb + 2048)) ]; }; then
     due "memory triage (MEMORY.md $lines lines, $((bytes / 1024)) KB of 200 lines / 25 KB)" "vulyk-gc memory"
   fi
 fi

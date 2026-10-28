@@ -215,6 +215,26 @@ rm "$M/MEMORY.md"
 BRIEF_CONF="$MC" brief_of "$H" | expect_absent "no MEMORY.md: nothing due" "memory triage"
 H="$(hive mem-none)"
 BRIEF_CONF="$MC" brief_of "$H" | expect_absent "no private memory dir: nothing due" "maintenance due"
+# After a triage the signal waits for growth (plan delta, story 04): 20 lines or 2048 bytes past the mark.
+HM="$(hive mem-mark)"; M="$(automem "$HM" "$MC")"; mkdir -p "$M"; MK="$HM/.claude/state/memory-triage.txt"
+mark() { (cd "$HM" && CLAUDE_CONFIG_DIR="$MC" bash "$SRC/scripts/memory-triage.sh" --mark); }
+lines_of 170 10 > "$M/MEMORY.md"
+BRIEF_CONF="$MC" brief_of "$HM" | expect "no mark: due at the threshold" "memory triage (MEMORY.md 170 lines"
+mark
+expect_file() { if [ "$(cat "$MK" 2>/dev/null)" = "$2" ]; then ok "$1"; else bad "$1 - mark is '$(cat "$MK" 2>/dev/null)', expected '$2'"; fi; }
+expect_file "--mark writes the lines and bytes" "170 1700"
+BRIEF_CONF="$MC" brief_of "$HM" | expect_absent "a triaged size stays quiet until it grows" "memory triage"
+lines_of 189 10 > "$M/MEMORY.md"
+BRIEF_CONF="$MC" brief_of "$HM" | expect_absent "19 lines past the mark: quiet" "memory triage"
+lines_of 190 10 > "$M/MEMORY.md"
+BRIEF_CONF="$MC" brief_of "$HM" | expect "20 lines past the mark: due" "memory triage (MEMORY.md 190 lines"
+{ lines_of 169 10; lines_of 1 2057; } > "$M/MEMORY.md"     # 170 lines, 1700 + 2047 bytes
+BRIEF_CONF="$MC" brief_of "$HM" | expect_absent "2047 bytes past the mark: quiet" "memory triage"
+{ lines_of 169 10; lines_of 1 2058; } > "$M/MEMORY.md"     # 170 lines, 1700 + 2048 bytes
+BRIEF_CONF="$MC" brief_of "$HM" | expect "2048 bytes past the mark: due" "memory triage (MEMORY.md 170 lines"
+rm "$M/MEMORY.md"
+if mark >/dev/null 2>&1; then ok "--mark without MEMORY.md exits 0"; else bad "--mark without MEMORY.md failed"; fi
+expect_file "... and leaves the mark alone" "170 1700"
 got="$(cd "$H" && CLAUDE_CONFIG_DIR="$MC" bash "$SRC/scripts/memory-triage.sh" --dir)"
 listed="$(cd "$H" && CLAUDE_CONFIG_DIR="$MC" bash "$SRC/scripts/memory-triage.sh")"
 if [ "$got" = "$(automem "$H" "$MC")" ] && [ "$listed" = "no private memory: $got" ]; then
