@@ -12,12 +12,9 @@
 # story's ## Files. Exit: 0 clean (warnings allowed), 1 a blocking finding, 2 usage / no python.
 set -u
 
-PY=""
-for p in python3 python; do
-  if command -v "$p" >/dev/null 2>&1 && "$p" -c 'import sys; sys.exit(sys.version_info[0] != 3)' >/dev/null 2>&1; then
-    PY="$p"; break
-  fi
-done
-[ -n "$PY" ] || { echo "prompt-check: python 3 not found on PATH (python3 or python)" >&2; exit 2; }
+# shellcheck source=scripts/lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+vulyk_python || { echo "prompt-check: python 3 not found on PATH (python3, python or py)" >&2; exit 2; }
+PY="$VULYK_PY"
 
 PYTHONIOENCODING=utf-8 exec "$PY" "$(dirname "$0")/prompt-check.py" "$@"

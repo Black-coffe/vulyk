@@ -404,5 +404,5 @@ parts=()
 [ "$conflict" -gt 0 ] && parts+=("$conflict conflicts")
 [ "$exc" -gt 0 ] && parts+=("$exc exceptions")
 [ "$stale" -gt 0 ] && parts+=("index stale")
-( IFS=','; echo "RED: ${parts[*]}" | sed 's/,/, /g' )
+( IFS=','; echo "RED: ${parts[*]+${parts[*]}}" | sed 's/,/, /g' )
 exit 1

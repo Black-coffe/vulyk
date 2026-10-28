@@ -342,7 +342,7 @@ EOF
     # Existing file: it carries the owner's permissions and standing approvals, so merge one
     # key and touch nothing else. Python is what the framework already depends on for
     # handoff.py; without it, say exactly what to add rather than rewriting JSON with sed.
-    PY="$(command -v python3 || command -v python || command -v py || true)"
+    vulyk_python || true; PY="$VULYK_PY"
     if [ -z "$PY" ]; then
       echo "cannot merge without python: add  \"model\": \"$QUEEN\"  to $LOCAL by hand"
       exit 1

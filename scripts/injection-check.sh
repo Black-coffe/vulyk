@@ -25,7 +25,10 @@ case "${f//\\//}" in
   *.claude/commands/*.md|*SKILL.md|*.fixture) ;;
   *) exit 0 ;;
 esac
-PY="$(command -v python3 || command -v python)" || { echo "injection-check: needs python3 or python" >&2; exit 2; }
+# shellcheck source=scripts/lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+vulyk_python || { echo "injection-check: needs python 3 (python3, python or py)" >&2; exit 2; }
+PY="$VULYK_PY"
 
 "$PY" - "$f" <<'PY'
 import re, shlex, sys

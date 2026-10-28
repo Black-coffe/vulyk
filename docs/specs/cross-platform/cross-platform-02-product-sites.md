@@ -1,8 +1,8 @@
 ---
 story: cross-platform-02
 spec: cross-platform
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
@@ -94,5 +94,16 @@ contract»; `memory/map/agents-and-commands.md` «Agents» (`lead-review` suite 
 `bash tests/telemetry.test.sh --part telemetry && bash tests/telemetry.test.sh --part scan && bash tests/telemetry.test.sh --part install && bash scripts/defects-check.sh && bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- install.sh: sources `$SRC/scripts/lib.sh` right after `SRC` (missing: the contract's stderr line, exit 2); five resolvers -> `vulyk_python || true`, the CR strip -> `sed_inplace` (edited in binary mode, CR bytes kept).
+- state.sh sources lib.sh by `BASH_SOURCE` before its `cd`; an empty `date_epoch` reports `stale: true`.
+- telemetry.sh: `prev_week` = `date_shift`, `week_of`/`epoch_of` = `date_epoch` (week formatted `-d @s || -r s` on one line); `:842` guarded.
+- redact.sh `SED_ARGS`, anomaly-scan.sh `toks`, vulyk-update-check.sh `AUTH` guarded; defects-check.sh's `"RED: ${parts[*]}"` too (ask 6, every expansion).
+- injection-check, leak-check, top-model, prompt-check, symbol-map, trace-autopsy: `vulyk_python` (lib.sh by `BASH_SOURCE`); messages now name `py` too.
+- defects-check.sh / defects-index.sh keep their run-probe loops (already stub-safe): `tests/defects.test.sh:17` (story 04's) copies them into a fixture without `lib.sh`, so sourcing it there would break that suite.
+- handoff.sh: falls through unless exit 0 or 1; stdin stays unbuffered (dump/status run from a shell, a read would block). anomaly-scan.sh: presence gate dropped, handoff.sh answers.
+- Prose: `python` -> `bash scripts/py.sh` (build, evolve, review, status), `date -d` keeps `|| date -v`, lead-review runs the suite under `bash -c '. scripts/lib.sh && run_capped ...'`.
+- tests/telemetry.test.sh: sources lib.sh at the top; 16 `sed -i` -> `sed_inplace` (two multi-file lines split per file: the helper takes one file); `:582,587` -> `run_capped` with dead stubs; `:529` -> `vulyk_python` resolved to an absolute path (the counting `python3` shim execs `$PY`, a bare name looped into itself).
+- New install-part cases: stub python3 install, no-lib copy (exit 2, nothing written), `bash` and shebang `--check` from another cwd, `vulyk-update.sh --check` against a tagged release of this tree, ask 9 Commands block byte-identical.
 
 ## Findings
+- A symlink to `install.sh` is not a documented start: `BASH_SOURCE` names the link's directory, which has no `scripts/lib.sh`, so it exits 2 like the missing-file case (on Git Bash `ln -s` copies, same result). Not tested on its own.

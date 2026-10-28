@@ -19,6 +19,9 @@
 #
 # Exit status is always 0: this reports, it does not block.
 set -u
+# date_epoch lives in lib.sh, found beside this file before the cd below.
+# shellcheck source=scripts/lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "state: CANNOT RUN - not a git repo, so there is no project root to scan." >&2
@@ -131,9 +134,11 @@ for dir in $( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirn
   done
 
   # A snapshot older than the newest story file it describes is, by definition, behind it.
-  snap_epoch="$(date -u -d "$SNAP" +%s 2>/dev/null || echo 0)"
+  # An epoch neither date can read is unknown, and unknown reports stale - never fresh by a `0`.
+  snap_epoch="$(date_epoch "$SNAP")" || snap_epoch=""
   stale=false
-  [ "$snap_epoch" -gt 0 ] && [ "$newest" -gt "$snap_epoch" ] && stale=true
+  if [ -z "$snap_epoch" ]; then stale=true
+  elif [ "$newest" -gt "$snap_epoch" ]; then stale=true; fi
 
   # Which of the six confirmations (docs/cycle.md) the spec has reached - read off plan.md's
   # marker lines and the two verdict ledgers, the same files ship-check.sh reads. A marker

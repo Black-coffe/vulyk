@@ -108,10 +108,9 @@ is_number() { case "${1:-}" in ''|*[!0-9.-]*) return 1 ;; *) return 0 ;; esac; }
 
 now_week() { date -u +%G-W%V; }
 
-prev_week() { # the ISO week seven days back (GNU date, then BSD date; empty when neither works)
+prev_week() { # the ISO week seven days back (lib.sh date_shift: GNU, then BSD; empty when neither works)
   local w=""
-  w="$(date -u -d '7 days ago' +%G-W%V 2>/dev/null || true)"
-  [ -n "$w" ] || w="$(date -u -v-7d +%G-W%V 2>/dev/null || true)"
+  w="$(date_shift -7 +%G-W%V)" || w=""
   printf '%s' "$w"
 }
 
@@ -130,10 +129,11 @@ default_weeks() {
 shq() { local s="${1:-}" q="'" r="'\''"; printf "'%s'" "${s//$q/$r}"; }
 
 week_of() { # week_of <UTC ISO-8601 ts> -> YYYY-Www  (empty when the ts is unparseable)
-  local ts="${1:-}" w=""
+  local ts="${1:-}" e w=""
   [ -n "$ts" ] || return 0
-  w="$(date -u -d "$ts" +%G-W%V 2>/dev/null || true)"
-  [ -n "$w" ] || w="$(date -u -jf '%Y-%m-%dT%H:%M:%SZ' "$ts" +%G-W%V 2>/dev/null || true)"
+  e="$(date_epoch "$ts")" || return 0
+  # An epoch formats as GNU `-d @<s>`, else BSD `-r <s>`.
+  w="$(date -u -d "@$e" +%G-W%V 2>/dev/null || date -u -r "$e" +%G-W%V 2>/dev/null || true)"
   printf '%s' "$w"
 }
 
@@ -277,8 +277,7 @@ model_alias() {
 epoch_of() { # epoch_of <UTC ISO-8601 ts> -> unix seconds, empty when unparseable
   local ts="${1:-}" e=""
   [ -n "$ts" ] || return 0
-  e="$(date -u -d "$ts" +%s 2>/dev/null || true)"
-  [ -n "$e" ] || e="$(date -u -jf '%Y-%m-%dT%H:%M:%SZ' "$ts" +%s 2>/dev/null || true)"
+  e="$(date_epoch "$ts")" || e=""
   printf '%s' "$e"
 }
 
@@ -839,7 +838,7 @@ cmd_publish() {
   done
 
   if [ "${#prpairs[@]}" -gt 0 ]; then
-    recipe_pr "$slug" "vulyk-telemetry" "$hive" "${prpairs[@]}"
+    recipe_pr "$slug" "vulyk-telemetry" "$hive" ${prpairs[@]+"${prpairs[@]}"}
   fi
 
   if [ "$sent" -eq 0 ]; then

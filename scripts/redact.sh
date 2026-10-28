@@ -50,7 +50,7 @@ SED_ARGS=( -E
 
 # Degrade to cat unless every tool is present AND this sed dialect accepts the script.
 if ! command -v sed >/dev/null 2>&1 || ! command -v awk >/dev/null 2>&1 \
-   || ! printf '' | sed "${SED_ARGS[@]}" >/dev/null 2>&1; then
+   || ! printf '' | sed ${SED_ARGS[@]+"${SED_ARGS[@]}"} >/dev/null 2>&1; then
   cat
   exit 0
 fi
@@ -62,6 +62,6 @@ awk -v mask="$MASK" '
   inkey && /-----END [A-Z0-9 ]*PRIVATE KEY-----/ { inkey=0; next }
   inkey { next }
   { print }
-' | sed "${SED_ARGS[@]}"
+' | sed ${SED_ARGS[@]+"${SED_ARGS[@]}"}
 
 exit 0

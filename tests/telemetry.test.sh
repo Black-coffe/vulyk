@@ -27,6 +27,9 @@
 # substrings, a non-zero exit on the first wrong answer, one summary line at the end.
 set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
+# The portable helpers (sed_inplace, vulyk_python, run_capped) every edit and cap below goes through.
+# shellcheck source=scripts/lib.sh
+. "$SRC/scripts/lib.sh"
 PARTS="telemetry
 scan
 install
@@ -526,7 +529,8 @@ if part_on scan; then
 # --- detectors (anomaly-telemetry-02) ---------------------------------------------------------
 # Story 02 adds the `scan` verb's five detectors, .claude/hooks/anomaly-scan.sh and
 # `handoff.py measure`. Its cases belong here, below this marker.
-PY="$(command -v python3 || command -v python || true)"
+# The proven name as an absolute path: the counting shim below is named python3 and execs $PY.
+vulyk_python || true; PY="$(command -v "$VULYK_PY" 2>/dev/null || true)"
 mkdir -p "$HIVE/.claude/hooks"
 cp "$SRC/.claude/hooks/handoff.py" "$SRC/.claude/hooks/handoff.sh" "$SRC/.claude/hooks/anomaly-scan.sh" \
   "$HIVE/.claude/hooks/"
@@ -577,14 +581,18 @@ expect_eq "measure on a missing file exits 0" "0" "$MISSING_RC"
 
 # Review finding 16: `measure` is a direct call, so it must return with a terminal (or any
 # never-written pipe) on stdin - the hook-payload read used to block it forever.
+# The cap is run_capped, with dead timeout/gtimeout stubs first on PATH: a Mac without coreutils still
+# caps the call (lib.sh's Python fallback) instead of failing on a missing `timeout`.
+DEADCAP="$T/deadcap"; mkdir -p "$DEADCAP"
+for b in timeout gtimeout; do printf '#!/bin/sh\nexit 1\n' > "$DEADCAP/$b"; chmod +x "$DEADCAP/$b"; done
 TTY_RC=0; TTY_OUT=""
 if { : < /dev/tty; } 2>/dev/null; then
-  TTY_OUT="$(timeout 5 "$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/main.jsonl" < /dev/tty 2>/dev/null)" || TTY_RC=$?
+  TTY_OUT="$(PATH="$DEADCAP:$PATH" run_capped 5 "$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/main.jsonl" < /dev/tty 2>/dev/null)" || TTY_RC=$?
 else
   FIFO="$T/measure.fifo"; rm -f "$FIFO"; mkfifo "$FIFO"
   sleep 10 > "$FIFO" &            # a writer that never writes: a blind read would never return
   FIFO_PID=$!
-  TTY_OUT="$(timeout 5 "$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/main.jsonl" < "$FIFO" 2>/dev/null)" || TTY_RC=$?
+  TTY_OUT="$(PATH="$DEADCAP:$PATH" run_capped 5 "$PY" "$SRC/.claude/hooks/handoff.py" measure "$MEASURE/main.jsonl" < "$FIFO" 2>/dev/null)" || TTY_RC=$?
   kill "$FIFO_PID" 2>/dev/null; wait "$FIFO_PID" 2>/dev/null || true
 fi
 expect_eq "measure with a terminal on stdin returns instead of blocking" "0" "$TTY_RC"
@@ -935,7 +943,7 @@ expect_eq "a single-file hive still pins from CLAUDE.md" "fable" "$(tmrun "" 2>/
 tmrun --explain 2>&1 | expect "--explain names CLAUDE.md in a single-file hive" "decided by: constitution - CLAUDE.md pins TOP_MODEL = fable"
 rm -f "$FLOORHIVE/CLAUDE.md"
 
-sed -i 's/^model: sonnet$/model: claude-sonnet-4-5/' "$FLOORHIVE/.claude/agents/worker-code.md"
+sed_inplace 's/^model: sonnet$/model: claude-sonnet-4-5/' "$FLOORHIVE/.claude/agents/worker-code.md"
 floorcheck 2>&1 | expect "--floor names an agent pinned below the floor" "worker-code.md model = claude-sonnet-4-5 is sonnet 4.5"
 
 : > "$LOG"
@@ -1237,7 +1245,7 @@ expect_eq "an answered row is byte-identical after --upgrade" "1" \
 cat "$T/up-plain.out" | expect_absent "no question for a hive that already answered" "Enable telemetry?"
 
 # --check reports the pending insertion and writes nothing
-sed -i '/^| Telemetry |/d' "$TGT/CLAUDE.md"
+sed_inplace '/^| Telemetry |/d' "$TGT/CLAUDE.md"
 CONST_BEFORE="$(cat "$TGT/CLAUDE.md")"
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/up-check.out" 2>&1
 expect_eq "--check never writes the row" "1" \
@@ -1254,20 +1262,91 @@ expect_eq "the cached install equals a real install (diff -r)" "" "$(diff -r "$N
 # OWNSET is a real install over an owner's settings.json: the cached one the other parts copy must equal it
 install_cache "$ICACHE-ownset" ownset
 expect_eq "the cached owner-settings install equals a real one (diff -r)" "" "$(diff -r "$OWNSET" "$ICACHE-ownset/tree" 2>&1)"
-sed -i '/VULYK:PROFILE:START/d; /VULYK:PROFILE:END/d' "$NOMARK/CLAUDE.md"
+sed_inplace '/VULYK:PROFILE:START/d; /VULYK:PROFILE:END/d' "$NOMARK/CLAUDE.md"
 NOMARK_BEFORE="$(cat "$NOMARK/CLAUDE.md")"
 VULYK_TELEMETRY=on bash "$SRC/install.sh" "$NOMARK" --upgrade > "$T/nomark-upgrade.out" 2>&1
 cat "$T/nomark-upgrade.out" | expect "marker-less Profile: warns and names the row and value" \
   "warning: Profile block has no markers - not writing | Telemetry | on |; add the row by hand"
 expect_eq "marker-less Profile: the file is unchanged" "1" \
   "$([ "$NOMARK_BEFORE" = "$(cat "$NOMARK/CLAUDE.md")" ] && echo 1 || echo 0)"
+
+# --- cross-platform-02: install.sh sources scripts/lib.sh and edits settings.json through vulyk_python
+echo "--- install.sh: lib.sh beside it, a stub python3 passed over"
+# A python3 that is a stub (the Windows Store alias, exit 49) first on PATH; `python` beside it is the real one,
+# so the run does not depend on which name this machine gives its Python.
+vulyk_python || true; REALPY="$(command -v "$VULYK_PY" 2>/dev/null || true)"
+XSTUB="$T/xp-stub"; mkdir -p "$XSTUB"
+printf '#!/bin/sh\nexit 49\n' > "$XSTUB/python3"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$REALPY" > "$XSTUB/python"
+chmod +x "$XSTUB/python3" "$XSTUB/python"
+XP="$T/hive-xp-stub"; seed_ownset "$XP"
+XP_RC=0; env -u VULYK_PY PATH="$XSTUB:$PATH" bash "$SRC/install.sh" "$XP" --telemetry off > "$T/xp-stub.out" 2>&1 || XP_RC=$?
+expect_eq "a stub python3 first on PATH: install.sh exits 0" "0" "$XP_RC"
+cat "$T/xp-stub.out" | expect "a stub python3 first on PATH: settings.json is still merged" \
+  "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+cat "$T/xp-stub.out" | expect_absent "a stub python3 first on PATH: no hook left unwired" "could NOT be wired"
+expect_eq "the merged settings.json keeps the owner's entry and gains the scan" "1 1" \
+  "$(grep -c 'Bash(ls:\*)' "$XP/.claude/settings.json") $(grep -c 'anomaly-scan.sh' "$XP/.claude/settings.json")"
+
+# A copy of install.sh without scripts/lib.sh beside it (a symlink to install.sh lands here too): exit 2, nothing written.
+NOLIB="$T/xp-nolib"; mkdir -p "$NOLIB"; cp "$SRC/install.sh" "$SRC/VERSION" "$NOLIB/"
+mkdir -p "$T/xp-nolib-dest"
+NOLIB_RC=0; bash "$NOLIB/install.sh" "$T/xp-nolib-dest" --telemetry off > "$T/xp-nolib.out" 2>&1 || NOLIB_RC=$?
+expect_eq "install.sh without scripts/lib.sh exits 2" "2" "$NOLIB_RC"
+cat "$T/xp-nolib.out" | expect "... naming the file and the fix" \
+  "install.sh: scripts/lib.sh not found beside install.sh - run from a full checkout"
+expect_eq "... and writes nothing" "" "$(ls -A "$T/xp-nolib-dest")"
+
+# Every documented start finds lib.sh through BASH_SOURCE, never the cwd: run from a cwd outside the checkout,
+# against a hive with its own settings.json so the dry run reaches vulyk_python.
+XCWD="$T/xp-elsewhere"; mkdir -p "$XCWD"
+XC="$T/hive-xp-check"; seed_ownset "$XC"
+XC_RC=0; ( cd "$XCWD" && bash "$SRC/install.sh" "$XC" --check --telemetry off ) > "$T/xp-bash.out" 2>&1 || XC_RC=$?
+expect_eq "bash <checkout>/install.sh --check from another cwd exits 0" "0" "$XC_RC"
+cat "$T/xp-bash.out" | expect "... and dry-runs the settings.json merge" "would wire     .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+cat "$T/xp-bash.out" | expect_absent "... with every helper defined" "command not found"
+XC_RC=0; ( cd "$XCWD" && "$SRC/install.sh" "$XC" --check --telemetry off ) > "$T/xp-shebang.out" 2>&1 || XC_RC=$?
+expect_eq "<checkout>/install.sh (shebang) --check from another cwd exits 0" "0" "$XC_RC"
+cat "$T/xp-shebang.out" | expect "... and dry-runs the settings.json merge" "would wire     .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+cat "$T/xp-shebang.out" | expect_absent "... with every helper defined" "command not found"
+
+# scripts/vulyk-update.sh runs the release's own install.sh out of its source cache: a release made of this tree.
+XREL="$T/xp-rel"; mkdir -p "$XREL"
+( cd "$SRC" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$XREL"
+printf '9.9.9\n' > "$XREL/VERSION"
+git -C "$XREL" init -q -b main && git -C "$XREL" config core.autocrlf false \
+  && git -C "$XREL" add -A 2>/dev/null && git -C "$XREL" -c user.name=t -c user.email=t@t commit -qm release \
+  && git -C "$XREL" tag v9.9.9
+git clone -q "$XREL" "$T/xp-relcache"
+XU="$T/hive-xp-update"; fresh_install "$XU"
+XU_RC=0; ( cd "$XCWD" && VULYK_SRC="$T/xp-relcache" bash "$SRC/scripts/vulyk-update.sh" "$XU" --check --version 9.9.9 --telemetry off ) \
+  > "$T/xp-update.out" 2>&1 || XU_RC=$?
+expect_eq "scripts/vulyk-update.sh --check runs the release's install.sh, exit 0" "0" "$XU_RC"
+cat "$T/xp-update.out" | expect "... reaching the release's installer" "Dry run done."
+cat "$T/xp-update.out" | expect_absent "... which finds its lib.sh" "lib.sh not found"
+cat "$T/xp-update.out" | expect_absent "... with every helper defined" "command not found"
+
+# Ask 9, upgrade half: a hive's own filled ## Commands block - the old bare-python cell included - is the host's,
+# carried byte for byte through --upgrade.
+A9="$T/hive-xp-cells"; fresh_install "$A9"
+awk '/VULYK:COMMANDS:START/ { inb = 1 }
+     { print }
+     inb && /^\|---\|---\|$/ && !done { print "| Python | `python -m py_compile .claude/hooks/*.py` |"; done = 1 }' \
+  "$A9/CLAUDE.md" > "$T/xp-cells.md" && cat "$T/xp-cells.md" > "$A9/CLAUDE.md"
+cmdblock() { awk '/VULYK:COMMANDS:START/,/VULYK:COMMANDS:END/' "$1"; }
+cmdblock "$A9/CLAUDE.md" | expect "the hive's block holds the old python cell" '| Python | `python -m py_compile .claude/hooks/*.py` |'
+cmdblock "$A9/CLAUDE.md" > "$T/xp-cells.before"
+bash "$SRC/install.sh" "$A9" --upgrade --telemetry off > "$T/xp-cells.out" 2>&1
+cmdblock "$A9/CLAUDE.md" > "$T/xp-cells.after"
+expect_eq "install.sh --upgrade keeps the hive's ## Commands block (old python cell included) byte-identical" "0" \
+  "$(cmp -s "$T/xp-cells.before" "$T/xp-cells.after"; echo $?)"
 fi # install
 
 if part_on terminal; then
 # The hive's own updater, then the Telemetry question with and without a terminal. The question
 # needs $TGT without its row, as the install part leaves it (the sed is a no-op in a whole run).
 install_fixtures tgt
-sed -i '/^| Telemetry |/d' "$TGT/CLAUDE.md"
+sed_inplace '/^| Telemetry |/d' "$TGT/CLAUDE.md"
 # An upgrade run through the hive's own scripts/vulyk-update.sh replaces that very script. An
 # in-place copy made the old process read the new file from its old offset and execute the
 # tail (upgrading a 0.17 hive to 0.18); install.sh now copies beside and renames over. The
@@ -1429,7 +1508,7 @@ block() { awk -v m="$2" 'index($0, m ":END") { f = 0 } f { print } index($0, m "
 
 CR="$T/hive-replace"; mkdir -p "$CR"
 bash "$SRC/install.sh" "$CR" --telemetry on > /dev/null 2>&1
-sed -i 's/| Stack | `<fill in>` |/| Stack | `filled-stack` |/; s/| Lint | `<fill in>` |/| Lint | `npm run lint -- --quiet` |/' "$CR/CLAUDE.md"
+sed_inplace 's/| Stack | `<fill in>` |/| Stack | `filled-stack` |/; s/| Lint | `<fill in>` |/| Lint | `npm run lint -- --quiet` |/' "$CR/CLAUDE.md"
 printf 'An owner line outside the blocks\n' >> "$CR/CLAUDE.md"
 cp "$CR/CLAUDE.md" "$T/cr.before"
 block "$CR/CLAUDE.md" VULYK:PROFILE > "$T/cr.profile"
@@ -1449,7 +1528,7 @@ eval "$(sed -n '/^report_full_suite_row() {/,/^}/p' "$SRC/install.sh")"
 FS="$T/hive-fullsuite"; mkdir -p "$FS"
 for row in 'Full test suite' 'Full suite / build' 'Повний набір тестів'; do
   cp "$T/cr.before" "$FS/c.md"
-  sed -i "s#^| Full suite / build (round-only) |#| $row |#" "$FS/c.md"
+  sed_inplace "s#^| Full suite / build (round-only) |#| $row |#" "$FS/c.md"
   report_full_suite_row "$FS/c.md" | expect "the upgrade names a '$row' row" "no 'Full suite / build (round-only)' row"
 done
 sed 's#^| Full suite / build (round-only) | `<fill in>` |#| Full suite / build (round-only) | none |#' "$T/cr.before" > "$FS/none.md"
@@ -1460,7 +1539,7 @@ expect_eq "a Commands block without markers gets no note" "" "$(report_full_suit
 SCF="$T/hive-sidecar-fullsuite"; mkdir -p "$SCF"
 printf '# My project rules\n\n@CLAUDE.vulyk.md\n' > "$SCF/CLAUDE.md"
 bash "$SRC/install.sh" "$SCF" --telemetry off > /dev/null 2>&1
-sed -i 's#^| Full suite / build (round-only) |#| Full test suite |#' "$SCF/CLAUDE.vulyk.md"
+sed_inplace 's#^| Full suite / build (round-only) |#| Full test suite |#' "$SCF/CLAUDE.vulyk.md"
 bash "$SRC/install.sh" "$SCF" --upgrade --check 2>&1 | expect "a sidecar's 'Full test suite' row is named on --upgrade --check" "no 'Full suite / build (round-only)' row"
 
 S0="$(treesum "$CR")"
@@ -1492,7 +1571,7 @@ cat "$T/cr-after.out" | expect_absent "a migrated hive gets no migrate hint" "--
 SC="$T/hive-sidecar-replace"; mkdir -p "$SC"
 printf '# My project rules\n\n@CLAUDE.vulyk.md\n' > "$SC/CLAUDE.md"
 bash "$SRC/install.sh" "$SC" --telemetry off > /dev/null 2>&1
-sed -i 's/| Stack | `<fill in>` |/| Stack | `sidecar-stack` |/; /^| Browser MCP |/d' "$SC/CLAUDE.vulyk.md"
+sed_inplace 's/| Stack | `<fill in>` |/| Stack | `sidecar-stack` |/; /^| Browser MCP |/d' "$SC/CLAUDE.vulyk.md"
 printf 'An owner line in the sidecar\n' >> "$SC/CLAUDE.vulyk.md"
 cp "$SC/CLAUDE.md" "$T/sc.foreign"; cp "$SC/CLAUDE.vulyk.md" "$T/sc.before"
 bash "$SRC/install.sh" "$SC" --upgrade --constitution replace > "$T/sc.out" 2>&1
@@ -1506,7 +1585,7 @@ cat "$T/sc.out" | expect "a release Profile row the hive lacks is named, not dro
 
 # refused, before anything is written, when the markers are gone
 NMR="$T/hive-replace-nomarkers"; fresh_install "$NMR"
-sed -i '/VULYK:COMMANDS:START/d; /VULYK:COMMANDS:END/d' "$NMR/CLAUDE.md"
+sed_inplace '/VULYK:COMMANDS:START/d; /VULYK:COMMANDS:END/d' "$NMR/CLAUDE.md"
 S1="$(treesum "$NMR")"
 RC=0; bash "$SRC/install.sh" "$NMR" --upgrade --constitution replace > "$T/nmr.out" 2>&1 || RC=$?
 expect_eq "a constitution without markers: replace exits 1" "1" "$RC"
@@ -1941,7 +2020,7 @@ if part_on wrapper; then
 # so re-running the update must repair them in place, not skip them or add a second copy.
 BC="$T/hive-wrap-bash-c"; BCS="$BC/.claude/settings.json"
 cp "$BCS" "$T/bc.good"
-sed -i "/defect/s/'\"\(\r\{0,1\}\)\$/\"\1/" "$BCS"   # Windows python writes CRLF
+sed_inplace "/defect/s/'\"\(\r\{0,1\}\)\$/\"\1/" "$BCS"   # Windows python writes CRLF
 expect_eq "fixture: four defect entries lost their closing quote" "4" \
   "$(jq -r '.hooks[][].hooks[].command | select(test("defect"))' "$BCS" | tr -d '\r' | grep -vc "'\$")"
 bash "$SRC/install.sh" "$BC" --upgrade --check > "$T/bc-check.out" 2>&1
@@ -1962,7 +2041,7 @@ echo "--- install.sh: CRLF manifest and .gitignore"
 CR="$T/hive-crlf"; fresh_install "$CR"
 printf '#!/usr/bin/env bash\n' > "$CR/.claude/hooks/retired-old.sh"
 printf '.claude/hooks/retired-old.sh\n' >> "$CR/.claude/vulyk-manifest"
-sed -i 's/$/\r/' "$CR/.claude/vulyk-manifest" "$CR/.gitignore"
+for f in "$CR/.claude/vulyk-manifest" "$CR/.gitignore"; do sed_inplace 's/$/\r/' "$f"; done
 expect_eq "fixture: the manifest is CRLF" "1" "$(grep -qc $'\r' "$CR/.claude/vulyk-manifest" && echo 1 || echo 0)"
 bash "$SRC/install.sh" "$CR" --upgrade --check > "$T/crlf-check.out" 2>&1
 cat "$T/crlf-check.out" | expect "--check: the retired file would go" "would remove   .claude/hooks/retired-old.sh"
@@ -2271,15 +2350,15 @@ git -C "$REL" add -A >/dev/null 2>&1 && git -C "$REL" commit -qm v9.0.0 && git -
 git -C "$HIVE" init -q
 bash "$REL/install.sh" "$HIVE" --telemetry off > "$T/edits-install.out" 2>&1
 A="$HIVE/.claude/agents"
-sed -i 's/^maxTurns: .*/maxTurns: 140/' "$A/worker-code.md"           # an edit the release does not touch
-sed -i 's/^maxTurns: .*/maxTurns: 140/' "$A/lead-review.md"           # an edit on the line the release changes
+sed_inplace 's/^maxTurns: .*/maxTurns: 140/' "$A/worker-code.md"           # an edit the release does not touch
+sed_inplace 's/^maxTurns: .*/maxTurns: 140/' "$A/lead-review.md"           # an edit on the line the release changes
 rm -f "$A/drone-scout.md"                                             # a deletion
 R="$REL/.claude/agents"
-sed -i '3s/$/ (hotfix)/' "$R/worker-test.md"                          # an untagged commit the hive took by hand
+sed_inplace '3s/$/ (hotfix)/' "$R/worker-test.md"                          # an untagged commit the hive took by hand
 git -C "$REL" commit -qam hotfix
 git -C "$REL" show HEAD:.claude/agents/worker-test.md > "$A/worker-test.md"
-sed -i '3s/$/ (v9.0.1)/' "$R/worker-code.md" "$R/drone-docs.md" "$R/worker-test.md"
-sed -i 's/^maxTurns: .*/maxTurns: 70/' "$R/lead-review.md"
+for f in worker-code drone-docs worker-test; do sed_inplace '3s/$/ (v9.0.1)/' "$R/$f.md"; done
+sed_inplace 's/^maxTurns: .*/maxTurns: 70/' "$R/lead-review.md"
 printf '9.0.1\n' > "$REL/VERSION"
 git -C "$REL" commit -qam v9.0.1 && git -C "$REL" tag v9.0.1
 cp "$A/lead-review.md" "$T/lead-review.hive"
