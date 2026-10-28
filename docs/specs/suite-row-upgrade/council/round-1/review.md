@@ -1,4 +1,4 @@
-<!-- seat: review · model: claude-opus-5-5 · round: 1 · head: 4128133 · pack: 75e0e88eae3e · attempt: 1 · recorded: 2026-10-28T08:43:35Z · verdict: BLOCK -->
+<!-- seat: review · model: claude-opus-5-5 · round: 1 · head: 655d92b · pack: 75e0e88eae3e · attempt: 1 · recorded: 2026-10-28T08:43:35Z · verdict: BLOCK -->
 VERDICT: BLOCK
 MODEL: claude-opus-5-5
 SUITE: ok 557s

@@ -35,12 +35,12 @@ that canon (its command kept), and the stale audit note and ADR status are broug
 **Branch:** vulyk/suite-row-upgrade
 **Checked:**
 **Council:**
-**Council:** ESCALATE round 1, 2026-10-28, at e0bf755, pack 75e0e88eae3e
+**Council:** ESCALATE round 1, 2026-10-28, at 0f14a62, pack 75e0e88eae3e
 **Shipped:**
 
 ## Needs a human
 - reason: ceiling · round 1 · 2026-10-28
 - ask 4: BLOCK by the reviewer - see docs/specs/suite-row-upgrade/council/round-1/review.md
 - seats: docs/specs/suite-row-upgrade/council/round-1/
-**Checked:** ACCEPTED by Andrei, 2026-10-28, at c581ffe - owner chose «ACCEPTED и выпуск (Рекомендую)» 2026-10-28: round-1 BLOCK was ask 4 (hives uncommitted) - committed in six hives, pushed in the four with a remote; minor 2 fixed in c581ffe with a test (constitution part 44/0)
-**Shipped:** 0.39.1, 2026-10-28, at 4e3c5d0 - merged to main, publish pending; owner override: «ACCEPTED и выпуск (Рекомендую)» after round-1 ESCALATE
+**Checked:** ACCEPTED by Andrei, 2026-10-28, at f241521 - owner chose «ACCEPTED и выпуск (Рекомендую)» 2026-10-28: round-1 BLOCK was ask 4 (hives uncommitted) - committed in six hives, pushed in the four with a remote; minor 2 fixed in f241521 with a test (constitution part 44/0)
+**Shipped:** 0.39.1, 2026-10-28, at a1951e9 - merged to main, publish pending; owner override: «ACCEPTED и выпуск (Рекомендую)» after round-1 ESCALATE
