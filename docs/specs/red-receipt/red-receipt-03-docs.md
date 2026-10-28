@@ -1,8 +1,8 @@
 ---
 story: red-receipt-03-docs
 spec: red-receipt
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: haiku
@@ -70,5 +70,11 @@ memory/map/cycle.md `## Verbs`, `## Repair (ADR-013 D4)`; memory/map/agents-and-
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- docs/adr/025-red-receipt.md: new; layout as ADR-024 with `## Options` listing the five declined proposals (reasons from horizon.md, the plan's Rejected for the three it carries) and `## Named bypasses` for the four bypasses.
+- docs/cycle.md: stage 04 row names the receipt; one invalidation row added at the end of the table; nothing else moved.
+- docs/command-reference.md: one sentence in the `/vulyk-build` solo paragraph naming `stamp-red`.
+- CHANGELOG.md: `### Added (spec \`red-receipt\`)` under `## [Unreleased]`; `## [0.39.1]` untouched.
+- Surprise: plan.md's Rejected carries three options; the other two (mutation testing, mock ban) reasons come from horizon.md's table.
+- `bash scripts/defects-check.sh docs/adr/025-red-receipt.md` exits 0 (GREEN: 2 blocking checks).
 
 ## Findings
