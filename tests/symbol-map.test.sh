@@ -195,6 +195,123 @@ expect_eq "the replay ends with hits, misses and the fixture's noise" "replay: h
 "$RPY" "$SRC/docs/specs/symbol-map/replay.py" "$(winpath "$T/cases-norepo.json")" > /dev/null 2>&1; RC=$?
 expect_eq "a story outside any git repo exits 2" "2" "$RC"
 
+# trace-autopsy.sh (docs/specs/trace-autopsy/plan.md ## Contracts), the step-2 sibling of symbol-map.sh: a fixture repo
+# built here, with two authors so the newest commit on a line is told from the first one.
+echo "--- trace-autopsy"
+TA="$SRC/scripts/trace-autopsy.sh"
+R="$T/ta"; mkdir -p "$R/src/app" "$R/web" "$R/lib" "$R/a" "$R/b"
+printf 'def calc(a, b):\n    x = a\n    return a + b\n' > "$R/src/app/core.py"
+printf 'from app.core import calc\ncalc(1, 0)\n' > "$R/src/app/main.py"
+printf 'const http = 1;\nfunction handler() {\n  const y = 2;\n  throw new Error("boom");\n}\n' > "$R/web/server.js"
+printf '#!/usr/bin/env bash\nfoo\n' > "$R/lib/run.sh"
+printf 'x = 1\n' > "$R/a/util.py"; printf 'x = 2\n' > "$R/b/util.py"
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf 'v = %s\n' "$i" > "$R/lib/m$i.py"; done
+git -C "$R" init -q
+git -C "$R" add -A && git -C "$R" -c user.name=Ann -c user.email=ann@example.invalid commit -q -m "initial import"
+printf 'def calc(a, b):\n    x = a\n    return a / b\n' > "$R/src/app/core.py"
+git -C "$R" add -A && git -C "$R" -c user.name=Bob -c user.email=bob@example.invalid commit -q -m "divide instead of add"
+HEAD7="$(git -C "$R" rev-parse --short=7 HEAD)"
+brief() { mkdir -p "$R/docs/specs/$1"; { printf '# brief\n\n## Request (verbatim)\n'; sed 's/^/> /'; } > "$R/docs/specs/$1/brief.md"; }
+
+brief py <<'EOF'
+Traceback (most recent call last):
+  File "/app/src/app/main.py", line 2, in <module>
+  File "/app/src/app/core.py", line 3, in calc
+    return a / b
+ZeroDivisionError: division by zero
+EOF
+t0="$(date +%s%N)"
+bash "$TA" "$R/docs/specs/py/brief.md" > "$T/ta-py.out" 2>&1; RC=$?
+ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+A="$R/docs/specs/py/autopsy.md"
+expect_eq "trace-autopsy: a Python traceback exits 0" "0" "$RC"
+if [ -f "$A" ]; then ok "trace-autopsy: a Python traceback writes autopsy.md"
+else bad "trace-autopsy: a Python traceback writes autopsy.md - got:"; sed 's/^/        /' "$T/ta-py.out"; : > "$A"; fi
+expect "trace-autopsy: /app/src/app/core.py resolves by suffix" "src/app/core.py:3" "$A"
+expect "trace-autopsy: the code line is read at HEAD" "return a / b" "$A"
+expect "trace-autopsy: HEAD is named" "$HEAD7" "$A"
+expect "trace-autopsy: the newest commit on the line" "divide instead of add" "$A"
+expect "trace-autopsy: its author" "Bob" "$A"
+expect "trace-autopsy: labelled as the last touch" "last touched" "$A"
+expect_absent "trace-autopsy: never says broke" "broke" "$A"
+expect_absent "trace-autopsy: never says сломал" "сломал" "$A"
+inner="$(grep -n 'src/app/core.py:3' "$A" | head -n1 | cut -d: -f1)"; outer="$(grep -n 'src/app/main.py:2' "$A" | head -n1 | cut -d: -f1)"
+if [ -n "$inner" ] && [ -n "$outer" ] && [ "$inner" -lt "$outer" ]; then ok "trace-autopsy: innermost Python frame first"
+else bad "trace-autopsy: innermost Python frame first (core at '${inner}', main at '${outer}')"; fi
+if [ "$ms" -lt 1000 ]; then ok "trace-autopsy: a run takes ${ms} ms (< 1000)"; else bad "trace-autopsy: a run takes ${ms} ms (>= 1000)"; fi
+
+brief js <<'EOF'
+Error: boom
+    at handler (C:\build\web\server.js:4:11)
+    at Server.emit (node:events:517:28)
+EOF
+bash "$TA" "$R/docs/specs/js/brief.md" > /dev/null 2>&1
+touch "$R/docs/specs/js/autopsy.md"
+expect "trace-autopsy: a Windows path in a Node frame resolves" "web/server.js:4" "$R/docs/specs/js/autopsy.md"
+expect "trace-autopsy: the Node frame's code line" 'throw new Error("boom")' "$R/docs/specs/js/autopsy.md"
+
+brief sh <<'EOF'
+/opt/svc/lib/run.sh: line 2: foo: command not found
+see also web/server.js:2
+EOF
+bash "$TA" "$R/docs/specs/sh/brief.md" > /dev/null 2>&1
+touch "$R/docs/specs/sh/autopsy.md"
+expect "trace-autopsy: a bash frame resolves" "lib/run.sh:2" "$R/docs/specs/sh/autopsy.md"
+expect "trace-autopsy: a plain path:line resolves" "web/server.js:2" "$R/docs/specs/sh/autopsy.md"
+
+brief marks <<'EOF'
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/json/decoder.py", line 355, in raw_decode
+  File "/srv/util.py", line 1, in <module>
+  File "/app/src/app/core.py", line 999, in calc
+  File "/app/src/app/core.py", line 2, in calc
+EOF
+bash "$TA" "$R/docs/specs/marks/brief.md" > "$T/ta-marks.out" 2>&1; RC=$?
+touch "$R/docs/specs/marks/autopsy.md"
+expect_eq "trace-autopsy: marks only, still exit 0" "0" "$RC"
+expect "trace-autopsy: a frame outside the repo is marked" "outside the repo" "$R/docs/specs/marks/autopsy.md"
+expect "trace-autopsy: a suffix two files share is marked" "ambiguous" "$R/docs/specs/marks/autopsy.md"
+expect "trace-autopsy: a line past the end is marked" "past end" "$R/docs/specs/marks/autopsy.md"
+
+brief hostile <<'EOF'
+-L1,1:lib/run.sh:2
+  File "../../etc/passwd", line 1, in x
+    at $(touch pwned):2
+    at `touch pwned2`.js:3:1
+EOF
+( cd "$R" && bash "$TA" "$R/docs/specs/hostile/brief.md" > "$T/ta-hostile.out" 2>&1 ); RC=$?
+expect_eq "trace-autopsy: a hostile trace exits 0" "0" "$RC"
+if [ ! -e "$R/pwned" ] && [ ! -e "$R/pwned2" ] && [ ! -e "$SRC/pwned" ] && [ ! -e "$SRC/pwned2" ]; then
+  ok "trace-autopsy: trace text is never run"; else bad "trace-autopsy: trace text was run (a pwned file exists)"; fi
+if grep -qE '^(\.\./)*etc/passwd:1 ' "$T/ta-hostile.out"; then bad "trace-autopsy: ../../etc/passwd became a frame"
+else ok "trace-autopsy: ../../etc/passwd never becomes a frame"; fi
+
+brief none <<'EOF'
+It crashes when I click save. No log.
+  File "/usr/lib/python3.12/json/decoder.py", line 355, in raw_decode
+EOF
+bash "$TA" "$R/docs/specs/none/brief.md" > "$T/ta-none.out" 2>&1; RC=$?
+expect_eq "trace-autopsy: no repo frame exits 0" "0" "$RC"
+if [ ! -e "$R/docs/specs/none/autopsy.md" ]; then ok "trace-autopsy: no repo frame writes no autopsy.md"
+else bad "trace-autopsy: no repo frame writes no autopsy.md"; fi
+expect "trace-autopsy: no repo frame says so" "no repo frame" "$T/ta-none.out"
+
+{ printf 'Traceback (most recent call last):\n'; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf '  File "/app/lib/m%s.py", line 1, in f\n' "$i"; done; } | brief many
+bash "$TA" "$R/docs/specs/many/brief.md" > /dev/null 2>&1
+touch "$R/docs/specs/many/autopsy.md"
+n="$(grep -c '' "$R/docs/specs/many/autopsy.md")"
+if [ "$n" -le 15 ] && [ "$n" -gt 0 ]; then ok "trace-autopsy: twelve frames fit in $n lines (<= 15)"; else bad "trace-autopsy: twelve frames give $n lines (want 1-15)"; fi
+case "$(tail -n1 "$R/docs/specs/many/autopsy.md")" in
+  "... "*more*) ok "trace-autopsy: the overflow folds into a last '... N more' line" ;;
+  *) bad "trace-autopsy: the last line is not '... N more': $(tail -n1 "$R/docs/specs/many/autopsy.md")" ;;
+esac
+
+bash "$TA" > /dev/null 2>&1; RC=$?
+expect_eq "trace-autopsy: no argument exits 2" "2" "$RC"
+mkdir -p "$T/ta-norepo"; printf '> lib/run.sh:2\n' > "$T/ta-norepo/brief.md"
+bash "$TA" "$T/ta-norepo/brief.md" > /dev/null 2>&1; RC=$?
+expect_eq "trace-autopsy: a brief outside any git repo exits 2" "2" "$RC"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 echo "symbol-map.test.sh: $CHECKS checks, $FAILED failed"
