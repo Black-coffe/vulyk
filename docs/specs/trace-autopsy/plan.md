@@ -57,4 +57,14 @@ location counts as known and step 3 sends no scout.
 
 ## Plan deltas
 
+- 2026-10-28, trigger: a side-agent note relayed by the owner during story 02 (model text, not an owner quote): a build
+  that drops a folder (`/app/app/core.py` for `src/app/core.py`) left the frame `ambiguous`, and with no resolved frame
+  the ambiguous hint was lost. Decision: a unique tail of two parts or more resolves; the `no repo frame` line names the
+  first ambiguous candidates; story 02 also takes `scripts/trace-autopsy.py`. Rejected: mapping built `dist/` files
+  back to sources (needs source maps; stays a known limit). Owner told in one line.
+
+
 **Approved:** Andrei, 2026-10-28 («/vulyk-build trace-autopsy»)
+**Branch:** vulyk/trace-autopsy
+**Council:** GREEN round 1, 2026-10-28, at dba32f4, pack d12770efbfef
+**Checked:** ACCEPTED by Andrei, 2026-10-28, at c73c3fa - owner picked «Да, но сначала два замечания (Рекомендую)» after GREEN round 1; narrow fix of review minors 2-3 (c73c3fa), repro + bash tests/symbol-map.test.sh 107/0, no new round
