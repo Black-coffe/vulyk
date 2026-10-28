@@ -48,3 +48,4 @@ none
 **Branch:** vulyk/auto-memory-subagent-start
 **Council:** RED round 1, 2026-10-28, at 395573e, pack 7d8be8e223bf
 **Council:** GREEN round 2, 2026-10-28, at 85c9f02, pack 4af56f510894
+**Shipped:** 0.41.0, 2026-10-28, at 87d8a4d - merged to main, publish pending
