@@ -2041,6 +2041,32 @@ fm_raw() { # fm_raw <story-file> <key> - a frontmatter line's whole value, trimm
   ' "$1"
 }
 
+fm_red() { # fm_red <story-file> - the `red:` mark from the frontmatter only, cut at a `#` comment
+  # and trimmed as fm_field cuts it: a body line `red: ...` marks nothing (0.40.1)
+  local v; v="$(fm_raw "$1" red)"; v="${v%%#*}"
+  printf '%s' "${v%"${v##*[![:space:]]}"}"
+}
+
+repair_unmarks() { # repair_unmarks <findings> <union-paths> <marked-paths> - exit 0 only when every
+  # finding line names a path of the union and none names a marked story's path; no findings: exit 1
+  local line p named
+  [ -n "$1" ] || return 1
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    named=0
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      case "$line" in *"$p"*) named=1; break ;; esac
+    done <<< "$2"
+    [ "$named" = 1 ] || return 1
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      case "$line" in *"$p"*) return 1 ;; esac
+    done <<< "$3"
+  done <<< "$1"
+  return 0
+}
+
 red_sets() { # red_sets <story-file> - red-receipt's sets, newline-separated: RED_SEALED (lib.sh
   # sealed_tests), RED_REST (## Files entries that are neither sealed nor the story file) and
   # RED_IMPL (RED_REST expanded as close-story's commit expands ## Files - git pathspecs, tracked
@@ -2124,7 +2150,7 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] - red-receipt: run the 
   branch_guard "$SPECDIR" stamp-red
 
   red_refuse() { echo "cycle: stamp-red - $STORY: $1" >&2; emit false stamp-red 4 repair "$1"; exit 4; }
-  [ "$(fm_field "$STORY" red)" = required ] || red_refuse "story is not red: required"
+  [ "$(fm_red "$STORY")" = required ] || red_refuse "story is not red: required"
   local REASON; REASON="$(fm_raw "$STORY" red_reason)"
   [ -n "$REASON" ] || red_refuse "red_reason is empty"
   red_sets "$STORY"
@@ -2305,7 +2331,7 @@ EOF
 
   # red-receipt: a story marked `red: required` closes only on stamp-red's receipt, with its sealed
   # tests unchanged since and its implementation changed since. An unmarked story runs none of this.
-  [ "$(fm_field "$STORY" red)" = required ] && red_gate "$STORY"
+  [ "$(fm_red "$STORY")" = required ] && red_gate "$STORY"
 
   local VERIFY; VERIFY="$(verify_of "$STORY")"
   local REPS; REPS="$(printf '%s\n' "$VERIFY" | awk -F': *' '$1 ~ /^repeat$/ { gsub(/[[:space:]]/, "", $2); print $2; exit }')"
@@ -3106,14 +3132,18 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   done
   asks="$(sort_num_list "$asks")"
 
-  local maxn=0 maxw=0 sf n w files="" verifs="" marked=0
+  local maxn=0 maxw=0 sf n w files="" verifs="" marked=0 mfiles=""
   for sf in "$SPEC"/*.md; do
     is_story_file "$sf" || continue
     n="$(story_number "$sf" "$SLUG")"; [ "$n" -gt "$maxn" ] && maxn="$n"
     w="$(fm_field "$sf" wave)"; case "$w" in ''|*[!0-9]*) w=1 ;; esac
     [ "$w" -gt "$maxw" ] && maxw="$w"
     [ "$(fm_field "$sf" status)" = done ] || continue
-    [ "$(fm_field "$sf" red)" = required ] && marked=1
+    if [ "$(fm_red "$sf")" = required ]; then
+      marked=1
+      mfiles="$mfiles$(files_of "$sf")
+"
+    fi
     files="$files$(files_of "$sf")
 "
     verifs="$verifs$(verify_of "$sf" | grep -vE '^repeat[[:space:]]*:')
@@ -3125,9 +3155,32 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   # `model: opus` on purpose (ADR-015): first attempts build on Sonnet, and a repair follows a RED
   # round that judged that work wrong, so it climbs a rung, as a missed story's retry climbs to the gate.
 
+  local findings
+  findings="$(
+    for seat in haiku sonnet opus; do
+      [ -f "$RD/$seat.md" ] && grep -E '^ASK [0-9]+:[[:space:]]*RED' "$RD/$seat.md"
+    done
+    # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
+    [ -f "$RD/review.md" ] && review_blocking_lines "$RD/review.md" \
+      | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
+    # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
+    # finding (judge's override) - its note is then the only condition the repair can meet.
+    ropened="$(round_field "$RD" opened)"
+    hlast="$(grep -F "\"spec\":\"$SLUG\"" memory/stats/human.jsonl 2>/dev/null | tail -1)"
+    if [ -n "$hlast" ] && [ "$(json_field "$hlast" verdict)" = REJECTED ]; then
+      hts="$(json_field "$hlast" ts)"
+      if [ -n "$hts" ] && [ -n "$ropened" ] && { [ "$hts" \> "$ropened" ] || [ "$hts" = "$ropened" ]; }; then
+        printf -- '- owner REJECTED at %s: %s\n' "$hts" "$(printf '%s' "$hlast" | sed -n 's/.*"note":"\(.*\)"}[[:space:]]*$/\1/p')"
+      fi
+    fi
+  )"
+  # red-receipt (0.40.1): a repair drops the mark only when every finding names a path of its
+  # ## Files and none names a marked story's; a finding that names no file keeps it (fail closed).
+  [ "$marked" = 1 ] && repair_unmarks "$findings" "$files" "$mfiles" && marked=0
+
   {
     printf -- '---\nstory: %s-%s\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: %s\nblocked_by: []\n' "$SLUG" "$NN" "$WAVE"
-    # red-receipt: a repair of a marked story stays marked; its builder writes red_reason anew.
+    # red-receipt: a repair that keeps the mark gets an empty red_reason for its builder to write.
     [ "$marked" = 1 ] && printf 'red: required\nred_reason:\n'
     printf -- '---\n\n'
     printf '# Repair round %s\n\n' "$N"
@@ -3142,23 +3195,7 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
       printf 'No brief ask is RED in round %s - the findings below are the whole task.\n' "$N"
     fi
     printf '\n## Findings\n'
-    for seat in haiku sonnet opus; do
-      [ -f "$RD/$seat.md" ] && grep -E '^ASK [0-9]+:[[:space:]]*RED' "$RD/$seat.md"
-    done
-    # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
-    [ -f "$RD/review.md" ] && review_blocking_lines "$RD/review.md" \
-      | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
-    # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
-    # finding (judge's override) - its note is then the only condition the repair can meet.
-    local hlast hts ropened
-    ropened="$(round_field "$RD" opened)"
-    hlast="$(grep -F "\"spec\":\"$SLUG\"" memory/stats/human.jsonl 2>/dev/null | tail -1)"
-    if [ -n "$hlast" ] && [ "$(json_field "$hlast" verdict)" = REJECTED ]; then
-      hts="$(json_field "$hlast" ts)"
-      if [ -n "$hts" ] && [ -n "$ropened" ] && { [ "$hts" \> "$ropened" ] || [ "$hts" = "$ropened" ]; }; then
-        printf -- '- owner REJECTED at %s: %s\n' "$hts" "$(printf '%s' "$hlast" | sed -n 's/.*"note":"\(.*\)"}[[:space:]]*$/\1/p')"
-      fi
-    fi
+    [ -n "$findings" ] && printf '%s\n' "$findings"
     printf '\n## Files\n'
     printf '%s' "$files" | awk 'NF && !seen[$0]++ { print "- " $0 }'
     printf '\n## Verification\n'

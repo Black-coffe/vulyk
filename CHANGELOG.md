@@ -4,6 +4,19 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.40.1] - 2026-10-28
+
+A repair that only fixes prose no longer stalls on the red receipt of 0.40.0 (spec `red-repair-mark`).
+
+### Fixed
+- **A repair that only fixes prose is no longer asked for a red test.** In 0.40.0 a repair story inherited
+  `red: required` from any marked story in the spec, so a repair whose findings touched only prompts or docs could
+  never go red: `stamp-red` refused, the worker missed twice and the build stopped. Now the repair drops the mark
+  when every finding names a file of the repair and none names a marked story's file; a finding that names no file
+  keeps the mark. ADR-025 D4 is amended.
+- **A `red:` line in a story's body marks nothing.** `stamp-red`, `close-story` and `wave-check` read the mark from
+  the frontmatter only.
+
 ## [0.40.0] - 2026-10-28
 
 A critical story must show its test failing before its code lands (spec `red-receipt`).

@@ -57,6 +57,12 @@ test was red, for the declared reason, before the code existed.
   An unmarked story runs no new code path; a stray `red_verified_at` on it is ignored.
 - **D4 - repair inherits the mark.** `cycle.sh repair` writes `red: required` and an empty `red_reason:` into the
   repair story when any story it unions is marked. With no marked story the frontmatter is unchanged.
+  Amended in 0.40.1 (spec `red-repair-mark`): the mark is dropped when every line of the repair's `## Findings` names
+  a path of its `## Files` union and none names a path of a marked story, since a prose-only repair has no red to
+  show. A finding that names no file, or no findings at all, keeps the mark (fail closed, the owner's choice).
+  Residual: a blind seat's prose-only RED ask with no file still yields a marked repair that cannot go red, and the
+  build stops as in 0.40.0. The `red:` mark is read from the frontmatter only (`fm_red`, wave-check's awk): a body
+  line `red: ...` marks nothing.
 - **D5 - wave-check.** `red-no-test: <story>` for a marked story whose sealed set is empty; `red-value: <story> <value>`
   for a `red:` value other than `required`. Report-only, exit 0, like `verify-gap`.
 - **D6 - prompts and the two prohibitions.** Worker, planner and solo-build prompts, `lead-review` and the story

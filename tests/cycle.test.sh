@@ -942,6 +942,47 @@ rq=docs/specs/redrq/redrq-02-repair-round-1.md
   && ! grep -q '^red' "$rq" && echo "  ok    an unmarked union writes the frontmatter byte for byte as before" \
   || { echo "::error::unmarked repair frontmatter changed: $(sed -n '1,12p' "$rq" 2>/dev/null) / $out"; fail=1; }
 
+echo "red-receipt: the repair keeps the mark unless every finding names a file and none a marked story's (0.40.1)"
+red_rp_two() { # red_rp_two <slug> <major-lines> - done stories 01 (marked, <slug>-a.txt) and 02 (unmarked, <slug>-doc.md), a RED round 1, its repair
+  mkdir -p "docs/specs/$1"
+  cp "$SRC/templates/plan.md" "docs/specs/$1/plan.md"
+  printf '# %s (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n' "$1" > "docs/specs/$1/brief.md"
+  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-28/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' "docs/specs/$1/plan.md"
+  printf 'a\n' > "$1-a.txt"; printf 'doc\n' > "$1-doc.md"
+  printf -- '---\nstory: %s-01\nstatus: done\nwave: 1\n%s---\n# A\n\n## Files\n- %s-a.txt\n\n## Verification\n`true`\n' "$1" "$MK" "$1" > "docs/specs/$1/$1-01-a.md"
+  printf -- '---\nstory: %s-02\nstatus: done\nwave: 1\n---\n# D\n\n## Files\n- %s-doc.md\n\n## Verification\n`true`\n' "$1" "$1" > "docs/specs/$1/$1-02-doc.md"
+  git add -A && git commit -qm "$1: fixture" >/dev/null
+  bash scripts/cycle.sh open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  printf 'VERDICT: BLOCK\n## Major\n%s\n' "$2" | bash scripts/cycle.sh record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
+  bash scripts/cycle.sh judge "docs/specs/$1" --commit >/dev/null 2>&1
+  bash scripts/cycle.sh repair "docs/specs/$1" --commit 2>&1 | tail -1
+}
+out="$(red_rp_two redpa '- [ask 1] redpa-doc.md:1 the prose is wrong: run: t saw: f')"
+rp=docs/specs/redpa/redpa-03-repair-round-1.md
+[ -f "$rp" ] && ! sed -n '2,/^---$/p' "$rp" | grep -q '^red' && echo "  ok    findings naming only the unmarked story's file: the repair is unmarked" \
+  || { echo "::error::a prose-only repair carries red: required: $(sed -n '1,12p' "$rp" 2>/dev/null) / $out"; fail=1; }
+out="$(red_rp_two redpb '- [ask 1] redpb-a.txt:1 the code is wrong: run: t saw: f')"
+sed -n '2,/^---$/p' docs/specs/redpb/redpb-03-repair-round-1.md 2>/dev/null | expect "a finding naming the marked story's file keeps the mark" "red: required"
+out="$(red_rp_two redpc $'- [ask 1] redpc-doc.md:1 the prose is wrong: run: t saw: f\n- [ask 1] ask 1 broke: run: t saw: f')"
+sed -n '2,/^---$/p' docs/specs/redpc/redpc-03-repair-round-1.md 2>/dev/null | expect "a finding that names no file keeps the mark beside an anchored prose one" "red: required"
+
+echo "red-receipt: a red: line in the story body, outside the frontmatter, marks nothing (0.40.1)"
+mkdir -p docs/specs/redbody
+printf -- '---\nstory: redbody-01\nstatus: todo\nwave: 1\n---\n# B\n\nred: required\n\n## Files\n- src/red.txt\n\n## Verification\n`true`\n' > docs/specs/redbody/redbody-01.md
+out="$(bash scripts/wave-check.sh docs/specs/redbody)"
+printf '%s' "$out" | grep -E 'red-(no-test|value): redbody-01' && { echo "::error::a body red: line marked the story in wave-check: $out"; fail=1; } \
+  || echo "  ok    wave-check prints no red line for a body red: line"
+red_story 30 '' $'- src/body.txt\n' '`bash tests/red-pass.sh`'
+sed -i 's/^# Red fixture 30$/&\n\nred: required/' docs/specs/red/red-30.md
+printf 'body\n' > src/body.txt
+git add -A && git commit -qm "red: body-line story" >/dev/null
+out="$(bash scripts/cycle.sh stamp-red docs/specs/red/red-30.md 2>&1)"
+printf '%s\n' "$out" | tail -1 | expect "stamp-red reads the body red: line as unmarked" '"error":"story is not red: required"'
+printf 'body2\n' > src/body.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/red/red-30.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    close-story asks no receipt of a body red: line" \
+  || { echo "::error::a body red: line gated close-story: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
+
 echo "red-receipt: stamp-red refuses every wrong red - exit 4, the story file untouched"
 red_refuses() { # red_refuses <label> <nn> <exit> <error-text> - runs stamp-red on red-<nn>
   local st="docs/specs/red/red-$2.md" before after out ex

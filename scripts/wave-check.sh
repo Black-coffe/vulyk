@@ -247,8 +247,9 @@ VL_EOF
   fi
 
   # 4. red-receipt: a marked story must seal a test (lib.sh sealed_tests, the set stamp-red seals);
-  #    a `red:` value other than `required` is a typo, never a silent unmark.
-  if grep -q '^red:' "$f"; then
+  #    a `red:` value other than `required` is a typo, never a silent unmark. Frontmatter only (0.40.1):
+  #    a body line `red: ...` marks nothing, as in cycle.sh's fm_red.
+  if awk 'NR == 1 && /^---[[:space:]]*$/ { i = 1; next } i && /^---[[:space:]]*$/ { exit } i && /^red:/ { m = 1; exit } END { exit !m }' "$f"; then
     redv="$(fm "$f" red | sed 's/[[:space:]]*$//')"
     if [ "$redv" = required ]; then
       [ -n "$(sealed_tests "$verify" "$declared")" ] \
