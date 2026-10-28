@@ -1440,6 +1440,28 @@ expect_eq "plain --upgrade never writes the constitution" "1" "$(same "$T/cr.bef
 cat "$T/cr-plain.out" | expect "plain --upgrade prints the sizes" "constitution differs from yours: CLAUDE.md is "
 cat "$T/cr-plain.out" | expect "plain --upgrade prints the migrate command" "install.sh\" \"$CR\" --upgrade --constitution replace"
 cat "$T/cr-plain.out" | expect "plain --upgrade names the backup" "the old file as CLAUDE.$BAKNAME.md"
+cat "$T/cr-plain.out" | expect_absent "a canonical full-suite row gets no note" "no 'Full suite / build (round-only)' row"
+
+# a hive bootstrapped before 0.36.0 keeps its own full-suite row name: the upgrade names it
+# (suite-row-upgrade-01), for the original `Full test suite`, a canonical name missing
+# `round-only`, and a row in another language; a sidecar constitution is read the same way
+eval "$(sed -n '/^report_full_suite_row() {/,/^}/p' "$SRC/install.sh")"
+FS="$T/hive-fullsuite"; mkdir -p "$FS"
+for row in 'Full test suite' 'Full suite / build' 'Повний набір тестів'; do
+  cp "$T/cr.before" "$FS/c.md"
+  sed -i "s#^| Full suite / build (round-only) |#| $row |#" "$FS/c.md"
+  report_full_suite_row "$FS/c.md" | expect "the upgrade names a '$row' row" "no 'Full suite / build (round-only)' row"
+done
+sed 's#^| Full suite / build (round-only) | `<fill in>` |#| Full suite / build (round-only) | none |#' "$T/cr.before" > "$FS/none.md"
+expect_eq "the 'none' fixture holds the row" "1" "$(grep -c '^| Full suite / build (round-only) | none |' "$FS/none.md")"
+expect_eq "a hive with no full suite quiets the note with a 'none' row" "" "$(report_full_suite_row "$FS/none.md")"
+sed '/VULYK:COMMANDS:START/d' "$FS/c.md" > "$FS/nomark.md"
+expect_eq "a Commands block without markers gets no note" "" "$(report_full_suite_row "$FS/nomark.md")"
+SCF="$T/hive-sidecar-fullsuite"; mkdir -p "$SCF"
+printf '# My project rules\n\n@CLAUDE.vulyk.md\n' > "$SCF/CLAUDE.md"
+bash "$SRC/install.sh" "$SCF" --telemetry off > /dev/null 2>&1
+sed -i 's#^| Full suite / build (round-only) |#| Full test suite |#' "$SCF/CLAUDE.vulyk.md"
+bash "$SRC/install.sh" "$SCF" --upgrade --check 2>&1 | expect "a sidecar's 'Full test suite' row is named on --upgrade --check" "no 'Full suite / build (round-only)' row"
 
 S0="$(treesum "$CR")"
 bash "$SRC/install.sh" "$CR" --upgrade --check --constitution replace > "$T/cr-check.out" 2>&1

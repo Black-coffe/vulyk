@@ -1,6 +1,6 @@
 # ADR-023: Fast story checks, one full suite per round; the runner runs parts, not whole suites
 
-- Status: proposed
+- Status: accepted (2026-10-28, owner: Andrei, chose «Принять (Рекомендую)»)
 - Date: 2026-10-26
 - Spec: docs/specs/fast-verification (0.36.0)
 

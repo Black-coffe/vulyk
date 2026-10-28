@@ -389,6 +389,28 @@ EOF
   echo "  $name: $n rows still hold <fill in: $joined"
 }
 
+# report_full_suite_row <file> - a Commands block whose rows carry no Purpose cell naming the full
+# suite with `round-only` (the predicate cycle.sh's full_suite_row_round_only reads) predates 0.36.0:
+# close-story then runs the hive's full suite on every story that names it, and the round's SUITE
+# gate is off. The block is the hive's (ADR-005 D3), so this only names it; /vulyk-update renames
+# the hive's own full-suite row to the canon, whatever language it is written in.
+report_full_suite_row() {
+  local file="$1"
+  grep -q "VULYK:COMMANDS:START" "$file" 2>/dev/null || return 0
+  grep -q "VULYK:COMMANDS:END" "$file" 2>/dev/null || return 0
+  awk '
+    index($0, "VULYK:COMMANDS:START") { on = 1; next }
+    index($0, "VULYK:COMMANDS:END")   { on = 0 }
+    on && /^\|/ {
+      line = $0; sub(/^\|/, "", line); i = index(line, "|"); if (!i) next
+      p = tolower(substr(line, 1, i - 1))
+      if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) { found = 1; exit }
+    }
+    END { exit !found }
+  ' "$file" && return 0
+  echo "  commands: no 'Full suite / build (round-only)' row - stories may run the full suite and the round's SUITE gate is off; /vulyk-update renames your full-suite row"
+}
+
 # --- constitution migration (ADR-013 D7) -------------------------------------------------------
 # A constitution is never overwritten on the installer's own initiative. `--constitution replace`
 # is the owner asking for it by name: the release's CLAUDE.md goes in whole, and the hive's two
@@ -1442,6 +1464,7 @@ if [ -f "$DEST/CLAUDE.md" ]; then
     fi
     report_fill_status "$DEST/CLAUDE.md" "VULYK:PROFILE" "profile"
     report_fill_status "$DEST/CLAUDE.md" "VULYK:COMMANDS" "commands"
+    report_full_suite_row "$DEST/CLAUDE.md"
   elif [ -e "$DEST/CLAUDE.vulyk.md" ]; then
     echo ""
     # Same treatment as the CLAUDE.md branch above - it's the same constitution under a
@@ -1457,6 +1480,7 @@ if [ -f "$DEST/CLAUDE.md" ]; then
     fi
     report_fill_status "$DEST/CLAUDE.vulyk.md" "VULYK:PROFILE" "profile"
     report_fill_status "$DEST/CLAUDE.vulyk.md" "VULYK:COMMANDS" "commands"
+    report_full_suite_row "$DEST/CLAUDE.vulyk.md"
   else
     if [ "$CHECK" != "--check" ]; then
       cp -p "$SRC/CLAUDE.md" "$DEST/CLAUDE.vulyk.md"

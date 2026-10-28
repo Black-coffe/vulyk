@@ -1,8 +1,8 @@
 ---
 story: suite-row-upgrade-01
 spec: suite-row-upgrade
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 wave: 1
@@ -51,5 +51,8 @@ memory/map/ install.sh section (upgrade, report_fill_status).
 `bash tests/telemetry.test.sh --part constitution`
 
 ## Implementation notes
+- install.sh: `report_full_suite_row` beside `report_fill_status`, called in the CLAUDE.md and sidecar branches; the awk predicate is cycle.sh's `full_suite_row_round_only` read inside the markers, without its runnable-command clause.
+- tests: the `constitution` part pulls the function out of install.sh with `sed` + `eval` (no install run per variant); three row spellings, a markerless block, and a sidecar `--upgrade --check` end to end.
+- vulyk-update step 6 names the rename, the wave-check pass on open specs, and the no-row case. Report 7.3 got a dated note; ADR-023 Status accepted.
 
 ## Findings
