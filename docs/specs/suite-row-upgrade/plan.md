@@ -32,7 +32,7 @@ that canon (its command kept), and the stale audit note and ADR status are broug
 
 **Approved:**
 **Briefed:** via mini-brief, Andrei, 2026-10-28
-**Branch:**
+**Branch:** vulyk/suite-row-upgrade
 **Checked:**
 **Council:**
 **Shipped:**
