@@ -80,7 +80,7 @@ tri="$(dirname "${BASH_SOURCE[0]}")/../../scripts/memory-triage.sh"
 adir="$( [ -f "$tri" ] && cd "$ROOT" 2>/dev/null && bash "$tri" --dir 2>/dev/null)"
 idx="$adir/MEMORY.md"
 if [ -n "$adir" ] && [ -f "$idx" ]; then
-  lines=$(wc -l < "$idx" | tr -d ' '); bytes=$(wc -c < "$idx" | tr -d ' ')
+  lines=$(awk 'END { print NR }' "$idx"); bytes=$(wc -c < "$idx" | tr -d ' ')   # NR: a last line without \n counts
   if [ "$lines" -ge 160 ] || [ "$bytes" -ge 20480 ]; then
     due "memory triage (MEMORY.md $lines lines, $((bytes / 1024)) KB of 200 lines / 25 KB)" "vulyk-gc memory"
   fi

@@ -239,8 +239,10 @@ def main():
         shown.append(card.ref)
     if rest:
         text += '\n+%d cards: %s' % (len(rest), ', '.join(rest))
-    shown += rest
     # Folded cards count as shown too: the agent has the refs, repeating them every call is noise.
+    # Not on a story Read: there the fold is a preview, and the full lines come at the first matching edit.
+    if tool != 'Read':
+        shown += rest
     try:
         os.makedirs(os.path.dirname(state), exist_ok=True)
         with open(state, 'a', encoding='utf-8') as f:

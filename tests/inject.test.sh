@@ -389,6 +389,13 @@ printf '%s' "$o" | ctx | expect "a relative story path works for another agent" 
 run "$HIVE" "$(readcall r2 "$W/docs/specs/demo/brief.md")" | expect_silent "a brief.md Read is silent"
 run "$HIVE" "$(readcall r2 "$W/docs/notes/not-a-story.md")" | expect_silent "a story-shaped file outside docs/specs/ is silent"
 run "$HIVE" "$(readcall r2 "$W/pipeline/voiceover.py")" | expect_silent "a source file Read is silent"
+# Round 1: a card folded into `+N cards` on the story Read is only named there; its lines still come at the Edit.
+printf -- '---\nstory: demo-02-big\n---\n\n## Files\n- big/x.py\n' > "$HIVE/docs/specs/demo/demo-02-big.md"
+o="$(run "$HIVE" "$(readcall r3 "$W/docs/specs/demo/demo-02-big.md" f1)")"
+printf '%s' "$o" | ctx | expect "eight big cards on a story Read fold the rest" "+2 cards: big-07, big-08"
+o="$(run "$HIVE" "$(edit r3 "$W/big/x.py" f1)")"
+printf '%s' "$o" | ctx | expect "a card folded on a story Read arrives in full at the first Edit" "✗ BIG08 long line"
+printf '%s' "$o" | ctx | expect_absent "a card shown in full on the story Read is not repeated at the Edit" "BIG01"
 fi # part functional
 
 if part latency; then # --- part latency: the two 200 ms medians, on the fixture library above

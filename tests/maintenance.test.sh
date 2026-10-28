@@ -207,6 +207,8 @@ BRIEF_CONF="$MC" brief_of "$H" | expect_absent "159 lines and 20479 bytes: memor
 lines_of 160 10 > "$M/MEMORY.md"
 BRIEF_CONF="$MC" brief_of "$H" | expect "memory triage due at 160 lines" "memory triage (MEMORY.md 160 lines, 1 KB of 200 lines / 25 KB)"
 BRIEF_CONF="$MC" brief_of "$H" | expect "the due line names /vulyk-gc memory" "vulyk-gc memory"
+{ lines_of 159 10; printf 'mmmmmmmmm'; } > "$M/MEMORY.md"   # 160 lines, the last with no newline
+BRIEF_CONF="$MC" brief_of "$H" | expect "a last line without a newline still counts" "memory triage (MEMORY.md 160 lines"
 lines_of 80 256 > "$M/MEMORY.md"                           # 80 lines, 20480 bytes
 BRIEF_CONF="$MC" brief_of "$H" | expect "memory triage due at 20480 bytes in fewer lines" "memory triage (MEMORY.md 80 lines, 20 KB of 200 lines / 25 KB)"
 rm "$M/MEMORY.md"
