@@ -50,6 +50,7 @@
 - Next brief's draft (round-2 UNASKED, ten review minors, ship-gate staleness on release paperwork): docs/specs/fable-review-remainders/plan.md `## Next circle`, CHANGELOG 0.13.1; the Fable majors of v0-12-0-remainders are closed there
 - Dispatch failure reasons from verb exit codes, seat reports by file (v0.13.1, proposed): docs/adr/009-dispatch-failure-reasons-and-report-by-file.md
 
+- Red receipt (v0.40.0, 2026-10-28): docs/adr/025-red-receipt.md — `red: required` stories close only after `cycle.sh stamp-red` proves the sealed test red for `red_reason`
 - Anomaly telemetry, opt-in (v0.14.0): docs/telemetry.md — `scripts/telemetry.sh`, `anomaly-scan.sh` (SessionEnd); `publish` only prints a copy recipe
 - Driver hardening (v0.15.0): docs/adr/011-driver-hardening.md — clerk retry, self-marked `done`, taint = story file
 - Sonnet executes, Opus judges (v0.20.0, 2026-09-28): docs/adr/015-sonnet-execution-rung-and-model-floor.md — workers/scouts/drone-docs on `sonnet`, repair stories `opus`

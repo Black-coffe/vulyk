@@ -1,4 +1,4 @@
-# Scout report: agents and commands (v0.39.0)
+# Scout report: agents and commands (v0.40.0)
 
 ## Purpose
 Every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (ADR-013 light VULYK, ADR-015 Sonnet
@@ -11,10 +11,12 @@ message points at the agent file's `maxTurns` (`reasonFor` :33).
 drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other four keep it for host conventions.
 - **lead-review** (`opus`, `high`, `maxTurns:60`, `experimental: cacheTtl: 1h` frontmatter,
   lead-review.md:8-9; Read/Grep/Glob/Bash) - the `review` seat of every
-  round; Tier 4: two dispatches. Judges four items (lead-review.md:14-27): 1 `## Asks` (+ `## Descoped`);
+  round; Tier 4: two dispatches. Judges five items (lead-review.md:16-33): 1 `## Asks` (+ `## Descoped`);
   2 correctness; 3 warn-only checks + `scripts/defects-check.sh` red debt; 4 the project's rules: a diff
   line breaking a Never (✗) / How-to (→) line of a card shown for its path = a major `[unanchored]`
-  naming the card ref (reaches the owner at ship); Allowed (✓) is no finding.
+  naming the card ref (reaches the owner at ship); Allowed (✓) is no finding. Item 5 (0.40.0, :30-33): for
+  each `red: required` story read its `## Red receipt` tail and `red_reason`; a tail showing a staged break
+  (an error inside the implementation, not the missing behaviour) = major `[ask N]`; no receipt is never asked.
   Reads (:34-47): round 1 `merge-base..head`; round 2+ `since..head` + previous `review.md`; ONE
   `git diff <range> -- <every path>` so the card hook delivers `docs/defects/` cards (a `+N cards` fold is
   opened at `docs/defects/<ref>.md`). Verdict (:56-65): BLOCK needs an anchored Critical/Major: `[ask N]`
@@ -34,15 +36,22 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
 - **worker-code** / **worker-test** (`sonnet`, `medium`, `maxTurns:90`) - Tier 3-4, one story. Close:
   `returned: DONE`, then `cycle.sh close-story <story> --commit --stamp <S>`; exit 4 → fix and rerun
   (`edited outside ## Files: <paths>` = undo your own edits; none yours → `NEEDS_CONTEXT`,
-  worker-code.md:28-29; exit 2 `verification is round-only` = the story named a `round-only` row,
-  worker-code.md:37 - `NEEDS_CONTEXT`), after three failures `## Findings` + `returned: WALL`. Never edit `status:`,
-  never stash/checkout/reset/clean. Step 2 (worker-code.md:19-25): a bug fix runs `symbol-map.sh <file>
+  worker-code.md:42-44; exit 2 `verification is round-only` = the story named a `round-only` row,
+  worker-code.md:58 - `NEEDS_CONTEXT`), after three failures `## Findings` + `returned: WALL`. **Red first
+  (0.40.0, ADR-025), step 2 of both workers, only for `red: required`:** write the test `## Files` names (no
+  mock of logic not yet written), write `red_reason:`, run `cycle.sh stamp-red <story> --stamp <S>`, then
+  implement, then `close-story`; never edit the implementation to produce a red (a staged break =
+  `NEEDS_CONTEXT`). Step 6 maps each gate/stamp-red exit-4 message to an action (worker-code.md:45-55). Never edit `status:`,
+  never stash/checkout/reset/clean. Step 3 (worker-code.md:27-33; was step 2): a bug fix runs `symbol-map.sh <file>
   --story <story>` on a root file first, greps only what it cannot vouch for (`textual` names, callers of an
   `imports not parsed` file); a fix needing a file outside `## Files` = `NEEDS_CONTEXT`.
 - **queen-planner** (`opus`, `high`, `maxTurns:40`; Read/Write/Grep/Glob) - Tier 3-4 plan + stories
   (`model:` per story: queen-planner.md:21-26, ADR-015/020; `## Verification` cites only `## Commands`
   rows without `round-only`, queen-planner.md:30). Never reads source; never plans repairs
-  (`cmd_repair` writes `model: opus`). T4 dispatch: `<top_model>`. `## Files` lists every reached path; the
+  (`cmd_repair` writes `model: opus`). Marks `red: required` (frontmatter, planner only) a story that adds a
+  branch, loop, parser, or money/security/data-write handling; its test file is in its own `## Files` and
+  `## Verification`, `red_reason:` prefilled when known, and no later-wave `worker-test` story for it
+  (queen-planner.md:36-42). T4 dispatch: `<top_model>`. `## Files` lists every reached path; the
   brief's symbol-map output (`--exact`) is a source: `exact` lines go into `## Files` when the change reaches
   them, a non-zero `textual <N> not shown` under `tests`/`importers` is a recon question for `drone-scout`,
   unchanged importers stay out (queen-planner.md:31-35).
@@ -65,7 +74,8 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   `drone-coverage` T3-4. T1 → `cycle.sh briefed --mode mini-brief` + `/vulyk-build`. T2-4 stop for
   `**Approved:**` (`--go` opts out). Recon step 3, T2-4 (vulyk-plan.md:27-29): `symbol-map.sh --exact <file>` once
   per file the plan likely names (many files in one call get cut at 1536 bytes), outputs kept for the plan;
-  checklist line: meta-tests, docs/ADR, `.env.example`, re-exports, sibling files. **Step 3a horizon** (vulyk-plan.md:31-51; `--horizon` forces, `--no-horizon`
+  checklist line: meta-tests, docs/ADR, `.env.example`, re-exports, sibling files. Step 6 (vulyk-plan.md:78-80):
+  the Queen/planner marks critical stories `red: required` and names the test in `## Files` and `## Verification`. **Step 3a horizon** (vulyk-plan.md:31-51; `--horizon` forces, `--no-horizon`
   skips; skipped for study, T0-1, no-question): fires on zero grep hits of the capability's 2-4 terms in
   `memory/memory.md`, `memory/map/`, source (a container hit does not count); three parallel `drone-horizon`
   (no `model:`), each given brief path, recon summary and the Profile rows *Configurations that exist today* +
@@ -91,7 +101,8 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   profile is not `sonnet-builds`; otherwise frontmatter applies.
 - **`/vulyk-build`** - `**Tier:**` picks the path. Solo T1-2: loop `cycle.sh advance`; `build:W` → the
   Queen implements each story (a bug fix runs `symbol-map.sh <file> --story <story>` on a root file first,
-  vulyk-build.md:20-23), `close-story --commit`; `dispatch:review` → one `lead-review`, then
+  vulyk-build.md:20-23; a `red: required` story first gets test + `red_reason:` + `stamp-red` with no
+  `--stamp`, vulyk-build.md:20-24), `close-story --commit`; `dispatch:review` → one `lead-review`, then
   `advance --ingest`. Hive T3-4 (vulyk-build.md:35): `top-model.sh --floor` first (exit 1 prints
   `below floor` lines and stops); then `top-model.sh`, `second_model`, 16-hex stamp, journal line,
   Workflow tool with `scriptPath` (never `name:`); a thrown call records `telemetry.sh record
@@ -121,4 +132,4 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a
   relative script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-10-28 (suite-row-upgrade merge, 0.39.1; ADR-013, ADR-015, ADR-020, ADR-022)
+last-verified: 2026-10-28 (red-receipt merge 879e67e, 0.40.0; ADR-013, ADR-015, ADR-020, ADR-022, ADR-025)

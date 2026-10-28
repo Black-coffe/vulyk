@@ -1,8 +1,8 @@
 # Scout report: the cycle (build -> council -> repair state contract)
 
 ## Purpose
-Truth lives in committed files under `docs/specs/<slug>/`, written only by `scripts/cycle.sh` (3217
-lines at 0.36.0). One verb, `advance` (ADR-013), steps the loop to the next agent boundary; the Queen (Tier 1-2
+Truth lives in committed files under `docs/specs/<slug>/`, written only by `scripts/cycle.sh` (3400+
+lines at 0.40.0). One verb, `advance` (ADR-013), steps the loop to the next agent boundary; the Queen (Tier 1-2
 solo, or Tier 3-4 without Workflow) or `.claude/workflows/vulyk-cycle.js` (Tier 3-4) calls it and
 dispatches the agent `next` names. Contract: ADR-001 (D2, D3 superseded) + ADR-013.
 
@@ -16,36 +16,50 @@ tier= seats= since=`) ← `build_round` :2317 · `council/REOPEN`, `CEILING` ←
 `journal.sh`. Gitignored: `PAUSE`, `DRIVER` (stamp), `.vulyk/court/`, `.vulyk/reports/`.
 
 ## Verbs (exit 0 ok · 1 usage · 2 precondition · 3 paused · 4 malformed report / red verify · 5 stale · 6 escalate)
-Dispatch `case "$VERB"` `cycle.sh:3101`. Last stdout line is one JSON object (`emit` :69); mutating
+Dispatch `case "$VERB"` `cycle.sh:3312`. Last stdout line is one JSON object (`emit` :69); mutating
 verbs on exit 0 carry the post-verb `status` (`emit_status` :86).
 - **Branch guard (ship-safety, 0.31):** `branch_guard <spec> <verb>` :205 - when plan.md has a
   `**Branch:**` and `git rev-parse --abbrev-ref HEAD` differs, exit 2 (`on X, spec branch is Y`), never
-  switches; no `**Branch:**` yet = pass. Called by `claim` (:2731), `close-story` (:1942), `open-round`
-  (:2427). `default_branch` :219 = origin/HEAD, else `main`, else `master`, else empty.
+  switches; no `**Branch:**` yet = pass. Called by `claim` (`cmd_claim` :2930), `close-story` (:2201), `open-round`
+  (:2625), `stamp-red` (:2124). `default_branch` :219 = origin/HEAD, else `main`, else `master`, else empty.
 - `status [--json]` `cmd_status` :559 (read-only) · `briefed` :1407 · `branch` :1458 · `escalate` :1336
-  · `judge` :1052 · `record-seat` :1795 · `manual-done` :2796.
+  · `judge` :1052 · `record-seat` :1795 · `manual-done` :3003.
 - `branch` also refuses (exit 2) an existing `vulyk/<slug>` that is already merged into the default
   branch and strictly behind its tip (:1495; a branch at the default tip is fresh, reused).
-- `close-story <file> [--commit] [--stamp]` :1932 - scope-check (:1999); with `--commit`, a path scope-check
+- **Red receipt (0.40.0, ADR-025):** a story with frontmatter `red: required` (planner-marked; any other
+  `red:` value = unmarked, `wave-check` `red-value`) closes only on a receipt. `stamp-red <story> [--stamp S]`
+  (`cmd_stamp_red` :2112; dispatch :3368; pause/driver/branch guards; commits nothing) runs the story's
+  `## Verification` once via `verify_run` and writes frontmatter `red_verified_at: <ts> <test-hash>` (after
+  `red_reason:`) plus a `## Red receipt` section (`command/exit/tests/impl/stamped` + 10 redacted tail lines;
+  a re-stamp replaces it). Exit 4 + nothing written: not `red: required`, empty `red_reason`, no sealed test,
+  nothing but tests in `## Files`, every line exits 0, 126/127 launch failure, timeout, or `red_reason` (`grep
+  -F`) absent from every failing line's output; exit 2 no sha256 tool / `redact.sh`. Sets: `red_sets` :2044 -
+  `RED_SEALED` = `sealed_tests` (lib.sh:235: literal tokens of `## Verification` that are `## Files` entries
+  or match a `## Files` glob), `RED_IMPL` = the other `## Files` paths expanded like close-story's commit;
+  `red_hash` = `set_hash` (lib.sh:261). `close-story` calls `red_gate` :2086 (call :2308) after scope-check,
+  before verification: exit 4 `no red receipt: run cycle.sh stamp-red ...` / `test changed after red receipt:
+  re-run stamp-red` (sealed hash differs) / `no implementation change since red receipt` (impl hash equals the
+  stamped `- impl:`); exit 2 without a sha256 tool. Unmarked stories skip it.
+- `close-story <file> [--commit] [--stamp]` :2201 - scope-check; with `--commit`, a path scope-check
   counts out of scope (`  ! ` lines) that is still dirty and not `is_paperwork_path` → exit 4 `edited
-  outside ## Files: <paths>` (:2030). A `## Verification` segment matching a `## Commands` row marked
-  `round-only` → exit 2 `verification is round-only` (:2058-2077; fast-verification-04). Only the wave's last open story refuses; with a wave-mate still
+  outside ## Files: <paths>`. A `## Verification` segment matching a `## Commands` row marked
+  `round-only` → exit 2 `verification is round-only` (`verify_cells_check`, shared with stamp-red). Only the wave's last open story refuses; with a wave-mate still
   open (same `wave:`, not done) it prints a note and goes on (0.28). Each `## Verification` segment must be a
   `## Commands` cell of `constitution_file` or `none — reviewed by lead-review`; runs under `timeout
   ${VULYK_VERIFY_TIMEOUT:-540}` when a working `timeout` exists (124 → exit 4); commits. Done + clean
   tree → `ok:true` "already done"; self-marked done with a diff → closes it.
-- `open-round` :2418 - refuses a tree dirty outside paperwork (`dirty_outside_paperwork` :455);
-  `build_round` freezes `seats=`/`since=`, builds the court (`build_court` :2215) only when a blind seat
-  is required, carries round n-1's GREEN/N/A blind seats (`carry_seats` :2294; `review` never carried).
-- **Court setup (0.34):** `build_court` ends by calling `run_court_setup` :2264. If the hive has
+- `open-round` :2625 - refuses a tree dirty outside paperwork (`dirty_outside_paperwork` :455);
+  `build_round` :2524 freezes `seats=`/`since=`, builds the court (`build_court` :2422) only when a blind seat
+  is required, carries round n-1's GREEN/N/A blind seats (`carry_seats` :2501; `review` never carried).
+- **Court setup (0.34):** `build_court` ends by calling `run_court_setup` :2471. If the hive has
   `$ROOT/.claude/vulyk-setup` (working copy, never shipped), it runs `bash` of it with cwd = the court,
   env `VULYK_ROOT`, `VULYK_COURT`, stdin /dev/null, under `timeout ${VULYK_SETUP_TIMEOUT:-300}` (non-numeric
   or 0 → 300; no working `timeout` → runs uncapped with a stderr note). Log:
   `.vulyk/reports/<slug>/round-<n>/setup.log`. Non-zero (124 = timeout) → tail 20 lines of the log to stderr,
   court removed, empty round dir removed, `open-round` exit 2 `court setup failed (exit N)`/`timed out`.
   No file = no-op. Runs only when a court is built (blind seat required).
-- `claim <spec> <stamp>` :2723 refuses a dirty tree (a holder's re-claim skips it); `release` :2774,
-  `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"` :2593 appends to `## Answers`,
+- `claim <spec> <stamp>` :2930 refuses a dirty tree (a holder's re-claim skips it); `release` :2981,
+  `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"` :2800 appends to `## Answers`,
   raises `CEILING`, emits `next:"repair"`; `open-round` when `escalate_reruns_round` :526 (an `env`
   escalation, or `suite-timeout` with nothing else red: the suite re-runs) or the round is stale.
 - **Full-suite line (0.36, fast-verification):** the `review` seat's line 3 is `SUITE: ok|FAIL|TIMEOUT <N>s
@@ -55,16 +69,16 @@ verbs on exit 0 carry the post-verb `status` (`emit_status` :86).
   verdict gets note `review PASS with SUITE: FAIL`); `SUITE: TIMEOUT` → ESCALATE `suite-timeout`
   (`## Needs a human` says seconds + budget; `VULYK_SUITE_TIMEOUT` default 590); `escalate --reason`
   accepts `suite-timeout`. `reopen` of it re-runs the round unless the row also has a RED ask/BLOCK.
-- `repair` :2848 - below. `advance [--stamp] [--claim] [--ingest]` :3009 - below.
+- `repair` :3055 - below. `advance [--stamp] [--claim] [--ingest]` :3220 - below.
 
 ## `advance` (ADR-013 D2)
 1. `--claim` (needs `--stamp`): runs `claim`; a refusal is the stop line.
 2. `--ingest`: each missing required seat of the open, non-stale round is recorded from
    `.vulyk/reports/<slug>/round-<n>/<seat>.attempt-<k>.md` (k=2 if attempt-1 exists); no file → empty
-   report (spends the attempt). Tier 4 `review` = `fold_reviews` :2981 over `review-top`/`review-second`
+   report (spends the attempt). Tier 4 `review` = `fold_reviews` :3192 over `review-top`/`review-second`
    (BLOCK if either). Each exit 4 goes into `rejected:[{seat,attempt,error}]`.
 3. Loop ≤ 12 steps: while `next` ∈ `branch|open-round|judge|repair`, run it with `--commit` (+`--stamp`)
-   via `run_verb` :3000. Exit 6 is ok. A verb leaving `next` unchanged stops (`no progress`, exit 2).
+   via `run_verb` :3211. Exit 6 is ok. A verb leaving `next` unchanged stops (`no progress`, exit 2).
 4. Last line `{"ok":true,"verb":"advance",..,"next","steps","rejected","status"}`; a stop is `ok:false`
    with `failed`, no `status`. After `--ingest` a RED round reads `steps:["judge","repair"]`.
 
@@ -97,9 +111,11 @@ ABSENT. Taint = a path to a story file, `plan.md`, `journal.md` or `council/` (`
 `docs/specs/<slug>/` reduced to `brief.md`, removed by `judge`.
 
 ## Repair (ADR-013 D4)
-`cmd_repair` :2848 runs only when `next == repair`; idempotent. Writes `<slug>-NN-repair-round-<n>.md`:
-`status: todo`, `worker: worker-code`, **`model: opus` on purpose** (ADR-015: cycle.sh:2917; first
-attempts run on Sonnet, a repair follows a RED), `wave: <max+1>`; `## Requirements` = the row's `red` +
+`cmd_repair` :3055 runs only when `next == repair`; idempotent. Writes `<slug>-NN-repair-round-<n>.md`:
+`status: todo`, `worker: worker-code`, **`model: opus` on purpose** (ADR-015; first
+attempts run on Sonnet, a repair follows a RED), `wave: <max+1>`; if any done story it unions is
+`red: required`, the repair carries `red: required` + an empty `red_reason:` (:3131; the builder writes the
+reason anew and stamps); `## Requirements` = the row's `red` +
 `review_asks` + seat-file RED asks as `> N. text` (`ask_item` :2829); `## Findings` = RED `ASK` lines +
 anchored review lines; `## Files`/`## Verification` = union over done stories.
 
@@ -125,4 +141,4 @@ profile args.
 
 Telemetry consumers (`telemetry.sh`, `scope-check.sh` ledger): see `memory/map/scripts.md`.
 
-last-verified: 2026-10-28 (fable-fallback merge 427ff2c; ADR-001, ADR-013, ADR-015, ADR-020)
+last-verified: 2026-10-28 (red-receipt merge 879e67e, 0.40.0; ADR-001, ADR-013, ADR-015, ADR-020, ADR-025)

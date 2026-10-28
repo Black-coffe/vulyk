@@ -8,7 +8,8 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 
 ## Entry points
 - `cycle.sh <verb> <spec-dir> [...]` - the cycle CLI; `advance` steps the loop. Callers: the Queen,
-  `cycle-clerk` (only `advance`, `status`, `release`), workers (`close-story`).
+  `cycle-clerk` (only `advance`, `status`, `release`), workers (`stamp-red` on a `red: required` story, then
+  `close-story`; `stamp-red` takes a story file, not a spec dir).
 - `lib.sh` - sourced only: `is_story_file`, `pack_fingerprint`, `is_paperwork_path`, `paperwork_only`,
   `marker`, `constitution_file`, `command_cell_exists`. Model floor (ADR-015): `model_floor` (default `fable
   5.1`, `opus 5.5`, `sonnet 5.5`, `haiku 5.5 cc>=2.1.293`; `VULYK_MODEL_FLOOR` overrides), `model_version`,
@@ -19,10 +20,15 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   rc 1; pack first, then a `<sha>..HEAD` that is `paperwork_only` stays current): the human-check record's rule,
   called by `human-check.sh --check` (:57) and ship-check.sh (:255 ACCEPTED override, :302 no-council branch).
   The council GREEN row's pack/commit test is still inline (ship-check.sh:225-228).
+  Red-receipt helpers (0.40.0): `verify_path_tokens` (:229), `sealed_tests <verification> <files>` (:235),
+  `sha256_tool` (:255; sha256sum, else `shasum -a 256`), `set_hash <path>...` (:261; a missing file hashes as
+  `missing <path>`). `cycle.sh stamp-red` and `close-story` use them (cycle.md).
 - `ship-check.sh <spec-dir>` / `--record`; `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`.
   `scope-check.sh <story-file> [range]` runs in `close-story`; `close-story --commit` exits 4 on its `  ! ` paths.
 - `wave-check.sh` (`no-verify`, `verify-gap`, `verify-cell`, `verify-round-only`: a segment matching a
-  `## Commands` row marked `round-only`, wave-check.sh:34,227), `trace-check.sh`, `token-report.py <project>
+  `## Commands` row marked `round-only`, wave-check.sh:34,227; 0.40.0 report-only `red-no-test`: a
+  `red: required` story whose `## Verification` seals no `## Files` path, and `red-value`: a `red:` value
+  other than `required`, wave-check.sh:249-259), `trace-check.sh`, `token-report.py <project>
   [--spec S] [--since D] [--json]` (dedupes by `message.id`), `evolve-ledger.py <root> <verb>` (owns
   `memory/stats/evolve.jsonl`; `resolve`: tip in default branch = accepted, unmerged branch gone = rejected).
 - `.claude/hooks/session-start-brief.sh` - map line; `[VULYK] model profile not chosen`; bootstrap offer
@@ -113,4 +119,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - Retired framework files are removed unless edited (`retired_edited`).
 - Card parsing lives only in `defects_lib.py` (`docs/wiki/rules-tree.md`).
 
-last-verified: 2026-10-28 (suite-row-upgrade merge, 0.39.1)
+last-verified: 2026-10-28 (red-receipt merge 879e67e, 0.40.0)
