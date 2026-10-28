@@ -102,6 +102,9 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup` (install.sh:79).
 - `--upgrade` ends with `Offer: no .claude/vulyk-setup ...` when absent and the host has a manifest
   (install.sh:1546); it creates nothing.
+- `report_full_suite_row <file>` (install.sh:397) runs after `report_fill_status` for CLAUDE.md and
+  CLAUDE.vulyk.md, on `--upgrade` and `--check`; names a Commands block with no `full suite` row marked
+  `round-only` (pre-0.36); read-only, the block is the hive's.
 
 ## Gotchas
 - `close-story`'s `## Commands` match, `record-seat`'s taint and `is_paperwork_path` are security-relevant
@@ -110,4 +113,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - Retired framework files are removed unless edited (`retired_edited`).
 - Card parsing lives only in `defects_lib.py` (`docs/wiki/rules-tree.md`).
 
-last-verified: 2026-10-28 (fable-fallback merge 427ff2c)
+last-verified: 2026-10-28 (suite-row-upgrade merge, 0.39.1)

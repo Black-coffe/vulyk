@@ -115,9 +115,10 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
 - **`/vulyk-gc`** - dispatches `librarian`; main session `git rm`s its `Delete:` list. **`/vulyk-gc memory`**
   (0.32.0) - main session alone: `memory-triage.sh`, one `AskUserQuestion`, nothing written before a yes.
 - **`/vulyk-pause`** / **`/vulyk-resume`** wrap `cycle.sh pause`/`resume`. **`/vulyk-update`** -
-  `vulyk-update.sh . --check`, ask. **`/vulyk-bootstrap`** - interview, Profile + Commands markers, scouts →
+  `vulyk-update.sh . --check`, ask; step 6 renames the hive's full-suite row to `Full suite / build
+  (round-only)` (or adds it with `none`), ADR-023. **`/vulyk-bootstrap`** - interview, Profile + Commands markers, scouts →
   map; a no is the Profile row `| Bootstrap | declined <date> |`.
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a
   relative script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-10-28 (horizon-audit merge 9816eea, 0.39.0; ADR-013, ADR-015, ADR-020, ADR-022)
+last-verified: 2026-10-28 (suite-row-upgrade merge, 0.39.1; ADR-013, ADR-015, ADR-020, ADR-022)
