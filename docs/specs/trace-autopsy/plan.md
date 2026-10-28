@@ -58,3 +58,4 @@ location counts as known and step 3 sends no scout.
 ## Plan deltas
 
 **Approved:** Andrei, 2026-10-28 («/vulyk-build trace-autopsy»)
+**Branch:** vulyk/trace-autopsy
