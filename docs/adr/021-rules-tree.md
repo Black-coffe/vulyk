@@ -173,9 +173,11 @@ without it."
     ref) is shared, so a card shown at the read is not repeated at the first edit. `SubagentStart` is not used for
     card delivery.
 15. **Native auto memory.** VULYK never sets `autoMemoryEnabled` nor `CLAUDE_CODE_DISABLE_AUTO_MEMORY`; the docs say
-    how to turn it off and what is lost. VULYK only signals: the SessionStart brief makes `memory triage` due when
+    how to turn it off and what is lost. VULYK only signals: the SessionStart brief offers `memory triage` when
     `MEMORY.md` reaches 160 lines or 20480 bytes (80% of Claude Code's 200 lines / 25 KB load limit), and after a
-    triage stays quiet until the file grows by 20 lines or 2 KB more.
+    triage stays quiet until the file grows by 20 lines or 2 KB more. Since 0.41.1 (spec `memory-triage-offer`,
+    owner: «Хотфикс 0.41.1: только предлагать (Рекомендую)») the offer has its own line, outside `maintenance due`:
+    the triage reads every private memory file, so the owner is asked first, and a no leaves the mark too.
 
 ### Invariants created
 
