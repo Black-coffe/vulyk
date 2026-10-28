@@ -11,7 +11,7 @@
 # owner looks again -> READY -> --record. Each step asserts what ship-check.sh and
 # human-check.sh must say. Exit 1 on the first wrong answer.
 set -u
-PARTS="ship hooklog gates manual close bsd safety" # one topic each; every part rebuilds the shared setup below
+PARTS="ship hooklog gates manual close bsd safety red" # one topic each; every part rebuilds the shared setup below
 PART=''
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -875,6 +875,161 @@ out="$(bash scripts/cycle.sh branch docs/specs/freshspec 2>&1)"; ex=$?
   && echo "  ok    neighbour: a branch cut at the default tip is fresh, branch checks it out" || { echo "::error::fresh branch exit=$ex out=$out"; fail=1; }
 git checkout -q -- . 2>/dev/null; git checkout -q "$BG_HOME"
 fi # part safety
+if part red; then # --- part red: stamp-red, the close-story receipt gate, repair inherits the mark, wave-check red lines
+# Order matters for the red-receipt story's own stamp: the gate cases run last, so the tail of a
+# red run ends on the close-story refusal this part expects.
+git add -A && git commit -qm "red: a clean tree to start from" >/dev/null 2>&1
+cat >> CLAUDE.md <<'EOF'
+| Red tests | `bash <file>` |
+| Red slow (round-only) | `bash tests/red-slow.sh` |
+EOF
+mkdir -p docs/specs/red tests src
+cp "$SRC"/templates/plan.md docs/specs/red/plan.md
+printf 'todo\n' > src/red.txt
+red_test_file() { # the sealed fixture test: green once src/red.txt says done
+  printf '#!/usr/bin/env bash\ngrep -qx done src/red.txt && exit 0\necho "expected done in src/red.txt, got $(cat src/red.txt)"\nexit 1\n' > tests/red.sh
+}
+red_test_file
+printf 'exit 0\n' > tests/red-pass.sh
+printf 'sleep 5\necho "expected done"\nexit 1\n' > tests/red-sleep.sh
+printf 'echo "expected done"\nexit 1\n' > tests/red-slow.sh
+red_story() { # red_story <nn> <frontmatter-lines> <files-lines> <verification-lines>
+  printf -- '---\nstory: red-%s\nspec: red\nstatus: todo\nreturned: DONE\nwave: %s\n%s---\n# Red fixture %s\n\n## Files\n%s\n## Verification\n%s\n' \
+    "$1" "$((10#$1))" "$2" "$1" "$3" "$4" > "docs/specs/red/red-$1.md"
+}
+MK=$'red: required\nred_reason: expected done\n'
+FI=$'- tests/red.sh\n- src/red.txt\n'
+git add -A && git commit -qm "red: fixtures" >/dev/null
+
+echo "red-receipt: wave-check names a marked story with nothing to seal and a red: value other than required"
+mkdir -p docs/specs/redwc
+printf -- '---\nstory: redwc-01\nstatus: todo\nwave: 1\nred: required\nred_reason: x\n---\n# W1\n\n## Files\n- src/red.txt\n\n## Verification\n`true`\n' > docs/specs/redwc/redwc-01.md
+printf -- '---\nstory: redwc-02\nstatus: todo\nwave: 2\nred: yes\n---\n# W2\n\n## Files\n- src/red.txt\n\n## Verification\n`bash tests/red.sh`\n' > docs/specs/redwc/redwc-02.md
+printf -- '---\nstory: redwc-03\nstatus: todo\nwave: 3\n---\n# W3\n\n## Files\n- src/red.txt\n\n## Verification\n`true`\n' > docs/specs/redwc/redwc-03.md
+printf -- '---\nstory: redwc-04\nstatus: todo\nwave: 4\nred: required\nred_reason: x\n---\n# W4\n\n## Files\n- tests/red.sh\n- src/red.txt\n\n## Verification\n`bash tests/red.sh`\n' > docs/specs/redwc/redwc-04.md
+out="$(bash scripts/wave-check.sh docs/specs/redwc)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    wave-check still exits 0" || { echo "::error::wave-check exit $ex"; fail=1; }
+printf '%s' "$out" | expect "a marked story whose verification names no path under ## Files" "red-no-test: redwc-01"
+printf '%s' "$out" | expect "a red: value other than required is named with the value" "red-value: redwc-02 yes"
+printf '%s' "$out" | grep -E 'red-(no-test|value): redwc-0[34]' && { echo "::error::an unmarked or sealed story got a red line: $out"; fail=1; } \
+  || echo "  ok    the unmarked story and the sealed marked story get no red line"
+rm -rf docs/specs/redwc
+
+echo "red-receipt: repair passes red: required on from a marked story it unions, and writes today's frontmatter otherwise"
+red_rp_spec() { # red_rp_spec <slug> <frontmatter-lines> - a Tier 2 spec, one done story, a RED round 1, its repair
+  mkdir -p "docs/specs/$1"
+  cp "$SRC/templates/plan.md" "docs/specs/$1/plan.md"
+  printf '# %s (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n' "$1" > "docs/specs/$1/brief.md"
+  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-28/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' "docs/specs/$1/plan.md"
+  printf 'a\n' > "$1-a.txt"
+  printf -- '---\nstory: %s-01\nstatus: done\nwave: 1\n%s---\n# A\n\n## Requirements\n> build the thing\n\n## Files\n- %s-a.txt\n\n## Verification\n`true`\n' \
+    "$1" "$2" "$1" > "docs/specs/$1/$1-01-a.md"
+  git add -A && git commit -qm "$1: fixture" >/dev/null
+  bash scripts/cycle.sh open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  printf 'VERDICT: BLOCK\n## Major\n- [ask 1] ask 1 broke: run: t saw: f\n' | bash scripts/cycle.sh record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
+  bash scripts/cycle.sh judge "docs/specs/$1" --commit >/dev/null 2>&1
+  bash scripts/cycle.sh repair "docs/specs/$1" --commit 2>&1 | tail -1
+}
+out="$(red_rp_spec redrp "$MK")"
+rp=docs/specs/redrp/redrp-02-repair-round-1.md
+[ -f "$rp" ] && echo "  ok    the marked spec reached its repair story" || { echo "::error::no repair story: $out"; fail=1; }
+sed -n '2,/^---$/p' "$rp" 2>/dev/null | expect "the repair story carries red: required" "red: required"
+sed -n '2,/^---$/p' "$rp" 2>/dev/null | grep -qx 'red_reason:' && echo "  ok    and an empty red_reason: line" \
+  || { echo "::error::repair frontmatter lacks an empty red_reason: $(sed -n '1,12p' "$rp" 2>/dev/null)"; fail=1; }
+out="$(red_rp_spec redrq '')"
+rq=docs/specs/redrq/redrq-02-repair-round-1.md
+[ "$(sed -n '1,9p' "$rq" 2>/dev/null)" = "$(printf -- '---\nstory: redrq-02\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: 2\nblocked_by: []\n---')" ] \
+  && ! grep -q '^red' "$rq" && echo "  ok    an unmarked union writes the frontmatter byte for byte as before" \
+  || { echo "::error::unmarked repair frontmatter changed: $(sed -n '1,12p' "$rq" 2>/dev/null) / $out"; fail=1; }
+
+echo "red-receipt: stamp-red refuses every wrong red - exit 4, the story file untouched"
+red_refuses() { # red_refuses <label> <nn> <exit> <error-text> - runs stamp-red on red-<nn>
+  local st="docs/specs/red/red-$2.md" before after out ex
+  before="$(cat "$st")"
+  out="$(bash scripts/cycle.sh stamp-red "$st" 2>&1)"; ex=$?
+  after="$(cat "$st")"
+  if [ "$ex" -eq "$3" ] && printf '%s\n' "$out" | tail -1 | grep -qF "\"error\":\"$4" && [ "$before" = "$after" ]; then echo "  ok    $1"
+  else echo "::error::$1 - expected exit $3, '$4' and the story unchanged; got exit $ex:"; printf '%s\n' "$out" | tail -3 | sed 's/^/        /'; fail=1; : > "$MARK"; fi
+}
+red_story 01 '' "$FI" '`bash tests/red.sh`'
+red_refuses "an unmarked story" 01 4 "story is not red: required"
+red_story 02 $'red: required\nred_reason:   \n' "$FI" '`bash tests/red.sh`'
+red_refuses "a marked story with an empty red_reason" 02 4 "red_reason is empty"
+red_story 03 "$MK" "$FI" '`true`'
+red_refuses "a verification that names no path under ## Files" 03 4 "no test to seal: ## Verification names no path under ## Files"
+red_story 04 "$MK" $'- tests/red.sh\n' '`bash tests/red.sh`'
+red_refuses "## Files holding only the sealed test" 04 4 "nothing to turn green: ## Files holds only sealed tests"
+red_story 05 "$MK" $'- tests/red-pass.sh\n- src/red.txt\n' '`bash tests/red-pass.sh`'
+red_refuses "every line exits 0" 05 4 "not red: every verification line exits 0"
+red_story 06 "$MK" $'- tests/red.sh\n- tests/red-missing.sh\n- src/red.txt\n' $'`bash tests/red.sh`\n`bash tests/red-missing.sh`'
+red_refuses "a missing test (127) refuses even beside a line carrying the reason" 06 4 "not red: bash tests/red-missing.sh exits 127 (launch failure)"
+red_story 07 $'red: required\nred_reason: expected something else\n' "$FI" '`bash tests/red.sh`'
+red_refuses "a failure without the declared text" 07 4 "red for another reason: red_reason not in the output of bash tests/red.sh"
+red_story 09 "$MK" $'- tests/red-slow.sh\n- src/red.txt\n' '`bash tests/red-slow.sh`'
+red_refuses "a round-only row: exit 2, close-story's own message" 09 2 "verification is round-only: bash tests/red-slow.sh"
+red_story 08 "$MK" $'- tests/red-sleep.sh\n- src/red.txt\n' '`bash tests/red-sleep.sh`'
+before="$(cat docs/specs/red/red-08.md)"
+out="$(VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh stamp-red docs/specs/red/red-08.md 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s\n' "$out" | tail -1 | grep -qF '"error":"not red: timed out after 1s' && [ "$before" = "$(cat docs/specs/red/red-08.md)" ] \
+  && echo "  ok    a timeout (124) is no red" || { echo "::error::timeout: exit=$ex $(printf '%s\n' "$out" | tail -2)"; fail=1; }
+
+echo "red-receipt: stamp-red on a red for the declared reason writes the receipt; a second stamp replaces it"
+st=docs/specs/red/red-10.md
+red_story 10 "$MK" "$FI" $'`true`\n`bash tests/red.sh`'
+out="$(bash scripts/cycle.sh stamp-red "$st" 2>&1)"; ex=$?
+last="$(printf '%s\n' "$out" | tail -1)"
+[ "$ex" -eq 0 ] && printf '%s' "$last" | grep -qE '^\{"ok":true,"verb":"stamp-red","story":"docs/specs/red/red-10.md","exit":1,"tests":"[0-9a-f]{64}","impl":"[0-9a-f]{64}"\}$' \
+  && echo "  ok    exit 0, the last line is the contract's JSON" || { echo "::error::stamp: exit=$ex $(printf '%s\n' "$out" | tail -3)"; fail=1; }
+th="$(printf '%s' "$last" | sed -n 's/.*"tests":"\([0-9a-f]*\)".*/\1/p')"
+ih="$(printf '%s' "$last" | sed -n 's/.*"impl":"\([0-9a-f]*\)".*/\1/p')"
+sed -n '/^red_reason:/{n;p;q;}' "$st" | grep -qE "^red_verified_at: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z $th\$" \
+  && echo "  ok    red_verified_at follows red_reason: a UTC timestamp and the tests hash" || { echo "::error::red_verified_at: $(grep '^red' "$st")"; fail=1; }
+grep -qx -- '- command: bash tests/red.sh' "$st" && grep -qx -- '- exit: 1' "$st" && grep -qx -- "- tests: $th (tests/red.sh)" "$st" \
+  && grep -qx -- "- impl: $ih" "$st" && grep -qE -- '^- stamped: [0-9]{4}-' "$st" && grep -qF 'expected done in src/red.txt, got todo' "$st" \
+  && echo "  ok    ## Red receipt: command, exit, tests, impl, stamped, the output tail" || { echo "::error::receipt: $(sed -n '/^## Red receipt/,$p' "$st")"; fail=1; }
+out="$(bash scripts/cycle.sh stamp-red "$st" 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(grep -c '^## Red receipt' "$st")" -eq 1 ] && [ "$(grep -c '^red_verified_at:' "$st")" -eq 1 ] && [ "$(grep -c '^- command:' "$st")" -eq 1 ] \
+  && echo "  ok    a second stamp leaves one red_verified_at and one ## Red receipt" || { echo "::error::re-stamp: exit=$ex $(cat "$st")"; fail=1; }
+git add -A && git commit -qm "red: stamp fixtures" >/dev/null
+
+echo "red-receipt: an unmarked story built from templates/story.md closes as before"
+sed -e 's/<slug>/red/g' -e 's/red-NN/red-20/' -e 's/^returned:/returned: DONE/' -e 's#^- path/to/file.ext#- src/tpl.txt#' \
+  -e 's#^`<exact command that proves the criteria>`#`true`#' -e 's/^wave: 1 /wave: 20 /' "$SRC"/templates/story.md > docs/specs/red/red-20-tpl.md
+git add -A && git commit -qm "red: template story" >/dev/null
+printf 'tpl\n' > src/tpl.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/red/red-20-tpl.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' docs/specs/red/red-20-tpl.md && git show --name-only --format= HEAD | grep -qx src/tpl.txt \
+  && echo "  ok    the template story closes and commits, no receipt asked" || { echo "::error::template close: exit=$ex $(printf '%s\n' "$out" | tail -3)"; fail=1; }
+
+echo "red-receipt: close-story on a marked story - the sealed test edited, no implementation change, then a real change closes"
+st=docs/specs/red/red-12.md
+red_story 12 "$MK" "$FI" '`bash tests/red.sh`'
+git add -A && git commit -qm "red: gate story" >/dev/null
+bash scripts/cycle.sh stamp-red "$st" >/dev/null 2>&1 && echo "  ok    red-12 stamped" || { echo "::error::red-12 stamp failed"; fail=1; }
+printf '# edited after the stamp\n' >> tests/red.sh
+out="$(bash scripts/cycle.sh close-story "$st" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s\n' "$out" | tail -1 | grep -qF '"error":"test changed after red receipt: re-run stamp-red"' \
+  && echo "  ok    a sealed test edited after the stamp: exit 4" || { echo "::error::test edit: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
+red_test_file
+out="$(bash scripts/cycle.sh close-story "$st" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s\n' "$out" | tail -1 | grep -qF '"error":"no implementation change since red receipt"' \
+  && echo "  ok    the implementation unchanged since the stamp: exit 4" || { echo "::error::no change: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
+printf 'done\n' > src/red.txt
+out="$(bash scripts/cycle.sh close-story "$st" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && git show HEAD:"$st" | grep -q '^## Red receipt' && git show HEAD:"$st" | grep -q '^status: done' \
+  && echo "  ok    receipt + changed implementation + green: closed, the receipt in the commit" || { echo "::error::close: exit=$ex $(printf '%s\n' "$out" | tail -3)"; fail=1; }
+
+echo "red-receipt: close-story on a marked story that was never stamped"
+st=docs/specs/red/red-11.md
+red_story 11 "$MK" "$FI" '`bash tests/red.sh`'
+git add -A && git commit -qm "red: unstamped story" >/dev/null
+head_before="$(git rev-parse HEAD)"
+out="$(bash scripts/cycle.sh close-story "$st" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && [ "$(git rev-parse HEAD)" = "$head_before" ] && echo "  ok    the unstamped story: exit 4, nothing committed" \
+  || { echo "::error::unstamped story: exit=$ex, head moved: $(git log -1 --format=%s)"; fail=1; }
+printf '%s\n' "$out" | tail -1 | expect "the refusal names stamp-red and the story" \
+  '"error":"no red receipt: run cycle.sh stamp-red docs/specs/red/red-11.md after writing the failing test"'
+fi # part red
 
 [ -e "$MARK" ] && fail=1
 exit $fail

@@ -33,9 +33,13 @@ mechanically by `cycle.sh repair`.
   `## Files` when the change reaches it; an importer that keeps working unchanged stays out. A non-zero
   count under `tests` or `importers` is a recon question for `drone-scout` when the story's change could
   reach an unnamed caller, never a guess.
-- A story that adds a branch, a loop, a parser, or handling of money, security or data writes names the
-  test that fails when that logic breaks: a test file in its `## Files`, or a `worker-test` story in a
-  later wave. One such test, not coverage; a trivial change names none.
+- A story that adds a branch, a loop, a parser, or handling of money, security or data writes is marked
+  `red: required` in its frontmatter (you mark it; the builder does not). It names the test that fails
+  when that logic breaks as a test file in its own `## Files`, and that path appears in its
+  `## Verification`, so `stamp-red` seals it; prefill `red_reason:` when you know the assertion text the
+  test prints on failure. A marked story gets no `worker-test` story in a later wave: its test is in the
+  same story. An unmarked story that wants a test may still name one in its `## Files` or in a
+  `worker-test` story in a later wave. One such test, not coverage; a trivial change names none.
 - Plan the concurrency: every story gets `wave:` and `blocked_by:`. Stories in one wave run in
   parallel in one tree, so their `## Files` must be disjoint; resolve overlap here by merging stories,
   moving the shared file into an earlier story, or sequencing with `blocked_by`.

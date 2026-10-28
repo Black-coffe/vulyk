@@ -226,6 +226,51 @@ verification_segments() { # verification_segments <line> -> one &&-separated seg
   done
 }
 
+verify_path_tokens() { # verify_path_tokens <verification-text> -> each whitespace-separated token of
+  # its lines but `repeat:`, an option (`-x`) dropped, quotes stripped, one per line. Lifted from
+  # wave-check.sh's verify-gap tokeniser (red-receipt): it and sealed_tests below read one parse.
+  printf '%s\n' "$1" | grep -v '^repeat:' | tr ' \t' '\n\n' | grep -v '^-' | tr -d "\"'" | grep -v '^$'
+}
+
+sealed_tests() { # sealed_tests <verification-text> <files-text> -> the red-receipt sealed set: every
+  # literal token (no glob character) of the verification that equals a `## Files` entry or matches
+  # a `## Files` glob, sorted, deduplicated. A quoted glob such as `'*.sh'` is never sealed.
+  local tok d
+  verify_path_tokens "$1" | while IFS= read -r tok; do
+    case "$tok" in *[*?[]*) continue ;; esac
+    while IFS= read -r d; do
+      [ -n "$d" ] || continue
+      case "$d" in
+        *[*?[]*)
+          # shellcheck disable=SC2254
+          case "$tok" in $d) printf '%s\n' "$tok"; break ;; esac ;;
+        *) [ "$tok" = "$d" ] && { printf '%s\n' "$tok"; break; } ;;
+      esac
+    done <<EOF
+$2
+EOF
+  done | LC_ALL=C sort -u
+}
+
+sha256_tool() { # sha256_tool -> `sha256sum`, else `shasum -a 256`, else nothing (exit 1)
+  if command -v sha256sum >/dev/null 2>&1; then printf 'sha256sum'
+  elif command -v shasum >/dev/null 2>&1; then printf 'shasum -a 256'
+  else return 1; fi
+}
+
+set_hash() { # set_hash <path>... -> 64 hex chars: each file's sha256 in the order given (a missing
+  # file contributes the literal `missing <path>`), that listing hashed once more. Exit 1 with no tool.
+  local tool p h
+  tool="$(sha256_tool)" || return 1
+  for p in "$@"; do
+    if [ -f "$p" ]; then
+      h="$($tool < "$p")"; printf '%s  %s\n' "${h%% *}" "$p"
+    else
+      printf 'missing %s\n' "$p"
+    fi
+  done | $tool | cut -c1-64
+}
+
 profile_value() { # profile_value <constitution> <field> -> the value cell of the table row whose
   # first cell is <field> (case-insensitive, `*`/backticks ignored), backticks stripped, `\|`
   # unescaped, trimmed; empty when the row or the file is absent.

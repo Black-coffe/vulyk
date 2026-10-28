@@ -1929,6 +1929,275 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
   printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$f")"
 }
 
+verify_cells_check() { # verify_cells_check <verb> <cmd-list> - C2 amended (R11/C-4): every &&-segment
+  # of every line must be a literal cell of the constitution's `## Commands` table (CLAUDE.vulyk.md
+  # in a sidecar hive, ADR-013 D1), or the line is the literal "none - reviewed by lead-review"
+  # (which runs nothing) - a story author never gets unprompted execution. Exits 2 on a refusal.
+  # One check, two callers: close-story and stamp-red (red-receipt).
+  local verb="$1" vline seg CONSTITUTION; CONSTITUTION="$(constitution_file "$ROOT")"
+  while IFS= read -r vline; do
+    [ -n "$vline" ] || continue
+    [ "$vline" = "none — reviewed by lead-review" ] && continue
+    # r2m9: a line matching a `## Commands` cell whole (its own `&&` and all) is one unit -
+    # only a line that is NOT itself a cell gets split and checked segment by segment.
+    # fast-verification-04: a cell whose row is marked `round-only` is a slow suite the round runs,
+    # never close-story - refused before anything runs, so the worker returns NEEDS_CONTEXT.
+    if command_cell_exists "$CONSTITUTION" "$vline"; then
+      command_cell_round_only "$CONSTITUTION" "$vline" && {
+        echo "cycle: $verb - verification is round-only in $CONSTITUTION's ## Commands: $vline" >&2
+        emit false "$verb" 2 error "verification is round-only: $vline"
+        exit 2
+      }
+      continue
+    fi
+    while IFS= read -r seg; do
+      [ -n "$seg" ] || continue
+      command_cell_exists "$CONSTITUTION" "$seg" || {
+        echo "cycle: $verb - verification command not in $CONSTITUTION's ## Commands: $seg" >&2
+        emit false "$verb" 2 error "verification not in ## Commands: $seg"
+        exit 2
+      }
+      command_cell_round_only "$CONSTITUTION" "$seg" && {
+        echo "cycle: $verb - verification is round-only in $CONSTITUTION's ## Commands: $seg" >&2
+        emit false "$verb" 2 error "verification is round-only: $seg"
+        exit 2
+      }
+    done <<SEGEOF
+$(verification_segments "$vline")
+SEGEOF
+  done <<EOF
+$2
+EOF
+}
+
+verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification runner (close-story,
+  # stamp-red). ADR-013 D5: the whole run - every line, every repeat - shares one budget under
+  # `timeout`, so verification slower than the Bash tool's 10-minute cap reports 124 instead of
+  # dying with the tool call. A per-command budget would not do: a repair story unions every story's
+  # lines, and five 500 s commands still pass five 540 s limits. 540 s leaves the verb its own
+  # margin inside that cap. `timeout 5 true` rather than `command -v`: on Windows a PATH that
+  # finds System32's timeout.exe first would otherwise fail every verification line.
+  # Without <outdir> (close-story): one command at a time, the whole block repeated <reps> times
+  # (R18/M-3 - a single `bash -c "$multi_line_block"` used to report only the last line's exit
+  # status), stopping at the first non-zero line. With <outdir> (stamp-red): every line once, its
+  # stdout+stderr in <outdir>/<k>.out (and echoed), its exit in VR_CODES[k], its text in VR_LINES[k];
+  # only a timeout stops it. Sets VR_VT, VR_TIMEOUT_OK, VR_RC (the stopping or last exit), VR_LINE,
+  # VR_RUN.
+  local cmds="$1" reps="$2" outdir="${3:-}" vline vrc left k=0 vstart="$SECONDS"
+  VR_VT="${VULYK_VERIFY_TIMEOUT:-540}"; VR_TIMEOUT_OK=0; VR_RC=0; VR_LINE=""; VR_RUN=0
+  VR_CODES=(); VR_LINES=()
+  case "$VR_VT" in ''|*[!0-9]*|0) VR_VT=540 ;; esac
+  command -v timeout >/dev/null 2>&1 && timeout 5 true </dev/null >/dev/null 2>&1 && VR_TIMEOUT_OK=1
+  [ -n "$outdir" ] && reps=1
+  local i=1
+  while [ "$i" -le "$reps" ]; do
+    VR_RUN="$i"
+    while IFS= read -r vline; do
+      [ -n "$vline" ] || continue
+      [ "$vline" = "none — reviewed by lead-review" ] && continue
+      if [ -n "$outdir" ]; then
+        k=$((k+1))
+        if [ "$VR_TIMEOUT_OK" -eq 1 ]; then
+          left=$(( VR_VT - (SECONDS - vstart) ))
+          if [ "$left" -le 0 ]; then vrc=124; : > "$outdir/$k.out"
+          else timeout "$left" bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
+          fi
+        else
+          bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
+        fi
+        cat "$outdir/$k.out"
+        VR_CODES[$k]="$vrc"; VR_LINES[$k]="$vline"; VR_RC="$vrc"; VR_LINE="$vline"
+        [ "$vrc" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ] && return 0
+        continue
+      fi
+      if [ "$VR_TIMEOUT_OK" -eq 1 ]; then
+        left=$(( VR_VT - (SECONDS - vstart) ))
+        if [ "$left" -le 0 ]; then vrc=124
+        else timeout "$left" bash -c "$vline"; vrc=$?
+        fi
+      else
+        bash -c "$vline"; vrc=$?
+      fi
+      VR_RC="$vrc"; VR_LINE="$vline"
+      [ "$vrc" -ne 0 ] && return 0
+    done <<EOF
+$cmds
+EOF
+    i=$((i+1))
+  done
+  return 0
+}
+
+verify_cmd_list() { # verify_cmd_list <story-file> -> the ## Verification command lines, `repeat:` dropped
+  verify_of "$1" | awk -F': *' '$1 !~ /^repeat$/ { print }' | sed '/^[[:space:]]*$/d'
+}
+
+fm_raw() { # fm_raw <story-file> <key> - a frontmatter line's whole value, trimmed: no cut at a colon
+  # or `#` as fm_field does (red_reason is failure text, red_verified_at a timestamp). Frontmatter only.
+  awk -v k="$2" '
+    NR == 1 && /^---[[:space:]]*$/ { infm=1; next }
+    infm && /^---[[:space:]]*$/    { exit }
+    infm && index($0, k ":") == 1  { v = substr($0, length(k) + 2); gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); print v; exit }
+  ' "$1"
+}
+
+red_sets() { # red_sets <story-file> - red-receipt's sets, newline-separated: RED_SEALED (lib.sh
+  # sealed_tests), RED_REST (## Files entries that are neither sealed nor the story file) and
+  # RED_IMPL (RED_REST expanded as close-story's commit expands ## Files - git pathspecs, tracked
+  # and untracked - a literal entry kept even while missing, minus the sealed tests and the story).
+  local story="${1#./}" files e
+  files="$(files_of "$1")"
+  RED_SEALED="$(sealed_tests "$(verify_of "$1")" "$files")"
+  RED_REST=""
+  local -a specs=()
+  while IFS= read -r e; do
+    [ -n "$e" ] || continue
+    printf '%s\n' "$RED_SEALED" | grep -qxF -- "$e" && continue
+    [ "$e" = "$story" ] && continue
+    RED_REST="$RED_REST$e
+"
+    specs+=("$e")
+  done <<EOF
+$files
+EOF
+  RED_IMPL=""
+  [ "${#specs[@]}" -gt 0 ] || return 0
+  RED_IMPL="$({
+    git -c core.quotePath=false ls-files -co --exclude-standard -- "${specs[@]}" 2>/dev/null
+    for e in "${specs[@]}"; do
+      case "$e" in *[*?[]*|*/) ;; *) [ -d "$e" ] || printf '%s\n' "$e" ;; esac
+    done
+  } | LC_ALL=C sort -u | while IFS= read -r e; do
+    [ -n "$e" ] || continue
+    [ "$e" = "$story" ] && continue
+    printf '%s\n' "$RED_SEALED" | grep -qxF -- "$e" && continue
+    printf '%s\n' "$e"
+  done)"
+}
+
+red_hash() { # red_hash <newline-list> -> set_hash of those paths, in order
+  local -a ps=(); local p
+  while IFS= read -r p; do [ -n "$p" ] && ps+=("$p"); done <<EOF
+$1
+EOF
+  set_hash ${ps[@]+"${ps[@]}"}
+}
+
+red_gate() { # red_gate <story-file> - close-story's refusals for a marked story (exit 4); returns
+  # when the receipt stands. A missing receipt line or section is a refusal, never a pass.
+  local story="$1" rva th ih now msg=""
+  rva="$(fm_raw "$story" red_verified_at)"
+  ih="$(awk '/^## Red receipt[[:space:]]*$/ { in_r=1; next } in_r && /^##[[:space:]]/ { exit }
+    in_r && /^- impl: / { sub(/^- impl: /, ""); sub(/[[:space:]]+$/, ""); print; exit }' "$story")"
+  th="${rva##* }"
+  if [ -z "$rva" ] || [ "$th" = "$rva" ] || [ -z "$ih" ] || ! grep -q '^## Red receipt[[:space:]]*$' "$story"; then
+    msg="no red receipt: run cycle.sh stamp-red $story after writing the failing test"
+  else
+    sha256_tool >/dev/null || {
+      echo "cycle: close-story - neither sha256sum nor shasum is on PATH: the red receipt cannot be checked" >&2
+      emit false close-story 2 error "no sha256 tool"; exit 2
+    }
+    red_sets "$story"
+    now="$(red_hash "$RED_SEALED")"
+    if [ "$now" != "$th" ]; then msg="test changed after red receipt: re-run stamp-red"
+    elif [ "$(red_hash "$RED_IMPL")" = "$ih" ]; then msg="no implementation change since red receipt"
+    fi
+  fi
+  [ -n "$msg" ] || return 0
+  echo "cycle: close-story - $story: $msg" >&2
+  emit false close-story 4 repair "$msg"
+  exit 4
+}
+
+cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] - red-receipt: run the story's
+  # ## Verification once, the close-story way, and write the receipt only for a red for the
+  # declared reason - never a launch failure, a timeout, or a green. Commits nothing.
+  local STORY="$1" STAMP="${2:-}"
+  [ -n "$STORY" ] && [ -f "$STORY" ] || {
+    echo "cycle: usage: $0 stamp-red <story-file> [--stamp <s>]" >&2
+    emit false stamp-red 1 error "usage"
+    exit 1
+  }
+  local SPECDIR; SPECDIR="$(dirname "$STORY")"
+  pause_guard "$SPECDIR" stamp-red
+  driver_guard "$SPECDIR" stamp-red "$STAMP"
+  branch_guard "$SPECDIR" stamp-red
+
+  red_refuse() { echo "cycle: stamp-red - $STORY: $1" >&2; emit false stamp-red 4 repair "$1"; exit 4; }
+  [ "$(fm_field "$STORY" red)" = required ] || red_refuse "story is not red: required"
+  local REASON; REASON="$(fm_raw "$STORY" red_reason)"
+  [ -n "$REASON" ] || red_refuse "red_reason is empty"
+  red_sets "$STORY"
+  [ -n "$RED_SEALED" ] || red_refuse "no test to seal: ## Verification names no path under ## Files"
+  [ -n "$RED_REST" ] || red_refuse "nothing to turn green: ## Files holds only sealed tests"
+  sha256_tool >/dev/null || {
+    echo "cycle: stamp-red - neither sha256sum nor shasum is on PATH" >&2
+    emit false stamp-red 2 error "no sha256 tool"; exit 2
+  }
+  [ -f "$HERE/redact.sh" ] || {
+    echo "cycle: stamp-red - $HERE/redact.sh is missing; an unredacted tail is never written" >&2
+    emit false stamp-red 2 error "scripts/redact.sh missing"; exit 2
+  }
+
+  local CMD_LIST; CMD_LIST="$(verify_cmd_list "$STORY")"
+  verify_cells_check stamp-red "$CMD_LIST"
+
+  local OUTD; OUTD="$(mktemp -d)" || { emit false stamp-red 2 error "mktemp failed"; exit 2; }
+  verify_run "$CMD_LIST" 1 "$OUTD"
+  if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
+    rm -rf "$OUTD"; red_refuse "not red: timed out after ${VR_VT}s"
+  fi
+  local k HIT="" FIRSTFAIL=""
+  for k in "${!VR_CODES[@]}"; do
+    case "${VR_CODES[$k]}" in
+      126|127) rm -rf "$OUTD"; red_refuse "not red: ${VR_LINES[$k]} exits ${VR_CODES[$k]} (launch failure)" ;;
+    esac
+  done
+  for k in "${!VR_CODES[@]}"; do
+    [ "${VR_CODES[$k]}" -ne 0 ] || continue
+    [ -n "$FIRSTFAIL" ] || FIRSTFAIL="$k"
+    grep -qF -- "$REASON" "$OUTD/$k.out" && { HIT="$k"; break; }
+  done
+  [ -n "$FIRSTFAIL" ] || { rm -rf "$OUTD"; red_refuse "not red: every verification line exits 0"; }
+  [ -n "$HIT" ] || { rm -rf "$OUTD"; red_refuse "red for another reason: red_reason not in the output of ${VR_LINES[$FIRSTFAIL]}"; }
+
+  local TS TH IH TAIL PATHS
+  TS="$(now_ts)"
+  TH="$(red_hash "$RED_SEALED")"
+  IH="$(red_hash "$RED_IMPL")"
+  TAIL="$(tail -n 10 "$OUTD/$HIT.out" | tr -d '\r' | bash "$HERE/redact.sh")"
+  rm -rf "$OUTD"
+  PATHS="$(printf '%s\n' "$RED_SEALED" | sed '/^$/d' | paste -sd, - | sed 's/,/, /g')"
+
+  # Frontmatter: red_verified_at replaced, or added right after red_reason:. Body: an old
+  # ## Red receipt block (heading to the next ## heading or EOF) dropped, trailing blank lines cut
+  # so a re-stamp never grows the file, the new block appended.
+  local TMP; TMP="$(mktemp)"
+  awk -v line="red_verified_at: $TS $TH" '
+    NR == 1 && /^---[[:space:]]*$/ { infm=1; print; next }
+    infm && /^---[[:space:]]*$/    { infm=0; print; next }
+    infm && /^red_verified_at:/    { next }
+    infm && /^red_reason:/         { print; print line; next }
+    infm                           { print; next }
+    /^## Red receipt[[:space:]]*$/ { skip=1; next }
+    skip && /^##[[:space:]]/       { skip=0 }
+    skip                           { next }
+    { a[++n] = $0 }
+    END { while (n > 0 && a[n] ~ /^[[:space:]]*$/) n--; for (i = 1; i <= n; i++) print a[i] }
+  ' "$STORY" > "$TMP"
+  {
+    cat "$TMP"
+    printf '\n## Red receipt\n- command: %s\n- exit: %s\n- tests: %s (%s)\n- impl: %s\n- stamped: %s\n\n```\n%s\n```\n' \
+      "${VR_LINES[$HIT]}" "${VR_CODES[$HIT]}" "$TH" "$PATHS" "$IH" "$TS" "$TAIL"
+  } > "$STORY"
+  rm -f "$TMP"
+
+  echo "cycle: $(fm_field "$STORY" story) - red receipt written (${VR_LINES[$HIT]} exits ${VR_CODES[$HIT]})"
+  printf '{"ok":true,"verb":"stamp-red","story":"%s","exit":%s,"tests":"%s","impl":"%s"}\n' \
+    "$(json_escape "$STORY")" "${VR_CODES[$HIT]}" "$TH" "$IH"
+  exit 0
+}
+
 cmd_close_story() { # cmd_close_story <story-file> <commit:0|1> [<stamp>]
   local STORY="$1" DOCOMMIT="$2" STAMP="${3:-}"
   [ -n "$STORY" ] && [ -f "$STORY" ] || {
@@ -2034,6 +2303,10 @@ EOF
     fi
   fi
 
+  # red-receipt: a story marked `red: required` closes only on stamp-red's receipt, with its sealed
+  # tests unchanged since and its implementation changed since. An unmarked story runs none of this.
+  [ "$(fm_field "$STORY" red)" = required ] && red_gate "$STORY"
+
   local VERIFY; VERIFY="$(verify_of "$STORY")"
   local REPS; REPS="$(printf '%s\n' "$VERIFY" | awk -F': *' '$1 ~ /^repeat$/ { gsub(/[[:space:]]/, "", $2); print $2; exit }')"
   case "$REPS" in ''|*[!0-9]*|0) REPS=1 ;; esac
@@ -2045,85 +2318,19 @@ EOF
     exit 4
   fi
 
-  # --- C2 amended (R11/C-4): every &&-segment of every line must be a literal cell of the
-  # constitution's `## Commands` table (CLAUDE.vulyk.md in a sidecar hive, ADR-013 D1), or the
-  # line is the literal "none - reviewed by lead-review" (which runs nothing, below) - a story
-  # author never gets unprompted execution.
-  local vline seg CONSTITUTION; CONSTITUTION="$(constitution_file "$ROOT")"
-  while IFS= read -r vline; do
-    [ -n "$vline" ] || continue
-    [ "$vline" = "none — reviewed by lead-review" ] && continue
-    # r2m9: a line matching a `## Commands` cell whole (its own `&&` and all) is one unit -
-    # only a line that is NOT itself a cell gets split and checked segment by segment.
-    # fast-verification-04: a cell whose row is marked `round-only` is a slow suite the round runs,
-    # never close-story - refused before anything runs, so the worker returns NEEDS_CONTEXT.
-    if command_cell_exists "$CONSTITUTION" "$vline"; then
-      command_cell_round_only "$CONSTITUTION" "$vline" && {
-        echo "cycle: close-story - verification is round-only in $CONSTITUTION's ## Commands: $vline" >&2
-        emit false close-story 2 error "verification is round-only: $vline"
-        exit 2
-      }
-      continue
-    fi
-    while IFS= read -r seg; do
-      [ -n "$seg" ] || continue
-      command_cell_exists "$CONSTITUTION" "$seg" || {
-        echo "cycle: close-story - verification command not in $CONSTITUTION's ## Commands: $seg" >&2
-        emit false close-story 2 error "verification not in ## Commands: $seg"
-        exit 2
-      }
-      command_cell_round_only "$CONSTITUTION" "$seg" && {
-        echo "cycle: close-story - verification is round-only in $CONSTITUTION's ## Commands: $seg" >&2
-        emit false close-story 2 error "verification is round-only: $seg"
-        exit 2
-      }
-    done <<SEGEOF
-$(verification_segments "$vline")
-SEGEOF
-  done <<EOF
-$CMD_LIST
-EOF
+  verify_cells_check close-story "$CMD_LIST"
 
-  # --- ADR-013 D5: the whole run - every line, every repeat - shares one budget under `timeout`,
-  # so verification slower than the Bash tool's 10-minute cap reports exit 4 instead of dying
-  # with the tool call. A per-command budget would not do: a repair story unions every story's
-  # lines, and five 500 s commands still pass five 540 s limits. 540 s leaves the verb its own
-  # margin inside that cap. `timeout 5 true` rather than `command -v`: on Windows a PATH that
-  # finds System32's timeout.exe first would otherwise fail every verification line. ---------
-  local VT="${VULYK_VERIFY_TIMEOUT:-540}" TIMEOUT_OK=0 vrc VSTART="$SECONDS" left
-  case "$VT" in ''|*[!0-9]*|0) VT=540 ;; esac
-  command -v timeout >/dev/null 2>&1 && timeout 5 true </dev/null >/dev/null 2>&1 && TIMEOUT_OK=1
-
-  # --- run: one command at a time, the whole block repeated REPS times (R18/M-3) - a single
-  # `bash -c "$multi_line_block"` used to report only the last line's exit status. -----------
-  local i=1
-  while [ "$i" -le "$REPS" ]; do
-    while IFS= read -r vline; do
-      [ -n "$vline" ] || continue
-      [ "$vline" = "none — reviewed by lead-review" ] && continue
-      if [ "$TIMEOUT_OK" -eq 1 ]; then
-        left=$(( VT - (SECONDS - VSTART) ))
-        if [ "$left" -le 0 ]; then vrc=124
-        else timeout "$left" bash -c "$vline"; vrc=$?
-        fi
-      else
-        bash -c "$vline"; vrc=$?
-      fi
-      if [ "$vrc" -eq 124 ] && [ "$TIMEOUT_OK" -eq 1 ]; then
-        echo "cycle: close-story - verification timed out after ${VT}s (run $i/$REPS): $vline" >&2
-        emit false close-story 4 repair "verification timed out after ${VT}s: $vline"
-        exit 4
-      fi
-      if [ "$vrc" -ne 0 ]; then
-        echo "cycle: close-story - verification failed (run $i/$REPS): $vline" >&2
-        emit false close-story 4 repair "$vline"
-        exit 4
-      fi
-    done <<EOF
-$CMD_LIST
-EOF
-    i=$((i+1))
-  done
+  verify_run "$CMD_LIST" "$REPS"
+  if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
+    echo "cycle: close-story - verification timed out after ${VR_VT}s (run $VR_RUN/$REPS): $VR_LINE" >&2
+    emit false close-story 4 repair "verification timed out after ${VR_VT}s: $VR_LINE"
+    exit 4
+  fi
+  if [ "$VR_RC" -ne 0 ]; then
+    echo "cycle: close-story - verification failed (run $VR_RUN/$REPS): $VR_LINE" >&2
+    emit false close-story 4 repair "$VR_LINE"
+    exit 4
+  fi
 
   if [ "$SELFMARKED" = "1" ]; then
     # C3 revised: verification is green, so this closing is real - record the self-mark once,
@@ -2899,13 +3106,14 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   done
   asks="$(sort_num_list "$asks")"
 
-  local maxn=0 maxw=0 sf n w files="" verifs=""
+  local maxn=0 maxw=0 sf n w files="" verifs="" marked=0
   for sf in "$SPEC"/*.md; do
     is_story_file "$sf" || continue
     n="$(story_number "$sf" "$SLUG")"; [ "$n" -gt "$maxn" ] && maxn="$n"
     w="$(fm_field "$sf" wave)"; case "$w" in ''|*[!0-9]*) w=1 ;; esac
     [ "$w" -gt "$maxw" ] && maxw="$w"
     [ "$(fm_field "$sf" status)" = done ] || continue
+    [ "$(fm_field "$sf" red)" = required ] && marked=1
     files="$files$(files_of "$sf")
 "
     verifs="$verifs$(verify_of "$sf" | grep -vE '^repeat[[:space:]]*:')
@@ -2918,7 +3126,10 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   # round that judged that work wrong, so it climbs a rung, as a missed story's retry climbs to the gate.
 
   {
-    printf -- '---\nstory: %s-%s\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: %s\nblocked_by: []\n---\n\n' "$SLUG" "$NN" "$WAVE"
+    printf -- '---\nstory: %s-%s\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: %s\nblocked_by: []\n' "$SLUG" "$NN" "$WAVE"
+    # red-receipt: a repair of a marked story stays marked; its builder writes red_reason anew.
+    [ "$marked" = 1 ] && printf 'red: required\nred_reason:\n'
+    printf -- '---\n\n'
     printf '# Repair round %s\n\n' "$N"
     printf '## Goal\nMake the asks and findings council round %s left RED pass, and change nothing else.\n\n' "$N"
     printf '## Requirements\n'
@@ -3153,6 +3364,15 @@ case "$VERB" in
     ;;
   manual-done)
     cmd_manual_done "$SPEC" "${3:-}" "${*:4}"
+    ;;
+  stamp-red)
+    STAMP=""
+    prevarg=""
+    for a in "$@"; do
+      [ "$prevarg" = "--stamp" ] && STAMP="$a"
+      prevarg="$a"
+    done
+    cmd_stamp_red "$SPEC" "$STAMP"
     ;;
   close-story)
     COMMIT=0; STAMP=""

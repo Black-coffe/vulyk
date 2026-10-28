@@ -4,6 +4,24 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-10-28
+
+A critical story must show its test failing before its code lands (spec `red-receipt`).
+
+### Added
+- **A critical story proves its test red before its code.** A story the planner marks `red: required` (the critical
+  list of `/vulyk-plan` step 6) closes only with a red receipt. `cycle.sh stamp-red <story>` runs its `## Verification`
+  and accepts a red only when the output carries the story's `red_reason:` text and no launch failure; it writes
+  `red_verified_at:` and a `## Red receipt` section with the hash of the sealed tests. `close-story` refuses a marked
+  story without the receipt, when a sealed test changed after it, or when no implementation file changed since it.
+- **A repair story inherits the mark** from any marked story it unions.
+- **`wave-check` reports `red-no-test` and `red-value`**, report-only, as `verify-gap` does.
+- **The prompts and the template teach the order** test, then `red_reason`, then `stamp-red`, then code, then
+  `close-story`, and forbid editing the implementation before the receipt and mocks of logic not yet written. The
+  worker, planner, solo-build and `lead-review` prompts and `templates/story.md` carry it.
+- ADR-025 records the decisions, the named bypasses and the five declined options.
+- For hive owners: existing stories stay unmarked and close as before; the planner marks critical stories from now on.
+
 ## [0.39.1] - 2026-10-28
 
 The fast/full test split of 0.36.0 reaches hives set up before it (spec `suite-row-upgrade`).

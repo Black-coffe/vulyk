@@ -1,14 +1,15 @@
 ---
 story: red-receipt-01-stamp-red-verb
 spec: red-receipt
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: no red receipt
+red_verified_at: 2026-10-28T10:24:55Z 8f8af99eae436c749162e49b1548e36f65c50841cd7f38a889ae6dbb97c194ae
 ---
 
 # `cycle.sh stamp-red`, the close-story gate, repair inheritance, wave-check report, the `red` test part
@@ -84,5 +85,32 @@ memory/map/cycle.md `## Verbs`, `## Repair (ADR-013 D4)`, `## Tests`; memory/map
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
+- tests/cycle.test.sh: new `red` part (last in PARTS; gate cases last so a red run's tail ends on the `no red receipt` refusal). `--part red` alone: 42-51 s on this box.
+- scripts/lib.sh: `verify_path_tokens` (lifted from wave-check's verify-gap tokeniser), `sealed_tests`, `sha256_tool`, `set_hash`.
+- scripts/cycle.sh: close-story's cell check and runner became `verify_cells_check <verb>` and `verify_run` (stop-at-first mode for close-story, run-all-once capture mode for stamp-red); `fm_raw` (whole frontmatter value: red_reason/red_verified_at hold colons), `red_sets`, `red_hash`, `red_gate`, `cmd_stamp_red`, dispatch `stamp-red`; `cmd_repair` prints `red: required` + `red_reason:` only when a done story is marked.
+- scripts/wave-check.sh: tokeniser now calls lib.sh `verify_path_tokens`; `red-no-test` / `red-value` lines.
+- Order kept: test written, stamp-red only, stamped (the full run failed with `no red receipt` in its tail), then gate, repair, wave-check; the test was not touched after the stamp.
+- Surprise: the first stamp's awk printed the frontmatter out of order (red_reason/red_verified_at above `story:`); fixed in cycle.sh (`infm { print; next }`) and the three lines of this story's own frontmatter moved back by hand - the receipt's hashes, tail and timestamp are the stamp's own. The `red` part does not assert frontmatter order (sealed now; see CONCERNS).
+- Impl set = `## Files` entries minus sealed minus the story file, expanded with `git ls-files -co --exclude-standard` plus literal entries kept while missing (so a not-yet-created file still counts as a change when it appears).
 
 ## Findings
+
+## Red receipt
+- command: bash tests/cycle.test.sh
+- exit: 1
+- tests: 8f8af99eae436c749162e49b1548e36f65c50841cd7f38a889ae6dbb97c194ae (tests/cycle.test.sh)
+- impl: 2e3c0b66a9538f7467aea67abdf3607489b216497027e08ccee4414820d28283
+- stamped: 2026-10-28T10:24:55Z
+
+```
+  ok    the template story closes and commits, no receipt asked
+red-receipt: close-story on a marked story - the sealed test edited, no implementation change, then a real change closes
+  ok    red-12 stamped
+::error::test edit: exit=4 {"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"bash tests/red.sh"}
+::error::no change: exit=4 {"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"bash tests/red.sh"}
+  ok    receipt + changed implementation + green: closed, the receipt in the commit
+red-receipt: close-story on a marked story that was never stamped
+::error::unstamped story: exit=0, head moved: story(red-11): Red fixture 11
+::error::the refusal names stamp-red and the story - expected '"error":"no red receipt: run cycle.sh stamp-red docs/specs/red/red-11.md after writing the failing test"' in:
+        {"ok":true,"verb":"close-story","exit":0,"next":"briefed","status":{"spec":"docs/specs/red","slug":"red","stage":"01-spec","next":"briefed","briefed":false,"approved":false,"branch":null,"head":"24e59f1","pack":"22e976cff899","stories":{"todo":10,"in-progress":0,"done":3,"blocked":0},"wave":1,"wave_stories":[{"file":"docs/specs/red/red-01.md","story":"red-01","worker":"worker-code","model":"","repeat":1}],"round":0,"ceiling":3,"tier":null,"open":false,"court":null,"missing":[],"stale":false,"verdict":null,"review":null,"red":[],"round_dir":null,"paused":false,"shipped":false,"since":null,"seat_attempt":{},"seats":[],"manual":[]}}
+```
