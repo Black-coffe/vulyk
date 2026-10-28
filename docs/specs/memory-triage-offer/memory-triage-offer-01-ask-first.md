@@ -1,14 +1,15 @@
 ---
 story: memory-triage-offer-01-ask-first
 spec: memory-triage-offer
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: ::error::memory triage is offered on its own line, not in maintenance due
+red_verified_at: 2026-10-28T17:09:02Z 8204398ad7fe6cf653d01db1541e22570546a71aa79b291e777a95e0d689e70a
 ---
 
 # Memory triage: ask first
@@ -31,12 +32,34 @@ offered, not run.
 - No change to gc/evolve/map maintenance or to the thresholds.
 
 ## Acceptance criteria
-- [ ] A hive with only a large `MEMORY.md` prints no `maintenance due` line and does print the ask-once line with the size.
-- [ ] Every 0.41.0 threshold and mark case still holds.
+- [x] A hive with only a large `MEMORY.md` prints no `maintenance due` line and does print the ask-once line with the size.
+- [x] Every 0.41.0 threshold and mark case still holds.
 
 ## Verification
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- `memline` replaces the `due` call and prints after the `maintenance due` line; threshold and mark logic untouched. The size text is kept, so the 0.41.0 tests and the map stay true. 3 new checks: no `maintenance due`, the ask-once wording, the `--mark` on a no.
+- Docs: `docs/memory-system.md` signal bullet, `/vulyk-gc` memory-mode intro.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: 8204398ad7fe6cf653d01db1541e22570546a71aa79b291e777a95e0d689e70a (tests/maintenance.test.sh)
+- impl: 33fb34f4b67ac52cb7984d5d209658997a0db5946d2ab5bab927628fc8a70b3e
+- stamped: 2026-10-28T17:09:02Z
+
+```
+  ok    memory-triage: a file without frontmatter lists with type -
+  ok    memory-triage: MEMORY.md is not a row
+  ok    memory-triage: exactly two rows
+  ok    memory-triage: an absent dir says so
+  ok    memory-triage: an absent dir exits 0
+  ok    memory-triage --index-lines: names the moved file's line
+  ok    memory-triage --index-lines: takes a bare file name
+  ok    memory-triage --index-lines: leaves other lines out
+  ok    memory-triage: writes nothing
+maintenance.test.sh: 173 checks, 3 failed
+```
