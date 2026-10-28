@@ -41,3 +41,4 @@ none
 ## Plan deltas
 
 **Approved:** Andrei, 2026-10-28 («да»)
+**Branch:** vulyk/auto-memory-subagent-start
