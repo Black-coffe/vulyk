@@ -2333,6 +2333,26 @@ EOF
   # tests unchanged since and its implementation changed since. An unmarked story runs none of this.
   [ "$(fm_red "$STORY")" = required ] && red_gate "$STORY"
 
+  # prompt-check (docs/specs/prompt-check): a story touching scripts or prompts closes only when no finding
+  # involves its own ## Files; a finding elsewhere prints as a warn, so an old drift in a hive stops nothing
+  # unrelated. Exit 2 (no python, usage) is a note: a lint, not a security gate. CI runs it over everything.
+  if [ -f "$HERE/prompt-check.sh" ] && files_of "$STORY" | grep -qE '^(\./)?(scripts/|\.claude/agents/|\.claude/commands/|templates/)'; then
+    local PC_OUT PC_RC pf; local -a PC_FILES=()
+    while IFS= read -r pf; do [ -n "$pf" ] && PC_FILES+=("$pf"); done <<EOF
+$(files_of "$STORY")
+EOF
+    PC_OUT="$(bash "$HERE/prompt-check.sh" --touched "${PC_FILES[@]}" 2>&1)"; PC_RC=$?
+    case "$PC_RC" in
+      0) printf '%s\n' "$PC_OUT" | grep '^prompt-check: warn ' >&2 ;;
+      1)
+        printf '%s\n' "$PC_OUT" >&2
+        echo "cycle: close-story - prompt-check: a prompt and the script or agent it names disagree in this story's files" >&2
+        emit false close-story 4 repair "$(printf '%s\n' "$PC_OUT" | grep -m1 '^prompt-check: error ')"
+        exit 4 ;;
+      *) echo "cycle: close-story - note: prompt-check did not run (exit $PC_RC): $(printf '%s' "$PC_OUT" | head -1)" >&2 ;;
+    esac
+  fi
+
   local VERIFY; VERIFY="$(verify_of "$STORY")"
   local REPS; REPS="$(printf '%s\n' "$VERIFY" | awk -F': *' '$1 ~ /^repeat$/ { gsub(/[[:space:]]/, "", $2); print $2; exit }')"
   case "$REPS" in ''|*[!0-9]*|0) REPS=1 ;; esac
