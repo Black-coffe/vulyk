@@ -41,7 +41,8 @@ newest published tag is.
    full-suite row (in any language: `Full test suite`, `Повний набір тестів`) to `Full suite / build
    (round-only)` and keep its command; the reviewer then runs it once per round and no story names it
    (ADR-023). Run `bash scripts/wave-check.sh` on each open spec and move a story that named it onto a
-   faster row. No full-suite row at all: add none and say so. Commit it with the upgrade.
+   faster row. No full suite at all: add the row with
+   `none` as its command (`SUITE: none`, and the note stops), and say so. Commit it with the upgrade.
 
 Never edit `.claude/vulyk-version` by hand to silence the check, and never widen the upgrade beyond
 what `install.sh --upgrade` does on its own.

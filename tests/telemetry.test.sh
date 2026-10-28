@@ -1452,6 +1452,9 @@ for row in 'Full test suite' 'Full suite / build' 'Повний набір те�
   sed -i "s#^| Full suite / build (round-only) |#| $row |#" "$FS/c.md"
   report_full_suite_row "$FS/c.md" | expect "the upgrade names a '$row' row" "no 'Full suite / build (round-only)' row"
 done
+sed 's#^| Full suite / build (round-only) | `<fill in>` |#| Full suite / build (round-only) | none |#' "$T/cr.before" > "$FS/none.md"
+expect_eq "the 'none' fixture holds the row" "1" "$(grep -c '^| Full suite / build (round-only) | none |' "$FS/none.md")"
+expect_eq "a hive with no full suite quiets the note with a 'none' row" "" "$(report_full_suite_row "$FS/none.md")"
 sed '/VULYK:COMMANDS:START/d' "$FS/c.md" > "$FS/nomark.md"
 expect_eq "a Commands block without markers gets no note" "" "$(report_full_suite_row "$FS/nomark.md")"
 SCF="$T/hive-sidecar-fullsuite"; mkdir -p "$SCF"
