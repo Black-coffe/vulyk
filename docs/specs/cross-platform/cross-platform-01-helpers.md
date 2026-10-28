@@ -1,14 +1,15 @@
 ---
 story: cross-platform-01
 spec: cross-platform
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
-red_reason:
+red_reason: vulyk_python did not pick the next working interpreter
+red_verified_at: 2026-10-28T21:08:42Z daa20754a1b2cc36a31d4a5bde45924d4b10c901286cb541bfa042fac912a89f
 # red_verified_at:      # written by `cycle.sh stamp-red`, never by hand
 ---
 
@@ -80,5 +81,34 @@ red receipt), «Tests».
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
+- scripts/lib.sh: vulyk_python, sed_inplace (moved verbatim from cycle.sh), date_epoch, date_shift, capped_by, run_capped appended.
+- capped_by (not in the Contracts) sets VULYK_CAP: run_capped dispatches on it and verify_run reads it into VR_TIMEOUT_OK, so an uncapped run never reads a command's own 124 as a timeout.
+- date_epoch accepts only the two contract shapes (anything else exit 1) so GNU and BSD agree; a bare day gets T00:00:00Z appended because BSD -f fills missing fields from the clock.
+- scripts/run-capped.py: Popen(start_new_session) + killpg TERM, 10 s grace, KILL, exit 124; on Windows taskkill /T /F and cmd[0] resolved with shutil.which (CreateProcess searches System32 before PATH: WSL bash.exe).
+- scripts/py.sh: sources lib.sh beside itself, exec "$VULYK_PY"; no Python -> the one stderr line, exit 2.
+- scripts/cycle.sh: own sed_inplace removed; :853 is sed -nE; verify_run and run_court_setup go through run_capped (court setup as `env ... bash -c 'cd "$1" && exec bash "$2"'`, so run_capped runs in cycle's cwd); 11 array expansions guarded.
+- Court setup's uncapped warning now comes from run_capped and lands in setup.log with the setup's stderr, not on the terminal.
+- CLAUDE.md: Python cell -> bash scripts/py.sh -m py_compile .claude/hooks/*.py (7165 B without CR).
+- tests/cycle.test.sh: 24 sed -i -> sed_inplace, pw_paths guarded, fixture copies py.sh + run-capped.py; BSD stub refuses BRE `\|`; part bsd gains the helper, run_capped, ask-9 close-story and CLAUDE.md cell cases; part red reruns the stamp-red timeout under dead timeout/gtimeout.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/cycle.test.sh
+- exit: 1
+- tests: daa20754a1b2cc36a31d4a5bde45924d4b10c901286cb541bfa042fac912a89f (tests/cycle.test.sh)
+- impl: 81f03dc1a564260c4f005dc45fbf9e86109915ae2364b5ceb18fccfdce7546cb
+- stamped: 2026-10-28T21:08:42Z
+
+```
+red-receipt: an unmarked story built from templates/story.md closes as before
+  ok    the template story closes and commits, no receipt asked
+red-receipt: close-story on a marked story - the sealed test edited, no implementation change, then a real change closes
+  ok    red-12 stamped
+  ok    a sealed test edited after the stamp: exit 4
+  ok    the implementation unchanged since the stamp: exit 4
+  ok    receipt + changed implementation + green: closed, the receipt in the commit
+red-receipt: close-story on a marked story that was never stamped
+  ok    the unstamped story: exit 4, nothing committed
+  ok    the refusal names stamp-red and the story
+```

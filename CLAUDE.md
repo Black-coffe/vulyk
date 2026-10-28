@@ -73,7 +73,7 @@ Quiet variants only: output is resent each turn. A story's `## Verification` nam
 | Purpose | Command |
 |---|---|
 | Shell | `git ls-files '*.sh' \| xargs -n1 bash -n` |
-| Python | `python -m py_compile .claude/hooks/*.py` |
+| Python | `bash scripts/py.sh -m py_compile .claude/hooks/*.py` |
 | JSON | `git ls-files '*.json' \| xargs -n1 jq -e . > /dev/null` |
 | Cycle | `bash tests/cycle.test.sh` |
 | Council (round-only) | `bash tests/council.test.sh` |
