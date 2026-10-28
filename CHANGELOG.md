@@ -4,6 +4,20 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.39.1] - 2026-10-28
+
+The fast/full test split of 0.36.0 reaches hives set up before it (spec `suite-row-upgrade`).
+
+### Fixed
+- **An upgrade names a hive whose full-suite row predates 0.36.0.** VULYK finds the full suite by the Purpose cell
+  `Full suite / build (round-only)`; only a fresh install wrote it, so older hives kept `Full test suite` or a
+  translated name, their stories could still run the whole suite on every close-story, and the round's `SUITE:` gate
+  was silently off. `install.sh --upgrade` now prints `commands: no 'Full suite / build (round-only)' row`, and
+  `/vulyk-update` has the Queen rename the hive's own row to the canon, its command kept; a hive with no full suite
+  writes the row with `none`. Six hives on 0.38.0 were renamed the same day.
+- ADR-023 (fast story checks, one full suite per round) is accepted; the architecture passport's item 7.3 notes that
+  0.36.0 closed it.
+
 ## [0.39.0] - 2026-10-28
 
 A build no longer stalls when Fable runs out: the refused role runs once more on Opus, recorded (spec
