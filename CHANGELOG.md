@@ -4,7 +4,11 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
-### Added (spec `red-receipt`)
+## [0.40.0] - 2026-10-28
+
+A critical story must show its test failing before its code lands (spec `red-receipt`).
+
+### Added
 - **A critical story proves its test red before its code.** A story the planner marks `red: required` (the critical
   list of `/vulyk-plan` step 6) closes only with a red receipt. `cycle.sh stamp-red <story>` runs its `## Verification`
   and accepts a red only when the output carries the story's `red_reason:` text and no launch failure; it writes
