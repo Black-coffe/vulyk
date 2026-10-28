@@ -8,7 +8,9 @@ message points at the agent file's `maxTurns` (`reasonFor` :33).
 
 ## Agents - frontmatter, job, report
 `omitClaudeMd: true` (no constitution loaded) on cycle-clerk, council-opus, council-haiku,
-drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other four keep it for host conventions.
+drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The rest (`queen-planner`, `worker-code`,
+`worker-test`, `lead-review`, `lead-architect`; docs/architecture.md:21) keep it for host conventions.
+`scripts/prompt-check.sh` enforces this against that sentence (rule `omit-claude-md`).
 - **lead-review** (`opus`, `high`, `maxTurns:60`, `experimental: cacheTtl: 1h` frontmatter,
   lead-review.md:8-9; Read/Grep/Glob/Bash) - the `review` seat of every
   round; Tier 4: two dispatches. Judges five items (lead-review.md:16-33): 1 `## Asks` (+ `## Descoped`);

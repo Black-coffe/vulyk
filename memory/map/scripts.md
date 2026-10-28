@@ -27,15 +27,21 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   `trace-check.sh`, `token-report.py <project> [--spec S] [--since D] [--json]` (dedupes by `message.id`),
   `evolve-ledger.py <root> <verb>` (owns `memory/stats/evolve.jsonl`; `resolve`: tip in default branch =
   accepted, unmerged branch gone = rejected).
-- `trace-autopsy.sh <brief.md>` (0.42.0) - picks python3|python (none: exit 2), execs `trace-autopsy.py`
-  (stdlib). Reads only the brief's `> ` lines; frames: Python `File "p", line N`, Node `at f (p:L:C)`, bash
-  `p: line N:`, plain `p.ext:N` (FRAME_FORMS, first match per line, else PLAIN). `resolve`: whole tracked path is
-  the tail of the frame path, else one file sharing >= 2 trailing parts; basename-only = `ambiguous`; none =
-  `outside the repo`; `dist/` not mapped back. Writes `autopsy.md` beside the brief, <= 15 lines (MAX_LINES,
-  MAX_FRAMES 3): HEAD, per frame its code line at HEAD + `git log -n 3 -L n,n:path` as `last touched:`, marks
-  (outside / ambiguous / past end), `... N more repo frames`. Innermost first (Python traces reversed). No repo
-  frame: one stdout line, no file. Trace text is data: git via argv list, only `ls-files` paths and digit lines;
-  git failure = a mark. Exit 0 / 2 (usage, no python, not in git). Sole caller: `/vulyk-plan` step 2.
+- `trace-autopsy.sh <brief.md>` (0.42.0) - python3|python wrapper (none: exit 2) over `trace-autopsy.py`. Reads
+  the brief's `> ` lines (Python/Node/bash/plain frames, FRAME_FORMS), resolves them against `git ls-files`
+  (`ambiguous` / `outside the repo` marks), writes `autopsy.md` beside the brief, <= 15 lines (MAX_FRAMES 3):
+  code line at HEAD + `git log -L` as `last touched:`. Trace text is data (git via argv). Exit 0 / 2. Sole
+  caller: `/vulyk-plan` step 2.
+- `prompt-check.sh [--touched <path>...]` (0.43.0) - python3|python wrapper over `prompt-check.py`; no model.
+  Root = the script's parent, so a fixture copy checks itself. Over `.claude/agents|commands/*.md` and
+  `templates/*.md` it checks agent frontmatter (name = file, model, `maxTurns`, `tools`), `omitClaudeMd` against
+  the `except ... carries \`omitClaudeMd: true\`` sentence of `docs/architecture.md` (keepers are the backticked
+  names between), backticked `scripts/` paths, `cycle.sh <verb>` against the dispatcher `case`, `--flag` against
+  non-comment lines of the script (+ same-stem `.py`), agent names, `telemetry.sh` `AGENTS` vs agent files.
+  Hive mode (`.claude/vulyk-version` exists): AGENTS mismatches are warnings. `--touched`: a finding involving no
+  given path (globs ok) is a `warn`. Exit 0 clean / 1 blocking / 2 usage, no python. Callers: `close-story`
+  (cycle.md) and CI's `shell` job (ci.yml:37). Tests: `tests/maintenance.test.sh` (:512+, fixture copies),
+  `cycle.test.sh` (:686+).
 - `.claude/hooks/session-start-brief.sh` - map line; `[VULYK] model profile not chosen`; bootstrap offer
   while the Profile holds `<fill in`; `maintenance due: ...` for gc, evolve, map (`memory/map/.stale`); its own
   `[VULYK] memory triage (...)` ask-once line (>= 160 lines or 20480 bytes of auto-memory MEMORY.md, quiet until
@@ -107,4 +113,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `trace-autopsy.py` resolves from `git ls-files` of the brief's repo and reads code via `git show HEAD:`, so an
   uncommitted file reads `not at HEAD`; `-L` blame is of HEAD, not the working tree.
 
-last-verified: 2026-10-28 (trace-autopsy merge 46d13ad, 0.42.0)
+last-verified: 2026-10-28 (prompt-check merge 44933bf, 0.43.0; slice over the ~80-line cap, trim next)

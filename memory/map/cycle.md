@@ -42,6 +42,10 @@ verbs on exit 0 carry the post-verb `status` (`emit_status` :86).
   before verification: exit 4 `no red receipt: run cycle.sh stamp-red ...` / `test changed after red receipt:
   re-run stamp-red` (sealed hash differs) / `no implementation change since red receipt` (impl hash equals the
   stamped `- impl:`); exit 2 without a sha256 tool. Unmarked stories skip it.
+- **prompt-check gate (0.43.0):** after `red_gate`, before verification (cycle.sh:2336-2354), when `## Files`
+  has a path under `scripts/`, `.claude/agents/`, `.claude/commands/` or `templates/` and `prompt-check.sh`
+  exists, `close-story` runs `prompt-check.sh --touched <## Files>`. Exit 0: `warn` lines to stderr; 1: exit 4
+  (emit error = first `error` line); any other (2 no python/usage) is a stderr note, not a refusal.
 - `close-story <file> [--commit] [--stamp]` :2227 - scope-check; with `--commit`, a path scope-check
   counts out of scope (`  ! ` lines) that is still dirty and not `is_paperwork_path` → exit 4 `edited
   outside ## Files: <paths>`. A `## Verification` segment matching a `## Commands` row marked
@@ -146,4 +150,4 @@ profile args.
 
 Telemetry consumers (`telemetry.sh`, `scope-check.sh` ledger): see `memory/map/scripts.md`.
 
-last-verified: 2026-10-28 (red-repair-mark merge 1135d70, 0.40.1; ADR-001, ADR-013, ADR-015, ADR-020, ADR-025)
+last-verified: 2026-10-28 (prompt-check merge 44933bf, 0.43.0; line numbers after :2336 may have shifted; red-repair-mark 1135d70, 0.40.1; ADR-001, ADR-013, ADR-015, ADR-020, ADR-025)
