@@ -1,0 +1,70 @@
+######## scripts/prompt-check.py
+## scripts/prompt-check.py
+tests:
+  exact    tests/cycle.test.sh
+  textual  1 not shown
+importers:
+  exact    scripts/prompt-check.sh
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  4 not shown
+######## scripts/cycle.sh
+## scripts/cycle.sh
+tests:
+  exact    tests/council.test.sh
+  textual  10 not shown
+importers:
+  textual  16 not shown
+path mentions:
+  textual  210 not shown
+######## scripts/trace-autopsy.py
+## scripts/trace-autopsy.py
+tests:
+  textual  1 not shown
+importers:
+  exact    scripts/trace-autopsy.sh
+  textual  1 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  5 not shown
+######## .claude/hooks/handoff.sh
+## .claude/hooks/handoff.sh
+tests:
+  textual  3 not shown
+importers:
+  textual  5 not shown
+imported:
+  exact    .claude/hooks/handoff.py
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  39 not shown
+######## tests/symbol-map.test.sh
+## tests/symbol-map.test.sh
+importers:
+  textual  1 not shown
+imported:
+  exact    docs/specs/symbol-map/replay.py
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  25 not shown
+######## docs/architecture.md
+## docs/architecture.md
+  ! imports not parsed for .md: search callers yourself
+tests:
+  textual  1 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  34 not shown
+######## scripts/state.sh
+## scripts/state.sh
+tests:
+  textual  6 not shown
+importers:
+  textual  9 not shown
+path mentions:
+  textual  23 not shown
