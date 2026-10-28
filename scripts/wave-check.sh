@@ -34,6 +34,9 @@
 #   verify-round-only - a `## Verification` segment matching a `## Commands` row whose Purpose
 #                cell carries `round-only` (a slow suite only the council round runs):
 #                close-story refuses it with exit 2, so the story needs a faster row
+#   red-no-test - a story marked `red: required` whose verification names no path under its
+#                `## Files`: stamp-red has no test to seal (lib.sh sealed_tests)
+#   red-value  - a `red:` value other than `required`: a typo would otherwise read as unmarked
 #
 # Limits, stated rather than hidden: a verification command that names NO path (a whole
 # suite) cannot be judged here, and a path that resolves but is simply the wrong file
@@ -191,7 +194,7 @@ PATHS_EOF
       # `feat/branch`, a URL - and treating those as paths reported every story in a
       # pnpm/npm monorepo as a verify-gap (found by the S2.6.5a battle test, 2026-08-18).
       cmd_paths=""
-      for tok in $(printf '%s\n' "$verify" | grep -v '^repeat:' | tr ' \t' '\n\n' | grep '/' | grep -v '^-' | tr -d "\"'" | grep -v '^$'); do
+      for tok in $(verify_path_tokens "$verify" | grep '/'); do
         case "$tok" in
           *[*?[]*) cmd_paths="${cmd_paths}${tok}
 " ;;
@@ -240,6 +243,18 @@ SEG_EOF
       done <<VL_EOF
 $(printf '%s\n' "$verify" | awk -F': *' '$1 !~ /^repeat$/')
 VL_EOF
+    fi
+  fi
+
+  # 4. red-receipt: a marked story must seal a test (lib.sh sealed_tests, the set stamp-red seals);
+  #    a `red:` value other than `required` is a typo, never a silent unmark.
+  if grep -q '^red:' "$f"; then
+    redv="$(fm "$f" red | sed 's/[[:space:]]*$//')"
+    if [ "$redv" = required ]; then
+      [ -n "$(sealed_tests "$verify" "$declared")" ] \
+        || report "red-no-test: $id - marked red: required, but its ## Verification names no path under its ## Files: stamp-red has no test to seal"
+    else
+      report "red-value: $id $redv - only 'required' marks a story; this value leaves it unmarked"
     fi
   fi
 
