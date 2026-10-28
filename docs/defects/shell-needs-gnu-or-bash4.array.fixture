@@ -1,0 +1,8 @@
+# neighbour form - .claude/hooks/vulyk-update-check.sh before cross-platform: bash 3.2 calls the empty
+# AUTH array unbound under set -u, and the hook dies when no GITHUB_TOKEN is set
+set -uo pipefail
+AUTH=()
+[ -n "${GITHUB_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
+FETCHED="$(curl -fsSL -m 4 "${AUTH[@]}" \
+    -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/$REPO/tags?per_page=100" 2>/dev/null)"

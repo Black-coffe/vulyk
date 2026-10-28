@@ -1,0 +1,2 @@
+# neighbour form - CLAUDE.md:76 before cross-platform: a bare python, absent on a stock macOS
+| Python | `python -m py_compile .claude/hooks/*.py` |

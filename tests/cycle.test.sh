@@ -799,8 +799,7 @@ cp "$BSD/CLAUDE.md.orig" CLAUDE.md
 git add -A && git commit -qm "conv: back to the default Commit convention" >/dev/null
 
 echo "cross-platform: the stub refuses BRE alternation; review_verdict_of_text and lib.sh's sed_inplace under it"
-( export REAL_SED; PATH="$BSD:$PATH"; printf 'a\n' | sed -n 's/\(a\|b\)/x/p' ) >/dev/null 2>&1 \
-  && { echo "::error::the BSD sed stub ran \\| in a basic regex"; fail=1; } || echo "  ok    the stub refuses \\| in a basic regex"
+( export REAL_SED; PATH="$BSD:$PATH"; printf 'a\n' | sed -n 's/\(a\|b\)/x/p' ) >/dev/null 2>&1 && { echo "::error::the BSD sed stub ran \\| in a basic regex"; fail=1; } || echo "  ok    the stub refuses \\| in a basic regex"  # portable: the BRE alternation is the case fed to the BSD sed stub
 [ "$( export REAL_SED; PATH="$BSD:$PATH"; printf 'a\\|b\n' | sed 's/\\|/|/g' )" = 'a|b' ] \
   && echo "  ok    the stub runs an escaped backslash before a bar" || { echo "::error::the BSD sed stub refused 's/\\\\|/|/g'"; fail=1; }
 eval "$(sed -n '/^review_verdict_of_text()/,/^}/p' scripts/cycle.sh)"

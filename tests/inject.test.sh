@@ -347,7 +347,7 @@ echo "--- python3 stub"
 mkdir -p "$T/stubbin"; printf '#!/bin/sh
 exit 9009
 ' > "$T/stubbin/python3"; chmod +x "$T/stubbin/python3"
-if python -c 'import sys' </dev/null >/dev/null 2>&1; then
+if ( VULYK_PY=""; PATH="$T/stubbin:$PATH"; vulyk_python ); then
   o="$(printf '%s' "$(edit stub "$W/pipeline/voiceover.py")" | PATH="$T/stubbin:$PATH" CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK")"
   if printf '%s' "$o" | grep -q additionalContext; then ok "a python3 stub exiting 9009 falls through to python"
   else bad "a python3 stub silenced the hook"; fi

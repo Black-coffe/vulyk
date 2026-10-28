@@ -1,8 +1,8 @@
 ---
 story: cross-platform-05
 spec: cross-platform
-status: todo
-returned: NEEDS_CONTEXT
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 3
@@ -92,6 +92,7 @@ pattern), «Tests» (`tests/maintenance.test.sh` caps); `docs/wiki/rules-tree.md
 - BRE rule: only an odd run of backslashes before `|+?` counts, so `lib.sh:161`'s `s/\\|/|/g` (a literal backslash, then a bar) is not a hit.
 - Card, 4 fixtures (each exits 1), `INDEX.md` regenerated; `defects-check.sh` GREEN (3 blocking checks).
 - `ci.yml`: `shell` runs the gate; `full-suite` and `install-smoke` use a matrix of `[ubuntu-latest, macos-latest]` with `fail-fast: false`. A macOS-only step pins `/bin/bash` through `GITHUB_PATH` and asserts 3.2, BSD sed and no `timeout`, and installs `jq` only if it is missing. install-smoke: `sed -i.bak ... && rm -f ...bak`, `md5sum` -> `cksum`.
+- Per the Queen's ruling: `tests/cycle.test.sh:802` joined to one line and marked `# portable:` (the BSD-stub case); `tests/inject.test.sh:350`, `tests/intake.test.sh:259` probe with `( VULYK_PY=""; PATH="$T/stubbin:$PATH"; vulyk_python )`, i.e. "is there a Python 3 besides the stubbed python3"; `vulyk-evolve.md:20,37,58` got the same-line `|| date -u -v-7d ...` fallback. Gate on the tree: ok (80 files, 1 allowed).
 
 ## Findings
 - Tree run is red on 6 leftovers of stories 01-04, all in files outside this story's `## Files` (Non-goals: report, do not fix):

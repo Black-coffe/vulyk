@@ -37,6 +37,9 @@ jobs:
       - name: prompt-check (agent and command prose against the scripts and agents it names)
         run: bash scripts/prompt-check.sh
 
+      - name: portability-check (bash 3.2, BSD tools, no bare python - card shell-needs-gnu-or-bash4)
+        run: bash scripts/portability-check.sh
+
   top-model:
     name: top-model.sh resolves every plan shape
     runs-on: ubuntu-latest
@@ -108,12 +111,29 @@ jobs:
           exit $fail
 
   full-suite:
-    name: every tests/*.test.sh at once (tests/full-suite.sh, uncapped)
-    runs-on: ubuntu-latest
+    name: every tests/*.test.sh at once (tests/full-suite.sh, uncapped) on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # council parts read history
+
+      # macOS: what an owner's Mac has - /bin/bash 3.2 first on PATH for every later step (the image may put
+      # a Homebrew bash 5 ahead of it), BSD sed, no timeout. Asserted, not assumed; only jq may be installed.
+      - name: macOS - pin the stock /bin/bash 3.2 and assert the BSD userland
+        if: runner.os == 'macOS'
+        run: |
+          d="$RUNNER_TEMP/stock-bash"; mkdir -p "$d" && ln -sf /bin/bash "$d/bash"
+          echo "$d" >> "$GITHUB_PATH"; PATH="$d:$PATH"
+          v="$(bash --version | head -1)"; echo "$v"
+          case "$v" in *"version 3.2"*) ;; *) echo "::error::bash on PATH is not 3.2: $v"; exit 1 ;; esac
+          if sed --version >/dev/null 2>&1; then echo "::error::sed is GNU sed, not the BSD one"; exit 1; fi
+          [ -z "$(command -v timeout)" ] || { echo "::error::a timeout is on PATH: $(command -v timeout)"; exit 1; }
+          command -v jq >/dev/null 2>&1 || brew install jq
 
       - uses: actions/setup-node@v4   # driver and e2e run the real Workflow driver
         with:
@@ -153,10 +173,25 @@ jobs:
           fi
 
   install-smoke:
-    name: install.sh dry-run smoke test
-    runs-on: ubuntu-latest
+    name: install.sh dry-run smoke test on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: macOS - pin the stock /bin/bash 3.2 and assert the BSD userland
+        if: runner.os == 'macOS'
+        run: |
+          d="$RUNNER_TEMP/stock-bash"; mkdir -p "$d" && ln -sf /bin/bash "$d/bash"
+          echo "$d" >> "$GITHUB_PATH"; PATH="$d:$PATH"
+          v="$(bash --version | head -1)"; echo "$v"
+          case "$v" in *"version 3.2"*) ;; *) echo "::error::bash on PATH is not 3.2: $v"; exit 1 ;; esac
+          if sed --version >/dev/null 2>&1; then echo "::error::sed is GNU sed, not the BSD one"; exit 1; fi
+          [ -z "$(command -v timeout)" ] || { echo "::error::a timeout is on PATH: $(command -v timeout)"; exit 1; }
+          command -v jq >/dev/null 2>&1 || brew install jq
 
       - name: plant dummy runtime artifacts (must never be shipped, per shippable())
         run: |
@@ -270,10 +305,10 @@ jobs:
           echo ".claude/agents/retired-smoke.md" >> "$target/.claude/vulyk-manifest"
           LC_ALL=C sort -u -o "$target/.claude/vulyk-manifest" "$target/.claude/vulyk-manifest"
           before_manifest="$(cat "$target/.claude/vulyk-manifest")"
-          checksum_before="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          checksum_before="$(find "$target" -type f -exec cksum {} \; | sort | cksum)"
           out="$(./install.sh "$target" --upgrade --check)"
           echo "$out" | grep -q "would remove   .claude/agents/retired-smoke.md" || { echo "::error::--check did not report would remove for the retired file"; exit 1; }
-          checksum_after="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          checksum_after="$(find "$target" -type f -exec cksum {} \; | sort | cksum)"
           [ "$checksum_before" = "$checksum_after" ] || { echo "::error::--upgrade --check wrote to the target (ADR-005 D4.11)"; exit 1; }
           [ -f "$target/.claude/agents/retired-smoke.md" ] || { echo "::error::--check deleted the retired file"; exit 1; }
           after_manifest="$(cat "$target/.claude/vulyk-manifest")"
@@ -303,9 +338,9 @@ jobs:
           target="$(mktemp -d)"
           ./install.sh "$target" >/dev/null
           echo mine > "$target/.claude/agents/mine.md"
-          before="$(md5sum "$target/.claude/agents/mine.md")"
+          before="$(cksum "$target/.claude/agents/mine.md")"
           ./install.sh "$target" --upgrade >/dev/null
-          after="$(md5sum "$target/.claude/agents/mine.md")"
+          after="$(cksum "$target/.claude/agents/mine.md")"
           [ "$before" = "$after" ] || { echo "::error::--upgrade touched an owner's own file"; exit 1; }
           grep -qxF ".claude/agents/mine.md" "$target/.claude/vulyk-manifest" && { echo "::error::an owner's own file was listed in the manifest"; exit 1; }
           true
@@ -348,7 +383,7 @@ jobs:
         run: |
           target="$(mktemp -d)"
           ./install.sh "$target" >/dev/null
-          sed -i 's/| Stack | `<fill in>` |/| Stack | `filled-in-value` |/' "$target/CLAUDE.md"
+          sed -i.bak 's/| Stack | `<fill in>` |/| Stack | `filled-in-value` |/' "$target/CLAUDE.md" && rm -f "$target/CLAUDE.md.bak"
           before="$(cat "$target/CLAUDE.md")"
           ./install.sh "$target" --upgrade >/dev/null
           after="$(cat "$target/CLAUDE.md")"
@@ -361,7 +396,7 @@ jobs:
         run: |
           target="$(mktemp -d)"
           ./install.sh "$target" >/dev/null
-          sed -i '/^| Telemetry |/d' "$target/CLAUDE.md"
+          sed -i.bak '/^| Telemetry |/d' "$target/CLAUDE.md" && rm -f "$target/CLAUDE.md.bak"
           before="$(grep -v '^| Telemetry |' "$target/CLAUDE.md")"
           out="$(./install.sh "$target" --upgrade)"
           echo "$out" | grep -q "Enable telemetry?" && { echo "::error::the installer asked a question with no terminal"; exit 1; }
@@ -381,10 +416,10 @@ jobs:
           target="$(mktemp -d)"
           VULYK_TELEMETRY=on ./install.sh "$target" >/dev/null
           [ "$(grep -c '^| Telemetry | on ' "$target/CLAUDE.md")" = "1" ] || { echo "::error::VULYK_TELEMETRY=on did not set the row to on"; exit 1; }
-          sed -i '/^| Telemetry |/d' "$target/CLAUDE.md"
-          before="$(md5sum "$target/CLAUDE.md")"
+          sed -i.bak '/^| Telemetry |/d' "$target/CLAUDE.md" && rm -f "$target/CLAUDE.md.bak"
+          before="$(cksum "$target/CLAUDE.md")"
           out="$(./install.sh "$target" --upgrade --check)"
-          [ "$before" = "$(md5sum "$target/CLAUDE.md")" ] || { echo "::error::--check wrote the Telemetry row"; exit 1; }
+          [ "$before" = "$(cksum "$target/CLAUDE.md")" ] || { echo "::error::--check wrote the Telemetry row"; exit 1; }
           echo "$out" | grep -q "would set      CLAUDE.md Profile row: Telemetry" || { echo "::error::--check did not report the pending Telemetry row"; exit 1; }
 
       - name: --upgrade wires anomaly-scan.sh on SessionEnd only and unwires what 0.18 retired, idempotently (ADR-013 D7)
@@ -405,9 +440,9 @@ jobs:
                  ([.hooks.Stop[].hooks[].command | select(test("handoff.sh stop"))] | length == 1)' \
             "$target/.claude/settings.json" >/dev/null \
             || { echo "::error::settings.json is not SessionEnd-only for the scan, still wires the learnings hook, or lost an existing entry"; exit 1; }
-          before="$(md5sum "$target/.claude/settings.json")"
+          before="$(cksum "$target/.claude/settings.json")"
           ./install.sh "$target" --upgrade >/dev/null
-          [ "$before" = "$(md5sum "$target/.claude/settings.json")" ] || { echo "::error::a second --upgrade re-wrote settings.json"; exit 1; }
+          [ "$before" = "$(cksum "$target/.claude/settings.json")" ] || { echo "::error::a second --upgrade re-wrote settings.json"; exit 1; }
           out3="$(./install.sh "$target" --upgrade --check)"
           echo "$out3" | grep -q "would wire     .claude/settings.json -> SessionEnd" && { echo "::error::--check reported wiring an already-wired hook"; exit 1; }
           echo "$out3" | grep -q "would unwire" && { echo "::error::--check reported unwiring an already-unwired hook"; exit 1; }
@@ -454,7 +489,7 @@ jobs:
         run: |
           target="$(mktemp -d)"
           ./install.sh "$target" >/dev/null
-          sed -i '/<!-- VULYK:PROFILE:START -->/d; /<!-- VULYK:PROFILE:END -->/d' "$target/CLAUDE.md"
+          sed -i.bak '/<!-- VULYK:PROFILE:START -->/d; /<!-- VULYK:PROFILE:END -->/d' "$target/CLAUDE.md" && rm -f "$target/CLAUDE.md.bak"
           before="$(cat "$target/CLAUDE.md")"
           out="$(./install.sh "$target" --upgrade)"
           after="$(cat "$target/CLAUDE.md")"
@@ -465,7 +500,7 @@ jobs:
         run: |
           target="$(mktemp -d)"
           ./install.sh "$target" --telemetry off >/dev/null
-          sed -i '/<!-- VULYK:PROFILE:START -->/d; /<!-- VULYK:PROFILE:END -->/d' "$target/CLAUDE.md"
+          sed -i.bak '/<!-- VULYK:PROFILE:START -->/d; /<!-- VULYK:PROFILE:END -->/d' "$target/CLAUDE.md" && rm -f "$target/CLAUDE.md.bak"
           before="$(cat "$target/CLAUDE.md")"
           out="$(VULYK_TELEMETRY=on ./install.sh "$target" --upgrade 2>&1)"
           after="$(cat "$target/CLAUDE.md")"
@@ -495,9 +530,9 @@ jobs:
           awk '/^## Profile$/{skip=1} skip && /<!-- VULYK:PROFILE:END -->/{skip=0; next} !skip' \
             "$target/CLAUDE.md" > "$target/CLAUDE.md.tmp" && mv "$target/CLAUDE.md.tmp" "$target/CLAUDE.md"
           ./install.sh "$target" --upgrade >/dev/null
-          before="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          before="$(find "$target" -type f -exec cksum {} \; | sort | cksum)"
           out="$(./install.sh "$target" --upgrade --check)"
-          after="$(find "$target" -type f -exec md5sum {} \; | sort | md5sum)"
+          after="$(find "$target" -type f -exec cksum {} \; | sort | cksum)"
           [ "$before" = "$after" ] || { echo "::error::--upgrade --check after a restore wrote to the target"; exit 1; }
 
       - name: re-install is idempotent (never overwrites existing files)

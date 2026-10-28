@@ -17,7 +17,7 @@ Nobody has to remember this command: the SessionStart brief says `maintenance du
    X="$(mktemp)"; bash .claude/hooks/defect-intake.sh --lexicon > "$X"; L=""; OUT=""; seen=0
    while IFS= read -r c; do   # PATH's copy first, then cached copies newest first: the first with the verb wins
      [ -f "$c" ] || continue; seen=1
-     if OUT="$(bash "$c" corrections --since "$(date -u -d '-7 days' +%Y-%m-%d)" --lexicon "$X" 2>/dev/null)"; then L="$c"; break; fi
+     if OUT="$(bash "$c" corrections --since "$(date -u -d '-7 days' +%Y-%m-%d 2>/dev/null || date -u -v-7d +%Y-%m-%d)" --lexicon "$X" 2>/dev/null)"; then L="$c"; break; fi
    done < <(command -v litopys; ls -d "$HOME"/.claude/plugins/cache/litopys/litopys/*/bin/litopys 2>/dev/null | sort -rV)
    if [ -n "$L" ]; then   # a quote opening with ">" is a relayed side-agent note: model text, not the owner's
      r=$(printf '%s\n' "$OUT" | grep -c ' · «> '); OUT="$(printf '%s\n' "$OUT" | grep -v ' · «> ')"
@@ -34,7 +34,7 @@ Nobody has to remember this command: the SessionStart brief says `maintenance du
    step 3: file its quote into the matching card (Law 6), not a new rule in prose.
 2. Council check-in (read-only; nothing here writes anything). If `memory/stats/council.jsonl` does not exist, print `council: no rounds yet` and skip to step 3. Otherwise run the same `awk` pass `/vulyk-status` step 2 uses, restricted to the last 7 days:
    ```
-   SINCE="$(date -u -d '-7 days' +%Y-%m-%dT%H:%M:%SZ)"
+   SINCE="$(date -u -d '-7 days' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-7d +%Y-%m-%dT%H:%M:%SZ)"
    awk -v since="$SINCE" '
      { match($0, /"ts":"[^"]*"/);      ts=substr($0, RSTART+6, RLENGTH-7) }
      ts < since { next }
@@ -55,7 +55,7 @@ Nobody has to remember this command: the SessionStart brief says `maintenance du
      }
    ' memory/stats/council.jsonl
    ```
-   plus the same escaped-defect grep as `/vulyk-status` step 2, restricted to briefs whose file mtime falls in the last 7 days (`date -r <brief.md> +%s` vs. `date -u -d '-7 days' +%s`). Print `council (7d): <specs> specs · median <n> rounds to green · <n> escalations · <n> escaped defects`. Then the comparison the grill names - `human.jsonl` rows with `"verdict":"REJECTED"` in the same window:
+   plus the same escaped-defect grep as `/vulyk-status` step 2, restricted to briefs whose file mtime falls in the last 7 days (`date -r <brief.md> +%s` vs. `date -u -d '-7 days' +%s 2>/dev/null || date -u -v-7d +%s`). Print `council (7d): <specs> specs · median <n> rounds to green · <n> escalations · <n> escaped defects`. Then the comparison the grill names - `human.jsonl` rows with `"verdict":"REJECTED"` in the same window:
    ```
    awk -v since="$SINCE" '
      { match($0, /"ts":"[^"]*"/); ts=substr($0, RSTART+6, RLENGTH-7) }
