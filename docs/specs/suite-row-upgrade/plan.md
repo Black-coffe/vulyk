@@ -35,4 +35,10 @@ that canon (its command kept), and the stale audit note and ADR status are broug
 **Branch:** vulyk/suite-row-upgrade
 **Checked:**
 **Council:**
+**Council:** ESCALATE round 1, 2026-10-28, at e0bf755, pack 75e0e88eae3e
 **Shipped:**
+
+## Needs a human
+- reason: ceiling · round 1 · 2026-10-28
+- ask 4: BLOCK by the reviewer - see docs/specs/suite-row-upgrade/council/round-1/review.md
+- seats: docs/specs/suite-row-upgrade/council/round-1/
