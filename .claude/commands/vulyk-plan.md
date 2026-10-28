@@ -20,11 +20,15 @@ Plan: "$ARGUMENTS"
    whenever stories exist.
 2. Brief. Write `docs/specs/<slug>/brief.md`: the request verbatim as a `> ` blockquote, piped through
    `bash scripts/redact.sh`, with the date. A bug report's error text, stack trace and reproduction go
-   in verbatim too. Everything downstream traces back to this file, so never paraphrase it.
+   in verbatim too. Everything downstream traces back to this file, so never paraphrase it. When the
+   request carries a stack trace, run `bash scripts/trace-autopsy.sh docs/specs/<slug>/brief.md` right
+   after: `autopsy.md` beside the brief lists its repo frames, each code line and the last commits that
+   touched it at HEAD (a lead, not a verdict).
 3. Recon. Read `memory/memory.md` and the relevant `memory/map/` slices first. A targeted question about
    a file or two: read them yourself. Dispatch `drone-scout` only for broad or unmapped territory:
    Tier 1 none (one if the location is unknown), Tier 2 at most one, Tier 3 at most two, Tier 4 at most
-   four, in parallel. Tier 2-4: run `bash scripts/symbol-map.sh --exact <file>` once per file the plan is
+   four, in parallel. A frame line in `autopsy.md` makes the location known: Tier 1-2 send no scout for it.
+   Tier 2-4: run `bash scripts/symbol-map.sh --exact <file>` once per file the plan is
    likely to name (one call on many files is cut at 1536 bytes after a few) and keep every output: the
    planner dispatch receives it. Checklist, Tier 2-4: meta-tests, docs/ADR, `.env.example`, re-exports,
    sibling files with the same pattern.

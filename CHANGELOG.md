@@ -4,6 +4,18 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+### Added
+- **Stack trace autopsy for bug-fix briefs** (spec `trace-autopsy`). When the request carries a stack trace,
+  `/vulyk-plan` step 2 runs `scripts/trace-autopsy.sh` on the fresh brief. It reads only the quoted request, resolves
+  Python, Node, bash and plain `path:N` frames to tracked files (a deployment or Windows path matches by its tail,
+  also when the build dropped a folder such as `src/`; built `dist/` files are not mapped back),
+  and writes `autopsy.md` beside the brief, at most 15 lines: HEAD, each frame's code line and its last commits
+  from `git log -n 3 -L`, labelled «last touched», then marks for frames outside the repo, ambiguous or past the end.
+  A frame line there counts as a known location: Tier 1-2 send no scout for it. The newest commit on a line is a
+  lead, not the commit that broke the behaviour. Trace text never reaches a shell; only `git ls-files` paths reach
+  git. No model; 0.32 s on this repo for three frames.
+
+
 ## [0.41.1] - 2026-10-28
 
 The memory triage of 0.41.0 is offered to the owner, not run by itself (spec `memory-triage-offer`).

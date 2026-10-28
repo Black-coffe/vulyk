@@ -4,8 +4,9 @@ Usage: bash scripts/trace-autopsy.sh <brief.md>
 
 Reads only the brief's `> ` lines (the verbatim request). Frames: Python `File "p", line N`, Node `at f (p:L:C)` /
 `at p:L:C`, bash `p: line N:`, plain `p.ext:N`; the first form that matches a line wins. A frame resolves when a
-tracked file's whole path is the tail of the frame path (`/app/src/a.py`, `C:\\build\\src\\a.py` -> `src/a.py`);
-a frame whose name only matches by basename is `ambiguous`, one with no tracked name is `outside the repo`.
+tracked file's whole path is the tail of the frame path (`/app/src/a.py`, `C:\\build\\src\\a.py` -> `src/a.py`),
+or one tracked file alone shares its last two parts or more (`/app/app/a.py` -> `src/app/a.py`); a basename-only
+match is `ambiguous`, a frame with no tracked name is `outside the repo`. Built files (`dist/`) are not mapped back.
 Innermost frame first (a Python `most recent call last` trace is reversed). Writes `autopsy.md` beside the brief,
 at most 15 lines: HEAD, up to 3 frames with the code line at HEAD and `git log -n 3 -L <n>,<n>:<path>` under
 «last touched», the marks, then `... N more repo frames`. No repo frame: one stdout line, no file.
@@ -74,7 +75,20 @@ def resolve(raw, by_name):
         return full[0], []
     if full:
         return None, full
+    # A build that drops a folder (`/app/app/core.py` for `src/app/core.py`): a unique tail of two parts or more.
+    tail = {t: common_tail(parts, t.split('/')) for t in cands}
+    best = max(tail.values(), default=0)
+    top = [t for t in cands if tail[t] == best]
+    if best >= 2 and len(top) == 1:
+        return top[0], []
     return None, cands
+
+
+def common_tail(a, b):
+    k = 0
+    while k < min(len(a), len(b)) and a[-1 - k] == b[-1 - k]:
+        k += 1
+    return k
 
 
 def main():
@@ -110,7 +124,11 @@ def main():
             seen.add((hit, n))
             resolved.append((hit, n))
     if not resolved:
-        print('trace-autopsy: no repo frame (%d frames seen)' % len(raw))
+        hint = ''
+        if ambiguous:
+            p, n, c = ambiguous[0]
+            hint = '; ambiguous: %d (first %s:%d -> %s)' % (len(ambiguous), p, n, ', '.join(c[:2]))
+        print('trace-autopsy: no repo frame (%d frames seen%s)' % (len(raw), hint))
         sys.exit(0)
 
     _, head = git(root, 'log', '-1', '--date=short', '--format=%h %ad')

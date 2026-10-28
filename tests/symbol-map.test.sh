@@ -296,6 +296,18 @@ if [ ! -e "$R/docs/specs/none/autopsy.md" ]; then ok "trace-autopsy: no repo fra
 else bad "trace-autopsy: no repo frame writes no autopsy.md"; fi
 expect "trace-autopsy: no repo frame says so" "no repo frame" "$T/ta-none.out"
 
+brief stripped <<'EOF'
+  File "/app/app/core.py", line 3, in calc
+EOF
+bash "$TA" "$R/docs/specs/stripped/brief.md" > /dev/null 2>&1
+touch "$R/docs/specs/stripped/autopsy.md"
+expect "trace-autopsy: a build without src/ resolves by its two-part tail" "src/app/core.py:3" "$R/docs/specs/stripped/autopsy.md"
+brief onlyamb <<'EOF'
+  File "/srv/util.py", line 1, in <module>
+EOF
+bash "$TA" "$R/docs/specs/onlyamb/brief.md" > "$T/ta-onlyamb.out" 2>&1
+expect "trace-autopsy: no repo frame still names the ambiguous candidates" "a/util.py, b/util.py" "$T/ta-onlyamb.out"
+
 { printf 'Traceback (most recent call last):\n'; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf '  File "/app/lib/m%s.py", line 1, in f\n' "$i"; done; } | brief many
 bash "$TA" "$R/docs/specs/many/brief.md" > /dev/null 2>&1
 touch "$R/docs/specs/many/autopsy.md"
@@ -311,6 +323,10 @@ expect_eq "trace-autopsy: no argument exits 2" "2" "$RC"
 mkdir -p "$T/ta-norepo"; printf '> lib/run.sh:2\n' > "$T/ta-norepo/brief.md"
 bash "$TA" "$T/ta-norepo/brief.md" > /dev/null 2>&1; RC=$?
 expect_eq "trace-autopsy: a brief outside any git repo exits 2" "2" "$RC"
+# /vulyk-plan step 2 is the only caller: the step, from its number to step 3, must name the script and its output
+awk '/^2\. Brief\./{on=1} /^3\. Recon\./{on=0} on' "$SRC/.claude/commands/vulyk-plan.md" > "$T/ta-step2.md"
+expect "trace-autopsy: /vulyk-plan step 2 runs it" "bash scripts/trace-autopsy.sh docs/specs/<slug>/brief.md" "$T/ta-step2.md"
+expect "trace-autopsy: /vulyk-plan step 2 names autopsy.md" "autopsy.md" "$T/ta-step2.md"
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

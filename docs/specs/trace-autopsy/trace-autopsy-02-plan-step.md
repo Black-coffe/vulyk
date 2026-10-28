@@ -1,8 +1,8 @@
 ---
 story: trace-autopsy-02
 spec: trace-autopsy
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 2
@@ -28,6 +28,7 @@ for it. The command reference and CHANGELOG `[Unreleased]` say the same, with no
 - docs/command-reference.md
 - CHANGELOG.md
 - tests/symbol-map.test.sh
+- scripts/trace-autopsy.py
 
 ## Non-goals
 - No hook: the owner chose step 2 (brief `## Answers` 1).
@@ -38,6 +39,7 @@ for it. The command reference and CHANGELOG `[Unreleased]` say the same, with no
 `memory/map/agents-and-commands.md`: the `/vulyk-plan` entry.
 
 ## Acceptance criteria
+- [ ] Plan delta 2026-10-28: `/app/app/core.py` resolves to `src/app/core.py`; `no repo frame` names ambiguous candidates.
 - [ ] Step 2 names `scripts/trace-autopsy.sh` and `autopsy.md`; step 3 says a resolved autopsy line counts as a known location.
 - [ ] `docs/command-reference.md` `/vulyk-plan` paragraph mentions the autopsy run.
 - [ ] CHANGELOG `[Unreleased]` has one entry.
@@ -47,5 +49,8 @@ for it. The command reference and CHANGELOG `[Unreleased]` say the same, with no
 `bash tests/symbol-map.test.sh`
 
 ## Implementation notes
+- `vulyk-plan.md` step 2 gets one sentence (run + what `autopsy.md` holds), step 3 one (a frame line = known location, no scout at Tier 1-2); `docs/command-reference.md` and CHANGELOG `[Unreleased]` say the same, no speed figure.
+- Guard: `tests/symbol-map.test.sh` cuts step 2 out of `vulyk-plan.md` (from `2. Brief.` to `3. Recon.`) and expects the exact command and `autopsy.md`.
+- Plan delta 2026-10-28 in `scripts/trace-autopsy.py`: `common_tail` resolves a unique tail of >= 2 parts; the `no repo frame` line names the first ambiguous candidates; two new test cases.
 
 ## Findings
