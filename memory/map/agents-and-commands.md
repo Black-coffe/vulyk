@@ -72,10 +72,13 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   `redact.sh`; recon (scouts: T1 0-1, T2 ≤1, T3 ≤2, T4 ≤4); grill T2-4; plan (Queen T1-2,
   `queen-planner` T3-4, `lead-architect` T4); stories; `wave-check.sh` + `trace-check.sh`;
   `drone-coverage` T3-4. T1 → `cycle.sh briefed --mode mini-brief` + `/vulyk-build`. T2-4 stop for
-  `**Approved:**` (`--go` opts out). Recon step 3, T2-4 (vulyk-plan.md:27-29): `symbol-map.sh --exact <file>` once
+  `**Approved:**` (`--go` opts out). Step 2 (vulyk-plan.md:21-26, 0.42.0): when the request carries a stack
+  trace, runs `bash scripts/trace-autopsy.sh docs/specs/<slug>/brief.md` right after the brief; `autopsy.md`
+  beside it is a lead, not a verdict. Step 3 (:27-34): a frame line in `autopsy.md` makes the location known, so
+  Tier 1-2 send no scout for it; T2-4 `symbol-map.sh --exact <file>` once
   per file the plan likely names (many files in one call get cut at 1536 bytes), outputs kept for the plan;
-  checklist line: meta-tests, docs/ADR, `.env.example`, re-exports, sibling files. Step 6 (vulyk-plan.md:78-80):
-  the Queen/planner marks critical stories `red: required` and names the test in `## Files` and `## Verification`. **Step 3a horizon** (vulyk-plan.md:31-51; `--horizon` forces, `--no-horizon`
+  checklist line: meta-tests, docs/ADR, `.env.example`, re-exports, sibling files. Step 6 (vulyk-plan.md:81-85):
+  the Queen/planner marks critical stories `red: required` and names the test in `## Files` and `## Verification`. **Step 3a horizon** (vulyk-plan.md:35-55; `--horizon` forces, `--no-horizon`
   skips; skipped for study, T0-1, no-question): fires on zero grep hits of the capability's 2-4 terms in
   `memory/memory.md`, `memory/map/`, source (a container hit does not count); three parallel `drone-horizon`
   (no `model:`), each given brief path, recon summary and the Profile rows *Configurations that exist today* +
@@ -88,7 +91,7 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   `offered, not adopted` (grill.md:73-77, :87).
 - **Fable-limit fallback, session path** (ADR-015 exception): `/vulyk-build` (section `## Fable-limit
   fallback`, vulyk-build.md:95-108; solo review :36, hive wake-up reads the driver's `fallbacks` :63),
-  `/vulyk-review` (step 2, :29-37) and `/vulyk-plan` (step 5, :59-67; `queen-planner`/`lead-architect`) redispatch
+  `/vulyk-review` (step 2, :29-37) and `/vulyk-plan` (step 5, :59-74; `queen-planner`/`lead-architect`) redispatch
   a refused dispatch once on `model: opus` (not when already opus). Session test: an error carrying
   `You've reached your Fable limit`/`model_requires_usage_credits`, or text starting `Agent terminated early due
   to an API error` and carrying `reached your Fable limit` (a quoting report is a report). Each writes a
@@ -133,4 +136,4 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a
   relative script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-10-28 (0.41.0 /vulyk-gc --mark; red-receipt merge 879e67e, 0.40.0; ADR-013, ADR-015, ADR-020, ADR-022, ADR-025)
+last-verified: 2026-10-28 (trace-autopsy merge 46d13ad, 0.42.0 /vulyk-plan steps 2-3; ADR-013, ADR-015, ADR-020, ADR-022, ADR-025). Over the ~80-line cap (136): not trimmed this pass.
