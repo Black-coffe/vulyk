@@ -66,3 +66,4 @@ location counts as known and step 3 sends no scout.
 
 **Approved:** Andrei, 2026-10-28 («/vulyk-build trace-autopsy»)
 **Branch:** vulyk/trace-autopsy
+**Council:** GREEN round 1, 2026-10-28, at dba32f4, pack d12770efbfef
