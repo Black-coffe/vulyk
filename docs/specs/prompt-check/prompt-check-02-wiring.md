@@ -1,14 +1,15 @@
 ---
 story: prompt-check-02
 spec: prompt-check
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 2
 blocked_by: [prompt-check-01]
 red: required
-red_reason:
+red_reason: ::error::prompt-check refusal: exit=0
+red_verified_at: 2026-10-28T18:38:06Z 6f2e5b08c2d9cf7f30ffd8d502ac4ad22d15deaa41767be74cf7da711d8ef2ca
 ---
 
 # prompt-check in close-story and CI
@@ -50,5 +51,29 @@ of those paths runs nothing new. CI's `shell` job gains one step, `bash scripts/
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
+- `cmd_close_story`: the block sits after `red_gate` and before the verification run, so a refusal costs no suite. Trigger: a `## Files` entry under the four prefixes; `--touched` gets every `## Files` entry, so a story that edits `scripts/telemetry.sh` or `docs/architecture.md` beside a prompt owns those findings too. Skipped when `scripts/prompt-check.sh` is absent (a hive before the upgrade, the older test fixtures).
+- Exit 1: the checker's output on stderr, `emit ... 4 repair "<first error line>"` (emit escapes the JSON). Exit 2+: one note, the close goes on.
+- Tests: three cases at the end of `tests/cycle.test.sh --part close` on a seeded drifted `.claude/commands/x.md`.
+- CI: one step in the `shell` job. Docs: the close-story clause in `docs/command-reference.md`, CHANGELOG `[Unreleased]`, no speed figure.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/cycle.test.sh
+- exit: 1
+- tests: 6f2e5b08c2d9cf7f30ffd8d502ac4ad22d15deaa41767be74cf7da711d8ef2ca (tests/cycle.test.sh)
+- impl: 1e936b64107f66663d72432d56ebc05bf19ffedc3993c00bf7d040569b814076
+- stamped: 2026-10-28T18:38:06Z
+
+```
+red-receipt: an unmarked story built from templates/story.md closes as before
+  ok    the template story closes and commits, no receipt asked
+red-receipt: close-story on a marked story - the sealed test edited, no implementation change, then a real change closes
+  ok    red-12 stamped
+  ok    a sealed test edited after the stamp: exit 4
+  ok    the implementation unchanged since the stamp: exit 4
+  ok    receipt + changed implementation + green: closed, the receipt in the commit
+red-receipt: close-story on a marked story that was never stamped
+  ok    the unstamped story: exit 4, nothing committed
+  ok    the refusal names stamp-red and the story
+```

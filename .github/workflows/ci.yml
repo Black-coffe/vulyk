@@ -34,6 +34,9 @@ jobs:
           done < <(find . -type f \( -name '*.sh' -o -path './scripts/git-hooks/*' \) -print0)
           exit $fail
 
+      - name: prompt-check (agent and command prose against the scripts and agents it names)
+        run: bash scripts/prompt-check.sh
+
   top-model:
     name: top-model.sh resolves every plan shape
     runs-on: ubuntu-latest

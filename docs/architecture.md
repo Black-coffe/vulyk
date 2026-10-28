@@ -18,7 +18,7 @@ In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a su
 | Council | `council-opus`, `council-haiku` | opus (effort medium); opus - it judges, the name is the angle | Tier 3-4 only; blind verdict on `brief.md`'s `## Asks` from a reduced git worktree that cannot see the stories: intent and edge cases; the black-box client path, required only when the Profile's *Client path* is filled |
 | Clerk | `cycle-clerk` | haiku, effort low (Haiku 5.5 and up, since 0.26.0; sonnet before) | the Workflow driver's only way to reach a shell: one `cycle.sh` command per agent boundary, no logic of its own |
 
-Every subagent above except `queen-planner`, the workers, `lead-review` and `lead-architect`
+Every subagent above except `queen-planner`, the workers (`worker-code`, `worker-test`), `lead-review` and `lead-architect`
 carries `omitClaudeMd: true`: it takes everything from its dispatch prompt and its own body, so
 it does not load the constitution. Those four keep it because they need the host's conventions.
 

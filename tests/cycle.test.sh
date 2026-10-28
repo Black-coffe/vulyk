@@ -683,6 +683,33 @@ committed="$(git -c core.quotePath=false show --name-only --format= HEAD)"
 [ -z "$(git status --porcelain)" ] && git show HEAD:stray-app.txt | grep -qx fmt \
   && echo "  ok    the hook's rewrite is in the commit and the tree is clean after (index synced)" || { echo "::error::status=$(git status --porcelain | tr '\n' ' ')"; fail=1; }
 
+echo "prompt-check: close-story runs it on a story touching scripts or prompts and refuses only on a finding in the story's own files (docs/specs/prompt-check)"
+cp "$SRC"/scripts/prompt-check.sh "$SRC"/scripts/prompt-check.py scripts/
+mkdir -p .claude/commands docs/specs/pcs
+printf '# A command\n\nRun `bash scripts/cycle.sh close-story <file> --no-such-flag`.\n' > .claude/commands/x.md # the drift, already in the tree
+cp "$SRC"/templates/plan.md docs/specs/pcs/plan.md
+printf '> build the pcs demo\n' > docs/specs/pcs/brief.md
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/pcs/plan.md
+pcs_story() { # pcs_story <nn> <file> - one in-progress story declaring <file> only
+  printf -- '---\nstory: pcs-%s\nspec: pcs\nstatus: in-progress\nreturned: DONE\nwave: %s\n---\n# Pcs %s\n\n## Files\n- %s\n\n## Verification\n`true`\n' \
+    "$1" "$1" "$1" "$2" > "docs/specs/pcs/pcs-$1.md"
+}
+pcs_story 01 .claude/commands/x.md; pcs_story 02 README.md; pcs_story 03 scripts/helper.sh
+git add -A && git commit -qm "pcs: setup" >/dev/null
+printf '\nMore prose.\n' >> .claude/commands/x.md
+out="$(bash scripts/cycle.sh close-story docs/specs/pcs/pcs-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"prompt-check: ' && printf '%s' "$out" | grep -qF 'prompt-check: error .claude/commands/x.md:3: flag:' \
+  && echo "  ok    a story touching the drifted command file: exit 4, the finding named" || { echo "::error::prompt-check refusal: exit=$ex out=$out"; fail=1; }
+git checkout -q -- .claude/commands/x.md
+printf 'readme\n' > README.md
+out="$(bash scripts/cycle.sh close-story docs/specs/pcs/pcs-02.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -qF 'prompt-check' \
+  && echo "  ok    a story touching neither scripts nor prompts: exit 0, prompt-check not run" || { echo "::error::README story: exit=$ex out=$out"; fail=1; }
+printf '#!/bin/sh\n' > scripts/helper.sh
+out="$(bash scripts/cycle.sh close-story docs/specs/pcs/pcs-03.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF 'prompt-check: warn .claude/commands/x.md:3: flag:' \
+  && echo "  ok    a story touching scripts/ while the drift sits in an untouched prompt: exit 0, the finding as a warn" || { echo "::error::helper story: exit=$ex out=$out"; fail=1; }
+
 fi # part close
 if part bsd; then # --- part bsd: cycle.sh under a BSD sed, conventional subjects, command_cell_exists
 echo "cycle.sh under a BSD (macOS) sed, and a Profile whose Commit convention is conventional: chore(...) subjects"
