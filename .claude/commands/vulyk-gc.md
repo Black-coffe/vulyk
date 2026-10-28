@@ -28,6 +28,8 @@ with a clean tree, then tells the owner in one line what changed, including the 
 
 ## `memory` mode: one-off triage of private memory into cards
 
+The SessionStart brief makes it due (`maintenance due: memory triage (MEMORY.md <n> lines, ...)`) once Claude Code's
+own `MEMORY.md` reaches 160 lines or 20 KB, 80% of what it loads; the owner's yes in step 4 still gates every write.
 Private auto memory (`~/.claude/projects/<slug>/memory/`) is outside the repo and the `librarian` has no shell, so
 the main session does every step itself. Never dispatch a subagent for it: personal files are never opened by one.
 

@@ -20,6 +20,21 @@
 - **Compaction insurance.** The PreCompact hook snapshots the index and spec statuses, so `/compact` can never silently destroy orchestration state.
 - **Session continuity.** `/clear` is mandatory hygiene under the token economy — the handoff layer makes it cheap. `handoff.py` dumps session state (git, todos, touched files, recent prompts) to `.claude/handoff/` on `/clear`/exit/compaction, `/vulyk-handoff` adds a model-written summary (decisions, dead ends, next step), and SessionStart restores the freshest handoff after a `/clear` or a compaction. Deliberately **not** in git: handoffs are per-machine session state, unlike the layers above. See [hooks-reference.md](hooks-reference.md).
 
+## Claude Code's own auto memory
+Outside the layers above, Claude Code keeps a private auto memory per repository at
+`~/.claude/projects/<slug>/memory/` (per machine, not in git). It loads the first 200 lines or 25 KB of
+its `MEMORY.md` into every session, and on some installs into subagents too. VULYK reads it, and the
+owner decides what happens to it:
+- **The signal.** At 160 lines or 20 KB (80% of either limit) the SessionStart brief adds `memory triage
+  (MEMORY.md <n> lines, <k> KB ...)` to `maintenance due`, and the Queen runs `/vulyk-gc memory`. That
+  triage asks the owner before it writes a card or deletes a file. Project lessons become cards in
+  `docs/defects/`, personal ones stay, and stale ones go.
+- **The off switch.** `"autoMemoryEnabled": false` in a project's `.claude/settings.json` (or
+  `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`) turns auto memory off for that project: nothing is read from it or
+  written to it. The owner's personal lessons (servers, access, people, their style, rules their own
+  global `CLAUDE.md` sends there) then stop loading. Nothing in `docs/defects/` replaces them. VULYK never sets
+  this switch, in its own repo or in a hive. Run the triage first if you want to set it.
+
 ## The LLM wiki
 One note per domain or invariant, written for a model to read: declarative, terse, densely linked (`related:` frontmatter). Obsidian opens the folder natively if you want a human view, but the wiki's customer is the next agent that touches the domain. Wiki notes are where ADR invariants and promoted learnings end up - the long-term memory of the hive.
 

@@ -2,6 +2,7 @@
 # VULYK memory triage - the lister behind `/vulyk-gc memory` (rules-tree, ADR-021, ask 11).
 #
 #   Usage: bash scripts/memory-triage.sh [<memory-dir>]
+#          bash scripts/memory-triage.sh --dir
 #          bash scripts/memory-triage.sh --index-lines <MEMORY.md> <file>...
 #
 # Lists this project's private auto memory so the main session can sort it into cards, personal or
@@ -11,6 +12,8 @@
 #   path<TAB>type<TAB>first heading
 # `type` comes from a `type:` line inside the leading frontmatter (nested or not), else `-`; the
 # heading is the first `#` line, else `-`. An absent dir prints `no private memory: <dir>`, exit 0.
+#
+# --dir prints that default dir and lists nothing (the SessionStart brief sizes its MEMORY.md).
 #
 # --index-lines prints the lines of the given MEMORY.md that name any of the given files (by base
 # name), so the session deletes exactly those lines and no other.
@@ -30,12 +33,15 @@ if [ "${1:-}" = "--index-lines" ]; then
   exit 0
 fi
 
+only_dir=""
+[ "${1:-}" = "--dir" ] && { only_dir=1; shift; }
 dir="${1:-}"
 if [ -z "$dir" ]; then
   root="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "memory-triage: not in a git repo; name the dir" >&2; exit 2; }
   slug="$(printf '%s' "$root" | LC_ALL=C.UTF-8 sed 's#[^0-9A-Za-z]#-#g')"
   dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$slug/memory"
 fi
+[ -n "$only_dir" ] && { printf '%s\n' "$dir"; exit 0; }
 [ -d "$dir" ] || { echo "no private memory: $dir"; exit 0; }
 
 for f in "$dir"/*.md; do

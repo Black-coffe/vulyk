@@ -190,6 +190,35 @@ fi
 printf '%s' "$out" | expect_absent "the false learnings counter is gone" "awaiting GC"
 printf '%s' "$out" | expect_absent "a hive without a constitution gets no bootstrap offer" "vulyk-bootstrap now"
 
+# --- the native auto memory index (auto-memory-subagent-start-02) ------------------------------------
+# Claude Code loads the first 200 lines / 25 KB of MEMORY.md; at 80% (160 lines or 20480 bytes) triage is due.
+echo "--- due maintenance: native MEMORY.md size"
+automem() { # automem <hive> <conf> -> the private memory dir Claude Code uses for that hive
+  local top; top="$(git -C "$1" rev-parse --show-toplevel)"
+  printf '%s/projects/%s/memory' "$2" "$(printf '%s' "$top" | LC_ALL=C.UTF-8 sed 's#[^0-9A-Za-z]#-#g')"
+}
+lines_of() { # lines_of <n> <width> -> n lines of width characters (newline included)
+  awk -v n="$1" -v w="$2" 'BEGIN { s = sprintf("%" (w - 1) "s", ""); gsub(/ /, "m", s); for (i = 0; i < n; i++) print s }'
+}
+MC="$T/conf-mem"
+H="$(hive mem-under)"; M="$(automem "$H" "$MC")"; mkdir -p "$M"
+{ lines_of 158 128; lines_of 1 255; } > "$M/MEMORY.md"   # 159 lines, 20479 bytes
+BRIEF_CONF="$MC" brief_of "$H" | expect_absent "159 lines and 20479 bytes: memory triage not due" "memory triage"
+lines_of 160 10 > "$M/MEMORY.md"
+BRIEF_CONF="$MC" brief_of "$H" | expect "memory triage due at 160 lines" "memory triage (MEMORY.md 160 lines, 1 KB of 200 lines / 25 KB)"
+BRIEF_CONF="$MC" brief_of "$H" | expect "the due line names /vulyk-gc memory" "vulyk-gc memory"
+lines_of 80 256 > "$M/MEMORY.md"                           # 80 lines, 20480 bytes
+BRIEF_CONF="$MC" brief_of "$H" | expect "memory triage due at 20480 bytes in fewer lines" "memory triage (MEMORY.md 80 lines, 20 KB of 200 lines / 25 KB)"
+rm "$M/MEMORY.md"
+BRIEF_CONF="$MC" brief_of "$H" | expect_absent "no MEMORY.md: nothing due" "memory triage"
+H="$(hive mem-none)"
+BRIEF_CONF="$MC" brief_of "$H" | expect_absent "no private memory dir: nothing due" "maintenance due"
+got="$(cd "$H" && CLAUDE_CONFIG_DIR="$MC" bash "$SRC/scripts/memory-triage.sh" --dir)"
+listed="$(cd "$H" && CLAUDE_CONFIG_DIR="$MC" bash "$SRC/scripts/memory-triage.sh")"
+if [ "$got" = "$(automem "$H" "$MC")" ] && [ "$listed" = "no private memory: $got" ]; then
+  ok "memory-triage.sh --dir prints the dir the listing reads"
+else bad "memory-triage.sh --dir: got '$got', listing said '$listed'"; fi
+
 # --- the bootstrap offer (next-circle-0-22-03) -----------------------------------------------------
 echo "--- bootstrap offered once in an unfilled hive"
 UNFILLED='| Stack | `<fill in>` |'; FILLED='| Stack | bash |'
