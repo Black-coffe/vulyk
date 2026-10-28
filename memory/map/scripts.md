@@ -34,7 +34,10 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   [--spec S] [--since D] [--json]` (dedupes by `message.id`), `evolve-ledger.py <root> <verb>` (owns
   `memory/stats/evolve.jsonl`; `resolve`: tip in default branch = accepted, unmerged branch gone = rejected).
 - `.claude/hooks/session-start-brief.sh` - map line; `[VULYK] model profile not chosen`; bootstrap offer
-  while the Profile holds `<fill in`; `maintenance due: ...` for gc, evolve or map (`memory/map/.stale`). grep/awk only.
+  while the Profile holds `<fill in`; `maintenance due: ...` for gc, evolve, map (`memory/map/.stale`) or
+  `vulyk-gc memory` (0.41.0): Claude Code's auto-memory MEMORY.md (path from `memory-triage.sh --dir`) at >= 160
+  lines or >= 20480 bytes, quiet until +20 lines / +2048 bytes past `.claude/state/memory-triage.txt`
+  (session-start-brief.sh:77-92). grep/awk only.
 - `vulyk-update.sh` (-> `install.sh --upgrade`); `release-check.sh`; `state.sh`; `git-hooks/post-merge`.
 - `model-profile.sh` (ADR-020) - `opus-builds|sonnet-builds|economy` in `${CLAUDE_CONFIG_DIR:-~/.claude}/
   vulyk-model-profile`; only `--set` writes; unknown = `sonnet-builds`. `top-model.sh`: `VULYK_TOP_MODEL`,
@@ -55,6 +58,8 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `memory-triage.sh [<memory-dir>]` - read-only lister behind `/vulyk-gc memory`: TSV `path<TAB>type<TAB>
   first heading`; default dir under `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<slug>/memory`; absent =
   `no private memory: <dir>`, exit 0. `--index-lines <MEMORY.md> <file>...`; exit 2 bad input.
+  0.41.0: `--dir` prints the default dir only; `--mark` writes `<lines> <bytes>` of MEMORY.md to
+  `.claude/state/memory-triage.txt` (no MEMORY.md: nothing, exit 0) - its one write.
 - `symbol-map.sh [--exact] [--story <story.md>] [--scope <path>]... <file>...` (0.37.0, `--exact` 0.38.0) - picks
   python3|python (none: exit 2), execs `symbol-map.py` (stdlib; repo = `git ls-files`). Per input a `## <path>`
   block of sections `tests`, `importers`, `imported`, `guard tests` (tests using os.walk/rglob/glob(/git
@@ -103,8 +108,10 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   (`print_migrate_hint`); `replace_constitution` backs up via `constitution_backup`; `render_constitution`
   takes Laws from `$SRC/CLAUDE.md`. `OWNED` includes `.claude/hooks`, so `defects_lib.py` ships.
 - Defect hooks (grep `wire_hook`): UserPromptSubmit `defect-intake.sh`; PreToolUse `defects-inject.sh` with
-  `INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*'` (an old narrower
-  matcher is unwired and rewired); SessionStart `defects-inject.sh reset`; PostToolUse `defect-intake.sh`
+  `INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*'` (install.sh:1402;
+  the 0.19 and 0.32 matchers are unwired and rewired). 0.41.0 `Read`: `story_files()` turns a Read of
+  `docs/specs/<slug>/<name>.md` with `story:` frontmatter into its `## Files` paths; any other Read exits in
+  bash before python; folded refs are not marked seen on a story Read (only shown ones); SessionStart `defects-inject.sh reset`; PostToolUse `defect-intake.sh`
   matcher `AskUserQuestion`, arg `answer`. `unwire_hook <event> <script>` ignores the matcher.
 - `install_mod vulyk-pulse@vulyk` (`VULYK_CLAUDE` overrides the CLI; failure returns 0); `retire_mod
   vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup` (install.sh:79).
@@ -121,4 +128,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - Retired framework files are removed unless edited (`retired_edited`).
 - Card parsing lives only in `defects_lib.py` (`docs/wiki/rules-tree.md`).
 
-last-verified: 2026-10-28 (red-repair-mark merge 1135d70, 0.40.1)
+last-verified: 2026-10-28 (auto-memory-subagent-start merge 211602d, 0.41.0)

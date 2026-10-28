@@ -136,3 +136,60 @@ month = new quote lines on existing «Нельзя» / «Как надо» text 
 `corrections --lexicon` hits that map to an existing card. Reopen if that number is not below half the baseline,
 if any «Можно» card reaches 3 quote lines (the agent still re-asks the allowed), or if the overflow line «ещё N
 карточек» appears in more than one action in five (the 12-line budget starves delivery).
+
+## Amendment 2026-10-28: story-read delivery and native auto memory (status: proposed)
+
+- Status: proposed (harvested from spec `auto-memory-subagent-start`, release 0.41.0; only the owner writes accepted)
+- Evidence: `docs/specs/auto-memory-subagent-start/brief.md` (Recon facts, Answers 1-3),
+  `docs/specs/auto-memory-subagent-start/plan.md` (Goal, Assumptions, Plan deltas).
+
+### Context
+
+Brief, Recon facts: "`SubagentStart` input is the common fields plus `agent_id` and `agent_type`, no prompt";
+"Workflow-driver agents are not `Agent` calls in the parent transcript (`subagents/workflows/<run>/`); whether
+`SubagentStart` fires for them is not checked." Plan delta, 2026-10-28: "Personal rules stay in `MEMORY.md` after a
+triage, so a file still over the threshold would make triage due after every task. The owner chose «Молчать до роста
+(Рекомендую)» [...] Rejected: a Profile decline row, which would also silence a real overflow later; shipping
+without it."
+
+### Options
+
+1. Deliver cards on `SubagentStart`, filtered by the worker's story `## Files` (the owner's request). Rejected: the
+   input has no prompt, so the story is unknown; Workflow workers, the main target, are not `Agent` calls to look up.
+2. Deliver cards on a `Read` of a story file (Answer 1). Chosen: works for any executor (Workflow worker, subagent,
+   the Queen on Tier 1-2); cost is a bash path check on every Read.
+3. Native auto memory: set `autoMemoryEnabled: false`, or only document the switch (Answer 3). Chosen: document only.
+   Reasons as the grill question put them (the Queen's wording, not an owner quote): with auto memory off, the
+   owner's personal rules, about 40 here plus whatever their global `CLAUDE.md` sends there, stop loading, and no
+   card replaces them. The owner's standing rule is to offer, never to switch on for them. VULYK is public, so other
+   owners keep personal memory too.
+4. Triage signal after a triage: always fire, a Profile decline row, or quiet until growth. Chosen: quiet until growth.
+
+### Decision
+
+14. **D6 extended (delivery trigger).** Besides PreToolUse on the acting tool, `defects-inject.sh` fires on `Read` of
+    a story file (`docs/specs/<slug>/<name>.md` with `story:` frontmatter) and shows the cards whose `paths:` match
+    the story's `## Files`; `cmd:`/`tool:`-only cards do not fire on a Read. The per-agent dedup (`agent_id` + card
+    ref) is shared, so a card shown at the read is not repeated at the first edit. `SubagentStart` is not used for
+    card delivery.
+15. **Native auto memory.** VULYK never sets `autoMemoryEnabled` nor `CLAUDE_CODE_DISABLE_AUTO_MEMORY`; the docs say
+    how to turn it off and what is lost. VULYK only signals: the SessionStart brief makes `memory triage` due when
+    `MEMORY.md` reaches 160 lines or 20480 bytes (80% of Claude Code's 200 lines / 25 KB load limit), and after a
+    triage stays quiet until the file grows by 20 lines or 2 KB more.
+
+### Invariants created
+
+- Card delivery never depends on a hook input that carries no story; the story is learned from the file the agent reads.
+- Spec files other than story files (`brief.md`, `plan.md`) deliver no cards.
+- VULYK writes no setting that turns native auto memory off; the owner does.
+- The memory-size signal is size-triggered and growth-gated after a triage; no decline row silences it.
+
+### Consequences
+
+Easier: cards reach Workflow workers before their first edit. Harder: every Read starts the bash wrapper (cost
+measured in story 01). A custom `autoMemoryDirectory` is not followed (plan Assumptions). Other consequences not recorded.
+
+### Revisit when
+
+`SubagentStart` input gains the prompt or a story reference, or is shown to fire for Workflow-driver agents with an
+identifiable story; otherwise not recorded.

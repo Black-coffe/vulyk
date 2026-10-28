@@ -124,7 +124,8 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
   counts `(horizon H` picks in `brief.md` `## Answers` (adopted/declined/offered) plus unanswered kept
   proposals, against ADR-022's reversal rule.
 - **`/vulyk-gc`** - dispatches `librarian`; main session `git rm`s its `Delete:` list. **`/vulyk-gc memory`**
-  (0.32.0) - main session alone: `memory-triage.sh`, one `AskUserQuestion`, nothing written before a yes.
+  (0.32.0) - main session alone: `memory-triage.sh`, one `AskUserQuestion`, nothing written before a yes;
+  step 10 (0.41.0, vulyk-gc.md:56) runs `memory-triage.sh --mark`, also when nothing moved, so the brief stays quiet.
 - **`/vulyk-pause`** / **`/vulyk-resume`** wrap `cycle.sh pause`/`resume`. **`/vulyk-update`** -
   `vulyk-update.sh . --check`, ask; step 6 renames the hive's full-suite row to `Full suite / build
   (round-only)` (or adds it with `none`), ADR-023. **`/vulyk-bootstrap`** - interview, Profile + Commands markers, scouts →
@@ -132,4 +133,4 @@ drone-scout, drone-coverage, drone-docs, drone-horizon, librarian. The other fou
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a
   relative script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-10-28 (red-receipt merge 879e67e, 0.40.0; ADR-013, ADR-015, ADR-020, ADR-022, ADR-025)
+last-verified: 2026-10-28 (0.41.0 /vulyk-gc --mark; red-receipt merge 879e67e, 0.40.0; ADR-013, ADR-015, ADR-020, ADR-022, ADR-025)
