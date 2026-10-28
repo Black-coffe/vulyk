@@ -92,6 +92,6 @@ is missing or unparsable.
 **Approved:** Andrei, 2026-10-28 («да»)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
 **Branch:** vulyk/post-043-tails
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-10-28, at efaf1af, pack b83a52b31a38
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Checked:** ACCEPTED by Andrei, 2026-10-28, at b188b8a - narrow repair of round-1 major 1 (handoff.sh single python start, b188b8a): reviewer repro telemetry --part scan 164/0, maintenance/cycle/symbol-map green; owner chose ACCEPTED without round 2
