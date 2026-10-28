@@ -28,6 +28,9 @@ auto memory off and what is lost; VULYK turns nothing off.
 - `auto-memory-subagent-start-01-story-read-cards` — `defects-inject.sh` on `Read` of a story file shows the cards for its `## Files`; matcher, installer rewire, tests, docs.
 - `auto-memory-subagent-start-02-memory-size-due` — SessionStart brief: native `MEMORY.md` at 160 lines / 20 KB makes `memory triage` due; `memory-triage.sh --dir`; docs on `autoMemoryEnabled`.
 
+**Wave 3** (plan delta, 2026-10-28)
+- `auto-memory-subagent-start-04-triage-quiet-until-growth` — after a triage the signal waits until `MEMORY.md` grows by 20 lines or 2 KB.
+
 ## Contracts
 none
 
@@ -39,6 +42,7 @@ none
 *(empty)*
 
 ## Plan deltas
+- 2026-10-28, after round 1. Trigger: a side-agent note pointed out that the `memory triage` signal never goes quiet. Personal rules stay in `MEMORY.md` after a triage, so a file still over the threshold would make triage due after every task. The owner chose «Молчать до роста (Рекомендую)»: «После разбора /vulyk-gc memory запоминает размер MEMORY.md; сигнал вернётся, только когда файл вырастет ещё на 20 строк или 2 КБ.» Decision: new story `auto-memory-subagent-start-04-triage-quiet-until-growth`. Rejected: a Profile decline row, which would also silence a real overflow later; shipping without it.
 
 **Approved:** Andrei, 2026-10-28 («да»)
 **Branch:** vulyk/auto-memory-subagent-start
