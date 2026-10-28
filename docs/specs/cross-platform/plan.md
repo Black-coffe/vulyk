@@ -154,4 +154,5 @@ is missing or unparsable.
 **Branch:** vulyk/cross-platform
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-10-28, at 3dcf9a5, pack 942d320ecef5
+**Council:** GREEN round 2, 2026-10-28, at 5e0aae1, pack dc3ae8f68b3f
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
