@@ -74,5 +74,5 @@ whenever a story touches scripts or prompts; in a hive an owner-added agent is a
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/prompt-check
 **Checked:** <written by scripts/human-check.sh after the owner has looked>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Council:** RED round 1, 2026-10-28, at 00d0cb3, pack 34cb121d2dd6
 **Shipped:** <written by scripts/ship-check.sh --record>
