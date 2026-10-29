@@ -20,3 +20,6 @@
 - 2026-10-29T15:29:47Z · 04-council:ESCALATE · reopened after round 4, ceiling now 6 · next: repair
 - 2026-10-29T15:29:58Z · 03-building · repair round 4: cross-platform-11-repair-round-4.md · next: build:7
 - 2026-10-29T15:31:27Z · 03-building · reopen ruling: latency = load noise; repair 11 = three macOS failures; macOS CI before the next round · next: build repair 11 (next session)
+- 2026-10-29T15:36:57Z · 03-building · launching the hive (Queen-run loop: stop after build 7 for macOS CI before round 5) · next: the loop holds the working tree of vulyk/cross-platform; to edit, run /vulyk-pause cross-platform
+- 2026-10-29T16:42:04Z · 03-building · macOS CI green on 022ee5b (run 40913239696, all 8 jobs) · next: advance opens round 5
+- 2026-10-29T16:42:07Z · 04-council:open · round 5 opened, court at E:/Projects/vulyk/.vulyk/court/cross-platform/round-5, carried from round 4: opus · next: dispatch:review
