@@ -13,3 +13,4 @@
 - 2026-10-29T11:40:45Z · 03-building · story 09 NEEDS_CONTEXT + 07 leftover (defects-check.sh bash 3.2); ruled as plan delta, folded into 09 · next: re-dispatch 09
 - 2026-10-29T12:00:20Z · 03-building · story 09 red mark removed - owner's choice (sealed gate script, receipts 11:04/11:45 kept) · next: re-dispatch 09 to close
 - 2026-10-29T12:06:04Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/cross-platform/round-3, carried from round 2: opus · next: dispatch:review
+- 2026-10-29T12:28:06Z · 04-council:RED · round 3 verdict RED at 4c37cd6 pack 398c12ba8464 · next: repair
