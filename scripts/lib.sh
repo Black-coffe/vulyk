@@ -455,11 +455,13 @@ date_shift() { # date_shift <±days> [<+fmt>] -> `date -u` of now shifted by <da
 
 capped_by() { # capped_by -> sets VULYK_CAP to what run_capped would cap with: timeout | gtimeout |
   # python (VULYK_PY set) | "" (1). A binary counts only if `<it> 1 true` passes: on Windows a PATH
-  # that finds System32's timeout.exe first would otherwise fail every capped command.
+  # that finds System32's timeout.exe first would otherwise fail every capped command. The Python cap
+  # counts only with run-capped.py beside this file: a lib.sh copied alone (a test sandbox on a Mac,
+  # which has no timeout) would otherwise fail every command with python's "can't open file".
   VULYK_CAP=""
   if command -v timeout >/dev/null 2>&1 && timeout 1 true </dev/null >/dev/null 2>&1; then VULYK_CAP=timeout
   elif command -v gtimeout >/dev/null 2>&1 && gtimeout 1 true </dev/null >/dev/null 2>&1; then VULYK_CAP=gtimeout
-  elif vulyk_python; then VULYK_CAP=python
+  elif [ -f "$(dirname "${BASH_SOURCE[0]}")/run-capped.py" ] && vulyk_python; then VULYK_CAP=python
   else return 1; fi
 }
 

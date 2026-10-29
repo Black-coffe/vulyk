@@ -116,7 +116,7 @@ rules_always_over() {
   local f
   for f in "$1"/*.md; do
     [ -f "$f" ] || continue
-    tr -d '\r' < "$f" | sed -n '1{/^---$/!q;d};/^---$/q;/^paths:/{p;q}' | grep -q . && continue
+    tr -d '\r' < "$f" | sed -n '1{/^---$/!q;d;};/^---$/q;/^paths:/{p;q;}' | grep -q . && continue
     [ "$(lines_of "$f")" -gt "$RULES_ALWAYS_MAX_LINES" ] && echo "$(basename "$f") $(lines_of "$f") lines"
   done
   return 0

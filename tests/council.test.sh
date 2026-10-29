@@ -96,7 +96,7 @@ mk_spec() { # mk_spec <slug> <n-asks> - brief.md with an N-item ## Asks, plan.md
   cp "$SRC/templates/plan.md" "docs/specs/$slug/plan.md"
   {
     printf '# %s (brief)\n\n## Request\n> build the thing\n\n## Asks\n' "$slug"
-    for i in $(seq 1 "$n"); do printf '%d. ask number %d works\n' "$i" "$i"; done
+    i=1; while [ "$i" -le "$n" ]; do printf '%d. ask number %d works\n' "$i" "$i"; i=$((i+1)); done # not seq: BSD `seq 1 0` counts down to 0
   } > "docs/specs/$slug/brief.md"
   printf -- '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# S1\n' "$slug" "$slug" > "docs/specs/$slug/$slug-01-first.md"
   git add -A && git commit -qm "spec($slug): fixture" >/dev/null

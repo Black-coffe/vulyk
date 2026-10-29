@@ -869,6 +869,11 @@ sleep 3
 err="$( PATH="$DEAD:$PATH"; VULYK_PY=; run_capped 1 true 2>&1 )"; ex=$?
 [ "$ex" -eq 0 ] && [ "$err" = "run_capped: no timeout, gtimeout or python 3 - running true uncapped" ] \
   && echo "  ok    nothing to cap with: runs uncapped and says so" || { echo "::error::run_capped uncapped: exit=$ex err='$err'"; fail=1; }
+LONE="$(mktemp -d)"; cp "$SRC/scripts/lib.sh" "$LONE/"   # a lib.sh with no run-capped.py beside it (macOS: no timeout)
+err="$( PATH="$CAPD:$PATH"; VULYK_PY=; bash -c '. "$1/lib.sh"; run_capped 5 true' _ "$LONE" 2>&1 )"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    no run-capped.py beside lib.sh: the Python cap is not claimed, the command runs" \
+  || { echo "::error::run_capped with no timeout and no run-capped.py beside lib.sh: exit=$ex err='$err'"; fail=1; }
+rm -rf "$LONE"
 err="$( PATH="$DEAD:$PATH"; VULYK_PY=; run_capped 0 true 2>&1 )"; ex=$?
 [ "$ex" -eq 0 ] && [ -z "$err" ] && echo "  ok    run_capped 0: uncapped, silently" || { echo "::error::run_capped 0: exit=$ex err='$err'"; fail=1; }
 rm -rf "$RC" "$CAPD" "$DEAD"
