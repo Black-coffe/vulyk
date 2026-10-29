@@ -38,3 +38,4 @@
 {"ts":"2026-10-28T20:16:23Z","spec":"upgrade-keeps-host-edits","version":"0.29.0","head":"04b1bbd","pack":"e009ed9d36c5","note":"superseded: built in 0.29.0 by 5239eb0 (hive-feedback-2026-10) outside this spec; never approved"}
 {"ts":"2026-10-28T20:16:24Z","spec":"self-learning","version":"0.19.0","head":"04b1bbd","pack":"e3b0c44298fc","note":"recorded late: merged b6d61e9 on 2026-09-27"}
 {"ts":"2026-10-28T20:49:26Z","spec":"post-043-tails","version":"0.43.1","head":"3e3ac1d","pack":"f90cdbd16a44","note":"merged to main (a5d8e67), publish pending; human-check ACCEPTED after a narrow round-1 repair, no round 2"}
+{"ts":"2026-10-29T21:06:18Z","spec":"cross-platform","version":"0.44.0","head":"0837af9","pack":"934e87b830a9","note":"merged to main, publish pending"}
