@@ -132,6 +132,12 @@ Python fallback, so no timeout test skips.
 
 ## Plan deltas
 
+- 2026-10-29, after GREEN round 2: the owner REJECTED («Переоткрыть, довести Mac») on CI evidence - the first macOS runs
+  (40787799947, probe 40857869190) show three causes in product code (`awk -v` with a newline, bash 3.2 `case` inside
+  `$( )`, BSD `paste` operand) and a test hang (`full-suite.test.sh` `nopy_path` drops `/usr/bin`). Wave 5: stories 07
+  (product), 08 (tests), 09 (gate rules + CI timeouts), disjoint files. Round 3 follows; the Queen re-runs macOS CI on the
+  branch before any ship.
+
 - 2026-10-29, story 05: the gate's tree scan found six sites stories 01, 02 and 04 missed (`tests/cycle.test.sh:802`,
   `tests/inject.test.sh:350`, `tests/intake.test.sh:259`, `.claude/commands/vulyk-evolve.md:20,37,58`). Two NEEDS_CONTEXT
   returns; ruled by the Queen as a plan delta, not a `lead-architect` dispatch (no design fork - the worker named the
@@ -152,7 +158,7 @@ is missing or unparsable.
 **Approved:** Andrei, 2026-10-28 («Jlj,hz.» - «Одобряю» typed in the Latin layout; both planner decisions kept)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
 **Branch:** vulyk/cross-platform
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-10-28, at 3dcf9a5, pack 942d320ecef5
 **Council:** GREEN round 2, 2026-10-28, at 5e0aae1, pack dc3ae8f68b3f
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Checked:** REJECTED by Andrei, 2026-10-29, at 9ca42a6 - owner's choice: «Переоткрыть, довести Mac (Рекомендую)». Looked at: GitHub CI on vulyk/cross-platform at 9ca42a6, run 40787799947 - full-suite timed out after 6 h on ubuntu and macos (never finished: tests/full-suite.test.sh, inject --part latency, intake --part latency); macos full-suite FAIL in council parts judge seats escalate ceilings replays roster driver walks advance, cycle parts hooklog gates ship red, e2e, defects, model-profile, solo, maintenance, telemetry parts terminal scan constitution; install-smoke on macos fails: awk: newline in string (install.sh awk -v repl= multi-line, lines 245 and 341)

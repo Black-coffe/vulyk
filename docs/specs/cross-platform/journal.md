@@ -9,3 +9,4 @@
 - 2026-10-28T22:35:18Z · 03-building · repair round 1: cross-platform-06-repair-round-1.md · next: build:4
 - 2026-10-28T23:21:30Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/cross-platform/round-2, carried from round 1: opus · next: dispatch:review
 - 2026-10-28T23:29:25Z · 04-council:GREEN · round 2 verdict GREEN at 5e0aae1 pack dc3ae8f68b3f · next: green
+- 2026-10-29T10:59:40Z · 05-rejected · owner REJECTED after GREEN round 2 on macOS CI evidence; repair wave 5: stories 07-09 · next: relaunching the hive
