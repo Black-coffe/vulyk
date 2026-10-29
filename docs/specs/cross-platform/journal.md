@@ -19,3 +19,4 @@
 - 2026-10-29T13:40:54Z · 04-council:ESCALATE · round 4 verdict ESCALATE at d47c5a5 pack 9781711a8e6c · next: escalated
 - 2026-10-29T15:29:47Z · 04-council:ESCALATE · reopened after round 4, ceiling now 6 · next: repair
 - 2026-10-29T15:29:58Z · 03-building · repair round 4: cross-platform-11-repair-round-4.md · next: build:7
+- 2026-10-29T15:31:27Z · 03-building · reopen ruling: latency = load noise; repair 11 = three macOS failures; macOS CI before the next round · next: build repair 11 (next session)

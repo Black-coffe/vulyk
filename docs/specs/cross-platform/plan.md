@@ -132,6 +132,11 @@ Python fallback, so no timeout test skips.
 
 ## Plan deltas
 
+- 2026-10-29, after ESCALATE round 4 (ceiling): reopened by the owner, «Переоткрыть: только 3 падения Mac (Рекомендую)».
+  Repair story 11's round-4 latency finding is ruled machine-load noise (no change); its task is the three macOS-only
+  failures of probe 40871539881 (`mac-probe-round4.txt`). Order from here: build 11, then macOS CI on the branch, and only
+  on a green macOS run the next council round - a round on code CI has not yet seen on macOS spends a round for nothing.
+
 - 2026-10-29, story 09: close-story refused «test changed after red receipt» - `scripts/defects-check.sh` (named in Files
   and in Verification by the Queen's ruling) was sealed as a test and then fixed. Owner's choice «Снять отметку red с 09
   (Рекомендую)»: the mark is removed, both earlier receipts stay in the story as the record. Next circle: seal tests only.
