@@ -1,4 +1,4 @@
-# Scout report: agents and commands (v0.43.1)
+# Scout report: agents and commands (v0.44.0)
 
 ## Purpose
 Every `.claude/agents/*.md` and `.claude/commands/vulyk-*.md` (ADR-013 light VULYK, ADR-015 Sonnet executes / Opus
@@ -20,8 +20,8 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   Critical/Major: `[ask N]` or `[regression]` (base-side evidence); else `[unanchored]`.
   **Suite step (ADR-023, ADR-024):** line 1 `VERDICT: PASS|BLOCK`; line 3 `SUITE: ok|FAIL|TIMEOUT <N>s budget
   <B>s|none`. Runs the `Full suite / build` row once per round, in the foreground (ADR-024: no reliance on
-  background commands in subagents), as `timeout $((VULYK_SUITE_TIMEOUT:-590)+5) <row>` with Bash `timeout:
-  600000`; FAIL = BLOCK with a `[regression]` Critical; TIMEOUT leaves the verdict, `judge` escalates. ≤ 5 minors.
+  background commands in subagents), as `run_capped $((VULYK_SUITE_TIMEOUT:-590)+5) <row>` (sourced from `scripts/lib.sh`; portable
+  where `timeout` is absent) with Bash `timeout: 600000`; FAIL = BLOCK with a `[regression]` Critical; TIMEOUT leaves the verdict, `judge` escalates. ≤ 5 minors.
 - **council-opus** (`opus`, `medium`, `maxTurns:60`; no Write/Edit) - Tier 3-4 blind seat inside `COURT`; one
   `ASK <n>` per ask, edge cases under `UNASKED:`; reading outside `COURT` or naming plan/story files is a BREACH.
   **council-haiku** (`opus` since ADR-015; Bash/Read + browser MCPs) - black-box seat on the Profile's *Client path*.
@@ -86,6 +86,9 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   conflict never overridden, other = "cannot check"). Release commit; local `merge --no-ff` only on a clean default
   tree, failure → `merge --abort`; `branch -d` (never `-D`). Prints the publish command, never runs it (push, green
   CI, then tag); `drone-docs`/`librarian` only with work; next-brief draft.
+- **Portable spelling (0.44.0):** command and agent shell blocks call Python as `bash scripts/py.sh ...` and
+  date windows as `date -u -d '-N days' ... || date -u -v-Nd ...`; `portability-check.sh` reads their shell
+  fences and multi-word inline spans (card `shell-needs-gnu-or-bash4`).
 - **`/vulyk-status`** - driver line, council stats, `token-report.py`, `state.sh` table, map freshness,
   `maintenance due|waits for`. Writes only `.claude/state.json`.
 - **`/vulyk-evolve`** - `evolve-ledger.py . resolve` + `window`; changeset in worktree on `vulyk/evolve-<date>`;
@@ -97,4 +100,4 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
   script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-10-28 (post-043-tails, 0.43.1; trimmed to the cap, line numbers dropped; ADR-013, 015, 020, 022, 023, 024, 025)
+last-verified: 2026-10-29 (cross-platform, 0.44.0; trimmed to the cap, line numbers dropped; ADR-013, 015, 020, 022, 023, 024, 025)

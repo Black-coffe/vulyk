@@ -6,7 +6,7 @@
 ## Codebase map
 <!-- one line per mapped module, added by /vulyk-bootstrap and /vulyk-map -->
 - `scripts/` (every gate/helper script, entry points, exit codes, callers; incl. `trace-autopsy.sh`,
-  `prompt-check.sh`): memory/map/scripts.md
+  `prompt-check.sh`, `portability-check.sh`, lib.sh portability helpers): memory/map/scripts.md
 - the cycle state contract as `cycle.sh` implements it (files, verbs, `advance`, verdict rule,
   staleness, seat/court contracts, repair, the Workflow driver): memory/map/cycle.md
 - every `.claude/agents/*.md` (incl. `drone-horizon`) and `.claude/commands/vulyk-*.md` (model, tools,
@@ -19,7 +19,7 @@
   model-cascade.md, command-reference.md, getting-started.md) and `docs/adr/` beyond ADR-001
 - `templates/`, `bootstrap/interview.md`, `.claude/hooks/` (bar the SessionStart brief and the defect hooks/`defects_lib.py`, in scripts.md and the wiki),
   `install.sh` (upgrade contract in scripts.md), `scripts/vulyk-update.sh`'s own mechanics, `tests/` harness internals beyond full-suite.sh and the `--part` flags (scripts.md),
-  `.github/workflows/ci.yml` beyond the `full-suite` job
+  `.github/workflows/ci.yml` beyond the `full-suite`/`install-smoke` macOS matrix and the `shell` job gates
 
 ## Wiki domains
 <!-- load-bearing domain notes in docs/wiki/ -->
@@ -28,7 +28,8 @@
 ## Verification
 <!-- the real ## Commands rows from CLAUDE.md - VULYK's own repo, no compiler, no test runner -->
 - Shell syntax, all scripts: `git ls-files '*.sh' | xargs -n1 bash -n`
-- Python syntax, hooks: `python -m py_compile .claude/hooks/*.py`
+- Python syntax, hooks: `bash scripts/py.sh -m py_compile .claude/hooks/*.py`
+- Portability (bash 3.2 / BSD / no bare python; card shell-needs-gnu-or-bash4): `bash scripts/portability-check.sh [<file>...]`
 - JSON validity: `git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
 - Hook self-diagnosis: `bash .claude/hooks/handoff.sh status`
 - Scope gate, per story: `bash scripts/scope-check.sh <story-file>`

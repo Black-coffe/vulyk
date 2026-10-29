@@ -37,12 +37,13 @@ Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the
 - `close-story <file> [--commit] [--stamp]` - scope-check; with `--commit`, a dirty path counted out of scope
   and not `is_paperwork_path` → exit 4 `edited outside ## Files: <paths>`. A `## Verification` segment matching a
   `round-only` `## Commands` row → exit 2 `verification is round-only`. Each segment must be a `## Commands` cell
-  of `constitution_file` or `none — reviewed by lead-review`; runs under `timeout ${VULYK_VERIFY_TIMEOUT:-540}`
-  (124 → exit 4); commits. Only the wave's last open story refuses; with a wave-mate open it notes and goes on.
+  of `constitution_file` or `none — reviewed by lead-review`; each line runs under lib.sh `run_capped_as` for
+  `${VULYK_VERIFY_TIMEOUT:-540}` s total (124 → exit 4; no timeout/gtimeout/Python cap = uncapped, so a command's
+  own 124 is not read as a timeout); commits. Only the wave's last open story refuses; with a wave-mate open it notes and goes on.
   Done + clean tree → `ok:true` "already done"; self-marked done with a diff → closes it.
 - `open-round` refuses a tree dirty outside paperwork; `build_round` freezes `seats=`/`since=`, builds the court
   only for a blind seat, carries round n-1's GREEN/N/A blind seats (`review` never).
-- **Court setup (0.34):** `build_court` runs `$ROOT/.claude/vulyk-setup` if present (cwd = court, `timeout
+- **Court setup (0.34):** `build_court` runs `$ROOT/.claude/vulyk-setup` if present (cwd = court, `run_capped
   ${VULYK_SETUP_TIMEOUT:-300}`); non-zero → court removed, `open-round` exit 2 `court setup failed`/`timed out`.
 - `claim` refuses a dirty tree; `release`, `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"`
   appends to `## Answers`, raises `CEILING`, emits `next:"repair"` (or re-runs on an `env`/`suite-timeout` escalation).
@@ -99,4 +100,6 @@ then `advance --ingest`. `release` in `finally`.
   also empty is rerun once on `opus`; not an attempt. Entries go in `fallbacks`; `/vulyk-build` journals them.
 - Tests: `cycle|council|telemetry.test.sh --part <topic>` / `--list-parts`; full set once per round (scripts.md).
 
-last-verified: 2026-10-28 (post-043-tails, 0.43.1; trimmed to the cap, line numbers dropped; ADR-001, 013, 015, 023, 025)
+Plan.md `**Briefed:**`/`**Branch:**` and the story `status:` edits use `sed_inplace` (lib.sh).
+
+last-verified: 2026-10-29 (cross-platform, 0.44.0; ADR-001, 013, 015, 023, 025)

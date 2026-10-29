@@ -12,7 +12,12 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `lib.sh` - sourced only: `is_story_file`, `pack_fingerprint`, `is_paperwork_path`, `paperwork_only`, `marker`,
   `constitution_file`, `command_cell_exists`, `command_cell_round_only`; model floor (ADR-015: `model_floor`,
   `model_below_floor` fails closed, `VULYK_MODEL_FLOOR` overrides); red helpers `sealed_tests`, `set_hash`
-  (a missing file hashes as `missing <path>`). `verdict_stale <spec> <head-sha> <pack-fp>` -> `CURRENT` rc 0 /
+  (a missing file hashes as `missing <path>`). Portability helpers (0.44.0): `vulyk_python` sets `VULYK_PY`
+  (first of python3/python/py that runs Python 3; preset trusted; call in the current shell, not `$(...)`),
+  `sed_inplace <sed-args> <file>` (`-i.bak` then rm), `date_epoch <YYYY-MM-DD|...Z>` (GNU `-d`, else BSD `-j -f`),
+  `date_shift <±days> [+fmt]`, `capped_by` (sets `VULYK_CAP` = timeout|gtimeout|python|"", each probed with `<it> 1
+  true`), `run_capped <secs> <cmd>` / `run_capped_as <cap> <secs> <cmd>` (exit 124; secs 0 = uncapped; none = runs
+  uncapped with a stderr line). `verdict_stale <spec> <head-sha> <pack-fp>` -> `CURRENT` rc 0 /
   `STALE (pack|commit)` rc 1; a `<sha>..HEAD` that is `paperwork_only` stays current. Used by `human-check.sh
   --check` and ship-check.sh.
 - `ship-check.sh <spec-dir>` / `--record`; `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`;
@@ -25,20 +30,24 @@ re-run. No line numbers: `grep -n '^name()'`.
   `memory/stats/acceptance.jsonl` with the pack identity (`head`, `pack`); `drift` is boolean or `"unknown"`
   (never read unknown as false); note redacted; always exits 0. `leak-check.sh <file>` - the `check:` of the
   `host-internals-in-public-repo` card; flags host-project internals in a public repo.
-- `trace-autopsy.sh <brief.md>` (0.42.0) - python3|python wrapper (none: exit 2) over `trace-autopsy.py`. Reads
-  the brief's `> ` lines (Python/Node/bash/plain frames), resolves against `git ls-files` (`ambiguous` / `outside
-  the repo` marks), writes `autopsy.md` beside the brief, <= 15 lines (3 frames): code line at HEAD + `git log -L`
-  as `last touched:`. Only a Python traceback's own frames are reversed (0.43.1): `path:N` refs after it keep
-  order behind it. Trace text is data (git via argv). Exit 0 / 2. Sole caller: `/vulyk-plan` step 2.
-- `prompt-check.sh [--touched <path>...]` (0.43.0) - python3|python wrapper over `prompt-check.py`; no model.
-  Root = the script's parent, so a fixture copy checks itself. Over `.claude/agents|commands/*.md` and
-  `templates/*.md`: agent frontmatter (name = file, model, `maxTurns`, `tools`), `omitClaudeMd` against the
-  `except ... carries \`omitClaudeMd: true\`` sentence of `docs/architecture.md`, backticked `scripts/` paths,
-  `cycle.sh <verb>` against the dispatcher `case` (no `case "$VERB" in` = a warning, 0.43.1), `--flag` against
-  non-comment script lines (+ same-stem `.py`), agent names anywhere in a backticked span (0.43.1), `telemetry.sh`
-  `AGENTS` vs agent files. Hive mode (`.claude/vulyk-version` exists): AGENTS mismatches are warnings.
-  `--touched`: a finding involving no given path (globs ok) is a `warn`. Exit 0 clean / 1 blocking / 2 usage,
-  no python. Callers: `close-story` (cycle.md) and CI's `shell` job. Tests: `maintenance.test.sh`, `cycle.test.sh`.
+- `py.sh <python-args>` (0.44.0) - `exec "$VULYK_PY" "$@"` via `vulyk_python`; none: exit 2. The spelling for
+  Python in `CLAUDE.md` and the commands. `run-capped.py <secs> <cmd>` - the cap `run_capped` falls back to
+  (own process group, SIGTERM, 10 s grace, SIGKILL; Windows `taskkill /T`; exit 124).
+- `portability-check.sh [<file>...]` (0.44.0) - the `check:` of card `shell-needs-gnu-or-bash4` (status block).
+  No arg: `git ls-files '*.sh'` + constitution + `.claude/commands|agents/*.md` (not `tests/fixtures/`). Prints
+  `portability-check: <file>:<line>: <rule>: <text>`; rules: bash4, sed-i, sed-bre, grep-P, stat-c, readlink-f,
+  find-printf, xargs-r, date-d, pct-n, timeout, python, array (`"${a[@]}"` under `set -u`), paste-s,
+  case-in-subst, heredoc-in-subst. Bypass: same-line `# portable: <reason>`. Exit 0 / 1 hits / 2 usage; CI `shell` job.
+- `trace-autopsy.sh <brief.md>` (0.42.0) - `vulyk_python` wrapper (none: exit 2) over `trace-autopsy.py`. Reads
+  the brief's `> ` frames, resolves against `git ls-files`, writes `autopsy.md` beside the brief, <= 15 lines
+  (3 frames): code line at HEAD + `git log -L` as `last touched:`. Trace text is data. Exit 0 / 2. Caller:
+  `/vulyk-plan` step 2.
+- `prompt-check.sh [--touched <path>...]` (0.43.0) - `vulyk_python` wrapper over `prompt-check.py`; no model.
+  Root = the script's parent. Over `.claude/agents|commands/*.md` and `templates/*.md`: agent frontmatter,
+  `omitClaudeMd` vs `docs/architecture.md`, backticked `scripts/` paths, `cycle.sh <verb>` vs the dispatcher
+  `case`, `--flag` vs script lines, agent names in spans, `telemetry.sh` `AGENTS` vs agent files (hive mode:
+  warnings). `--touched`: a finding involving no given path is a `warn`. Exit 0 / 1 blocking / 2 usage or no
+  python. Callers: `close-story` (cycle.md) and CI's `shell` job.
 - `state.sh` - writes `.claude/state.json`/table for `/vulyk-status`. Reads `story:`, `status:`, `wave:`, `tier:`
   from the leading frontmatter block only (0.43.1), so a study report quoting the story template is not a story.
 - `.claude/hooks/session-start-brief.sh` - map line, profile/bootstrap offers, `maintenance due: ...` for gc,
@@ -52,16 +61,16 @@ re-run. No line numbers: `grep -n '^name()'`.
   `--check` exit 1 `index stale`. `defects-check.sh [<arg>]` - cards parsed only by `.claude/hooks/defects_lib.py`;
   no arg = audit (`BLIND`); `<arg>` = gate (non-zero = `RED`). Red only when new, else an `old ...` line.
   Always red: `DUPLICATE`, `INDEX`. Exit 0/1/2. `DEFECTS_DIR` overrides the library.
-- `memory-triage.sh [<memory-dir>]` - read-only lister behind `/vulyk-gc memory`; `--index-lines`; `--dir`;
-  `--mark` writes `<lines> <bytes>` to `.claude/state/memory-triage.txt` (its one write).
-- `symbol-map.sh [--exact] [--story <story.md>] [--scope <path>]... <file>...` - python3|python (none: exit 2),
+- `memory-triage.sh` - read-only lister behind `/vulyk-gc memory`; `--mark` is its one write.
+- `symbol-map.sh [--exact] [--story <story.md>] [--scope <path>]... <file>...` - `vulyk_python` (none: exit 2),
   execs `symbol-map.py` (repo = `git ls-files`). Per input a `## <path>` block: `tests`, `importers`, `imported`,
   `guard tests`, `path mentions`; lines `exact` or `textual`; `--exact` folds textual into `textual <N> not shown`.
   Section cap 5; stdout <= 1536 bytes. Exit 0 / 1 input missing / 2 usage. Callers: recon, `worker-code`, solo build.
 - `redact.sh` (stdin mask). `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan`, `bundle`, `check`,
   `publish`, `inbox`; `vulyk_version`: `.claude/vulyk-version`, else `VERSION` beside `install.sh`, else `0.0.0`.
   `ENUM`/`AGENTS` are append-only (removed agents go to `RETIRED_AGENTS`; `ENUM` ends `model_below_floor`,
-  `fable_limit_fallback`). The scan counts handoff Python starts (0.43.1).
+  `fable_limit_fallback`). The scan counts handoff Python starts (0.43.1). Dates go through `date_epoch` /
+  `date_shift` (prev ISO week = `date_shift -7 +%G-W%V`).
 
 ## Key contracts
 - `cycle.sh`: last stdout line is one JSON object; exits 0 ok · 1 usage · 2 precondition · 3 paused ·
@@ -75,19 +84,22 @@ re-run. No line numbers: `grep -n '^name()'`.
   `--list-parts` (telemetry, council, cycle) run one `--part` job each; `inject`/`intake` latency runs alone last.
   `VULYK_SUITE_TIMEOUT` (590 s; 0 = uncapped); exit 0 / 1 FAIL / 124 TIMEOUT / 2 usage. These are the
   `(round-only)` rows in CLAUDE.md `## Commands`; CI runs one `full-suite` job.
-- `tests/symbol-map.test.sh` (not round-only) also holds the `--- trace-autopsy` block (speed check best of
-  three under 1000 ms) and an awk guard on `/vulyk-plan` step 2. `tests/maintenance.test.sh`: caps, brief due
-  logic, ledger, prompt-check fixture copies.
+- `tests/symbol-map.test.sh` also holds the `--- trace-autopsy` block; `tests/maintenance.test.sh`: caps, brief
+  due logic, ledger, prompt-check fixture copies.
 
 ## install.sh - the upgrade contract
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution. Defect hooks via
-  `wire_hook`/`unwire_hook` (matcher ignored on unwire). `install_mod vulyk-pulse@vulyk`; `retire_mod
-  vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup`.
+  `wire_hook`/`unwire_hook` (matcher ignored on unwire). Uses `vulyk_python`/`sed_inplace` from `lib.sh` beside it
+  (found via `BASH_SOURCE`); awk values pass through `ENVIRON`, never `-v` (BSD awk refuses a newline).
+  `install_mod vulyk-pulse@vulyk`; `retire_mod vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup`.
 
 ## Gotchas
 - `close-story`'s `## Commands` match, `record-seat`'s taint and `is_paperwork_path` are security-relevant string
-  matches: keep them anchored. `close-story` probes `timeout 5 true` (Windows cmd `timeout`).
+  matches: keep them anchored. `close-story` verification runs under `capped_by`/`run_capped_as` (a cap counts
+  only if `<it> 1 true` passes: Windows cmd `timeout`; no cap = uncapped, a 124 is then the command's own).
+- Scripts target bash 3.2 + BSD userland (macOS CI jobs `full-suite`, `install-smoke` pin `/bin/bash` 3.2, BSD sed,
+  no `timeout`): no bare `sed -i`/`python`/`timeout`/`date -d`; run the gate after editing any `.sh`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-10-28 (post-043-tails, 0.43.1; trimmed to the cap, line numbers dropped)
+last-verified: 2026-10-29 (cross-platform, 0.44.0)
