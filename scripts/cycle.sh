@@ -1995,7 +1995,7 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
         k=$((k+1))
         left=$(( VR_VT - (SECONDS - vstart) ))
         if [ "$left" -le 0 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then vrc=124; : > "$outdir/$k.out"
-        else run_capped "$(( left > 0 ? left : 1 ))" bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
+        else run_capped_as "$VULYK_CAP" "$(( left > 0 ? left : 1 ))" bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
         fi
         cat "$outdir/$k.out"
         VR_CODES[$k]="$vrc"; VR_LINES[$k]="$vline"; VR_RC="$vrc"; VR_LINE="$vline"
@@ -2004,7 +2004,7 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
       fi
       left=$(( VR_VT - (SECONDS - vstart) ))
       if [ "$left" -le 0 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then vrc=124
-      else run_capped "$(( left > 0 ? left : 1 ))" bash -c "$vline"; vrc=$?
+      else run_capped_as "$VULYK_CAP" "$(( left > 0 ? left : 1 ))" bash -c "$vline"; vrc=$?
       fi
       VR_RC="$vrc"; VR_LINE="$vline"
       [ "$vrc" -ne 0 ] && return 0

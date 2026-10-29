@@ -1,13 +1,14 @@
 ---
 story: cross-platform-10
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 6
 blocked_by: []
 red: required
-red_reason:
+red_reason: dead stubs probed more than once per run
+red_verified_at: 2026-10-29T13:01:51Z d091079a487cb3978423d9e140943b2e1136306f4f3ca1b40e918117351ecc5c
 ---
 
 # Repair round 3
@@ -91,3 +92,29 @@ No brief ask is RED in round 3 - the findings below are the whole task.
 `bash tests/telemetry.test.sh --part scan`
 `bash tests/maintenance.test.sh`
 `bash scripts/defects-check.sh`
+
+## Red receipt
+- command: bash tests/full-suite.test.sh
+- exit: 1
+- tests: d091079a487cb3978423d9e140943b2e1136306f4f3ca1b40e918117351ecc5c (scripts/defects-check.sh, tests/council.test.sh, tests/cycle.test.sh, tests/defects.test.sh, tests/full-suite.test.sh, tests/inject.test.sh, tests/intake.test.sh, tests/maintenance.test.sh, tests/model-profile.test.sh, tests/solo.test.sh, tests/symbol-map.test.sh, tests/telemetry.test.sh)
+- impl: 161fa9995f3679ade8e5c0403d841ec0d1939ae332b51151cc5ee37f6d188ffe
+- stamped: 2026-10-29T13:01:51Z
+
+```
+== the latency suites run last, alone, one at a time
+  ok    --list puts the latency suites last
+  ok    latency suites after the rest, no overlap -> exit 0
+  ok    inject ok
+  ok    intake ok
+== jobs share one install cache inside the logs dir
+  ok    VULYK_INSTALL_CACHE is exported to every job -> exit 0
+== bad usage
+  ok    --jobs 0 -> exit 2
+full-suite.test.sh: FAILED
+```
+
+## Implementation notes
+- scripts/lib.sh: run_capped split; new run_capped_as <cap> <secs> <cmd> runs with a cap the caller already probed (run_capped = capped_by + run_capped_as).
+- tests/full-suite.sh, scripts/cycle.sh verify_run: probe once (their existing capped_by) and cap each job/line with run_capped_as "$VULYK_CAP" - no timeout/gtimeout/python probe launches per job between the budget clock and the cap.
+- tests/full-suite.test.sh: dead stubs log calls, the run must probe them once (red); the capped check uses the 30 s hang and accepts TIMEOUT 0-9s, so load overhead on a 1 s budget no longer fails it while "ran to the end" (30 s) still would.
+- Surprise: stamp-red needed VULYK_VERIFY_TIMEOUT=2400 - the twelve verification lines run sequentially past 540 s on this box.

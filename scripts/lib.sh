@@ -467,11 +467,18 @@ run_capped() { # run_capped <secs> <cmd> [args...] - <cmd> with stdin/stdout/std
   # after <secs>: exit 124 on timeout, else the command's exit. `timeout -k 10`, else `gtimeout -k 10`,
   # else run-capped.py beside this file (its own process group, SIGTERM, 10 s grace, SIGKILL), else
   # uncapped with one stderr line. <secs> 0 or empty: uncapped, silently.
-  local secs="${1:-}"
-  shift
-  case "$secs" in ''|0) "$@"; return ;; esac
+  case "${1:-}" in ''|0) shift; "$@"; return ;; esac
   capped_by
-  case "$VULYK_CAP" in
+  run_capped_as "$VULYK_CAP" "$@"
+}
+
+run_capped_as() { # run_capped_as <cap> <secs> <cmd> [args...] - run_capped with the cap a caller's own
+  # capped_by already found (VULYK_CAP): a runner capping many commands probes once, not once per
+  # command, so no probe launches sit between its budget clock and the cap.
+  local cap="${1:-}" secs="${2:-}"
+  shift 2
+  case "$secs" in ''|0) "$@"; return ;; esac
+  case "$cap" in
     timeout)  timeout -k 10 "$secs" "$@" ;;
     gtimeout) gtimeout -k 10 "$secs" "$@" ;;
     python)   "$VULYK_PY" "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/run-capped.py" "$secs" "$@" ;;

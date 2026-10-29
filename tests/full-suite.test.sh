@@ -105,12 +105,19 @@ expect "budget 0 in the summary" "budget 0s"
 
 echo "== dead timeout and gtimeout stubs, Python present: the budget still caps"
 mkdir -p "$T/deadbin"
-for b in timeout gtimeout; do printf '#!/bin/sh\nexit 1\n' > "$T/deadbin/$b"; chmod +x "$T/deadbin/$b"; done
-OUT="$(PATH="$T/deadbin:$PATH" VULYK_SUITE_TIMEOUT=1 VULYK_SUITES="bash $S/slow.sh
+# Each stub logs its call: the runner probes the cap once, not again inside every job (a re-probe
+# per job is two more process launches between the budget's clock and the cap, under the full
+# suite's load enough to push a 1 s cap to a 3 s report).
+for b in timeout gtimeout; do printf '#!/bin/sh\necho %s >> "%s/probes"\nexit 1\n' "$b" "$T" > "$T/deadbin/$b"; chmod +x "$T/deadbin/$b"; done
+OUT="$(PATH="$T/deadbin:$PATH" VULYK_SUITE_TIMEOUT=1 VULYK_SUITES="bash $S/hang.sh
 bash $S/mark.sh done" bash "$RUN" --jobs 2 2>&1)"; RC=$?
 code "over-budget job with dead stubs -> exit 124" 124 "$RC"
-printf '%s\n' "$OUT" | grep -q "^TIMEOUT [0-2]s bash $S/slow.sh\$" && echo "  ok    the slow job is killed at the budget" \
-  || { echo "::error::slow job not capped at the budget"; printf '%s\n' "$OUT"; fail=1; }
+# a 30 s hang reported under 10 s was killed, whatever the box's load adds to the 1 s budget
+printf '%s\n' "$OUT" | grep -q "^TIMEOUT [0-9]s bash $S/hang.sh\$" && echo "  ok    the hanging job is killed at the budget" \
+  || { echo "::error::hanging job not capped at the budget"; printf '%s\n' "$OUT"; fail=1; }
+[ "$(grep -c . "$T/probes" 2>/dev/null)" = 2 ] && echo "  ok    the cap is probed once per run" \
+  || { echo "::error::dead stubs probed more than once per run: $(tr '\n' ' ' < "$T/probes" 2>/dev/null)"; fail=1; }
+rm -f "$T/probes"
 line "a job inside the budget is ok" ok "bash $S/mark.sh done"
 reject "no uncapped warning while python caps" "no working timeout"
 LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"

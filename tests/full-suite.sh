@@ -30,7 +30,7 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 2
-. "$ROOT/scripts/lib.sh"   # capped_by, run_capped
+. "$ROOT/scripts/lib.sh"   # capped_by, run_capped_as (probed once here, not per job)
 
 JOBS='' LIST=0
 while [ $# -gt 0 ]; do
@@ -95,7 +95,7 @@ start_job() { # start_job <index> - runs in the background, leaves "<rc> <end>" 
   (
     if [ "$BUDGET" -gt 0 ] && [ "$TIMEOUT_OK" -eq 1 ]; then
       left=$(( BUDGET - SECONDS )); [ "$left" -lt 1 ] && left=1
-      run_capped "$left" bash -c "${CMDS[i]}" </dev/null >"$LOGS/$i.log" 2>&1 || rc=$?
+      run_capped_as "$VULYK_CAP" "$left" bash -c "${CMDS[i]}" </dev/null >"$LOGS/$i.log" 2>&1 || rc=$?
     else
       bash -c "${CMDS[i]}" </dev/null >"$LOGS/$i.log" 2>&1 || rc=$?
     fi
