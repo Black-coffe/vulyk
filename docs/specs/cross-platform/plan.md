@@ -132,6 +132,10 @@ Python fallback, so no timeout test skips.
 
 ## Plan deltas
 
+- 2026-10-29, wave 5: 07 and 08 closed; 09 returned NEEDS_CONTEXT (`docs/defects/INDEX.md` must be regenerated, not in its
+  Files) and 07 left `scripts/defects-check.sh` unparsable by bash 3.2 (heredoc inside `$( )`). Ruled: both fold into 09
+  (Files + INDEX.md, defects-check.sh, a `heredoc-in-subst` rule and fixture) - one worker, no parallel coupling.
+
 - 2026-10-29, after GREEN round 2: the owner REJECTED («Переоткрыть, довести Mac») on CI evidence - the first macOS runs
   (40787799947, probe 40857869190) show three causes in product code (`awk -v` with a newline, bash 3.2 `case` inside
   `$( )`, BSD `paste` operand) and a test hang (`full-suite.test.sh` `nopy_path` drops `/usr/bin`). Wave 5: stories 07
