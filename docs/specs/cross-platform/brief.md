@@ -51,6 +51,9 @@ Preceded in the same session by an owner brainstorm (Windows-first VULYK, wish t
 
 Side-agent notes relayed in this session (model text, not owner words): a stock Mac without Xcode Command Line Tools may carry a `/usr/bin/python3` stub; GitHub's macOS image may put a Homebrew bash 5 ahead of `/bin/bash` on PATH, so the macOS job must pin `/bin/bash` 3.2 and print its version. Both unverified.
 
+
+**After escalation (round 4, 2026-10-29).**
+> Owner's choice: «Переоткрыть: только 3 падения Mac (Рекомендую)». The round-4 inject latency finding is treated as machine-load noise (alone: 163-168 ms, threshold 200 ms kept; the hook is not in the diff) - no code change for it. The repair fixes the three macOS-only failures of probe run 40871539881: tests/maintenance.test.sh:119 BSD sed brace; cycle.sh briefed accepting an empty ## Asks on macOS; council walks probe r2m9 on the branch.
 ## Asks
 
 1. Четыре хелпера в `scripts/lib.sh`: `vulyk_python`, `sed_inplace`, `date_epoch`/`date_shift`, `run_capped`.
