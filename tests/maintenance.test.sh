@@ -657,7 +657,66 @@ ok - for x in ${a[@]+"${a[@]}"}; do :; done
 ok - for p in python3 python py; do :; done
 ok - bash scripts/py.sh -m py_compile x.py
 ok - sed -i 's/a/b/' "$f" # portable: this line runs only on the GNU CI image
+hit paste-s echo "$(comm -13 "$T/tree.before" "$T/tree.after" | paste -sd'|')"
+hit paste-s grep x "$LOG" | paste -s -d ' ' > out.txt
+hit case-in-subst x="$(case "$b" in plan.md|brief.md) echo y ;; esac)"
+hit case-in-subst x=$(case "$b" in *.md) echo y ;; esac)
+ok - echo "$(comm -13 "$T/tree.before" "$T/tree.after" | paste -sd'|' -)"
+ok - paste -s -d, list.txt
+ok - x="$(case "$b" in (plan.md|brief.md) echo y ;; esac)"
+ok - case "$b" in plan.md|brief.md) continue ;; esac
+ok - x="$(f "$b")"; case "$x" in a) echo y ;; esac
 CASES
+cat > "$T/pg-case.sh" <<'EOF'
+#!/usr/bin/env bash
+ALL_QUOTES="$(for story in "$SPEC"/*.md; do
+  base="$(basename "$story")"
+  case "$base" in plan.md|brief.md) continue ;; esac
+  awk '/^>/ { print }' "$story" 2>/dev/null
+done | grep -v '^$')"
+EOF
+pg_run "$T/pg-case.sh"
+expect "portability-check: trace-check's case inside a multi-line \$( ) is a hit on its line" "pg-case.sh:4: case-in-subst: " < "$T/pg-out"
+cat > "$T/pg-case-ok.sh" <<'EOF'
+#!/usr/bin/env bash
+ALL_QUOTES="$(for story in "$SPEC"/*.md; do
+  base="$(basename "$story")"
+  case "$base" in
+    (plan.md|brief.md) continue ;;
+    (*) : ;;
+  esac
+  awk '/^>/ { print }' "$story" 2>/dev/null
+done | grep -v '^$')"
+case "$ALL_QUOTES" in
+  *x*) echo y ;;
+esac
+EOF
+pg_run "$T/pg-case-ok.sh"
+expect "portability-check: the (pat) form inside a multi-line \$( ) is not a hit" "exit=0;" < "$T/pg-out"
+cat > "$T/pg-hd.sh" <<'EOF'
+#!/usr/bin/env bash
+plan="$(PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" <<'PY'
+print("it's")
+PY
+)" || exit 2
+EOF
+pg_run "$T/pg-hd.sh"
+expect "portability-check: defects-check's heredoc inside a multi-line \$( ) exits 1" "exit=1;" < "$T/pg-out"
+expect "portability-check: defects-check's heredoc inside a multi-line \$( ) names rule heredoc-in-subst" "pg-hd.sh:2: heredoc-in-subst: " < "$T/pg-out"
+cat > "$T/pg-hd-ok.sh" <<'EOF'
+#!/usr/bin/env bash
+read_cards() {
+  PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" <<'PY'
+print("it's")
+PY
+}
+plan="$(read_cards)" || exit 2
+"$PY" - "$(pwd)" <<'PY'
+print(1)
+PY
+EOF
+pg_run "$T/pg-hd-ok.sh"
+expect "portability-check: the heredoc in a function called from \$( ) is not a hit" "exit=0;" < "$T/pg-out"
 cat > "$T/pg-allow.sh" <<'EOF'
 sed -i 's/a/b/' "$f" # portable: GNU CI image only
 EOF

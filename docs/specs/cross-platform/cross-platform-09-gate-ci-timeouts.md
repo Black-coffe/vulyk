@@ -1,16 +1,15 @@
 ---
 story: cross-platform-09
 spec: cross-platform
-status: todo
-returned: NEEDS_CONTEXT
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
 wave: 5
 blocked_by: []
-red: required
-red_reason: names rule case-in-subst
-red_verified_at: 2026-10-29T11:04:46Z 4811294c10358e3713ff6ae6a7ca1332e198f1a88976e403c5f5a0e36f380da4
+red_reason: names rule heredoc-in-subst
+red_verified_at: 2026-10-29T11:45:34Z fbd2114d3c947ff6d4e697f29e054c5899bd5fd8cf5a8210e0b3913dd8534e73
 ---
 
 # The gate learns what CI found; CI fails fast and shows why
@@ -69,6 +68,18 @@ Evidence (Queen, 2026-10-29): owner REJECTED after GREEN round 2 (plan.md `**Che
 - Card: fixtures list, one Never bullet for both rules, a `## How-to` for `awk -v` with a newline (ENVIRON).
 - ci.yml: full-suite `timeout-minutes: 90` + `VULYK_SUITE_TIMEOUT=2400`; install-smoke `timeout-minutes: 30`. The job
   display name still says "uncapped" (left: renaming changes the check name).
+- Relaunch after the Queen's ruling: tests for `heredoc-in-subst` added to maintenance.test.sh and re-stamped red
+  (red_reason now `names rule heredoc-in-subst`) before any implementation edit.
+- scripts/portability-check.sh: rule `heredoc-in-subst` - a heredoc opened while a `$( )` frame is open, reported on
+  its opening line only when its body holds `'` `"` `` ` `` or `(`. Narrowed from "every heredoc in `$( )`" because
+  Docker bash:3.2 parses a body without them (scripts/telemetry.sh:891, `$list`), and that product line would
+  otherwise be a tree hit; probes: lone `'`, `"`, `(` fail; balanced `print(1)` passes but is still a hit (conservative).
+- scripts/defects-check.sh: python call moved into `read_cards()`, `plan="$(read_cards)"`; gate and `--audit` output
+  byte-identical to HEAD's script (diffed); `bash -n` under Docker bash:3.2 is clean for it and every
+  scripts/tests/.claude `.sh` file.
+- Fixture heredoc-in-subst: original = defects-check.sh's `plan="$(` with its real `card's` comment line; neighbour =
+  unquoted `$(` on its own line, `cat <<END` with `it's`. Both fail `bash -n` under bash:3.2 and both are gate hits.
+- Card: fixtures list + a Never bullet; docs/defects/INDEX.md regenerated with `bash scripts/defects-index.sh`.
 
 ## Findings
 - Tree hits (story 07's files, not marked `# portable:`): `scripts/cycle.sh:2079` and `scripts/trace-check.sh:117`,
@@ -79,17 +90,24 @@ Evidence (Queen, 2026-10-29): owner REJECTED after GREEN round 2 (plan.md `**Che
   `defects-check.sh` RED `index stale`. INDEX.md is not under `## Files`; add it (or let the Queen regenerate it).
   Still open on relaunch: defects-check.sh is RED `index stale` (both fixtures pass their check), and this is the
   only thing between the story and close-story. Not regenerated here: it would be an edit outside `## Files`.
+  Resolved by the Queen's ruling below: regenerated.
+- close-story exit 4 `test changed after red receipt: re-run stamp-red`: `scripts/defects-check.sh` is both under
+  `## Files` and a `## Verification` line, so lib.sh `sealed_tests` seals it with tests/maintenance.test.sh. The
+  receipt (11:45:34Z) sealed the pre-fix script; the ruling's `read_cards()` fix edited it afterwards. stamp-red
+  cannot be re-run: everything is green now, and re-breaking the gate to get a red is a staged break. Everything else
+  passes (maintenance 304/0, defects-check GREEN, scope 9/9). Needs a Queen call: re-stamp the receipt over the
+  current tree, or take the defects-check.sh edit out of this story (the verification line or the file).
 
 ## Red receipt
 - command: bash tests/maintenance.test.sh
 - exit: 1
-- tests: 4811294c10358e3713ff6ae6a7ca1332e198f1a88976e403c5f5a0e36f380da4 (tests/maintenance.test.sh)
-- impl: 363e4d4182bf006ed2efec8c35f158638e17c0481ae55c23684954477494cccf
-- stamped: 2026-10-29T11:04:46Z
+- tests: fbd2114d3c947ff6d4e697f29e054c5899bd5fd8cf5a8210e0b3913dd8534e73 (scripts/defects-check.sh, tests/maintenance.test.sh)
+- impl: 27861f36d0c418423a62d36a2f9b4254c201f16bd247780229b4dfdf6f87f051
+- stamped: 2026-10-29T11:45:34Z
 
 ```
         exit=0;
-  ok    portability-check: the (pat) form inside a multi-line $( ) is not a hit
+  ok    portability-check: the heredoc in a function called from $( ) is not a hit
   ok    portability-check: a # portable: line is counted as allowed
   ok    portability-check: |& inside a Python heredoc body is not a hit
   ok    portability-check: the line after the heredoc is read again
@@ -97,14 +115,11 @@ Evidence (Queen, 2026-10-29): owner REJECTED after GREEN round 2 (plan.md `**Che
   ok    portability-check: the bare python cell of CLAUDE.md:76 is a hit
   ok    portability-check: a missing named file exits 2
   ok    portability-check: nothing to scan exits 2
-maintenance.test.sh: 301 checks, 9 failed
+maintenance.test.sh: 304 checks, 2 failed
 ```
 
-**Queen's ruling, 2026-10-29 (after NEEDS_CONTEXT, and story 07's leftover):** `## Files` gains `docs/defects/INDEX.md`
-(regenerate it with `bash scripts/defects-index.sh` after the card edits), `scripts/defects-check.sh` and one more fixture.
-Story 07 found that bash 3.2 cannot parse `scripts/defects-check.sh` (a `<<'PY'` heredoc inside `plan="$( ... )"`, lines
-82-332: «unexpected EOF while looking for matching `''»), so every `tests/defects.test.sh` case fails on macOS. Fix it the
-way 07 tested in a container: the python call in a function (`read_cards() { ... <<'PY' ... PY }`, `plan="$(read_cards)"`),
-same output. The gate gets a third rule of the same bash 3.2 class, `heredoc-in-subst` (a `<<` heredoc opened inside a
-multi-line `$( ... )`), with the original case and a neighbour form as fixture and tests. Story 07 is committed (a8776c5),
-so the tree run is expected clean; check it under Docker `bash:3.2` too.
+**Owner's choice, 2026-10-29: «Снять отметку red с 09 (Рекомендую)».** The `red: required` mark is removed. The receipts of
+11:04:46Z and 11:45:34Z (frontmatter `red_verified_at`, kept as the record) proved the tests red before the implementation;
+the only sealed file changed after them is `scripts/defects-check.sh`, a gate script the Queen's ruling put in both
+`## Files` and `## Verification`, so `sealed_tests` read it as a test. Framework defect for the next circle: the receipt
+seals any `## Files` path named in `## Verification`, not only tests. Close the story as it stands.

@@ -117,6 +117,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90   # a hang ends here, not at the 6 h default; the suite's own cap below names it first
     steps:
       - uses: actions/checkout@v4
         with:
@@ -143,9 +144,10 @@ jobs:
       - name: Claude Code CLI for mods.test.sh
         run: npm install -g @anthropic-ai/claude-code && claude --version
 
-      # Uncapped: a hosted runner has fewer cores than the review box the 540 s budget is tuned to.
+      # 2400 s, not the 590 s default: a hosted runner has fewer cores than the review box the budget is tuned
+      # to. Capped, not 0: a hung suite ends as a named TIMEOUT with its log tails before timeout-minutes cancels.
       - name: full suite - cycle, council, driver, e2e, solo, maintenance, telemetry, token-report, ...
-        run: VULYK_SUITE_TIMEOUT=0 bash tests/full-suite.sh
+        run: VULYK_SUITE_TIMEOUT=2400 bash tests/full-suite.sh
 
   handoff-window:
     name: handoff.py resolves the context window
@@ -179,6 +181,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 

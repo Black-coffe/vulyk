@@ -19,6 +19,12 @@
 #                outside scripts/lib.sh (vulyk_python, bash scripts/py.sh)
 #   array        "${a[@]}" / "${a[*]}" not inside ${a[@]+...}, in a file that sets -u (bash 3.2 calls an
 #                empty array unbound)
+#   paste-s      paste -s with no file operand (BSD paste needs `-` for stdin)
+#   case-in-subst  a case pattern closed by `)` with no opening `(` inside a $( ), one line or many
+#                (bash 3.2 reads that `)` as the end of the substitution): write (pat)
+#   heredoc-in-subst  a << heredoc opened inside a $( ) whose body holds a quote, a backtick or `(`
+#                (bash 3.2 reads the body as part of the substitution): put the heredoc in a function
+#                and call it in $( )
 # Not read: comments, heredoc bodies (Python, file contents), and in an .md file everything but
 # inline code spans and shell fences. The one bypass is a same-line `# portable: <reason>`, counted
 # in the summary line. No warn mode, no rule switch.
@@ -29,7 +35,7 @@ set -u
 # shellcheck source=scripts/lib.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 vulyk_python || { echo "portability-check: needs python 3 (python3, python or py)" >&2; exit 2; }
-case "${1:-}" in -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; esac
+case "${1:-}" in -h|--help) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; esac
 
 PYTHONIOENCODING=utf-8 "$VULYK_PY" - "$@" <<'PY'
 import os, re, subprocess, sys
@@ -103,13 +109,27 @@ ARRAY = re.compile(r'"\$\{(' + NAME + r')\[([@*])\]\}"')
 NOUNSET = re.compile(r"(?:^|[;&]\s*)\s*set\s+(?:-[A-Za-z]*u|-o\s+nounset)", re.M)
 HEREDOC = re.compile(r"(?<!<)<<(-?)\s*(['\"]?)(" + NAME + r")\2")
 PORTABLE = re.compile(r"#\s*portable:\s*\S")
+BODY_BREAKS = "'\"`("
+PASTE = re.compile(r"\bpaste(?=\s|$)")
+WORD = re.compile(r"\s*((?:'[^']*'|\"[^\"]*\"|\\.|[^\s'\"|;&)<>`])+)")
+KW_START = " \t;&|(`"
+
+
+def keyword(line, i, word):
+    """True when `word` starts at i as a shell word: after a separator, before one."""
+    if not line.startswith(word, i) or (i and line[i - 1] not in KW_START):
+        return False
+    j = i + len(word)
+    return j == len(line) or line[j] in " \t;)"
 
 
 def scan(line, stack):
-    """(code, comment, is_code) for one line; `stack` carries open quotes and $( ) across lines.
+    """(code, comment, is_code, case_hit) for one line; `stack` carries open quotes and $( ) across lines.
     is_code[i] is False inside single quotes and inside double quotes outside a $( ) or backticks.
-    A `#` at the start or after whitespace, in plain code, starts the comment."""
-    is_code, i, n = [], 0, len(line)
+    A `#` at the start or after whitespace, in plain code, starts the comment.
+    A $( ) is ["sub", open parens, open cases]: a `)` with no open paren while a case is open is a
+    case pattern with no `(`, which bash 3.2 reads as the end of the substitution (case_hit)."""
+    is_code, i, n, case_hit = [], 0, len(line), False
     while i < n:
         ch, top = line[i], stack[-1]
         if top == "'":
@@ -122,7 +142,7 @@ def scan(line, stack):
             if ch == '"':
                 stack.pop(); is_code.append(False)
             elif line.startswith("$(", i):
-                stack.append(["sub", 0]); is_code += [True, True]; i += 2; continue
+                stack.append(["sub", 0, 0]); is_code += [True, True]; i += 2; continue
             elif ch == "`":
                 stack.append("bt"); is_code.append(True)
             else:
@@ -131,7 +151,13 @@ def scan(line, stack):
             if ch == "\\" and i + 1 < n:
                 is_code += [True, True]; i += 2; continue
             if ch == "#" and len(stack) == 1 and (i == 0 or line[i - 1].isspace()):
-                return line[:i], line[i:], is_code
+                return line[:i], line[i:], is_code, case_hit
+            if line.startswith("$(", i) and not line.startswith("$((", i):
+                stack.append(["sub", 0, 0]); is_code += [True, True]; i += 2; continue
+            if isinstance(top, list) and keyword(line, i, "case"):
+                top[2] += 1
+            elif isinstance(top, list) and top[2] and keyword(line, i, "esac"):
+                top[2] -= 1
             is_code.append(ch not in "'\"")
             if ch in "'\"":
                 stack.append(ch)
@@ -144,10 +170,37 @@ def scan(line, stack):
             elif isinstance(top, list) and ch == ")":
                 if top[1]:
                     top[1] -= 1
+                elif top[2]:
+                    case_hit = True
                 else:
                     stack.pop()
         i += 1
-    return line, "", is_code
+    return line, "", is_code, case_hit
+
+
+def paste_s(code, is_code):
+    """paste with -s and no file operand: GNU reads stdin, BSD paste prints its usage and exits 1."""
+    for m in PASTE.finditer(code):
+        if not is_code[m.start()]:
+            continue
+        i, serial, operand, skip = m.end(), False, False, False
+        while True:
+            t = WORD.match(code, i)
+            if not t:
+                break
+            i, w = t.end(), t.group(1)
+            if skip:
+                skip = False
+            elif w == "-" or not w.startswith("-"):
+                operand = True
+                break
+            else:
+                letters, d, delim = w[1:].partition("d")
+                serial = serial or "s" in letters
+                skip = bool(d) and not delim
+        if serial and not operand:
+            return True
+    return False
 
 
 def sed_bre(code):
@@ -163,6 +216,8 @@ def sed_bre(code):
 
 def hits_of(code, is_code, path, nounset):
     out = [r for r, rx in RULES if rx.search(code)]
+    if paste_s(code, is_code):
+        out.append("paste-s")
     lib = path.replace("\\", "/").endswith("scripts/lib.sh")
     for r, rx in WORDS:
         if lib and r != "bash4":
@@ -220,23 +275,32 @@ for shown, path in files:
         print("portability-check: cannot read %s: %s" % (shown, e), file=sys.stderr)
         sys.exit(2)
     nounset = bool(NOUNSET.search(text))
-    pending, stack = [], ["code"]   # heredoc terminators still to come: (word, strip-tabs); quote state
+    pending, stack = [], ["code"]   # heredoc terminators still to come: [word, strip-tabs, opener]; quote state
     for n, ln, fresh in pieces(path, text.split("\n")):
         if fresh:
             pending, stack = [], ["code"]
         if pending:
-            word, dash = pending[0]
+            word, dash, opener = pending[0]
             if (ln.lstrip("\t") if dash else ln) == word:
                 pending.pop(0)
+            elif opener and any(c in ln for c in BODY_BREAKS):
+                # bash 3.2 reads this body as part of the $( ): a quote or `(` in it breaks the parse
+                pending[0][2] = None
+                if opener[2]:
+                    allowed += 1
+                else:
+                    found.append("portability-check: %s:%d: heredoc-in-subst: %s" % (shown, opener[0], opener[1]))
             continue
-        code, comment, is_code = scan(ln, stack)
+        code, comment, is_code, case_hit = scan(ln, stack)
+        in_sub = any(isinstance(f, list) for f in stack)  # a heredoc's body comes before the `)`
+        portable = bool(PORTABLE.match(comment.strip()))
         for m in HEREDOC.finditer(code):
             if is_code[m.start()]:
-                pending.append((m.group(3), m.group(1) == "-"))
-        rules = hits_of(code, is_code, path, nounset)
+                pending.append([m.group(3), m.group(1) == "-", (n, ln.strip(), portable) if in_sub else None])
+        rules = hits_of(code, is_code, path, nounset) + (["case-in-subst"] if case_hit else [])
         if not rules:
             continue
-        if PORTABLE.match(comment.strip()):
+        if portable:
             allowed += 1
             continue
         for r in dict.fromkeys(rules):
