@@ -242,7 +242,10 @@ reset_marked_block() {
     echo "  would reset    $name '$label' -> placeholders"
     return 0
   fi
-  awk -v m="$marker" -v repl="$repl" '
+  # repl goes through the environment, not -v: BSD awk refuses a newline in a -v value, and -v
+  # would rewrite the backslash escapes in the rows.
+  VULYK_REPL="$repl" awk -v m="$marker" '
+    BEGIN { repl = ENVIRON["VULYK_REPL"] }
     index($0, m ":START") { print; print repl; skip = 1; next }
     index($0, m ":END")   { skip = 0; print; next }
     !skip
@@ -287,7 +290,7 @@ print_profile_placeholder() {
 | Commit convention | `<fill in>` |
 | **Configurations that exist today** | `<fill in - single node? multi-process? a database? what is deferred, to when>` |
 | Client path | `<fill in - how a person reaches the running thing: URL + test login, CLI entry point, a browser runner's quiet command, or "none: library only">` |
-| Browser MCP | `<fill in - chrome-devtools \\| claude-in-chrome \\| none (default); read by the council-haiku seat only, read-only, on a separate test profile>` |
+| Browser MCP | `<fill in - chrome-devtools \| claude-in-chrome \| none (default); read by the council-haiku seat only, read-only, on a separate test profile>` |
 | Release / deploy | `<fill in - default branch; how a version ships (tag + push? CI on merge?) and who presses the button>` |
 | Owner language | `<fill in - ru, uk, en (default)>` |
 PLACEHOLDER
@@ -338,7 +341,9 @@ ensure_marked_block() {
     return 0
   fi
   local block anchor
-  block="$(awk -v m="$marker" -v repl="$repl" '
+  # repl via ENVIRON, not -v, as in reset_marked_block
+  block="$(VULYK_REPL="$repl" awk -v m="$marker" '
+    BEGIN { repl = ENVIRON["VULYK_REPL"] }
     /^## / { buf = $0; next }
     index($0, m ":START") { print buf; print $0; print repl; skip = 1; next }
     index($0, m ":END")   { skip = 0; print $0; exit }

@@ -308,13 +308,16 @@ descope_not_in_brief() { # descope_not_in_brief <spec> -> each `## Descoped` ent
   # plan.md did not hold yet when brief.md last changed: a descope the brief never took in. The
   # blind seats read only brief.md, so they judge the dropped ask as unmet (a hive lost three
   # rounds so). Read from git, not guessed: nothing when brief.md has no commit or is being edited.
-  local spec="$1" rel c
+  local spec="$1" rel c old
   # -z: the path comes back as itself; a C-quoted non-ASCII name would miss in `git show`
   rel="$(git ls-files -z --full-name -- "$spec/brief.md" 2>/dev/null | tr -d '\0')"
   [ -n "$rel" ] && [ -z "$(git status --porcelain -- "$spec/brief.md" 2>/dev/null)" ] || return 0
   c="$(git log -1 --format=%H -- "$spec/brief.md" 2>/dev/null)"; [ -n "$c" ] || return 0
-  grep -vxF -f <(git show "$c:${rel%brief.md}plan.md" 2>/dev/null | descoped_entries) \
-    <(descoped_entries < "$spec/plan.md")
+  old="$(git show "$c:${rel%brief.md}plan.md" 2>/dev/null | descoped_entries)"
+  # no old entries: every entry is new - never `grep -f` an empty file, which matches every
+  # line under BusyBox (and some BSD) greps
+  [ -n "$old" ] || { descoped_entries < "$spec/plan.md"; return; }
+  grep -vxF -f <(printf '%s\n' "$old") <(descoped_entries < "$spec/plan.md")
 }
 
 current_round_dir() { # current_round_dir <spec> -> the highest round-N dir, or nothing
@@ -2076,7 +2079,7 @@ EOF
   RED_IMPL="$({
     git -c core.quotePath=false ls-files -co --exclude-standard -- ${specs[@]+"${specs[@]}"} 2>/dev/null
     for e in ${specs[@]+"${specs[@]}"}; do
-      case "$e" in *[*?[]*|*/) ;; *) [ -d "$e" ] || printf '%s\n' "$e" ;; esac
+      case "$e" in (*[*?[]*|*/) ;; (*) [ -d "$e" ] || printf '%s\n' "$e" ;; esac
     done
   } | LC_ALL=C sort -u | while IFS= read -r e; do
     [ -n "$e" ] || continue
@@ -2823,8 +2826,10 @@ append_after_answers() { # append_after_answers <brief.md> <block> - inserts bef
   # heading at EOF first when a spec was briefed a path that never wrote one (e.g. Tier 1).
   local brief="$1" block="$2"
   grep -q '^## Answers[[:space:]]*$' "$brief" 2>/dev/null || { printf '\n## Answers\n' >> "$brief"; }
-  awk -v ins="$block" '
-    BEGIN { in_ans=0; done=0 }
+  # the block goes through the environment, not -v: BSD awk refuses a newline in a -v value,
+  # and -v would rewrite a backslash in the owner's decision.
+  VULYK_INS="$block" awk '
+    BEGIN { ins = ENVIRON["VULYK_INS"]; in_ans=0; done=0 }
     { if (!done && in_ans && /^##[[:space:]]/) { print ins; done=1 }
       print
       if ($0 ~ /^##[[:space:]]+Answers[[:space:]]*$/) in_ans=1 }

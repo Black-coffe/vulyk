@@ -944,6 +944,59 @@ command_cell_exists "$SRC/CLAUDE.md" 'bash scripts/py.sh -m py_compile .claude/h
 [ "$(tr -d '\r' < "$SRC/CLAUDE.md" | wc -c | tr -d ' ')" -lt 7168 ] && echo "  ok    CLAUDE.md stays under 7168 bytes" \
   || { echo "::error::CLAUDE.md is $(tr -d '\r' < "$SRC/CLAUDE.md" | wc -c | tr -d ' ') bytes, the cap is 7168"; fail=1; }
 
+echo "cross-platform: a BSD (macOS) awk refuses a newline inside a -v value; install.sh's block restore and reopen's insertion under it"
+REAL_AWK="$(command -v awk)"; BAWK="$(mktemp -d)"
+cat > "$BAWK/awk" <<'EOF'
+#!/bin/sh
+# A BSD awk stand-in: a -v assignment whose value holds a newline is refused, as macOS awk does.
+nl='
+'
+prev=''
+for a in "$@"; do
+  v=''
+  [ "$prev" = "-v" ] && v="$a"
+  case "$a" in -v?*) v="${a#-v}" ;; esac
+  case "$v" in *"$nl"*) echo "awk: newline in string ${v%%"$nl"*}..." >&2; exit 2 ;; esac
+  prev="$a"
+done
+exec "$REAL_AWK" "$@"
+EOF
+chmod +x "$BAWK/awk"
+( export REAL_AWK; PATH="$BAWK:$PATH"; awk -v x="$(printf 'a\nb')" 'BEGIN { print x }' ) >/dev/null 2>&1 \
+  && { echo "::error::the BSD awk stub ran a -v value holding a newline"; fail=1; } || echo "  ok    the stub refuses a -v value holding a newline"
+mblock() { tr -d '\r' < "$1" | sed -n "/$2:START/,/$2:END/p" | sed '1d;$d'; } # mblock <file> <MARKER> - the body between the markers
+BROW='| Browser MCP | `<fill in - chrome-devtools \| claude-in-chrome \| none (default); read by the council-haiku seat only, read-only, on a separate test profile>` |'
+HV="$(mktemp -d)"
+out="$( export REAL_AWK; PATH="$BAWK:$PATH"; bash "$SRC/install.sh" "$HV" --telemetry off 2>&1 )"; ex=$?
+[ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -q 'newline in string' && grep -q 'VULYK:PROFILE:START' "$HV/CLAUDE.md" \
+  && echo "  ok    a fresh install under BSD awk resets both blocks" \
+  || { echo "::error::fresh install under BSD awk: exit=$ex out=$(printf '%s' "$out" | grep -i 'awk' | head -3)"; fail=1; }
+[ "$(mblock "$HV/CLAUDE.md" VULYK:PROFILE | grep -cxF -- "$BROW")" = 1 ] \
+  && echo "  ok    the Browser MCP row keeps \\| byte for byte" \
+  || { echo "::error::Browser MCP row after a fresh install: $(mblock "$HV/CLAUDE.md" VULYK:PROFILE | grep 'Browser MCP')"; fail=1; }
+mblock "$HV/CLAUDE.md" VULYK:PROFILE > "$BAWK/profile.fresh"; mblock "$HV/CLAUDE.md" VULYK:COMMANDS > "$BAWK/commands.fresh"
+tr -d '\r' < "$HV/CLAUDE.md" | sed -n '/^## Profile/,/VULYK:COMMANDS:END/p' > "$BAWK/sections.fresh"
+printf '# VULYK Constitution\n\n## Laws\n\n1. A law.\n' > "$HV/CLAUDE.md"
+out="$( export REAL_AWK; PATH="$BAWK:$PATH"; bash "$SRC/install.sh" "$HV" --upgrade 2>&1 )"; ex=$?
+[ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -q 'newline in string' \
+  && [ "$(mblock "$HV/CLAUDE.md" VULYK:PROFILE)" = "$(cat "$BAWK/profile.fresh")" ] \
+  && [ "$(mblock "$HV/CLAUDE.md" VULYK:COMMANDS)" = "$(cat "$BAWK/commands.fresh")" ] \
+  && [ "$(tr -d '\r' < "$HV/CLAUDE.md" | sed -n '/^## Profile/,/VULYK:COMMANDS:END/p')" = "$(cat "$BAWK/sections.fresh")" ] \
+  && echo "  ok    install.sh --upgrade under BSD awk restores both blocks, byte for byte as a fresh install writes them" \
+  || { echo "::error::--upgrade under BSD awk: exit=$ex out=$(printf '%s' "$out" | grep -i 'awk' | head -3)"; diff "$BAWK/sections.fresh" <(tr -d '\r' < "$HV/CLAUDE.md" | sed -n '/^## Profile/,/VULYK:COMMANDS:END/p') | head -10; fail=1; }
+rm -rf "$HV"
+mkdir -p docs/specs/bsdawk
+cp "$SRC"/templates/plan.md docs/specs/bsdawk/plan.md
+printf '> build the bsdawk demo\n\n## Answers\n- an earlier answer\n\n## Asks\n1. one ask\n' > docs/specs/bsdawk/brief.md
+printf '{"ts":"2020-01-01T00:00:00Z","spec":"bsdawk","round":1,"verdict":"ESCALATE","head":"aaaaaaa","pack":"p","asks":1,"red":[1],"red_unevidenced":[],"na":0,"review":"","escalate":"ceiling","note":""}\n' >> memory/stats/council.jsonl
+out="$( export REAL_AWK; PATH="$BAWK:$PATH"; bash scripts/cycle.sh reopen docs/specs/bsdawk 'keep a \| b' 2>&1 )"; ex=$?
+want="$(printf '> build the bsdawk demo\n\n## Answers\n- an earlier answer\n\n\n**After escalation (round 1, %s).**\n> keep a \\| b\n## Asks\n1. one ask' "$(date -u +%Y-%m-%d)")"
+[ "$ex" -eq 0 ] && [ "$(cat docs/specs/bsdawk/brief.md)" = "$want" ] \
+  && echo "  ok    reopen under BSD awk inserts the decision after ## Answers, \\| byte for byte" \
+  || { echo "::error::reopen under BSD awk: exit=$ex out=$(printf '%s' "$out" | head -3) brief:"; cat docs/specs/bsdawk/brief.md; fail=1; }
+git add -A && git commit -qm "bsdawk: reopen fixture" >/dev/null
+rm -rf "$BAWK"
+
 fi # part bsd
 if part safety; then # --- part safety: ship-check merge proof, the spec-branch guard
 echo "ship-safety: ship-check stage 03 proves the merge into the default branch (git merge-tree) and the branch it runs on"

@@ -270,3 +270,4 @@
 {"ts":"2026-10-28T22:24:06Z","story":"cross-platform-05-gate-ci","declared":13,"changed":13,"out_of_scope":0}
 {"ts":"2026-10-28T23:04:53Z","story":"cross-platform-06-repair-round-1","declared":46,"changed":2,"out_of_scope":0}
 {"ts":"2026-10-29T11:19:23Z","story":"cross-platform-08-test-portability","declared":3,"changed":3,"out_of_scope":0}
+{"ts":"2026-10-29T11:34:22Z","story":"cross-platform-07-mac-product","declared":12,"changed":5,"out_of_scope":0}

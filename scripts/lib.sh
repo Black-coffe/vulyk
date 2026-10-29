@@ -85,12 +85,16 @@ hive_paperwork_path() { # hive_paperwork_path <repo-relative-path> <root>
 # A commit range is paperwork-only iff every changed path is one the cycle writes itself -
 # never the software. See is_paperwork_path() above for the whitelist itself.
 paperwork_only() { # paperwork_only <root> <from-commit> <to-commit>
-  local p
+  local p list rc=0
   git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
-  while IFS= read -r -d '' p; do
-    is_paperwork_path "$p" "$1" || return 1
-  done < <(git -C "$1" diff --name-only -z "$2" "$3" 2>/dev/null)
-  wait $! || return 1   # a diff git could not produce is not paperwork
+  # a file, not `wait $!` on a process substitution: bash 3.2 (macOS) cannot wait on one
+  list="$(mktemp)" || return 1
+  git -C "$1" diff --name-only -z "$2" "$3" > "$list" 2>/dev/null || rc=1   # a diff git could not produce is not paperwork
+  while [ "$rc" -eq 0 ] && IFS= read -r -d '' p; do
+    is_paperwork_path "$p" "$1" || rc=1
+  done < "$list"
+  rm -f "$list"
+  return "$rc"
 }
 
 # A marker line is "filled" when it exists and does not still carry the template's `<...>`.

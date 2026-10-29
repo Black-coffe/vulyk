@@ -1,15 +1,16 @@
 ---
 story: cross-platform-07
 spec: cross-platform
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
 wave: 5
 blocked_by: []
 red: required
-red_reason:
+red_reason: ::error::fresh install under BSD awk
+red_verified_at: 2026-10-29T11:17:50Z 3f283b5bed2aea8601f2e81e82aca3568235f7959fbae66a826af4aedd85f506
 ---
 
 # Product scripts that break on stock macOS: awk -v with a newline, bash 3.2 parsing
@@ -67,5 +68,35 @@ Local repro, no Mac needed: bash 3.2 is `MSYS_NO_PATHCONV=1 docker run --rm -v "
 `bash tests/cycle.test.sh`
 
 ## Implementation notes
+- tests/cycle.test.sh `part bsd`: BSD awk stub (refuses a `-v` value holding a newline); fresh install + `--upgrade` block restore and `reopen`'s insertion under it, `\|` byte for byte. Red stamped first.
+- install.sh: `reset_marked_block` and `ensure_marked_block` pass `repl` through `ENVIRON["VULYK_REPL"]`; the Browser MCP placeholder row now holds `\|` itself (it held `\\|` only because `-v` halved it). GNU/Windows output checked identical: fresh install and `--upgrade` CLAUDE.md `cmp`-equal to HEAD's install.sh.
+- scripts/cycle.sh: `append_after_answers` passes the block through `ENVIRON["VULYK_INS"]` (side effect: a `\` in an owner decision now survives on GNU awk too, where `-v` used to eat it); `red_sets`' `case` inside `$( { ... } )` uses the `(pat)` form (bash 3.2 parse error at :2092); `descope_not_in_brief` never `grep -f`s an empty pattern list (BusyBox grep matches every line then).
+- scripts/lib.sh: `paperwork_only` reads `git diff -z` from a temp file instead of `wait $!` on a process substitution - bash 3.2 returns 127 there, so every paperwork-only range read as STALE (cascade behind council seats/ceilings/replays/roster/driver/advance, cycle ship/hooklog/red, solo).
+- scripts/trace-check.sh: the `case` inside the multi-line `$( ... )` (:117) uses `(pat)`; under Docker `bash:3.2` it now prints its normal summary.
+- Docker `bash:3.2` (clone of HEAD + this diff, BusyBox tools and again with GNU grep/sed/gawk): every suite of (3) exits 0 except `tests/defects.test.sh` - see Findings.
+- `bash tests/cycle.test.sh` here (Windows): exit 0, no error. First attempt returned NEEDS_CONTEXT (defects-check.sh); re-dispatch kept `## Files`, so closed with that item under Findings.
+- Other `-v` values checked: install.sh:653 `newrow` and cycle.sh:140/144/2187 are one line; no change.
 
 ## Findings
+- Remains, outside this story's `## Files` (re-dispatched with `## Files` unchanged, so closed with it named here; needs its own story): `scripts/defects-check.sh` does not parse under bash 3.2: `line 407: unexpected EOF while looking for matching ''` - the `<<'PY'` heredoc inside `plan="$( ... )"` (:82-332) is scanned for quotes by bash 3.2. Every `tests/defects.test.sh` case fails on it. Verified fix (in a throwaway container copy only): wrap the python call in a function `read_cards() { PYTHONIOENCODING=utf-8 "$PY" - ... <<'PY' ... PY }` and set `plan="$(read_cards)" || { ...`; with it `bash -n` passes and `tests/defects.test.sh` exits 0 under bash 3.2.
+- Not reproducible in the container (BSD-only, for 08/CI): BSD `paste`/`awk` differences beyond the `-v` newline; the BusyBox tools are not BSD.
+
+## Red receipt
+- command: bash tests/cycle.test.sh
+- exit: 1
+- tests: 3f283b5bed2aea8601f2e81e82aca3568235f7959fbae66a826af4aedd85f506 (tests/cycle.test.sh)
+- impl: 769553ac3c6e96ec6143a63bc8cb11fe7e5d6d0234b0deb47b283812aeb5f9ac
+- stamped: 2026-10-29T11:17:50Z
+
+```
+red-receipt: an unmarked story built from templates/story.md closes as before
+  ok    the template story closes and commits, no receipt asked
+red-receipt: close-story on a marked story - the sealed test edited, no implementation change, then a real change closes
+  ok    red-12 stamped
+  ok    a sealed test edited after the stamp: exit 4
+  ok    the implementation unchanged since the stamp: exit 4
+  ok    receipt + changed implementation + green: closed, the receipt in the commit
+red-receipt: close-story on a marked story that was never stamped
+  ok    the unstamped story: exit 4, nothing committed
+  ok    the refusal names stamp-red and the story
+```
