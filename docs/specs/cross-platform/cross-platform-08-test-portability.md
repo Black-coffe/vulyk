@@ -1,8 +1,8 @@
 ---
 story: cross-platform-08
 spec: cross-platform
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-test
 model: opus
@@ -50,5 +50,13 @@ Local repro, no Mac needed: bash 3.2 is `MSYS_NO_PATHCONV=1 docker run --rm -v "
 `bash tests/telemetry.test.sh --part scan`
 
 ## Implementation notes
+- full-suite.test.sh: `nopy_path` replaced by dead `python3`/`python`/`py` stubs (exit 127) first on PATH, rest of PATH
+  kept. Its self-check now runs `vulyk_python` itself (must fail) instead of `command -v`, since the stubs are found by
+  `command -v`. Linux cause confirmed in a WSL clone: the old test hung at that case (no `mv`/`sleep` once `/usr/bin` was
+  dropped, so the job's `.rc` never appeared); the new one finishes, all ok. Mutation `NOPY="$PATH"` fails both the
+  self-check and «warns that it runs uncapped».
+- `paste -sd... -` at model-profile.test.sh:137, telemetry.test.sh:872,1139,1366; the other three already had `-`.
+- macOS probe tail for full-suite.test.sh stops at the «Python present» header (killed at 1430 s), i.e. before the
+  no-Python case; not reproducible here or in WSL/bash:3.2 docker, and no test-side cause found in these files.
 
 ## Findings

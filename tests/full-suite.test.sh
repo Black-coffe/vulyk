@@ -116,16 +116,14 @@ reject "no uncapped warning while python caps" "no working timeout"
 LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
 
 echo "== dead stubs and no Python on PATH: the run is uncapped and says so"
-nopy_path() { # the PATH minus every directory holding a python3, python or py (with or without .exe)
-  local d out=""
-  while IFS= read -r d; do
-    [ -e "$d/python3" ] || [ -e "$d/python" ] || [ -e "$d/py" ] || [ -e "$d/python3.exe" ] || [ -e "$d/python.exe" ] || [ -e "$d/py.exe" ] || out="$out:$d"
-  done < <(printf '%s\n' "$PATH" | tr ':' '\n')
-  printf '%s' "${out#:}"
-}
-NOPY="$(nopy_path)"
-[ -z "$(PATH="$NOPY" "$BASH" -c 'for p in python3 python py; do command -v "$p"; done' 2>/dev/null)" ] \
-  && echo "  ok    the test PATH holds no python" || { echo "::error::the test PATH still finds a python"; fail=1; }
+# Python is hidden by dead python3/python/py stubs first on PATH (exit 127, as a missing command):
+# vulyk_python runs each and rejects it. The rest of PATH stays: on Linux and macOS python sits in
+# /usr/bin beside every tool the runner needs, so dropping its directory would strip them too.
+mkdir -p "$T/nopy"
+for b in python3 python py; do printf '#!/bin/sh\nexit 127\n' > "$T/nopy/$b"; chmod +x "$T/nopy/$b"; done
+NOPY="$T/nopy:$PATH"
+(PATH="$T/deadbin:$NOPY"; VULYK_PY=; . "$SRC/scripts/lib.sh"; ! vulyk_python) \
+  && echo "  ok    the test PATH runs no python" || { echo "::error::the test PATH still runs a python"; fail=1; }
 OUT="$(PATH="$T/deadbin:$NOPY" VULYK_PY= VULYK_SUITE_TIMEOUT=1 VULYK_SUITES="bash $S/slow.sh
 bash $S/mark.sh done" "$BASH" "$RUN" --jobs 2 2>&1)"; RC=$?
 code "uncapped run over the budget -> exit 124 by measured time" 124 "$RC"

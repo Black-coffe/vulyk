@@ -134,7 +134,7 @@ find "$H" "$T/cfgA" "$T/up" 2>/dev/null | sort > "$T/tree.before"
 expect_eq "CLAUDE_CONFIG_DIR is honoured" "economy" "$(cat "$T/cfgA/vulyk-model-profile" 2>/dev/null | tr -d '\r')"
 find "$H" "$T/cfgA" "$T/up" 2>/dev/null | sort > "$T/tree.after"
 expect_eq "--set wrote nothing outside the config folder" \
-  "$T/cfgA|$T/cfgA/vulyk-model-profile" "$(comm -13 "$T/tree.before" "$T/tree.after" | paste -sd'|')"
+  "$T/cfgA|$T/cfgA/vulyk-model-profile" "$(comm -13 "$T/tree.before" "$T/tree.after" | paste -sd'|' -)"
 expect_eq "the temp HOME holds no file" "" "$(find "$H" -type f 2>/dev/null)"
 (cd "$HIVE" && env -u HOME -u CLAUDE_CONFIG_DIR -u VULYK_TOP_MODEL USERPROFILE="$T/up" \
   bash scripts/model-profile.sh --set opus-builds >/dev/null)

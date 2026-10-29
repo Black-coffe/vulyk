@@ -869,7 +869,7 @@ expect_eq "a resolved Haiku 5.5 ID needs no Claude Code version" "ok" \
   "$(CLAUDE_CODE_VERSION= PATH="$NOCC:$PATH" floorof claude-haiku-5-5)"
 expect_eq "a malformed cc>= line fails closed, with no shell error" "haiku cc 5.5 2.1.292 2.1.x|rc=0" \
   "$(VULYK_MODEL_FLOOR='haiku 5.5 cc>=2.1.x' CLAUDE_CODE_VERSION=2.1.292 \
-     bash -c '. "$1/scripts/lib.sh"; model_below_floor haiku; echo "rc=$?"' _ "$SRC" 2>&1 | paste -sd'|')"
+     bash -c '. "$1/scripts/lib.sh"; model_below_floor haiku; echo "rc=$?"' _ "$SRC" 2>&1 | paste -sd'|' -)"
 sed -n '/^## Hive/,/^## Terminal/p' "$SRC/.claude/commands/vulyk-build.md" | grep -q 'top-model.sh --floor`. Exit 1' \
   && ok "the hive launch is gated on --floor" || bad "the hive launch is gated on --floor - Hive step 1 lost the gate"
 
@@ -1136,7 +1136,7 @@ llm_hook() { # llm_hook <settings json> - run the hook as a SessionEnd would, pr
   : > "$LOG"
   echo '{"hook_event_name":"SessionEnd"}' | CLAUDE_PROJECT_DIR="$HIVE" VULYK_HIVE="$HIVE" \
     bash "$HIVE/.claude/hooks/anomaly-scan.sh" >/dev/null 2>&1
-  grep '"code":"sessionend_llm"' "$LOG" | sed -n 's/.*"ref":"\([^"]*\)".*/\1/p' | paste -sd' '
+  grep '"code":"sessionend_llm"' "$LOG" | sed -n 's/.*"ref":"\([^"]*\)".*/\1/p' | paste -sd' ' -
 }
 expect_eq "fires on a SessionEnd script that calls claude -p, naming it" "sessionend:learn.sh" \
   "$(llm_hook '{"hooks":{"SessionEnd":[{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh"},{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/learn.sh\""}]}]}}')"
@@ -1363,7 +1363,7 @@ bash "$SELFSRC/install.sh" "$SELF" --telemetry off > "$T/self-install.out" 2>&1
   printf 'echo "updater: done"\n'
 } > "$SELF/scripts/vulyk-update.sh"
 expect_eq "an upgrade run from the hive's own updater lets that updater finish cleanly" \
-  "updater: after the upgrade|updater: done" "$(bash "$SELF/scripts/vulyk-update.sh" 2>&1 | paste -sd'|')"
+  "updater: after the upgrade|updater: done" "$(bash "$SELF/scripts/vulyk-update.sh" 2>&1 | paste -sd'|' -)"
 expect_eq "... and leaves the release's updater in place" "0" \
   "$(cmp -s "$SELFSRC/scripts/vulyk-update.sh" "$SELF/scripts/vulyk-update.sh"; echo $?)"
 
