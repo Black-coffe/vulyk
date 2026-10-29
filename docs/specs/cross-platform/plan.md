@@ -132,6 +132,10 @@ Python fallback, so no timeout test skips.
 
 ## Plan deltas
 
+- 2026-10-29, story 09: close-story refused «test changed after red receipt» - `scripts/defects-check.sh` (named in Files
+  and in Verification by the Queen's ruling) was sealed as a test and then fixed. Owner's choice «Снять отметку red с 09
+  (Рекомендую)»: the mark is removed, both earlier receipts stay in the story as the record. Next circle: seal tests only.
+
 - 2026-10-29, wave 5: 07 and 08 closed; 09 returned NEEDS_CONTEXT (`docs/defects/INDEX.md` must be regenerated, not in its
   Files) and 07 left `scripts/defects-check.sh` unparsable by bash 3.2 (heredoc inside `$( )`). Ruled: both fold into 09
   (Files + INDEX.md, defects-check.sh, a `heredoc-in-subst` rule and fixture) - one worker, no parallel coupling.
