@@ -1,0 +1,5 @@
+# original case - tests/model-profile.test.sh:137 before cross-platform-08: paste -s with no file operand,
+# which BSD paste answers with its usage line and exit 1
+  "$T/cfgA|$T/cfgA/vulyk-model-profile" "$(comm -13 "$T/tree.before" "$T/tree.after" | paste -sd'|')"
+# neighbour form: the flags apart, the output redirected - still no `-`
+grep '"code":"sessionend_llm"' "$LOG" | paste -s -d ' ' > "$T/refs"

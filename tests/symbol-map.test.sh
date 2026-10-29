@@ -11,6 +11,7 @@
 # into a temp dir and made a git repo there; the cap cases add generated files to their own copy.
 set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
+. "$SRC/scripts/lib.sh"   # vulyk_python, for now_ms
 FIX="$SRC/tests/fixtures/symbol-map"
 SM="$SRC/scripts/symbol-map.sh"
 T="$(mktemp -d)"
@@ -220,11 +221,14 @@ Traceback (most recent call last):
     return a / b
 ZeroDivisionError: division by zero
 EOF
+vulyk_python || true   # now_ms falls back to Python where bash has no EPOCHREALTIME
+now_ms() { if [ -n "${EPOCHREALTIME:-}" ]; then local t="${EPOCHREALTIME//[.,]/}"; echo $(( t / 1000 ))
+  else "$VULYK_PY" -c 'import time; print(int(time.time() * 1000))'; fi; }
 ms=""  # the best of three runs: a loaded box slows one run, not all three (post-043-tails)
 for _ in 1 2 3; do
-  t0="$(date +%s%N)"
+  t0="$(now_ms)"
   bash "$TA" "$R/docs/specs/py/brief.md" > "$T/ta-py.out" 2>&1; RC=$?
-  t=$(( ($(date +%s%N) - t0) / 1000000 ))
+  t=$(( $(now_ms) - t0 ))
   { [ -z "$ms" ] || [ "$t" -lt "$ms" ]; } && ms="$t"
 done
 A="$R/docs/specs/py/autopsy.md"

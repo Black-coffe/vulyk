@@ -16,6 +16,12 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The portable helpers (vulyk_python, sed_inplace) live beside this file, found through BASH_SOURCE
+# and never the cwd. A symlink to install.sh is not a supported start: it lands here, exit 2.
+[ -f "$SRC/scripts/lib.sh" ] || {
+  echo "install.sh: scripts/lib.sh not found beside install.sh - run from a full checkout" >&2; exit 2; }
+# shellcheck source=scripts/lib.sh
+. "$SRC/scripts/lib.sh"
 # Whitespace stripped: a Windows checkout (core.autocrlf) gives VERSION a CR, which would ride
 # into the stamp, the messages and the `v$PREV` tag lookup below.
 VER="$(cat "$SRC/VERSION" 2>/dev/null | tr -d '[:space:]' || true)"; VER="${VER:-unknown}"
@@ -236,7 +242,10 @@ reset_marked_block() {
     echo "  would reset    $name '$label' -> placeholders"
     return 0
   fi
-  awk -v m="$marker" -v repl="$repl" '
+  # repl goes through the environment, not -v: BSD awk refuses a newline in a -v value, and -v
+  # would rewrite the backslash escapes in the rows.
+  VULYK_REPL="$repl" awk -v m="$marker" '
+    BEGIN { repl = ENVIRON["VULYK_REPL"] }
     index($0, m ":START") { print; print repl; skip = 1; next }
     index($0, m ":END")   { skip = 0; print; next }
     !skip
@@ -281,7 +290,7 @@ print_profile_placeholder() {
 | Commit convention | `<fill in>` |
 | **Configurations that exist today** | `<fill in - single node? multi-process? a database? what is deferred, to when>` |
 | Client path | `<fill in - how a person reaches the running thing: URL + test login, CLI entry point, a browser runner's quiet command, or "none: library only">` |
-| Browser MCP | `<fill in - chrome-devtools \\| claude-in-chrome \\| none (default); read by the council-haiku seat only, read-only, on a separate test profile>` |
+| Browser MCP | `<fill in - chrome-devtools \| claude-in-chrome \| none (default); read by the council-haiku seat only, read-only, on a separate test profile>` |
 | Release / deploy | `<fill in - default branch; how a version ships (tag + push? CI on merge?) and who presses the button>` |
 | Owner language | `<fill in - ru, uk, en (default)>` |
 PLACEHOLDER
@@ -332,7 +341,9 @@ ensure_marked_block() {
     return 0
   fi
   local block anchor
-  block="$(awk -v m="$marker" -v repl="$repl" '
+  # repl via ENVIRON, not -v, as in reset_marked_block
+  block="$(VULYK_REPL="$repl" awk -v m="$marker" '
+    BEGIN { repl = ENVIRON["VULYK_REPL"] }
     /^## / { buf = $0; next }
     index($0, m ":START") { print buf; print $0; print repl; skip = 1; next }
     index($0, m ":END")   { skip = 0; print $0; exit }
@@ -852,7 +863,7 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
   local by_hand="{ \"type\": \"command\", \"command\": \"\$CLAUDE_PROJECT_DIR/.claude/hooks/$script${arg:+ $arg}\" }"
   [ -n "$matcher" ] && by_hand="{ \"matcher\": \"$matcher\", \"hooks\": [ $by_hand ] }"
   [ -f "$file" ] || return 0                                   # fresh install: ours was copied whole
-  PYBIN="$(command -v python3 || command -v python || true)"
+  vulyk_python || true; PYBIN="$VULYK_PY"
   if [ -z "$PYBIN" ]; then
     if [ -n "$arg" ]; then                                     # no python: file-wide check is all we have
       grep -qE "$script\"? $arg" "$file" 2>/dev/null && return 0
@@ -950,7 +961,7 @@ unwire_hook() { # unwire_hook <event> <hook-script-name>
   local event="$1" script="$2" file="$DEST/.claude/settings.json" took=""
   [ -f "$file" ] || return 0
   grep -qF "$script" "$file" 2>/dev/null || return 0         # not mentioned anywhere: nothing to do
-  PYBIN="$(command -v python3 || command -v python || true)"
+  vulyk_python || true; PYBIN="$VULYK_PY"
   if [ -z "$PYBIN" ]; then
     echo ""
     echo "  NOTE: this release no longer runs .claude/hooks/$script on $event, and with no python on"
@@ -995,7 +1006,7 @@ wire_permissions() {
     echo "  would wire     .claude/settings.json -> permissions.allow: cycle.sh, journal.sh"
     return 0
   fi
-  py="$(command -v python3 || command -v python || true)"
+  vulyk_python || true; py="$VULYK_PY"
   if [ -z "$py" ]; then
     echo ""
     echo "  NOTE: the Workflow driver's clerk needs Bash access but could NOT be wired -"
@@ -1054,7 +1065,7 @@ unwire_ysk() {
   local lbl=".claude/settings.json -> enabledPlugins: $YSK_ID (now offered at session start, not switched on)"
   [ -n "$UPGRADE" ] && [ -f "$file" ] || return 0
   grep -qF "\"$YSK_ID\"" "$file" 2>/dev/null || return 0
-  py="$(command -v python3 || command -v python || true)"
+  vulyk_python || true; py="$VULYK_PY"
   if [ -z "$py" ]; then
     echo ""
     echo "  NOTE: no python on PATH to edit .claude/settings.json safely. If it switches"
@@ -1112,7 +1123,7 @@ wire_ripgrep() {
     echo "  wire           $lbl"
     return 0
   fi
-  py="$(command -v python3 || command -v python || true)"
+  vulyk_python || true; py="$VULYK_PY"
   [ -n "$py" ] && "$py" - "$file" <<'PYRG' || rc=$?
 import json, sys
 path = sys.argv[1]
@@ -1288,7 +1299,7 @@ ensure_gitattributes() {
     case "$f" in *.sh|*.py|.claude/workflows/*.js) ;; *) continue ;; esac
     f="$DEST/$f"
     [ -f "$f" ] || continue
-    if grep -q $'' "$f"; then sed -i 's/$//' "$f"; n=$((n + 1)); fi
+    if grep -q $'' "$f"; then sed_inplace 's/$//' "$f"; n=$((n + 1)); fi
   done < "$NEW_MANIFEST"
   [ "$n" -gt 0 ] && echo "  gitattributes  normalized $n shipped script(s) to LF"
   return 0

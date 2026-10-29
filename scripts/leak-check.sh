@@ -24,7 +24,10 @@ set -u
 
 f="${1:-}"
 [ -n "$f" ] && [ -f "$f" ] || exit 0
-PY="$(command -v python3 || command -v python)" || { echo "leak-check: needs python3 or python" >&2; exit 2; }
+# shellcheck source=scripts/lib.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+vulyk_python || { echo "leak-check: needs python 3 (python3, python or py)" >&2; exit 2; }
+PY="$VULYK_PY"
 
 "$PY" - "$f" "${VULYK_PRIVATE_TERMS:-$HOME/.vulyk/private-terms}" "${VULYK_PRIVATE_TERMS_AUTO:-$HOME/.vulyk/private-terms.auto}" "${VULYK_EXTRA_TERMS:-}" <<'PY'
 import os, re, sys

@@ -114,7 +114,7 @@ fi
 UNCOVERED=0
 ALL_QUOTES="$(for story in "$SPEC"/*.md; do
   base="$(basename "$story")"
-  case "$base" in plan.md|brief.md) continue ;; esac
+  case "$base" in (plan.md|brief.md) continue ;; esac
   awk '
     /^##[[:space:]]+Requirements[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/                           { inblock=0 }

@@ -53,7 +53,7 @@ No driver, no clerk, no court. Loop:
    Tier 4 line names another; the profile's families, only when the profile is not `sonnet-builds`
    (`bash scripts/model-profile.sh` prints it): `worker_model="$(bash scripts/model-profile.sh --role worker)"`,
    `review_model="$(bash scripts/model-profile.sh --role review)"`, `seat_model="$(bash scripts/model-profile.sh --role seat)"`;
-   `stamp="$(openssl rand -hex 8 2>/dev/null || python -c 'import secrets; print(secrets.token_hex(8))')"`.
+   `stamp="$(openssl rand -hex 8 2>/dev/null || bash scripts/py.sh -c 'import secrets; print(secrets.token_hex(8))')"`.
 2. Journal and print the line that hands the tree to the loop: `bash scripts/journal.sh
    docs/specs/<slug> 03-building "launching the hive" "the loop holds the working tree of vulyk/<slug>; to edit, run /vulyk-pause <slug>"`.
 3. Call the Workflow tool with `scriptPath: ".claude/workflows/vulyk-cycle.js"` (never `name:`, which
@@ -64,7 +64,7 @@ No driver, no clerk, no court. Loop:
    <slug> --ref driver:<slug>:$(date -u +%Y-%m-%d)`, print the error and stop.
 4. Wake-up: read the returned object, the `journal.md` lines since launch and the newest round's files
    under `docs/specs/<slug>/council/`; never the run transcript. The run's printed `totalTokens` sums
-   final contexts and is not spend; `python scripts/token-report.py . --spec <slug>` measures spend.
+   final contexts and is not spend; `bash scripts/py.sh scripts/token-report.py . --spec <slug>` measures spend.
    - First, every entry `{agent, where, from, to}` of the returned `fallbacks`: the driver already
      redispatched that role on `opus` after the Fable-limit refusal; write the journal line, the
      telemetry row and the owner sentence of the Fable-limit fallback (below), once per entry.

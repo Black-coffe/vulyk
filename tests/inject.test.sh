@@ -33,11 +33,13 @@ while [ $# -gt 0 ]; do
 done
 part() { [ -z "$PART" ] || [ "$PART" = "$1" ]; } # `if part <name>; then ... fi` wraps each part
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
+. "$SRC/scripts/lib.sh"   # vulyk_python, run_capped, sed_inplace
 HOOK="$SRC/.claude/hooks/defects-inject.sh"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 fail=0
-PYBIN="$(command -v python3 || command -v python)" || { echo "inject.test.sh: needs python3 or python"; exit 1; }
+vulyk_python || { echo "inject.test.sh: needs python3 or python"; exit 1; }
+PYBIN="$VULYK_PY"
 LEDGER="$T/checks"; FAILS="$T/fails"; : > "$LEDGER"; : > "$FAILS"
 ok()  { printf 'x\n' >> "$LEDGER"; echo "  ok    $1"; }
 bad() { printf 'x\n' >> "$LEDGER"; printf 'x\n' >> "$FAILS"; echo "::error::$1"; }
@@ -281,7 +283,7 @@ card c-short.md '["cmd:dep"]' '## Never' '- SHORTNEVER.'
 card d-long.md '["cmd:deploy\\s+now"]' '## Never' '- LONGNEVER.'
 card ht.md '["how/**"]' '## How-to' '- HOWLINE do it this way.'
 card perm.md '["how/**"]' '## Allowed' '- 2026-10-01 · «PERMLINE»'
-printf 'exception: ht\n' > "$T/exc"; sed -i '2r '"$T/exc" "$D2/perm.md"
+printf 'exception: ht\n' > "$T/exc"; sed_inplace '2r '"$T/exc" "$D2/perm.md"
 card perm2.md '["how/x.txt"]' '## Allowed' '- 2026-10-02 · «PERM2LINE»'
 card nv.md '["nv/**"]' '## Never' '- NVLINE never here.'
 card perm3.md '["nv/a.txt"]' '## Allowed' '- 2026-10-03 · «PERM3LINE»'
@@ -345,7 +347,7 @@ echo "--- python3 stub"
 mkdir -p "$T/stubbin"; printf '#!/bin/sh
 exit 9009
 ' > "$T/stubbin/python3"; chmod +x "$T/stubbin/python3"
-if command -v python >/dev/null 2>&1; then
+if ( VULYK_PY=""; PATH="$T/stubbin:$PATH"; vulyk_python ); then
   o="$(printf '%s' "$(edit stub "$W/pipeline/voiceover.py")" | PATH="$T/stubbin:$PATH" CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK")"
   if printf '%s' "$o" | grep -q additionalContext; then ok "a python3 stub exiting 9009 falls through to python"
   else bad "a python3 stub silenced the hook"; fi

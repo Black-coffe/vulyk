@@ -2,6 +2,7 @@
 # Mod checks: claude plugin validate (the pulse mod and the root marketplace), claude plugin test once a *.test.ts exists,
 # its plugin.json version pinned to VERSION, and the pulse weights pinned to scripts/token-report.py.
 cd "$(dirname "$0")/.." || exit 2
+. scripts/lib.sh   # vulyk_python; sourcing it also turns on set -u
 MODS=".claude/mods/vulyk-pulse"
 if ! command -v claude >/dev/null 2>&1; then
   echo "mods.test.sh: claude is not on PATH, the mods cannot be checked" >&2
@@ -29,7 +30,8 @@ done
 
 # Weights pin: the fixture line in the pulse's core.test.ts gives the same figure through scripts/token-report.py's own
 # functions as the `want` it carries (core.test.ts checks weigh() against the same `want`).
-PY=$(command -v python3 || command -v python)
+vulyk_python || true
+PY="$VULYK_PY"
 [ -n "$PY" ] || { echo "mods.test.sh: no python, the weights pin cannot be checked" >&2; exit 2; }
 "$PY" -I - <<'PYEOF' || exit 1
 import importlib.util, json, re, sys

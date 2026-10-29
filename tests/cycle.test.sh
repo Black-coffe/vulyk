@@ -59,7 +59,7 @@ ship | expect "no brief is OPEN"                 "01   OPEN"
 ship | expect "placeholder Approved is OPEN"     "02   OPEN"
 ship | expect "verdict is NOT READY"             "NOT READY"
 printf '> build the demo\n' > docs/specs/demo/brief.md
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-05/' docs/specs/demo/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-05/' docs/specs/demo/plan.md
 git add -A && git commit -qm "approve"
 ship | expect "brief closes 01"                  "01   ok"
 ship | expect "approval closes 02"               "02   ok"
@@ -67,10 +67,10 @@ ship | expect "no branch line is OPEN"           "no **Branch:** line"
 
 echo "stage 03: branch and stories"
 git checkout -q -b vulyk/demo
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/demo/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/demo/plan.md
 git add -A && git commit -qm "branch"
 ship | expect "open story keeps 03 OPEN"         "still open"
-sed -i 's/^status: todo/status: done/' docs/specs/demo/demo-01-first.md
+sed_inplace 's/^status: todo/status: done/' docs/specs/demo/demo-01-first.md
 git add -A && git commit -qm "story(demo-01): first"
 ship | expect "all done closes 03"               "stories 1/1 done"
 ship | expect "no verdict keeps 04 OPEN"         "no acceptance verdict"
@@ -141,8 +141,8 @@ echo "council row closes 04+05 together (ADR-001 D4); **Checked:** still overrid
 mkdir -p docs/specs/council-demo
 printf '> build the council demo\n' > docs/specs/council-demo/brief.md
 cp "$SRC"/templates/plan.md docs/specs/council-demo/plan.md
-sed -i 's/^\*\*Briefed:\*\* <.*/**Briefed:** via grill, owner, 2026-01-01/' docs/specs/council-demo/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/council-demo/plan.md
+sed_inplace 's/^\*\*Briefed:\*\* <.*/**Briefed:** via grill, owner, 2026-01-01/' docs/specs/council-demo/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/council-demo/plan.md
 printf -- '---\nstory: council-demo-01\nspec: council-demo\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/council-demo/council-demo-01-first.md
 git add -A && git commit -qm "council-demo: setup"
 C0="$(git rev-parse --short HEAD)"
@@ -193,8 +193,8 @@ echo "post-037-tails: an ACCEPTED override over a GREEN row is current only whil
 mkdir -p docs/specs/gate-demo
 printf '> build the gate demo\n' > docs/specs/gate-demo/brief.md
 cp "$SRC"/templates/plan.md docs/specs/gate-demo/plan.md
-sed -i 's/^\*\*Briefed:\*\* <.*/**Briefed:** via grill, owner, 2026-01-02/' docs/specs/gate-demo/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/gate-demo/plan.md
+sed_inplace 's/^\*\*Briefed:\*\* <.*/**Briefed:** via grill, owner, 2026-01-02/' docs/specs/gate-demo/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/gate-demo/plan.md
 printf -- '---\nstory: gate-demo-01\nspec: gate-demo\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/gate-demo/gate-demo-01-first.md
 git add -A && git commit -qm "gate-demo: setup"
 shipg() { bash scripts/ship-check.sh docs/specs/gate-demo; }
@@ -229,7 +229,7 @@ echo "the paperwork whitelist is anchored to docs/specs/*/ (R23/m-2): a commit u
 mkdir -p docs/specs/anchor-demo
 cp "$SRC"/templates/plan.md docs/specs/anchor-demo/plan.md
 printf '> build the anchor demo\n' > docs/specs/anchor-demo/brief.md
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/anchor-demo/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/anchor-demo/plan.md
 printf -- '---\nstory: anchor-demo-01\nspec: anchor-demo\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/anchor-demo/anchor-demo-01-first.md
 git add -A && git commit -qm "anchor-demo: setup" >/dev/null
 bash scripts/human-check.sh docs/specs/anchor-demo ACCEPTED "looks right" >/dev/null
@@ -247,6 +247,7 @@ fi # part ship
 if [ "$PART" != ship ]; then
 [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/demo ] || git checkout -q -b vulyk/demo
 cp "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/wave-check.sh "$SRC"/scripts/trace-check.sh scripts/
+cp "$SRC"/scripts/py.sh "$SRC"/scripts/run-capped.py scripts/   # lib.sh's run_capped falls back to run-capped.py beside it
 cat >> CLAUDE.md <<'EOF'
 
 ## Commands
@@ -263,8 +264,8 @@ echo "story 09: memory/stats/anomalies.jsonl (the anomaly-scan Stop hook's log) 
 mkdir -p docs/specs/hooklog
 cp "$SRC"/templates/plan.md docs/specs/hooklog/plan.md
 printf '> build the hooklog demo\n' > docs/specs/hooklog/brief.md
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/hooklog/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/hooklog/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/hooklog/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/hooklog/plan.md
 printf 'v1\n' > hook-app.txt
 cat > docs/specs/hooklog/hooklog-01-first.md <<'EOF'
 ---
@@ -351,13 +352,13 @@ bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round: n
 shiph | expect "ship-check 03: a tree dirty only in hive glob paths is clean" "clean (hook-written stats pending:"
 shiph | expect "ship-check 03 names the non-ASCII path as itself" "docs/specs/оплата/smoke/run-1.md"
 pw_paths=("docs/specs/оплата" "docs/specs/a b" docs/specs/hooklog/runs docs/specs/hooklog/smoke)
-git add -- "${pw_paths[@]}" && git commit -qm "smoke reports after GREEN" -- "${pw_paths[@]}"
+git add -- ${pw_paths[@]+"${pw_paths[@]}"} && git commit -qm "smoke reports after GREEN" -- ${pw_paths[@]+"${pw_paths[@]}"}
 paperwork_only "$PWD" "$pw_base" HEAD && echo "  ok    a commit of only hive glob paths (non-ASCII, spaced, dir/) does not stale a round" \
   || { echo "::error::paperwork_only called $(git diff --name-only "$pw_base" HEAD | tr '\n' ' ') code"; fail=1; }
 git mv hook-app.txt docs/specs/hooklog/runs/moved.txt
 bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round: code renamed into a hive glob path is still dirt" "hook-app.txt"
 git mv docs/specs/hooklog/runs/moved.txt hook-app.txt
-git rm -rq -- "${pw_paths[@]}" && git commit -qm "drop the smoke reports" -- "${pw_paths[@]}"
+git rm -rq -- ${pw_paths[@]+"${pw_paths[@]}"} && git commit -qm "drop the smoke reports" -- ${pw_paths[@]+"${pw_paths[@]}"}
 rm -rf docs/specs/hooklog/smoke
 git rm -q .claude/vulyk-paperwork && git commit -qm "drop the hive paperwork globs" -- .claude/vulyk-paperwork
 git checkout -- memory/stats/scope.jsonl
@@ -394,7 +395,7 @@ sib_story 02 src/sib/b.txt todo
 sib_story 03 src/sib/c.txt done
 git add -A && git commit -qm "sib: three stories, 01 and 02 in flight" >/dev/null
 printf 'a2\n' > src/sib/a.txt; printf 'b2\n' > src/sib/b.txt; printf 'c2\n' > src/sib/c.txt
-sed -i 's/^status: todo/status: todo\nreturned: DONE/' docs/specs/sib/sib-02-s.md
+sed_inplace 's/^status: todo/status: todo\nreturned: DONE/' docs/specs/sib/sib-02-s.md
 out="$(bash scripts/scope-check.sh docs/specs/sib/sib-01-s.md)"
 printf '%s' "$out" | expect "sibling 02 (todo) drops out: changed 2 (a + the done sibling's c), out of scope 1" "declared 1, changed 2, out of scope 1"
 printf '%s' "$out" | expect "the done sibling's file still counts" "! src/sib/c.txt"
@@ -513,8 +514,8 @@ echo "0.19 C: blocked_by manual:<id> - a hand step stops the wave until manual-d
 mkdir -p docs/specs/man
 cp "$SRC"/templates/plan.md docs/specs/man/plan.md
 printf '> build the manual demo\n' > docs/specs/man/brief.md
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/man/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/man#' docs/specs/man/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/man/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/man#' docs/specs/man/plan.md
 man_story() { # man_story <nn> <status> <wave> <blocked_by>
   printf -- '---\nstory: man-%s\nspec: man\nstatus: %s\nwave: %s\nblocked_by: %s   # a comment\n---\n# M%s\n\n## Files\n- app.txt\n\n## Verification\n`true`\n' \
     "$1" "$2" "$3" "$4" "$1" > "docs/specs/man/man-$1-m.md"
@@ -563,7 +564,7 @@ sed -e 's/<slug>/tpl/g' -e 's/tpl-NN/tpl-01/' "$SRC"/templates/story.md > docs/s
 printf -- '---\nname: worker-code\nmodel: opus\n---\n' > .claude/agents/worker-code.md
 bash scripts/cycle.sh status docs/specs/tpl --json | expect "a story from the shipped template carries no model, so a hive's pin in worker-code.md holds" \
   '"story":"tpl-01","worker":"worker-code","model":"","repeat"'
-sed -i 's/^wave: 2$/wave: 2\nmodel: opus/' docs/specs/man/man-02-m.md
+sed_inplace 's/^wave: 2$/wave: 2\nmodel: opus/' docs/specs/man/man-02-m.md
 bash scripts/cycle.sh status docs/specs/man --json | expect "the story's own model: line still wins" '"worker":"worker-code","model":"opus"'
 git checkout -q -- docs/specs/man/man-02-m.md && rm -rf .claude/agents docs/specs/tpl
 
@@ -573,7 +574,7 @@ echo "close-story-scope-refusal: close-story --commit refuses an edit outside ##
 mkdir -p docs/specs/stray
 cp "$SRC"/templates/plan.md docs/specs/stray/plan.md
 printf '> build the stray demo\n' > docs/specs/stray/brief.md
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/stray/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/stray/plan.md
 printf 'v1\n' > stray-app.txt; printf 'v1\n' > stray-other.txt
 stray_story() { # stray_story <nn> - one in-progress story declaring stray-app.txt only
   cat > "docs/specs/stray/stray-$1.md" <<EOF
@@ -632,7 +633,7 @@ git add -A && git commit -qm "stray: done" >/dev/null
 # Two wave-mates in one tree (the driver runs a wave in parallel): B's in-flight scratch file must not
 # stop A; the wave's last close (B) refuses it.
 stray_story 04; stray_story 05
-sed -i 's/^wave: 05$/wave: 04/; s/^- stray-app.txt$/- stray-other.txt/' docs/specs/stray/stray-05.md
+sed_inplace 's/^wave: 05$/wave: 04/; s/^- stray-app.txt$/- stray-other.txt/' docs/specs/stray/stray-05.md
 git add -A && git commit -qm "stray: wave-mates 04 + 05" >/dev/null
 printf 'v5\n' > stray-app.txt; printf 'v5\n' > stray-other.txt; printf 'scratch\n' > stray-b-scratch.txt
 out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-04.md --commit 2>&1)"; ex=$?
@@ -700,7 +701,7 @@ mkdir -p .claude/commands docs/specs/pcs
 printf '# A command\n\nRun `bash scripts/cycle.sh close-story <file> --no-such-flag`.\n' > .claude/commands/x.md # the drift, already in the tree
 cp "$SRC"/templates/plan.md docs/specs/pcs/plan.md
 printf '> build the pcs demo\n' > docs/specs/pcs/brief.md
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/pcs/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/pcs/plan.md
 pcs_story() { # pcs_story <nn> <file> - one in-progress story declaring <file> only
   printf -- '---\nstory: pcs-%s\nspec: pcs\nstatus: in-progress\nreturned: DONE\nwave: %s\n---\n# Pcs %s\n\n## Files\n- %s\n\n## Verification\n`true`\n' \
     "$1" "$1" "$1" "$2" > "docs/specs/pcs/pcs-$1.md"
@@ -737,8 +738,20 @@ echo "cycle.sh under a BSD (macOS) sed, and a Profile whose Commit convention is
 REAL_SED="$(command -v sed)"; BSD="$(mktemp -d)"
 cat > "$BSD/sed" <<'EOF'
 #!/bin/sh
-# A BSD sed stand-in: there a bare -i reads the next argument as its backup suffix and breaks.
-for a in "$@"; do [ "$a" = "-i" ] && { echo "sed: bare -i (BSD sed takes the next argument as a suffix)" >&2; exit 1; }; done
+# A BSD sed stand-in: there a bare -i reads the next argument as its backup suffix and breaks,
+# and a basic regex reads `\|` as a literal bar, not alternation (only -E / -r give alternation).
+ere=0
+for a in "$@"; do
+  [ "$a" = "-i" ] && { echo "sed: bare -i (BSD sed takes the next argument as a suffix)" >&2; exit 1; }
+  case "$a" in --*) ;; -*[!A-Za-z]*) ;; -*E*|-*r*) ere=1 ;; esac
+done
+if [ "$ere" -eq 0 ]; then
+  for a in "$@"; do
+    case "$(printf '%s' "$a" | "$REAL_SED" 's/\\\\//g')" in
+      *'\|'*) echo "sed: \\| in a basic regex (BSD sed has no BRE alternation)" >&2; exit 1 ;;
+    esac
+  done
+fi
 exec "$REAL_SED" "$@"
 EOF
 chmod +x "$BSD/sed"
@@ -782,8 +795,114 @@ out="$(bsd close-story docs/specs/conv/conv-01-first.md --commit 2>&1)"; ex=$?
 [ -z "$(git status --porcelain)" ] && echo "  ok    no sed backup file is left behind" \
   || { echo "::error::left behind: $(git status --porcelain | tr '\n' ' ')"; fail=1; }
 git checkout -q -
-cp "$BSD/CLAUDE.md.orig" CLAUDE.md; rm -rf "$BSD"
+cp "$BSD/CLAUDE.md.orig" CLAUDE.md
 git add -A && git commit -qm "conv: back to the default Commit convention" >/dev/null
+
+echo "cross-platform: the stub refuses BRE alternation; review_verdict_of_text and lib.sh's sed_inplace under it"
+( export REAL_SED; PATH="$BSD:$PATH"; printf 'a\n' | sed -n 's/\(a\|b\)/x/p' ) >/dev/null 2>&1 && { echo "::error::the BSD sed stub ran \\| in a basic regex"; fail=1; } || echo "  ok    the stub refuses \\| in a basic regex"  # portable: the BRE alternation is the case fed to the BSD sed stub
+[ "$( export REAL_SED; PATH="$BSD:$PATH"; printf 'a\\|b\n' | sed 's/\\|/|/g' )" = 'a|b' ] \
+  && echo "  ok    the stub runs an escaped backslash before a bar" || { echo "::error::the BSD sed stub refused 's/\\\\|/|/g'"; fail=1; }
+eval "$(sed -n '/^review_verdict_of_text()/,/^}/p' scripts/cycle.sh)"
+for rv in 'VERDICT: PASS (asks 1-3)|PASS' 'VERDICT: BLOCK - ask 2|BLOCK'; do
+  got="$( export REAL_SED; PATH="$BSD:$PATH"; review_verdict_of_text "${rv%|*}" 2>&1 )"
+  [ "$got" = "${rv##*|}" ] && echo "  ok    review_verdict_of_text under BSD sed: ${rv##*|}" \
+    || { echo "::error::review_verdict_of_text '${rv%|*}' under BSD sed gave '$got', expected ${rv##*|}"; fail=1; }
+done
+SI="$(mktemp -d)"; printf 'one\ntwo\n' > "$SI/f.txt"
+( export REAL_SED; PATH="$BSD:$PATH"; sed_inplace -E 's/^(t)wo$/\1hree/' "$SI/f.txt" ) 2>/dev/null
+[ "$(cat "$SI/f.txt")" = "$(printf 'one\nthree')" ] && [ ! -e "$SI/f.txt.bak" ] \
+  && echo "  ok    sed_inplace (lib.sh) edits under BSD sed and leaves no .bak" \
+  || { echo "::error::sed_inplace under BSD sed: $(cat "$SI/f.txt" | tr '\n' ' ') $(ls "$SI" | tr '\n' ' ')"; fail=1; }
+rm -rf "$SI" "$BSD"
+
+echo "cross-platform: vulyk_python and py.sh past a dead python3 (9009 on Windows, 49 once truncated)"
+REAL_PY=""
+for p in python3 python py; do
+  "$p" -c 'import sys; sys.exit(sys.version_info[0] != 3)' </dev/null >/dev/null 2>&1 && { REAL_PY="$(command -v "$p")"; break; }
+done
+[ -n "$REAL_PY" ] || { echo "::error::no python 3 on this machine: the helper cases below cannot pass"; fail=1; }
+dead_stub() { printf '#!/bin/sh\nexit %s\n' "$3" > "$1/$2"; chmod +x "$1/$2"; } # dead_stub <dir> <name> <exit>
+for code in 9009 49; do
+  PYD="$(mktemp -d)"
+  dead_stub "$PYD" python3 "$code"; dead_stub "$PYD" py 1
+  printf '#!/bin/sh\nexec "%s" "$@"\n' "$REAL_PY" > "$PYD/python"; chmod +x "$PYD/python"
+  got="$( PATH="$PYD:$PATH"; VULYK_PY=; vulyk_python; printf '%s %s' "$?" "${VULYK_PY:-}" )"
+  [ "$got" = "0 python" ] && echo "  ok    a python3 exiting $code: vulyk_python picks python" \
+    || { echo "::error::vulyk_python did not pick the next working interpreter (python3 exits $code): got '$got'"; fail=1; }
+  got="$(VULYK_PY= PATH="$PYD:$PATH" bash "$SRC/scripts/py.sh" -c 'print(6*7)' 2>&1)"
+  [ "$got" = 42 ] && echo "  ok    py.sh runs the picked interpreter" || { echo "::error::py.sh past python3 $code gave '$got'"; fail=1; }
+  rm -rf "$PYD"
+done
+DEAD="$(mktemp -d)"   # no python of any name, no working timeout or gtimeout
+for n in python3 python py timeout gtimeout; do dead_stub "$DEAD" "$n" 1; done
+got="$( PATH="$DEAD:$PATH"; VULYK_PY=; vulyk_python; printf '%s [%s]' "$?" "${VULYK_PY:-}" )"
+[ "$got" = "1 []" ] && echo "  ok    no working interpreter: vulyk_python returns 1, VULYK_PY empty" \
+  || { echo "::error::vulyk_python with no interpreter: got '$got'"; fail=1; }
+err="$(VULYK_PY= PATH="$DEAD:$PATH" bash "$SRC/scripts/py.sh" -c pass 2>&1 >/dev/null)"; ex=$?
+[ "$ex" -eq 2 ] && [ "$err" = "py.sh: no python 3 found (tried python3 python py)" ] \
+  && echo "  ok    py.sh with no interpreter: exit 2, one stderr line" || { echo "::error::py.sh no python: exit=$ex err='$err'"; fail=1; }
+
+echo "cross-platform: date_epoch and date_shift"
+[ "$(date_epoch 2026-01-02T03:04:05Z)" = 1767323045 ] && echo "  ok    date_epoch of a UTC timestamp" \
+  || { echo "::error::date_epoch 2026-01-02T03:04:05Z gave '$(date_epoch 2026-01-02T03:04:05Z)'"; fail=1; }
+[ "$(date_epoch 2026-01-02)" = 1767312000 ] && echo "  ok    date_epoch of a day is its UTC midnight" \
+  || { echo "::error::date_epoch 2026-01-02 gave '$(date_epoch 2026-01-02)'"; fail=1; }
+got="$(date_epoch garbage)"; ex=$?
+[ "$ex" -eq 1 ] && [ -z "$got" ] && echo "  ok    date_epoch of garbage: nothing, exit 1" || { echo "::error::date_epoch garbage: exit=$ex out='$got'"; fail=1; }
+ds="$(date_shift -7)"; today="$(date -u +%Y-%m-%d)"
+case "$ds" in
+  [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])
+    [ "$(( $(date_epoch "$today") - $(date_epoch "$ds") ))" -eq 604800 ] && echo "  ok    date_shift -7 is seven days before today" \
+      || { echo "::error::date_shift -7 gave $ds, today is $today"; fail=1; } ;;
+  *) echo "::error::date_shift -7 gave '$ds', not YYYY-MM-DD"; fail=1 ;;
+esac
+
+echo "cross-platform: run_capped past dead timeout and gtimeout binaries"
+CAPD="$(mktemp -d)"; dead_stub "$CAPD" timeout 1; dead_stub "$CAPD" gtimeout 1
+RC="$(mktemp -d)"; t0="$SECONDS"
+( PATH="$CAPD:$PATH"; VULYK_PY=; run_capped 1 bash -c "(sleep 3; : > '$RC/marker') & sleep 5; echo late" ) > "$RC/out" 2>&1; ex=$?
+el=$((SECONDS - t0))
+[ "$ex" -eq 124 ] && [ "$el" -le 3 ] && ! grep -q late "$RC/out" && echo "  ok    the Python cap: exit 124 in ${el}s, no late output" \
+  || { echo "::error::run_capped 1 under dead timeout/gtimeout: exit=$ex after ${el}s, out: $(cat "$RC/out")"; fail=1; }
+sleep 3
+[ ! -e "$RC/marker" ] && echo "  ok    the grandchild died with its process group" || { echo "::error::run_capped left a grandchild that wrote its marker"; fail=1; }
+err="$( PATH="$DEAD:$PATH"; VULYK_PY=; run_capped 1 true 2>&1 )"; ex=$?
+[ "$ex" -eq 0 ] && [ "$err" = "run_capped: no timeout, gtimeout or python 3 - running true uncapped" ] \
+  && echo "  ok    nothing to cap with: runs uncapped and says so" || { echo "::error::run_capped uncapped: exit=$ex err='$err'"; fail=1; }
+LONE="$(mktemp -d)"; cp "$SRC/scripts/lib.sh" "$LONE/"   # a lib.sh with no run-capped.py beside it (macOS: no timeout)
+err="$( PATH="$CAPD:$PATH"; VULYK_PY=; bash -c '. "$1/lib.sh"; run_capped 5 true' _ "$LONE" 2>&1 )"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    no run-capped.py beside lib.sh: the Python cap is not claimed, the command runs" \
+  || { echo "::error::run_capped with no timeout and no run-capped.py beside lib.sh: exit=$ex err='$err'"; fail=1; }
+rm -rf "$LONE"
+err="$( PATH="$DEAD:$PATH"; VULYK_PY=; run_capped 0 true 2>&1 )"; ex=$?
+[ "$ex" -eq 0 ] && [ -z "$err" ] && echo "  ok    run_capped 0: uncapped, silently" || { echo "::error::run_capped 0: exit=$ex err='$err'"; fail=1; }
+rm -rf "$RC" "$CAPD" "$DEAD"
+
+echo "cross-platform ask 9: close-story runs the constitution's py.sh Python cell and refuses the old bare python one"
+PRE9="$(mktemp)"; cp CLAUDE.md "$PRE9"
+grep '^| Python |' "$SRC/CLAUDE.md" | tr -d '\r' >> CLAUDE.md
+mkdir -p docs/specs/pyc .claude/hooks
+cp "$SRC"/templates/plan.md docs/specs/pyc/plan.md
+printf '> build the pyc demo\n' > docs/specs/pyc/brief.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-28/' docs/specs/pyc/plan.md
+printf '__pycache__/\n' >> .gitignore
+printf 'x = 1\n' > .claude/hooks/ok.py
+pyc_story() { # pyc_story <nn> <verification>
+  printf -- '---\nstory: pyc-%s\nspec: pyc\nstatus: in-progress\nreturned: DONE\nwave: %s\n---\n# Pyc fixture %s\n\n## Files\n- .claude/hooks/ok.py\n\n## Verification\n`%s`\n' \
+    "$1" "$((10#$1))" "$1" "$2" > "docs/specs/pyc/pyc-$1.md"
+}
+pyc_story 01 'bash scripts/py.sh -m py_compile .claude/hooks/*.py'
+pyc_story 02 'python -m py_compile .claude/hooks/*.py'
+git add -A && git commit -qm "pyc: setup, the constitution's Python row" >/dev/null
+printf 'x = 2\n' > .claude/hooks/ok.py
+out="$(bash scripts/cycle.sh close-story docs/specs/pyc/pyc-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' docs/specs/pyc/pyc-01.md \
+  && echo "  ok    close-story accepts and runs the py.sh cell green" || { echo "::error::py.sh cell: exit=$ex $(printf '%s\n' "$out" | tail -3)"; fail=1; }
+out="$(bash scripts/cycle.sh close-story docs/specs/pyc/pyc-02.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s\n' "$out" | tail -1 | grep -qF '"error":"verification not in ## Commands: python -m py_compile .claude/hooks/*.py"' \
+  && echo "  ok    an old story naming bare python is refused, exit 2" || { echo "::error::old python cell: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
+cp "$PRE9" CLAUDE.md; rm -f "$PRE9"
+git add -A && git commit -qm "pyc: back to the fixture's ## Commands" >/dev/null
 
 echo "command_cell_exists: each backticked command of a cell, and <name> / [<name>] placeholders without shell control characters"
 CELLS="$(mktemp)"
@@ -824,6 +943,64 @@ cell_case no  'pytest -p evil'
 cell_case no  'pytest a.py -p evil'
 cell_case yes 'bash -n deploy.sh'
 rm -f "$CELLS"
+command_cell_exists "$SRC/CLAUDE.md" 'bash scripts/py.sh -m py_compile .claude/hooks/*.py' \
+  && echo "  ok    yes: the constitution's Python cell is bash scripts/py.sh -m py_compile .claude/hooks/*.py" \
+  || { echo "::error::CLAUDE.md has no 'bash scripts/py.sh -m py_compile .claude/hooks/*.py' cell"; fail=1; }
+[ "$(tr -d '\r' < "$SRC/CLAUDE.md" | wc -c | tr -d ' ')" -lt 7168 ] && echo "  ok    CLAUDE.md stays under 7168 bytes" \
+  || { echo "::error::CLAUDE.md is $(tr -d '\r' < "$SRC/CLAUDE.md" | wc -c | tr -d ' ') bytes, the cap is 7168"; fail=1; }
+
+echo "cross-platform: a BSD (macOS) awk refuses a newline inside a -v value; install.sh's block restore and reopen's insertion under it"
+REAL_AWK="$(command -v awk)"; BAWK="$(mktemp -d)"
+cat > "$BAWK/awk" <<'EOF'
+#!/bin/sh
+# A BSD awk stand-in: a -v assignment whose value holds a newline is refused, as macOS awk does.
+nl='
+'
+prev=''
+for a in "$@"; do
+  v=''
+  [ "$prev" = "-v" ] && v="$a"
+  case "$a" in -v?*) v="${a#-v}" ;; esac
+  case "$v" in *"$nl"*) echo "awk: newline in string ${v%%"$nl"*}..." >&2; exit 2 ;; esac
+  prev="$a"
+done
+exec "$REAL_AWK" "$@"
+EOF
+chmod +x "$BAWK/awk"
+( export REAL_AWK; PATH="$BAWK:$PATH"; awk -v x="$(printf 'a\nb')" 'BEGIN { print x }' ) >/dev/null 2>&1 \
+  && { echo "::error::the BSD awk stub ran a -v value holding a newline"; fail=1; } || echo "  ok    the stub refuses a -v value holding a newline"
+mblock() { tr -d '\r' < "$1" | sed -n "/$2:START/,/$2:END/p" | sed '1d;$d'; } # mblock <file> <MARKER> - the body between the markers
+BROW='| Browser MCP | `<fill in - chrome-devtools \| claude-in-chrome \| none (default); read by the council-haiku seat only, read-only, on a separate test profile>` |'
+HV="$(mktemp -d)"
+out="$( export REAL_AWK; PATH="$BAWK:$PATH"; bash "$SRC/install.sh" "$HV" --telemetry off 2>&1 )"; ex=$?
+[ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -q 'newline in string' && grep -q 'VULYK:PROFILE:START' "$HV/CLAUDE.md" \
+  && echo "  ok    a fresh install under BSD awk resets both blocks" \
+  || { echo "::error::fresh install under BSD awk: exit=$ex out=$(printf '%s' "$out" | grep -i 'awk' | head -3)"; fail=1; }
+[ "$(mblock "$HV/CLAUDE.md" VULYK:PROFILE | grep -cxF -- "$BROW")" = 1 ] \
+  && echo "  ok    the Browser MCP row keeps \\| byte for byte" \
+  || { echo "::error::Browser MCP row after a fresh install: $(mblock "$HV/CLAUDE.md" VULYK:PROFILE | grep 'Browser MCP')"; fail=1; }
+mblock "$HV/CLAUDE.md" VULYK:PROFILE > "$BAWK/profile.fresh"; mblock "$HV/CLAUDE.md" VULYK:COMMANDS > "$BAWK/commands.fresh"
+tr -d '\r' < "$HV/CLAUDE.md" | sed -n '/^## Profile/,/VULYK:COMMANDS:END/p' > "$BAWK/sections.fresh"
+printf '# VULYK Constitution\n\n## Laws\n\n1. A law.\n' > "$HV/CLAUDE.md"
+out="$( export REAL_AWK; PATH="$BAWK:$PATH"; bash "$SRC/install.sh" "$HV" --upgrade 2>&1 )"; ex=$?
+[ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -q 'newline in string' \
+  && [ "$(mblock "$HV/CLAUDE.md" VULYK:PROFILE)" = "$(cat "$BAWK/profile.fresh")" ] \
+  && [ "$(mblock "$HV/CLAUDE.md" VULYK:COMMANDS)" = "$(cat "$BAWK/commands.fresh")" ] \
+  && [ "$(tr -d '\r' < "$HV/CLAUDE.md" | sed -n '/^## Profile/,/VULYK:COMMANDS:END/p')" = "$(cat "$BAWK/sections.fresh")" ] \
+  && echo "  ok    install.sh --upgrade under BSD awk restores both blocks, byte for byte as a fresh install writes them" \
+  || { echo "::error::--upgrade under BSD awk: exit=$ex out=$(printf '%s' "$out" | grep -i 'awk' | head -3)"; diff "$BAWK/sections.fresh" <(tr -d '\r' < "$HV/CLAUDE.md" | sed -n '/^## Profile/,/VULYK:COMMANDS:END/p') | head -10; fail=1; }
+rm -rf "$HV"
+mkdir -p docs/specs/bsdawk
+cp "$SRC"/templates/plan.md docs/specs/bsdawk/plan.md
+printf '> build the bsdawk demo\n\n## Answers\n- an earlier answer\n\n## Asks\n1. one ask\n' > docs/specs/bsdawk/brief.md
+printf '{"ts":"2020-01-01T00:00:00Z","spec":"bsdawk","round":1,"verdict":"ESCALATE","head":"aaaaaaa","pack":"p","asks":1,"red":[1],"red_unevidenced":[],"na":0,"review":"","escalate":"ceiling","note":""}\n' >> memory/stats/council.jsonl
+out="$( export REAL_AWK; PATH="$BAWK:$PATH"; bash scripts/cycle.sh reopen docs/specs/bsdawk 'keep a \| b' 2>&1 )"; ex=$?
+want="$(printf '> build the bsdawk demo\n\n## Answers\n- an earlier answer\n\n\n**After escalation (round 1, %s).**\n> keep a \\| b\n## Asks\n1. one ask' "$(date -u +%Y-%m-%d)")"
+[ "$ex" -eq 0 ] && [ "$(cat docs/specs/bsdawk/brief.md)" = "$want" ] \
+  && echo "  ok    reopen under BSD awk inserts the decision after ## Answers, \\| byte for byte" \
+  || { echo "::error::reopen under BSD awk: exit=$ex out=$(printf '%s' "$out" | head -3) brief:"; cat docs/specs/bsdawk/brief.md; fail=1; }
+git add -A && git commit -qm "bsdawk: reopen fixture" >/dev/null
+rm -rf "$BAWK"
 
 fi # part bsd
 if part safety; then # --- part safety: ship-check merge proof, the spec-branch guard
@@ -836,7 +1013,7 @@ SS="$(mktemp -d)"
   cp "$SRC"/scripts/lib.sh "$SRC"/scripts/ship-check.sh scripts/
   printf '> ship it\n' > docs/specs/ss/brief.md
   cp "$SRC"/templates/plan.md docs/specs/ss/plan.md
-  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-19/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/ss#' docs/specs/ss/plan.md
+  sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-19/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/ss#' docs/specs/ss/plan.md
   printf -- '---\nstory: ss-01\nspec: ss\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/ss/ss-01.md
   printf 'base\n' > app.txt
   git add -A && git commit -qm init
@@ -853,7 +1030,7 @@ SS="$(mktemp -d)"
   sss | expect "a conflict is OPEN and names the file" "vulyk/ss conflicts with main in: app.txt"
   sss | expect "a conflict offers the repair" "repair: merge main into vulyk/ss"
   sss | expect "a conflict is NOT READY" "NOT READY"
-  sed -i 's#^\*\*Branch:\*\* .*#**Branch:** vulyk/gone#' docs/specs/ss/plan.md
+  sed_inplace 's#^\*\*Branch:\*\* .*#**Branch:** vulyk/gone#' docs/specs/ss/plan.md
   sss | expect "a merge-tree error is 'cannot check', never clean" "cannot check the merge of vulyk/gone into main"
   sss | grep -qF "vulyk/gone merges into main cleanly" && { echo "::error::a merge-tree error was read as clean"; : > "$MARK"; }
   exit 0
@@ -867,7 +1044,7 @@ git branch -f main HEAD && git checkout -q main   # main must carry scripts/ and
 mkdir -p docs/specs/bguard
 cp "$SRC"/templates/plan.md docs/specs/bguard/plan.md
 printf '> guard the branch\n' > docs/specs/bguard/brief.md
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-19/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/bguard#' docs/specs/bguard/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-19/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/bguard#' docs/specs/bguard/plan.md
 cat > docs/specs/bguard/bguard-01.md <<'EOF'
 ---
 story: bguard-01
@@ -910,7 +1087,7 @@ mkdir -p docs/specs/oldspec docs/specs/freshspec
 for bg_s in oldspec freshspec; do
   cp "$SRC"/templates/plan.md "docs/specs/$bg_s/plan.md"
   printf '> reuse\n' > "docs/specs/$bg_s/brief.md"
-  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-19/' "docs/specs/$bg_s/plan.md"
+  sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-19/' "docs/specs/$bg_s/plan.md"
 done
 git add -A && git commit -qm "two specs" >/dev/null
 out="$(bash scripts/cycle.sh branch docs/specs/oldspec 2>&1)"; ex=$?
@@ -968,7 +1145,7 @@ red_rp_spec() { # red_rp_spec <slug> <frontmatter-lines> - a Tier 2 spec, one do
   mkdir -p "docs/specs/$1"
   cp "$SRC/templates/plan.md" "docs/specs/$1/plan.md"
   printf '# %s (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n' "$1" > "docs/specs/$1/brief.md"
-  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-28/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' "docs/specs/$1/plan.md"
+  sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-28/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' "docs/specs/$1/plan.md"
   printf 'a\n' > "$1-a.txt"
   printf -- '---\nstory: %s-01\nstatus: done\nwave: 1\n%s---\n# A\n\n## Requirements\n> build the thing\n\n## Files\n- %s-a.txt\n\n## Verification\n`true`\n' \
     "$1" "$2" "$1" > "docs/specs/$1/$1-01-a.md"
@@ -995,7 +1172,7 @@ red_rp_two() { # red_rp_two <slug> <major-lines> - done stories 01 (marked, <slu
   mkdir -p "docs/specs/$1"
   cp "$SRC/templates/plan.md" "docs/specs/$1/plan.md"
   printf '# %s (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n' "$1" > "docs/specs/$1/brief.md"
-  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-28/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' "docs/specs/$1/plan.md"
+  sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-28/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' "docs/specs/$1/plan.md"
   printf 'a\n' > "$1-a.txt"; printf 'doc\n' > "$1-doc.md"
   printf -- '---\nstory: %s-01\nstatus: done\nwave: 1\n%s---\n# A\n\n## Files\n- %s-a.txt\n\n## Verification\n`true`\n' "$1" "$MK" "$1" > "docs/specs/$1/$1-01-a.md"
   printf -- '---\nstory: %s-02\nstatus: done\nwave: 1\n---\n# D\n\n## Files\n- %s-doc.md\n\n## Verification\n`true`\n' "$1" "$1" > "docs/specs/$1/$1-02-doc.md"
@@ -1021,7 +1198,7 @@ out="$(bash scripts/wave-check.sh docs/specs/redbody)"
 printf '%s' "$out" | grep -E 'red-(no-test|value): redbody-01' && { echo "::error::a body red: line marked the story in wave-check: $out"; fail=1; } \
   || echo "  ok    wave-check prints no red line for a body red: line"
 red_story 30 '' $'- src/body.txt\n' '`bash tests/red-pass.sh`'
-sed -i 's/^# Red fixture 30$/&\n\nred: required/' docs/specs/red/red-30.md
+sed_inplace 's/^# Red fixture 30$/&\n\nred: required/' docs/specs/red/red-30.md
 printf 'body\n' > src/body.txt
 git add -A && git commit -qm "red: body-line story" >/dev/null
 out="$(bash scripts/cycle.sh stamp-red docs/specs/red/red-30.md 2>&1)"
@@ -1061,6 +1238,12 @@ before="$(cat docs/specs/red/red-08.md)"
 out="$(VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh stamp-red docs/specs/red/red-08.md 2>&1)"; ex=$?
 [ "$ex" -eq 4 ] && printf '%s\n' "$out" | tail -1 | grep -qF '"error":"not red: timed out after 1s' && [ "$before" = "$(cat docs/specs/red/red-08.md)" ] \
   && echo "  ok    a timeout (124) is no red" || { echo "::error::timeout: exit=$ex $(printf '%s\n' "$out" | tail -2)"; fail=1; }
+DEADT="$(mktemp -d)"; printf '#!/bin/sh\nexit 1\n' > "$DEADT/timeout"; cp "$DEADT/timeout" "$DEADT/gtimeout"; chmod +x "$DEADT/timeout" "$DEADT/gtimeout"
+out="$(PATH="$DEADT:$PATH" VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh stamp-red docs/specs/red/red-08.md 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s\n' "$out" | tail -1 | grep -qF '"error":"not red: timed out after 1s' && [ "$before" = "$(cat docs/specs/red/red-08.md)" ] \
+  && echo "  ok    a timeout (124) is no red with no timeout or gtimeout either (the Python cap)" \
+  || { echo "::error::timeout without timeout/gtimeout: exit=$ex $(printf '%s\n' "$out" | tail -2)"; fail=1; }
+rm -rf "$DEADT"
 
 echo "red-receipt: stamp-red on a red for the declared reason writes the receipt; a second stamp replaces it"
 st=docs/specs/red/red-10.md

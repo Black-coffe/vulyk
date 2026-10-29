@@ -12,7 +12,10 @@ SRC="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 fail=0
-PYBIN="$(command -v python3 || command -v python)" || { echo "maintenance.test.sh: needs python3 or python"; exit 1; }
+# shellcheck source=scripts/lib.sh
+. "$SRC/scripts/lib.sh"
+vulyk_python || { echo "maintenance.test.sh: needs python 3 (python3, python or py)"; exit 1; }
+PYBIN="$(command -v "$VULYK_PY")"   # a full path: the counting python3 stub below execs it by PATH otherwise
 LEDGER="$T/checks"; FAILS="$T/fails"; : > "$LEDGER"; : > "$FAILS"
 ok()  { printf 'x\n' >> "$LEDGER"; echo "  ok    $1"; }
 bad() { printf 'x\n' >> "$LEDGER"; printf 'x\n' >> "$FAILS"; echo "::error::$1"; }
@@ -82,6 +85,12 @@ echo "--- budget: this tree"
 if why="$(within_budget "$SRC/CLAUDE.md" "$CONSTITUTION_MAX_BYTES" "$CONSTITUTION_MAX_LINES")"; then
   ok "CLAUDE.md within $CONSTITUTION_MAX_BYTES B / $CONSTITUTION_MAX_LINES lines ($(size_of "$SRC/CLAUDE.md") B, $(lines_of "$SRC/CLAUDE.md") lines)"
 else bad "CLAUDE.md over budget: $why"; fi
+# tests/model-profile.test.sh holds the constitution at its baa5219 size too: the tighter of the two caps binds
+if git -C "$SRC" show baa5219:CLAUDE.md > "$T/claude.baa5219" 2>/dev/null; then
+  [ "$(size_of "$SRC/CLAUDE.md")" -le "$(size_of "$T/claude.baa5219")" ] \
+    && ok "CLAUDE.md no bigger than at baa5219 ($(size_of "$SRC/CLAUDE.md") <= $(size_of "$T/claude.baa5219") B)" \
+    || bad "CLAUDE.md grew past its baa5219 size"
+else ok "the baa5219 size comparison skipped: baa5219 not in this clone"; fi
 if shipped_render "$SRC/CLAUDE.md" "$T/shipped.md" 2>"$T/render.err"; then
   if why="$(within_budget "$T/shipped.md" "$CONSTITUTION_MAX_BYTES" "$CONSTITUTION_MAX_LINES")"; then
     ok "shipped constitution within budget ($(size_of "$T/shipped.md") B, $(lines_of "$T/shipped.md") lines)"
@@ -107,7 +116,7 @@ rules_always_over() {
   local f
   for f in "$1"/*.md; do
     [ -f "$f" ] || continue
-    tr -d '\r' < "$f" | sed -n '1{/^---$/!q;d};/^---$/q;/^paths:/{p;q}' | grep -q . && continue
+    tr -d '\r' < "$f" | sed -n '1{/^---$/!q;d;};/^---$/q;/^paths:/{p;q;}' | grep -q . && continue
     [ "$(lines_of "$f")" -gt "$RULES_ALWAYS_MAX_LINES" ] && echo "$(basename "$f") $(lines_of "$f") lines"
   done
   return 0
@@ -122,7 +131,7 @@ over="$(rules_always_over "$SRC/.claude/rules")"
 
 # --- due maintenance: the SessionStart brief (auto-maintenance-02) ---------------------------------
 BRIEF_HOOK="$SRC/.claude/hooks/session-start-brief.sh"
-iso_ago() { date -u -d "-$1 days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-"$1"d +%Y-%m-%dT%H:%M:%SZ; }
+iso_ago() { date_shift -"$1" +%Y-%m-%dT%H:%M:%SZ; }
 hive() { # hive <name> - a fresh fixture hive: git repo on main with one commit, empty memory
   local h="$T/$1"
   mkdir -p "$h/memory/learnings" "$h/memory/stats" "$h/memory/map"
@@ -256,7 +265,8 @@ profile() { # profile <hive> <file> <row>... - a constitution with a Profile blo
 H="$(hive boot-unfilled)"; profile "$H" CLAUDE.md "$UNFILLED"
 brief_of "$H" | expect "a <fill in Profile gets the offer" "run /vulyk-bootstrap now"
 brief_of "$H" | expect "the offer tells how a decline is recorded" "| Bootstrap | declined <date> |"
-H="$(hive boot-crlf)"; profile "$H" CLAUDE.md "$UNFILLED"; sed -i 's/$/\r/' "$H/CLAUDE.md"
+H="$(hive boot-crlf)"; profile "$H" CLAUDE.md "$UNFILLED"
+awk '{ printf "%s\r\n", $0 }' "$H/CLAUDE.md" > "$H/crlf.tmp" && mv "$H/crlf.tmp" "$H/CLAUDE.md"
 brief_of "$H" | expect "a CRLF constitution with <fill in gets the offer" "run /vulyk-bootstrap now"
 H="$(hive boot-filled)"; profile "$H" CLAUDE.md "$FILLED"
 brief_of "$H" | expect_absent "a filled Profile gets no offer" "vulyk-bootstrap now"
@@ -369,18 +379,18 @@ KEEP=(
 )
 printf '' | sed -E -e 's|a|b|' >/dev/null 2>&1 && ok "this sed takes -E, so redact.sh does not degrade to cat" \
   || bad "sed -E is refused here: redact.sh passes text through unmasked"
-for t in "${TOKENS[@]}"; do
+for t in ${TOKENS[@]+"${TOKENS[@]}"}; do
   label="${t%% *}"; tok="${t#* }"
   out="$(printf 'note %s end\n' "$tok" | bash "$SRC/scripts/redact.sh")"
   case "$out" in *"$tok"*|*"[VULYK:REDACTED]"*"[VULYK:REDACTED]"*) bad "redact.sh $label: not masked once: $out" ;;
     *"[VULYK:REDACTED]"*) ok "redact.sh masks a $label token" ;; *) bad "redact.sh $label: no mask: $out" ;; esac
 done
-for t in "${KEEP[@]}"; do
+for t in ${KEEP[@]+"${KEEP[@]}"}; do
   label="${t%% *}"; s="${t#* }"
   out="$(printf 'note %s end\n' "$s" | bash "$SRC/scripts/redact.sh")"
   [ "$out" = "note $s end" ] && ok "redact.sh leaves a $label alone" || bad "redact.sh $label changed: $out"
 done
-printf '%s\n' "${TOKENS[@]}" "${KEEP[@]}" > "$T/samples"
+printf '%s\n' ${TOKENS[@]+"${TOKENS[@]}"} ${KEEP[@]+"${KEEP[@]}"} > "$T/samples"
 PYTHONIOENCODING=utf-8 "$PYBIN" - "$SRC/.claude/hooks/handoff.py" "$T/samples" "$T" <<'PY' > "$T/fallback"
 import importlib.util, sys
 spec = importlib.util.spec_from_file_location('handoff', sys.argv[1]); h = importlib.util.module_from_spec(spec)
@@ -389,8 +399,8 @@ for line in open(sys.argv[2], encoding='utf-8').read().splitlines():
     label, s = line.split(' ', 1)
     print(label, 'masked' if '[VULYK:REDACTED]' in h.redact_text(sys.argv[3], 'note ' + s + ' end') else 'kept')
 PY
-for t in "${TOKENS[@]}"; do expect "handoff.py fallback masks a ${t%% *} token" "${t%% *} masked" < "$T/fallback"; done
-for t in "${KEEP[@]}"; do expect "handoff.py fallback leaves a ${t%% *} alone" "${t%% *} kept" < "$T/fallback"; done
+for t in ${TOKENS[@]+"${TOKENS[@]}"}; do expect "handoff.py fallback masks a ${t%% *} token" "${t%% *} masked" < "$T/fallback"; done
+for t in ${KEEP[@]+"${KEEP[@]}"}; do expect "handoff.py fallback leaves a ${t%% *} alone" "${t%% *} kept" < "$T/fallback"; done
 
 # --- /vulyk-gc refuses a gutted CONSOLIDATED.md (hindsight-harvest-03) --------------------------------
 echo "--- /vulyk-gc commit line refuses to commit a CONSOLIDATED.md that lost more than half"
@@ -530,11 +540,12 @@ pc_bites() { # pc_bites <label> <rule> - the seeded drift exits 1 naming the rul
   expect "prompt-check: $1 names rule $2" ": $2: " < "$T/pc-out"
 }
 CMDF=".claude/commands/vulyk-plan.md"
-pc_case nomaxturns; sed -i '/^maxTurns:/d' "$PCD/.claude/agents/drone-scout.md"; pc_run
+pc_case nomaxturns; sed_inplace '/^maxTurns:/d' "$PCD/.claude/agents/drone-scout.md"; pc_run
 pc_bites "an agent without maxTurns" frontmatter
-pc_case omitbad; sed -i 's/^omitClaudeMd: true/omitClaudeMd: yes/' "$PCD/.claude/agents/drone-scout.md"; pc_run
+pc_case omitbad; sed_inplace 's/^omitClaudeMd: true/omitClaudeMd: yes/' "$PCD/.claude/agents/drone-scout.md"; pc_run
 pc_bites "omitClaudeMd: yes" omit-claude-md
-pc_case omitrule; sed -i 's/^maxTurns:/omitClaudeMd: true\nmaxTurns:/' "$PCD/.claude/agents/lead-review.md"; pc_run
+pc_case omitrule; sed_inplace 's/^maxTurns:/omitClaudeMd: true\
+maxTurns:/' "$PCD/.claude/agents/lead-review.md"; pc_run
 pc_bites "omitClaudeMd: true on lead-review, which keeps the constitution" omit-claude-md
 pc_case verb; printf '\nRun `bash scripts/cycle.sh no-such-verb docs/specs/x`.\n' >> "$PCD/$CMDF"; pc_run
 pc_bites "a backticked cycle.sh verb the dispatcher lacks" verb
@@ -574,7 +585,7 @@ expect "prompt-check: a framework agent a hive deleted exits 0 (upgrade keeps ho
 expect "prompt-check: the hive deletion is a warn line" "prompt-check: warn scripts/telemetry.sh:1: telemetry: AGENTS names worker-test" < "$T/pc-out"
 pc_case agentspan; printf '\nDispatch it with `Agent drone-ghost` here.\n' >> "$PCD/$CMDF"; pc_run
 pc_bites "an agent name inside a longer span (post-043-tails)" agent
-pc_case noverbs; sed -i 's/^case "\$VERB" in/case "$CMD" in/' "$PCD/scripts/cycle.sh"; pc_run
+pc_case noverbs; sed_inplace 's/^case "\$VERB" in/case "$CMD" in/' "$PCD/scripts/cycle.sh"; pc_run
 expect "prompt-check: a cycle.sh without a verb dispatcher exits 0" "exit=0;" < "$T/pc-out"
 grep -c '^prompt-check: warn scripts/cycle.sh:1: verb: ' "$T/pc-out" > "$T/pc-nv" 2>&1
 expect "prompt-check: a cycle.sh without a verb dispatcher is one warn line, not a silent skip" "1" < "$T/pc-nv"
@@ -592,6 +603,155 @@ chmod +x "$CB/python3"
 ( cd "$T" && PATH="$CB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status > /dev/null 2>&1 )
 echo "starts=$(grep -c . "$T/hs-calls");" > "$T/hs-count"
 expect "handoff.sh starts a working python3 once per call, never a probe beside it" "starts=1;" < "$T/hs-count"
+
+echo "--- portability-check.sh: the static gate of card shell-needs-gnu-or-bash4 (cross-platform-05)"
+# Each case is one line in a temp file under `set -u`: `hit <rule>` must exit 1 naming the rule, `ok -` exit 0.
+# The cases live in a heredoc, whose body the gate does not read, so this file stays clean on the tree run.
+PG="$SRC/scripts/portability-check.sh"
+pg_run() { bash "$PG" "$@" < /dev/null > "$T/pg-out" 2>&1; echo "exit=$?;" >> "$T/pg-out"; }
+( cd "$SRC" && pg_run )
+expect "portability-check: the tree exits 0" "exit=0;" < "$T/pg-out"
+expect "portability-check: the tree prints its ok line" "portability-check: ok (" < "$T/pg-out"
+n=0
+while read -r want rule code; do
+  n=$((n + 1)); printf '#!/usr/bin/env bash\nset -u\n%s\n' "$code" > "$T/pg-$n.sh"; pg_run "$T/pg-$n.sh"
+  if [ "$want" = hit ]; then
+    expect "portability-check: $code exits 1" "exit=1;" < "$T/pg-out"
+    expect "portability-check: $code names rule $rule" ": $rule: " < "$T/pg-out"
+  else expect "portability-check: $code is not a hit" "exit=0;" < "$T/pg-out"; fi
+done <<'CASES'
+hit bash4 declare -A seen
+hit bash4 lower="${name,,}"
+hit bash4 make 2>&1 |& tee build.log
+hit sed-i sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' docs/specs/status1/plan.md
+hit sed-i sed -E -i 's/a+/b/' "$f"
+hit sed-bre printf '%s' "$first" | sed -n 's/^VERDICT: \(PASS\|BLOCK\).*/\1/p'
+hit sed-bre v="$(sed 's/ \+$//' "$f")"
+hit grep-P grep -oP '(?<=id: )\w+' "$f"
+hit grep-P grep --perl-regexp 'x' "$f"
+hit stat-c stat -c %s "$f"
+hit stat-c m="$(stat --format=%Y "$f")"
+hit date-d date -d "$ts" +%s
+hit date-d now="$(date -u -Iseconds)"
+hit pct-n ns="$(date +%s%N)"
+hit pct-n t="$(date +%H:%M:%S.%3N)"
+hit readlink-f readlink -f "$0"
+hit readlink-f dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+hit find-printf find . -type f -printf '%T@ %p\n'
+hit find-printf find "$d" -name '*.md' -fprintf out '%p'
+hit xargs-r git ls-files | xargs -r rm
+hit xargs-r ls | xargs --no-run-if-empty -n1 echo
+hit timeout timeout 30 bash x.sh
+hit timeout out="$(gtimeout -k 5 10 cmd)"
+hit python python -m py_compile .claude/hooks/*.py
+hit python PY="$(command -v python3 || command -v python)"
+hit python if python3 -c 'print(1)'; then :; fi
+hit array FETCHED="$(curl -fsSL -m 4 "${AUTH[@]}" "$url")"
+hit array for f in "${files[*]}"; do :; done
+ok - ts="$(date -u -d "$x" +%s 2>/dev/null || date -ju -f '%Y-%m-%d' "$x" +%s)"
+ok - sed -i.bak 's/a/b/' "$f" && rm -f "$f.bak"
+ok - sed -E 's/(a|b)+/c/' "$f"
+ok - n="${#a[@]}"
+ok - for x in "$@"; do :; done
+ok - for x in ${a[@]+"${a[@]}"}; do :; done
+ok - for p in python3 python py; do :; done
+ok - bash scripts/py.sh -m py_compile x.py
+ok - sed -i 's/a/b/' "$f" # portable: this line runs only on the GNU CI image
+hit paste-s echo "$(comm -13 "$T/tree.before" "$T/tree.after" | paste -sd'|')"
+hit paste-s grep x "$LOG" | paste -s -d ' ' > out.txt
+hit case-in-subst x="$(case "$b" in plan.md|brief.md) echo y ;; esac)"
+hit case-in-subst x=$(case "$b" in *.md) echo y ;; esac)
+ok - echo "$(comm -13 "$T/tree.before" "$T/tree.after" | paste -sd'|' -)"
+ok - paste -s -d, list.txt
+ok - x="$(case "$b" in (plan.md|brief.md) echo y ;; esac)"
+ok - case "$b" in plan.md|brief.md) continue ;; esac
+ok - x="$(f "$b")"; case "$x" in a) echo y ;; esac
+CASES
+cat > "$T/pg-case.sh" <<'EOF'
+#!/usr/bin/env bash
+ALL_QUOTES="$(for story in "$SPEC"/*.md; do
+  base="$(basename "$story")"
+  case "$base" in plan.md|brief.md) continue ;; esac
+  awk '/^>/ { print }' "$story" 2>/dev/null
+done | grep -v '^$')"
+EOF
+pg_run "$T/pg-case.sh"
+expect "portability-check: trace-check's case inside a multi-line \$( ) is a hit on its line" "pg-case.sh:4: case-in-subst: " < "$T/pg-out"
+cat > "$T/pg-case-ok.sh" <<'EOF'
+#!/usr/bin/env bash
+ALL_QUOTES="$(for story in "$SPEC"/*.md; do
+  base="$(basename "$story")"
+  case "$base" in
+    (plan.md|brief.md) continue ;;
+    (*) : ;;
+  esac
+  awk '/^>/ { print }' "$story" 2>/dev/null
+done | grep -v '^$')"
+case "$ALL_QUOTES" in
+  *x*) echo y ;;
+esac
+EOF
+pg_run "$T/pg-case-ok.sh"
+expect "portability-check: the (pat) form inside a multi-line \$( ) is not a hit" "exit=0;" < "$T/pg-out"
+cat > "$T/pg-hd.sh" <<'EOF'
+#!/usr/bin/env bash
+plan="$(PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" <<'PY'
+print("it's")
+PY
+)" || exit 2
+EOF
+pg_run "$T/pg-hd.sh"
+expect "portability-check: defects-check's heredoc inside a multi-line \$( ) exits 1" "exit=1;" < "$T/pg-out"
+expect "portability-check: defects-check's heredoc inside a multi-line \$( ) names rule heredoc-in-subst" "pg-hd.sh:2: heredoc-in-subst: " < "$T/pg-out"
+cat > "$T/pg-hd-ok.sh" <<'EOF'
+#!/usr/bin/env bash
+read_cards() {
+  PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" <<'PY'
+print("it's")
+PY
+}
+plan="$(read_cards)" || exit 2
+"$PY" - "$(pwd)" <<'PY'
+print(1)
+PY
+EOF
+pg_run "$T/pg-hd-ok.sh"
+expect "portability-check: the heredoc in a function called from \$( ) is not a hit" "exit=0;" < "$T/pg-out"
+cat > "$T/pg-allow.sh" <<'EOF'
+sed -i 's/a/b/' "$f" # portable: GNU CI image only
+EOF
+pg_run "$T/pg-allow.sh"
+expect "portability-check: a # portable: line is counted as allowed" "1 allowed)" < "$T/pg-out"
+cat > "$T/pg-heredoc.sh" <<'EOF'
+#!/usr/bin/env bash
+set -u
+"$VULYK_PY" - "$f" <<'PY'
+print(1) |& 2
+PY
+echo done
+EOF
+pg_run "$T/pg-heredoc.sh"
+expect "portability-check: |& inside a Python heredoc body is not a hit" "exit=0;" < "$T/pg-out"
+cat >> "$T/pg-heredoc.sh" <<'EOF'
+make |& tee log
+EOF
+pg_run "$T/pg-heredoc.sh"
+expect "portability-check: the line after the heredoc is read again" ": bash4: " < "$T/pg-out"
+cat > "$T/pg-prose.md" <<'EOF'
+A step that hangs is stopped by a timeout of 540 s; then python reports it.
+EOF
+pg_run "$T/pg-prose.md"
+expect "portability-check: timeout in an .md sentence outside backticks is not a hit" "exit=0;" < "$T/pg-out"
+cat > "$T/pg-cell.md" <<'EOF'
+| Python | `python -m py_compile .claude/hooks/*.py` |
+EOF
+pg_run "$T/pg-cell.md"
+expect "portability-check: the bare python cell of CLAUDE.md:76 is a hit" ": python: " < "$T/pg-out"
+pg_run "$T/pg-no-such-file.sh"
+expect "portability-check: a missing named file exits 2" "exit=2;" < "$T/pg-out"
+mkdir -p "$T/pg-empty" && git -C "$T/pg-empty" init -q
+( cd "$T/pg-empty" && pg_run )
+expect "portability-check: nothing to scan exits 2" "exit=2;" < "$T/pg-out"
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

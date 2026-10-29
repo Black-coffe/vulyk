@@ -132,6 +132,30 @@ Python fallback, so no timeout test skips.
 
 ## Plan deltas
 
+- 2026-10-29, after ESCALATE round 4 (ceiling): reopened by the owner, «Переоткрыть: только 3 падения Mac (Рекомендую)».
+  Repair story 11's round-4 latency finding is ruled machine-load noise (no change); its task is the three macOS-only
+  failures of probe 40871539881 (`mac-probe-round4.txt`). Order from here: build 11, then macOS CI on the branch, and only
+  on a green macOS run the next council round - a round on code CI has not yet seen on macOS spends a round for nothing.
+
+- 2026-10-29, story 09: close-story refused «test changed after red receipt» - `scripts/defects-check.sh` (named in Files
+  and in Verification by the Queen's ruling) was sealed as a test and then fixed. Owner's choice «Снять отметку red с 09
+  (Рекомендую)»: the mark is removed, both earlier receipts stay in the story as the record. Next circle: seal tests only.
+
+- 2026-10-29, wave 5: 07 and 08 closed; 09 returned NEEDS_CONTEXT (`docs/defects/INDEX.md` must be regenerated, not in its
+  Files) and 07 left `scripts/defects-check.sh` unparsable by bash 3.2 (heredoc inside `$( )`). Ruled: both fold into 09
+  (Files + INDEX.md, defects-check.sh, a `heredoc-in-subst` rule and fixture) - one worker, no parallel coupling.
+
+- 2026-10-29, after GREEN round 2: the owner REJECTED («Переоткрыть, довести Mac») on CI evidence - the first macOS runs
+  (40787799947, probe 40857869190) show three causes in product code (`awk -v` with a newline, bash 3.2 `case` inside
+  `$( )`, BSD `paste` operand) and a test hang (`full-suite.test.sh` `nopy_path` drops `/usr/bin`). Wave 5: stories 07
+  (product), 08 (tests), 09 (gate rules + CI timeouts), disjoint files. Round 3 follows; the Queen re-runs macOS CI on the
+  branch before any ship.
+
+- 2026-10-29, story 05: the gate's tree scan found six sites stories 01, 02 and 04 missed (`tests/cycle.test.sh:802`,
+  `tests/inject.test.sh:350`, `tests/intake.test.sh:259`, `.claude/commands/vulyk-evolve.md:20,37,58`). Two NEEDS_CONTEXT
+  returns; ruled by the Queen as a plan delta, not a `lead-architect` dispatch (no design fork - the worker named the
+  fix): story 05's `## Files` gains those four files, six lines only. The gate did its job on its first run.
+
 <!--
 The lines below are the cycle's confirmation markers (docs/cycle.md); each placeholder is replaced by
 the command or script that owns it, and scripts/ship-check.sh reads them all. Approved is the owner's
@@ -146,7 +170,15 @@ is missing or unparsable.
 -->
 **Approved:** Andrei, 2026-10-28 («Jlj,hz.» - «Одобряю» typed in the Latin layout; both planner decisions kept)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
-**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
-**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
+**Branch:** vulyk/cross-platform
+**Council:** RED round 1, 2026-10-28, at 3dcf9a5, pack 942d320ecef5
+**Council:** GREEN round 2, 2026-10-28, at 5e0aae1, pack dc3ae8f68b3f
+**Council:** RED round 3, 2026-10-29, at 4c37cd6, pack 398c12ba8464
+**Council:** ESCALATE round 4, 2026-10-29, at d47c5a5, pack 9781711a8e6c
+**Council:** GREEN round 5, 2026-10-29, at 022ee5b, pack 934e87b830a9
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Checked:** REJECTED by Andrei, 2026-10-29, at 9ca42a6 - owner's choice: «Переоткрыть, довести Mac (Рекомендую)». Looked at: GitHub CI on vulyk/cross-platform at 9ca42a6, run 40787799947 - full-suite timed out after 6 h on ubuntu and macos (never finished: tests/full-suite.test.sh, inject --part latency, intake --part latency); macos full-suite FAIL in council parts judge seats escalate ceilings replays roster driver walks advance, cycle parts hooklog gates ship red, e2e, defects, model-profile, solo, maintenance, telemetry parts terminal scan constitution; install-smoke on macos fails: awk: newline in string (install.sh awk -v repl= multi-line, lines 245 and 341)
+
+## Needs a human
+- reason: ceiling · round 4 · 2026-10-29
+- seats: docs/specs/cross-platform/council/round-4/

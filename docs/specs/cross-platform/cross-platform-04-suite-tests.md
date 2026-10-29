@@ -1,8 +1,8 @@
 ---
 story: cross-platform-04
 spec: cross-platform
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-test
 model: haiku
@@ -70,5 +70,12 @@ files; every helper is defined and tested in story 01.
 `bash tests/solo.test.sh`
 
 ## Implementation notes
+- The nine suites source `scripts/lib.sh` (full-suite.test.sh needs none). `sed -i` in defects, inject and solo is `sed_inplace`, one call per file (the two multi-file lines split). `command -v python` in defects, mods, token-report, inject and intake is `vulyk_python` (VULYK_PY read after it); the two `python3`-stub cases in inject and intake probe `python -c` instead, since they test a second interpreter, not a resolver.
+- intake `timeout 10 bash "$HOOK" --lexicon` is `run_capped 10 ...`. Dead `timeout` stubs first on PATH: `bash tests/intake.test.sh --part latency` still passes (175 ms median).
+- symbol-map: `now_ms` (EPOCHREALTIME in ms, else `vulyk_python` and `time.time()`); the speed check reads it, no `%N`. Still milliseconds (260 ms observed).
+- full-suite.sh: `capped_by` decides TIMEOUT_OK (no more `timeout 5 true` probe); a job's cap is `run_capped`; the `CMDS`/`EARLY`/`LATE` expansions use `${a[@]+"${a[@]}"}`. `"${PID[@]:-}"` and `"${TAILS[@]:-}"` were already defaulted and are left. The header comment names the new cap order. Exit codes, `--jobs`, `--list`, fan-out and the budget semantics are unchanged.
+- full-suite.test.sh: the dead-timeout case is split. (a) dead `timeout`+`gtimeout` stubs with Python on PATH: a 3 s job under a 1 s budget is killed (exit 124), no uncapped warning. (b) `VULYK_PY=` and a PATH with every python directory removed (asserted empty by `command -v` in a child shell): the run is uncapped, warns, and the job is TIMEOUT by its measured time. Added: a latency-only list (empty parallel list) runs.
+- No assertion of any suite was changed. mods.test.sh gained `set -u` through lib.sh and runs green (35 pass).
+- Bash here is 5.3, which does not fail on an empty array under `set -u`; the empty-array guard is therefore not reproduced by this box and rests on the idiom check, not a failing run.
 
 ## Findings

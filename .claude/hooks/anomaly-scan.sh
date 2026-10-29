@@ -5,7 +5,9 @@
 set -uo pipefail
 ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 command -v jq >/dev/null 2>&1 || exit 0
-command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || command -v py >/dev/null 2>&1 || exit 0
+# No Python presence gate: a name on PATH may be a stub (the Windows Store alias). Every Python start
+# of the scan goes through handoff.sh, which tries each name by running it and exits 0 with nothing
+# printed when none is Python - the scan then measures nothing and records nothing.
 SCRIPT="$ROOT/scripts/telemetry.sh"
 [ -f "$SCRIPT" ] || exit 0
 
@@ -38,7 +40,7 @@ detect_sessionend_llm() {
     hit=""; name=""
     printf '%s\n' "$cmd" | grep -Eq "$LLM_RE" && hit=1
     read -ra toks <<< "$cmd"
-    for tok in "${toks[@]}"; do
+    for tok in ${toks[@]+"${toks[@]}"}; do
       tok="${tok//\"/}"; tok="${tok//\'/}"
       tok="${tok//\$\{CLAUDE_PROJECT_DIR\}/$ROOT}"; tok="${tok//\$CLAUDE_PROJECT_DIR/$ROOT}"
       case "$tok" in /*|[A-Za-z]:*) path="$tok" ;; *) path="$ROOT/$tok" ;; esac

@@ -4,6 +4,28 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-10-29
+
+VULYK runs on macOS (bash 3.2, BSD tools) and Linux as well as Windows, and CI proves it on every run (spec `cross-platform`).
+
+### Added
+- **Portable helpers in `scripts/lib.sh`.** `vulyk_python` sets `VULYK_PY` to the first of `python3`, `python`, `py` that
+  really runs Python 3 (the Windows Store stub is passed over); `sed_inplace` is `sed -i` in the one spelling GNU and BSD
+  sed share; `date_epoch` / `date_shift` replace GNU `date -d`; `run_capped` caps a command with `timeout`, `gtimeout` or,
+  on a stock macOS that has neither, `scripts/run-capped.py` (exit 124 on the cap). `install.sh` loads `lib.sh` however it
+  is started. Product scripts, commands, `CLAUDE.md` and tests call these helpers instead of the GNU-only forms.
+- **Portability gate** `scripts/portability-check.sh`, the `check:` of the new card `shell-needs-gnu-or-bash4` with a
+  fixture per rule: bash 4 syntax, bare `sed -i`, BRE `\|` `\+` `\?`, GNU-only flags (`grep -P`, `stat -c`,
+  `readlink -f`, `find -printf`, `xargs -r`), `date -d` with no fallback, `%N`, a bare `timeout` or `python`, an
+  unguarded `"${a[@]}"` under `set -u`, `paste -s` without `-`, and the two bash 3.2 `$( )` parser traps (`case` patterns,
+  heredocs). The one bypass is a same-line `# portable: <reason>`, counted in the summary. CI's shell job runs it over the
+  tree.
+- **CI on `macos-latest`**: the full suite and the `install.sh` smoke test run on Ubuntu and macOS.
+
+### Fixed
+- `cycle.sh` section extraction uses `sed -nE` (BSD sed rejected the old BRE alternation).
+- Every array expansion in a `set -u` file is `${a[@]+"${a[@]}"}` (bash 3.2 calls an empty array unbound).
+
 ## [0.43.1] - 2026-10-28
 
 Review tails of 0.42.0 and 0.43.0, and the paperwork that made `/vulyk-status` show finished work as open (spec `post-043-tails`).

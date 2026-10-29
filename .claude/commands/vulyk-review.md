@@ -6,7 +6,7 @@ argument-hint: [spec slug; defaults to the spec on the current branch]
 Run one council round on: "$ARGUMENTS" (default: the spec whose `**Branch:**` matches the current
 branch). Every call below that runs `advance` carries `timeout: 600000`.
 
-1. Claim and advance. `stamp="$(openssl rand -hex 8 2>/dev/null || python -c 'import secrets;
+1. Claim and advance. `stamp="$(openssl rand -hex 8 2>/dev/null || bash scripts/py.sh -c 'import secrets;
    print(secrets.token_hex(8))')"`, then `bash scripts/cycle.sh advance docs/specs/<slug> --stamp
    $stamp --claim`. `ok:false` with `held by`: another driver holds the spec; print its `error` and
    stop. Otherwise act on `next`:

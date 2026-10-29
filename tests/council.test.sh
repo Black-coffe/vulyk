@@ -40,9 +40,17 @@ done
 full() { [ "$QUICK" -eq 0 ]; } # `if full; then ... fi` wraps each block --quick skips
 part() { [ -z "$PART" ] || [ "$PART" = "$1" ]; } # `if part <name>; then ... fi` wraps each part
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
+. "$SRC/scripts/lib.sh" # sed_inplace (the fixture edits) and run_capped/capped_by: the helpers under test
 T="$(mktemp -d)"
 FAILS="$(mktemp)" # expect() records here too: a failure inside a pipe's subshell still reaches the exit code
-trap 'rm -rf "$T" "$FAILS"' EXIT
+# STUBS holds a timeout and a gtimeout that exit 1, kept out of the fixture repo ($T) so they dirty nothing.
+# Put first on PATH they make capped_by fall through to the Python cap (run-capped.py) - the cap the
+# Windows and no-coreutils boxes actually run. The timeout cases repeat under it (parts judge, advance).
+STUBS="$(mktemp -d)"
+printf '#!/bin/sh\nexit 1\n' > "$STUBS/timeout"; printf '#!/bin/sh\nexit 1\n' > "$STUBS/gtimeout"
+chmod +x "$STUBS/timeout" "$STUBS/gtimeout"
+trap 'rm -rf "$T" "$FAILS" "$STUBS"' EXIT
+err_of() { printf '%s\n' "$1" | grep -o '"error":"[^"]*"' | head -1; } # err_of <output> -> the JSON error field, or ""
 fail=0
 expect() { # expect <label> <needle>   (reads the output to judge from stdin)
   local label="$1" needle="$2" out; out="$(cat)"
@@ -54,6 +62,7 @@ cd "$T" || exit 1
 git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
 mkdir -p scripts memory/stats docs/specs .claude
 cp "$SRC"/scripts/lib.sh "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh scripts/
+cp "$SRC"/scripts/run-capped.py scripts/ # run_capped's Python cap: lib.sh looks for it beside itself
 # Mirrors the real .gitignore (D1: neither is ever committed) - without it, open-round's
 # "clean tree" precondition would trip on its own court worktree and PAUSE files. Story 17
 # adds DRIVER (ADR-004/K3): a claim must leave the fixture repo's tree clean too.
@@ -87,7 +96,7 @@ mk_spec() { # mk_spec <slug> <n-asks> - brief.md with an N-item ## Asks, plan.md
   cp "$SRC/templates/plan.md" "docs/specs/$slug/plan.md"
   {
     printf '# %s (brief)\n\n## Request\n> build the thing\n\n## Asks\n' "$slug"
-    for i in $(seq 1 "$n"); do printf '%d. ask number %d works\n' "$i" "$i"; done
+    i=1; while [ "$i" -le "$n" ]; do printf '%d. ask number %d works\n' "$i" "$i"; i=$((i+1)); done # not seq: BSD `seq 1 0` counts down to 0
   } > "docs/specs/$slug/brief.md"
   printf -- '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# S1\n' "$slug" "$slug" > "docs/specs/$slug/$slug-01-first.md"
   git add -A && git commit -qm "spec($slug): fixture" >/dev/null
@@ -99,7 +108,7 @@ set_tier() { # set_tier <slug> <n> - overwrites plan.md's template `**Tier:** <.
   # spelling, so a template wording change elsewhere on the branch does not silently no-op this.
   local slug="$1" n="$2" plan
   plan="docs/specs/$slug/plan.md"
-  sed -i "s/^\(\*\*Tier:\*\* \)<[^>]*>/\1$n/" "$plan"
+  sed_inplace "s/^\(\*\*Tier:\*\* \)<[^>]*>/\1$n/" "$plan"
   git add -A && git commit -qm "$slug: tier $n" >/dev/null
 }
 
@@ -108,8 +117,8 @@ mk_open_spec() { # mk_open_spec <slug> <n-asks> - mk_spec plus **Approved:**/**B
   # branch instead of stopping at "briefed"/"branch"
   local slug="$1" n="$2"
   mk_spec "$slug" "$n"
-  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' "docs/specs/$slug/plan.md"
-  sed -i "s#^\*\*Branch:\*\* <.*#**Branch:** $(git rev-parse --abbrev-ref HEAD)#" "docs/specs/$slug/plan.md"
+  sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' "docs/specs/$slug/plan.md"
+  sed_inplace "s#^\*\*Branch:\*\* <.*#**Branch:** $(git rev-parse --abbrev-ref HEAD)#" "docs/specs/$slug/plan.md"
   git add -A && git commit -qm "$slug: approved+branch" >/dev/null
 }
 
@@ -357,8 +366,8 @@ if part verbs; then # --- part verbs: status --json, tier, judge, journal, brief
 
 echo "status --json: exactly one JSON object with every C3 key"
 mk_spec status1 3
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' docs/specs/status1/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/status1/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' docs/specs/status1/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/status1/plan.md
 git add -A && git commit -qm "status1: briefed" >/dev/null
 
 out="$(council status docs/specs/status1 --json)"
@@ -481,7 +490,7 @@ printf '%s' "$out" | jq -r '.missing | sort | join(",")' | expect "no Tier line 
 
 echo "open-round: an unparsable **Tier:** line refuses (exit 2, names the line) instead of buying the largest court (M-10/R21)"
 mk_spec notier1 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/notier1/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/notier1/plan.md
 git add -A && git commit -qm "notier1: branch, Tier line left as the template placeholder" >/dev/null
 out="$(council open-round docs/specs/notier1 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'tier' && echo "  ok    unparsable Tier line -> exit 2, error names Tier" \
@@ -508,14 +517,14 @@ grep -qF '· 04-council:GREEN ·' docs/specs/status1/journal.md && echo "  ok   
   || { echo "::error::journal.md missing the council line"; fail=1; }
 
 echo "judge: idempotent restoration"
-sed -i '/^\*\*Council:\*\* GREEN round 1,/d' docs/specs/status1/plan.md
+sed_inplace '/^\*\*Council:\*\* GREEN round 1,/d' docs/specs/status1/plan.md
 council judge docs/specs/status1 >/dev/null
 cnt="$(grep -c '^\*\*Council:\*\* GREEN round 1,' docs/specs/status1/plan.md)"
 rowcount="$(grep -c '"spec":"status1"' memory/stats/council.jsonl)"
 [ "$cnt" -eq 1 ] && [ "$rowcount" -eq 1 ] && echo "  ok    deleting the Council line restores only that line, row not duplicated" \
   || { echo "::error::Council-line restore: line count=$cnt row count=$rowcount"; fail=1; }
 
-sed -i '/04-council:GREEN/d' docs/specs/status1/journal.md
+sed_inplace '/04-council:GREEN/d' docs/specs/status1/journal.md
 council judge docs/specs/status1 >/dev/null
 jcnt="$(grep -c '04-council:GREEN' docs/specs/status1/journal.md)"
 rowcount2="$(grep -c '"spec":"status1"' memory/stats/council.jsonl)"
@@ -874,7 +883,7 @@ printf '%s' "$jout" | expect "the same line reaches stdout" '· 03-building · w
 
 echo "briefed: missing ## Asks section -> exit 2, no Briefed line written"
 mk_spec briefnoask 3
-sed -i '/^## Asks$/,$d' docs/specs/briefnoask/brief.md
+sed_inplace '/^## Asks$/,$d' docs/specs/briefnoask/brief.md
 out="$(council briefed docs/specs/briefnoask 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'Asks' && echo "  ok    missing ## Asks -> exit 2" \
   || { echo "::error::missing Asks: exit=$ex out=$out"; fail=1; }
@@ -1031,6 +1040,18 @@ out="$(VULYK_SETUP_TIMEOUT=2 council open-round docs/specs/csetup2 2>&1)"; ex=$?
 [ ! -d docs/specs/csetup2/council/round-1 ] && [ ! -d .vulyk/court/csetup2/round-1 ] \
   && echo "  ok    the timed-out court is removed, no round left" \
   || { echo "::error::left: $(ls -R docs/specs/csetup2/council .vulyk/court/csetup2 2>&1)"; fail=1; }
+# The same timeout with timeout and gtimeout stubs first on PATH: capped_by must reach the Python cap,
+# and the run must report the same exit and the same error text as the real-PATH run above.
+echo "open-round: the same timeout with timeout/gtimeout stubs first on PATH -> same exit and error, python cap"
+[ "$(PATH="$STUBS:$PATH" bash -c '. "$1/scripts/lib.sh"; capped_by; printf %s "$VULYK_CAP"' _ "$SRC")" = python ] \
+  && echo "  ok    capped_by falls through the stubs to python" || { echo "::error::capped_by under stubs is not python"; fail=1; }
+out_stub="$(PATH="$STUBS:$PATH" VULYK_SETUP_TIMEOUT=2 council open-round docs/specs/csetup2 2>&1)"; ex_stub=$?
+[ "$ex_stub" -eq "$ex" ] && [ -n "$(err_of "$out")" ] && [ "$(err_of "$out_stub")" = "$(err_of "$out")" ] \
+  && echo "  ok    stubbed run: exit $ex_stub, same error text as the real PATH run" \
+  || { echo "::error::stubbed run: exit=$ex_stub out=$out_stub"; fail=1; }
+[ ! -d docs/specs/csetup2/council/round-1 ] && [ ! -d .vulyk/court/csetup2/round-1 ] \
+  && echo "  ok    stubbed run removes its court too" \
+  || { echo "::error::stubbed run left: $(ls -R docs/specs/csetup2/council .vulyk/court/csetup2 2>&1)"; fail=1; }
 git rm -q .claude/vulyk-setup && git commit -qm "fixture: drop vulyk-setup" >/dev/null
 fi # part judge
 if part seats; then # --- part seats: record-seat (preconditions, MALFORMED, taint, evidence, review layout, --model, --file)
@@ -1060,8 +1081,8 @@ out="$(seat_report sonnet 1 GG | council record-seat docs/specs/rseat2 1 sonnet 
 
 echo "record-seat: NOT stale when HEAD only advanced by the cycle's own paperwork since ROUND.head"
 mk_spec pwseat1 3
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' docs/specs/pwseat1/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/pwseat1/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' docs/specs/pwseat1/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/pwseat1/plan.md
 git add -A && git commit -qm "pwseat1: briefed, branch" >/dev/null
 set_tier pwseat1 3
 council open-round docs/specs/pwseat1 --commit >/dev/null   # open-round's own commit moves HEAD
@@ -1617,7 +1638,7 @@ out="$(council close-story docs/specs/cstory1/cstory1-01-first.md 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF 'already done' && echo "  ok    already done -> exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
 
 echo "close-story: self-marked status: done with an uncommitted diff -> proceeds, journals the self-mark once with the story's own wave (C3 revised)"
-sed -i -E 's/^wave:.*/wave: 2/' docs/specs/cstory1/cstory1-01-first.md   # Minor 5: a wave-2 story
+sed_inplace -E 's/^wave:.*/wave: 2/' docs/specs/cstory1/cstory1-01-first.md   # Minor 5: a wave-2 story
 printf 'again\n' > docs/specs/cstory1/flag.txt
 out="$(council close-story docs/specs/cstory1/cstory1-01-first.md --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && echo "  ok    self-marked done + dirty diff -> exit 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
@@ -1634,7 +1655,7 @@ flagcommits="$(git log --oneline -- docs/specs/cstory1/flag.txt | wc -l)"
   || { echo "::error::commits touching flag.txt: $flagcommits"; fail=1; }
 
 echo "close-story: self-marked done, dirty diff, but returned: absent -> exit 4 returned: missing, no commit, journal.md untouched (C3 revised, Minor 6)"
-sed -i -E 's/^returned:.*/returned:/' docs/specs/cstory1/cstory1-01-first.md
+sed_inplace -E 's/^returned:.*/returned:/' docs/specs/cstory1/cstory1-01-first.md
 headbefore="$(git rev-parse HEAD)"
 jbefore="$(cat docs/specs/cstory1/journal.md)"
 out="$(council close-story docs/specs/cstory1/cstory1-01-first.md --commit 2>&1)"; ex=$?
@@ -2048,7 +2069,7 @@ git add -A && git commit -qm "spec(lr31w): fixture" >/dev/null
 out="$(council status docs/specs/lr31w --json)"
 printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: ready A and not-ready B (blocked_by todo/blocked C) -> wave_stories names only A" \
   '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"","repeat":1}]'
-sed -i 's/^status: blocked/status: done/' docs/specs/lr31w/lr31w-02-c.md
+sed_inplace 's/^status: blocked/status: done/' docs/specs/lr31w/lr31w-02-c.md
 git add -A && git commit -qm "lr31w: blocker C done" >/dev/null
 out="$(council status docs/specs/lr31w --json)"
 printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: blocker C done -> both A and B are listed" \
@@ -2105,7 +2126,7 @@ out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'branch' && echo "  ok    missing Branch -> exit 2" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oround1/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oround1/plan.md
 git add -A && git commit -qm "oround1: branch" >/dev/null
 
 echo "open-round: preconditions - dirty tree -> exit 2"
@@ -2147,7 +2168,7 @@ out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
 set_tier oround1 4
 
 echo "open-round: a ## Descoped entry the brief never took in -> exit 2, naming it (a hive lost three rounds to a plan-only descope)"
-sed -i 's/^\*(empty)\*$/- ask 3 narrowed to the happy path - owner: "only the happy path for now"/' docs/specs/oround1/plan.md
+sed_inplace 's/^\*(empty)\*$/- ask 3 narrowed to the happy path - owner: "only the happy path for now"/' docs/specs/oround1/plan.md
 out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"descope not in the brief: - ask 3 narrowed' \
   && echo "  ok    an uncommitted plan-only descope refuses the round" || { echo "::error::exit=$ex out=$out"; fail=1; }
@@ -2155,14 +2176,14 @@ git add -A && git commit -qm "oround1: descope in plan.md only" >/dev/null
 out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'strike or narrow the ask' \
   && echo "  ok    committed in plan.md alone, it still refuses and says what to edit" || { echo "::error::exit=$ex out=$out"; fail=1; }
-sed -i 's/^3\. ask number 3 works$/3. ask number 3 works on the happy path (narrowed by the owner)/' docs/specs/oround1/brief.md
+sed_inplace 's/^3\. ask number 3 works$/3. ask number 3 works on the happy path (narrowed by the owner)/' docs/specs/oround1/brief.md
 git add -A && git commit -qm "oround1: the brief takes the descope in" >/dev/null
 
 echo "open-round: a non-ASCII spec whose descope was committed with the brief passes the descope check (quotePath must not C-quote the path)"
 git config core.quotePath true
 mk_spec 'оплата' 3
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\*(empty)\*$/- ask 2 dropped - owner: "not this circle"/' 'docs/specs/оплата/plan.md'
-sed -i 's/^2\. ask number 2 works$/2. (descoped by the owner: not this circle)/' 'docs/specs/оплата/brief.md'
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\*(empty)\*$/- ask 2 dropped - owner: "not this circle"/' 'docs/specs/оплата/plan.md'
+sed_inplace 's/^2\. ask number 2 works$/2. (descoped by the owner: not this circle)/' 'docs/specs/оплата/brief.md'
 git add -A && git commit -qm "оплата: descope with the brief" >/dev/null
 out="$(council open-round 'docs/specs/оплата' 2>&1)"; ex=$?
 { [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'tier' && ! printf '%s' "$out" | grep -qF 'descope not in the brief'; } \
@@ -2226,8 +2247,8 @@ git worktree list | grep -qF "$court2" && { echo "::error::git worktree list sti
 
 echo "open-round: exit 6 at the ceiling, next escalated - no new round created"
 mk_spec oceil1 2
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-13/' docs/specs/oceil1/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oceil1/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-13/' docs/specs/oceil1/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oceil1/plan.md
 set_tier oceil1 3
 mkdir -p docs/specs/oceil1/council
 printf '1\n' > docs/specs/oceil1/council/CEILING
@@ -2267,7 +2288,7 @@ rowcount_after="$(grep -c '"spec":"oceil1"' memory/stats/council.jsonl)"
 
 echo "open-round --commit: at the ceiling, commits the ESCALATE record (clean tree afterward)"
 mk_spec oceilc1 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oceilc1/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oceilc1/plan.md
 set_tier oceilc1 3
 mkdir -p docs/specs/oceilc1/council
 printf '1\n' > docs/specs/oceilc1/council/CEILING
@@ -2503,7 +2524,7 @@ if part ceilings && full; then # --- part ceilings (--quick skips it): the reope
 
 echo "reopen: three RED rounds escalate (ceiling) on the third, reopen bumps ceiling to 6, a 4th round opens"
 mk_spec oreopen1 5
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oreopen1/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/oreopen1/plan.md
 git add -A && git commit -qm "oreopen1: branch" >/dev/null
 set_tier oreopen1 3
 
@@ -2547,7 +2568,7 @@ out="$(council open-round docs/specs/oreopen1 --commit)"; ex=$?
 
 echo "tier ceiling: Tier 1 - ROUND ceiling=1, a RED round 1 escalates (ceiling)"
 mk_spec tceil1 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tceil1/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tceil1/plan.md
 git add -A && git commit -qm "tceil1: branch" >/dev/null
 set_tier tceil1 1
 council open-round docs/specs/tceil1 --commit >/dev/null
@@ -2563,7 +2584,7 @@ jout="$(council judge docs/specs/tceil1 --commit)"; jex=$?
 
 echo "tier ceiling: Tier 2 - round 1 RED repairs, round 2 RED escalates (ceiling), reopen gives 4"
 mk_spec tceil2 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tceil2/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tceil2/plan.md
 git add -A && git commit -qm "tceil2: branch" >/dev/null
 set_tier tceil2 2
 for n in 1 2; do
@@ -2593,7 +2614,7 @@ council reopen docs/specs/tceil2 "owner: one more pass" --commit >/dev/null
 
 echo "judged ceiling: Tier 1 - round 1 goes STALE, round 2 opens (exit 0), round 2 RED escalates (ceiling)"
 mk_spec tstale1 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tstale1/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tstale1/plan.md
 git add -A && git commit -qm "tstale1: branch" >/dev/null
 set_tier tstale1 1
 council open-round docs/specs/tstale1 --commit >/dev/null
@@ -2613,7 +2634,7 @@ jout="$(council judge docs/specs/tstale1 --commit)"; jex=$?
 
 echo "judged ceiling: Tier 2 - STALE, RED (repair), RED (ESCALATE ceiling); after reopen the next RED is repair"
 mk_spec tstale2 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tstale2/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tstale2/plan.md
 git add -A && git commit -qm "tstale2: branch" >/dev/null
 set_tier tstale2 2
 council open-round docs/specs/tstale2 --commit >/dev/null
@@ -2651,7 +2672,7 @@ jout="$(council judge docs/specs/tstale2 --commit)"; jex=$?
 
 echo "RED ceiling: Tier 1 - round 1 GREEN, a code commit, round 2 opens (exit 0); round 2 RED escalates (ceiling)"
 mk_spec tgreen1 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tgreen1/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tgreen1/plan.md
 git add -A && git commit -qm "tgreen1: branch" >/dev/null
 set_tier tgreen1 1
 council open-round docs/specs/tgreen1 --commit >/dev/null
@@ -2673,7 +2694,7 @@ jout="$(council judge docs/specs/tgreen1 --commit)"; jex=$?
 
 echo "RED ceiling: Tier 2 - GREEN, RED (repair), RED (ESCALATE ceiling); after reopen (C=4) RED (repair), RED (ESCALATE ceiling)"
 mk_spec tgreen2 2
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tgreen2/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/tgreen2/plan.md
 git add -A && git commit -qm "tgreen2: branch" >/dev/null
 set_tier tgreen2 2
 tg2_round() { # tg2_round <n> <sonnet-pattern> <expected-exit> <label> - commit code (n>1), open, seat, judge
@@ -2961,7 +2982,7 @@ after_ct="$(grep -c '^\*\*Council:\*\*' docs/specs/lr25a/plan.md)"
 echo "judge: with a prior round's Council line already on record, the next round's line inserts right after it, not at EOF (LR25/C7)"
 mk_open_spec lr25b 2
 set_tier lr25b 1
-sed -i 's/^\*\*Council:\*\* <.*/**Council:** GREEN round 1, 2020-01-01, at 1234567, pack demo-pack/' docs/specs/lr25b/plan.md
+sed_inplace 's/^\*\*Council:\*\* <.*/**Council:** GREEN round 1, 2020-01-01, at 1234567, pack demo-pack/' docs/specs/lr25b/plan.md
 git add -A && git commit -qm "lr25b: seed a round-1 Council line" >/dev/null
 rd25b="$(mk_open_round lr25b 2)"
 write_review "$rd25b" PASS
@@ -3088,8 +3109,8 @@ out="$(council open-round docs/specs/nm3a --commit)"; ex=$?
 
 echo "open-round: r2m5/r2m6 - the ceiling block (plain path) carries the RED asks (2,5) of the last judged round"
 mk_spec ceilred1 5
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-14/' docs/specs/ceilred1/plan.md
-sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/ceilred1/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-14/' docs/specs/ceilred1/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/ceilred1/plan.md
 set_tier ceilred1 3
 mkdir -p docs/specs/ceilred1/council
 printf '1\n' > docs/specs/ceilred1/council/CEILING
@@ -3228,8 +3249,8 @@ probe_nm3() {
 }
 probe_ceiling() {
   mk_spec pceil 5
-  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, x/' docs/specs/pceil/plan.md
-  sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/pceil/plan.md
+  sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, x/' docs/specs/pceil/plan.md
+  sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/pceil/plan.md
   set_tier pceil 3 >/dev/null
   mkdir -p docs/specs/pceil/council
   printf '1\n' > docs/specs/pceil/council/CEILING
@@ -3257,8 +3278,8 @@ probe_courtcommit() {
 }
 probe_exit6uniform() {
   mk_spec puni 2
-  sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, x/' docs/specs/puni/plan.md
-  sed -i 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/puni/plan.md
+  sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, x/' docs/specs/puni/plan.md
+  sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#' docs/specs/puni/plan.md
   set_tier puni 1 >/dev/null
   mkdir -p docs/specs/puni/council
   printf '1\n' > docs/specs/puni/council/CEILING
@@ -3680,7 +3701,7 @@ c5_check() { # c5_check <label> <spec> <verb-stdout>
 
 mk_spec c5verb 2
 set_tier c5verb 1
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-15/' docs/specs/c5verb/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-15/' docs/specs/c5verb/plan.md
 cat > docs/specs/c5verb/c5verb-02-second.md <<'EOF'
 ---
 story: c5verb-02
@@ -3791,7 +3812,7 @@ git add -A >/dev/null 2>&1; git commit -qm "0.18: snapshot what the sections abo
 cp "$SRC"/scripts/wave-check.sh "$SRC"/scripts/trace-check.sh scripts/
 # The fixture constitution gains a Profile (Client path left as the template's placeholder)
 # and a slow ## Commands cell for the timeout case.
-sed -i '1a\
+sed_inplace '1a\
 \
 ## Profile\
 \
@@ -3802,7 +3823,7 @@ printf '| Fixture: slower than VULYK_VERIFY_TIMEOUT=1 | `sleep 3` |\n' >> CLAUDE
 git add -A && git commit -qm "0.18: fixture Profile + slow cell" >/dev/null
 
 l18_client() { # l18_client <value> - rewrites the fixture constitution's Client path cell, commits
-  sed -i "s#^| Client path | .*#| Client path | \`$1\` |#" CLAUDE.md
+  sed_inplace "s#^| Client path | .*#| Client path | \`$1\` |#" CLAUDE.md
   git add -A && git commit -qm "constitution: Client path = $1" >/dev/null
 }
 l18_last() { printf '%s\n' "$1" | tail -1; } # l18_last <verb-output> -> its JSON line
@@ -3939,7 +3960,7 @@ echo "ADR-013 D4: repair writes the mechanical story - asks from the row and the
 mkdir -p docs/specs/r18rp
 cp "$SRC/templates/plan.md" docs/specs/r18rp/plan.md
 printf '# r18rp (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n2. ask number 2 works\n3. ask number 3 works\n' > docs/specs/r18rp/brief.md
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-26/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rp/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-26/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rp/plan.md
 printf 'a\n' > r18rp-a.txt; printf 'b\n' > r18rp-b.txt
 cat > docs/specs/r18rp/r18rp-01-a.md <<'EOF'
 ---
@@ -4043,7 +4064,7 @@ echo "one ## Asks parser (lib.sh brief_asks): Asks written as > lines alone open
 mkdir -p docs/specs/r18rq
 cp "$SRC/templates/plan.md" docs/specs/r18rq/plan.md
 printf '# r18rq (brief)\n\n## Request\nbuild the thing\n\n## Asks\n> quoted ask one works\n>\n> quoted ask two works\n\n## Answers\n> not an ask\n' > docs/specs/r18rq/brief.md
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-16/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rq/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-16/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rq/plan.md
 printf 'q\n' > r18rq-a.txt
 printf -- '---\nstory: r18rq-01\nstatus: done\nwave: 1\n---\n# A\n\n## Requirements\n> quoted ask one works\n\n## Files\n- r18rq-a.txt\n\n## Verification\n`true`\n' > docs/specs/r18rq/r18rq-01-a.md
 git add -A && git commit -qm "r18rq: fixture" >/dev/null
@@ -4064,7 +4085,7 @@ fi # part roster
 if part advance; then # --- part advance: advance, --ingest, claim's clean-tree rule, close-story's idempotency and timeout
 echo "ADR-013 D2: advance - branch and open-round in one call, stop at the first agent boundary, key order fixed"
 mk_spec r18ad 2
-sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-26/; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18ad/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-26/; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18ad/plan.md
 git add -A && git commit -qm "r18ad: approved, tier 2, no branch yet" >/dev/null
 out="$(council advance docs/specs/r18ad 2>&1)"; ex=$?
 last="$(l18_last "$out")"
@@ -4182,6 +4203,12 @@ out="$(VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh close-story docs/specs/r18cs
 [ "$ex" -eq 4 ] && [ "$(l18_last "$out")" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"verification timed out after 1s: sleep 3"}' ] \
   && grep -q '^status: todo' docs/specs/r18cs/r18cs-02-slow.md && echo "  ok    exit 4, error names the timeout and the command, story stays todo" \
   || { echo "::error::timeout: exit=$ex out=$out"; fail=1; }
+# The same timeout with timeout/gtimeout stubs first on PATH: the run must reach the Python cap and
+# report the same exit and the same JSON line as the real-PATH run above.
+out_stub="$(PATH="$STUBS:$PATH" VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh close-story docs/specs/r18cs/r18cs-02-slow.md 2>&1)"; ex_stub=$?
+[ "$ex_stub" -eq "$ex" ] && [ -n "$(l18_last "$out")" ] && [ "$(l18_last "$out_stub")" = "$(l18_last "$out")" ] \
+  && grep -q '^status: todo' docs/specs/r18cs/r18cs-02-slow.md && echo "  ok    stubbed timeout/gtimeout first on PATH: exit $ex_stub, same timeout JSON, story stays todo" \
+  || { echo "::error::stubbed timeout: exit=$ex_stub out=$out_stub"; fail=1; }
 
 echo "ADR-013 D5: the budget covers the whole run - two 2 s lines under a 3 s budget time out on the second"
 printf '| Fixture: two-second line | `sleep 2` |\n' >> CLAUDE.md

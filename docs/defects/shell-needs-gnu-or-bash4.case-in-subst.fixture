@@ -1,0 +1,12 @@
+# original case - scripts/trace-check.sh:117 before cross-platform-07: a case pattern's `)` inside a multi-line
+# $( ), which bash 3.2 reads as the end of the substitution (syntax error near unexpected token `newline')
+ALL_QUOTES="$(for story in "$SPEC"/*.md; do
+  base="$(basename "$story")"
+  case "$base" in plan.md|brief.md) continue ;; esac
+done)"
+# neighbour form - scripts/cycle.sh:2079: the same inside a { } group piped in $( ), a glob pattern
+RED_IMPL="$({
+  for e in ${specs[@]+"${specs[@]}"}; do
+    case "$e" in *[*?[]*|*/) ;; *) [ -d "$e" ] || printf '%s\n' "$e" ;; esac
+  done
+} | LC_ALL=C sort -u)"

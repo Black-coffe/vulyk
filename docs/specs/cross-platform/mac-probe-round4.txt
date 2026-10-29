@@ -1,0 +1,119 @@
+##### tests/maintenance.test.sh
+--- budget: the checker itself
+--- budget: this tree
+sed: 1: "1{/^---$/!q;d};/^---$/q ...": extra characters at the end of d command
+sed: 1: "1{/^---$/!q;d};/^---$/q ...": extra characters at the end of d command
+tr: stdout: Broken pipe
+##[error]the always-loaded rules cap misjudged the fixture: 'always.md 41 lines
+README.md 59 lines'
+sed: 1: "1{/^---$/!q;d};/^---$/q ...": extra characters at the end of d command
+tr: stdout: Broken pipe
+sed: 1: "1{/^---$/!q;d};/^---$/q ...": extra characters at the end of d command
+tr: stdout: Broken pipe
+--- due maintenance: gc
+--- due maintenance: evolve
+--- due maintenance: map, quiet hive, size
+--- due maintenance: native MEMORY.md size
+--- bootstrap offered once in an unfilled hive
+--- model profile offered while this machine has no choice
+--- evolve ledger
+--- green terminal asks «Выпускаем?» and ships on yes
+--- redact.sh and the handoff.py fallback mask nine more token shapes
+--- /vulyk-gc commit line refuses to commit a CONSOLIDATED.md that lost more than half
+--- /vulyk-handoff runs from any folder of the hive (handoff-cwd)
+--- no command or skill injection names its script relative to the cwd (Law 6 card)
+--- memory-triage.sh lists private memory and writes nothing (rules-tree ask 11)
+--- prompt-check.sh: agent and command prose against the scripts and agents it names (docs/specs/prompt-check)
+--- handoff.sh: a python3 that is a stub (the Windows Store alias, exit 49) is passed over (post-043-tails)
+--- portability-check.sh: the static gate of card shell-needs-gnu-or-bash4 (cross-platform-05)
+maintenance.test.sh: 304 checks, 1 failed
+##### tests/council.test.sh --part judge
+judge: three RED rounds (a different ask each) escalate (ceiling) on the third, not the second
+judge: ask 3 RED in rounds 1 and 2 -> round 2 ESCALATE no-progress (ceiling 3)
+judge: ask 2 RED then ask 5 RED -> round 2 RED/repair, no trigger
+judge: round N-1 STALE with ask 3 -> round 2 RED/repair, no trigger
+judge: review [ask 4] BLOCK in rounds 1 and 2, seats GREEN -> round 2 ESCALATE no-progress
+judge: 4 of 7 asks RED -> ESCALATE half, on round 1 already
+judge: half floor = max(2, ceil(A/2)) - a 1-ask brief's one evidenced RED repairs, never escalates (R10)
+judge: half floor - a 2-ask brief needs BOTH asks RED to escalate, not just one (R10)
+judge: every blind seat exhausted -> ESCALATE env; only the required one (opus) is ABSENT in the row
+judge: every seat N/A with why:, review PASS -> GREEN na:3
+judge: memory/stats/human.jsonl REJECTED newer than ROUND.opened forces RED
+judge: a seat with no report and no attempt-2 is a precondition failure, not ABSENT
+judge: PAUSE present -> exit 3, next paused, nothing written
+journal.sh: header on first use, appends the C9 line, same line on stdout
+briefed: missing ## Asks section -> exit 2, no Briefed line written
+briefed: empty ## Asks section (present, zero items) -> exit 2
+##[error]empty Asks: exit=0 out=cycle: briefempty - briefed
+{"ok":true,"verb":"briefed","exit":0,"next":"branch"}
+briefed: writes **Briefed:** via grill, <owner>, <date>, journals, next branch
+briefed: --mode mini-brief / assumed select the C7 variant
+briefed --commit: commits as vulyk(<slug>): briefed
+branch: exits 2 without Briefed or Approved
+branch: creates/checks out vulyk/<slug>, writes **Branch:**, journal, next build:1
+branch --commit: commits as vulyk(<slug>): branch vulyk/<slug>
+branch: checkout fails (branch already checked out in another worktree) -> exit 2, no **Branch:** line (R17/M-6)
+git failures: a --commit whose git commit fails (index.lock present) -> exit 2 naming git commit, paperwork stays on disk, re-run after unlocking commits it (R17/M-6)
+open-round: leaves no ROUND file when git worktree add fails (R17/M-6) - ROUND is written last
+open-round: .claude/vulyk-setup exits 0 -> the round opens and the setup ran inside the court
+open-round: .claude/vulyk-setup exits 3 -> exit 2 naming the exit, no round, no court, log tail on stderr
+open-round: VULYK_SETUP_TIMEOUT=2 and a setup that sleeps 10 s -> exit 2 naming the timeout, court removed
+open-round: the same timeout with timeout/gtimeout stubs first on PATH -> same exit and error, python cap
+##### tests/council.test.sh --part walks
+=== Story 15: one scenario per story 05 criterion ===
+open-round --commit: r2m3 - a failed first commit (index.lock) leaves ROUND/journal.md uncommitted; the second --commit finishes them, not a silent no-op
+open-round: r2m16 - a status: blocked story refuses by name and file, nothing created under council/
+open-round / status --json: N-m3 - a round dir without its own ROUND file is not open; open-round rewrites it in place (same N), no round-2, no no-op line
+open-round: r2m5/r2m6 - the ceiling block (plain path) carries the RED asks (2,5) of the last judged round
+open-round: a STALE fold at ceiling 1 no longer counts toward the ceiling (convergent-judge-05, flipped) - round 2 opens
+open-round: r2m5/r2m6 - the ceiling block (STALE-fold path) carries the same RED asks (2,5)
+open-round: r2m7/N-m2 - a failing court reduction commit exits 2 naming it, and removes the round/court (never handed to a seat)
+open-round: r2m7/N-m2 - by structure, the reduction commit uses -c commit.gpgsign=false and --no-verify, with no || true
+r2m4/N-m1: structural - every 'emit false' call site carries a non-empty error argument
+r2m4/N-m1: structural - every exit-6 site means ok:true/next:escalated, never ok:false (exit 6 means one thing everywhere)
+  [b9f36e8] LR19 attempts (cmd_judge):        ok
+  [b9f36e8] LR21/r2m1 round-number match:      ok
+  [b9f36e8] LR25/C7 Council line placement:    ok
+  [b9f36e8] m-4 same-second override:          ok
+  [b9f36e8] m-10 atomic ledger append:         ok
+  [b9f36e8] N-m7 note through redact:          ok
+  [b9f36e8] probe_r2m3:  FAIL
+  [b9f36e8] probe_r2m16:  FAIL
+  [b9f36e8] probe_nm3:  FAIL
+  [b9f36e8] probe_ceiling:  FAIL
+  [b9f36e8] probe_courtcommit:  FAIL
+  [b9f36e8] probe_exit6uniform:  FAIL
+  [branch] LR19 attempts (cmd_judge):        ok
+  [branch] LR21/r2m1 round-number match:      ok
+  [branch] LR25/C7 Council line placement:    ok
+  [branch] m-4 same-second override:          ok
+  [branch] m-10 atomic ledger append:         ok
+  [branch] N-m7 note through redact:          ok
+  [branch] probe_r2m3:  ok
+  [branch] probe_r2m16:  ok
+  [branch] probe_nm3:  ok
+  [branch] probe_ceiling:  ok
+  [branch] probe_courtcommit:  ok
+  [branch] probe_exit6uniform:  ok
+  [eb3203a] LR19 attempts (cmd_judge):        ok
+  [eb3203a] LR21/r2m1 round-number match:      ok
+  [eb3203a] LR25/C7 Council line placement:    ok
+  [eb3203a] m-4 same-second override:          ok
+  [eb3203a] m-10 atomic ledger append:         ok
+  [eb3203a] N-m7 note through redact:          ok
+  [eb3203a] probe_returned:  FAIL
+  [eb3203a] probe_r2m2wall:  ok
+  [eb3203a] probe_lr31wall:  FAIL
+  [eb3203a] probe_r2m9wall:  FAIL
+  [branch] LR19 attempts (cmd_judge):        ok
+  [branch] LR21/r2m1 round-number match:      ok
+  [branch] LR25/C7 Council line placement:    ok
+  [branch] m-4 same-second override:          ok
+  [branch] m-10 atomic ledger append:         ok
+  [branch] N-m7 note through redact:          ok
+  [branch] probe_returned:  ok
+  [branch] probe_r2m2wall:  ok
+  [branch] probe_lr31wall:  ok
+  [branch] probe_r2m9wall:  FAIL
+##[error][branch] probe_r2m9wall: expected ok, got FAIL
+Post job cleanup.

@@ -115,14 +115,6 @@ redact_note() { # redact_note <text> -> <text> piped through scripts/redact.sh (
   printf '%s' "$1" | bash "$HERE/redact.sh" 2>/dev/null
 }
 
-sed_inplace() { # sed_inplace <sed-args...> <file> - `sed -i` in the one spelling GNU and BSD
-  # (macOS) sed both read, an attached backup suffix; the backup is removed whatever sed returned.
-  local f="${!#}" rc=0
-  sed -i.bak "$@" || rc=$?
-  rm -f "$f.bak"
-  return $rc
-}
-
 commit_subject() { # commit_subject <message> -> <message>, or, when the Profile's Commit convention
   # names conventional commits, `kind(id): text` rewritten as `chore(kind-id): text`: a hive whose
   # commitlint allows only conventional types rejected every `story(..)` and `vulyk(..)` subject.
@@ -316,13 +308,16 @@ descope_not_in_brief() { # descope_not_in_brief <spec> -> each `## Descoped` ent
   # plan.md did not hold yet when brief.md last changed: a descope the brief never took in. The
   # blind seats read only brief.md, so they judge the dropped ask as unmet (a hive lost three
   # rounds so). Read from git, not guessed: nothing when brief.md has no commit or is being edited.
-  local spec="$1" rel c
+  local spec="$1" rel c old
   # -z: the path comes back as itself; a C-quoted non-ASCII name would miss in `git show`
   rel="$(git ls-files -z --full-name -- "$spec/brief.md" 2>/dev/null | tr -d '\0')"
   [ -n "$rel" ] && [ -z "$(git status --porcelain -- "$spec/brief.md" 2>/dev/null)" ] || return 0
   c="$(git log -1 --format=%H -- "$spec/brief.md" 2>/dev/null)"; [ -n "$c" ] || return 0
-  grep -vxF -f <(git show "$c:${rel%brief.md}plan.md" 2>/dev/null | descoped_entries) \
-    <(descoped_entries < "$spec/plan.md")
+  old="$(git show "$c:${rel%brief.md}plan.md" 2>/dev/null | descoped_entries)"
+  # no old entries: every entry is new - never `grep -f` an empty file, which matches every
+  # line under BusyBox (and some BSD) greps
+  [ -n "$old" ] || { descoped_entries < "$spec/plan.md"; return; }
+  grep -vxF -f <(printf '%s\n' "$old") <(descoped_entries < "$spec/plan.md")
 }
 
 current_round_dir() { # current_round_dir <spec> -> the highest round-N dir, or nothing
@@ -850,7 +845,7 @@ review_verdict_of_text() { # review_verdict_of_text <text> -> PASS | BLOCK | "" 
   first="$(printf '%s\n' "$1" | sed -n '1p')"
   first="$(printf '%s' "$first" | grep -E '^(PASS|BLOCK)\b|^VERDICT: (PASS|BLOCK)\b')" || return 0
   case "$first" in
-    VERDICT:*) printf '%s' "$first" | sed -n 's/^VERDICT: \(PASS\|BLOCK\).*/\1/p' ;;
+    VERDICT:*) printf '%s' "$first" | sed -nE 's/^VERDICT: (PASS|BLOCK).*/\1/p' ;;
     PASS*) echo PASS ;;
     BLOCK*) echo BLOCK ;;
   esac
@@ -928,8 +923,8 @@ commit_paperwork() { # commit_paperwork <verb-label> <message> <path...> - stage
   # file, so a spec that never had a Stop hook fire yet must not add a path that does not
   # exist on disk - only ride the log when there is a log to ride.
   [ -e memory/stats/anomalies.jsonl ] && paths+=(memory/stats/anomalies.jsonl)
-  [ -n "$(git status --porcelain -- "${paths[@]}" 2>/dev/null)" ] || return 0
-  git add -A -- "${paths[@]}" >/dev/null 2>&1
+  [ -n "$(git status --porcelain -- ${paths[@]+"${paths[@]}"} 2>/dev/null)" ] || return 0
+  git add -A -- ${paths[@]+"${paths[@]}"} >/dev/null 2>&1
   git_commit_or_fail "$verb" "$(commit_subject "$msg")"
 }
 
@@ -1975,8 +1970,9 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
   # `timeout`, so verification slower than the Bash tool's 10-minute cap reports 124 instead of
   # dying with the tool call. A per-command budget would not do: a repair story unions every story's
   # lines, and five 500 s commands still pass five 540 s limits. 540 s leaves the verb its own
-  # margin inside that cap. `timeout 5 true` rather than `command -v`: on Windows a PATH that
-  # finds System32's timeout.exe first would otherwise fail every verification line.
+  # margin inside that cap. Each line runs under lib.sh's run_capped (timeout, gtimeout or the Python
+  # cap, else uncapped with its warning); capped_by says whether a cap exists, so an uncapped run never
+  # reads a command's own 124 as a timeout.
   # Without <outdir> (close-story): one command at a time, the whole block repeated <reps> times
   # (R18/M-3 - a single `bash -c "$multi_line_block"` used to report only the last line's exit
   # status), stopping at the first non-zero line. With <outdir> (stamp-red): every line once, its
@@ -1987,7 +1983,7 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
   VR_VT="${VULYK_VERIFY_TIMEOUT:-540}"; VR_TIMEOUT_OK=0; VR_RC=0; VR_LINE=""; VR_RUN=0
   VR_CODES=(); VR_LINES=()
   case "$VR_VT" in ''|*[!0-9]*|0) VR_VT=540 ;; esac
-  command -v timeout >/dev/null 2>&1 && timeout 5 true </dev/null >/dev/null 2>&1 && VR_TIMEOUT_OK=1
+  capped_by && VR_TIMEOUT_OK=1
   [ -n "$outdir" ] && reps=1
   local i=1
   while [ "$i" -le "$reps" ]; do
@@ -1997,26 +1993,18 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
       [ "$vline" = "none — reviewed by lead-review" ] && continue
       if [ -n "$outdir" ]; then
         k=$((k+1))
-        if [ "$VR_TIMEOUT_OK" -eq 1 ]; then
-          left=$(( VR_VT - (SECONDS - vstart) ))
-          if [ "$left" -le 0 ]; then vrc=124; : > "$outdir/$k.out"
-          else timeout "$left" bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
-          fi
-        else
-          bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
+        left=$(( VR_VT - (SECONDS - vstart) ))
+        if [ "$left" -le 0 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then vrc=124; : > "$outdir/$k.out"
+        else run_capped_as "$VULYK_CAP" "$(( left > 0 ? left : 1 ))" bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
         fi
         cat "$outdir/$k.out"
         VR_CODES[$k]="$vrc"; VR_LINES[$k]="$vline"; VR_RC="$vrc"; VR_LINE="$vline"
         [ "$vrc" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ] && return 0
         continue
       fi
-      if [ "$VR_TIMEOUT_OK" -eq 1 ]; then
-        left=$(( VR_VT - (SECONDS - vstart) ))
-        if [ "$left" -le 0 ]; then vrc=124
-        else timeout "$left" bash -c "$vline"; vrc=$?
-        fi
-      else
-        bash -c "$vline"; vrc=$?
+      left=$(( VR_VT - (SECONDS - vstart) ))
+      if [ "$left" -le 0 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then vrc=124
+      else run_capped_as "$VULYK_CAP" "$(( left > 0 ? left : 1 ))" bash -c "$vline"; vrc=$?
       fi
       VR_RC="$vrc"; VR_LINE="$vline"
       [ "$vrc" -ne 0 ] && return 0
@@ -2089,9 +2077,9 @@ EOF
   RED_IMPL=""
   [ "${#specs[@]}" -gt 0 ] || return 0
   RED_IMPL="$({
-    git -c core.quotePath=false ls-files -co --exclude-standard -- "${specs[@]}" 2>/dev/null
-    for e in "${specs[@]}"; do
-      case "$e" in *[*?[]*|*/) ;; *) [ -d "$e" ] || printf '%s\n' "$e" ;; esac
+    git -c core.quotePath=false ls-files -co --exclude-standard -- ${specs[@]+"${specs[@]}"} 2>/dev/null
+    for e in ${specs[@]+"${specs[@]}"}; do
+      case "$e" in (*[*?[]*|*/) ;; (*) [ -d "$e" ] || printf '%s\n' "$e" ;; esac
     done
   } | LC_ALL=C sort -u | while IFS= read -r e; do
     [ -n "$e" ] || continue
@@ -2254,7 +2242,7 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1> [<stamp>]
       done <<EOF
 $(files_of "$STORY")
 EOF
-      local DONE_DIRTY; DONE_DIRTY="$(git status --porcelain -- "${DONE_PATHS[@]}" 2>/dev/null)"
+      local DONE_DIRTY; DONE_DIRTY="$(git status --porcelain -- ${DONE_PATHS[@]+"${DONE_PATHS[@]}"} 2>/dev/null)"
       if [ -z "$DONE_DIRTY" ]; then
         echo "cycle: $(fm_field "$STORY" story) - already done, nothing to close"
         emit_status close-story "$SPECDIR"
@@ -2341,7 +2329,7 @@ EOF
     while IFS= read -r pf; do [ -n "$pf" ] && PC_FILES+=("$pf"); done <<EOF
 $(files_of "$STORY")
 EOF
-    PC_OUT="$(bash "$HERE/prompt-check.sh" --touched "${PC_FILES[@]}" 2>&1)"; PC_RC=$?
+    PC_OUT="$(bash "$HERE/prompt-check.sh" --touched ${PC_FILES[@]+"${PC_FILES[@]}"} 2>&1)"; PC_RC=$?
     case "$PC_RC" in
       0) printf '%s\n' "$PC_OUT" | grep '^prompt-check: warn ' >&2 ;;
       1)
@@ -2427,11 +2415,11 @@ EOF
     # that matches no path. The globs of `## Files` expand here, and only here: the commit and the
     # resets below read OWN literally (GIT_LITERAL_PATHSPECS), so `app/[id]/p.ts` is one file.
     while IFS= read -r -d '' p; do OWN+=("$p"); done < <(git -c core.quotePath=false diff --cached \
-      --name-only -z --no-renames -- "${SPECS[@]}" 2>/dev/null)
+      --name-only -z --no-renames -- ${SPECS[@]+"${SPECS[@]}"} 2>/dev/null)
     local commit_err="nothing of this story is staged"
     if [ "${#OWN[@]}" -eq 0 ] \
-      || ! commit_err="$(GIT_LITERAL_PATHSPECS=1 git commit -q -m "$(commit_subject "story($ID): $TITLE")" --only -- "${OWN[@]}" 2>&1)"; then
-      [ "${#OWN[@]}" -eq 0 ] || GIT_LITERAL_PATHSPECS=1 git reset -q -- "${OWN[@]}" >/dev/null 2>&1
+      || ! commit_err="$(GIT_LITERAL_PATHSPECS=1 git commit -q -m "$(commit_subject "story($ID): $TITLE")" --only -- ${OWN[@]+"${OWN[@]}"} 2>&1)"; then
+      [ "${#OWN[@]}" -eq 0 ] || GIT_LITERAL_PATHSPECS=1 git reset -q -- ${OWN[@]+"${OWN[@]}"} >/dev/null 2>&1
       sed_inplace -E "s/^(status:[[:space:]]*)done/\1$ST/" "$STORY"
       echo "cycle: close-story - git commit failed: $commit_err" >&2
       emit false close-story 2 error "git commit failed"
@@ -2439,7 +2427,7 @@ EOF
     fi
     # `--only` commits through a temporary index: a hook that rewrote and re-added a file
     # (lint-staged, a formatter) changed the commit but not the real index. Sync it to HEAD.
-    GIT_LITERAL_PATHSPECS=1 git reset -q -- "${OWN[@]}" >/dev/null 2>&1
+    GIT_LITERAL_PATHSPECS=1 git reset -q -- ${OWN[@]+"${OWN[@]}"} >/dev/null 2>&1
   else
     sed_inplace -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
   fi
@@ -2533,12 +2521,9 @@ run_court_setup() { # run_court_setup <slug> <n> <court-abs> <round-dir> - the h
   case "$st" in ''|*[!0-9]*|0) st=300 ;; esac
   mkdir -p "$logdir"
   local log="$logdir/setup.log"
-  if command -v timeout >/dev/null 2>&1 && timeout 5 true </dev/null >/dev/null 2>&1; then
-    ( cd "$court_abs" && VULYK_ROOT="$ROOT" VULYK_COURT="$court_abs" timeout "$st" bash "$setup" ) </dev/null >"$log" 2>&1 || src=$?
-  else
-    echo "cycle: open-round - no working timeout, court setup runs uncapped" >&2
-    ( cd "$court_abs" && VULYK_ROOT="$ROOT" VULYK_COURT="$court_abs" bash "$setup" ) </dev/null >"$log" 2>&1 || src=$?
-  fi
+  # run_capped (lib.sh): timeout, gtimeout or Python caps it; with none it runs uncapped and says so.
+  run_capped "$st" env VULYK_ROOT="$ROOT" VULYK_COURT="$court_abs" bash -c 'cd "$1" && exec bash "$2"' court-setup "$court_abs" "$setup" \
+    </dev/null >"$log" 2>&1 || src=$?
   [ "$src" -eq 0 ] && return 0
   local why="court setup failed (exit $src)"
   [ "$src" -eq 124 ] && why="court setup timed out after ${st}s"
@@ -2841,8 +2826,10 @@ append_after_answers() { # append_after_answers <brief.md> <block> - inserts bef
   # heading at EOF first when a spec was briefed a path that never wrote one (e.g. Tier 1).
   local brief="$1" block="$2"
   grep -q '^## Answers[[:space:]]*$' "$brief" 2>/dev/null || { printf '\n## Answers\n' >> "$brief"; }
-  awk -v ins="$block" '
-    BEGIN { in_ans=0; done=0 }
+  # the block goes through the environment, not -v: BSD awk refuses a newline in a -v value,
+  # and -v would rewrite a backslash in the owner's decision.
+  VULYK_INS="$block" awk '
+    BEGIN { ins = ENVIRON["VULYK_INS"]; in_ans=0; done=0 }
     { if (!done && in_ans && /^##[[:space:]]/) { print ins; done=1 }
       print
       if ($0 ~ /^##[[:space:]]+Answers[[:space:]]*$/) in_ans=1 }
@@ -3131,7 +3118,7 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
       echo "cycle: $SLUG - $f already repairs round $N, nothing written"
       if [ "$DOCOMMIT" = "1" ]; then
         local -a cpaths=("$f"); [ -f "$SPEC/journal.md" ] && cpaths+=("$SPEC/journal.md")
-        commit_paperwork repair "vulyk($SLUG): repair round $N" "${cpaths[@]}"
+        commit_paperwork repair "vulyk($SLUG): repair round $N" ${cpaths[@]+"${cpaths[@]}"}
       fi
       emit_status repair "$SPEC"
       exit 0

@@ -85,12 +85,16 @@ hive_paperwork_path() { # hive_paperwork_path <repo-relative-path> <root>
 # A commit range is paperwork-only iff every changed path is one the cycle writes itself -
 # never the software. See is_paperwork_path() above for the whitelist itself.
 paperwork_only() { # paperwork_only <root> <from-commit> <to-commit>
-  local p
+  local p list rc=0
   git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
-  while IFS= read -r -d '' p; do
-    is_paperwork_path "$p" "$1" || return 1
-  done < <(git -C "$1" diff --name-only -z "$2" "$3" 2>/dev/null)
-  wait $! || return 1   # a diff git could not produce is not paperwork
+  # a file, not `wait $!` on a process substitution: bash 3.2 (macOS) cannot wait on one
+  list="$(mktemp)" || return 1
+  git -C "$1" diff --name-only -z "$2" "$3" > "$list" 2>/dev/null || rc=1   # a diff git could not produce is not paperwork
+  while [ "$rc" -eq 0 ] && IFS= read -r -d '' p; do
+    is_paperwork_path "$p" "$1" || rc=1
+  done < "$list"
+  rm -f "$list"
+  return "$rc"
 }
 
 # A marker line is "filled" when it exists and does not still carry the template's `<...>`.
@@ -397,3 +401,91 @@ EOF
 now_ts() { date -u +%Y-%m-%dT%H:%M:%SZ; } # the one timestamp shape every ledger row uses
 
 slug_of() { basename "$1"; } # slug_of <spec-dir>
+
+# --- portability helpers (cross-platform) ----------------------------------------------------
+# One spelling each for what GNU, BSD (macOS) and Git Bash disagree on: which Python, `sed -i`,
+# `date -d`, and a time cap. Callers use these instead of their own probes.
+
+vulyk_python() { # vulyk_python -> sets VULYK_PY to the first of python3, python, py that runs Python 3
+  # (0), or empties it (1). A preset non-empty VULYK_PY is trusted. Call it in the current shell,
+  # never in $(...): the answer is the variable. Run, not `command -v`: Windows' python3 alias exits
+  # 9009 (49 once truncated) and an old python is Python 2.
+  local p
+  [ -n "${VULYK_PY:-}" ] && return 0
+  for p in python3 python py; do
+    if "$p" -c 'import sys; sys.exit(sys.version_info[0] != 3)' </dev/null >/dev/null 2>&1; then
+      VULYK_PY="$p"; return 0
+    fi
+  done
+  VULYK_PY=""
+  return 1
+}
+
+sed_inplace() { # sed_inplace <sed-args...> <file> - `sed -i` in the one spelling GNU and BSD
+  # (macOS) sed both read, an attached backup suffix; the backup is removed whatever sed returned.
+  local f="${!#}" rc=0
+  sed -i.bak "$@" || rc=$?
+  rm -f "$f.bak"
+  return $rc
+}
+
+date_epoch() { # date_epoch <YYYY-MM-DD | YYYY-MM-DDTHH:MM:SSZ> -> epoch seconds (UTC); empty, exit 1
+  # for any other shape or a date neither GNU `date -d` nor BSD `date -j -f` parses. A day is its UTC
+  # midnight: BSD -f fills the fields it is not given from the clock, so the time is spelled out.
+  local w="${1:-}" e=""
+  case "$w" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) w="${w}T00:00:00Z" ;;
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+    *) return 1 ;;
+  esac
+  e="$(date -u -d "$w" +%s 2>/dev/null)" || e="$(date -ju -f '%Y-%m-%dT%H:%M:%SZ' "$w" +%s 2>/dev/null)" || e=""
+  case "$e" in ''|*[!0-9]*) return 1 ;; esac
+  printf '%s\n' "$e"
+}
+
+date_shift() { # date_shift <±days> [<+fmt>] -> `date -u` of now shifted by <days>, default +%Y-%m-%d;
+  # GNU `-d "N days"`, else BSD `-v±Nd`; empty, exit 1 on a bad count or when neither date takes it.
+  local n="${1:-}" fmt="${2:-+%Y-%m-%d}" s="+" d out=""
+  case "$n" in -*) s="-"; d="${n#-}" ;; +*) d="${n#+}" ;; *) d="$n" ;; esac
+  case "$d" in ''|*[!0-9]*) return 1 ;; esac
+  out="$(date -u -d "$s$d days" "$fmt" 2>/dev/null)" || out="$(date -u -v"$s$d"d "$fmt" 2>/dev/null)" || out=""
+  [ -n "$out" ] || return 1
+  printf '%s\n' "$out"
+}
+
+capped_by() { # capped_by -> sets VULYK_CAP to what run_capped would cap with: timeout | gtimeout |
+  # python (VULYK_PY set) | "" (1). A binary counts only if `<it> 1 true` passes: on Windows a PATH
+  # that finds System32's timeout.exe first would otherwise fail every capped command. The Python cap
+  # counts only with run-capped.py beside this file: a lib.sh copied alone (a test sandbox on a Mac,
+  # which has no timeout) would otherwise fail every command with python's "can't open file".
+  VULYK_CAP=""
+  if command -v timeout >/dev/null 2>&1 && timeout 1 true </dev/null >/dev/null 2>&1; then VULYK_CAP=timeout
+  elif command -v gtimeout >/dev/null 2>&1 && gtimeout 1 true </dev/null >/dev/null 2>&1; then VULYK_CAP=gtimeout
+  elif [ -f "$(dirname "${BASH_SOURCE[0]}")/run-capped.py" ] && vulyk_python; then VULYK_CAP=python
+  else return 1; fi
+}
+
+run_capped() { # run_capped <secs> <cmd> [args...] - <cmd> with stdin/stdout/stderr inherited, stopped
+  # after <secs>: exit 124 on timeout, else the command's exit. `timeout -k 10`, else `gtimeout -k 10`,
+  # else run-capped.py beside this file (its own process group, SIGTERM, 10 s grace, SIGKILL), else
+  # uncapped with one stderr line. <secs> 0 or empty: uncapped, silently.
+  case "${1:-}" in ''|0) shift; "$@"; return ;; esac
+  capped_by
+  run_capped_as "$VULYK_CAP" "$@"
+}
+
+run_capped_as() { # run_capped_as <cap> <secs> <cmd> [args...] - run_capped with the cap a caller's own
+  # capped_by already found (VULYK_CAP): a runner capping many commands probes once, not once per
+  # command, so no probe launches sit between its budget clock and the cap.
+  local cap="${1:-}" secs="${2:-}"
+  shift 2
+  case "$secs" in ''|0) "$@"; return ;; esac
+  case "$cap" in
+    timeout)  timeout -k 10 "$secs" "$@" ;;
+    gtimeout) gtimeout -k 10 "$secs" "$@" ;;
+    python)   "$VULYK_PY" "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/run-capped.py" "$secs" "$@" ;;
+    *)
+      echo "run_capped: no timeout, gtimeout or python 3 - running $1 uncapped" >&2
+      "$@" ;;
+  esac
+}

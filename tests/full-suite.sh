@@ -17,10 +17,10 @@
 # fresh install copy one install.sh output built once per run (tests/telemetry.test.sh, tests/intake.test.sh).
 #
 # VULYK_SUITE_TIMEOUT: the whole run's budget in seconds, default 590 (the 600 s Bash cap less the summary), 0 = uncapped. At the
-# budget running jobs are killed (`timeout`, set to what is left of the budget) and they and
-# every unstarted job are marked TIMEOUT. Without a working `timeout` binary (probe `timeout 5
-# true`: System32's timeout.exe fails it) jobs run uncapped, no new job starts after the
-# budget, and a job that ends past it is still reported TIMEOUT by its measured time.
+# budget running jobs are killed (lib.sh's run_capped: `timeout`, else `gtimeout`, else python 3; the
+# budget is what is left of it) and they and every unstarted job are marked TIMEOUT. Without any of the three
+# (capped_by probes them) jobs run uncapped, no new job starts after the budget, and a job that ends past it
+# is still reported TIMEOUT by its measured time.
 #
 # Output: one `ok|FAIL|TIMEOUT <seconds>s <command>` line per job as it ends, the last 20 lines
 # of each failed or killed job's log, then
@@ -30,6 +30,7 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 2
+. "$ROOT/scripts/lib.sh"   # capped_by, run_capped_as (probed once here, not per job)
 
 JOBS='' LIST=0
 while [ $# -gt 0 ]; do
@@ -70,16 +71,16 @@ fi
 # the latency checks move to the end; FIRST_LATE is the index of the first of them
 is_late() { [[ "$1" =~ (^|[ /])(inject|intake)\.test\.sh( --part latency)?$ ]]; }
 EARLY=() LATE=()
-for c in "${CMDS[@]}"; do if is_late "$c"; then LATE+=("$c"); else EARLY+=("$c"); fi; done
-CMDS=("${EARLY[@]}" "${LATE[@]}")
+for c in ${CMDS[@]+"${CMDS[@]}"}; do if is_late "$c"; then LATE+=("$c"); else EARLY+=("$c"); fi; done
+CMDS=(${EARLY[@]+"${EARLY[@]}"} ${LATE[@]+"${LATE[@]}"})
 FIRST_LATE=${#EARLY[@]}
-if [ "$LIST" -eq 1 ]; then printf '%s\n' "${CMDS[@]}"; exit 0; fi
+if [ "$LIST" -eq 1 ]; then printf '%s\n' ${CMDS[@]+"${CMDS[@]}"}; exit 0; fi
 NJ=${#CMDS[@]}
 [ "$NJ" -gt 0 ] || { echo "full-suite: no jobs found" >&2; exit 2; }
 
 # --- run ---------------------------------------------------------------------------------
 TIMEOUT_OK=0
-command -v timeout >/dev/null 2>&1 && timeout 5 true </dev/null >/dev/null 2>&1 && TIMEOUT_OK=1
+capped_by && TIMEOUT_OK=1
 [ "$BUDGET" -gt 0 ] && [ "$TIMEOUT_OK" -eq 0 ] && echo "full-suite: no working timeout - jobs run uncapped, over-budget ones are reported by their time" >&2
 LOGS="$(mktemp -d)"
 export VULYK_INSTALL_CACHE="$LOGS/install-cache"
@@ -94,7 +95,7 @@ start_job() { # start_job <index> - runs in the background, leaves "<rc> <end>" 
   (
     if [ "$BUDGET" -gt 0 ] && [ "$TIMEOUT_OK" -eq 1 ]; then
       left=$(( BUDGET - SECONDS )); [ "$left" -lt 1 ] && left=1
-      timeout -k 10 "$left" bash -c "${CMDS[i]}" </dev/null >"$LOGS/$i.log" 2>&1 || rc=$?
+      run_capped_as "$VULYK_CAP" "$left" bash -c "${CMDS[i]}" </dev/null >"$LOGS/$i.log" 2>&1 || rc=$?
     else
       bash -c "${CMDS[i]}" </dev/null >"$LOGS/$i.log" 2>&1 || rc=$?
     fi

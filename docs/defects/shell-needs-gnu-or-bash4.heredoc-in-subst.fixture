@@ -1,0 +1,14 @@
+# original case - scripts/defects-check.sh:82 before cross-platform-09: a <<'PY' heredoc inside plan="$( ... )",
+# which bash 3.2 cannot parse (unexpected EOF while looking for matching `'')
+plan="$(PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" <<'PY'
+for c in cards:
+    # name: the card's path relative to the library, for git; cid: the ref every finding prints.
+    print(c)
+PY
+)" || exit 2
+# neighbour form - the $( opened on its own line, unquoted, the heredoc on a later line, a lone quote in its body
+out=$(
+  cat <<END
+it's
+END
+)

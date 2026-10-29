@@ -53,7 +53,7 @@ if [ "$NOW" -gt 0 ] && [ $((NOW - CACHED_AT)) -ge $((INTERVAL_H * 3600)) ]; then
   [ -n "${GITHUB_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
   # Tags, not releases: VULYK tags every version, and a repository may carry no GitHub
   # Release at all. `sort -V` picks the newest rather than trusting the API's ordering.
-  FETCHED="$(curl -fsSL -m 4 "${AUTH[@]}" \
+  FETCHED="$(curl -fsSL -m 4 ${AUTH[@]+"${AUTH[@]}"} \
       -H 'Accept: application/vnd.github+json' \
       "https://api.github.com/repos/$REPO/tags?per_page=100" 2>/dev/null \
     | grep -o '"name"[[:space:]]*:[[:space:]]*"v\{0,1\}[0-9][^"]*"' \

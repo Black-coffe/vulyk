@@ -79,7 +79,9 @@ done
 #   I <text>                      information (not red)
 #   R <id> <target> <cmd> <title> a check to run: <target> is the fixture (audit) or <arg> (gate)
 #   P <ref> <fixture> <cmd> <new|old never-ref>  a passes: fixture the never card's check must exit 0 on
-plan="$(PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" "$ARG" "$LIB" <<'PY'
+# The python call lives in a function: bash 3.2 cannot parse a heredoc inside a multi-line $( ).
+read_cards() {
+PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" "$ARG" "$LIB" <<'PY'
 import collections, datetime, os, re, shlex, subprocess, sys
 
 sys.stdout.reconfigure(newline='\n')  # Windows python would end every record with \r
@@ -329,7 +331,8 @@ for i in range(len(live_keys)):
                     if k in m:
                         emit('I', 'ambiguous key  %s "%s" is inside %s "%s"' % (x, k, y, m))
 PY
-)" || { echo "defects-check: cards could not be read in $DIR" >&2; exit 2; }
+}
+plan="$(read_cards)" || { echo "defects-check: cards could not be read in $DIR" >&2; exit 2; }
 
 LOG="${TMPDIR:-/tmp}/vulyk-defects-$(date +%Y%m%d-%H%M%S)-$$.log"
 debt=0; red=0; blind=0; runs=0; undel=0; overlap=0; escape=0; dup=0; conflict=0; exc=0; stale=0
@@ -404,5 +407,5 @@ parts=()
 [ "$conflict" -gt 0 ] && parts+=("$conflict conflicts")
 [ "$exc" -gt 0 ] && parts+=("$exc exceptions")
 [ "$stale" -gt 0 ] && parts+=("index stale")
-( IFS=','; echo "RED: ${parts[*]}" | sed 's/,/, /g' )
+( IFS=','; echo "RED: ${parts[*]+${parts[*]}}" | sed 's/,/, /g' )
 exit 1

@@ -1,0 +1,6 @@
+# original case - scripts/cycle.sh:853 before cross-platform: BRE alternation, which BSD sed does not read
+review_verdict_of_text() {
+  case "$first" in
+    VERDICT:*) printf '%s' "$first" | sed -n 's/^VERDICT: \(PASS\|BLOCK\).*/\1/p' ;;
+  esac
+}

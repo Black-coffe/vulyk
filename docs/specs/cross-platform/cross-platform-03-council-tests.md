@@ -1,8 +1,8 @@
 ---
 story: cross-platform-03
 spec: cross-platform
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-test
 model: haiku
@@ -49,5 +49,14 @@ cap. `model: haiku`: a repeated mechanical pattern plus two copied assertions, t
 `bash tests/council.test.sh --part judge && bash tests/council.test.sh --part advance && bash tests/council.test.sh --part close`
 
 ## Implementation notes
+- The 42 bare `sed -i` fixture edits are `sed_inplace` now, same arguments (the file is still the last one).
+- `tests/council.test.sh` sources `scripts/lib.sh` at the top (the goal assumed it; it did not before). `set -u` kept.
+- Fixture gap found by the stubbed run, not a product bug: the fixture repo did not copy `scripts/run-capped.py`,
+  so lib.sh's Python cap failed with "can't open file". The fixture now copies it beside lib.sh.
+- Part judge (court setup timeout) and part advance (close-story timeout) repeat their timeout case with a
+  `$STUBS` dir first on PATH (`timeout` and `gtimeout` exit 1, kept outside the fixture repo). Each compares exit
+  and error text (judge) or the exact timeout JSON line (advance) with the real-PATH run. Judge also checks
+  `capped_by` falls through to `python` under the stubs.
+- No expectation changed. Part judge, part advance and part close pass on this box; no `skip` printed.
 
 ## Findings

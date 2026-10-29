@@ -103,16 +103,48 @@ code "a 3 s job under budget 0 -> exit 0" 0 "$RC"
 expect "ok line" "ok "
 expect "budget 0 in the summary" "budget 0s"
 
-echo "== no working timeout binary"
-mkdir -p "$T/fakebin"; printf '#!/bin/sh\nexit 1\n' > "$T/fakebin/timeout"; chmod +x "$T/fakebin/timeout"
-OUT="$(PATH="$T/fakebin:$PATH" VULYK_SUITE_TIMEOUT=1 VULYK_SUITES="bash $S/slow.sh
+echo "== dead timeout and gtimeout stubs, Python present: the budget still caps"
+mkdir -p "$T/deadbin"
+# Each stub logs its call: the runner probes the cap once, not again inside every job (a re-probe
+# per job is two more process launches between the budget's clock and the cap, under the full
+# suite's load enough to push a 1 s cap to a 3 s report).
+for b in timeout gtimeout; do printf '#!/bin/sh\necho %s >> "%s/probes"\nexit 1\n' "$b" "$T" > "$T/deadbin/$b"; chmod +x "$T/deadbin/$b"; done
+OUT="$(PATH="$T/deadbin:$PATH" VULYK_SUITE_TIMEOUT=1 VULYK_SUITES="bash $S/hang.sh
 bash $S/mark.sh done" bash "$RUN" --jobs 2 2>&1)"; RC=$?
-code "over-budget job -> exit 124" 124 "$RC"
-printf '%s\n' "$OUT" | grep -q "^TIMEOUT [3-9]s bash $S/slow.sh\$" && echo "  ok    reported TIMEOUT by its measured time, ran to the end" \
+code "over-budget job with dead stubs -> exit 124" 124 "$RC"
+# a 30 s hang reported under 10 s was killed, whatever the box's load adds to the 1 s budget
+printf '%s\n' "$OUT" | grep -q "^TIMEOUT [0-9]s bash $S/hang.sh\$" && echo "  ok    the hanging job is killed at the budget" \
+  || { echo "::error::hanging job not capped at the budget"; printf '%s\n' "$OUT"; fail=1; }
+[ "$(grep -c . "$T/probes" 2>/dev/null)" = 2 ] && echo "  ok    the cap is probed once per run" \
+  || { echo "::error::dead stubs probed more than once per run: $(tr '\n' ' ' < "$T/probes" 2>/dev/null)"; fail=1; }
+rm -f "$T/probes"
+line "a job inside the budget is ok" ok "bash $S/mark.sh done"
+reject "no uncapped warning while python caps" "no working timeout"
+LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+
+echo "== dead stubs and no Python on PATH: the run is uncapped and says so"
+# Python is hidden by dead python3/python/py stubs first on PATH (exit 127, as a missing command):
+# vulyk_python runs each and rejects it. The rest of PATH stays: on Linux and macOS python sits in
+# /usr/bin beside every tool the runner needs, so dropping its directory would strip them too.
+mkdir -p "$T/nopy"
+for b in python3 python py; do printf '#!/bin/sh\nexit 127\n' > "$T/nopy/$b"; chmod +x "$T/nopy/$b"; done
+NOPY="$T/nopy:$PATH"
+(PATH="$T/deadbin:$NOPY"; VULYK_PY=; . "$SRC/scripts/lib.sh"; ! vulyk_python) \
+  && echo "  ok    the test PATH runs no python" || { echo "::error::the test PATH still runs a python"; fail=1; }
+OUT="$(PATH="$T/deadbin:$NOPY" VULYK_PY= VULYK_SUITE_TIMEOUT=1 VULYK_SUITES="bash $S/slow.sh
+bash $S/mark.sh done" "$BASH" "$RUN" --jobs 2 2>&1)"; RC=$?
+code "uncapped run over the budget -> exit 124 by measured time" 124 "$RC"
+expect "warns that it runs uncapped" "no working timeout"
+printf '%s\n' "$OUT" | grep -q "^TIMEOUT [3-9]s bash $S/slow.sh\$" && echo "  ok    the slow job ran to the end, reported by its time" \
   || { echo "::error::slow job not TIMEOUT by measured time"; printf '%s\n' "$OUT"; fail=1; }
 line "a job inside the budget is ok" ok "bash $S/mark.sh done"
-expect "says it runs uncapped" "no working timeout"
 LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+
+echo "== only latency suites: the parallel list is empty, the run still works"
+mkdir -p "$T/only"; printf 'echo fine\n' > "$T/only/inject.test.sh"
+run 540 "bash $T/only/inject.test.sh"
+code "a latency-only list -> exit 0" 0 "$RC"
+line "the latency suite ran" ok "bash $T/only/inject.test.sh"
 
 echo "== --list"
 run 540 "bash $S/mark.sh listed" --list

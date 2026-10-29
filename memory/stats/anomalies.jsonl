@@ -275,3 +275,5 @@
 {"v":1,"ts":"2026-10-27T22:46:36Z","code":"council_rounds_high","value":3,"threshold":3,"vulyk":"0.39.0","tier":3,"model":"","agent":"","spec":"fable-fallback","story":"","ref":"council:fable-fallback"}
 {"v":1,"ts":"2026-10-28T10:41:34Z","code":"agent_empty","value":19,"threshold":0,"vulyk":"0.39.1","tier":0,"model":"","agent":"lead-review","spec":"","story":"","ref":"agent:agent-a5cfe6ee67b1d1299.jsonl"}
 {"v":1,"ts":"2026-10-28T10:41:40Z","code":"agent_empty","value":26,"threshold":0,"vulyk":"0.39.1","tier":0,"model":"","agent":"council-opus","spec":"","story":"","ref":"agent:agent-ac848dfe0e1aef0f4.jsonl"}
+{"v":1,"ts":"2026-10-28T21:22:45Z","code":"scope_breach","value":5,"threshold":0,"vulyk":"0.43.1","tier":0,"model":"","agent":"","spec":"","story":"post-043-tails-02-trace-order","ref":"scope:post-043-tails-02-trace-order"}
+{"v":1,"ts":"2026-10-29T15:36:52Z","code":"council_rounds_high","value":4,"threshold":3,"vulyk":"0.43.1","tier":3,"model":"","agent":"","spec":"cross-platform","story":"","ref":"council:cross-platform"}

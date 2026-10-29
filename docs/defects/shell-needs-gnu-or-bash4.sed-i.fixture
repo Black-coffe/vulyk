@@ -1,0 +1,2 @@
+# neighbour form - tests/council.test.sh before cross-platform: a bare sed -i, which BSD sed reads as a suffix
+sed -i 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-09-12/' docs/specs/status1/plan.md
