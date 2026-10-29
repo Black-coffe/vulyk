@@ -16,3 +16,4 @@
 - 2026-10-29T12:28:06Z · 04-council:RED · round 3 verdict RED at 4c37cd6 pack 398c12ba8464 · next: repair
 - 2026-10-29T12:28:10Z · 03-building · repair round 3: cross-platform-10-repair-round-3.md · next: build:6
 - 2026-10-29T13:28:15Z · 04-council:open · round 4 opened, court at E:/Projects/vulyk/.vulyk/court/cross-platform/round-4, carried from round 3: opus · next: dispatch:review
+- 2026-10-29T13:40:54Z · 04-council:ESCALATE · round 4 verdict ESCALATE at d47c5a5 pack 9781711a8e6c · next: escalated
