@@ -175,6 +175,7 @@ is missing or unparsable.
 **Council:** GREEN round 2, 2026-10-28, at 5e0aae1, pack dc3ae8f68b3f
 **Council:** RED round 3, 2026-10-29, at 4c37cd6, pack 398c12ba8464
 **Council:** ESCALATE round 4, 2026-10-29, at d47c5a5, pack 9781711a8e6c
+**Council:** GREEN round 5, 2026-10-29, at 022ee5b, pack 934e87b830a9
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 **Checked:** REJECTED by Andrei, 2026-10-29, at 9ca42a6 - owner's choice: «Переоткрыть, довести Mac (Рекомендую)». Looked at: GitHub CI on vulyk/cross-platform at 9ca42a6, run 40787799947 - full-suite timed out after 6 h on ubuntu and macos (never finished: tests/full-suite.test.sh, inject --part latency, intake --part latency); macos full-suite FAIL in council parts judge seats escalate ceilings replays roster driver walks advance, cycle parts hooklog gates ship red, e2e, defects, model-profile, solo, maintenance, telemetry parts terminal scan constitution; install-smoke on macos fails: awk: newline in string (install.sh awk -v repl= multi-line, lines 245 and 341)
 
