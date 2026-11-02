@@ -1,0 +1,138 @@
+=== scripts/top-model.sh
+## scripts/top-model.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  3 not shown
+imported:
+  exact    scripts/lib.sh
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  61 not shown
+=== scripts/model-profile.sh
+## scripts/model-profile.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  3 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  27 not shown
+=== .claude/workflows/vulyk-cycle.js
+## .claude/workflows/vulyk-cycle.js
+  ! imports not parsed for .js: search callers yourself
+tests:
+  textual  2 not shown
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  94 not shown
+=== scripts/cycle.sh
+## scripts/cycle.sh
+tests:
+  exact    tests/council.test.sh
+  textual  10 not shown
+importers:
+  textual  16 not shown
+path mentions:
+  textual  234 not shown
+=== .claude/hooks/top-model-brief.sh
+## .claude/hooks/top-model-brief.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  1 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  21 not shown
+=== .claude/hooks/session-start-brief.sh
+## .claude/hooks/session-start-brief.sh
+tests:
+  textual  2 not shown
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  22 not shown
+=== .claude/hooks/handoff.py
+## .claude/hooks/handoff.py
+tests:
+  exact    tests/maintenance.test.sh
+  exact    tests/telemetry.test.sh
+  textual  1 not shown
+importers:
+  exact    .claude/hooks/handoff.sh
+  textual  1 not shown
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  20 not shown
+=== scripts/lib.sh
+## scripts/lib.sh
+tests:
+  exact    tests/council.test.sh
+  exact    tests/cycle.test.sh
+  exact    tests/defects.test.sh
+  exact    tests/full-suite.sh
+  exact    tests/full-suite.test.sh
+  exact    tests/inject.test.sh
+  exact    tests/intake.test.sh
+  exact    tests/maintenance.test.sh
+  exact    tests/mods.test.sh
+  exact    tests/solo.test.sh
+  exact    tests/symbol-map.test.sh
+  exact    tests/telemetry.test.sh
+  exact    tests/token-report.test.sh
+  textual  1 not shown
+importers:
+  exact    install.sh
+  exact    scripts/acceptance-log.sh
+  exact    scripts/cycle.sh
+  exact    scripts/human-check.sh
+  exact    scripts/injection-check.sh
+  exact    scripts/leak-check.sh
+  exact    scripts/portability-check.sh
+  exact    scripts/prompt-check.sh
+  exact    scripts/py.sh
+  exact    scripts/release-check.sh
+  exact    scripts/scope-check.sh
+  exact    scripts/ship-check.sh
+  exact    scripts/state.sh
+  exact    scripts/symbol-map.sh
+  exact    scripts/telemetry.sh
+  exact    scripts/top-model.sh
+  exact    scripts/trace-autopsy.sh
+  exact    scripts/trace-check.sh
+  exact    scripts/wave-check.sh
+imported:
+  exact    scripts/run-capped.py
+path mentions:
+  textual  95 not shown
+=== scripts/token-report.py
+## scripts/token-report.py
+tests:
+  exact    tests/token-report.test.sh
+  textual  2 not shown
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  36 not shown
+=== install.sh
+## install.sh
+tests:
+  textual  7 not shown
+importers:
+  textual  5 not shown
+imported:
+  exact    scripts/lib.sh
+path mentions:
+  textual  255 not shown
+=== .claude/commands/vulyk-status.md
+## .claude/commands/vulyk-status.md
+  ! imports not parsed for .md: search callers yourself
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  14 not shown
