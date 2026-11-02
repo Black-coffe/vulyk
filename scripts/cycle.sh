@@ -1287,7 +1287,7 @@ ASKS
         printf -- '- no progress: ask %s RED in rounds %s and %s\n' "$(json_num_csv "$repeated" | sed 's/,/, /g')" "$((N-1))" "$N"
       fi
       if [ "$escalate_reason" = "suite-timeout" ]; then
-        printf -- '- suite: %s s, budget %s s - raise VULYK_SUITE_TIMEOUT or cut the suite\n' "$suite_secs" "$suite_budget"
+        printf -- '- suite: %s s, budget %s s - an old SUITE: TIMEOUT report: cut the part that ran long (cycle.sh suite caps each part)\n' "$suite_secs" "$suite_budget"
       fi
       if [ "$escalate_reason" = "env" ]; then
         local aseat att
@@ -1599,25 +1599,32 @@ ask_evidenced_of() { # ask_evidenced_of <ask-line> -> "1" iff run:+saw: or url:+
   esac
 }
 
-full_suite_row_round_only() { # full_suite_row_round_only <constitution> -> 0 iff its ## Commands
-  # has a row whose Purpose cell names the full suite and carries `round-only` (fast-verification-07)
-  # and whose command cell is runnable: `<fill in...>`, `none` or an empty cell is no suite to run
-  # (fast-verification-08), so `SUITE: none` is the right report for it.
+full_suite_row() { # full_suite_row <constitution> -> "<purpose><TAB><command>" of the first ## Commands row
+  # whose Purpose cell names the full suite and carries `round-only` (fast-verification-07) and whose
+  # command cell is runnable: `<fill in...>`, `none` or an empty cell is no suite to run
+  # (fast-verification-08), so `SUITE: none` is the right report for it. Nothing (exit 1) when none.
   [ -f "$1" ] || return 1
   awk '
     /^## Commands[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/            { if (inblock) exit }
     inblock && /^\|/ {
-      line = $0; sub(/^\|/, "", line); i = index(line, "|"); if (!i) next
-      p = tolower(substr(line, 1, i - 1))
+      line = $0; sub(/\r$/, "", line); sub(/^\|/, "", line); i = index(line, "|"); if (!i) next
+      po = substr(line, 1, i - 1); sub(/^[[:space:]]+/, "", po); sub(/[[:space:]]+$/, "", po)
+      p = tolower(po)
       if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) {
-        c = tolower(substr(line, i + 1)); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c)
-        if (c == "" || c ~ /^\|/ || c ~ /^<fill in/ || c ~ /^none([^[:alnum:]_-]|$)/) next
-        found = 1; exit
+        c = substr(line, i + 1); sub(/[[:space:]]*\|[[:space:]]*$/, "", c)
+        gsub(/\\[|]/, "|", c); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c); sub(/[[:space:]]+$/, "", c)
+        lc = tolower(c)
+        if (lc == "" || lc ~ /^<fill in/ || lc ~ /^none([^[:alnum:]_-]|$)/) next
+        printf "%s\t%s\n", po, c; found = 1; exit
       }
     }
     END { exit !found }
   ' "$1"
+}
+
+full_suite_row_round_only() { # full_suite_row_round_only <constitution> -> 0 iff full_suite_row finds a row
+  full_suite_row "$1" >/dev/null
 }
 
 cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <report> <model-opt> <head>
@@ -1642,6 +1649,18 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
     echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
     emit false record-seat 4 error "MALFORMED: $why"
     exit 4
+  fi
+
+  # gate-split-04: the round's own gate ran before the seats (`cycle.sh suite`); a finished
+  # council/round-N/suite.log keyed to this round's head is the SUITE line, whatever the report says:
+  # every reported `SUITE:` line is dropped and the log's goes right under the VERDICT line.
+  local logline; logline="$(suite_log_line "$RD")"
+  if [ -n "$logline" ]; then
+    REPORT="$(printf '%s\n' "$REPORT" | tr -d '\r' | awk -v s="$logline" '
+      /^SUITE:/ { next }
+      { print }
+      !done && NF { print s; done = 1 }
+      END { if (!done) print s }')"
   fi
 
   # fast-verification-07/08: when the constitution has a round-only full-suite row with a runnable
@@ -2681,6 +2700,7 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   local rd="$spec/council/round-$n"
   mkdir -p "$rd"
   clean_court "$slug"
+  rm -f "$rd/suite.log" # gate-split-04: a re-stamp in place starts the round's gate over
 
   # C15/ADR-013 D3: the tier and the roster are derived once, here, and frozen into the round
   # (tier=, seats=) - a plan.md or Profile edit mid-round (or a stale re-stamp) never changes
@@ -2931,6 +2951,164 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
     exit 6
   }
   build_round "$SPEC" "$SLUG" "$((ROUND_COUNT+1))" "$HEAD" "$PACK" "$CEILING" "$DOCOMMIT"
+}
+
+# --- suite: the round's integration gate, one step per call (gate-split-04) ------------------
+# The open round's round-only full-suite row runs here, before the seats, into
+# council/round-N/suite.log (paperwork): `head=<ROUND head> steps=<S>`, then per step
+# `STEP K/S: ok|FAIL <N>s` and that step's PART lines, then one `SUITE: ok <N>s | FAIL <N>s - <why> |
+# none` line. A stepped row (Purpose has `steps`) is `<cmd> --steps` / `<cmd> --step K` under a 590 s
+# call cap; any other row is one part under VULYK_PART_CAP (default 300, never above). A red part
+# (FAIL, CAP, or one suite-parts-check.sh names) makes the gate FAIL: data, exit 0.
+
+suite_log_line() { # suite_log_line <round-dir> -> the SUITE: line of a finished suite.log keyed to the
+  # round's ROUND head=, or nothing (no log, another head, not finished)
+  local log="$1/suite.log" rh lh last
+  [ -f "$log" ] || return 0
+  rh="$(round_field "$1" head)"
+  lh="$(head -1 "$log" | tr -d '\r' | sed -n 's/^head=\([^ ]*\).*/\1/p')"
+  [ -n "$rh" ] && [ "$rh" = "$lh" ] || return 0
+  last="$(tail -1 "$log" | tr -d '\r')"
+  case "$last" in "SUITE: "*) printf '%s' "$last" ;; esac
+}
+
+suite_cut_names() { # suite_cut_names <log> -> each part name suite-parts-check.sh says to cut, one per line
+  bash "$HERE/suite-parts-check.sh" "$1" 2>/dev/null | sed -n 's/^suite-parts-check: cut part \(.*\): [0-9]*s of cap .*/\1/p'
+}
+
+suite_red_parts() { # suite_red_parts <log> -> its red PART lines: FAIL, CAP, or named by suite-parts-check.sh
+  [ -f "$1" ] || return 0
+  tr -d '\r' < "$1" | awk -v cut="$(suite_cut_names "$1")" '
+    BEGIN { n = split(cut, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") c[a[i]] = 1 }
+    $1 == "PART" && ($3 == "FAIL" || $3 == "CAP" || ($2 in c)) { print }'
+}
+
+suite_verdict() { # suite_verdict <log> -> the closing `SUITE: ok <N>s` or `SUITE: FAIL <N>s - <why>` line
+  local log="$1" secs why
+  secs="$(tr -d '\r' < "$log" | awk '$1 == "STEP" { v = $4; sub(/s$/, "", v); t += v } END { print t + 0 }')"
+  why="$(tr -d '\r' < "$log" | awk -v cut="$(suite_cut_names "$log")" '
+    BEGIN { n = split(cut, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "" && !(a[i] in c)) { c[a[i]] = 1; out = out sep "cut part " a[i]; sep = ", " } }
+    $1 == "PART" && $3 == "FAIL" && !($2 in c) && !($2 in f) { f[$2] = 1; out = out sep "part " $2 " failed"; sep = ", " }
+    $1 == "STEP" && $3 == "FAIL" { k = $2; sub(/:$/, "", k); st = st ssep "step " k " failed"; ssep = ", " }
+    END { if (out != "") print out; else if (st != "") print st }')"
+  if [ -n "$why" ]; then printf 'SUITE: FAIL %ss - %s' "$secs" "$why"; else printf 'SUITE: ok %ss' "$secs"; fi
+}
+
+suite_emit() { # suite_emit <spec> <step> <steps> <done:true|false> <suite> - the verb's exit-0 line
+  local st rc next tail=""
+  st="$(cmd_status "$1")"; rc=$?
+  next="$(json_field "$st" next)"
+  [ "$rc" -eq 0 ] && [ -n "$st" ] && ! printf '%s' "$st" | grep -q '"ok":false' && tail=",\"status\":$st"
+  printf '{"ok":true,"verb":"suite","exit":0,"next":"%s","step":%s,"steps":%s,"done":%s,"suite":"%s"%s}\n' \
+    "$(json_escape "$next")" "$2" "$3" "$4" "$5" "$tail"
+}
+
+cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
+  local SPEC="$1" DOCOMMIT="$2" STAMP="${3:-}"
+  [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
+    echo "cycle: usage: $0 suite <spec-dir> [--commit] [--stamp <s>]" >&2
+    emit false suite 1 error "usage"
+    exit 1
+  }
+  pause_guard "$SPEC" suite
+  driver_guard "$SPEC" suite "$STAMP"
+  branch_guard "$SPEC" suite
+
+  local SLUG RD N; SLUG="$(slug_of "$SPEC")"; RD="$(current_round_dir "$SPEC")"
+  if [ -z "$RD" ] || [ ! -f "$RD/ROUND" ] || row_exists "$SLUG" "${RD##*/round-}"; then
+    echo "cycle: suite - $SLUG has no open round; run open-round first" >&2
+    emit false suite 2 error "no open round"
+    exit 2
+  fi
+  N="${RD##*/round-}"
+  if round_is_stale "$SPEC" "$N"; then
+    echo "cycle: suite - round $N is stale (ROUND head=$(round_field "$RD" head), current HEAD=$(git rev-parse --short HEAD 2>/dev/null)); run open-round" >&2
+    emit false suite 5 stale "stale"
+    exit 5
+  fi
+
+  local LOG="$RD/suite.log" RHEAD S K
+  RHEAD="$(round_field "$RD" head)"
+  local done_line; done_line="$(suite_log_line "$RD")"
+  if [ -n "$done_line" ]; then # a finished log: no-op
+    S="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/.* steps=\([0-9][0-9]*\).*/\1/p')"; S="${S:-0}"
+    [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N" "$LOG"
+    echo "cycle: $SLUG - round $N suite already finished: $done_line"
+    suite_emit "$SPEC" "$S" "$S" true "$(printf '%s' "$done_line" | awk '{ print $2 }')"
+    exit 0
+  fi
+
+  local row purpose cmd stepped=0
+  row="$(full_suite_row "$(constitution_file "$ROOT")")"
+  purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
+  case " $(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' ' ') " in *" steps "*) stepped=1 ;; esac
+
+  # A log keyed to another head (an earlier code state) is discarded, never resumed.
+  local lh=""; [ -f "$LOG" ] && lh="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/^head=\([^ ]*\).*/\1/p')"
+  [ -f "$LOG" ] && [ "$lh" != "$RHEAD" ] && rm -f "$LOG"
+
+  if [ ! -f "$LOG" ]; then
+    if [ -z "$row" ]; then
+      printf 'head=%s steps=0\nSUITE: none\n' "$RHEAD" > "$LOG"
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N none" "$LOG"
+      echo "cycle: $SLUG - round $N: no round-only full-suite row, SUITE: none"
+      suite_emit "$SPEC" 0 0 true none
+      exit 0
+    fi
+    S=1
+    if [ "$stepped" = 1 ]; then
+      local sout src
+      sout="$(run_capped 590 bash -c "$cmd --steps" 2>/dev/null)"; src=$?
+      S="$(printf '%s\n' "$sout" | tr -d '\r' | awk 'NF { l = $1 } END { print l }')"
+      case "$S" in ''|*[!0-9]*|0)
+        printf 'head=%s steps=0\nSUITE: FAIL 0s - %s --steps gave no step count (exit %s)\n' "$RHEAD" "$cmd" "$src" > "$LOG"
+        [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N FAIL" "$LOG"
+        echo "cycle: $SLUG - round $N: $cmd --steps gave no step count (exit $src)" >&2
+        suite_emit "$SPEC" 0 0 true FAIL
+        exit 0 ;;
+      esac
+    fi
+    printf 'head=%s steps=%s\n' "$RHEAD" "$S" > "$LOG"
+  fi
+  S="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/.* steps=\([0-9][0-9]*\).*/\1/p')"; S="${S:-1}"
+  K=$(( $(tr -d '\r' < "$LOG" | grep -c '^STEP ') + 1 ))
+
+  # --- run step K: its STEP line and its PART lines, appended as one block ---------------------
+  local t0="$SECONDS" out rc parts secs sres=ok note="" tmp
+  if [ "$stepped" = 1 ]; then
+    out="$(run_capped 590 bash -c "$cmd --step $K" 2>&1)"; rc=$?
+    secs=$((SECONDS - t0))
+    parts="$(printf '%s\n' "$out" | tr -d '\r' | grep '^PART ')"
+    [ "$rc" -eq 124 ] && note=" - timed out after 590s"
+  else
+    local cap="${VULYK_PART_CAP:-300}" pname pres=ok
+    case "$cap" in ''|*[!0-9]*|0) cap=300 ;; esac
+    [ "$cap" -gt 300 ] && cap=300
+    pname="$(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g')"
+    run_capped "$cap" bash -c "$cmd" >/dev/null 2>&1; rc=$?
+    secs=$((SECONDS - t0))
+    [ "$rc" -ne 0 ] && pres=FAIL
+    if [ "$rc" -eq 124 ]; then parts="PART $pname CAP ${secs}s cap ${cap}s - timed out"
+    else parts="PART $pname $pres ${secs}s cap ${cap}s"; fi
+  fi
+  tmp="$RD/.suite-step.tmp"
+  printf '%s\n' "$parts" > "$tmp"
+  { [ "$rc" -ne 0 ] || ! bash "$HERE/suite-parts-check.sh" "$tmp" >/dev/null 2>&1; } && sres=FAIL
+  rm -f "$tmp"
+  {
+    printf 'STEP %s/%s: %s %ss%s\n' "$K" "$S" "$sres" "$secs" "$note"
+    [ -n "$parts" ] && printf '%s\n' "$parts"
+  } >> "$LOG"
+  local sv=pending is_done=false
+  if [ "$K" -ge "$S" ]; then
+    local verdict; verdict="$(suite_verdict "$LOG")"
+    printf '%s\n' "$verdict" >> "$LOG"
+    sv="$(printf '%s' "$verdict" | awk '{ print $2 }')"; is_done=true
+  fi
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N step $K/$S" "$LOG"
+  echo "cycle: $SLUG - round $N suite step $K/$S: $sres ${secs}s"
+  suite_emit "$SPEC" "$K" "$S" "$is_done" "$sv"
+  exit 0
 }
 
 # --- reopen: the tier's own ceiling again after ESCALATE (D6; convergent-judge) - Tier 1 +1,
@@ -3292,6 +3470,8 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
     # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
     [ -f "$RD/review.md" ] && review_blocking_lines "$RD/review.md" \
       | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
+    # gate-split-04: the round's own gate - each red PART line of a finished suite.log is a finding.
+    [ -n "$(suite_log_line "$RD")" ] && suite_red_parts "$RD/suite.log" | sed 's/^/- [regression] /'
     # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
     # finding (judge's override) - its note is then the only condition the repair can meet.
     ropened="$(round_field "$RD" opened)"
@@ -3559,6 +3739,16 @@ case "$VERB" in
       prevarg="$a"
     done
     cmd_open_round "$SPEC" "$COMMIT" "$STAMP"
+    ;;
+  suite)
+    COMMIT=0; STAMP=""
+    prevarg=""
+    for a in "$@"; do
+      [ "$a" = "--commit" ] && COMMIT=1
+      [ "$prevarg" = "--stamp" ] && STAMP="$a"
+      prevarg="$a"
+    done
+    cmd_suite "$SPEC" "$COMMIT" "$STAMP"
     ;;
   reopen)
     DECISION="${3:-}"
