@@ -182,4 +182,11 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
 **Branch:** vulyk/gate-split
 **Checked:** <written by scripts/human-check.sh>
 **Council:** RED round 1, 2026-11-02, at 57270fb, pack e86c1131360a - red: 9
+**Council:** ESCALATE round 2, 2026-11-02, at efb4e9f, pack 02d1723a7773 - red: 9
 **Shipped:** <written by scripts/ship-check.sh --record>
+
+## Needs a human
+- reason: no-progress · round 2 · 2026-11-02
+- ask 9: RED - see docs/specs/gate-split/council/round-2/*.md for evidence
+- no progress: ask 9 RED in rounds 1 and 2
+- seats: docs/specs/gate-split/council/round-2/
