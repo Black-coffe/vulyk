@@ -57,6 +57,8 @@ You implement one story and close it. Not two, and nothing "while you are here".
      set `returned: WALL`, and return `WALL`.
    - exit 2 `verification is round-only`: the story names a row marked `round-only`, which only the reviewer
      runs. Set `returned: NEEDS_CONTEXT`, name the row, and return it.
+   - exit 7 `verification paused`: the verification is longer than one call. Run the same `close-story` or
+     `stamp-red` command again, it resumes at the line it stopped at. It is not a failure and costs no retry.
    - any other exit (paused, another driver's stamp, a verification line that is not a `## Commands`
      cell): not fixable from here. Set `returned: NEEDS_CONTEXT` and return it with the `error`.
 

@@ -276,3 +276,4 @@
 {"ts":"2026-10-29T13:02:59Z","story":"cross-platform-10-repair-round-3","declared":55,"changed":4,"out_of_scope":0}
 {"ts":"2026-10-29T16:13:16Z","story":"cross-platform-11-repair-round-4","declared":55,"changed":4,"out_of_scope":0}
 {"ts":"2026-11-02T19:32:06Z","story":"gate-split-01-runner-part-caps","declared":8,"changed":8,"out_of_scope":0}
+{"ts":"2026-11-02T19:37:16Z","story":"gate-split-02-verify-per-line-cap","declared":6,"changed":5,"out_of_scope":0}

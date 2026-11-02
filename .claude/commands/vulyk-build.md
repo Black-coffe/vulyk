@@ -27,7 +27,9 @@ No driver, no clerk, no court. Loop:
    editing it, greps only what it cannot vouch for (names marked `textual`, every caller of a file it
    reports `imports not parsed`) and fixes the shared code once; targeted checks while
    working), add `## Implementation notes`, set `returned: DONE`, and run
-   `bash scripts/cycle.sh close-story <file> --commit`. On exit 4, read the error, fix, rerun; after
+   `bash scripts/cycle.sh close-story <file> --commit`. On exit 7 (verification paused, longer than one call)
+   run the same `close-story` or `stamp-red` command again: it resumes, it is not a failure and costs no retry.
+   On exit 4, read the error, fix, rerun; after
    three failed reruns write `## Findings` and stop for the owner. A repair story (`# Repair round <n>`)
    is built the same way; its `## Findings` are the conditions to meet. Back to 1.
 3. `dispatch:review`: dispatch `lead-review` with the Agent tool, with `model: <r>` from

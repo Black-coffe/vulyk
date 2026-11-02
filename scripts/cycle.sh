@@ -1966,46 +1966,56 @@ EOF
 }
 
 verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification runner (close-story,
-  # stamp-red). ADR-013 D5: the whole run - every line, every repeat - shares one budget under
-  # `timeout`, so verification slower than the Bash tool's 10-minute cap reports 124 instead of
-  # dying with the tool call. A per-command budget would not do: a repair story unions every story's
-  # lines, and five 500 s commands still pass five 540 s limits. 540 s leaves the verb its own
-  # margin inside that cap. Each line runs under lib.sh's run_capped (timeout, gtimeout or the Python
-  # cap, else uncapped with its warning); capped_by says whether a cap exists, so an uncapped run never
-  # reads a command's own 124 as a timeout.
+  # stamp-red). gate-split-02: every line runs under its own cap, VULYK_VERIFY_TIMEOUT (default 300,
+  # never above 300), so one slow line names itself and a timeout is that line's. The call has a budget,
+  # VULYK_VERIFY_CALL (default 540, inside the Bash tool's 10-minute cap): a line starts only when its
+  # cap still fits what is left of it (the first line of a call always runs); otherwise the runner stops
+  # with VR_PAUSE = the number of the line it would run next, and the verb writes a resume mark and exits
+  # 7. VR_START (set by the verb) is the line a resumed call begins at; lines count across <reps>. Each
+  # line runs under lib.sh's run_capped (timeout, gtimeout or the Python cap, else uncapped with its
+  # warning); capped_by says whether a cap exists, so an uncapped run never reads a command's own 124 as
+  # a timeout.
   # Without <outdir> (close-story): one command at a time, the whole block repeated <reps> times
   # (R18/M-3 - a single `bash -c "$multi_line_block"` used to report only the last line's exit
   # status), stopping at the first non-zero line. With <outdir> (stamp-red): every line once, its
-  # stdout+stderr in <outdir>/<k>.out (and echoed), its exit in VR_CODES[k], its text in VR_LINES[k];
-  # only a timeout stops it. Sets VR_VT, VR_TIMEOUT_OK, VR_RC (the stopping or last exit), VR_LINE,
-  # VR_RUN.
-  local cmds="$1" reps="$2" outdir="${3:-}" vline vrc left k=0 vstart="$SECONDS"
-  VR_VT="${VULYK_VERIFY_TIMEOUT:-540}"; VR_TIMEOUT_OK=0; VR_RC=0; VR_LINE=""; VR_RUN=0
+  # stdout+stderr in <outdir>/<k>.out (and echoed), its exit in <k>.code and VR_CODES[k], its text in
+  # <k>.line and VR_LINES[k] (a resumed call reads the earlier lines back from those files); only a
+  # timeout stops it. Sets VR_VT, VR_TIMEOUT_OK, VR_RC (the stopping or last exit), VR_LINE, VR_RUN,
+  # VR_PAUSE.
+  local cmds="$1" reps="$2" outdir="${3:-}" vline vrc k=0 vstart="$SECONDS" vcall start="${VR_START:-1}"
+  VR_VT="${VULYK_VERIFY_TIMEOUT:-300}"; VR_TIMEOUT_OK=0; VR_RC=0; VR_LINE=""; VR_RUN=0; VR_PAUSE=0
   VR_CODES=(); VR_LINES=()
-  case "$VR_VT" in ''|*[!0-9]*|0) VR_VT=540 ;; esac
+  case "$VR_VT" in ''|*[!0-9]*|0) VR_VT=300 ;; esac
+  [ "$VR_VT" -gt 300 ] && VR_VT=300
+  vcall="${VULYK_VERIFY_CALL:-540}"
+  case "$vcall" in ''|*[!0-9]*|0) vcall=540 ;; esac
   capped_by && VR_TIMEOUT_OK=1
   [ -n "$outdir" ] && reps=1
+  if [ -n "$outdir" ]; then
+    local j=1
+    while [ "$j" -lt "$start" ]; do
+      VR_CODES[$j]="$(cat "$outdir/$j.code" 2>/dev/null)"; VR_LINES[$j]="$(cat "$outdir/$j.line" 2>/dev/null)"
+      j=$((j+1))
+    done
+  fi
   local i=1
   while [ "$i" -le "$reps" ]; do
     VR_RUN="$i"
     while IFS= read -r vline; do
       [ -n "$vline" ] || continue
       [ "$vline" = "none — reviewed by lead-review" ] && continue
+      k=$((k+1))
+      [ "$k" -lt "$start" ] && continue
+      if [ "$k" -gt "$start" ] && [ $(( (SECONDS - vstart) + VR_VT )) -gt "$vcall" ]; then VR_PAUSE="$k"; return 0; fi
       if [ -n "$outdir" ]; then
-        k=$((k+1))
-        left=$(( VR_VT - (SECONDS - vstart) ))
-        if [ "$left" -le 0 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then vrc=124; : > "$outdir/$k.out"
-        else run_capped_as "$VULYK_CAP" "$(( left > 0 ? left : 1 ))" bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
-        fi
+        run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
         cat "$outdir/$k.out"
+        printf '%s' "$vrc" > "$outdir/$k.code"; printf '%s' "$vline" > "$outdir/$k.line"
         VR_CODES[$k]="$vrc"; VR_LINES[$k]="$vline"; VR_RC="$vrc"; VR_LINE="$vline"
         [ "$vrc" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ] && return 0
         continue
       fi
-      left=$(( VR_VT - (SECONDS - vstart) ))
-      if [ "$left" -le 0 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then vrc=124
-      else run_capped_as "$VULYK_CAP" "$(( left > 0 ? left : 1 ))" bash -c "$vline"; vrc=$?
-      fi
+      run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline"; vrc=$?
       VR_RC="$vrc"; VR_LINE="$vline"
       [ "$vrc" -ne 0 ] && return 0
     done <<EOF
@@ -2014,6 +2024,49 @@ EOF
     i=$((i+1))
   done
   return 0
+}
+
+verify_files_hash() { # verify_files_hash <story-file> -> set_hash of its ## Files entries (the story itself
+  # left out: the resume mark is written into it), in order
+  local story="${1#./}" p; local -a ps=()
+  while IFS= read -r p; do
+    [ -n "$p" ] && [ "${p#./}" != "$story" ] && ps+=("$p")
+  done <<EOF
+$(files_of "$1")
+EOF
+  set_hash ${ps[@]+"${ps[@]}"}
+}
+
+verify_resume_set() { # verify_resume_set <story-file> [<verb> <k> <hash>] - drop the frontmatter
+  # `verify_resume:` line, and write a new one before the closing `---` when given
+  local tmp
+  [ -n "${2:-}" ] || grep -q '^verify_resume:' "$1" || return 0
+  tmp="$(mktemp)"
+  awk -v line="${2:+verify_resume: $2 $3 $4}" '
+    NR == 1 && /^---[[:space:]]*$/ { infm=1; print; next }
+    infm && /^---[[:space:]]*$/    { if (line != "") print line; infm=0; print; next }
+    infm && /^verify_resume:/      { next }
+    { print }
+  ' "$1" > "$tmp" && cat "$tmp" > "$1"
+  rm -f "$tmp"
+}
+
+verify_resume_start() { # verify_resume_start <story-file> <verb> <hash> -> the line to start at: the
+  # mark's when it names this verb and this ## Files hash, else 1
+  local m v k h
+  m="$(fm_raw "$1" verify_resume)"
+  read -r v k h <<EOF
+$m
+EOF
+  if [ "$v" = "$2" ] && [ "$h" = "$3" ]; then case "$k" in ''|*[!0-9]*|0) echo 1 ;; *) echo "$k" ;; esac
+  else echo 1; fi
+}
+
+verify_pause() { # verify_pause <verb> <story-file> <k> <hash> - write the mark, print the exit-7 line, exit 7
+  verify_resume_set "$2" "$1" "$3" "$4"
+  echo "cycle: $1 - verification paused before line $3 (call budget); run the same command again, it resumes" >&2
+  printf '{"ok":false,"verb":"%s","exit":7,"next":"resume","resume":%s,"error":"verification paused before line %s: run the same command again"}\n' "$1" "$3" "$3"
+  exit 7
 }
 
 verify_cmd_list() { # verify_cmd_list <story-file> -> the ## Verification command lines, `repeat:` dropped
@@ -2033,6 +2086,56 @@ fm_red() { # fm_red <story-file> - the `red:` mark from the frontmatter only, cu
   # and trimmed as fm_field cuts it: a body line `red: ...` marks nothing (0.40.1)
   local v; v="$(fm_raw "$1" red)"; v="${v%%#*}"
   printf '%s' "${v%"${v##*[![:space:]]}"}"
+}
+
+path_overlap() { # path_overlap <path-or-glob> <path-or-glob> - 0 if the two can hit one file
+  # (wave-check.sh's overlap rule: exact path, glob, directory prefix)
+  local a="$1" b="$2"
+  [ "$a" = "$b" ] && return 0
+  case "$a" in */) case "$b" in "$a"*) return 0 ;; esac ;; esac
+  case "$b" in */) case "$a" in "$b"*) return 0 ;; esac ;; esac
+  # shellcheck disable=SC2254
+  case "$b" in $a) return 0 ;; esac
+  # shellcheck disable=SC2254
+  case "$a" in $b) return 0 ;; esac
+  return 1
+}
+
+finding_paths() { # finding_paths <findings> -> the path each finding starts with, one per line: its
+  # leading `- ` and `[tag]`s dropped, the first word cut at a `:`, kept only if it holds a `/` or a `.`
+  local line tok
+  while IFS= read -r line; do
+    line="${line#- }"
+    while :; do case "$line" in "["*"] "*) line="${line#*] }" ;; *) break ;; esac; done
+    tok="${line%% *}"; tok="${tok%%:*}"; tok="${tok//\`/}"
+    case "$tok" in */*|*.*) printf '%s\n' "$tok" ;; esac
+  done <<< "$1"
+}
+
+verify_lines_hitting() { # verify_lines_hitting <verification-lines> <paths> -> the lines with a path token
+  # overlapping one of <paths>, in order; none when <paths> is empty
+  local line tok p
+  [ -n "$2" ] || return 0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    while IFS= read -r tok; do
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        if path_overlap "$tok" "$p"; then printf '%s\n' "$line"; continue 3; fi
+      done <<< "$2"
+    done <<< "$(verify_path_tokens "$line")"
+  done <<< "$1"
+}
+
+repair_verification() { # repair_verification <verifs> <findings> <files> -> the repair's ## Verification lines,
+  # deduped: those covering a path the findings name; else those covering ## Files; else all of them
+  local all fp hit
+  all="$(printf '%s' "$1" | awk 'NF && !seen[$0]++')"
+  fp="$(finding_paths "$2")"
+  hit="$(verify_lines_hitting "$all" "$fp")"
+  [ -n "$hit" ] || hit="$(verify_lines_hitting "$all" "$3")"
+  [ -n "$hit" ] || hit="$all"
+  printf '%s\n' "$hit"
 }
 
 repair_unmarks() { # repair_unmarks <findings> <union-paths> <marked-paths> - exit 0 only when every
@@ -2156,8 +2259,16 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] - red-receipt: run the 
   local CMD_LIST; CMD_LIST="$(verify_cmd_list "$STORY")"
   verify_cells_check stamp-red "$CMD_LIST"
 
-  local OUTD; OUTD="$(mktemp -d)" || { emit false stamp-red 2 error "mktemp failed"; exit 2; }
-  verify_run "$CMD_LIST" 1 "$OUTD"
+  # gate-split-02: the call budget can stop the run between lines (exit 7); the earlier lines' results
+  # wait in a per-story directory under the temp dir until the resumed call has them all.
+  local VH VSTART OUTD; VH="$(verify_files_hash "$STORY")"
+  VSTART="$(verify_resume_start "$STORY" stamp-red "$VH")"
+  OUTD="${TMPDIR:-/tmp}/vulyk-sr-$(printf '%s' "$STORY" | cksum | cut -d' ' -f1)"
+  [ "$VSTART" -gt 1 ] && [ -d "$OUTD" ] || { VSTART=1; rm -rf "$OUTD"; }
+  mkdir -p "$OUTD" || { emit false stamp-red 2 error "mkdir failed"; exit 2; }
+  VR_START="$VSTART" verify_run "$CMD_LIST" 1 "$OUTD"
+  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause stamp-red "$STORY" "$VR_PAUSE" "$VH"; fi
+  verify_resume_set "$STORY"
   if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
     rm -rf "$OUTD"; red_refuse "not red: timed out after ${VR_VT}s"
   fi
@@ -2361,7 +2472,11 @@ EOF
 
   verify_cells_check close-story "$CMD_LIST"
 
-  verify_run "$CMD_LIST" "$REPS"
+  local VH VSTART; VH="$(verify_files_hash "$STORY")"
+  VSTART="$(verify_resume_start "$STORY" close-story "$VH")"
+  VR_START="$VSTART" verify_run "$CMD_LIST" "$REPS"
+  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause close-story "$STORY" "$VR_PAUSE" "$VH"; fi
+  verify_resume_set "$STORY"
   if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
     echo "cycle: close-story - verification timed out after ${VR_VT}s (run $VR_RUN/$REPS): $VR_LINE" >&2
     emit false close-story 4 repair "verification timed out after ${VR_VT}s: $VR_LINE"
@@ -3213,7 +3328,7 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
     printf '\n## Files\n'
     printf '%s' "$files" | awk 'NF && !seen[$0]++ { print "- " $0 }'
     printf '\n## Verification\n'
-    printf '%s' "$verifs" | awk 'NF && !seen[$0]++ { print "`" $0 "`" }'
+    repair_verification "$verifs" "$findings" "$files" | awk 'NF { print "`" $0 "`" }'
   } > "$STORY"
 
   bash "$HERE/journal.sh" "$SPEC" "03-building" "repair round $N: $(basename "$STORY")" "build:$WAVE" >/dev/null

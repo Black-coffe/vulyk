@@ -1,14 +1,15 @@
 ---
 story: gate-split-02
 spec: gate-split
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
-red_reason:
+red_reason: ::error::per-line cap
+red_verified_at: 2026-11-02T19:33:03Z 02cfb15370d221e32b869db7c90120de7c650dc8d4d98210b2f22d37ab6a0ee1
 ---
 
 # close-story and stamp-red: a cap per line, a resume mark, a repair keeps only its own lines
@@ -68,4 +69,30 @@ memory/map/cycle.md `## Verbs` (Red receipt, close-story bullets), `## Repair (A
 
 ## Implementation notes
 
+- scripts/cycle.sh: verify_run per-line cap (300 max) + call budget (VULYK_VERIFY_CALL 540), pause -> exit 7 with verify_resume mark; verify_files_hash/resume helpers; stamp-red keeps earlier lines in a temp dir; repair_verification filter.
+- Resume index counts lines across `repeat:` runs; the mark is cleared whenever a verb finishes its run (also on a red/timeout).
+- A line starts only if elapsed + per-line cap <= call budget (conservative: default 300+300>540 so a second line after a long first one pauses).
+- tests/council.test.sh: replaced the shared-budget r18cs-03 case with the per-line one; new cases in part advance.
+- Workers/vulyk-build: exit 7 sentence.
+
 ## Findings
+
+## Red receipt
+- command: bash tests/council.test.sh --part advance
+- exit: 1
+- tests: 02cfb15370d221e32b869db7c90120de7c650dc8d4d98210b2f22d37ab6a0ee1 (tests/council.test.sh)
+- impl: fccb6dab14d7b226d0faca0e4255443c93663a9acf272bb7a17a064261600630
+- stamped: 2026-11-02T19:33:03Z
+
+```
+::error::per-line cap: repair fallback: ## Verification
+`test -f r18vg-a.txt`
+`echo unrelated`
+`test -f r18vg-b.txt`
+gate-split-02: workers and the solo build learn exit 7
+::error::per-line cap: .claude/agents/worker-code.md does not name exit 7
+::error::per-line cap: .claude/agents/worker-test.md does not name exit 7
+::error::per-line cap: .claude/commands/vulyk-build.md does not name exit 7
+ADR-013 D2: status --json appends since, seat_attempt, seats after every pre-0.18 key
+  ok    the last seven keys (0.19 appends manual)
+```

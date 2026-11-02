@@ -4210,14 +4210,93 @@ out_stub="$(PATH="$STUBS:$PATH" VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh clo
   && grep -q '^status: todo' docs/specs/r18cs/r18cs-02-slow.md && echo "  ok    stubbed timeout/gtimeout first on PATH: exit $ex_stub, same timeout JSON, story stays todo" \
   || { echo "::error::stubbed timeout: exit=$ex_stub out=$out_stub"; fail=1; }
 
-echo "ADR-013 D5: the budget covers the whole run - two 2 s lines under a 3 s budget time out on the second"
+echo "gate-split-02: the cap is per line - two 2 s lines under a 3 s cap both run, the third (4 s) times out at 3 s"
 printf '| Fixture: two-second line | `sleep 2` |\n' >> CLAUDE.md
-printf -- '---\nstory: r18cs-03\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Two slow lines\n\n## Files\n- r18cs-two.txt\n\n## Verification\n`sleep 2`\n`sleep 2`\n' > docs/specs/r18cs/r18cs-03-two.md
-git add -A && git commit -qm "r18cs: two slow lines" >/dev/null
+printf '| Fixture: four-second line | `sleep 4` |\n' >> CLAUDE.md
+printf -- '---\nstory: r18cs-03\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Slow lines\n\n## Files\n- r18cs-two.txt\n\n## Verification\n`sleep 2`\n`sleep 2`\n`sleep 4`\n' > docs/specs/r18cs/r18cs-03-two.md
+git add -A && git commit -qm "r18cs: slow lines" >/dev/null
 out="$(VULYK_VERIFY_TIMEOUT=3 bash scripts/cycle.sh close-story docs/specs/r18cs/r18cs-03-two.md 2>&1)"; ex=$?
-[ "$ex" -eq 4 ] && [ "$(l18_last "$out")" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"verification timed out after 3s: sleep 2"}' ] \
-  && echo "  ok    exit 4 on the second line: each line alone fits, the run does not" \
-  || { echo "::error::run budget: exit=$ex out=$out"; fail=1; }
+[ "$ex" -eq 4 ] && [ "$(l18_last "$out")" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"verification timed out after 3s: sleep 4"}' ] \
+  && echo "  ok    exit 4 on the third line: the cap is per line, not one budget for the run" \
+  || { echo "::error::per-line cap: exit=$ex out=$out"; fail=1; }
+
+echo "gate-split-02: close-story pauses at exit 7 with a verify_resume mark when the next line does not fit the call, and the same command resumes"
+printf -- '---\nstory: r18pl-01\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Paused\n\n## Files\n- r18pl-one.txt\n\n## Verification\n`sleep 1`\n`sleep 1`\n' > docs/specs/r18cs/r18pl-01-two.md
+printf 'v1\n' > r18pl-one.txt
+printf '| Fixture: one-second line | `sleep 1` |\n' >> CLAUDE.md
+git add -A && git commit -qm "r18pl: fixture" >/dev/null
+PLS=docs/specs/r18cs/r18pl-01-two.md
+out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
+mark1="$(grep '^verify_resume:' "$PLS")"
+[ "$ex" -eq 7 ] && l18_last "$out" | jq -e '.exit == 7 and .resume == 2' >/dev/null 2>&1 \
+  && printf '%s' "$mark1" | grep -qE '^verify_resume: close-story 2 [0-9a-f]{64}$' && grep -q '^status: todo' "$PLS" \
+  && echo "  ok    call 1: exit 7, resume 2, a verify_resume mark in the frontmatter, story still todo" \
+  || { echo "::error::per-line cap: pause exit=$ex out=$out mark=$mark1"; fail=1; }
+printf 'v2\n' > r18pl-one.txt
+out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
+mark2="$(grep '^verify_resume:' "$PLS")"
+[ "$ex" -eq 7 ] && [ -n "$mark2" ] && [ "$mark2" != "$mark1" ] && printf '%s' "$mark2" | grep -qE '^verify_resume: close-story 2 ' \
+  && echo "  ok    a changed ## Files set between the calls restarts at line 1 (new hash, paused again)" \
+  || { echo "::error::per-line cap: restart exit=$ex out=$out mark=$mark2"; fail=1; }
+out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' "$PLS" && ! grep -q '^verify_resume:' "$PLS" \
+  && echo "  ok    call 2 on the same files resumes at line 2, closes, leaves no verify_resume line" \
+  || { echo "::error::per-line cap: resume exit=$ex out=$out"; fail=1; }
+
+echo "gate-split-02: stamp-red resumes the same way and still writes its receipt"
+printf '| Fixture: red test | `bash r18sr-test.sh` |\n' >> CLAUDE.md
+printf 'echo R18SR-RED-MARK\nexit 1\n' > r18sr-test.sh
+printf -- '---\nstory: r18sr-01\nstatus: todo\nreturned:\nwave: 1\nred: required\nred_reason: R18SR-RED-MARK\n---\n# Red resume\n\n## Files\n- r18sr-test.sh\n- r18sr-impl.txt\n\n## Verification\n`sleep 1`\n`bash r18sr-test.sh`\n' > docs/specs/r18cs/r18sr-01-red.md
+git add -A && git commit -qm "r18sr: fixture" >/dev/null
+SRS=docs/specs/r18cs/r18sr-01-red.md
+out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh stamp-red "$SRS" 2>&1)"; ex=$?
+[ "$ex" -eq 7 ] && l18_last "$out" | jq -e '.exit == 7 and .resume == 2' >/dev/null 2>&1 \
+  && grep -qE '^verify_resume: stamp-red 2 [0-9a-f]{64}$' "$SRS" && ! grep -q '^red_verified_at:' "$SRS" \
+  && echo "  ok    stamp-red call 1: exit 7, resume 2, mark written, no receipt yet" \
+  || { echo "::error::per-line cap: stamp-red pause exit=$ex out=$out"; fail=1; }
+out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh stamp-red "$SRS" 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^red_verified_at:' "$SRS" && ! grep -q '^verify_resume:' "$SRS" \
+  && echo "  ok    stamp-red call 2: resumes at line 2, red for the declared reason, receipt written, mark gone" \
+  || { echo "::error::per-line cap: stamp-red resume exit=$ex out=$out"; fail=1; }
+
+echo "gate-split-02: VULYK_VERIFY_TIMEOUT above 300 acts as 300"
+CAPS="$(mktemp -d)"; CAPLOG="$CAPS/log"
+printf '#!/bin/sh\nif [ "$1" = "-k" ]; then echo "$3" >> "%s"; shift 3; else shift 1; fi\nexec "$@"\n' "$CAPLOG" > "$CAPS/timeout"
+chmod +x "$CAPS/timeout"
+printf -- '---\nstory: r18pl-02\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Clamp\n\n## Files\n- r18pl-clamp.txt\n\n## Verification\n`true`\n' > docs/specs/r18cs/r18pl-02-clamp.md
+git add -A && git commit -qm "r18pl: clamp fixture" >/dev/null
+PATH="$CAPS:$PATH" VULYK_VERIFY_TIMEOUT=999 bash scripts/cycle.sh close-story docs/specs/r18cs/r18pl-02-clamp.md --commit >/dev/null 2>&1
+[ "$(tail -1 "$CAPLOG" 2>/dev/null)" = 300 ] && echo "  ok    a 999 s setting caps the line at 300 s" \
+  || { echo "::error::per-line cap: clamp saw '$(cat "$CAPLOG" 2>&1)'"; fail=1; }
+rm -rf "$CAPS"
+
+echo "gate-split-02: repair keeps only the verification lines covering the paths its findings name"
+vf_spec() { # vf_spec <slug> <finding-line> - done stories 01 (a) and 02 (b), a RED round 1 with the finding, its repair
+  mk_open_spec "$1" 2; set_tier "$1" 2
+  printf -- '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# A\n\n## Files\n- %s-a.txt\n\n## Verification\n`test -f %s-a.txt`\n`echo unrelated`\n' "$1" "$1" "$1" "$1" > "docs/specs/$1/$1-01-a.md"
+  printf -- '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# B\n\n## Files\n- %s-b.txt\n\n## Verification\n`test -f %s-b.txt`\n`test -f %s-b.txt`\n' "$1" "$1" "$1" "$1" "$1" > "docs/specs/$1/$1-02-b.md"
+  git add -A && git commit -qm "$1: stories" >/dev/null
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  seat_report opus 1 GG | council record-seat "docs/specs/$1" 1 opus >/dev/null 2>&1
+  printf 'VERDICT: BLOCK\n## Major\n%s\n' "$2" | council record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
+  council judge "docs/specs/$1" --commit >/dev/null 2>&1
+  council repair "docs/specs/$1" --commit >/dev/null 2>&1
+}
+vf_spec r18vf '- [ask 2] r18vf-b.txt:1 b is wrong: run: t saw: f'
+vfv="$(sed -n '/^## Verification$/,$p' docs/specs/r18vf/r18vf-03-repair-round-1.md 2>/dev/null)"
+[ "$vfv" = "$(printf '## Verification\n`test -f r18vf-b.txt`')" ] \
+  && echo "  ok    a finding naming b: only b's line survives, once" \
+  || { echo "::error::per-line cap: repair filter: $vfv"; fail=1; }
+vf_spec r18vg '- [ask 2] zzz/nothing.c:3 nothing runs this: run: t saw: f'
+vfv="$(sed -n '/^## Verification$/,$p' docs/specs/r18vg/r18vg-03-repair-round-1.md 2>/dev/null)"
+[ "$vfv" = "$(printf '## Verification\n`test -f r18vg-a.txt`\n`test -f r18vg-b.txt`')" ] \
+  && echo "  ok    no surviving line: the lines hitting ## Files, deduped, the unrelated echo dropped" \
+  || { echo "::error::per-line cap: repair fallback: $vfv"; fail=1; }
+
+echo "gate-split-02: workers and the solo build learn exit 7"
+for f in .claude/agents/worker-code.md .claude/agents/worker-test.md .claude/commands/vulyk-build.md; do
+  grep -qF 'exit 7' "$SRC/$f" && echo "  ok    $f names exit 7" || { echo "::error::per-line cap: $f does not name exit 7"; fail=1; }
+done
 
 echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every pre-0.18 key"
 council status docs/specs/r18ad --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
