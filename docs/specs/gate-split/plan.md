@@ -164,6 +164,13 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
 
 ## Plan deltas
 
+1. 2026-11-02, wave 2: `bash tests/cycle.test.sh` whole takes 307-309 s alone, over the 300 s per-line cap
+   `gate-split-02` landed, so `gate-split-04` could take no red receipt. The line is dropped from its `## Verification`;
+   the round's stepped suite runs all eight cycle parts. Rejected: `--part` lines (close-story runs only `## Commands`
+   cells, there is no `Cycle part` row, and CLAUDE.md is `gate-split-06`'s file) and raising the cap (the card).
+   Tail, not this spec: the CLAUDE.md `Cycle` row is itself a line over the cap; a `--part <topic>` cell needs ~20
+   bytes the ADR-016 budget (7156/7168) does not have.
+
 **Approved:** Andrei, 2026-11-02 (Windows part times from the local round log, no Windows CI job)
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/gate-split

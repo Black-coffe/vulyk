@@ -9,7 +9,7 @@ model: opus
 wave: 2
 blocked_by: [gate-split-01, gate-split-02]
 red: required
-red_reason:
+red_reason: suite: no open round must exit 2
 ---
 
 # cycle.sh suite: the round's gate runs once, in steps, into a log the judge reads
@@ -70,8 +70,12 @@ scout report C:/Users/Andrei/AppData/Local/Temp/claude/E--Projects-vulyk/aeafb18
 `bash tests/council.test.sh --part roster`
 `bash tests/council.test.sh --part replays`
 `bash tests/council.test.sh --part replays2`
-`bash tests/cycle.test.sh`
 
 ## Implementation notes
+- tests/council.test.sh: red test written (new part `suite`, a seats case for record-seat with a suite.log, the escalate plan-line assert, `replays` split into `replays` | `replays2`); scripts/cycle.sh not touched yet - no red receipt.
+- tests/council.test.sh (attempt 2): `sx_open` takes a tier; the `sxfail` judge case opens at Tier 2 (ceiling 2) so its first RED routes to `repair`, not a ceiling ESCALATE (Tier 1 ceiling is 1). `--part suite` is red for the declared reason (17 `::error` lines, the first `suite: no open round must exit 2 - exit=1`). scripts/cycle.sh still untouched: no red receipt.
 
 ## Findings
+- stamp-red refused twice with `not red: timed out after 300s` on the verification line `bash tests/cycle.test.sh` (calls on 2026-11-02, the second resumed at line 5). Measured alone: `bash tests/cycle.test.sh` took 309 s, exit 0, with wave-mate gate-split-03 running on the same tree. Under gate-split-02's per-line cap (VULYK_VERIFY_TIMEOUT never above 300) this line cannot pass here, so neither stamp-red nor close-story can finish. The `suite` part is red for the declared reason (`suite: no open round must exit 2`). Question: replace that line with per-part lines (`bash tests/cycle.test.sh --part <topic>`, which needs a `Cycle part` row in `## Commands`, gate-split-06's file), drop it (this story's cycle.test.sh changes are nil so far), or re-dispatch once the wave is idle?
+- Attempt 2 (2026-11-02, wave idle: gate-split-01..03 committed, nothing else running on the tree): `bash tests/cycle.test.sh` alone took 307 s, exit 0, 0 errors (measured by a direct run, not stamp-red). It sits at the 300 s per-line cap in both measurements (309 s, 307 s), so `stamp-red`/`close-story` cannot pass this line here and the story is still blocked on the same choice; stamp-red was not re-run (the two earlier refusals and this measurement already decide it). Recommended: gate-split-06 lands a `Cycle part` row (`bash tests/cycle.test.sh --part <topic>`) in `## Commands` first and this story's `## Verification` replaces the line with the eight part lines (`ship hooklog gates manual close bsd safety red`); the alternative is dropping the line (this story changes nothing in tests/cycle.test.sh; its council paths are covered by the council parts), leaving cycle.sh's close-story/stamp-red regression check to the round-only full suite. Neither edit is this worker's to make.
+- Queen ruling (2026-11-02, plan delta 1): the `bash tests/cycle.test.sh` line is dropped (307-309 s, over the 300 s line cap; no `Cycle part` row exists). The round's stepped suite runs all eight cycle parts. Keep the red test as written and take the red receipt.
