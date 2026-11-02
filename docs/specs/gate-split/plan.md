@@ -170,6 +170,12 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
    cells, there is no `Cycle part` row, and CLAUDE.md is `gate-split-06`'s file) and raising the cap (the card).
    Tail, not this spec: the CLAUDE.md `Cycle` row is itself a line over the cap; a `--part <topic>` cell needs ~20
    bytes the ADR-016 budget (7156/7168) does not have.
+2. 2026-11-02 (side-agent note): the 300 s line clamp also binds a hive's story rows; the old
+   `VULYK_VERIFY_TIMEOUT=1800` bypass ends. `gate-split-06`'s hive note says so; before upgrading a hive, time the
+   rows its stories name and cut any over ~210 s first.
+3. 2026-11-02, wave 2: `gate-split-04`'s sealed escalate test greps the fixture plan.md copied from
+   `templates/plan.md`, whose line 37 still names `VULYK_SUITE_TIMEOUT`; that file moves from `gate-split-06` to
+   `gate-split-04`. Rejected: editing the sealed test after the receipt.
 
 **Approved:** Andrei, 2026-11-02 (Windows part times from the local round log, no Windows CI job)
 **Briefed:** <written by scripts/cycle.sh briefed>
