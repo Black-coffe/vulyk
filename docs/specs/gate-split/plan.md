@@ -181,5 +181,5 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/gate-split
 **Checked:** <written by scripts/human-check.sh>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Council:** RED round 1, 2026-11-02, at 57270fb, pack e86c1131360a - red: 9
 **Shipped:** <written by scripts/ship-check.sh --record>
