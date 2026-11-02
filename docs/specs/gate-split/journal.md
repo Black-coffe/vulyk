@@ -8,3 +8,4 @@
 - 2026-11-02T21:46:01Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/gate-split; to edit, run /vulyk-pause gate-split
 - 2026-11-02T21:46:16Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/gate-split/round-1 · next: dispatch:opus,review
 - 2026-11-02T22:08:26Z · 04-council:RED · round 1 verdict RED at 57270fb pack e86c1131360a · next: repair
+- 2026-11-02T22:08:34Z · 03-building · repair round 1: gate-split-08-repair-round-1.md · next: build:4
