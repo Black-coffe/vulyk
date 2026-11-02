@@ -69,3 +69,6 @@ PART telemetry:edits ok 94s cap 300s
 PART token-report ok 4s cap 300s
 STEP 7/8: ok 15s
 PART inject:latency ok 14s cap 300s
+STEP 8/8: ok 6s
+PART intake:latency ok 5s cap 300s
+SUITE: ok 667s
