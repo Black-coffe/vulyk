@@ -36,6 +36,9 @@ Skipped: not new ground (the runner, parts and round gate exist: `tests/full-sui
 3. Требования — Да, план на утверждение (Рекомендую). Работа затрагивает механику раунда, драйвер и все проекты на VULYK. Сначала вы видите план по историям, и только потом тратятся исполнители и суд.
 4. Windows — По локальному логу (Рекомендую). Эта машина на Windows, каждый раунд пишет время каждой части в лог: время на Windows видно уже сейчас. В GitHub на Windows тесты ни разу не запускались, их сначала пришлось бы там чинить; это отдельная работа, позже отдельным планом. (2026-11-02, gate-split plan approval)
 
+
+**After escalation (round 2, 2026-11-02).**
+> Owner 2026-11-03: reopen. (1) install.sh --upgrade tells every hive, including one that already has a Full suite (round-only) row, that the row may be split into several part rows of 300 s each and that every verification line now has a 300 s cap; fix install.sh:268 (the reviewer no longer runs the suite: the round gate does, before the seats). (2) A Full suite (round-only) row with an empty or missing command cell is a red step (refused, named in the log), never a silent drop and never SUITE: none. (3) Reviewer minors: a step number beyond the row count fails the step; two rows with the same Purpose get distinct part names.
 ## Asks
 
 1. У каждой части тестов свой лимит не больше 300 с, шаг прогона влезает в один вызов, одного общего лимита больше нет.
