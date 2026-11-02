@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs judge seats close escalate ceilings replays replays2 walks driver roster advance suite" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs judge seats seats2 close escalate ceilings ceilings2 replays replays2 walks walks2 driver roster roster2 advance suite" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -1373,6 +1373,9 @@ out="$(printf 'garbage3\n' | council record-seat docs/specs/rabsent 1 haiku 2>&1
   || { echo "::error::files: $(ls "$rd_rabsent")"; fail=1; }
 
 fi # --quick: end of the taint/evidence skip
+fi # part seats
+if part seats2; then # --- part seats2: record-seat review seat verdict, review layout, --model, --file
+
 # --- record-seat: review seat, verdict read from line 1 only (C5 amended, story 27/R28,N-m4) --
 
 echo "record-seat review: VERDICT: BLOCK on line 1 -> recorded BLOCK"
@@ -1555,7 +1558,7 @@ out="$(council record-seat docs/specs/rfile1 1 haiku --file .vulyk/reports/empty
   && echo "  ok    empty --file path behaves as missing: exit 2, no attempt file" \
   || { echo "::error::--file empty: exit=$ex out=$out"; fail=1; }
 
-fi # part seats
+fi # part seats2
 if part close; then # --- part close: the PAUSE guard, pause/resume, close-story
 # --- PAUSE guard: every mutating verb refuses before touching anything ------------------------
 
@@ -2638,6 +2641,9 @@ council reopen docs/specs/tceil2 "owner: one more pass" --commit >/dev/null
 [ "$(cat docs/specs/tceil2/council/CEILING 2>&1)" = "4" ] && echo "  ok    tier 2: reopen raises the ceiling to 4" \
   || { echo "::error::CEILING: $(cat docs/specs/tceil2/council/CEILING 2>&1)"; fail=1; }
 
+fi # part ceilings
+if part ceilings2 && full; then # --- part ceilings2 (--quick skips it): the judged-rounds and RED-rounds ceilings
+
 # --- judged-rounds ceiling (convergent-judge-05): a STALE-folded round does not consume the
 # tier's budget - the ceiling counts rounds with a non-STALE council.jsonl row only.
 
@@ -2749,7 +2755,7 @@ tg2_round 5 GR 6 "tier 2 after reopen: round 5 RED -> ESCALATE ceiling (exactly 
 grep '"spec":"tgreen2"' memory/stats/council.jsonl | grep '"round":5,' | grep -qF '"escalate":"ceiling"' \
   || { echo "::error::tgreen2 round 5 is not ESCALATE ceiling"; fail=1; }
 
-fi # part ceilings
+fi # part ceilings2
 if part replays && full; then # --- part replays (--quick skips it): status after committed verbs, env/STALE-fold seats
 # --- status --json after committed verbs (autonomous-cycle-19: R1, R2, R3, R7, R25) -----------
 # The council round found the suite asserted only each verb's own emit, never `status --json`
@@ -3331,6 +3337,9 @@ if pin_cycle b9f36e8 "$OLDCYCLE2"; then
 fi
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
 
+fi # part walks
+if part walks2 && full; then # --- part walks2 (--quick skips it): story 16, its wall probes and pinned replay
+
 # ============================================================================================
 # Story 16: one wall probe per story 08 fix (M3/ADR-006 returned:, r2m2, LR31, r2m9), replayed
 # against eb3203a's cycle.sh (the commit immediately before story 08's own) vs. the branch's,
@@ -3451,7 +3460,7 @@ fi
 PIN_MUST_FAIL=""
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
 
-fi # part walks
+fi # part walks2
 if part driver && full; then # --- part driver (--quick skips it): story 17 DRIVER semaphore and its pinned replay, the C5 status block
 # ============================================================================================
 # Story 17: one scenario per story 11 criterion - the DRIVER semaphore (ADR-004/K3): claim,
@@ -3830,7 +3839,7 @@ council resume docs/specs/c5dirty >/dev/null 2>&1
 
 
 fi # part driver
-if part roster || part advance; then # --- the 0.18 section's shared fixture (ADR-013): parts roster and advance
+if part roster || part roster2 || part advance; then # --- the 0.18 section's shared fixture (ADR-013): parts roster and advance
 # ============================================================================================
 # 0.18 - Light VULYK (docs/adr/013-light-vulyk.md): the roster and the Client path, the sidecar
 # constitution, frozen seats, no-court rounds, carry-forward, reopen -> repair, the repair and
@@ -3987,6 +3996,9 @@ out="$(council reopen docs/specs/r18re "the reviewer died, run it again" --commi
 l18_last "$out" | jq -r .next | expect "reopen after env -> open-round" "open-round"
 council status docs/specs/r18re --json | jq -r .next | expect "status agrees: open-round" "open-round"
 
+fi # part roster
+if part roster2; then # --- part roster2: the repair verb and the Asks parser (roster, second half)
+
 echo "ADR-013 D4: repair writes the mechanical story - asks from the row and the seats, findings verbatim, Files and Verification of the done stories"
 mkdir -p docs/specs/r18rp
 cp "$SRC/templates/plan.md" docs/specs/r18rp/plan.md
@@ -4112,7 +4124,7 @@ sed -n '/^## Requirements$/,/^## Findings$/p' docs/specs/r18rq/r18rq-02-repair-r
 out="$(bash scripts/trace-check.sh docs/specs/r18rq)"
 printf '%s' "$out" | expect "trace-check: the repair quote traces to the brief" "backward: 0 unfound + 0 storyless"
 
-fi # part roster
+fi # part roster2
 if part advance; then # --- part advance: advance, --ingest, claim's clean-tree rule, close-story's idempotency and timeout
 echo "ADR-013 D2: advance - branch and open-round in one call, stop at the first agent boundary, key order fixed"
 mk_spec r18ad 2
