@@ -1,8 +1,8 @@
 ---
 story: gate-split-03
 spec: gate-split
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
@@ -63,5 +63,10 @@ C:/Users/Andrei/AppData/Local/Temp/claude/E--Projects-vulyk/aeafb186-f7ba-4c02-b
 `bash tests/telemetry.test.sh --part ysk-hook`
 
 ## Implementation notes
+- Files: tests/solo.test.sh, e2e.test.sh, model-profile.test.sh, telemetry.test.sh (cuts only, no assert removed or edited).
+- Alone times measured 2026-11-02: solo green 13 s, block 29 s, rejected 16 s; e2e green 19 s, red 32 s; model-profile defaults 12 s, set 19 s, edges 9 s; telemetry install 137 s, install-xp 76 s, constitution 150 s, constitution2 48 s, ysk 140 s, ysk-hook 3 s.
+- Three telemetry parts (install 137, constitution 150, ysk 140) stay above 100 s at the story's cut lines: the fixture/install cache build is in each; a further cut is a follow-up.
+- Assert counts: old install 50 = 31+21-2, constitution 44 = 30+16-2, ysk 30 = 16+16-2 (the 2 syntax asserts run in every part, as before).
+- e2e: no node prints SKIP: node not found, exits 77 (checked with node off PATH). model-profile edges runs mp --set opus-builds first; YSK/ysk_val and the constitution helpers sit in a shared block gated on both parts; install_fixtures keys on install and install-xp.
 
 ## Findings

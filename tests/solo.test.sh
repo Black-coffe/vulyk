@@ -5,7 +5,27 @@
 # throwaway repo, writing the reviewer's report where the loop tells it to.
 #
 #   Usage: bash tests/solo.test.sh            # from the VULYK repo root
+#          bash tests/solo.test.sh --part <name>   # one topic alone
+#          bash tests/solo.test.sh --list-parts    # the part names, one per line
 set -u
+PARTS="green block rejected"
+PART=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list-parts) printf '%s
+' $PARTS; exit 0 ;;
+    --part)
+      PART="${2:-}"; shift
+      case " $PARTS " in
+        *" $PART "*) ;;
+        *) echo "unknown part '$PART' - parts:" >&2; printf '%s
+' $PARTS >&2; exit 1 ;;
+      esac ;;
+    *) echo "usage: bash tests/solo.test.sh [--part <name>] [--list-parts]" >&2; exit 2 ;;
+  esac
+  shift
+done
+part() { [ -z "$PART" ] || [ "$PART" = "$1" ]; }
 
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 . "$SRC/scripts/lib.sh"   # sed_inplace
@@ -59,6 +79,7 @@ review() { # review <round> <PASS|BLOCK> - the reviewer's report where the solo 
   fi > ".vulyk/reports/demo/round-$1/review.attempt-1.md"
 }
 
+if part green; then
 echo "--- Tier 1, green in one round"
 ( mkfix "$TMP/pass" 1 )
 cd "$TMP/pass" || exit 1
@@ -72,6 +93,9 @@ o="$(adv --ingest)"; ok "--ingest records the review and judges GREEN" "$([ "$(j
 ok "the tree is clean and no worktree is left" "$([ -z "$(git status --porcelain)" ] && [ -z "$(git worktree list | sed 1d)" ]; echo $?)"
 cd "$SRC" || exit 1
 
+fi
+
+if part block; then
 echo "--- Tier 1, an anchored BLOCK escalates at once; reopen routes to a mechanical repair"
 ( mkfix "$TMP/block" 1 )
 cd "$TMP/block" || exit 1
@@ -90,6 +114,9 @@ review 2 PASS
 o="$(adv --ingest)"; ok "round 2 is GREEN" "$([ "$(jl "$o" .next)" = green ]; echo $?)"
 cd "$SRC" || exit 1
 
+fi
+
+if part rejected; then
 echo "--- Tier 2, the owner's REJECTED turns a passing round RED; the repair carries the note"
 ( mkfix "$TMP/rej" 2 )
 cd "$TMP/rej" || exit 1
@@ -101,6 +128,8 @@ o="$(adv --ingest)"; ok "the override makes the round RED and advance cuts a rep
 ok "the repair story's findings carry the owner's note" \
   "$(grep -q '^- owner REJECTED at .*: the owner saw the wrong button$' docs/specs/demo/demo-02-repair-round-1.md; echo $?)"
 cd "$SRC" || exit 1
+
+fi
 
 if [ "$fail" -eq 0 ]; then echo "solo.test.sh: all checks passed"; else echo "solo.test.sh: FAILED"; fi
 exit "$fail"
