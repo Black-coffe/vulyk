@@ -1,0 +1,6 @@
+SUITE run 2026-11-02, weekly-budget round 2: one budget of 905 s over every part
+PART cycle:ship ok 61s cap 905s
+PART council:verbs ok 148s cap 905s
+PART solo ok 377s cap 905s
+PART telemetry:telemetry ok 214s cap 905s
+SUITE: FAIL 904s parts=4 skip=0 fail=

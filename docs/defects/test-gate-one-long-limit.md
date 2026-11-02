@@ -1,9 +1,9 @@
 ---
 id: test-gate-one-long-limit
 title: A test gate runs as one long job under one big time limit and keeps hitting it
-status: text
-check:
-fixtures: []
+status: block
+check: bash scripts/suite-parts-check.sh <arg>
+fixtures: [docs/defects/test-gate-one-long-limit.original.fixture, docs/defects/test-gate-one-long-limit.neighbour.fixture]
 keys: [упираться в лимиты, дробными лимитами, гонять по 20-30 мин]
 paths: ["tests/full-suite.sh", "tests/*.test.sh", "scripts/cycle.sh", "scripts/lib.sh", ".claude/agents/lead-review.md", ".claude/agents/worker-*.md", "cmd:full-suite\\.sh", "cmd:VULYK_SUITE_TIMEOUT"]
 ---

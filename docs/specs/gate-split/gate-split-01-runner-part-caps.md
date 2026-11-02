@@ -1,14 +1,15 @@
 ---
 story: gate-split-01
 spec: gate-split
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
-red_reason:
+red_reason: expected 'PART ok ok <N>s cap <C>s' in:
+red_verified_at: 2026-11-02T19:29:49Z 95dde02d6318c6c31acbf69bd5163846e5b9c810ceef3798688dddf3835e7df3
 ---
 
 # Runner: a 300 s cap per part, steps, PART lines, growth check, SKIP, CI
@@ -79,3 +80,23 @@ memory/map/scripts.md `## Tests`, `## Key contracts`, `## Gotchas`; docs/defects
 ## Implementation notes
 
 ## Findings
+
+## Red receipt
+- command: bash tests/full-suite.test.sh
+- exit: 1
+- tests: 95dde02d6318c6c31acbf69bd5163846e5b9c810ceef3798688dddf3835e7df3 (tests/full-suite.test.sh)
+- impl: 3ccfe9f1c4c03f7b1c3006dc7a0118701326b5d6c02e71f2abc6162729637511
+- stamped: 2026-11-02T19:29:49Z
+
+```
+::error::intake ok - expected 'PART intake ok <N>s cap <C>s' in:
+        ok 2s bash /tmp/tmp.9kgM0Ttkte/late/early.sh
+        ok 1s bash /tmp/tmp.9kgM0Ttkte/late/inject.test.sh
+        ok 1s bash /tmp/tmp.9kgM0Ttkte/late/intake.test.sh
+        full suite: 3 ok, 0 failed, 0 timed out, wall 5s, budget 900s, jobs 4
+== jobs share one install cache inside the logs dir
+  ok    VULYK_INSTALL_CACHE is exported to every job -> exit 0
+== bad usage
+  ok    --jobs 0 -> exit 2
+full-suite.test.sh: FAILED
+```

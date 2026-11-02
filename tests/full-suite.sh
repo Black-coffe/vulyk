@@ -1,44 +1,51 @@
 #!/usr/bin/env bash
-# The whole test suite at once, under one budget (plan fast-verification, `## Contracts` Runner).
+# The whole test suite in capped parts, run in steps (plan gate-split, `## Contracts` Runner).
 #
-#   Usage: bash tests/full-suite.sh [--jobs N] [--list]     # from anywhere; runs from the repo root
+#   Usage: bash tests/full-suite.sh [--jobs N] [--list | --steps | --step K]   # from anywhere; runs from the repo root
 #
 # Jobs: every tests/*.test.sh as `bash tests/<x>.test.sh`; a suite that answers `--list-parts`
-# (telemetry, council, cycle) contributes one `--part <name>` job per part instead, so a later re-cut
+# (telemetry, council, cycle, ...) contributes one `--part <name>` job per part instead, so a later re-cut
 # needs no edit here. VULYK_SUITES (newline-separated commands) overrides the list - tests only.
-# The wall-clock latency checks (inject.test.sh, intake.test.sh `--part latency`: 200 ms medians, or
-# either suite listed whole) go last and start only once every other job has ended, one at a time,
-# outside the contended window; their `--part functional` runs among the parallel jobs.
+# Each job is a part with its own hard cap, VULYK_PART_CAP seconds (default and maximum 300; lower is
+# allowed, for tests). There is no budget for the whole run: a part at its cap is a FAIL of that part
+# ("cut part X", exit 1, never 124); a part over 70% of its cap fails too (scripts/suite-parts-check.sh,
+# run on each step's PART lines). Cap by lib.sh's run_capped_as: `timeout`, else `gtimeout`, else python 3;
+# with none of the three parts run uncapped, one over its cap is reported CAP by its measured time.
 #
-# --jobs defaults to the core count capped at 12: at 28 parallel jobs the box's load pushed the
-# latency medians past their bound and cut 16 of 31 jobs at the budget (round 1, 2026-10-26); with
-# a council suite beside it, 8 jobs hit the budget at 540 s and 12 ended green at 421 s.
-# VULYK_INSTALL_CACHE is exported as a directory inside the logs dir: the parts that need a plain
-# fresh install copy one install.sh output built once per run (tests/telemetry.test.sh, tests/intake.test.sh).
+# Steps: the K-th chunk of at most --jobs jobs in --list order, started together; the wall-clock latency
+# checks (inject.test.sh, intake.test.sh `--part latency`: 200 ms medians, or either suite listed whole)
+# go last, each in a step alone, outside the contended window. `--steps` prints the step count S,
+# `--step K` runs step K, no flag runs steps 1..S in sequence. Step membership is a pure function of
+# the job list and --jobs.
 #
-# VULYK_SUITE_TIMEOUT: the whole run's budget in seconds, default 590 (the 600 s Bash cap less the summary), 0 = uncapped. At the
-# budget running jobs are killed (lib.sh's run_capped: `timeout`, else `gtimeout`, else python 3; the
-# budget is what is left of it) and they and every unstarted job are marked TIMEOUT. Without any of the three
-# (capped_by probes them) jobs run uncapped, no new job starts after the budget, and a job that ends past it
-# is still reported TIMEOUT by its measured time.
+# --jobs defaults to the core count capped at 12 (28 parallel jobs pushed the latency medians past
+# their bound). VULYK_INSTALL_CACHE is exported as a directory inside the logs dir: the parts that need a
+# plain fresh install copy one install.sh output built once per run (tests/telemetry.test.sh, tests/intake.test.sh).
 #
-# Output: one `ok|FAIL|TIMEOUT <seconds>s <command>` line per job as it ends, the last 20 lines
-# of each failed or killed job's log, then
-#   full suite: <ok> ok, <fail> failed, <timeout> timed out, wall <W>s, budget <B>s, jobs <N>
-# Exit 0 all ok, 1 any FAIL, 124 any TIMEOUT (outranks FAIL), 2 bad usage. Logs live in a
+# SKIP: a job that prints `SKIP: <reason>` and exits 77 is a SKIP part, counted apart; with
+# VULYK_STRICT_SKIP=1 (CI) it is a FAIL.
+#
+# Output: one `PART <name> <ok|FAIL|SKIP|CAP> <N>s cap <C>s[ - <reason>]` line per part as it ends, the last
+# 20 lines of each failed or cut part's log, the growth lines, then
+#   STEP K/S: ok|FAIL <N>s                                   (--step K)
+#   SUITE: ok|FAIL <N>s parts=<n> skip=<n> fail=<csv>        (no flag)
+# Exit 0 all ok, 1 any FAIL, CAP, growth or strict SKIP, 2 bad usage; 124 is never returned. Logs live in a
 # mktemp -d, removed on exit 0, kept and named otherwise.
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 2
 . "$ROOT/scripts/lib.sh"   # capped_by, run_capped_as (probed once here, not per job)
 
-JOBS='' LIST=0
+JOBS='' LIST=0 STEPS=0 STEPK=''
 while [ $# -gt 0 ]; do
   case "$1" in
     --jobs) JOBS="${2:-}"; shift ;;
     --jobs=*) JOBS="${1#--jobs=}" ;;
     --list) LIST=1 ;;
-    *) echo "usage: bash tests/full-suite.sh [--jobs N] [--list]" >&2; exit 2 ;;
+    --steps) STEPS=1 ;;
+    --step) STEPK="${2:-}"; shift ;;
+    --step=*) STEPK="${1#--step=}" ;;
+    *) echo "usage: bash tests/full-suite.sh [--jobs N] [--list | --steps | --step K]" >&2; exit 2 ;;
   esac
   shift
 done
@@ -49,8 +56,12 @@ if [ -z "$JOBS" ]; then
 else
   case "$JOBS" in *[!0-9]*|0) echo "full-suite: --jobs needs a positive number, got '$JOBS'" >&2; exit 2 ;; esac
 fi
-BUDGET="${VULYK_SUITE_TIMEOUT:-590}"
-case "$BUDGET" in ''|*[!0-9]*) echo "full-suite: VULYK_SUITE_TIMEOUT must be seconds, got '$BUDGET'" >&2; exit 2 ;; esac
+PART_CAP="${VULYK_PART_CAP:-300}"
+case "$PART_CAP" in ''|*[!0-9]*|0) echo "full-suite: VULYK_PART_CAP must be seconds, 1-300, got '$PART_CAP'" >&2; exit 2 ;; esac
+[ "$PART_CAP" -le 300 ] || { echo "full-suite: VULYK_PART_CAP is at most 300 s, got '$PART_CAP': split the part, never raise the cap" >&2; exit 2; }
+[ "$STEPS" -eq 1 ] && [ -n "$STEPK" ] && { echo "full-suite: --steps and --step K are exclusive" >&2; exit 2; }
+case "$STEPK" in *[!0-9]*) echo "full-suite: --step needs a positive number, got '$STEPK'" >&2; exit 2 ;; esac
+[ "$STEPK" = 0 ] && { echo "full-suite: --step needs a positive number, got '0'" >&2; exit 2; }
 
 # --- the job list ------------------------------------------------------------------------
 CMDS=()
@@ -78,83 +89,93 @@ if [ "$LIST" -eq 1 ]; then printf '%s\n' ${CMDS[@]+"${CMDS[@]}"}; exit 0; fi
 NJ=${#CMDS[@]}
 [ "$NJ" -gt 0 ] || { echo "full-suite: no jobs found" >&2; exit 2; }
 
+# --- steps: chunks of at most JOBS early jobs, then every latency job alone ----------------
+declare -a STEP_FIRST STEP_N
+NSTEPS=0
+for ((i = 0; i < FIRST_LATE; i += JOBS)); do
+  n=$(( FIRST_LATE - i )); [ "$n" -gt "$JOBS" ] && n=$JOBS
+  STEP_FIRST[NSTEPS]=$i; STEP_N[NSTEPS]=$n; NSTEPS=$((NSTEPS + 1))
+done
+for ((i = FIRST_LATE; i < NJ; i++)); do STEP_FIRST[NSTEPS]=$i; STEP_N[NSTEPS]=1; NSTEPS=$((NSTEPS + 1)); done
+if [ "$STEPS" -eq 1 ]; then echo "$NSTEPS"; exit 0; fi
+if [ -n "$STEPK" ] && [ "$STEPK" -gt "$NSTEPS" ]; then
+  echo "full-suite: --step $STEPK, but there are $NSTEPS steps" >&2; exit 2
+fi
+
 # --- run ---------------------------------------------------------------------------------
 TIMEOUT_OK=0
 capped_by && TIMEOUT_OK=1
-[ "$BUDGET" -gt 0 ] && [ "$TIMEOUT_OK" -eq 0 ] && echo "full-suite: no working timeout - jobs run uncapped, over-budget ones are reported by their time" >&2
+[ "$TIMEOUT_OK" -eq 0 ] && echo "full-suite: no working timeout - parts run uncapped, over-cap ones are reported by their time" >&2
 LOGS="$(mktemp -d)"
 export VULYK_INSTALL_CACHE="$LOGS/install-cache"
 SECONDS=0
-declare -a PID STATE START   # STATE: pending | running | done
-for ((i = 0; i < NJ; i++)); do STATE[i]=pending; done
-trap 'for p in "${PID[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null; done; exit 124' INT TERM
+declare -a PID
+trap 'for p in "${PID[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null; done; exit 1' INT TERM
 
-start_job() { # start_job <index> - runs in the background, leaves "<rc> <end>" in $LOGS/<i>.rc
-  local i="$1" left rc=0
-  START[i]=$SECONDS
+part_name() { # part_name <index> - <suite>[:<part>] from the command, else job<index>
+  local c="${CMDS[$1]}" n
+  if [[ "$c" =~ ([A-Za-z0-9_-]+)(\.test)?\.sh([[:space:]]+--part[[:space:]]+([a-z0-9-]+))? ]]; then
+    n="${BASH_REMATCH[1]}"; [ -n "${BASH_REMATCH[4]}" ] && n="$n:${BASH_REMATCH[4]}"
+  else n="job$1"; fi
+  printf '%s' "$n"
+}
+
+start_job() { # start_job <index> - runs in the background, leaves "<rc> <seconds>" in $LOGS/<i>.rc
+  local i="$1"
   (
-    if [ "$BUDGET" -gt 0 ] && [ "$TIMEOUT_OK" -eq 1 ]; then
-      left=$(( BUDGET - SECONDS )); [ "$left" -lt 1 ] && left=1
-      run_capped_as "$VULYK_CAP" "$left" bash -c "${CMDS[i]}" </dev/null >"$LOGS/$i.log" 2>&1 || rc=$?
+    rc=0 st=$SECONDS
+    if [ "$TIMEOUT_OK" -eq 1 ]; then
+      run_capped_as "$VULYK_CAP" "$PART_CAP" bash -c "${CMDS[i]}" </dev/null >"$LOGS/$i.log" 2>&1 || rc=$?
     else
       bash -c "${CMDS[i]}" </dev/null >"$LOGS/$i.log" 2>&1 || rc=$?
     fi
-    echo "$rc $SECONDS" > "$LOGS/$i.rc.tmp" && mv "$LOGS/$i.rc.tmp" "$LOGS/$i.rc"
+    echo "$rc $(( SECONDS - st ))" > "$LOGS/$i.rc.tmp" && mv "$LOGS/$i.rc.tmp" "$LOGS/$i.rc"
   ) &
   PID[i]=$!
-  STATE[i]=running
 }
 
-NOK=0 NFAIL=0 NTO=0 TAILS=()
-report() { # report <index> <verdict> <seconds>
-  echo "$2 $3s ${CMDS[$1]}"
-  case "$2" in
-    ok) NOK=$((NOK + 1)) ;;
-    FAIL) NFAIL=$((NFAIL + 1)); TAILS+=("$1") ;;
-    TIMEOUT) NTO=$((NTO + 1)); [ -f "$LOGS/$1.log" ] && TAILS+=("$1") ;;
-  esac
-  STATE[$1]=done
-}
+NPART=0 NSKIP=0 FAILS=''
+add_fail() { case ",$FAILS," in *",$1,"*) ;; *) FAILS="${FAILS:+$FAILS,}$1" ;; esac; }
 
-next=0 running=0
-while :; do
-  over=0; [ "$BUDGET" -gt 0 ] && [ "$SECONDS" -ge "$BUDGET" ] && over=1
-  # unstarted jobs past the budget never start
-  if [ "$over" -eq 1 ]; then
-    while [ "$next" -lt "$NJ" ]; do report "$next" TIMEOUT 0; next=$((next + 1)); done
+run_step() { # run_step <k> (0-based) - starts the step's parts together, prints their PART lines and tails
+  local k="$1" first last i rc secs name verdict why reason tails=() pl="$LOGS/parts.$1" chk line
+  first=${STEP_FIRST[k]}; last=$(( first + STEP_N[k] - 1 ))
+  : > "$pl"
+  for ((i = first; i <= last; i++)); do start_job "$i"; done
+  for ((i = first; i <= last; i++)); do
+    wait "${PID[i]}" 2>/dev/null
+    read -r rc secs < "$LOGS/$i.rc"
+    name="$(part_name "$i")"; why=''; NPART=$((NPART + 1))
+    if [ "$rc" -eq 77 ] && grep -q '^SKIP:' "$LOGS/$i.log"; then
+      reason="$(grep -m1 '^SKIP:' "$LOGS/$i.log" | sed 's/^SKIP:[[:space:]]*//')"
+      if [ "${VULYK_STRICT_SKIP:-0}" = 1 ]; then
+        verdict=FAIL; why="SKIP under VULYK_STRICT_SKIP=1: $reason"; add_fail "$name"
+      else verdict=SKIP; why="$reason"; NSKIP=$((NSKIP + 1)); fi
+    elif [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ] || { [ "$TIMEOUT_OK" -eq 0 ] && [ "$secs" -ge "$PART_CAP" ]; }; then
+      verdict=CAP; why="cut part $name"; add_fail "$name"
+    elif [ "$rc" -eq 0 ]; then verdict=ok
+    else verdict=FAIL; add_fail "$name"; fi
+    if [ "$verdict" = FAIL ] || [ "$verdict" = CAP ]; then tails+=("$i"); fi
+    echo "PART $name $verdict ${secs}s cap ${PART_CAP}s${why:+ - $why}" | tee -a "$pl"
+  done
+  for i in ${tails[@]+"${tails[@]}"}; do
+    echo "--- last 20 lines: ${CMDS[i]}"
+    tail -n 20 "$LOGS/$i.log"
+  done
+  if ! chk="$(bash "$ROOT/scripts/suite-parts-check.sh" "$pl")"; then
+    printf '%s\n' "$chk"
+    while IFS= read -r line; do
+      name="${line#suite-parts-check: cut part }"; add_fail "${name%%: *}"
+    done <<< "$chk"
   fi
-  # a late job starts only when nothing else runs, so the latency suites run alone, in turn
-  while [ "$running" -lt "$JOBS" ] && [ "$next" -lt "$NJ" ]; do
-    [ "$next" -ge "$FIRST_LATE" ] && [ "$running" -gt 0 ] && break
-    start_job "$next"; next=$((next + 1)); running=$((running + 1))
-  done
-  for ((i = 0; i < next; i++)); do
-    [ "${STATE[i]}" = running ] || continue
-    if [ -f "$LOGS/$i.rc" ]; then
-      wait "${PID[i]}" 2>/dev/null
-      read -r rc end < "$LOGS/$i.rc"
-      secs=$(( end - START[i] ))
-      if [ "$BUDGET" -gt 0 ] && { [ "$end" -gt "$BUDGET" ] || { [ "$TIMEOUT_OK" -eq 1 ] && { [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; }; }; }; then
-        report "$i" TIMEOUT "$secs"
-      elif [ "$rc" -eq 0 ]; then report "$i" ok "$secs"
-      else report "$i" FAIL "$secs"; fi
-      running=$((running - 1))
-    elif [ "$BUDGET" -gt 0 ] && [ "$TIMEOUT_OK" -eq 1 ] && [ "$SECONDS" -gt $(( BUDGET + 20 )) ]; then
-      # backstop: timeout -k should have ended it 10 s past the budget
-      kill -9 "${PID[i]}" 2>/dev/null
-      report "$i" TIMEOUT $(( SECONDS - START[i] )); running=$((running - 1))
-    fi
-  done
-  [ "$running" -eq 0 ] && [ "$next" -ge "$NJ" ] && break
-  sleep 0.25
-done
+}
 
-for i in "${TAILS[@]:-}"; do
-  [ -n "$i" ] || continue
-  echo "--- last 20 lines: ${CMDS[i]}"
-  tail -n 20 "$LOGS/$i.log"
-done
-echo "full suite: $NOK ok, $NFAIL failed, $NTO timed out, wall ${SECONDS}s, budget ${BUDGET}s, jobs $JOBS"
-rc=0; [ "$NFAIL" -gt 0 ] && rc=1; [ "$NTO" -gt 0 ] && rc=124
+if [ -n "$STEPK" ]; then FROM=$((STEPK - 1)) TO=$((STEPK - 1)); else FROM=0 TO=$((NSTEPS - 1)); fi
+for ((k = FROM; k <= TO; k++)); do run_step "$k"; done
+
+verdict=ok rc=0
+[ -n "$FAILS" ] && { verdict=FAIL; rc=1; }
+if [ -n "$STEPK" ]; then echo "STEP $STEPK/$NSTEPS: $verdict ${SECONDS}s"
+else echo "SUITE: $verdict ${SECONDS}s parts=$NPART skip=$NSKIP fail=$FAILS"; fi
 if [ "$rc" -eq 0 ]; then rm -rf "$LOGS"; else echo "logs: $LOGS"; fi
 exit "$rc"

@@ -21,7 +21,7 @@ cards 14 · never 39 · allowed 14 · how-to 2 · allowed repeats 0
 | general | [owner-words-by-builder](owner-words-by-builder.md) | The owner's words or decision written by the builder | text | 3 | 0 | 0 | - |
 | general | [safeguard-bypassable-or-late](safeguard-bypassable-or-late.md) | A safeguard that can be bypassed, passes silently on a missing input, or ships after what it guards | text | 3 | 0 | 0 | - |
 | general | [shell-needs-gnu-or-bash4](shell-needs-gnu-or-bash4.md) | Shell that runs only on Linux - bash 4+, GNU-only flags, a bare python | block | 6 | 1 | 0 | 2026-10-28 |
-| general | [test-gate-one-long-limit](test-gate-one-long-limit.md) | A test gate runs as one long job under one big time limit and keeps hitting it | text | 3 | 1 | 0 | 2026-11-02 |
+| general | [test-gate-one-long-limit](test-gate-one-long-limit.md) | A test gate runs as one long job under one big time limit and keeps hitting it | block | 3 | 1 | 0 | 2026-11-02 |
 | general | [upgrade-overwrites-host-edits](upgrade-overwrites-host-edits.md) | An upgrade overwrites a hive's own edits and deletions in framework files | text | 3 | 1 | 0 | 2026-10-13 |
 | general | [work-handed-back-to-owner](work-handed-back-to-owner.md) | Work an agent can do is handed back to the owner as a to-do list | text | 2 | 1 | 0 | 2026-10-13 |
 
@@ -39,7 +39,7 @@ cards 14 · never 39 · allowed 14 · how-to 2 · allowed repeats 0
 | general | [outward-artifact-carries-internals](outward-artifact-carries-internals.md) | An artifact going outward carries internal or client content beyond names | text | 1 | 0 | 0 | - |
 | general | [owner-words-by-builder](owner-words-by-builder.md) | The owner's words or decision written by the builder | text | 1 | 0 | 0 | - |
 | general | [safeguard-bypassable-or-late](safeguard-bypassable-or-late.md) | A safeguard that can be bypassed, passes silently on a missing input, or ships after what it guards | text | 1 | 0 | 0 | - |
-| general | [test-gate-one-long-limit](test-gate-one-long-limit.md) | A test gate runs as one long job under one big time limit and keeps hitting it | text | 1 | 1 | 0 | 2026-11-02 |
+| general | [test-gate-one-long-limit](test-gate-one-long-limit.md) | A test gate runs as one long job under one big time limit and keeps hitting it | block | 1 | 1 | 0 | 2026-11-02 |
 | general | [upgrade-overwrites-host-edits](upgrade-overwrites-host-edits.md) | An upgrade overwrites a hive's own edits and deletions in framework files | text | 1 | 1 | 0 | - |
 | general | [work-handed-back-to-owner](work-handed-back-to-owner.md) | Work an agent can do is handed back to the owner as a to-do list | text | 2 | 1 | 0 | - |
 
@@ -48,4 +48,4 @@ cards 14 · never 39 · allowed 14 · how-to 2 · allowed repeats 0
 | area | card | title | status | lines | quotes | repeats | last |
 |---|---|---|---|---|---|---|---|
 | general | [shell-needs-gnu-or-bash4](shell-needs-gnu-or-bash4.md) | Shell that runs only on Linux - bash 4+, GNU-only flags, a bare python | block | 1 | 1 | 0 | 2026-10-28 |
-| general | [test-gate-one-long-limit](test-gate-one-long-limit.md) | A test gate runs as one long job under one big time limit and keeps hitting it | text | 1 | 1 | 0 | 2026-11-02 |
+| general | [test-gate-one-long-limit](test-gate-one-long-limit.md) | A test gate runs as one long job under one big time limit and keeps hitting it | block | 1 | 1 | 0 | 2026-11-02 |
