@@ -4476,6 +4476,37 @@ out="$(council suite docs/specs/sxplain 2>&1)"; ex=$?
   && grep -qE '^PART full-suite-plain-round-only- ok [0-9]+s cap 300s$' docs/specs/sxplain/council/round-1/suite.log \
   && echo "  ok    plain row green -> PART ok under the default 300 s cap, SUITE: ok" || { echo "::error::suite plain ok: exit=$ex out=$out"; fail=1; }
 
+echo "suite: several round-only full-suite rows -> each row is its own capped part, one step per row (gate-split-08, ask 9)"
+printf ': > "%s/fx-b-ran"\n' "$PWD" > fx-b.sh
+grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+printf '| Full suite unit (round-only) | `true` |\n| Full suite e2e (round-only) | `bash fx-b.sh` |\n' >> CLAUDE.md
+git add -A && git commit -qm "fixture: two full-suite part rows" >/dev/null
+sx_open sxsplit
+rd="docs/specs/sxsplit/council/round-1"
+out1="$(council suite docs/specs/sxsplit 2>&1)"; ex1=$?
+out2="$(council suite docs/specs/sxsplit 2>&1)"; ex2=$?
+[ "$ex1" -eq 0 ] && [ "$ex2" -eq 0 ] && sx_last "$out1" | jq -e '.step == 1 and .steps == 2 and .done == false' >/dev/null 2>&1 \
+  && sx_last "$out2" | jq -e '.step == 2 and .steps == 2 and .done == true and .suite == "ok"' >/dev/null 2>&1 \
+  && [ -e fx-b-ran ] && grep -qE '^PART full-suite-unit-round-only- ok [0-9]+s cap 300s$' "$rd/suite.log" \
+  && grep -qE '^PART full-suite-e2e-round-only- ok [0-9]+s cap 300s$' "$rd/suite.log" \
+  && echo "  ok    two part rows -> steps 2, both rows ran as PART lines, SUITE: ok" \
+  || { echo "::error::suite split rows: the second row did not run - out1=$out1 out2=$out2 log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+rm -f fx-b-ran
+
+echo "suite: the row parser takes exactly the second cell and refuses an empty one (gate-split-08, finding 2)"
+eval "$(sed -n '/^full_suite_row() {/,/^}/p' "$SRC/scripts/cycle.sh")"
+fsr() { printf '## Commands\n| Purpose | Command |\n|---|---|\n%s\n' "$1" > fsr.md; full_suite_row fsr.md; }
+r="$(fsr '| Full suite (round-only) |  | echo PWNED |')"; ex=$?
+[ "$ex" -ne 0 ] && [ -z "$r" ] && echo "  ok    an empty second cell is refused, the third cell never becomes the command" \
+  || { echo "::error::suite row parser: an empty command cell gave '$r' (exit $ex)"; fail=1; }
+r="$(fsr '| Full suite (round-only) | `bash t.sh` | echo PWNED |')"
+[ "$r" = "$(printf 'Full suite (round-only)\tbash t.sh')" ] && echo "  ok    a third cell is dropped: the command is the second cell alone" \
+  || { echo "::error::suite row parser: a three-cell row gave '$r'"; fail=1; }
+r="$(fsr '| Full suite (round-only) | `a \| b` |')"
+[ "$r" = "$(printf 'Full suite (round-only)\ta | b')" ] && echo "  ok    an escaped pipe stays inside the second cell" \
+  || { echo "::error::suite row parser: an escaped pipe gave '$r'"; fail=1; }
+rm -f fsr.md
+
 echo "suite: no round-only full-suite row -> SUITE: none, done at once"
 sx_row
 sx_open sxno

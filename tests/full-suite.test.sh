@@ -168,13 +168,19 @@ for b in python3 python py; do printf '#!/bin/sh\nexit 127\n' > "$T/nopy/$b"; ch
 NOPY="$T/nopy:$PATH"
 (PATH="$T/deadbin:$NOPY"; VULYK_PY=; . "$SRC/scripts/lib.sh"; ! vulyk_python) \
   && echo "  ok    the test PATH runs no python" || { echo "::error::the test PATH still runs a python"; fail=1; }
+rm -f "$T/started-done"
 OUT="$(PATH="$T/deadbin:$NOPY" VULYK_PY= VULYK_PART_CAP=1 VULYK_SUITES="bash $S/slow.sh
 bash $S/mark.sh done" "$BASH" "$RUN" --jobs 2 2>&1)"; RC=$?
 code "uncapped run over the cap -> exit 1 by measured time" 1 "$RC"
 expect "warns that it runs uncapped" "no working timeout"
 printf '%s\n' "$OUT" | grep -qE "^PART slow CAP [3-9]s cap 1s" && echo "  ok    the slow job ran to the end, reported CAP by its time" \
   || { echo "::error::slow job not CAP by measured time"; printf '%s\n' "$OUT"; fail=1; }
-part "a job inside the cap is ok" mark ok
+# Uncapped, a part is judged by whole-second SECONDS against a 1 s cap, so a trivial job on a loaded
+# box can measure 1s and read CAP (gate-split-08 finding 1): this check asks only that it ran and was
+# reported, never that it ended inside the 1 s window.
+[ -e "$T/started-done" ] && printf '%s\n' "$OUT" | grep -qE '^PART mark (ok|CAP) [0-9]+s cap 1s' \
+  && echo "  ok    the second job ran and got its PART line" \
+  || { echo "::error::uncapped run: the mark job did not run or has no PART line"; printf '%s\n' "$OUT"; fail=1; }
 dropLogs
 
 echo "== only latency suites: the parallel list is empty, the run still works"

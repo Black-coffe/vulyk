@@ -1,13 +1,14 @@
 ---
 story: gate-split-08
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 4
 blocked_by: []
 red: required
-red_reason:
+red_reason: ::error::suite split rows: the second row did not run
+red_verified_at: 2026-11-02T22:33:48Z edc7a4c66012383c91897528adb63954c4829a7d8a1aa269b98e29a3c89b3932
 ---
 
 # Repair round 1
@@ -86,3 +87,31 @@ ASK 9: RED - a hive can split its full run into several 300 s part rows, and the
 `bash tests/council.test.sh --part roster2`
 `bash tests/council.test.sh --part ceilings`
 `bash tests/council.test.sh --part ceilings2`
+
+## Implementation notes
+- scripts/cycle.sh full_suite_row: prints every matching row (no `exit` at the first); splits the row into cells with `\|` masked, command = exactly cell 2, an empty cell 2 is refused, later cells dropped.
+- scripts/cycle.sh cmd_suite: with several rows S = row count and step K runs row K as one capped plain part; the `steps` marker is read only when there is a single row (a stepped runner among split rows runs plain).
+- scripts/cycle.sh cmd_repair: comment "the round's own gate" reworded so no apostrophe sits inside the `$(` block (portability-check: ok, 0 hits).
+- tests/full-suite.test.sh: the uncapped block asks only that the mark job ran and got a PART line (ok or CAP), not that it ended inside 1 s; its started marker is cleared first.
+- tests/council.test.sh --part suite: a two-row split case and three parser cases (empty cell 2, a third cell, an escaped pipe).
+- The two `[regression] PART ... FAIL` findings were the round's red parts from finding 1 (full-suite) and finding 2 portability (maintenance); not rerun here beyond portability-check and full-suite.test.sh.
+
+## Red receipt
+- command: bash tests/council.test.sh --part suite
+- exit: 1
+- tests: edc7a4c66012383c91897528adb63954c4829a7d8a1aa269b98e29a3c89b3932 (tests/council.test.sh, tests/driver.test.sh, tests/e2e.test.sh, tests/full-suite.test.sh, tests/model-profile.test.sh, tests/solo.test.sh, tests/telemetry.test.sh)
+- impl: 9337609a15b09d3b1fda5d120ba3dd3548324a4787cdc73b972e2251a552523e
+- stamped: 2026-11-02T22:33:48Z
+
+```
+{"ok":true,"verb":"suite","exit":0,"next":"dispatch:review","step":1,"steps":1,"done":true,"suite":"ok","status":{"spec":"docs/specs/sxsplit","slug":"sxsplit","stage":"03-built","next":"dispatch:review","briefed":true,"approved":true,"branch":"main","head":"bdba48d","pack":"efab022b16f1","stories":{"todo":0,"in-progress":0,"done":1,"blocked":0},"wave":null,"wave_stories":[],"round":1,"ceiling":1,"tier":1,"open":true,"court":null,"missing":["review"],"stale":false,"verdict":null,"review":null,"red":[],"round_dir":"docs/specs/sxsplit/council/round-1","paused":false,"shipped":false,"since":null,"seat_attempt":{"review":1},"seats":["review"],"manual":[]}} log=head=c34e6c8 steps=1
+STEP 1/1: ok 0s
+PART full-suite-unit-round-only- ok 0s cap 300s
+SUITE: ok 0s
+suite: the row parser takes exactly the second cell and refuses an empty one (gate-split-08, finding 2)
+::error::suite row parser: an empty command cell gave 'Full suite (round-only)	| echo PWNED' (exit 0)
+::error::suite row parser: a three-cell row gave 'Full suite (round-only)	bash t.sh | echo PWNED'
+  ok    an escaped pipe stays inside the second cell
+suite: no round-only full-suite row -> SUITE: none, done at once
+  ok    no row -> SUITE: none, steps 0, done
+```

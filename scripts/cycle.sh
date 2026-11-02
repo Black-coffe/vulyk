@@ -1599,24 +1599,26 @@ ask_evidenced_of() { # ask_evidenced_of <ask-line> -> "1" iff run:+saw: or url:+
   esac
 }
 
-full_suite_row() { # full_suite_row <constitution> -> "<purpose><TAB><command>" of the first ## Commands row
-  # whose Purpose cell names the full suite and carries `round-only` (fast-verification-07) and whose
+full_suite_row() { # full_suite_row <constitution> -> "<purpose><TAB><command>", one line per ## Commands
+  # row whose Purpose cell names the full suite and carries `round-only` (fast-verification-07) and whose
   # command cell is runnable: `<fill in...>`, `none` or an empty cell is no suite to run
-  # (fast-verification-08), so `SUITE: none` is the right report for it. Nothing (exit 1) when none.
+  # (fast-verification-08), so `SUITE: none` is the right report for it. Every such row, in table order:
+  # a hive may split its full run into several part rows (gate-split-08). The command is exactly the
+  # second cell (an escaped \| stays inside it); later cells are never part of it. Nothing (exit 1) when none.
   [ -f "$1" ] || return 1
   awk '
     /^## Commands[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/            { if (inblock) exit }
     inblock && /^\|/ {
-      line = $0; sub(/\r$/, "", line); sub(/^\|/, "", line); i = index(line, "|"); if (!i) next
-      po = substr(line, 1, i - 1); sub(/^[[:space:]]+/, "", po); sub(/[[:space:]]+$/, "", po)
+      line = $0; sub(/\r$/, "", line); gsub(/\\[|]/, "\001", line)
+      n = split(line, cell, "|"); if (n < 3) next
+      po = cell[2]; gsub(/\001/, "|", po); sub(/^[[:space:]]+/, "", po); sub(/[[:space:]]+$/, "", po)
       p = tolower(po)
       if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) {
-        c = substr(line, i + 1); sub(/[[:space:]]*\|[[:space:]]*$/, "", c)
-        gsub(/\\[|]/, "|", c); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c); sub(/[[:space:]]+$/, "", c)
+        c = cell[3]; gsub(/\001/, "|", c); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c); sub(/[[:space:]]+$/, "", c)
         lc = tolower(c)
         if (lc == "" || lc ~ /^<fill in/ || lc ~ /^none([^[:alnum:]_-]|$)/) next
-        printf "%s\t%s\n", po, c; found = 1; exit
+        printf "%s\t%s\n", po, c; found = 1
       }
     }
     END { exit !found }
@@ -3038,10 +3040,14 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
     exit 0
   fi
 
-  local row purpose cmd stepped=0
-  row="$(full_suite_row "$(constitution_file "$ROOT")")"
+  # Several round-only full-suite rows (gate-split-08): each row is one step, run as one capped part,
+  # and a `steps` marker is read only on a single row. One row keeps the stepped / plain split.
+  local rows row purpose cmd stepped=0 nrows=0
+  rows="$(full_suite_row "$(constitution_file "$ROOT")")"
+  [ -n "$rows" ] && nrows="$(printf '%s\n' "$rows" | grep -c .)"
+  row="$(printf '%s\n' "$rows" | sed -n 1p)"
   purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
-  case " $(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' ' ') " in *" steps "*) stepped=1 ;; esac
+  [ "$nrows" -le 1 ] && case " $(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' ' ') " in *" steps "*) stepped=1 ;; esac
 
   # A log keyed to another head (an earlier code state) is discarded, never resumed.
   local lh=""; [ -f "$LOG" ] && lh="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/^head=\([^ ]*\).*/\1/p')"
@@ -3055,7 +3061,7 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
       suite_emit "$SPEC" 0 0 true none
       exit 0
     fi
-    S=1
+    S=1; [ "$nrows" -gt 1 ] && S="$nrows"
     if [ "$stepped" = 1 ]; then
       local sout src
       sout="$(run_capped 590 bash -c "$cmd --steps" 2>/dev/null)"; src=$?
@@ -3072,6 +3078,10 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
   fi
   S="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/.* steps=\([0-9][0-9]*\).*/\1/p')"; S="${S:-1}"
   K=$(( $(tr -d '\r' < "$LOG" | grep -c '^STEP ') + 1 ))
+  if [ "$nrows" -gt 1 ]; then
+    row="$(printf '%s\n' "$rows" | sed -n "${K}p")"
+    purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
+  fi
 
   # --- run step K: its STEP line and its PART lines, appended as one block ---------------------
   local t0="$SECONDS" out rc parts secs sres=ok note="" tmp
@@ -3470,7 +3480,7 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
     # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
     [ -f "$RD/review.md" ] && review_blocking_lines "$RD/review.md" \
       | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
-    # gate-split-04: the round's own gate - each red PART line of a finished suite.log is a finding.
+    # gate-split-04: the gate of the round - each red PART line of a finished suite.log is a finding.
     [ -n "$(suite_log_line "$RD")" ] && suite_red_parts "$RD/suite.log" | sed 's/^/- [regression] /'
     # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
     # finding (judge's override) - its note is then the only condition the repair can meet.
