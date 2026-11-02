@@ -1,8 +1,8 @@
 ---
 story: gate-split-06
 spec: gate-split
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 3
@@ -67,5 +67,6 @@ docs/adr/023 (13), docs/adr/024 (9-29).
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- CLAUDE.md row renamed; install.sh prints the gate-split note once per --upgrade (after the constitution chain); vulyk-update step 6 names the split; ADR-029 added, ADR-001 (D3, D2/D6), 023, 024 amended. templates/plan.md was already done by story 04 (plan delta 3); no telemetry test edit needed.
 
 ## Findings

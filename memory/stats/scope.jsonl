@@ -283,3 +283,6 @@
 {"ts":"2026-11-02T20:43:24Z","story":"gate-split-04-round-suite-verb","declared":3,"changed":1,"out_of_scope":0}
 {"ts":"2026-11-02T20:57:51Z","story":"gate-split-04-round-suite-verb","declared":4,"changed":1,"out_of_scope":0}
 {"ts":"2026-11-02T21:03:05Z","story":"gate-split-04-round-suite-verb","declared":4,"changed":1,"out_of_scope":0}
+{"ts":"2026-11-02T21:08:41Z","story":"gate-split-05-driver-and-reviewer","declared":7,"changed":7,"out_of_scope":0}
+{"ts":"2026-11-02T21:13:18Z","story":"gate-split-06-rows-upgrade-adr","declared":8,"changed":7,"out_of_scope":0}
+{"ts":"2026-11-02T21:17:50Z","story":"gate-split-06-rows-upgrade-adr","declared":8,"changed":7,"out_of_scope":0}

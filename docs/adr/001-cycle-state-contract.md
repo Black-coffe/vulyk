@@ -130,6 +130,9 @@ Source: `docs/specs/fast-verification/plan.md` `## Assumptions` and `## Contract
 - **D3** - `lead-review` runs the `Full suite / build` row once per round under one budget
   (`VULYK_SUITE_TIMEOUT`, default 590 s) and reports it on line 3, `SUITE:`. A failed suite is a
   `BLOCK` anchored `[regression]` and goes to repair; it never escalates.
+  *Amended 2026-11-02 by ADR-029 (spec `gate-split`):* `cycle.sh suite` runs the full suite once per round, before the seats, in
+  steps; `lead-review` reads `council/round-N/suite.log` and no longer runs it. A part at its cap is `SUITE: FAIL` ("cut part X"),
+  never a timeout; `VULYK_SUITE_TIMEOUT` is no longer read.
 - **D4** - a new escalation reason, `suite-timeout`: a stored review with a body line
   `SUITE: TIMEOUT <N>s` is ESCALATE with the seconds and the budget in `note` and `## Needs a
   human`. It ranks right after the owner's `REJECTED` and before `env`: a repair story cannot fix
@@ -139,6 +142,8 @@ Source: `docs/specs/fast-verification/plan.md` `## Assumptions` and `## Contract
   full-budget reviewer run every round for a question only the owner can answer.
 - **D2/D6** - `escalate --reason` admits `suite-timeout`; `reopen` after it goes to `open-round`,
   and `status` never answers `repair` for it, as after `env`.
+  *Amended 2026-11-02 by ADR-029:* nothing produces `suite-timeout` any more; the reason stays readable for old `council.jsonl`
+  rows, `escalate --reason` and an old seat file's `SUITE: TIMEOUT` line.
 
 ### Amendment (2026-10-26) - proposed - spec `fast-verification`, the budget contract
 
