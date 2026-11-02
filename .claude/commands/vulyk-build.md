@@ -32,7 +32,9 @@ No driver, no clerk, no court. Loop:
    On exit 4, read the error, fix, rerun; after
    three failed reruns write `## Findings` and stop for the owner. A repair story (`# Repair round <n>`)
    is built the same way; its `## Findings` are the conditions to meet. Back to 1.
-3. `dispatch:review`: dispatch `lead-review` with the Agent tool, with `model: <r>` from
+3. `dispatch:review`: first the round's test gate: `bash scripts/cycle.sh suite docs/specs/<slug> --commit`, one Bash
+   call per step with `timeout: 600000`, repeated until the last line says `"done":true` (`ok:false`: print its
+   `error` and stop). Then dispatch `lead-review` with the Agent tool, with `model: <r>` from
    `r="$(bash scripts/model-profile.sh --role review)"` only when the profile (`bash scripts/model-profile.sh`)
    is not `sonnet-builds`, else no model parameter:
    `Review <slug>, round <round>. Spec: <spec>. Branch <branch> at <head>. Report: .vulyk/reports/<slug>/round-<round>/review.attempt-<k>.md`
@@ -85,7 +87,9 @@ Without the Workflow tool, run the solo loop from this session with the stamp, b
   frontmatter applies; `<top_model>` on its second dispatch, `opus` when `<top_model>` is also `<review_model>`): `Your story: <file>. Stamp: <S>. Your last step is bash
   scripts/cycle.sh close-story <file> --commit --stamp <S>.` Then `advance --stamp <S>`. A story still
   listed is a miss; a second miss is handled as a `stop` with a `file`.
-- `dispatch:<seats>`: one message, every seat, each told to write its report to
+- `dispatch:<seats>`: first the round's test gate: `bash scripts/cycle.sh suite docs/specs/<slug> --commit --stamp <S>`,
+  one Bash call per step with `timeout: 600000`, repeated until the last line says `"done":true` (`ok:false`: stop
+  as for any refused verb). Then one message, every seat, each told to write its report to
   `.vulyk/reports/<slug>/round-<round>/<seat>.attempt-<k>.md`, k from `status.seat_attempt`. `opus` or
   `haiku`: `council-<seat>` with `Council round <round> for <slug>, seat <seat>. COURT: <court>.
   Report: <path>.` and nothing more (never `round_dir`), with `model: <seat_model>` only when the profile is not
@@ -122,7 +126,7 @@ Then go on. A refusal on the redispatch is the existing stop: an absent seat, a 
   this session. No, or no `AskUserQuestion` (`claude -p`): recommend `/vulyk-ship` in one line. Push
   and publish stay the owner's: ship prints them and never runs them.
 - `escalated`: print plan.md's `## Needs a human` verbatim (a `suite-timeout` reason carries its `- suite:
-  <N> s, budget <B> s` line: raise `VULYK_SUITE_TIMEOUT` or cut the suite, then reopen). The owner chooses: `bash
+  <N> s, budget <B> s` line: cut the part that ran long, then reopen). The owner chooses: `bash
   scripts/human-check.sh docs/specs/<slug> ACCEPTED "<note>"`, `bash scripts/cycle.sh reopen
   docs/specs/<slug> "<decision>"`, or leaving it open.
 - `paused`: stop; `/vulyk-resume <slug>` continues. `shipped`: nothing to build. `briefed`: point at

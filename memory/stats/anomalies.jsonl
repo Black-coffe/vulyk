@@ -277,3 +277,4 @@
 {"v":1,"ts":"2026-10-28T10:41:40Z","code":"agent_empty","value":26,"threshold":0,"vulyk":"0.39.1","tier":0,"model":"","agent":"council-opus","spec":"","story":"","ref":"agent:agent-ac848dfe0e1aef0f4.jsonl"}
 {"v":1,"ts":"2026-10-28T21:22:45Z","code":"scope_breach","value":5,"threshold":0,"vulyk":"0.43.1","tier":0,"model":"","agent":"","spec":"","story":"post-043-tails-02-trace-order","ref":"scope:post-043-tails-02-trace-order"}
 {"v":1,"ts":"2026-10-29T15:36:52Z","code":"council_rounds_high","value":4,"threshold":3,"vulyk":"0.43.1","tier":3,"model":"","agent":"","spec":"cross-platform","story":"","ref":"council:cross-platform"}
+{"v":1,"ts":"2026-11-02T21:43:14Z","code":"context_high","value":188204,"threshold":140000,"vulyk":"0.44.0","tier":0,"model":"opus","agent":"","spec":"","story":"","ref":"session:a8b372b9-ff0a-4927-ba43-34d5ff8fd7f3.jsonl"}

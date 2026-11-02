@@ -188,6 +188,21 @@ const rejectionFor = (seat) => {
   return r && r.error ? r.error : 'no reason reached the driver - write the report again, exactly in your contract\'s format.'
 }
 
+// The round's integration gate: `cycle.sh suite` runs one step per call into council/round-N/suite.log
+// and says done:true when the log is finished; a finished log answers with a no-op. Every call goes
+// through the clerk (no shell here); ok:false stops the run like any refused verb.
+const SUITE_CALLS = 32
+const gate = async (st) => {
+  const cmd = `suite ${spec} --commit --stamp ${stamp}`
+  for (let k = 0; k < SUITE_CALLS; k++) {
+    const r = await ask(cmd)
+    if (r.exit === 3) throw new Paused()
+    if (r.ok === false) fail(st, { verb: r.verb || 'suite', failed: r.failed, exit: r.exit, next: r.next, error: r.error })
+    if (r.done === true) return
+  }
+  fail(st, { verb: 'suite', error: `suite not done after ${SUITE_CALLS} calls` })
+}
+
 const council = async (st) => {
   phase('Council')
   const seats = st.next.slice('dispatch:'.length).split(',').filter(Boolean)
@@ -198,6 +213,7 @@ const council = async (st) => {
       fail(st, { verb: 'dispatch', seat, round: st.round, error: `seat ${seat} still missing after two dispatches in round ${st.round}` })
     }
   }
+  await gate(st)
   const jobs = []
   for (const seat of seats) {
     // keyed by head too: a round that went stale is re-stamped in place (same N, new head) and its

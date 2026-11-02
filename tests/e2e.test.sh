@@ -196,8 +196,8 @@ OUT="$(run_driver "$TMP/green" green)"
 [ -n "${E2E_DEBUG:-}" ] && printf '%s\n' "$OUT" | jq -c '{result, clerk: .trace.clerk, agents: [.trace.agents[].type], crash}'
 [ -n "$(jqr '.crash // empty')" ] && { echo "::error::green: driver crashed: $(jqr .crash)"; fail=1; }
 expect "green: the run ends green" "$([ "$(jqr '.result.next')" = green ]; echo $?)"
-expect "green: four clerk calls - claim, advance, ingest, release" \
-  "$([ "$(jqr '.trace.clerk | join(",")')" = "advance --claim,advance,advance --ingest,release" ]; echo $?)"
+expect "green: five clerk calls - claim, advance, suite, ingest, release" \
+  "$([ "$(jqr '.trace.clerk | join(",")')" = "advance --claim,advance,suite,advance --ingest,release" ]; echo $?)"
 expect "green: one worker, one intent seat, one reviewer, nothing else" \
   "$([ "$(jqr '[.trace.agents[].type] | sort | join(",")')" = "council-opus,lead-review,worker-code" ]; echo $?)"
 cd "$TMP/green" || exit 1

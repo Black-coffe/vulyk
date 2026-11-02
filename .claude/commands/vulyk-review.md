@@ -18,7 +18,9 @@ branch). Every call below that runs `advance` carries `timeout: 600000`.
      Release and point at `/vulyk-build`.
    - `escalated`, `paused`, `shipped`, `briefed`, or any `ok:false`: release and report it as
      `/vulyk-build`'s Terminal section does.
-2. Dispatch exactly the seats `next` names, in one message, as `/vulyk-build` describes: each writes to
+2. First the round's test gate: `bash scripts/cycle.sh suite docs/specs/<slug> --commit --stamp $stamp`, one Bash
+   call per step with `timeout: 600000`, repeated until the last line says `"done":true` (`ok:false`: print its
+   `error`, release and stop). Then dispatch exactly the seats `next` names, in one message, as `/vulyk-build` describes: each writes to
    `.vulyk/reports/<slug>/round-<round>/<seat>.attempt-<k>.md` with k from `status.seat_attempt`;
    blind seats get slug, round, `court` and the report path only, never `round_dir`; `lead-review` gets
    the spec, branch, head, report path, and from round 2 `since` and the previous round's directory,

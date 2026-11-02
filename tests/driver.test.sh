@@ -6,13 +6,13 @@
 #
 #   Usage: bash tests/driver.test.sh            # from the VULYK repo root
 #
-# No node on PATH -> prints "skipped: node not found" and exits 0 (this suite proves nothing
-# about the driver without a runtime to execute it in).
+# No node on PATH -> prints "SKIP: node not found" and exits 77 (this suite proves nothing
+# about the driver without a runtime to execute it in; CI counts a SKIP as an error).
 set -u
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "skipped: node not found"
-  exit 0
+  echo "SKIP: node not found"
+  exit 77
 fi
 
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
@@ -75,6 +75,8 @@ const CLAIM = `${ADV} --claim`;
 const INGEST = `${ADV} --ingest`;
 const STATUS = `status ${SPEC} --json`;
 const RELEASE = `release ${SPEC} ${S}`;
+const SUITE = `suite ${SPEC} --commit --stamp ${S}`;
+const suiteDone = { ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: 0, steps: 0, done: true, suite: 'none' };
 const ARGS = { spec: SPEC, top_model: 'fable', second_model: 'opus', stamp: S };
 const releaseOk = { ok: true, verb: 'release', exit: 0, next: 'released' };
 const COURT = '/abs/.vulyk/court/demo';
@@ -101,6 +103,7 @@ async function run(args, script) {
   const clerk = script.clerk || [];
   const agents = (script.agents || []).slice();
   const clerkCmds = [];
+  const suiteCmds = [];
   const mismatches = [];
   const dispatches = [];
   const logs = [];
@@ -109,6 +112,12 @@ async function run(args, script) {
     if (opts && opts.agentType === 'cycle-clerk') {
       const m = prompt.match(/^Run exactly: bash scripts\/cycle\.sh (.*)\nReturn the last stdout line verbatim\.$/);
       const cmd = m ? m[1] : '<malformed clerk prompt> ' + prompt;
+      if (cmd.startsWith('suite ')) { // the gate before the seats: tracked apart, so the clerk scripts below stay as they are
+        const k = suiteCmds.length;
+        suiteCmds.push({ cmd, dispatchesBefore: dispatches.length });
+        const a = script.suite ? script.suite(cmd, k) : suiteDone;
+        return Promise.resolve(typeof a === 'string' ? a : JSON.stringify(a));
+      }
       const n = clerkCmds.length;
       clerkCmds.push(cmd);
       let answer;
@@ -132,7 +141,7 @@ async function run(args, script) {
     try { return Promise.resolve(t()).catch(() => null); } catch { return Promise.resolve(null); }
   }));
   const result = await driverFn(args, agent, parallel, (p) => phases.push(p), (l) => logs.push(l));
-  return { result, clerkCmds, mismatches, dispatches, logs, phases };
+  return { result, clerkCmds, suiteCmds, mismatches, dispatches, logs, phases };
 }
 const seq = (r) => r.clerkCmds.join(' | ');
 const blindPromptsClean = (r) => r.dispatches
@@ -538,6 +547,35 @@ const blindPromptsClean = (r) => r.dispatches
     const ok = await run(ARGS, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(green())], [RELEASE, releaseOk]] });
     check(st.result.stop && Array.isArray(st.result.fallbacks) && st.result.fallbacks.length === 0
       && Array.isArray(ok.result.fallbacks) && ok.result.fallbacks.length === 0, 'fallback: no refusal returns fallbacks: [] on a stop and on green', [st.result, ok.result]);
+  }
+
+  // --- gate-split-05: the stepped suite gate runs through the clerk before the seats
+  {
+    const notDone = (k) => ({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: k, steps: 3, done: false, suite: 'ok' });
+    const r = await run(ARGS, {
+      clerk: [[CLAIM, adv(round('opus,review'))], [INGEST, adv(green())], [RELEASE, releaseOk]],
+      suite: (cmd, k) => (k < 2 ? notDone(k + 1) : { ...suiteDone, step: 3, steps: 3 }),
+    });
+    check(r.suiteCmds.length === 3 && r.suiteCmds.every((s) => s.cmd === SUITE && s.dispatchesBefore === 0)
+      && r.dispatches.length === 2 && r.result.next === 'green' && r.mismatches.length === 0,
+      'suite: gate-split-05 suite calls loop until done:true, all before the first seat dispatch', { suite: r.suiteCmds, d: r.dispatches.length, result: r.result });
+    // a finished log: one no-op call, then straight to the seats
+    const r1 = await run(ARGS, { clerk: [[CLAIM, adv(round('review'))], [INGEST, adv(green())], [RELEASE, releaseOk]] });
+    check(r1.suiteCmds.length === 1 && r1.dispatches.length === 1, 'suite: a finished log costs one call and the seats follow', { s: r1.suiteCmds.length, d: r1.dispatches.length });
+    // the bound: 32 calls, never done
+    const rb = await run(ARGS, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]], suite: (c, k) => notDone(k + 1) });
+    check(rb.suiteCmds.length === 32 && rb.dispatches.length === 0 && rb.result.stop && rb.result.stop.verb === 'suite',
+      'suite: at most 32 calls, then the run stops without dispatching', { n: rb.suiteCmds.length, d: rb.dispatches.length, result: rb.result });
+    // ok:false stops like any refused verb
+    const rf = await run(ARGS, {
+      clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]],
+      suite: () => ({ ok: false, verb: 'suite', exit: 5, next: 'open-round', error: 'stale' }),
+    });
+    check(rf.suiteCmds.length === 1 && rf.dispatches.length === 0 && rf.result.stop && rf.result.stop.verb === 'suite' && rf.result.stop.exit === 5
+      && rf.clerkCmds[rf.clerkCmds.length - 1] === RELEASE, 'suite: ok:false stops the run, no dispatch, still releases', rf.result);
+    // an unreadable line is a BadLine stop
+    const rg = await run(ARGS, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]], suite: () => 'garbage' });
+    check(rg.result === 'garbage' && rg.dispatches.length === 0, 'suite: an unreadable line ends the run with the raw line', rg.result);
   }
 
   check(!everyAgentType.has('queen-planner'), 'no queen-planner dispatch in any scenario', [...everyAgentType]);
