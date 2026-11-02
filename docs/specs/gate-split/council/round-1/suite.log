@@ -1,0 +1,14 @@
+head=57270fb steps=8
+STEP 1/8: ok 99s
+PART council:verbs ok 70s cap 300s
+PART council:judge ok 93s cap 300s
+PART council:seats ok 87s cap 300s
+PART council:seats2 ok 47s cap 300s
+PART council:close ok 51s cap 300s
+PART council:escalate ok 98s cap 300s
+PART council:ceilings ok 53s cap 300s
+PART council:ceilings2 ok 76s cap 300s
+PART council:replays ok 94s cap 300s
+PART council:replays2 ok 66s cap 300s
+PART council:walks ok 92s cap 300s
+PART council:walks2 ok 51s cap 300s
