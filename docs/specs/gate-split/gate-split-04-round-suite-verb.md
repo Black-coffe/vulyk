@@ -1,8 +1,8 @@
 ---
 story: gate-split-04
 spec: gate-split
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -81,6 +81,7 @@ scout report C:/Users/Andrei/AppData/Local/Temp/claude/E--Projects-vulyk/aeafb18
 - scripts/cycle.sh: record-seat review drops every reported SUITE: line and puts the finished log's line under VERDICT; repair copies the log's red PART lines as `- [regression] PART ...`; build_round deletes suite.log (re-stamp); the legacy suite-timeout note no longer advises a bigger budget.
 - Decision: the runner's own STEP line is not copied (only its PART lines), the verb writes its own `STEP K/S`; a step is FAIL on a non-zero exit or a red suite-parts-check on its PART lines; SUITE reasons are cut parts, then failed parts, else failed steps.
 - Decision: a stepped row whose `--steps` gives no count writes `SUITE: FAIL 0s - <cmd> --steps gave no step count` (data, exit 0) rather than refusing; a plain row's output is discarded (the reviewer reruns a part).
+- templates/plan.md (plan delta 3): Integration gate comment now says the suite runs once per round via `cycle.sh suite`, step by step, 300 s per part, a red part is cut; no VULYK_SUITE_TIMEOUT.
 - Surprise: gawk read `/\\\|/` as an alternation matching the empty string; `/\\[|]/` is used.
 
 ## Findings
