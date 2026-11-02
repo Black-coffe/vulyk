@@ -25,3 +25,16 @@ PART cycle:manual ok 17s cap 300s
 PART cycle:close ok 43s cap 300s
 PART cycle:bsd ok 78s cap 300s
 PART cycle:safety ok 21s cap 300s
+STEP 3/8: ok 85s
+PART cycle:red ok 84s cap 300s
+PART defects ok 53s cap 300s
+PART driver ok 1s cap 300s
+PART e2e:green ok 21s cap 300s
+PART e2e:red ok 39s cap 300s
+PART full-suite ok 38s cap 300s
+PART inject:functional ok 17s cap 300s
+PART intake:functional ok 84s cap 300s
+PART maintenance ok 79s cap 300s
+PART model-profile:defaults ok 16s cap 300s
+PART model-profile:set ok 23s cap 300s
+PART model-profile:edges ok 12s cap 300s
