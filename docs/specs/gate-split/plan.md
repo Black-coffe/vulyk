@@ -166,7 +166,7 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
 
 **Approved:** Andrei, 2026-11-02 (Windows part times from the local round log, no Windows CI job)
 **Briefed:** <written by scripts/cycle.sh briefed>
-**Branch:** <written by /vulyk-build before wave 1>
+**Branch:** vulyk/gate-split
 **Checked:** <written by scripts/human-check.sh>
 **Council:** <written by scripts/cycle.sh judge/escalate>
 **Shipped:** <written by scripts/ship-check.sh --record>
