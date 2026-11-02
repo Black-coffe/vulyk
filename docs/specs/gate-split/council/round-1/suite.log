@@ -38,3 +38,16 @@ PART maintenance FAIL 84s cap 300s
 PART model-profile:defaults ok 18s cap 300s
 PART model-profile:set ok 26s cap 300s
 PART model-profile:edges ok 14s cap 300s
+STEP 4/8: ok 123s
+PART mods ok 4s cap 300s
+PART solo:green ok 15s cap 300s
+PART solo:block ok 35s cap 300s
+PART solo:rejected ok 20s cap 300s
+PART symbol-map ok 17s cap 300s
+PART telemetry:telemetry ok 57s cap 300s
+PART telemetry:scan ok 101s cap 300s
+PART telemetry:install ok 122s cap 300s
+PART telemetry:install-xp ok 63s cap 300s
+PART telemetry:terminal ok 80s cap 300s
+PART telemetry:wiring ok 91s cap 300s
+PART telemetry:ledger ok 96s cap 300s
