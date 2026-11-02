@@ -4,6 +4,9 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+### Changed
+- **Plan names follow the 2026-10-30 rename.** Max 5x is now "Max" and Max 20x is "Ultra"; the README, FAQ, model-cascade table and the `top-model.sh` header say so. The `--explain` output keeps its `Max 20x` / `Max 5x` labels (a byte-for-byte guard in `tests/model-profile.test.sh`). Detection is unchanged: the profile still reads `organizationType: claude_max` / `default_claude_max_20x`, and an unrecognised type still resolves to `opus` and prints `plan unknown` at session start.
+
 ## [0.44.0] - 2026-10-29
 
 VULYK runs on macOS (bash 3.2, BSD tools) and Linux as well as Windows, and CI proves it on every run (spec `cross-platform`).

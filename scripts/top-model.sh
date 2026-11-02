@@ -16,7 +16,7 @@
 # frontmatter model (`opus` or `sonnet`, ADR-015), whatever the plan. Fable holds the gate wherever
 # the plan includes it, Opus everywhere else. Per Anthropic's plan terms (Sept 2026) that means:
 #
-#   Max 5x / Max 20x, Team & Enterprise premium seats  -> fable   (up to half the weekly limit
+#   Max, Ultra (ex-Max 5x/20x), Team/Ent premium seats -> fable   (up to half the weekly limit
 #                                                                  is Fable at no extra cost)
 #   Pro, Team standard seats, Enterprise standard seats -> opus    (Fable bills to usage credits
 #                                                                  on top of the subscription)

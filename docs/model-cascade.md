@@ -51,7 +51,7 @@ credits on top of the subscription. So the rule VULYK applies is:
 
 | Plan | Read from | Gate (`TOP_MODEL`) | Tier 4 second reviewer |
 |---|---|---|---|
-| Max 5x, Max 20x | `organizationType: claude_max` | `fable` | `opus` |
+| Max, Ultra (formerly Max 5x, Max 20x) | `organizationType: claude_max` | `fable` | `opus` |
 | Team / Enterprise, premium seat | `organizationType` + `seatTier: premium` | `fable` | `opus` |
 | Pro, standard seats | `organizationType: claude_pro` / seat tier | `opus` | `sonnet` (Fable would bill to credits) |
 | API key, unknown, not signed in | `ANTHROPIC_API_KEY` / nothing | `opus` — the floor | `sonnet` |
