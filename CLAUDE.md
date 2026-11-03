@@ -75,7 +75,7 @@ Quiet variants only: output is resent each turn. A story's `## Verification` nam
 | Shell | `git ls-files '*.sh' \| xargs -n1 bash -n` |
 | Python | `bash scripts/py.sh -m py_compile .claude/hooks/*.py` |
 | JSON | `git ls-files '*.json' \| xargs -n1 jq -e . > /dev/null` |
-| Cycle | `bash tests/cycle.test.sh` |
+| Cycle | `bash tests/cycle.test.sh --part <topic>` |
 | Council (round-only) | `bash tests/council.test.sh` |
 | Council part | `bash tests/council.test.sh --part <topic>` |
 | Driver | `bash tests/driver.test.sh` |
@@ -87,7 +87,7 @@ Quiet variants only: output is resent each turn. A story's `## Verification` nam
 | Defect hooks | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
 | Maintenance | `bash tests/maintenance.test.sh` |
 | Mods | `bash tests/mods.test.sh` |
-| Model profile tests | `bash tests/model-profile.test.sh` |
+| Models | `bash tests/model-profile.test.sh` |
 | Symbol map | `bash tests/symbol-map.test.sh` |
 | Runner | `bash tests/full-suite.test.sh` |
 | Full suite steps (round-only) | `bash tests/full-suite.sh` |

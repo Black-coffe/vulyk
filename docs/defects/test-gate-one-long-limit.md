@@ -43,3 +43,5 @@ part that grows is noticed only when the whole run reaches the one limit, and th
   against the safeguard-bypassable-or-late never-line (missing input is a refusal, never a pass). It stays so because
   `defects-check.sh` runs every block check on any argument. Inside the round gate the path is unreachable: every
   caller passes a file that exists. Owed: a missing file exits non-zero without breaking `defects-check.sh` (next circle, U3).
+- 2026-11-03 · closed by post-045-tails: a path that is not a readable regular file exits 2 (`suite-parts-check: no such
+  file: <path>`); a readable file with no PART line still exits 0, so `defects-check.sh` on an unrelated file stays green.

@@ -25,7 +25,8 @@
 # SKIP: a job that prints `SKIP: <reason>` and exits 77 is a SKIP part, counted apart; with
 # VULYK_STRICT_SKIP=1 (CI) it is a FAIL.
 #
-# Output: one `PART <name> <ok|FAIL|SKIP|CAP> <N>s cap <C>s[ - <reason>]` line per part as it ends, the last
+# Output: with --step K first `PARTS K/S: <name> ...` (the step's parts, before any starts); one
+# `PART <name> <ok|FAIL|SKIP|CAP> <N>s cap <C>s[ - <reason>]` line per part as it ends (completion order), the last
 # 20 lines of each failed or cut part's log, the growth lines, then
 #   STEP K/S: ok|FAIL <N>s                                   (--step K)
 #   SUITE: ok|FAIL <N>s parts=<n> skip=<n> fail=<csv>        (no flag)
@@ -130,34 +131,52 @@ start_job() { # start_job <index> - runs in the background, leaves "<rc> <second
       bash -c "${CMDS[i]}" </dev/null >"$LOGS/$i.log" 2>&1 || rc=$?
     fi
     echo "$rc $(( SECONDS - st ))" > "$LOGS/$i.rc.tmp" && mv "$LOGS/$i.rc.tmp" "$LOGS/$i.rc"
-  ) &
+  ) >/dev/null &   # the job's output is in its log; a job never holds the runner's stdout open
   PID[i]=$!
 }
 
 NPART=0 NSKIP=0 FAILS=''
 add_fail() { case ",$FAILS," in *",$1,"*) ;; *) FAILS="${FAILS:+$FAILS,}$1" ;; esac; }
 
-run_step() { # run_step <k> (0-based) - starts the step's parts together, prints their PART lines and tails
-  local k="$1" first last i rc secs name verdict why reason tails=() pl="$LOGS/parts.$1" chk line
+run_step() { # run_step <k> (0-based) - starts the step's parts together, prints their PART lines as they end, then tails
+  local k="$1" first last i rc secs name verdict why reason tails=() pl="$LOGS/parts.$1" chk line names='' left
   first=${STEP_FIRST[k]}; last=$(( first + STEP_N[k] - 1 ))
   : > "$pl"
+  # --step K: the step's part names come first, so a caller that kills the step can name the parts with no PART line.
+  if [ -n "$STEPK" ]; then
+    for ((i = first; i <= last; i++)); do names="$names $(part_name "$i")"; done
+    echo "PARTS $STEPK/$NSTEPS:$names"
+  fi
   for ((i = first; i <= last; i++)); do start_job "$i"; done
-  for ((i = first; i <= last; i++)); do
+  local done_=() failed_=() j
+  left=${STEP_N[k]}
+  while [ "$left" -gt 0 ]; do
+    i=''
+    for ((j = first; j <= last; j++)); do
+      [ -z "${done_[j]:-}" ] || continue
+      # a job gone without its rc file (killed from outside) is a FAIL, never a wait forever
+      [ -f "$LOGS/$j.rc" ] || kill -0 "${PID[j]}" 2>/dev/null || [ -f "$LOGS/$j.rc" ] || echo "1 0" > "$LOGS/$j.rc"
+      [ -f "$LOGS/$j.rc" ] && { i=$j; break; }
+    done
+    [ -n "$i" ] || { sleep 1; continue; }
+    done_[i]=1; left=$((left - 1))
     wait "${PID[i]}" 2>/dev/null
     read -r rc secs < "$LOGS/$i.rc"
     name="$(part_name "$i")"; why=''; NPART=$((NPART + 1))
     if [ "$rc" -eq 77 ] && grep -q '^SKIP:' "$LOGS/$i.log"; then
       reason="$(grep -m1 '^SKIP:' "$LOGS/$i.log" | sed 's/^SKIP:[[:space:]]*//')"
       if [ "${VULYK_STRICT_SKIP:-0}" = 1 ]; then
-        verdict=FAIL; why="SKIP under VULYK_STRICT_SKIP=1: $reason"; add_fail "$name"
+        verdict=FAIL; why="SKIP under VULYK_STRICT_SKIP=1: $reason"; failed_[i]="$name"
       else verdict=SKIP; why="$reason"; NSKIP=$((NSKIP + 1)); fi
     elif [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ] || { [ "$TIMEOUT_OK" -eq 0 ] && [ "$secs" -ge "$PART_CAP" ]; }; then
-      verdict=CAP; why="cut part $name"; add_fail "$name"
+      verdict=CAP; why="cut part $name"; failed_[i]="$name"
     elif [ "$rc" -eq 0 ]; then verdict=ok
-    else verdict=FAIL; add_fail "$name"; fi
+    else verdict=FAIL; failed_[i]="$name"; fi
     if [ "$verdict" = FAIL ] || [ "$verdict" = CAP ]; then tails+=("$i"); fi
     echo "PART $name $verdict ${secs}s cap ${PART_CAP}s${why:+ - $why}" | tee -a "$pl"
   done
+  # the summary's fail= list keeps the job-list order, whatever order the parts ended in
+  for ((i = first; i <= last; i++)); do [ -n "${failed_[i]:-}" ] && add_fail "${failed_[i]}"; done
   for i in ${tails[@]+"${tails[@]}"}; do
     echo "--- last 20 lines: ${CMDS[i]}"
     tail -n 20 "$LOGS/$i.log"

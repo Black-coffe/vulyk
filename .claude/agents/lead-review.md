@@ -58,8 +58,8 @@ unchanged. Never run the whole suite yourself. To look at a red part, rerun that
 (`bash tests/<suite>.test.sh --part <topic>`, or one hive row) as `bash -c '. scripts/lib.sh && run_capped 300 <command>'`
 with `timeout: 600000` on the Bash call, and report what you saw. A `FAIL` in the log (or a part it names red)
 is `VERDICT: BLOCK` with a `## Critical` `[regression]` line naming the suite and the failing check (red on
-the base too is still a BLOCK). No log, or a log whose `head=` is not the head you review: `SUITE: none`
-and say so under `## Minor`.
+the base too is still a BLOCK). No log, or a log whose `head=` is not the head you review: say so under
+`## Minor` and write no `SUITE:` line; `record-seat` writes the gate's own line once the gate has run.
 Beyond that, run only the targeted command a finding needs, each with a timeout.
 
 ## Verdict

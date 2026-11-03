@@ -1,8 +1,8 @@
 ---
 story: post-045-tails-01
 spec: post-045-tails
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 1
@@ -40,5 +40,6 @@ memory/map/tests.md - model-profile, cycle
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- `Cycle` row now `bash tests/cycle.test.sh --part <topic>`; `Model profile tests` label -> `Models` (`Model profile` alone left 7163 B, over the 7162 B ratchet at `tests/model-profile.test.sh:191`), and the row assert at `tests/model-profile.test.sh:189` follows. CLAUDE.md 7154 -> 7156 B (CR stripped). No other script or test names the old label or a `model-profile-tests` PART.
 
 ## Findings

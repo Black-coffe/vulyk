@@ -1444,8 +1444,8 @@ rlog_case rlog2 round 'VERDICT: PASS\nMODEL: test\n'
   && echo "  ok    a report with no SUITE line is recorded with the log's line inserted, not MALFORMED" \
   || { echo "::error::record-seat log insert: exit=$RLOG_EX out=$RLOG_OUT"; fail=1; }
 rlog_case rlog3 other 'VERDICT: PASS\nMODEL: test\n'
-[ "$RLOG_EX" -eq 4 ] && printf '%s' "$RLOG_OUT" | grep -qF 'MALFORMED' && [ ! -f "$RLOG_RD/review.md" ] \
-  && echo "  ok    a log for another head is not read: no SUITE line is still MALFORMED" \
+[ "$RLOG_EX" -eq 2 ] && printf '%s' "$RLOG_OUT" | grep -qF 'run cycle.sh suite' && [ ! -f "$RLOG_RD/review.md" ] && ! ls "$RLOG_RD"/review.attempt-* >/dev/null 2>&1 \
+  && echo "  ok    a log for another head is not read: the gate did not run for this head, exit 2 naming cycle.sh suite (post-045-tails ask 1)" \
   || { echo "::error::record-seat foreign log: exit=$RLOG_EX out=$RLOG_OUT"; fail=1; }
 grep -v 'no-such-runner' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
 git add -A && git commit -qm "fixture: drop the round-only full-suite row (suite.log cases)" >/dev/null
@@ -2388,7 +2388,7 @@ out="$(council escalate docs/specs/esc4 2>&1)"; ex=$?
 [ "$ex" -eq 3 ] && printf '%s' "$out" | grep -qF '"next":"paused"' && echo "  ok    PAUSE -> exit 3" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
-# --- fast-verification-06: the reviewer's SUITE: line - a timeout escalates, a failure is RED ---
+# --- the reviewer's SUITE: line - a legacy TIMEOUT and a failure are both RED (fast-verification-06, post-045-tails ask 2) ---
 
 write_review_suite() { # write_review_suite <round-dir> <PASS|BLOCK> <suite-line> [critical-line]
   local rd="$1" v="$2" sl="$3" crit="${4:-None.}" n="${1##*/round-}"
@@ -2398,24 +2398,21 @@ write_review_suite() { # write_review_suite <round-dir> <PASS|BLOCK> <suite-line
   } > "$rd/review.md"
 }
 
-echo "judge: review PASS + SUITE: TIMEOUT 571s budget 540s -> ESCALATE suite-timeout, exit 6, the seconds in the note and ## Needs a human (fast-verification-06)"
+echo "judge: review PASS + a legacy SUITE: TIMEOUT 571s budget 540s line, no round log -> read as SUITE: FAIL: review BLOCK, RED, next repair, never ESCALATE suite-timeout (post-045-tails ask 2)"
 mk_open_spec suto1 2
 set_tier suto1 1
 rdst1="$(mk_open_round suto1 1)"
 write_review_suite "$rdst1" PASS 'SUITE: TIMEOUT 571s budget 540s'
 out="$(council judge docs/specs/suto1 2>&1)"; ex=$?
-[ "$ex" -eq 6 ] && printf '%s' "$out" | grep -qF '"next":"escalated"' && echo "  ok    suite timeout -> exit 6, next escalated" \
-  || { echo "::error::exit=$ex out=$out"; fail=1; }
 row="$(grep '"spec":"suto1"' memory/stats/council.jsonl | tail -1)"
-[ "$(printf '%s' "$row" | jq -r '.verdict + " " + .escalate')" = "ESCALATE suite-timeout" ] \
-  && printf '%s' "$row" | jq -e '.note == "full suite timed out: 571s, budget 540s"' >/dev/null \
-  && echo "  ok    row ESCALATE, escalate suite-timeout, note carries 571s and the budget" || { echo "::error::row: $row"; fail=1; }
-grep -qE '^\*\*Council:\*\* ESCALATE round 1,' docs/specs/suto1/plan.md && grep -qF 'reason: suite-timeout · round 1' docs/specs/suto1/plan.md \
-  && grep -qF -- '- suite: 571 s, budget 540 s - an old SUITE: TIMEOUT report: cut the part that ran long (cycle.sh suite caps each part)' docs/specs/suto1/plan.md \
-  && ! grep -qF 'VULYK_SUITE_TIMEOUT' docs/specs/suto1/plan.md \
-  && grep -qF -- "- seats: $rdst1/" docs/specs/suto1/plan.md \
-  && echo "  ok    plan.md: Council ESCALATE, ## Needs a human with the reason, the suite line (571) and the seats line" \
-  || { echo "::error::plan.md: $(cat docs/specs/suto1/plan.md)"; fail=1; }
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF '"next":"repair"' \
+  && printf '%s' "$row" | jq -e '.verdict == "RED" and .review == "BLOCK" and .escalate == null and (.note | contains("SUITE: TIMEOUT"))' >/dev/null \
+  && ! grep -qF 'reason: suite-timeout' docs/specs/suto1/plan.md && ! grep -qF -- '- suite: ' docs/specs/suto1/plan.md \
+  && echo "  ok    legacy TIMEOUT -> RED, review BLOCK, no escalate, no ## Needs a human suite line" \
+  || { echo "::error::judge must read a legacy SUITE: TIMEOUT line as SUITE: FAIL - exit=$ex out=$out row=$row plan=$(cat docs/specs/suto1/plan.md)"; fail=1; }
+hits="$(git -C "$SRC" grep -n "VULYK_SUITE""_TIMEOUT" -- scripts tests 2>/dev/null)"
+[ -z "$hits" ] && echo "  ok    nothing under scripts/ or tests/ reads the old suite budget variable" \
+  || { echo "::error::the old suite budget variable is still read: $hits"; fail=1; }
 
 echo "judge: review BLOCK anchored [regression] + SUITE: FAIL 300s -> RED, next repair (a failure never escalates)"
 mk_open_spec sufail1 2
@@ -2438,29 +2435,33 @@ row="$(grep '"spec":"sufail2"' memory/stats/council.jsonl | tail -1)"
   && printf '%s' "$row" | jq -e '.verdict == "RED" and .review == "BLOCK" and (.note | contains("SUITE: FAIL"))' >/dev/null \
   && echo "  ok    PASS + SUITE: FAIL -> RED, review BLOCK, the note names SUITE: FAIL" || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
 
-echo "record-seat review: a round-only Full suite row with a runnable command -> the SUITE line is enforced; each refused form beside its accepted neighbour (fast-verification-07/08)"
+echo "record-seat review: a round-only Full suite row and no suite.log for the round -> exit 2 naming cycle.sh suite, no attempt file, whatever the SUITE line; after the gate the same report records with the log's line (post-045-tails ask 1)"
 printf '| Full suite / build (round-only) | `bash tests/no-such-runner.sh` |\n' >> CLAUDE.md
 git add -A && git commit -qm "fixture: a round-only full-suite row" >/dev/null
 sui=0
-suite_case() { # suite_case <want-exit> <label> <report body after MODEL line>
-  sui=$((sui + 1)); mk_spec "suline$sui" 2
+suite_case() { # suite_case <want-exit 0|2> <label> <report body after MODEL line>
+  sui=$((sui + 1)); mk_open_spec "suline$sui" 2
   local rd; rd="$(mk_open_round "suline$sui" 1)"
   local out ex
   out="$(printf 'VERDICT: PASS\nMODEL: test\n%b' "$3" | council record-seat "docs/specs/suline$sui" 1 review 2>&1)"; ex=$?
-  if [ "$1" -eq 4 ]; then
-    [ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'MALFORMED' && [ ! -f "$rd/review.md" ] && [ -f "$rd/review.attempt-1.md" ] \
-      && echo "  ok    $2 -> exit 4, kept as attempt-1, not recorded" || { echo "::error::$2: exit=$ex out=$out"; fail=1; }
+  if [ "$1" -eq 2 ]; then
+    [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'run cycle.sh suite' && [ ! -f "$rd/review.md" ] && ! ls "$rd"/review.attempt-* >/dev/null 2>&1 \
+      && echo "  ok    $2 -> exit 2 naming cycle.sh suite, nothing written" \
+      || { echo "::error::record-seat review without suite.log must exit 2 naming cycle.sh suite - $2: exit=$ex out=$out files=$(ls "$rd")"; fail=1; }
   else
     [ "$ex" -eq 0 ] && [ -f "$rd/review.md" ] && echo "  ok    $2 -> recorded, exit 0" || { echo "::error::$2: exit=$ex out=$out"; fail=1; }
   fi
 }
-suite_case 4 'SUITE: none' 'SUITE: none\n'
-suite_case 0 'SUITE: ok 300s' 'SUITE: ok 300s\n'
-suite_case 4 'no SUITE line' '\n## Critical\nNone.\n'
-suite_case 0 'SUITE: FAIL 300s' 'SUITE: FAIL 300s\n'
-suite_case 4 'SUITE: TIMEOUT without seconds' 'SUITE: TIMEOUT\n'
-suite_case 4 'SUITE: TIMEOUT 571 s (space)' 'SUITE: TIMEOUT 571 s budget 540s\n'
-suite_case 0 'SUITE: TIMEOUT 571s budget 540s' 'SUITE: TIMEOUT 571s budget 540s\n'
+suite_case 2 'SUITE: none' 'SUITE: none\n'
+suite_case 2 'SUITE: ok 300s' 'SUITE: ok 300s\n'
+suite_case 2 'no SUITE line' '\n## Critical\nNone.\n'
+suite_case 2 'SUITE: TIMEOUT 571s budget 540s' 'SUITE: TIMEOUT 571s budget 540s\n'
+rd="docs/specs/suline$sui/council/round-1"
+council suite "docs/specs/suline$sui" --commit >/dev/null 2>&1
+out="$(printf 'VERDICT: PASS\nMODEL: test\nSUITE: TIMEOUT 571s budget 540s\n' | council record-seat "docs/specs/suline$sui" 1 review 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -f "$rd/review.md" ] && grep -qE '^SUITE: FAIL [0-9]+s - ' "$rd/review.md" && ! grep -qF 'SUITE: TIMEOUT' "$rd/review.md" \
+  && echo "  ok    after cycle.sh suite the same report records, with the log's SUITE line" \
+  || { echo "::error::record-seat after the gate: exit=$ex out=$out review=$(cat "$rd/review.md" 2>&1) log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
 grep -v 'no-such-runner' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
 git add -A && git commit -qm "fixture: drop the round-only full-suite row" >/dev/null
 
@@ -2473,26 +2474,34 @@ for cell in '`<fill in>`' 'none'; do
   git add -A && git commit -qm "fixture: drop it" >/dev/null
 done
 
-echo "reopen after a suite-timeout row -> next open-round; status never answers repair for it"
-git add -A && git commit -qm "suto1: judged suite-timeout" >/dev/null
-out="$(council reopen docs/specs/suto1 "owner: raised the budget" 2>&1)"; ex=$?
+# An old suite-timeout row, as judge wrote it before post-045-tails: status and reopen keep reading it.
+legacy_suto_row() { # legacy_suto_row <slug> <red-json> <review> <review_asks-json>
+  printf '{"ts":"2026-11-01T00:00:00Z","spec":"%s","round":1,"verdict":"ESCALATE","head":"%s","pack":"demo-pack","asks":2,"red":%s,"red_unevidenced":[],"review_asks":%s,"na":0,"review":"%s","haiku":"","haiku_model":"","sonnet":"","sonnet_model":"","opus":"","opus_model":"","attempts":1,"escalate":"suite-timeout","note":"full suite timed out: 571s, budget 540s"}\n' \
+    "$1" "$HEAD7" "$2" "$4" "$3" >> memory/stats/council.jsonl
+  printf '**Council:** ESCALATE round 1, 2026-11-01, at %s, pack demo-pack\n' "$HEAD7" >> "docs/specs/$1/plan.md"
+}
+
+echo "reopen after an old suite-timeout row -> next open-round; status never answers repair for it"
+mk_open_spec suto3 2
+set_tier suto3 1
+mk_open_round suto3 1 >/dev/null
+legacy_suto_row suto3 '[]' PASS '[]'
+git add -A && git commit -qm "suto3: an old suite-timeout row" >/dev/null
+out="$(council reopen docs/specs/suto3 "owner: cut the part" 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qF '"next":"open-round"' && echo "  ok    reopen -> next open-round" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
-out="$(council status docs/specs/suto1 --json)"
+out="$(council status docs/specs/suto3 --json)"
 printf '%s' "$out" | jq -e '.next == "open-round"' >/dev/null 2>&1 && echo "  ok    status after the reopen -> open-round, not repair" \
   || { echo "::error::status: $out"; fail=1; }
 
-echo "reopen after a suite-timeout row that also holds a RED ask and a review BLOCK -> next repair, status and repair agree (fast-verification-07)"
+echo "reopen after an old suite-timeout row that also holds a RED ask and a review BLOCK -> next repair, status and repair agree (fast-verification-07)"
 mk_open_spec suto2 2
 set_tier suto2 3
 rdst2="$(mk_open_round suto2 1)"
 write_seat "$rdst2" opus RG
 write_review_suite "$rdst2" BLOCK 'SUITE: TIMEOUT 541s budget 540s' '1. tests/full-suite.sh [ask 2] the runner misses the budget - repro: `bash tests/full-suite.sh`'
-out="$(council judge docs/specs/suto2 2>&1)"; ex=$?
-row="$(grep '"spec":"suto2"' memory/stats/council.jsonl | tail -1)"
-[ "$ex" -eq 6 ] && printf '%s' "$row" | jq -e '.escalate == "suite-timeout" and .review == "BLOCK" and .red == [1]' >/dev/null \
-  && echo "  ok    judged ESCALATE suite-timeout, the row keeps red [1] and the BLOCK" || { echo "::error::exit=$ex out=$out row=$row"; fail=1; }
-git add -A && git commit -qm "suto2: judged suite-timeout with RED" >/dev/null
+legacy_suto_row suto2 '[1]' BLOCK '[2]'
+git add -A && git commit -qm "suto2: an old suite-timeout row with RED" >/dev/null
 out="$(council reopen docs/specs/suto2 "owner: fix the root" 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qF '"next":"repair"' && echo "  ok    reopen -> next repair" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
@@ -4466,14 +4475,14 @@ sx_open sxcap
 rd="docs/specs/sxcap/council/round-1"
 out="$(VULYK_PART_CAP=2 council suite docs/specs/sxcap 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 1 and .steps == 1 and .done == true and .suite == "FAIL"' >/dev/null 2>&1 \
-  && grep -qE '^PART full-suite-plain-round-only- CAP [0-9]+s cap 2s' "$rd/suite.log" \
-  && tail -1 "$rd/suite.log" | grep -qE '^SUITE: FAIL [0-9]+s - cut part full-suite-plain-round-only-' \
+  && grep -qE '^PART full-suite-plain-round-only CAP [0-9]+s cap 2s' "$rd/suite.log" \
+  && tail -1 "$rd/suite.log" | grep -qE '^SUITE: FAIL [0-9]+s - cut part full-suite-plain-round-only$' \
   && echo "  ok    plain row at its cap -> PART CAP, SUITE: FAIL cut part, exit 0" || { echo "::error::suite plain cap: exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
 sx_row 'Full suite plain (round-only)' 'true'
 sx_open sxplain
 out="$(council suite docs/specs/sxplain 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "ok"' >/dev/null 2>&1 \
-  && grep -qE '^PART full-suite-plain-round-only- ok [0-9]+s cap 300s$' docs/specs/sxplain/council/round-1/suite.log \
+  && grep -qE '^PART full-suite-plain-round-only ok [0-9]+s cap 300s$' docs/specs/sxplain/council/round-1/suite.log \
   && echo "  ok    plain row green -> PART ok under the default 300 s cap, SUITE: ok" || { echo "::error::suite plain ok: exit=$ex out=$out"; fail=1; }
 
 echo "suite: several round-only full-suite rows -> each row is its own capped part, one step per row (gate-split-08, ask 9)"
@@ -4487,8 +4496,8 @@ out1="$(council suite docs/specs/sxsplit 2>&1)"; ex1=$?
 out2="$(council suite docs/specs/sxsplit 2>&1)"; ex2=$?
 [ "$ex1" -eq 0 ] && [ "$ex2" -eq 0 ] && sx_last "$out1" | jq -e '.step == 1 and .steps == 2 and .done == false' >/dev/null 2>&1 \
   && sx_last "$out2" | jq -e '.step == 2 and .steps == 2 and .done == true and .suite == "ok"' >/dev/null 2>&1 \
-  && [ -e fx-b-ran ] && grep -qE '^PART full-suite-unit-round-only- ok [0-9]+s cap 300s$' "$rd/suite.log" \
-  && grep -qE '^PART full-suite-e2e-round-only- ok [0-9]+s cap 300s$' "$rd/suite.log" \
+  && [ -e fx-b-ran ] && grep -qE '^PART full-suite-unit-round-only ok [0-9]+s cap 300s$' "$rd/suite.log" \
+  && grep -qE '^PART full-suite-e2e-round-only ok [0-9]+s cap 300s$' "$rd/suite.log" \
   && echo "  ok    two part rows -> steps 2, both rows ran as PART lines, SUITE: ok" \
   || { echo "::error::suite split rows: the second row did not run - out1=$out1 out2=$out2 log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
 rm -f fx-b-ran
@@ -4523,7 +4532,7 @@ for fr in '| Full suite (round-only) |  |' '| Full suite (round-only) |'; do
   rd="docs/specs/sxempty$sxe/council/round-1"
   out="$(council suite "docs/specs/sxempty$sxe" 2>&1)"; ex=$?
   [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL" and .steps == 1' >/dev/null 2>&1 \
-    && grep -qE '^STEP 1/1: FAIL ' "$rd/suite.log" && grep -qE '^PART full-suite-round-only- FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \
+    && grep -qE '^STEP 1/1: FAIL ' "$rd/suite.log" && grep -qE '^PART full-suite-round-only FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \
     && ! grep -q '^SUITE: none' "$rd/suite.log" \
     && echo "  ok    sole row '$fr' -> STEP FAIL, a PART line names the row, SUITE: FAIL" \
     || { echo "::error::suite empty row: a row with no command must be a red step naming it - '$fr' exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
@@ -4536,8 +4545,8 @@ rd="docs/specs/sxempty3/council/round-1"
 council suite docs/specs/sxempty3 >/dev/null 2>&1
 out="$(council suite docs/specs/sxempty3 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 2 and .steps == 2 and .done == true and .suite == "FAIL"' >/dev/null 2>&1 \
-  && grep -qE '^PART full-suite-unit-round-only- ok ' "$rd/suite.log" \
-  && grep -qE '^PART full-suite-e2e-round-only- FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \
+  && grep -qE '^PART full-suite-unit-round-only ok ' "$rd/suite.log" \
+  && grep -qE '^PART full-suite-e2e-round-only FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \
   && echo "  ok    unit=true + e2e empty -> steps 2, the e2e row is named FAIL, SUITE: FAIL" \
   || { echo "::error::suite empty row: an empty row beside a good one must be a red step naming it - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
 
@@ -4550,7 +4559,7 @@ rd="docs/specs/sxdup/council/round-1"
 council suite docs/specs/sxdup >/dev/null 2>&1
 out="$(council suite docs/specs/sxdup 2>&1)"; ex=$?
 p1="$(grep '^PART ' "$rd/suite.log" | sed -n 1p | awk '{ print $2 }')"; p2="$(grep '^PART ' "$rd/suite.log" | sed -n 2p | awk '{ print $2 }')"
-[ "$ex" -eq 0 ] && [ -n "$p1" ] && [ -n "$p2" ] && [ "$p1" != "$p2" ] \
+[ "$ex" -eq 0 ] && [ -n "$p1" ] && [ -n "$p2" ] && [ "$p1" = full-suite-round-only-1 ] && [ "$p2" = full-suite-round-only-2 ] \
   && tail -1 "$rd/suite.log" | grep -qF "part $p2 failed" \
   && echo "  ok    two rows named 'Full suite (round-only)' -> PART $p1 and PART $p2, the verdict names the failed one" \
   || { echo "::error::suite duplicate purpose: two rows with one Purpose must get distinct PART names - p1=$p1 p2=$p2 log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
@@ -4562,6 +4571,26 @@ out="$(council suite docs/specs/sxbeyond 2>&1)"; ex=$?
   && grep -qE '^STEP 3/3: FAIL ' "$rd/suite.log" && grep -qE '^PART step-3-no-row FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \
   && echo "  ok    step 3 of a log over 2 rows -> STEP 3/3 FAIL, PART step-3-no-row, SUITE: FAIL" \
   || { echo "::error::suite step beyond rows: a step past the row count must fail - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+
+echo "suite: a stepped step killed at its call cap names the parts that never ended, in the STEP note and the SUITE line (post-045-tails ask 5)"
+cat > fx-hang.sh <<'HANG'
+case "$1" in
+  --steps) echo 1 ;;
+  --step) echo "PARTS 1/1: fx:quick fx:hung"; echo "PART fx:quick ok 0s cap 300s"; sleep 30 >/dev/null 2>&1; echo "PART fx:hung ok 30s cap 300s" ;;
+  *) exit 2 ;;
+esac
+HANG
+git add -A && git commit -qm "fixture: a stepped runner with a hung part" >/dev/null
+sx_row 'Full suite (round-only, steps)' 'bash fx-hang.sh'
+sx_open sxhung
+rd="docs/specs/sxhung/council/round-1"
+out="$(VULYK_STEP_CAP=3 council suite docs/specs/sxhung 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && grep -qE '^STEP 1/1: FAIL [0-9]+s - timed out after 3s - no end from: fx:hung$' "$rd/suite.log" \
+  && grep -qF 'PART fx:quick ok 0s cap 300s' "$rd/suite.log" \
+  && tail -1 "$rd/suite.log" | grep -qE '^SUITE: FAIL [0-9]+s - step 1/1 no end from: fx:hung$' \
+  && echo "  ok    the hung part is named in the STEP note and the SUITE line, the ended one is not" \
+  || { echo "::error::suite hung step: the part that never ended must be named - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
 
 echo "suite: no round-only full-suite row -> SUITE: none, done at once"
 sx_row

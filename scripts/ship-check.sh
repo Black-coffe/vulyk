@@ -186,6 +186,39 @@ else
   ok 03 "code: stories $DONE/$TOTAL done"
 fi
 
+# ci - a green CI run on what ships (post-045-tails; 0.45.0 reached main with red CI). It reads, it never
+# starts a run: /vulyk-ship pushes the branch and dispatches the workflow when this line says no run.
+# The run is HEAD's, or the newest commit's whose range to HEAD is paperwork only (the rule the council
+# line uses). Missing gh, or gh failing, is "cannot confirm", never a pass.
+ci_check() {
+  local wf origin sha s7 out rc runs bad=""
+  wf="$(ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -1)"
+  [ -n "$wf" ] || { ok ci "ci: not checked - no CI workflow in this repo"; return; }
+  origin="$(git remote get-url origin 2>/dev/null)"
+  case "$origin" in *github.com[:/]*) ;; *) ok ci "ci: not checked - no GitHub remote"; return ;; esac
+  command -v gh >/dev/null 2>&1 || { fail ci "ci: cannot confirm CI: gh not found (install the GitHub CLI and run gh auth login)"; return; }
+  local head; head="$(git rev-parse HEAD 2>/dev/null)"
+  for sha in $(git rev-list --first-parent --max-count=20 HEAD 2>/dev/null); do
+    [ "$sha" = "$head" ] || paperwork_only "$ROOT" "$sha" "$head" || break
+    out="$(gh run list --commit "$sha" --json status,conclusion,workflowName \
+      --jq '.[] | [.status, .conclusion, .workflowName] | @tsv' 2>&1)"; rc=$?
+    if [ "$rc" -ne 0 ]; then
+      fail ci "ci: cannot confirm CI: gh run list exit $rc: $(printf '%s\n' "$out" | head -1)"; return
+    fi
+    runs="$(printf '%s\n' "$out" | tr -d '\r' | grep -v '^[[:space:]]*$')"
+    [ -n "$runs" ] || continue
+    s7="$(git rev-parse --short "$sha")"
+    bad="$(printf '%s\n' "$runs" | awk -F'\t' '
+      $1 != "completed" { printf "%s%s %s", sep, $3, $1; sep = ", "; next }
+      $2 != "success"   { printf "%s%s %s", sep, $3, ($2 == "" ? "no conclusion" : $2); sep = ", " }')"
+    if [ -n "$bad" ]; then fail ci "ci: $bad on $s7"
+    else ok ci "ci: green on $s7 ($(printf '%s\n' "$runs" | cut -f3 | sort -u | paste -sd, - | sed 's/,/, /g'))"; fi
+    return
+  done
+  fail ci "ci: no CI run for $(git rev-parse --short HEAD) (or a commit with only paperwork after it) - push the branch and run its workflow"
+}
+ci_check
+
 # 04+05 Tests + Human - the council's verdict now closes both stages at once (ADR-001 D4):
 # a GREEN council row for the current pack, at HEAD or only paperwork since, is enough on
 # its own. **Checked:** stays the owner's override in both directions - whichever of the

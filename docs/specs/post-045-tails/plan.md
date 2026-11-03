@@ -75,7 +75,7 @@ skipped where it cannot.
 `bash tests/full-suite.sh` (the `Full suite steps (round-only)` row, run by `cycle.sh suite`)
 
 ## Descoped
-*(empty)*
+- `post-045-tails-04` (repair round 1): the round-1 gate was red from machine load only; the owner accepted the round (human-check ACCEPTED, 2026-11-03). The bsd 3 s wall check, splitting the 11 parts over 70% and the box slowdown go to the next circle.
 
 ## Plan deltas
 
@@ -86,7 +86,8 @@ is missing or unparsable.
 -->
 **Approved:** Andrei, 2026-11-03 (branch-CI step in /vulyk-ship kept: the Queen pushes the branch and runs `gh workflow run`)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
-**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
-**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
+**Branch:** vulyk/post-045-tails
+**Council:** RED round 1, 2026-11-03, at 6da4657, pack 6dece2748bae
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Checked:** ACCEPTED by Andrei, 2026-11-03, at 22f00fa - owner chose «ACCEPTED, хвосты в след. круг»; Queen's note: gate red only from machine load (63 parts ok; cycle:bsd's 3 s wall check and 11 growth marks), bsd 98 s on main vs 99 s on the branch, review found nothing on the asks; branch CI on ship is the load-free run
+**Checked:** ACCEPTED by Andrei, 2026-11-03, at 21c96ad - owner chose «ACCEPTED, хвосты в след. круг»; re-recorded after the descope commit of repair story 04 (no code change since 22f00fa); Queen's note: gate red only from machine load, bsd 98 s on main vs 99 s on the branch, review found nothing on the asks

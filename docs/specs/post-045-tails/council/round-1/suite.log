@@ -1,0 +1,74 @@
+head=6da4657 steps=8
+STEP 1/8: FAIL 275s
+PART council:seats2 ok 123s cap 300s
+PART council:walks2 ok 139s cap 300s
+PART council:close ok 145s cap 300s
+PART council:ceilings ok 147s cap 300s
+PART council:replays2 ok 183s cap 300s
+PART council:verbs ok 196s cap 300s
+PART council:ceilings2 ok 210s cap 300s
+PART council:seats ok 251s cap 300s
+PART council:judge ok 260s cap 300s
+PART council:walks ok 263s cap 300s
+PART council:replays ok 266s cap 300s
+PART council:escalate ok 272s cap 300s
+STEP 2/8: FAIL 190s
+PART cycle:manual ok 33s cap 300s
+PART cycle:gates ok 37s cap 300s
+PART cycle:safety ok 43s cap 300s
+PART cycle:hooklog ok 43s cap 300s
+PART council:roster2 ok 75s cap 300s
+PART cycle:close ok 82s cap 300s
+PART council:roster ok 132s cap 300s
+PART cycle:bsd FAIL 138s cap 300s
+PART council:driver ok 153s cap 300s
+PART cycle:ship ok 159s cap 300s
+PART council:suite ok 182s cap 300s
+PART council:advance ok 187s cap 300s
+STEP 3/8: ok 135s
+PART driver ok 2s cap 300s
+PART model-profile:edges ok 20s cap 300s
+PART inject:functional ok 25s cap 300s
+PART model-profile:defaults ok 26s cap 300s
+PART e2e:green ok 32s cap 300s
+PART model-profile:set ok 36s cap 300s
+PART e2e:red ok 55s cap 300s
+PART full-suite ok 72s cap 300s
+PART defects ok 79s cap 300s
+PART maintenance ok 116s cap 300s
+PART cycle:red ok 121s cap 300s
+PART intake:functional ok 131s cap 300s
+STEP 4/8: ok 196s
+PART mods ok 7s cap 300s
+PART solo:green ok 24s cap 300s
+PART symbol-map ok 28s cap 300s
+PART solo:rejected ok 35s cap 300s
+PART solo:block ok 62s cap 300s
+PART telemetry:telemetry ok 93s cap 300s
+PART telemetry:install-xp ok 99s cap 300s
+PART telemetry:terminal ok 129s cap 300s
+PART telemetry:wiring ok 143s cap 300s
+PART telemetry:ledger ok 154s cap 300s
+PART telemetry:scan ok 166s cap 300s
+PART telemetry:install ok 194s cap 300s
+STEP 5/8: FAIL 290s
+PART telemetry:ysk-hook ok 6s cap 300s
+PART telemetry:constitution2 ok 71s cap 300s
+PART telemetry:upgrade ok 159s cap 300s
+PART telemetry:library ok 167s cap 300s
+PART telemetry:watcher ok 186s cap 300s
+PART telemetry:launchers ok 190s cap 300s
+PART telemetry:rg ok 215s cap 300s
+PART telemetry:crlf ok 218s cap 300s
+PART telemetry:constitution ok 277s cap 300s
+PART telemetry:mods ok 277s cap 300s
+PART telemetry:ysk ok 285s cap 300s
+PART telemetry:wrapper ok 288s cap 300s
+STEP 6/8: ok 160s
+PART token-report ok 5s cap 300s
+PART telemetry:edits ok 158s cap 300s
+STEP 7/8: ok 18s
+PART inject:latency ok 17s cap 300s
+STEP 8/8: ok 7s
+PART intake:latency ok 6s cap 300s
+SUITE: FAIL 1271s - cut part council:seats, cut part council:judge, cut part council:walks, cut part council:replays, cut part council:escalate, cut part telemetry:rg, cut part telemetry:crlf, cut part telemetry:constitution, cut part telemetry:mods, cut part telemetry:ysk, cut part telemetry:wrapper, part cycle:bsd failed
