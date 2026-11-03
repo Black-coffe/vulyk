@@ -38,8 +38,8 @@ and the word `steps` opts a row into the stepped protocol.
 - Rejected: raise the budget again (the card forbids it; cut the work first).
 
 ## Consequences
-`VULYK_SUITE_TIMEOUT` no longer bounds any run and exit 124 is never returned; it is read in one place only, as the
-fallback budget when an old reviewer's `SUITE: TIMEOUT <N>s` line carries no `budget` (`scripts/cycle.sh` judge).
+`VULYK_SUITE_TIMEOUT` no longer bounds any run and exit 124 is never returned; nothing reads it (post-045-tails,
+2026-11-03): `judge` reads an old reviewer's `SUITE: TIMEOUT <N>s` line as `SUITE: FAIL`, a repair, never a budget.
 `suite-timeout` stays a readable reason for old rows and seat files. `VULYK_VERIFY_TIMEOUT` above 300 acts as 300, so a hive's story row over 300 s can no longer be
 bypassed; a hive cuts any row over about 210 s into `--part` rows before taking this release. The round may take longer in
 wall time than one 698 s run. `install.sh --upgrade` tells a hive; it never edits the hive's constitution.

@@ -1143,29 +1143,19 @@ ASKS
     fi
     [ -n "$review_v" ] || review_v="BLOCK" # an unreadable stored report stays a block
     # fast-verification-07: a failed full suite is never green, whatever the VERDICT line says:
-    # `SUITE: FAIL` is the reviewer's BLOCK (a [regression]), anchored or not.
-    if sed '1d' "$rf" 2>/dev/null | grep -qE '^SUITE: FAIL'; then
-      [ "$review_v" = "BLOCK" ] || review_note="review PASS with SUITE: FAIL"
+    # `SUITE: FAIL` is the reviewer's BLOCK (a [regression]), anchored or not. A legacy
+    # `SUITE: TIMEOUT` line (a reviewer from before the gate split) is the same FAIL: repair, never
+    # the old suite-timeout escalation (post-045-tails, owner: «Считать как FAIL»). Read anywhere in
+    # the stored review, so a Tier 4 fold keeps it.
+    local sfail; sfail="$(sed '1d' "$rf" 2>/dev/null | grep -oE '^SUITE: (FAIL|TIMEOUT)' | head -1)"
+    if [ -n "$sfail" ]; then
+      [ "$review_v" = "BLOCK" ] || review_note="review PASS with $sfail"
       review_v="BLOCK"
     fi
   elif is_required_seat review "$REQUIRED"; then
     review_v="ABSENT"
   else
     review_v="" # C15: review not required at this tier and never recorded - not ABSENT
-  fi
-
-  # --- fast-verification-06: the reviewer's `SUITE: TIMEOUT <N>s [budget <B>s]` line, read
-  # anywhere in the stored review (fold-proof at Tier 4). An over-budget full suite is neither
-  # GREEN nor a repair: the owner raises the budget or cuts the suite.
-  local suite_secs="" suite_budget=""
-  if [ -f "$rf" ]; then
-    local suite_line
-    suite_line="$(sed '1d' "$rf" 2>/dev/null | grep -E '^SUITE: TIMEOUT [0-9]+s' | head -1)"
-    if [ -n "$suite_line" ]; then
-      suite_secs="$(printf '%s' "$suite_line" | sed -n 's/^SUITE: TIMEOUT \([0-9][0-9]*\)s.*/\1/p')"
-      suite_budget="$(printf '%s' "$suite_line" | sed -n 's/.*budget \([0-9][0-9]*\)s.*/\1/p')"
-      [ -n "$suite_budget" ] || suite_budget="${VULYK_SUITE_TIMEOUT:-590}"
-    fi
   fi
 
   # --- env escalation is "at least one REQUIRED seat is ABSENT" (R16/M-5), not "all three" -
@@ -1221,8 +1211,6 @@ ASKS
   local half=$(( (A+1)/2 )); [ "$half" -lt 2 ] && half=2  # R10: max(2, ceil(A/2))
   if [ "$override_red" -eq 1 ]; then
     overall="RED"; next_val="repair"
-  elif [ -n "$suite_secs" ]; then
-    overall="ESCALATE"; escalate_reason="suite-timeout"; next_val="escalated"
   elif [ -n "$absent_seats" ] && [ "$red_e_count" -eq 0 ] && [ "$red_u_count" -eq 0 ] && [ "$review_v" != "BLOCK" ]; then
     overall="ESCALATE"; escalate_reason="env"; next_val="escalated"
   elif [ "$red_e_count" -gt 0 ] && [ "$red_e_count" -ge "$half" ]; then
@@ -1257,7 +1245,6 @@ ASKS
     done
     local noteval=""
     [ "$escalate_reason" = "env" ] && noteval="$(redact_note "$(printf '%s' "$absent_seats" | sed 's/ /, /g') ABSENT")"
-    [ "$escalate_reason" = "suite-timeout" ] && noteval="$(redact_note "full suite timed out: ${suite_secs}s, budget ${suite_budget}s")"
     [ -n "$review_note" ] && noteval="${noteval:+$noteval; }$review_note"
     printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"review_asks":[%s],"na":%s,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":%s,"note":"%s"}\n' \
       "$(now_ts)" "$SLUG" "$N" "$overall" "$head7" "$RPACK" "$A" \
@@ -1285,9 +1272,6 @@ ASKS
       done
       if [ "$escalate_reason" = "no-progress" ]; then
         printf -- '- no progress: ask %s RED in rounds %s and %s\n' "$(json_num_csv "$repeated" | sed 's/,/, /g')" "$((N-1))" "$N"
-      fi
-      if [ "$escalate_reason" = "suite-timeout" ]; then
-        printf -- '- suite: %s s, budget %s s - an old SUITE: TIMEOUT report: cut the part that ran long (cycle.sh suite caps each part)\n' "$suite_secs" "$suite_budget"
       fi
       if [ "$escalate_reason" = "env" ]; then
         local aseat att
@@ -1635,6 +1619,18 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
   local RPACK; RPACK="$(round_field "$RD" pack)"
   local model="$MODEL_OPT"; [ -n "$model" ] || model="$(seat_field_str "$REPORT" MODEL)"; [ -n "$model" ] || model="unknown"
 
+  # post-045-tails: with a round-only full-suite row that has a runnable command, the round's gate
+  # (`cycle.sh suite`) runs before the seats. No finished suite.log keyed to the round's head means
+  # the gate never ran: exit 2, nothing written and no attempt spent, so the same report records
+  # once it has. Never a re-ask - the reviewer cannot fix a gate the loop skipped.
+  local logline; logline="$(suite_log_line "$RD")"
+  if [ -z "$logline" ] && full_suite_row_round_only "$(constitution_file "$ROOT")"; then
+    local why; why="no suite.log for round $N at head $(round_field "$RD" head) - run cycle.sh suite $SPEC first, then record the same report again"
+    echo "cycle: record-seat - review round $N: $why" >&2
+    emit false record-seat 2 error "$why"
+    exit 2
+  fi
+
   local verdict; verdict="$(review_verdict_of_text "$REPORT")"
   if [ -z "$verdict" ]; then
     write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
@@ -1657,31 +1653,13 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
   # gate-split-04: the round's own gate ran before the seats (`cycle.sh suite`); a finished
   # council/round-N/suite.log keyed to this round's head is the SUITE line, whatever the report says:
   # every reported `SUITE:` line is dropped and the log's goes right under the VERDICT line.
-  local logline; logline="$(suite_log_line "$RD")"
+  # Without a log (no round-only row, refused above otherwise) the report's own line stands.
   if [ -n "$logline" ]; then
     REPORT="$(printf '%s\n' "$REPORT" | tr -d '\r' | awk -v s="$logline" '
       /^SUITE:/ { next }
       { print }
       !done && NF { print s; done = 1 }
       END { if (!done) print s }')"
-  fi
-
-  # fast-verification-07/08: when the constitution has a round-only full-suite row with a runnable
-  # command, the reviewer ran it and says so: the first `SUITE:` line must be `ok <N>s`, `FAIL <N>s`
-  # or `TIMEOUT <N>s [budget <B>s]`. A missing line, `SUITE: none`, or a malformed form (no seconds,
-  # `571 s`) is MALFORMED - re-asked, never recorded, never judged green.
-  if full_suite_row_round_only "$(constitution_file "$ROOT")"; then
-    local sline; sline="$(printf '%s\n' "$REPORT" | grep -E '^SUITE:' | head -1 | tr -d '\r')"
-    if ! printf '%s\n' "$sline" | grep -qE '^SUITE: (ok|FAIL|TIMEOUT) [0-9]+s([[:space:]].*)?$'; then
-      local why
-      if [ -z "$sline" ]; then why="review: no SUITE: line, but ## Commands has a round-only Full suite row - run it and report its SUITE: line"
-      else why="review: $sline, but ## Commands has a round-only Full suite row - report SUITE: ok <N>s | FAIL <N>s | TIMEOUT <N>s budget <B>s"
-      fi
-      write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
-      echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
-      emit false record-seat 4 error "MALFORMED: $why"
-      exit 4
-    fi
   fi
 
   local extra; extra="$(printf ' \xc2\xb7 verdict: %s' "$verdict")"
@@ -2992,7 +2970,9 @@ suite_verdict() { # suite_verdict <log> -> the closing `SUITE: ok <N>s` or `SUIT
   why="$(tr -d '\r' < "$log" | awk -v cut="$(suite_cut_names "$log")" '
     BEGIN { n = split(cut, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "" && !(a[i] in c)) { c[a[i]] = 1; out = out sep "cut part " a[i]; sep = ", " } }
     $1 == "PART" && $3 == "FAIL" && !($2 in c) && !($2 in f) { f[$2] = 1; out = out sep "part " $2 " failed"; sep = ", " }
-    $1 == "STEP" && $3 == "FAIL" { k = $2; sub(/:$/, "", k); st = st ssep "step " k " failed"; ssep = ", " }
+    $1 == "STEP" && $3 == "FAIL" { k = $2; sub(/:$/, "", k); h = index($0, "no end from: ")
+      if (h) { out = out sep "step " k " no end from: " substr($0, h + 13); sep = ", " }
+      else { st = st ssep "step " k " failed"; ssep = ", " } }
     END { if (out != "") print out; else if (st != "") print st }')"
   if [ -n "$why" ]; then printf 'SUITE: FAIL %ss - %s' "$secs" "$why"; else printf 'SUITE: ok %ss' "$secs"; fi
 }
@@ -3093,18 +3073,32 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
   # --- run step K: its STEP line and its PART lines, appended as one block ---------------------
   local t0="$SECONDS" out rc parts secs sres=ok note="" tmp
   if [ "$stepped" = 1 ]; then
-    out="$(run_capped 590 bash -c "$cmd --step $K" 2>&1)"; rc=$?
+    # The call cap: 590 s (one Bash call). VULYK_STEP_CAP only lowers it, for tests.
+    local stepcap="${VULYK_STEP_CAP:-590}"
+    case "$stepcap" in ''|*[!0-9]*|0) stepcap=590 ;; esac
+    [ "$stepcap" -gt 590 ] && stepcap=590
+    out="$(run_capped "$stepcap" bash -c "$cmd --step $K" 2>&1)"; rc=$?
     secs=$((SECONDS - t0))
     parts="$(printf '%s\n' "$out" | tr -d '\r' | grep '^PART ')"
-    [ "$rc" -eq 124 ] && note=" - timed out after 590s"
+    if [ "$rc" -eq 124 ]; then
+      # post-045-tails: the runner names its parts first (`PARTS K/S: <names>`) and prints a PART line
+      # as each ends; the listed names with no PART line are the parts that never ended.
+      local hung; hung="$(printf '%s\n' "$out" | tr -d '\r' | awk '
+        $1 == "PARTS" { for (i = 3; i <= NF; i++) want[++n] = $i }
+        $1 == "PART"  { ended[$2]++ }
+        END { for (i = 1; i <= n; i++) { if (ended[want[i]] > 0) ended[want[i]]--; else { printf "%s%s", sep, want[i]; sep = " " } } }')"
+      note=" - timed out after ${stepcap}s${hung:+ - no end from: $hung}"
+    fi
   else
     local cap="${VULYK_PART_CAP:-300}" pname pres=ok
     case "$cap" in ''|*[!0-9]*|0) cap=300 ;; esac
     [ "$cap" -gt 300 ] && cap=300
-    pname="$(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g')"
+    # A Purpose's PART name: lower case, each run of other characters one hyphen, none at either end.
+    part_slug() { tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g; s/^-//; s/-$//'; }
+    pname="$(printf '%s' "$purpose" | part_slug)"
     # Two rows whose Purposes give one name: each part takes its step number, so the log tells them apart.
-    if [ "$(printf '%s\n' "$rows" | cut -f1 | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g' | grep -cxF -- "$pname")" -gt 1 ]; then
-      case "$pname" in *-) pname="$pname$K" ;; *) pname="$pname-$K" ;; esac
+    if [ "$(printf '%s\n' "$rows" | cut -f1 | part_slug | grep -cxF -- "$pname")" -gt 1 ]; then
+      pname="$pname-$K"
     fi
     if [ -z "$cmd" ]; then
       rc=1; secs=0; parts="PART $pname FAIL 0s cap ${cap}s - no command in its row"

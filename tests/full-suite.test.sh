@@ -131,6 +131,28 @@ code "a failing step -> exit 1" 1 "$RC"
 expect "STEP line says FAIL" "STEP 1/1: FAIL "
 dropLogs
 
+echo "== --step K names its parts first, and PART lines come in the order the parts end (post-045-tails ask 5)"
+run 300 "$J5" --jobs 2 --step 2
+[ "$(printf '%s\n' "$OUT" | sed -n 1p)" = "PARTS 2/3: mark mark" ] && echo "  ok    the first line is PARTS 2/3 with the step's part names" \
+  || { echo "::error::--step K must print PARTS K/S: <names> first - got: $(printf '%s\n' "$OUT" | sed -n 1p)"; fail=1; }
+run 10 "bash $S/slow.sh
+bash $S/ok.sh" --jobs 2 --step 1
+[ "$(printf '%s\n' "$OUT" | grep '^PART ' | awk '{ print $2 }' | paste -sd' ' -)" = "ok slow" ] \
+  && echo "  ok    the quick part's PART line comes before the slow one listed ahead of it" \
+  || { echo "::error::PART lines must come in completion order - got: $(printf '%s\n' "$OUT" | grep '^PART ' | paste -sd'|' -)"; fail=1; }
+run 300 "bash $S/ok.sh"
+reject "a run with no --step prints no PARTS line" "PARTS "
+
+echo "== suite-parts-check: a path that is not a readable file is refused, a file with no PART line passes (post-045-tails ask 3)"
+OUT="$(bash "$SRC/scripts/suite-parts-check.sh" "$T/no-such-file" 2>&1)"; RC=$?
+code "a missing file -> exit 2" 2 "$RC"
+expect "the refusal names the path" "suite-parts-check: no such file: $T/no-such-file"
+OUT="$(bash "$SRC/scripts/suite-parts-check.sh" "$T" 2>&1)"; RC=$?
+code "a directory -> exit 2" 2 "$RC"
+printf 'no part lines here\n' > "$T/plain.txt"
+OUT="$(bash "$SRC/scripts/suite-parts-check.sh" "$T/plain.txt" 2>&1)"; RC=$?
+code "a readable file with no PART line -> exit 0" 0 "$RC"
+
 echo "== SKIP: exit 77 with a SKIP: line"
 run 300 "bash $S/skip.sh
 bash $S/ok.sh"
