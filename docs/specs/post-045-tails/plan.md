@@ -88,6 +88,6 @@ is missing or unparsable.
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
 **Branch:** vulyk/post-045-tails
 **Council:** RED round 1, 2026-11-03, at 6da4657, pack 6dece2748bae
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 **Checked:** ACCEPTED by Andrei, 2026-11-03, at 22f00fa - owner chose «ACCEPTED, хвосты в след. круг»; Queen's note: gate red only from machine load (63 parts ok; cycle:bsd's 3 s wall check and 11 growth marks), bsd 98 s on main vs 99 s on the branch, review found nothing on the asks; branch CI on ship is the load-free run
 **Checked:** ACCEPTED by Andrei, 2026-11-03, at 21c96ad - owner chose «ACCEPTED, хвосты в след. круг»; re-recorded after the descope commit of repair story 04 (no code change since 22f00fa); Queen's note: gate red only from machine load, bsd 98 s on main vs 99 s on the branch, review found nothing on the asks
+**Shipped:** 0.46.0, 2026-11-03, at 3898b0d - merged to main, publish pending; owner override: round 1 RED from machine-load gate only, **Checked:** ACCEPTED («ACCEPTED, хвосты в след. круг»); branch CI run 41660058462 green
