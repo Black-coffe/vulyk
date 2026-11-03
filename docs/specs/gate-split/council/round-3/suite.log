@@ -67,3 +67,5 @@ PART telemetry:launchers ok 89s cap 300s
 STEP 6/8: ok 92s
 PART telemetry:edits ok 91s cap 300s
 PART token-report ok 3s cap 300s
+STEP 7/8: ok 12s
+PART inject:latency ok 12s cap 300s
