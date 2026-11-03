@@ -265,7 +265,8 @@ print_commands_placeholder() {
 | Lint | `<fill in>` |
 | Build / typecheck | `<fill in>` |
 
-`round-only` marks the full suite: the reviewer runs it once per round, and no story names it.
+`round-only` marks the full suite: the round gate runs it, and no story names it. Several
+`Full suite ... (round-only)` rows split it into parts, each one part under a 300 s cap (ADR-029).
 Filled in by `/vulyk-bootstrap`. Verify each command actually runs before writing it
 down, and write "none" where this project genuinely lacks one - a verification that
 always exits 0 is worse than an admitted gap.

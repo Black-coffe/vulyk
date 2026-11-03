@@ -1529,6 +1529,16 @@ cat "$T/cr-plain.out" | expect "plain --upgrade prints the sizes" "constitution 
 cat "$T/cr-plain.out" | expect "plain --upgrade prints the migrate command" "install.sh\" \"$CR\" --upgrade --constitution replace"
 cat "$T/cr-plain.out" | expect "plain --upgrade names the backup" "the old file as CLAUDE.$BAKNAME.md"
 cat "$T/cr-plain.out" | expect_absent "a canonical full-suite row gets no note" "no 'Full suite / build (round-only)' row"
+# gate split (ADR-029) reaches a hive that already has the canonical row: the upgrade prints it,
+# /vulyk-update says it outside the missing-row paragraph, the template and the CHANGELOG name it
+cat "$T/cr-plain.out" | expect "a hive with the canonical row hears the gate split on --upgrade" "gate split (ADR-029)"
+sed -n '/^6\. /,/^Never edit/p' "$SRC/.claude/commands/vulyk-update.md" | grep '^   Gate split (ADR-029), every hive:' \
+  | expect "gate split: /vulyk-update step 6 tells every hive, not only a renamed row" "300 s"
+print_commands_placeholder_text="$(sed -n '/^print_commands_placeholder() {/,/^}/p' "$SRC/install.sh")"
+printf '%s\n' "$print_commands_placeholder_text" \
+  | expect "gate split: the install template names the 300 s part cap" "each one part under a 300 s cap"
+sed -n '/^## \[Unreleased\]/,/^## \[[0-9]/p' "$SRC/CHANGELOG.md" \
+  | expect "gate split: CHANGELOG [Unreleased] has the gate-split entry" "Gate split (ADR-029)"
 
 # a hive bootstrapped before 0.36.0 keeps its own full-suite row name: the upgrade names it
 # (suite-row-upgrade-01), for the original `Full test suite`, a canonical name missing

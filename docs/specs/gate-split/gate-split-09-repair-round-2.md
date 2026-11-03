@@ -1,13 +1,14 @@
 ---
 story: gate-split-09
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 5
 blocked_by: []
 red: required
-red_reason:
+red_reason: gate split: /vulyk-update step 6 tells every hive, not only a renamed row
+red_verified_at: 2026-11-02T23:43:46Z dcab456096a7f3bc0829984a3393ae30faca1aa3dfa1f8cd0beb0d93447fdea6
 ---
 
 # Repair round 2
@@ -80,3 +81,30 @@ ASK 9: RED - hives may split their full run into several 300 s part rows, and th
 `bash tests/council.test.sh --part roster2`
 `bash tests/council.test.sh --part ceilings`
 `bash tests/council.test.sh --part ceilings2`
+
+## Red receipt
+- command: bash tests/telemetry.test.sh --part constitution
+- exit: 1
+- tests: dcab456096a7f3bc0829984a3393ae30faca1aa3dfa1f8cd0beb0d93447fdea6 (tests/council.test.sh, tests/driver.test.sh, tests/e2e.test.sh, tests/full-suite.test.sh, tests/model-profile.test.sh, tests/solo.test.sh, tests/telemetry.test.sh)
+- impl: 74af5813556bbc6cce307c286c04ef9a83d9804d1c5baaf66edcd7675256a2bd
+- stamped: 2026-11-02T23:43:46Z
+
+```
+  ok    the Commands body is carried over verbatim
+  ok    everything outside the blocks is the release's text
+  ok    the Telemetry row keeps its answer
+  ok    an owner line outside the blocks survives in the backup only
+  ok    VULYK's own Commands rows never land in a hive
+  ok    a Profile with every release row gets no missing-rows note
+  ok    a second replace has nothing to do
+  ok    and writes no second backup
+  ok    a migrated hive gets no migrate hint
+telemetry.test.sh: 34 checks, 3 failed
+```
+
+## Implementation notes
+- tests/telemetry.test.sh (part constitution): four checks - canonical-row hive hears `gate split (ADR-029)` on --upgrade, /vulyk-update step 6 has an unconditional "Gate split (ADR-029), every hive:" line, the install Commands template names the 300 s part cap, CHANGELOG [Unreleased] has the entry.
+- .claude/commands/vulyk-update.md: split/300 s text moved out of the missing-row paragraph into its own every-hive paragraph.
+- install.sh: Commands placeholder no longer says "the reviewer runs it once per round"; names part rows and the 300 s cap.
+- CHANGELOG.md [Unreleased]: gate-split entry (paperwork path per scripts/lib.sh, not in ## Files).
+- Surprise: install.sh --upgrade already printed the gate-split notice on every hive (story 06, line ~1517); the finding's "prints nothing" did not hold, now guarded by the first check.
