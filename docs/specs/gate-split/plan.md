@@ -191,4 +191,5 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
 - ask 9: RED - see docs/specs/gate-split/council/round-2/*.md for evidence
 - no progress: ask 9 RED in rounds 1 and 2
 - seats: docs/specs/gate-split/council/round-2/
-**Checked:** ACCEPTED by Andrei, 2026-11-03, at 20f6270 - narrow fix 20f6270 (gate() BadLine re-ask, CHANGELOG check); owner answer verbatim: «ACCEPTED (Рекомендую)», looked at the diff in chat
+**Checked:** ACCEPTED by Andrei, 2026-11-03, at 20f6270 - narrow fix 20f6270 (gate() BadLine re-ask, CHANGELOG check); owner answer verbatim: «ACCEPTED (Рекомендую)»
+**Checked:** ACCEPTED by Andrei, 2026-11-03, at cbaaf51 - Diff посмотрел, принимаю. Отличная починка: защита драйвера от битых строк клерка через повторный запрос в пределах 32 попыток и фикс теста телеметрии для релизной структуры CHANGELOG полностью закрывают последние шероховатости перед релизом. Смело выпускайте 0.45.0 по плану.
