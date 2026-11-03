@@ -38,3 +38,16 @@ PART maintenance ok 75s cap 300s
 PART model-profile:defaults ok 15s cap 300s
 PART model-profile:set ok 22s cap 300s
 PART model-profile:edges ok 11s cap 300s
+STEP 4/8: ok 103s
+PART mods ok 4s cap 300s
+PART solo:green ok 13s cap 300s
+PART solo:block ok 31s cap 300s
+PART solo:rejected ok 17s cap 300s
+PART symbol-map ok 15s cap 300s
+PART telemetry:telemetry ok 51s cap 300s
+PART telemetry:scan ok 89s cap 300s
+PART telemetry:install ok 101s cap 300s
+PART telemetry:install-xp ok 54s cap 300s
+PART telemetry:terminal ok 67s cap 300s
+PART telemetry:wiring ok 73s cap 300s
+PART telemetry:ledger ok 77s cap 300s
