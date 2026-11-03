@@ -17,3 +17,4 @@
 - 2026-11-03T00:06:04Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/gate-split/round-3 · next: dispatch:opus,review
 - 2026-11-03T00:26:56Z · 04-council:RED · round 3 verdict RED at d5978a8 pack 22e4a6c40747 · next: repair
 - 2026-11-03T00:27:04Z · 03-building · repair round 3: gate-split-10-repair-round-3.md · next: build:6
+- 2026-11-03T01:11:50Z · 04-council:open · round 4 opened, court at E:/Projects/vulyk/.vulyk/court/gate-split/round-4 · next: dispatch:opus,review
