@@ -1600,10 +1600,11 @@ ask_evidenced_of() { # ask_evidenced_of <ask-line> -> "1" iff run:+saw: or url:+
 }
 
 full_suite_row() { # full_suite_row <constitution> -> "<purpose><TAB><command>", one line per ## Commands
-  # row whose Purpose cell names the full suite and carries `round-only` (fast-verification-07) and whose
-  # command cell is runnable: `<fill in...>`, `none` or an empty cell is no suite to run
-  # (fast-verification-08), so `SUITE: none` is the right report for it. Every such row, in table order:
-  # a hive may split its full run into several part rows (gate-split-08). The command is exactly the
+  # row whose Purpose cell names the full suite and carries `round-only` (fast-verification-07), unless its
+  # command cell says `<fill in...>` or `none`: no suite to run (fast-verification-08), so `SUITE: none` is
+  # the right report for it. An empty or missing command cell is never dropped: it prints the row with an
+  # empty command, which cmd_suite turns into a red step naming the row (gate-split-10). Every such row,
+  # in table order: a hive may split its full run into several part rows (gate-split-08). The command is exactly the
   # second cell (an escaped \| stays inside it); later cells are never part of it. Nothing (exit 1) when none.
   [ -f "$1" ] || return 1
   awk '
@@ -1611,13 +1612,13 @@ full_suite_row() { # full_suite_row <constitution> -> "<purpose><TAB><command>",
     /^##[[:space:]]/            { if (inblock) exit }
     inblock && /^\|/ {
       line = $0; sub(/\r$/, "", line); gsub(/\\[|]/, "\001", line)
-      n = split(line, cell, "|"); if (n < 3) next
+      n = split(line, cell, "|"); if (n < 2) next
       po = cell[2]; gsub(/\001/, "|", po); sub(/^[[:space:]]+/, "", po); sub(/[[:space:]]+$/, "", po)
       p = tolower(po)
       if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) {
-        c = cell[3]; gsub(/\001/, "|", c); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c); sub(/[[:space:]]+$/, "", c)
+        c = (n >= 3) ? cell[3] : ""; gsub(/\001/, "|", c); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c); sub(/[[:space:]]+$/, "", c)
         lc = tolower(c)
-        if (lc == "" || lc ~ /^<fill in/ || lc ~ /^none([^[:alnum:]_-]|$)/) next
+        if (lc ~ /^<fill in/ || lc ~ /^none([^[:alnum:]_-]|$)/) next
         printf "%s\t%s\n", po, c; found = 1
       }
     }
@@ -3047,7 +3048,7 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
   [ -n "$rows" ] && nrows="$(printf '%s\n' "$rows" | grep -c .)"
   row="$(printf '%s\n' "$rows" | sed -n 1p)"
   purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
-  [ "$nrows" -le 1 ] && case " $(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' ' ') " in *" steps "*) stepped=1 ;; esac
+  [ "$nrows" -le 1 ] && [ -n "$cmd" ] && case " $(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' ' ') " in *" steps "*) stepped=1 ;; esac
 
   # A log keyed to another head (an earlier code state) is discarded, never resumed.
   local lh=""; [ -f "$LOG" ] && lh="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/^head=\([^ ]*\).*/\1/p')"
@@ -3078,9 +3079,15 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
   fi
   S="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/.* steps=\([0-9][0-9]*\).*/\1/p')"; S="${S:-1}"
   K=$(( $(tr -d '\r' < "$LOG" | grep -c '^STEP ') + 1 ))
-  if [ "$nrows" -gt 1 ]; then
-    row="$(printf '%s\n' "$rows" | sed -n "${K}p")"
-    purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
+  # Step K runs row K; a K past the rows (the log's steps= outgrew the table) has no row to run, and
+  # neither has a row with an empty command cell: both are a red step below, never `ok` from `bash -c ""`.
+  if [ "$stepped" != 1 ]; then
+    if [ "$K" -le "$nrows" ]; then
+      row="$(printf '%s\n' "$rows" | sed -n "${K}p")"
+      purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
+    else
+      purpose="step $K: no row"; cmd=""
+    fi
   fi
 
   # --- run step K: its STEP line and its PART lines, appended as one block ---------------------
@@ -3095,11 +3102,19 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
     case "$cap" in ''|*[!0-9]*|0) cap=300 ;; esac
     [ "$cap" -gt 300 ] && cap=300
     pname="$(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g')"
-    run_capped "$cap" bash -c "$cmd" >/dev/null 2>&1; rc=$?
-    secs=$((SECONDS - t0))
-    [ "$rc" -ne 0 ] && pres=FAIL
-    if [ "$rc" -eq 124 ]; then parts="PART $pname CAP ${secs}s cap ${cap}s - timed out"
-    else parts="PART $pname $pres ${secs}s cap ${cap}s"; fi
+    # Two rows whose Purposes give one name: each part takes its step number, so the log tells them apart.
+    if [ "$(printf '%s\n' "$rows" | cut -f1 | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g' | grep -cxF -- "$pname")" -gt 1 ]; then
+      case "$pname" in *-) pname="$pname$K" ;; *) pname="$pname-$K" ;; esac
+    fi
+    if [ -z "$cmd" ]; then
+      rc=1; secs=0; parts="PART $pname FAIL 0s cap ${cap}s - no command in its row"
+    else
+      run_capped "$cap" bash -c "$cmd" >/dev/null 2>&1; rc=$?
+      secs=$((SECONDS - t0))
+      [ "$rc" -ne 0 ] && pres=FAIL
+      if [ "$rc" -eq 124 ]; then parts="PART $pname CAP ${secs}s cap ${cap}s - timed out"
+      else parts="PART $pname $pres ${secs}s cap ${cap}s"; fi
+    fi
   fi
   tmp="$RD/.suite-step.tmp"
   printf '%s\n' "$parts" > "$tmp"

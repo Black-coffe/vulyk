@@ -1,13 +1,14 @@
 ---
 story: gate-split-10
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 6
 blocked_by: []
 red: required
-red_reason:
+red_reason: ::error::suite row parser: an empty command cell must be a row with no command
+red_verified_at: 2026-11-03T00:48:57Z 21977ed578ff85375c87cf2d30475f3b16e76b2e2668b5d89b61e86c143be460
 ---
 
 # Repair round 3
@@ -83,3 +84,30 @@ ASK 9: RED - hive full run splittable into 300 s part rows, upgrade says so - ru
 `bash tests/council.test.sh --part roster2`
 `bash tests/council.test.sh --part ceilings`
 `bash tests/council.test.sh --part ceilings2`
+
+## Red receipt
+- command: bash tests/council.test.sh --part suite
+- exit: 1
+- tests: 21977ed578ff85375c87cf2d30475f3b16e76b2e2668b5d89b61e86c143be460 (tests/council.test.sh, tests/driver.test.sh, tests/e2e.test.sh, tests/full-suite.test.sh, tests/model-profile.test.sh, tests/solo.test.sh, tests/telemetry.test.sh)
+- impl: e164ec75f5bf022f25b2c4b9604d5dec18342842c455c82706b3617d4aa5e34d
+- stamped: 2026-11-03T00:48:57Z
+
+```
+SUITE: FAIL 0s - part full-suite-round-only- failed
+::error::suite step beyond rows: a step past the row count must fail - exit=0 out=cycle: sxbeyond - round 1 suite step 3/3: ok 0s
+{"ok":true,"verb":"suite","exit":0,"next":"dispatch:review","step":3,"steps":3,"done":true,"suite":"ok","status":{"spec":"docs/specs/sxbeyond","slug":"sxbeyond","stage":"03-built","next":"dispatch:review","briefed":true,"approved":true,"branch":"main","head":"8824f07","pack":"ecd71d438ed1","stories":{"todo":0,"in-progress":0,"done":1,"blocked":0},"wave":null,"wave_stories":[],"round":1,"ceiling":1,"tier":1,"open":true,"court":null,"missing":["review"],"stale":false,"verdict":null,"review":null,"red":[],"round_dir":"docs/specs/sxbeyond/council/round-1","paused":false,"shipped":false,"since":null,"seat_attempt":{"review":1},"seats":["review"],"manual":[]}} log=head=9bf30da steps=3
+STEP 1/3: ok 0s
+STEP 2/3: ok 0s
+STEP 3/3: ok 0s
+PART  ok 0s cap 300s
+SUITE: ok 0s
+suite: no round-only full-suite row -> SUITE: none, done at once
+  ok    no row -> SUITE: none, steps 0, done
+```
+
+## Implementation notes
+- scripts/cycle.sh full_suite_row: an empty or missing command cell (also a row with no closing pipe) prints the row with an empty command instead of being dropped; `<fill in...>` and `none` still mean no suite (finding 2).
+- scripts/cycle.sh cmd_suite: an empty command is a red step, `PART <name> FAIL 0s cap <C>s - no command in its row`; a sole empty row no longer reaches `SUITE: none`; a `steps` marker is ignored on an empty row (finding 2).
+- scripts/cycle.sh cmd_suite: plain steps pick row K by number; K past the row count is the red part `step-<K>-no-row`; Purposes that normalise to one name get the step number appended, e.g. `full-suite-round-only-1` and `-2` (finding 3).
+- tests/council.test.sh --part suite: the old "empty cell refused" parser case now expects a row with no command; new cases cover a sole empty row, a sole missing-cell row, a good row beside an empty one, duplicate Purposes and a step past the rows.
+- CHANGELOG.md (paperwork, not in ## Files, so close-story does not stage it): the gate-split entry gains one sentence and is committed in its own commit after close-story (finding 1).

@@ -4493,12 +4493,17 @@ out2="$(council suite docs/specs/sxsplit 2>&1)"; ex2=$?
   || { echo "::error::suite split rows: the second row did not run - out1=$out1 out2=$out2 log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
 rm -f fx-b-ran
 
-echo "suite: the row parser takes exactly the second cell and refuses an empty one (gate-split-08, finding 2)"
+echo "suite: the row parser takes exactly the second cell; an empty or missing one is a row with no command (gate-split-08 finding 2, gate-split-10 finding 2)"
 eval "$(sed -n '/^full_suite_row() {/,/^}/p' "$SRC/scripts/cycle.sh")"
 fsr() { printf '## Commands\n| Purpose | Command |\n|---|---|\n%s\n' "$1" > fsr.md; full_suite_row fsr.md; }
 r="$(fsr '| Full suite (round-only) |  | echo PWNED |')"; ex=$?
-[ "$ex" -ne 0 ] && [ -z "$r" ] && echo "  ok    an empty second cell is refused, the third cell never becomes the command" \
-  || { echo "::error::suite row parser: an empty command cell gave '$r' (exit $ex)"; fail=1; }
+[ "$ex" -eq 0 ] && [ "$r" = "$(printf 'Full suite (round-only)\t')" ] && echo "  ok    an empty second cell is a row with no command, the third cell never becomes the command" \
+  || { echo "::error::suite row parser: an empty command cell must be a row with no command - gave '$r' (exit $ex)"; fail=1; }
+for fr in '| Full suite B (round-only) |' '| Full suite B (round-only)'; do
+  r="$(fsr "$fr")"; ex=$?
+  [ "$ex" -eq 0 ] && [ "$r" = "$(printf 'Full suite B (round-only)\t')" ] && echo "  ok    a missing command cell ($fr) is a row with no command" \
+    || { echo "::error::suite row parser: a missing command cell must be a row with no command - '$fr' gave '$r' (exit $ex)"; fail=1; }
+done
 r="$(fsr '| Full suite (round-only) | `bash t.sh` | echo PWNED |')"
 [ "$r" = "$(printf 'Full suite (round-only)\tbash t.sh')" ] && echo "  ok    a third cell is dropped: the command is the second cell alone" \
   || { echo "::error::suite row parser: a three-cell row gave '$r'"; fail=1; }
@@ -4506,6 +4511,57 @@ r="$(fsr '| Full suite (round-only) | `a \| b` |')"
 [ "$r" = "$(printf 'Full suite (round-only)\ta | b')" ] && echo "  ok    an escaped pipe stays inside the second cell" \
   || { echo "::error::suite row parser: an escaped pipe gave '$r'"; fail=1; }
 rm -f fsr.md
+
+echo "suite: a row with an empty or missing command cell is a red step that names it, never SUITE: none or a silent drop (gate-split-10 finding 2)"
+sxe=0
+for fr in '| Full suite (round-only) |  |' '| Full suite (round-only) |'; do
+  sxe=$((sxe + 1))
+  grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+  printf '%s\n' "$fr" >> CLAUDE.md
+  git add -A && git commit -qm "fixture: a sole full-suite row with no command" >/dev/null
+  sx_open "sxempty$sxe"
+  rd="docs/specs/sxempty$sxe/council/round-1"
+  out="$(council suite "docs/specs/sxempty$sxe" 2>&1)"; ex=$?
+  [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL" and .steps == 1' >/dev/null 2>&1 \
+    && grep -qE '^STEP 1/1: FAIL ' "$rd/suite.log" && grep -qE '^PART full-suite-round-only- FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \
+    && ! grep -q '^SUITE: none' "$rd/suite.log" \
+    && echo "  ok    sole row '$fr' -> STEP FAIL, a PART line names the row, SUITE: FAIL" \
+    || { echo "::error::suite empty row: a row with no command must be a red step naming it - '$fr' exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+done
+grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+printf '| Full suite unit (round-only) | `true` |\n| Full suite e2e (round-only) |  |\n' >> CLAUDE.md
+git add -A && git commit -qm "fixture: a good row and an empty one" >/dev/null
+sx_open sxempty3
+rd="docs/specs/sxempty3/council/round-1"
+council suite docs/specs/sxempty3 >/dev/null 2>&1
+out="$(council suite docs/specs/sxempty3 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 2 and .steps == 2 and .done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && grep -qE '^PART full-suite-unit-round-only- ok ' "$rd/suite.log" \
+  && grep -qE '^PART full-suite-e2e-round-only- FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \
+  && echo "  ok    unit=true + e2e empty -> steps 2, the e2e row is named FAIL, SUITE: FAIL" \
+  || { echo "::error::suite empty row: an empty row beside a good one must be a red step naming it - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+
+echo "suite: a step beyond the row count fails, two rows with one Purpose get distinct PART names (gate-split-10 finding 3)"
+grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+printf '| Full suite (round-only) | `true` |\n| Full suite (round-only) | `false` |\n' >> CLAUDE.md
+git add -A && git commit -qm "fixture: two rows with one Purpose" >/dev/null
+sx_open sxdup
+rd="docs/specs/sxdup/council/round-1"
+council suite docs/specs/sxdup >/dev/null 2>&1
+out="$(council suite docs/specs/sxdup 2>&1)"; ex=$?
+p1="$(grep '^PART ' "$rd/suite.log" | sed -n 1p | awk '{ print $2 }')"; p2="$(grep '^PART ' "$rd/suite.log" | sed -n 2p | awk '{ print $2 }')"
+[ "$ex" -eq 0 ] && [ -n "$p1" ] && [ -n "$p2" ] && [ "$p1" != "$p2" ] \
+  && tail -1 "$rd/suite.log" | grep -qF "part $p2 failed" \
+  && echo "  ok    two rows named 'Full suite (round-only)' -> PART $p1 and PART $p2, the verdict names the failed one" \
+  || { echo "::error::suite duplicate purpose: two rows with one Purpose must get distinct PART names - p1=$p1 p2=$p2 log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+sx_open sxbeyond
+rd="docs/specs/sxbeyond/council/round-1"; rh="$(sed -n 's/^head=//p' "$rd/ROUND")"
+printf 'head=%s steps=3\nSTEP 1/3: ok 0s\nSTEP 2/3: ok 0s\n' "$rh" > "$rd/suite.log"
+out="$(council suite docs/specs/sxbeyond 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 3 and .steps == 3 and .done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && grep -qE '^STEP 3/3: FAIL ' "$rd/suite.log" && grep -qE '^PART step-3-no-row FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \
+  && echo "  ok    step 3 of a log over 2 rows -> STEP 3/3 FAIL, PART step-3-no-row, SUITE: FAIL" \
+  || { echo "::error::suite step beyond rows: a step past the row count must fail - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
 
 echo "suite: no round-only full-suite row -> SUITE: none, done at once"
 sx_row
