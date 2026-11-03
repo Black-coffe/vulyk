@@ -190,17 +190,26 @@ const rejectionFor = (seat) => {
 
 // The round's integration gate: `cycle.sh suite` runs one step per call into council/round-N/suite.log
 // and says done:true when the log is finished; a finished log answers with a no-op. Every call goes
-// through the clerk (no shell here); ok:false stops the run like any refused verb.
+// through the clerk (no shell here); ok:false stops the run like any refused verb. A clerk line that
+// cannot be read is asked again within the same 32 calls: safe, since each call resumes the log at
+// its next step and a finished log is a no-op, so a step the lost line ran is never run twice.
 const SUITE_CALLS = 32
 const gate = async (st) => {
   const cmd = `suite ${spec} --commit --stamp ${stamp}`
+  let bad = null
   for (let k = 0; k < SUITE_CALLS; k++) {
-    const r = await ask(cmd)
+    let r
+    try { r = await ask(cmd) } catch (e) {
+      if (!(e instanceof BadLine)) throw e
+      bad = e.line
+      log(`cycle-clerk: unreadable result from "${cmd}", asking suite again`)
+      continue
+    }
     if (r.exit === 3) throw new Paused()
     if (r.ok === false) fail(st, { verb: r.verb || 'suite', failed: r.failed, exit: r.exit, next: r.next, error: r.error })
     if (r.done === true) return
   }
-  fail(st, { verb: 'suite', error: `suite not done after ${SUITE_CALLS} calls` })
+  fail(st, { verb: 'suite', error: `suite not done after ${SUITE_CALLS} calls` + (bad === null ? '' : `; last unreadable clerk line: ${bad}`) })
 }
 
 const council = async (st) => {

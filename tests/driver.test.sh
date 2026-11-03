@@ -573,9 +573,26 @@ const blindPromptsClean = (r) => r.dispatches
     });
     check(rf.suiteCmds.length === 1 && rf.dispatches.length === 0 && rf.result.stop && rf.result.stop.verb === 'suite' && rf.result.stop.exit === 5
       && rf.clerkCmds[rf.clerkCmds.length - 1] === RELEASE, 'suite: ok:false stops the run, no dispatch, still releases', rf.result);
-    // an unreadable line is a BadLine stop
+    // a clerk line cut short (its last `}` lost) once: the gate asks suite again and the run reaches the seats
+    const cut = JSON.stringify({ ...suiteDone, step: 1, steps: 2, done: false }).slice(0, -1);
+    const rc = await run(ARGS, {
+      clerk: [[CLAIM, adv(round('review'))], [INGEST, adv(green())], [RELEASE, releaseOk]],
+      suite: (c, k) => (k === 0 ? cut : { ...suiteDone, step: 2, steps: 2 }),
+    });
+    check(rc.suiteCmds.length === 2 && rc.dispatches.length === 1 && rc.result.next === 'green' && rc.mismatches.length === 0,
+      'suite: a broken clerk line is asked again, the run still reaches the seats', { s: rc.suiteCmds, d: rc.dispatches.length, result: rc.result });
+    // neighbour form: an empty clerk reply (the clerk itself died) is asked again the same way
+    const re = await run(ARGS, {
+      clerk: [[CLAIM, adv(round('review'))], [INGEST, adv(green())], [RELEASE, releaseOk]],
+      suite: (c, k) => (k === 0 ? '' : suiteDone),
+    });
+    check(re.suiteCmds.length === 2 && re.dispatches.length === 1 && re.result.next === 'green',
+      'suite: an empty clerk reply is asked again', { s: re.suiteCmds.length, d: re.dispatches.length, result: re.result });
+    // a clerk that never answers in JSON: still bounded by the 32 calls, the stop names the last raw line, no seat
     const rg = await run(ARGS, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]], suite: () => 'garbage' });
-    check(rg.result === 'garbage' && rg.dispatches.length === 0, 'suite: an unreadable line ends the run with the raw line', rg.result);
+    check(rg.suiteCmds.length === 32 && rg.dispatches.length === 0 && rg.result.stop && rg.result.stop.verb === 'suite'
+      && /garbage/.test(rg.result.stop.error) && rg.clerkCmds[rg.clerkCmds.length - 1] === RELEASE,
+      'suite: unreadable lines stop after 32 calls with the raw line, no dispatch, still releases', { n: rg.suiteCmds.length, result: rg.result });
   }
 
   check(!everyAgentType.has('queen-planner'), 'no queen-planner dispatch in any scenario', [...everyAgentType]);

@@ -1537,8 +1537,13 @@ sed -n '/^6\. /,/^Never edit/p' "$SRC/.claude/commands/vulyk-update.md" | grep '
 print_commands_placeholder_text="$(sed -n '/^print_commands_placeholder() {/,/^}/p' "$SRC/install.sh")"
 printf '%s\n' "$print_commands_placeholder_text" \
   | expect "gate split: the install template names the 300 s part cap" "each one part under a 300 s cap"
-sed -n '/^## \[Unreleased\]/,/^## \[[0-9]/p' "$SRC/CHANGELOG.md" \
-  | expect "gate split: CHANGELOG [Unreleased] has the gate-split entry" "Gate split (ADR-029)"
+# the whole file, not [Unreleased]: the release commit moves the entry under its version header
+cat "$SRC/CHANGELOG.md" \
+  | expect "gate split: CHANGELOG has the gate-split entry" "Gate split (ADR-029)"
+# ...and the check must hold on that released shape too
+awk '{ print } /^## \[Unreleased\]$/ { print ""; print "## [9.9.9] - 2099-01-01" }' "$SRC/CHANGELOG.md" > "$T/changelog-released.md"
+cat "$T/changelog-released.md" \
+  | expect "gate split: a released CHANGELOG still has the gate-split entry" "Gate split (ADR-029)"
 
 # a hive bootstrapped before 0.36.0 keeps its own full-suite row name: the upgrade names it
 # (suite-row-upgrade-01), for the original `Full test suite`, a canonical name missing
