@@ -180,7 +180,6 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
 **Approved:** Andrei, 2026-11-02 (Windows part times from the local round log, no Windows CI job)
 **Briefed:** <written by scripts/cycle.sh briefed>
 **Branch:** vulyk/gate-split
-**Checked:** <written by scripts/human-check.sh>
 **Council:** RED round 1, 2026-11-02, at 57270fb, pack e86c1131360a - red: 9
 **Council:** ESCALATE round 2, 2026-11-02, at efb4e9f, pack 02d1723a7773 - red: 9
 **Council:** RED round 3, 2026-11-03, at d5978a8, pack 22e4a6c40747 - red: 9
@@ -192,3 +191,4 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
 - ask 9: RED - see docs/specs/gate-split/council/round-2/*.md for evidence
 - no progress: ask 9 RED in rounds 1 and 2
 - seats: docs/specs/gate-split/council/round-2/
+**Checked:** ACCEPTED by Andrei, 2026-11-03, at 20f6270 - narrow fix 20f6270 (gate() BadLine re-ask, CHANGELOG check); owner answer verbatim: «ACCEPTED (Рекомендую)», looked at the diff in chat
