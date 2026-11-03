@@ -286,3 +286,4 @@
 {"v":1,"ts":"2026-11-03T08:34:20Z","code":"agent_prefix_high","value":56730,"threshold":50000,"vulyk":"0.44.0","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-a601620edea3e16b0.jsonl"}
 {"v":1,"ts":"2026-11-03T12:03:24Z","code":"context_high","value":164039,"threshold":140000,"vulyk":"0.45.0","tier":0,"model":"opus","agent":"","spec":"","story":"","ref":"session:80d96525-f5d1-4152-b77f-74ddcb519c67.jsonl"}
 {"v":1,"ts":"2026-11-03T12:20:57Z","code":"context_high","value":196777,"threshold":140000,"vulyk":"0.45.0","tier":0,"model":"opus","agent":"","spec":"","story":"","ref":"session:f7c9d020-a6a6-4acd-8952-ecfae4bee751.jsonl"}
+{"v":1,"ts":"2026-11-03T17:06:34Z","code":"context_high","value":162157,"threshold":140000,"vulyk":"0.46.0","tier":0,"model":"opus","agent":"","spec":"","story":"","ref":"session:e2555281-42db-4dda-8fcb-9bb6e742a539.jsonl"}
