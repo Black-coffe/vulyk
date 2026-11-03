@@ -50,7 +50,7 @@ suite.log so the next slowdown names its cause.
 
 ## Descoped
 
-*(empty)*
+- post-046-tails-03, ask 5: telemetry parts constitution3, mods and mods2 stay over the 70 s idle line (86, 74, 72 s idle; 106, 90, 87 s in the round-1 gate). Each is one chain of install.sh runs (20-27 s each) on one hive, and a further cut rebuilds that hive with the same runs. wrapper2, the one projected past the 300 s cap under a 3x load, is cut again in repair round 1 (wrapper2 + wrapper3). The owner chose the option «wrapper2 режем, 3 в Descoped» on 2026-11-03; a faster install.sh goes to the next circle.
 
 ## Plan deltas
 
