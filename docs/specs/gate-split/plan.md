@@ -184,6 +184,7 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
 **Council:** RED round 1, 2026-11-02, at 57270fb, pack e86c1131360a - red: 9
 **Council:** ESCALATE round 2, 2026-11-02, at efb4e9f, pack 02d1723a7773 - red: 9
 **Council:** RED round 3, 2026-11-03, at d5978a8, pack 22e4a6c40747 - red: 9
+**Council:** GREEN round 4, 2026-11-03, at 4aae83f, pack 49cacecfa97e
 **Shipped:** <written by scripts/ship-check.sh --record>
 
 ## Needs a human
