@@ -111,7 +111,7 @@ jobs:
           exit $fail
 
   full-suite:
-    name: every tests/*.test.sh at once (tests/full-suite.sh, uncapped) on ${{ matrix.os }}
+    name: every tests/*.test.sh at once (tests/full-suite.sh, 300 s cap per part) on ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -144,10 +144,10 @@ jobs:
       - name: Claude Code CLI for mods.test.sh
         run: npm install -g @anthropic-ai/claude-code && claude --version
 
-      # 2400 s, not the 590 s default: a hosted runner has fewer cores than the review box the budget is tuned
-      # to. Capped, not 0: a hung suite ends as a named TIMEOUT with its log tails before timeout-minutes cancels.
+      # Every part runs under its own 300 s cap (VULYK_PART_CAP default): a part at its cap or past 70% of it is red.
+      # VULYK_STRICT_SKIP=1: a SKIP is a failure here. The PART lines (name, time, cap) reach the job log.
       - name: full suite - cycle, council, driver, e2e, solo, maintenance, telemetry, token-report, ...
-        run: VULYK_SUITE_TIMEOUT=2400 bash tests/full-suite.sh
+        run: VULYK_STRICT_SKIP=1 bash tests/full-suite.sh
 
   handoff-window:
     name: handoff.py resolves the context window

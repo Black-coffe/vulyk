@@ -164,9 +164,32 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
 
 ## Plan deltas
 
+1. 2026-11-02, wave 2: `bash tests/cycle.test.sh` whole takes 307-309 s alone, over the 300 s per-line cap
+   `gate-split-02` landed, so `gate-split-04` could take no red receipt. The line is dropped from its `## Verification`;
+   the round's stepped suite runs all eight cycle parts. Rejected: `--part` lines (close-story runs only `## Commands`
+   cells, there is no `Cycle part` row, and CLAUDE.md is `gate-split-06`'s file) and raising the cap (the card).
+   Tail, not this spec: the CLAUDE.md `Cycle` row is itself a line over the cap; a `--part <topic>` cell needs ~20
+   bytes the ADR-016 budget (7156/7168) does not have.
+2. 2026-11-02 (side-agent note): the 300 s line clamp also binds a hive's story rows; the old
+   `VULYK_VERIFY_TIMEOUT=1800` bypass ends. `gate-split-06`'s hive note says so; before upgrading a hive, time the
+   rows its stories name and cut any over ~210 s first.
+3. 2026-11-02, wave 2: `gate-split-04`'s sealed escalate test greps the fixture plan.md copied from
+   `templates/plan.md`, whose line 37 still names `VULYK_SUITE_TIMEOUT`; that file moves from `gate-split-06` to
+   `gate-split-04`. Rejected: editing the sealed test after the receipt.
+
 **Approved:** Andrei, 2026-11-02 (Windows part times from the local round log, no Windows CI job)
 **Briefed:** <written by scripts/cycle.sh briefed>
-**Branch:** <written by /vulyk-build before wave 1>
-**Checked:** <written by scripts/human-check.sh>
-**Council:** <written by scripts/cycle.sh judge/escalate>
+**Branch:** vulyk/gate-split
+**Council:** RED round 1, 2026-11-02, at 57270fb, pack e86c1131360a - red: 9
+**Council:** ESCALATE round 2, 2026-11-02, at efb4e9f, pack 02d1723a7773 - red: 9
+**Council:** RED round 3, 2026-11-03, at d5978a8, pack 22e4a6c40747 - red: 9
+**Council:** GREEN round 4, 2026-11-03, at 4aae83f, pack 49cacecfa97e
 **Shipped:** <written by scripts/ship-check.sh --record>
+
+## Needs a human
+- reason: no-progress · round 2 · 2026-11-02
+- ask 9: RED - see docs/specs/gate-split/council/round-2/*.md for evidence
+- no progress: ask 9 RED in rounds 1 and 2
+- seats: docs/specs/gate-split/council/round-2/
+**Checked:** ACCEPTED by Andrei, 2026-11-03, at 20f6270 - narrow fix 20f6270 (gate() BadLine re-ask, CHANGELOG check); owner answer verbatim: «ACCEPTED (Рекомендую)»
+**Checked:** ACCEPTED by Andrei, 2026-11-03, at cbaaf51 - Diff посмотрел, принимаю. Отличная починка: защита драйвера от битых строк клерка через повторный запрос в пределах 32 попыток и фикс теста телеметрии для релизной структуры CHANGELOG полностью закрывают последние шероховатости перед релизом. Смело выпускайте 0.45.0 по плану.

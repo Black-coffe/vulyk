@@ -1287,7 +1287,7 @@ ASKS
         printf -- '- no progress: ask %s RED in rounds %s and %s\n' "$(json_num_csv "$repeated" | sed 's/,/, /g')" "$((N-1))" "$N"
       fi
       if [ "$escalate_reason" = "suite-timeout" ]; then
-        printf -- '- suite: %s s, budget %s s - raise VULYK_SUITE_TIMEOUT or cut the suite\n' "$suite_secs" "$suite_budget"
+        printf -- '- suite: %s s, budget %s s - an old SUITE: TIMEOUT report: cut the part that ran long (cycle.sh suite caps each part)\n' "$suite_secs" "$suite_budget"
       fi
       if [ "$escalate_reason" = "env" ]; then
         local aseat att
@@ -1599,25 +1599,35 @@ ask_evidenced_of() { # ask_evidenced_of <ask-line> -> "1" iff run:+saw: or url:+
   esac
 }
 
-full_suite_row_round_only() { # full_suite_row_round_only <constitution> -> 0 iff its ## Commands
-  # has a row whose Purpose cell names the full suite and carries `round-only` (fast-verification-07)
-  # and whose command cell is runnable: `<fill in...>`, `none` or an empty cell is no suite to run
-  # (fast-verification-08), so `SUITE: none` is the right report for it.
+full_suite_row() { # full_suite_row <constitution> -> "<purpose><TAB><command>", one line per ## Commands
+  # row whose Purpose cell names the full suite and carries `round-only` (fast-verification-07), unless its
+  # command cell says `<fill in...>` or `none`: no suite to run (fast-verification-08), so `SUITE: none` is
+  # the right report for it. An empty or missing command cell is never dropped: it prints the row with an
+  # empty command, which cmd_suite turns into a red step naming the row (gate-split-10). Every such row,
+  # in table order: a hive may split its full run into several part rows (gate-split-08). The command is exactly the
+  # second cell (an escaped \| stays inside it); later cells are never part of it. Nothing (exit 1) when none.
   [ -f "$1" ] || return 1
   awk '
     /^## Commands[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/            { if (inblock) exit }
     inblock && /^\|/ {
-      line = $0; sub(/^\|/, "", line); i = index(line, "|"); if (!i) next
-      p = tolower(substr(line, 1, i - 1))
+      line = $0; sub(/\r$/, "", line); gsub(/\\[|]/, "\001", line)
+      n = split(line, cell, "|"); if (n < 2) next
+      po = cell[2]; gsub(/\001/, "|", po); sub(/^[[:space:]]+/, "", po); sub(/[[:space:]]+$/, "", po)
+      p = tolower(po)
       if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) {
-        c = tolower(substr(line, i + 1)); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c)
-        if (c == "" || c ~ /^\|/ || c ~ /^<fill in/ || c ~ /^none([^[:alnum:]_-]|$)/) next
-        found = 1; exit
+        c = (n >= 3) ? cell[3] : ""; gsub(/\001/, "|", c); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c); sub(/[[:space:]]+$/, "", c)
+        lc = tolower(c)
+        if (lc ~ /^<fill in/ || lc ~ /^none([^[:alnum:]_-]|$)/) next
+        printf "%s\t%s\n", po, c; found = 1
       }
     }
     END { exit !found }
   ' "$1"
+}
+
+full_suite_row_round_only() { # full_suite_row_round_only <constitution> -> 0 iff full_suite_row finds a row
+  full_suite_row "$1" >/dev/null
 }
 
 cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <report> <model-opt> <head>
@@ -1642,6 +1652,18 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
     echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
     emit false record-seat 4 error "MALFORMED: $why"
     exit 4
+  fi
+
+  # gate-split-04: the round's own gate ran before the seats (`cycle.sh suite`); a finished
+  # council/round-N/suite.log keyed to this round's head is the SUITE line, whatever the report says:
+  # every reported `SUITE:` line is dropped and the log's goes right under the VERDICT line.
+  local logline; logline="$(suite_log_line "$RD")"
+  if [ -n "$logline" ]; then
+    REPORT="$(printf '%s\n' "$REPORT" | tr -d '\r' | awk -v s="$logline" '
+      /^SUITE:/ { next }
+      { print }
+      !done && NF { print s; done = 1 }
+      END { if (!done) print s }')"
   fi
 
   # fast-verification-07/08: when the constitution has a round-only full-suite row with a runnable
@@ -1966,46 +1988,56 @@ EOF
 }
 
 verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification runner (close-story,
-  # stamp-red). ADR-013 D5: the whole run - every line, every repeat - shares one budget under
-  # `timeout`, so verification slower than the Bash tool's 10-minute cap reports 124 instead of
-  # dying with the tool call. A per-command budget would not do: a repair story unions every story's
-  # lines, and five 500 s commands still pass five 540 s limits. 540 s leaves the verb its own
-  # margin inside that cap. Each line runs under lib.sh's run_capped (timeout, gtimeout or the Python
-  # cap, else uncapped with its warning); capped_by says whether a cap exists, so an uncapped run never
-  # reads a command's own 124 as a timeout.
+  # stamp-red). gate-split-02: every line runs under its own cap, VULYK_VERIFY_TIMEOUT (default 300,
+  # never above 300), so one slow line names itself and a timeout is that line's. The call has a budget,
+  # VULYK_VERIFY_CALL (default 540, inside the Bash tool's 10-minute cap): a line starts only when its
+  # cap still fits what is left of it (the first line of a call always runs); otherwise the runner stops
+  # with VR_PAUSE = the number of the line it would run next, and the verb writes a resume mark and exits
+  # 7. VR_START (set by the verb) is the line a resumed call begins at; lines count across <reps>. Each
+  # line runs under lib.sh's run_capped (timeout, gtimeout or the Python cap, else uncapped with its
+  # warning); capped_by says whether a cap exists, so an uncapped run never reads a command's own 124 as
+  # a timeout.
   # Without <outdir> (close-story): one command at a time, the whole block repeated <reps> times
   # (R18/M-3 - a single `bash -c "$multi_line_block"` used to report only the last line's exit
   # status), stopping at the first non-zero line. With <outdir> (stamp-red): every line once, its
-  # stdout+stderr in <outdir>/<k>.out (and echoed), its exit in VR_CODES[k], its text in VR_LINES[k];
-  # only a timeout stops it. Sets VR_VT, VR_TIMEOUT_OK, VR_RC (the stopping or last exit), VR_LINE,
-  # VR_RUN.
-  local cmds="$1" reps="$2" outdir="${3:-}" vline vrc left k=0 vstart="$SECONDS"
-  VR_VT="${VULYK_VERIFY_TIMEOUT:-540}"; VR_TIMEOUT_OK=0; VR_RC=0; VR_LINE=""; VR_RUN=0
+  # stdout+stderr in <outdir>/<k>.out (and echoed), its exit in <k>.code and VR_CODES[k], its text in
+  # <k>.line and VR_LINES[k] (a resumed call reads the earlier lines back from those files); only a
+  # timeout stops it. Sets VR_VT, VR_TIMEOUT_OK, VR_RC (the stopping or last exit), VR_LINE, VR_RUN,
+  # VR_PAUSE.
+  local cmds="$1" reps="$2" outdir="${3:-}" vline vrc k=0 vstart="$SECONDS" vcall start="${VR_START:-1}"
+  VR_VT="${VULYK_VERIFY_TIMEOUT:-300}"; VR_TIMEOUT_OK=0; VR_RC=0; VR_LINE=""; VR_RUN=0; VR_PAUSE=0
   VR_CODES=(); VR_LINES=()
-  case "$VR_VT" in ''|*[!0-9]*|0) VR_VT=540 ;; esac
+  case "$VR_VT" in ''|*[!0-9]*|0) VR_VT=300 ;; esac
+  [ "$VR_VT" -gt 300 ] && VR_VT=300
+  vcall="${VULYK_VERIFY_CALL:-540}"
+  case "$vcall" in ''|*[!0-9]*|0) vcall=540 ;; esac
   capped_by && VR_TIMEOUT_OK=1
   [ -n "$outdir" ] && reps=1
+  if [ -n "$outdir" ]; then
+    local j=1
+    while [ "$j" -lt "$start" ]; do
+      VR_CODES[$j]="$(cat "$outdir/$j.code" 2>/dev/null)"; VR_LINES[$j]="$(cat "$outdir/$j.line" 2>/dev/null)"
+      j=$((j+1))
+    done
+  fi
   local i=1
   while [ "$i" -le "$reps" ]; do
     VR_RUN="$i"
     while IFS= read -r vline; do
       [ -n "$vline" ] || continue
       [ "$vline" = "none — reviewed by lead-review" ] && continue
+      k=$((k+1))
+      [ "$k" -lt "$start" ] && continue
+      if [ "$k" -gt "$start" ] && [ $(( (SECONDS - vstart) + VR_VT )) -gt "$vcall" ]; then VR_PAUSE="$k"; return 0; fi
       if [ -n "$outdir" ]; then
-        k=$((k+1))
-        left=$(( VR_VT - (SECONDS - vstart) ))
-        if [ "$left" -le 0 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then vrc=124; : > "$outdir/$k.out"
-        else run_capped_as "$VULYK_CAP" "$(( left > 0 ? left : 1 ))" bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
-        fi
+        run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
         cat "$outdir/$k.out"
+        printf '%s' "$vrc" > "$outdir/$k.code"; printf '%s' "$vline" > "$outdir/$k.line"
         VR_CODES[$k]="$vrc"; VR_LINES[$k]="$vline"; VR_RC="$vrc"; VR_LINE="$vline"
         [ "$vrc" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ] && return 0
         continue
       fi
-      left=$(( VR_VT - (SECONDS - vstart) ))
-      if [ "$left" -le 0 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then vrc=124
-      else run_capped_as "$VULYK_CAP" "$(( left > 0 ? left : 1 ))" bash -c "$vline"; vrc=$?
-      fi
+      run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline"; vrc=$?
       VR_RC="$vrc"; VR_LINE="$vline"
       [ "$vrc" -ne 0 ] && return 0
     done <<EOF
@@ -2014,6 +2046,49 @@ EOF
     i=$((i+1))
   done
   return 0
+}
+
+verify_files_hash() { # verify_files_hash <story-file> -> set_hash of its ## Files entries (the story itself
+  # left out: the resume mark is written into it), in order
+  local story="${1#./}" p; local -a ps=()
+  while IFS= read -r p; do
+    [ -n "$p" ] && [ "${p#./}" != "$story" ] && ps+=("$p")
+  done <<EOF
+$(files_of "$1")
+EOF
+  set_hash ${ps[@]+"${ps[@]}"}
+}
+
+verify_resume_set() { # verify_resume_set <story-file> [<verb> <k> <hash>] - drop the frontmatter
+  # `verify_resume:` line, and write a new one before the closing `---` when given
+  local tmp
+  [ -n "${2:-}" ] || grep -q '^verify_resume:' "$1" || return 0
+  tmp="$(mktemp)"
+  awk -v line="${2:+verify_resume: $2 $3 $4}" '
+    NR == 1 && /^---[[:space:]]*$/ { infm=1; print; next }
+    infm && /^---[[:space:]]*$/    { if (line != "") print line; infm=0; print; next }
+    infm && /^verify_resume:/      { next }
+    { print }
+  ' "$1" > "$tmp" && cat "$tmp" > "$1"
+  rm -f "$tmp"
+}
+
+verify_resume_start() { # verify_resume_start <story-file> <verb> <hash> -> the line to start at: the
+  # mark's when it names this verb and this ## Files hash, else 1
+  local m v k h
+  m="$(fm_raw "$1" verify_resume)"
+  read -r v k h <<EOF
+$m
+EOF
+  if [ "$v" = "$2" ] && [ "$h" = "$3" ]; then case "$k" in ''|*[!0-9]*|0) echo 1 ;; *) echo "$k" ;; esac
+  else echo 1; fi
+}
+
+verify_pause() { # verify_pause <verb> <story-file> <k> <hash> - write the mark, print the exit-7 line, exit 7
+  verify_resume_set "$2" "$1" "$3" "$4"
+  echo "cycle: $1 - verification paused before line $3 (call budget); run the same command again, it resumes" >&2
+  printf '{"ok":false,"verb":"%s","exit":7,"next":"resume","resume":%s,"error":"verification paused before line %s: run the same command again"}\n' "$1" "$3" "$3"
+  exit 7
 }
 
 verify_cmd_list() { # verify_cmd_list <story-file> -> the ## Verification command lines, `repeat:` dropped
@@ -2033,6 +2108,56 @@ fm_red() { # fm_red <story-file> - the `red:` mark from the frontmatter only, cu
   # and trimmed as fm_field cuts it: a body line `red: ...` marks nothing (0.40.1)
   local v; v="$(fm_raw "$1" red)"; v="${v%%#*}"
   printf '%s' "${v%"${v##*[![:space:]]}"}"
+}
+
+path_overlap() { # path_overlap <path-or-glob> <path-or-glob> - 0 if the two can hit one file
+  # (wave-check.sh's overlap rule: exact path, glob, directory prefix)
+  local a="$1" b="$2"
+  [ "$a" = "$b" ] && return 0
+  case "$a" in */) case "$b" in "$a"*) return 0 ;; esac ;; esac
+  case "$b" in */) case "$a" in "$b"*) return 0 ;; esac ;; esac
+  # shellcheck disable=SC2254
+  case "$b" in $a) return 0 ;; esac
+  # shellcheck disable=SC2254
+  case "$a" in $b) return 0 ;; esac
+  return 1
+}
+
+finding_paths() { # finding_paths <findings> -> the path each finding starts with, one per line: its
+  # leading `- ` and `[tag]`s dropped, the first word cut at a `:`, kept only if it holds a `/` or a `.`
+  local line tok
+  while IFS= read -r line; do
+    line="${line#- }"
+    while :; do case "$line" in "["*"] "*) line="${line#*] }" ;; *) break ;; esac; done
+    tok="${line%% *}"; tok="${tok%%:*}"; tok="${tok//\`/}"
+    case "$tok" in */*|*.*) printf '%s\n' "$tok" ;; esac
+  done <<< "$1"
+}
+
+verify_lines_hitting() { # verify_lines_hitting <verification-lines> <paths> -> the lines with a path token
+  # overlapping one of <paths>, in order; none when <paths> is empty
+  local line tok p
+  [ -n "$2" ] || return 0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    while IFS= read -r tok; do
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        if path_overlap "$tok" "$p"; then printf '%s\n' "$line"; continue 3; fi
+      done <<< "$2"
+    done <<< "$(verify_path_tokens "$line")"
+  done <<< "$1"
+}
+
+repair_verification() { # repair_verification <verifs> <findings> <files> -> the repair's ## Verification lines,
+  # deduped: those covering a path the findings name; else those covering ## Files; else all of them
+  local all fp hit
+  all="$(printf '%s' "$1" | awk 'NF && !seen[$0]++')"
+  fp="$(finding_paths "$2")"
+  hit="$(verify_lines_hitting "$all" "$fp")"
+  [ -n "$hit" ] || hit="$(verify_lines_hitting "$all" "$3")"
+  [ -n "$hit" ] || hit="$all"
+  printf '%s\n' "$hit"
 }
 
 repair_unmarks() { # repair_unmarks <findings> <union-paths> <marked-paths> - exit 0 only when every
@@ -2156,8 +2281,16 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] - red-receipt: run the 
   local CMD_LIST; CMD_LIST="$(verify_cmd_list "$STORY")"
   verify_cells_check stamp-red "$CMD_LIST"
 
-  local OUTD; OUTD="$(mktemp -d)" || { emit false stamp-red 2 error "mktemp failed"; exit 2; }
-  verify_run "$CMD_LIST" 1 "$OUTD"
+  # gate-split-02: the call budget can stop the run between lines (exit 7); the earlier lines' results
+  # wait in a per-story directory under the temp dir until the resumed call has them all.
+  local VH VSTART OUTD; VH="$(verify_files_hash "$STORY")"
+  VSTART="$(verify_resume_start "$STORY" stamp-red "$VH")"
+  OUTD="${TMPDIR:-/tmp}/vulyk-sr-$(printf '%s' "$STORY" | cksum | cut -d' ' -f1)"
+  [ "$VSTART" -gt 1 ] && [ -d "$OUTD" ] || { VSTART=1; rm -rf "$OUTD"; }
+  mkdir -p "$OUTD" || { emit false stamp-red 2 error "mkdir failed"; exit 2; }
+  VR_START="$VSTART" verify_run "$CMD_LIST" 1 "$OUTD"
+  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause stamp-red "$STORY" "$VR_PAUSE" "$VH"; fi
+  verify_resume_set "$STORY"
   if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
     rm -rf "$OUTD"; red_refuse "not red: timed out after ${VR_VT}s"
   fi
@@ -2361,7 +2494,11 @@ EOF
 
   verify_cells_check close-story "$CMD_LIST"
 
-  verify_run "$CMD_LIST" "$REPS"
+  local VH VSTART; VH="$(verify_files_hash "$STORY")"
+  VSTART="$(verify_resume_start "$STORY" close-story "$VH")"
+  VR_START="$VSTART" verify_run "$CMD_LIST" "$REPS"
+  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause close-story "$STORY" "$VR_PAUSE" "$VH"; fi
+  verify_resume_set "$STORY"
   if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
     echo "cycle: close-story - verification timed out after ${VR_VT}s (run $VR_RUN/$REPS): $VR_LINE" >&2
     emit false close-story 4 repair "verification timed out after ${VR_VT}s: $VR_LINE"
@@ -2566,6 +2703,7 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   local rd="$spec/council/round-$n"
   mkdir -p "$rd"
   clean_court "$slug"
+  rm -f "$rd/suite.log" # gate-split-04: a re-stamp in place starts the round's gate over
 
   # C15/ADR-013 D3: the tier and the roster are derived once, here, and frozen into the round
   # (tier=, seats=) - a plan.md or Profile edit mid-round (or a stale re-stamp) never changes
@@ -2816,6 +2954,186 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
     exit 6
   }
   build_round "$SPEC" "$SLUG" "$((ROUND_COUNT+1))" "$HEAD" "$PACK" "$CEILING" "$DOCOMMIT"
+}
+
+# --- suite: the round's integration gate, one step per call (gate-split-04) ------------------
+# The open round's round-only full-suite row runs here, before the seats, into
+# council/round-N/suite.log (paperwork): `head=<ROUND head> steps=<S>`, then per step
+# `STEP K/S: ok|FAIL <N>s` and that step's PART lines, then one `SUITE: ok <N>s | FAIL <N>s - <why> |
+# none` line. A stepped row (Purpose has `steps`) is `<cmd> --steps` / `<cmd> --step K` under a 590 s
+# call cap; any other row is one part under VULYK_PART_CAP (default 300, never above). A red part
+# (FAIL, CAP, or one suite-parts-check.sh names) makes the gate FAIL: data, exit 0.
+
+suite_log_line() { # suite_log_line <round-dir> -> the SUITE: line of a finished suite.log keyed to the
+  # round's ROUND head=, or nothing (no log, another head, not finished)
+  local log="$1/suite.log" rh lh last
+  [ -f "$log" ] || return 0
+  rh="$(round_field "$1" head)"
+  lh="$(head -1 "$log" | tr -d '\r' | sed -n 's/^head=\([^ ]*\).*/\1/p')"
+  [ -n "$rh" ] && [ "$rh" = "$lh" ] || return 0
+  last="$(tail -1 "$log" | tr -d '\r')"
+  case "$last" in "SUITE: "*) printf '%s' "$last" ;; esac
+}
+
+suite_cut_names() { # suite_cut_names <log> -> each part name suite-parts-check.sh says to cut, one per line
+  bash "$HERE/suite-parts-check.sh" "$1" 2>/dev/null | sed -n 's/^suite-parts-check: cut part \(.*\): [0-9]*s of cap .*/\1/p'
+}
+
+suite_red_parts() { # suite_red_parts <log> -> its red PART lines: FAIL, CAP, or named by suite-parts-check.sh
+  [ -f "$1" ] || return 0
+  tr -d '\r' < "$1" | awk -v cut="$(suite_cut_names "$1")" '
+    BEGIN { n = split(cut, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") c[a[i]] = 1 }
+    $1 == "PART" && ($3 == "FAIL" || $3 == "CAP" || ($2 in c)) { print }'
+}
+
+suite_verdict() { # suite_verdict <log> -> the closing `SUITE: ok <N>s` or `SUITE: FAIL <N>s - <why>` line
+  local log="$1" secs why
+  secs="$(tr -d '\r' < "$log" | awk '$1 == "STEP" { v = $4; sub(/s$/, "", v); t += v } END { print t + 0 }')"
+  why="$(tr -d '\r' < "$log" | awk -v cut="$(suite_cut_names "$log")" '
+    BEGIN { n = split(cut, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "" && !(a[i] in c)) { c[a[i]] = 1; out = out sep "cut part " a[i]; sep = ", " } }
+    $1 == "PART" && $3 == "FAIL" && !($2 in c) && !($2 in f) { f[$2] = 1; out = out sep "part " $2 " failed"; sep = ", " }
+    $1 == "STEP" && $3 == "FAIL" { k = $2; sub(/:$/, "", k); st = st ssep "step " k " failed"; ssep = ", " }
+    END { if (out != "") print out; else if (st != "") print st }')"
+  if [ -n "$why" ]; then printf 'SUITE: FAIL %ss - %s' "$secs" "$why"; else printf 'SUITE: ok %ss' "$secs"; fi
+}
+
+suite_emit() { # suite_emit <spec> <step> <steps> <done:true|false> <suite> - the verb's exit-0 line
+  local st rc next tail=""
+  st="$(cmd_status "$1")"; rc=$?
+  next="$(json_field "$st" next)"
+  [ "$rc" -eq 0 ] && [ -n "$st" ] && ! printf '%s' "$st" | grep -q '"ok":false' && tail=",\"status\":$st"
+  printf '{"ok":true,"verb":"suite","exit":0,"next":"%s","step":%s,"steps":%s,"done":%s,"suite":"%s"%s}\n' \
+    "$(json_escape "$next")" "$2" "$3" "$4" "$5" "$tail"
+}
+
+cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
+  local SPEC="$1" DOCOMMIT="$2" STAMP="${3:-}"
+  [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
+    echo "cycle: usage: $0 suite <spec-dir> [--commit] [--stamp <s>]" >&2
+    emit false suite 1 error "usage"
+    exit 1
+  }
+  pause_guard "$SPEC" suite
+  driver_guard "$SPEC" suite "$STAMP"
+  branch_guard "$SPEC" suite
+
+  local SLUG RD N; SLUG="$(slug_of "$SPEC")"; RD="$(current_round_dir "$SPEC")"
+  if [ -z "$RD" ] || [ ! -f "$RD/ROUND" ] || row_exists "$SLUG" "${RD##*/round-}"; then
+    echo "cycle: suite - $SLUG has no open round; run open-round first" >&2
+    emit false suite 2 error "no open round"
+    exit 2
+  fi
+  N="${RD##*/round-}"
+  if round_is_stale "$SPEC" "$N"; then
+    echo "cycle: suite - round $N is stale (ROUND head=$(round_field "$RD" head), current HEAD=$(git rev-parse --short HEAD 2>/dev/null)); run open-round" >&2
+    emit false suite 5 stale "stale"
+    exit 5
+  fi
+
+  local LOG="$RD/suite.log" RHEAD S K
+  RHEAD="$(round_field "$RD" head)"
+  local done_line; done_line="$(suite_log_line "$RD")"
+  if [ -n "$done_line" ]; then # a finished log: no-op
+    S="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/.* steps=\([0-9][0-9]*\).*/\1/p')"; S="${S:-0}"
+    [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N" "$LOG"
+    echo "cycle: $SLUG - round $N suite already finished: $done_line"
+    suite_emit "$SPEC" "$S" "$S" true "$(printf '%s' "$done_line" | awk '{ print $2 }')"
+    exit 0
+  fi
+
+  # Several round-only full-suite rows (gate-split-08): each row is one step, run as one capped part,
+  # and a `steps` marker is read only on a single row. One row keeps the stepped / plain split.
+  local rows row purpose cmd stepped=0 nrows=0
+  rows="$(full_suite_row "$(constitution_file "$ROOT")")"
+  [ -n "$rows" ] && nrows="$(printf '%s\n' "$rows" | grep -c .)"
+  row="$(printf '%s\n' "$rows" | sed -n 1p)"
+  purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
+  [ "$nrows" -le 1 ] && [ -n "$cmd" ] && case " $(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' ' ') " in *" steps "*) stepped=1 ;; esac
+
+  # A log keyed to another head (an earlier code state) is discarded, never resumed.
+  local lh=""; [ -f "$LOG" ] && lh="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/^head=\([^ ]*\).*/\1/p')"
+  [ -f "$LOG" ] && [ "$lh" != "$RHEAD" ] && rm -f "$LOG"
+
+  if [ ! -f "$LOG" ]; then
+    if [ -z "$row" ]; then
+      printf 'head=%s steps=0\nSUITE: none\n' "$RHEAD" > "$LOG"
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N none" "$LOG"
+      echo "cycle: $SLUG - round $N: no round-only full-suite row, SUITE: none"
+      suite_emit "$SPEC" 0 0 true none
+      exit 0
+    fi
+    S=1; [ "$nrows" -gt 1 ] && S="$nrows"
+    if [ "$stepped" = 1 ]; then
+      local sout src
+      sout="$(run_capped 590 bash -c "$cmd --steps" 2>/dev/null)"; src=$?
+      S="$(printf '%s\n' "$sout" | tr -d '\r' | awk 'NF { l = $1 } END { print l }')"
+      case "$S" in ''|*[!0-9]*|0)
+        printf 'head=%s steps=0\nSUITE: FAIL 0s - %s --steps gave no step count (exit %s)\n' "$RHEAD" "$cmd" "$src" > "$LOG"
+        [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N FAIL" "$LOG"
+        echo "cycle: $SLUG - round $N: $cmd --steps gave no step count (exit $src)" >&2
+        suite_emit "$SPEC" 0 0 true FAIL
+        exit 0 ;;
+      esac
+    fi
+    printf 'head=%s steps=%s\n' "$RHEAD" "$S" > "$LOG"
+  fi
+  S="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/.* steps=\([0-9][0-9]*\).*/\1/p')"; S="${S:-1}"
+  K=$(( $(tr -d '\r' < "$LOG" | grep -c '^STEP ') + 1 ))
+  # Step K runs row K; a K past the rows (the log's steps= outgrew the table) has no row to run, and
+  # neither has a row with an empty command cell: both are a red step below, never `ok` from `bash -c ""`.
+  if [ "$stepped" != 1 ]; then
+    if [ "$K" -le "$nrows" ]; then
+      row="$(printf '%s\n' "$rows" | sed -n "${K}p")"
+      purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
+    else
+      purpose="step $K: no row"; cmd=""
+    fi
+  fi
+
+  # --- run step K: its STEP line and its PART lines, appended as one block ---------------------
+  local t0="$SECONDS" out rc parts secs sres=ok note="" tmp
+  if [ "$stepped" = 1 ]; then
+    out="$(run_capped 590 bash -c "$cmd --step $K" 2>&1)"; rc=$?
+    secs=$((SECONDS - t0))
+    parts="$(printf '%s\n' "$out" | tr -d '\r' | grep '^PART ')"
+    [ "$rc" -eq 124 ] && note=" - timed out after 590s"
+  else
+    local cap="${VULYK_PART_CAP:-300}" pname pres=ok
+    case "$cap" in ''|*[!0-9]*|0) cap=300 ;; esac
+    [ "$cap" -gt 300 ] && cap=300
+    pname="$(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g')"
+    # Two rows whose Purposes give one name: each part takes its step number, so the log tells them apart.
+    if [ "$(printf '%s\n' "$rows" | cut -f1 | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9][^a-z0-9]*/-/g' | grep -cxF -- "$pname")" -gt 1 ]; then
+      case "$pname" in *-) pname="$pname$K" ;; *) pname="$pname-$K" ;; esac
+    fi
+    if [ -z "$cmd" ]; then
+      rc=1; secs=0; parts="PART $pname FAIL 0s cap ${cap}s - no command in its row"
+    else
+      run_capped "$cap" bash -c "$cmd" >/dev/null 2>&1; rc=$?
+      secs=$((SECONDS - t0))
+      [ "$rc" -ne 0 ] && pres=FAIL
+      if [ "$rc" -eq 124 ]; then parts="PART $pname CAP ${secs}s cap ${cap}s - timed out"
+      else parts="PART $pname $pres ${secs}s cap ${cap}s"; fi
+    fi
+  fi
+  tmp="$RD/.suite-step.tmp"
+  printf '%s\n' "$parts" > "$tmp"
+  { [ "$rc" -ne 0 ] || ! bash "$HERE/suite-parts-check.sh" "$tmp" >/dev/null 2>&1; } && sres=FAIL
+  rm -f "$tmp"
+  {
+    printf 'STEP %s/%s: %s %ss%s\n' "$K" "$S" "$sres" "$secs" "$note"
+    [ -n "$parts" ] && printf '%s\n' "$parts"
+  } >> "$LOG"
+  local sv=pending is_done=false
+  if [ "$K" -ge "$S" ]; then
+    local verdict; verdict="$(suite_verdict "$LOG")"
+    printf '%s\n' "$verdict" >> "$LOG"
+    sv="$(printf '%s' "$verdict" | awk '{ print $2 }')"; is_done=true
+  fi
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N step $K/$S" "$LOG"
+  echo "cycle: $SLUG - round $N suite step $K/$S: $sres ${secs}s"
+  suite_emit "$SPEC" "$K" "$S" "$is_done" "$sv"
+  exit 0
 }
 
 # --- reopen: the tier's own ceiling again after ESCALATE (D6; convergent-judge) - Tier 1 +1,
@@ -3177,6 +3495,8 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
     # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
     [ -f "$RD/review.md" ] && review_blocking_lines "$RD/review.md" \
       | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
+    # gate-split-04: the gate of the round - each red PART line of a finished suite.log is a finding.
+    [ -n "$(suite_log_line "$RD")" ] && suite_red_parts "$RD/suite.log" | sed 's/^/- [regression] /'
     # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
     # finding (judge's override) - its note is then the only condition the repair can meet.
     ropened="$(round_field "$RD" opened)"
@@ -3213,7 +3533,7 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
     printf '\n## Files\n'
     printf '%s' "$files" | awk 'NF && !seen[$0]++ { print "- " $0 }'
     printf '\n## Verification\n'
-    printf '%s' "$verifs" | awk 'NF && !seen[$0]++ { print "`" $0 "`" }'
+    repair_verification "$verifs" "$findings" "$files" | awk 'NF { print "`" $0 "`" }'
   } > "$STORY"
 
   bash "$HERE/journal.sh" "$SPEC" "03-building" "repair round $N: $(basename "$STORY")" "build:$WAVE" >/dev/null
@@ -3444,6 +3764,16 @@ case "$VERB" in
       prevarg="$a"
     done
     cmd_open_round "$SPEC" "$COMMIT" "$STAMP"
+    ;;
+  suite)
+    COMMIT=0; STAMP=""
+    prevarg=""
+    for a in "$@"; do
+      [ "$a" = "--commit" ] && COMMIT=1
+      [ "$prevarg" = "--stamp" ] && STAMP="$a"
+      prevarg="$a"
+    done
+    cmd_suite "$SPEC" "$COMMIT" "$STAMP"
     ;;
   reopen)
     DECISION="${3:-}"

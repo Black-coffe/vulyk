@@ -13,6 +13,10 @@ The plan's Goal (approved 2026-10-25) splits verification in two: a story's `## 
 `tests/full-suite.sh`. Slow rows of `## Commands` carry `round-only` in their Purpose cell; `wave-check`
 reports a story that names one and `close-story` refuses it with exit 2.
 
+*Amended 2026-11-02 by ADR-029 (spec `gate-split`):* the whole suite still runs once per round, but no longer inside
+`lead-review`: `cycle.sh suite` runs it before the seats are dispatched, in steps of parts capped at 300 s, and the reviewer
+reads the round's `suite.log` (it may rerun one part). The old text above is kept.
+
 Two plan deltas then fixed how the runner fits its budget, quoted verbatim:
 
 > 2026-10-26, story 07 NEEDS_CONTEXT, Queen ruling (a): the repair premise "shared setup is the cost" came from a seat's reading, not a measurement; the worker measured it at 0.5-0.7 s. The cost is repeated `install.sh` runs (16-21 s each, 5-12 per telemetry part). Within the owner's "fix the root, not the budget": keep parts in the runner, cache one pristine `install.sh` output per run (fixtures copy it, checked by `diff -r`), split the parts still over two minutes, run parts at a bounded default `--jobs`, latency suites after the rest. Finding 3's "whole suites" clause is dropped: whole suites cannot fit 540 s. Rejected: (b) a faster `install.sh` (product code, outside this spec), (c) accepting parts over two minutes (contradicts ask 1 and the owner's choice).

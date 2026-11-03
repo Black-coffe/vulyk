@@ -33,8 +33,8 @@ this section and records it under ## Plan deltas. Tier 1-2: usually "none".
 - <...>
 
 ## Integration gate
-<!-- The full quiet suite: the constitution's `round-only` row from ## Commands. lead-review runs it once
-per round under VULYK_SUITE_TIMEOUT (default 590 s); a timeout escalates with the time it ran.
+<!-- The full quiet suite: the constitution's `round-only` row from ## Commands. It runs once per round
+via `cycle.sh suite`, step by step, each part capped at 300 s; a red part (at its cap) is cut, not escalated.
 wave-check.sh runs before each wave. -->
 `<command>`
 

@@ -1,0 +1,74 @@
+head=57270fb steps=8
+STEP 1/8: ok 99s
+PART council:verbs ok 70s cap 300s
+PART council:judge ok 93s cap 300s
+PART council:seats ok 87s cap 300s
+PART council:seats2 ok 47s cap 300s
+PART council:close ok 51s cap 300s
+PART council:escalate ok 98s cap 300s
+PART council:ceilings ok 53s cap 300s
+PART council:ceilings2 ok 76s cap 300s
+PART council:replays ok 94s cap 300s
+PART council:replays2 ok 66s cap 300s
+PART council:walks ok 92s cap 300s
+PART council:walks2 ok 51s cap 300s
+STEP 2/8: ok 120s
+PART council:driver ok 98s cap 300s
+PART council:roster ok 83s cap 300s
+PART council:roster2 ok 43s cap 300s
+PART council:advance ok 120s cap 300s
+PART council:suite ok 74s cap 300s
+PART cycle:ship ok 70s cap 300s
+PART cycle:hooklog ok 26s cap 300s
+PART cycle:gates ok 23s cap 300s
+PART cycle:manual ok 20s cap 300s
+PART cycle:close ok 47s cap 300s
+PART cycle:bsd ok 91s cap 300s
+PART cycle:safety ok 26s cap 300s
+STEP 3/8: FAIL 97s
+PART cycle:red ok 89s cap 300s
+PART defects ok 56s cap 300s
+PART driver ok 0s cap 300s
+PART e2e:green ok 24s cap 300s
+PART e2e:red ok 41s cap 300s
+PART full-suite FAIL 39s cap 300s
+PART inject:functional ok 19s cap 300s
+PART intake:functional ok 96s cap 300s
+PART maintenance FAIL 84s cap 300s
+PART model-profile:defaults ok 18s cap 300s
+PART model-profile:set ok 26s cap 300s
+PART model-profile:edges ok 14s cap 300s
+STEP 4/8: ok 123s
+PART mods ok 4s cap 300s
+PART solo:green ok 15s cap 300s
+PART solo:block ok 35s cap 300s
+PART solo:rejected ok 20s cap 300s
+PART symbol-map ok 17s cap 300s
+PART telemetry:telemetry ok 57s cap 300s
+PART telemetry:scan ok 101s cap 300s
+PART telemetry:install ok 122s cap 300s
+PART telemetry:install-xp ok 63s cap 300s
+PART telemetry:terminal ok 80s cap 300s
+PART telemetry:wiring ok 91s cap 300s
+PART telemetry:ledger ok 96s cap 300s
+STEP 5/8: ok 162s
+PART telemetry:constitution ok 154s cap 300s
+PART telemetry:constitution2 ok 41s cap 300s
+PART telemetry:library ok 98s cap 300s
+PART telemetry:ysk ok 158s cap 300s
+PART telemetry:ysk-hook ok 3s cap 300s
+PART telemetry:rg ok 115s cap 300s
+PART telemetry:mods ok 153s cap 300s
+PART telemetry:watcher ok 106s cap 300s
+PART telemetry:upgrade ok 102s cap 300s
+PART telemetry:crlf ok 117s cap 300s
+PART telemetry:wrapper ok 161s cap 300s
+PART telemetry:launchers ok 112s cap 300s
+STEP 6/8: ok 113s
+PART telemetry:edits ok 112s cap 300s
+PART token-report ok 5s cap 300s
+STEP 7/8: ok 14s
+PART inject:latency ok 12s cap 300s
+STEP 8/8: ok 6s
+PART intake:latency ok 5s cap 300s
+SUITE: FAIL 734s - part full-suite failed, part maintenance failed

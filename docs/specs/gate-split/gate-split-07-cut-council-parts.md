@@ -1,8 +1,8 @@
 ---
 story: gate-split-07
 spec: gate-split
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-test
 wave: 3
@@ -54,5 +54,7 @@ cases read from the half before it.
 `bash tests/council.test.sh --part ceilings2`
 
 ## Implementation notes
+Cuts (tests/council.test.sh): seats at the review-seat section, ceilings before the judged-rounds block, walks before Story 16, roster before the repair verb (the shared 0.18 fixture guard also runs for roster2). Ok-line counts match the old parts: seats 54+28=82, roster 32+12=44, ceilings 15+14=29, walks 29 (output identical, line for line).
+Alone times, measured 2026-11-02 on a quiet box (s): verbs 47, judge 70, seats 61, seats2 31, close 33, escalate 77, ceilings 35, ceilings2 52, replays 70, replays2 43, walks 71, walks2 31, driver 69, roster 56, roster2 28, advance 100, suite 53. No part needed further cutting; advance (100 s) was left whole.
 
 ## Findings

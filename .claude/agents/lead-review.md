@@ -52,12 +52,14 @@ chasing them costs rounds and buys nothing.
   project's rules (`docs/defects/`) for those paths. Open a card folded into `+N cards` at
   `docs/defects/<ref>.md`.
 
-If your constitution's `## Commands` table names a `Full suite / build` row, run it once per round as
-`bash -c '. scripts/lib.sh && run_capped $((${VULYK_SUITE_TIMEOUT:-590} + 5)) <row>'` with `timeout: 600000` on the Bash call, and
-measure its seconds. Report it on the `SUITE:` line: exit 0 is `ok`; exit 124 (either timeout) is
-`TIMEOUT` with the budget, and the verdict stays what the code earns (`judge` stops the round and asks
-the owner); any other non-zero is `FAIL` and `VERDICT: BLOCK`, with a `## Critical` `[regression]` line
-naming the suite and the failing check (red on the base too is still a BLOCK). No such row: `SUITE: none`.
+The round's tests already ran before you were dispatched (`cycle.sh suite`, in steps): read
+`<spec>/council/round-<N>/suite.log` and copy its last line, the `SUITE:` line, to line 3 of your report
+unchanged. Never run the whole suite yourself. To look at a red part, rerun that one part in the foreground
+(`bash tests/<suite>.test.sh --part <topic>`, or one hive row) as `bash -c '. scripts/lib.sh && run_capped 300 <command>'`
+with `timeout: 600000` on the Bash call, and report what you saw. A `FAIL` in the log (or a part it names red)
+is `VERDICT: BLOCK` with a `## Critical` `[regression]` line naming the suite and the failing check (red on
+the base too is still a BLOCK). No log, or a log whose `head=` is not the head you review: `SUITE: none`
+and say so under `## Minor`.
 Beyond that, run only the targeted command a finding needs, each with a timeout.
 
 ## Verdict
@@ -85,7 +87,7 @@ worker that never saw this review.
 ```
 VERDICT: PASS | BLOCK
 MODEL: <your model id>
-SUITE: ok <N>s | FAIL <N>s | TIMEOUT <N>s budget <B>s | none
+SUITE: ok <N>s | FAIL <N>s - <why> | none
 
 ## Critical
 None.
@@ -97,7 +99,7 @@ None.
 
 Minors are optional: at most five, one line each.
 
-- Line 1 is exactly `VERDICT: PASS` or `VERDICT: BLOCK`; line 3 is the `SUITE:` line, one of its four forms.
+- Line 1 is exactly `VERDICT: PASS` or `VERDICT: BLOCK`; line 3 is the log's `SUITE:` line, copied.
 - `## Critical`, `## Major`, `## Minor` in that order; an empty one holds `None.`.
 - One finding per list line (`1. ` or `- `), tag and evidence on that same line. No `###` severity
   headings, no tables, no wrapped findings: a tag anywhere else is not an anchor.

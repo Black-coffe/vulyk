@@ -1,0 +1,74 @@
+head=d5978a8 steps=8
+STEP 1/8: ok 93s
+PART council:verbs ok 65s cap 300s
+PART council:judge ok 86s cap 300s
+PART council:seats ok 80s cap 300s
+PART council:seats2 ok 43s cap 300s
+PART council:close ok 47s cap 300s
+PART council:escalate ok 91s cap 300s
+PART council:ceilings ok 49s cap 300s
+PART council:ceilings2 ok 70s cap 300s
+PART council:replays ok 88s cap 300s
+PART council:replays2 ok 60s cap 300s
+PART council:walks ok 87s cap 300s
+PART council:walks2 ok 47s cap 300s
+STEP 2/8: ok 107s
+PART council:driver ok 81s cap 300s
+PART council:roster ok 69s cap 300s
+PART council:roster2 ok 36s cap 300s
+PART council:advance ok 106s cap 300s
+PART council:suite ok 70s cap 300s
+PART cycle:ship ok 61s cap 300s
+PART cycle:hooklog ok 21s cap 300s
+PART cycle:gates ok 17s cap 300s
+PART cycle:manual ok 16s cap 300s
+PART cycle:close ok 40s cap 300s
+PART cycle:bsd ok 74s cap 300s
+PART cycle:safety ok 20s cap 300s
+STEP 3/8: ok 81s
+PART cycle:red ok 80s cap 300s
+PART defects ok 51s cap 300s
+PART driver ok 0s cap 300s
+PART e2e:green ok 20s cap 300s
+PART e2e:red ok 35s cap 300s
+PART full-suite ok 36s cap 300s
+PART inject:functional ok 16s cap 300s
+PART intake:functional ok 80s cap 300s
+PART maintenance ok 75s cap 300s
+PART model-profile:defaults ok 15s cap 300s
+PART model-profile:set ok 22s cap 300s
+PART model-profile:edges ok 11s cap 300s
+STEP 4/8: ok 103s
+PART mods ok 4s cap 300s
+PART solo:green ok 13s cap 300s
+PART solo:block ok 31s cap 300s
+PART solo:rejected ok 17s cap 300s
+PART symbol-map ok 15s cap 300s
+PART telemetry:telemetry ok 51s cap 300s
+PART telemetry:scan ok 89s cap 300s
+PART telemetry:install ok 101s cap 300s
+PART telemetry:install-xp ok 54s cap 300s
+PART telemetry:terminal ok 67s cap 300s
+PART telemetry:wiring ok 73s cap 300s
+PART telemetry:ledger ok 77s cap 300s
+STEP 5/8: ok 130s
+PART telemetry:constitution ok 125s cap 300s
+PART telemetry:constitution2 ok 35s cap 300s
+PART telemetry:library ok 81s cap 300s
+PART telemetry:ysk ok 130s cap 300s
+PART telemetry:ysk-hook ok 4s cap 300s
+PART telemetry:rg ok 99s cap 300s
+PART telemetry:mods ok 124s cap 300s
+PART telemetry:watcher ok 86s cap 300s
+PART telemetry:upgrade ok 84s cap 300s
+PART telemetry:crlf ok 96s cap 300s
+PART telemetry:wrapper ok 130s cap 300s
+PART telemetry:launchers ok 89s cap 300s
+STEP 6/8: ok 92s
+PART telemetry:edits ok 91s cap 300s
+PART token-report ok 3s cap 300s
+STEP 7/8: ok 12s
+PART inject:latency ok 12s cap 300s
+STEP 8/8: ok 6s
+PART intake:latency ok 5s cap 300s
+SUITE: ok 624s

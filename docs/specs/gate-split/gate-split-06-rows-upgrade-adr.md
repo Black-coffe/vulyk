@@ -1,8 +1,8 @@
 ---
 story: gate-split-06
 spec: gate-split
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 3
@@ -31,7 +31,6 @@ and ADR-024's suite clause.
 - CLAUDE.md
 - install.sh
 - .claude/commands/vulyk-update.md
-- templates/plan.md
 - docs/adr/029-gate-split.md
 - docs/adr/001-cycle-state-contract.md
 - docs/adr/023-fast-story-checks-full-suite-per-round.md
@@ -55,8 +54,8 @@ docs/adr/023 (13), docs/adr/024 (9-29).
       constitution is not edited by it. A fresh install's hive template row (`install.sh` 264) stays
       `Full suite / build (round-only)`: one part until the owner splits it.
 - [ ] `/vulyk-update` step 6 names the split: several `Full suite ... (round-only)` rows, each one part under 300 s.
-- [ ] `templates/plan.md` line 37 comment: the suite runs once per round via `cycle.sh suite`, step by step, 300 s per
-      part, a red part is cut; no `VULYK_SUITE_TIMEOUT`.
+- [ ] The hive note also says: every story `## Verification` line runs under a 300 s cap (`VULYK_VERIFY_TIMEOUT` above
+      300 acts as 300); a row over ~210 s must be cut into `--part` rows before the hive takes this release.
 - [ ] ADR-029 (`Status: accepted`, date, spec) states the decision, the six crossgrill points and the owner's three
       answers, and the rejected alternative from plan.md; ADR-001, 023 and 024 each get a dated `Amended by ADR-029`
       note at the clauses it changes, their old text kept.
@@ -68,5 +67,6 @@ docs/adr/023 (13), docs/adr/024 (9-29).
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- CLAUDE.md row renamed; install.sh prints the gate-split note once per --upgrade (after the constitution chain); vulyk-update step 6 names the split; ADR-029 added, ADR-001 (D3, D2/D6), 023, 024 amended. templates/plan.md was already done by story 04 (plan delta 3); no telemetry test edit needed.
 
 ## Findings

@@ -90,7 +90,7 @@ Quiet variants only: output is resent each turn. A story's `## Verification` nam
 | Model profile tests | `bash tests/model-profile.test.sh` |
 | Symbol map | `bash tests/symbol-map.test.sh` |
 | Runner | `bash tests/full-suite.test.sh` |
-| Full suite / build (round-only) | `bash tests/full-suite.sh` |
+| Full suite steps (round-only) | `bash tests/full-suite.sh` |
 
 Never commit `__pycache__/`.
 

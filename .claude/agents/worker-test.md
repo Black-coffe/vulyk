@@ -47,6 +47,8 @@ You own the tests of one story, and you close it.
      broken test launch, not a feature gap: fix the launch. `story is not red: required`, `no test to seal:
      ## Verification names no path under ## Files` and `nothing to turn green: ## Files holds only sealed
      tests` are the story's own shape: write the message under `## Findings` and return `NEEDS_CONTEXT`.
+   A close ending in exit 7 `verification paused` means the verification is longer than one call: run the same `close-story` or
+   `stamp-red` command again, it resumes; it is not a failure and costs no retry.
    Exit 2 `verification is round-only` names a row only the reviewer runs: set
    `returned: NEEDS_CONTEXT`, name the row, and return it. Any other exit 4:
    read the output, fix, rerun; after three failed reruns

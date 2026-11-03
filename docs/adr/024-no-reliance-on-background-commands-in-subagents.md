@@ -24,6 +24,9 @@ both ended. Nothing told the subagent or its parent that the command ended.
 Option 3. The owner dropped ask 2 after the failed probe (2026-10-27, AskUserQuestion, option text by the Queen).
 `lead-review` runs the full suite in the foreground, as before.
 
+*Amended 2026-11-02 by ADR-029:* the suite clause is superseded: `lead-review` no longer runs the full suite. `cycle.sh suite`
+runs it in the foreground, step by step, through the driver's clerk before any seat; no step relies on a background command.
+
 ## Consequences
 The reviewer still waits for the suite, so a round takes as long as before; the cache cost of that wait is carried by
 `cacheTtl: 1h`, measured on 2026-11-03 against the week before. No `SUITE:` line can go missing through a background

@@ -6,15 +6,35 @@
 # suites prove cycle.sh on its own - this is the seam between them (ADR-013 D2, D6).
 #
 #   Usage: bash tests/e2e.test.sh            # from the VULYK repo root
+#          bash tests/e2e.test.sh --part <name>   # one run alone (green | red)
+#          bash tests/e2e.test.sh --list-parts    # the part names, one per line
 #
 # Two runs: a Tier 3 spec that goes green in one round, and one whose first review BLOCKs on
 # an anchored ask - the mechanical repair story, its worker, and a second round that carries
 # the green intent seat forward and reviews only the repair diff.
 set -u
+PARTS="green red"
+PART=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list-parts) printf '%s
+' $PARTS; exit 0 ;;
+    --part)
+      PART="${2:-}"; shift
+      case " $PARTS " in
+        *" $PART "*) ;;
+        *) echo "unknown part '$PART' - parts:" >&2; printf '%s
+' $PARTS >&2; exit 1 ;;
+      esac ;;
+    *) echo "usage: bash tests/e2e.test.sh [--part <name>] [--list-parts]" >&2; exit 2 ;;
+  esac
+  shift
+done
+part() { [ -z "$PART" ] || [ "$PART" = "$1" ]; }
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "skipped: node not found"
-  exit 0
+  echo "SKIP: node not found"
+  exit 77
 fi
 
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
@@ -169,14 +189,15 @@ jqr() { printf '%s' "$OUT" | jq -r "$1" 2>/dev/null; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+if part green; then
 # --- run 1: green in one round ---------------------------------------------------------------
 ( make_fixture "$TMP/green" >/dev/null )
 OUT="$(run_driver "$TMP/green" green)"
 [ -n "${E2E_DEBUG:-}" ] && printf '%s\n' "$OUT" | jq -c '{result, clerk: .trace.clerk, agents: [.trace.agents[].type], crash}'
 [ -n "$(jqr '.crash // empty')" ] && { echo "::error::green: driver crashed: $(jqr .crash)"; fail=1; }
 expect "green: the run ends green" "$([ "$(jqr '.result.next')" = green ]; echo $?)"
-expect "green: four clerk calls - claim, advance, ingest, release" \
-  "$([ "$(jqr '.trace.clerk | join(",")')" = "advance --claim,advance,advance --ingest,release" ]; echo $?)"
+expect "green: five clerk calls - claim, advance, suite, ingest, release" \
+  "$([ "$(jqr '.trace.clerk | join(",")')" = "advance --claim,advance,suite,advance --ingest,release" ]; echo $?)"
 expect "green: one worker, one intent seat, one reviewer, nothing else" \
   "$([ "$(jqr '[.trace.agents[].type] | sort | join(",")')" = "council-opus,lead-review,worker-code" ]; echo $?)"
 cd "$TMP/green" || exit 1
@@ -189,6 +210,9 @@ expect "green: the DRIVER lock is released" "$([ ! -f docs/specs/demo/DRIVER ]; 
 expect "green: the tree is clean" "$([ -z "$(git status --porcelain)" ]; echo $?)"
 cd "$SRC" || exit 1
 
+fi
+
+if part red; then
 # --- run 2: an anchored BLOCK, a mechanical repair, a second round on the repair diff ----------
 ( make_fixture "$TMP/red" >/dev/null )
 OUT="$(run_driver "$TMP/red" red)"
@@ -214,6 +238,7 @@ expect "red: round 1 RED, round 2 GREEN in the ledger" \
 expect "red: round 2's intent seat is marked carried" "$(head -1 docs/specs/demo/council/round-2/opus.md | grep -q 'carried: round 1'; echo $?)"
 expect "red: the DRIVER lock is released" "$([ ! -f docs/specs/demo/DRIVER ]; echo $?)"
 cd "$SRC" || exit 1
+fi
 
 if [ "$fail" -eq 0 ]; then echo "e2e.test.sh: all checks passed"; else echo "e2e.test.sh: FAILED"; fi
 exit "$fail"

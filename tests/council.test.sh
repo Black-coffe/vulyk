@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs judge seats close escalate ceilings replays walks driver roster advance" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs judge seats seats2 close escalate ceilings ceilings2 replays replays2 walks walks2 driver roster roster2 advance suite" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -62,6 +62,7 @@ cd "$T" || exit 1
 git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
 mkdir -p scripts memory/stats docs/specs .claude
 cp "$SRC"/scripts/lib.sh "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh scripts/
+cp "$SRC"/scripts/suite-parts-check.sh scripts/ # cycle.sh suite reads PART lines through it (gate-split-04)
 cp "$SRC"/scripts/run-capped.py scripts/ # run_capped's Python cap: lib.sh looks for it beside itself
 # Mirrors the real .gitignore (D1: neither is ever committed) - without it, open-round's
 # "clean tree" precondition would trip on its own court worktree and PAUSE files. Story 17
@@ -1372,6 +1373,9 @@ out="$(printf 'garbage3\n' | council record-seat docs/specs/rabsent 1 haiku 2>&1
   || { echo "::error::files: $(ls "$rd_rabsent")"; fail=1; }
 
 fi # --quick: end of the taint/evidence skip
+fi # part seats
+if part seats2; then # --- part seats2: record-seat review seat verdict, review layout, --model, --file
+
 # --- record-seat: review seat, verdict read from line 1 only (C5 amended, story 27/R28,N-m4) --
 
 echo "record-seat review: VERDICT: BLOCK on line 1 -> recorded BLOCK"
@@ -1418,6 +1422,33 @@ out="$(council judge docs/specs/rrev3)"; ex=$?
 row="$(grep '"spec":"rrev3"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -qF '"escalate":"env"' && printf '%s' "$row" | grep -qF '"review":"ABSENT"' \
   && echo "  ok    row escalate:env, review ABSENT" || { echo "::error::row: $row"; fail=1; }
+
+echo "record-seat review: a finished council/round-N/suite.log supplies the SUITE line - replacing a reported one, inserted when missing; a log for another head is not read (gate-split-04)"
+printf '| Full suite / build (round-only) | `bash tests/no-such-runner.sh` |\n' >> CLAUDE.md
+git add -A && git commit -qm "fixture: a round-only full-suite row (suite.log cases)" >/dev/null
+rlog_case() { # rlog_case <slug> <log-head: round|other> <report> - a round whose suite.log ended FAIL
+  mk_spec "$1" 2
+  local rd; rd="$(mk_open_round "$1" 1)"
+  local h; h="$(sed -n 's/^head=//p' "$rd/ROUND")"; [ "$2" = round ] || h=0000000
+  printf 'head=%s steps=1\nSTEP 1/1: FAIL 3s\nPART fx:b FAIL 3s cap 300s\nSUITE: FAIL 3s - part fx:b failed\n' "$h" > "$rd/suite.log"
+  RLOG_OUT="$(printf '%b' "$3" | council record-seat "docs/specs/$1" 1 review 2>&1)"; RLOG_EX=$?
+  RLOG_RD="$rd"
+}
+rlog_case rlog1 round 'VERDICT: PASS\nMODEL: test\nSUITE: ok 1s\n'
+[ "$RLOG_EX" -eq 0 ] && grep -qx 'SUITE: FAIL 3s - part fx:b failed' "$RLOG_RD/review.md" && ! grep -qF 'SUITE: ok 1s' "$RLOG_RD/review.md" \
+  && sed -n 2p "$RLOG_RD/review.md" | grep -qx 'VERDICT: PASS' \
+  && echo "  ok    a reported SUITE: ok is replaced by the log's SUITE: FAIL, VERDICT stays the first body line" \
+  || { echo "::error::record-seat log replace: exit=$RLOG_EX out=$RLOG_OUT file=$(cat "$RLOG_RD/review.md" 2>/dev/null)"; fail=1; }
+rlog_case rlog2 round 'VERDICT: PASS\nMODEL: test\n'
+[ "$RLOG_EX" -eq 0 ] && grep -qx 'SUITE: FAIL 3s - part fx:b failed' "$RLOG_RD/review.md" \
+  && echo "  ok    a report with no SUITE line is recorded with the log's line inserted, not MALFORMED" \
+  || { echo "::error::record-seat log insert: exit=$RLOG_EX out=$RLOG_OUT"; fail=1; }
+rlog_case rlog3 other 'VERDICT: PASS\nMODEL: test\n'
+[ "$RLOG_EX" -eq 4 ] && printf '%s' "$RLOG_OUT" | grep -qF 'MALFORMED' && [ ! -f "$RLOG_RD/review.md" ] \
+  && echo "  ok    a log for another head is not read: no SUITE line is still MALFORMED" \
+  || { echo "::error::record-seat foreign log: exit=$RLOG_EX out=$RLOG_OUT"; fail=1; }
+grep -v 'no-such-runner' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+git add -A && git commit -qm "fixture: drop the round-only full-suite row (suite.log cases)" >/dev/null
 
 if full; then # --quick skips: the review layout variants
 # --- review layout at record-seat (convergent-judge-07): a BLOCK needs a tagged finding line --
@@ -1527,7 +1558,7 @@ out="$(council record-seat docs/specs/rfile1 1 haiku --file .vulyk/reports/empty
   && echo "  ok    empty --file path behaves as missing: exit 2, no attempt file" \
   || { echo "::error::--file empty: exit=$ex out=$out"; fail=1; }
 
-fi # part seats
+fi # part seats2
 if part close; then # --- part close: the PAUSE guard, pause/resume, close-story
 # --- PAUSE guard: every mutating verb refuses before touching anything ------------------------
 
@@ -2380,7 +2411,8 @@ row="$(grep '"spec":"suto1"' memory/stats/council.jsonl | tail -1)"
   && printf '%s' "$row" | jq -e '.note == "full suite timed out: 571s, budget 540s"' >/dev/null \
   && echo "  ok    row ESCALATE, escalate suite-timeout, note carries 571s and the budget" || { echo "::error::row: $row"; fail=1; }
 grep -qE '^\*\*Council:\*\* ESCALATE round 1,' docs/specs/suto1/plan.md && grep -qF 'reason: suite-timeout · round 1' docs/specs/suto1/plan.md \
-  && grep -qF -- '- suite: 571 s, budget 540 s - raise VULYK_SUITE_TIMEOUT or cut the suite' docs/specs/suto1/plan.md \
+  && grep -qF -- '- suite: 571 s, budget 540 s - an old SUITE: TIMEOUT report: cut the part that ran long (cycle.sh suite caps each part)' docs/specs/suto1/plan.md \
+  && ! grep -qF 'VULYK_SUITE_TIMEOUT' docs/specs/suto1/plan.md \
   && grep -qF -- "- seats: $rdst1/" docs/specs/suto1/plan.md \
   && echo "  ok    plan.md: Council ESCALATE, ## Needs a human with the reason, the suite line (571) and the seats line" \
   || { echo "::error::plan.md: $(cat docs/specs/suto1/plan.md)"; fail=1; }
@@ -2609,6 +2641,9 @@ council reopen docs/specs/tceil2 "owner: one more pass" --commit >/dev/null
 [ "$(cat docs/specs/tceil2/council/CEILING 2>&1)" = "4" ] && echo "  ok    tier 2: reopen raises the ceiling to 4" \
   || { echo "::error::CEILING: $(cat docs/specs/tceil2/council/CEILING 2>&1)"; fail=1; }
 
+fi # part ceilings
+if part ceilings2 && full; then # --- part ceilings2 (--quick skips it): the judged-rounds and RED-rounds ceilings
+
 # --- judged-rounds ceiling (convergent-judge-05): a STALE-folded round does not consume the
 # tier's budget - the ceiling counts rounds with a non-STALE council.jsonl row only.
 
@@ -2720,8 +2755,8 @@ tg2_round 5 GR 6 "tier 2 after reopen: round 5 RED -> ESCALATE ceiling (exactly 
 grep '"spec":"tgreen2"' memory/stats/council.jsonl | grep '"round":5,' | grep -qF '"escalate":"ceiling"' \
   || { echo "::error::tgreen2 round 5 is not ESCALATE ceiling"; fail=1; }
 
-fi # part ceilings
-if part replays && full; then # --- part replays (--quick skips it): status after committed verbs, LR19-25/m-4/N-m7, story 14 pinned replay
+fi # part ceilings2
+if part replays && full; then # --- part replays (--quick skips it): status after committed verbs, env/STALE-fold seats
 # --- status --json after committed verbs (autonomous-cycle-19: R1, R2, R3, R7, R25) -----------
 # The council round found the suite asserted only each verb's own emit, never `status --json`
 # afterward - which is exactly the seam where `--commit` (used by both drivers, always) moved
@@ -2902,6 +2937,8 @@ printf '%s' "$row" | grep -qF '"opus":""' && echo "  ok    STALE row: opus (not 
 [ -d docs/specs/stalenr1/council/round-2 ] && echo "  ok    round 2 opened (the fold path, not an in-place re-stamp)" \
   || { echo "::error::round-2 missing - the has_seat=0 re-stamp path fired instead of the fold"; fail=1; }
 
+fi # part replays
+if part replays2 && full; then # --- part replays2 (--quick skips it): story 14's criteria, LR19-25/m-4/N-m7, story 14 pinned replay
 # ============================================================================================
 # Story 14: one scenario per story 01 criterion (LR19, LR21/r2m1, LR25, m-4, m-10, N-m7)
 # ============================================================================================
@@ -3047,7 +3084,7 @@ if [ -n "$OLDCYCLE" ]; then
 fi
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh"
 
-fi # part replays
+fi # part replays2
 if part walks && full; then # --- part walks (--quick skips it): stories 15 and 16, their scenarios and pinned replays
 # ============================================================================================
 # Story 15: one scenario per story 05 criterion (r2m3, r2m16, N-m3, r2m5/r2m6 x2, r2m7/N-m2 x2,
@@ -3300,6 +3337,9 @@ if pin_cycle b9f36e8 "$OLDCYCLE2"; then
 fi
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
 
+fi # part walks
+if part walks2 && full; then # --- part walks2 (--quick skips it): story 16, its wall probes and pinned replay
+
 # ============================================================================================
 # Story 16: one wall probe per story 08 fix (M3/ADR-006 returned:, r2m2, LR31, r2m9), replayed
 # against eb3203a's cycle.sh (the commit immediately before story 08's own) vs. the branch's,
@@ -3420,7 +3460,7 @@ fi
 PIN_MUST_FAIL=""
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_returned probe_r2m2wall probe_lr31wall probe_r2m9wall
 
-fi # part walks
+fi # part walks2
 if part driver && full; then # --- part driver (--quick skips it): story 17 DRIVER semaphore and its pinned replay, the C5 status block
 # ============================================================================================
 # Story 17: one scenario per story 11 criterion - the DRIVER semaphore (ADR-004/K3): claim,
@@ -3799,7 +3839,7 @@ council resume docs/specs/c5dirty >/dev/null 2>&1
 
 
 fi # part driver
-if part roster || part advance; then # --- the 0.18 section's shared fixture (ADR-013): parts roster and advance
+if part roster || part roster2 || part advance; then # --- the 0.18 section's shared fixture (ADR-013): parts roster and advance
 # ============================================================================================
 # 0.18 - Light VULYK (docs/adr/013-light-vulyk.md): the roster and the Client path, the sidecar
 # constitution, frozen seats, no-court rounds, carry-forward, reopen -> repair, the repair and
@@ -3956,6 +3996,9 @@ out="$(council reopen docs/specs/r18re "the reviewer died, run it again" --commi
 l18_last "$out" | jq -r .next | expect "reopen after env -> open-round" "open-round"
 council status docs/specs/r18re --json | jq -r .next | expect "status agrees: open-round" "open-round"
 
+fi # part roster
+if part roster2; then # --- part roster2: the repair verb and the Asks parser (roster, second half)
+
 echo "ADR-013 D4: repair writes the mechanical story - asks from the row and the seats, findings verbatim, Files and Verification of the done stories"
 mkdir -p docs/specs/r18rp
 cp "$SRC/templates/plan.md" docs/specs/r18rp/plan.md
@@ -4081,7 +4124,7 @@ sed -n '/^## Requirements$/,/^## Findings$/p' docs/specs/r18rq/r18rq-02-repair-r
 out="$(bash scripts/trace-check.sh docs/specs/r18rq)"
 printf '%s' "$out" | expect "trace-check: the repair quote traces to the brief" "backward: 0 unfound + 0 storyless"
 
-fi # part roster
+fi # part roster2
 if part advance; then # --- part advance: advance, --ingest, claim's clean-tree rule, close-story's idempotency and timeout
 echo "ADR-013 D2: advance - branch and open-round in one call, stop at the first agent boundary, key order fixed"
 mk_spec r18ad 2
@@ -4210,18 +4253,324 @@ out_stub="$(PATH="$STUBS:$PATH" VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh clo
   && grep -q '^status: todo' docs/specs/r18cs/r18cs-02-slow.md && echo "  ok    stubbed timeout/gtimeout first on PATH: exit $ex_stub, same timeout JSON, story stays todo" \
   || { echo "::error::stubbed timeout: exit=$ex_stub out=$out_stub"; fail=1; }
 
-echo "ADR-013 D5: the budget covers the whole run - two 2 s lines under a 3 s budget time out on the second"
+echo "gate-split-02: the cap is per line - two 2 s lines under a 3 s cap both run, the third (4 s) times out at 3 s"
 printf '| Fixture: two-second line | `sleep 2` |\n' >> CLAUDE.md
-printf -- '---\nstory: r18cs-03\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Two slow lines\n\n## Files\n- r18cs-two.txt\n\n## Verification\n`sleep 2`\n`sleep 2`\n' > docs/specs/r18cs/r18cs-03-two.md
-git add -A && git commit -qm "r18cs: two slow lines" >/dev/null
+printf '| Fixture: four-second line | `sleep 4` |\n' >> CLAUDE.md
+printf -- '---\nstory: r18cs-03\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Slow lines\n\n## Files\n- r18cs-two.txt\n\n## Verification\n`sleep 2`\n`sleep 2`\n`sleep 4`\n' > docs/specs/r18cs/r18cs-03-two.md
+git add -A && git commit -qm "r18cs: slow lines" >/dev/null
 out="$(VULYK_VERIFY_TIMEOUT=3 bash scripts/cycle.sh close-story docs/specs/r18cs/r18cs-03-two.md 2>&1)"; ex=$?
-[ "$ex" -eq 4 ] && [ "$(l18_last "$out")" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"verification timed out after 3s: sleep 2"}' ] \
-  && echo "  ok    exit 4 on the second line: each line alone fits, the run does not" \
-  || { echo "::error::run budget: exit=$ex out=$out"; fail=1; }
+[ "$ex" -eq 4 ] && [ "$(l18_last "$out")" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"verification timed out after 3s: sleep 4"}' ] \
+  && echo "  ok    exit 4 on the third line: the cap is per line, not one budget for the run" \
+  || { echo "::error::per-line cap: exit=$ex out=$out"; fail=1; }
+
+echo "gate-split-02: close-story pauses at exit 7 with a verify_resume mark when the next line does not fit the call, and the same command resumes"
+printf -- '---\nstory: r18pl-01\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Paused\n\n## Files\n- r18pl-one.txt\n\n## Verification\n`sleep 1`\n`sleep 1`\n' > docs/specs/r18cs/r18pl-01-two.md
+printf 'v1\n' > r18pl-one.txt
+printf '| Fixture: one-second line | `sleep 1` |\n' >> CLAUDE.md
+git add -A && git commit -qm "r18pl: fixture" >/dev/null
+PLS=docs/specs/r18cs/r18pl-01-two.md
+out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
+mark1="$(grep '^verify_resume:' "$PLS")"
+[ "$ex" -eq 7 ] && l18_last "$out" | jq -e '.exit == 7 and .resume == 2' >/dev/null 2>&1 \
+  && printf '%s' "$mark1" | grep -qE '^verify_resume: close-story 2 [0-9a-f]{64}$' && grep -q '^status: todo' "$PLS" \
+  && echo "  ok    call 1: exit 7, resume 2, a verify_resume mark in the frontmatter, story still todo" \
+  || { echo "::error::per-line cap: pause exit=$ex out=$out mark=$mark1"; fail=1; }
+printf 'v2\n' > r18pl-one.txt
+out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
+mark2="$(grep '^verify_resume:' "$PLS")"
+[ "$ex" -eq 7 ] && [ -n "$mark2" ] && [ "$mark2" != "$mark1" ] && printf '%s' "$mark2" | grep -qE '^verify_resume: close-story 2 ' \
+  && echo "  ok    a changed ## Files set between the calls restarts at line 1 (new hash, paused again)" \
+  || { echo "::error::per-line cap: restart exit=$ex out=$out mark=$mark2"; fail=1; }
+out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^status: done' "$PLS" && ! grep -q '^verify_resume:' "$PLS" \
+  && echo "  ok    call 2 on the same files resumes at line 2, closes, leaves no verify_resume line" \
+  || { echo "::error::per-line cap: resume exit=$ex out=$out"; fail=1; }
+
+echo "gate-split-02: stamp-red resumes the same way and still writes its receipt"
+printf '| Fixture: red test | `bash r18sr-test.sh` |\n' >> CLAUDE.md
+printf 'echo R18SR-RED-MARK\nexit 1\n' > r18sr-test.sh
+printf -- '---\nstory: r18sr-01\nstatus: todo\nreturned:\nwave: 1\nred: required\nred_reason: R18SR-RED-MARK\n---\n# Red resume\n\n## Files\n- r18sr-test.sh\n- r18sr-impl.txt\n\n## Verification\n`sleep 1`\n`bash r18sr-test.sh`\n' > docs/specs/r18cs/r18sr-01-red.md
+git add -A && git commit -qm "r18sr: fixture" >/dev/null
+SRS=docs/specs/r18cs/r18sr-01-red.md
+out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh stamp-red "$SRS" 2>&1)"; ex=$?
+[ "$ex" -eq 7 ] && l18_last "$out" | jq -e '.exit == 7 and .resume == 2' >/dev/null 2>&1 \
+  && grep -qE '^verify_resume: stamp-red 2 [0-9a-f]{64}$' "$SRS" && ! grep -q '^red_verified_at:' "$SRS" \
+  && echo "  ok    stamp-red call 1: exit 7, resume 2, mark written, no receipt yet" \
+  || { echo "::error::per-line cap: stamp-red pause exit=$ex out=$out"; fail=1; }
+out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh stamp-red "$SRS" 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -q '^red_verified_at:' "$SRS" && ! grep -q '^verify_resume:' "$SRS" \
+  && echo "  ok    stamp-red call 2: resumes at line 2, red for the declared reason, receipt written, mark gone" \
+  || { echo "::error::per-line cap: stamp-red resume exit=$ex out=$out"; fail=1; }
+
+echo "gate-split-02: VULYK_VERIFY_TIMEOUT above 300 acts as 300"
+CAPS="$(mktemp -d)"; CAPLOG="$CAPS/log"
+printf '#!/bin/sh\nif [ "$1" = "-k" ]; then echo "$3" >> "%s"; shift 3; else shift 1; fi\nexec "$@"\n' "$CAPLOG" > "$CAPS/timeout"
+chmod +x "$CAPS/timeout"
+printf -- '---\nstory: r18pl-02\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Clamp\n\n## Files\n- r18pl-clamp.txt\n\n## Verification\n`true`\n' > docs/specs/r18cs/r18pl-02-clamp.md
+git add -A && git commit -qm "r18pl: clamp fixture" >/dev/null
+PATH="$CAPS:$PATH" VULYK_VERIFY_TIMEOUT=999 bash scripts/cycle.sh close-story docs/specs/r18cs/r18pl-02-clamp.md --commit >/dev/null 2>&1
+[ "$(tail -1 "$CAPLOG" 2>/dev/null)" = 300 ] && echo "  ok    a 999 s setting caps the line at 300 s" \
+  || { echo "::error::per-line cap: clamp saw '$(cat "$CAPLOG" 2>&1)'"; fail=1; }
+rm -rf "$CAPS"
+
+echo "gate-split-02: repair keeps only the verification lines covering the paths its findings name"
+vf_spec() { # vf_spec <slug> <finding-line> - done stories 01 (a) and 02 (b), a RED round 1 with the finding, its repair
+  mk_open_spec "$1" 2; set_tier "$1" 2
+  printf -- '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# A\n\n## Files\n- %s-a.txt\n\n## Verification\n`test -f %s-a.txt`\n`echo unrelated`\n' "$1" "$1" "$1" "$1" > "docs/specs/$1/$1-01-a.md"
+  printf -- '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# B\n\n## Files\n- %s-b.txt\n\n## Verification\n`test -f %s-b.txt`\n`test -f %s-b.txt`\n' "$1" "$1" "$1" "$1" "$1" > "docs/specs/$1/$1-02-b.md"
+  git add -A && git commit -qm "$1: stories" >/dev/null
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  seat_report opus 1 GG | council record-seat "docs/specs/$1" 1 opus >/dev/null 2>&1
+  printf 'VERDICT: BLOCK\n## Major\n%s\n' "$2" | council record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
+  council judge "docs/specs/$1" --commit >/dev/null 2>&1
+  council repair "docs/specs/$1" --commit >/dev/null 2>&1
+}
+vf_spec r18vf '- [ask 2] r18vf-b.txt:1 b is wrong: run: t saw: f'
+vfv="$(sed -n '/^## Verification$/,$p' docs/specs/r18vf/r18vf-03-repair-round-1.md 2>/dev/null)"
+[ "$vfv" = "$(printf '## Verification\n`test -f r18vf-b.txt`')" ] \
+  && echo "  ok    a finding naming b: only b's line survives, once" \
+  || { echo "::error::per-line cap: repair filter: $vfv"; fail=1; }
+vf_spec r18vg '- [ask 2] zzz/nothing.c:3 nothing runs this: run: t saw: f'
+vfv="$(sed -n '/^## Verification$/,$p' docs/specs/r18vg/r18vg-03-repair-round-1.md 2>/dev/null)"
+[ "$vfv" = "$(printf '## Verification\n`test -f r18vg-a.txt`\n`test -f r18vg-b.txt`')" ] \
+  && echo "  ok    no surviving line: the lines hitting ## Files, deduped, the unrelated echo dropped" \
+  || { echo "::error::per-line cap: repair fallback: $vfv"; fail=1; }
+
+echo "gate-split-02: workers and the solo build learn exit 7"
+for f in .claude/agents/worker-code.md .claude/agents/worker-test.md .claude/commands/vulyk-build.md; do
+  grep -qF 'exit 7' "$SRC/$f" && echo "  ok    $f names exit 7" || { echo "::error::per-line cap: $f does not name exit 7"; fail=1; }
+done
 
 echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every pre-0.18 key"
 council status docs/specs/r18ad --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
 fi # part advance
+
+if part suite; then # --- part suite: cycle.sh suite (gate-split-04) - the round's gate, one step per call, into council/round-N/suite.log
+# A fixture runner answers --steps / --step K the way tests/full-suite.sh does: two steps, PART lines.
+# FX_FAIL: step 2 fails a part; FX_GROW: step 2 reports a part past 70% of its cap and still exits 0,
+# so the growth verdict can only come from cycle.sh's own suite-parts-check.sh read of the log.
+cat > fx-runner.sh <<'EOF'
+case "$1" in
+  --steps) echo 2 ;;
+  --step)
+    echo "PART fx:a$2 ok 0s cap 300s"
+    if [ "$2" = 2 ] && [ -n "${FX_FAIL:-}" ]; then echo "PART fx:b2 FAIL 1s cap 300s"; echo "STEP 2/2: FAIL 1s"; exit 1; fi
+    [ "$2" = 2 ] && [ -n "${FX_GROW:-}" ] && echo "PART fx:slow ok 250s cap 300s"
+    echo "STEP $2/2: ok 0s" ;;
+  *) exit 2 ;;
+esac
+EOF
+git add -A && git commit -qm "fixture: a stepped runner" >/dev/null
+sx_row() { # sx_row [<purpose> <command>] - the fixture constitution's one round-only full-suite row (none without args), committed
+  grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+  [ $# -eq 2 ] && printf '| %s | `%s` |\n' "$1" "$2" >> CLAUDE.md
+  git add -A && git commit -qm "fixture: full-suite row ${1:-none}" >/dev/null
+}
+sx_open() { # sx_open <slug> [<tier>] - a Tier 1 (or <tier>) spec, approved and branched, its round 1 opened --commit (no court below Tier 3)
+  mk_open_spec "$1" 2
+  set_tier "$1" "${2:-1}"
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+}
+sx_last() { printf '%s\n' "$1" | tail -1; } # sx_last <output> -> its JSON line
+
+echo "suite: no open round -> exit 2, nothing written"
+mk_open_spec sxnone 2
+set_tier sxnone 1
+out="$(council suite docs/specs/sxnone 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && sx_last "$out" | jq -e '.ok == false and .verb == "suite"' >/dev/null 2>&1 && [ ! -d docs/specs/sxnone/council ] \
+  && echo "  ok    no open round -> exit 2, ok:false" \
+  || { echo "::error::suite: no open round must exit 2 - exit=$ex out=$out"; fail=1; }
+
+echo "suite: a stepped row runs one step per call into the log, commits it, then writes SUITE once; a further call is a no-op"
+sx_row 'Full suite (round-only, steps)' 'bash fx-runner.sh'
+sx_open sxstep
+rd="docs/specs/sxstep/council/round-1"; rh="$(sed -n 's/^head=//p' "$rd/ROUND")"
+out="$(council suite docs/specs/sxstep --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.ok and .verb == "suite" and .step == 1 and .steps == 2 and .done == false and .suite == "pending" and (.status | type) == "object"' >/dev/null 2>&1 \
+  && echo "  ok    call 1 -> step 1 of 2, done:false, suite pending, status carried" || { echo "::error::suite step 1: exit=$ex out=$out"; fail=1; }
+[ "$(head -1 "$rd/suite.log" 2>/dev/null)" = "head=$rh steps=2" ] && grep -qE '^STEP 1/2: ok [0-9]+s$' "$rd/suite.log" && grep -qF 'PART fx:a1 ok 0s cap 300s' "$rd/suite.log" \
+  && ! grep -q '^SUITE:' "$rd/suite.log" \
+  && echo "  ok    log: header keyed to ROUND head=, STEP 1/2 and its PART line, no SUITE line yet" || { echo "::error::suite log after step 1: $(cat "$rd/suite.log" 2>&1)"; fail=1; }
+[ -z "$(git status --porcelain -- "$rd")" ] && git log -1 --format=%s | grep -qF 'suite round 1 step 1/2' \
+  && echo "  ok    --commit committed the log" || { echo "::error::suite commit: $(git status --porcelain) / $(git log -1 --format=%s)"; fail=1; }
+out="$(council suite docs/specs/sxstep --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 2 and .steps == 2 and .done == true and .suite == "ok"' >/dev/null 2>&1 \
+  && tail -1 "$rd/suite.log" | grep -qE '^SUITE: ok [0-9]+s$' && [ "$(grep -c '^SUITE:' "$rd/suite.log")" -eq 1 ] \
+  && echo "  ok    call 2 -> step 2 of 2, done:true, the log ends with one SUITE: ok line" || { echo "::error::suite step 2: exit=$ex out=$out log=$(cat "$rd/suite.log")"; fail=1; }
+before="$(cksum < "$rd/suite.log")"; hbefore="$(git rev-parse HEAD)"
+out="$(council suite docs/specs/sxstep --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .step == 2 and .suite == "ok"' >/dev/null 2>&1 \
+  && [ "$(cksum < "$rd/suite.log")" = "$before" ] && [ "$(git rev-parse HEAD)" = "$hbefore" ] \
+  && echo "  ok    call 3 -> no-op, done:true, log and HEAD unchanged" || { echo "::error::suite no-op: exit=$ex out=$out"; fail=1; }
+council status docs/specs/sxstep --json | jq -e '.open == true and .stale == false' >/dev/null 2>&1 \
+  && echo "  ok    the log's commits are paperwork: the round is still open, not stale" || { echo "::error::status after suite: $(council status docs/specs/sxstep --json)"; fail=1; }
+
+echo "suite: a failed part is data (exit 0, SUITE: FAIL); record-seat takes it, judge routes it RED -> repair, whose ## Findings carry the red PART line"
+sx_open sxfail 2 # Tier 2: ceiling 2, so the first RED is a repair, not a ceiling ESCALATE
+rd="docs/specs/sxfail/council/round-1"
+FX_FAIL=1 council suite docs/specs/sxfail --commit >/dev/null 2>&1
+out="$(FX_FAIL=1 council suite docs/specs/sxfail --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && tail -1 "$rd/suite.log" | grep -qE '^SUITE: FAIL [0-9]+s - part fx:b2 failed$' && grep -qE '^STEP 2/2: FAIL ' "$rd/suite.log" \
+  && echo "  ok    a FAIL step: exit 0, SUITE: FAIL - part fx:b2 failed" || { echo "::error::suite fail: exit=$ex out=$out log=$(cat "$rd/suite.log")"; fail=1; }
+out="$(printf 'VERDICT: PASS\nMODEL: test\nSUITE: ok 1s\n' | council record-seat docs/specs/sxfail 1 review 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -qE '^SUITE: FAIL [0-9]+s - part fx:b2 failed$' "$rd/review.md" && ! grep -qF 'SUITE: ok 1s' "$rd/review.md" \
+  && echo "  ok    record-seat review writes the log's SUITE line over the reported one" || { echo "::error::record-seat with log: exit=$ex out=$out"; fail=1; }
+out="$(council judge docs/specs/sxfail --commit 2>&1)"; ex=$?
+row="$(grep '"spec":"sxfail"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 0 ] && sx_last "$out" | grep -qF '"next":"repair"' && printf '%s' "$row" | jq -e '.verdict == "RED" and .review == "BLOCK" and .escalate == null' >/dev/null \
+  && echo "  ok    judge: SUITE FAIL -> RED, review BLOCK, no escalate" || { echo "::error::judge suite fail: exit=$ex out=$out row=$row"; fail=1; }
+out="$(council repair docs/specs/sxfail --commit 2>&1)"; ex=$?
+rs="$(ls docs/specs/sxfail/*-repair-round-1.md 2>/dev/null | head -1)"
+[ "$ex" -eq 0 ] && [ -n "$rs" ] && sed -n '/^## Findings$/,/^## Files$/p' "$rs" | grep -qF 'PART fx:b2 FAIL 1s cap 300s' \
+  && ! sed -n '/^## Findings$/,/^## Files$/p' "$rs" | grep -qF 'PART fx:a1' \
+  && echo "  ok    repair: ## Findings carry the red PART line, not the green ones" || { echo "::error::repair findings: exit=$ex out=$out story=$(cat "$rs" 2>/dev/null)"; fail=1; }
+
+echo "suite: a part past 70% of its cap fails the gate through suite-parts-check.sh, even when the runner exits 0"
+sx_open sxgrow
+rd="docs/specs/sxgrow/council/round-1"
+FX_GROW=1 council suite docs/specs/sxgrow >/dev/null 2>&1
+out="$(FX_GROW=1 council suite docs/specs/sxgrow 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && tail -1 "$rd/suite.log" | grep -qE '^SUITE: FAIL [0-9]+s - cut part fx:slow$' \
+  && echo "  ok    growth -> SUITE: FAIL - cut part fx:slow, exit 0" || { echo "::error::suite growth: exit=$ex out=$out log=$(cat "$rd/suite.log")"; fail=1; }
+
+echo "suite: a log keyed to another head is replaced, not resumed"
+sx_open sxhead
+rd="docs/specs/sxhead/council/round-1"
+council suite docs/specs/sxhead >/dev/null 2>&1
+sed_inplace '1s/^head=[^ ]*/head=0000000/' "$rd/suite.log"
+out="$(council suite docs/specs/sxhead 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 1 and .done == false' >/dev/null 2>&1 \
+  && [ "$(head -1 "$rd/suite.log")" = "head=$(sed -n 's/^head=//p' "$rd/ROUND") steps=2" ] && [ "$(grep -c '^STEP ' "$rd/suite.log")" -eq 1 ] \
+  && echo "  ok    a foreign head= -> the log starts over at step 1" || { echo "::error::suite foreign head: exit=$ex out=$out log=$(cat "$rd/suite.log")"; fail=1; }
+
+echo "suite: guards - PAUSE exits 3, a stale round exits 5, the re-stamp deletes the log"
+sx_open sxstale
+rd="docs/specs/sxstale/council/round-1"
+council suite docs/specs/sxstale --commit >/dev/null 2>&1
+touch docs/specs/sxstale/PAUSE
+out="$(council suite docs/specs/sxstale 2>&1)"; ex=$?
+[ "$ex" -eq 3 ] && echo "  ok    PAUSE -> exit 3" || { echo "::error::suite PAUSE: exit=$ex out=$out"; fail=1; }
+rm -f docs/specs/sxstale/PAUSE
+echo "code" > sxstale-code.txt
+git add -A && git commit -qm "real code change on sxstale" >/dev/null
+out="$(council suite docs/specs/sxstale 2>&1)"; ex=$?
+[ "$ex" -eq 5 ] && sx_last "$out" | grep -qF '"ok":false' && echo "  ok    stale round -> exit 5" || { echo "::error::suite stale: exit=$ex out=$out"; fail=1; }
+council open-round docs/specs/sxstale --commit >/dev/null 2>&1
+[ ! -e "$rd/suite.log" ] && [ -z "$(git status --porcelain -- "$rd")" ] && [ "$(sed -n 's/^head=//p' "$rd/ROUND")" = "$(git rev-parse --short HEAD~1)" ] \
+  && echo "  ok    open-round's re-stamp in place removed the log and committed the removal" || { echo "::error::re-stamp kept the log: $(ls "$rd") / $(git status --porcelain)"; fail=1; }
+
+echo "suite: a plain row is one part under VULYK_PART_CAP - at the cap it is PART <name> CAP and SUITE: FAIL - cut part <name>"
+sx_row 'Full suite plain (round-only)' 'sleep 5'
+sx_open sxcap
+rd="docs/specs/sxcap/council/round-1"
+out="$(VULYK_PART_CAP=2 council suite docs/specs/sxcap 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 1 and .steps == 1 and .done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && grep -qE '^PART full-suite-plain-round-only- CAP [0-9]+s cap 2s' "$rd/suite.log" \
+  && tail -1 "$rd/suite.log" | grep -qE '^SUITE: FAIL [0-9]+s - cut part full-suite-plain-round-only-' \
+  && echo "  ok    plain row at its cap -> PART CAP, SUITE: FAIL cut part, exit 0" || { echo "::error::suite plain cap: exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+sx_row 'Full suite plain (round-only)' 'true'
+sx_open sxplain
+out="$(council suite docs/specs/sxplain 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "ok"' >/dev/null 2>&1 \
+  && grep -qE '^PART full-suite-plain-round-only- ok [0-9]+s cap 300s$' docs/specs/sxplain/council/round-1/suite.log \
+  && echo "  ok    plain row green -> PART ok under the default 300 s cap, SUITE: ok" || { echo "::error::suite plain ok: exit=$ex out=$out"; fail=1; }
+
+echo "suite: several round-only full-suite rows -> each row is its own capped part, one step per row (gate-split-08, ask 9)"
+printf ': > "%s/fx-b-ran"\n' "$PWD" > fx-b.sh
+grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+printf '| Full suite unit (round-only) | `true` |\n| Full suite e2e (round-only) | `bash fx-b.sh` |\n' >> CLAUDE.md
+git add -A && git commit -qm "fixture: two full-suite part rows" >/dev/null
+sx_open sxsplit
+rd="docs/specs/sxsplit/council/round-1"
+out1="$(council suite docs/specs/sxsplit 2>&1)"; ex1=$?
+out2="$(council suite docs/specs/sxsplit 2>&1)"; ex2=$?
+[ "$ex1" -eq 0 ] && [ "$ex2" -eq 0 ] && sx_last "$out1" | jq -e '.step == 1 and .steps == 2 and .done == false' >/dev/null 2>&1 \
+  && sx_last "$out2" | jq -e '.step == 2 and .steps == 2 and .done == true and .suite == "ok"' >/dev/null 2>&1 \
+  && [ -e fx-b-ran ] && grep -qE '^PART full-suite-unit-round-only- ok [0-9]+s cap 300s$' "$rd/suite.log" \
+  && grep -qE '^PART full-suite-e2e-round-only- ok [0-9]+s cap 300s$' "$rd/suite.log" \
+  && echo "  ok    two part rows -> steps 2, both rows ran as PART lines, SUITE: ok" \
+  || { echo "::error::suite split rows: the second row did not run - out1=$out1 out2=$out2 log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+rm -f fx-b-ran
+
+echo "suite: the row parser takes exactly the second cell; an empty or missing one is a row with no command (gate-split-08 finding 2, gate-split-10 finding 2)"
+eval "$(sed -n '/^full_suite_row() {/,/^}/p' "$SRC/scripts/cycle.sh")"
+fsr() { printf '## Commands\n| Purpose | Command |\n|---|---|\n%s\n' "$1" > fsr.md; full_suite_row fsr.md; }
+r="$(fsr '| Full suite (round-only) |  | echo PWNED |')"; ex=$?
+[ "$ex" -eq 0 ] && [ "$r" = "$(printf 'Full suite (round-only)\t')" ] && echo "  ok    an empty second cell is a row with no command, the third cell never becomes the command" \
+  || { echo "::error::suite row parser: an empty command cell must be a row with no command - gave '$r' (exit $ex)"; fail=1; }
+for fr in '| Full suite B (round-only) |' '| Full suite B (round-only)'; do
+  r="$(fsr "$fr")"; ex=$?
+  [ "$ex" -eq 0 ] && [ "$r" = "$(printf 'Full suite B (round-only)\t')" ] && echo "  ok    a missing command cell ($fr) is a row with no command" \
+    || { echo "::error::suite row parser: a missing command cell must be a row with no command - '$fr' gave '$r' (exit $ex)"; fail=1; }
+done
+r="$(fsr '| Full suite (round-only) | `bash t.sh` | echo PWNED |')"
+[ "$r" = "$(printf 'Full suite (round-only)\tbash t.sh')" ] && echo "  ok    a third cell is dropped: the command is the second cell alone" \
+  || { echo "::error::suite row parser: a three-cell row gave '$r'"; fail=1; }
+r="$(fsr '| Full suite (round-only) | `a \| b` |')"
+[ "$r" = "$(printf 'Full suite (round-only)\ta | b')" ] && echo "  ok    an escaped pipe stays inside the second cell" \
+  || { echo "::error::suite row parser: an escaped pipe gave '$r'"; fail=1; }
+rm -f fsr.md
+
+echo "suite: a row with an empty or missing command cell is a red step that names it, never SUITE: none or a silent drop (gate-split-10 finding 2)"
+sxe=0
+for fr in '| Full suite (round-only) |  |' '| Full suite (round-only) |'; do
+  sxe=$((sxe + 1))
+  grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+  printf '%s\n' "$fr" >> CLAUDE.md
+  git add -A && git commit -qm "fixture: a sole full-suite row with no command" >/dev/null
+  sx_open "sxempty$sxe"
+  rd="docs/specs/sxempty$sxe/council/round-1"
+  out="$(council suite "docs/specs/sxempty$sxe" 2>&1)"; ex=$?
+  [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL" and .steps == 1' >/dev/null 2>&1 \
+    && grep -qE '^STEP 1/1: FAIL ' "$rd/suite.log" && grep -qE '^PART full-suite-round-only- FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \
+    && ! grep -q '^SUITE: none' "$rd/suite.log" \
+    && echo "  ok    sole row '$fr' -> STEP FAIL, a PART line names the row, SUITE: FAIL" \
+    || { echo "::error::suite empty row: a row with no command must be a red step naming it - '$fr' exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+done
+grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+printf '| Full suite unit (round-only) | `true` |\n| Full suite e2e (round-only) |  |\n' >> CLAUDE.md
+git add -A && git commit -qm "fixture: a good row and an empty one" >/dev/null
+sx_open sxempty3
+rd="docs/specs/sxempty3/council/round-1"
+council suite docs/specs/sxempty3 >/dev/null 2>&1
+out="$(council suite docs/specs/sxempty3 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 2 and .steps == 2 and .done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && grep -qE '^PART full-suite-unit-round-only- ok ' "$rd/suite.log" \
+  && grep -qE '^PART full-suite-e2e-round-only- FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \
+  && echo "  ok    unit=true + e2e empty -> steps 2, the e2e row is named FAIL, SUITE: FAIL" \
+  || { echo "::error::suite empty row: an empty row beside a good one must be a red step naming it - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+
+echo "suite: a step beyond the row count fails, two rows with one Purpose get distinct PART names (gate-split-10 finding 3)"
+grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+printf '| Full suite (round-only) | `true` |\n| Full suite (round-only) | `false` |\n' >> CLAUDE.md
+git add -A && git commit -qm "fixture: two rows with one Purpose" >/dev/null
+sx_open sxdup
+rd="docs/specs/sxdup/council/round-1"
+council suite docs/specs/sxdup >/dev/null 2>&1
+out="$(council suite docs/specs/sxdup 2>&1)"; ex=$?
+p1="$(grep '^PART ' "$rd/suite.log" | sed -n 1p | awk '{ print $2 }')"; p2="$(grep '^PART ' "$rd/suite.log" | sed -n 2p | awk '{ print $2 }')"
+[ "$ex" -eq 0 ] && [ -n "$p1" ] && [ -n "$p2" ] && [ "$p1" != "$p2" ] \
+  && tail -1 "$rd/suite.log" | grep -qF "part $p2 failed" \
+  && echo "  ok    two rows named 'Full suite (round-only)' -> PART $p1 and PART $p2, the verdict names the failed one" \
+  || { echo "::error::suite duplicate purpose: two rows with one Purpose must get distinct PART names - p1=$p1 p2=$p2 log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+sx_open sxbeyond
+rd="docs/specs/sxbeyond/council/round-1"; rh="$(sed -n 's/^head=//p' "$rd/ROUND")"
+printf 'head=%s steps=3\nSTEP 1/3: ok 0s\nSTEP 2/3: ok 0s\n' "$rh" > "$rd/suite.log"
+out="$(council suite docs/specs/sxbeyond 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 3 and .steps == 3 and .done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && grep -qE '^STEP 3/3: FAIL ' "$rd/suite.log" && grep -qE '^PART step-3-no-row FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \
+  && echo "  ok    step 3 of a log over 2 rows -> STEP 3/3 FAIL, PART step-3-no-row, SUITE: FAIL" \
+  || { echo "::error::suite step beyond rows: a step past the row count must fail - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+
+echo "suite: no round-only full-suite row -> SUITE: none, done at once"
+sx_row
+sx_open sxno
+out="$(council suite docs/specs/sxno 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "none" and .steps == 0' >/dev/null 2>&1 \
+  && [ "$(tail -1 docs/specs/sxno/council/round-1/suite.log)" = "SUITE: none" ] \
+  && echo "  ok    no row -> SUITE: none, steps 0, done" || { echo "::error::suite none: exit=$ex out=$out"; fail=1; }
+fi # part suite
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
 [ -s "$FAILS" ] && fail=1 # an expect() that ran on the right of a pipe

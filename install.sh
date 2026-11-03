@@ -265,7 +265,8 @@ print_commands_placeholder() {
 | Lint | `<fill in>` |
 | Build / typecheck | `<fill in>` |
 
-`round-only` marks the full suite: the reviewer runs it once per round, and no story names it.
+`round-only` marks the full suite: the round gate runs it, and no story names it. Several
+`Full suite ... (round-only)` rows split it into parts, each one part under a 300 s cap (ADR-029).
 Filled in by `/vulyk-bootstrap`. Verify each command actually runs before writing it
 down, and write "none" where this project genuinely lacks one - a verification that
 always exits 0 is worse than an admitted gap.
@@ -1513,6 +1514,14 @@ else
     reset_commands_table "$DEST/CLAUDE.md"
   fi
   echo "  copy           CLAUDE.md"
+fi
+# Gate split (ADR-029): said once per upgrade, never written into the hive's constitution.
+if [ -n "$UPGRADE" ]; then
+  echo ""
+  echo "  gate split (ADR-029): the round gate runs each 'Full suite ... (round-only)' row as one part under a 300 s cap;"
+  echo "  you may list several such rows (each one part, e.g. 'Full suite unit (round-only)'). A part over 210 s is red."
+  echo "  Every story '## Verification' line also runs under a 300 s cap (VULYK_VERIFY_TIMEOUT above 300 acts as 300):"
+  echo "  cut any row over ~210 s into --part rows before this hive takes this release. Your constitution is not edited."
 fi
 [ -f "$DEST/AGENTS.md" ] || { [ "$CHECK" = "--check" ] || cp -p "$SRC/AGENTS.md" "$DEST/AGENTS.md"; }
 

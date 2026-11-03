@@ -2,6 +2,25 @@
 # Model profile checks (model-profiles-01): scripts/model-profile.sh storage, roles, --set/--chosen/--recommend/--explain;
 # top-model.sh --plan and its profile-aware gate and second reviewer; the profile at the end of top-model-brief.sh's
 # line; the CLAUDE.md row. Every run gets a temp HOME, a temp config folder and a plan fixture, never the real ones.
+#   Usage: bash tests/model-profile.test.sh [--part defaults|set|edges] [--list-parts]
+PARTS="defaults set edges"
+PART=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list-parts) printf '%s
+' $PARTS; exit 0 ;;
+    --part)
+      PART="${2:-}"; shift
+      case " $PARTS " in
+        *" $PART "*) ;;
+        *) echo "unknown part '$PART' - parts:" >&2; printf '%s
+' $PARTS >&2; exit 1 ;;
+      esac ;;
+    *) echo "usage: bash tests/model-profile.test.sh [--part <name>] [--list-parts]" >&2; exit 2 ;;
+  esac
+  shift
+done
+part() { [ -z "$PART" ] || [ "$PART" = "$1" ]; }
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
@@ -43,6 +62,7 @@ tm() { run "$HIVE" scripts/top-model.sh "$@"; }
 ROLES="queen planner review seat worker routine gate architect review-second"
 roles_of() { local r out=""; for r in $ROLES; do out="$out $r=$(mp --role "$r")"; done; echo "${out# }"; }
 
+if part defaults; then
 echo "--- no profile file: today's output"
 for fx in max pro missing; do
   PLANFILE="$T/$fx.json"
@@ -71,6 +91,9 @@ expect_eq "[pro] sonnet-builds column" \
   "$(roles_of)"
 [ ! -e "$CFG" ] && ok "reading wrote nothing" || bad "reading created $CFG"
 
+fi
+
+if part set; then
 echo "--- --set opus-builds / economy"
 for fx in max pro; do
   PLANFILE="$T/$fx.json"
@@ -100,6 +123,11 @@ printf '# VULYK Constitution\n\n`TOP_MODEL = auto` names the gate model.\n' > "$
 expect_eq "TOP_MODEL = auto defers to the profile" "fable" "$(tm)"
 rm -f "$HIVE/CLAUDE.md"
 
+fi
+
+if part edges; then
+PLANFILE="$T/max.json"
+mp --set opus-builds >/dev/null # what the set part leaves behind: the file the next line copies
 echo "--- bad input"
 cp "$CFG/vulyk-model-profile" "$T/before"
 mp --set bogus >/dev/null 2>&1; expect_eq "--set bogus exits 2" "2" "$?"
@@ -165,6 +193,7 @@ if git -C "$SRC" show baa5219:CLAUDE.md > "$T/claude.base" 2>/dev/null; then
   [ "$NOW" -le "$WAS" ] && ok "CLAUDE.md is no bigger than at baa5219 ($NOW <= $WAS B)" \
     || bad "CLAUDE.md grew: $NOW B > $WAS B at baa5219"
 else ok "the CLAUDE.md size comparison skipped: baa5219 not in this clone"; fi
+fi
 
 N="$(wc -l < "$LEDGER" | tr -d ' ')"; F="$(wc -l < "$FAILS" | tr -d ' ')"
 if [ "$F" -gt 0 ]; then echo "model-profile.test.sh: $F of $N checks failed"; exit 1; fi

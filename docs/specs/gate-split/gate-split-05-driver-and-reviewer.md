@@ -1,14 +1,15 @@
 ---
 story: gate-split-05
 spec: gate-split
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 3
 blocked_by: [gate-split-03, gate-split-04]
 red: required
-red_reason:
+red_reason: suite: gate-split-05 suite calls loop until done:true, all before the first seat dispatch
+red_verified_at: 2026-11-02T21:44:44Z f50ee3dfa9829ac4429d16d2c73f28ebb706010222f75d83b74732ca0246b117
 ---
 
 # The driver, the clerk, the reviewer and the Queen's commands run the gate before the seats
@@ -65,5 +66,32 @@ scout report C:/Users/Andrei/AppData/Local/Temp/claude/E--Projects-vulyk/aeafb18
 `bash tests/e2e.test.sh`
 
 ## Implementation notes
+- vulyk-cycle.js: gate() loops the clerk `suite` verb (cap 32) before seat dispatch in council(); ok:false stops, exit 3 pauses.
+- driver.test.sh: SKIP exit 77; harness tracks suite calls apart from clerkCmds; new suite tests. e2e.test.sh: clerk trace now has one suite call.
+- cycle-clerk, lead-review (reads suite.log, reruns one part under run_capped 300), vulyk-build, vulyk-review updated; VULYK_SUITE_TIMEOUT advice removed.
 
 ## Findings
+
+- Attempt 2 (stamp 67ef1fd8e67c2624): close-story exit 4 again, `test changed after red receipt: re-run stamp-red`. The receipt hashes both sealed tests (driver + e2e); the e2e edit (lines 199-200: the green run's clerk trace gains one `suite` call) is required by the gate itself, and stamp-red cannot be rerun now because the implementation is green (`not red`). Resolution is the Queen's: re-stamp the receipt over the current tests (or accept the e2e edit), then close-story goes through. driver.test.sh 101/0 on this attempt; no file changed since attempt 1.
+
+- Queen, 2026-11-02: receipt re-stamped over the final tests with the five implementation files set aside (git diff saved, checkout, stamp-red, git apply): driver.test.sh red for red_reason, e2e red too; implementation restored unchanged. returned set to DONE for close-story.
+
+## Red receipt
+- command: bash tests/driver.test.sh
+- exit: 1
+- tests: f50ee3dfa9829ac4429d16d2c73f28ebb706010222f75d83b74732ca0246b117 (tests/driver.test.sh, tests/e2e.test.sh)
+- impl: 6f8687637fd32759fd51bbd866aedf9aa73c1de503e47599cdc580410fa753e3
+- stamped: 2026-11-02T21:44:44Z
+
+```
+  ok    fallback: a refused worker is redispatched, where is the story id
+  ok    fallback: the retry on top_model is redispatched on opus when Fable refuses
+  ok    fallback: no refusal returns fallbacks: [] on a stop and on green
+::error::suite: gate-split-05 suite calls loop until done:true, all before the first seat dispatch - got {"suite":[],"d":2,"result":{"spec":"docs/specs/demo","slug":"demo","stage":"05","tier":3,"branch":"vulyk/demo","head":"h1","wave_stories":[],"round":0,"court":null,"round_dir":null,"since":null,"seat_attempt":{},"seats":[],"red":[],"next":"green","fallbacks":[]}}
+::error::suite: a finished log costs one call and the seats follow - got {"s":0,"d":1}
+::error::suite: at most 32 calls, then the run stops without dispatching - got {"n":0,"d":1,"result":""}
+::error::suite: ok:false stops the run, no dispatch, still releases - got ""
+::error::suite: an unreadable line ends the run with the raw line - got ""
+  ok    no queen-planner dispatch in any scenario
+96 passed, 5 failed
+```

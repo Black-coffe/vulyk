@@ -33,12 +33,15 @@ SRC="$(cd "$(dirname "$0")/.." && pwd)"
 PARTS="telemetry
 scan
 install
+install-xp
 terminal
 wiring
 ledger
 constitution
+constitution2
 library
 ysk
+ysk-hook
 rg
 mods
 watcher
@@ -177,7 +180,7 @@ install_fixtures() { # [tgt] - $TGT (fresh install) and $OWNSET (an owner's own 
   [ "${1:-}" = tgt ] && return 0
   [ -n "${OWNSET:-}" ] && return 0
   OWNSET="$T/hive-own-settings"
-  if part_on install; then
+  if part_on install install-xp; then
     seed_ownset "$OWNSET"
     bash "$SRC/install.sh" "$OWNSET" --telemetry off > "$T/ownset.out" 2>&1
   else
@@ -1270,6 +1273,9 @@ cat "$T/nomark-upgrade.out" | expect "marker-less Profile: warns and names the r
 expect_eq "marker-less Profile: the file is unchanged" "1" \
   "$([ "$NOMARK_BEFORE" = "$(cat "$NOMARK/CLAUDE.md")" ] && echo 1 || echo 0)"
 
+fi # install
+
+if part_on install-xp; then
 # --- cross-platform-02: install.sh sources scripts/lib.sh and edits settings.json through vulyk_python
 echo "--- install.sh: lib.sh beside it, a stub python3 passed over"
 # A python3 that is a stub (the Windows Store alias, exit 49) first on PATH; `python` beside it is the real one,
@@ -1340,7 +1346,7 @@ bash "$SRC/install.sh" "$A9" --upgrade --telemetry off > "$T/xp-cells.out" 2>&1
 cmdblock "$A9/CLAUDE.md" > "$T/xp-cells.after"
 expect_eq "install.sh --upgrade keeps the hive's ## Commands block (old python cell included) byte-identical" "0" \
   "$(cmp -s "$T/xp-cells.before" "$T/xp-cells.after"; echo $?)"
-fi # install
+fi # install-xp
 
 if part_on terminal; then
 # The hive's own updater, then the Telemetry question with and without a terminal. The question
@@ -1493,7 +1499,7 @@ rmdir "$TGT/docs/specs/autonomous-cycle"
 
 fi # ledger
 
-if part_on constitution; then
+if part_on constitution constitution2; then
 # --- install.sh: --constitution replace (ADR-013 D7) ------------------------------------------
 # The release's constitution goes in whole; the hive's Profile and Commands bodies are carried
 # over verbatim between the markers; the old file is kept as <name>.pre-<major.minor>.md. A
@@ -1506,6 +1512,9 @@ outside() { # the file minus both block bodies (markers kept)
 }
 block() { awk -v m="$2" 'index($0, m ":END") { f = 0 } f { print } index($0, m ":START") { f = 1 }' "$1" | tr -d '\r'; }
 
+fi # the helpers constitution and constitution2 share
+
+if part_on constitution; then
 CR="$T/hive-replace"; mkdir -p "$CR"
 bash "$SRC/install.sh" "$CR" --telemetry on > /dev/null 2>&1
 sed_inplace 's/| Stack | `<fill in>` |/| Stack | `filled-stack` |/; s/| Lint | `<fill in>` |/| Lint | `npm run lint -- --quiet` |/' "$CR/CLAUDE.md"
@@ -1520,6 +1529,21 @@ cat "$T/cr-plain.out" | expect "plain --upgrade prints the sizes" "constitution 
 cat "$T/cr-plain.out" | expect "plain --upgrade prints the migrate command" "install.sh\" \"$CR\" --upgrade --constitution replace"
 cat "$T/cr-plain.out" | expect "plain --upgrade names the backup" "the old file as CLAUDE.$BAKNAME.md"
 cat "$T/cr-plain.out" | expect_absent "a canonical full-suite row gets no note" "no 'Full suite / build (round-only)' row"
+# gate split (ADR-029) reaches a hive that already has the canonical row: the upgrade prints it,
+# /vulyk-update says it outside the missing-row paragraph, the template and the CHANGELOG name it
+cat "$T/cr-plain.out" | expect "a hive with the canonical row hears the gate split on --upgrade" "gate split (ADR-029)"
+sed -n '/^6\. /,/^Never edit/p' "$SRC/.claude/commands/vulyk-update.md" | grep '^   Gate split (ADR-029), every hive:' \
+  | expect "gate split: /vulyk-update step 6 tells every hive, not only a renamed row" "300 s"
+print_commands_placeholder_text="$(sed -n '/^print_commands_placeholder() {/,/^}/p' "$SRC/install.sh")"
+printf '%s\n' "$print_commands_placeholder_text" \
+  | expect "gate split: the install template names the 300 s part cap" "each one part under a 300 s cap"
+# the whole file, not [Unreleased]: the release commit moves the entry under its version header
+cat "$SRC/CHANGELOG.md" \
+  | expect "gate split: CHANGELOG has the gate-split entry" "Gate split (ADR-029)"
+# ...and the check must hold on that released shape too
+awk '{ print } /^## \[Unreleased\]$/ { print ""; print "## [9.9.9] - 2099-01-01" }' "$SRC/CHANGELOG.md" > "$T/changelog-released.md"
+cat "$T/changelog-released.md" \
+  | expect "gate split: a released CHANGELOG still has the gate-split entry" "Gate split (ADR-029)"
 
 # a hive bootstrapped before 0.36.0 keeps its own full-suite row name: the upgrade names it
 # (suite-row-upgrade-01), for the original `Full test suite`, a canonical name missing
@@ -1567,6 +1591,9 @@ expect_eq "and writes no second backup" "1" "$(ls "$CR"/CLAUDE.pre-*.md | grep -
 bash "$SRC/install.sh" "$CR" --upgrade > "$T/cr-after.out" 2>&1
 cat "$T/cr-after.out" | expect_absent "a migrated hive gets no migrate hint" "--constitution replace"
 
+fi # constitution
+
+if part_on constitution2; then
 # the sidecar: CLAUDE.vulyk.md is replaced, the foreign CLAUDE.md that imports it is not opened
 SC="$T/hive-sidecar-replace"; mkdir -p "$SC"
 printf '# My project rules\n\n@CLAUDE.vulyk.md\n' > "$SC/CLAUDE.md"
@@ -1598,7 +1625,7 @@ EMPTYH="$T/hive-replace-empty"; mkdir -p "$EMPTYH"
 RC=0; bash "$SRC/install.sh" "$EMPTYH" --upgrade --constitution replace > "$T/empty.out" 2>&1 || RC=$?
 expect_eq "no constitution to replace is an error" "1" "$RC"
 expect_eq "and leaves the directory empty" "" "$(ls -A "$EMPTYH")"
-fi # constitution
+fi # constitution2
 
 if part_on upgrade; then
 # --- install.sh: retired framework files and the hooks wired to them (ADR-013 D7) -------------
@@ -1684,13 +1711,16 @@ cat "$T/ownset.out" | expect "an owner's settings.json: reset wired on SessionSt
 expect_eq "... and all three land in the owner's file" "1 1 1" "$(defect_wiring "$OWNSET/.claude/settings.json")"
 fi # library
 
+if part_on ysk ysk-hook; then
+YSK='cc-plugin-you-should-know@builtin'
+ysk_val() { jq -r --arg k "$YSK" '.enabledPlugins[$k] | tostring' "$1" | tr -d '\r'; }
+fi # the helpers ysk and ysk-hook share
+
 if part_on ysk; then
 install_fixtures
 # ysk-offer (0.29.0): Claude Code's built-in "You should know" mod is offered to the user, never switched
 # on. No settings.json the installer writes or edits names its key; the SessionStart hook ysk-offer.sh
 # carries the offer, at most three times per machine and once a day, and stops at any key the user set.
-YSK='cc-plugin-you-should-know@builtin'
-ysk_val() { jq -r --arg k "$YSK" '.enabledPlugins[$k] | tostring' "$1" | tr -d '\r'; }
 expect_eq "VULYK's own settings.json does not switch the mod" "null" "$(ysk_val "$SRC/.claude/settings.json")"
 expect_eq "a fresh hive gets no key for it" "null" "$(ysk_val "$TGT/.claude/settings.json")"
 expect_eq "... nor does an owner's settings.json" "null" "$(ysk_val "$OWNSET/.claude/settings.json")"
@@ -1724,6 +1754,9 @@ bash "$SRC/install.sh" "$YSK3" --upgrade > "$T/ysk-off.out" 2>&1
 expect_eq "an owner's false stays, and settings.local.json is never touched" "false true" \
   "$(ysk_val "$YSK3/.claude/settings.json") $(ysk_val "$YSK3/.claude/settings.local.json")"
 
+fi # ysk
+
+if part_on ysk-hook; then
 # The hook itself, in a sandbox: CLAUDE_CONFIG_DIR stands in for ~/.claude.
 YO="$SRC/.claude/hooks/ysk-offer.sh"
 YH="$T/ysk-hive"; YC="$T/ysk-cfg"; mkdir -p "$YH/.claude" "$YC"
@@ -1758,7 +1791,7 @@ expect_eq "... and none of them counted a showing" "0" "$([ -e "$YC/vulyk-ysk-of
 printf '| Owner language | `<fill in - ru, uk, en (default)>` |\n' > "$YH/CLAUDE.md"
 yo | jq -r .systemMessage | expect "an unfilled language row falls back to English" "Tip 1 of 3"
 
-fi # ysk
+fi # ysk-hook
 
 if part_on rg; then
 # wire_ripgrep: on Windows, with a system rg on PATH, USE_BUILTIN_RIPGREP=0 goes to the hive's

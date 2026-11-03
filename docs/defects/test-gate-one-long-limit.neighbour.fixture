@@ -1,0 +1,5 @@
+SUITE run with a cap per part: every part under 300 s, one grown past 70% of its cap
+PART cycle:ship ok 61s cap 300s
+PART council:verbs ok 148s cap 300s
+PART solo:green ok 215s cap 300s
+SUITE: ok 424s parts=3 skip=0 fail=

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # The full-suite runner's contract (tests/full-suite.sh), driven through VULYK_SUITES with stub
-# scripts: ok / FAIL / TIMEOUT lines, the summary, exit 0/1/124, the --jobs cap, the budget,
-# the uncapped modes, --list, the capped default --jobs, the latency suites last and the shared
-# install cache. No real suite runs here except the --list of the real tree.
+# scripts: a cap per part (a part at its cap is FAIL, exit 1, never 124), the growth check over 70% of
+# the cap, PART lines, --steps / --step K, SKIP (exit 77) and VULYK_STRICT_SKIP, the --jobs cap,
+# the uncapped mode, --list, the capped default --jobs, the latency suites last and the shared install
+# cache. No real suite runs here except the --list of the real tree.
 #
-#   Usage: bash tests/full-suite.test.sh     # from anywhere, about 30 s
+#   Usage: bash tests/full-suite.test.sh     # from anywhere, about 40 s
 set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 RUN="$SRC/tests/full-suite.sh"
@@ -23,13 +24,14 @@ reject() { # reject <label> <needle>   (judges $OUT)
 code() { # code <label> <want> <got>
   if [ "$2" = "$3" ]; then echo "  ok    $1"; else echo "::error::$1 - exit $3, want $2"; fail=1; fi
 }
-line() { # line <label> <verdict> <command> - a `<verdict> <N>s <command>` line, any N (seconds round)
-  if printf '%s\n' "$OUT" | sed -E 's/^(ok|FAIL|TIMEOUT) [0-9]+s /\1 Ns /' | grep -qxF -- "$2 Ns $3"; then echo "  ok    $1"
-  else echo "::error::$1 - expected '$2 <N>s $3' in:"; printf '%s\n' "$OUT" | sed 's/^/        /'; fail=1; fi
+part() { # part <label> <name> <verdict> - a `PART <name> <verdict> <N>s cap <C>s` line, any N
+  if printf '%s\n' "$OUT" | grep -qE -- "^PART $2 $3 [0-9]+s cap [0-9]+s"; then echo "  ok    $1"
+  else echo "::error::$1 - expected 'PART $2 $3 <N>s cap <C>s' in:"; printf '%s\n' "$OUT" | sed 's/^/        /'; fail=1; fi
 }
-run() { # run <VULYK_SUITE_TIMEOUT> <suites> [runner args...] - sets OUT and RC
-  local b="$1" s="$2"; shift 2
-  OUT="$(VULYK_SUITE_TIMEOUT="$b" VULYK_SUITES="$s" bash "$RUN" "$@" 2>&1)"; RC=$?
+dropLogs() { local d; d="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$d" ] && rm -rf "$d"; return 0; }
+run() { # run <VULYK_PART_CAP> <suites> [runner args...] - sets OUT and RC
+  local c="$1" s="$2"; shift 2
+  OUT="$(VULYK_PART_CAP="$c" VULYK_SUITES="$s" bash "$RUN" "$@" 2>&1)"; RC=$?
 }
 
 S="$T/stubs"; mkdir -p "$S"
@@ -38,116 +40,157 @@ printf 'for i in $(seq 1 30); do echo "fail-line-$i"; done\nexit 3\n' > "$S/bad.
 printf 'sleep 30\n' > "$S/hang.sh"
 printf 'sleep 3\n' > "$S/slow.sh"
 printf ': > "%s/started-$1"\n' "$T" > "$S/mark.sh"
+printf 'echo "SKIP: no such tool"\nexit 77\n' > "$S/skip.sh"
 # lock.sh: fails when another lock.sh holds the lock - two at once means the --jobs cap broke
 printf 'mkdir "%s/lock" 2>/dev/null || { echo overlap; exit 1; }\nsleep 2\nrmdir "%s/lock"\n' "$T" "$T" > "$S/lock.sh"
 
 echo "== all ok"
-run 540 "bash $S/ok.sh
+run 300 "bash $S/ok.sh
 bash $S/ok.sh"
 code "all ok -> exit 0" 0 "$RC"
-line "an ok line per job" ok "bash $S/ok.sh"
-expect "summary line" "full suite: 2 ok, 0 failed, 0 timed out, wall "
-expect "summary names budget and jobs" "s, budget 540s, jobs "
+part "a PART ok line per job" ok ok
+expect "summary line" "SUITE: ok "
+expect "summary counts parts" "parts=2 skip=0 fail="
 reject "logs removed on exit 0" "logs: "
 
 echo "== one failing"
-run 540 "bash $S/ok.sh
+run 300 "bash $S/ok.sh
 bash $S/bad.sh"
 code "a FAIL -> exit 1" 1 "$RC"
-line "FAIL line" FAIL "bash $S/bad.sh"
+part "FAIL line" bad FAIL
 expect "tail of the failed log" "fail-line-30"
 expect "tail reaches 20 lines back" "fail-line-11"
 reject "tail stops at 20 lines" "fail-line-10"
-expect "summary counts the failure" "full suite: 1 ok, 1 failed, 0 timed out"
+expect "summary names the failure" "SUITE: FAIL "
+expect "summary lists the failed part" "fail=bad"
 LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"
 if [ -n "$LOGDIR" ] && [ -d "$LOGDIR" ]; then echo "  ok    logs kept and named on exit 1"; rm -rf "$LOGDIR"
 else echo "::error::logs not kept/named: '$LOGDIR'"; fail=1; fi
 
-echo "== the budget: a hang beside a FAIL"
+echo "== a part at its cap is FAIL, exit 1, never 124"
 before=$SECONDS
 run 2 "bash $S/hang.sh
 bash $S/bad.sh" --jobs 2
 took=$(( SECONDS - before ))
-code "TIMEOUT outranks FAIL -> exit 124" 124 "$RC"
-expect "TIMEOUT line for the hang" "s bash $S/hang.sh"
-printf '%s\n' "$OUT" | grep -q "^TIMEOUT [0-9]*s bash $S/hang.sh\$" && echo "  ok    hang marked TIMEOUT" \
-  || { echo "::error::hang not marked TIMEOUT"; printf '%s\n' "$OUT"; fail=1; }
-line "FAIL line beside it" FAIL "bash $S/bad.sh"
-expect "summary still printed" "full suite: 0 ok, 1 failed, 1 timed out"
+code "a cut part -> exit 1, not 124" 1 "$RC"
+expect "the CAP line names the cut part" "cut part hang"
+part "CAP line for the hang" hang CAP
+part "FAIL line beside it" bad FAIL
+expect "summary lists both" "fail=hang,bad"
 [ "$took" -lt 20 ] && echo "  ok    the hang was killed (${took}s)" || { echo "::error::runner waited ${took}s for a 30 s hang"; fail=1; }
-LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+dropLogs
 
-echo "== the budget: a job still queued at the budget never starts"
-run 2 "bash $S/hang.sh
-bash $S/mark.sh late" --jobs 1
-code "queued job -> exit 124" 124 "$RC"
-expect "unstarted job marked TIMEOUT" "TIMEOUT 0s bash $S/mark.sh late"
-[ -e "$T/started-late" ] && { echo "::error::a job started past the budget"; fail=1; } || echo "  ok    no job starts past the budget"
-expect "summary counts both" "full suite: 0 ok, 0 failed, 2 timed out"
-LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+echo "== a part over 70% of its cap fails the growth check"
+run 4 "bash $S/slow.sh"
+code "3 s of a 4 s cap -> exit 1" 1 "$RC"
+expect "growth line from suite-parts-check" "suite-parts-check: cut part slow"
+expect "named as grown" "grew"
+dropLogs
+run 10 "bash $S/slow.sh"
+code "3 s of a 10 s cap is fine -> exit 0" 0 "$RC"
+
+echo "== a cap above 300 is refused"
+run 301 "bash $S/ok.sh"
+code "VULYK_PART_CAP=301 -> exit 2" 2 "$RC"
+run abc "bash $S/ok.sh"
+code "a non-number cap -> exit 2" 2 "$RC"
 
 echo "== --jobs 1 runs one at a time, --jobs 2 does not"
-run 540 "bash $S/lock.sh
+run 300 "bash $S/lock.sh
 bash $S/lock.sh" --jobs 1
 code "--jobs 1: no overlap -> exit 0" 0 "$RC"
-expect "--jobs 1 in the summary" "jobs 1"
-run 540 "bash $S/lock.sh
+expect "--jobs 1 is a step per part" "parts=2"
+run 300 "bash $S/lock.sh
 bash $S/lock.sh" --jobs 2
 code "--jobs 2: the lock catches the overlap -> exit 1" 1 "$RC"
 expect "overlap reported" "overlap"
-LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+dropLogs
 
-echo "== VULYK_SUITE_TIMEOUT=0 runs uncapped"
-run 0 "bash $S/slow.sh"
-code "a 3 s job under budget 0 -> exit 0" 0 "$RC"
-expect "ok line" "ok "
-expect "budget 0 in the summary" "budget 0s"
+echo "== --steps and --step K"
+J5="bash $S/mark.sh a
+bash $S/mark.sh b
+bash $S/mark.sh c
+bash $S/mark.sh d
+bash $S/mark.sh e"
+run 300 "$J5" --jobs 2 --steps
+code "--steps -> exit 0" 0 "$RC"
+[ "$OUT" = "3" ] && echo "  ok    5 jobs, jobs 2 -> 3 steps" || { echo "::error::--steps printed: $OUT"; fail=1; }
+run 300 "$J5" --jobs 2 --step 2
+code "--step 2 -> exit 0" 0 "$RC"
+expect "the step's last line" "STEP 2/3: ok "
+[ -e "$T/started-c" ] && [ -e "$T/started-d" ] && echo "  ok    step 2 ran its two parts" || { echo "::error::step 2 did not run c and d"; fail=1; }
+[ -e "$T/started-a" ] || [ -e "$T/started-b" ] || [ -e "$T/started-e" ] && { echo "::error::step 2 ran another step's part"; fail=1; } || echo "  ok    step 2 ran nothing else"
+run 300 "$J5" --jobs 2 --step 4
+code "--step beyond the last -> exit 2" 2 "$RC"
+run 300 "bash $S/ok.sh
+bash $S/bad.sh" --jobs 2 --step 1
+code "a failing step -> exit 1" 1 "$RC"
+expect "STEP line says FAIL" "STEP 1/1: FAIL "
+dropLogs
 
-echo "== dead timeout and gtimeout stubs, Python present: the budget still caps"
+echo "== SKIP: exit 77 with a SKIP: line"
+run 300 "bash $S/skip.sh
+bash $S/ok.sh"
+code "a skip is not a failure -> exit 0" 0 "$RC"
+part "SKIP PART line" skip SKIP
+expect "the reason is kept" "no such tool"
+expect "skips counted apart" "parts=2 skip=1 fail="
+OUT="$(VULYK_STRICT_SKIP=1 VULYK_PART_CAP=300 VULYK_SUITES="bash $S/skip.sh
+bash $S/ok.sh" bash "$RUN" 2>&1)"; RC=$?
+code "strict SKIP -> exit 1" 1 "$RC"
+part "strict SKIP is a FAIL part" skip FAIL
+expect "strict summary lists it" "fail=skip"
+dropLogs
+printf 'exit 77\n' > "$S/mute77.sh"
+run 300 "bash $S/mute77.sh"
+code "77 without a SKIP: line is a FAIL" 1 "$RC"
+dropLogs
+
+echo "== dead timeout and gtimeout stubs, Python present: the cap still holds"
 mkdir -p "$T/deadbin"
-# Each stub logs its call: the runner probes the cap once, not again inside every job (a re-probe
-# per job is two more process launches between the budget's clock and the cap, under the full
-# suite's load enough to push a 1 s cap to a 3 s report).
+# Each stub logs its call: the runner probes the cap once, not again inside every job.
 for b in timeout gtimeout; do printf '#!/bin/sh\necho %s >> "%s/probes"\nexit 1\n' "$b" "$T" > "$T/deadbin/$b"; chmod +x "$T/deadbin/$b"; done
-OUT="$(PATH="$T/deadbin:$PATH" VULYK_SUITE_TIMEOUT=1 VULYK_SUITES="bash $S/hang.sh
+OUT="$(PATH="$T/deadbin:$PATH" VULYK_PART_CAP=1 VULYK_SUITES="bash $S/hang.sh
 bash $S/mark.sh done" bash "$RUN" --jobs 2 2>&1)"; RC=$?
-code "over-budget job with dead stubs -> exit 124" 124 "$RC"
-# a 30 s hang reported under 10 s was killed, whatever the box's load adds to the 1 s budget
-printf '%s\n' "$OUT" | grep -q "^TIMEOUT [0-9]s bash $S/hang.sh\$" && echo "  ok    the hanging job is killed at the budget" \
-  || { echo "::error::hanging job not capped at the budget"; printf '%s\n' "$OUT"; fail=1; }
+code "over-cap job with dead stubs -> exit 1" 1 "$RC"
+printf '%s\n' "$OUT" | grep -qE "^PART hang CAP [0-9]s cap 1s" && echo "  ok    the hanging job is cut at the cap" \
+  || { echo "::error::hanging job not capped"; printf '%s\n' "$OUT"; fail=1; }
 [ "$(grep -c . "$T/probes" 2>/dev/null)" = 2 ] && echo "  ok    the cap is probed once per run" \
   || { echo "::error::dead stubs probed more than once per run: $(tr '\n' ' ' < "$T/probes" 2>/dev/null)"; fail=1; }
 rm -f "$T/probes"
-line "a job inside the budget is ok" ok "bash $S/mark.sh done"
+part "a job inside the cap is ok" mark ok
 reject "no uncapped warning while python caps" "no working timeout"
-LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+dropLogs
 
 echo "== dead stubs and no Python on PATH: the run is uncapped and says so"
-# Python is hidden by dead python3/python/py stubs first on PATH (exit 127, as a missing command):
-# vulyk_python runs each and rejects it. The rest of PATH stays: on Linux and macOS python sits in
-# /usr/bin beside every tool the runner needs, so dropping its directory would strip them too.
 mkdir -p "$T/nopy"
 for b in python3 python py; do printf '#!/bin/sh\nexit 127\n' > "$T/nopy/$b"; chmod +x "$T/nopy/$b"; done
 NOPY="$T/nopy:$PATH"
 (PATH="$T/deadbin:$NOPY"; VULYK_PY=; . "$SRC/scripts/lib.sh"; ! vulyk_python) \
   && echo "  ok    the test PATH runs no python" || { echo "::error::the test PATH still runs a python"; fail=1; }
-OUT="$(PATH="$T/deadbin:$NOPY" VULYK_PY= VULYK_SUITE_TIMEOUT=1 VULYK_SUITES="bash $S/slow.sh
+rm -f "$T/started-done"
+OUT="$(PATH="$T/deadbin:$NOPY" VULYK_PY= VULYK_PART_CAP=1 VULYK_SUITES="bash $S/slow.sh
 bash $S/mark.sh done" "$BASH" "$RUN" --jobs 2 2>&1)"; RC=$?
-code "uncapped run over the budget -> exit 124 by measured time" 124 "$RC"
+code "uncapped run over the cap -> exit 1 by measured time" 1 "$RC"
 expect "warns that it runs uncapped" "no working timeout"
-printf '%s\n' "$OUT" | grep -q "^TIMEOUT [3-9]s bash $S/slow.sh\$" && echo "  ok    the slow job ran to the end, reported by its time" \
-  || { echo "::error::slow job not TIMEOUT by measured time"; printf '%s\n' "$OUT"; fail=1; }
-line "a job inside the budget is ok" ok "bash $S/mark.sh done"
-LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+printf '%s\n' "$OUT" | grep -qE "^PART slow CAP [3-9]s cap 1s" && echo "  ok    the slow job ran to the end, reported CAP by its time" \
+  || { echo "::error::slow job not CAP by measured time"; printf '%s\n' "$OUT"; fail=1; }
+# Uncapped, a part is judged by whole-second SECONDS against a 1 s cap, so a trivial job on a loaded
+# box can measure 1s and read CAP (gate-split-08 finding 1): this check asks only that it ran and was
+# reported, never that it ended inside the 1 s window.
+[ -e "$T/started-done" ] && printf '%s\n' "$OUT" | grep -qE '^PART mark (ok|CAP) [0-9]+s cap 1s' \
+  && echo "  ok    the second job ran and got its PART line" \
+  || { echo "::error::uncapped run: the mark job did not run or has no PART line"; printf '%s\n' "$OUT"; fail=1; }
+dropLogs
 
 echo "== only latency suites: the parallel list is empty, the run still works"
 mkdir -p "$T/only"; printf 'echo fine\n' > "$T/only/inject.test.sh"
-run 540 "bash $T/only/inject.test.sh"
+run 300 "bash $T/only/inject.test.sh"
 code "a latency-only list -> exit 0" 0 "$RC"
-line "the latency suite ran" ok "bash $T/only/inject.test.sh"
+part "the latency suite ran" inject ok
 
 echo "== --list"
-run 540 "bash $S/mark.sh listed" --list
+run 300 "bash $S/mark.sh listed" --list
 code "--list -> exit 0" 0 "$RC"
 [ "$OUT" = "bash $S/mark.sh listed" ] && echo "  ok    --list prints the commands" || { echo "::error::--list printed: $OUT"; fail=1; }
 [ -e "$T/started-listed" ] && { echo "::error::--list ran a job"; fail=1; } || echo "  ok    --list runs nothing"
@@ -166,12 +209,14 @@ printf '%s\n' "$OUT" | grep -qxE 'bash tests/(telemetry|council|cycle|inject|int
 
 echo "== the default --jobs is the core count capped at 12"
 mkdir -p "$T/nproc28"; printf '#!/bin/sh\necho 28\n' > "$T/nproc28/nproc"; chmod +x "$T/nproc28/nproc"
-OUT="$(PATH="$T/nproc28:$PATH" VULYK_SUITE_TIMEOUT=540 VULYK_SUITES="bash $S/ok.sh" bash "$RUN" 2>&1)"; RC=$?
+OUT="$(PATH="$T/nproc28:$PATH" VULYK_SUITES="bash $S/ok.sh" bash "$RUN" --steps 2>&1)"; RC=$?
 code "28 cores -> exit 0" 0 "$RC"
-expect "28 cores run 12 jobs" "jobs 12"
+J14="$(for n in 1 2 3 4 5 6 7 8 9 10 11 12 13; do echo "bash $S/mark.sh x$n"; done)"
+OUT="$(PATH="$T/nproc28:$PATH" VULYK_SUITES="$J14" bash "$RUN" --steps 2>&1)"
+[ "$OUT" = "2" ] && echo "  ok    28 cores: 13 jobs fall in 2 steps of at most 12" || { echo "::error::28 cores --steps: $OUT"; fail=1; }
 mkdir -p "$T/nproc3"; printf '#!/bin/sh\necho 3\n' > "$T/nproc3/nproc"; chmod +x "$T/nproc3/nproc"
-OUT="$(PATH="$T/nproc3:$PATH" VULYK_SUITE_TIMEOUT=540 VULYK_SUITES="bash $S/ok.sh" bash "$RUN" 2>&1)"
-expect "3 cores run 3 jobs" "jobs 3"
+OUT="$(PATH="$T/nproc3:$PATH" VULYK_SUITES="$J14" bash "$RUN" --steps 2>&1)"
+[ "$OUT" = "5" ] && echo "  ok    3 cores: 13 jobs fall in 5 steps of at most 3" || { echo "::error::3 cores --steps: $OUT"; fail=1; }
 
 echo "== the latency suites run last, alone, one at a time"
 L="$T/late"; mkdir -p "$L"
@@ -183,23 +228,25 @@ done
 LATE_SUITES="bash $L/inject.test.sh
 bash $L/intake.test.sh
 bash $L/early.sh"
-run 540 "$LATE_SUITES" --list
+run 300 "$LATE_SUITES" --list
 [ "$OUT" = "bash $L/early.sh
 bash $L/inject.test.sh
 bash $L/intake.test.sh" ] && echo "  ok    --list puts the latency suites last" || { echo "::error::--list order: $OUT"; fail=1; }
-run 540 "$LATE_SUITES" --jobs 4
+run 300 "$LATE_SUITES" --jobs 4 --steps
+[ "$OUT" = "3" ] && echo "  ok    one early step, then one step per latency job" || { echo "::error::latency --steps: $OUT"; fail=1; }
+run 300 "$LATE_SUITES" --jobs 4
 code "latency suites after the rest, no overlap -> exit 0" 0 "$RC"
-line "inject ok" ok "bash $L/inject.test.sh"
-line "intake ok" ok "bash $L/intake.test.sh"
-LOGDIR="$(printf '%s\n' "$OUT" | sed -n 's/^logs: //p')"; [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
+part "inject ok" inject ok
+part "intake ok" intake ok
+dropLogs
 
 echo "== jobs share one install cache inside the logs dir"
 printf 'case "$VULYK_INSTALL_CACHE" in */install-cache) ;; *) echo "cache: [$VULYK_INSTALL_CACHE]"; exit 1 ;; esac\n' > "$S/cache.sh"
-run 540 "bash $S/cache.sh"
+run 300 "bash $S/cache.sh"
 code "VULYK_INSTALL_CACHE is exported to every job -> exit 0" 0 "$RC"
 
 echo "== bad usage"
-run 540 "bash $S/ok.sh" --jobs 0
+run 300 "bash $S/ok.sh" --jobs 0
 code "--jobs 0 -> exit 2" 2 "$RC"
 
 [ "$fail" -eq 0 ] && echo "full-suite.test.sh: all ok" || echo "full-suite.test.sh: FAILED"

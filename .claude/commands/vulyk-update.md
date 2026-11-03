@@ -43,6 +43,12 @@ newest published tag is.
    (ADR-023). Run `bash scripts/wave-check.sh` on each open spec and move a story that named it onto a
    faster row. No full suite at all: add the row with
    `none` as its command (`SUITE: none`, and the note stops), and say so. Commit it with the upgrade.
+   Gate split (ADR-029), every hive: each part and each verification line now runs under a 300 s cap.
+   Say this whether or not the row was renamed (the upgrade prints it as `gate split (ADR-029)`). The
+   round gate runs each `Full suite ... (round-only)` row as one part, so a hive may split its full run
+   into several such rows (e.g. `Full suite unit (round-only)`), each one part under 300 s (a part over
+   ~210 s is red); the owner splits, the upgrade never does. Cut any story verification row over
+   ~210 s into `--part` rows before the hive takes this release.
 
 Never edit `.claude/vulyk-version` by hand to silence the check, and never widen the upgrade beyond
 what `install.sh --upgrade` does on its own.
