@@ -38,3 +38,16 @@ PART defects ok 79s cap 300s
 PART maintenance ok 116s cap 300s
 PART cycle:red ok 121s cap 300s
 PART intake:functional ok 131s cap 300s
+STEP 4/8: ok 196s
+PART mods ok 7s cap 300s
+PART solo:green ok 24s cap 300s
+PART symbol-map ok 28s cap 300s
+PART solo:rejected ok 35s cap 300s
+PART solo:block ok 62s cap 300s
+PART telemetry:telemetry ok 93s cap 300s
+PART telemetry:install-xp ok 99s cap 300s
+PART telemetry:terminal ok 129s cap 300s
+PART telemetry:wiring ok 143s cap 300s
+PART telemetry:ledger ok 154s cap 300s
+PART telemetry:scan ok 166s cap 300s
+PART telemetry:install ok 194s cap 300s
