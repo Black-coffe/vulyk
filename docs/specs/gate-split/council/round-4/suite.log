@@ -64,3 +64,6 @@ PART telemetry:upgrade ok 86s cap 300s
 PART telemetry:crlf ok 98s cap 300s
 PART telemetry:wrapper ok 133s cap 300s
 PART telemetry:launchers ok 92s cap 300s
+STEP 6/8: ok 92s
+PART telemetry:edits ok 90s cap 300s
+PART token-report ok 3s cap 300s
