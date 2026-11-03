@@ -12,3 +12,16 @@ PART council:judge ok 146s cap 300s
 PART council:walks ok 147s cap 300s
 PART council:replays ok 149s cap 300s
 PART council:escalate ok 157s cap 300s
+STEP 2/8: FAIL 221s
+PART cycle:manual ok 31s cap 300s
+PART cycle:gates ok 34s cap 300s
+PART cycle:hooklog ok 41s cap 300s
+PART cycle:safety ok 41s cap 300s
+PART council:roster2 ok 92s cap 300s
+PART cycle:close ok 104s cap 300s
+PART council:roster ok 151s cap 300s
+PART cycle:bsd FAIL 163s cap 300s
+PART council:driver ok 180s cap 300s
+PART cycle:ship ok 188s cap 300s
+PART council:suite ok 219s cap 300s
+PART council:advance ok 220s cap 300s
