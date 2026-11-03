@@ -1,0 +1,27 @@
+## scripts/ship-check.sh
+tests:
+  textual  3 not shown
+importers:
+  textual  7 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  74 not shown
+## tests/cycle.test.sh
+tests:
+  textual  10 not shown
+importers:
+  textual  17 not shown
+imported:
+  exact    scripts/prompt-check.py
+  exact    scripts/run-capped.py
+path mentions:
+  textual  135 not shown
+## .claude/commands/vulyk-ship.md
+  ! imports not parsed for .md: search callers yourself
+tests:
+  textual  2 not shown
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  38 not shown
