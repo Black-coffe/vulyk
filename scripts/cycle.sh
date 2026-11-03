@@ -2979,6 +2979,24 @@ suite_verdict() { # suite_verdict <log> -> the closing `SUITE: ok <N>s` or `SUIT
   if [ -n "$why" ]; then printf 'SUITE: FAIL %ss - %s' "$secs" "$why"; else printf 'SUITE: ok %ss' "$secs"; fi
 }
 
+suite_load() { # suite_load <start|end> [<cap secs>] -> one `LOAD: ...` line, always exit 0 (post-046-tails):
+  # lib.sh load_sample under a cap (default 10 s), or VULYK_LOAD_SAMPLER (a bash -c command; the tests' seam).
+  # A sampler that fails, times out or prints no cpu line gives `LOAD: unavailable - <when>: <why>`.
+  local when="$1" cap="${2:-10}" out rc line
+  if [ -n "${VULYK_LOAD_SAMPLER:-}" ]; then out="$(run_capped "$cap" bash -c "$VULYK_LOAD_SAMPLER" 2>&1)"; rc=$?
+  else out="$(run_capped "$cap" bash -c '. "$1"; load_sample' _ "$HERE/lib.sh" 2>&1)"; rc=$?; fi
+  out="$(printf '%s\n' "$out" | tr -d '\r')"
+  line="$(printf '%s\n' "$out" | grep -m1 '^cpu ')"
+  if [ "$rc" -eq 0 ] && [ -n "$line" ]; then printf 'LOAD: %s %s\n' "$when" "$line"
+  elif [ "$rc" -eq 124 ]; then printf 'LOAD: unavailable - %s: timed out after %ss\n' "$when" "$cap"
+  elif [ "$rc" -eq 0 ]; then printf 'LOAD: unavailable - %s: no cpu line\n' "$when"
+  else
+    line="$(printf '%s\n' "$out" | grep -m1 .)"
+    printf 'LOAD: unavailable - %s: exit %s%s\n' "$when" "$rc" "${line:+: $line}"
+  fi
+  return 0
+}
+
 suite_emit() { # suite_emit <spec> <step> <steps> <done:true|false> <suite> - the verb's exit-0 line
   local st rc next tail=""
   st="$(cmd_status "$1")"; rc=$?
@@ -3073,6 +3091,10 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
   fi
 
   # --- run step K: its STEP line and its PART lines, appended as one block ---------------------
+  # post-046-tails: the box's load is sampled at the step's start (in the background, so the step's own
+  # clock never pays for it) and, for a FAIL step only, at its end; only a FAIL step writes the two lines.
+  local loadf loadpid loads=""; loadf="$(mktemp)"
+  suite_load start > "$loadf" & loadpid=$!
   local t0="$SECONDS" out rc parts secs sres=ok note="" tmp
   if [ "$stepped" = 1 ]; then
     # The call cap: 590 s (one Bash call). VULYK_STEP_CAP only lowers it, for tests.
@@ -3116,9 +3138,20 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
   printf '%s\n' "$parts" > "$tmp"
   { [ "$rc" -ne 0 ] || ! bash "$HERE/suite-parts-check.sh" "$tmp" >/dev/null 2>&1; } && sres=FAIL
   rm -f "$tmp"
+  wait "$loadpid" 2>/dev/null
+  if [ "$sres" = FAIL ]; then
+    # The end sample fits inside the one Bash call (600 s) this verb runs in: at most 10 s, none when
+    # under 2 s are left (a stepped step killed at its 590 s cap).
+    local left=$((580 - SECONDS)); [ "$left" -gt 10 ] && left=10
+    loads="$(cat "$loadf")"
+    if [ "$left" -ge 2 ]; then loads="$loads"$'\n'"$(suite_load end "$left")"
+    else loads="$loads"$'\n'"LOAD: unavailable - end: no time left in this call"; fi
+  fi
+  rm -f "$loadf"
   {
     printf 'STEP %s/%s: %s %ss%s\n' "$K" "$S" "$sres" "$secs" "$note"
     [ -n "$parts" ] && printf '%s\n' "$parts"
+    [ -n "$loads" ] && printf '%s\n' "$loads"
   } >> "$LOG"
   local sv=pending is_done=false
   if [ "$K" -ge "$S" ]; then

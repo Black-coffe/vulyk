@@ -88,6 +88,7 @@ EOF
 git add -A && git commit -qm init >/dev/null
 HEAD7="$(git rev-parse --short HEAD)"
 council() { bash scripts/cycle.sh "$@"; }
+export VULYK_LOAD_SAMPLER='echo "cpu 7% top: stub 7%"' # post-046-tails: every `cycle.sh suite` here samples a stub, never the box
 
 # --- fixture helpers -------------------------------------------------------------------------
 
@@ -4422,6 +4423,16 @@ out="$(FX_FAIL=1 council suite docs/specs/sxfail --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL"' >/dev/null 2>&1 \
   && tail -1 "$rd/suite.log" | grep -qE '^SUITE: FAIL [0-9]+s - part fx:b2 failed$' && grep -qE '^STEP 2/2: FAIL ' "$rd/suite.log" \
   && echo "  ok    a FAIL step: exit 0, SUITE: FAIL - part fx:b2 failed" || { echo "::error::suite fail: exit=$ex out=$out log=$(cat "$rd/suite.log")"; fail=1; }
+# post-046-tails ask 6: the FAIL step carries the box's load at its start and end, after its PART lines;
+# the ok step 1 carries none. The stub sampler (VULYK_LOAD_SAMPLER, set for this part) keeps it off the box.
+[ "$(awk '/^STEP 2\/2: FAIL /{s=1} s && /^PART fx:b2 /{p=1} p && /^LOAD: start cpu 7% top: stub 7%$/{a=1} a && /^LOAD: end cpu 7% top: stub 7%$/{print "yes"; exit}' "$rd/suite.log")" = yes ] \
+  && [ "$(grep -c '^LOAD:' "$rd/suite.log")" -eq 2 ] \
+  && echo "  ok    a FAIL step writes LOAD lines into suite.log after its PART lines, the ok step none" \
+  || { echo "::error::a FAIL step writes LOAD lines into suite.log - expected LOAD: start/end after PART fx:b2 only: $(cat "$rd/suite.log")"; fail=1; }
+nl="$(mktemp)"; grep -v '^LOAD:' "$rd/suite.log" > "$nl"
+[ "$(bash scripts/suite-parts-check.sh "$rd/suite.log" 2>&1; echo "exit $?")" = "$(bash scripts/suite-parts-check.sh "$nl" 2>&1; echo "exit $?")" ] \
+  && echo "  ok    suite-parts-check.sh reads the log with LOAD lines as without them" || { echo "::error::suite-parts-check.sh changed its reading with LOAD lines"; fail=1; }
+rm -f "$nl"
 out="$(printf 'VERDICT: PASS\nMODEL: test\nSUITE: ok 1s\n' | council record-seat docs/specs/sxfail 1 review 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && grep -qE '^SUITE: FAIL [0-9]+s - part fx:b2 failed$' "$rd/review.md" && ! grep -qF 'SUITE: ok 1s' "$rd/review.md" \
   && echo "  ok    record-seat review writes the log's SUITE line over the reported one" || { echo "::error::record-seat with log: exit=$ex out=$out"; fail=1; }
@@ -4434,6 +4445,24 @@ rs="$(ls docs/specs/sxfail/*-repair-round-1.md 2>/dev/null | head -1)"
 [ "$ex" -eq 0 ] && [ -n "$rs" ] && sed -n '/^## Findings$/,/^## Files$/p' "$rs" | grep -qF 'PART fx:b2 FAIL 1s cap 300s' \
   && ! sed -n '/^## Findings$/,/^## Files$/p' "$rs" | grep -qF 'PART fx:a1' \
   && echo "  ok    repair: ## Findings carry the red PART line, not the green ones" || { echo "::error::repair findings: exit=$ex out=$out story=$(cat "$rs" 2>/dev/null)"; fail=1; }
+
+echo "suite: a sampler that fails writes LOAD: unavailable and never changes a step's verdict (post-046-tails ask 6)"
+sx_open sxloadx
+rd="docs/specs/sxloadx/council/round-1"
+VULYK_LOAD_SAMPLER='echo boom >&2; exit 3' council suite docs/specs/sxloadx >/dev/null 2>&1
+out="$(FX_FAIL=1 VULYK_LOAD_SAMPLER='echo boom >&2; exit 3' council suite docs/specs/sxloadx 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && tail -1 "$rd/suite.log" | grep -qE '^SUITE: FAIL [0-9]+s - part fx:b2 failed$' \
+  && grep -qx 'LOAD: unavailable - start: exit 3: boom' "$rd/suite.log" && grep -qx 'LOAD: unavailable - end: exit 3: boom' "$rd/suite.log" \
+  && [ "$(grep -c '^LOAD:' "$rd/suite.log")" -eq 2 ] \
+  && echo "  ok    a failing sampler: LOAD: unavailable - start/end: exit 3: boom, the verdict as without it" \
+  || { echo "::error::failing sampler: exit=$ex out=$(sx_last "$out") log=$(cat "$rd/suite.log")"; fail=1; }
+sx_open sxloadok
+rd="docs/specs/sxloadok/council/round-1"
+VULYK_LOAD_SAMPLER='exit 3' council suite docs/specs/sxloadok >/dev/null 2>&1
+out="$(VULYK_LOAD_SAMPLER='exit 3' council suite docs/specs/sxloadok 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && tail -1 "$rd/suite.log" | grep -qE '^SUITE: ok [0-9]+s$' && ! grep -q '^LOAD:' "$rd/suite.log" \
+  && echo "  ok    a failing sampler under ok steps: SUITE: ok, no LOAD line" || { echo "::error::failing sampler, ok steps: exit=$ex log=$(cat "$rd/suite.log")"; fail=1; }
 
 echo "suite: a part past 70% of its cap fails the gate through suite-parts-check.sh, even when the runner exits 0"
 sx_open sxgrow

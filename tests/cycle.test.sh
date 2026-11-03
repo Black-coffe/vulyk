@@ -909,13 +909,14 @@ esac
 
 echo "cross-platform: run_capped past dead timeout and gtimeout binaries"
 CAPD="$(mktemp -d)"; dead_stub "$CAPD" timeout 1; dead_stub "$CAPD" gtimeout 1
-RC="$(mktemp -d)"; t0="$SECONDS"
-( PATH="$CAPD:$PATH"; VULYK_PY=; run_capped 1 bash -c "(sleep 3; : > '$RC/marker') & sleep 5; echo late" ) > "$RC/out" 2>&1; ex=$?
-el=$((SECONDS - t0))
-[ "$ex" -eq 124 ] && [ "$el" -le 3 ] && ! grep -q late "$RC/out" && echo "  ok    the Python cap: exit 124 in ${el}s, no late output" \
+# post-046-tails ask 4: a 10 s grandchild and a 20 s parent under a 1 s cap, so a box 3x slower still lands
+# well inside the window; the marker is read at the end of the part, 12 s after the start, so the wait is
+# spent on the cases between.
+RC="$(mktemp -d)"; RC_T0="$SECONDS"
+( PATH="$CAPD:$PATH"; VULYK_PY=; run_capped 1 bash -c "(sleep 10; : > '$RC/marker') & sleep 20; echo late" ) > "$RC/out" 2>&1; ex=$?
+el=$((SECONDS - RC_T0))
+[ "$ex" -eq 124 ] && [ "$el" -lt 10 ] && ! grep -q late "$RC/out" && echo "  ok    the Python cap: exit 124 in ${el}s, no late output" \
   || { echo "::error::run_capped 1 under dead timeout/gtimeout: exit=$ex after ${el}s, out: $(cat "$RC/out")"; fail=1; }
-sleep 3
-[ ! -e "$RC/marker" ] && echo "  ok    the grandchild died with its process group" || { echo "::error::run_capped left a grandchild that wrote its marker"; fail=1; }
 err="$( PATH="$DEAD:$PATH"; VULYK_PY=; run_capped 1 true 2>&1 )"; ex=$?
 [ "$ex" -eq 0 ] && [ "$err" = "run_capped: no timeout, gtimeout or python 3 - running true uncapped" ] \
   && echo "  ok    nothing to cap with: runs uncapped and says so" || { echo "::error::run_capped uncapped: exit=$ex err='$err'"; fail=1; }
@@ -926,7 +927,7 @@ err="$( PATH="$CAPD:$PATH"; VULYK_PY=; bash -c '. "$1/lib.sh"; run_capped 5 true
 rm -rf "$LONE"
 err="$( PATH="$DEAD:$PATH"; VULYK_PY=; run_capped 0 true 2>&1 )"; ex=$?
 [ "$ex" -eq 0 ] && [ -z "$err" ] && echo "  ok    run_capped 0: uncapped, silently" || { echo "::error::run_capped 0: exit=$ex err='$err'"; fail=1; }
-rm -rf "$RC" "$CAPD" "$DEAD"
+rm -rf "$CAPD" "$DEAD"
 
 echo "cross-platform ask 9: close-story runs the constitution's py.sh Python cell and refuses the old bare python one"
 PRE9="$(mktemp)"; cp CLAUDE.md "$PRE9"
@@ -1051,6 +1052,11 @@ want="$(printf '> build the bsdawk demo\n\n## Answers\n- an earlier answer\n\n\n
   || { echo "::error::reopen under BSD awk: exit=$ex out=$(printf '%s' "$out" | head -3) brief:"; cat docs/specs/bsdawk/brief.md; fail=1; }
 git add -A && git commit -qm "bsdawk: reopen fixture" >/dev/null
 rm -rf "$BAWK"
+
+w=$((RC_T0 + 12 - SECONDS)); [ "$w" -gt 0 ] && sleep "$w"
+[ ! -e "$RC/marker" ] && echo "  ok    the run_capped grandchild died with its process group (read 12 s after the start)" \
+  || { echo "::error::run_capped left a grandchild that wrote its marker"; fail=1; }
+rm -rf "$RC"
 
 fi # part bsd
 if part safety; then # --- part safety: ship-check merge proof, the spec-branch guard
