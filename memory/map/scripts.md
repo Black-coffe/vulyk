@@ -80,10 +80,17 @@ re-run. No line numbers: `grep -n '^name()'`.
   `memory/learnings/*.md`, `VERSION`, `CHANGELOG.md`.
 
 ## Tests
-- `tests/full-suite.sh [--jobs N] [--list]` - every `tests/*.test.sh` once, in parallel (cap 12); suites with
-  `--list-parts` (telemetry, council, cycle) run one `--part` job each; `inject`/`intake` latency runs alone last.
-  `VULYK_SUITE_TIMEOUT` (590 s; 0 = uncapped); exit 0 / 1 FAIL / 124 TIMEOUT / 2 usage. These are the
-  `(round-only)` rows in CLAUDE.md `## Commands`; CI runs one `full-suite` job.
+- `tests/full-suite.sh [--jobs N] [--list | --steps | --step K]` (ADR-029) - every `tests/*.test.sh` as capped
+  parts; suites with `--list-parts` run one `--part` job each. A step = a chunk of <= `--jobs` (default cores,
+  max 12) jobs started together; `inject`/`intake` latency jobs go last, one per step. `--steps` prints S,
+  `--step K` runs one, no flag runs all. Each part has its own cap `VULYK_PART_CAP` (default and max 300; above
+  = exit 2). Output `PART <name> ok|FAIL|SKIP|CAP <N>s cap <C>s`, then `STEP K/S: ok|FAIL <N>s` or `SUITE: ...
+  parts= skip= fail=`. Exit 0 / 1 (FAIL, CAP, growth, strict SKIP) / 2; never 124. No whole-run budget:
+  `VULYK_SUITE_TIMEOUT` is no longer read here. CLAUDE.md row `Full suite steps (round-only)`; the round runs it
+  through `cycle.sh suite` (cycle.md); CI runs one `full-suite` job.
+- `suite-parts-check.sh <file>` - reads `PART` lines (full-suite output or a `suite.log`); prints `suite-parts-check:
+  cut part <name>: <N>s of cap <C>s (cap|over-cap|grew)` for a CAP line, a cap > 300, or N*10 > C*7. Exit 1 any,
+  0 none (also an unreadable path), 2 no argument. Used by `full-suite.sh` and `cmd_suite`.
 - `tests/symbol-map.test.sh` also holds the `--- trace-autopsy` block; `tests/maintenance.test.sh`: caps, brief
   due logic, ledger, prompt-check fixture copies.
 
@@ -95,11 +102,11 @@ re-run. No line numbers: `grep -n '^name()'`.
 
 ## Gotchas
 - `close-story`'s `## Commands` match, `record-seat`'s taint and `is_paperwork_path` are security-relevant string
-  matches: keep them anchored. `close-story` verification runs under `capped_by`/`run_capped_as` (a cap counts
+  matches: keep them anchored. `close-story` verification runs per line under `capped_by`/`run_capped` (a cap counts
   only if `<it> 1 true` passes: Windows cmd `timeout`; no cap = uncapped, a 124 is then the command's own).
 - Scripts target bash 3.2 + BSD userland (macOS CI jobs `full-suite`, `install-smoke` pin `/bin/bash` 3.2, BSD sed,
   no `timeout`): no bare `sed -i`/`python`/`timeout`/`date -d`; run the gate after editing any `.sh`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-10-29 (cross-platform, 0.44.0)
+last-verified: 2026-11-03 (0.45.0 gate split; lib.sh, install.sh unchanged in contract)

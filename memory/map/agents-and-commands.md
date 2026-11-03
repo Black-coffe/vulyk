@@ -18,10 +18,11 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   is never asked). Reads: round 1 `merge-base..head`; round 2+ `since..head` + previous `review.md`; ONE
   `git diff <range> -- <every path>` so the card hook delivers `docs/defects/` cards. BLOCK needs an anchored
   Critical/Major: `[ask N]` or `[regression]` (base-side evidence); else `[unanchored]`.
-  **Suite step (ADR-023, ADR-024):** line 1 `VERDICT: PASS|BLOCK`; line 3 `SUITE: ok|FAIL|TIMEOUT <N>s budget
-  <B>s|none`. Runs the `Full suite / build` row once per round, in the foreground (ADR-024: no reliance on
-  background commands in subagents), as `run_capped $((VULYK_SUITE_TIMEOUT:-590)+5) <row>` (sourced from `scripts/lib.sh`; portable
-  where `timeout` is absent) with Bash `timeout: 600000`; FAIL = BLOCK with a `[regression]` Critical; TIMEOUT leaves the verdict, `judge` escalates. ≤ 5 minors.
+  **Suite line (ADR-029, supersedes the ADR-023 run):** never runs the whole suite. The round's tests ran before
+  dispatch (`cycle.sh suite`); it reads `council/round-N/suite.log` and copies its last `SUITE: ok|FAIL <N>s[ -
+  <why>]|none` line to line 3 (no log, or `head=` not the reviewed head: `SUITE: none`). A red part may be rerun
+  alone under `run_capped 300`; FAIL = BLOCK with a `[regression]` Critical. `record-seat` overwrites the line
+  with the log's anyway. ≤ 5 minors.
 - **council-opus** (`opus`, `medium`, `maxTurns:60`; no Write/Edit) - Tier 3-4 blind seat inside `COURT`; one
   `ASK <n>` per ask, edge cases under `UNASKED:`; reading outside `COURT` or naming plan/story files is a BREACH.
   **council-haiku** (`opus` since ADR-015; Bash/Read + browser MCPs) - black-box seat on the Profile's *Client path*.
@@ -30,7 +31,7 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **worker-code** / **worker-test** (`sonnet`, `medium`, `maxTurns:90`) - Tier 3-4, one story. Close: `returned:
   DONE`, then `cycle.sh close-story <story> --commit --stamp <S>`; exit 4 → fix and rerun (`edited outside ##
   Files` = undo your own edits; none yours → `NEEDS_CONTEXT`; exit 2 `verification is round-only` →
-  `NEEDS_CONTEXT`), after three failures `## Findings` + `returned: WALL`. **Red first (ADR-025), only for `red:
+  `NEEDS_CONTEXT`; exit 7 `verification paused` = rerun the same `close-story`/`stamp-red`, it resumes), after three failures `## Findings` + `returned: WALL`. **Red first (ADR-025), only for `red:
   required`:** write the test `## Files` names, write `red_reason:`, run `cycle.sh stamp-red <story> --stamp <S>`,
   then implement, then `close-story`; never edit the implementation to produce a red. Step 6 maps each gate exit-4
   message to an action. Never edit `status:`, never stash/checkout/reset/clean. A bug fix first runs `symbol-map.sh
@@ -100,4 +101,4 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
   script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-10-29 (cross-platform, 0.44.0; trimmed to the cap, line numbers dropped; ADR-013, 015, 020, 022, 023, 024, 025)
+last-verified: 2026-11-03 (0.45.0 gate split; ADR-013, 015, 020, 022, 023, 024, 025, 029)

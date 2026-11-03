@@ -42,14 +42,14 @@
 - Pulse mod / symbol map: `bash tests/mods.test.sh`, `bash tests/symbol-map.test.sh`
 - Cycle state contract tests, per part: `bash tests/cycle.test.sh --part <topic>` (`--list-parts`); council and telemetry alike
 - Driver contract / end to end / runner: `bash tests/driver.test.sh`, `bash tests/e2e.test.sh`, `bash tests/full-suite.test.sh`
-- Full suite (round-only; every suite once, budget `VULYK_SUITE_TIMEOUT` 590 s): `bash tests/full-suite.sh`; no build step
+- Full suite (round-only; capped parts, 300 s each, `--steps`/`--step K`): `bash tests/full-suite.sh`; the round runs it via `cycle.sh suite`; no build step
 
 ## Learnings
 - Model ladder and no Haiku below generation 5 (v0.13.0, 2026-09-14): docs/adr/007-model-ladder.md
 - Deliverable before tier, plan stops for approval (v0.13.0, 2026-09-14): docs/adr/008-approval-stop-and-study-work.md
 - Red receipt (v0.40.0, 2026-10-28): docs/adr/025-red-receipt.md - `red: required` stories close only after `cycle.sh stamp-red` proves the sealed test red for `red_reason`
 - Horizon step (ADR-022, v0.35.0): `/vulyk-plan` step 3a on new ground, three `drone-horizon` lenses, kept ideas in `horizon.md`, never in `brief.md`
-- Fast story checks, one full suite per round (ADR-023): stories verify with targeted commands; the `round-only` full-suite row runs once, in `lead-review`
+- Fast story checks, one full suite per round (ADR-023): stories verify with targeted commands; the `round-only` full-suite row runs once per round (since ADR-029 via `cycle.sh suite` into `suite.log`, not in `lead-review`)
 - No reliance on background commands in subagents (ADR-024): run suite and checks in the foreground with a `timeout`
 - Anomaly telemetry, opt-in (v0.14.0): docs/telemetry.md - `scripts/telemetry.sh`, `anomaly-scan.sh` (SessionEnd); `publish` only prints a copy recipe
 - Driver hardening (v0.15.0): docs/adr/011-driver-hardening.md - clerk retry, self-marked `done`, taint = story file
