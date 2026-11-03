@@ -51,3 +51,16 @@ PART telemetry:wiring ok 122s cap 300s
 PART telemetry:ledger ok 139s cap 300s
 PART telemetry:scan ok 150s cap 300s
 PART telemetry:install ok 179s cap 300s
+STEP 5/8: FAIL 227s
+PART telemetry:ysk-hook ok 5s cap 300s
+PART telemetry:constitution2 ok 59s cap 300s
+PART telemetry:upgrade ok 136s cap 300s
+PART telemetry:library ok 138s cap 300s
+PART telemetry:watcher ok 151s cap 300s
+PART telemetry:launchers ok 156s cap 300s
+PART telemetry:rg ok 161s cap 300s
+PART telemetry:crlf ok 163s cap 300s
+PART telemetry:mods ok 211s cap 300s
+PART telemetry:constitution ok 214s cap 300s
+PART telemetry:ysk ok 219s cap 300s
+PART telemetry:wrapper ok 226s cap 300s
