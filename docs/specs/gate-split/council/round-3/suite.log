@@ -12,3 +12,16 @@ PART council:replays ok 88s cap 300s
 PART council:replays2 ok 60s cap 300s
 PART council:walks ok 87s cap 300s
 PART council:walks2 ok 47s cap 300s
+STEP 2/8: ok 107s
+PART council:driver ok 81s cap 300s
+PART council:roster ok 69s cap 300s
+PART council:roster2 ok 36s cap 300s
+PART council:advance ok 106s cap 300s
+PART council:suite ok 70s cap 300s
+PART cycle:ship ok 61s cap 300s
+PART cycle:hooklog ok 21s cap 300s
+PART cycle:gates ok 17s cap 300s
+PART cycle:manual ok 16s cap 300s
+PART cycle:close ok 40s cap 300s
+PART cycle:bsd ok 74s cap 300s
+PART cycle:safety ok 20s cap 300s
