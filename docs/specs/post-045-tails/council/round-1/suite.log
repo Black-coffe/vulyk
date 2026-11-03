@@ -1,0 +1,14 @@
+head=6da4657 steps=8
+STEP 1/8: FAIL 275s
+PART council:seats2 ok 123s cap 300s
+PART council:walks2 ok 139s cap 300s
+PART council:close ok 145s cap 300s
+PART council:ceilings ok 147s cap 300s
+PART council:replays2 ok 183s cap 300s
+PART council:verbs ok 196s cap 300s
+PART council:ceilings2 ok 210s cap 300s
+PART council:seats ok 251s cap 300s
+PART council:judge ok 260s cap 300s
+PART council:walks ok 263s cap 300s
+PART council:replays ok 266s cap 300s
+PART council:escalate ok 272s cap 300s
