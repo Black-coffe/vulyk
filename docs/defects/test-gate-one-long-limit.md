@@ -37,3 +37,9 @@ part that grows is noticed only when the whole run reaches the one limit, and th
 - A test gate is a list of parts, each with its own cap of at most 300 s and a measured run time well under that cap;
   a part that grows toward its cap is split before it reaches it, and the gate is green only when every part ran to
   its end.
+
+## Known gap
+- 2026-11-03 · 0.45.0 ships with it: `scripts/suite-parts-check.sh` exits 0 on a path that is not a readable file,
+  against the safeguard-bypassable-or-late never-line (missing input is a refusal, never a pass). It stays so because
+  `defects-check.sh` runs every block check on any argument. Inside the round gate the path is unreachable: every
+  caller passes a file that exists. Owed: a missing file exits non-zero without breaking `defects-check.sh` (next circle, U3).
