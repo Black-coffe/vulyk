@@ -67,3 +67,5 @@ PART telemetry:wrapper ok 288s cap 300s
 STEP 6/8: ok 160s
 PART token-report ok 5s cap 300s
 PART telemetry:edits ok 158s cap 300s
+STEP 7/8: ok 18s
+PART inject:latency ok 17s cap 300s
