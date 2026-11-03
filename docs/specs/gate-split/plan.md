@@ -184,7 +184,6 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
 **Council:** ESCALATE round 2, 2026-11-02, at efb4e9f, pack 02d1723a7773 - red: 9
 **Council:** RED round 3, 2026-11-03, at d5978a8, pack 22e4a6c40747 - red: 9
 **Council:** GREEN round 4, 2026-11-03, at 4aae83f, pack 49cacecfa97e
-**Shipped:** <written by scripts/ship-check.sh --record>
 
 ## Needs a human
 - reason: no-progress · round 2 · 2026-11-02
@@ -193,3 +192,4 @@ for each step; per-part cap 300 s); `wave-check.sh` runs before each wave.
 - seats: docs/specs/gate-split/council/round-2/
 **Checked:** ACCEPTED by Andrei, 2026-11-03, at 20f6270 - narrow fix 20f6270 (gate() BadLine re-ask, CHANGELOG check); owner answer verbatim: «ACCEPTED (Рекомендую)»
 **Checked:** ACCEPTED by Andrei, 2026-11-03, at cbaaf51 - Diff посмотрел, принимаю. Отличная починка: защита драйвера от битых строк клерка через повторный запрос в пределах 32 попыток и фикс теста телеметрии для релизной структуры CHANGELOG полностью закрывают последние шероховатости перед релизом. Смело выпускайте 0.45.0 по плану.
+**Shipped:** 0.45.0, 2026-11-03, at ba8b243 - merged to main; owner: «Смело выпускайте 0.45.0 по плану.»
