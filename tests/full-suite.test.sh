@@ -11,6 +11,9 @@ SRC="$(cd "$(dirname "$0")/.." && pwd)"
 RUN="$SRC/tests/full-suite.sh"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
+# The runner reads these from the environment; CI exports VULYK_STRICT_SKIP=1 for the real suite, and a case
+# here that wants one sets it on its own line. Inherited, they turn the SKIP cases red.
+unset VULYK_STRICT_SKIP VULYK_PART_CAP VULYK_SUITES VULYK_CAP
 fail=0
 expect() { # expect <label> <needle>   (judges $OUT)
   if printf '%s' "$OUT" | grep -qF -- "$2"; then echo "  ok    $1"
