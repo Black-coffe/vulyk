@@ -5,6 +5,7 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 ## [Unreleased]
 
 ### Changed
+- **Gate split (ADR-029).** The round gate runs each `Full suite ... (round-only)` row as one part under a 300 s cap (a part over ~210 s is red), so a hive may split its full run into several such rows; the owner splits, the upgrade never does. Such a row with an empty or missing command cell is a red step named in `suite.log` (never `SUITE: none`), and two rows with one Purpose log distinct part names. Every story `## Verification` line also runs under a 300 s cap (`VULYK_VERIFY_TIMEOUT` above 300 acts as 300): cut rows over ~210 s into `--part` rows before taking this release. `install.sh --upgrade` prints it as `gate split (ADR-029)` on every hive, and `/vulyk-update` step 6 says it whether or not the full-suite row was renamed.
 - **Plan names follow the 2026-10-30 rename.** Max 5x is now "Max" and Max 20x is "Ultra"; the README, FAQ, model-cascade table and the `top-model.sh` header say so. The `--explain` output keeps its `Max 20x` / `Max 5x` labels (a byte-for-byte guard in `tests/model-profile.test.sh`). Detection is unchanged: the profile still reads `organizationType: claude_max` / `default_claude_max_20x`, and an unrecognised type still resolves to `opus` and prints `plan unknown` at session start.
 
 ## [0.44.0] - 2026-10-29
