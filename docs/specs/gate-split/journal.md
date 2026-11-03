@@ -14,3 +14,4 @@
 - 2026-11-02T23:22:13Z · 04-council:ESCALATE · reopened after round 2, ceiling now 6 · next: repair
 - 2026-11-02T23:22:22Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/gate-split; to edit, run /vulyk-pause gate-split
 - 2026-11-02T23:22:37Z · 03-building · repair round 2: gate-split-09-repair-round-2.md · next: build:5
+- 2026-11-03T00:06:04Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/gate-split/round-3 · next: dispatch:opus,review
