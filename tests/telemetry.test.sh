@@ -39,15 +39,22 @@ wiring
 ledger
 constitution
 constitution2
+constitution3
 library
 ysk
+ysk2
+ysk3
 ysk-hook
 rg
+rg2
 mods
+mods2
 watcher
 upgrade
 crlf
+crlf2
 wrapper
+wrapper2
 launchers
 edits"
 PART=""
@@ -1499,7 +1506,7 @@ rmdir "$TGT/docs/specs/autonomous-cycle"
 
 fi # ledger
 
-if part_on constitution constitution2; then
+if part_on constitution constitution2 constitution3; then
 # --- install.sh: --constitution replace (ADR-013 D7) ------------------------------------------
 # The release's constitution goes in whole; the hive's Profile and Commands bodies are carried
 # over verbatim between the markers; the old file is kept as <name>.pre-<major.minor>.md. A
@@ -1512,16 +1519,19 @@ outside() { # the file minus both block bodies (markers kept)
 }
 block() { awk -v m="$2" 'index($0, m ":END") { f = 0 } f { print } index($0, m ":START") { f = 1 }' "$1" | tr -d '\r'; }
 
-fi # the helpers constitution and constitution2 share
+cr_hive() { # $CR: a hive installed with telemetry on, two Profile rows filled, an owner line outside the blocks
+  CR="$T/hive-replace"; mkdir -p "$CR"
+  bash "$SRC/install.sh" "$CR" --telemetry on > /dev/null 2>&1
+  sed_inplace 's/| Stack | `<fill in>` |/| Stack | `filled-stack` |/; s/| Lint | `<fill in>` |/| Lint | `npm run lint -- --quiet` |/' "$CR/CLAUDE.md"
+  printf 'An owner line outside the blocks\n' >> "$CR/CLAUDE.md"
+  cp "$CR/CLAUDE.md" "$T/cr.before"
+  block "$CR/CLAUDE.md" VULYK:PROFILE > "$T/cr.profile"
+  block "$CR/CLAUDE.md" VULYK:COMMANDS > "$T/cr.commands"
+}
+fi # the helpers constitution, constitution2 and constitution3 share
 
 if part_on constitution; then
-CR="$T/hive-replace"; mkdir -p "$CR"
-bash "$SRC/install.sh" "$CR" --telemetry on > /dev/null 2>&1
-sed_inplace 's/| Stack | `<fill in>` |/| Stack | `filled-stack` |/; s/| Lint | `<fill in>` |/| Lint | `npm run lint -- --quiet` |/' "$CR/CLAUDE.md"
-printf 'An owner line outside the blocks\n' >> "$CR/CLAUDE.md"
-cp "$CR/CLAUDE.md" "$T/cr.before"
-block "$CR/CLAUDE.md" VULYK:PROFILE > "$T/cr.profile"
-block "$CR/CLAUDE.md" VULYK:COMMANDS > "$T/cr.commands"
+cr_hive
 
 bash "$SRC/install.sh" "$CR" --upgrade > "$T/cr-plain.out" 2>&1
 expect_eq "plain --upgrade never writes the constitution" "1" "$(same "$T/cr.before" "$CR/CLAUDE.md")"
@@ -1566,6 +1576,10 @@ bash "$SRC/install.sh" "$SCF" --telemetry off > /dev/null 2>&1
 sed_inplace 's#^| Full suite / build (round-only) |#| Full test suite |#' "$SCF/CLAUDE.vulyk.md"
 bash "$SRC/install.sh" "$SCF" --upgrade --check 2>&1 | expect "a sidecar's 'Full test suite' row is named on --upgrade --check" "no 'Full suite / build (round-only)' row"
 
+fi # constitution
+
+if part_on constitution3; then # post-046-tails: constitution, second half - --constitution replace on the CR hive
+cr_hive
 S0="$(treesum "$CR")"
 bash "$SRC/install.sh" "$CR" --upgrade --check --constitution replace > "$T/cr-check.out" 2>&1
 cat "$T/cr-check.out" | expect "--check names the backup" "would back up  CLAUDE.md -> CLAUDE.$BAKNAME.md"
@@ -1591,7 +1605,7 @@ expect_eq "and writes no second backup" "1" "$(ls "$CR"/CLAUDE.pre-*.md | grep -
 bash "$SRC/install.sh" "$CR" --upgrade > "$T/cr-after.out" 2>&1
 cat "$T/cr-after.out" | expect_absent "a migrated hive gets no migrate hint" "--constitution replace"
 
-fi # constitution
+fi # constitution3
 
 if part_on constitution2; then
 # the sidecar: CLAUDE.vulyk.md is replaced, the foreign CLAUDE.md that imports it is not opened
@@ -1711,10 +1725,10 @@ cat "$T/ownset.out" | expect "an owner's settings.json: reset wired on SessionSt
 expect_eq "... and all three land in the owner's file" "1 1 1" "$(defect_wiring "$OWNSET/.claude/settings.json")"
 fi # library
 
-if part_on ysk ysk-hook; then
+if part_on ysk ysk2 ysk3 ysk-hook; then
 YSK='cc-plugin-you-should-know@builtin'
 ysk_val() { jq -r --arg k "$YSK" '.enabledPlugins[$k] | tostring' "$1" | tr -d '\r'; }
-fi # the helpers ysk and ysk-hook share
+fi # the helpers ysk, ysk2, ysk3 and ysk-hook share
 
 if part_on ysk; then
 install_fixtures
@@ -1729,6 +1743,9 @@ expect_eq "a fresh hive has the offer hook on SessionStart" "1" \
   "$(jq -r '[.hooks.SessionStart[].hooks[].command | select(test("ysk-offer.sh$"))] | length' "$TGT/.claude/settings.json" | tr -d '\r')"
 cat "$T/ownset.out" | expect "an owner's settings.json: the offer hook wired" \
   "wire           .claude/settings.json -> SessionStart: ysk-offer.sh"
+fi # ysk
+
+if part_on ysk2; then # post-046-tails: ysk, second half - the upgrade drops the old true
 # 0.25-0.28 wrote the key `true` into every hive: an upgrade drops exactly that `true` (owner, 2026-10-16).
 YSK2="$T/hive-ysk"; mkdir -p "$YSK2/.claude"
 printf '{"enabledPlugins":{"other@market":true,"%s":true}}\n' "$YSK" > "$YSK2/.claude/settings.json"
@@ -1743,6 +1760,9 @@ expect_eq "... the key is gone, another plugin's key stays" "null true" \
   "$(ysk_val "$YSK2/.claude/settings.json") $(jq -r '.enabledPlugins["other@market"] | tostring' "$YSK2/.claude/settings.json" | tr -d '\r')"
 bash "$SRC/install.sh" "$YSK2" --upgrade > "$T/ysk-up2.out" 2>&1
 cat "$T/ysk-up2.out" | expect_absent "a second upgrade says nothing about it" "$YSK"
+fi # ysk2
+
+if part_on ysk3; then # post-046-tails: ysk, third part - an enabledPlugins left empty, an owner's false
 YSK3="$T/hive-ysk-only"; mkdir -p "$YSK3/.claude"
 printf '{"enabledPlugins":{"%s":true}}\n' "$YSK" > "$YSK3/.claude/settings.json"
 bash "$SRC/install.sh" "$YSK3" --telemetry off > /dev/null 2>&1
@@ -1754,7 +1774,7 @@ bash "$SRC/install.sh" "$YSK3" --upgrade > "$T/ysk-off.out" 2>&1
 expect_eq "an owner's false stays, and settings.local.json is never touched" "false true" \
   "$(ysk_val "$YSK3/.claude/settings.json") $(ysk_val "$YSK3/.claude/settings.local.json")"
 
-fi # ysk
+fi # ysk3
 
 if part_on ysk-hook; then
 # The hook itself, in a sandbox: CLAUDE_CONFIG_DIR stands in for ~/.claude.
@@ -1793,7 +1813,7 @@ yo | jq -r .systemMessage | expect "an unfilled language row falls back to Engli
 
 fi # ysk-hook
 
-if part_on rg; then
+if part_on rg rg2; then
 # wire_ripgrep: on Windows, with a system rg on PATH, USE_BUILTIN_RIPGREP=0 goes to the hive's
 # settings.local.json (the machine's file, never the committed one); off Windows, with no rg, or
 # with the hive's own value in either file, nothing is written. uname and rg are stubbed.
@@ -1805,6 +1825,9 @@ printf '#!/bin/sh\nexit 0\n' > "$RGWIN/rg"; cp "$RGWIN/rg" "$RGLIN/rg"
 chmod +x "$RGWIN/uname" "$RGLIN/uname" "$RGNONE/uname" "$RGWIN/rg" "$RGLIN/rg"
 rg_val() { jq -r '.env.USE_BUILTIN_RIPGREP | tostring' "$1" 2>/dev/null | tr -d '\r'; }
 RGLBL="wire           .claude/settings.local.json -> env: USE_BUILTIN_RIPGREP"
+fi # the stubs rg and rg2 share
+
+if part_on rg; then
 RG1="$T/hive-rg"; mkdir -p "$RG1"
 PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG1" --telemetry off --check > "$T/rg-check.out" 2>&1
 cat "$T/rg-check.out" | expect "Windows + rg: --check names the key it would wire" "would wire     .claude/settings.local.json -> env: USE_BUILTIN_RIPGREP"
@@ -1820,6 +1843,9 @@ printf '{"permissions":{"allow":["Bash(ls:*)"]}}\n' > "$RG2/.claude/settings.loc
 PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG2" --telemetry off > /dev/null 2>&1
 expect_eq "an owner's settings.local.json gets the key and keeps its permission" "0 1" \
   "$(rg_val "$RG2/.claude/settings.local.json") $(jq -r '[.permissions.allow[] | select(. == "Bash(ls:*)")] | length' "$RG2/.claude/settings.local.json" | tr -d '\r')"
+fi # rg
+
+if part_on rg2; then # post-046-tails: rg, second half - the hive's own value, off Windows, no rg, a broken file
 RG3="$T/hive-rg-set"; mkdir -p "$RG3/.claude"
 printf '{"env":{"USE_BUILTIN_RIPGREP":"1"}}\n' > "$RG3/.claude/settings.json"
 PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG3" --telemetry off > "$T/rg-set.out" 2>&1
@@ -1845,16 +1871,20 @@ PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG6" --telemetry off > "$T/rg-bad.o
 expect_eq "an unparseable settings.local.json is left byte for byte" '{"env": [' "$(tr -d '\r\n' < "$RG6/.claude/settings.local.json")"
 cat "$T/rg-bad.out" | expect "... with the line to add by hand" '"env": { "USE_BUILTIN_RIPGREP": "0" }'
 
-fi # rg
+fi # rg2
 
-if part_on mods; then
-install_fixtures
+if part_on mods mods2; then
 # VULYK's mods (the pulse): installed once per machine, user scope, from VULYK's GitHub marketplace;
 # no project marketplace key and no enabledPlugins true is written; an owner's false is kept.
 PID='vulyk-pulse@vulyk'
 PADD='claude plugin marketplace add Black-coffe/vulyk'
 PINST="claude plugin install $PID --scope user"
 pid_keys() { jq -r --arg k "$PID" '"\(.enabledPlugins[$k] | tostring) \(.extraKnownMarketplaces.vulyk | tostring)"' "$1" | tr -d '\r'; }
+PI="$T/hive-pulse"; mkdir -p "$PI"
+fi # the names mods and mods2 share
+
+if part_on mods; then
+install_fixtures
 expect_eq "VULYK's own settings.json carries no pulse key" "null null" "$(pid_keys "$SRC/.claude/settings.json")"
 expect_eq "a fresh hive gets no pulse key" "null null" "$(pid_keys "$TGT/.claude/settings.json")"
 expect_eq "... nor does an owner's settings.json" "null null" "$(pid_keys "$OWNSET/.claude/settings.json")"
@@ -1863,7 +1893,6 @@ expect_eq "OWNED lists the pulse tree" "1" "$(grep -c '^OWNED=.*\.claude/mods/vu
 cat "$T/install.out" | expect "no claude on PATH: a NOTE says so, the install goes on" "NOTE: claude is not on PATH"
 cat "$T/install.out" | expect "... and names the marketplace command" "$PADD"
 cat "$T/install.out" | expect "... and the install command" "$PINST"
-PI="$T/hive-pulse"; mkdir -p "$PI"
 : > "$T/cc.log"
 VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --telemetry off --check > "$T/pi-check.out" 2>&1
 cat "$T/pi-check.out" | expect "--check names what it would install" "would install  $PID (user scope"
@@ -1886,6 +1915,11 @@ cat "$T/pi-again.out" | expect "... and says so" "update         $PID (user scop
 VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade --check > "$T/pi-upd-check.out" 2>&1
 cat "$T/pi-upd-check.out" | expect "--check on a machine that has it names the update" "would update   $PID (user scope"
 expect_eq "... and the dry run updates nothing" "0" "$(grep -c 'plugin marketplace update\|plugin update' "$T/cc.log")"
+fi # mods
+
+if part_on mods2; then # post-046-tails: mods, second half - PI rebuilt as mods leaves it (installed, the mod listed)
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --telemetry off > /dev/null 2>&1
+printf '  vulyk\n' > "$T/cc-mkt"; printf '  %s\n    Scope: user\n' "$PID" > "$T/cc-list"; : > "$T/cc.log"
 : > "$T/cc-upd-fail"
 VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade > "$T/pi-upd-fail.out" 2>&1; rc=$?
 expect_eq "a failed plugin update never fails the install" "0" "$rc"
@@ -1905,7 +1939,7 @@ expect_eq "a failed plugin install never fails the install" "0" "$rc"
 cat "$T/pi-fail.out" | expect "... it names both commands" "$PADD"
 cat "$T/pi-fail.out" | expect "... the second one too" "$PINST"
 rm -f "$T/cc-fail" "$T/cc-mkt"
-fi # mods
+fi # mods2
 
 if part_on watcher; then
 install_fixtures tgt
@@ -1982,7 +2016,7 @@ expect_eq "a second upgrade leaves it byte-identical" "1" "$([ "$DW_BEFORE" = "$
 cat "$T/dw2.out" | expect_absent "and wires nothing" "wire           .claude/settings.json"
 fi # library
 
-if part_on wrapper launchers; then
+if part_on wrapper wrapper2 launchers; then
 # --- install.sh: the host's hook wrapper, reproduced exactly (0.19.1) ------------------------
 # 0.19.0 copied a Varto-style `bash -c '"...x.sh"'` prefix and dropped the closing quote: every
 # new hook died with "unexpected EOF" and exit 2, which on PreToolUse blocks every tool. Each
@@ -2028,14 +2062,17 @@ wrapper_case() { # wrapper_case <name> <cmd-of vulyk-update-check.sh> <cmd-of an
   expect_eq "$name: a second upgrade leaves settings.json byte-identical" "1" "$([ "$got" = "$(cat "$s")" ] && echo 1 || echo 0)"
   cat "$T/wrap-$name-2.out" | expect_absent "$name: and wires nothing" "wire           .claude/settings.json"
 }
-fi # wrapper launchers
+fi # wrapper wrapper2 launchers
 
 if part_on wrapper; then
 wrapper_case plain "${P}vulyk-update-check.sh" "${P}anomaly-scan.sh" \
   "${P}defect-intake.sh" "${P}defects-inject.sh" "${P}defects-inject.sh reset"
+fi # wrapper
+
+if part_on wrapper2; then # post-046-tails: wrapper, second half - the bash -c form and the repair of a broken one
 wrapper_case bash-c "$W -c '\"${P}vulyk-update-check.sh\"'" "$W -c '\"${P}anomaly-scan.sh\"'" \
   "$W -c '\"${P}defect-intake.sh\"'" "$W -c '\"${P}defects-inject.sh\"'" "$W -c '\"${P}defects-inject.sh\" reset'"
-fi # wrapper
+fi # wrapper2
 
 if part_on launchers; then
 N='node "${CLAUDE_PROJECT_DIR}/scripts/vulyk-hook.mjs"'
@@ -2048,7 +2085,7 @@ wrapper_case mixed "${B}vulyk-update-check.sh\"" "${P}anomaly-scan.sh" \
   "${B}defect-intake.sh\"" "${B}defects-inject.sh\"" "${B}defects-inject.sh\" reset"
 fi # launchers
 
-if part_on wrapper; then
+if part_on wrapper2; then
 # A host 0.19.0 already broke: the three entries lack their closing quote. They count as wired,
 # so re-running the update must repair them in place, not skip them or add a second copy.
 BC="$T/hive-wrap-bash-c"; BCS="$BC/.claude/settings.json"
@@ -2064,7 +2101,7 @@ expect_eq "settings.json is back to the correct form, byte for byte" "1" "$(same
 bash "$SRC/install.sh" "$BC" --upgrade --telemetry off > "$T/bc2.out" 2>&1
 cat "$T/bc2.out" | expect_absent "a run after the repair wires and repairs nothing" "settings.json ->"
 
-fi # wrapper
+fi # wrapper2
 
 if part_on crlf; then
 # --- install.sh: CRLF host files (core.autocrlf=true) -----------------------------------------
@@ -2091,6 +2128,9 @@ expect_eq "a fresh hive's .gitattributes pins LF for hooks, drivers and the mani
   "$(tr -d '\r' < "$CR/.gitattributes" | grep -cxE '(\*\.sh|\.claude/hooks/\*\.py|\.claude/workflows/\*\.js|\.claude/vulyk-manifest) text eol=lf')"
 cat "$T/crlf.out" | expect_absent "and a second run adds no rule" "gitattributes  added"
 
+fi # crlf
+
+if part_on crlf2; then # post-046-tails: crlf, second half - what a release ships into a hive
 # Shipping: only the index skeleton, install semantics; VULYK's own cards and hook state never.
 DREL="$T/release-defects"; mkdir -p "$DREL"
 tar -C "$SRC" --exclude=./.git --exclude=./.claude/worktrees -cf - . | tar -C "$DREL" -xf -
@@ -2134,7 +2174,7 @@ cat "$T/dh-up2.out" | expect_absent "a hive that has the file gets no offer" "Of
 bash "$DREL/install.sh" "$DH" --check > "$T/dh-check.out" 2>&1
 cat "$T/dh-check.out" | expect_absent "--check does not list the hive's .claude/vulyk-setup" ".claude/vulyk-setup"
 cat "$T/dh-check.out" | expect "--check lists hook state as a runtime skip" "would skip (runtime) .claude/state/defects/keys"
-fi # crlf
+fi # crlf2
 
 if part_on telemetry; then
 # --- case 17: inbox - distil, then stage the clear (anomaly-telemetry-07) ----------------------

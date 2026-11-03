@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs judge seats seats2 close escalate ceilings ceilings2 replays replays2 walks walks2 driver roster roster2 advance suite" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -787,6 +787,8 @@ row="$(grep '"spec":"halffloor2b"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -qF '"escalate":"half"' && echo "  ok    A=2 both-red row escalate:half" || { echo "::error::row: $row"; fail=1; }
 
 fi # --quick: end of the ceiling/no-progress/half skip
+fi # part judge
+if part judge2; then # --- part judge2 (post-046-tails: judge, second half): ABSENT/N/A/REJECTED, journal, briefed, branch, git failures, court setup
 # --- judge: three ABSENT seats -------------------------------------------------------------------
 
 echo "judge: every blind seat exhausted -> ESCALATE env; only the required one (opus) is ABSENT in the row"
@@ -1259,6 +1261,10 @@ out="$(report_taint 'the story is demo-14' | council record-seat docs/specs/demo
 [ "$ex" -eq 0 ] && echo "  ok    a bare <slug>-NN stays clean under the revised pattern (C4 revised)" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 
+fi # --quick: end of the taint skip (seats)
+fi # part seats
+if part seats3; then # --- part seats3 (post-046-tails: seats, second half): the R9 live proof, evidence, unevidenced RED/GREEN, ABSENT
+if full; then # --quick skips: the R9 live proof and the evidence re-ask rules
 echo "record-seat: the live round-1 false positives no longer taint under the real slug (R9 live proof)"
 mk_spec autonomous-cycle 2
 rd_ac1="$(mk_open_round autonomous-cycle 1)"
@@ -1374,7 +1380,7 @@ out="$(printf 'garbage3\n' | council record-seat docs/specs/rabsent 1 haiku 2>&1
   || { echo "::error::files: $(ls "$rd_rabsent")"; fail=1; }
 
 fi # --quick: end of the taint/evidence skip
-fi # part seats
+fi # part seats3
 if part seats2; then # --- part seats2: record-seat review seat verdict, review layout, --model, --file
 
 # --- record-seat: review seat, verdict read from line 1 only (C5 amended, story 27/R28,N-m4) --
@@ -2335,6 +2341,8 @@ out="$(council open-round docs/specs/oceilc1 --commit 2>&1)"; ex=$?
 [ -z "$(git status --porcelain)" ] && echo "  ok    --commit at the ceiling committed the ESCALATE record (clean tree)" \
   || { echo "::error::tree dirty after --commit: $(git status --porcelain)"; fail=1; }
 
+fi # part escalate
+if part escalate2; then # --- part escalate2 (post-046-tails: escalate, second half): the escalate verb, suite-line judging, reopen, the court reduction
 # --- escalate: a verb of its own, not an alias of judge (R5/C-3) ------------------------------
 
 echo "escalate: an open round with seats missing -> ESCALATE row (reason defaults to env), court removed, exit 6"
@@ -2854,6 +2862,8 @@ out="$(council status docs/specs/freshreview --json)"
 printf '%s' "$out" | jq -e '.review == null' >/dev/null 2>&1 && echo "  ok    status --json review:null on a fresh spec with no council row" \
   || { echo "::error::status: $out"; fail=1; }
 
+fi # part replays
+if part replays3 && full; then # --- part replays3 (post-046-tails: replays, second half; --quick skips it): stale and exhausted seats, Tier 3 ABSENT, the STALE fold
 echo "status --json: an open round gone stale before any seat is recorded, and with one already present (R2)"
 mk_open_spec stalerd1 2
 set_tier stalerd1 1
@@ -3269,6 +3279,8 @@ grep -qF 'emit true "$VERBLABEL" "$exit_code" "$next_val"' scripts/cycle.sh \
   && echo "  ok    judge's own ESCALATE (exit_code=6) path shares the same unconditional emit true call - never emit false" \
   || { echo "::error::judge's emit call not found in the expected literal shape"; fail=1; }
 
+fi # part walks (scenarios)
+if { part walks || part walks3; } && full; then # the wall probes walks and walks3 share (post-046-tails)
 # --- regression proof: the same six checks replayed against b9f36e8's cycle.sh vs. the branch's,
 # reusing run_wall_probes (extended above with a variadic extra-probe list) rather than a second
 # runner - a second scratch git repo per version, the branch's own working tree untouched. ------
@@ -3339,15 +3351,19 @@ probe_exit6uniform() {
   printf '%s' "$out" | tail -n1 | jq -e '.ok == true' >/dev/null 2>&1 && echo ok || echo FAIL
 }
 
-OLDCYCLE2="$(mktemp)"
 PIN_MUST_FAIL=""
+fi # the wall probes walks and walks3 share
+if part walks && full; then
+OLDCYCLE2="$(mktemp)"
 if pin_cycle b9f36e8 "$OLDCYCLE2"; then
   run_wall_probes "b9f36e8" "$OLDCYCLE2" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
   rm -f "$OLDCYCLE2"
 fi
+fi # part walks
+if part walks3 && full; then # --- part walks3 (post-046-tails: walks, second half; --quick skips it): story 16's six wall probes on the branch's cycle.sh
 run_wall_probes "branch"  "$SRC/scripts/cycle.sh" probe_r2m3 probe_r2m16 probe_nm3 probe_ceiling probe_courtcommit probe_exit6uniform
 
-fi # part walks
+fi # part walks3
 if part walks2 && full; then # --- part walks2 (--quick skips it): story 16, its wall probes and pinned replay
 
 # ============================================================================================
