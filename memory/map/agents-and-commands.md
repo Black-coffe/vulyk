@@ -20,7 +20,8 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   Critical/Major: `[ask N]` or `[regression]` (base-side evidence); else `[unanchored]`.
   **Suite line (ADR-029, supersedes the ADR-023 run):** never runs the whole suite. The round's tests ran before
   dispatch (`cycle.sh suite`); it reads `council/round-N/suite.log` and copies its last `SUITE: ok|FAIL <N>s[ -
-  <why>]|none` line to line 3 (no log, or `head=` not the reviewed head: `SUITE: none`). A red part may be rerun
+<why>]|none` line to line 3 (no log: writes no `SUITE:` line; `record-seat` refuses a review until the gate has run,
+  0.46). A red part may be rerun
   alone under `run_capped 300`; FAIL = BLOCK with a `[regression]` Critical. `record-seat` overwrites the line
   with the log's anyway. ≤ 5 minors.
 - **council-opus** (`opus`, `medium`, `maxTurns:60`; no Write/Edit) - Tier 3-4 blind seat inside `COURT`; one
@@ -83,7 +84,8 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   `AskUserQuestion` «Выпускаем?»; yes runs `vulyk-ship` via Skill.
 - **`/vulyk-review`** - claim + `advance --claim`; dispatch the seats `next` names; `advance --ingest`; release.
   `build:W` = RED → repair story, `/vulyk-build`.
-- **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses). Stage 03 runs `git merge-tree --write-tree` (0 clean, 1
+- **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses). On `ci: no CI run for <sha>` it pushes the spec
+  branch, runs `gh workflow run <file> --ref <branch>`, waits, rechecks; a red run is a refusal. Stage 03 runs `git merge-tree --write-tree` (0 clean, 1
   conflict never overridden, other = "cannot check"). Release commit; local `merge --no-ff` only on a clean default
   tree, failure → `merge --abort`; `branch -d` (never `-D`). Prints the publish command, never runs it (push, green
   CI, then tag); `drone-docs`/`librarian` only with work; next-brief draft.

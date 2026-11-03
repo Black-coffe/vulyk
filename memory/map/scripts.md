@@ -20,7 +20,9 @@ re-run. No line numbers: `grep -n '^name()'`.
   uncapped with a stderr line). `verdict_stale <spec> <head-sha> <pack-fp>` -> `CURRENT` rc 0 /
   `STALE (pack|commit)` rc 1; a `<sha>..HEAD` that is `paperwork_only` stays current. Used by `human-check.sh
   --check` and ship-check.sh.
-- `ship-check.sh <spec-dir>` / `--record`; `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`;
+- `ship-check.sh <spec-dir>` / `--record` (0.46 `ci` line, `ci_check`: needs a `.github/workflows/*.y*ml` and a
+  GitHub `origin`, else `ci: not checked`; `gh run list --commit` for HEAD or the newest commit with only
+  paperwork after; all `success` = ok, failed/pending/none = NOT READY, no/failing `gh` = `cannot confirm CI`); `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`;
   `scope-check.sh <story-file> [range]` runs in `close-story` (`  ! ` paths -> `--commit` exit 4).
 - `wave-check.sh` (`no-verify`, `verify-gap`, `verify-cell`, `verify-round-only`; report-only `red-no-test`,
   `red-value`; the red block opens only on a `red:` line inside frontmatter), `trace-check.sh`,
@@ -83,14 +85,15 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `tests/full-suite.sh [--jobs N] [--list | --steps | --step K]` (ADR-029) - every `tests/*.test.sh` as capped
   parts; suites with `--list-parts` run one `--part` job each. A step = a chunk of <= `--jobs` (default cores,
   max 12) jobs started together; `inject`/`intake` latency jobs go last, one per step. `--steps` prints S,
-  `--step K` runs one, no flag runs all. Each part has its own cap `VULYK_PART_CAP` (default and max 300; above
+  `--step K` runs one (0.46: first prints `PARTS K/S: <names>`, PART lines as parts end; part names lose edge
+  hyphens), no flag runs all. Each part has its own cap `VULYK_PART_CAP` (default and max 300; above
   = exit 2). Output `PART <name> ok|FAIL|SKIP|CAP <N>s cap <C>s`, then `STEP K/S: ok|FAIL <N>s` or `SUITE: ...
   parts= skip= fail=`. Exit 0 / 1 (FAIL, CAP, growth, strict SKIP) / 2; never 124. No whole-run budget:
   `VULYK_SUITE_TIMEOUT` is no longer read here. CLAUDE.md row `Full suite steps (round-only)`; the round runs it
   through `cycle.sh suite` (cycle.md); CI runs one `full-suite` job.
 - `suite-parts-check.sh <file>` - reads `PART` lines (full-suite output or a `suite.log`); prints `suite-parts-check:
   cut part <name>: <N>s of cap <C>s (cap|over-cap|grew)` for a CAP line, a cap > 300, or N*10 > C*7. Exit 1 any,
-  0 none (also an unreadable path), 2 no argument. Used by `full-suite.sh` and `cmd_suite`.
+  0 none (a readable file with no PART line), 2 no argument or `no such file: <path>` (0.46). Used by `full-suite.sh` and `cmd_suite`.
 - `tests/symbol-map.test.sh` also holds the `--- trace-autopsy` block; `tests/maintenance.test.sh`: caps, brief
   due logic, ledger, prompt-check fixture copies.
 
@@ -109,4 +112,4 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-03 (0.45.0 gate split; lib.sh, install.sh unchanged in contract)
+last-verified: 2026-11-03 (0.46.0 post-045-tails; lib.sh, install.sh unchanged in contract). Over the ~80-line budget.

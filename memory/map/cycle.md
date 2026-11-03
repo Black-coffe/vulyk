@@ -43,7 +43,7 @@ Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the
   only for a blind seat, carries round n-1's GREEN/N/A blind seats (`review` never). Court setup: `build_court`
   runs `$ROOT/.claude/vulyk-setup` if present (`${VULYK_SETUP_TIMEOUT:-300}`); failure → `open-round` exit 2.
 - `claim` refuses a dirty tree; `release`, `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"`
-  appends to `## Answers`, raises `CEILING`, emits `next:"repair"` (or re-runs on `env`/`suite-timeout`).
+  appends to `## Answers`, raises `CEILING`, emits `next:"repair"` (or re-runs on `env`, or an old `suite-timeout`).
 - **`suite <spec> [--commit] [--stamp S]` (ADR-029, `cmd_suite`):** the round's gate, one step per call, before
   the seats, into `council/round-N/suite.log` (paperwork, committed per step with `--commit`): line 1
   `head=<ROUND head> steps=<S>`, per step `STEP K/S: ok|FAIL <N>s` + its `PART <name> ok|FAIL|SKIP|CAP <N>s cap
@@ -54,13 +54,16 @@ Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the
   runs `<cmd> --step K` under a 590 s cap. Otherwise each row (`full_suite_row`, table order) is one step and one
   part under `VULYK_PART_CAP` (default 300, never above), part name = Purpose slug. An empty command cell or a
   step past the rows is a red part, never ok. A step is FAIL on non-zero rc or when `suite-parts-check.sh` names
-  a part (CAP, cap > 300, or > 70% of cap). No row = `SUITE: none`.
+  a part (CAP, cap > 300, or > 70% of cap). No row = `SUITE: none`. A step killed at its cap notes
+  `timed out after <C>s - no end from: <parts>` (from the runner's `PARTS K/S:` line); the SUITE line repeats it.
 - **Full-suite line (0.36; ADR-023, ADR-029):** a finished suite.log keyed to the round head overrides the
   `review` report: `record-seat` drops every reported `SUITE:` line and writes the log's under the VERDICT line.
-  With a `round-only` row and no usable log the report's own line must match `SUITE: ok|FAIL|TIMEOUT <N>s` else
-  exit 4. `judge`: `FAIL` = BLOCK `[regression]`; `SUITE: TIMEOUT` → ESCALATE `suite-timeout`, an old review
-  line only (the suite verb never writes TIMEOUT); `VULYK_SUITE_TIMEOUT` (590) is read only as the fallback
-  budget of that line. `repair` also copies each red PART line of the finished log as a `- [regression]` finding.
+  **0.46:** `record-seat` of a `review` with a `round-only` row and no finished log for the round head exits 2
+  (`no suite.log for round N ... run cycle.sh suite`), nothing written, no attempt spent (not a re-ask; the
+  same report records after the gate). `judge`: `SUITE: FAIL` and a legacy `SUITE: TIMEOUT` line are both a
+  review BLOCK `[regression]` → repair, never `suite-timeout`. `VULYK_SUITE_TIMEOUT` is read nowhere;
+  `escalate --reason suite-timeout` stays valid for old rows/reopen. `repair` also copies each red PART line of
+  the finished log as a `- [regression]` finding.
 
 ## `advance` (ADR-013 D2)
 1. `--claim` (needs `--stamp`): runs `claim`. 2. `--ingest`: each missing seat of the open round is recorded from
@@ -76,7 +79,7 @@ stale → `open-round`, missing seat → `dispatch:<csv>`, else `judge` → `esc
 ## Seats and the verdict (`cmd_judge`)
 `required_seats_for_tier`: Tier 1-2 → `review`; 3-4 → `opus review`, plus `haiku` when `client_path_filled`.
 `tier_ceiling` 1/2/3/3; `CEILING` wins. Verdict, first match: human REJECTED newer than the round → RED; required
-seat ABSENT with no RED/BLOCK → ESCALATE `env`; `SUITE: TIMEOUT` with nothing RED → `suite-timeout`; evidenced
+seat ABSENT with no RED/BLOCK → ESCALATE `env`; (`suite-timeout` only on old rows); evidenced
 RED ≥ max(2, ceil(A/2)) → `half`; anchored review BLOCK or any RED → `no-progress` (same ask RED in n-1),
 `ceiling`, else RED; else GREEN. A BLOCK with no in-range `[ask N]`/`[regression]` is PASS, note `unanchored`.
 
@@ -102,4 +105,4 @@ the run; `dispatch:` → `gate(st)` first, then the seats in parallel (Tier 4 re
   entries go in `fallbacks`; `/vulyk-build` journals them.
 - Tests: `cycle|council|telemetry.test.sh --part <topic>` / `--list-parts`; full set once per round (scripts.md).
 
-last-verified: 2026-11-03 (0.45.0 gate split; ADR-001, 013, 015, 023, 025, 029)
+last-verified: 2026-11-03 (0.46.0 post-045-tails; ADR-001, 013, 015, 023, 025, 029). Over the ~80-line budget.
