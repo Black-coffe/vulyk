@@ -1,6 +1,6 @@
 ---
 story: post-045-tails-04
-status: todo
+status: blocked
 returned:
 worker: worker-code
 model: opus
