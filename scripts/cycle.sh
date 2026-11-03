@@ -2290,7 +2290,9 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] - red-receipt: run the 
   TS="$(now_ts)"
   TH="$(red_hash "$RED_SEALED")"
   IH="$(red_hash "$RED_IMPL")"
-  TAIL="$(tail -n 10 "$OUTD/$HIT.out" | tr -d '\r' | bash "$HERE/redact.sh")"
+  # The lines carrying red_reason (at most 3) lead the tail, so the receipt shows the failing check even
+  # when ten passing lines follow it (post-046-tails).
+  TAIL="$( { grep -F -- "$REASON" "$OUTD/$HIT.out" | head -n 3; tail -n 10 "$OUTD/$HIT.out"; } | tr -d '\r' | bash "$HERE/redact.sh")"
   rm -rf "$OUTD"
   PATHS="$(printf '%s\n' "$RED_SEALED" | sed '/^$/d' | paste -sd, - | sed 's/,/, /g')"
 

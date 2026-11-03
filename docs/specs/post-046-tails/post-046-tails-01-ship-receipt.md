@@ -1,14 +1,15 @@
 ---
 story: post-046-tails-01
 spec: post-046-tails
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: a red run re-dispatched green on the same commit -> ci ok
+red_verified_at: 2026-11-03T17:11:13Z 3d8715bb3e95f4363b7b6db6ac6b499e00df4cdf847ee9a732cb4d398232358a
 ---
 
 # ci judges the newest run per workflow; the red receipt shows its failing line
@@ -59,5 +60,36 @@ memory/map/cycle.md: `ship-check.sh` ci line, `stamp-red`
 `bash tests/cycle.test.sh --part red`
 
 ## Implementation notes
+- `ci_check` asks gh for `createdAt` too, then `sort -t<TAB> -k4,4r | awk -F'\t' '!seen[$3]++'` keeps the newest
+  run per workflow before the unchanged judging awk. ISO 8601 UTC sorts as text, so no date parsing. The fake gh
+  rows in `--part ship` gained the fourth column; new cases write rows oldest first so the order is the script's.
+- `stamp-red` tail: `grep -F -- "$REASON" | head -n 3` then `tail -n 10`, one redact pass over both. When the
+  reason line is already in the last ten it shows twice; accepted, the receipt format is otherwise unchanged.
+- vulyk-ship.md step 1: one sentence for `ci: <workflow> failure on <sha>` (log, rerun or fresh dispatch).
+  vulyk-build.md green: ship pushes the spec branch, prints tag and publish. The maintenance green-terminal
+  checks still match (the strings they grep are untouched).
+- `createdAt` checked live: gh 2.91.0 `gh run list --help` lists it, and the exact `--json/--jq` query on this
+  repo printed `completed	success	CI	2026-11-03T15:25:59Z` rows. A `gh run rerun` keeps the run id (and its
+  createdAt) and changes its own conclusion, so it never needed the newest-run rule; a fresh dispatch does.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/cycle.test.sh --part ship
+- exit: 1
+- tests: 3d8715bb3e95f4363b7b6db6ac6b499e00df4cdf847ee9a732cb4d398232358a (tests/cycle.test.sh)
+- impl: fc91ad61a6464397a319dc87497d3742f9dec9d78900da3c7ec1dbfb69a3f1b0
+- stamped: 2026-11-03T17:11:13Z
+
+```
+  ok    GREEN + newer ACCEPTED at HEAD is READY
+  ok    code after ACCEPTED: stage 05 is OPEN
+  ok    code after ACCEPTED: 05 names STALE (commit)
+  ok    code after ACCEPTED: NOT READY
+  ok    VERSION + CHANGELOG.md after ACCEPTED stays READY
+  ok    a new story after ACCEPTED: 05 names STALE (pack)
+  ok    a new story after ACCEPTED: NOT READY
+the paperwork whitelist is anchored to docs/specs/*/ (R23/m-2): a commit under src/council/ or a bare src/journal.md is never paperwork, even though it shares the names
+  ok    CURRENT right after the recorded check
+  ok    src/council/x and src/journal.md are not paperwork -> STALE
+```

@@ -121,7 +121,7 @@ ship | expect "no workflow dir: the ci line is not checked, still READY" "ci: no
 echo "ci (post-045-tails ask 7): with a workflow and a GitHub origin, ship-check wants a green run on HEAD, or on the newest commit with only paperwork after it"
 CIR="$(mktemp -d)"; CIBIN="$(mktemp -d)"; mkdir -p "$CIBIN/runs"
 # A fake gh: `run list --commit <sha> ...` prints $FAKE_GH_DIR/<sha> as the --jq form (status, conclusion,
-# workflow, tab-separated); FAKE_GH_RC makes it fail as a logged-out gh does.
+# workflow, createdAt, tab-separated); FAKE_GH_RC makes it fail as a logged-out gh does.
 printf '#!/bin/sh\n[ -n "${FAKE_GH_RC:-}" ] && { echo "fake gh: HTTP 401" >&2; exit "$FAKE_GH_RC"; }\nsha=""\nwhile [ $# -gt 0 ]; do [ "$1" = --commit ] && sha="$2"; shift; done\n[ -f "$FAKE_GH_DIR/$sha" ] && cat "$FAKE_GH_DIR/$sha"\nexit 0\n' > "$CIBIN/gh"
 chmod +x "$CIBIN/gh"
 cp -R "$T/." "$CIR/"
@@ -137,19 +137,29 @@ cis | expect "a workflow and no origin -> ci not checked - no GitHub remote" "ci
 cig remote add origin https://gitlab.com/example/demo.git
 cis | expect "a non-GitHub origin -> ci not checked - no GitHub remote" "ci   ok       ci: not checked - no GitHub remote"
 cig remote set-url origin https://github.com/example/demo.git
-printf 'completed\tsuccess\tCI\n' > "$CIBIN/runs/$H"
+printf 'completed\tsuccess\tCI\t2026-11-01T10:00:00Z\n' > "$CIBIN/runs/$H"
 cis | expect "a green run on HEAD -> ci ok" "ci   ok       ci: green on $h7 (CI)"
 cis | expect "a green run on HEAD -> READY" "READY."
-rm -f "$CIBIN/runs/$H"; printf 'completed\tsuccess\tCI\n' > "$CIBIN/runs/$W"
+rm -f "$CIBIN/runs/$H"; printf 'completed\tsuccess\tCI\t2026-11-01T10:00:00Z\n' > "$CIBIN/runs/$W"
 cis | expect "a green run on a commit followed only by paperwork -> ci ok" "ci   ok       ci: green on $w7 (CI)"
-printf 'completed\tfailure\tCI\n' > "$CIBIN/runs/$W"
+printf 'completed\tfailure\tCI\t2026-11-01T10:00:00Z\n' > "$CIBIN/runs/$W"
 cis | expect "a failed CI run -> ci OPEN naming the workflow" "ci   OPEN     ci: CI failure on $w7"
 cis | expect "a failed CI run -> NOT READY" "NOT READY"
-printf 'in_progress\t\tCI\n' > "$CIBIN/runs/$W"
+printf 'in_progress\t\tCI\t2026-11-01T10:00:00Z\n' > "$CIBIN/runs/$W"
 cis | expect "a run still in progress -> ci OPEN" "ci   OPEN     ci: CI in_progress on $w7"
+# post-046-tails ask 1: only the newest run of each workflow on the commit is judged; the rows are written
+# oldest first, the way gh does not print them, so the order is the script's own sort.
+printf 'completed\tfailure\tCI\t2026-11-01T10:00:00Z\ncompleted\tsuccess\tCI\t2026-11-01T11:00:00Z\n' > "$CIBIN/runs/$W"
+cis | expect "a red run re-dispatched green on the same commit -> ci ok" "ci   ok       ci: green on $w7 (CI)"
+printf 'completed\tsuccess\tCI\t2026-11-01T10:00:00Z\ncompleted\tfailure\tCI\t2026-11-01T11:00:00Z\n' > "$CIBIN/runs/$W"
+cis | expect "a green run followed by a newer red run of the same workflow -> ci OPEN" "ci   OPEN     ci: CI failure on $w7"
+printf 'completed\tsuccess\tLint\t2026-11-01T12:00:00Z\ncompleted\tsuccess\tCI\t2026-11-01T10:00:00Z\ncompleted\tfailure\tCI\t2026-11-01T11:00:00Z\n' > "$CIBIN/runs/$W"
+cis | expect "two workflows, the newest run of one red -> ci OPEN naming only that one" "ci   OPEN     ci: CI failure on $w7"
+printf 'completed\tsuccess\tLint\t2026-11-01T12:00:00Z\ncompleted\tsuccess\tCI\t2026-11-01T11:00:00Z\ncompleted\tfailure\tCI\t2026-11-01T10:00:00Z\n' > "$CIBIN/runs/$W"
+cis | expect "two workflows, both newest runs green -> ci ok naming both" "ci   ok       ci: green on $w7 (CI, Lint)"
 rm -f "$CIBIN/runs/$W"
 cis | expect "no run for the head -> ci OPEN no CI run" "ci   OPEN     ci: no CI run for $h7"
-printf 'completed\tsuccess\tCI\n' > "$CIBIN/runs/$W"
+printf 'completed\tsuccess\tCI\t2026-11-01T10:00:00Z\n' > "$CIBIN/runs/$W"
 (cd "$CIR" && PATH="$CIBIN:$PATH" FAKE_GH_DIR="$CIBIN/runs" FAKE_GH_RC=1 bash scripts/ship-check.sh docs/specs/demo) \
   | expect "gh failing -> ci OPEN cannot confirm CI" "ci   OPEN     ci: cannot confirm CI: gh run list exit 1: fake gh: HTTP 401"
 printf 'v3\n' > "$CIR/app.txt"; cig add -A && cig commit -qm "a code change after the green run"
@@ -1302,6 +1312,18 @@ grep -qx -- '- command: bash tests/red.sh' "$st" && grep -qx -- '- exit: 1' "$st
 out="$(bash scripts/cycle.sh stamp-red "$st" 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && [ "$(grep -c '^## Red receipt' "$st")" -eq 1 ] && [ "$(grep -c '^red_verified_at:' "$st")" -eq 1 ] && [ "$(grep -c '^- command:' "$st")" -eq 1 ] \
   && echo "  ok    a second stamp leaves one red_verified_at and one ## Red receipt" || { echo "::error::re-stamp: exit=$ex $(cat "$st")"; fail=1; }
+
+echo "red-receipt (post-046-tails ask 3): the receipt carries the red_reason line even when 10+ passing lines follow it"
+st=docs/specs/red/red-13.md
+{ printf '#!/usr/bin/env bash\necho "expected done in src/red.txt, got $(cat src/red.txt)"\n'
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf 'echo "  ok    passing case %s"\n' "$i"; done
+  printf 'exit 1\n'; } > tests/red-long.sh
+red_story 13 "$MK" $'- tests/red-long.sh\n- src/red.txt\n' '`bash tests/red-long.sh`'
+out="$(bash scripts/cycle.sh stamp-red "$st" 2>&1)"; ex=$?
+rcpt="$(sed -n '/^## Red receipt/,$p' "$st")"
+[ "$ex" -eq 0 ] && printf '%s' "$rcpt" | grep -qF 'expected done in src/red.txt, got todo' && printf '%s' "$rcpt" | grep -qF 'passing case 12' \
+  && echo "  ok    ## Red receipt holds the red_reason line and the last lines" \
+  || { echo "::error::receipt lost the red_reason line: exit=$ex $rcpt $(printf '%s\n' "$out" | tail -1)"; fail=1; }
 git add -A && git commit -qm "red: stamp fixtures" >/dev/null
 
 echo "red-receipt: an unmarked story built from templates/story.md closes as before"

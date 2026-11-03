@@ -123,8 +123,8 @@ Then go on. A refusal on the redispatch is the existing stop: an absent seat, a 
 - `green`: print the round count and the newest `**Council:**` line, then ask the owner once with
   `AskUserQuestion`, in the owner's language: «<slug>: council GREEN, round <n>. Выпускаем?», the yes
   option first and marked recommended. Yes: run `vulyk-ship` with the Skill tool (args `<slug>`) in
-  this session. No, or no `AskUserQuestion` (`claude -p`): recommend `/vulyk-ship` in one line. Push
-  and publish stay the owner's: ship prints them and never runs them.
+  this session. No, or no `AskUserQuestion` (`claude -p`): recommend `/vulyk-ship` in one line. Ship
+  pushes the spec branch for its CI run, then prints the tag and publish steps; it never runs those.
 - `escalated`: print plan.md's `## Needs a human` verbatim (a `suite-timeout` reason carries its `- suite:
   <N> s, budget <B> s` line: cut the part that ran long, then reopen). The owner chooses: `bash
   scripts/human-check.sh docs/specs/<slug> ACCEPTED "<note>"`, `bash scripts/cycle.sh reopen
