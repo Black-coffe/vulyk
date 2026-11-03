@@ -51,3 +51,16 @@ PART telemetry:install-xp ok 54s cap 300s
 PART telemetry:terminal ok 67s cap 300s
 PART telemetry:wiring ok 73s cap 300s
 PART telemetry:ledger ok 77s cap 300s
+STEP 5/8: ok 130s
+PART telemetry:constitution ok 125s cap 300s
+PART telemetry:constitution2 ok 35s cap 300s
+PART telemetry:library ok 81s cap 300s
+PART telemetry:ysk ok 130s cap 300s
+PART telemetry:ysk-hook ok 4s cap 300s
+PART telemetry:rg ok 99s cap 300s
+PART telemetry:mods ok 124s cap 300s
+PART telemetry:watcher ok 86s cap 300s
+PART telemetry:upgrade ok 84s cap 300s
+PART telemetry:crlf ok 96s cap 300s
+PART telemetry:wrapper ok 130s cap 300s
+PART telemetry:launchers ok 89s cap 300s
