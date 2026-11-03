@@ -1,0 +1,37 @@
+## scripts/cycle.sh
+tests:
+  exact    tests/council.test.sh
+  textual  10 not shown
+importers:
+  textual  16 not shown
+path mentions:
+  textual  255 not shown
+## scripts/ship-check.sh
+tests:
+  textual  3 not shown
+importers:
+  textual  7 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  69 not shown
+## tests/full-suite.sh
+tests:
+  textual  5 not shown
+importers:
+  textual  3 not shown
+imported:
+  exact    scripts/lib.sh
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  67 not shown
+## scripts/suite-parts-check.sh
+tests:
+  textual  3 not shown
+importers:
+  textual  1 not shown
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  12 not shown
