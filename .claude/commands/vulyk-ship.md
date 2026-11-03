@@ -1,5 +1,5 @@
 ---
-description: Stage 06 of the cycle - fix history, merge locally, print the publish command, open the next circle. Never pushes, tags, publishes or deploys.
+description: Stage 06 of the cycle - fix history, merge locally, print the publish command, open the next circle. Pushes only the spec branch, for its CI run; never tags, publishes or deploys.
 argument-hint: [spec slug; defaults to the newest spec with a GREEN council row or a human check recorded]
 ---
 
@@ -16,6 +16,13 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    A stage-03 merge conflict (the line names the files) is not overridden: stop and offer the repair,
    merging the default branch into the spec branch and opening a new council round, because the
    resolution is code no GREEN round has seen. Run it only on the owner's yes.
+   The `ci` line wants a green CI run on the branch head (or the newest commit with only paperwork after
+   it). On `ci: no CI run for <sha>`, run it yourself: `git push -u origin <branch>`, then
+   `gh workflow run <file under .github/workflows/> --ref <branch>` (skip it when the push itself started
+   a run; a workflow with neither a push nor a `workflow_dispatch` trigger for the branch: say so and stop).
+   Wait for the run (`gh run watch <id> --exit-status`, Bash `timeout: 600000`, again while it runs), then
+   run ship-check again. A red run is a refusal like a RED council: repair, never ship around it.
+   `cannot confirm CI` is a broken `gh` (missing, logged out): fix it or take the owner's override.
 2. History. The spec branch (`**Branch:**`) holds one commit per story; do not squash them, they are
    the rollback points and the review units. Work out the version from the Profile's *Commit
    convention* (a semver bump sized to the change). If a story on this branch already wrote `VERSION`

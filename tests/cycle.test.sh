@@ -116,6 +116,46 @@ grep -q '"version":"v1.2.3"' memory/stats/ship.jsonl || { echo "::error::ship.js
 git add -A && git commit -qm "record ship"
 ship | expect "already shipped is shown"         "06   done"
 ship | expect "still READY after the ship record" "READY."
+ship | expect "no workflow dir: the ci line is not checked, still READY" "ci: not checked - no CI workflow in this repo"
+
+echo "ci (post-045-tails ask 7): with a workflow and a GitHub origin, ship-check wants a green run on HEAD, or on the newest commit with only paperwork after it"
+CIR="$(mktemp -d)"; CIBIN="$(mktemp -d)"; mkdir -p "$CIBIN/runs"
+# A fake gh: `run list --commit <sha> ...` prints $FAKE_GH_DIR/<sha> as the --jq form (status, conclusion,
+# workflow, tab-separated); FAKE_GH_RC makes it fail as a logged-out gh does.
+printf '#!/bin/sh\n[ -n "${FAKE_GH_RC:-}" ] && { echo "fake gh: HTTP 401" >&2; exit "$FAKE_GH_RC"; }\nsha=""\nwhile [ $# -gt 0 ]; do [ "$1" = --commit ] && sha="$2"; shift; done\n[ -f "$FAKE_GH_DIR/$sha" ] && cat "$FAKE_GH_DIR/$sha"\nexit 0\n' > "$CIBIN/gh"
+chmod +x "$CIBIN/gh"
+cp -R "$T/." "$CIR/"
+cig() { git -C "$CIR" "$@"; }
+cis() { (cd "$CIR" && PATH="$CIBIN:$PATH" FAKE_GH_DIR="$CIBIN/runs" bash scripts/ship-check.sh docs/specs/demo); }
+mkdir -p "$CIR/.github/workflows"; printf 'on: push\n' > "$CIR/.github/workflows/ci.yml"
+cig add -A && cig commit -qm "ci workflow"
+W="$(cig rev-parse HEAD)"; w7="$(cig rev-parse --short HEAD)"
+(cd "$CIR" && bash scripts/human-check.sh docs/specs/demo ACCEPTED "looked at the ci fixture") >/dev/null
+cig add -A && cig commit -qm "record the check"
+H="$(cig rev-parse HEAD)"; h7="$(cig rev-parse --short HEAD)"
+cis | expect "a workflow and no origin -> ci not checked - no GitHub remote" "ci   ok       ci: not checked - no GitHub remote"
+cig remote add origin https://gitlab.com/example/demo.git
+cis | expect "a non-GitHub origin -> ci not checked - no GitHub remote" "ci   ok       ci: not checked - no GitHub remote"
+cig remote set-url origin https://github.com/example/demo.git
+printf 'completed\tsuccess\tCI\n' > "$CIBIN/runs/$H"
+cis | expect "a green run on HEAD -> ci ok" "ci   ok       ci: green on $h7 (CI)"
+cis | expect "a green run on HEAD -> READY" "READY."
+rm -f "$CIBIN/runs/$H"; printf 'completed\tsuccess\tCI\n' > "$CIBIN/runs/$W"
+cis | expect "a green run on a commit followed only by paperwork -> ci ok" "ci   ok       ci: green on $w7 (CI)"
+printf 'completed\tfailure\tCI\n' > "$CIBIN/runs/$W"
+cis | expect "a failed CI run -> ci OPEN naming the workflow" "ci   OPEN     ci: CI failure on $w7"
+cis | expect "a failed CI run -> NOT READY" "NOT READY"
+printf 'in_progress\t\tCI\n' > "$CIBIN/runs/$W"
+cis | expect "a run still in progress -> ci OPEN" "ci   OPEN     ci: CI in_progress on $w7"
+rm -f "$CIBIN/runs/$W"
+cis | expect "no run for the head -> ci OPEN no CI run" "ci   OPEN     ci: no CI run for $h7"
+printf 'completed\tsuccess\tCI\n' > "$CIBIN/runs/$W"
+(cd "$CIR" && PATH="$CIBIN:$PATH" FAKE_GH_DIR="$CIBIN/runs" FAKE_GH_RC=1 bash scripts/ship-check.sh docs/specs/demo) \
+  | expect "gh failing -> ci OPEN cannot confirm CI" "ci   OPEN     ci: cannot confirm CI: gh run list exit 1: fake gh: HTTP 401"
+printf 'v3\n' > "$CIR/app.txt"; cig add -A && cig commit -qm "a code change after the green run"
+c7="$(cig rev-parse --short HEAD)"
+cis | expect "a green run followed by a code commit -> ci OPEN no CI run for the head" "ci   OPEN     ci: no CI run for $c7"
+rm -rf "$CIR" "$CIBIN"
 bash scripts/state.sh >/dev/null
 grep -q '"stage": "06-shipped"' .claude/state.json || { echo "::error::state.sh did not derive stage 06-shipped:"; cat .claude/state.json; fail=1; }
 echo "  ok    state.sh derives the stage"
