@@ -6,3 +6,4 @@
 - 2026-11-03T14:21:51Z · 04-council · round 1 gate paused at step 4/8: red again from load (a neighbour session renders video; telemetry:install 218s vs 102s at 03:24, cycle:bsd alone 118s vs 75s) · next: owner: wait for the render to end, then re-run the gate from scratch (git rm the suite.log, keep it in history) and dispatch review
 - 2026-11-03T14:25:20Z · 04-council · round 1 gate re-run 2: the neighbour render ended (owner: гони) · next: the load-red log stays in git history at e6e90d3
 - 2026-11-03T15:02:34Z · 04-council:RED · round 1 verdict RED at 6da4657 pack 6dece2748bae · next: repair
+- 2026-11-03T15:02:39Z · 03-building · repair round 1: post-045-tails-04-repair-round-1.md · next: build:3
