@@ -69,3 +69,6 @@ PART token-report ok 5s cap 300s
 PART telemetry:edits ok 158s cap 300s
 STEP 7/8: ok 18s
 PART inject:latency ok 17s cap 300s
+STEP 8/8: ok 7s
+PART intake:latency ok 6s cap 300s
+SUITE: FAIL 1271s - cut part council:seats, cut part council:judge, cut part council:walks, cut part council:replays, cut part council:escalate, cut part telemetry:rg, cut part telemetry:crlf, cut part telemetry:constitution, cut part telemetry:mods, cut part telemetry:ysk, cut part telemetry:wrapper, part cycle:bsd failed
