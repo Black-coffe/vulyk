@@ -186,7 +186,7 @@ printf '%s\n' "$LINE" | expect "the brief says the profile decided the gate" "by
 rm -f "$CFG/vulyk-model-profile"
 
 echo "--- CLAUDE.md"
-grep -qxF '| Model profile tests | `bash tests/model-profile.test.sh` |' "$SRC/CLAUDE.md" \
+grep -qxF '| Models | `bash tests/model-profile.test.sh` |' "$SRC/CLAUDE.md" \
   && ok "the ## Commands row is there" || bad "the ## Commands row is missing"
 if git -C "$SRC" show baa5219:CLAUDE.md > "$T/claude.base" 2>/dev/null; then
   NOW="$(tr -d '\r' < "$SRC/CLAUDE.md" | wc -c | tr -d ' ')"; WAS="$(tr -d '\r' < "$T/claude.base" | wc -c | tr -d ' ')"
