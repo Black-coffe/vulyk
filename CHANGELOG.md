@@ -4,6 +4,23 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-03
+
+Tails of the 0.45.0 gate split, and the check whose absence let 0.45.0 reach main with red CI (spec `post-045-tails`).
+
+### Added
+- **`ship-check.sh` confirms CI on what ships.** A new `ci` line: with a `.github/workflows/*.y*ml` and a GitHub `origin`, it asks `gh run list --commit` for HEAD, or for the newest commit with only paperwork after it. Every run completed `success` -> ok; a failed, cancelled or pending run, or no run at all -> NOT READY naming it; `gh` missing or failing -> NOT READY `cannot confirm CI`, never a silent pass. No workflow, or no GitHub remote: `not checked`, with the reason. `/vulyk-ship` acts on `no CI run`: it pushes the spec branch, runs `gh workflow run <file> --ref <branch>`, waits and checks again; a red run is a refusal. `ci.yml` is unchanged (no run on every story commit).
+
+### Changed
+- **`record-seat` refuses a review recorded before the round's gate ran.** With a round-only full-suite row and no finished `suite.log` for the round head it exits 2, naming `cycle.sh suite`, with no attempt file written. It is not a re-ask: the same report records once the gate has run. The reviewer no longer writes `SUITE: none` when the log is missing.
+- **A legacy `SUITE: TIMEOUT` line is a FAIL.** `judge` reads it as a review BLOCK and routes the round to repair, never to the old `suite-timeout` escalation. `VULYK_SUITE_TIMEOUT` is read nowhere. Old `suite-timeout` rows keep their status and reopen paths, and `escalate --reason suite-timeout` is still valid.
+- **A hung part is named.** `tests/full-suite.sh --step K` prints `PARTS K/S: <names>` first, and PART lines come out as parts end. When `cycle.sh suite` kills a step at its cap, the STEP note and the SUITE line say `no end from: <names>`.
+- **The constitution's `Cycle` row runs by part** (`bash tests/cycle.test.sh --part <topic>`), so it stays inside the 300 s line cap; the `Model profile tests` row is now `Models` (CLAUDE.md 7156 B).
+
+### Fixed
+- `scripts/suite-parts-check.sh` exits 2 (`no such file: <path>`) on a path that is not a readable regular file, instead of passing; a readable file with no PART line still passes.
+- PART names built from a row's Purpose lose their edge hyphens (`full-suite-round-only`, not `full-suite-round-only-`).
+
 ## [0.45.0] - 2026-11-03
 
 ### Changed
