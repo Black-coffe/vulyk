@@ -22,7 +22,8 @@ Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the
   default) · `escalate` · `judge` · `record-seat` · `manual-done`.
 - **Red receipt (ADR-025):** frontmatter `red: required` (planner-marked; `fm_red` reads frontmatter only)
   closes only on a receipt. `stamp-red <story> [--stamp S]` runs `## Verification` once and writes
-  `red_verified_at: <ts> <test-hash>` + a `## Red receipt` section. Exit 4, nothing written: not required, empty
+  `red_verified_at: <ts> <test-hash>` + a `## Red receipt` section (0.47: its fenced tail leads with up to 3
+  lines of the failing output carrying `red_reason`, then the last 10 lines, redacted). Exit 4, nothing written: not required, empty
   `red_reason`, no sealed test, only tests in `## Files`, every line exits 0, 126/127, timeout, or `red_reason`
   (`grep -F`) in no failing line; exit 2 no sha256 tool. `close-story` calls `red_gate` after scope-check: exit 4
   `no red receipt` / `test changed after red receipt` / `no implementation change since red receipt`.
@@ -56,6 +57,11 @@ Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the
   step past the rows is a red part, never ok. A step is FAIL on non-zero rc or when `suite-parts-check.sh` names
   a part (CAP, cap > 300, or > 70% of cap). No row = `SUITE: none`. A step killed at its cap notes
   `timed out after <C>s - no end from: <parts>` (from the runner's `PARTS K/S:` line); the SUITE line repeats it.
+  **LOAD lines (0.47, `suite_load`):** each step samples the box in the background at its start; only a FAIL
+  step appends `LOAD: start <cpu line>` and `LOAD: end ...` under its PART lines (end sample <= 10 s, none under
+  2 s left of 580: `LOAD: unavailable - end: no time left in this call`). `suite_load` always exits 0; failure =
+  `LOAD: unavailable - <when>: <why>`. `lib.sh load_sample` is the sampler; `VULYK_LOAD_SAMPLER` (a `bash -c`
+  command) replaces it (tests' seam). Evidence, never a verdict.
 - **Full-suite line (0.36; ADR-023, ADR-029):** a finished suite.log keyed to the round head overrides the
   `review` report: `record-seat` drops every reported `SUITE:` line and writes the log's under the VERDICT line.
   **0.46:** `record-seat` of a `review` with a `round-only` row and no finished log for the round head exits 2
@@ -105,4 +111,4 @@ the run; `dispatch:` → `gate(st)` first, then the seats in parallel (Tier 4 re
   entries go in `fallbacks`; `/vulyk-build` journals them.
 - Tests: `cycle|council|telemetry.test.sh --part <topic>` / `--list-parts`; full set once per round (scripts.md).
 
-last-verified: 2026-11-03 (0.46.0 post-045-tails; ADR-001, 013, 015, 023, 025, 029). Over the ~80-line budget.
+last-verified: 2026-11-04 (0.47.0 post-046-tails; ADR-001, 013, 015, 023, 025, 029). Over the ~80-line budget.

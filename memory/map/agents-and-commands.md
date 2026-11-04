@@ -85,7 +85,7 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **`/vulyk-review`** - claim + `advance --claim`; dispatch the seats `next` names; `advance --ingest`; release.
   `build:W` = RED → repair story, `/vulyk-build`.
 - **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses). On `ci: no CI run for <sha>` it pushes the spec
-  branch, runs `gh workflow run <file> --ref <branch>`, waits, rechecks; a red run is a refusal. Stage 03 runs `git merge-tree --write-tree` (0 clean, 1
+  branch, runs `gh workflow run <file> --ref <branch>`, waits, rechecks; a red run is a refusal; only the newest run of each workflow on that commit counts, so a green re-run clears an older red (0.47). Stage 03 runs `git merge-tree --write-tree` (0 clean, 1
   conflict never overridden, other = "cannot check"). Release commit; local `merge --no-ff` only on a clean default
   tree, failure → `merge --abort`; `branch -d` (never `-D`). Prints the publish command, never runs it (push, green
   CI, then tag); `drone-docs`/`librarian` only with work; next-brief draft.
@@ -103,4 +103,4 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
   script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-11-03 (0.45.0 gate split; ADR-013, 015, 020, 022, 023, 024, 025, 029)
+last-verified: 2026-11-04 (0.47.0 vulyk-ship ci wording; 0.45.0 gate split; ADR-013, 015, 020, 022, 023, 024, 025, 029)

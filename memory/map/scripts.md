@@ -15,14 +15,16 @@ re-run. No line numbers: `grep -n '^name()'`.
   (a missing file hashes as `missing <path>`). Portability helpers (0.44.0): `vulyk_python` sets `VULYK_PY`
   (first of python3/python/py that runs Python 3; preset trusted; call in the current shell, not `$(...)`),
   `sed_inplace <sed-args> <file>` (`-i.bak` then rm), `date_epoch <YYYY-MM-DD|...Z>` (GNU `-d`, else BSD `-j -f`),
-  `date_shift <±days> [+fmt]`, `capped_by` (sets `VULYK_CAP` = timeout|gtimeout|python|"", each probed with `<it> 1
+  `date_shift <±days> [+fmt]`, `load_sample` (0.47: one `cpu N% top: ...` line, top five processes; CIM on Git
+  Bash, `ps`/`uptime` elsewhere; non-zero + stderr reason; used by `cycle.sh suite_load`), `capped_by` (sets `VULYK_CAP` = timeout|gtimeout|python|"", each probed with `<it> 1
   true`), `run_capped <secs> <cmd>` / `run_capped_as <cap> <secs> <cmd>` (exit 124; secs 0 = uncapped; none = runs
   uncapped with a stderr line). `verdict_stale <spec> <head-sha> <pack-fp>` -> `CURRENT` rc 0 /
   `STALE (pack|commit)` rc 1; a `<sha>..HEAD` that is `paperwork_only` stays current. Used by `human-check.sh
   --check` and ship-check.sh.
 - `ship-check.sh <spec-dir>` / `--record` (0.46 `ci` line, `ci_check`: needs a `.github/workflows/*.y*ml` and a
   GitHub `origin`, else `ci: not checked`; `gh run list --commit` for HEAD or the newest commit with only
-  paperwork after; all `success` = ok, failed/pending/none = NOT READY, no/failing `gh` = `cannot confirm CI`); `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`;
+  paperwork after; only the newest run per `workflowName` (by `createdAt`) is judged (0.47), so a re-run or dispatch clears a red;
+  all `success` = ok, failed/pending/none = NOT READY, no/failing `gh` = `cannot confirm CI`); `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`;
   `scope-check.sh <story-file> [range]` runs in `close-story` (`  ! ` paths -> `--commit` exit 4).
 - `wave-check.sh` (`no-verify`, `verify-gap`, `verify-cell`, `verify-round-only`; report-only `red-no-test`,
   `red-value`; the red block opens only on a `red:` line inside frontmatter), `trace-check.sh`,
@@ -112,4 +114,4 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-03 (0.46.0 post-045-tails; lib.sh, install.sh unchanged in contract). Over the ~80-line budget.
+last-verified: 2026-11-04 (0.47.0 post-046-tails; ship-check ci, lib.sh load_sample). Over the ~80-line budget.
