@@ -58,5 +58,5 @@ suite.log so the next slowdown names its cause.
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
 **Branch:** vulyk/post-046-tails
 **Council:** RED round 1, 2026-11-03, at 5614844, pack 362e08dea806
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 **Checked:** ACCEPTED by Andrei, 2026-11-04, at 250f77f - owner chose option 1 (ACCEPTED, narrow fix) in chat on 2026-11-04 after the repair-round-1 diff was shown in the reply; repair 250f77f + descope 7decc88
+**Shipped:** 0.47.0, 2026-11-04, at c548324 - merged to main; owner accepted round 1 (human-check ACCEPTED 2026-11-04); push, tag and release run by the Queen per the owner's rule
