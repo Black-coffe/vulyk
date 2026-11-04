@@ -3092,7 +3092,8 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
 
   # --- run step K: its STEP line and its PART lines, appended as one block ---------------------
   # post-046-tails: the box's load is sampled at the step's start (in the background, so the step's own
-  # clock never pays for it) and, for a FAIL step only, at its end; only a FAIL step writes the two lines.
+  # clock never pays for it; `LOAD: start` therefore reads the box during the step's first seconds, the step
+  # included) and, for a FAIL step only, at its end; only a FAIL step writes the two lines.
   local loadf loadpid loads=""; loadf="$(mktemp)"
   suite_load start > "$loadf" & loadpid=$!
   local t0="$SECONDS" out rc parts secs sres=ok note="" tmp

@@ -929,6 +929,20 @@ err="$( PATH="$DEAD:$PATH"; VULYK_PY=; run_capped 0 true 2>&1 )"; ex=$?
 [ "$ex" -eq 0 ] && [ -z "$err" ] && echo "  ok    run_capped 0: uncapped, silently" || { echo "::error::run_capped 0: exit=$ex err='$err'"; fail=1; }
 rm -rf "$CAPD" "$DEAD"
 
+echo "cross-platform: load_sample on Windows lists WmiPrvSE and powershell apart from the top five (post-046-tails repair 1)"
+# The CIM query is answered by WmiPrvSE inside the powershell.exe the sampler starts: on an idle box they head
+# the list (cpu 1%, WmiPrvSE 26% and 21%, measured 2026-11-03). A stub powershell.exe prints the raw rows.
+LSD="$(mktemp -d)"
+printf '#!/bin/sh\necho MINGW64_NT-10.0-22631\n' > "$LSD/uname"
+printf '#!/bin/sh\nprintf "cpu\\t40\\nWmiPrvSE\\t26\\nWmiPrvSE#3\\t21\\nchrome#108\\t13\\npowershell\\t9\\nnode\\t8\\nclaude#13\\t8\\nSystem\\t5\\ngit\\t4\\nbash\\t3\\n"\n' > "$LSD/powershell.exe"
+chmod +x "$LSD/uname" "$LSD/powershell.exe"
+got="$( PATH="$LSD:$PATH"; load_sample 2>&1 )"; ex=$?
+# By name only, so a real powershell or WMI load would hide too: the rows are listed after the top five, not dropped.
+[ "$ex" -eq 0 ] && [ "$got" = "cpu 40% top: chrome#108 13%, node 8%, claude#13 8%, System 5%, git 4%; named like the sampler: WmiPrvSE 26%, WmiPrvSE#3 21%, powershell 9%" ] \
+  && echo "  ok    WmiPrvSE and powershell are listed apart from the top five" \
+  || { echo "::error::WmiPrvSE and powershell are listed apart from the top five - exit=$ex got: $got"; fail=1; }
+rm -rf "$LSD"
+
 echo "cross-platform ask 9: close-story runs the constitution's py.sh Python cell and refuses the old bare python one"
 PRE9="$(mktemp)"; cp CLAUDE.md "$PRE9"
 grep '^| Python |' "$SRC/CLAUDE.md" | tr -d '\r' >> CLAUDE.md

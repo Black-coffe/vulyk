@@ -55,6 +55,7 @@ crlf
 crlf2
 wrapper
 wrapper2
+wrapper3
 launchers
 edits"
 PART=""
@@ -2016,7 +2017,7 @@ expect_eq "a second upgrade leaves it byte-identical" "1" "$([ "$DW_BEFORE" = "$
 cat "$T/dw2.out" | expect_absent "and wires nothing" "wire           .claude/settings.json"
 fi # library
 
-if part_on wrapper wrapper2 launchers; then
+if part_on wrapper wrapper2 wrapper3 launchers; then
 # --- install.sh: the host's hook wrapper, reproduced exactly (0.19.1) ------------------------
 # 0.19.0 copied a Varto-style `bash -c '"...x.sh"'` prefix and dropped the closing quote: every
 # new hook died with "unexpected EOF" and exit 2, which on PreToolUse blocks every tool. Each
@@ -2035,14 +2036,20 @@ done
 STUBLOG="$T/stub.log"
 W='"'"$WRAPBIN/bash-wrap"'"'
 P='$CLAUDE_PROJECT_DIR/.claude/hooks/'
-wrapper_case() { # wrapper_case <name> <cmd-of vulyk-update-check.sh> <cmd-of anomaly-scan.sh> <intake> <inject> <reset>
-  local name="$1" upd="$2" scan="$3" want_in="$4" want_inj="$5" want_rs="$6" d="$T/hive-wrap-$1" s got c
+wrapper_hive() { # wrapper_hive <name> <cmd-of vulyk-update-check.sh> <cmd-of anomaly-scan.sh> - $T/hive-wrap-<name>:
+  # a fresh hive whose settings.json holds the host's form, upgraded once (wrapper_case's fixture; wrapper3
+  # rebuilds the bash-c one with it, post-046-tails)
+  local d="$T/hive-wrap-$1" s="$T/hive-wrap-$1/.claude/settings.json" upd="$2" scan="$3"
   fresh_install "$d"
-  s="$d/.claude/settings.json"
   jq -n --arg upd "$upd" --arg scan "$scan" --arg tmb "${upd/vulyk-update-check.sh/top-model-brief.sh}" \
     '{hooks:{SessionStart:[{hooks:[{type:"command",command:$upd},{type:"command",command:$tmb}]}],
              SessionEnd:[{hooks:[{type:"command",command:$scan}]}]}}' > "$s"
-  bash "$SRC/install.sh" "$d" --upgrade --telemetry off > "$T/wrap-$name.out" 2>&1
+  bash "$SRC/install.sh" "$d" --upgrade --telemetry off > "$T/wrap-$1.out" 2>&1
+}
+wrapper_case() { # wrapper_case <name> <cmd-of vulyk-update-check.sh> <cmd-of anomaly-scan.sh> <intake> <inject> <reset>
+  local name="$1" upd="$2" scan="$3" want_in="$4" want_inj="$5" want_rs="$6" d="$T/hive-wrap-$1" s got c
+  s="$d/.claude/settings.json"
+  wrapper_hive "$name" "$upd" "$scan"
   got="$(jq -r '[.hooks.UserPromptSubmit[]?.hooks[].command | select(test("defect-intake"))] | join("|")' "$s" | tr -d '\r')"
   expect_eq "$name: intake wired in the host's form" "$want_in" "$got"
   got="$(jq -r --arg m "$PRE_M" '[.hooks.PreToolUse[]? | select(.matcher == $m) | .hooks[].command | select(test("defects-inject"))] | join("|")' "$s" | tr -d '\r')"
@@ -2062,14 +2069,14 @@ wrapper_case() { # wrapper_case <name> <cmd-of vulyk-update-check.sh> <cmd-of an
   expect_eq "$name: a second upgrade leaves settings.json byte-identical" "1" "$([ "$got" = "$(cat "$s")" ] && echo 1 || echo 0)"
   cat "$T/wrap-$name-2.out" | expect_absent "$name: and wires nothing" "wire           .claude/settings.json"
 }
-fi # wrapper wrapper2 launchers
+fi # wrapper wrapper2 wrapper3 launchers
 
 if part_on wrapper; then
 wrapper_case plain "${P}vulyk-update-check.sh" "${P}anomaly-scan.sh" \
   "${P}defect-intake.sh" "${P}defects-inject.sh" "${P}defects-inject.sh reset"
 fi # wrapper
 
-if part_on wrapper2; then # post-046-tails: wrapper, second half - the bash -c form and the repair of a broken one
+if part_on wrapper2; then # post-046-tails: wrapper, second part - the bash -c form
 wrapper_case bash-c "$W -c '\"${P}vulyk-update-check.sh\"'" "$W -c '\"${P}anomaly-scan.sh\"'" \
   "$W -c '\"${P}defect-intake.sh\"'" "$W -c '\"${P}defects-inject.sh\"'" "$W -c '\"${P}defects-inject.sh\" reset'"
 fi # wrapper2
@@ -2085,7 +2092,8 @@ wrapper_case mixed "${B}vulyk-update-check.sh\"" "${P}anomaly-scan.sh" \
   "${B}defect-intake.sh\"" "${B}defects-inject.sh\"" "${B}defects-inject.sh\" reset"
 fi # launchers
 
-if part_on wrapper2; then
+if part_on wrapper3; then # post-046-tails repair 1: wrapper, third part - the repair of a broken bash -c form
+wrapper_hive bash-c "$W -c '\"${P}vulyk-update-check.sh\"'" "$W -c '\"${P}anomaly-scan.sh\"'"
 # A host 0.19.0 already broke: the three entries lack their closing quote. They count as wired,
 # so re-running the update must repair them in place, not skip them or add a second copy.
 BC="$T/hive-wrap-bash-c"; BCS="$BC/.claude/settings.json"
@@ -2101,7 +2109,7 @@ expect_eq "settings.json is back to the correct form, byte for byte" "1" "$(same
 bash "$SRC/install.sh" "$BC" --upgrade --telemetry off > "$T/bc2.out" 2>&1
 cat "$T/bc2.out" | expect_absent "a run after the repair wires and repairs nothing" "settings.json ->"
 
-fi # wrapper2
+fi # wrapper3
 
 if part_on crlf; then
 # --- install.sh: CRLF host files (core.autocrlf=true) -----------------------------------------
