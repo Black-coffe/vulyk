@@ -22,6 +22,9 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    a run; a workflow with neither a push nor a `workflow_dispatch` trigger for the branch: say so and stop).
    Wait for the run (`gh run watch <id> --exit-status`, Bash `timeout: 600000`, again while it runs), then
    run ship-check again. A red run is a refusal like a RED council: repair, never ship around it.
+   On `ci: <workflow> failure on <sha>`, read why first (`gh run view <id> --log-failed`): a real failure
+   is a repair; a flake or a loaded runner is cleared by `gh run rerun <id>` or a fresh `gh workflow run`
+   on the branch, since ship-check judges only the newest run of each workflow on that commit.
    `cannot confirm CI` is a broken `gh` (missing, logged out): fix it or take the owner's override.
 2. History. The spec branch (`**Branch:**`) holds one commit per story; do not squash them, they are
    the rollback points and the review units. Work out the version from the Profile's *Commit

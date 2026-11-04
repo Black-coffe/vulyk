@@ -200,12 +200,15 @@ ci_check() {
   local head; head="$(git rev-parse HEAD 2>/dev/null)"
   for sha in $(git rev-list --first-parent --max-count=20 HEAD 2>/dev/null); do
     [ "$sha" = "$head" ] || paperwork_only "$ROOT" "$sha" "$head" || break
-    out="$(gh run list --commit "$sha" --json status,conclusion,workflowName \
-      --jq '.[] | [.status, .conclusion, .workflowName] | @tsv' 2>&1)"; rc=$?
+    out="$(gh run list --commit "$sha" --json status,conclusion,workflowName,createdAt \
+      --jq '.[] | [.status, .conclusion, .workflowName, .createdAt] | @tsv' 2>&1)"; rc=$?
     if [ "$rc" -ne 0 ]; then
       fail ci "ci: cannot confirm CI: gh run list exit $rc: $(printf '%s\n' "$out" | head -1)"; return
     fi
-    runs="$(printf '%s\n' "$out" | tr -d '\r' | grep -v '^[[:space:]]*$')"
+    # Only the newest run of each workflow is judged (post-046-tails): a red run that a re-run or a fresh
+    # dispatch on the same commit replaced no longer holds the ship. Keyed by workflow, not by event, so a
+    # workflow_dispatch run clears a red push run. createdAt is ISO 8601 UTC, so a text sort orders it.
+    runs="$(printf '%s\n' "$out" | tr -d '\r' | grep -v '^[[:space:]]*$' | sort -t "$(printf '\t')" -k4,4r | awk -F'\t' '!seen[$3]++')"
     [ -n "$runs" ] || continue
     s7="$(git rev-parse --short "$sha")"
     bad="$(printf '%s\n' "$runs" | awk -F'\t' '

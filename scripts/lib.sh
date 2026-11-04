@@ -474,6 +474,44 @@ run_capped() { # run_capped <secs> <cmd> [args...] - <cmd> with stdin/stdout/std
   run_capped_as "$VULYK_CAP" "$@"
 }
 
+load_sample() { # load_sample -> one line `cpu <N>% top: <name> <pct>%, ...` (five processes) - the box's
+  # load now; non-zero with the reason on stderr when it cannot be read. Evidence for a slow gate step,
+  # never a verdict (post-046-tails). Windows (Git Bash, powershell.exe): CIM Win32_Processor.LoadPercentage
+  # and Win32_PerfFormattedData_PerfProc_Process - class and property names are not localized; a process's
+  # percent is of one core, so it can pass 100. Elsewhere: ps -A (percent of one core) and uptime.
+  # The sample's own processes (WmiPrvSE answering the CIM query, the powershell running it) headed the top
+  # five on an idle box (post-046-tails repair 1). Matched by name only, so a real powershell or WMI load
+  # carries the same names: those rows are listed after the five, `; named like the sampler: ...`, not dropped.
+  case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*)
+      command -v powershell.exe >/dev/null 2>&1 || { echo "no powershell.exe on PATH" >&2; return 1; }
+      local ps1 raw rc
+      ps1='$ErrorActionPreference = "Stop"
+$c = (Get-CimInstance Win32_Processor | Measure-Object LoadPercentage -Average).Average
+"cpu`t{0}" -f $(if ($null -eq $c) { "?" } else { [int]$c })
+Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { $_.Name -ne "_Total" -and $_.Name -ne "Idle" } | Sort-Object PercentProcessorTime -Descending | Select-Object -First 12 | ForEach-Object { "{0}`t{1}" -f $_.Name, $_.PercentProcessorTime }'
+      raw="$(powershell.exe -NoProfile -NonInteractive -Command "$ps1" </dev/null)"; rc=$?
+      raw="$(printf '%s\n' "$raw" | tr -d '\r')"
+      [ "$rc" -eq 0 ] || { printf '%s\n' "$raw" | head -3 >&2; return "$rc"; }
+      printf '%s\n' "$raw" | awk -F'\t' '
+        $1 == "cpu" { cpu = $2; next }
+        NF != 2 { next }
+        tolower($1) ~ /^(wmiprvse|powershell)(#[0-9]+)?$/ { own = own osep $1 " " $2 "%"; osep = ", "; next }
+        n < 5 { top = top sep $1 " " $2 "%"; sep = ", "; n++ }
+        END { if (cpu == "") exit 1; printf "cpu %s%% top: %s%s\n", cpu, top, (own == "" ? "" : "; named like the sampler: " own) }'
+      return ;;
+  esac
+  command -v ps >/dev/null 2>&1 || { echo "no ps on PATH" >&2; return 1; }
+  local rows n cpu top la
+  rows="$(ps -A -o pcpu= -o comm= 2>/dev/null | awk '{ p = $1; $1 = ""; sub(/^ +/, ""); sub(/.*\//, ""); printf "%s\t%s\n", p, $0 }')"
+  [ -n "$rows" ] || { echo "ps -A printed no process" >&2; return 1; }
+  n="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)"
+  cpu="$(printf '%s\n' "$rows" | awk -F'\t' -v n="$n" '{ t += $1 } END { if (n + 0 < 1) n = 1; printf "%d", t / n }')"
+  top="$(printf '%s\n' "$rows" | sort -t "$(printf '\t')" -k1,1rn | head -5 | awk -F'\t' '{ printf "%s%s %s%%", s, $2, $1; s = ", " }')"
+  la="$(uptime 2>/dev/null | sed -n 's/.*load averages*: *//p')"
+  printf 'cpu %s%% top: %s%s\n' "$cpu" "$top" "${la:+; load $la}"
+}
+
 run_capped_as() { # run_capped_as <cap> <secs> <cmd> [args...] - run_capped with the cap a caller's own
   # capped_by already found (VULYK_CAP): a runner capping many commands probes once, not once per
   # command, so no probe launches sit between its budget clock and the cap.

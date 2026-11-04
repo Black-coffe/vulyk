@@ -50,13 +50,13 @@ suite.log so the next slowdown names its cause.
 
 ## Descoped
 
-*(empty)*
+- post-046-tails-03, ask 5: telemetry parts constitution3, mods and mods2 stay over the 70 s idle line (86, 74, 72 s idle; 106, 90, 87 s in the round-1 gate). Each is one chain of install.sh runs (20-27 s each) on one hive, and a further cut rebuilds that hive with the same runs. wrapper2, the one projected past the 300 s cap under a 3x load, is cut again in repair round 1 (wrapper2 + wrapper3). The owner chose the option «wrapper2 режем, 3 в Descoped» on 2026-11-03; a faster install.sh goes to the next circle.
 
 ## Plan deltas
 
 **Approved:** Andrei, 2026-11-03
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
-**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
-**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
+**Branch:** vulyk/post-046-tails
+**Council:** RED round 1, 2026-11-03, at 5614844, pack 362e08dea806
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Checked:** ACCEPTED by Andrei, 2026-11-04, at 250f77f - owner chose option 1 (ACCEPTED, narrow fix) in chat on 2026-11-04 after the repair-round-1 diff was shown in the reply; repair 250f77f + descope 7decc88
