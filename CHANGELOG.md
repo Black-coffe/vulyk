@@ -4,6 +4,20 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-11-04
+
+Tails of 0.46.0: the reviewer's notes and the descoped repair of post-045-tails (spec `post-046-tails`).
+
+### Changed
+- **`ship-check.sh`'s `ci` line judges the newest run of each workflow on the commit.** It asks `gh run list` for `createdAt` too and keeps the newest run per `workflowName` (keyed by workflow, not event, so a `workflow_dispatch` re-run clears a red `push` run). An old red run that a newer green one replaced no longer holds the ship; a newest run that is red or unfinished still does. `/vulyk-ship` step 1 says what to do with `ci: <workflow> failure on <sha>`: read `gh run view <id> --log-failed`, repair a real failure, clear a flake with `gh run rerun` or a fresh `gh workflow run`.
+- **`/vulyk-build`'s green terminal no longer says ship never pushes**: ship pushes the spec branch for its CI run and prints the tag and publish steps.
+- **A red receipt shows the failing line.** `stamp-red` puts the output lines that carry `red_reason` (at most 3) before the last ten lines, so a failure followed by ten passing lines is still in `## Red receipt`.
+- **The gate's slow parts are cut.** council `seats`, `judge`, `walks`, `replays`, `escalate` gain `seats3`, `judge2`, `walks3`, `replays3`, `escalate2`; telemetry `rg`, `crlf`, `constitution`, `mods`, `ysk`, `wrapper` gain `rg2`, `crlf2`, `constitution3`, `mods2`, `ysk2`, `ysk3`, `wrapper2`, `wrapper3`. Old part names keep their first half, so stories that name them still run. No assertion dropped. telemetry `constitution3`, `mods`, `mods2` stay over 70 s idle (each is one chain of install.sh runs on one hive); a faster install.sh is the next step.
+- **The bsd `run_capped` case no longer times a 3 s window**: a 10 s grandchild and a 20 s parent under a 1 s cap, `el < 10`, the marker read 12 s after the start.
+
+### Added
+- **A red gate step writes the box's load into `suite.log`.** `cycle.sh suite` samples the box at the start of each step (in the background, so the step's clock never pays) and, for a FAIL step only, at its end, and writes `LOAD: start|end cpu <N>% top: <five processes>` under that step's PART lines. `lib.sh` `load_sample`: Windows through CIM `Win32_Processor` and `Win32_PerfFormattedData_PerfProc_Process` (its own WmiPrvSE and powershell listed after the five, `; named like the sampler: ...`, not dropped); elsewhere `ps -A` and `uptime`. A sampler that fails or runs past 10 s writes `LOAD: unavailable - <when>: <why>` and never changes a verdict. `VULYK_LOAD_SAMPLER` is the tests' seam.
+
 ## [0.46.0] - 2026-11-03
 
 Tails of the 0.45.0 gate split, and the check whose absence let 0.45.0 reach main with red CI (spec `post-045-tails`).
