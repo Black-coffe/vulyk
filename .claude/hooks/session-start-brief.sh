@@ -99,6 +99,27 @@ fi
 [ -n "$memline" ] && echo "$memline"
 [ -n "$pending" ] && echo "[VULYK] evolve changeset $pending waits for the owner's review (merge = accept, delete the branch = reject): tell the owner once."
 
+# A mod that answers tool.check (uncommitted-work-guard-01): on a personal login it can approve a call
+# a PreToolUse hook denied, the git guard included, in silence. A heuristic, read-only: the plugins
+# enabled in the user and project settings, their install paths in installed_plugins.json, a grep of
+# each one's hooks/ folder. Nothing found prints nothing.
+conf="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; mods=""
+enabled="$(cat "$conf/settings.json" "$ROOT/.claude/settings.json" "$ROOT/.claude/settings.local.json" 2>/dev/null |
+  grep -oE '"[^"]+@[^"]+"[[:space:]]*:[[:space:]]*true' | sed -E 's/^"([^"]+)".*/\1/' | sort -u)"
+if [ -n "$enabled" ] && [ -f "$conf/plugins/installed_plugins.json" ]; then
+  reg="$(tr -d '\r\n' < "$conf/plugins/installed_plugins.json")"
+  for key in $enabled; do
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      if grep -rqsF 'tool.check' "$p/hooks" 2>/dev/null; then mods="${mods:+$mods, }$key"; break; fi
+    done <<EOF
+$(printf '%s' "$reg" | grep -oE "\"$key\"[[:space:]]*:[[:space:]]*\[[^]]*\]" |
+  grep -oE '"installPath"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*:[[:space:]]*"([^"]*)"$/\1/' | sed 's#\\\\#/#g')
+EOF
+  done
+fi
+[ -n "$mods" ] && echo "[VULYK] a mod that handles tool.check is enabled: $mods. On a personal login it can approve a call a PreToolUse hook denied, the git guard included (a heuristic: a grep of its hooks folder). Tell the owner once."
+
 # litopys, the session chronicle plugin (0.19, plan 1.7): offered once. Installed = an
 # `enabledPlugins` key starting `litopys@` in either settings file; declined = a Profile row
 # `| Chronicle | none ... |` in the constitution. Either one silences the line for good.

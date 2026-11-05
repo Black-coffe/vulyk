@@ -1,0 +1,1 @@
+{"hook_event_name": "PreToolUse", "tool_name": "PowerShell", "agent_id": "a1", "agent_type": "worker-code", "tool_input": {"command": "git stash -u"}, "cwd": ".", "porcelain": "?? docs/specs/x/drone-horizon.md\n"}

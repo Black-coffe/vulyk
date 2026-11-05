@@ -1,0 +1,1 @@
+{"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git checkout -- memory/stats/skills.json"}, "cwd": ".", "porcelain": " M memory/stats/skills.json\n"}
