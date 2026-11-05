@@ -74,6 +74,19 @@ hive, with no model calls. This is the design after the grill (see "Cross-model 
 - **Named as uncovered** (card `safeguard-bypassable-or-late`):
   - `bash -c`, scripts, aliases, `python -c` subprocess;
   - `rm -r` and `Remove-Item -Recurse`, which are best-effort at most.
+- **A mod can override the hook.** The docs say so (code.claude.com/docs/en/permissions, "Precedence
+  among rules, hooks, and mods", read 2026-11-05): "With neither managed settings nor a Team or
+  Enterprise `/login` as the session's credential, the mod can approve a call that a deny rule refuses
+  or a `PreToolUse` hook blocked." The ruling comes from a mod's `tool.check` handler, which runs after
+  the hooks. This is the owner's setup (personal login), so any installed mod with `tool.check` can lift
+  the guard in silence.
+  - Today no installed mod on this machine handles `tool.check` (a grep of the plugin dirs on
+    2026-11-05; `vulyk-pulse` has none).
+  - How to notice: the story adds a line to `/vulyk-status` and the SessionStart brief that names every
+    enabled plugin whose hooks module mentions `tool.check`.
+  - With managed settings on the machine, the block stays. Whether a minimal local managed-settings file
+    is enough for that is ❓; the story checks it before offering it to an owner.
+  - Pointed out by a side-agent note the owner forwarded on 2026-11-05, and confirmed in the docs above.
 
 Why ours rather than the mod:
 - The mod watches Bash only.
