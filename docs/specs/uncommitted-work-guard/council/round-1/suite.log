@@ -12,3 +12,16 @@ PART council:escalate2 ok 54s cap 300s
 PART council:replays ok 61s cap 300s
 PART council:verbs ok 62s cap 300s
 PART council:ceilings2 ok 67s cap 300s
+STEP 2/9: ok 123s
+PART cycle:hooklog ok 22s cap 300s
+PART council:replays3 ok 35s cap 300s
+PART council:walks3 ok 36s cap 300s
+PART council:roster2 ok 40s cap 300s
+PART council:walks2 ok 46s cap 300s
+PART council:replays2 ok 58s cap 300s
+PART council:walks ok 60s cap 300s
+PART council:roster ok 74s cap 300s
+PART council:driver ok 86s cap 300s
+PART cycle:ship ok 100s cap 300s
+PART council:advance ok 113s cap 300s
+PART council:suite ok 121s cap 300s
