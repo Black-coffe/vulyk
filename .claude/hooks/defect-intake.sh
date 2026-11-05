@@ -8,6 +8,8 @@
 #     file the quote now and report one line with «отмени»;
 #   - a correction word or card key only inside <pasted_content> -> ask the owner whether these are
 #     his words first. A paste that starts with $VULYK_DICTATION_TAG (when set) counts as typed.
+#   - the same in a quote inside typed text («…», “…”, „…“, "…" on one line, `>` lines): someone else's words
+#     until the owner says so, so the ask, unless a correction word or key also stands outside the quote.
 # A side-agent note ("Here is a note offered by a side agent", to the end of its paragraph or tag, then its
 # quoted `>` lines) is cut before every pass: it is model text, never the owner's. <task-notification>, <system-reminder>
 # and <cross-session-message> blocks are cut too; ``` / ~~~ fences are cut from the correction passes.
@@ -43,6 +45,9 @@ HARNESS = [
     r'<cross-session-message\b[^>]*>.*?(?:</cross-session-message\b[^>]*>|\Z)',
 ]
 FENCES = [r'```.*?(?:```|\Z)', r'~~~.*?(?:~~~|\Z)']
+# A quote inside typed text (uncommitted-work-guard-03): «…», “…”, „…“, "…" on one line, and `>` lines. The
+# words in it are someone else's until the owner says so: they go to the paste pass, never the typed one.
+QUOTES = re.compile(r'«[^«»]*»|“[^“”]*”|„[^„“”]*[“”]|"[^"\n]*"|^[ \t]*>[^\n]*', re.M)
 PASTE = re.compile(r'<pasted_content\b[^>]*?(?:/>|>(.*?)(?:</pasted_content\b[^>]*>|\Z))', re.S | re.I)
 # A side-agent note: from its preamble (at a line start or right after a tag) to a blank line or a closing tag,
 # then the blank and `>` lines that follow it (the relayed note's quoted body, evolve 2026-10-19).
@@ -173,6 +178,11 @@ def on_prompt(data, cards):
         pastes.append(inner)
         return ' '
     typed = strip(PASTE.sub(paste, text), FENCES)
+
+    def quote(m):
+        pastes.append(m.group(0))
+        return ' '
+    typed = QUOTES.sub(quote, typed)
     why, refs = triggers(typed, cards)
     if why:
         return [typed_line(why, refs)]
