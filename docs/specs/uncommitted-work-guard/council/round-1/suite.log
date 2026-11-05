@@ -38,3 +38,16 @@ PART defects ok 55s cap 300s
 PART full-suite ok 61s cap 300s
 PART cycle:bsd ok 75s cap 300s
 PART cycle:red ok 88s cap 300s
+STEP 4/9: ok 102s
+PART mods ok 5s cap 300s
+PART model-profile:edges ok 12s cap 300s
+PART solo:green ok 16s cap 300s
+PART model-profile:defaults ok 16s cap 300s
+PART symbol-map ok 18s cap 300s
+PART solo:rejected ok 20s cap 300s
+PART model-profile:set ok 23s cap 300s
+PART solo:block ok 31s cap 300s
+PART telemetry:telemetry ok 49s cap 300s
+PART maintenance ok 90s cap 300s
+PART intake:functional ok 91s cap 300s
+PART telemetry:scan ok 101s cap 300s
