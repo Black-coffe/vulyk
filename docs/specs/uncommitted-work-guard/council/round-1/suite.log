@@ -1,0 +1,14 @@
+head=bde477c steps=9
+STEP 1/9: ok 68s
+PART council:seats3 ok 36s cap 300s
+PART council:seats2 ok 43s cap 300s
+PART council:judge2 ok 46s cap 300s
+PART council:close ok 47s cap 300s
+PART council:ceilings ok 48s cap 300s
+PART council:judge ok 51s cap 300s
+PART council:escalate ok 51s cap 300s
+PART council:seats ok 53s cap 300s
+PART council:escalate2 ok 54s cap 300s
+PART council:replays ok 61s cap 300s
+PART council:verbs ok 62s cap 300s
+PART council:ceilings2 ok 67s cap 300s
