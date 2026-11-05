@@ -326,3 +326,4 @@
 {"ts":"2026-11-03T22:50:06Z","story":"post-046-tails-04-repair-round-1","declared":8,"changed":4,"out_of_scope":0}
 {"ts":"2026-11-04T07:32:19Z","story":"post-046-tails-04-repair-round-1","declared":8,"changed":4,"out_of_scope":0}
 {"ts":"2026-11-05T21:44:23Z","story":"uncommitted-work-guard-01-guard","declared":11,"changed":11,"out_of_scope":0}
+{"ts":"2026-11-05T21:48:36Z","story":"uncommitted-work-guard-02-diff-before-accepted","declared":3,"changed":3,"out_of_scope":0}

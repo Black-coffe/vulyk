@@ -291,6 +291,30 @@ printf 'not a spec journal either\n' > src/journal.md
 git add -A && git commit -qm "a real code change under src/council/ and src/journal.md - not paperwork" >/dev/null
 bash scripts/human-check.sh --check docs/specs/anchor-demo | expect "src/council/x and src/journal.md are not paperwork -> STALE" "STALE"
 
+echo "--show (uncommitted-work-guard-02): the pack's change as text, pasted into the reply before ACCEPTED"
+(
+  mkdir -p "$T/show" && cd "$T/show" || exit 1
+  git init -q -b main . && git config user.email t@t && git config user.name t && git config core.autocrlf false
+  mkdir -p scripts docs/specs/s && cp "$T"/scripts/lib.sh "$T"/scripts/human-check.sh "$T"/scripts/redact.sh scripts/
+  printf 'v1\n' > app.txt && git add -A && git commit -qm base
+  git checkout -q -b vulyk/s
+  cp "$SRC"/templates/plan.md docs/specs/s/plan.md && printf 'v2\n' > app.txt
+  git add -A && git commit -qm work
+  out="$(bash scripts/human-check.sh --show docs/specs/s)"
+  printf '%s' "$out" | expect "--show prints the stat line" "2 files changed"
+  printf '%s' "$out" | expect "--show prints the diff" "+v2"
+  if printf '%s' "$out" | grep -qF "scripts/lib.sh"; then expect "--show leaves out what the base already had" "<never>" < /dev/null
+  else echo "  ok    --show leaves out what the base already had"; fi
+  if printf '%s' "$out" | grep -qF "more lines cut"; then expect "--show under the cap cuts nothing" "<never>" < /dev/null
+  else echo "  ok    --show under the cap cuts nothing"; fi
+  i=0; while [ "$i" -lt 400 ]; do i=$((i + 1)); echo "line $i"; done > big.txt
+  git add -A && git commit -qm big
+  bash scripts/human-check.sh --show docs/specs/s | tail -n 1 | expect "--show over the cap ends with the cut line" "more lines cut; the rest: git diff"
+  out="$(bash scripts/human-check.sh --show docs/specs/nope 2>&1; echo "exit=$?")"
+  printf '%s' "$out" | expect "--show on a missing spec dir names it" "no spec dir 'docs/specs/nope'"
+  printf '%s' "$out" | expect "--show on a missing spec dir exits non-zero" "exit=2"
+)
+
 fi # part ship
 
 # --- every other part: cycle.sh and the gate scripts on the spec branch, a ## Commands cell

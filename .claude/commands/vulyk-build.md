@@ -120,14 +120,16 @@ Then go on. A refusal on the redispatch is the existing stop: an absent seat, a 
 
 ## Terminal
 
-- `green`: print the round count and the newest `**Council:**` line, then ask the owner once with
+- `green`: print the round count, the newest `**Council:**` line and the output of `bash scripts/human-check.sh
+  --show docs/specs/<slug>` as a fenced block in the reply text (tool output is collapsed), then ask the owner once with
   `AskUserQuestion`, in the owner's language: «<slug>: council GREEN, round <n>. Выпускаем?», the yes
   option first and marked recommended. Yes: run `vulyk-ship` with the Skill tool (args `<slug>`) in
   this session. No, or no `AskUserQuestion` (`claude -p`): recommend `/vulyk-ship` in one line. Ship
   pushes the spec branch for its CI run, then prints the tag and publish steps; it never runs those.
 - `escalated`: print plan.md's `## Needs a human` verbatim (a `suite-timeout` reason carries its `- suite:
-  <N> s, budget <B> s` line: cut the part that ran long, then reopen). The owner chooses: `bash
-  scripts/human-check.sh docs/specs/<slug> ACCEPTED "<note>"`, `bash scripts/cycle.sh reopen
+  <N> s, budget <B> s` line: cut the part that ran long, then reopen), then the output of `bash
+  scripts/human-check.sh --show docs/specs/<slug>` as a fenced block in the reply text. The owner chooses: `bash
+  scripts/human-check.sh docs/specs/<slug> ACCEPTED "<note>"` (the note is the owner's own words, never yours), `bash scripts/cycle.sh reopen
   docs/specs/<slug> "<decision>"`, or leaving it open.
 - `paused`: stop; `/vulyk-resume <slug>` continues. `shipped`: nothing to build. `briefed`: point at
   `/vulyk-plan`.
