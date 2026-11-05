@@ -64,3 +64,16 @@ PART telemetry:wiring ok 97s cap 300s
 PART telemetry:constitution3 ok 99s cap 300s
 PART telemetry:ledger ok 101s cap 300s
 PART telemetry:install ok 117s cap 300s
+STEP 6/9: ok 95s
+PART telemetry:ysk-hook ok 3s cap 300s
+PART telemetry:rg ok 53s cap 300s
+PART telemetry:rg2 ok 57s cap 300s
+PART telemetry:crlf ok 57s cap 300s
+PART telemetry:crlf2 ok 60s cap 300s
+PART telemetry:wrapper ok 61s cap 300s
+PART telemetry:wrapper2 ok 61s cap 300s
+PART telemetry:mods2 ok 79s cap 300s
+PART telemetry:mods ok 82s cap 300s
+PART telemetry:upgrade ok 85s cap 300s
+PART telemetry:wrapper3 ok 93s cap 300s
+PART telemetry:watcher ok 94s cap 300s
