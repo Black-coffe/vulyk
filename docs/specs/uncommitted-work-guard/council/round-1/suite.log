@@ -85,3 +85,6 @@ LOAD: start cpu 0% top: MsMpEng 43%, System 14%, svchost#31 4%, dllhost#2 4%, cs
 LOAD: unavailable - end: no time left in this call
 STEP 8/9: ok 16s
 PART inject:latency ok 14s cap 300s
+STEP 9/9: ok 6s
+PART intake:latency ok 5s cap 300s
+SUITE: FAIL 36455s - cut part telemetry:launchers, cut part telemetry:edits
