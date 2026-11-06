@@ -8,3 +8,4 @@
 - 2026-11-06T08:52:51Z · 04-council:ESCALATE · round 2 verdict ESCALATE at 3497a3e pack eee8867fbef5 · next: escalated
 - 2026-11-06T11:20:26Z · 04-council:ESCALATE · reopened after round 2, ceiling now 4 · next: repair
 - 2026-11-06T11:20:30Z · 03-building · repair round 2: uncommitted-work-guard-05-repair-round-2.md · next: build:3
+- 2026-11-06T11:29:53Z · 04-council:open · round 3 opened, no court (no blind seat required) · next: dispatch:review
