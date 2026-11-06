@@ -21,6 +21,13 @@ hook, an agent the project removed (copied back). The hive learns about it only 
 installed from, and a path missing from the hive is copied in as new. Fixed 2026-10-16 (ADR-005 amendment): release
 copies only, edits merged or kept with `.vulyk-new`, deletions kept; covered by `tests/telemetry.test.sh` case 21.
 
+Still open (seen 2026-11-06, 0.44 -> 0.48 on a hive): "release copy" means equal to *any* release, so an edit that
+puts back an older release's text is taken for a stale copy and replaced. The hive had pinned `cycle-clerk` to
+`model: sonnet`, which is the 0.18-0.25 text; the upgrade wrote 0.48's `haiku`. Only the hive's own patch check
+caught it. A three-way merge with base = the closest tag would lose it too (ours = base). The base must be the
+release the hive is installed at (`.claude/vulyk-version`): a file equal to that release is a release copy; anything
+else, older release text included, is an edit to merge.
+
 ## Never
 - Replace a framework file in a hive without first telling a release copy from a project edit.
 - Put back a framework file the hive deleted.
@@ -28,4 +35,4 @@ copies only, edits merged or kept with `.vulyk-new`, deletions kept; covered by 
   merge them by hand, deletions included.
 
 ## Allowed
-- Replacing a file that equals what some release shipped.
+- Replacing a file that equals what the release the hive is installed at shipped (not any older release).
