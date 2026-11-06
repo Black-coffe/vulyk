@@ -83,3 +83,5 @@ PART telemetry:launchers ok 35793s cap 300s
 PART telemetry:edits ok 35835s cap 300s
 LOAD: start cpu 0% top: MsMpEng 43%, System 14%, svchost#31 4%, dllhost#2 4%, csrss#1 4%; named like the sampler: WmiPrvSE 43%
 LOAD: unavailable - end: no time left in this call
+STEP 8/9: ok 16s
+PART inject:latency ok 14s cap 300s
