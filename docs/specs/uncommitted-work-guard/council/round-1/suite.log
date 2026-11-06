@@ -77,3 +77,9 @@ PART telemetry:mods ok 82s cap 300s
 PART telemetry:upgrade ok 85s cap 300s
 PART telemetry:wrapper3 ok 93s cap 300s
 PART telemetry:watcher ok 94s cap 300s
+STEP 7/9: FAIL 35837s
+PART token-report ok 4s cap 300s
+PART telemetry:launchers ok 35793s cap 300s
+PART telemetry:edits ok 35835s cap 300s
+LOAD: start cpu 0% top: MsMpEng 43%, System 14%, svchost#31 4%, dllhost#2 4%, csrss#1 4%; named like the sampler: WmiPrvSE 43%
+LOAD: unavailable - end: no time left in this call
