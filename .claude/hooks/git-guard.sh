@@ -48,6 +48,17 @@ CAP = 10
 SEP = {';', '&&', '||', '|', '&', '\n', '(', ')', '{', '}'}
 
 
+def quoted(line, pos):
+    """True when pos sits inside a '...' or "..." string of line."""
+    q = None
+    for ch in line[:pos]:
+        if q is None and ch in '\'"':
+            q = ch
+        elif ch == q:
+            q = None
+    return q is not None
+
+
 def drop_heredocs(cmd):
     """The command with every heredoc body cut: its lines are text, not commands (`<<<` is no heredoc)."""
     lines, out, i = cmd.split('\n'), [], 0
@@ -56,27 +67,37 @@ def drop_heredocs(cmd):
         out.append(line)
         i += 1
         for m in re.finditer(r'(?<!<)<<(?!<)-?[ \t]*([\'"]?)([A-Za-z_][A-Za-z0-9_]*)\1', line):
+            if quoted(line, m.start()):
+                continue
             while i < len(lines) and lines[i].strip() != m.group(2):
                 i += 1
             i += 1
     return '\n'.join(out)
 
 
-CD = ('cd', 'chdir', 'pushd', 'set-location', 'sl', 'push-location')
+CD = ('cd', 'chdir', 'pushd', 'popd', 'set-location', 'sl', 'push-location', 'pop-location')
+UNKNOWN = ''   # a cd the hook cannot follow: the whole tree of the call's cwd is checked instead
 
 
 def cd_target(seg, now):
     """The folder a `cd` / `Set-Location` segment moves to from `now`, else None (not a cd)."""
     if not seg or seg[0].lower() not in CD:
         return None
+    if seg[0].lower() in ('popd', 'pop-location') or '-' in seg[1:]:
+        return UNKNOWN                              # back to a folder this command did not name
+    if now == UNKNOWN:
+        return UNKNOWN
     args = [a for a in seg[1:] if not a.startswith('-')]
     if not args:
         return os.path.expanduser('~')
     t = args[0]
+    if re.search(r'[$`%]', t):                      # a variable or a command substitution
+        return UNKNOWN
     m = re.match(r'^/([A-Za-z])(/.*)?$', t)
     if os.name == 'nt' and m:                       # Git Bash /e/x -> e:/x for a native git
         t = m.group(1) + ':' + (m.group(2) or '/')
-    return os.path.join(now, os.path.expanduser(t))
+    t = os.path.join(now, os.path.expanduser(t))
+    return t if os.path.isdir(t) else UNKNOWN
 
 
 def split_segments(cmd, powershell):
@@ -228,7 +249,7 @@ def classify(verb, args, base):
 
 
 def status(cwd, paths, fake):
-    """Porcelain v1 entries [(xy, path)] under paths ([] = all)."""
+    """Porcelain v1 entries [(xy, path)] under paths ([] = all); None when git status fails there."""
     if fake is not None:
         text = fake
     else:
@@ -237,7 +258,7 @@ def status(cwd, paths, fake):
             cmd += ['--'] + paths
         r = subprocess.run(cmd, capture_output=True, timeout=8)
         if r.returncode != 0:
-            return []
+            return None
         text = r.stdout.decode('utf-8', 'replace')
     out = []
     for line in text.splitlines():
@@ -289,7 +310,8 @@ def main():
         if not call:
             continue
         where, verb, args = call
-        base = here if not where else os.path.join(here, where)
+        blind = here == UNKNOWN
+        base = cwd if blind else (here if not where else os.path.join(here, where))
         hit = classify(verb, args, base)
         if not hit:
             continue
@@ -301,12 +323,17 @@ def main():
                  'truly needs this, report it under ## Findings and return NEEDS_CONTEXT.' % shown)
         if not tree:
             continue
-        if paths[:1] == ['@worktree']:
+        if paths[:1] == ['@worktree'] and not blind:
             base, paths = os.path.join(here, paths[1]), []
             if not os.path.isdir(base):
                 continue
+        if blind:
+            paths = []                               # relative to a folder the hook cannot name
         try:
             entries = status(base, paths, fake)
+            if entries is None and not blind:        # a folder git cannot read (a Git Bash /tmp on Windows)
+                entries = status(cwd, [], fake)
+            entries = entries or []
         except Exception:
             continue
         lost = [p for xy, p in entries

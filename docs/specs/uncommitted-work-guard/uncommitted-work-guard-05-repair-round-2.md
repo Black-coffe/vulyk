@@ -1,13 +1,14 @@
 ---
 story: uncommitted-work-guard-05
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 3
 blocked_by: []
 red: required
-red_reason:
+red_reason: git-guard: an unresolvable cd target still checks the tree
+red_verified_at: 2026-11-06T11:26:14Z cd47e75d55152028aecc82a2a49657b810e7f47e0499139266114ee7f56561b3
 ---
 
 # Repair round 2
@@ -23,26 +24,45 @@ No brief ask is RED in round 2 - the findings below are the whole task.
 
 ## Files
 - .claude/hooks/git-guard.sh
-- .claude/settings.json
-- install.sh
-- .claude/hooks/session-start-brief.sh
-- .claude/commands/vulyk-status.md
-- docs/defects/work-discarded-by-git-verb.md
-- docs/defects/work-discarded-by-git-verb.original.fixture
-- docs/defects/work-discarded-by-git-verb.neighbour.fixture
-- docs/defects/INDEX.md
-- docs/hooks-reference.md
 - tests/maintenance.test.sh
-- scripts/human-check.sh
-- .claude/commands/vulyk-build.md
-- tests/cycle.test.sh
-- .claude/hooks/defect-intake.sh
-- tests/intake.test.sh
-- docs/pulse.md
 
 ## Verification
 `bash tests/maintenance.test.sh`
 `bash scripts/defects-check.sh docs/defects/work-discarded-by-git-verb.md`
 `git ls-files '*.sh' | xargs -n1 bash -n`
-`bash tests/cycle.test.sh --part ship`
-`bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh`
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: cd47e75d55152028aecc82a2a49657b810e7f47e0499139266114ee7f56561b3 (tests/maintenance.test.sh)
+- impl: 06204cc73340ca486229ba100a95fa7a0f75966deb349e1e049d6a77f63949ce
+- stamped: 2026-11-06T11:26:14Z
+
+```
+::error::git-guard: an unresolvable cd target still checks the tree: cd "$(git rev-parse --show-toplevel)" && git checkout . - expected 'sub/f' in:
+::error::git-guard: an unresolvable cd target still checks the tree: cd $SOMEWHERE && git reset --hard - expected 'sub/f' in:
+::error::git-guard: an unresolvable cd target still checks the tree: cd /no/such/folder && git reset --hard - expected 'sub/f' in:
+  ok    git-guard: no interpreter exits 0, silent
+  ok    git-guard: --check fails on the original fixture
+  ok    git-guard: --check fails on the neighbour fixture
+  ok    git-guard: --check passes a file that is no hook input
+--- git guard: a mod with tool.check
+  ok    git-guard: an enabled mod with tool.check gets a brief line
+  ok    git-guard: a disabled mod is not named
+  ok    git-guard: no such mod, no line
+  ok    git-guard: an enabled mod without tool.check, no line
+maintenance.test.sh: 379 checks, 7 failed
+```
+
+## Implementation notes
+- `git-guard.sh`: a cd the hook cannot follow (`$VAR`, `$(...)`, backticks, `cd -`, `popd`, a target that is no
+  folder) sets `here` to UNKNOWN; a later git verb is then checked against the whole tree of the call's cwd, pathspecs
+  dropped (they are relative to a folder it cannot name). Errs toward a deny.
+- When `git status` fails in a resolved folder (on Windows Python reads Git Bash `/tmp` as `C:/tmp`, not a repo), the
+  check falls back to the whole tree of the call's cwd instead of reading the failure as "nothing dirty". Found by the
+  repro's `cd /tmp` form after the first fix; its test was added by reverting the hook to HEAD, re-stamping the red
+  receipt and putting the implementation back.
+- `<<` inside a quoted string is not a heredoc start (`quoted()`).
+- The executable bit: `git update-index --chmod=+x` right before close-story; the round-1 one was lost by the close.
+- Left as named limits: a `cd` into another repo that the hook resolves is checked there; a cd inside `( )` counts as
+  lasting.
