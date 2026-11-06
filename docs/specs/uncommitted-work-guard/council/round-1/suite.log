@@ -25,3 +25,16 @@ PART council:driver ok 89s cap 300s
 PART cycle:ship ok 102s cap 300s
 PART council:advance ok 121s cap 300s
 PART council:suite ok 129s cap 300s
+STEP 3/9: ok 87s
+PART driver ok 1s cap 300s
+PART cycle:manual ok 19s cap 300s
+PART inject:functional ok 20s cap 300s
+PART cycle:gates ok 21s cap 300s
+PART cycle:safety ok 23s cap 300s
+PART e2e:green ok 24s cap 300s
+PART e2e:red ok 40s cap 300s
+PART cycle:close ok 41s cap 300s
+PART defects ok 54s cap 300s
+PART full-suite ok 60s cap 300s
+PART cycle:bsd ok 75s cap 300s
+PART cycle:red ok 86s cap 300s
