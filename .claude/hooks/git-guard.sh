@@ -48,6 +48,37 @@ CAP = 10
 SEP = {';', '&&', '||', '|', '&', '\n', '(', ')', '{', '}'}
 
 
+def drop_heredocs(cmd):
+    """The command with every heredoc body cut: its lines are text, not commands (`<<<` is no heredoc)."""
+    lines, out, i = cmd.split('\n'), [], 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        i += 1
+        for m in re.finditer(r'(?<!<)<<(?!<)-?[ \t]*([\'"]?)([A-Za-z_][A-Za-z0-9_]*)\1', line):
+            while i < len(lines) and lines[i].strip() != m.group(2):
+                i += 1
+            i += 1
+    return '\n'.join(out)
+
+
+CD = ('cd', 'chdir', 'pushd', 'set-location', 'sl', 'push-location')
+
+
+def cd_target(seg, now):
+    """The folder a `cd` / `Set-Location` segment moves to from `now`, else None (not a cd)."""
+    if not seg or seg[0].lower() not in CD:
+        return None
+    args = [a for a in seg[1:] if not a.startswith('-')]
+    if not args:
+        return os.path.expanduser('~')
+    t = args[0]
+    m = re.match(r'^/([A-Za-z])(/.*)?$', t)
+    if os.name == 'nt' and m:                       # Git Bash /e/x -> e:/x for a native git
+        t = m.group(1) + ':' + (m.group(2) or '/')
+    return os.path.join(now, os.path.expanduser(t))
+
+
 def split_segments(cmd, powershell):
     """Shell words cut into simple commands; None when the quotes do not close."""
     lex = shlex.shlex(cmd.replace('\r', ''), posix=True, punctuation_chars=';&|()')
@@ -242,18 +273,23 @@ def main():
     sub = bool(data.get('agent_id'))
     cwd = str(data.get('cwd') or os.getcwd())
     fake = data.get('porcelain') if CHECK else None
-    segs = split_segments(cmd, tool == 'PowerShell')
+    segs = split_segments(drop_heredocs(cmd), tool == 'PowerShell')
     if segs is None:
         if sub and re.search(r'(^|[\s;&|(])git(\.exe)?\s', cmd):
             deny('VULYK git guard: this git call cannot be read (its quotes do not close), and a subagent may not '
                  'run a git command that can throw away work. Leave the tree as it is and report the step instead.')
         sys.exit(0)
+    here = cwd                                       # follows each cd of the command, in order
     for seg in segs:
+        moved = cd_target(seg, here)
+        if moved is not None:
+            here = moved
+            continue
         call = git_call(seg)
         if not call:
             continue
         where, verb, args = call
-        base = cwd if not where else os.path.join(cwd, where)
+        base = here if not where else os.path.join(here, where)
         hit = classify(verb, args, base)
         if not hit:
             continue
@@ -266,7 +302,7 @@ def main():
         if not tree:
             continue
         if paths[:1] == ['@worktree']:
-            base, paths = os.path.join(cwd, paths[1]), []
+            base, paths = os.path.join(here, paths[1]), []
             if not os.path.isdir(base):
                 continue
         try:

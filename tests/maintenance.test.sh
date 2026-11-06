@@ -814,6 +814,23 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12; do echo x > "$GG/u$i.txt"; done
 guard Bash "git clean -f" | expect "git-guard: the list stops at 10, then +N more" "+2 more"
 rm -f "$GG"/u*.txt
 
+echo "--- git guard: a cd before the git verb, heredoc bodies (round 1 repair)"
+mkdir -p "$GG/sub" "$GG/docs" && echo a > "$GG/sub/f" && echo a > "$GG/docs/d.md"
+git -C "$GG" add -A && git -C "$GG" -c user.email=t@t -c user.name=t commit -q -m sub
+echo b > "$GG/sub/f"
+out="$(guard Bash "cd sub && git checkout -- f")"
+printf '%s' "$out" | expect "git-guard: a main-session cd then checkout over a dirty file is denied" '"deny"'
+printf '%s' "$out" | expect "git-guard: the cd refusal names the file from the root" "sub/f"
+guard PowerShell "Set-Location sub; git checkout -- f" | expect "git-guard: Set-Location then checkout is denied" '"deny"'
+guard Bash "cd docs && git checkout ." | silent "git-guard: cd into a clean folder, then checkout . passes"
+guard Bash "cd sub && cd .. && cd docs && git checkout ." | silent "git-guard: chained cds are followed"
+guard Bash "$(printf "cat > r.md <<'EOF'\nthen cd x && git checkout -- f\nEOF")" a1 \
+  | silent "git-guard: a heredoc body is text, not a command"
+guard Bash "$(printf "cat > r.md <<EOF\ngit stash\nEOF\ngit stash")" a1 \
+  | expect "git-guard: a git verb after the heredoc still counts" '"deny"'
+guard Bash 'cat <<<"git stash" && git status' a1 | silent "git-guard: a here-string is not a heredoc start"
+echo a > "$GG/sub/f"
+
 echo "--- git guard: fails open, card fixtures"
 out="$(printf 'not json' | bash "$GUARD" 2>&1; echo "exit=$?")"
 [ "$out" = "exit=0" ] && ok "git-guard: broken JSON exits 0, silent" || bad "git-guard: broken JSON - got: $out"
