@@ -51,3 +51,16 @@ PART telemetry:telemetry ok 52s cap 300s
 PART maintenance ok 94s cap 300s
 PART intake:functional ok 96s cap 300s
 PART telemetry:scan ok 104s cap 300s
+STEP 5/9: ok 118s
+PART telemetry:ysk ok 32s cap 300s
+PART telemetry:constitution2 ok 42s cap 300s
+PART telemetry:ysk3 ok 62s cap 300s
+PART telemetry:install-xp ok 68s cap 300s
+PART telemetry:constitution ok 75s cap 300s
+PART telemetry:ysk2 ok 80s cap 300s
+PART telemetry:terminal ok 90s cap 300s
+PART telemetry:library ok 93s cap 300s
+PART telemetry:wiring ok 97s cap 300s
+PART telemetry:constitution3 ok 100s cap 300s
+PART telemetry:ledger ok 101s cap 300s
+PART telemetry:install ok 117s cap 300s
