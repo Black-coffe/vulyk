@@ -77,3 +77,7 @@ PART telemetry:mods ok 82s cap 300s
 PART telemetry:upgrade ok 85s cap 300s
 PART telemetry:watcher ok 93s cap 300s
 PART telemetry:wrapper3 ok 92s cap 300s
+STEP 7/9: ok 113s
+PART token-report ok 4s cap 300s
+PART telemetry:launchers ok 74s cap 300s
+PART telemetry:edits ok 111s cap 300s
