@@ -85,8 +85,8 @@ is missing or unparsable.
 **Council:** RED round 1, 2026-11-06, at bde477c, pack e26fe2f21746
 **Council:** ESCALATE round 2, 2026-11-06, at 3497a3e, pack eee8867fbef5
 **Council:** GREEN round 3, 2026-11-06, at 97253a4, pack 1ea400337548
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 
 ## Needs a human
 - reason: ceiling · round 2 · 2026-11-06
 - seats: docs/specs/uncommitted-work-guard/council/round-2/
+**Shipped:** 0.48.0, 2026-11-06, at 46646d8 - merged to main, publish pending

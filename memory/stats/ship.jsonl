@@ -42,3 +42,4 @@
 {"ts":"2026-11-03T11:25:38Z","spec":"gate-split","version":"0.45.0","head":"ba8b243","pack":"49cacecfa97e","note":"merged to main; owner: «Смело выпускайте 0.45.0 по плану.»"}
 {"ts":"2026-11-03T15:13:57Z","spec":"post-045-tails","version":"0.46.0","head":"3898b0d","pack":"0b6d58db604f","note":"merged to main, publish pending; owner override: round 1 RED from machine-load gate only, **Checked:** ACCEPTED («ACCEPTED, хвосты в след. круг»); branch CI run 41660058462 green"}
 {"ts":"2026-11-04T08:00:37Z","spec":"post-046-tails","version":"0.47.0","head":"c548324","pack":"dd7add9f1db3","note":"merged to main; owner accepted round 1 (human-check ACCEPTED 2026-11-04); push, tag and release run by the Queen per the owner's rule"}
+{"ts":"2026-11-06T16:30:35Z","spec":"uncommitted-work-guard","version":"0.48.0","head":"46646d8","pack":"1ea400337548","note":"merged to main, publish pending"}
