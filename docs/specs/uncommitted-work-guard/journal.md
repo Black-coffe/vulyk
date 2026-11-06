@@ -9,3 +9,4 @@
 - 2026-11-06T11:20:26Z · 04-council:ESCALATE · reopened after round 2, ceiling now 4 · next: repair
 - 2026-11-06T11:20:30Z · 03-building · repair round 2: uncommitted-work-guard-05-repair-round-2.md · next: build:3
 - 2026-11-06T11:29:53Z · 04-council:open · round 3 opened, no court (no blind seat required) · next: dispatch:review
+- 2026-11-06T11:46:46Z · 04-council:GREEN · round 3 verdict GREEN at 97253a4 pack 1ea400337548 · next: green

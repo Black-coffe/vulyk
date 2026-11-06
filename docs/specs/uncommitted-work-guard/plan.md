@@ -84,6 +84,7 @@ is missing or unparsable.
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-11-06, at bde477c, pack e26fe2f21746
 **Council:** ESCALATE round 2, 2026-11-06, at 3497a3e, pack eee8867fbef5
+**Council:** GREEN round 3, 2026-11-06, at 97253a4, pack 1ea400337548
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 
 ## Needs a human
