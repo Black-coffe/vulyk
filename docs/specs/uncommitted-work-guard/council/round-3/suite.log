@@ -83,3 +83,6 @@ PART telemetry:launchers ok 76s cap 300s
 PART telemetry:edits ok 118s cap 300s
 STEP 8/9: ok 14s
 PART inject:latency ok 13s cap 300s
+STEP 9/9: ok 7s
+PART intake:latency ok 6s cap 300s
+SUITE: ok 773s
