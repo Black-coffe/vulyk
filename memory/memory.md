@@ -17,7 +17,7 @@
 ## Unmapped territory
 - `docs/` narrative pages (architecture.md, pipeline.md, cycle.md, token-economy.md,
   model-cascade.md, command-reference.md, getting-started.md) and `docs/adr/` beyond ADR-001
-- `templates/`, `bootstrap/interview.md`, `.claude/hooks/` (bar the SessionStart brief and the defect hooks/`defects_lib.py`, in scripts.md and the wiki),
+- `templates/`, `bootstrap/interview.md`, `.claude/hooks/` (bar the SessionStart brief, `git-guard.sh` and the defect hooks/`defects_lib.py`, in scripts.md and the wiki),
   `install.sh` (upgrade contract in scripts.md), `scripts/vulyk-update.sh`'s own mechanics, `tests/` harness internals beyond full-suite.sh and the `--part` flags (scripts.md),
   `.github/workflows/ci.yml` beyond the `full-suite`/`install-smoke` macOS matrix and the `shell` job gates
 

@@ -81,7 +81,8 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   `top-model.sh --floor` first (exit 1 stops); then `top-model.sh`, `second_model`, 16-hex stamp, journal line,
   Workflow tool with `scriptPath` (never `name:`); a thrown call records `telemetry.sh record driver_refused`. No
   Workflow: same loop with `--stamp --claim`, Agent tool, `release` on every exit. Terminal `green`:
-  `AskUserQuestion` «Выпускаем?»; yes runs `vulyk-ship` via Skill.
+  `AskUserQuestion` «Выпускаем?»; yes runs `vulyk-ship` via Skill. Before asking for the human check
+  it runs `human-check.sh --show docs/specs/<slug>` and pastes it as a fenced block in the reply text (0.48).
 - **`/vulyk-review`** - claim + `advance --claim`; dispatch the seats `next` names; `advance --ingest`; release.
   `build:W` = RED → repair story, `/vulyk-build`.
 - **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses). On `ci: no CI run for <sha>` it pushes the spec
@@ -93,7 +94,8 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   date windows as `date -u -d '-N days' ... || date -u -v-Nd ...`; `portability-check.sh` reads their shell
   fences and multi-word inline spans (card `shell-needs-gnu-or-bash4`).
 - **`/vulyk-status`** - driver line, council stats, `token-report.py`, `state.sh` table, map freshness,
-  `maintenance due|waits for`. Writes only `.claude/state.json`.
+  `maintenance due|waits for` (0.48: also a `tool.check` brief line, naming a mod that can approve a call git-guard
+  denied). Writes only `.claude/state.json`.
 - **`/vulyk-evolve`** - `evolve-ledger.py . resolve` + `window`; changeset in worktree on `vulyk/evolve-<date>`;
   step 2: once ≥ 3 `horizon.md` exist, counts `(horizon H` picks against ADR-022's reversal rule.
 - **`/vulyk-gc`** - dispatches `librarian`; main session `git rm`s its `Delete:` list. `/vulyk-gc memory`: main
@@ -103,4 +105,4 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
   script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-11-04 (0.47.0 vulyk-ship ci wording; 0.45.0 gate split; ADR-013, 015, 020, 022, 023, 024, 025, 029)
+last-verified: 2026-11-06 (0.48.0 build --show, status tool.check; prior 2026-11-04: 0.47.0 vulyk-ship ci wording; 0.45.0 gate split; ADR-013, 015, 020, 022, 023, 024, 025, 029)

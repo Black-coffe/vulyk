@@ -25,6 +25,8 @@ re-run. No line numbers: `grep -n '^name()'`.
   GitHub `origin`, else `ci: not checked`; `gh run list --commit` for HEAD or the newest commit with only
   paperwork after; only the newest run per `workflowName` (by `createdAt`) is judged (0.47), so a re-run or dispatch clears a red;
   all `success` = ok, failed/pending/none = NOT READY, no/failing `gh` = `cannot confirm CI`); `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`;
+  `human-check.sh --show <spec-dir>` (0.48; writes nothing; `git diff --stat` then the diff, 300 lines max; base = merge-base
+  with the default branch off it, else parent of the commit that added `<spec>/plan.md`, else the empty tree; exit 2 no dir/repo; the Queen pastes it in her reply before asking);
   `scope-check.sh <story-file> [range]` runs in `close-story` (`  ! ` paths -> `--commit` exit 4).
 - `wave-check.sh` (`no-verify`, `verify-gap`, `verify-cell`, `verify-round-only`; report-only `red-no-test`,
   `red-value`; the red block opens only on a `red:` line inside frontmatter), `trace-check.sh`,
@@ -40,8 +42,8 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `portability-check.sh [<file>...]` (0.44.0) - the `check:` of card `shell-needs-gnu-or-bash4` (status block).
   No arg: `git ls-files '*.sh'` + constitution + `.claude/commands|agents/*.md` (not `tests/fixtures/`). Prints
   `portability-check: <file>:<line>: <rule>: <text>`; rules: bash4, sed-i, sed-bre, grep-P, stat-c, readlink-f,
-  find-printf, xargs-r, date-d, pct-n, timeout, python, array (`"${a[@]}"` under `set -u`), paste-s,
-  case-in-subst, heredoc-in-subst. Bypass: same-line `# portable: <reason>`. Exit 0 / 1 hits / 2 usage; CI `shell` job.
+  find-printf, xargs-r, date-d, pct-n, timeout, python, array, paste-s, case-in-subst, heredoc-in-subst.
+  Bypass: same-line `# portable: <reason>`. Exit 0 / 1 hits / 2 usage; CI `shell` job.
 - `trace-autopsy.sh <brief.md>` (0.42.0) - `vulyk_python` wrapper (none: exit 2) over `trace-autopsy.py`. Reads
   the brief's `> ` frames, resolves against `git ls-files`, writes `autopsy.md` beside the brief, <= 15 lines
   (3 frames): code line at HEAD + `git log -L` as `last touched:`. Trace text is data. Exit 0 / 2. Caller:
@@ -55,7 +57,16 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `state.sh` - writes `.claude/state.json`/table for `/vulyk-status`. Reads `story:`, `status:`, `wave:`, `tier:`
   from the leading frontmatter block only (0.43.1), so a study report quoting the story template is not a story.
 - `.claude/hooks/session-start-brief.sh` - map line, profile/bootstrap offers, `maintenance due: ...` for gc,
-  evolve, map, and its `[VULYK] memory triage (...)` ask-once line (a no runs `--mark`).
+  evolve, map, its `[VULYK] memory triage (...)` ask-once line (a no runs `--mark`), and (0.48) a line naming an
+  enabled plugin whose `hooks/` greps `tool.check` (heuristic; such a mod can approve a call git-guard denied).
+- `.claude/hooks/git-guard.sh` (0.48, PreToolUse `Bash|PowerShell`; card `work-discarded-by-git-verb`; `docs/hooks-reference.md`)
+  - denies git verbs that discard uncommitted work: stash push/save/bare/-u/drop/clear, `checkout .|-f|-- <path>`, worktree
+  `restore`, `reset --hard`, `clean -f`, `switch -f`, `branch -D`, `worktree remove -f`. Input with `agent_id` (subagent):
+  every listed verb denied, no `git status`, unreadable quotes denied. Main session: denied only if `git status --porcelain`
+  shows the affected paths dirty (clean -f/stash -u: untracked too); names 10 then `+N more`; stash drop/clear and
+  `branch -D` are subagent-only. Follows `cd`/`-C`. Fails open (no python, bad JSON, error: exit 0). `--check <file>`
+  (the card's check; `porcelain` field fakes status): exit 1 on deny. Python sits in a no-op heredoc below `exit 0`.
+  Not covered: rm, `bash -c`, scripts/aliases. No env off-switch; owner removes the settings entry.
 - `.claude/hooks/handoff.sh` - skips a `python3` that is the Windows Store stub (exit 49) or fails to launch,
   and starts a working Python once per call (0.43.1); `handoff.py` `_REDACT_FALLBACK` mirrors `redact.sh`.
 - `vulyk-update.sh` (-> `install.sh --upgrade`); `release-check.sh`; `git-hooks/post-merge`.
@@ -103,6 +114,7 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution. Defect hooks via
   `wire_hook`/`unwire_hook` (matcher ignored on unwire). Uses `vulyk_python`/`sed_inplace` from `lib.sh` beside it
   (found via `BASH_SOURCE`); awk values pass through `ENVIRON`, never `-v` (BSD awk refuses a newline).
+  `git-guard.sh` is wired once, only when `v$PREV` did not ship it (a later missing entry = owner's removal, stays).
   `install_mod vulyk-pulse@vulyk`; `retire_mod vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup`.
 
 ## Gotchas
@@ -114,4 +126,4 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-04 (0.47.0 post-046-tails; ship-check ci, lib.sh load_sample). Over the ~80-line budget.
+last-verified: 2026-11-06 (0.48.0 uncommitted-work-guard; git-guard.sh, human-check --show). Over the ~80-line budget.
