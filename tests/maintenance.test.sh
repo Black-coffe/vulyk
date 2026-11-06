@@ -753,6 +753,127 @@ mkdir -p "$T/pg-empty" && git -C "$T/pg-empty" init -q
 ( cd "$T/pg-empty" && pg_run )
 expect "portability-check: nothing to scan exits 2" "exit=2;" < "$T/pg-out"
 
+# --- the git guard (uncommitted-work-guard-01) ----------------------------------------------------
+GUARD="$SRC/.claude/hooks/git-guard.sh"
+GG="$T/gg"
+mkdir -p "$GG/memory/stats" && git -C "$GG" init -q
+echo '{}' > "$GG/memory/stats/skills.json"
+git -C "$GG" add -A && git -C "$GG" -c user.email=t@t -c user.name=t commit -q -m init
+cat > "$T/guard-in.py" <<'PY'
+import json, sys
+d = {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": sys.argv[1],
+     "tool_input": {"command": sys.argv[2]}, "cwd": sys.argv[4]}
+if sys.argv[3]:
+    d["agent_id"] = sys.argv[3]; d["agent_type"] = "worker-code"
+sys.stdout.write(json.dumps(d))
+PY
+guard() { # guard <tool> <command> [<agent_id>] - the hook's output for one call made in $GG
+  ( cd "$GG" && "$PYBIN" "$T/guard-in.py" "$1" "$2" "${3:-}" "$(pwd -W 2>/dev/null || pwd)" | bash "$GUARD" 2>&1 )
+}
+silent() { # silent <label> - ok when stdin is empty: no decision, no noise
+  local out; out="$(cat)"
+  if [ -z "$out" ]; then ok "$1"; else bad "$1 - expected no output, got:"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+}
+
+echo "--- git guard: a subagent"
+for c in "git stash" "git stash -u" "git stash drop" "git stash clear" "git checkout -- f" "git checkout ." \
+         "git checkout -f" "git checkout main -- f" "git restore f" "git reset --hard" "git clean -fd" \
+         "git switch -f main" "git switch --discard-changes main" "git branch -D x" "git worktree remove --force ../w" \
+         "cd sub && git stash" "VAR=1 git stash" "git -C sub reset --hard"; do
+  guard Bash "$c" a1 | expect "git-guard: a subagent's $c is denied" '"deny"'
+done
+guard Bash 'git stash "unclosed' a1 | expect "git-guard: a subagent's unreadable git call is denied" '"deny"'
+guard PowerShell "git stash" a1 | expect "git-guard: a subagent's PowerShell git stash is denied" '"deny"'
+for c in "git stash list" "git stash show" "git checkout -b x" "git status" "git reset --soft HEAD~1" \
+         "git reset HEAD f" "git clean -n" "git clean -fdn" "git restore --staged f" "git log --oneline" \
+         "echo git stash" "bash scripts/cycle.sh advance x" "ls -la"; do
+  guard Bash "$c" a1 | silent "git-guard: a subagent's $c passes"
+done
+
+echo "--- git guard: the main session"
+echo '{"n":1}' > "$GG/memory/stats/skills.json"
+out="$(guard Bash "git checkout -- memory/stats/skills.json")"
+printf '%s' "$out" | expect "git-guard: the original case (checkout over a dirty skills.json) is denied" '"deny"'
+printf '%s' "$out" | expect "git-guard: the refusal names the dirty file" "memory/stats/skills.json"
+printf '%s' "$out" | expect "git-guard: the refusal gives the safe path" "your own terminal"
+guard PowerShell "git stash" | expect "git-guard: main-session git stash over a dirty file is denied" '"deny"'
+guard Bash "git reset --hard" | expect "git-guard: main-session reset --hard over a dirty file is denied" '"deny"'
+guard Bash "git checkout -- other.txt" | silent "git-guard: a checkout of a clean path passes"
+guard Bash "git branch -D x" | silent "git-guard: main-session branch -D passes (not the tree)"
+guard Bash 'git stash "unclosed' | silent "git-guard: a main-session unreadable call fails open"
+echo x > "$GG/new.txt"
+out="$(guard Bash "git clean -fd")"
+printf '%s' "$out" | expect "git-guard: clean -f over an untracked file is denied" '"deny"'
+printf '%s' "$out" | expect "git-guard: the refusal names the untracked file" "new.txt"
+git -C "$GG" add -A && git -C "$GG" -c user.email=t@t -c user.name=t commit -q -m clean
+guard Bash "git checkout -- memory/stats/skills.json" | silent "git-guard: the neighbour (same checkout, clean tree) passes"
+for c in "git stash" "git reset --hard" "git clean -fd" "git checkout ."; do
+  guard Bash "$c" | silent "git-guard: main-session $c on a clean tree passes"
+done
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do echo x > "$GG/u$i.txt"; done
+guard Bash "git clean -f" | expect "git-guard: the list stops at 10, then +N more" "+2 more"
+rm -f "$GG"/u*.txt
+
+echo "--- git guard: a cd before the git verb, heredoc bodies (round 1 repair)"
+mkdir -p "$GG/sub" "$GG/docs" && echo a > "$GG/sub/f" && echo a > "$GG/docs/d.md"
+git -C "$GG" add -A && git -C "$GG" -c user.email=t@t -c user.name=t commit -q -m sub
+echo b > "$GG/sub/f"
+out="$(guard Bash "cd sub && git checkout -- f")"
+printf '%s' "$out" | expect "git-guard: a main-session cd then checkout over a dirty file is denied" '"deny"'
+printf '%s' "$out" | expect "git-guard: the cd refusal names the file from the root" "sub/f"
+guard PowerShell "Set-Location sub; git checkout -- f" | expect "git-guard: Set-Location then checkout is denied" '"deny"'
+guard Bash "cd docs && git checkout ." | silent "git-guard: cd into a clean folder, then checkout . passes"
+guard Bash "cd sub && cd .. && cd docs && git checkout ." | silent "git-guard: chained cds are followed"
+guard Bash "$(printf "cat > r.md <<'EOF'\nthen cd x && git checkout -- f\nEOF")" a1 \
+  | silent "git-guard: a heredoc body is text, not a command"
+guard Bash "$(printf "cat > r.md <<EOF\ngit stash\nEOF\ngit stash")" a1 \
+  | expect "git-guard: a git verb after the heredoc still counts" '"deny"'
+guard Bash 'cat <<<"git stash" && git status' a1 | silent "git-guard: a here-string is not a heredoc start"
+
+echo "--- git guard: a cd it cannot follow checks the whole tree (round 2 repair)"
+for c in 'cd "$(git rev-parse --show-toplevel)" && git checkout .' 'cd $SOMEWHERE && git reset --hard' \
+         'cd /no/such/folder && git reset --hard' 'cd - && git checkout .' 'pushd sub && popd && git checkout .' \
+         'Set-Location $env:TEMP; git checkout .'; do
+  guard Bash "$c" | expect "git-guard: an unresolvable cd target still checks the tree: $c" "sub/f"
+done
+mkdir -p "$T/norepo"; NR="$(cd "$T/norepo" && pwd -W 2>/dev/null || pwd)"
+guard Bash "cd $NR && git reset --hard" \
+  | expect "git-guard: a cd into a folder git status cannot read still checks the tree (Git Bash /tmp on Windows)" "sub/f"
+guard Bash "$(printf 'echo "x <<b"\ngit reset --hard')" a1 | expect "git-guard: <<b inside quotes is no heredoc" '"deny"'
+case "$(git -C "$SRC" ls-files -s .claude/hooks/git-guard.sh)" in
+  100755*) ok "git-guard: committed executable (settings.json runs it directly)" ;;
+  *) bad "git-guard: committed without the executable bit" ;;
+esac
+echo a > "$GG/sub/f"
+
+echo "--- git guard: fails open, card fixtures"
+out="$(printf 'not json' | bash "$GUARD" 2>&1; echo "exit=$?")"
+[ "$out" = "exit=0" ] && ok "git-guard: broken JSON exits 0, silent" || bad "git-guard: broken JSON - got: $out"
+mkdir -p "$T/nopy"
+out="$(printf '{"tool_name":"Bash","agent_id":"a","tool_input":{"command":"git stash"}}' | PATH="$T/nopy" "$BASH" "$GUARD" 2>&1; echo "exit=$?")"
+[ "$out" = "exit=0" ] && ok "git-guard: no interpreter exits 0, silent" || bad "git-guard: no interpreter - got: $out"
+for f in original neighbour; do
+  ( cd "$SRC" && bash "$GUARD" --check "docs/defects/work-discarded-by-git-verb.$f.fixture" > /dev/null 2>&1 )
+  [ $? -eq 1 ] && ok "git-guard: --check fails on the $f fixture" || bad "git-guard: --check passed the $f fixture"
+done
+( cd "$SRC" && bash "$GUARD" --check docs/defects/work-discarded-by-git-verb.md > /dev/null 2>&1 )
+[ $? -eq 0 ] && ok "git-guard: --check passes a file that is no hook input" || bad "git-guard: --check failed on the card itself"
+
+echo "--- git guard: a mod with tool.check"
+MC="$T/conf-mod"; mkdir -p "$MC/plugins" "$T/fakemod/hooks" "$T/offmod/hooks"
+printf '{\n  "enabledPlugins": {\n    "fakemod@local": true,\n    "offmod@local": false\n  }\n}\n' > "$MC/settings.json"
+printf '{\n  "version": 2,\n  "plugins": {\n    "fakemod@local": [\n      { "scope": "user", "installPath": "%s" }\n    ],\n    "offmod@local": [\n      { "scope": "user", "installPath": "%s" }\n    ]\n  }\n}\n' \
+  "$T/fakemod" "$T/offmod" > "$MC/plugins/installed_plugins.json"
+printf "export default (r) => { r.on('tool.check', () => ({ allow: true })) }\n" > "$T/fakemod/hooks/register.ts"
+cp "$T/fakemod/hooks/register.ts" "$T/offmod/hooks/register.ts"
+H="$(hive modcheck)"
+out="$(BRIEF_CONF="$MC" brief_of "$H")"
+printf '%s' "$out" | expect "git-guard: an enabled mod with tool.check gets a brief line" "fakemod@local"
+printf '%s' "$out" | expect_absent "git-guard: a disabled mod is not named" "offmod@local"
+brief_of "$H" | expect_absent "git-guard: no such mod, no line" "tool.check"
+rm -f "$T/fakemod/hooks/register.ts"
+BRIEF_CONF="$MC" brief_of "$H" | expect_absent "git-guard: an enabled mod without tool.check, no line" "tool.check"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1

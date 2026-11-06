@@ -4,6 +4,7 @@
 #   Usage: scripts/human-check.sh <spec-dir> <ACCEPTED|REJECTED> [where you looked / note]
 #          scripts/human-check.sh docs/specs/oauth ACCEPTED "staging, logged in as a new user, logout works"
 #          scripts/human-check.sh --check <spec-dir>       # is the newest check still about THIS pack at THIS commit?
+#          scripts/human-check.sh --show <spec-dir>        # the pack's change as text, for the reply before ACCEPTED
 #
 # The blind acceptance gate can say the software does what the brief's words said. Only
 # the person who wrote the words can say whether the words said what they meant, so the
@@ -28,6 +29,41 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/lib.sh
 . "$HERE/lib.sh"
+
+# --- `--show`: the pack's change, for the Queen to paste into her reply before the owner answers ----
+# Base: the merge-base with the default branch while on the spec's branch; otherwise (on the default
+# branch, after a merge) the parent of the commit that added <spec>/plan.md, or the empty tree. Prints
+# `git diff --stat`, then the diff capped at SHOW_CAP lines and a line naming the cut and the command
+# for the rest. Writes nothing. A missing spec dir or no git repo exits 2: never a silent pass.
+SHOW_CAP=300
+if [ "${1:-}" = "--show" ]; then
+  SSPEC="${2:-}"
+  [ -n "$SSPEC" ] && [ -d "$SSPEC" ] || {
+    echo "human-check: --show - no spec dir '${SSPEC}': usage: $0 --show <spec-dir>" >&2; exit 2; }
+  git rev-parse --show-toplevel >/dev/null 2>&1 || {
+    echo "human-check: --show - not a git repo, there is no diff to show" >&2; exit 2; }
+  SDEF="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)"; SDEF="${SDEF#origin/}"
+  [ -n "$SDEF" ] || { git show-ref --verify --quiet refs/heads/main && SDEF=main; }
+  [ -n "$SDEF" ] || { git show-ref --verify --quiet refs/heads/master && SDEF=master; }
+  SBASE=""
+  if [ -n "$SDEF" ] && [ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" != "$SDEF" ]; then
+    SBASE="$(git merge-base "$SDEF" HEAD 2>/dev/null)"
+  fi
+  if [ -z "$SBASE" ]; then
+    SADD="$(git log --diff-filter=A --format=%H -- "$SSPEC/plan.md" 2>/dev/null | tail -n 1)"
+    [ -n "$SADD" ] && SBASE="$(git rev-parse -q --verify "$SADD^" 2>/dev/null)"
+    [ -n "$SBASE" ] || SBASE="$(git hash-object -t tree /dev/null)"   # the empty tree
+  fi
+  SB7="$(printf '%s' "$SBASE" | cut -c1-7)"
+  echo "human-check: $(basename "$SSPEC") - the change from $SB7 to HEAD"
+  git -c core.quotePath=false diff --stat "$SBASE" HEAD
+  STOTAL="$(git diff "$SBASE" HEAD | wc -l | tr -d ' ')"
+  git -c core.quotePath=false diff "$SBASE" HEAD | head -n "$SHOW_CAP"
+  if [ "$STOTAL" -gt "$SHOW_CAP" ]; then
+    echo "... $((STOTAL - SHOW_CAP)) more lines cut; the rest: git diff $SB7 HEAD"
+  fi
+  exit 0
+fi
 
 # --- `--check`: does the newest recorded human check still describe this pack, here? ----
 if [ "${1:-}" = "--check" ]; then

@@ -196,6 +196,18 @@ printf '%s' "$o" | expect "a paste starting with VULYK_DICTATION_TAG counts as t
 o="$(ctx "$HIVE" '{"prompt":"<pasted_content id=\"1\">[VoiceDrop] опять обрезал голос</pasted_content id=\"1\">"}')"
 printf '%s' "$o" | expect "without the tag set the same paste asks the owner" "whether these are their words"
 
+echo "--- quoted words are not a correction (uncommitted-work-guard-03)"
+o="$(ctx "$HIVE" '{"prompt":"Автор поста пишет: «нет, не так, всё устроено иначе». Что думаешь?"}')"
+printf '%s' "$o" | expect "intake: «нет, не так» in guillemets asks the owner first" "whether these are their words"
+printf '%s' "$o" | expect_absent "intake: the quoted correction is not filed at once" "file the quote now"
+ctx "$HIVE" '{"prompt":"нет, не так"}' | expect "intake: the neighbour, a bare нет, не так, is filed at once" "file the quote now"
+ctx "$HIVE" '{"prompt":"«нет, не так» — и опять ты обрезал"}' \
+  | expect "intake: the same kind of word outside the quote still files" "file the quote now"
+ctx "$HIVE" '{"prompt":"Он ответил “not what i asked” и ушёл"}' | expect "intake: curly quotes go to the ask" "whether these are their words"
+ctx "$HIVE" '{"prompt":"Он ответил \"not what i asked\" и ушёл"}' | expect "intake: straight quotes go to the ask" "whether these are their words"
+ctx "$HIVE" '{"prompt":"Она пишет „опять обрезал“, глянь"}' | expect "intake: „low“ quotes go to the ask" "whether these are their words"
+ctx "$HIVE" '{"prompt":"> опять обрезал голос\n\nразбери этот отзыв"}' | expect "intake: a > quote line goes to the ask" "whether these are their words"
+
 echo "--- side-agent notes are never the owner"
 ctx "$HIVE" '{"prompt":"Here is a note offered by a side agent: the render failed опять on the same step, retry later.\n\nпродолжай"}' \
   | expect "a «опять» only inside a side-agent note is silent (the original case)" "(silent)"

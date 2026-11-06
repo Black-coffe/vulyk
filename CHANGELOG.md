@@ -4,6 +4,23 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-11-06
+
+The uncommitted-work guard, the diff before ACCEPTED, quotes that are not corrections (spec `uncommitted-work-guard`,
+from study `claude-code-mods-9`).
+
+### Added
+- **`git-guard.sh`, a PreToolUse hook on `Bash|PowerShell`, denies the git verbs that throw away uncommitted work:** `stash` (push, `-u`, `drop`, `clear`), `checkout .` / `-f` / `[<ref>] -- <path>`, worktree `restore`, `reset --hard`, `clean -f`, `switch -f` / `--discard-changes`, `branch -D`, `worktree remove --force`; read-only forms pass. A subagent is denied every listed verb, and any git call whose quotes do not close. The main session is denied only when `git status --porcelain` shows the paths dirty or untracked, and the reason names them (10, then `+N more`) with the safe path: commit them, leave them, or run it in your own terminal. It follows `cd` / `Set-Location` and `git -C`; a `cd` it cannot follow checks the whole tree; heredoc bodies are text. Fails open on bad JSON, no python, or a non-git command. Not covered: `rm` / `Remove-Item`, `bash -c`, scripts, aliases. `install.sh` wires it once; an owner who removes the entry keeps it removed. Card `work-discarded-by-git-verb` checks it on two fixtures.
+- **A mod that handles `tool.check` is named** in the SessionStart brief and `/vulyk-status`: on a personal login such a mod can approve a call a hook denied. A heuristic grep of each enabled plugin's hooks folder.
+- **`human-check.sh --show <spec-dir>`** prints the pack's `diff --stat` and the diff, capped at 300 lines. `/vulyk-build`'s `green` and `escalated` steps paste it as a fenced block in the reply before the owner answers; the ACCEPTED note is the owner's own words.
+- **`docs/pulse.md`: other mods on the same rows.** Pulse and a mod that replaces `Spinner`, `AbovePrompt` or `TurnDuration` (Claude Skins) cannot both draw; the outer one wins; the per-hive off switch keeps the other.
+
+### Changed
+- **A correction word inside a quote is not filed as the owner's correction.** `defect-intake.sh` sends words inside «…», “…”, „…“, "…" or `>` lines to the "are these your words?" ask; the same word outside the quote still files at once.
+
+### Known
+- Two edge cases of the guard: an escaped quote can make a quoted `<<word` read as a heredoc start, and after an unresolvable `cd` an absolute `git -C` is not followed. `--show` spends its 300 lines on spec paperwork first. `close-story` (`git commit --only`) drops an index-only executable bit when `core.fileMode=false`.
+
 ## [0.47.0] - 2026-11-04
 
 Tails of 0.46.0: the reviewer's notes and the descoped repair of post-045-tails (spec `post-046-tails`).

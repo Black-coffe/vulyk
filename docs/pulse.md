@@ -64,3 +64,11 @@ the finer figure. The row is a gauge, not the ledger.
 
 To turn it off in one hive, set `"vulyk-pulse@vulyk": false` under `enabledPlugins` in that hive's
 `.claude/settings.json` or `.claude/settings.local.json`. The installer respects it and never writes it.
+
+## Other mods on the same rows
+
+Pulse replaces three rows: `Spinner`, `AbovePrompt` (the band) and `TurnDuration` (the closing line). Another mod
+that replaces the same rows cannot draw beside it. Claude Skins is one: it replaces `Spinner`, `AbovePrompt` and
+`TurnDuration` too, and neither mod hands the row on to the other. The outer one wins: whichever Claude Code puts
+outermost is drawn, and the other is silent on that row. VULYK does not pick the order. To keep the other mod's rows
+in a hive, turn pulse off there with the switch above (`"vulyk-pulse@vulyk": false`).

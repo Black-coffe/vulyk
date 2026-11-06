@@ -1,0 +1,34 @@
+## install.sh
+tests:
+  textual  7 not shown
+importers:
+  textual  6 not shown
+imported:
+  exact    scripts/lib.sh
+path mentions:
+  textual  277 not shown
+## .claude/hooks/session-start-brief.sh
+tests:
+  textual  2 not shown
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  23 not shown
+## scripts/human-check.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  6 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  44 not shown
+## .claude/hooks/defect-intake.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  2 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  16 not shown

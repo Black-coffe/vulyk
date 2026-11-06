@@ -1422,6 +1422,12 @@ wire_hook SessionStart defects-inject.sh '' reset
 wire_hook SessionStart ysk-offer.sh
 # rules-tree: the owner's answers in AskUserQuestion windows reach the intake (decision or quote).
 wire_hook PostToolUse defect-intake.sh AskUserQuestion answer
+# uncommitted-work-guard: the git guard is wired by the release that brings it, once. When v$PREV
+# already shipped the hook, a missing entry is the owner's removal and stays removed (like unwire_hook).
+if { [ -f "$DEST/.claude/hooks/git-guard.sh" ] || [ "$CHECK" = "--check" ]; } &&
+   ! git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/git-guard.sh" 2>/dev/null; then
+  wire_hook PreToolUse git-guard.sh 'Bash|PowerShell'
+fi
 unwire_ysk
 wire_permissions
 wire_ripgrep
