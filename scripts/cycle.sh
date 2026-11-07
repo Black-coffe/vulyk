@@ -582,7 +582,7 @@ cmd_status() {
   [ -n "$APPROVED_V" ] && APPROVED_B=true
   [ -n "$SHIPPED_V" ] && SHIPPED_B=true
   [ -f "$SPEC/PAUSE" ] && PAUSED_B=true
-  local BRANCH_JSON="null"; [ -n "$BRANCH_V" ] && BRANCH_JSON="\"$BRANCH_V\""
+  local BRANCH_JSON="null"; [ -n "$BRANCH_V" ] && { json_escape_to "$BRANCH_V"; BRANCH_JSON="\"$JE\""; } # P9-06: a quoted marker value
 
   # --- stories: counts, and the lowest wave that is either dispatchable or closeable -------
   # One read per story (status and wave together), kept in arrays for the wave walk below -
@@ -665,7 +665,7 @@ cmd_status() {
     local RCOURT
     RCOURT="$(round_field "$RD" court)"
     CEILING="$(round_field "$RD" ceiling)"; [ -n "$CEILING" ] || CEILING="$(tier_ceiling "$(round_tier "$SPEC" "$RD")")"
-    [ -n "$RCOURT" ] && COURT_JSON="\"$RCOURT\""
+    [ -n "$RCOURT" ] && { json_escape_to "$RCOURT"; COURT_JSON="\"$JE\""; }
     if ! row_exists "$SLUG" "$ROUND_N"; then
       OPEN_B=true
       local seat
@@ -1938,7 +1938,11 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
   # `model:` applies, as it does for the seats (a hive's pin there holds). The driver never reads the
   # story file to learn it.
   model="$(fm_field "$f" model)"
-  printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$f")"
+  # P9-06: values are taken as written - a quoted YAML value (`story: "x-01"`) keeps its quotes,
+  # JSON-escaped, so the line stays one parsable object.
+  json_escape_to "$f"; f="$JE"; json_escape_to "$id"; id="$JE"
+  json_escape_to "$worker"; worker="$JE"; json_escape_to "$model"; model="$JE"
+  printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$1")"
 }
 
 verify_cells_check() { # verify_cells_check <verb> <cmd-list> - C2 amended (R11/C-4): every &&-segment

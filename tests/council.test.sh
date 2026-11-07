@@ -4701,6 +4701,16 @@ git worktree remove --force .vulyk/court/h03/round-1 >/dev/null 2>&1
 cd "$h03_save_pwd" || exit 1
 T="$h03_save_t"; HEAD7="$h03_save_head7"
 rm -rf "$h03"
+
+echo "status --json: quoted YAML values in a story and a quoted **Branch:** marker keep the line parsable (P9-06)"
+mk_open_spec h06 2
+sed_inplace 's#^\*\*Branch:\*\* .*#**Branch:** "vulyk/h06"#' docs/specs/h06/plan.md
+printf -- '---\nstory: "h06-02"\nspec: h06\nstatus: todo\nwave: 1\nworker: '"'"'worker-code'"'"'\nmodel: "sonnet"\n---\n# S2\n' > docs/specs/h06/h06-02-second.md
+git add -A && git commit -qm "h06: quoted values" >/dev/null
+out="$(council status docs/specs/h06 --json)"
+printf '%s' "$out" | jq -e '.branch == "\"vulyk/h06\"" and .next == "build:1"
+  and (.wave_stories | map(select(.file | endswith("h06-02-second.md"))) | .[0] | .story == "\"h06-02\"" and .model == "\"sonnet\"" and .worker == "'"'"'worker-code'"'"'")' >/dev/null 2>&1 \
+  && echo "  ok    the line parses; branch and the story's values come back as written" || { echo "::error::status: $out"; fail=1; }
 fi # part hardening
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
