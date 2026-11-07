@@ -127,10 +127,21 @@ def emit(payload):
 
 
 def read_stdin_json():
+    # Claude Code writes the payload as UTF-8. sys.stdin decodes with the locale's code page
+    # (cp1251 on a Cyrillic Windows), which garbles a non-ASCII transcript_path into a file
+    # that does not exist: 0 tokens, so no banner, no dump. Read bytes and decode them here.
     try:
-        raw = sys.stdin.read()
+        data = getattr(sys.stdin, "buffer", None)
+        data = data.read() if data is not None else sys.stdin.read()
     except Exception:
         return {}
+    if isinstance(data, bytes):
+        try:
+            raw = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raw = data.decode(getattr(sys.stdin, "encoding", None) or "utf-8", "replace")  # the old path
+    else:
+        raw = data
     if not raw or not raw.strip():
         return {}
     try:
