@@ -3251,7 +3251,9 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
 
   local dateonly; dateonly="$(date -u +%Y-%m-%d)"
   local marker_text="**After escalation (round $N, $dateonly).**"
-  local already=0; grep -qF "$marker_text" "$BRIEF" 2>/dev/null && already=1
+  # P9-16: idempotent per round, not per day - the date stays in the marker but out of the key,
+  # or a re-run the next day appended a second decision and raised the ceiling again.
+  local already=0; grep -qF "**After escalation (round $N, " "$BRIEF" 2>/dev/null && already=1
 
   local STEP; STEP="$(tier_ceiling "$(tier_of "$SPEC")")"
   local OLDCEIL; OLDCEIL="$(head -1 "$SPEC/council/CEILING" 2>/dev/null | tr -d '[:space:]')"; [ -n "$OLDCEIL" ] || OLDCEIL="$STEP"

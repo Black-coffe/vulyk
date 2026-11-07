@@ -4758,6 +4758,17 @@ out="$(council close-story docs/specs/h13/h13-01-first.md 2>&1)"; ex=$?
   && echo "  ok    line 4 is status: done, the two body lines are unchanged" \
   || { echo "::error::exit=$ex out=$out story: $(cat docs/specs/h13/h13-01-first.md)"; fail=1; }
 git add -A && git commit -qm "h13: closed" >/dev/null
+
+echo "reopen: the same round reopened again on a later day keeps its ceiling and its one decision (P9-16)"
+h16ceil="$(cat docs/specs/h07/council/CEILING 2>/dev/null)"
+sed_inplace 's/^\*\*After escalation (round 1, [0-9-]*)\.\*\*$/**After escalation (round 1, 2020-01-01).**/' docs/specs/h07/brief.md # h07's reopen above, as if made on an earlier day
+out="$(council reopen docs/specs/h07 "again the next day" 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -n "$h16ceil" ] && [ "$(cat docs/specs/h07/council/CEILING)" = "$h16ceil" ] \
+  && [ "$(grep -cF '**After escalation (round 1,' docs/specs/h07/brief.md)" -eq 1 ] && grep -qF '(round 1, 2020-01-01)' docs/specs/h07/brief.md \
+  && ! grep -qF 'again the next day' docs/specs/h07/brief.md \
+  && echo "  ok    ceiling still $h16ceil, one After escalation block for round 1" \
+  || { echo "::error::exit=$ex ceiling=$(cat docs/specs/h07/council/CEILING 2>&1) (was $h16ceil) brief: $(cat docs/specs/h07/brief.md)"; fail=1; }
+git add -A && git commit -qm "h07: reopened" >/dev/null
 fi # part hardening
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
