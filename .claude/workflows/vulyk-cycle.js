@@ -107,13 +107,23 @@ const refusedClaim = (r) => r.ok === false && (r.verb === 'claim' || r.failed ==
 // One `advance`; its ok:false line comes back for the caller to stop on. A line that is not
 // JSON, or an ok line without a status, costs one read-only `status --json` - the verb may
 // already have acted - and a second unreadable line ends the run with that raw line.
+// Not after `--claim`, unless the line said ok:true (advance stops on a refused claim): status
+// does not name the DRIVER holder, so it cannot prove the claim, and a run on another driver's
+// claim would dispatch beside it. That run stops before any dispatch, still releasing (a stamp it
+// does not hold is refused); a relaunch claims afresh.
 const advance = async (flags) => {
   const cmd = `advance ${spec} --stamp ${stamp}${flags}`
   let res = null
-  try { res = await ask(cmd) } catch (e) { if (!(e instanceof BadLine)) throw e }
+  let bad = null
+  try { res = await ask(cmd) } catch (e) { if (!(e instanceof BadLine)) throw e; bad = e.line }
   if (res !== null && refusedClaim(res)) claimed = false
   if (res !== null && res.exit === 3) throw new Paused()
   if (res !== null && (res.ok === false || isStatus(res.status))) return res
+  if (flags.includes('--claim') && !(res !== null && res.ok === true)) {
+    const line = bad === null ? JSON.stringify(res) : bad
+    return { ok: false, verb: 'advance', failed: 'claim', exit: 2, next: 'error', steps: [],
+      error: `unreadable result from "${cmd}": the claim is unproven, launch again; clerk line: ${line}` }
+  }
   log(`cycle-clerk: unreadable result from "${cmd}", reading status instead`)
   const st = await ask(`status ${spec} --json`)
   if (st.exit === 3) throw new Paused()

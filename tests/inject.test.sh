@@ -57,6 +57,10 @@ expect_absent() { # expect_absent <label> <needle>   (reads the output to judge 
   else ok "$label"; fi
 }
 
+expect_eq() { # expect_eq <label> <want> <got>
+  if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 - expected '$2', got '$3'"; fi
+}
+
 expect_silent() { # expect_silent <label>   (reads run's output: the hook's stdout, then rc=N)
   local label="$1" out; out="$(cat)"
   if [ "$out" = "rc=0" ]; then ok "$label"
@@ -233,6 +237,14 @@ printf '%s' "$c" | expect_absent "Bash: a card whose globs miss every token stay
 printf '%s' "$c" | expect_absent "Bash: a revoked cmd: card stays out" "REVOKEDNEVER"
 o="$(run "$HIVE" "$(bashcall s6 "python \\\"$W/pipeline/voiceover.py\\\" --check")")"
 printf '%s' "$o" | ctx | expect "Bash: a quoted absolute path token is made repo-relative" "voice-text"
+# P10-15: a quoted path with a space was split into pieces no glob matched.
+printf -- '---\nid: notes-space\ntitle: Notes with a space\nstatus: text\npaths: ["My Notes/*.md"]\n---\n\n## Never\n- SPACENEVER edit notes blind.\n' > "$D/notes-space.md"
+run "$HIVE" "$(bashcall s6q 'cat \"My Notes/a.md\" | wc -l')" | ctx | expect "P10-15: a double-quoted path with a space matches its glob" "✗ SPACENEVER"
+run "$HIVE" "$(bashcall s6r "sed -n 1p 'My Notes/b.md'")" | ctx | expect "P10-15: a single-quoted path with a space matches too" "✗ SPACENEVER"
+run "$HIVE" "$(bashcall s6s "python \\\"$W/My Notes/c.md\\\"")" | ctx | expect "P10-15: a quoted absolute path with a space is made repo-relative" "✗ SPACENEVER"
+run "$HIVE" "$(bashcall s6t 'echo \"a\" \"My Notes/d.md\"')" | ctx | expect "P10-15: quotes pair left to right across tokens" "✗ SPACENEVER"
+run "$HIVE" "$(bashcall s6u 'cat My Notes/a.md')" | expect_silent "P10-15 neighbour: the unquoted words are two arguments, no match"
+rm -f "$D/notes-space.md"
 run "$HIVE" "$(bashcall s3 'ls -la docs && git status')" | expect_silent "an unrelated Bash command is silent"
 
 # --- reset on SessionStart --------------------------------------------------------------------
@@ -352,6 +364,45 @@ if ( VULYK_PY=""; PATH="$T/stubbin:$PATH"; vulyk_python ); then
   if printf '%s' "$o" | grep -q additionalContext; then ok "a python3 stub exiting 9009 falls through to python"
   else bad "a python3 stub silenced the hook"; fi
 else echo "  skip  no python on PATH besides python3"; fi
+
+# P10-10: exit 1 was taken as "python ran" (a Python 2 named python3, a broken install), and neither a
+# preset $VULYK_PY nor Windows' `py` launcher was tried.
+echo "--- P10-10: which python runs the hook"
+REALPY="$(command -v "$PYBIN")"
+mkdir -p "$T/py1bin" "$T/pyonly"
+printf '#!/bin/sh\necho "half a line"\nexit 1\n' > "$T/py1bin/python3"; chmod +x "$T/py1bin/python3"
+o="$(edit p10a "$W/pipeline/voiceover.py" | env -u VULYK_PY PATH="$T/py1bin:$PATH" CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK")"
+printf '%s' "$o" | ctx | expect "P10-10: a python3 exiting 1 falls through to the next python" "voice-text"
+printf '%s' "$o" | expect_absent "P10-10: and the failed one's output is not printed" "half a line"
+printf '#!/bin/sh\n: > "%s/vpy-used"\nexec "%s" "$@"\n' "$T" "$REALPY" > "$T/vpy"; chmod +x "$T/vpy"
+o="$(edit p10b "$W/pipeline/voiceover.py" | VULYK_PY="$T/vpy" PATH="$T/py1bin:$PATH" CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK")"
+expect_eq "P10-10: a preset VULYK_PY is tried first" yes "$([ -e "$T/vpy-used" ] && echo yes || echo no)"
+printf '%s' "$o" | ctx | expect "P10-10: ... and injects" "voice-text"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$(command -v cat)" > "$T/pyonly/cat"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$REALPY" > "$T/pyonly/py"; chmod +x "$T/pyonly/cat" "$T/pyonly/py"
+o="$(edit p10c "$W/pipeline/voiceover.py" | env -u VULYK_PY PATH="$T/pyonly" CLAUDE_PROJECT_DIR="$HIVE" "$BASH" "$HOOK")"
+printf '%s' "$o" | ctx | expect "P10-10: with only py on PATH the hook still runs" "voice-text"
+
+# P10-11: an Agent / WebFetch / mcp__ call started python (0.5-2 s on Windows) in a library no `tool:` card
+# could match. A python3 stub that leaves a mark shows whether python was started at all.
+echo "--- P10-11: no tool: card, no python start"
+mkdir -p "$T/markbin"; printf '#!/bin/sh\n: > "%s/py-started"\nexit 9009\n' "$T" > "$T/markbin/python3"; chmod +x "$T/markbin/python3"
+started() { # started <root> <json>   -> yes when the hook tried a python, else no
+  rm -f "$T/py-started"
+  printf '%s' "$2" | env -u VULYK_PY PATH="$T/markbin:$PATH" CLAUDE_PROJECT_DIR="$1" bash "$HOOK" >/dev/null 2>&1
+  [ -e "$T/py-started" ] && echo yes || echo no
+}
+for t in Agent WebFetch mcp__chrome-devtools__click BashOutput; do
+  expect_eq "P10-11: $t in a library with no tool: card starts no python" no \
+    "$(started "$HIVE" "{\"session_id\":\"p11\",\"tool_name\":\"$t\",\"tool_input\":{\"url\":\"https://x\"}}")"
+done
+expect_eq "P10-11 neighbour: an Agent call in a library with a tool: card still starts python" yes \
+  "$(started "$H2" '{"session_id":"p11","tool_name":"Agent","tool_input":{"prompt":"x"}}')"
+expect_eq "P10-11 neighbour: an Edit call in a library with no tool: card still starts python" yes \
+  "$(started "$HIVE" "$(edit p11 "$W/pipeline/voiceover.py")")"
+expect_eq "P10-11 neighbour: a payload with no tool_name (SessionStart) still starts python" yes \
+  "$(started "$HIVE" '{"session_id":"p11","source":"compact"}' )"
+run "$H2" "$(tool p11b WebFetch)" | ctx | expect "P10-11 neighbour: the tool: card itself is still injected" "✗ WEBNEVER fetch blind."
 
 # --- cards on reading a story (0.41): a Read of a story file delivers the cards for its ## Files ------
 echo "--- story read"
