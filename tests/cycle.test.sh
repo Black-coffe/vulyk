@@ -523,6 +523,20 @@ printf '%s' "$out" | grep -qF "'no-such-cell'" && { echo "::error::the sidecar's
 rm -f CLAUDE.vulyk.md
 git add -A && git commit -qm "wcell fixture" >/dev/null
 
+echo "P9-12: a verification glob that matches nothing is still a path for verify-gap (globstar and nullglob are on)"
+mkdir -p docs/specs/wgap src/wgap && printf 'x\n' > src/wgap/a.txt
+wgap_story() { # wgap_story <nn> <file> <verification>
+  printf -- '---\nstory: wgap-%s\nspec: wgap\nstatus: todo\nwave: %s\n---\n# G%s\n\n## Files\n- %s\n\n## Verification\n%s\n' \
+    "$1" "$1" "$1" "$2" "$3" > "docs/specs/wgap/wgap-$1-g.md"
+}
+wgap_story 01 app.txt '`bash nothere/**/*.sh`'
+wgap_story 02 src/wgap/a.txt '`cat src/**/*.txt`'
+out="$(bash scripts/wave-check.sh docs/specs/wgap)"
+printf '%s' "$out" | expect "a glob matching nothing outside ## Files is a verify-gap" "verify-gap: wgap-01's verification"
+printf '%s' "$out" | grep -qF "verify-gap: wgap-02" && { echo "::error::a glob covering the story's file was reported: $out"; fail=1; } \
+  || echo "  ok    a ** glob covering the story's own file is no verify-gap"
+rm -rf docs/specs/wgap src/wgap
+
 echo "fast-verification-04: wave-check reports a segment naming a round-only row, not its unmarked --part neighbour"
 cat > CLAUDE.vulyk.md <<'EOF'
 # Sidecar constitution
