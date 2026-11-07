@@ -18,6 +18,9 @@
 # Agents get no env off-switch. The owner turns the guard off by removing its entry from
 # .claude/settings.json; install.sh then leaves it removed.
 #
+# Law 5 (0.48.1): the main session is denied `cycle.sh close-story <story>` when the story's plan.md says
+# Tier 3 or 4: there a worker closes its own story, and a returned worker's story is re-dispatched, never
+# finished by the Queen. A subagent and Tier 1-2 pass; `stamp-red` passes (ADR-025's re-stamp escape).
 # Fails open: no python, bad JSON, a non-git command or any error -> silent exit 0.
 # `--check <file>` (the card's check): reads hook input from <file>; a `porcelain` field stands in for
 # `git status --porcelain`. Exit 1 on a deny (the reason on stdout), 0 otherwise, also for a file that
@@ -29,7 +32,7 @@ if [ "${1:-}" = "--check" ]; then
 else
   IFS= read -r -d '' IN   # a builtin: no `cat`, so an empty PATH still exits 0 in silence
 fi
-case "$IN" in *git*) ;; *) exit 0 ;; esac
+case "$IN" in *git*|*close-story*) ;; *) exit 0 ;; esac
 for PY in python3 python; do
   command -v "$PY" >/dev/null 2>&1 || continue
   printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \
@@ -271,6 +274,28 @@ def status(cwd, paths, fake):
     return out
 
 
+def story_tier(base, story):
+    """The leading digit of the first **Tier:** line of the story's plan.md, else None."""
+    plan = os.path.join(base, os.path.dirname(story), 'plan.md')
+    try:
+        with open(plan, encoding='utf-8', errors='replace') as f:
+            for line in f:
+                if line.startswith('**Tier:**'):
+                    m = re.match(r'\s*([1-4])', line[len('**Tier:**'):])
+                    return int(m.group(1)) if m else None
+    except OSError:
+        return None
+    return None
+
+
+def closes_story(seg):
+    """The story path of a `cycle.sh close-story <story>` simple command, else None."""
+    for k, w in enumerate(seg[:-2]):
+        if os.path.basename(w.replace('\\', '/')) == 'cycle.sh' and seg[k + 1] == 'close-story':
+            return seg[k + 2]
+    return None
+
+
 def deny(reason):
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                              "permissionDecision": "deny",
@@ -289,7 +314,7 @@ def main():
     if tool not in ('Bash', 'PowerShell'):
         sys.exit(0)
     cmd = (data.get('tool_input') or {}).get('command')
-    if not isinstance(cmd, str) or 'git' not in cmd:
+    if not isinstance(cmd, str) or ('git' not in cmd and 'close-story' not in cmd):
         sys.exit(0)
     sub = bool(data.get('agent_id'))
     cwd = str(data.get('cwd') or os.getcwd())
@@ -306,6 +331,13 @@ def main():
         if moved is not None:
             here = moved
             continue
+        story = None if sub else closes_story(seg)
+        if story and (story_tier(cwd if here == UNKNOWN else here, story) or 0) >= 3:
+            deny('VULYK Law 5: `cycle.sh close-story %s` from the main session - this is a Tier 3-4 story, so its '
+                 'worker closes it and the Queen never finishes a returned worker\'s story herself, nor edits '
+                 'its files. Write the error under its ## Findings and dispatch its worker again, or stop for '
+                 'the owner, who can close it in their own terminal.'
+                 % story)
         call = git_call(seg)
         if not call:
             continue

@@ -846,6 +846,28 @@ case "$(git -C "$SRC" ls-files -s .claude/hooks/git-guard.sh)" in
 esac
 echo a > "$GG/sub/f"
 
+echo "--- git guard: Law 5 - the main session never closes a Tier 3-4 story (0.48.1)"
+mkdir -p "$GG/docs/specs/hv" "$GG/docs/specs/solo"
+printf '# hv\n\n**Tier:** 3 · **Spec slug:** `hv`\n' > "$GG/docs/specs/hv/plan.md"
+printf '# solo\n\n**Tier:** 2 · **Spec slug:** `solo`\n' > "$GG/docs/specs/solo/plan.md"
+printf -- '---\nstory: hv-01\nstatus: todo\nreturned: DONE\n---\n' > "$GG/docs/specs/hv/hv-01.md"
+printf -- '---\nstory: solo-01\nstatus: todo\nreturned: DONE\n---\n' > "$GG/docs/specs/solo/solo-01.md"
+out="$(guard Bash "bash scripts/cycle.sh close-story docs/specs/hv/hv-01.md --commit --stamp s1")"
+printf '%s' "$out" | expect "law5: the original case (the Queen closes a returned Tier 3 story) is denied" '"deny"'
+printf '%s' "$out" | expect "law5: the refusal names the re-dispatch" "dispatch"
+guard PowerShell "bash scripts/cycle.sh close-story ./docs/specs/hv/hv-01.md" \
+  | expect "law5: the neighbour form (PowerShell, ./path, no flags) is denied" '"deny"'
+guard Bash "git add -A && bash scripts/cycle.sh close-story docs/specs/hv/hv-01.md --commit" \
+  | expect "law5: a close-story after another command is denied" '"deny"'
+guard Bash "bash scripts/cycle.sh close-story docs/specs/hv/hv-01.md --commit --stamp s1" a1 \
+  | silent "law5: a worker (subagent) closes its own Tier 3 story"
+guard Bash "bash scripts/cycle.sh close-story docs/specs/solo/solo-01.md --commit" \
+  | silent "law5: the Queen closes a Tier 2 story herself"
+guard Bash "bash scripts/cycle.sh stamp-red docs/specs/hv/hv-01.md" \
+  | silent "law5: stamp-red stays the Queen's escape (ADR-025), not a close"
+guard Bash "grep -n close-story scripts/cycle.sh" | silent "law5: a grep for close-story passes"
+rm -rf "$GG/docs/specs"
+
 echo "--- git guard: fails open, card fixtures"
 out="$(printf 'not json' | bash "$GUARD" 2>&1; echo "exit=$?")"
 [ "$out" = "exit=0" ] && ok "git-guard: broken JSON exits 0, silent" || bad "git-guard: broken JSON - got: $out"

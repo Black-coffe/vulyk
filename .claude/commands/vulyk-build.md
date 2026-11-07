@@ -78,6 +78,9 @@ No driver, no clerk, no court. Loop:
    - `stop.verb` `claim`: another driver holds the spec. Run the release command the error names only
      if that driver is known dead.
    - Any other `stop`: print `stop.error` and the journal tail, and stop. No `stop`: see Terminal.
+   - A story a worker returned unclosed is never finished here (Law 5): no edit to its files, no
+     `close-story` (the git guard denies it at Tier 3-4). Its error goes under `## Findings`, its worker is
+     dispatched again, or the owner decides.
 
 Without the Workflow tool, run the solo loop from this session with the stamp, but agents do the work:
 - Begin with `advance --stamp <S> --claim`; every later call carries `--stamp <S>`; every exit runs
@@ -136,7 +139,8 @@ Then go on. A refusal on the redispatch is the existing stop: an absent seat, a 
 - `manual:<ids>` (or a driver `stop.verb` `manual`): a story waits on a hand step. Do it (or ask the
   owner), run `bash scripts/cycle.sh manual-done docs/specs/<slug> <id> "<note>"` per id, then build again.
 - `close-story:<file>`: a story from before 0.18 still says `status: in-progress`. Set it to `todo`
-  if its work is unfinished, or run `bash scripts/cycle.sh close-story <file> --commit` if it is done,
+  if its work is unfinished, or, if it is done, run `bash scripts/cycle.sh close-story <file> --commit`
+  (Tier 1-2) or dispatch its worker to close it (Tier 3-4),
   then build again.
 - `ok:false` from any verb: print `failed` and `error`, run `bash scripts/journal.sh docs/specs/<slug>
   03-building "<failed> exit <exit>" "<error>, stopped for a human"`, and stop.
