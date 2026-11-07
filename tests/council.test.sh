@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite hardening" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -4645,6 +4645,131 @@ out="$(council suite docs/specs/sxno 2>&1)"; ex=$?
   && [ "$(tail -1 docs/specs/sxno/council/round-1/suite.log)" = "SUITE: none" ] \
   && echo "  ok    no row -> SUITE: none, steps 0, done" || { echo "::error::suite none: exit=$ex out=$out"; fail=1; }
 fi # part suite
+
+if part hardening; then # --- part hardening: free text and odd values that broke a ledger, a report or a path (audit P9)
+
+echo "escalate: a note holding quotes is JSON-escaped - it never forges a key, jq still reads the row (P9-01)"
+mk_open_spec h01 2
+set_tier h01 1
+mk_open_round h01 1 >/dev/null
+h01note='owner says","verdict":"GREEN in C:\tmp\x'
+out="$(council escalate docs/specs/h01 --reason half "$h01note" 2>&1)"; ex=$?
+row="$(grep '"spec":"h01"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 6 ] && printf '%s' "$row" | jq -e --arg n "$h01note" '.verdict == "ESCALATE" and .note == $n' >/dev/null 2>&1 \
+  && echo "  ok    the row parses, verdict ESCALATE, the note is the text given" || { echo "::error::exit=$ex row=$row"; fail=1; }
+council status docs/specs/h01 --json | jq -r .next | expect "status still reads the round as escalated, not green" "escalated"
+
+echo "record-seat: attempt 2 rewrites an unevidenced GREEN whose text holds # & \\ - the rest of the report survives (P9-02)"
+mk_spec h02 2
+rd_h02="$(mk_open_round h02 1)"
+report_h02() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf '%s\n' 'ASK 1: GREEN - ask one - run: c saw: ok' 'ASK 2: GREEN - ask #2 & C:\dir\n - looked fine'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+report_h02 | council record-seat docs/specs/h02 1 sonnet >/dev/null 2>&1; ex1=$?
+report_h02 | council record-seat docs/specs/h02 1 sonnet >/dev/null 2>&1; ex2=$?
+[ "$ex1" -eq 4 ] && [ "$ex2" -eq 0 ] \
+  && grep -qxF 'ASK 2: N/A - ask #2 & C:\dir\n - why: unevidenced on attempt 2' "$rd_h02/sonnet.md" \
+  && grep -qxF 'ASK 1: GREEN - ask one - run: c saw: ok' "$rd_h02/sonnet.md" \
+  && grep -qxF 'VERDICT: GREEN' "$rd_h02/sonnet.md" && grep -qxF 'BREACH: none' "$rd_h02/sonnet.md" \
+  && echo "  ok    ASK 2 rewritten to N/A verbatim, ASK 1, VERDICT and the labels kept" \
+  || { echo "::error::ex1=$ex1 ex2=$ex2 sonnet.md: $(cat "$rd_h02/sonnet.md" 2>&1)"; fail=1; }
+
+echo "open-round: an orphan court in a hive whose path holds a space is removed whole, never by fragment (P9-03)"
+h03="$(mktemp -d)"
+mkdir -p "$h03/my" "$h03/my hive"
+: > "$h03/my/keep" # what the first fragment of "<h03>/my hive/.vulyk/court/..." names
+h03_save_t="$T" h03_save_head7="$HEAD7" h03_save_pwd="$PWD"
+cd "$h03/my hive" || exit 1
+git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
+mkdir -p scripts memory/stats docs/specs .claude
+cp "$SRC"/scripts/lib.sh "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh \
+  "$SRC"/scripts/suite-parts-check.sh "$SRC"/scripts/run-capped.py scripts/
+cp "$h03_save_pwd/.gitignore" "$h03_save_pwd/CLAUDE.md" .
+git add -A && git commit -qm init >/dev/null
+T="$h03/my hive"; HEAD7="$(git rev-parse --short HEAD)"
+mk_open_spec h03 2
+set_tier h03 3
+git worktree add --detach -q "$PWD/.vulyk/court/h03/round-0" HEAD >/dev/null 2>&1 # a crashed round's court, still registered
+out="$(council open-round docs/specs/h03 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -f "$h03/my/keep" ] && [ ! -d .vulyk/court/h03/round-0 ] && [ -d .vulyk/court/h03/round-1 ] \
+  && ! git worktree list --porcelain | grep -qF '/.vulyk/court/h03/round-0' \
+  && echo "  ok    the orphan court is gone and unregistered, round 1 has its court, the sibling directory is untouched" \
+  || { echo "::error::exit=$ex keep=$([ -f "$h03/my/keep" ] && echo kept || echo DELETED) out=$out worktrees=$(git worktree list 2>&1)"; fail=1; }
+git worktree remove --force .vulyk/court/h03/round-1 >/dev/null 2>&1
+cd "$h03_save_pwd" || exit 1
+T="$h03_save_t"; HEAD7="$h03_save_head7"
+rm -rf "$h03"
+
+echo "status --json: quoted YAML values in a story and a quoted **Branch:** marker keep the line parsable (P9-06)"
+mk_open_spec h06 2
+sed_inplace 's#^\*\*Branch:\*\* .*#**Branch:** "vulyk/h06"#' docs/specs/h06/plan.md
+printf -- '---\nstory: "h06-02"\nspec: h06\nstatus: todo\nwave: 1\nworker: '"'"'worker-code'"'"'\nmodel: "sonnet"\n---\n# S2\n' > docs/specs/h06/h06-02-second.md
+git add -A && git commit -qm "h06: quoted values" >/dev/null
+out="$(council status docs/specs/h06 --json)"
+printf '%s' "$out" | jq -e '.branch == "\"vulyk/h06\"" and .next == "build:1"
+  and (.wave_stories | map(select(.file | endswith("h06-02-second.md"))) | .[0] | .story == "\"h06-02\"" and .model == "\"sonnet\"" and .worker == "'"'"'worker-code'"'"'")' >/dev/null 2>&1 \
+  && echo "  ok    the line parses; branch and the story's values come back as written" || { echo "::error::status: $out"; fail=1; }
+
+echo "reopen, pause, journal.sh: a credential in the owner's text is masked before brief.md, PAUSE and journal.md (P9-07)"
+h07secret="sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+mk_open_spec h07 2
+set_tier h07 1
+mk_open_round h07 1 >/dev/null
+council escalate docs/specs/h07 >/dev/null 2>&1
+council reopen docs/specs/h07 "rotate $h07secret and go on" >/dev/null 2>&1; ex1=$?
+council pause docs/specs/h07 "pasted $h07secret by mistake" >/dev/null 2>&1; ex2=$?
+bash scripts/journal.sh docs/specs/h07 03-building "fallback note with $h07secret" build:1 >/dev/null
+[ "$ex1" -eq 0 ] && [ "$ex2" -eq 0 ] && ! grep -qF "$h07secret" docs/specs/h07/brief.md docs/specs/h07/PAUSE docs/specs/h07/journal.md \
+  && grep -qF '> rotate [VULYK:REDACTED] and go on' docs/specs/h07/brief.md && grep -qF 'pasted [VULYK:REDACTED] by mistake' docs/specs/h07/PAUSE \
+  && [ "$(grep -cF '[VULYK:REDACTED]' docs/specs/h07/journal.md)" -eq 2 ] \
+  && echo "  ok    brief.md, PAUSE and journal.md carry the mask, never the token" \
+  || { echo "::error::ex1=$ex1 ex2=$ex2 $(grep -nF -e "$h07secret" -e REDACTED docs/specs/h07/brief.md docs/specs/h07/PAUSE docs/specs/h07/journal.md 2>&1)"; fail=1; }
+rm -f docs/specs/h07/PAUSE
+
+echo "close-story: only the frontmatter status: line becomes done, a body status: line is left as written (P9-13)"
+mkdir -p docs/specs/h13
+cat > docs/specs/h13/h13-01-first.md <<'EOF'
+---
+story: h13-01
+spec: h13
+status: todo
+returned: DONE
+wave: 1
+---
+# Body lines that look like frontmatter
+
+status: todo
+status: in-progress
+
+## Files
+- docs/specs/h13/flag.txt
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "spec(h13): fixture" >/dev/null
+printf 'ok\n' > docs/specs/h13/flag.txt
+out="$(council close-story docs/specs/h13/h13-01-first.md 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(sed -n 4p docs/specs/h13/h13-01-first.md)" = "status: done" ] \
+  && [ "$(grep -c '^status:' docs/specs/h13/h13-01-first.md)" -eq 3 ] \
+  && grep -qx 'status: todo' docs/specs/h13/h13-01-first.md && grep -qx 'status: in-progress' docs/specs/h13/h13-01-first.md \
+  && echo "  ok    line 4 is status: done, the two body lines are unchanged" \
+  || { echo "::error::exit=$ex out=$out story: $(cat docs/specs/h13/h13-01-first.md)"; fail=1; }
+git add -A && git commit -qm "h13: closed" >/dev/null
+
+echo "reopen: the same round reopened again on a later day keeps its ceiling and its one decision (P9-16)"
+h16ceil="$(cat docs/specs/h07/council/CEILING 2>/dev/null)"
+sed_inplace 's/^\*\*After escalation (round 1, [0-9-]*)\.\*\*$/**After escalation (round 1, 2020-01-01).**/' docs/specs/h07/brief.md # h07's reopen above, as if made on an earlier day
+out="$(council reopen docs/specs/h07 "again the next day" 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -n "$h16ceil" ] && [ "$(cat docs/specs/h07/council/CEILING)" = "$h16ceil" ] \
+  && [ "$(grep -cF '**After escalation (round 1,' docs/specs/h07/brief.md)" -eq 1 ] && grep -qF '(round 1, 2020-01-01)' docs/specs/h07/brief.md \
+  && ! grep -qF 'again the next day' docs/specs/h07/brief.md \
+  && echo "  ok    ceiling still $h16ceil, one After escalation block for round 1" \
+  || { echo "::error::exit=$ex ceiling=$(cat docs/specs/h07/council/CEILING 2>&1) (was $h16ceil) brief: $(cat docs/specs/h07/brief.md)"; fail=1; }
+git add -A && git commit -qm "h07: reopened" >/dev/null
+fi # part hardening
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
 [ -s "$FAILS" ] && fail=1 # an expect() that ran on the right of a pipe
