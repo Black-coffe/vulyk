@@ -229,6 +229,20 @@ rc, out = restore(proj, home, "compact", "other-window")
 check("P10-05 compaction restores its own session's handoff", rc == 0 and "SEED-other-window" in out, out[:200])
 
 
+# --- P10-06: the restore cut keeps the `## Summary` at the end of the document -----------------
+print("--- P10-06 restore keeps ## Summary")
+home, proj = fresh("p06")
+long_body = ("---\nhandoff: true\n---\n\n# Handoff\n\n## Recent user prompts\n\n"
+             + "".join("%d. %s\n" % (i, rep(90, "x")) for i in range(60))
+             + "\n## Summary\n\nSUMMARY-NEXT-STEP: run the migration\n")
+seed_handoff(proj, "s06", body=long_body)
+rc, out = restore(proj, home, "compact", "s06")
+ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"] if out else ""
+check("P10-06 a handoff over restore_max_chars still carries its ## Summary",
+      "SUMMARY-NEXT-STEP" in ctx and "## Summary" in ctx, ctx[-300:])
+check("P10-06 ... and is still cut near the cap", len(long_body) > 5000 and len(ctx) < 4000 + 800, str(len(ctx)))
+
+
 shutil.rmtree(os.path.dirname(ROOT), ignore_errors=True)
 print()
 if fails:

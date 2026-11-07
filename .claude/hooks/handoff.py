@@ -916,6 +916,25 @@ def mode_dump_hook(payload, cfg, reason, min_tokens_check=True):
 RESTORE_SOURCES = ("clear", "compact")
 
 
+def clip_handoff(body, cap):
+    """body cut to about cap characters, keeping its last `## Summary` section.
+
+    The summary is the model-written narrative and the document's last section, so a
+    plain head cut dropped exactly it. The head gets what the summary leaves; a summary
+    longer than the cap is itself cut, since it is worth more than the mechanical head.
+    """
+    if len(body) <= cap:
+        return body
+    mark = "\n...(truncated)\n\n"
+    at = body.rfind("\n## Summary")
+    if at == -1:
+        return body[:cap] + "\n\n...(truncated)"
+    tail = body[at + 1:]
+    if len(tail) >= cap:
+        return tail[:cap] + "\n\n...(truncated)"
+    return body[:cap - len(tail)] + mark + tail
+
+
 def mode_sessionstart(payload, cfg, root):
     source = (payload.get("source") or "").lower()
     if source not in RESTORE_SOURCES:
@@ -949,8 +968,7 @@ def mode_sessionstart(payload, cfg, root):
     except Exception:
         emit(None)
     cap = positive_int(cfg.get("restore_max_chars")) or DEFAULTS["restore_max_chars"]
-    if len(body) > cap:
-        body = body[:cap] + "\n\n...(truncated)"
+    body = clip_handoff(body, cap)
 
     try:
         meta["consumed_by_startup"] = True
