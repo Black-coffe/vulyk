@@ -924,6 +924,14 @@ floorcheck CLAUDE_CODE_USE_BEDROCK=1 ANTHROPIC_DEFAULT_OPUS_MODEL=anthropic.clau
 expect_eq "--floor is clean on a provider with every family pinned at the floor" "0" "$?"
 floorcheck VULYK_MODEL_FLOOR='haiku 5.5 unreleased' CLAUDE_CODE_SUBAGENT_MODEL=haiku 2>&1 | expect "--floor names a route to an unreleased floor" \
   "env CLAUDE_CODE_SUBAGENT_MODEL = haiku - no haiku at its floor 5.5 has shipped"
+# P9-09: the opus-builds profile hands the gate to fable; --floor read no profile, so that route went unjudged.
+cp "$SRC/scripts/model-profile.sh" "$FLOORHIVE/scripts/"
+printf 'opus-builds\n' > "$FLOORHIVE/home/.claude/vulyk-model-profile"
+OUT="$(floorcheck VULYK_MODEL_FLOOR='fable 5.1 unreleased' 2>&1)"; RC=$?
+expect_eq "--floor exits 1 when the profile's gate model is below its floor" "1" "$RC"
+printf '%s\n' "$OUT" | expect "--floor names the profile's gate model" \
+  "gate model (profile opus-builds) = fable - no fable at its floor 5.1 has shipped"
+rm -f "$FLOORHIVE/scripts/model-profile.sh" "$FLOORHIVE/home/.claude/vulyk-model-profile"
 mkdir -p "$FLOORHIVE/docs/specs/demo"
 printf -- '---\nstory: demo-01\nmodel: claude-opus-4-6   # pinned\n---\n' > "$FLOORHIVE/docs/specs/demo/demo-01-x.md"
 floorcheck 2>&1 | expect "--floor names a story pinned below the floor" "docs/specs/demo/demo-01-x.md model = claude-opus-4-6 is opus 4.6"

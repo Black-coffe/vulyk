@@ -138,7 +138,7 @@ constitution_pin() {
 # The model profile: model-profile.sh is the only reader of its file; a hive without it reads as sonnet-builds.
 MPROFILE="sonnet-builds"
 case "$MODE" in
-  print|explain)
+  print|explain|floor)   # --floor too: an opus-builds profile hands the gate to fable, and that route is judged
     MP="$(dirname "$0")/model-profile.sh"
     [ -f "$MP" ] && MPROFILE="$(bash "$MP" 2>/dev/null)"
     [ -n "$MPROFILE" ] || MPROFILE="sonnet-builds" ;;
@@ -262,8 +262,9 @@ case "$MODE" in
     # own background model, not a VULYK route.
     VARS="ANTHROPIC_MODEL ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL CLAUDE_CODE_SUBAGENT_MODEL"
     for v in $VARS; do below "env $v" "${!v:-}"; done
-    # The gate itself, when a pin chose it: a plan-chosen alias is judged by the frontmatter lines.
-    case "$SOURCE" in constitution|env) below "gate model ($SOURCE)" "$MODEL" ;; esac
+    # The gate itself, when a pin or the model profile chose it: a plan-chosen alias is judged by the
+    # frontmatter lines.
+    case "$SOURCE" in constitution|env|profile*) below "gate model ($SOURCE)" "$MODEL" ;; esac
     # Settings files a session reads: the user's, the project's, the local one. Their `env` blocks
     # set the same variables, and `model` sets the session.
     # One grep over all three files and bash for the rest: this runs at every session start.
