@@ -483,7 +483,7 @@ load_sample() { # load_sample -> one line `cpu <N>% top: <name> <pct>%, ...` (fi
   # load now; non-zero with the reason on stderr when it cannot be read. Evidence for a slow gate step,
   # never a verdict (post-046-tails). Windows (Git Bash, powershell.exe): CIM Win32_Processor.LoadPercentage
   # and Win32_PerfFormattedData_PerfProc_Process - class and property names are not localized; a process's
-  # percent is of one core, so it can pass 100. Elsewhere: ps -A (percent of one core) and uptime.
+  # percent is of one core, so it can pass 100. Elsewhere: a one-second interval (below) and uptime.
   # The sample's own processes (WmiPrvSE answering the CIM query, the powershell running it) headed the top
   # five on an idle box (post-046-tails repair 1). Matched by name only, so a real powershell or WMI load
   # carries the same names: those rows are listed after the five, `; named like the sampler: ...`, not dropped.
@@ -506,15 +506,61 @@ Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { $_.Nam
         END { if (cpu == "") exit 1; printf "cpu %s%% top: %s%s\n", cpu, top, (own == "" ? "" : "; named like the sampler: " own) }'
       return ;;
   esac
-  command -v ps >/dev/null 2>&1 || { echo "no ps on PATH" >&2; return 1; }
-  local rows n cpu top la
-  rows="$(ps -A -o pcpu= -o comm= 2>/dev/null | awk '{ p = $1; $1 = ""; sub(/^ +/, ""); sub(/.*\//, ""); printf "%s\t%s\n", p, $0 }')"
-  [ -n "$rows" ] || { echo "ps -A printed no process" >&2; return 1; }
-  n="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)"
-  cpu="$(printf '%s\n' "$rows" | awk -F'\t' -v n="$n" '{ t += $1 } END { if (n + 0 < 1) n = 1; printf "%d", t / n }')"
-  top="$(printf '%s\n' "$rows" | sort -t "$(printf '\t')" -k1,1rn | head -5 | awk -F'\t' '{ printf "%s%s %s%%", s, $2, $1; s = ", " }')"
+  # Elsewhere the load NOW, over a one-second interval (X-07): `ps -o pcpu` is a lifetime average on
+  # Linux and a decaying one on macOS, so a box busy this second read idle. Linux: /proc/stat and each
+  # /proc/<pid>/stat read twice; macOS: the second sample of `top -l 2`. Any other system: unavailable.
+  local s1 s2 out la
+  if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+    command -v top >/dev/null 2>&1 || { echo "no top on PATH" >&2; return 1; }
+    out="$(top -l 2 -s 1 -n 5 -o cpu -stats command,cpu 2>/dev/null | load_from_top_l)" || { echo "top -l printed no CPU usage line" >&2; return 1; }
+  elif [ -r /proc/stat ]; then
+    s1="$(load_proc_snap)"; sleep 1; s2="$(load_proc_snap)"
+    out="$(printf '%s\n--\n%s\n' "$s1" "$s2" | load_from_proc_snaps "$(getconf _NPROCESSORS_ONLN 2>/dev/null)")" || { echo "/proc/stat gave no interval" >&2; return 1; }
+  else
+    echo "no interval CPU source here (/proc/stat or macOS top -l)" >&2; return 1
+  fi
   la="$(uptime 2>/dev/null | sed -n 's/.*load averages*: *//p')"
-  printf 'cpu %s%% top: %s%s\n' "$cpu" "$top" "${la:+; load $la}"
+  printf '%s%s\n' "$out" "${la:+; load $la}"
+}
+
+load_proc_snap() { # load_proc_snap -> `T <total jiffies> <idle+iowait>` then `P <tab> pid <tab> ticks <tab> name` lines
+  # cat, not awk over the glob: a process gone mid-read is an error cat skips and some awks die on. The name
+  # is the text between the first `(` and the last `) `, so a name holding spaces or `)` stays whole.
+  { head -n 1 /proc/stat; cat /proc/[0-9]*/stat 2>/dev/null; } | awk '
+    NR == 1 { if ($1 != "cpu") exit; t = 0; for (i = 2; i <= 9 && i <= NF; i++) t += $i; print "T", t, $5 + $6; next }
+    { nm = $0; sub(/^[^(]*\(/, "", nm); sub(/\) [^)]*$/, "", nm)
+      r = $0; sub(/^.*\) /, "", r); split(r, f, " ")
+      printf "P\t%s\t%s\t%s\n", $1, f[12] + f[13], nm }'
+}
+
+load_from_proc_snaps() { # load_from_proc_snaps <ncpu> <stdin: snap, `--`, snap> -> `cpu <N>% top: <name> <pct>%, ...`
+  # Busy share of all cores between the two snaps; a process's share is of one core (as ps and the Windows
+  # branch print it), so it can pass 100. Only a pid in both snaps counts; 1 when the interval is empty.
+  awk -F'\t' -v n="${1:-1}" '
+    $0 == "--" { two = 1; next }
+    /^T / { split($0, w, " "); if (two) { t2 = w[2]; i2 = w[3] } else { t1 = w[2]; i1 = w[3] }; next }
+    $1 == "P" { if (!two) { a[$2] = $3; next }
+                if (($2 in a) && $3 > a[$2]) { d[$2] = $3 - a[$2]; nm[$2] = $4 } }
+    END {
+      dt = t2 - t1; if (t1 == "" || t2 == "" || dt <= 0) exit 1
+      if (n + 0 < 1) n = 1
+      printf "cpu %d%%\n", 100 * (dt - (i2 - i1)) / dt + 0.5
+      for (p in d) printf "%.1f\t%s\n", 100 * d[p] * n / dt, nm[p]
+    }' | {
+    local head rows
+    IFS= read -r head || return 1
+    rows="$(LC_ALL=C sort -t "$(printf '\t')" -k1,1rn | head -5 | awk -F'\t' '{ printf "%s%s %s%%", s, $2, $1; s = ", " }')"
+    printf '%s top: %s\n' "$head" "$rows"
+  }
+}
+
+load_from_top_l() { # load_from_top_l <stdin: top -l 2 -stats command,cpu> -> `cpu <N>% top: ...` from the
+  # second sample (the first has no interval behind it): 100 minus its idle share, and its process rows.
+  awk '
+    /^CPU usage:/ { s++; if (s == 2) { idle = $0; sub(/.*, */, "", idle); sub(/%.*/, "", idle) } ; inrows = 0; next }
+    s == 2 && $1 == "COMMAND" { inrows = 1; next }
+    s == 2 && inrows && NF >= 2 { c = $NF; $NF = ""; sub(/ +$/, ""); top = top sep $0 " " c "%"; sep = ", " }
+    END { if (idle == "") exit 1; printf "cpu %d%% top: %s\n", 100 - idle + 0.5, top }'
 }
 
 run_capped_as() { # run_capped_as <cap> <secs> <cmd> [args...] - run_capped with the cap a caller's own

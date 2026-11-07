@@ -1009,6 +1009,30 @@ got="$( PATH="$LSD:$PATH"; load_sample 2>&1 )"; ex=$?
   || { echo "::error::WmiPrvSE and powershell are listed apart from the top five - exit=$ex got: $got"; fail=1; }
 rm -rf "$LSD"
 
+echo "X-07: off Windows, load_sample reads the load over an interval, not ps's lifetime pcpu"
+# macOS: the second sample of top -l 2 (the first has no interval behind it). A stub top prints both.
+LSD="$(mktemp -d)"
+printf '#!/bin/sh\necho Darwin\n' > "$LSD/uname"
+printf '#!/bin/sh\nprintf "Processes: 1\\nCPU usage: 1.0%%%% user, 1.0%%%% sys, 98.0%%%% idle\\nCOMMAND %%%%CPU\\nlifetime 99.0\\nProcesses: 1\\nCPU usage: 20.5%%%% user, 9.0%%%% sys, 70.5%%%% idle\\nCOMMAND          %%%%CPU\\nGoogle Chrome He 31.2\\nkernel_task      12.0\\n"\n' > "$LSD/top"
+printf '#!/bin/sh\necho "10:00  up 1 day, load averages: 2.10 1.50 1.20"\n' > "$LSD/uptime"
+chmod +x "$LSD/uname" "$LSD/top" "$LSD/uptime"
+got="$( PATH="$LSD:$PATH"; load_sample 2>&1 )"; ex=$?
+[ "$ex" -eq 0 ] && [ "$got" = "cpu 30% top: Google Chrome He 31.2%, kernel_task 12.0%; load 2.10 1.50 1.20" ] \
+  && echo "  ok    macOS: cpu and the top rows come from top's second sample" \
+  || { echo "::error::macOS load_sample - exit=$ex got: $got"; fail=1; }
+printf '#!/bin/sh\necho "top: illegal option -- l"; exit 1\n' > "$LSD/top"
+got="$( PATH="$LSD:$PATH"; load_sample 2>&1 )"; ex=$?
+[ "$ex" -ne 0 ] && echo "  ok    macOS: a top with no CPU usage line fails, so the suite says LOAD: unavailable" \
+  || { echo "::error::a broken top still gave a load: $got"; fail=1; }
+rm -rf "$LSD"
+# Linux: busy share of the /proc/stat delta; a process's share of one core from its utime+stime delta. Only a
+# pid in both snaps counts (gone and new are left out), a name with spaces and `)` stays whole.
+got="$(printf 'T 1000 800\nP\t1\t100\tinit\nP\t42\t50\tmy (odd) name\nP\t7\t10\tgone\nP\t5\t1\tidle\n--\nT 1400 1000\nP\t1\t180\tinit\nP\t42\t250\tmy (odd) name\nP\t9\t30\tnew\nP\t5\t1\tidle\n' | load_from_proc_snaps 4)"
+[ "$got" = "cpu 50% top: my (odd) name 200.0%, init 80.0%" ] && echo "  ok    Linux: the load is the interval's delta, per core" \
+  || { echo "::error::load_from_proc_snaps got: $got"; fail=1; }
+printf 'T 1000 800\n--\nT 1000 800\n' | load_from_proc_snaps 4 >/dev/null && { echo "::error::an empty interval gave a load"; fail=1; } \
+  || echo "  ok    Linux: an empty interval is no load"
+
 echo "cross-platform ask 9: close-story runs the constitution's py.sh Python cell and refuses the old bare python one"
 PRE9="$(mktemp)"; cp CLAUDE.md "$PRE9"
 grep '^| Python |' "$SRC/CLAUDE.md" | tr -d '\r' >> CLAUDE.md
