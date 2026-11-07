@@ -163,7 +163,10 @@ def main():
         cmd = ti.get('command') or ''
         if not isinstance(cmd, str):
             return
-        for t in re.split(r'[\s;|&<>()]+', cmd):
+        # A quoted string with a space in it is one more token, whole: the split alone cut
+        # "docs/My Notes/a.md" into pieces no glob matches (P10-15).
+        quoted = [a or b for a, b in re.findall(r'"([^"]*)"|\'([^\']*)\'', cmd)]
+        for t in re.split(r'[\s;|&<>()]+', cmd) + [q.strip() for q in quoted if re.search(r'\s', q.strip())]:
             t = t.strip('\'"`')
             for part in {t, t.rsplit('=', 1)[-1]}:
                 part = rel(part.strip('\'"`'), root)

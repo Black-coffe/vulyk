@@ -233,6 +233,14 @@ printf '%s' "$c" | expect_absent "Bash: a card whose globs miss every token stay
 printf '%s' "$c" | expect_absent "Bash: a revoked cmd: card stays out" "REVOKEDNEVER"
 o="$(run "$HIVE" "$(bashcall s6 "python \\\"$W/pipeline/voiceover.py\\\" --check")")"
 printf '%s' "$o" | ctx | expect "Bash: a quoted absolute path token is made repo-relative" "voice-text"
+# P10-15: a quoted path with a space was split into pieces no glob matched.
+printf -- '---\nid: notes-space\ntitle: Notes with a space\nstatus: text\npaths: ["My Notes/*.md"]\n---\n\n## Never\n- SPACENEVER edit notes blind.\n' > "$D/notes-space.md"
+run "$HIVE" "$(bashcall s6q 'cat \"My Notes/a.md\" | wc -l')" | ctx | expect "P10-15: a double-quoted path with a space matches its glob" "✗ SPACENEVER"
+run "$HIVE" "$(bashcall s6r "sed -n 1p 'My Notes/b.md'")" | ctx | expect "P10-15: a single-quoted path with a space matches too" "✗ SPACENEVER"
+run "$HIVE" "$(bashcall s6s "python \\\"$W/My Notes/c.md\\\"")" | ctx | expect "P10-15: a quoted absolute path with a space is made repo-relative" "✗ SPACENEVER"
+run "$HIVE" "$(bashcall s6t 'echo \"a\" \"My Notes/d.md\"')" | ctx | expect "P10-15: quotes pair left to right across tokens" "✗ SPACENEVER"
+run "$HIVE" "$(bashcall s6u 'cat My Notes/a.md')" | expect_silent "P10-15 neighbour: the unquoted words are two arguments, no match"
+rm -f "$D/notes-space.md"
 run "$HIVE" "$(bashcall s3 'ls -la docs && git status')" | expect_silent "an unrelated Bash command is silent"
 
 # --- reset on SessionStart --------------------------------------------------------------------
