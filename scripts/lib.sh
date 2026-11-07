@@ -314,7 +314,8 @@ client_path_filled() { # client_path_filled <constitution> -> 0 iff the Profile'
 #   Haiku 5.5 shipped on 2026-10-07; Claude Code 2.1.292 still ran `haiku` as Haiku 4.5, 2.1.293 as
 #   5.5. Drop the flag once no supported Claude Code is older.
 # VULYK_MODEL_FLOOR overrides line by line, same shape, lines or `;` (`sonnet 4.5; opus 4.6`), for a
-# hive that runs lower on purpose; a family it does not name keeps the default line.
+# hive that runs lower on purpose; a family it does not name keeps the default line, and so does a
+# line with no `<major>[.<minor>]` version (`opus`, `opus x`): an empty floor would admit every model.
 model_floor() { # model_floor -> "<family> <major.minor> [unreleased|cc>=<x.y.z>]" lines
   local defaults='fable 5.1
 opus 5.5
@@ -324,7 +325,9 @@ haiku 5.5 cc>=2.1.293'
   [ -n "${VULYK_MODEL_FLOOR:-}" ] || { printf '%s\n' "$defaults"; return 0; } # the common case, no fork
   over="$(printf '%s\n' "$VULYK_MODEL_FLOOR" | tr ';,' '\n\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d')"
   printf '%s\n' "$defaults" | while read -r f _; do
-    line="$(printf '%s\n' "$over" | while read -r o rest; do [ "$o" = "$f" ] && { printf '%s %s' "$o" "$rest"; break; }; done)"
+    line="$(printf '%s\n' "$over" | while read -r o v rest; do
+      [ "$o" = "$f" ] && [[ "$v" =~ ^[0-9]+(\.[0-9]+)?$ ]] && { printf '%s %s%s' "$o" "$v" "${rest:+ $rest}"; break; }
+    done)"
     if [ -n "$line" ]; then printf '%s\n' "$line"; else printf '%s\n' "$defaults" | grep "^$f "; fi
   done 2>/dev/null # a reader that stops at its family closes the pipe early; EPIPE is not news
 }

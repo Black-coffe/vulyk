@@ -860,6 +860,11 @@ expect_eq "a partial override keeps the other families' floors" "opus 4.1 5.5" \
 expect_eq "the alias of an unreleased floor is below it"       "haiku alias 5.5" \
   "$(VULYK_MODEL_FLOOR='haiku 5.5 unreleased' floorof haiku)"
 expect_eq "the override can mark haiku released"               "ok" "$(VULYK_MODEL_FLOOR='haiku 4.5' floorof haiku)"
+# P9-11: an override line with no version used to print an empty floor, and an empty floor admitted all.
+expect_eq "an override with no version keeps the default floor" "opus 4.0 5.5" "$(VULYK_MODEL_FLOOR='opus' floorof claude-opus-4-0)"
+expect_eq "an override with a non-numeric version keeps the default floor" "opus 4.0 5.5" \
+  "$(VULYK_MODEL_FLOOR='opus x.y; sonnet 4.5' floorof claude-opus-4-0)"
+expect_eq "a major-only override still lowers the floor"      "ok" "$(VULYK_MODEL_FLOOR='opus 4' floorof claude-opus-4-0)"
 # 0.26.0: Haiku 5.5 shipped, but the alias table ships inside Claude Code - 2.1.292 still ran
 # `haiku` as Haiku 4.5, 2.1.293 as 5.5 - so the haiku line reads `cc>=2.1.293`.
 expect_eq "an alias on a Claude Code older than its cc>= line is below" "haiku cc 5.5 2.1.292 2.1.293" \
