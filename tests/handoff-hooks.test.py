@@ -243,6 +243,24 @@ check("P10-06 a handoff over restore_max_chars still carries its ## Summary",
 check("P10-06 ... and is still cut near the cap", len(long_body) > 5000 and len(ctx) < 4000 + 800, str(len(ctx)))
 
 
+# --- P10-07: compaction resets the Stop / prompt warning levels ---------------------------------
+print("--- P10-07 warning levels reset after compaction")
+home, proj = fresh("p07")
+sid = "s07"
+tp = write_transcript(os.path.join(ROOT, "p07", "tr", sid + ".jsonl"), 150000)  # 75% of 200k: level 2
+pl = {"session_id": sid, "transcript_path": tp, "cwd": proj}
+first = run("stop", env_for(home, proj), pl)[1]
+again = run("stop", env_for(home, proj), pl)[1]
+check("P10-07 a level warns once (baseline)", "systemMessage" in first and again == "", repr((first[:80], again[:80])))
+run("prompt", env_for(home, proj), pl)
+run("sessionstart", env_for(home, proj), {"session_id": sid, "cwd": proj, "source": "compact"})
+after_stop = run("stop", env_for(home, proj), pl)[1]
+after_prompt = run("prompt", env_for(home, proj), pl)[1]
+check("P10-07 after compaction the Stop banner fires again", "systemMessage" in after_stop, repr(after_stop[:120]))
+check("P10-07 after compaction the prompt nudge fires again", "additionalContext" in after_prompt,
+      repr(after_prompt[:120]))
+
+
 shutil.rmtree(os.path.dirname(ROOT), ignore_errors=True)
 print()
 if fails:

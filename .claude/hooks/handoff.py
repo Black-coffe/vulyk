@@ -937,6 +937,15 @@ def clip_handoff(body, cap):
 
 def mode_sessionstart(payload, cfg, root):
     source = (payload.get("source") or "").lower()
+    if source == "compact":
+        # Compaction keeps the session id but shrinks the context: the levels already
+        # warned about must fire again when it grows back, or the session gets no warning.
+        sid = payload.get("session_id")
+        state = load_state(root, sid)
+        if "stop_level" in state or "prompt_level" in state:
+            state.pop("stop_level", None)
+            state.pop("prompt_level", None)
+            save_state(root, sid, state)
     if source not in RESTORE_SOURCES:
         emit(None)
     idx = index_path(root)
