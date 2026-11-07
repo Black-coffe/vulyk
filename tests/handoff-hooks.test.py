@@ -188,6 +188,47 @@ check("P10-14 dump <session-id> reads the transcript under CLAUDE_CONFIG_DIR",
       rc == 0 and "context_tokens=150000" in out, "rc=%d out=%r err=%r" % (rc, out[:200], err[:200]))
 
 
+# --- P10-05: a handoff is restored once, while fresh, and after compaction only its own session's ---
+print("--- P10-05 restore once, fresh, own session")
+
+
+def seed_handoff(proj, sid, age_h=0.0, consumed=False, body=None):
+    d = os.path.join(proj, ".claude", "handoff")
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, "seed-%s.md" % sid)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(body if body is not None else "---\nhandoff: true\n---\n\n# Handoff\n\nSEED-%s\n" % sid)
+    meta = {"path": path, "session_id": sid, "reason": "sessionend-clear", "ts": time.time() - age_h * 3600}
+    if consumed:
+        meta["consumed_by_startup"] = True
+    with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
+        json.dump(meta, fh)
+    return path
+
+
+def restore(proj, home, source, sid):
+    rc, out, err = run("sessionstart", env_for(home, proj), {"session_id": sid, "cwd": proj, "source": source})
+    return rc, out
+
+
+home, proj = fresh("p05a")
+seed_handoff(proj, "old-1")
+rc, out = restore(proj, home, "clear", "new-1")
+check("P10-05 /clear restores a fresh handoff", rc == 0 and "SEED-old-1" in out, out[:200])
+rc, out = restore(proj, home, "clear", "new-2")
+check("P10-05 a second /clear does not inject the same handoff again", rc == 0 and out == "", out[:200])
+home, proj = fresh("p05b")
+seed_handoff(proj, "old-2", age_h=48)
+rc, out = restore(proj, home, "clear", "new-3")
+check("P10-05 /clear does not restore a two-day-old handoff", rc == 0 and out == "", out[:200])
+home, proj = fresh("p05c")
+seed_handoff(proj, "other-window")
+rc, out = restore(proj, home, "compact", "this-window")
+check("P10-05 compaction does not restore another session's handoff", rc == 0 and out == "", out[:200])
+rc, out = restore(proj, home, "compact", "other-window")
+check("P10-05 compaction restores its own session's handoff", rc == 0 and "SEED-other-window" in out, out[:200])
+
+
 shutil.rmtree(os.path.dirname(ROOT), ignore_errors=True)
 print()
 if fails:

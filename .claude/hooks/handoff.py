@@ -71,7 +71,7 @@ DEFAULTS = {
     # (unless ENABLE_PROMPT_CACHING_1H=1). Checkpointing inside this window
     # re-reads the conversation at cache price; outside it, at full price.
     "cache_ttl_minutes": 60,
-    # SessionStart(resume) only restores a handoff younger than this
+    # SessionStart (clear / compact) restores a handoff once, and only one younger than this
     "restore_max_age_hours": 12,
     # the restored handoff is cut to this many characters
     "restore_max_chars": 4000,
@@ -932,12 +932,16 @@ def mode_sessionstart(payload, cfg, root):
         emit(None)
 
     age_h = (time.time() - float(meta.get("ts") or 0)) / 3600.0
-    deliberate = source in ("clear", "compact")
-    if not deliberate:
-        if age_h > cfg["restore_max_age_hours"]:
-            emit(None)
-        if meta.get("consumed_by_startup"):
-            emit(None)
+    # A handoff is restored once, and only while fresh: a /clear in a session too small to
+    # dump left index.json on whatever it last named - any session, any day - and every
+    # later /clear injected that again.
+    if age_h > cfg["restore_max_age_hours"] or meta.get("consumed_by_startup"):
+        emit(None)
+    # Compaction keeps the session id and PreCompact has just dumped this session, so a
+    # handoff of another session is a parallel window's, not this one's.
+    sid = payload.get("session_id")
+    if source == "compact" and sid and meta.get("session_id") not in (None, sid):
+        emit(None)
 
     try:
         with open(path, "r", encoding="utf-8") as fh:
