@@ -224,8 +224,11 @@ def on_answer(data, cards):
         q = next((q for q in qs if q.get('question') == question), None)
         rest = answer
         for label in sorted(labels(q) if q else every, key=len, reverse=True):
-            if label in rest:
-                rest = rest.replace(label, ' ')
+            # A whole comma-separated part only (the answer joins chosen labels and free text with ", "):
+            # "Blue" in "not Blue" or "Reddish" is no choice the owner made (P10-09).
+            part = re.compile(r'(?:^|(?<=,))[ \t]*' + re.escape(label) + r'[ \t]*(?=,|\Z)')
+            if part.search(rest):
+                rest = part.sub(' ', rest)
                 lines.append('[VULYK] decision: «' + clip(label, 120) + '» on «' + clip(str(question), 160) + '»')
         rest = SIDE_NOTE.sub(' ', rest).strip(' \t\r\n,;"\'«»“”')
         if rest:

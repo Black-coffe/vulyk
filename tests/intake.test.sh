@@ -249,6 +249,19 @@ o="$(ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"опя�
 printf '%s' "$o" | expect "free text with only the lexicon is filed as typed" "file the quote now"
 printf '%s' "$o" | expect_absent "free text alone prints no decision" "decision:"
 ctx "$HIVE" "{$Q,\"tool_response\":{}}" answer | expect "a payload without answers is silent" "(silent)"
+# P10-09: a label found anywhere in the answer was recorded as the owner's choice.
+ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"not Blue\"}}}" answer \
+  | expect_absent "P10-09: \"not Blue\" records no decision on Blue" "decision:"
+ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Reddish please\"}}}" answer \
+  | expect_absent "P10-09: a label inside a longer word (Reddish) records no decision" "decision:"
+ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"neither, Blueish is closer\"}}}" answer \
+  | expect_absent "P10-09: a label inside a later free-text part records no decision" "decision:"
+o="$(ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Blue, Red\"}}}" answer)"
+printf '%s' "$o" | expect "P10-09 neighbour: labels joined by \", \" are each a decision (Blue)" "[VULYK] decision: «Blue»"
+printf '%s' "$o" | expect "P10-09 neighbour: ... (Red)" "[VULYK] decision: «Red»"
+QC='"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Ship?","header":"Ship","multiSelect":false,"options":[{"label":"Yes, ship it","description":"go"},{"label":"Yes","description":"later"}]}]}'
+expect_eq "P10-09 neighbour: a label holding a comma is one decision" "[VULYK] decision: «Yes, ship it» on «Ship?»" \
+  "$(ctx "$HIVE" "{$QC,\"tool_response\":{\"answers\":{\"Ship?\":\"Yes, ship it\"}}}" answer)"
 ctx "$NOLIB" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Blue\"}}}" answer | expect "answer without docs/defects/ is silent" "(silent)"
 
 # --- what stays silent ------------------------------------------------------------------------
