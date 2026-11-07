@@ -1030,6 +1030,11 @@ cell_case yes 'make b foo'
 cell_case no  'make a` or `make b foo'
 cell_case no  'pytest -p evil'
 cell_case no  'pytest a.py -p evil'
+cell_case no  'pytest "-p" evil'        # P9-05: quotes, a backslash, a tab or braces smuggle an option past the class
+cell_case no  "pytest '-p' evil"
+cell_case no  'pytest \-p evil'
+cell_case no  "pytest a.py$(printf '\t')-p evil"
+cell_case no  'pytest {-p,evil}'
 cell_case yes 'bash -n deploy.sh'
 rm -f "$CELLS"
 command_cell_exists "$SRC/CLAUDE.md" 'bash scripts/py.sh -m py_compile .claude/hooks/*.py' \

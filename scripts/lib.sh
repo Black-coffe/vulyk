@@ -177,8 +177,9 @@ command_cell_exists() { # command_cell_exists <constitution> <command> -> 0 iff 
   [ -n "$cells" ] || return 1
   printf '%s\n' "$cells" | grep -qxF -- "$want" && return 0
   # A belt beside the argument classes: a command holding a control character never matches a
-  # placeholder cell, only a cell that is literally the same.
-  case "$want" in *[\;\&\|\`\$\<\>\(\)]*) return 1 ;; esac
+  # placeholder cell, only a cell that is literally the same. Quotes, a backslash, braces and a tab
+  # too: the shell strips or splits them, so `"-p" evil`, `\-p` and `a.py<TAB>-p` would hand it an option.
+  case "$want" in *[\;\&\|\`\$\<\>\(\)\"\'\\\{\}]*|*"$(printf '\t')"*) return 1 ;; esac
   s1="$(printf '\001')"; s2="$(printf '\002')"
   arg='[^-;\&|`$<>() ][^;\&|`$<>() ]*'
   while IFS= read -r c; do
