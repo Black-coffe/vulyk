@@ -1129,7 +1129,8 @@ def main():
         mode_dump_hook(payload, cfg, "precompact", min_tokens_check=False)
     elif mode == "sessionend":
         reason = (payload.get("reason") or "other").lower()
-        if reason not in ("clear", "logout", "other", "exit"):
+        # A normal /exit or Ctrl+D arrives as `prompt_input_exit` (Claude Code's SessionEnd reasons).
+        if reason not in ("clear", "logout", "other", "exit", "prompt_input_exit"):
             emit(None)
         mode_dump_hook(payload, cfg, "sessionend-%s" % reason)
     elif mode == "sessionstart":

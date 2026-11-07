@@ -166,6 +166,17 @@ check("P10-13 no token prefix survives the prompt cut", "yyyyy" not in doc, doc[
 check("P10-13 no token prefix survives the reply cut", "zzzzz" not in doc, doc[-700:])
 
 
+# --- P10-04: a normal /exit (reason prompt_input_exit) dumps a handoff -------------------------
+print("--- P10-04 SessionEnd on /exit")
+for reason, wanted in (("prompt_input_exit", 1), ("clear", 1), ("resume", 0)):
+    home, proj = fresh("p04-" + reason)
+    tp = write_transcript(os.path.join(ROOT, "p04-" + reason, "tr", "s04.jsonl"), 150000)
+    rc, out, err = run("sessionend", env_for(home, proj),
+                       {"session_id": "s04", "transcript_path": tp, "cwd": proj, "reason": reason})
+    check("P10-04 SessionEnd reason %s -> %d handoff(s)" % (reason, wanted),
+          rc == 0 and len(handoffs(proj)) == wanted, "rc=%d out=%r err=%r" % (rc, out[:160], err[:160]))
+
+
 shutil.rmtree(os.path.dirname(ROOT), ignore_errors=True)
 print()
 if fails:
