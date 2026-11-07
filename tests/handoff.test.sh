@@ -30,6 +30,21 @@ else
   bad "handoff-hooks.test.py failed:"; sed 's/^/        /' "$T/hooks.out"
 fi
 
+echo "--- handoff.sh: an interpreter that exits 1 is passed over (P10-10)"
+# python3 is a Python that cannot run the script (a Python 2, a broken venv: exit 1 at import);
+# the next name is a working one. The wrapper used to take that exit 1 as "ran" and stop there.
+FB="$T/py-exit1"; mkdir -p "$FB"
+printf '#!/bin/sh\necho "ImportError: cannot import name timezone" >&2\nexit 1\n' > "$FB/python3"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$PYBIN" > "$FB/python"
+chmod +x "$FB/python3" "$FB/python"
+( cd "$T" && PATH="$FB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null 2>/dev/null; echo "exit=$?" ) > "$T/exit1.out"
+if grep -q '^root *:' "$T/exit1.out" && grep -q '^exit=0$' "$T/exit1.out"; then
+  ok "handoff.sh status falls through a python3 that exits 1 to the next working Python"
+else bad "handoff.sh stopped at a python3 that exits 1:"; sed 's/^/        /' "$T/exit1.out"; fi
+printf '#!/bin/sh\nexit 1\n' > "$FB/python"; cp "$FB/python" "$FB/py"; chmod +x "$FB/python" "$FB/py"
+( cd "$T" && PATH="$FB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null > /dev/null 2>&1; echo "exit=$?" ) > "$T/allbad.out"
+expect_eq "handoff.sh exits 0 when every interpreter exits 1 (fail-open)" "exit=0" "$(tr -d '\r' < "$T/allbad.out")"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 echo "handoff.test.sh: $CHECKS checks, $FAILED failed"
