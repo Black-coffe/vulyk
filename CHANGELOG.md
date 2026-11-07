@@ -4,6 +4,26 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+Fixes from a code audit of VULYK 0.46 run in a hive on Windows (05.11), re-checked against 0.48.0.
+IDs are the audit's; every fix has a regression test that fails on 0.48.0.
+
+### Fixed
+- **Handoff on Windows.** `handoff.py` reads hook stdin as UTF-8, so a non-ASCII `transcript_path` no longer turns into 0 tokens (no Stop banner, no SessionEnd dump, an empty handoff after compaction) (P10-01). Redaction runs `redact.sh` through Git Bash, not WSL's `bash`, and the built-in fallback now masks URL credentials, Bearer and Basic auth too (P10-02). Prompts and the last reply are masked before they are cut, so no token prefix survives the cut (P10-13). Transcripts are looked up under `CLAUDE_CONFIG_DIR` (P10-14).
+- **Handoff behaviour.** SessionEnd hooks get `"timeout": 30` instead of the 1.5 s default that killed the dump (P10-03). A normal `/exit` (`prompt_input_exit`) dumps a handoff (P10-04). A handoff is restored once, only while under 12 h old, and after a compaction only the same session's (P10-05). A cut restore keeps the last `## Summary` (P10-06). Warning levels reset after a compaction (P10-07). `handoff.sh` counts only exit 0 as "ran" and tries the next Python (P10-10).
+- **Defect hooks.** `defect-intake.sh` no longer files bare «снова» / "again", a clock time after a date or before am/pm/UTC, or a card key inside a word as a correction (P10-08); an answer records a decision only for a part equal to an option label (P10-09). Both defect hooks try `$VULYK_PY`, python3, python, py and count only exit 0 (P10-10). `defects-inject.sh` exits without starting Python for a tool no `tool:` card can match (P10-11) and reads a quoted path with a space whole (P10-15).
+- **Driver.** An unreadable `advance --claim` result stops the run before any dispatch instead of being recovered from status (P10-12).
+- **cycle.sh.** The `escalate` note and `status --json` values are JSON-escaped, so a quote or a `"verdict":"GREEN"` in a note no longer breaks or forges the ledger (P9-01, P9-06). `record-seat` rewrites an unevidenced ask without `sed`, so `#`, `&`, `\` keep the report (P9-02). `clean_court` reads worktree paths one per line and no longer deletes fragments of a path with spaces (P9-03). `pause`, `reopen` and `journal.sh` mask their text (P9-07). `close-story` changes only the front-matter `status:` (P9-13). `reopen`'s idempotency key is the round, not the date (P9-16).
+- **redact.sh** masks `Authorization: Basic`, camelCase and bare token keys, PGP private key blocks, `sk_test_`, URL passwords with `/`, whole quoted values, and keeps the rest of the input after an unmatched PEM begin (P9-04).
+- **lib.sh and checks.** A `<file>` cell refuses quoted, escaped and tab-split options (P9-05). A rename of code into a paperwork path is not paperwork (P9-08). `VULYK_MODEL_FLOOR` without a version keeps the default floor (P9-11). `top-model.sh --floor` judges the profile's gate model (P9-09). `vulyk-update.sh` picks the newest tag with git's version sort, not `sort -V` (absent on stock macOS) (P9-10). A verification glob that matches nothing still counts for verify-gap (P9-12). `state.sh` and `release-check.sh` read spec paths with spaces whole, and `stale` works with a BSD `stat` (P9-14, P9-15). A directory entry in `## Files` owns the findings beneath it (P9-17). The defect scripts probe `$VULYK_PY` and `py` (P9-18).
+- **Load sampler.** Off Windows, `load_sample` measures CPU over an interval (`/proc/stat` twice; `top -l 2` on macOS) instead of summing `ps pcpu`, a lifetime average.
+- `portability-check.sh` decodes git's output as UTF-8, so a non-ASCII repo path on Windows is no longer "not in a git checkout".
+
+### Known
+- A quoted front-matter value now parses in `status --json` but keeps its quotes (`"\"h06-02\""`); stripping them needs `fm_field` and `blockers_of` changed together (P9-06).
+- On Windows the `LOAD: start` sample overlaps the step's first seconds and its own powershell/CIM start, so the start figure reads high.
+- A bare clock time in typed text ("at 14:32 the build ran") still files as a correction (P10-08).
+- Existing hives keep SessionEnd entries without a timeout until `install.sh --upgrade` learns to add it (P10-03); `write_handoff()` always rewrites `index.json`, so `/vulyk-handoff` then `/clear` can replace an enriched handoff with a plain one.
+
 ## [0.48.0] - 2026-11-06
 
 The uncommitted-work guard, the diff before ACCEPTED, quotes that are not corrections (spec `uncommitted-work-guard`,
