@@ -53,7 +53,9 @@ printf '  %-42s %-6s %-6s %-12s %s\n' "-----------------------------------------
 COMPLETE=0
 PARTIAL=0
 
-for dir in $(find "$SPECS_DIR" -type d | LC_ALL=C sort); do
+# One directory per line, never a word-split list: `docs/specs/a b` was read as two paths, both missing.
+while IFS= read -r dir; do
+  [ -n "$dir" ] || continue
   # A spec is a directory holding story files directly.
   has_story=0
   for f in "$dir"/*.md; do
@@ -105,7 +107,9 @@ for dir in $(find "$SPECS_DIR" -type d | LC_ALL=C sort); do
     PARTIAL=$((PARTIAL + 1)); mark="-"
   fi
   printf '  %-42s %-6s %-6s %-12s %s\n' "$slug" "$brief" "$scope" "$acc" "$mark"
-done
+done <<DIRS_EOF
+$(find "$SPECS_DIR" -type d | LC_ALL=C sort)
+DIRS_EOF
 
 echo ""
 echo "  Criterion (1): $COMPLETE of $TARGET specs carry all three series. $PARTIAL more are partial."

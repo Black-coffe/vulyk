@@ -196,6 +196,11 @@ chmod +x "$BSDBIN/date" "$BSDBIN/stat"
 touch -t 209901010000 "docs/specs/a b/ab 01 x.md"   # newer than any snapshot
 PATH="$BSDBIN:$PATH" bash scripts/state.sh >/dev/null
 sed -n '/"spec": "a b"/,/"stage"/p' .claude/state.json | expect "state.sh with a BSD stat: a story newer than the snapshot is stale" '"stale": true'
+# P9-15: release-check.sh read the same spaced dir as two missing paths and left it out of the count.
+cp "$SRC/scripts/release-check.sh" scripts/
+bash scripts/release-check.sh | grep -E '^  a b +no ' >/dev/null && echo "  ok    release-check.sh lists a spec dir with a space in its name" \
+  || { echo "::error::release-check.sh lost the spaced spec: $(bash scripts/release-check.sh)"; fail=1; }
+rm -f scripts/release-check.sh
 rm -rf "docs/specs/a b" "$BSDBIN"
 
 # A stale pack (a story cut after the look) reopens 04 and 05 both.
