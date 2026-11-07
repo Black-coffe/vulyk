@@ -86,10 +86,11 @@ fi
 
 # --- what actually changed ---------------------------------------------------
 if [ -n "$RANGE" ]; then
-  CHANGED="$(git -c core.quotePath=false diff --name-only "$RANGE" 2>/dev/null)"
+  CHANGED="$(git -c core.quotePath=false diff --name-only --no-renames "$RANGE" 2>/dev/null)"
 else
-  # quotePath off: a non-ASCII name must come back as itself to match its `## Files` line.
-  CHANGED="$(git -c core.quotePath=false diff --name-only HEAD 2>/dev/null; git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null)"
+  # quotePath off: a non-ASCII name must come back as itself to match its `## Files` line. --no-renames
+  # (both diffs): a rename names only its new path, so code moved into paperwork vanished from the count.
+  CHANGED="$(git -c core.quotePath=false diff --name-only --no-renames HEAD 2>/dev/null; git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null)"
 fi
 # The story file rides along with every per-story commit (its status line changes) -
 # drop it from the measurement entirely so each entry reflects code, not bookkeeping.

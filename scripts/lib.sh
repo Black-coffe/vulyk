@@ -89,7 +89,8 @@ paperwork_only() { # paperwork_only <root> <from-commit> <to-commit>
   git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
   # a file, not `wait $!` on a process substitution: bash 3.2 (macOS) cannot wait on one
   list="$(mktemp)" || return 1
-  git -C "$1" diff --name-only -z "$2" "$3" > "$list" 2>/dev/null || rc=1   # a diff git could not produce is not paperwork
+  # --no-renames: a rename lists only its new path, so code moved into a paperwork path read as paperwork
+  git -C "$1" diff --name-only -z --no-renames "$2" "$3" > "$list" 2>/dev/null || rc=1   # a diff git could not produce is not paperwork
   while [ "$rc" -eq 0 ] && IFS= read -r -d '' p; do
     is_paperwork_path "$p" "$1" || rc=1
   done < "$list"

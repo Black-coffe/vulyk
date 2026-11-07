@@ -431,7 +431,13 @@ paperwork_only "$PWD" "$pw_base" HEAD && echo "  ok    a commit of only hive glo
   || { echo "::error::paperwork_only called $(git diff --name-only "$pw_base" HEAD | tr '\n' ' ') code"; fail=1; }
 git mv hook-app.txt docs/specs/hooklog/runs/moved.txt
 bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round: code renamed into a hive glob path is still dirt" "hook-app.txt"
-git mv docs/specs/hooklog/runs/moved.txt hook-app.txt
+echo "P9-08: a commit renaming code into a paperwork path stales a round, and scope-check still counts the code path"
+git commit -qm "code moved into a hive glob path" >/dev/null
+paperwork_only "$PWD" "$pw_base" HEAD && { echo "::error::paperwork_only called code renamed into a hive glob path paperwork"; fail=1; } \
+  || echo "  ok    a commit renaming code into a hive glob path is not paperwork_only"
+bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md HEAD~1..HEAD | expect "scope-check counts the code path a rename moved away" "changed 1,"
+git checkout -- memory/stats/scope.jsonl
+git mv docs/specs/hooklog/runs/moved.txt hook-app.txt && git commit -qm "move the code back" >/dev/null
 git rm -rq -- ${pw_paths[@]+"${pw_paths[@]}"} && git commit -qm "drop the smoke reports" -- ${pw_paths[@]+"${pw_paths[@]}"}
 rm -rf docs/specs/hooklog/smoke
 git rm -q .claude/vulyk-paperwork && git commit -qm "drop the hive paperwork globs" -- .claude/vulyk-paperwork
