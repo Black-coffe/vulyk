@@ -634,19 +634,50 @@ _REDACT_FALLBACK = [
     re.compile(r"hf_[A-Za-z0-9]{30,}"),
     re.compile(r"gsk_[A-Za-z0-9]{40,}"),
     re.compile(r"SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}"),
-    re.compile(r"[rs]k_live_[A-Za-z0-9]{20,}"),
+    re.compile(r"[rs]k_(?:live|test)_[A-Za-z0-9]{20,}"),
     re.compile(r"(?<=hooks\.slack\.com/services/)[A-Za-z0-9/_-]{20,}"),
     re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"),
-    re.compile(r"([Bb]earer\s+)[A-Za-z0-9._~+/-]{16,}=*"),
-    # Basic credentials only inside an Authorization header: a bare "Basic <word>" is prose.
-    re.compile(r"((?:proxy-)?authorization[\"']?\s*[:=]\s*[\"']?basic\s+)[A-Za-z0-9+/._~-]{8,}=*", re.I),
-    re.compile(r"(?<=://)[^/\s:@]+:[^/\s@]+(?=@)"),
-    re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?"
-               r"(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)", re.S),
-    re.compile(r"([\"']?[A-Za-z0-9_-]*(?:password|passwd|secret|api[_-]?key|access[_-]?key"
-               r"|auth[_-]?token|client[_-]?secret|private[_-]?key)[A-Za-z0-9_-]*[\"']?"
-               r"\s*[=:]\s*)[\"']?[^\"'\s]{6,}[\"']?", re.I),
+    re.compile(r"([Bb]earer[^\S\n]+)[A-Za-z0-9._~+/-]{16,}=*"),
+    # Basic / token credentials only inside an Authorization header: a bare "Basic <word>" is prose.
+    re.compile(r"((?:proxy-)?authorization[\"']?[^\S\n]*[:=][^\S\n]*[\"']?(?:basic|token)[^\S\n]+)"
+               r"[A-Za-z0-9._~+/-]{8,}=*", re.I),
+    # A URL password may hold a raw '/'; a port before a path (host:443/@scope) is all digits, so it is not one.
+    re.compile(r"(://)[^/\s:@]+:(?:[^/\s@]*[^0-9/\s@][^\s@]*|[^/\s@]+)(?=@)"),
+    # key = value: a whole quoted string (spaces and all), else one unquoted word of 6+ chars that does not
+    # open with ':' (token::Kind, secret::Name stay readable). Line-bound, as sed is.
+    re.compile(r"([\"']?[A-Za-z0-9_-]*(?:password|passwd|secret|api[_-]?key|access[_-]?key|access[_-]?token"
+               r"|refresh[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key)[A-Za-z0-9_-]*[\"']?"
+               r"[^\S\n]*[=:][^\S\n]*)"
+               r"(?:\"[^\"\n]{6,}\"|'[^'\n]{6,}'|[\"']?[^\"'\s:][^\"'\s]{5,}[\"']?)", re.I),
+    # A bare token key must END in token (max_tokens, token_budget are counters) and hold a 16+ char value.
+    re.compile(r"([\"']?[A-Za-z0-9_-]*(?:token|TOKEN|Token)[\"']?[^\S\n]*[=:][^\S\n]*)"
+               r"[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
 ]
+
+_KEY_BEGIN = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----")
+_KEY_END = re.compile(r"-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----")
+_KEY_BODY = re.compile(r"^[ \t]*[A-Za-z0-9+/=]*[ \t]*$"
+                       r"|^(?:Proc-Type|DEK-Info|Version|Comment|Hash|Charset|MessageID): ")
+
+
+def _mask_key_blocks(text):
+    """redact.sh's awk pass: a PEM / PGP private key block becomes one mask line. It runs to its END
+    line or, when none comes (a truncated paste), to the first line that is not key body."""
+    out, inkey = [], False
+    for line in text.split("\n"):
+        bare = line[:-1] if line.endswith("\r") else line
+        if inkey and _KEY_END.search(bare):
+            inkey = False
+            continue
+        if inkey and _KEY_BODY.search(bare):
+            continue
+        inkey = False
+        if _KEY_BEGIN.search(bare):
+            out.append("[VULYK:REDACTED]")
+            inkey = not _KEY_END.search(bare)
+            continue
+        out.append(line)
+    return "\n".join(out)
 
 
 def redact_text(root, text):
@@ -675,6 +706,7 @@ def redact_text(root, text):
 def redact_builtin(text):
     """The _REDACT_FALLBACK pass alone: pure Python, no process. Never raises."""
     try:
+        text = _mask_key_blocks(text)
         for pat in _REDACT_FALLBACK:
             text = pat.sub(
                 lambda m: (m.group(1) if m.groups() else "") + "[VULYK:REDACTED]", text)

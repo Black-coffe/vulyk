@@ -151,6 +151,56 @@ check("P10-02 redact.sh at a native path runs, then the built-in pass", got.star
       and MASK in got and "zzzzzzzz" not in got, repr(got))
 
 
+# --- P10-02 / P9-04: the built-in pass masks what scripts/redact.sh masks, word for word, with no bash ---
+# (review of the audit fixes: the fallback missed rk_test_, accessToken, refresh_token, bare TOKEN keys,
+# Authorization: token, PGP blocks, URL passwords with '/', and cut quoted values at the first space)
+print("--- P10-02 built-in pass = redact.sh P9-04 table")
+b64, val, nl = "dXNlcjpw" + rep(16, "Y") + "==", rep(10, "q") + "42" + rep(8, "Z"), "\n"
+PARITY = [  # (label, input, expected) - the same rows as tests/maintenance.test.sh "redact.sh P9-04"
+    ("Authorization: Basic", "Authorization: Basic " + b64, "Authorization: Basic " + MASK),
+    ("quoted Authorization: token", '-H "Authorization: token ' + val + '"', '-H "Authorization: token ' + MASK + '"'),
+    ("camelCase apiKey", 'apiKey = "' + val + '"', "apiKey = " + MASK),
+    ("camelCase accessToken", "accessToken: " + val, "accessToken: " + MASK),
+    ("refresh_token", "refresh_token=" + val, "refresh_token=" + MASK),
+    ("bare TOKEN", "TOKEN=" + val, "TOKEN=" + MASK),
+    ("env-style GH_TOKEN", "export GH_TOKEN=" + val, "export GH_TOKEN=" + MASK),
+    ('JSON "token"', '{"token": "' + val + '"}', '{"token": ' + MASK + "}"),
+    ("Stripe test key", "key r" + "k_test_" + rep(24, "j") + " end", "key " + MASK + " end"),
+    ("URL password holding a /", "postgres://app:pa/ss" + val + "@db/x", "postgres://" + MASK + "@db/x"),
+    ("whole quoted value", 'password = "correct horse battery staple" tail', "password = " + MASK + " tail"),
+    ("single-quoted value with spaces", "secret='two words here' tail", "secret=" + MASK + " tail"),
+    ("token counters", "max_tokens: 4096000, input_tokens=123456", None),
+    ("token_budget and tokenizer", "token_budget=200000 tokenizer: cl100k_base", None),
+    ("prose about a token", "the token: see below, a token = `agentType`", None),
+    ("a code constant", "SLUG_TOKEN = re.compile(r'^[a-z]')", None),
+    ("Rust paths", "let k = token::Identifier; secret::Name", None),
+    ("a port before an @scope path", "https://registry.npmjs.org:443/@scope/pkg", None),
+    ("prose Authorization and basic", "Authorization: required. Basic auth is a basic understanding", None),
+    ("a git remote", "git@github.com:owner/repo.git ssh://git@host:22/x@y", None),
+    ("PGP private key block, keeps what follows",
+     nl.join(["a", "-----BEGIN PGP PRIVATE KEY BLOCK-----", "Version: GnuPG v2", "", "lQOYBF" + rep(40, "x") + "+/=",
+              "=AbCd", "-----END PGP PRIVATE KEY BLOCK-----", "after"]), nl.join(["a", MASK, "after"])),
+    ("unterminated PEM block ends at the first non-key line",
+     nl.join(["a", "-----BEGIN RSA PRIVATE KEY-----", "MIIE" + rep(60, "x"), rep(20, "y") + "==",
+              "next line of prose", "more"]), nl.join(["a", MASK, "next line of prose", "more"])),
+    ("one-line JSON key with its END on the BEGIN line",
+     '{"private_key": "-----BEGIN PRIVATE KEY-----\\nMIIE\\n-----END PRIVATE KEY-----\\n",' + nl + '"client_email": "x@y"}',
+     MASK + nl + '"client_email": "x@y"}'),
+]
+for label, s, want in PARITY:
+    want = s if want is None else want
+    got = h.redact_builtin(s)
+    check("built-in pass: %s" % label, got == want, "got %r want %r" % (got, want))
+RSH = os.path.join(os.path.dirname(HOOK), "..", "..", "scripts", "redact.sh")
+rbash = h.redact_bash() if os.path.isfile(RSH) else None
+if rbash:
+    for label, s, want in PARITY:
+        p = subprocess.run([rbash, RSH], input=(s + "\n").encode("utf-8"), stdout=subprocess.PIPE)
+        sh = p.stdout.decode("utf-8", "replace").rstrip("\n").replace("\r\n", "\n")
+        check("redact.sh then the built-in pass leave the same text: %s" % label,
+              h.redact_builtin(sh) == sh == h.redact_builtin(s), "sh %r py %r" % (sh, h.redact_builtin(s)))
+
+
 # --- P10-13: a token cut by the 500/1500-char truncation is masked, not left as a prefix ------
 print("--- P10-13 redact first, then truncate")
 home, proj = fresh("p13")
