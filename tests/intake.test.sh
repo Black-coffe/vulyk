@@ -168,6 +168,25 @@ n="$(printf '%s' "$o" | head -1 | "$PYBIN" -c 'import json,sys; print(len(json.l
 if [ "${n:-9999}" -le 600 ]; then ok "additionalContext with no ids stays within 600 chars ($n)"
 else bad "additionalContext is ${n:-unparsable} chars"; fi
 
+# P10-08: a reviewer report typed or relayed inline fired on every turn - «снова», "again", a clock time,
+# a path's line:col and a card key inside a longer word were each read as a correction.
+echo "--- P10-08: report words are not a correction"
+run "$HIVE" '{"prompt":"ran the suite again, all green"}' | expect_silent "P10-08: a bare \"again\" is silent"
+run "$HIVE" '{"prompt":"снова прогнал тесты, всё зелёное"}' | expect_silent "P10-08: a bare «снова» is silent"
+run "$HIVE" '{"prompt":"suite started 2026-11-07 14:32 and passed"}' | expect_silent "P10-08: a clock time after a date is silent"
+run "$HIVE" '{"prompt":"stamp 2026-11-07T14:32:05Z, done"}' | expect_silent "P10-08: an ISO timestamp is silent"
+run "$HIVE" '{"prompt":"finished at 14:32 UTC"}' | expect_silent "P10-08: a time with UTC is silent"
+run "$HIVE" '{"prompt":"finished at 14:32:05+02:00"}' | expect_silent "P10-08: a time with an offset is silent"
+run "$HIVE" '{"prompt":"the build ran at 9:30 am"}' | expect_silent "P10-08: a time with am is silent"
+run "$HIVE" '{"prompt":"see defect-intake.sh:53:12 and cycle.js:113"}' | expect_silent "P10-08: a path line:col is silent"
+ctx "$HIVE" '{"prompt":"on 01:02:03 the voice drops"}' | expect "P10-08 neighbour: an h:mm:ss timecode still fires" "timecode 01:02:03"
+ctx "$HIVE" '{"prompt":"at 10:04, the voice drops"}' | expect "P10-08 neighbour: a timecode before a comma still fires" "timecode 10:04"
+ctx "$HIVE" '{"prompt":"опять не тот цвет"}' | expect "P10-08 neighbour: «опять» still fires" "looks like a correction"
+KEYHIVE="$T/keyhive"; mkdir -p "$KEYHIVE/docs/defects"
+printf -- '---\nid: cut\ntitle: Cut speech\nstatus: text\nkeys: [cut]\n---\n\n# Cut\n' > "$KEYHIVE/docs/defects/cut.md"
+run "$KEYHIVE" '{"prompt":"execute the plan, then the shortcut"}' | expect_silent "P10-08: a card key inside a longer word is silent"
+ctx "$KEYHIVE" '{"prompt":"the cutting at the end is wrong"}' | expect "P10-08 neighbour: a key at a word start still fires" "file the quote now in cut "
+
 # --- capture (rules-tree-05): the explicit phrase, pastes, side-agent notes ----------------------
 echo "--- the explicit phrase"
 ctx "$HIVE" '{"prompt":"внеси в запрет: обрезка на полуслове"}' \
@@ -350,8 +369,9 @@ LX=""; for l in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do locale -a 2>/dev/null 
 lex() { printf '%s\n' "$1" | LC_ALL="${LX:-C.UTF-8}" grep -Eiq -f "$T/lex.txt"; }
 lex "переделайте это" && ok "a stem matches at a word start (переделайте)" || bad "stem at word start missed"
 lex "непеределай" && bad "a stem inside a word matched (непеределай)" || ok "neighbour: a stem inside a word does not match"
-lex "again!" && ok "a phrase with a punctuation edge matches (again!)" || bad "phrase at an edge missed"
-lex "against it" && bad "a phrase inside a longer word matched (against)" || ok "neighbour: a phrase needs both edges (against)"
+lex "i told you!" && ok "a phrase with a punctuation edge matches (i told you!)" || bad "phrase at an edge missed"
+lex "i told yours" && bad "a phrase inside a longer word matched (i told yours)" || ok "neighbour: a phrase needs both edges (i told yours)"
+lex "ran it again" && bad "P10-08: the export still carries a bare \"again\"" || ok "P10-08: the export has no bare \"again\""
 lex "Опять не то" && ok "a capitalised Cyrillic stem matches under a UTF-8 locale" || bad "Cyrillic case not folded"
 [ "$(grep -c . "$T/lex.txt")" -eq "$("$PYBIN" -c "
 import ast,re,sys
