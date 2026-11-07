@@ -4658,6 +4658,23 @@ row="$(grep '"spec":"h01"' memory/stats/council.jsonl | tail -1)"
 [ "$ex" -eq 6 ] && printf '%s' "$row" | jq -e --arg n "$h01note" '.verdict == "ESCALATE" and .note == $n' >/dev/null 2>&1 \
   && echo "  ok    the row parses, verdict ESCALATE, the note is the text given" || { echo "::error::exit=$ex row=$row"; fail=1; }
 council status docs/specs/h01 --json | jq -r .next | expect "status still reads the round as escalated, not green" "escalated"
+
+echo "record-seat: attempt 2 rewrites an unevidenced GREEN whose text holds # & \\ - the rest of the report survives (P9-02)"
+mk_spec h02 2
+rd_h02="$(mk_open_round h02 1)"
+report_h02() {
+  printf 'COUNCIL: x\nMODEL: t\nCOURT: /x\nVERDICT: GREEN\nASSUMED CONFIG: none given\nRAN: nothing\nPATH: none named\n'
+  printf '%s\n' 'ASK 1: GREEN - ask one - run: c saw: ok' 'ASK 2: GREEN - ask #2 & C:\dir\n - looked fine'
+  printf 'UNASKED: none\nBREACH: none\n'
+}
+report_h02 | council record-seat docs/specs/h02 1 sonnet >/dev/null 2>&1; ex1=$?
+report_h02 | council record-seat docs/specs/h02 1 sonnet >/dev/null 2>&1; ex2=$?
+[ "$ex1" -eq 4 ] && [ "$ex2" -eq 0 ] \
+  && grep -qxF 'ASK 2: N/A - ask #2 & C:\dir\n - why: unevidenced on attempt 2' "$rd_h02/sonnet.md" \
+  && grep -qxF 'ASK 1: GREEN - ask one - run: c saw: ok' "$rd_h02/sonnet.md" \
+  && grep -qxF 'VERDICT: GREEN' "$rd_h02/sonnet.md" && grep -qxF 'BREACH: none' "$rd_h02/sonnet.md" \
+  && echo "  ok    ASK 2 rewritten to N/A verbatim, ASK 1, VERDICT and the labels kept" \
+  || { echo "::error::ex1=$ex1 ex2=$ex2 sonnet.md: $(cat "$rd_h02/sonnet.md" 2>&1)"; fail=1; }
 fi # part hardening
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"

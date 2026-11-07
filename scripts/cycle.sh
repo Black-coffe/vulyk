@@ -1567,6 +1567,15 @@ ask_line_of() { # ask_line_of <report> <n> -> the first line starting "ASK <n>:"
     case "$line" in "ASK $2:"*) printf '%s\n' "$line"; return ;; esac
   done <<<"$1"
 }
+replace_ask_line() { # replace_ask_line <report> <n> <new-line> -> <report>, each line starting
+  # "ASK <n>:" replaced by <new-line> verbatim. Not sed: <new-line> carries the seat's own text,
+  # and a `#`, `&` or `\` in it broke the s### expression and lost the whole report (P9-02).
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in "ASK $2:"*) line="$3" ;; esac
+    printf '%s\n' "$line"
+  done <<<"$1"
+}
 ask_num_of() { # ask_num_of <ask-line> -> its ask number
   local re='^ASK ([0-9]+):'
   [[ $1 =~ $re ]] && printf '%s\n' "${BASH_REMATCH[1]}"
@@ -1764,7 +1773,7 @@ REPORTEOF
         # this): the description before the final dash-separated segment, same as before.
         short="$(printf '%s' "$line" | sed -E "s/^ASK $u: (GREEN|RED|N\/A) - //")"
         short="$(printf '%s' "$short" | sed 's/ - [^-]*$//')"
-        FINAL_REPORT="$(printf '%s\n' "$FINAL_REPORT" | sed "s#^ASK $u:.*#ASK $u: N/A - $short - why: unevidenced on attempt 2#")"
+        FINAL_REPORT="$(replace_ask_line "$FINAL_REPORT" "$u" "ASK $u: N/A - $short - why: unevidenced on attempt 2")"
       else
         red_u_list="$red_u_list $u"
       fi
