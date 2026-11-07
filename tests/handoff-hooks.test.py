@@ -16,6 +16,11 @@ import tempfile
 import time
 from datetime import datetime, timezone
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 HOOK = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else ".claude/hooks/handoff.py")
 # A non-ASCII root on purpose: the owner's home on Windows is often Cyrillic (P10-01).
 ROOT = tempfile.mkdtemp(prefix="vulyk-handoff-")
@@ -97,6 +102,53 @@ rc, out, err = run("stop", env_for(home, proj, {"PYTHONIOENCODING": "cp1251"}),
                    {"session_id": "s01", "transcript_path": tp, "cwd": proj})
 check("P10-01 a Cyrillic transcript_path under a cp1251 locale still yields the Stop banner",
       rc == 0 and "systemMessage" in out and "150k" in out, "rc=%d out=%r err=%r" % (rc, out[:200], err[:200]))
+
+
+# --- P10-02: redaction runs through a bash that can open the script, and the built-in pass ---
+# covers what scripts/redact.sh covers -------------------------------------------------------
+print("--- P10-02 redaction: the right bash, a complete built-in pass")
+import importlib.util
+spec = importlib.util.spec_from_file_location("handoff_under_test", HOOK)
+h = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(h)
+MASK = "[VULYK:REDACTED]"
+
+
+def rep(n, c):
+    return c * n  # samples are built, never literal tokens
+
+
+SECRETS = [  # (label, text, the repeated character the secret is made of)
+    ("bearer", "curl -H 'Authorization: Bearer " + rep(24, "a") + "' https://x", "a"),
+    ("basic-header", "Authorization: Basic " + rep(20, "Q") + "==", "Q"),
+    ("url-creds", "git clone https://bob:" + rep(10, "p") + "@example.com/r.git", "p"),
+    ("password=", "password=" + rep(10, "s"), "s"),
+    ("api_key:", '"api_key": "' + rep(12, "k") + '"', "k"),
+    ("github", "gh" + "p_" + rep(36, "g"), "g"),
+    ("aws", "AK" + "IA" + rep(16, "B"), "B"),
+]
+KEEP = ["Basic configuration is fine", "see https://example.com/a:b path", "sk-learn"]
+nobash = os.path.join(ROOT, "nobash")  # no scripts/redact.sh: the built-in pass alone
+os.makedirs(nobash)
+for label, s, c in SECRETS:
+    got = h.redact_text(nobash, "note " + s + " end")
+    check("P10-02 built-in pass masks %s" % label, MASK in got and rep(8, c) not in got, got)
+for s in KEEP:
+    check("P10-02 built-in pass leaves %r alone" % s, h.redact_text(nobash, s) == s, h.redact_text(nobash, s))
+
+if os.name == "nt":
+    b = getattr(h, "redact_bash", lambda: None)()
+    windir = os.path.normcase(os.environ.get("SystemRoot") or r"C:\Windows")
+    check("P10-02 Windows: the bash picked is not WSL's launcher under %s" % windir,
+          bool(b) and not os.path.normcase(b).startswith(windir), repr(b))
+# The hook's own path to redact.sh: a stand-in script that tags each line proves bash ran it.
+home, proj = fresh("p02")
+os.makedirs(os.path.join(proj, "scripts"))
+with open(os.path.join(proj, "scripts", "redact.sh"), "w", encoding="utf-8", newline="\n") as fh:
+    fh.write("#!/usr/bin/env bash\nsed 's/^/BASHED /'\n")
+got = h.redact_text(proj, "line " + "gh" + "p_" + rep(36, "z"))
+check("P10-02 redact.sh at a native path runs, then the built-in pass", got.startswith("BASHED line ")
+      and MASK in got and "zzzzzzzz" not in got, repr(got))
 
 
 shutil.rmtree(os.path.dirname(ROOT), ignore_errors=True)

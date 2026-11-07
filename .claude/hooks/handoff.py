@@ -39,6 +39,7 @@ Invoked through handoff.sh, which fails open when no Python 3 is on PATH.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -612,8 +613,10 @@ def harvest(entries, cfg):
     }
 
 
-# Minimal mirror of scripts/redact.sh for environments without bash - that script is
-# the single source of truth for the pattern list; extend both together.
+# Mirror of scripts/redact.sh, applied after it too: it is the only redaction where bash is
+# missing, is WSL's (a Windows path is not a file there) or redact.sh degraded to `cat`.
+# Keep it a superset of that script's list; extend both together. Group 1, when a pattern
+# has one, is kept in front of the mask.
 _REDACT_FALLBACK = [
     re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"),
     re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
@@ -631,6 +634,10 @@ _REDACT_FALLBACK = [
     re.compile(r"[rs]k_live_[A-Za-z0-9]{20,}"),
     re.compile(r"(?<=hooks\.slack\.com/services/)[A-Za-z0-9/_-]{20,}"),
     re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"),
+    re.compile(r"([Bb]earer\s+)[A-Za-z0-9._~+/-]{16,}=*"),
+    # Basic credentials only inside an Authorization header: a bare "Basic <word>" is prose.
+    re.compile(r"((?:proxy-)?authorization[\"']?\s*[:=]\s*[\"']?basic\s+)[A-Za-z0-9+/._~-]{8,}=*", re.I),
+    re.compile(r"(?<=://)[^/\s:@]+:[^/\s@]+(?=@)"),
     re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?"
                r"(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)", re.S),
     re.compile(r"([\"']?[A-Za-z0-9_-]*(?:password|passwd|secret|api[_-]?key|access[_-]?key"
@@ -649,15 +656,21 @@ def redact_text(root, text):
     if not text:
         return text
     script = os.path.join(root, "scripts", "redact.sh")
-    if os.path.isfile(script):
+    bash = redact_bash() if os.path.isfile(script) else None
+    if bash:
         try:
             p = subprocess.run(
-                ["bash", script], input=text.encode("utf-8"),
+                [bash, script], input=text.encode("utf-8"),
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15)
             if p.returncode == 0 and p.stdout:
-                return p.stdout.decode("utf-8", "replace")
+                text = p.stdout.decode("utf-8", "replace")
         except Exception:
             pass
+    return redact_builtin(text)
+
+
+def redact_builtin(text):
+    """The _REDACT_FALLBACK pass alone: pure Python, no process. Never raises."""
     try:
         for pat in _REDACT_FALLBACK:
             text = pat.sub(
@@ -665,6 +678,41 @@ def redact_text(root, text):
     except Exception:
         pass
     return text
+
+
+def redact_bash():
+    """A bash that can run scripts/redact.sh given a native path, or None.
+
+    On Windows a bare "bash" is resolved by CreateProcess, which searches System32 before
+    PATH: that is WSL's launcher, a Linux bash to which C:\\... is no file (exit 127). So
+    there it is Git Bash - Claude Code's own pin, then PATH, then beside git.exe, then
+    the stock install folders - and never a bash under the Windows folder or WindowsApps.
+    """
+    if os.name != "nt":
+        return "bash"
+    cands = [os.environ.get("CLAUDE_CODE_GIT_BASH_PATH"), shutil.which("bash")]
+    git = shutil.which("git")
+    if git:
+        top = os.path.dirname(os.path.dirname(os.path.realpath(git)))  # Git\cmd\git.exe -> Git
+        cands += [os.path.join(top, "bin", "bash.exe"), os.path.join(top, "usr", "bin", "bash.exe"),
+                  os.path.join(os.path.dirname(top), "bin", "bash.exe")]  # Git\mingw64\bin\git.exe
+    for var in ("ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"):
+        if os.environ.get(var):
+            cands.append(os.path.join(os.environ[var], "Git", "bin", "bash.exe"))
+    if os.environ.get("LOCALAPPDATA"):
+        cands.append(os.path.join(os.environ["LOCALAPPDATA"], "Programs", "Git", "bin", "bash.exe"))
+    windir = os.path.normcase(os.environ.get("SystemRoot") or os.environ.get("windir") or r"C:\Windows")
+    for c in cands:
+        try:
+            if not c or not os.path.isfile(c):
+                continue
+            n = os.path.normcase(os.path.abspath(c))
+        except Exception:
+            continue
+        if n.startswith(windir.rstrip("\\") + "\\") or "\\windowsapps\\" in n:
+            continue
+        return c
+    return None
 
 
 def create_unique(target_dir, base, doc):
