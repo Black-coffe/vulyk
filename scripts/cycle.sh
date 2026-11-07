@@ -3257,7 +3257,8 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
   fi
 
   if [ "$already" -eq 0 ]; then
-    append_after_answers "$BRIEF" "$(printf '\n%s\n> %s\n' "$marker_text" "$DECISION")"
+    # P9-07: the owner's decision is free text bound for the committed brief.md - masked first
+    append_after_answers "$BRIEF" "$(printf '\n%s\n> %s\n' "$marker_text" "$(redact_note "$DECISION")")"
     NEWCEIL=$((OLDCEIL+STEP))
     mkdir -p "$SPEC/council"
     printf '%s\n' "$NEWCEIL" > "$SPEC/council/CEILING"
@@ -3289,6 +3290,7 @@ cmd_pause() { # cmd_pause <spec> <why>
   }
   local WHO="${OWNER:-${USER:-${USERNAME:-owner}}}"
   [ -n "$WHY" ] || WHY="no reason given"
+  WHY="$(redact_note "$WHY")" # P9-07: the reason reaches PAUSE, stdout and the committed journal masked
   local HEAD; HEAD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   {
     printf '%s \xc2\xb7 %s \xc2\xb7 %s\n' "$WHO" "$WHY" "$(now_ts)"

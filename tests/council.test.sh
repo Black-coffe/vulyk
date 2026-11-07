@@ -4711,6 +4711,22 @@ out="$(council status docs/specs/h06 --json)"
 printf '%s' "$out" | jq -e '.branch == "\"vulyk/h06\"" and .next == "build:1"
   and (.wave_stories | map(select(.file | endswith("h06-02-second.md"))) | .[0] | .story == "\"h06-02\"" and .model == "\"sonnet\"" and .worker == "'"'"'worker-code'"'"'")' >/dev/null 2>&1 \
   && echo "  ok    the line parses; branch and the story's values come back as written" || { echo "::error::status: $out"; fail=1; }
+
+echo "reopen, pause, journal.sh: a credential in the owner's text is masked before brief.md, PAUSE and journal.md (P9-07)"
+h07secret="sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+mk_open_spec h07 2
+set_tier h07 1
+mk_open_round h07 1 >/dev/null
+council escalate docs/specs/h07 >/dev/null 2>&1
+council reopen docs/specs/h07 "rotate $h07secret and go on" >/dev/null 2>&1; ex1=$?
+council pause docs/specs/h07 "pasted $h07secret by mistake" >/dev/null 2>&1; ex2=$?
+bash scripts/journal.sh docs/specs/h07 03-building "fallback note with $h07secret" build:1 >/dev/null
+[ "$ex1" -eq 0 ] && [ "$ex2" -eq 0 ] && ! grep -qF "$h07secret" docs/specs/h07/brief.md docs/specs/h07/PAUSE docs/specs/h07/journal.md \
+  && grep -qF '> rotate [VULYK:REDACTED] and go on' docs/specs/h07/brief.md && grep -qF 'pasted [VULYK:REDACTED] by mistake' docs/specs/h07/PAUSE \
+  && [ "$(grep -cF '[VULYK:REDACTED]' docs/specs/h07/journal.md)" -eq 2 ] \
+  && echo "  ok    brief.md, PAUSE and journal.md carry the mask, never the token" \
+  || { echo "::error::ex1=$ex1 ex2=$ex2 $(grep -nF -e "$h07secret" -e REDACTED docs/specs/h07/brief.md docs/specs/h07/PAUSE docs/specs/h07/journal.md 2>&1)"; fail=1; }
+rm -f docs/specs/h07/PAUSE
 fi # part hardening
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
