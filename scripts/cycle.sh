@@ -2586,10 +2586,15 @@ clean_court() { # clean_court <slug> - removes every worktree (registered or orp
   # .vulyk/court/<slug>/ before a fresh one is built (D5: "an orphaned court ... is removed
   # by the next open-round before it creates its own" - covers a crashed judge's leftover
   # worktree and the previous round's court alike, unconditionally).
+  # One path per line, never word-split (P9-03): a hive path with a space split into fragments,
+  # and the first one ("/home/me/my" of "/home/me/my hive/...") was rm -rf'd.
   local slug="$1" wt
-  for wt in $(git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | grep -F "/.vulyk/court/$slug/"); do
+  while IFS= read -r wt; do
+    [ -n "$wt" ] || continue
     remove_worktree_path "$wt"
-  done
+  done <<WTEOF
+$(git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | grep -F "/.vulyk/court/$slug/")
+WTEOF
   rm -rf "$ROOT/.vulyk/court/$slug"
   git worktree prune >/dev/null 2>&1 || true
 }

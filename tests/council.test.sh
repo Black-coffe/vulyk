@@ -4675,6 +4675,32 @@ report_h02 | council record-seat docs/specs/h02 1 sonnet >/dev/null 2>&1; ex2=$?
   && grep -qxF 'VERDICT: GREEN' "$rd_h02/sonnet.md" && grep -qxF 'BREACH: none' "$rd_h02/sonnet.md" \
   && echo "  ok    ASK 2 rewritten to N/A verbatim, ASK 1, VERDICT and the labels kept" \
   || { echo "::error::ex1=$ex1 ex2=$ex2 sonnet.md: $(cat "$rd_h02/sonnet.md" 2>&1)"; fail=1; }
+
+echo "open-round: an orphan court in a hive whose path holds a space is removed whole, never by fragment (P9-03)"
+h03="$(mktemp -d)"
+mkdir -p "$h03/my" "$h03/my hive"
+: > "$h03/my/keep" # what the first fragment of "<h03>/my hive/.vulyk/court/..." names
+h03_save_t="$T" h03_save_head7="$HEAD7" h03_save_pwd="$PWD"
+cd "$h03/my hive" || exit 1
+git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
+mkdir -p scripts memory/stats docs/specs .claude
+cp "$SRC"/scripts/lib.sh "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/scope-check.sh "$SRC"/scripts/redact.sh \
+  "$SRC"/scripts/suite-parts-check.sh "$SRC"/scripts/run-capped.py scripts/
+cp "$h03_save_pwd/.gitignore" "$h03_save_pwd/CLAUDE.md" .
+git add -A && git commit -qm init >/dev/null
+T="$h03/my hive"; HEAD7="$(git rev-parse --short HEAD)"
+mk_open_spec h03 2
+set_tier h03 3
+git worktree add --detach -q "$PWD/.vulyk/court/h03/round-0" HEAD >/dev/null 2>&1 # a crashed round's court, still registered
+out="$(council open-round docs/specs/h03 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -f "$h03/my/keep" ] && [ ! -d .vulyk/court/h03/round-0 ] && [ -d .vulyk/court/h03/round-1 ] \
+  && ! git worktree list --porcelain | grep -qF '/.vulyk/court/h03/round-0' \
+  && echo "  ok    the orphan court is gone and unregistered, round 1 has its court, the sibling directory is untouched" \
+  || { echo "::error::exit=$ex keep=$([ -f "$h03/my/keep" ] && echo kept || echo DELETED) out=$out worktrees=$(git worktree list 2>&1)"; fail=1; }
+git worktree remove --force .vulyk/court/h03/round-1 >/dev/null 2>&1
+cd "$h03_save_pwd" || exit 1
+T="$h03_save_t"; HEAD7="$h03_save_head7"
+rm -rf "$h03"
 fi # part hardening
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
