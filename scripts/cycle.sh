@@ -2346,6 +2346,18 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] - red-receipt: run the 
   exit 0
 }
 
+set_story_status() { # set_story_status <story-file> <from-ERE> <to> - rewrites the value of the
+  # first `status:` line only, the one fm_field reads, never a later `status:` line in the body
+  # (P9-13: a body line such as an example or a quoted log was rewritten to `done` too).
+  local f="$1" n=0 at="" line
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n+1))
+    case "$line" in status:*) at="$n"; break ;; esac
+  done < "$f"
+  [ -n "$at" ] && sed_inplace -E "${at}s/^(status:[[:space:]]*)$2/\1$3/" "$f"
+  return 0
+}
+
 cmd_close_story() { # cmd_close_story <story-file> <commit:0|1> [<stamp>]
   local STORY="$1" DOCOMMIT="$2" STAMP="${3:-}"
   [ -n "$STORY" ] && [ -f "$STORY" ] || {
@@ -2539,7 +2551,7 @@ EOF
     # Story 09: the anomaly-scan hook's log rides this commit too, same as scope.jsonl above.
     [ -n "$(git status --porcelain -- memory/stats/anomalies.jsonl 2>/dev/null)" ] && git add -- memory/stats/anomalies.jsonl >/dev/null 2>&1
 
-    sed_inplace -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
+    set_story_status "$STORY" '[^[:space:]#]+' done
     git add -- "$STORY" >/dev/null 2>&1
 
     # Commit exactly what this story staged (`--only` by pathspec), never whatever else sits in
@@ -2558,7 +2570,7 @@ EOF
     if [ "${#OWN[@]}" -eq 0 ] \
       || ! commit_err="$(GIT_LITERAL_PATHSPECS=1 git commit -q -m "$(commit_subject "story($ID): $TITLE")" --only -- ${OWN[@]+"${OWN[@]}"} 2>&1)"; then
       [ "${#OWN[@]}" -eq 0 ] || GIT_LITERAL_PATHSPECS=1 git reset -q -- ${OWN[@]+"${OWN[@]}"} >/dev/null 2>&1
-      sed_inplace -E "s/^(status:[[:space:]]*)done/\1$ST/" "$STORY"
+      set_story_status "$STORY" done "$ST"
       echo "cycle: close-story - git commit failed: $commit_err" >&2
       emit false close-story 2 error "git commit failed"
       exit 2
@@ -2567,7 +2579,7 @@ EOF
     # (lint-staged, a formatter) changed the commit but not the real index. Sync it to HEAD.
     GIT_LITERAL_PATHSPECS=1 git reset -q -- ${OWN[@]+"${OWN[@]}"} >/dev/null 2>&1
   else
-    sed_inplace -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
+    set_story_status "$STORY" '[^[:space:]#]+' done
   fi
 
   echo "cycle: $(fm_field "$STORY" story) - closed, verification green"

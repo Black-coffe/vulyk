@@ -4727,6 +4727,37 @@ bash scripts/journal.sh docs/specs/h07 03-building "fallback note with $h07secre
   && echo "  ok    brief.md, PAUSE and journal.md carry the mask, never the token" \
   || { echo "::error::ex1=$ex1 ex2=$ex2 $(grep -nF -e "$h07secret" -e REDACTED docs/specs/h07/brief.md docs/specs/h07/PAUSE docs/specs/h07/journal.md 2>&1)"; fail=1; }
 rm -f docs/specs/h07/PAUSE
+
+echo "close-story: only the frontmatter status: line becomes done, a body status: line is left as written (P9-13)"
+mkdir -p docs/specs/h13
+cat > docs/specs/h13/h13-01-first.md <<'EOF'
+---
+story: h13-01
+spec: h13
+status: todo
+returned: DONE
+wave: 1
+---
+# Body lines that look like frontmatter
+
+status: todo
+status: in-progress
+
+## Files
+- docs/specs/h13/flag.txt
+
+## Verification
+`true`
+EOF
+git add -A && git commit -qm "spec(h13): fixture" >/dev/null
+printf 'ok\n' > docs/specs/h13/flag.txt
+out="$(council close-story docs/specs/h13/h13-01-first.md 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(sed -n 4p docs/specs/h13/h13-01-first.md)" = "status: done" ] \
+  && [ "$(grep -c '^status:' docs/specs/h13/h13-01-first.md)" -eq 3 ] \
+  && grep -qx 'status: todo' docs/specs/h13/h13-01-first.md && grep -qx 'status: in-progress' docs/specs/h13/h13-01-first.md \
+  && echo "  ok    line 4 is status: done, the two body lines are unchanged" \
+  || { echo "::error::exit=$ex out=$out story: $(cat docs/specs/h13/h13-01-first.md)"; fail=1; }
+git add -A && git commit -qm "h13: closed" >/dev/null
 fi # part hardening
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
