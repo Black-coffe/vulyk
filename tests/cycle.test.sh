@@ -180,6 +180,23 @@ case "$st_study" in
   *) echo "::error::state.sh listed a story for a study spec whose report quotes story: lines: ${st_study:-absent}"; fail=1 ;;
 esac
 rm -rf docs/specs/study1
+# P9-14: a spec dir with a space is one spec, not two missing ones; a BSD-only stat still reads the mtime.
+mkdir -p "docs/specs/a b"
+printf -- '---\nstory: ab-01\nspec: a b\nstatus: done\n---\n' > "docs/specs/a b/ab 01 x.md"
+bash scripts/state.sh >/dev/null
+st_ab="$(sed -n '/"spec": "a b"/,/"stage"/p' .claude/state.json | tr -d ' \n')"
+case "$st_ab" in
+  *'"stories":1,"done":1,'*) echo "  ok    state.sh reads a spec dir and a story file with spaces in their names" ;;
+  *) echo "::error::state.sh lost the spaced spec: ${st_ab:-absent}"; fail=1 ;;
+esac
+BSDBIN="$(mktemp -d)"   # date without -r <file> and stat without -c: the BSD pair
+printf '#!/bin/sh\ncase " $* " in *" -r "*) exit 1 ;; esac\nexec %s "$@"\n' "$(command -v date)" > "$BSDBIN/date"
+printf '#!/bin/sh\n[ "$1" = -f ] && [ "$2" = %%m ] && exec %s -c %%Y "$3"\nexit 1\n' "$(command -v stat)" > "$BSDBIN/stat"
+chmod +x "$BSDBIN/date" "$BSDBIN/stat"
+touch -t 209901010000 "docs/specs/a b/ab 01 x.md"   # newer than any snapshot
+PATH="$BSDBIN:$PATH" bash scripts/state.sh >/dev/null
+sed -n '/"spec": "a b"/,/"stage"/p' .claude/state.json | expect "state.sh with a BSD stat: a story newer than the snapshot is stale" '"stale": true'
+rm -rf "docs/specs/a b" "$BSDBIN"
 
 # A stale pack (a story cut after the look) reopens 04 and 05 both.
 printf -- '---\nstory: demo-02\nspec: demo\nstatus: done\nwave: 2\n---\n# S2\n' > docs/specs/demo/demo-02-repair.md
