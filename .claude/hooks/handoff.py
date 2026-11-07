@@ -39,6 +39,7 @@ Invoked through handoff.sh, which fails open when no Python 3 is on PATH.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -51,7 +52,9 @@ except Exception:
     pass
 
 HOME = os.path.expanduser("~")
-CLAUDE_USER_DIR = os.path.join(HOME, ".claude")
+# Claude Code keeps its transcripts under CLAUDE_CONFIG_DIR when that is set, else ~/.claude.
+CLAUDE_USER_DIR = (os.path.expanduser(os.environ.get("CLAUDE_CONFIG_DIR") or "")
+                   or os.path.join(HOME, ".claude"))
 
 DEFAULTS = {
     "enabled": True,
@@ -68,7 +71,7 @@ DEFAULTS = {
     # (unless ENABLE_PROMPT_CACHING_1H=1). Checkpointing inside this window
     # re-reads the conversation at cache price; outside it, at full price.
     "cache_ttl_minutes": 60,
-    # SessionStart(resume) only restores a handoff younger than this
+    # SessionStart (clear / compact) restores a handoff once, and only one younger than this
     "restore_max_age_hours": 12,
     # the restored handoff is cut to this many characters
     "restore_max_chars": 4000,
@@ -127,10 +130,21 @@ def emit(payload):
 
 
 def read_stdin_json():
+    # Claude Code writes the payload as UTF-8. sys.stdin decodes with the locale's code page
+    # (cp1251 on a Cyrillic Windows), which garbles a non-ASCII transcript_path into a file
+    # that does not exist: 0 tokens, so no banner, no dump. Read bytes and decode them here.
     try:
-        raw = sys.stdin.read()
+        data = getattr(sys.stdin, "buffer", None)
+        data = data.read() if data is not None else sys.stdin.read()
     except Exception:
         return {}
+    if isinstance(data, bytes):
+        try:
+            raw = data.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raw = data.decode(getattr(sys.stdin, "encoding", None) or "utf-8", "replace")  # the old path
+    else:
+        raw = data
     if not raw or not raw.strip():
         return {}
     try:
@@ -597,12 +611,15 @@ def harvest(entries, cfg):
         "prompts": prompts[-cfg["max_user_prompts"]:],
         "touched": list(touched.items())[-cfg["max_touched_files"]:],
         "todos": todos,
-        "last_reply": last_reply[:1500],
+        # masked before the cut: a token split by it is too short for any pattern (P10-13)
+        "last_reply": redact_builtin(last_reply)[:1500],
     }
 
 
-# Minimal mirror of scripts/redact.sh for environments without bash - that script is
-# the single source of truth for the pattern list; extend both together.
+# Mirror of scripts/redact.sh, applied after it too: it is the only redaction where bash is
+# missing, is WSL's (a Windows path is not a file there) or redact.sh degraded to `cat`.
+# Keep it a superset of that script's list; extend both together. Group 1, when a pattern
+# has one, is kept in front of the mask.
 _REDACT_FALLBACK = [
     re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"),
     re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
@@ -620,6 +637,10 @@ _REDACT_FALLBACK = [
     re.compile(r"[rs]k_live_[A-Za-z0-9]{20,}"),
     re.compile(r"(?<=hooks\.slack\.com/services/)[A-Za-z0-9/_-]{20,}"),
     re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"),
+    re.compile(r"([Bb]earer\s+)[A-Za-z0-9._~+/-]{16,}=*"),
+    # Basic credentials only inside an Authorization header: a bare "Basic <word>" is prose.
+    re.compile(r"((?:proxy-)?authorization[\"']?\s*[:=]\s*[\"']?basic\s+)[A-Za-z0-9+/._~-]{8,}=*", re.I),
+    re.compile(r"(?<=://)[^/\s:@]+:[^/\s@]+(?=@)"),
     re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?"
                r"(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)", re.S),
     re.compile(r"([\"']?[A-Za-z0-9_-]*(?:password|passwd|secret|api[_-]?key|access[_-]?key"
@@ -638,15 +659,21 @@ def redact_text(root, text):
     if not text:
         return text
     script = os.path.join(root, "scripts", "redact.sh")
-    if os.path.isfile(script):
+    bash = redact_bash() if os.path.isfile(script) else None
+    if bash:
         try:
             p = subprocess.run(
-                ["bash", script], input=text.encode("utf-8"),
+                [bash, script], input=text.encode("utf-8"),
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15)
             if p.returncode == 0 and p.stdout:
-                return p.stdout.decode("utf-8", "replace")
+                text = p.stdout.decode("utf-8", "replace")
         except Exception:
             pass
+    return redact_builtin(text)
+
+
+def redact_builtin(text):
+    """The _REDACT_FALLBACK pass alone: pure Python, no process. Never raises."""
     try:
         for pat in _REDACT_FALLBACK:
             text = pat.sub(
@@ -654,6 +681,41 @@ def redact_text(root, text):
     except Exception:
         pass
     return text
+
+
+def redact_bash():
+    """A bash that can run scripts/redact.sh given a native path, or None.
+
+    On Windows a bare "bash" is resolved by CreateProcess, which searches System32 before
+    PATH: that is WSL's launcher, a Linux bash to which C:\\... is no file (exit 127). So
+    there it is Git Bash - Claude Code's own pin, then PATH, then beside git.exe, then
+    the stock install folders - and never a bash under the Windows folder or WindowsApps.
+    """
+    if os.name != "nt":
+        return "bash"
+    cands = [os.environ.get("CLAUDE_CODE_GIT_BASH_PATH"), shutil.which("bash")]
+    git = shutil.which("git")
+    if git:
+        top = os.path.dirname(os.path.dirname(os.path.realpath(git)))  # Git\cmd\git.exe -> Git
+        cands += [os.path.join(top, "bin", "bash.exe"), os.path.join(top, "usr", "bin", "bash.exe"),
+                  os.path.join(os.path.dirname(top), "bin", "bash.exe")]  # Git\mingw64\bin\git.exe
+    for var in ("ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"):
+        if os.environ.get(var):
+            cands.append(os.path.join(os.environ[var], "Git", "bin", "bash.exe"))
+    if os.environ.get("LOCALAPPDATA"):
+        cands.append(os.path.join(os.environ["LOCALAPPDATA"], "Programs", "Git", "bin", "bash.exe"))
+    windir = os.path.normcase(os.environ.get("SystemRoot") or os.environ.get("windir") or r"C:\Windows")
+    for c in cands:
+        try:
+            if not c or not os.path.isfile(c):
+                continue
+            n = os.path.normcase(os.path.abspath(c))
+        except Exception:
+            continue
+        if n.startswith(windir.rstrip("\\") + "\\") or "\\windowsapps\\" in n:
+            continue
+        return c
+    return None
 
 
 def create_unique(target_dir, base, doc):
@@ -729,7 +791,7 @@ def write_handoff(payload, cfg, reason):
     if data["prompts"]:
         lines += ["## Recent user prompts", ""]
         for i, p in enumerate(data["prompts"], start=1):
-            snippet = p.strip().replace("\r", "")
+            snippet = redact_builtin(p.strip().replace("\r", ""))  # before the cut, as above
             if len(snippet) > 500:
                 snippet = snippet[:500] + " ..."
             lines.append("%d. %s" % (i, snippet.replace("\n", "\n   ")))
@@ -854,8 +916,36 @@ def mode_dump_hook(payload, cfg, reason, min_tokens_check=True):
 RESTORE_SOURCES = ("clear", "compact")
 
 
+def clip_handoff(body, cap):
+    """body cut to about cap characters, keeping its last `## Summary` section.
+
+    The summary is the model-written narrative and the document's last section, so a
+    plain head cut dropped exactly it. The head gets what the summary leaves; a summary
+    longer than the cap is itself cut, since it is worth more than the mechanical head.
+    """
+    if len(body) <= cap:
+        return body
+    mark = "\n...(truncated)\n\n"
+    at = body.rfind("\n## Summary")
+    if at == -1:
+        return body[:cap] + "\n\n...(truncated)"
+    tail = body[at + 1:]
+    if len(tail) >= cap:
+        return tail[:cap] + "\n\n...(truncated)"
+    return body[:cap - len(tail)] + mark + tail
+
+
 def mode_sessionstart(payload, cfg, root):
     source = (payload.get("source") or "").lower()
+    if source == "compact":
+        # Compaction keeps the session id but shrinks the context: the levels already
+        # warned about must fire again when it grows back, or the session gets no warning.
+        sid = payload.get("session_id")
+        state = load_state(root, sid)
+        if "stop_level" in state or "prompt_level" in state:
+            state.pop("stop_level", None)
+            state.pop("prompt_level", None)
+            save_state(root, sid, state)
     if source not in RESTORE_SOURCES:
         emit(None)
     idx = index_path(root)
@@ -870,12 +960,16 @@ def mode_sessionstart(payload, cfg, root):
         emit(None)
 
     age_h = (time.time() - float(meta.get("ts") or 0)) / 3600.0
-    deliberate = source in ("clear", "compact")
-    if not deliberate:
-        if age_h > cfg["restore_max_age_hours"]:
-            emit(None)
-        if meta.get("consumed_by_startup"):
-            emit(None)
+    # A handoff is restored once, and only while fresh: a /clear in a session too small to
+    # dump left index.json on whatever it last named - any session, any day - and every
+    # later /clear injected that again.
+    if age_h > cfg["restore_max_age_hours"] or meta.get("consumed_by_startup"):
+        emit(None)
+    # Compaction keeps the session id and PreCompact has just dumped this session, so a
+    # handoff of another session is a parallel window's, not this one's.
+    sid = payload.get("session_id")
+    if source == "compact" and sid and meta.get("session_id") not in (None, sid):
+        emit(None)
 
     try:
         with open(path, "r", encoding="utf-8") as fh:
@@ -883,8 +977,7 @@ def mode_sessionstart(payload, cfg, root):
     except Exception:
         emit(None)
     cap = positive_int(cfg.get("restore_max_chars")) or DEFAULTS["restore_max_chars"]
-    if len(body) > cap:
-        body = body[:cap] + "\n\n...(truncated)"
+    body = clip_handoff(body, cap)
 
     try:
         meta["consumed_by_startup"] = True
@@ -1069,7 +1162,8 @@ def main():
         mode_dump_hook(payload, cfg, "precompact", min_tokens_check=False)
     elif mode == "sessionend":
         reason = (payload.get("reason") or "other").lower()
-        if reason not in ("clear", "logout", "other", "exit"):
+        # A normal /exit or Ctrl+D arrives as `prompt_input_exit` (Claude Code's SessionEnd reasons).
+        if reason not in ("clear", "logout", "other", "exit", "prompt_input_exit"):
             emit(None)
         mode_dump_hook(payload, cfg, "sessionend-%s" % reason)
     elif mode == "sessionstart":

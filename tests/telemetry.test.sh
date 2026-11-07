@@ -616,7 +616,7 @@ expect_eq "handoff.sh status still exits 0 with measure added" "0" "$STATUS_RC"
 
 # --- case 9b: handoff.py sessionstart - which sessions get the handoff (ADR-013 D7) ------------
 # Only a session that continues earlier work - /clear or compaction - is handed the last
-# handoff, and never more than 4 000 characters of it. A resumed session still carries its own
+# handoff, once, and never more than 4 000 characters of it. A resumed session still carries its own
 # context, so it gets nothing, like startup and fork.
 echo "--- handoff.py sessionstart"
 RS="$T/restore"; mkdir -p "$RS/.claude/handoff"
@@ -637,7 +637,9 @@ expect_eq "startup gets no handoff"             "0"    "$(restored startup)"
 expect_eq "fork gets no handoff"                "0"    "$(restored fork)"
 expect_eq "a payload with no source gets none"  "0"    "$(restored '')"
 expect_eq "clear gets it, cut to 4000 chars"    "4000" "$(restored clear)"
-expect_eq "compact gets it again (deliberate)"  "4000" "$(restored compact)"
+expect_eq "the same handoff is not restored twice" "0"    "$(restored compact)"
+restore_index
+expect_eq "compact gets a fresh one, cut to 4000"  "4000" "$(restored compact)"
 restore_index
 expect_eq "resume gets no handoff"              "0"    "$(restored resume)"
 
