@@ -114,7 +114,7 @@ while IFS= read -r dir; do
   total=0; done_n=0; blocked_n=0; progress_n=0; todo_n=0; unknown_n=0
   newest=0
   rows=""
-  for f in "${stories[@]}"; do
+  for f in ${stories[@]+"${stories[@]}"}; do
     total=$((total + 1))
     id="$(field "$f" story)"; st="$(field "$f" status)"
     wv="$(field "$f" wave)"; tr_="$(field "$f" tier)"
