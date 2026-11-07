@@ -34,13 +34,15 @@ cd "$ROOT" || exit 2
 DIR="${DEFECTS_DIR:-docs/defects}"
 [ -d "$DIR" ] || { echo "defects-index: no defect library at $DIR" >&2; exit 2; }
 
+# VULYK_PY first, then the names lib.sh's vulyk_python tries (`py` is the Windows launcher); not
+# sourced from lib.sh, so a fixture carrying this script alone still runs.
 PY=""
-for p in python3 python; do
-  if command -v "$p" >/dev/null 2>&1 && "$p" -c 'import sys; sys.exit(sys.version_info[0] != 3)' >/dev/null 2>&1; then
+for p in ${VULYK_PY:+"$VULYK_PY"} python3 python py; do
+  if command -v "$p" >/dev/null 2>&1 && "$p" -c 'import sys; sys.exit(sys.version_info[0] != 3)' </dev/null >/dev/null 2>&1; then
     PY="$p"; break
   fi
 done
-[ -n "$PY" ] || { echo "defects-index: python 3 not found on PATH (python3 or python) - cannot parse cards" >&2; exit 2; }
+[ -n "$PY" ] || { echo "defects-index: python 3 not found on PATH (python3, python or py) - cannot parse cards" >&2; exit 2; }
 
 PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" "$LIB" "$PAT" <<'PY'
 import os, re, sys

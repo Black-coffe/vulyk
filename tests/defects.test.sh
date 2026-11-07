@@ -414,8 +414,20 @@ ok "--counts prints the one-line counts" "$([ "$o" = 'cards 2 · never 1 · allo
 mkdir -p "$TMP/nopy"; printf '#!/bin/sh
 exit 1
 ' > "$TMP/nopy/python3"; cp "$TMP/nopy/python3" "$TMP/nopy/python"; chmod +x "$TMP/nopy/"*
-o="$(PATH="$TMP/nopy:$PATH" bash scripts/defects-index.sh --counts 2>&1)"; irc=$?
+cp "$TMP/nopy/python3" "$TMP/nopy/py"   # the Windows launcher is probed too (P9-18)
+o="$(VULYK_PY= PATH="$TMP/nopy:$PATH" bash scripts/defects-index.sh --counts 2>&1)"; irc=$?
 ok "no python -> defects-index exit 2 like the gate" "$([ "$irc" = 2 ] && printf '%s' "$o" | grep -q 'python 3 not found'; echo $?)"
+REALPY="$(command -v "$PYBIN")"
+o="$(VULYK_PY="$REALPY" PATH="$TMP/nopy:$PATH" bash scripts/defects-index.sh --counts 2>&1)"
+ok "P9-18: defects-index honours VULYK_PY when no python name runs" "$([ "$o" = 'cards 2 · never 1 · allowed 2 · how-to 0 · allowed repeats 1' ]; echo $?)"
+mkdir -p "$TMP/pyonly"; cp "$TMP/nopy/python3" "$TMP/nopy/python" "$TMP/pyonly/"
+printf '#!/bin/sh
+exec "%s" "$@"
+' "$REALPY" > "$TMP/pyonly/py"; chmod +x "$TMP/pyonly/"*
+o="$(VULYK_PY= PATH="$TMP/pyonly:$PATH" bash scripts/defects-index.sh --counts 2>&1)"
+ok "P9-18: defects-index finds py when python3 and python do not run" "$([ "$o" = 'cards 2 · never 1 · allowed 2 · how-to 0 · allowed repeats 1' ]; echo $?)"
+run_pyonly="$(VULYK_PY= PATH="$TMP/pyonly:$PATH" bash scripts/defects-check.sh 2>&1)"
+ok "P9-18: defects-check finds py too" "$(printf '%s' "$run_pyonly" | grep -q 'python 3 not found'; [ $? -ne 0 ]; echo $?)"
 
 echo "--- usage"
 run a b; ok "two arguments -> exit 2" "$([ "$rc" = 2 ]; echo $?)"

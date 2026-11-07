@@ -79,15 +79,18 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 } > "$TMP"
 
 # One entry per directory that holds at least one story file directly.
+# Directories one per line and stories in an array, never a word-split list: a spec dir with a space
+# in its name (`docs/specs/a b`) vanished from the view.
 first_spec=1
-for dir in $( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirname "$TARGET" ); do
-  stories=""
+while IFS= read -r dir; do
+  [ -n "$dir" ] || continue
+  stories=()
   for f in "$dir"/*.md; do
     [ -f "$f" ] || continue
     field "$f" story >/dev/null 2>&1 || continue
-    stories="$stories $f"
+    stories+=("$f")
   done
-  if [ -z "$stories" ]; then
+  if [ "${#stories[@]}" -eq 0 ]; then
     # A study spec (ADR-008): brief + report, no plan, no story - a document deliverable that
     # never entered the cycle. Listed with stage "study" so the dashboard shows it exists.
     if [ -f "$dir/report.md" ] && [ ! -f "$dir/plan.md" ]; then
@@ -111,7 +114,7 @@ for dir in $( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirn
   total=0; done_n=0; blocked_n=0; progress_n=0; todo_n=0; unknown_n=0
   newest=0
   rows=""
-  for f in $stories; do
+  for f in ${stories[@]+"${stories[@]}"}; do
     total=$((total + 1))
     id="$(field "$f" story)"; st="$(field "$f" status)"
     wv="$(field "$f" wave)"; tr_="$(field "$f" tier)"
@@ -127,7 +130,8 @@ for dir in $( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirn
       todo)        todo_n=$((todo_n + 1)) ;;
       *)           unknown_n=$((unknown_n + 1)) ;;
     esac
-    mt="$(date -r "$f" +%s 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)"
+    # GNU date/stat, then BSD stat: without the last a macOS mtime read 0 and `stale` could never be true.
+    mt="$(date -r "$f" +%s 2>/dev/null || stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || echo 0)"
     [ "$mt" -gt "$newest" ] 2>/dev/null && newest="$mt"
     rows="$rows      {\"story\": \"$(j "${id:-unknown}")\", \"status\": \"$(j "${st:-<missing>}")\", \"wave\": \"$(j "${wv:-}")\", \"tier\": \"$(j "${tr_:-}")\", \"file\": \"$(j "$f")\"},
 "
@@ -182,7 +186,9 @@ for dir in $( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirn
     printf '\n      ]\n'
     printf '    }'
   } >> "$TMP"
-done
+done <<DIRS_EOF
+$( [ -d "$TARGET" ] && find "$TARGET" -type d | LC_ALL=C sort || dirname "$TARGET" )
+DIRS_EOF
 
 {
   printf '\n  ]\n'

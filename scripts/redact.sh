@@ -23,7 +23,15 @@ set -u
 MASK='[VULYK:REDACTED]'
 
 # Case variants spelled out instead of sed's GNU-only `I` flag - BSD sed must not choke.
-KEYWORDS='password|PASSWORD|Password|passwd|PASSWD|secret|SECRET|Secret|api[_-]?key|API[_-]?KEY|apikey|APIKEY|access[_-]?key|ACCESS[_-]?KEY|auth[_-]?token|AUTH[_-]?TOKEN|client[_-]?secret|CLIENT[_-]?SECRET|private[_-]?key|PRIVATE[_-]?KEY'
+KEYWORDS='password|PASSWORD|Password|passwd|PASSWD|secret|SECRET|Secret|[Aa]pi[_-]?[Kk]ey|API[_-]?KEY|apikey|APIKEY|[Aa]ccess[_-]?[Kk]ey|ACCESS[_-]?KEY|[Aa]ccess[_-]?[Tt]oken|ACCESS[_-]?TOKEN|[Rr]efresh[_-]?[Tt]oken|REFRESH[_-]?TOKEN|[Aa]uth[_-]?[Tt]oken|AUTH[_-]?TOKEN|[Cc]lient[_-]?[Ss]ecret|CLIENT[_-]?SECRET|[Pp]rivate[_-]?[Kk]ey|PRIVATE[_-]?KEY'
+# A bare token key (TOKEN=, GH_TOKEN:, "token":) must END in token - max_tokens, token_budget and
+# tokenizer are counters and settings, and this framework writes them everywhere - and its value must
+# look like one: 16+ chars, no spaces. Prose says "token: see below" and "token = `agent`".
+TOKEN_KEY='[A-Za-z0-9_-]*(token|TOKEN|Token)'
+TOKEN_VALUE="[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"
+# The value: a whole quoted string (spaces and all), else one unquoted word of 6+ chars that does not
+# open with ':' (so `token::Kind` or `secret::Name` in Rust / C++ stays readable).
+VALUE="(\"[^\"]{6,}\"|'[^']{6,}'|[\"']?[^\"'[:space:]:][^\"'[:space:]]{5,}[\"']?)"
 
 SED_ARGS=( -E
   -e "s|AKIA[0-9A-Z]{16}|$MASK|g"
@@ -40,12 +48,15 @@ SED_ARGS=( -E
   -e "s|hf_[A-Za-z0-9]{30,}|$MASK|g"
   -e "s|gsk_[A-Za-z0-9]{40,}|$MASK|g"
   -e "s|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}|$MASK|g"
-  -e "s|[rs]k_live_[A-Za-z0-9]{20,}|$MASK|g"
+  -e "s#[rs]k_(live|test)_[A-Za-z0-9]{20,}#$MASK#g"
   -e "s|hooks\.slack\.com/services/[A-Za-z0-9/_-]{20,}|hooks.slack.com/services/$MASK|g"
   -e "s|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}|$MASK|g"
   -e "s|[Bb]earer[[:space:]]+[A-Za-z0-9._~+/-]{16,}=*|Bearer $MASK|g"
-  -e "s#(://)[^/[:space:]:@]+:[^/[:space:]@]+@#\1$MASK@#g"
-  -e "s#([\"']?[A-Za-z0-9_-]*($KEYWORDS)[A-Za-z0-9_-]*[\"']?[[:space:]]*[=:][[:space:]]*)[\"']?[^\"'[:space:]]{6,}[\"']?#\1$MASK#g"
+  -e "s#([Aa]uthorization|AUTHORIZATION)([\"']?[[:space:]]*[:=][[:space:]]*[\"']?)([Bb]asic|BASIC|[Tt]oken|TOKEN)[[:space:]]+[A-Za-z0-9._~+/-]{8,}=*#\1\2\3 $MASK#g"
+  # A URL password may hold a raw '/'; a port before a path (host:443/@scope) is all digits, so it is not one.
+  -e "s#(://)[^/[:space:]:@]+:([^/[:space:]@]*[^0-9/[:space:]@][^[:space:]@]*|[^/[:space:]@]+)@#\1$MASK@#g"
+  -e "s#([\"']?[A-Za-z0-9_-]*($KEYWORDS)[A-Za-z0-9_-]*[\"']?[[:space:]]*[=:][[:space:]]*)$VALUE#\1$MASK#g"
+  -e "s#([\"']?$TOKEN_KEY[\"']?[[:space:]]*[=:][[:space:]]*)$TOKEN_VALUE#\1$MASK#g"
 )
 
 # Degrade to cat unless every tool is present AND this sed dialect accepts the script.
@@ -55,12 +66,23 @@ if ! command -v sed >/dev/null 2>&1 || ! command -v awk >/dev/null 2>&1 \
   exit 0
 fi
 
-# Pass 1 (awk): PEM-style private key blocks - multi-line, sed can't span lines.
+# Pass 1 (awk): PEM and PGP private key blocks - multi-line, sed can't span lines. A block runs to its
+#   END line or, when no END comes (a truncated paste), to the first line that is not key body (base64,
+#   an armor header, blank) - so the text after a broken key still reaches the file.
 # Pass 2 (sed): single-line token shapes and key=value assignments.
 awk -v mask="$MASK" '
-  /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/ { inkey=1; print mask; next }
-  inkey && /-----END [A-Z0-9 ]*PRIVATE KEY-----/ { inkey=0; next }
-  inkey { next }
+  function body(l) {
+    sub(/\r$/, "", l)
+    return l ~ /^[ \t]*[A-Za-z0-9+\/=]*[ \t]*$/ || l ~ /^(Proc-Type|DEK-Info|Version|Comment|Hash|Charset|MessageID): /
+  }
+  inkey && /-----END [A-Z0-9 ]*PRIVATE KEY( BLOCK)?-----/ { inkey=0; next }
+  inkey && body($0) { next }
+  { inkey=0 }
+  /-----BEGIN [A-Z0-9 ]*PRIVATE KEY( BLOCK)?-----/ {
+    print mask
+    if ($0 !~ /-----END [A-Z0-9 ]*PRIVATE KEY( BLOCK)?-----/) inkey=1
+    next
+  }
   { print }
 ' | sed ${SED_ARGS[@]+"${SED_ARGS[@]}"}
 
