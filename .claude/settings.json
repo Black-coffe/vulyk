@@ -16,8 +16,8 @@
     "SessionEnd": [
       {
         "hooks": [
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh sessionend" },
-          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh" }
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh sessionend", "timeout": 30 },
+          { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh", "timeout": 30 }
         ]
       }
     ],

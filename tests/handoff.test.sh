@@ -45,6 +45,20 @@ printf '#!/bin/sh\nexit 1\n' > "$FB/python"; cp "$FB/python" "$FB/py"; chmod +x 
 ( cd "$T" && PATH="$FB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null > /dev/null 2>&1; echo "exit=$?" ) > "$T/allbad.out"
 expect_eq "handoff.sh exits 0 when every interpreter exits 1 (fail-open)" "exit=0" "$(tr -d '\r' < "$T/allbad.out")"
 
+echo "--- settings.json: SessionEnd hooks carry an explicit timeout (P10-03)"
+# Without one a SessionEnd hook gets Claude Code's short exit budget (1.5 s); the dump takes 1.4-7 s.
+PYTHONIOENCODING=utf-8 "$PYBIN" - "$(W "$SRC/.claude/settings.json")" > "$T/se.out" 2>&1 <<'PY'
+import json, sys
+hooks = [h for g in json.load(open(sys.argv[1], encoding="utf-8"))["hooks"].get("SessionEnd", [])
+         for h in g.get("hooks", [])]
+for h in hooks:
+    t = h.get("timeout")
+    print("%s timeout=%s" % (h["command"].rsplit("/", 1)[-1], t if type(t) is int and t >= 10 else "MISSING"))
+PY
+grep -q 'handoff.sh sessionend timeout=' "$T/se.out" && ! grep -q MISSING "$T/se.out" \
+  && ok "every SessionEnd hook, handoff.sh sessionend among them, has a timeout >= 10 s" \
+  || { bad "a SessionEnd hook has no timeout:"; sed 's/^/        /' "$T/se.out"; }
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 echo "handoff.test.sh: $CHECKS checks, $FAILED failed"
