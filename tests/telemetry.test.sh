@@ -1347,6 +1347,13 @@ expect_eq "scripts/vulyk-update.sh --check runs the release's install.sh, exit 0
 cat "$T/xp-update.out" | expect "... reaching the release's installer" "Dry run done."
 cat "$T/xp-update.out" | expect_absent "... which finds its lib.sh" "lib.sh not found"
 cat "$T/xp-update.out" | expect_absent "... with every helper defined" "command not found"
+# P9-10: with no --version the newest tag wins by version, not by text, and without `sort -V` (stock macOS).
+git -C "$T/xp-relcache" tag v9.10.0 && git -C "$T/xp-relcache" tag v9.2.0
+NOSORTV="$T/nosortv"; mkdir -p "$NOSORTV"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in -V|--version-sort) echo "sort: invalid option -- V" >&2; exit 2 ;; esac; done\nexec %s "$@"\n' \
+  "$(command -v sort)" > "$NOSORTV/sort"; chmod +x "$NOSORTV/sort"
+( cd "$XCWD" && PATH="$NOSORTV:$PATH" VULYK_SRC="$T/xp-relcache" bash "$SRC/scripts/vulyk-update.sh" "$XU" --check --telemetry off ) \
+  2>&1 | expect "vulyk-update.sh picks the newest tag by version, with no sort -V" "upgrading to v9.10.0"
 
 # Ask 9, upgrade half: a hive's own filled ## Commands block - the old bare-python cell included - is the host's,
 # carried byte for byte through --upgrade.
