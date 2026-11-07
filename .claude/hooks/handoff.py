@@ -52,7 +52,9 @@ except Exception:
     pass
 
 HOME = os.path.expanduser("~")
-CLAUDE_USER_DIR = os.path.join(HOME, ".claude")
+# Claude Code keeps its transcripts under CLAUDE_CONFIG_DIR when that is set, else ~/.claude.
+CLAUDE_USER_DIR = (os.path.expanduser(os.environ.get("CLAUDE_CONFIG_DIR") or "")
+                   or os.path.join(HOME, ".claude"))
 
 DEFAULTS = {
     "enabled": True,

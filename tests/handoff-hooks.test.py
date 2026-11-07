@@ -177,6 +177,17 @@ for reason, wanted in (("prompt_input_exit", 1), ("clear", 1), ("resume", 0)):
           rc == 0 and len(handoffs(proj)) == wanted, "rc=%d out=%r err=%r" % (rc, out[:160], err[:160]))
 
 
+# --- P10-14: transcripts are found under CLAUDE_CONFIG_DIR -------------------------------------
+print("--- P10-14 CLAUDE_CONFIG_DIR")
+home, proj = fresh("p14")
+cfgdir = os.path.join(ROOT, "p14", "claude-config")
+sid = "0000aaaa-1414-1414-1414-000000000014"
+write_transcript(os.path.join(cfgdir, "projects", "some-project", sid + ".jsonl"), 150000)
+rc, out, err = run("dump", env_for(home, proj, {"CLAUDE_CONFIG_DIR": cfgdir}), args=[sid])
+check("P10-14 dump <session-id> reads the transcript under CLAUDE_CONFIG_DIR",
+      rc == 0 and "context_tokens=150000" in out, "rc=%d out=%r err=%r" % (rc, out[:200], err[:200]))
+
+
 shutil.rmtree(os.path.dirname(ROOT), ignore_errors=True)
 print()
 if fails:
