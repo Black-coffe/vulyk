@@ -151,6 +151,21 @@ check("P10-02 redact.sh at a native path runs, then the built-in pass", got.star
       and MASK in got and "zzzzzzzz" not in got, repr(got))
 
 
+# --- P10-13: a token cut by the 500/1500-char truncation is masked, not left as a prefix ------
+print("--- P10-13 redact first, then truncate")
+home, proj = fresh("p13")
+tok_p, tok_r = "gh" + "p_" + rep(36, "y"), "gh" + "p_" + rep(36, "z")
+tp = write_transcript(os.path.join(ROOT, "p13", "tr", "s13.jsonl"), 30000,
+                      prompts=[rep(490, "a") + " " + tok_p], reply=rep(1490, "b") + " " + tok_r)
+rc, out, err = run("precompact", env_for(home, proj), {"session_id": "s13", "transcript_path": tp, "cwd": proj})
+docs = handoffs(proj)
+doc = read(docs[0]) if docs else ""
+check("P10-13 the precompact dump is written", rc == 0 and len(docs) == 1,
+      "rc=%d docs=%r err=%r" % (rc, docs, err[:200]))
+check("P10-13 no token prefix survives the prompt cut", "yyyyy" not in doc, doc[-2500:-1800])
+check("P10-13 no token prefix survives the reply cut", "zzzzz" not in doc, doc[-700:])
+
+
 shutil.rmtree(os.path.dirname(ROOT), ignore_errors=True)
 print()
 if fails:

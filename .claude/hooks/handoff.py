@@ -609,7 +609,8 @@ def harvest(entries, cfg):
         "prompts": prompts[-cfg["max_user_prompts"]:],
         "touched": list(touched.items())[-cfg["max_touched_files"]:],
         "todos": todos,
-        "last_reply": last_reply[:1500],
+        # masked before the cut: a token split by it is too short for any pattern (P10-13)
+        "last_reply": redact_builtin(last_reply)[:1500],
     }
 
 
@@ -788,7 +789,7 @@ def write_handoff(payload, cfg, reason):
     if data["prompts"]:
         lines += ["## Recent user prompts", ""]
         for i, p in enumerate(data["prompts"], start=1):
-            snippet = p.strip().replace("\r", "")
+            snippet = redact_builtin(p.strip().replace("\r", ""))  # before the cut, as above
             if len(snippet) > 500:
                 snippet = snippet[:500] + " ..."
             lines.append("%d. %s" % (i, snippet.replace("\n", "\n   ")))
