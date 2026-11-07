@@ -22,16 +22,20 @@
 # Never blocks: no python, no docs/defects/, bad JSON or any error -> silent exit 0.
 # The Python half lives below the `exit 0`, inside a no-op heredoc; bash never runs it, python reads
 # it back out of this file (one interpreter start, stdin passes straight through).
-# stdin is read once so a non-working interpreter (the Windows Store `python3` alias exits 9009
-# without running anything) falls through to the next one; 0 or 1 means python itself ran.
+# stdin is read once so a non-working interpreter falls through to the next one: a preset $VULYK_PY
+# (as scripts/lib.sh trusts it), then python3, python, py. Only exit 0 means the Python half ran (it
+# always ends in sys.exit(0)); its output is held until then, so the Windows Store `python3` alias
+# (9009), a Python 2 that cannot read this file (1) or a broken install prints nothing.
 # `--lexicon` prints the correction lexicon as portable ERE lines instead (for `litopys corrections
 # --lexicon`, read by /vulyk-evolve) and reads no stdin: one word list, two consumers.
 if [ "${1:-}" = "--lexicon" ]; then IN=""; else IN="$(cat)"; fi
-for PY in python3 python; do
+for PY in ${VULYK_PY:+"$VULYK_PY"} python3 python py; do
   command -v "$PY" >/dev/null 2>&1 || continue
-  printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \
-    "${BASH_SOURCE[0]}" "$@" 2>/dev/null
-  case $? in 0|1) exit 0 ;; esac
+  # the trailing `.` keeps the output's last newline (the --lexicon list) through $(...)
+  OUT="$(printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \
+    "${BASH_SOURCE[0]}" "$@" 2>/dev/null && printf .)" || continue
+  printf '%s' "${OUT%.}"
+  exit 0
 done
 exit 0
 

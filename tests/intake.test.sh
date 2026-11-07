@@ -293,6 +293,26 @@ if ( VULYK_PY=""; PATH="$T/stubbin:$PATH"; vulyk_python ); then
   else bad "a python3 stub silenced the hook"; fi
 else echo "  skip  no python on PATH besides python3"; fi
 
+# P10-10: exit 1 was taken as "python ran" (a Python 2 named python3, a broken install), and neither a
+# preset $VULYK_PY nor Windows' `py` launcher was tried.
+echo "--- P10-10: which python runs the hook"
+REALPY="$(command -v "$PYBIN")"
+mkdir -p "$T/py1bin" "$T/pyonly"
+printf '#!/bin/sh\necho "half a line"\nexit 1\n' > "$T/py1bin/python3"; chmod +x "$T/py1bin/python3"
+o="$(printf '%s' '{"prompt":"опять обрезал голос"}' | env -u VULYK_PY PATH="$T/py1bin:$PATH" CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK")"
+printf '%s' "$o" | expect "P10-10: a python3 exiting 1 falls through to the next python" "looks like a correction"
+printf '%s' "$o" | expect_absent "P10-10: and the failed one's output is not printed" "half a line"
+printf '#!/bin/sh\n: > "%s/vpy-used"\nexec "%s" "$@"\n' "$T" "$REALPY" > "$T/vpy"; chmod +x "$T/vpy"
+o="$(printf '%s' '{"prompt":"опять обрезал голос"}' | VULYK_PY="$T/vpy" PATH="$T/py1bin:$PATH" CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK")"
+expect_eq "P10-10: a preset VULYK_PY is tried first" yes "$([ -e "$T/vpy-used" ] && echo yes || echo no)"
+printf '%s' "$o" | expect "P10-10: ... and files the correction" "looks like a correction"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$(command -v cat)" > "$T/pyonly/cat"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$REALPY" > "$T/pyonly/py"; chmod +x "$T/pyonly/cat" "$T/pyonly/py"
+o="$(printf '%s' '{"prompt":"опять обрезал голос"}' | env -u VULYK_PY PATH="$T/pyonly" CLAUDE_PROJECT_DIR="$HIVE" "$BASH" "$HOOK")"
+printf '%s' "$o" | expect "P10-10: with only py on PATH the hook still runs" "looks like a correction"
+o="$(env -u VULYK_PY PATH="$T/pyonly" "$BASH" "$HOOK" --lexicon </dev/null | tail -c 1 | od -An -c | tr -d ' ')"
+expect_eq "P10-10: --lexicon output still ends in a newline" '\n' "$o"
+
 # --- install.sh --upgrade rewires the inject matcher and adds the answer hook (rules-tree-05) ---
 echo "--- install.sh --upgrade wiring"
 UP="$T/up"; mkdir -p "$UP"; export VULYK_CLAUDE="$T/no-claude"   # no run reaches the real claude binary
