@@ -28,6 +28,15 @@ re='"tool_name"[[:space:]]*:[[:space:]]*"Read"'
 if [[ $IN =~ $re ]]; then
   case "$IN" in *docs/specs/*|*'docs\\specs\\'*) ;; *) exit 0 ;; esac
 fi
+# Any other tool (WebFetch, Agent, mcp__*) has no path and no command line: only a `tool:` entry can match
+# it, so a library with no `tool:` anywhere exits here too, before python starts (P10-11). grep's 1 is
+# "read it all, none there"; a read error (2) goes on to python.
+re='"tool_name"[[:space:]]*:[[:space:]]*"'
+re_path='"tool_name"[[:space:]]*:[[:space:]]*"(Edit|Write|MultiEdit|NotebookEdit|Bash|Read)"'
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [[ $IN =~ $re ]] && ! [[ $IN =~ $re_path ]]; then
+  grep -rqsF 'tool:' "$CLAUDE_PROJECT_DIR/docs/defects"
+  [ $? -eq 1 ] && exit 0
+fi
 for PY in python3 python; do
   command -v "$PY" >/dev/null 2>&1 || continue
   printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \

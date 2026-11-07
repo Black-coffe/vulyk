@@ -57,6 +57,10 @@ expect_absent() { # expect_absent <label> <needle>   (reads the output to judge 
   else ok "$label"; fi
 }
 
+expect_eq() { # expect_eq <label> <want> <got>
+  if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 - expected '$2', got '$3'"; fi
+}
+
 expect_silent() { # expect_silent <label>   (reads run's output: the hook's stdout, then rc=N)
   local label="$1" out; out="$(cat)"
   if [ "$out" = "rc=0" ]; then ok "$label"
@@ -360,6 +364,27 @@ if ( VULYK_PY=""; PATH="$T/stubbin:$PATH"; vulyk_python ); then
   if printf '%s' "$o" | grep -q additionalContext; then ok "a python3 stub exiting 9009 falls through to python"
   else bad "a python3 stub silenced the hook"; fi
 else echo "  skip  no python on PATH besides python3"; fi
+
+# P10-11: an Agent / WebFetch / mcp__ call started python (0.5-2 s on Windows) in a library no `tool:` card
+# could match. A python3 stub that leaves a mark shows whether python was started at all.
+echo "--- P10-11: no tool: card, no python start"
+mkdir -p "$T/markbin"; printf '#!/bin/sh\n: > "%s/py-started"\nexit 9009\n' "$T" > "$T/markbin/python3"; chmod +x "$T/markbin/python3"
+started() { # started <root> <json>   -> yes when the hook tried a python, else no
+  rm -f "$T/py-started"
+  printf '%s' "$2" | env -u VULYK_PY PATH="$T/markbin:$PATH" CLAUDE_PROJECT_DIR="$1" bash "$HOOK" >/dev/null 2>&1
+  [ -e "$T/py-started" ] && echo yes || echo no
+}
+for t in Agent WebFetch mcp__chrome-devtools__click BashOutput; do
+  expect_eq "P10-11: $t in a library with no tool: card starts no python" no \
+    "$(started "$HIVE" "{\"session_id\":\"p11\",\"tool_name\":\"$t\",\"tool_input\":{\"url\":\"https://x\"}}")"
+done
+expect_eq "P10-11 neighbour: an Agent call in a library with a tool: card still starts python" yes \
+  "$(started "$H2" '{"session_id":"p11","tool_name":"Agent","tool_input":{"prompt":"x"}}')"
+expect_eq "P10-11 neighbour: an Edit call in a library with no tool: card still starts python" yes \
+  "$(started "$HIVE" "$(edit p11 "$W/pipeline/voiceover.py")")"
+expect_eq "P10-11 neighbour: a payload with no tool_name (SessionStart) still starts python" yes \
+  "$(started "$HIVE" '{"session_id":"p11","source":"compact"}' )"
+run "$H2" "$(tool p11b WebFetch)" | ctx | expect "P10-11 neighbour: the tool: card itself is still injected" "✗ WEBNEVER fetch blind."
 
 # --- cards on reading a story (0.41): a Read of a story file delivers the cards for its ## Files ------
 echo "--- story read"
