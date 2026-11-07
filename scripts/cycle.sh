@@ -58,12 +58,18 @@ json_escape() { # json_escape <text> -> the JSON-string-safe form of <text>: bac
   # every value through, so the last stdout line is one parsable JSON object whatever a
   # hive's `## Commands` cell or a report's own text contains. Order matters: backslash first,
   # or a later substitution's own backslash would be escaped a second time.
-  local s="$1"
-  s="${s//\\/\\\\}"
-  s="${s//\"/\\\"}"
-  s="${s//$'\t'/\\t}"
-  s="${s//$'\n'/\\n}"
-  printf '%s' "$s"
+  json_escape_to "$1"
+  printf '%s' "$JE"
+}
+
+json_escape_to() { # json_escape_to <text> -> JE: json_escape's result in a variable, no subshell -
+  # for free text interpolated into a council.jsonl row (P9-01) or `status --json` (P9-06), where a
+  # note or a frontmatter value holding a quote broke the line for jq or forged a key.
+  JE="$1"
+  JE="${JE//\\/\\\\}"
+  JE="${JE//\"/\\\"}"
+  JE="${JE//$'\t'/\\t}"
+  JE="${JE//$'\n'/\\n}"
 }
 
 emit() { # emit <true|false> <verb> <exit> <next> [error] [status-json]
@@ -1008,11 +1014,12 @@ ASKS
 
   if ! escalate_row_exists "$slug" "$n"; then
     mkdir -p memory/stats
+    json_escape_to "$note" # P9-01: the note is free text - a quote in it must not forge a key
     printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"ESCALATE","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"review_asks":[%s],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":"%s","note":"%s"}\n' \
       "$(now_ts)" "$slug" "$n" "$rhead" "$rpack" "$a" \
       "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$(json_num_csv "$review_asks")" \
       "$review_v" "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" \
-      "$attempts" "$reason" "$note" >> memory/stats/council.jsonl
+      "$attempts" "$reason" "$JE" >> memory/stats/council.jsonl
   fi
 
   if [ -f "$plan" ] && ! escalate_council_line_exists "$plan" "$n"; then
@@ -1246,6 +1253,7 @@ ASKS
     local noteval=""
     [ "$escalate_reason" = "env" ] && noteval="$(redact_note "$(printf '%s' "$absent_seats" | sed 's/ /, /g') ABSENT")"
     [ -n "$review_note" ] && noteval="${noteval:+$noteval; }$review_note"
+    json_escape_to "$noteval"; noteval="$JE" # P9-01: same as write_escalate_row_for_round
     printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"review_asks":[%s],"na":%s,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":%s,"note":"%s"}\n' \
       "$(now_ts)" "$SLUG" "$N" "$overall" "$head7" "$RPACK" "$A" \
       "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$(json_num_csv "$review_asks")" "$na_count" \

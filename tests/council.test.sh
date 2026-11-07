@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite hardening" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -4645,6 +4645,20 @@ out="$(council suite docs/specs/sxno 2>&1)"; ex=$?
   && [ "$(tail -1 docs/specs/sxno/council/round-1/suite.log)" = "SUITE: none" ] \
   && echo "  ok    no row -> SUITE: none, steps 0, done" || { echo "::error::suite none: exit=$ex out=$out"; fail=1; }
 fi # part suite
+
+if part hardening; then # --- part hardening: free text and odd values that broke a ledger, a report or a path (audit P9)
+
+echo "escalate: a note holding quotes is JSON-escaped - it never forges a key, jq still reads the row (P9-01)"
+mk_open_spec h01 2
+set_tier h01 1
+mk_open_round h01 1 >/dev/null
+h01note='owner says","verdict":"GREEN in C:\tmp\x'
+out="$(council escalate docs/specs/h01 --reason half "$h01note" 2>&1)"; ex=$?
+row="$(grep '"spec":"h01"' memory/stats/council.jsonl | tail -1)"
+[ "$ex" -eq 6 ] && printf '%s' "$row" | jq -e --arg n "$h01note" '.verdict == "ESCALATE" and .note == $n' >/dev/null 2>&1 \
+  && echo "  ok    the row parses, verdict ESCALATE, the note is the text given" || { echo "::error::exit=$ex row=$row"; fail=1; }
+council status docs/specs/h01 --json | jq -r .next | expect "status still reads the round as escalated, not green" "escalated"
+fi # part hardening
 
 [ "$QUICK" -eq 1 ] && echo "--quick: variant batteries, regression walks and pinned-commit replays skipped; bash tests/council.test.sh is the release gate"
 [ -s "$FAILS" ] && fail=1 # an expect() that ran on the right of a pipe
