@@ -4,6 +4,9 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+### Fixed
+- **`stamp-red` seals the test, not every file a verification line names.** The sealed set was every `## Verification` path under `## Files`, so a line such as `pint --test app/Foo.php tests/FooTest.php` sealed the implementation and the lint config too, and the story could not close after the worker touched them (`test changed after red receipt`). Now `lib.sh` `is_test_path` keeps only test-shaped paths (`test/`, `tests/`, `spec/`, `__tests__/`, `test_*`, `*_test.*`, `*.test.*`, `*.spec.*`, `*_spec.*`, `*Test.*`, `*Tests.*`, `*Spec.*`); with none among them, every one is sealed as before. ADR-025 D2 amended. Still sealed: a lint fix to the test file itself.
+
 ## [0.48.0] - 2026-11-06
 
 The uncommitted-work guard, the diff before ACCEPTED, quotes that are not corrections (spec `uncommitted-work-guard`,

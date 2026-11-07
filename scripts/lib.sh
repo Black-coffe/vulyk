@@ -236,9 +236,28 @@ verify_path_tokens() { # verify_path_tokens <verification-text> -> each whitespa
   printf '%s\n' "$1" | grep -v '^repeat:' | tr ' \t' '\n\n' | grep -v '^-' | tr -d "\"'" | grep -v '^$'
 }
 
-sealed_tests() { # sealed_tests <verification-text> <files-text> -> the red-receipt sealed set: every
-  # literal token (no glob character) of the verification that equals a `## Files` entry or matches
-  # a `## Files` glob, sorted, deduplicated. A quoted glob such as `'*.sh'` is never sealed.
+is_test_path() { # is_test_path <path> -> 0 iff the path is test-shaped: a folder named test, tests,
+  # spec or __tests__, or a file named test_*, *_test.*, *.test.*, *.spec.*, *_spec.*, *Test.*,
+  # *Tests.* or *Spec.*. `docs/specs/` is no test folder.
+  local p="/${1#./}" b="${1##*/}"
+  case "$p" in */test/*|*/tests/*|*/spec/*|*/__tests__/*) return 0 ;; esac
+  case "$b" in test_*|*_test.*|*.test.*|*.spec.*|*_spec.*|*Test.*|*Tests.*|*Spec.*) return 0 ;; esac
+  return 1
+}
+
+sealed_tests() { # sealed_tests <verification-text> <files-text> -> the red-receipt sealed set: the
+  # test-shaped paths (is_test_path) among the verification's literal tokens (no glob character) that
+  # equal a `## Files` entry or match a `## Files` glob, sorted, deduplicated. An implementation or lint
+  # file a verification line also names stays out of the seal (0.48.1). With no test-shaped path among
+  # them, every such token is sealed, as before 0.48.1. A quoted glob such as `'*.sh'` is never sealed.
+  local all t
+  all="$(sealed_candidates "$1" "$2")"
+  t="$(printf '%s\n' "$all" | while IFS= read -r tok; do [ -n "$tok" ] && is_test_path "$tok" && printf '%s\n' "$tok"; done)"
+  if [ -n "$t" ]; then printf '%s\n' "$t"; elif [ -n "$all" ]; then printf '%s\n' "$all"; fi
+}
+
+sealed_candidates() { # sealed_candidates <verification-text> <files-text> -> every literal token of
+  # the verification under `## Files` (sealed_tests before 0.48.1), sorted, deduplicated
   local tok d
   verify_path_tokens "$1" | while IFS= read -r tok; do
     case "$tok" in *[*?[]*) continue ;; esac

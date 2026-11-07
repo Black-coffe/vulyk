@@ -81,7 +81,7 @@ Plan: "$ARGUMENTS"
    on disjoint `## Files`; fold the rest together. A story that adds a branch, a loop, a parser, or
    handling of money, security or data writes is marked `red: required` by you, the planner, and names
    the test that fails when that logic breaks: a test file in its own `## Files` whose path appears in
-   its `## Verification` (so `stamp-red` seals it), with `red_reason:` prefilled when the assertion is
+   its `## Verification` and is test-shaped (`tests/`, `*_test.*`, `*Test.*`: `stamp-red` seals only those), with `red_reason:` prefilled when the assertion is
    known. A marked story gets no `worker-test` story in a later wave; its test is in the same story.
    One such test, not coverage, and a trivial change names none.
 7. Check. `bash scripts/wave-check.sh docs/specs/<slug>` and `bash scripts/trace-check.sh

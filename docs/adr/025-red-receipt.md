@@ -47,6 +47,11 @@ test was red, for the declared reason, before the code existed.
   earlier `## Red receipt` section with a new one (command, exit, tests hash with its paths, impl hash, stamped time,
   and the last 10 output lines of the segment piped through `scripts/redact.sh`), and prints one JSON line. It commits
   nothing: the receipt rides close-story's commit of the story file.
+  Amended in 0.48.1: the sealed set is the test-shaped paths (`lib.sh` `is_test_path`: a folder `test`, `tests`,
+  `spec` or `__tests__`, or a file `test_*`, `*_test.*`, `*.test.*`, `*.spec.*`, `*_spec.*`, `*Test.*`, `*Tests.*`,
+  `*Spec.*`) among the verification paths under `## Files`; an implementation or lint file a verification line also
+  names is no longer sealed, so editing it after the stamp no longer reads as `test changed after red receipt`. With
+  no test-shaped path among them, every one is sealed, as before.
 - **D3 - the close-story gate.** For a marked story, after the scope check and before verification, close-story
   refuses with exit 4:
   - `no red receipt: run cycle.sh stamp-red <story> after writing the failing test` - `red_verified_at` or the
