@@ -49,7 +49,9 @@ test was red, for the declared reason, before the code existed.
   nothing: the receipt rides close-story's commit of the story file.
   Amended in 0.48.1: the sealed set is the test-shaped paths (`lib.sh` `is_test_path`: a folder `test`, `tests`,
   `spec` or `__tests__`, or a file `test_*`, `*_test.*`, `*.test.*`, `*.spec.*`, `*_spec.*`, `*Test.*`, `*Tests.*`,
-  `*Spec.*`) among the verification paths under `## Files`; an implementation or lint file a verification line also
+  `*Spec.*`) among the verification paths under `## Files`, plus the program each verification line runs
+  (`verify_programs`: its first word, or the first non-option word after an interpreter), so the checker stays sealed
+  beside its test; an implementation or lint file a verification line also
   names is no longer sealed, so editing it after the stamp no longer reads as `test changed after red receipt`. With
   no test-shaped path among them, every one is sealed, as before.
 - **D3 - the close-story gate.** For a marked story, after the scope check and before verification, close-story

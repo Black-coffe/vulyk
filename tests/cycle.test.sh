@@ -1397,22 +1397,41 @@ out="$(bash scripts/cycle.sh close-story "$st" --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && git show HEAD:"$st" | grep -q '^## Red receipt' && git show HEAD:"$st" | grep -q '^status: done' \
   && echo "  ok    receipt + changed implementation + green: closed, the receipt in the commit" || { echo "::error::close: exit=$ex $(printf '%s\n' "$out" | tail -3)"; fail=1; }
 
-echo "red-receipt (0.48.1): the seal covers the test only, never an implementation or lint file a verification line also names"
+echo "red-receipt (0.48.1): the seal covers the test and the program a line runs, never a plain implementation or lint-config argument"
 st=docs/specs/red/red-14.md
+mkdir -p tools
 printf 'todo\n' > src/red14.txt
 printf '#!/usr/bin/env bash\ngrep -qx done src/red14.txt && exit 0\necho "expected done in src/red14.txt"\nexit 1\n' > tests/red14.sh
-printf '#!/usr/bin/env bash\n# lint config: checks the files it is given\nexit 0\n' > src/lint14.sh
-red_story 14 "$MK" $'- tests/red14.sh\n- src/red14.txt\n- src/lint14.sh\n' $'`bash tests/red14.sh`\n`bash src/lint14.sh tests/red14.sh`'
+printf '#!/usr/bin/env bash\n# lints the files it is given, by the config it is given\nexit 0\n' > tools/lint14.sh
+printf 'rule: a\n' > src/lint14.cfg
+red_story 14 "$MK" $'- tests/red14.sh\n- src/red14.txt\n- src/lint14.cfg\n' $'`bash tests/red14.sh`\n`bash tools/lint14.sh src/lint14.cfg src/red14.txt tests/red14.sh`'
 git add -A && git commit -qm "red: seal-scope story" >/dev/null
 bash scripts/cycle.sh stamp-red "$st" >/dev/null 2>&1 && echo "  ok    red-14 stamped" || { echo "::error::red-14 stamp failed"; fail=1; }
 grep -qE -- '^- tests: [0-9a-f]{64} \(tests/red14\.sh\)$' "$st" \
-  && echo "  ok    the receipt seals tests/red14.sh alone" || { echo "::error::sealed set: $(grep -- '^- tests:' "$st")"; fail=1; }
-printf '# the worker fixes the lint config\nexit 0\n' > src/lint14.sh
+  && echo "  ok    the receipt seals tests/red14.sh, not the implementation or the lint config" || { echo "::error::sealed set: $(grep -- '^- tests:' "$st")"; fail=1; }
+printf 'rule: b\n' > src/lint14.cfg
 printf 'done\n' > src/red14.txt
 out="$(bash scripts/cycle.sh close-story "$st" --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && git show HEAD:"$st" | grep -q '^status: done' \
-  && echo "  ok    an edit to the verification-named lint file does not break the seal: closed" \
+  && echo "  ok    an edit to the verification-named lint config does not break the seal: closed" \
   || { echo "::error::seal-scope close: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
+st=docs/specs/red/red-15.md
+printf 'todo\n' > src/red15.txt
+printf '#!/usr/bin/env bash\ngrep -qx done src/red15.txt && exit 0\necho "expected done in src/red15.txt"\nexit 1\n' > tests/red15.sh
+printf '#!/usr/bin/env bash\nbash "$1"\n' > src/check15.sh
+red_story 15 "$MK" $'- src/check15.sh\n- tests/red15.sh\n- src/red15.txt\n' '`bash src/check15.sh tests/red15.sh`'
+git add -A && git commit -qm "red: checker story" >/dev/null
+bash scripts/cycle.sh stamp-red "$st" >/dev/null 2>&1 && echo "  ok    red-15 stamped" || { echo "::error::red-15 stamp failed"; fail=1; }
+grep -qE -- '^- tests: [0-9a-f]{64} \(src/check15\.sh, tests/red15\.sh\)$' "$st" \
+  && echo "  ok    the repo script the line runs is sealed beside its test argument" || { echo "::error::checker not sealed: $(grep -- '^- tests:' "$st")"; fail=1; }
+printf '#!/usr/bin/env bash\nexit 0\n' > src/check15.sh
+printf 'done\n' > src/red15.txt
+out="$(bash scripts/cycle.sh close-story "$st" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s\n' "$out" | tail -1 | grep -qF '"error":"test changed after red receipt: re-run stamp-red"' \
+  && echo "  ok    a checker weakened after the stamp: exit 4" || { echo "::error::weakened checker: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
+printf '#!/usr/bin/env bash\nbash "$1"\n' > src/check15.sh
+printf 'todo\n' > src/red15.txt
+git add -A && git commit -qm "red: checker story put back" >/dev/null
 ( . scripts/lib.sh; sealed_tests 'bash src/chk.sh' $'src/chk.sh\nsrc/x.txt' ) | grep -qx 'src/chk.sh' \
   && echo "  ok    no test-shaped path: the seal falls back to every verification path under ## Files" \
   || { echo "::error::fallback seal lost"; fail=1; }

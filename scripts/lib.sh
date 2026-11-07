@@ -245,15 +245,56 @@ is_test_path() { # is_test_path <path> -> 0 iff the path is test-shaped: a folde
   return 1
 }
 
-sealed_tests() { # sealed_tests <verification-text> <files-text> -> the red-receipt sealed set: the
-  # test-shaped paths (is_test_path) among the verification's literal tokens (no glob character) that
-  # equal a `## Files` entry or match a `## Files` glob, sorted, deduplicated. An implementation or lint
-  # file a verification line also names stays out of the seal (0.48.1). With no test-shaped path among
-  # them, every such token is sealed, as before 0.48.1. A quoted glob such as `'*.sh'` is never sealed.
-  local all t
+verify_programs() { # verify_programs <verification-text> -> the program each &&-segment runs: its first
+  # word after `VAR=value` assignments, or, after an interpreter (bash, sh, python, python3, py, node,
+  # npx, php, pwsh, ruby, perl), its first word that is no option; quotes stripped, one per line
+  local line seg w prog interp
+  printf '%s\n' "$1" | grep -v '^repeat:' | while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    verification_segments "$line" | while IFS= read -r seg; do
+      prog=""; interp=0
+      for w in $seg; do
+        w="$(printf '%s' "$w" | tr -d "\"'")"
+        [ -n "$w" ] || continue
+        if [ "$interp" = 1 ]; then
+          case "$w" in -*) continue ;; esac
+          prog="$w"; break
+        fi
+        case "$w" in [A-Za-z_]*=*) continue ;; esac
+        case "${w##*/}" in
+          bash|sh|python|python3|py|node|npx|php|pwsh|ruby|perl|*.exe) interp=1 ;;
+          *) prog="$w"; break ;;
+        esac
+      done
+      [ -n "$prog" ] && printf '%s\n' "$prog"
+    done
+  done
+}
+
+sealed_tests() { # sealed_tests <verification-text> <files-text> -> the red-receipt sealed set, drawn from
+  # the verification's literal tokens (no glob character) that equal a `## Files` entry or match a
+  # `## Files` glob: the test-shaped ones (is_test_path) and the program each line runs (verify_programs),
+  # sorted. A plain argument that is no test - the implementation or a lint file the story changes - stays
+  # out of the seal (0.48.1). With no test-shaped path among them, every such token is sealed, as before
+  # 0.48.1. A quoted glob such as `'*.sh'` is never sealed.
+  local all progs tok tests=""
   all="$(sealed_candidates "$1" "$2")"
-  t="$(printf '%s\n' "$all" | while IFS= read -r tok; do [ -n "$tok" ] && is_test_path "$tok" && printf '%s\n' "$tok"; done)"
-  if [ -n "$t" ]; then printf '%s\n' "$t"; elif [ -n "$all" ]; then printf '%s\n' "$all"; fi
+  while IFS= read -r tok; do
+    [ -n "$tok" ] && is_test_path "$tok" && { tests=1; break; }
+  done <<EOF
+$all
+EOF
+  if [ -z "$tests" ]; then
+    [ -z "$all" ] || printf '%s\n' "$all"
+    return 0
+  fi
+  progs="$(verify_programs "$1")"
+  while IFS= read -r tok; do
+    [ -n "$tok" ] || continue
+    if is_test_path "$tok" || printf '%s\n' "$progs" | grep -qxF -- "$tok"; then printf '%s\n' "$tok"; fi
+  done <<EOF
+$all
+EOF
 }
 
 sealed_candidates() { # sealed_candidates <verification-text> <files-text> -> every literal token of
