@@ -67,6 +67,9 @@ too much": ADR-008 cut recon that ran on every plan, and Law 2 forbids unrequest
   the three lenses returning the same proposals (then option B, or one lens).
 - *Amended 2026-10-28 (spec `horizon-audit`):* **not yet run:** the in-session three-lens dispatch. The first real
   new-ground plan is its live run; its tokens and any permission prompts go into that spec's `horizon.md`.
+- *Amended 2026-11-08 (spec `ab-run-fixes`):* in a repo whose `memory/memory.md` `## Codebase map` lists a module,
+  the horizon step runs only on `--horizon`; the zero-hit grep trigger stays only for a repo with no mapped module.
+  `--no-horizon` is unchanged.
 - **Trigger 1 (counter):** from the third `docs/specs/*/horizon.md` on, `/vulyk-evolve` counts the `(horizon H`
   entries in the briefs (adopted, declined, offered) and the kept proposals with no entry, against the reversal
   rule above.

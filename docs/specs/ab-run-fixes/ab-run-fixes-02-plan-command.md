@@ -1,8 +1,8 @@
 ---
 story: ab-run-fixes-02
 spec: ab-run-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
@@ -62,5 +62,12 @@ memory/map/agents-and-commands.md (`/vulyk-plan`, including step 3, step 3a hori
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- `.claude/commands/vulyk-plan.md`: step 3 freshness rule, scout cap as a ceiling, `bash scripts/model-profile.sh` (no argument, recon Q1) once; 3a mapped-repo gate; step 5 profile line for the Queen and `queen-planner` (passed as `model profile: <name>`, the planner has no Bash); step 8 early `git add docs/specs/<slug>/` commit; step 9 one approval of `## Asks` + plan, asks correction re-runs `trace-check.sh` and commits; approval commit adds only `plan.md` + `journal.md` (the 02-approved journal line rides with it); step 10 Tier 3-4 starts `/vulyk-build` via the Skill tool.
+- Decision: the grill's straight-through opt-in lived on the removed Confirm question, so `--go` is now the only opt-in.
+- `templates/grill.md`: batches of up to 4 per call, Confirm question and read-back removed, `## Asks` derived from the request and confirmed at the approval stop; horizon section reworded without the last question.
+- `templates/plan.md`: `**Model profile:**` header line (not a cycle marker).
+- Docs: ADR-022 amendment 2026-11-08, README (drone-horizon row, build-discipline bullet, `/vulyk-plan` row), `docs/command-reference.md`, `docs/cycle.md` stage 02 row.
+- Surprise: the working copies are CRLF (index LF); edits kept CRLF so diffs show only content lines.
+- CHANGELOG: `/vulyk-plan` sends no scout to a freshly mapped area, grills in batches of up to four with no confirm question, runs the horizon step only on `--horizon` in a mapped repo, commits the plan before the stop, approves asks and plan in one word (Tier 3-4: the same turn starts `/vulyk-build`), and prints the model profile in the plan header.
 
 ## Findings

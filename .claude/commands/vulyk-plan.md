@@ -25,15 +25,21 @@ Plan: "$ARGUMENTS"
    after: `autopsy.md` beside the brief lists its repo frames, each code line and the last commits that
    touched it at HEAD (a lead, not a verdict).
 3. Recon. Read `memory/memory.md` and the relevant `memory/map/` slices first. A targeted question about
-   a file or two: read them yourself. Dispatch `drone-scout` only for broad or unmapped territory:
-   Tier 1 none (one if the location is unknown), Tier 2 at most one, Tier 3 at most two, Tier 4 at most
-   four, in parallel. A frame line in `autopsy.md` makes the location known: Tier 1-2 send no scout for it.
+   a file or two: read them yourself. An area whose slice is fresh gets no scout: fresh means the slice
+   exists and `git log -1 --format=%cs -- <area paths>` is not newer than its `last-verified:` date.
+   Dispatch `drone-scout` only to unmapped or stale areas, in parallel, up to a ceiling that is not a
+   quota: Tier 1 none (one if the location is unknown), Tier 2 one, Tier 3 two, Tier 4 four. A frame
+   line in `autopsy.md` makes the location known: Tier 1-2 send no scout for it.
+   Run `bash scripts/model-profile.sh` (no argument: it prints the active profile name) once; that name
+   fills plan.md's `**Model profile:**` line (step 5).
    Tier 2-4: run `bash scripts/symbol-map.sh --exact <file>` once per file the plan is
    likely to name (one call on many files is cut at 1536 bytes after a few) and keep every output: the
    planner dispatch receives it. Checklist, Tier 2-4: meta-tests, docs/ADR, `.env.example`, re-exports,
    sibling files with the same pattern.
 3a. Horizon, Tier 2-4 on new ground (ADR-022). Skip it for study work, Tier 0-1, no-question mode and
-   `--no-horizon`; `--horizon` runs it anyway. New ground is a recon fact: take two to four terms that
+   `--no-horizon`; `--horizon` runs it anyway. In a repo whose `memory/memory.md` `## Codebase map` lists
+   a module, it runs only with `--horizon`: no lens, no horizon question. Only a repo with no mapped
+   module uses the trigger that follows. New ground is a recon fact: take two to four terms that
    name the asked capability (its nouns and verbs, not the project's) and Grep them in `memory/memory.md`,
    `memory/map/` and the source. Zero hits on the capability fires the step; a hit on its container (a
    folder or file family, such as `.claude/commands/` for a new command) does not count. An empty repo
@@ -54,10 +60,13 @@ Plan: "$ARGUMENTS"
    fields and, for a gap, the fragment it rests on.
    Proposals never go into `brief.md` by themselves; only what the owner picks in the grill does.
 4. Grill, Tier 2-4. Follow `templates/grill.md`; it owns every rule of the round, horizon questions
-   included. Its output lands in `brief.md` as `## Answers` then `## Asks`. Tier 1 skips it: `## Asks`
+   included. Its output lands in `brief.md` as `## Answers` then `## Asks`; the owner confirms `## Asks`
+   at the approval stop (step 9), with the plan, not in the grill. Tier 1 skips it: `## Asks`
    is the task phrase as item 1.
-5. Plan. Tier 1-2: write plan.md yourself from `templates/plan.md`. Tier 3-4: dispatch `queen-planner`
-   with the brief, scout reports, the symbol-map output and map pointers; Tier 4 also consults
+5. Plan. Tier 1-2: write plan.md yourself from `templates/plan.md`, its `**Model profile:**` line the name
+   step 3's `bash scripts/model-profile.sh` printed. Tier 3-4: dispatch `queen-planner` with the brief,
+   scout reports, the symbol-map output, map pointers and the line `model profile: <name>` from that same
+   call, which the planner copies into the `**Model profile:**` line; Tier 4 also consults
    `lead-architect` on the central design fork, and both Tier 4 dispatches carry `model: <top_model>`
    (`bash scripts/top-model.sh`).
    Tier 3 passes `model: <p>` from `p="$(bash scripts/model-profile.sh --role planner)"` only when it is not
@@ -89,20 +98,30 @@ Plan: "$ARGUMENTS"
    segment that is not a `## Commands` cell.
 8. Coverage, Tier 3-4. Dispatch `drone-coverage` with exactly two paths, brief.md and plan.md. An absent
    or partial ask rides forward as a `## Assumptions` line in plan.md, never silently.
+   Then, Tier 2-4, with `wave-check.sh` and `trace-check.sh` passing and before the approval stop, commit
+   the spec directory as one commit: `git add docs/specs/<slug>/ && git commit -m "vulyk(<slug>): plan"`
+   (`chore(vulyk-<slug>): plan` under conventional commits). `claim` then never meets an uncommitted plan.
 9. Close the plan.
    - Tier 1 runs straight through: `bash scripts/cycle.sh briefed docs/specs/<slug> --commit --mode
      mini-brief`, then `/vulyk-build <slug>` in this session.
-   - Tier 2-4 stop for approval by default. Show the plan in the owner's language: the tier, the stories
-     by wave (one line each), the `## Assumptions`, and what the build will spend (Tier 2: you build,
-     one reviewer per round; Tier 3-4: the workers and seats). Wait. On approval, fill `**Approved:**`
-     with the owner and the date, run `bash scripts/journal.sh docs/specs/<slug> 02-approved "approved
-     by <owner>" branch`, and commit the spec directory (`vulyk(<slug>): approved`;
-     `chore(vulyk-<slug>): approved` when the Profile's Commit convention names conventional commits, as
-     `cycle.sh` writes it). A "no" or a change request reopens steps 5-7 once; a second one is a new brief.
-   - Straight-through opt-in, only with `--go` or when the grill's last answer asked for it: instead of
-     waiting, `bash scripts/cycle.sh briefed docs/specs/<slug> --commit` (`--mode assumed` in
-     no-question mode) and continue.
+   - Tier 2-4 stop for approval by default: one approval for the asks and the plan together. Show, in the
+     owner's language, `brief.md`'s `## Asks` (numbered, verbatim), then the plan: the tier, the model
+     profile, the stories by wave (one line each), the `## Assumptions`, and what the build will spend
+     (Tier 2: you build, one reviewer per round; Tier 3-4: the workers and seats). Wait. One word approves
+     both. A correction to an ask edits `## Asks`, re-runs `bash scripts/trace-check.sh docs/specs/<slug>`
+     (fix the stories it flags), commits the spec directory (`vulyk(<slug>): asks revised`) and shows the
+     asks and the plan again. A "no" or a change request to the plan reopens steps 5-7 once, ending in the
+     same commit; a second one is a new brief.
+   - On approval, fill `**Approved:**` with the owner and the date, run `bash scripts/journal.sh
+     docs/specs/<slug> 02-approved "approved by <owner>" branch`, and commit only that line and its journal
+     entry: `git add docs/specs/<slug>/plan.md docs/specs/<slug>/journal.md && git commit -m
+     "vulyk(<slug>): approved"` (`chore(vulyk-<slug>): approved` when the Profile's Commit convention names
+     conventional commits, as `cycle.sh` writes it); the plan itself is already committed (step 8).
+   - Straight-through opt-in, only with `--go`: instead of waiting, `bash scripts/cycle.sh briefed
+     docs/specs/<slug> --commit` (`--mode assumed` in no-question mode) and continue.
 10. Launch.
    - Tier 2 after approval: tell the owner to `/clear` and run `/vulyk-build <slug>` in a fresh
      session. The build needs the files, not this planning conversation. Stop here.
-   - Tier 2 with `--go`, and Tier 3-4: run `/vulyk-build <slug>` now.
+   - Tier 3-4 after approval: in the same turn as the approval commit, start `/vulyk-build <slug>` with
+     the Skill tool. No `/clear`, no second word from the owner.
+   - Tier 2 or Tier 3-4 with `--go`: run `/vulyk-build <slug>` now.
