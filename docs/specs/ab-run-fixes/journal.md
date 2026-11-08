@@ -12,3 +12,4 @@
 - 2026-11-08T22:58:00Z · 03-building · 09 NEEDS_CONTEXT: now breaks whole-line asserts in council.test.sh; Queen added tests/council.test.sh to its Files (strip now before comparing) · next: 09's worker continues
 - 2026-11-08T23:07:48Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/ab-run-fixes/round-1 · next: dispatch:opus,review
 - 2026-11-08T23:39:57Z · 04-council:RED · round 1 verdict RED at c89d3bc pack d2df65182f50 · next: repair
+- 2026-11-08T23:40:03Z · 03-building · repair round 1: ab-run-fixes-10-repair-round-1.md · next: build:5
