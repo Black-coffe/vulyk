@@ -44,6 +44,7 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 - README.md
 - scripts/cycle.sh
 - tests/cycle.test.sh
+- tests/e2e.test.sh
 - tests/council.test.sh
 - docs/adr/029-*.md
 - .claude/workflows/vulyk-cycle.js

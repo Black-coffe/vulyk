@@ -13,3 +13,4 @@
 - 2026-11-08T23:07:48Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/ab-run-fixes/round-1 · next: dispatch:opus,review
 - 2026-11-08T23:39:57Z · 04-council:RED · round 1 verdict RED at c89d3bc pack d2df65182f50 · next: repair
 - 2026-11-08T23:40:03Z · 03-building · repair round 1: ab-run-fixes-10-repair-round-1.md · next: build:5
+- 2026-11-08T23:40:17Z · 03-building · round 1 RED (review BLOCK: stale red-part asserts, checkpoint now not top-level on advance/suite, defects INDEX stale; opus GREEN 22/22); repair 10 cut, Queen added tests/e2e.test.sh to its Files · next: build repair 10
