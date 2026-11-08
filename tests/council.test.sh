@@ -507,7 +507,7 @@ jout="$(council judge docs/specs/status1)"; jexit=$?
 [ "$jexit" -eq 0 ] || { echo "::error::judge (green) exited $jexit, expected 0"; fail=1; }
 # C5 (driver-hardening-03): the exit-0 line keeps its four keys in order and now appends the
 # post-verb status object last - the needle below is the whole line up to that appended key.
-printf '%s\n' "$jout" | tail -1 | expect "last stdout line is the JSON contract" '{"ok":true,"verb":"judge","exit":0,"next":"green","status":{'
+printf '%s\n' "$jout" | tail -1 | jq -c 'del(.now)' | expect "last stdout line is the JSON contract" '{"ok":true,"verb":"judge","exit":0,"next":"green","status":{'
 row="$(grep '"spec":"status1"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -q '"verdict":"GREEN"' && echo "  ok    row verdict GREEN" || { echo "::error::row: $row"; fail=1; }
 keys="$(printf '%s' "$row" | grep -oE '"[a-z_]+":' | tr -d '":' | tr '\n' ',')"
@@ -546,7 +546,7 @@ write_review "$rd" PASS
 jout="$(council judge docs/specs/red1)"; jexit=$?
 [ "$jexit" -eq 0 ] || { echo "::error::judge (red) exited $jexit, expected 0 (R24: RED is a successful judgement)"; fail=1; }
 printf '%s' "$jout" | expect "next is repair" '"next":"repair"'
-printf '%s' "$jout" | grep -qF '{"ok":true,"verb":"judge","exit":0,"next":"repair","status":{' \
+printf '%s\n' "$jout" | tail -1 | jq -c 'del(.now)' | grep -qF '{"ok":true,"verb":"judge","exit":0,"next":"repair","status":{' \
   && echo "  ok    RED judge output shape: ok:true, exit:0, next:repair (R24)" || { echo "::error::jout: $jout"; fail=1; }
 row="$(grep '"spec":"red1"' memory/stats/council.jsonl | tail -1)"
 printf '%s' "$row" | grep -q '"verdict":"RED"' && printf '%s' "$row" | grep -q '"red":\[2\]' \
@@ -3806,12 +3806,12 @@ c5_check() { # c5_check <label> <spec> <verb-stdout>
   after="$(council status "$spec" --json)"
   [ "$njson" -eq 1 ] || { echo "::error::$label: $njson JSON lines on stdout, expected exactly 1: $out"; fail=1; return; }
   printf '%s' "$last" | jq -e . >/dev/null 2>&1 || { echo "::error::$label: last line is not JSON: $last"; fail=1; return; }
-  [ "$(printf '%s' "$last" | jq -S .status)" = "$(printf '%s' "$after" | jq -S .)" ] \
+  [ "$(printf '%s' "$last" | jq -S '.status | del(.now)')" = "$(printf '%s' "$after" | jq -S 'del(.now)')" ] \
     || { echo "::error::$label: carried status differs from status --json right after: $last vs $after"; fail=1; return; }
   [ "$(printf '%s' "$last" | jq -r .next)" = "$(printf '%s' "$last" | jq -r .status.next)" ] \
     || { echo "::error::$label: next is not .status.next: $last"; fail=1; return; }
-  [ "$(printf '%s' "$last" | jq -r 'keys_unsorted | join(",")')" = "ok,verb,exit,next,status" ] \
-    || { echo "::error::$label: key order is not ok,verb,exit,next,status: $last"; fail=1; return; }
+  [ "$(printf '%s' "$last" | jq -r 'keys_unsorted | join(",")')" = "ok,verb,exit,next,now,status" ] \
+    || { echo "::error::$label: key order is not ok,verb,exit,next,now,status: $last"; fail=1; return; }
   # C5 addendum (Minor 10): the carried status is a status object, never an error envelope -
   # an envelope is recognisable by its `ok` key, which `status --json` never emits.
   printf '%s' "$last" | jq -e '.status | has("ok") | not' >/dev/null 2>&1 \
@@ -3873,7 +3873,7 @@ emit_status close-story "$1" repair
 EOF
 out="$(bash scripts/c5probe.sh docs/specs/c5verb 2>&1)"; ex=$?
 last="$(printf '%s\n' "$out" | tail -1)"
-{ [ "$ex" -eq 0 ] && [ "$last" = '{"ok":true,"verb":"close-story","exit":0,"next":"repair"}' ]; } \
+{ [ "$ex" -eq 0 ] && [ "$(printf '%s' "$last" | jq -c 'del(.now)')" = '{"ok":true,"verb":"close-story","exit":0,"next":"repair"}' ]; } \
   && echo "  ok    cmd_status fails -> five keys, no status, still exit 0" \
   || { echo "::error::emit_status fallback: exit=$ex last=$last"; fail=1; }
 rm -f scripts/c5probe.sh
@@ -3895,7 +3895,7 @@ EOF
 git add -A && git commit -qm "c5verb: a WALL story" >/dev/null
 out="$(council close-story docs/specs/c5verb/c5verb-03-wall.md 2>&1)"; ex=$?
 last="$(printf '%s\n' "$out" | tail -1)"
-{ [ "$ex" -eq 4 ] && [ "$last" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"returned WALL"}' ]; } \
+{ [ "$ex" -eq 4 ] && [ "$(printf '%s' "$last" | jq -c 'del(.now)')" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"returned WALL"}' ]; } \
   && echo "  ok    close-story exit 4 (returned: WALL): no status key, line unchanged" \
   || { echo "::error::close-story WALL: exit=$ex last=$last"; fail=1; }
 
@@ -3904,7 +3904,7 @@ set_tier c5dirty 1
 echo "a dirty non-paperwork file" > c5verb-dirty.txt
 out="$(council open-round docs/specs/c5dirty 2>&1)"; ex=$?
 last="$(printf '%s\n' "$out" | tail -1)"
-{ [ "$ex" -eq 2 ] && [ "$last" = '{"ok":false,"verb":"open-round","exit":2,"next":"error","error":"working tree not clean"}' ]; } \
+{ [ "$ex" -eq 2 ] && [ "$(printf '%s' "$last" | jq -c 'del(.now)')" = '{"ok":false,"verb":"open-round","exit":2,"next":"error","error":"working tree not clean"}' ]; } \
   && echo "  ok    open-round exit 2 (dirty tree): no status key, line unchanged" \
   || { echo "::error::open-round dirty: exit=$ex last=$last"; fail=1; }
 rm -f c5verb-dirty.txt
@@ -4361,13 +4361,13 @@ echo "ADR-013 D5: close-story runs each command under timeout \$VULYK_VERIFY_TIM
 printf -- '---\nstory: r18cs-02\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Slow\n\n## Files\n- r18cs-slow.txt\n\n## Verification\n`sleep 3`\n' > docs/specs/r18cs/r18cs-02-slow.md
 git add -A && git commit -qm "r18cs: a slow story" >/dev/null
 out="$(VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh close-story docs/specs/r18cs/r18cs-02-slow.md 2>&1)"; ex=$?
-[ "$ex" -eq 4 ] && [ "$(l18_last "$out")" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"verification timed out after 1s: sleep 3"}' ] \
+[ "$ex" -eq 4 ] && [ "$(l18_last "$out" | jq -c 'del(.now)')" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"verification timed out after 1s: sleep 3"}' ] \
   && grep -q '^status: todo' docs/specs/r18cs/r18cs-02-slow.md && echo "  ok    exit 4, error names the timeout and the command, story stays todo" \
   || { echo "::error::timeout: exit=$ex out=$out"; fail=1; }
 # The same timeout with timeout/gtimeout stubs first on PATH: the run must reach the Python cap and
 # report the same exit and the same JSON line as the real-PATH run above.
 out_stub="$(PATH="$STUBS:$PATH" VULYK_VERIFY_TIMEOUT=1 bash scripts/cycle.sh close-story docs/specs/r18cs/r18cs-02-slow.md 2>&1)"; ex_stub=$?
-[ "$ex_stub" -eq "$ex" ] && [ -n "$(l18_last "$out")" ] && [ "$(l18_last "$out_stub")" = "$(l18_last "$out")" ] \
+[ "$ex_stub" -eq "$ex" ] && [ -n "$(l18_last "$out")" ] && [ "$(l18_last "$out_stub" | jq -c 'del(.now)')" = "$(l18_last "$out" | jq -c 'del(.now)')" ] \
   && grep -q '^status: todo' docs/specs/r18cs/r18cs-02-slow.md && echo "  ok    stubbed timeout/gtimeout first on PATH: exit $ex_stub, same timeout JSON, story stays todo" \
   || { echo "::error::stubbed timeout: exit=$ex_stub out=$out_stub"; fail=1; }
 
@@ -4377,7 +4377,7 @@ printf '| Fixture: four-second line | `sleep 4` |\n' >> CLAUDE.md
 printf -- '---\nstory: r18cs-03\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Slow lines\n\n## Files\n- r18cs-two.txt\n\n## Verification\n`sleep 2`\n`sleep 2`\n`sleep 4`\n' > docs/specs/r18cs/r18cs-03-two.md
 git add -A && git commit -qm "r18cs: slow lines" >/dev/null
 out="$(VULYK_VERIFY_TIMEOUT=3 bash scripts/cycle.sh close-story docs/specs/r18cs/r18cs-03-two.md 2>&1)"; ex=$?
-[ "$ex" -eq 4 ] && [ "$(l18_last "$out")" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"verification timed out after 3s: sleep 4"}' ] \
+[ "$ex" -eq 4 ] && [ "$(l18_last "$out" | jq -c 'del(.now)')" = '{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"verification timed out after 3s: sleep 4"}' ] \
   && echo "  ok    exit 4 on the third line: the cap is per line, not one budget for the run" \
   || { echo "::error::per-line cap: exit=$ex out=$out"; fail=1; }
 

@@ -62,7 +62,8 @@ No driver, no clerk, no court. Loop:
    docs/specs/<slug> 03-building "launching the hive" "the loop holds the working tree of vulyk/<slug>; to edit, run /vulyk-pause <slug>"`.
 3. Call the Workflow tool with `scriptPath: ".claude/workflows/vulyk-cycle.js"` (never `name:`, which
    its permission handler rejects) and `args: {spec: "docs/specs/<slug>", stamp, top_model,
-   second_model}`, plus `worker_model`, `review_model`, `seat_model` only when the profile is not
+   second_model, launched_at}`, `launched_at="$(date +%s)"` resolved right before the call (the driver's
+   50-minute checkpoint counts from it against the `now` each verb answer carries), plus `worker_model`, `review_model`, `seat_model` only when the profile is not
    `sonnet-builds` (absent, each agent's frontmatter decides). The driver claims the spec itself; run no `claim` first, and nothing else while it
    runs. If the call itself throws, run `bash scripts/telemetry.sh record driver_refused 1 0 --spec
    <slug> --ref driver:<slug>:$(date -u +%Y-%m-%d)`, print the error and stop.

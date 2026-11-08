@@ -341,3 +341,5 @@
 {"ts":"2026-11-08T22:42:08Z","story":"ab-run-fixes-07-repair-portability","declared":2,"changed":2,"out_of_scope":0}
 {"ts":"2026-11-08T22:44:41Z","story":"ab-run-fixes-06-onboarding-readme","declared":11,"changed":10,"out_of_scope":0}
 {"ts":"2026-11-08T22:47:43Z","story":"ab-run-fixes-08-repair-driver-clock","declared":2,"changed":2,"out_of_scope":0}
+{"ts":"2026-11-08T23:02:33Z","story":"ab-run-fixes-09-checkpoint-time-source","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-11-08T23:05:33Z","story":"ab-run-fixes-09-checkpoint-time-source","declared":4,"changed":4,"out_of_scope":0}

@@ -68,13 +68,15 @@ json_escape() { # json_escape <text> -> the JSON-string-safe form of <text>: bac
 
 emit() { # emit <true|false> <verb> <exit> <next> [error] [status-json]
   # C5: <status-json> is a whole `status --json` object, appended verbatim as the last key -
-  # exit-0 mutating verbs only (see emit_status below); every other call passes nothing and
-  # the line is byte-for-byte what it was.
+  # exit-0 mutating verbs only (see emit_status below); every other call passes nothing.
+  # ab-run-fixes-09: every line carries `now` (epoch seconds) just before `status`, the clock
+  # the driver's 50-minute checkpoint reads (it has none of its own); `status` stays last, since
+  # advance cuts the carried object off the end of the line.
   local ok="$1" verb="$2" ex="$3" next="$4" err="${5:-}" st="${6:-}"
   verb="$(json_escape "$verb")"
   next="$(json_escape "$next")"
-  local tail=""
-  [ -n "$st" ] && tail=",\"status\":$st"
+  local tail=",\"now\":$(date +%s)"
+  [ -n "$st" ] && tail="$tail,\"status\":$st"
   if [ -n "$err" ]; then
     err="$(json_escape "$err")"
     printf '{"ok":%s,"verb":"%s","exit":%s,"next":"%s","error":"%s"%s}\n' "$ok" "$verb" "$ex" "$next" "$err" "$tail"
@@ -820,9 +822,9 @@ cmd_status() {
     NEXT="open-round"
   fi
 
-  printf '{"spec":"%s","slug":"%s","stage":"%s","next":"%s","briefed":%s,"approved":%s,"branch":%s,"head":"%s","pack":"%s","stories":{"todo":%s,"in-progress":%s,"done":%s,"blocked":%s},"wave":%s,"wave_stories":[%s],"round":%s,"ceiling":%s,"tier":%s,"open":%s,"court":%s,"missing":[%s],"stale":%s,"verdict":%s,"review":%s,"red":[%s],"round_dir":%s,"paused":%s,"shipped":%s,"since":%s,"seat_attempt":{%s},"seats":[%s],"manual":[%s]}\n' \
+  printf '{"spec":"%s","slug":"%s","stage":"%s","next":"%s","briefed":%s,"approved":%s,"branch":%s,"head":"%s","pack":"%s","now":%s,"stories":{"todo":%s,"in-progress":%s,"done":%s,"blocked":%s},"wave":%s,"wave_stories":[%s],"round":%s,"ceiling":%s,"tier":%s,"open":%s,"court":%s,"missing":[%s],"stale":%s,"verdict":%s,"review":%s,"red":[%s],"round_dir":%s,"paused":%s,"shipped":%s,"since":%s,"seat_attempt":{%s},"seats":[%s],"manual":[%s]}\n' \
     "$SPEC" "$SLUG" "$(compute_stage "$SPEC" "$PLAN" "$BRIEFED_B" "$BRANCH_V" "$((TODO+PROG+DONE+BLOCKED))" "$DONE" "$NEWEST_VERDICT" "$SHIPPED_B")" \
-    "$NEXT" "$BRIEFED_B" "$APPROVED_B" "$BRANCH_JSON" "$HEAD" "$PACK" \
+    "$NEXT" "$BRIEFED_B" "$APPROVED_B" "$BRANCH_JSON" "$HEAD" "$PACK" "$(date +%s)" \
     "$TODO" "$PROG" "$DONE" "$BLOCKED" \
     "$WAVE_JSON" "$WAVE_STORIES_JSON" \
     "$ROUND_N" "$CEILING" "$TIER_JSON" "$OPEN_B" "$COURT_JSON" "$(json_str_array "$MISSING")" "$STALE_B" \

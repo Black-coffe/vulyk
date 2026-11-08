@@ -603,6 +603,18 @@ done
 [ "$kfail" -eq 0 ] && echo "  ok    the known values todo, in-progress, done, blocked behave as before"
 rm -rf docs/specs/ustat
 
+echo "ab-run-fixes-09: every verb's last JSON line carries now, the epoch seconds the driver checkpoint reads"
+nfail=0
+for nverb in "status docs/specs/sib" "status docs/specs/no-such-spec"; do
+  t0="$(date +%s)"
+  out="$(bash scripts/cycle.sh $nverb 2>&1)"
+  t1="$(date +%s)"
+  printf '%s\n' "$out" | tail -1 | jq -e --argjson a "$((t0 - 5))" --argjson b "$((t1 + 5))" \
+    '(.now | type) == "number" and .now == (.now | floor) and .now >= $a and .now <= $b' >/dev/null 2>&1 \
+    || { echo "::error::emit: a verb's JSON line carries now in epoch seconds - verb=$nverb out=$out"; fail=1; nfail=1; }
+done
+[ "$nfail" -eq 0 ] && echo "  ok    an ok and a refused verb both carry an integer now within 5 s of the shell clock"
+
 fi # part gates
 if part manual; then # --- part manual: blocked_by manual:<id>, the worker model source
 echo "0.19 C: blocked_by manual:<id> - a hand step stops the wave until manual-done records it; no later wave is built past it"
