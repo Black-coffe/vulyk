@@ -129,14 +129,18 @@ rounds took **29.5%** of the spend of the tasks that had them.
 |---|---|---|
 | 1 | 14 (10 clerks) | 1 `lead-review` |
 | 2 | 21–33 | 1–2 `lead-review` (one per round) + at most one scout |
-| 3 | 35–53 | the workers + 2 seats (3 with a *Client path*) per round + 4 clerk calls for a one-wave, one-round run |
-| 4 | 52–73 | as Tier 3, with two reviewers per round and a `lead-architect` consult |
+| 3 | 35–53 | the workers + 2 seats (`review` and one blind seat) per round + 4 clerk calls for a one-wave, one-round run |
+| 4 | 52–73 | as Tier 3, plus a `lead-architect` consult; a second reviewer (`review2`) only on a risk path or after a `review` BLOCK |
 
 The clerk count fell because the driver calls `cycle.sh advance` once per agent boundary —
 `advance --claim`, `advance` after a wave, `advance --ingest` after a council dispatch, `release` —
 instead of once per verb. Each extra wave or round adds one or two calls. Rounds are cheaper as
 well: a green blind seat is carried forward, and from round 2 `lead-review` reads only the diff
 since the last round. The estimate is −40…55% on a median task.
+
+Since ab-run-fixes a narrow repair round (one RED item in one file) is a single `lead-review`
+dispatch: no blind seat, no second reviewer, no gate step. A blind seat is not carried over an ask
+the repair touched, so that round dispatches it again.
 
 **Measure it, do not trust the printed figure.** The `totalTokens` a Workflow run prints is the
 sum of each agent's *final* context, not what was processed — about 29 times too low on the median

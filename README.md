@@ -112,7 +112,7 @@ Every subagent declares its model in YAML frontmatter — the cascade is enforce
 | 👑 Queen | *(main session)* + `queen-planner` | `opus`; a Tier 4 `queen-planner` gets `TOP_MODEL` | Plan; build Tier 1–2 herself; at Tier 3–4 decompose, dispatch and integrate | Tier 1–2: the story's files; Tier 3–4: scout reports and memory |
 | 🛡 Lead | `lead-architect` | `TOP_MODEL` | Design decisions, ADRs, tradeoff analysis | Targeted excerpts only |
 | 🛡 Lead | `lead-review` | `opus` at Tier 1–3; `TOP_MODEL` at Tier 4 | The reviewer seat of every round: the brief's asks and correctness; BLOCK only on an anchored finding | The round's diff |
-| 🛡 Lead | *second reviewer, Tier 4* | a different model: `opus` beside Fable, `sonnet` beside Opus on Pro | Recall complement — an ensemble, not a duplicate | The round's diff |
+| 🛡 Lead | *second reviewer, Tier 4* | a different model: `opus` beside Fable, `sonnet` beside Opus on Pro | Recall complement — an ensemble, not a duplicate; the seat `review2`, called only when the round's diff touches a security or data path, or after the first reviewer's BLOCK | The round's diff |
 | 🐝 Worker | `worker-code` | `sonnet` (the story's `model:`) · effort `medium` | Tier 3–4: implement exactly one story and close it | Scoped slice via map |
 | 🐝 Worker | `worker-test` | `sonnet` (the story's `model:`) · effort `medium` | Tier 3–4: write or repair the tests of one story and close it | Scoped slice |
 | 🔍 Drone | `drone-scout` | `sonnet` · effort `low` | Recon: files, symbols, structure → map-format report | Yes — that's the point |
@@ -120,7 +120,7 @@ Every subagent declares its model in YAML frontmatter — the cascade is enforce
 | 🔍 Drone | `drone-horizon` | `sonnet` · effort `medium` | Tier 2–4 on new ground (in a repo with a mapped module, only on `--horizon`): one lens (altitude, depth, range) → at most three proposals with cost, an outside check and dated sources; three run in parallel, the Queen cuts, the owner picks | A few files, only to check a proposal fits; the brief and the web are data |
 | 🔍 Drone | `librarian` | `opus` · effort `low` | Memory consolidation & garbage collection | Memory files only |
 | 🔍 Drone | `drone-coverage` | `opus` · effort `medium` | Plan-time coverage check: brief vs plan, blind to the stories | **Never** — brief + plan only |
-| ⚖️ Council | `council-opus` / `council-haiku` | `opus` · effort `medium` / `opus` (it judges; the name is the angle) — Tier 3–4 only; `haiku` only when the Profile's *Client path* is filled | Blind verdict on the brief's `## Asks`, from a reduced worktree — intent & edge cases / black-box client path | Only what a client would see — never the stories |
+| ⚖️ Council | `council-opus` / `council-haiku` | `opus` · effort `medium` / `opus` (it judges; the name is the angle) — Tier 3–4 only, one blind seat per round: `haiku` when the Profile's *Client path* is filled, else `opus` | Blind verdict on the brief's `## Asks`, from a reduced worktree — intent & edge cases / black-box client path | Only what a client would see — never the stories |
 | ⚖️ Council | `cycle-clerk` | `haiku` · effort `low` (Haiku 5.5 and up, since 0.26.0; `sonnet` before) | The Workflow driver's only shell access — one `cycle.sh advance` per agent boundary, no logic of its own | Never |
 | 🛡 Lead | *any story's second attempt* | `TOP_MODEL` | A story a Sonnet worker missed is retried on the gate model: Fable on Max, Opus on Pro and API — always a different family (ADR-015) | Scoped slice |
 
@@ -150,8 +150,8 @@ Routing happens **before** any work starts — and the first question is not the
 | 0 | Trivial, single file, obvious | The Queen directly, no paperwork | none |
 | 1 | One module, clear task | The Queen, solo — no driver, no clerk | one `lead-review`; 1 round |
 | 2 | Feature within a module | The Queen, solo, in a fresh session after the plan is approved | one `lead-review`; 2 rounds |
-| 3 | Cross-cutting, multi-module | Workers in waves through the Workflow driver | `council-opus` + `lead-review` (+ `council-haiku` with a *Client path*); 3 rounds |
-| 4 | Architecture / migration / 200k+ LOC touched | Tier 3 + `lead-architect` | as Tier 3, the review folded from two reviewers on *different* models; 3 rounds |
+| 3 | Cross-cutting, multi-module | Workers in waves through the Workflow driver | `lead-review` + one blind seat (`council-haiku` with a *Client path*, else `council-opus`); 3 rounds |
+| 4 | Architecture / migration / 200k+ LOC touched | Tier 3 + `lead-architect` | as Tier 3, plus a second reviewer on a *different* model only on a security/data path or after a BLOCK, folded with the first; 3 rounds |
 
 **One agent below Tier 3** (changed in 0.18.0, [ADR-013](docs/adr/013-light-vulyk.md)). A token audit over 1,844 sessions found a median task dispatching 67 subagents, 43 of them clerks, with spend split into near-equal thirds between the Queen, the workers and the review machinery. Separate agents for planning, building and reviewing a one-module change cost more coordinating than working, so below Tier 3 one session builds and one fresh-context reviewer judges. **Bookend rule:** the top model is spent where it changes everything downstream — the Tier 4 plan and review, design, and a missed story's retry.
 
@@ -176,7 +176,7 @@ What changed with Opus 5 is the *reason* for the bookend, not its shape. The bin
 | `/vulyk-bootstrap` | Interview → tailored constitution, pruned roster, initial map & wiki seed |
 | `/vulyk-plan <goal> [--go] [--study] [--horizon \| --no-horizon]` | Queen mode: deliverable named first (a document ends at `report.md`), recon with no scout for a freshly mapped area, a one-round grill in batches of up to four (recommended options first, silence safe) closes into the brief's `## Asks`, plan (its model profile in the header) + story files written to `docs/specs/` and committed, then the asks and the plan shown for one word of approval, which at Tier 3–4 starts the build; `--go` builds straight through |
 | `/vulyk-build [slug]` | Build the plan to a council verdict. Tier 1–2 solo: the Queen builds each story and steps `cycle.sh advance`, one `lead-review` per round. Tier 3–4: the Workflow driver runs parallel workers on disjoint files, wave by wave, one commit per story, a missed story retried on the gate model |
-| `/vulyk-review [slug]` | One council round on demand: `lead-review` ∥ the tier's blind seats (`council-opus`, and `council-haiku` with a *Client path*, at Tier 3–4), judged by `cycle.sh` from evidenced reports - `RED` routes to `/vulyk-build` as a repair story |
+| `/vulyk-review [slug]` | One council round on demand: `lead-review` ∥ the tier's one blind seat at Tier 3–4 (`council-haiku` with a *Client path*, else `council-opus`; a narrow repair round has none), judged by `cycle.sh` from evidenced reports - `RED` routes to `/vulyk-build` as a repair story |
 | `/vulyk-pause <slug>` | Hand the working tree back to you at any point the loop is running |
 | `/vulyk-resume <slug>` | Clear the pause and relaunch the driver fresh - never a replayed run |
 | `/vulyk-ship [slug]` | Stage 06: refuses without a current, GREEN council verdict, then version + CHANGELOG, a local merge, the publish command printed for a human to press, recorded - and the next circle's draft handed over |

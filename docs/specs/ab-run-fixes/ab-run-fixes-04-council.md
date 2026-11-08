@@ -1,8 +1,8 @@
 ---
 story: ab-run-fixes-04
 spec: ab-run-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -10,6 +10,7 @@ wave: 2
 blocked_by: [ab-run-fixes-01, ab-run-fixes-02, ab-run-fixes-03]
 red: required
 red_reason: seats: Tier 3 with a Client path requires review and haiku only
+red_verified_at: 2026-11-08T21:56:18Z b8ea18bf4a37f0d1e3ece0d4e6ef8d621e97e7ddd7a1ec9d03c114c899384f28
 ---
 
 # Council: one blind seat, a second reviewer with a reason, no stale carry, a narrow repair path
@@ -87,5 +88,34 @@ memory/map/cycle.md (Seats and the verdict; Repair; `suite`; Full-suite line; `a
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- scripts/cycle.sh: roster `haiku review` / `opus review` (C1); `review2` seat with `review2_called`, `round_needed_seats`, fixed `risk_path` set and `second=risk|none` frozen at open-round (C2, C3); judge folds review+review2; `fold_reviews` and the review-top/second ingest removed.
+- scripts/cycle.sh: `carry_seats` skips a seat with an `ASK n:` line for an ask the previous repair story cites (C4).
+- scripts/cycle.sh: `repair` marks one-item, one-non-test-file rounds `narrow: true` (file, exact tests, docs/defects/*, verification of the stories naming it); the next round freezes `seats=review`, `narrow=1`; `suite` writes `SUITE: none - narrow repair round` (C5).
+- .claude/workflows/vulyk-cycle.js: dispatches exactly `next`'s seats; Tier 4 review on TOP, review2 one lead-review on SECOND.
+- Decision: both card fixtures are defect forms that must fail the `check:` (defects-check audit semantics: every fixture must exit non-zero); the original requires a blind seat in a narrow round, the neighbour runs gate steps in one. The story's "passes on the neighbour" reads as a non-narrow round, which the check passes.
+- Docs: cycle.md, model-cascade.md, token-economy.md, ADR-013 amendment (D1, D3, D4), README rows, command-reference, vulyk-build, vulyk-review, lead-review description.
+- Surprise: a previous attempt had left most of the code and tests uncommitted; reviewed and kept, finished the docs.
+- CHANGELOG: Council: Tier 3-4 take one blind seat, Tier 4's second reviewer runs only on a security/data path or after a BLOCK, a blind seat is not carried over an ask the repair touched, and a one-item one-file RED round gets a narrow, review-only repair round.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/council.test.sh --part roster
+- exit: 1
+- tests: b8ea18bf4a37f0d1e3ece0d4e6ef8d621e97e7ddd7a1ec9d03c114c899384f28 (tests/council.test.sh, tests/driver.test.sh)
+- impl: d50e969f147d946fedbd9a9afe0335ceeea098ea329fbaae5360bd7d5bf586c2
+- stamped: 2026-11-08T21:56:18Z
+
+```
+::error::seats: Tier 3 with a Client path requires review and haiku only - expected '["haiku","review"]' in:
+## Verification round-2=ROUND
+sonnet.md
+  ok    carry: a repair of regressions only carries the GREEN blind seats
+  ok    carry: only review is missing in the regressions-only round 2
+ADR-013 D3: reopen after a ceiling ESCALATE routes to repair; after env, to open-round
+  ok    tier 1, one RED round -> ESCALATE ceiling
+  ok    reopen emits next repair and carries the status that says so
+  ok    review ABSENT -> ESCALATE env
+  ok    reopen after env -> open-round
+  ok    status agrees: open-round
+```

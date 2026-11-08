@@ -25,7 +25,7 @@ that opens the next stage refuses when the previous stage's artifact is missing.
 | 02 | **Plan** — who does what in which files; the plan can be handed to an agent whole | Queen / `queen-planner` | the list of steps, committed before the stop, and the brief's `## Asks` with it, approved by the owner in one word (default; at Tier 3-4 the approval starts `/vulyk-build`) or briefed straight through (`--go`, Tier 1) | `plan.md` + story files; `**Approved:**` or `**Briefed:**` line | `/vulyk-plan`, stop for approval |
 | 03 | **Code** — changes live in their own branch | the Queen at Tier 1-2; workers in waves at Tier 3-4 | the branch, one commit per story | `**Branch:**` line in plan.md; git | `/vulyk-build` |
 | 04 | **Tests** — automatic: each story's own `## Verification` command, run once inside `cycle.sh close-story` (under a 540 s timeout) and repeated as the story asks; a `red: required` story first proves its test red with `cycle.sh stamp-red` (receipt in the story file), then closes as today | whoever built the story closes it: the Queen, or the worker itself | every story's verification green; on a `red: required` story, a red receipt | story `## Verification` greens; `## Red receipt` section | `/vulyk-build` |
-| 05 | **Council** — `lead-review` judges the diff against the brief's `## Asks`; at Tier 3-4 blind seats judge the same asks from a court that cannot see the hive's stories | `lead-review` (+ `council-opus`, and `council-haiku` when the Client path is filled, at Tier 3-4) | every required seat GREEN or N/A and the review PASS | `**Council:**` line in plan.md; `memory/stats/council.jsonl` | `/vulyk-build` or `/vulyk-review` (one round) |
+| 05 | **Council** — `lead-review` judges the diff against the brief's `## Asks`; at Tier 3-4 one blind seat judges the same asks from a court that cannot see the hive's stories; a narrow repair round is review-only | `lead-review` (+ at Tier 3-4 one blind seat: `council-haiku` when the Client path is filled, else `council-opus`; at Tier 4 a second reviewer, `review2`, on a risk path or after a BLOCK) | every required seat GREEN or N/A and the review PASS | `**Council:**` line in plan.md; `memory/stats/council.jsonl` | `/vulyk-build` or `/vulyk-review` (one round) |
 | 06 | **Ship** — history fixed, branch merged locally, publish command printed and never pressed, next circle opened | a green build or review asks «Выпускаем?» once and a yes runs `/vulyk-ship`; Queen merges and prints; human presses when ready | the local merge, recorded | `**Shipped:**` line in plan.md; git (local merge) | `/vulyk-ship` |
 
 ## Why 05 is red
@@ -43,9 +43,9 @@ things was the blind agent, not the human standing beside it.
 
 Stage 05 is now the **council**, sized by the tier (changed in 0.18.0, ADR-013). At Tier 1-2 it
 is one fresh-context reviewer, `lead-review`, judging the diff against the asks and for
-correctness. At Tier 3-4 blind seats join it: `council-opus` (intent and edge cases) and, when
-the Profile's *Client path* is filled, `council-haiku` (the black-box walk). They work in a
-worktree with `docs/specs/<slug>/` reduced to `brief.md`, so neither can see the hive's own
+correctness. At Tier 3-4 one blind seat joins it (ab-run-fixes C1): `council-haiku` (the black-box
+walk) when the Profile's *Client path* is filled, else `council-opus` (intent and edge cases). It
+works in a worktree with `docs/specs/<slug>/` reduced to `brief.md`, so it cannot see the hive's own
 account of what it built — the same blindness stage 05 used to buy from a human who had not
 read the stories either. Green requires unanimity: every required seat `GREEN` or `N/A`, and
 `lead-review` `PASS`. When the hive has `.claude/vulyk-setup` (its own script; the installer
@@ -55,11 +55,36 @@ never ships it), `open-round` runs it inside the fresh court with `VULYK_ROOT` a
 no round (exit 2, log tail on stderr), since a seat on a broken court writes `N/A` and `N/A`
 counts as agreement.
 
+At Tier 4 a second reviewer, `review2` (one `lead-review` on `second_model`), joins only when there
+is a reason for it (C2). `open-round` freezes `second=risk|none` into `ROUND`: `risk` when a path in
+the range the reviewer reads (round 1: the branch against its base; later rounds: `since..head`)
+is in the fixed risk set; a range git cannot name counts as `risk`. The risk set (C3), matched
+case-insensitively on the diff's `--name-only` paths, with no Profile row or env to change it:
+- security: a path segment or file stem equal to, or starting with, `auth`, `security`, `secret`,
+  `crypt`, `permission`, `password` or `credential`, or a file named `.env` or `.env.*`;
+- data: a segment `migrations` or `migrate`, a file stem `schema`, or a `*.sql` file.
+
+With `second=risk` the first dispatch is `review`, `review2` and the blind seat at once. With
+`second=none` it is `review` and the blind seat; a recorded `review` BLOCK makes `next`
+`dispatch:review2` once. `judge` folds `review` and `review2` when both exist (BLOCK if either,
+both bodies kept, so the second reviewer's findings join the one repair story) and judges
+`review` alone otherwise. The driver dispatches exactly the seats `next` names.
+
 The council converges rather than starting over each round. A blind seat that was `GREEN` or
-`N/A` in round n-1 is carried into round n, and from round 2 `lead-review` reads only
-`since..head` against the previous round's findings. A `BLOCK` needs a finding anchored to an
+`N/A` in round n-1 is carried into round n, unless round n-1's repair story touched an ask the
+seat's report judged with an `ASK <n>:` line (a `> N. ` line under its `## Requirements`, or
+`[ask N]` under its `## Findings`; C4) - in practice only a repair of regressions alone carries
+one. From round 2 `lead-review` reads only `since..head` against the previous round's findings. A `BLOCK` needs a finding anchored to an
 ask (`[ask N]`) or a `[regression]`. A RED round becomes a repair story written by
 `cycle.sh repair`: the RED asks quoted, the anchored findings verbatim, no planner in between.
+A RED round with exactly one RED item (one ask, or one `[regression]`, gate or owner finding) whose
+reach - the paths its findings name, else the `## Files` union - is one non-test file is **narrow**
+(C5): its repair story says `narrow: true`, names that file, its `exact` tests (`symbol-map.sh
+--exact`) and `docs/defects/*`, takes the `## Verification` of the stories that named the file, and
+asks for the class card in the same commit; a worker still builds it on `opus`. The next round
+freezes `seats=review` and `narrow=1`: no blind seat, no second reviewer, and `cycle.sh suite`
+writes `SUITE: none - narrow repair round` without running a step. It counts against the ceiling
+like any RED round. Two files or two items is a full round, as before.
 A round with an evidenced RED on
 half the asks or more escalates immediately rather than burning further rounds on a plan
 that is wrong; a round that finds the same ask RED as the round before escalates at once
@@ -106,8 +131,10 @@ from plan.md's `**Tier:**` line and freezes the seats that tier requires into th
 |---|---|---|---|---|
 | 1 | the Queen, solo | `review` | 1 | 1 `lead-review` |
 | 2 | the Queen, solo, in a fresh session after approval | `review` | 2 | 1 `lead-review` |
-| 3 | workers in waves (Workflow driver) | `opus`, `review`; `haiku` when *Client path* is filled | 3 | the seats + 1 clerk call to record them |
-| 4 | workers in waves + `lead-architect` | as Tier 3; `review` is two reviewers on different models, folded into one | 3 | as Tier 3, one reviewer more |
+| 3 | workers in waves (Workflow driver) | `review` plus one blind seat: `haiku` when *Client path* is filled, else `opus` | 3 | 2 seats + 1 clerk call to record them |
+| 4 | workers in waves + `lead-architect` | as Tier 3, plus `review2` on a risk path or after a `review` BLOCK, folded with `review` | 3 | as Tier 3; one reviewer more only when `review2` is called |
+
+A narrow repair round (C5) at any tier is `review` alone: one `lead-review`, no court, no gate step.
 
 Solo means no driver, no clerk and no court: the Queen runs `cycle.sh advance` from her own
 Bash. It performs every mechanical step (branch, open-round, judge, repair) and stops at the

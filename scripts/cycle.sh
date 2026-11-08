@@ -398,15 +398,16 @@ tier_ceiling() { # tier_ceiling <tier> -> the default round ceiling for a tier (
 }
 
 required_seats_for_tier() { # required_seats_for_tier <tier> -> the space-separated seats a
-  # round of this tier must have before judge will run (ADR-013 D1, superseding C15's roster):
-  # one reviewer below Tier 3; the intent seat and the reviewer from Tier 3, plus the black box
-  # only where a client can actually be walked. 3 and 4 (and any value outside 1-4, which
-  # tier_of never produces) share one roster - Tier 4's second reviewer folds into `review`.
-  # `sonnet` is in no roster any more; record-seat still accepts it so old rounds stay readable.
+  # round of this tier must have before judge will run (ADR-013 D1, amended by ab-run-fixes C1):
+  # one reviewer below Tier 3; from Tier 3 the reviewer plus exactly one blind seat - the black box
+  # (haiku) where a client can actually be walked, else the intent seat (opus). 3 and 4 (and any
+  # value outside 1-4, which tier_of never produces) share one roster; Tier 4's second reviewer is
+  # `review2`, called by round_needed_seats, never frozen here. `sonnet` is in no roster any more;
+  # record-seat still accepts it so old rounds stay readable.
   case "$1" in
     1|2) printf 'review' ;;
     *)
-      if client_path_filled "$(constitution_file "$ROOT")"; then printf 'haiku opus review'
+      if client_path_filled "$(constitution_file "$ROOT")"; then printf 'haiku review'
       else printf 'opus review'
       fi ;;
   esac
@@ -425,16 +426,69 @@ round_required_seats() { # round_required_seats <spec> <round-dir> -> the round'
   required_seats_for_tier "$(round_tier "$spec" "$rd")"
 }
 
+review2_called() { # review2_called <spec> <round-dir> -> 0 iff the round needs the Tier 4 second reviewer
+  # (ab-run-fixes C2): a Tier 4 round that is not a narrow repair round, and either open-round froze
+  # second=risk (a C3 path in the reviewed range) or the recorded `review` is a BLOCK. A round with
+  # no second= line (opened before C2) reads as none.
+  [ "$(round_tier "$1" "$2")" = 4 ] || return 1
+  [ "$(round_field "$2" narrow)" = 1 ] && return 1
+  [ "$(round_field "$2" second)" = risk ] && return 0
+  [ -f "$2/review.md" ] && [ "$(review_verdict_of "$2/review.md")" = BLOCK ]
+}
+
+round_needed_seats() { # round_needed_seats <spec> <round-dir> -> the frozen seats, plus review2 when
+  # review2_called - what `next` dispatches and judge waits for
+  local req; req="$(round_required_seats "$1" "$2")"
+  if review2_called "$1" "$2"; then printf '%s review2' "$req"; else printf '%s' "$req"; fi
+}
+
+risk_path() { # risk_path <path> -> 0 iff the path is in the fixed C3 risk set (ab-run-fixes), case-insensitive.
+  # Security: a segment or file stem equal to, or starting with, auth, security, secret, crypt, permission,
+  # password or credential, or a file named .env / .env.*. Data: a segment migrations or migrate, a file
+  # stem schema, or a *.sql file. Fixed in code on purpose: no Profile row, no env.
+  local p seg base stem
+  p="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  base="${p##*/}"; stem="${base%.*}"; [ -n "$stem" ] || stem="$base"
+  case "$base" in .env|.env.*|*.sql) return 0 ;; esac
+  [ "$stem" = schema ] && return 0
+  local IFS=/
+  for seg in $p $stem; do
+    case "$seg" in
+      auth*|security*|secret*|crypt*|permission*|password*|credential*|migrations|migrate) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+round_second() { # round_second <spec> <n> <head> <since> -> risk | none: whether a path in the range
+  # lead-review reads for round n (since..head; round 1: the branch against its base) is a risk_path.
+  # A range git cannot name reads as risk - the second reviewer is never dropped on a missing input.
+  local base="$4" names p
+  if [ -z "$base" ]; then
+    local db; db="$(default_branch)"
+    [ -n "$db" ] && base="$(git merge-base "$db" "$3" 2>/dev/null)"
+  fi
+  [ -n "$base" ] || { printf 'risk'; return; }
+  names="$(git diff --name-only "$base" "$3" 2>/dev/null)" || { printf 'risk'; return; }
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    risk_path "$p" && { printf 'risk'; return; }
+  done <<EOF
+$names
+EOF
+  printf 'none'
+}
+
 is_required_seat() { # is_required_seat <seat> <required-list> -> 0 iff seat is in the list
   case " $2 " in *" $1 "*) return 0 ;; *) return 1 ;; esac
 }
 
 missing_required_seats() { # missing_required_seats <round-dir> <required-list> -> space-sep
-  # required seats with no accepted report yet, in canonical haiku/sonnet/opus/review order.
+  # required seats with no accepted report yet, in canonical haiku/sonnet/opus/review/review2 order.
   # A seat that exhausted both attempts (attempt-2 exists, no final <seat>.md) is ABSENT, not
   # missing (R3/C-2, autonomous-cycle-19) - it must not block `next` from ever reaching `judge`.
   local rd="$1" required="$2" seat out=""
-  for seat in haiku sonnet opus review; do
+  for seat in haiku sonnet opus review review2; do
     [ -f "$rd/$seat.md" ] && continue
     [ -f "$rd/$seat.attempt-2.md" ] && continue
     is_required_seat "$seat" "$required" && out="$out $seat"
@@ -683,7 +737,7 @@ cmd_status() {
       OPEN_B=true
       local seat
       REQUIRED="$(round_required_seats "$SPEC" "$RD")"
-      MISSING="$(missing_required_seats "$RD" "$REQUIRED")"
+      MISSING="$(missing_required_seats "$RD" "$(round_needed_seats "$SPEC" "$RD")")"
       for seat in $MISSING; do
         SEAT_ATTEMPT_JSON="${SEAT_ATTEMPT_JSON:+$SEAT_ATTEMPT_JSON,}\"$seat\":$(seat_next_attempt "$RD" "$seat")"
       done
@@ -1089,12 +1143,13 @@ cmd_judge() { # cmd_judge <spec> <commit:0|1> [<verb-label>] [<stamp>]
   RPACK="$(round_field "$RD" pack)"
   ROPENED="$(round_field "$RD" opened)"
   RCEILING="$(round_field "$RD" ceiling)"; [ -n "$RCEILING" ] || RCEILING="$(tier_ceiling "$(round_tier "$SPEC" "$RD")")"
-  local REQUIRED; REQUIRED="$(round_required_seats "$SPEC" "$RD")"
+  # ab-run-fixes C2: REQUIRED is the frozen roster plus review2 when the round calls for it
+  local REQUIRED; REQUIRED="$(round_needed_seats "$SPEC" "$RD")"
 
   # --- presence pass: every REQUIRED seat must be present or ABSENT, in order (C15: a seat
   # this round's tier does not call for simply may never have been dispatched) --------------
   local seat pres
-  for seat in haiku sonnet opus review; do
+  for seat in haiku sonnet opus review review2; do
     is_required_seat "$seat" "$REQUIRED" || continue
     pres="$(seat_presence "$RD" "$seat")"
     if [ "$pres" = missing ]; then
@@ -1148,7 +1203,21 @@ ASKS
   red_e_count="$(printf '%s' "$red_e" | wc -w | tr -d ' ')"
   red_u_count="$(printf '%s' "$red_u" | wc -w | tr -d ' ')"
 
-  local rf="$RD/review.md" review_asks="" review_note=""
+  local rf="$RD/review.md" review_asks="" review_note="" rfold=""
+  # ab-run-fixes C2: with a recorded review2 the review judged below is the fold of both - BLOCK if
+  # either, both bodies kept (the second under its own heading, so its lines never join the first
+  # report's last section); every rule after this (anchors, unanchored, SUITE: FAIL) reads the fold.
+  if [ -f "$rf" ] && [ -f "$RD/review2.md" ]; then
+    local fv=PASS
+    [ "$(review_verdict_of "$rf")" = PASS ] || fv=BLOCK
+    [ "$(review_verdict_of "$RD/review2.md")" = PASS ] || fv=BLOCK
+    rfold="$(mktemp)"
+    { head -1 "$rf"; printf 'VERDICT: %s
+' "$fv"; sed '1d' "$rf"; printf '
+## Second reviewer (review2)
+'; sed '1d' "$RD/review2.md"; } > "$rfold"
+    rf="$rfold"
+  fi
   if [ -f "$rf" ]; then
     review_v="$(review_verdict_of "$rf")"
     if [ "$review_v" = "BLOCK" ]; then
@@ -1176,6 +1245,7 @@ ASKS
   else
     review_v="" # C15: review not required at this tier and never recorded - not ABSENT
   fi
+  [ -n "$rfold" ] && rm -f "$rfold"
 
   # --- env escalation is "at least one REQUIRED seat is ABSENT" (R16/M-5), not "all three" -
   # a partial absence with nothing RED anywhere and review not BLOCK is a court/tooling defect
@@ -1190,6 +1260,8 @@ ASKS
     esac
   done
   is_required_seat review "$REQUIRED" && [ "$review_v" = ABSENT ] && absent_seats="$absent_seats review"
+  # a called review2 that spent both attempts is ABSENT like any required seat (C2)
+  is_required_seat review2 "$REQUIRED" && [ ! -f "$RD/review2.md" ] && absent_seats="$absent_seats review2"
   absent_seats="${absent_seats# }"
 
   local na_count=0 v
@@ -1259,7 +1331,7 @@ ASKS
     mkdir -p memory/stats
     local escjson="null"; [ -n "$escalate_reason" ] && escjson="\"$escalate_reason\""
     local attempts=0
-    for seat in haiku sonnet opus review; do
+    for seat in haiku sonnet opus review review2; do
       attempts=$((attempts + $(seat_attempt_count "$RD" "$seat")))
     done
     local noteval=""
@@ -1373,7 +1445,7 @@ cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|en
   local N="${RD##*/round-}"
 
   local required missing
-  required="$(round_required_seats "$SPEC" "$RD")"
+  required="$(round_needed_seats "$SPEC" "$RD")"
   missing="$(missing_required_seats "$RD" "$required")"
 
   if [ -z "$missing" ]; then
@@ -1633,8 +1705,10 @@ full_suite_row_round_only() { # full_suite_row_round_only <constitution> -> 0 if
   full_suite_row "$1" >/dev/null
 }
 
-cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <report> <model-opt> <head>
-  local SPEC="$1" RD="$2" N="$3" ATTEMPT="$4" REPORT="$5" MODEL_OPT="$6" HEAD="$7"
+cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <report> <model-opt> <head> [<seat>]
+  # <seat> is review (default) or review2, the Tier 4 second reviewer (ab-run-fixes C2): the same
+  # checks, stored as <seat>.md, folded with review.md by judge.
+  local SPEC="$1" RD="$2" N="$3" ATTEMPT="$4" REPORT="$5" MODEL_OPT="$6" HEAD="$7" SEAT="${8:-review}"
   local RPACK; RPACK="$(round_field "$RD" pack)"
   local model="$MODEL_OPT"; [ -n "$model" ] || model="$(seat_field_str "$REPORT" MODEL)"; [ -n "$model" ] || model="unknown"
 
@@ -1645,16 +1719,16 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
   local logline; logline="$(suite_log_line "$RD")"
   if [ -z "$logline" ] && full_suite_row_round_only "$(constitution_file "$ROOT")"; then
     local why; why="no suite.log for round $N at head $(round_field "$RD" head) - run cycle.sh suite $SPEC first, then record the same report again"
-    echo "cycle: record-seat - review round $N: $why" >&2
+    echo "cycle: record-seat - $SEAT round $N: $why" >&2
     emit false record-seat 2 error "$why"
     exit 2
   fi
 
   local verdict; verdict="$(review_verdict_of_text "$REPORT")"
   if [ -z "$verdict" ]; then
-    write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
-    echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: review: first line is not VERDICT: PASS|BLOCK" >&2
-    emit false record-seat 4 error "MALFORMED: review: first line is not VERDICT: PASS|BLOCK"
+    write_seat_file "$RD/$SEAT.attempt-$ATTEMPT.md" "$SEAT" "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
+    echo "cycle: record-seat - $SEAT round $N attempt $ATTEMPT: MALFORMED: $SEAT: first line is not VERDICT: PASS|BLOCK" >&2
+    emit false record-seat 4 error "MALFORMED: $SEAT: first line is not VERDICT: PASS|BLOCK"
     exit 4
   fi
 
@@ -1662,9 +1736,9 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
   # an anchor tag; otherwise it is MALFORMED like any seat - kept, exit 4, re-asked once. The tag
   # is not validated further here (ask range, regression claim: judge's business).
   if [ "$verdict" = BLOCK ] && ! review_blocking_lines_text "$REPORT" | grep -qE '\[ask [0-9]+\]|\[regression\]|\[unanchored\]'; then
-    local why="review: BLOCK has no tagged finding - no list line under ## Critical / ## Major carries [ask N], [regression] or [unanchored]"
-    write_seat_file "$RD/review.attempt-$ATTEMPT.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
-    echo "cycle: record-seat - review round $N attempt $ATTEMPT: MALFORMED: $why" >&2
+    local why="$SEAT: BLOCK has no tagged finding - no list line under ## Critical / ## Major carries [ask N], [regression] or [unanchored]"
+    write_seat_file "$RD/$SEAT.attempt-$ATTEMPT.md" "$SEAT" "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "" "$REPORT"
+    echo "cycle: record-seat - $SEAT round $N attempt $ATTEMPT: MALFORMED: $why" >&2
     emit false record-seat 4 error "MALFORMED: $why"
     exit 4
   fi
@@ -1682,10 +1756,10 @@ cmd_record_seat_review() { # cmd_record_seat_review <spec> <rd> <n> <attempt> <r
   fi
 
   local extra; extra="$(printf ' \xc2\xb7 verdict: %s' "$verdict")"
-  write_seat_file "$RD/review.md" review "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$extra" "$REPORT"
-  echo "cycle: record-seat - review recorded for round $N (verdict $verdict)"
+  write_seat_file "$RD/$SEAT.md" "$SEAT" "$model" "$N" "$HEAD" "$RPACK" "$ATTEMPT" "$extra" "$REPORT"
+  echo "cycle: record-seat - $SEAT recorded for round $N (verdict $verdict)"
   local missing required next_val
-  required="$(round_required_seats "$SPEC" "$RD")"
+  required="$(round_needed_seats "$SPEC" "$RD")"
   missing="$(missing_required_seats "$RD" "$required")"
   next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
   emit_status record-seat "$SPEC" "$next_val"
@@ -1799,7 +1873,7 @@ REPORTEOF
   echo "cycle: record-seat - $SEAT recorded for round $N (attempt $ATTEMPT)$( [ -n "$red_u_list" ] && printf ', unevidenced: %s' "$(json_num_csv "$red_u_list")" )"
 
   local missing required next_val
-  required="$(round_required_seats "$SPEC" "$RD")"
+  required="$(round_needed_seats "$SPEC" "$RD")"
   missing="$(missing_required_seats "$RD" "$required")"
   next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
   emit_status record-seat "$SPEC" "$next_val"
@@ -1822,9 +1896,9 @@ cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] [--stamp 
   done
 
   case "$SEAT" in
-    haiku|sonnet|opus|review) ;;
+    haiku|sonnet|opus|review|review2) ;;
     *)
-      echo "cycle: usage: $0 record-seat <spec-dir> <N> <haiku|sonnet|opus|review> [--model <id>] [--stamp <s>] [--file <path>] [< report]" >&2
+      echo "cycle: usage: $0 record-seat <spec-dir> <N> <haiku|sonnet|opus|review|review2> [--model <id>] [--stamp <s>] [--file <path>] [< report]" >&2
       emit false record-seat 1 error "usage"
       exit 1
       ;;
@@ -1863,6 +1937,13 @@ cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] [--stamp 
     emit false record-seat 2 error "$SEAT already recorded"
     exit 2
   }
+  # ab-run-fixes C2: review2 is taken only while the round calls for it (a Tier 4 risk round, or a
+  # recorded review BLOCK); otherwise nothing is written and no attempt is spent.
+  if [ "$SEAT" = review2 ] && ! review2_called "$SPEC" "$RD"; then
+    echo "cycle: record-seat - round $N does not call for review2 (Tier 4 only: a risk path in the range, or a review BLOCK first)" >&2
+    emit false record-seat 2 error "review2 not called in round $N"
+    exit 2
+  fi
   local ATTEMPT=1
   if [ -f "$RD/$SEAT.attempt-2.md" ]; then
     echo "cycle: record-seat - $SEAT has exhausted both attempts for round $N; the seat is ABSENT" >&2
@@ -1886,8 +1967,8 @@ cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] [--stamp 
     REPORT="$(cat)"
   fi
 
-  if [ "$SEAT" = review ]; then
-    cmd_record_seat_review "$SPEC" "$RD" "$N" "$ATTEMPT" "$REPORT" "$MODEL_OPT" "$HEAD"
+  if [ "$SEAT" = review ] || [ "$SEAT" = review2 ]; then
+    cmd_record_seat_review "$SPEC" "$RD" "$N" "$ATTEMPT" "$REPORT" "$MODEL_OPT" "$HEAD" "$SEAT"
   else
     cmd_record_seat_council "$SPEC" "$RD" "$N" "$SEAT" "$ATTEMPT" "$REPORT" "$MODEL_OPT" "$HEAD"
   fi
@@ -2696,18 +2777,44 @@ run_court_setup() { # run_court_setup <slug> <n> <court-abs> <round-dir> - the h
   exit 2
 }
 
-carry_seats() { # carry_seats <round-dir n> <round-dir n-1> <n-1> -> the space-separated blind
+repair_story_of_round() { # repair_story_of_round <spec> <n> -> the repair story cut for round n, or nothing
+  local f
+  for f in "$1"/*-repair-round-"$2".md; do
+    [ -f "$f" ] && is_story_file "$f" && { printf '%s' "$f"; return; }
+  done
+}
+
+repair_touched_asks() { # repair_touched_asks <story> -> " n n " - the asks a repair story touches (C4):
+  # a `> N. ` line under ## Requirements, or an `[ask N]` tag under ## Findings
+  tr -d '\r' < "$1" | awk '/^## / { sec = $0; next }
+    sec == "## Requirements" && /^> [0-9]+\. / { n = $2; sub(/\.$/, "", n); print n + 0 }
+    sec == "## Findings" { s = $0; while (match(s, /\[ask [0-9]+\]/)) { print substr(s, RSTART + 5, RLENGTH - 6) + 0; s = substr(s, RSTART + RLENGTH) } }' \
+    | awk 'BEGIN { printf " " } !seen[$0]++ { printf "%s ", $0 }'
+}
+
+carry_seats() { # carry_seats <round-dir n> <round-dir n-1> <n-1> [<spec>] -> the space-separated blind
   # seats copied forward (ADR-013 D3): a GREEN or N/A report of round n-1 is copied into round n
   # as <seat>.md, its header marked ` · carried: round <n-1>` (inside the comment, so the header
   # stays one well-formed line). `review` is never carried - the reviewer always reads the new
   # diff. A seat round n already holds is left alone, so a re-stamp in place carries nothing twice.
-  local rd="$1" prev="$2" pn="$3" seat src v out=""
+  # ab-run-fixes C4: nor is a seat whose report judged (an `ASK <n>:` line) an ask that round n-1's
+  # repair story touched - the repair changed what it saw. A round with no repair story carries as before.
+  local rd="$1" prev="$2" pn="$3" spec="${4:-}" seat src v out="" touched="" rs="" a hit
+  [ -n "$spec" ] && rs="$(repair_story_of_round "$spec" "$pn")"
+  [ -n "$rs" ] && touched="$(repair_touched_asks "$rs")"
   for seat in haiku sonnet opus; do
     src="$prev/$seat.md"
     [ -f "$src" ] || continue
     [ -f "$rd/$seat.md" ] && continue
     v="$(seat_field "$src" VERDICT)"
     case "$v" in GREEN|N/A) ;; *) continue ;; esac
+    if [ -n "${touched// /}" ]; then
+      hit=0
+      for a in $(grep -E '^ASK [0-9]+:' "$src" | sed -n 's/^ASK \([0-9][0-9]*\):.*/\1/p'); do
+        case "$touched" in *" $((10#$a)) "*) hit=1; break ;; esac
+      done
+      [ "$hit" = 1 ] && continue
+    fi
     {
       head -1 "$src" | awk -v m=" $(printf '\xc2\xb7') carried: round $pn" '
         /[[:space:]]*-->[[:space:]]*$/ { sub(/[[:space:]]*-->[[:space:]]*$/, m " -->"); print; next }
@@ -2731,9 +2838,16 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   # C15/ADR-013 D3: the tier and the roster are derived once, here, and frozen into the round
   # (tier=, seats=) - a plan.md or Profile edit mid-round (or a stale re-stamp) never changes
   # what this round already requires.
-  local tier required
+  local tier required narrow="" second=""
   tier="$(tier_of "$spec")"
   required="$(required_seats_for_tier "$tier")"
+  # ab-run-fixes C5: the round after a narrow repair story (`narrow: true`, cut for round n-1) is
+  # review-only: seats=review, narrow=1 - no blind seat, no court, no second reviewer, and `suite`
+  # runs no step. Every other round is a full one.
+  if [ "$n" -gt 1 ]; then
+    local nrs; nrs="$(repair_story_of_round "$spec" "$((n-1))")"
+    [ -n "$nrs" ] && [ "$(fm_field "$nrs" narrow)" = true ] && { narrow=1; required="review"; }
+  fi
 
   # No blind seat, no court (D3): the reviewer never enters one, so a review-only round would
   # pay a worktree for nobody.
@@ -2747,7 +2861,11 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   local since="" carried=""
   if [ "$n" -gt 1 ]; then
     since="$(round_field "$spec/council/round-$((n-1))" head)"
-    carried="$(carry_seats "$rd" "$spec/council/round-$((n-1))" "$((n-1))")"
+    [ -n "$narrow" ] || carried="$(carry_seats "$rd" "$spec/council/round-$((n-1))" "$((n-1))" "$spec")"
+  fi
+  # ab-run-fixes C2/C3: a Tier 4 round freezes whether its reviewed range touches the risk set
+  if [ "$tier" = 4 ]; then
+    if [ -n "$narrow" ]; then second=none; else second="$(round_second "$spec" "$n" "$head" "$since")"; fi
   fi
 
   {
@@ -2759,13 +2877,17 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
     printf 'tier=%s\n' "$tier"
     printf 'seats=%s\n' "$required"
     [ -n "$since" ] && printf 'since=%s\n' "$since"
+    [ -n "$second" ] && printf 'second=%s\n' "$second"
+    [ -n "$narrow" ] && printf 'narrow=1\n'
   } > "$rd/ROUND"
 
   local missing dispatch_val
-  missing="$(missing_required_seats "$rd" "$required")"
+  missing="$(missing_required_seats "$rd" "$(round_needed_seats "$spec" "$rd")")"
   dispatch_val="judge"; [ -n "$missing" ] && dispatch_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
   local where="court at $court_abs"; [ -n "$court_abs" ] || where="no court (no blind seat required)"
   local note="round $n opened, $where"
+  [ -n "$narrow" ] && note="$note, narrow repair round (review only)"
+  [ "$second" = risk ] && note="$note, second reviewer: a risk path in the range"
   [ -n "$carried" ] && note="$note, carried from round $((n-1)): $(printf '%s' "$carried" | sed 's/ /, /g')"
   bash "$HERE/journal.sh" "$spec" "04-council:open" "$note" "$dispatch_val" >/dev/null
 
@@ -2810,7 +2932,7 @@ write_stale_row() { # write_stale_row <spec> <slug> <round-dir> <n> <a> - a STAL
     if [ -f "$rd/review.md" ]; then
       review_v="$(review_verdict_of "$rd/review.md")"; [ -n "$review_v" ] || review_v="ABSENT"
     fi
-    attempts=$((attempts + $(seat_attempt_count "$rd" review)))
+    attempts=$((attempts + $(seat_attempt_count "$rd" review) + $(seat_attempt_count "$rd" review2)))
     printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"STALE","head":"%s","pack":"%s","asks":%s,"red":[],"red_unevidenced":[],"review_asks":[],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":null,"note":"code moved after dispatch"}\n' \
       "$(now_ts)" "$slug" "$n" "${rhead:-unknown}" "$rpack" "$a" "$review_v" \
       "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" "$attempts" >> memory/stats/council.jsonl
@@ -2931,7 +3053,7 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
       # uncommitted under this spec's own paperwork is finished now, not silently left behind.
       [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): open-round $N" "$SPEC"
       local missing required next_val
-      required="$(round_required_seats "$SPEC" "$RD")"
+      required="$(round_needed_seats "$SPEC" "$RD")"
       missing="$(missing_required_seats "$RD" "$required")"
       next_val="judge"; [ -n "$missing" ] && next_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
       echo "cycle: $SLUG - round $N already open at current HEAD, no-op"
@@ -2941,7 +3063,7 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
     # A carried report is round n-1's evidence, not a dispatch of this round - a round holding
     # only carried seats re-stamps in place like an empty one (ADR-013 D3), no STALE fold.
     local has_seat=0 seat2
-    for seat2 in haiku sonnet opus review; do
+    for seat2 in haiku sonnet opus review review2; do
       [ -f "$RD/$seat2.md" ] && ! seat_is_carried "$RD/$seat2.md" && has_seat=1
     done
     if [ "$has_seat" -eq 0 ]; then
@@ -3098,6 +3220,15 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
   [ -f "$LOG" ] && [ "$lh" != "$RHEAD" ] && rm -f "$LOG"
 
   if [ ! -f "$LOG" ]; then
+    # ab-run-fixes C5: a narrow repair round runs no gate step - the finished log keyed to the round
+    # head says so, and record-seat takes the review against it.
+    if [ "$(round_field "$RD" narrow)" = 1 ]; then
+      printf 'head=%s steps=0\nSUITE: none - narrow repair round\n' "$RHEAD" > "$LOG"
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N none (narrow)" "$LOG"
+      echo "cycle: $SLUG - round $N: narrow repair round, SUITE: none, no step run"
+      suite_emit "$SPEC" 0 0 true none
+      exit 0
+    fi
     if [ -z "$row" ]; then
       printf 'head=%s steps=0\nSUITE: none\n' "$RHEAD" > "$LOG"
       [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N none" "$LOG"
@@ -3568,8 +3699,11 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
       [ -f "$RD/$seat.md" ] && grep -E '^ASK [0-9]+:[[:space:]]*RED' "$RD/$seat.md"
     done
     # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
-    [ -f "$RD/review.md" ] && review_blocking_lines "$RD/review.md" \
-      | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
+    # ab-run-fixes C2: a second reviewer's anchored findings join the one repair story (recall)
+    for seat in review review2; do
+      [ -f "$RD/$seat.md" ] && review_blocking_lines "$RD/$seat.md" \
+        | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
+    done
     # gate-split-04: the gate of the round - each red PART line of a finished suite.log is a finding.
     [ -n "$(suite_log_line "$RD")" ] && suite_red_parts "$RD/suite.log" | sed 's/^/- [regression] /'
     # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
@@ -3587,8 +3721,45 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   # ## Files and none names a marked story's; a finding that names no file keeps it (fail closed).
   [ "$marked" = 1 ] && repair_unmarks "$findings" "$files" "$mfiles" && marked=0
 
+  # ab-run-fixes C5: narrow - exactly one RED item (one ask, or one [regression] / gate / owner
+  # finding) whose reach (the paths its findings name, else the ## Files union) is one non-test file.
+  # Its story names that file, its exact tests and the defect cards; the next round is review-only.
+  local NARROW="" nfile="" reach items
+  items=$(( $(printf '%s\n' $asks | grep -c .) + $(printf '%s\n' "$findings" | grep -cE '\[regression\]|^- owner REJECTED') ))
+  if [ "$items" -eq 1 ]; then
+    reach="$(finding_paths "$findings" | awk 'NF && !seen[$0]++')"
+    [ -n "$reach" ] || reach="$(printf '%s' "$files" | awk 'NF && !seen[$0]++')"
+    if [ "$(printf '%s\n' "$reach" | grep -c .)" -eq 1 ]; then
+      case "$reach" in *[*?[]*|*/) ;; *) is_test_path "$reach" || { NARROW=1; nfile="$reach"; } ;; esac
+    fi
+  fi
+  local nfiles="" nverifs=""
+  if [ -n "$NARROW" ]; then
+    nfiles="$nfile
+"
+    [ -f "$HERE/symbol-map.sh" ] && nfiles="$nfiles$(bash "$HERE/symbol-map.sh" --exact "$nfile" 2>/dev/null \
+      | awk '/^[^ ]/ { on = ($0 == "tests:"); next } on && $1 == "exact" { print $2 }')
+"
+    nfiles="${nfiles}docs/defects/*
+"
+    local e named
+    for sf in "$SPEC"/*.md; do
+      is_story_file "$sf" || continue
+      [ "$(fm_field "$sf" status)" = done ] || continue
+      named=0
+      while IFS= read -r e; do
+        [ -n "$e" ] && path_overlap "$e" "$nfile" && { named=1; break; }
+      done <<EOF
+$(files_of "$sf")
+EOF
+      [ "$named" = 1 ] && nverifs="$nverifs$(verify_of "$sf" | grep -vE '^repeat[[:space:]]*:')
+"
+    done
+  fi
+
   {
     printf -- '---\nstory: %s-%s\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: %s\nblocked_by: []\n' "$SLUG" "$NN" "$WAVE"
+    [ -n "$NARROW" ] && printf 'narrow: true\n'
     # red-receipt: a repair that keeps the mark gets an empty red_reason for its builder to write.
     [ "$marked" = 1 ] && printf 'red: required\nred_reason:\n'
     printf -- '---\n\n'
@@ -3605,16 +3776,29 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
     fi
     printf '\n## Findings\n'
     [ -n "$findings" ] && printf '%s\n' "$findings"
-    printf '\n## Files\n'
-    printf '%s' "$files" | awk 'NF && !seen[$0]++ { print "- " $0 }'
-    printf '\n## Verification\n'
-    repair_verification "$verifs" "$findings" "$files" | awk 'NF { print "`" $0 "`" }'
+    if [ -n "$NARROW" ]; then
+      printf '\n## Acceptance criteria\n'
+      printf -- '- [ ] The class card under docs/defects/ (its quote, Never line or check:) is added or updated in the same commit as the fix.\n'
+      printf '\n## Files\n'
+      printf '%s' "$nfiles" | awk 'NF && !seen[$0]++ { print "- " $0 }'
+      printf '\n## Verification\n'
+      if [ -n "$(printf '%s' "$nverifs" | tr -d '[:space:]')" ]; then
+        printf '%s' "$nverifs" | awk 'NF && !seen[$0]++ { print "`" $0 "`" }'
+      else
+        repair_verification "$verifs" "$findings" "$files" | awk 'NF { print "`" $0 "`" }'
+      fi
+    else
+      printf '\n## Files\n'
+      printf '%s' "$files" | awk 'NF && !seen[$0]++ { print "- " $0 }'
+      printf '\n## Verification\n'
+      repair_verification "$verifs" "$findings" "$files" | awk 'NF { print "`" $0 "`" }'
+    fi
   } > "$STORY"
 
   bash "$HERE/journal.sh" "$SPEC" "03-building" "repair round $N: $(basename "$STORY")" "build:$WAVE" >/dev/null
   [ "$DOCOMMIT" = "1" ] && commit_paperwork repair "vulyk($SLUG): repair round $N" "$STORY" "$SPEC/journal.md"
 
-  echo "cycle: $SLUG - repair story for round $N: $STORY"
+  echo "cycle: $SLUG - repair story for round $N: $STORY${NARROW:+ (narrow: $nfile, the next round is review-only)}"
   emit_status repair "$SPEC"
   exit 0
 }
@@ -3628,30 +3812,6 @@ verb_json_str() { # verb_json_str <verb-line> <key> -> a string field of a verb'
   # still JSON-escaped (it goes back into JSON as is); the carried status is cut off first, so
   # a status key of the same name can never answer for the verb's own.
   printf '%s' "${1%%,\"status\":\{*}" | sed -nE "s/.*\"$2\":\"(([^\"\\\\]|\\\\.)*)\".*/\\1/p" | head -1
-}
-
-review_first_line() { # review_first_line <text> -> its first non-blank line, leading blanks and
-  # a trailing CR dropped - the driver's foldReviews read `trim().split('\n')[0]`
-  printf '%s\n' "$1" | awk 'NF { sub(/^[[:space:]]+/, ""); sub(/\r$/, ""); print; exit }'
-}
-
-fold_reviews() { # fold_reviews <top-file> <second-file> -> the Tier 4 `review` text (D2): the
-  # 0.17 driver's foldReviews, moved here. Both first lines `VERDICT: PASS|BLOCK` -> one
-  # verdict, BLOCK if either blocks, both bodies below; anything else -> `NO VERDICT: ...`,
-  # which record-seat rejects, so the attempt is spent exactly as the driver spent it. A
-  # missing file is an empty body.
-  local r1="" r2="" f1 f2 v=PASS
-  [ -f "$1" ] && r1="$(cat "$1")"
-  [ -f "$2" ] && r2="$(cat "$2")"
-  f1="$(review_first_line "$r1")"; f2="$(review_first_line "$r2")"
-  if printf '%s' "$f1" | grep -qE '^VERDICT:[[:space:]]*(PASS|BLOCK)([^A-Za-z0-9_]|$)' \
-    && printf '%s' "$f2" | grep -qE '^VERDICT:[[:space:]]*(PASS|BLOCK)([^A-Za-z0-9_]|$)'; then
-    printf '%s\n%s\n' "$f1" "$f2" | grep -qE '^VERDICT:[[:space:]]*BLOCK([^A-Za-z0-9_]|$)' && v=BLOCK
-    printf 'VERDICT: %s\n%s\n%s\n' "$v" "$r1" "$r2"
-    return
-  fi
-  printf 'NO VERDICT: top=%s \xc2\xb7 second=%s\n%s\n%s\n' "${f1:-(no report)}" "${f2:-(no report)}" \
-    "${r1:-(no report)}" "${r2:-(no report)}"
 }
 
 run_verb() { # run_verb <verb> <args...> - runs one cycle.sh verb as a subprocess (stdin is the
@@ -3689,14 +3849,12 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
   if [ "$INGEST" = 1 ]; then
     local RD N; RD="$(current_round_dir "$SPEC")"; N="${RD##*/round-}"
     if [ -n "$RD" ] && [ -f "$RD/ROUND" ] && ! row_exists "$SLUG" "$N" && ! round_is_stale "$SPEC" "$N"; then
-      local REPDIR=".vulyk/reports/$SLUG/round-$N" TIER seat k err
-      TIER="$(round_tier "$SPEC" "$RD")"
-      for seat in $(missing_required_seats "$RD" "$(round_required_seats "$SPEC" "$RD")"); do
+      local REPDIR=".vulyk/reports/$SLUG/round-$N" seat k err
+      # ab-run-fixes C2: each seat, review2 included, is recorded from its own file; judge folds
+      # review and review2. A review2 called by this ingest's own BLOCK is the next dispatch.
+      for seat in $(missing_required_seats "$RD" "$(round_needed_seats "$SPEC" "$RD")"); do
         k="$(seat_next_attempt "$RD" "$seat")"
-        if [ "$seat" = review ] && [ "$TIER" = 4 ]; then
-          run_verb record-seat "$SPEC" "$N" review ${SARG[@]+"${SARG[@]}"} \
-            <<<"$(fold_reviews "$REPDIR/review-top.attempt-$k.md" "$REPDIR/review-second.attempt-$k.md")"
-        elif [ -s "$REPDIR/$seat.attempt-$k.md" ]; then
+        if [ -s "$REPDIR/$seat.attempt-$k.md" ]; then
           run_verb record-seat "$SPEC" "$N" "$seat" ${SARG[@]+"${SARG[@]}"} --file "$REPDIR/$seat.attempt-$k.md" </dev/null
         else
           run_verb record-seat "$SPEC" "$N" "$seat" ${SARG[@]+"${SARG[@]}"} </dev/null

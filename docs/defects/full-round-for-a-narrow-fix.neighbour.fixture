@@ -1,0 +1,18 @@
+# council/round-2/ROUND and suite.log: one ask red in one file, a narrow repair, a review-only round,
+# and the round's gate still runs every inherited suite part
+head=c3e8f10
+pack=1b6d0e9a7f22
+opened=2026-11-08T09:40:03Z
+court=
+ceiling=3
+tier=3
+seats=review
+since=8a0d4c1
+narrow=1
+head=c3e8f10 steps=2
+STEP 1/2: ok 214s
+PART council:verbs ok 148s cap 300s
+PART cycle:ship ok 66s cap 300s
+STEP 2/2: ok 198s
+PART telemetry:rg ok 198s cap 300s
+SUITE: ok 412s

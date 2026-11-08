@@ -14,7 +14,7 @@ cards 15 · never 40 · allowed 14 · how-to 2 · allowed repeats 0
 | general | [command-injection-follows-cwd](command-injection-follows-cwd.md) | A command's injection names its script relative to the session cwd | block | 2 | 1 | 0 | 2026-10-13 |
 | general | [done-without-real-run](done-without-real-run.md) | Work reported done without running it where it will really run | text | 2 | 0 | 0 | - |
 | general | [framework-fix-skips-live-hives](framework-fix-skips-live-hives.md) | A framework fix ships in VULYK while a live hive keeps the defect | text | 2 | 1 | 0 | 2026-10-14 |
-| general | [full-round-for-a-narrow-fix](full-round-for-a-narrow-fix.md) | A repair of one narrow finding re-runs a full council round and every inherited suite | text | 2 | 1 | 0 | 2026-10-16 |
+| general | [full-round-for-a-narrow-fix](full-round-for-a-narrow-fix.md) | A repair of one narrow finding re-runs a full council round and every inherited suite | block | 2 | 1 | 0 | 2026-10-16 |
 | general | [host-internals-in-public-repo](host-internals-in-public-repo.md) | A host project's insides quoted into the public VULYK repository | block | 3 | 2 | 1 | 2026-10-13 |
 | general | [measurement-unlike-reality](measurement-unlike-reality.md) | A test or measurement that does not represent the reality it is used to judge | text | 3 | 0 | 0 | - |
 | general | [outward-artifact-carries-internals](outward-artifact-carries-internals.md) | An artifact going outward carries internal or client content beyond names | text | 2 | 0 | 0 | - |
@@ -34,7 +34,7 @@ cards 15 · never 40 · allowed 14 · how-to 2 · allowed repeats 0
 | general | [command-injection-follows-cwd](command-injection-follows-cwd.md) | A command's injection names its script relative to the session cwd | block | 1 | 1 | 0 | - |
 | general | [done-without-real-run](done-without-real-run.md) | Work reported done without running it where it will really run | text | 1 | 0 | 0 | - |
 | general | [framework-fix-skips-live-hives](framework-fix-skips-live-hives.md) | A framework fix ships in VULYK while a live hive keeps the defect | text | 1 | 1 | 0 | - |
-| general | [full-round-for-a-narrow-fix](full-round-for-a-narrow-fix.md) | A repair of one narrow finding re-runs a full council round and every inherited suite | text | 1 | 1 | 0 | - |
+| general | [full-round-for-a-narrow-fix](full-round-for-a-narrow-fix.md) | A repair of one narrow finding re-runs a full council round and every inherited suite | block | 1 | 1 | 0 | - |
 | general | [host-internals-in-public-repo](host-internals-in-public-repo.md) | A host project's insides quoted into the public VULYK repository | block | 1 | 2 | 0 | - |
 | general | [measurement-unlike-reality](measurement-unlike-reality.md) | A test or measurement that does not represent the reality it is used to judge | text | 1 | 0 | 0 | - |
 | general | [outward-artifact-carries-internals](outward-artifact-carries-internals.md) | An artifact going outward carries internal or client content beyond names | text | 1 | 0 | 0 | - |

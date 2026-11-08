@@ -33,7 +33,7 @@ reviewer per round. The audit behind it found `lead-review` BLOCK behind 39 of 6
 and extra rounds took 29.5% of the spend of the tasks that had them.
 
 Today the gate model is passed only where the stakes justify it, and these four uses are the whole
-list: the Tier 4 review (beside a second reviewer on a different model), `lead-architect` (Tier 4, or
+list: the Tier 4 review (beside a second reviewer on a different model when the round calls one), `lead-architect` (Tier 4, or
 a story missed twice), the Tier 4 `queen-planner` and a missed story's retry. A hive's own judge
 script is none of them: it asks `bash scripts/model-profile.sh --role seat` for its family and passes
 `--effort` explicitly, because one hive's scripts that took the gate model ran it at the account's
@@ -131,6 +131,13 @@ Bedrock, Vertex and gateways).
 This is what makes the Tier 4 "second reviewer on a different model" affordable: it is a second
 subagent, not a session-level switch. See [token-economy.md](token-economy.md).
 
+Since ab-run-fixes (C2) that subagent runs only when there is a reason for it. It is the seat
+`review2`: one `lead-review` on `second_model`, dispatched when `open-round` found a path of the risk
+set in the reviewed range (`second=risk`, [cycle.md](cycle.md) names the set) or when the first
+reviewer's `review` came back BLOCK. A round with neither is judged on the gate-model `review` and
+the one blind seat. `judge` folds the two reviews, BLOCK if either; the second never overturns a
+BLOCK, it only adds findings to the one repair story. A narrow repair round has no second reviewer.
+
 ## Use aliases, not pinned IDs
 Write `opus`, `sonnet`, `haiku` — not `claude-opus-5`. An alias resolves to the current model in
 that family, so the next generation is absorbed without editing a single file. That property is the
@@ -185,8 +192,8 @@ haiku floor line carries `cc>=2.1.293` (below).
 Max, Opus on Pro and API. `status --json` carries each story's `model` (`""` with no line: the worker's frontmatter), so the
 driver never opens the story file to learn it.
 
-At Tier 3–4, `lead-review` and the blind seats (`council-opus`, and `council-haiku` when the
-Profile's *Client path* is filled) are dispatched together, one message per council round: they
+At Tier 3–4, `lead-review` and the one blind seat (`council-haiku` when the Profile's *Client
+path* is filled, else `council-opus`) are dispatched together, one message per council round: they
 are independent in information, so they can be independent in wall-clock time. `cycle.sh advance
 --ingest` records their reports and `cycle.sh judge` folds them into one verdict; no model does.
 

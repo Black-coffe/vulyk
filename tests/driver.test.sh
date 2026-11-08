@@ -49,7 +49,7 @@ if (!driverFn) { console.log('FAIL: nothing to run'); process.exit(1); }
   try { literal = !!m && typeof new Function('"use strict"; return (' + m[1] + ')')() === 'object'; } catch { literal = false; }
   check(literal, 'static: meta is a pure literal');
   check(!src.includes('queen-planner'), 'static: no queen-planner anywhere in the driver');
-  check(!/\bfoldReviews\b/.test(src), 'static: no JS review fold - advance --ingest folds');
+  check(!/\bfoldReviews\b/.test(src), 'static: no JS review fold - judge folds review and review2');
   const advances = src.match(/`advance \$\{spec\}[^`]*`/g) || [];
   check(advances.length > 0 && advances.every((t) => t.includes('--stamp ${stamp}')), 'static: every advance template carries --stamp', advances);
   check(/close-story \$\{story\.file\} --commit --stamp \$\{stamp\}/.test(src), 'static: the worker prompt names close-story --commit --stamp');
@@ -306,16 +306,27 @@ const blindPromptsClean = (r) => r.dispatches
     check(haiku && haiku.prompt.includes('round-2/haiku.attempt-1.md') && blindPromptsClean(r), 'round 2: haiku stays blind', haiku && haiku.prompt);
   }
 
-  // --- Tier 4: two reviewers, review-top on TOP and review-second on SECOND, one ingest
+  // --- Tier 4 (ab-run-fixes C2): exactly the seats `next` names - review on TOP; review2, one lead-review on SECOND, only when named
   {
     const r = await run(ARGS, {
-      clerk: [[CLAIM, adv(round('opus,review', { tier: 4 }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
+      clerk: [
+        [CLAIM, adv(round('opus,review', { tier: 4 }))],
+        [INGEST, adv(round('review2', { tier: 4 }))],
+        [INGEST, adv(green({ tier: 4 }))],
+        [RELEASE, releaseOk],
+      ],
     });
     const revs = r.dispatches.filter((d) => d.agentType === 'lead-review');
-    check(revs.length === 2 && revs[0].model === 'fable' && revs[0].prompt.includes('round-1/review-top.attempt-1.md')
-      && revs[1].model === 'opus' && revs[1].prompt.includes('round-1/review-second.attempt-1.md'),
-      'tier 4: two reviewers, review-top on TOP and review-second on SECOND', revs.map((d) => [d.model, d.prompt]));
-    check(r.mismatches.length === 0 && r.clerkCmds.length === 3 && r.result.next === 'green', 'tier 4: one ingest folds both', seq(r));
+    check(r.dispatches.length === 3 && revs.length === 2 && revs[0].model === 'fable' && revs[0].prompt.includes('round-1/review.attempt-1.md')
+      && revs[1].model === 'opus' && revs[1].prompt.includes('round-1/review2.attempt-1.md'),
+      'tier 4: one reviewer on TOP beside the blind seat; review2 dispatched on second_model once next names it', revs.map((d) => [d.model, d.prompt]));
+    check(r.mismatches.length === 0 && r.clerkCmds.length === 4 && r.result.next === 'green', 'tier 4: an ingest per dispatch, then green', seq(r));
+    const rk = await run(ARGS, {
+      clerk: [[CLAIM, adv(round('opus,review,review2', { tier: 4 }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
+    });
+    const types = rk.dispatches.map((d) => `${d.agentType}:${d.model}`).join(',');
+    check(types === 'council-opus:undefined,lead-review:fable,lead-review:opus' && rk.mismatches.length === 0,
+      'tier 4 risk path: the three seats next names in one dispatch, review2 on second_model, no doubling by tier', types);
   }
   for (const [label, args] of [['second_model missing', { spec: SPEC, top_model: 'fable', stamp: S }], ['second_model equal to top_model', { ...ARGS, second_model: 'fable' }]]) {
     const r = await run(args, { clerk: [[CLAIM, adv(build([story(1)], { tier: 4 }))], [RELEASE, releaseOk]] });
@@ -358,12 +369,12 @@ const blindPromptsClean = (r) => r.dispatches
       clerk: [[CLAIM, adv(round('review', { tier: 4, court: null }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
     });
     const revs = r3.dispatches.filter((d) => d.agentType === 'lead-review');
-    check(revs.length === 2 && revs[0].model === 'fable' && revs[1].model === 'sonnet', 'profile: the Tier 4 pair stays TOP/SECOND, review_model is not used',
+    check(revs.length === 1 && revs[0].model === 'fable', 'profile: the Tier 4 review runs on TOP alone, review_model is not used',
       revs.map((d) => d.model));
     const r4 = await run({ ...ARGS, review_model: 'haiku' }, {
       clerk: [[CLAIM, adv(round('review', { tier: 4, court: null }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
     });
-    check(r4.dispatches.map((d) => d.model).join(',') === 'fable,opus', 'profile: review_model leaves the Tier 4 pair on the launch pair', r4.dispatches.map((d) => d.model));
+    check(r4.dispatches.map((d) => d.model).join(',') === 'fable', 'profile: review_model leaves the Tier 4 review on TOP, one dispatch', r4.dispatches.map((d) => d.model));
   }
 
   // --- unreadable clerk lines: one read-only status, then on from that status

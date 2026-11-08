@@ -22,7 +22,7 @@ export const meta = {
 const TERMINAL = ['green', 'escalated', 'paused', 'shipped']
 // advance runs these itself - one reaching the driver means advance stopped short of a boundary
 const ADVANCE_VERBS = ['branch', 'open-round', 'judge', 'repair']
-const SEAT_AGENT = { haiku: 'council-haiku', opus: 'council-opus', review: 'lead-review' }
+const SEAT_AGENT = { haiku: 'council-haiku', opus: 'council-opus', review: 'lead-review', review2: 'lead-review' }
 const BLIND = ['haiku', 'opus']
 const MAX_ITERATIONS = 40
 
@@ -232,12 +232,12 @@ const council = async (st) => {
     dispatched.set(key, n)
     const k = (st.seat_attempt && st.seat_attempt[seat]) || 1
     const note = n > 1 ? `\nYour previous report was rejected: ${rejectionFor(seat)}` : ''
-    if (seat === 'review' && st.tier === 4) {
-      // two reviewers on different models; advance --ingest folds their files into one review
-      jobs.push({ who: 'reviewer (top)', agentType: 'lead-review', model: TOP, name: 'review-top', prompt: reviewPrompt(st) + note + reportNote(st, 'review-top', k) })
-      jobs.push({ who: 'reviewer (second)', agentType: 'lead-review', model: SECOND, name: 'review-second', prompt: reviewPrompt(st) + note + reportNote(st, 'review-second', k) })
+    // exactly the seats `next` names, never doubled by tier: Tier 4's review runs on TOP, and review2 -
+    // the second reviewer `next` names on a risk path or after a BLOCK - is one lead-review on SECOND
+    if (seat === 'review2') {
+      jobs.push({ who: 'reviewer (second)', agentType: 'lead-review', model: SECOND, name: 'review2', prompt: reviewPrompt(st) + note + reportNote(st, 'review2', k) })
     } else if (seat === 'review') {
-      jobs.push({ who: 'reviewer', agentType: 'lead-review', model: REVIEW, name: 'review', prompt: reviewPrompt(st) + note + reportNote(st, 'review', k) })
+      jobs.push({ who: 'reviewer', agentType: 'lead-review', model: st.tier === 4 ? TOP : REVIEW, name: 'review', prompt: reviewPrompt(st) + note + reportNote(st, 'review', k) })
     } else {
       jobs.push({ who: `seat ${seat}`, agentType: SEAT_AGENT[seat], model: SEAT, name: seat, prompt: seatPrompt(seat, st) + note + reportNote(st, seat, k) })
     }
@@ -264,7 +264,7 @@ try {
     log(`${st.slug} · ${st.stage} · next: ${st.next}${ran}`)
     if (TERMINAL.includes(st.next)) return { ...st, fallbacks }
     if (i >= MAX_ITERATIONS) fail(st, { verb: 'driver', error: `iteration cap ${MAX_ITERATIONS} reached at next: ${st.next}` })
-    // before any worker or seat is dispatched: Tier 4's two reviewers need two different models
+    // before any worker or seat is dispatched: Tier 4's review and review2 need two different models
     if (st.tier === 4 && (!SECOND || SECOND === TOP)) {
       fail(st, { verb: 'launch', error: 'second_model missing or equal to top_model on a Tier 4 spec' })
     }

@@ -97,10 +97,10 @@ Without the Workflow tool, run the solo loop from this session with the stamp, b
   `haiku`: `council-<seat>` with `Council round <round> for <slug>, seat <seat>. COURT: <court>.
   Report: <path>.` and nothing more (never `round_dir`), with `model: <seat_model>` only when the profile is not
   `sonnet-builds`. `review`: `lead-review` as in solo, with `model: <review_model>` only when the profile is not
-  `sonnet-builds`; at Tier 4
-  two dispatches, `model: <top_model>` writing `review-top.attempt-<k>.md` and `model: <second_model>`
-  writing `review-second.attempt-<k>.md`, the second told to probe concurrency, security and migration
-  safety. Then `advance --stamp <S> --ingest`. A seat still listed is re-dispatched once with its
+  `sonnet-builds`; at Tier 4 `review` is one dispatch on `model: <top_model>`. `review2` (Tier 4
+  only, named by `next` on a risk path or after a `review` BLOCK): one `lead-review` on
+  `model: <second_model>` writing `review2.attempt-<k>.md`, told to probe concurrency, security and
+  migration safety. Dispatch exactly the seats `next` names, never doubled by tier. Then `advance --stamp <S> --ingest`. A seat still listed is re-dispatched once with its
   `rejected` error; one needing a third dispatch in a round stops the loop.
 - Any dispatch above (worker, retry, seat, reviewer, architect) that returns the Fable-limit refusal
   (`You've reached your Fable limit` / `model_requires_usage_credits`) gets the Fable-limit fallback
