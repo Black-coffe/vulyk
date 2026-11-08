@@ -337,3 +337,5 @@
 {"ts":"2026-11-08T22:07:03Z","story":"ab-run-fixes-04-council","declared":17,"changed":17,"out_of_scope":0}
 {"ts":"2026-11-08T22:12:49Z","story":"ab-run-fixes-04-council","declared":17,"changed":17,"out_of_scope":0}
 {"ts":"2026-11-08T22:21:29Z","story":"ab-run-fixes-05-driver","declared":7,"changed":7,"out_of_scope":0}
+{"ts":"2026-11-08T22:26:16Z","story":"ab-run-fixes-06-onboarding-readme","declared":11,"changed":10,"out_of_scope":0}
+{"ts":"2026-11-08T22:42:08Z","story":"ab-run-fixes-07-repair-portability","declared":2,"changed":2,"out_of_scope":0}

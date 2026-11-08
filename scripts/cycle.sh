@@ -3529,7 +3529,7 @@ claim_leftover() { # claim_leftover <spec> <dirty lines> - ab-run-fixes C9: a wo
     ok=1; rest="${line:3}"
     # dirty_outside_paperwork prints a rename as `<orig> -> <path>`: both sides must be covered
     case "$rest" in *' -> '*) PP=("${rest%% -> *}" "${rest#* -> }") ;; *) PP=("$rest") ;; esac
-    for p in "${PP[@]}"; do
+    for p in ${PP[@]+"${PP[@]}"}; do
       is_paperwork_path "$p" && continue
       hit=""
       for i in "${!LS[@]}"; do
@@ -3760,20 +3760,22 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   # round that judged that work wrong, so it climbs a rung, as a missed story's retry climbs to the gate.
 
   local findings
+  # findings, in order: seat RED asks; anchored review findings; red gate parts; owner REJECTED
+  # (comments stay out of the $( ) body: the portability gate, and likely bash 3.2, read them as code).
+  # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
+  # ab-run-fixes C2: a second reviewer's anchored findings join the one repair story (recall)
+  # gate-split-04: the gate of the round - each red PART line of a finished suite.log is a finding.
+  # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
+  # finding (judge's override) - its note is then the only condition the repair can meet.
   findings="$(
     for seat in haiku sonnet opus; do
       [ -f "$RD/$seat.md" ] && grep -E '^ASK [0-9]+:[[:space:]]*RED' "$RD/$seat.md"
     done
-    # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
-    # ab-run-fixes C2: a second reviewer's anchored findings join the one repair story (recall)
     for seat in review review2; do
       [ -f "$RD/$seat.md" ] && review_blocking_lines "$RD/$seat.md" \
         | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
     done
-    # gate-split-04: the gate of the round - each red PART line of a finished suite.log is a finding.
     [ -n "$(suite_log_line "$RD")" ] && suite_red_parts "$RD/suite.log" | sed 's/^/- [regression] /'
-    # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
-    # finding (judge's override) - its note is then the only condition the repair can meet.
     ropened="$(round_field "$RD" opened)"
     hlast="$(grep -F "\"spec\":\"$SLUG\"" memory/stats/human.jsonl 2>/dev/null | tail -1)"
     if [ -n "$hlast" ] && [ "$(json_field "$hlast" verdict)" = REJECTED ]; then

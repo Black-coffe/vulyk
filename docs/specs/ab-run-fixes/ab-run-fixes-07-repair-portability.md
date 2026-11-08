@@ -1,8 +1,8 @@
 ---
 story: ab-run-fixes-07
 spec: ab-run-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -51,5 +51,9 @@ Ruling: `docs/specs/ab-run-fixes/council/architect-06.md`, ADR-031.
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- scripts/cycle.sh `claim_leftover`: `for p in ${PP[@]+"${PP[@]}"}; do` (house idiom; PP never empty, no behaviour change).
+- scripts/cycle.sh `cmd_repair`: the five comment lines moved verbatim above `findings="$(` under a lead-in line plus one line naming why; the `$( )` body now holds only code, output unchanged. Lines 3799/3818 untouched, no `# portable:` added.
+- docs/defects/shell-needs-gnu-or-bash4.md: one How-to bullet (comment above the line that opens a `$( )`); `check:` unchanged.
+- `bash scripts/portability-check.sh` on the whole tree: `ok (83 files, 1 allowed)`.
 
 ## Findings

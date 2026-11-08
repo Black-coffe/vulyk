@@ -301,3 +301,4 @@
 {"v":1,"ts":"2026-11-08T20:19:17Z","code":"agent_prefix_high","value":61725,"threshold":50000,"vulyk":"0.48.0","tier":0,"model":"","agent":"workflow-subagent","spec":"","story":"","ref":"agent:agent-ad07da2bebd3406d0.jsonl"}
 {"v":1,"ts":"2026-11-08T20:19:18Z","code":"agent_prefix_high","value":61734,"threshold":50000,"vulyk":"0.48.0","tier":0,"model":"","agent":"workflow-subagent","spec":"","story":"","ref":"agent:agent-ae48201dd624a9105.jsonl"}
 {"v":1,"ts":"2026-11-08T21:16:13Z","code":"context_high","value":201421,"threshold":140000,"vulyk":"0.48.0","tier":0,"model":"opus","agent":"","spec":"","story":"","ref":"session:3673794b-3fff-448b-a5b6-4a69107c2611.jsonl"}
+{"v":1,"ts":"2026-11-08T22:41:16Z","code":"driver_refused","value":1,"threshold":0,"vulyk":"0.48.0","tier":0,"model":"","agent":"","spec":"ab-run-fixes","story":"","ref":"driver:ab-run-fixes:2026-11-08"}
