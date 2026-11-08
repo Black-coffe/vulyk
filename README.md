@@ -37,7 +37,7 @@ The result: more parallel agents, larger codebases, and — the point of the who
 Four failure modes show up in every serious Claude Code setup:
 
 1. **Token burn.** Running every task on the top model exhausts session and weekly limits long before the work is done. Routing is the single biggest cost lever in Claude Code — most setups never touch it.
-2. **Large codebases make agents dumber.** Past ~100k LOC, stuffing context windows stops working. A 1M-token window is a trap, not a solution: quality degrades while costs explode. The fix is external memory — maps, wikis, and pointer indexes the agent consults instead of re-reading the world.
+2. **Large codebases make agents dumber.** Past ~100k LOC, stuffing context windows stops working. Our hypothesis is that a 1M-token window is a trap, not a solution: quality degrades while costs explode. The A/B run below did not confirm it. The answer VULYK bets on is external memory — maps, wikis, and pointer indexes the agent consults instead of re-reading the world.
 3. **Static configs rot.** Skills, rules, and agent prompts written in week one are stale by week six. Without a feedback loop, your setup never learns from its own mistakes.
 4. **Gates go stale where nobody looks.** A check runs, reports green, and then the thing it checked moves — a repair story is cut, a file list changes, the pack grows — and nothing re-runs it. The green is still on the record, now describing work that never shipped. This is not a bug in any gate; each one did its job at the moment it was asked. It is the gap between *a check ran* and *a check ran against this*, and it is invisible precisely because the artifact looks finished. VULYK hit it twice in one day of real use: an acceptance verdict recorded against a six-story pack that shipped with nine, and a repair round dispatched against a collision check nobody re-ran. Both were caught by reading the artifact afterwards, which is not a mechanism.
 
@@ -92,7 +92,7 @@ git -C /tmp/vulyk pull
 
 `--upgrade` replaces changed framework-owned files (agents, commands, hooks, templates, scripts), removes retired ones you never edited, and touches nothing of yours — not your constitution, memory, specs, ADRs or wiki. The installed version is stamped in `.claude/vulyk-version`. When the constitution changed, the upgrade prints the size difference and the command that replaces it — `install.sh /path/to/your/project --upgrade --constitution replace` — which carries your Profile and Commands blocks over and keeps the old file as `<name>.pre-0.18.md`. Upgrading from 0.17 or earlier, the replace is what brings the smaller constitution into every agent that loads it.
 
-`/vulyk-bootstrap` runs a short interview (stack, size, conventions, risk tolerance, token budget), then tailors the constitution, prunes the agent roster, builds an initial codebase map with scout drones, and seeds the wiki. **From that point on you work through three commands:**
+`/vulyk-bootstrap` reads the Profile and the Commands from the repo itself (manifests, lockfiles, CI, compose files, the README) and asks you only where a fact is missing or two facts disagree. It tailors the constitution, prunes the agent roster and seeds the wiki. It builds no map up front: `/vulyk-plan` recon maps what a task touches, and `/vulyk-map` maps on request. **From that point on you work through three commands:**
 
 ```text
 /vulyk-plan  "add OAuth login with refresh tokens"   # Queen plans, scouts recon, stories written
@@ -252,6 +252,8 @@ Most agent frameworks — this one included, until now — ship claims nobody ch
 
 **Recorded by `scripts/acceptance-log.sh`** — the pre-council path, still live for any spec recorded before v0.12.0's council replaced it. The verdict of `drone-acceptance` — which read the human's brief and the repository, never the plan or the stories — next to what the stories claimed about themselves, appended to `memory/stats/acceptance.jsonl`. The number worth having is the disagreement: every story `done` while the blind gate did not accept. It is the only series in this framework capable of contradicting the framework's own account of itself. It starts empty on a fresh install; the first real entries are in, and what they showed is below. Each entry names the commit and a fingerprint of the pack it judged, because a verdict is about the stories that existed when the drone ran — let review carve out repair stories afterwards and the old verdict is about work that never shipped. `acceptance-log.sh --check <spec-dir>` answers whether the newest verdict still describes the spec: `CURRENT`, `STALE`, or `NO VERDICT RECORDED`. Read `drift` for what it is — evidence about delivery, never about proof. The two are independent: on the first real run the blind gate accepted a pack `lead-review` then blocked twice, and both were right.
 
+**Measured once: an A/B run on an open-source Laravel app.** VULYK 0.47.0 against plain Claude Code on one task, so n=1. Quality came out equal on the acceptance checklist and on the tests. VULYK spent 1.8x the weighted tokens and stopped 18 times against 4. The workers ran on Opus, so the model cascade was not measured. Fixes for what the run found followed, and a measurement across several tasks is planned. One task proves nothing in general, either way.
+
 **Not measured.** Whether the cascade beats an all-Opus baseline on output quality. Whether the memory plane beats simply letting a 1M-token window read the repository. Whether moving recon off Haiku helped or just cost more. Whether `/vulyk-evolve` improves anything — it has never been run against real data, which is why it is being rebuilt around the scope metric rather than shipped as-is.
 
 Claims of the form "N× cheaper" or "near-parity quality" have been removed from this README. They may well be true; nobody here has measured them. When `scope.jsonl` and `acceptance.jsonl` have data from real projects, this section gets numbers instead of prose.
@@ -269,7 +271,8 @@ in `scripts/telemetry.sh` (`bash scripts/telemetry.sh agents`) - any other agent
 `other`. **Never included:** file paths, story/spec slugs, dispatch names, emails,
 free text, or file contents.
 
-The installer asks once — `Enable telemetry? [y/N]`, default off — and the `Telemetry` row in
+The installer asks nothing and writes the row as off. `install.sh --telemetry ask` puts the one
+question, `Enable telemetry? [y/N]`, and `--telemetry on|off` sets it; the `Telemetry` row in
 your `CLAUDE.md` Profile table holds the answer. With it on, `/vulyk-evolve` prints the exact
 command to send the week's bundle (a local commit, or `gh pr create`) — it never runs it; you
 push the PR into `telemetry/inbox/` yourself. Weekly, `/vulyk-evolve` in the VULYK repo runs

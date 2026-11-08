@@ -1,6 +1,6 @@
 ---
-description: Adapt VULYK to this project - interview, tailor constitution, build initial map, seed wiki
-argument-hint: [--quick to accept defaults]
+description: Adapt VULYK to this project - facts from the repo, questions only on a gap, tailor constitution, seed wiki
+argument-hint: [--quick to ask nothing and list the gaps]
 ---
 
 You are initializing VULYK for this repository. Follow `bootstrap/interview.md`. The constitution is
@@ -8,9 +8,12 @@ You are initializing VULYK for this repository. Follow `bootstrap/interview.md`.
 still holds a `<fill in` row, the SessionStart brief tells the Queen to offer it once, before the first
 task. A no is recorded as the Profile row `| Bootstrap | declined <date> |`, which silences the offer.
 
-1. Interview. Ask the script's questions in three batches (context, conventions, posture). With
-   `--quick` in "$ARGUMENTS", infer the answers from the repo (package files, CI config, lockfiles,
-   README) and present them for one confirmation instead.
+1. Facts first. Read the repo before asking anything: manifests and lockfiles, CI config, compose files
+   and Dockerfiles, the README. Fill each interview question from those facts. Ask the owner only where
+   no fact answers a question, or two facts disagree (a README naming one test runner, a lockfile or
+   CI another); name both sources in that question. Ask the open ones in one batch per interview
+   section. With `--quick` in "$ARGUMENTS", ask nothing: a gap takes the script's default and is listed
+   in the summary.
 2. Tailor the constitution.
    - Profile: fill the rows between the `VULYK:PROFILE` markers from what you verified in step 1, never
      from what a README claims; a profile copied from another repository is a confident lie. The row
@@ -26,14 +29,18 @@ task. A no is recorded as the Profile row `| Bootstrap | declined <date> |`, whi
      alias in its place). Then run `bash scripts/top-model.sh --apply` whatever the answer: it pins the
      Queen's own session in the gitignored `.claude/settings.local.json`, so the session runs on the
      model the ladder assumes rather than the account default.
-   - Telemetry: do not ask; the installer did. Print `bash scripts/telemetry.sh consent` in the summary
-     with the one line that changes it (`install.sh --telemetry ask`, or edit the `| Telemetry |` row).
+   - Telemetry: do not ask; the installer leaves it off unless told otherwise. Print
+     `bash scripts/telemetry.sh consent` in the summary with the one line that changes it
+     (`install.sh --telemetry ask`, or edit the `| Telemetry |` row).
    - Commands: replace every row between the `VULYK:COMMANDS` markers, and the warning blockquote above
      the table; the shipped rows are VULYK's own and wrong for any other project. Use this project's
      real commands in their quiet form (`--reporter=dot`, `-q`, `--silent`), because their output is
-     resent on every later turn. Run each one; where the project lacks one (no build step, no test
-     runner), write that instead of a plausible command, since a verification that always exits 0 is
-     worse than an admitted gap. Per-story rows run in a minute or two. Name the full suite in its own
+     resent on every later turn. In a docker stack (a compose file whose services run the code), write
+     each row as `docker compose exec -u <user> <service> <cmd>`, with `<user>` read from the repo: the
+     service's compose `user:`, else the Dockerfile's last `USER`; with neither, that is a gap to ask
+     about. Run each one; where the project lacks one (no build step, no test runner), write that
+     instead of a plausible command, since a verification that always exits 0 is worse than an
+     admitted gap. Per-story rows run in a minute or two. Name the full suite in its own
      row with `(round-only)` in its Purpose cell: the reviewer runs it once per round and no story names
      it. A suite that runs longer gets a part switch (`--part <topic>` or the runner's equivalent), and
      each story names the part covering its `## Files`.
@@ -50,15 +57,15 @@ task. A no is recorded as the Profile row `| Bootstrap | declined <date> |`, whi
    path*, no run command), write that sentence into the summary. Leave *Browser MCP* at `none` unless a
    browser-reachable Client path exists and the owner wants the black-box seat driving it on a separate
    test profile.
-4. Build the map. Identify the top-level modules and dispatch `drone-scout` per module, up to four in
-   parallel; save each report as `memory/map/<module>.md` with a `last-verified` date, under ~80 lines.
-   For 1000+ files, map breadth-first: the 8-12 most load-bearing modules now, the rest listed in
-   `memory/memory.md` as unmapped.
-5. Seed memory. Write the `memory/memory.md` pointer index (at most 60 lines): map files, wiki notes to
-   create, verification commands, unmapped territory.
+4. List the modules, map none. Name the top-level modules in `memory/memory.md` as unmapped territory.
+   Bootstrap dispatches no scout: `/vulyk-plan` recon maps what a task touches, and `/vulyk-map` maps
+   an area on request.
+5. Seed memory. Write the `memory/memory.md` pointer index (at most 60 lines): wiki notes to create,
+   verification commands, unmapped territory.
 6. Seed the wiki: 2-4 `docs/wiki/` notes for the most load-bearing domains or invariants found while
-   mapping (`templates/wiki-note.md`).
+   reading the repo (`templates/wiki-note.md`).
 7. Commit everything as `vulyk: initialize hive for <project>` and print a summary: tier examples for
-   this codebase, the plan-build-ship loop, and any pruned agents.
+   this codebase, the plan-build-ship loop, any pruned agents, and the gaps `--quick` defaulted.
 
-Bootstrap ends with the commit and the summary; no feature work.
+Bootstrap ends with the commit and the summary; no feature work. The summary does not suggest
+`/vulyk-handoff` or `/clear`: the owner's next step is their first task.

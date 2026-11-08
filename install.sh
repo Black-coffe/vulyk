@@ -28,8 +28,9 @@ VER="$(cat "$SRC/VERSION" 2>/dev/null | tr -d '[:space:]' || true)"; VER="${VER:
 
 USAGE="Usage: $0 /path/to/your/project [--upgrade] [--check] [--telemetry on|off|ask] [--constitution replace]"
 DEST=""; CHECK=""; UPGRADE=""; BLOCK_INSERTED=""; CONST_MODE=""; CONST_REPLACED=""
-# Telemetry consent (docs/telemetry.md): the flag wins over the env var, both are optional,
-# and `ask` forces the question even for a hive that already answered it once.
+# Telemetry consent (docs/telemetry.md): the flag wins over the env var, both are optional.
+# With neither, nothing is asked and a missing row is written as off; `ask` is the only way to
+# get the question, and it asks even a hive that already answered it once.
 TEL_MODE="${VULYK_TELEMETRY:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -570,8 +571,9 @@ replace_constitution() { # replace_constitution <constitution-file>
 }
 
 # --- telemetry consent -------------------------------------------------------------------------
-# One question, asked once, on the one surface every hive passes through: this installer.
-# /vulyk-bootstrap only reports the answer (asking twice would silently overwrite the first one).
+# One question, asked only on `--telemetry ask` (ab-run-fixes-06: a bare install asks nothing and
+# writes off), on the one surface every hive passes through: this installer. /vulyk-bootstrap
+# only reports the answer (asking twice would silently overwrite the first one).
 #
 # The answer is NEVER read from stdin: the copy and manifest loops above are `while read` over
 # `find`/`ls` output, and a piped `curl | bash` install has no answer on stdin either. It is read
@@ -626,7 +628,10 @@ telemetry_decide() { # sets TEL_WANT: on|off to write, "" to leave the row exact
     return 0
   fi
   case "$TEL_MODE" in on|off) TEL_WANT="$TEL_MODE"; return 0 ;; esac   # A10 (2)
-  if [ "$TEL_MODE" != "ask" ] && [ -n "$TEL_PRE" ]; then return 0; fi  # A10 (4): already answered
+  if [ "$TEL_MODE" != "ask" ]; then                                    # no `ask`: never a question
+    [ -n "$TEL_PRE" ] || TEL_WANT="off"                                # A10 (4): an answer stays
+    return 0
+  fi
   if ! telemetry_tty; then                                             # A10 (5): nobody to ask
     [ -n "$TEL_PRE" ] || TEL_WANT="off"
     return 0

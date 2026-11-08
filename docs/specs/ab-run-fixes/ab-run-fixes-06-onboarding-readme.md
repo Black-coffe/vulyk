@@ -1,14 +1,15 @@
 ---
 story: ab-run-fixes-06
 spec: ab-run-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 3
-blocked_by: [ab-run-fixes-02, ab-run-fixes-04]
+blocked_by: [ab-run-fixes-02, ab-run-fixes-04, ab-run-fixes-07]
 red: required
 red_reason: brief: no litopys offer when the plugin is enabled at user scope
+red_verified_at: 2026-11-08T22:17:46Z eacdfd70dc3be8c2bb22725d9b5bd45216f5ab39fee977e9e7f8a01df274b1ec
 ---
 
 # Onboarding and the README: bootstrap from the repo, docker rows, no telemetry question, litopys at user scope, the honest result
@@ -75,5 +76,38 @@ memory/map/scripts.md (install.sh: the upgrade contract; `session-start-brief.sh
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- tests/maintenance.test.sh: the red test (fake HOME with `litopys@litopys` in `~/.claude/settings.json`), plus the project-scope and no-scope cases.
+- tests/telemetry.test.sh: install part gains the bare-install pty case (no question, row off); terminal part's pty case now runs `--telemetry ask` and counts one question; the scan part's brief() gets a temp CLAUDE_CONFIG_DIR so the owner's real user settings decide nothing. Both pty cases skip on a box without util-linux `script` (this one), so they were not run here.
+- session-start-brief.sh: the litopys grep also reads `$conf/settings.json` (`$CLAUDE_CONFIG_DIR`, else `~/.claude`, already resolved for the mod check above it).
+- install.sh: `telemetry_decide` puts the question only on `ask`; with no flag a missing row is written off, an existing one stays. `on|off` and `--check` unchanged. Binary-mode edit, the one intentional CR byte kept.
+- vulyk-bootstrap.md / interview.md: facts first, a question only on a gap or a clash; `--quick` asks nothing and lists gaps; step 4 lists modules as unmapped, no scout; docker `exec -u <user>` rule in the Commands step; the summary does not suggest `/vulyk-handoff` or `/clear`.
+- handoff.py: not edited. Its `:777` push is the level-2 context banner; bootstrap reached it because step 4 mapped every module with scouts, and that step is gone. Changing the banner would touch thresholds, a non-goal.
+- README: the 1M sentence is a hypothesis the run did not confirm; one "Measured once" paragraph with the run's facts; bootstrap and installer sentences match. getting-started, telemetry.md, hooks-reference.md (the litopys line, which it lacked) corrected.
+CHANGELOG: bootstrap reads the Profile and Commands from the repo and asks only on a gap or a clash, maps nothing up front and writes docker rows as `exec -u <user>`; a bare `install.sh` no longer asks about telemetry (`--telemetry ask` does); the litopys offer respects a user-scope install; the README states the A/B run's result.
 
 ## Findings
+- close-story exit 4 on `bash tests/maintenance.test.sh`: 390 checks, 2 failed, both `portability-check: the tree exits 0` / `prints its ok line`. Every other check passes, the red test included (`brief: no litopys offer when the plugin is enabled at user scope` ok).
+- The hits are in `scripts/cycle.sh`, outside this story's `## Files`: committed HEAD d31b363 (story 04) already has `case-in-subst` (`case "$reach" in ...`, the narrow-repair NARROW line) and `heredoc-in-subst` (`done <<EOF` after it); the live tree adds a third, `array` (`for p in "${PP[@]}"`), from story 05's uncommitted edits. Running portability-check on a copy of HEAD's cycle.sh gives the 2 hits.
+- Rerun 2026-11-09: story 05 is now committed (e1b2597) and `scripts/portability-check.sh` still reports 3 hits, all in committed `scripts/cycle.sh` (3532 array, 3799 case-in-subst, 3818 heredoc-in-subst); the tree is clean there. Still outside this story's files.
+- Needed: story 04's owner (a repair) and story 05 fix the cycle.sh lines, then this story's close-story is rerun; nothing in this story's files causes the red.
+- Driver stop 2026-11-09 (missed twice): worker returned, but docs/specs/ab-run-fixes/ab-run-fixes-06-onboarding-readme.md is still todo - close-story did not close it. Queen check: `bash scripts/portability-check.sh` on HEAD e1b2597 gives the same 3 hits (cycle.sh:3532 array, 3799 case-in-subst, 3818 heredoc-in-subst); story 06 edits are left uncommitted in the tree.
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: eacdfd70dc3be8c2bb22725d9b5bd45216f5ab39fee977e9e7f8a01df274b1ec (tests/maintenance.test.sh, tests/telemetry.test.sh)
+- impl: 56ce1c512e4d728a4ff8c5019bc7339348021436acc7ea036f0ca7f87a48fd27
+- stamped: 2026-11-08T22:17:46Z
+
+```
+::error::brief: no litopys offer when the plugin is enabled at user scope
+  ok    git-guard: no interpreter exits 0, silent
+  ok    git-guard: --check fails on the original fixture
+  ok    git-guard: --check fails on the neighbour fixture
+  ok    git-guard: --check passes a file that is no hook input
+--- git guard: a mod with tool.check
+  ok    git-guard: an enabled mod with tool.check gets a brief line
+  ok    git-guard: a disabled mod is not named
+  ok    git-guard: no such mod, no line
+  ok    git-guard: an enabled mod without tool.check, no line
+maintenance.test.sh: 390 checks, 3 failed
+```

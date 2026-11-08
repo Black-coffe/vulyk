@@ -303,6 +303,20 @@ H="$(hive mp-usage)"; mkdir -p "$H/scripts"; printf 'exit 2
 ' > "$H/scripts/model-profile.sh"
 brief_of "$H" | expect_absent "a usage error (exit 2) is not 'not chosen'" "model profile"
 
+# --- the litopys offer reads the user's settings too (ab-run-fixes-06) -----------------------------
+echo "--- litopys offer: user, project and no scope"
+LIT_LINE="litopys (session chronicle plugin) is not installed here"
+brief_home() { echo '{}' | env -u CLAUDE_CONFIG_DIR HOME="$2" CLAUDE_PROJECT_DIR="$1" bash "$BRIEF_HOOK" 2>&1; }
+H="$(hive lit-user)"; LH="$T/lit-home"; mkdir -p "$LH/.claude"
+printf '{\n  "enabledPlugins": {\n    "litopys@litopys": true\n  }\n}\n' > "$LH/.claude/settings.json"
+if brief_home "$H" "$LH" | grep -qF "$LIT_LINE"; then bad "brief: no litopys offer when the plugin is enabled at user scope"
+else ok "brief: no litopys offer when the plugin is enabled at user scope"; fi
+H="$(hive lit-project)"; LN="$T/lit-home-none"; mkdir -p "$LN/.claude" "$H/.claude"
+printf '{"enabledPlugins":{"litopys@litopys":true}}\n' > "$H/.claude/settings.json"
+brief_home "$H" "$LN" | expect_absent "brief: project scope still silences the offer" "$LIT_LINE"
+H="$(hive lit-none)"
+brief_home "$H" "$LN" | expect "brief: neither scope, the offer still shows" "$LIT_LINE"
+
 # --- the evolve ledger (auto-maintenance-03) ------------------------------------------------------
 echo "--- evolve ledger"
 EL="$SRC/scripts/evolve-ledger.py"
