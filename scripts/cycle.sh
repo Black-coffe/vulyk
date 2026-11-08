@@ -261,6 +261,25 @@ fm_status_wave() { # fm_status_wave <story-file> -> FM_STATUS, FM_WAVE, each by 
   done < "$1"
 }
 
+story_status_guard() { # story_status_guard <spec> <verb> - ab-run-fixes C6: a story whose status: is
+  # none of todo, in-progress, done, blocked (an `open`, a typo) exits 2 naming the file and the value.
+  # status counted it as todo and listed it in no wave, so the build stopped with no word why. An absent
+  # status: stays todo, as before.
+  local f
+  for f in "$1"/*.md; do
+    [ -f "$f" ] || continue
+    is_story_file "$f" || continue
+    fm_status_wave "$f"
+    case "$FM_STATUS" in
+      ''|todo|in-progress|done|blocked) ;;
+      *)
+        echo "cycle: $2 - unknown story status '$FM_STATUS' in $f (todo, in-progress, done or blocked)" >&2
+        emit false "$2" 2 error "unknown story status '$FM_STATUS' in $f"
+        exit 2 ;;
+    esac
+  done
+}
+
 story_status_for_id() { # story_status_for_id <spec> <story-id>
   local spec="$1" id="$2" f
   for f in "$spec"/*.md; do
@@ -1924,6 +1943,29 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
   printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$f")"
 }
 
+verify_cell_hint() { # verify_cell_hint <constitution> <segment> - ab-run-fixes C7: up to 3 `try: <cell>`
+  # lines, the cells that are not round-only and whose first two words are the segment's; with none,
+  # one `try: see ## Commands in <constitution>` line. close-story's refusal prints it, nothing else.
+  local c n=0 seen="" w1 w2 c1 c2 rest
+  read -r w1 w2 rest <<EOF
+$2
+EOF
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    read -r c1 c2 rest <<EOF2
+$c
+EOF2
+    [ "$c1" = "$w1" ] && [ "$c2" = "${w2:-}" ] || continue
+    case "$seen" in *"|$c|"*) continue ;; esac
+    command_cell_round_only "$1" "$c" && continue
+    seen="$seen|$c|"; printf 'try: %s\n' "$c"; n=$((n+1))
+    [ "$n" -ge 3 ] && break
+  done <<EOF
+$(command_cells "$1")
+EOF
+  [ "$n" -gt 0 ] || printf 'try: see ## Commands in %s\n' "$1"
+}
+
 verify_cells_check() { # verify_cells_check <verb> <cmd-list> - C2 amended (R11/C-4): every &&-segment
   # of every line must be a literal cell of the constitution's `## Commands` table (CLAUDE.vulyk.md
   # in a sidecar hive, ADR-013 D1), or the line is the literal "none - reviewed by lead-review"
@@ -1949,6 +1991,7 @@ verify_cells_check() { # verify_cells_check <verb> <cmd-list> - C2 amended (R11/
       [ -n "$seg" ] || continue
       command_cell_exists "$CONSTITUTION" "$seg" || {
         echo "cycle: $verb - verification command not in $CONSTITUTION's ## Commands: $seg" >&2
+        [ "$verb" = close-story ] && verify_cell_hint "$CONSTITUTION" "$seg" >&2
         emit false "$verb" 2 error "verification not in ## Commands: $seg"
         exit 2
       }
@@ -2008,14 +2051,14 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
       [ "$k" -lt "$start" ] && continue
       if [ "$k" -gt "$start" ] && [ $(( (SECONDS - vstart) + VR_VT )) -gt "$vcall" ]; then VR_PAUSE="$k"; return 0; fi
       if [ -n "$outdir" ]; then
-        run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline" > "$outdir/$k.out" 2>&1; vrc=$?
+        run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline" < /dev/null > "$outdir/$k.out" 2>&1; vrc=$?
         cat "$outdir/$k.out"
         printf '%s' "$vrc" > "$outdir/$k.code"; printf '%s' "$vline" > "$outdir/$k.line"
         VR_CODES[$k]="$vrc"; VR_LINES[$k]="$vline"; VR_RC="$vrc"; VR_LINE="$vline"
         [ "$vrc" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ] && return 0
         continue
       fi
-      run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline"; vrc=$?
+      run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline" < /dev/null; vrc=$?
       VR_RC="$vrc"; VR_LINE="$vline"
       [ "$vrc" -ne 0 ] && return 0
     done <<EOF
@@ -3160,7 +3203,9 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
     printf '%s\n' "$verdict" >> "$LOG"
     sv="$(printf '%s' "$verdict" | awk '{ print $2 }')"; is_done=true
   fi
-  [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N step $K/$S" "$LOG"
+  # ab-run-fixes C8: one commit per suite, on the call that finishes it; a middle step leaves the log
+  # written and uncommitted (paperwork: the round stays fresh, the next call resumes from it).
+  [ "$DOCOMMIT" = "1" ] && [ "$is_done" = true ] && commit_paperwork suite "vulyk($SLUG): suite round $N $sv" "$LOG"
   echo "cycle: $SLUG - round $N suite step $K/$S: $sres ${secs}s"
   suite_emit "$SPEC" "$K" "$S" "$is_done" "$sv"
   exit 0
@@ -3709,6 +3754,14 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
 }
 
 # --- dispatch ---------------------------------------------------------------------------------
+
+# C6: every verb that derives status refuses an unknown story status before it reads or writes anything.
+case "$VERB" in
+  status|judge|branch|record-seat|resume|manual-done|open-round|suite|reopen|repair|advance)
+    [ -n "$SPEC" ] && [ -d "$SPEC" ] && story_status_guard "$SPEC" "$VERB" ;;
+  close-story)
+    [ -f "$SPEC" ] && story_status_guard "$(dirname "$SPEC")" close-story ;;
+esac
 
 case "$VERB" in
   status)

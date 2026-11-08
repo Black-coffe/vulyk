@@ -4411,18 +4411,23 @@ echo "suite: a stepped row runs one step per call into the log, commits it, then
 sx_row 'Full suite (round-only, steps)' 'bash fx-runner.sh'
 sx_open sxstep
 rd="docs/specs/sxstep/council/round-1"; rh="$(sed -n 's/^head=//p' "$rd/ROUND")"
+hstep0="$(git rev-parse HEAD)"
 out="$(council suite docs/specs/sxstep --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.ok and .verb == "suite" and .step == 1 and .steps == 2 and .done == false and .suite == "pending" and (.status | type) == "object"' >/dev/null 2>&1 \
   && echo "  ok    call 1 -> step 1 of 2, done:false, suite pending, status carried" || { echo "::error::suite step 1: exit=$ex out=$out"; fail=1; }
 [ "$(head -1 "$rd/suite.log" 2>/dev/null)" = "head=$rh steps=2" ] && grep -qE '^STEP 1/2: ok [0-9]+s$' "$rd/suite.log" && grep -qF 'PART fx:a1 ok 0s cap 300s' "$rd/suite.log" \
   && ! grep -q '^SUITE:' "$rd/suite.log" \
   && echo "  ok    log: header keyed to ROUND head=, STEP 1/2 and its PART line, no SUITE line yet" || { echo "::error::suite log after step 1: $(cat "$rd/suite.log" 2>&1)"; fail=1; }
-[ -z "$(git status --porcelain -- "$rd")" ] && git log -1 --format=%s | grep -qF 'suite round 1 step 1/2' \
-  && echo "  ok    --commit committed the log" || { echo "::error::suite commit: $(git status --porcelain) / $(git log -1 --format=%s)"; fail=1; }
+[ "$(git rev-parse HEAD)" = "$hstep0" ] && [ -n "$(git status --porcelain -- "$rd/suite.log")" ] \
+  && echo "  ok    suite: a middle step makes no commit (HEAD unchanged, suite.log written)" \
+  || { echo "::error::suite: a middle step makes no commit - head moved to: $(git log -1 --format=%s) / $(git status --porcelain -- "$rd")"; fail=1; }
 out="$(council suite docs/specs/sxstep --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 2 and .steps == 2 and .done == true and .suite == "ok"' >/dev/null 2>&1 \
   && tail -1 "$rd/suite.log" | grep -qE '^SUITE: ok [0-9]+s$' && [ "$(grep -c '^SUITE:' "$rd/suite.log")" -eq 1 ] \
   && echo "  ok    call 2 -> step 2 of 2, done:true, the log ends with one SUITE: ok line" || { echo "::error::suite step 2: exit=$ex out=$out log=$(cat "$rd/suite.log")"; fail=1; }
+[ -z "$(git status --porcelain -- "$rd")" ] && [ "$(git rev-parse HEAD~1)" = "$hstep0" ] && git log -1 --format=%s | grep -qF 'suite round 1' \
+  && echo "  ok    the finishing step commits suite.log, once" \
+  || { echo "::error::suite: the finishing step commits suite.log once - $(git status --porcelain -- "$rd") / $(git log -3 --format=%s | tr '\n' '|')"; fail=1; }
 before="$(cksum < "$rd/suite.log")"; hbefore="$(git rev-parse HEAD)"
 out="$(council suite docs/specs/sxstep --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .step == 2 and .suite == "ok"' >/dev/null 2>&1 \

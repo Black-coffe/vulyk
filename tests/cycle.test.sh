@@ -582,6 +582,27 @@ out="$(bash scripts/cycle.sh briefed docs/specs/qa 2>&1)"; ex=$?
   || { echo "::error::briefed on a quoted ## Asks: exit=$ex out=$out"; fail=1; }
 rm -rf docs/specs/qa
 
+echo "ab-run-fixes C6: status and every verb that derives it refuse a story status cycle.sh does not recognise"
+mkdir -p docs/specs/ustat
+printf -- '---\nstory: ustat-01\nspec: ustat\nstatus: open\nwave: 1\n---\n# U1\n' > docs/specs/ustat/ustat-01-u.md
+printf -- '---\nstory: ustat-02\nspec: ustat\nstatus: todo\nwave: 1\n---\n# U2\n' > docs/specs/ustat/ustat-02-u.md
+out="$(bash scripts/cycle.sh status docs/specs/ustat --json 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s\n' "$out" | tail -1 | jq -e '.ok == false and .verb == "status" and .error == "unknown story status '"'open'"' in docs/specs/ustat/ustat-01-u.md"' >/dev/null 2>&1 \
+  && echo "  ok    status: an unknown story status is an error (exit 2, the file and the value named)" \
+  || { echo "::error::status: an unknown story status is an error - exit=$ex out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh repair docs/specs/ustat 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s\n' "$out" | tail -1 | jq -e '.verb == "repair" and .error == "unknown story status '"'open'"' in docs/specs/ustat/ustat-01-u.md"' >/dev/null 2>&1 \
+  && echo "  ok    a verb that derives status (repair) refuses the same way" \
+  || { echo "::error::repair on an unknown story status - exit=$ex out=$out"; fail=1; }
+kfail=0
+for kst in todo in-progress done blocked; do
+  sed_inplace "s/^status: .*/status: $kst/" docs/specs/ustat/ustat-01-u.md
+  out="$(bash scripts/cycle.sh status docs/specs/ustat --json 2>&1)"; ex=$?
+  [ "$ex" -eq 0 ] || { echo "::error::status with a known story status '$kst' - exit=$ex out=$out"; fail=1; kfail=1; }
+done
+[ "$kfail" -eq 0 ] && echo "  ok    the known values todo, in-progress, done, blocked behave as before"
+rm -rf docs/specs/ustat
+
 fi # part gates
 if part manual; then # --- part manual: blocked_by manual:<id>, the worker model source
 echo "0.19 C: blocked_by manual:<id> - a hand step stops the wave until manual-done records it; no later wave is built past it"
@@ -805,6 +826,42 @@ out="$(bash scripts/cycle.sh close-story docs/specs/pcs/pcs-04.md --commit 2>&1)
   && echo "  ok    a crashing prompt-check: exit 4, the reason names the crash" || { echo "::error::prompt-check crash: exit=$ex out=$out"; fail=1; }
 rm -f scripts/helper4.sh; cp "$SRC"/scripts/prompt-check.py scripts/
 git add -A && git commit -qm "pcs: the linter restored" >/dev/null
+
+echo "ab-run-fixes C7 + stdin: verify_run gives each line /dev/null for stdin; a non-cell segment names a ready line"
+mkdir -p tests
+printf 'cat > /dev/null\n' > stdin-eat.sh; printf ': > stdin.mark\n' > stdin-mark.sh
+cat >> CLAUDE.md <<'EOF'
+| Stdin eater | `bash stdin-eat.sh` |
+| Stdin mark | `bash stdin-mark.sh` |
+| X part | `bash tests/x.test.sh --part <topic>` |
+| X all (round-only) | `bash tests/x.test.sh --all` |
+EOF
+vfy_story() { # vfy_story <nn> <verification-lines> - one in-progress story declaring stray-app.txt only
+  printf -- '---\nstory: stray-%s\nspec: stray\nstatus: in-progress\nreturned: DONE\nwave: %s\n---\n# Stray fixture %s\n\n## Files\n- stray-app.txt\n\n## Verification\n%s\n' \
+    "$1" "$1" "$1" "$2" > "docs/specs/stray/stray-$1.md"
+}
+vfy_story 08 '`bash stdin-eat.sh`
+`bash stdin-mark.sh`'
+vfy_story 09 '`bash tests/x.test.sh --part a --verbose`'
+vfy_story 10 '`echo nothing-like-a-cell`'
+git add -A && git commit -qm "vfy: stdin and hint fixtures" >/dev/null
+rm -f stdin.mark
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-08.md 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -f stdin.mark ] \
+  && echo "  ok    verify_run: a line that reads stdin leaves the next line its turn" \
+  || { echo "::error::verify_run: a line that reads stdin leaves the next line its turn - exit=$ex mark=$([ -f stdin.mark ] && echo yes || echo no) out=$out"; fail=1; }
+rm -f stdin.mark
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-09.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s\n' "$out" | grep -qxF 'try: bash tests/x.test.sh --part <topic>' \
+  && printf '%s\n' "$out" | grep -qF 'verification not in ## Commands: bash tests/x.test.sh --part a --verbose' \
+  && ! printf '%s\n' "$out" | grep -qF 'try: bash tests/x.test.sh --all' \
+  && echo "  ok    close-story: a non-cell segment names a ready line (exit 2 kept, the round-only cell not offered)" \
+  || { echo "::error::close-story: a non-cell segment names a ready line - exit=$ex out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-10.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s\n' "$out" | grep -qE '^try: see ## Commands in .*CLAUDE\.md$' \
+  && echo "  ok    close-story: a segment like no cell points at the ## Commands table" \
+  || { echo "::error::close-story: a segment like no cell points at ## Commands - exit=$ex out=$out"; fail=1; }
+git add -A && git commit -qm "vfy: done" >/dev/null 2>&1
 
 fi # part close
 if part bsd; then # --- part bsd: cycle.sh under a BSD sed, conventional subjects, command_cell_exists
