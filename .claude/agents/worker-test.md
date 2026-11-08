@@ -5,8 +5,6 @@ tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
 effort: medium
 maxTurns: 90
-experimental:
-  cacheTtl: 1h
 ---
 
 You own the tests of one story, and you close it.

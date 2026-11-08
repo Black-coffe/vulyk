@@ -1,14 +1,15 @@
 ---
 story: ab-run-fixes-01
 spec: ab-run-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: model-profile: --recommend gives sonnet-builds on every plan
+red_verified_at: 2026-11-08T21:20:24Z 7683861a11fcf8b3b2caf2cbb22ca67b690b8232487101a91e0621fdb4c6167d
 ---
 
 # Model profile: `sonnet-builds` is the recommendation; no 1 h cache on three agents
@@ -65,5 +66,34 @@ memory/map/scripts.md (`model-profile.sh`, `top-model.sh` entries); memory/map/a
 `git ls-files '*.sh' | xargs -n1 bash -n`
 
 ## Implementation notes
+- scripts/model-profile.sh: `--recommend` prints `sonnet-builds <plan>` on every plan; the help line says so; output shape unchanged.
+- tests/model-profile.test.sh: one labelled check over seven synthetic shapes (Max, Ultra, premium seat, Pro, standard seat, API key, none); the old `opus-builds max` expectation now reads `sonnet-builds max`.
+- Ultra fixture is `claude_max` with an `ultra` rate tier (top-model.sh has no separate Ultra organizationType); the real field value was not checked.
+- Agents: removed the two-line `experimental: / cacheTtl: 1h` block from lead-review, worker-code, worker-test.
+- /vulyk-models: sonnet-builds first with «(Рекомендую)» and the Opus-vs-Opus A/B reason; opus-builds marked the owner's own choice; the credits note keys on the plan word now.
+- Docs: token-economy time row + worker paragraph (reversal and the 5-min re-write cost), model-cascade profiles section + cache paragraph, ADR-020 one amendment line.
+- Surprise: the docs are CRLF in the working tree; edits were made line-ending-aware.
+CHANGELOG: `--recommend` and `/vulyk-models` recommend `sonnet-builds` on every plan (`opus-builds` only by the owner's own choice); `lead-review`, `worker-code` and `worker-test` drop `cacheTtl: 1h`.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/model-profile.test.sh
+- exit: 1
+- tests: 7683861a11fcf8b3b2caf2cbb22ca67b690b8232487101a91e0621fdb4c6167d (tests/model-profile.test.sh)
+- impl: 94faab54bd40a1222e78399188a7523cd20af78eccc74ece7c1a3134558df979
+- stamped: 2026-11-08T21:20:24Z
+
+```
+::error::model-profile: --recommend gives sonnet-builds on every plan - expected [max=sonnet-builds ultra=sonnet-builds premium-seat=sonnet-builds pro=sonnet-builds standard-seat=sonnet-builds api=sonnet-builds missing=sonnet-builds], got [max=opus-builds ultra=opus-builds premium-seat=opus-builds pro=sonnet-builds standard-seat=sonnet-builds api=sonnet-builds missing=sonnet-builds]
+  ok    the USERPROFILE fallback reads back
+  ok    nothing else appeared under the fallback home
+--- top-model-brief.sh
+  ok    the brief ends with the default, not chosen
+  ok    the brief ends with the chosen profile
+  ok    the brief says the profile decided the gate
+--- CLAUDE.md
+  ok    the ## Commands row is there
+  ok    CLAUDE.md is no bigger than at baa5219 (7156 <= 7162 B)
+model-profile.test.sh: 2 of 81 checks failed
+```

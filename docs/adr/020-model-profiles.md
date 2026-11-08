@@ -5,6 +5,7 @@
 - Spec: docs/specs/model-profiles
 - Amends: ADR-015 (the ladder becomes one of three profiles; the floor and the rule "the family that builds never
   judges" stand). ADR-013 D3 (the gate model) stands, with the profile added to its resolution order.
+- Amended 2026-11-08 (spec `ab-run-fixes`): `--recommend` names `sonnet-builds` on every plan and `opus-builds` comes only from the owner's own `--set` (D6, D8), because the A/B run behind it compared Opus with Opus, its workers having run on Opus.
 
 ## Context
 

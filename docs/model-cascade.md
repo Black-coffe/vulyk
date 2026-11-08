@@ -109,11 +109,9 @@ sentence to the owner. The build goes on. A second refusal stops as it did befor
 a missed story. Under `opus-builds` this means Opus judges Opus code for that one dispatch: the
 family that built judges, the owner's recorded exception (ADR-015).
 
-`worker-code` and `worker-test` carry `experimental:` / `cacheTtl: 1h` since cache-economy
-(`docs/token-economy.md`); in the same spec `lead-review` became the only judge that does, since the
-reviewer waits longest on tests. The other agents stay at 5 minutes. On 2026-11-03 `lead-review`'s
-spend per dispatch is compared with the week before (the rewrite share beside it), and the owner
-decides whether the field spreads to the remaining roles.
+No agent carries `experimental:` / `cacheTtl: 1h` any more: cache-economy gave it to `worker-code`,
+`worker-test` and `lead-review`, and ab-run-fixes took it back on the A/B run's evidence. Every agent
+caches for 5 minutes; an agent idle past that re-writes its prefix (`docs/token-economy.md`).
 
 [fable-plan]: https://support.claude.com/en/articles/15424964-claude-fable-models-on-your-plan
 [subagents]: https://code.claude.com/docs/en/sub-agents
@@ -220,13 +218,17 @@ is `sonnet`, the builders' family. A missed story's retry climbs to the gate, bu
 is the judge, so there the retry runs on `opus`.
 
 **The resolver.** `scripts/model-profile.sh` is the only reader of the file: no arguments prints the profile,
-`--role <r>` one family, `--recommend` a profile by plan, `--explain [<name>]` the table, `--chosen` whether the owner
+`--role <r>` one family, `--recommend` the recommendation (`sonnet-builds` on every plan), `--explain [<name>]` the table, `--chosen` whether the owner
 picked one, `--set <name>` writes it. The driver and the build, review and plan commands ask it, and pass a model only
 when the profile is not `sonnet-builds`.
 
 **Gate order, now.** `top-model.sh` resolves `VULYK_TOP_MODEL` in the shell, then a non-`auto` pin in the
 constitution, then the profile (`opus-builds` gives `fable`, `economy` gives `opus`, `sonnet-builds` falls through),
 then the plan, then `opus`. When the profile decides, `--explain` reads `decided by: profile <name>`.
+
+**Recommendation.** `sonnet-builds` on every plan (ab-run-fixes, 2026-11-08): the A/B run that favoured Opus as the
+builder compared Opus with Opus, because its workers ran on Opus. `opus-builds` is reached only by the owner's own
+`--set opus-builds` (through `/vulyk-models` or by hand); nothing chooses it for them.
 
 **Changing it.** Run `/vulyk-models` (or say "change model distribution") at any time, or run
 `bash scripts/model-profile.sh --set <name>`. The SessionStart brief offers the quiz until a profile is chosen.

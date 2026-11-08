@@ -5,7 +5,7 @@
 #   scripts/model-profile.sh --chosen        -> exit 0 if the file holds a known profile, 1 if not; prints nothing
 #   scripts/model-profile.sh --set <name>    -> stores <name> in the profile file and prints it
 #   scripts/model-profile.sh --role <role>   -> prints one family alias for the role under the active profile
-#   scripts/model-profile.sh --recommend     -> prints "<profile> <plan>", from scripts/top-model.sh --plan
+#   scripts/model-profile.sh --recommend     -> prints "sonnet-builds <plan>" on every plan (scripts/top-model.sh --plan)
 #   scripts/model-profile.sh --explain [<n>] -> who does what under the active (or the named) profile
 #
 # Profiles, named by family only:
@@ -127,8 +127,9 @@ case "${1:-}" in
     case " $ROLES " in *" $2 "*) ;; *) usage "unknown role '$2': $ROLES" ;; esac
     role_of "$(active)" "$2" ;;
   --recommend)
+    # sonnet-builds on every plan (ab-run-fixes): opus-builds is the owner's own --set, never a recommendation.
     P="$(plan_info)"
-    case "$P" in *" premium") echo "opus-builds ${P%% *}" ;; *) echo "sonnet-builds ${P%% *}" ;; esac ;;
+    echo "sonnet-builds ${P%% *}" ;;
   --explain)
     [ $# -le 2 ] || usage "--explain takes at most one name"
     NAME="${2:-$(active)}"
