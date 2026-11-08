@@ -663,6 +663,28 @@ sed_inplace 's/^wave: 2$/wave: 2\nmodel: opus/' docs/specs/man/man-02-m.md
 bash scripts/cycle.sh status docs/specs/man --json | expect "the story's own model: line still wins" '"worker":"worker-code","model":"opus"'
 git checkout -q -- docs/specs/man/man-02-m.md && rm -rf .claude/agents docs/specs/tpl
 
+echo "ab-run-fixes ask 18 repro: a ready story in the same wave as a manual:-blocked one is built; the stop comes after it"
+mkdir -p docs/specs/manw
+cp "$SRC"/templates/plan.md docs/specs/manw/plan.md
+printf '> build beside a hand step\n' > docs/specs/manw/brief.md
+sed_inplace "s/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-09/; s#^\*\*Branch:\*\* <.*#**Branch:** $(git rev-parse --abbrev-ref HEAD)#" docs/specs/manw/plan.md
+manw_story() { # manw_story <nn> <status> <blocked_by> - every story in wave 1
+  printf -- '---\nstory: manw-%s\nspec: manw\nstatus: %s\nwave: 1\nblocked_by: %s\n---\n# W%s\n\n## Files\n- manw.txt\n\n## Verification\n`true`\n' \
+    "$1" "$2" "$3" "$1" > "docs/specs/manw/manw-$1-w.md"
+}
+manw_story 01 todo '[manual:tape]'
+manw_story 02 todo '[]'
+git add -A && git commit -qm "manw fixture" >/dev/null
+st="$(bash scripts/cycle.sh status docs/specs/manw --json)"
+printf '%s' "$st" | expect "manual wave: the ready wave-mate makes next build:1" '"next":"build:1"'
+printf '%s' "$st" | expect "manual wave: wave_stories lists only the ready story" '"wave_stories":[{"file":"docs/specs/manw/manw-02-w.md"'
+printf '%s' "$st" | grep -qF 'manw-01-w.md' && { echo "::error::manual wave: the blocked story was listed: $st"; fail=1; } \
+  || echo "  ok    manual wave: the manual-blocked story is not dispatched"
+bash scripts/cycle.sh advance docs/specs/manw 2>&1 | tail -1 | expect "manual wave: advance stops at build:1, not at the hand step" '"next":"build:1"'
+sed_inplace 's/^status: todo$/status: done/' docs/specs/manw/manw-02-w.md
+bash scripts/cycle.sh status docs/specs/manw --json | expect "manual wave: once the ready story is done, next is manual:tape" '"next":"manual:tape"'
+git checkout -q -- docs/specs/manw/manw-02-w.md
+
 fi # part manual
 if part close; then # --- part close: close-story scope refusal, own-path commits, odd path names
 echo "close-story-scope-refusal: close-story --commit refuses an edit outside ## Files that would leave the tree dirty for open-round"
@@ -1250,6 +1272,47 @@ out="$(bash scripts/cycle.sh branch docs/specs/freshspec 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/freshspec ] \
   && echo "  ok    neighbour: a branch cut at the default tip is fresh, branch checks it out" || { echo "::error::fresh branch exit=$ex out=$out"; fail=1; }
 git checkout -q -- . 2>/dev/null; git checkout -q "$BG_HOME"
+
+echo "ab-run-fixes C9: claim and advance --claim accept leftover edits in a todo wave story's ## Files, and refuse any other dirty path"
+git add -A && git commit -qm "lftv: a clean tree to start from" >/dev/null 2>&1
+LFTV_BR="$(git rev-parse --abbrev-ref HEAD)"
+mkdir -p docs/specs/lftv
+cp "$SRC"/templates/plan.md docs/specs/lftv/plan.md
+printf '> leave edits behind\n' > docs/specs/lftv/brief.md
+sed_inplace "s/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-09/; s#^\*\*Branch:\*\* <.*#**Branch:** $LFTV_BR#" docs/specs/lftv/plan.md
+lftv_story() { # lftv_story <nn> <status> <wave> <file>
+  printf -- '---\nstory: lftv-%s\nspec: lftv\nstatus: %s\nwave: %s\n---\n# L%s\n\n## Files\n- %s\n\n## Verification\n`true`\n' \
+    "$1" "$2" "$3" "$1" "$4" > "docs/specs/lftv/lftv-$1.md"
+}
+lftv_story 01 todo 1 lftv-a.txt
+lftv_story 02 todo 2 lftv-b.txt
+git add -A && git commit -qm "lftv fixture" >/dev/null
+printf 'half done\n' > lftv-a.txt
+printf '\n## Implementation notes\n- half done\n' >> docs/specs/lftv/lftv-01.md
+out="$(bash scripts/cycle.sh claim docs/specs/lftv lftvstamp 2>&1)"; ex=$?
+if [ "$ex" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qF '"leftover":["docs/specs/lftv/lftv-01.md"]'; then
+  echo "  ok    claim: leftover edits of a wave story are accepted"
+else echo "::error::claim: leftover edits of a wave story are accepted - exit=$ex out=$out"; fail=1; fi
+bash scripts/cycle.sh release docs/specs/lftv lftvstamp >/dev/null 2>&1
+out="$(bash scripts/cycle.sh advance docs/specs/lftv --claim --stamp lftvstamp 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qF '"leftover":["docs/specs/lftv/lftv-01.md"],"status":{' \
+  && printf '%s' "$out" | tail -1 | grep -qF '"next":"build:1"' \
+  && echo "  ok    advance --claim carries leftover and walks on to build:1" || { echo "::error::advance --claim leftover: exit=$ex out=$out"; fail=1; }
+bash scripts/cycle.sh release docs/specs/lftv lftvstamp >/dev/null 2>&1
+for lftv_stray in lftv-b.txt lftv-stray.txt; do # a later wave's ## Files, and a path no story names
+  printf 'x\n' > "$lftv_stray"
+  out="$(bash scripts/cycle.sh claim docs/specs/lftv lftvstamp 2>&1)"; ex=$?
+  [ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"working tree not clean"' && printf '%s' "$out" | grep -qF "$lftv_stray" \
+    && [ ! -e docs/specs/lftv/DRIVER ] \
+    && echo "  ok    neighbour: a dirty $lftv_stray beside the leftover is still refused, no DRIVER" || { echo "::error::claim with $lftv_stray dirty: exit=$ex out=$out"; fail=1; }
+  rm -f "$lftv_stray"
+done
+rm -f lftv-a.txt docs/specs/lftv/DRIVER
+git checkout -q -- docs/specs/lftv/lftv-01.md
+out="$(bash scripts/cycle.sh claim docs/specs/lftv lftvstamp 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -qF '"leftover"' \
+  && echo "  ok    neighbour: a clean tree claims with no leftover key, the line as before" || { echo "::error::clean claim: exit=$ex out=$out"; fail=1; }
+bash scripts/cycle.sh release docs/specs/lftv lftvstamp >/dev/null 2>&1
 fi # part safety
 if part red; then # --- part red: stamp-red, the close-story receipt gate, repair inherits the mark, wave-check red lines
 # Order matters for the red-receipt story's own stamp: the gate cases run last, so the tail of a

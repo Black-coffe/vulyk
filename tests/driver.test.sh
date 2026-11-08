@@ -606,6 +606,64 @@ const blindPromptsClean = (r) => r.dispatches
       'suite: unreadable lines stop after 32 calls with the raw line, no dispatch, still releases', { n: rg.suiteCmds.length, result: rg.result });
   }
 
+  // --- ab-run-fixes C9: a story claim names in leftover is dispatched with the leftover note; the retry model and the two-miss stop are as before
+  {
+    const a = story(1, { model: 'sonnet' });
+    const b = story(2, { model: 'sonnet' });
+    const note = 'a previous attempt left uncommitted edits in your ## Files: read `git diff` first, finish the story and close it';
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, adv(build([a, b]), { leftover: [a.file] })],
+        [ADV, adv(build([a]))],
+        [ADV, adv(build([a]))],
+        [RELEASE, releaseOk],
+      ],
+    });
+    const [wa, wb, wa2] = r.dispatches;
+    check(r.dispatches.length === 3 && wa.prompt.includes(note) && !wb.prompt.includes(note) && !wb.prompt.includes('git diff') && wa2.prompt.includes(note),
+      'leftover: the leftover story is dispatched with the leftover note, its wave-mate without', r.dispatches.map((d) => d.prompt));
+    check(wa.model === 'sonnet' && wa2.model === 'fable', 'leftover: the first dispatch keeps the story model, the retry climbs to TOP', r.dispatches.map((d) => d.model));
+    check(r.result.stop && r.result.stop.verb === 'build' && r.result.stop.file === a.file && /still todo/.test(r.result.stop.error)
+      && r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
+      'leftover: a second miss stops the run naming the file, and releases', { result: r.result, seq: seq(r) });
+  }
+
+  // --- ab-run-fixes ask 18 repro: a ready story beside a manual:-blocked wave-mate is built; the hand-step stop comes after
+  {
+    const b = story(2);
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, adv(build([b]))],
+        [ADV, adv(status({ next: 'manual:tape', manual: ['tape'] }))],
+        [RELEASE, releaseOk],
+      ],
+    });
+    check(r.dispatches.length === 1 && r.dispatches[0].prompt.includes(b.file) && r.result.stop && r.result.stop.verb === 'manual'
+      && JSON.stringify(r.result.stop.manual) === '["tape"]' && r.mismatches.length === 0,
+      'manual wave: the ready wave-mate is built, then the run stops at the hand step', { d: r.dispatches.length, result: r.result });
+  }
+
+  // --- ab-run-fixes C10: checkpoint_min 0 returns checkpoint at the first boundary after work, and releases
+  {
+    const CP = { ...ARGS, checkpoint_min: 0 };
+    const isCp = (res, next) => res && res.status === 'checkpoint' && res.next === next && typeof res.elapsed_min === 'number' && !res.stop
+    const w = await run(CP, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(build([story(2)]))], [RELEASE, releaseOk]] });
+    check(isCp(w.result, 'build:1') && w.dispatches.length === 1 && w.mismatches.length === 0 && w.clerkCmds[w.clerkCmds.length - 1] === RELEASE,
+      'checkpoint: after a wave, before the next build wave, the claim released', { result: w.result, seq: seq(w) });
+    const c = await run(CP, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(round('review'))], [RELEASE, releaseOk]] });
+    check(isCp(c.result, 'dispatch:review') && c.dispatches.length === 1 && c.suiteCmds.length === 0 && c.clerkCmds[c.clerkCmds.length - 1] === RELEASE,
+      'checkpoint: after a wave, before the gate and the seats', { result: c.result, s: c.suiteCmds.length });
+    const notDone = (k) => ({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: k, steps: 3, done: false, suite: 'ok' });
+    const g = await run(CP, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]], suite: (cmd, k) => notDone(k + 1) });
+    check(isCp(g.result, 'dispatch:review') && g.suiteCmds.length === 1 && g.dispatches.length === 0 && g.clerkCmds[g.clerkCmds.length - 1] === RELEASE,
+      'checkpoint: after one gate step, before the next', { result: g.result, s: g.suiteCmds.length });
+    const s = await run(CP, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]] });
+    check(isCp(s.result, 'dispatch:review') && s.suiteCmds.length === 1 && s.dispatches.length === 0,
+      'checkpoint: after the gate finished, before the seat dispatch', { result: s.result, s: s.suiteCmds.length, d: s.dispatches.length });
+    const t = await run(CP, { clerk: [[CLAIM, adv(green())], [RELEASE, releaseOk]] });
+    check(t.result.next === 'green' && t.result.status !== 'checkpoint', 'checkpoint: a terminal state returns as itself, no checkpoint', t.result);
+  }
+
   check(!everyAgentType.has('queen-planner'), 'no queen-planner dispatch in any scenario', [...everyAgentType]);
   console.log(`${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);

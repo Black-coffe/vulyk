@@ -72,6 +72,14 @@ No driver, no clerk, no court. Loop:
    - First, every entry `{agent, where, from, to}` of the returned `fallbacks`: the driver already
      redispatched that role on `opus` after the Fable-limit refusal; write the journal line, the
      telemetry row and the owner sentence of the Fable-limit fallback (below), once per entry.
+   - `status` `checkpoint` (50 min since launch, at a wave, gate-step or seat boundary; the driver
+     released its claim): run `bash scripts/journal.sh docs/specs/<slug> 03-building "checkpoint after
+     <elapsed_min> min at <next>" "relaunching with a fresh stamp"`, make a fresh `stamp`, and call step 3
+     again with the same other args. This keeps your cache warm between waves; one wave or seat dispatch
+     longer than ~55 min still lets it lapse.
+   - A worker that returned without closing left edits in its `## Files`: the relaunch's claim accepts
+     them (`leftover`, only for todo stories of the current wave; any other dirty path is still refused)
+     and the driver dispatches that story again with a note to read `git diff` and finish.
    - `stop` with a `file` (a story missed twice): set that story's `status: blocked`, append the error
      under `## Findings`, dispatch `lead-architect` (`model: <top_model>`) with the story and both
      failures, and stop.

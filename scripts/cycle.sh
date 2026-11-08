@@ -3491,6 +3491,60 @@ cmd_resume() { # cmd_resume <spec>
 
 # --- claim/release (ADR-004/K3: the DRIVER semaphore, no --commit accepted) ----------------
 
+in_files() { # in_files <path> <newline-separated ## Files patterns> - scope-check's matches_any rule:
+  # the literal path, a `dir/` prefix, or a glob
+  local file="$1" pattern
+  while IFS= read -r pattern; do
+    [ -n "$pattern" ] || continue
+    [ "$file" = "$pattern" ] && return 0
+    case "$pattern" in */) case "$file" in "$pattern"*) return 0 ;; esac ;; esac
+    # shellcheck disable=SC2254
+    case "$file" in $pattern) return 0 ;; esac
+  done <<EOF
+$2
+EOF
+  return 1
+}
+
+claim_leftover() { # claim_leftover <spec> <dirty lines> - ab-run-fixes C9: a worker that returned
+  # without closing leaves edits in its story's ## Files (and its story file). Sets CL_LEFT, the
+  # todo stories of the current build wave holding a dirty path (space-separated), and CL_REST,
+  # the dirty lines no such story covers - claim refuses on those exactly as before.
+  local spec="$1" dirty="$2" w f line p ok hit i rest
+  local -a LS=() LF=() PP=()
+  CL_LEFT=""; CL_REST=""
+  w="$(json_field "$(cmd_status "$spec" 2>/dev/null)" wave)"
+  if [ -n "$w" ]; then
+    for f in "$spec"/*.md; do
+      [ -f "$f" ] || continue
+      is_story_file "$f" || continue
+      fm_status_wave "$f"
+      case "$FM_STATUS" in todo|'') ;; *) continue ;; esac
+      [ "${FM_WAVE:-1}" = "$w" ] || continue
+      LS+=("${f#./}"); LF+=("$(files_of "$f")")
+    done
+  fi
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    ok=1; rest="${line:3}"
+    # dirty_outside_paperwork prints a rename as `<orig> -> <path>`: both sides must be covered
+    case "$rest" in *' -> '*) PP=("${rest%% -> *}" "${rest#* -> }") ;; *) PP=("$rest") ;; esac
+    for p in "${PP[@]}"; do
+      is_paperwork_path "$p" && continue
+      hit=""
+      for i in "${!LS[@]}"; do
+        if [ "$p" = "${LS[$i]}" ] || in_files "$p" "${LF[$i]}"; then hit="${LS[$i]}"; break; fi
+      done
+      if [ -z "$hit" ]; then ok=0; break; fi
+      case " $CL_LEFT " in *" $hit "*) ;; *) CL_LEFT="${CL_LEFT:+$CL_LEFT }$hit" ;; esac
+    done
+    [ "$ok" -eq 1 ] || CL_REST="${CL_REST:+$CL_REST
+}$line"
+  done <<EOF
+$dirty
+EOF
+}
+
 cmd_claim() { # cmd_claim <spec> <stamp>
   local SPEC="$1" STAMP="${2:-}"
   [ -n "$SPEC" ] && [ -d "$SPEC" ] && [ -n "$STAMP" ] || {
@@ -3516,17 +3570,29 @@ cmd_claim() { # cmd_claim <spec> <stamp>
   # ADR-013 D5: the same predicate open-round applies, checked before the build instead of
   # after it - an owner's stray file used to surface only when the first round tried to open.
   # A re-claim by the holder (above) is exempt: that run is already under way.
+  # ab-run-fixes C9: edits inside a todo wave story's ## Files are a worker's leftover, not dirt -
+  # claim names those stories under `leftover` and the driver re-dispatches them with a note.
   local dirty; dirty="$(dirty_outside_paperwork)"
+  local CL_LEFT="" CL_REST="" LEFT_JSON="" lf
   if [ -n "$dirty" ]; then
-    echo "cycle: claim - working tree has changes outside the cycle's own paperwork:" >&2
-    printf '%s\n' "$dirty" | sed 's/^/  /' >&2
-    emit false claim 2 error "working tree not clean"
-    exit 2
+    claim_leftover "$SPEC" "$dirty"
+    if [ -n "$CL_REST" ]; then
+      echo "cycle: claim - working tree has changes outside the cycle's own paperwork:" >&2
+      printf '%s\n' "$CL_REST" | sed 's/^/  /' >&2
+      emit false claim 2 error "working tree not clean"
+      exit 2
+    fi
+    for lf in $CL_LEFT; do LEFT_JSON="${LEFT_JSON:+$LEFT_JSON,}\"$(json_escape "$lf")\""; done
   fi
 
   if ( set -o noclobber; { printf 'stamp=%s\n' "$STAMP"; printf 'claimed=%s\n' "$(now_ts)"; } > "$SPEC/DRIVER" ) 2>/dev/null; then
     echo "cycle: $(slug_of "$SPEC") - claimed by $STAMP"
-    emit true claim 0 claimed
+    if [ -n "$LEFT_JSON" ]; then
+      echo "cycle: claim - leftover edits in the ## Files of: $CL_LEFT"
+      printf '{"ok":true,"verb":"claim","exit":0,"next":"claimed","leftover":[%s]}\n' "$LEFT_JSON"
+    else
+      emit true claim 0 claimed
+    fi
     exit 0
   fi
 
@@ -3827,7 +3893,7 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
   local SPEC="$1" STAMP="$2" CLAIM="$3" INGEST="$4"
   local SLUG; SLUG="$(slug_of "$SPEC")"
   local -a SARG=(); [ -n "$STAMP" ] && SARG=(--stamp "$STAMP")
-  local STEPS="" REJECTED="" VERB_LINE="" VERB_RC=0
+  local STEPS="" REJECTED="" VERB_LINE="" VERB_RC=0 LEFTOVER_KEY=""
 
   advance_stop() { # advance_stop <failed-verb> - the stop line, built from VERB_LINE/VERB_RC; a
     # verb that exited 0 without an ok:true line (garbled output) still stops as exit 2
@@ -3841,6 +3907,9 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
   if [ "$CLAIM" = 1 ]; then
     run_verb claim "$SPEC" "$STAMP" </dev/null
     case "$VERB_LINE" in *'"ok":true'*) ;; *) advance_stop claim ;; esac
+    # ab-run-fixes C9: claim's leftover stories ride on advance's own line for the driver
+    local re_left='"leftover":(\[[^]]*\])'
+    [[ $VERB_LINE =~ $re_left ]] && LEFTOVER_KEY=",\"leftover\":${BASH_REMATCH[1]}"
   fi
 
   # --- ingest: every missing seat of the open, non-stale round is recorded from the report
@@ -3906,8 +3975,8 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
         echo "cycle: waiting on manual step '$mid' - do it, then: bash scripts/cycle.sh manual-done $SPEC $mid [note]"
       done ;;
   esac
-  printf '{"ok":true,"verb":"advance","exit":0,"next":"%s","steps":[%s],"rejected":[%s],"status":%s}\n' \
-    "$next" "$STEPS" "$REJECTED" "$st"
+  printf '{"ok":true,"verb":"advance","exit":0,"next":"%s","steps":[%s],"rejected":[%s]%s,"status":%s}\n' \
+    "$next" "$STEPS" "$REJECTED" "$LEFTOVER_KEY" "$st"
   exit 0
 }
 

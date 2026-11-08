@@ -52,6 +52,9 @@ Three operational consequences:
   conversation; inside the 1 h window that read is a cache hit, after it, full price. If you are
   going for lunch, compact *before* you go, not after. The audit counted 58 full re-writes of the
   Queen's cache after she sat idle for over an hour waiting on a long run: 25M weighted tokens.
+  Since ab-run-fixes the Workflow driver returns `checkpoint` at the first boundary past 50 min and
+  `/vulyk-build` relaunches it, so the Queen idles under an hour per launch; one wave or seat
+  dispatch longer than ~55 min still lets her cache lapse.
 - **A subagent that waits more than five minutes pays for its whole context again.** A worker or
   reviewer idle on a ten-minute suite re-writes its cache on its next request. That is one
   reason `close-story` runs verification once, under a 540 s timeout, instead of the worker

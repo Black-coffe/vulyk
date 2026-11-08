@@ -140,11 +140,23 @@ Solo means no driver, no clerk and no court: the Queen runs `cycle.sh advance` f
 Bash. It performs every mechanical step (branch, open-round, judge, repair) and stops at the
 next thing only an agent can do.
 
+At Tier 3-4 the Workflow driver (`.claude/workflows/vulyk-cycle.js`) runs the same loop through the
+clerk. A worker that returns with its story still `todo` is a miss: the driver dispatches it once
+more, on the gate model, and a second miss stops the run. Its edits stay in the tree, and since
+ab-run-fixes a relaunch is not refused for them: `claim` accepts dirty paths in the `## Files` (or the
+story file) of a `todo` story of the current wave, names those stories under `leftover`, and the
+driver tells each one's worker to read `git diff` and finish. Any other dirty path is refused as before.
+The driver also returns `{"status":"checkpoint",...}` at the first wave, gate-step or seat boundary
+past `checkpoint_min` minutes (default 50) since launch, releasing its claim; `/vulyk-build` journals
+it and relaunches with a fresh stamp, so the Queen's turn comes back before her 1 h cache lapses.
+
 A story can also wait on a hand step: `blocked_by: [manual:<id>]` (0.19). When the earliest wave with
 todo stories has none ready and one waits on an unrecorded step, `next` is `manual:<id,...>` (the ids
 also under `status.manual`); no later wave is built past it, and the driver stops without dispatching.
 `bash scripts/cycle.sh manual-done docs/specs/<slug> <id> [note]` writes and commits
-`docs/specs/<slug>/manual/<id>`, and the wave becomes ready.
+`docs/specs/<slug>/manual/<id>`, and the wave becomes ready. A wave with a ready story beside the
+waiting one is built first: `next` is `build:<W>` with only the ready stories listed, and the `manual:`
+stop comes once they are done (ab-run-fixes ask 18 repro, both test suites).
 
 Study work - a request whose deliverable is a document - never enters the loop at all: it ends
 at `report.md` (ADR-008). And since v0.13 stage 02 closes on the owner's `**Approved:**` by

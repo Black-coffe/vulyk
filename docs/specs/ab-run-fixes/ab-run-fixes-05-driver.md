@@ -1,14 +1,15 @@
 ---
 story: ab-run-fixes-05
 spec: ab-run-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 3
 blocked_by: [ab-run-fixes-01, ab-run-fixes-03, ab-run-fixes-04]
 red: required
 red_reason: claim: leftover edits of a wave story are accepted
+red_verified_at: 2026-11-08T22:18:22Z b4c56909167d5bb768f9d8fa8831fb9ccd9b605fad96e45792cb635903f10aac
 ---
 
 # Driver: leftover edits re-dispatched, a checkpoint before the hour, the manual-wave repro
@@ -68,4 +69,35 @@ memory/map/cycle.md (The Workflow driver, `gate`; Verbs: `claim`, `release`; `st
 
 ## Implementation notes
 
+- scripts/cycle.sh: `in_files` (scope-check's matches_any rule) and `claim_leftover`; `claim` accepts dirty paths covered by a todo story of status's current build wave (its `## Files` or the story file itself) and adds `"leftover":[...]`; `advance --claim` copies the key onto its own line before `status`. Clean-tree and refused lines are byte-for-byte as before.
+- Decision: the story file itself counts as the leftover story's own (a worker writes its notes and `returned:` there); everything else outside those `## Files` is still refused (neighbour tests: a later wave's file, a stray file).
+- .claude/workflows/vulyk-cycle.js: `leftover` from the claim's advance line gives that story `LEFTOVER_NOTE` on each dispatch; the retry model (RETRY on a miss in this run) and the two-miss stop are unchanged; the old retry sentence stays for in-run misses.
+- .claude/workflows/vulyk-cycle.js: `checkpoint_min` arg (default 50) and `boundary()`: after any work (a wave or a gate call), before a build wave, a seat dispatch round, each further gate step and the seat dispatch after the gate, past the limit throws `Checkpoint` -> `{status:"checkpoint", next, elapsed_min, fallbacks}`; `finally` releases.
+- Surprise: the driver header said the runtime has no clock; the checkpoint reads `Date.now()` (comment rewritten). Not verified in the live Workflow runtime, only in the node harness.
+- Manual-wave repro (ask 18): not a bug: `status` puts a ready story first (`BUILD_WAVE` breaks on `ready` before the `wave_manual` check), so a ready wave-mate of a `manual:`-blocked story is listed and built, and `next` turns `manual:<id>` only once it is done; green on HEAD in tests/cycle.test.sh part manual and tests/driver.test.sh, no fix.
+- tests: cycle.test.sh part safety (claim/advance leftover + neighbours), part manual (repro); driver.test.sh (leftover note + retry + stop, manual-wave repro, five checkpoint cases).
+- Docs: vulyk-build.md wake-up (checkpoint relaunch with a journal line, the ~55 min wave caveat, the leftover retry), docs/cycle.md (driver and manual paragraphs), docs/token-economy.md (the Queen-idle line).
+- CHANGELOG: Driver: a worker's leftover edits no longer block the relaunch (claim names them under `leftover`, the story is re-dispatched with a note), and the driver returns `checkpoint` after 50 min at a wave, gate-step or seat boundary so `/vulyk-build` relaunches it before the Queen's 1 h cache lapses.
+
 ## Findings
+
+## Red receipt
+- command: bash tests/cycle.test.sh --part safety
+- exit: 1
+- tests: b4c56909167d5bb768f9d8fa8831fb9ccd9b605fad96e45792cb635903f10aac (tests/cycle.test.sh, tests/driver.test.sh)
+- impl: 69a2af27d8e4557abe8da786b23abda90d6c3b5390916203222e74f21d8a8ebe
+- stamped: 2026-11-08T22:18:22Z
+
+```
+::error::claim: leftover edits of a wave story are accepted - exit=2 out=cycle: claim - working tree has changes outside the cycle's own paperwork:
+   M docs/specs/lftv/lftv-01.md
+  ?? lftv-a.txt
+{"ok":false,"verb":"claim","exit":2,"next":"error","error":"working tree not clean"}
+::error::advance --claim leftover: exit=2 out=cycle: claim - working tree has changes outside the cycle's own paperwork:
+   M docs/specs/lftv/lftv-01.md
+  ?? lftv-a.txt
+{"ok":false,"verb":"advance","exit":2,"next":"error","error":"working tree not clean","failed":"claim","steps":[],"rejected":[]}
+  ok    neighbour: a dirty lftv-b.txt beside the leftover is still refused, no DRIVER
+  ok    neighbour: a dirty lftv-stray.txt beside the leftover is still refused, no DRIVER
+  ok    neighbour: a clean tree claims with no leftover key, the line as before
+```
