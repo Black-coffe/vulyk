@@ -17,9 +17,11 @@ export const meta = {
 // What the driver remembers is per run and bounds re-dispatch only: misses per story file (two
 // end the run) and dispatches per seat per round (a third ends the run).
 // There is no deadline in here: deadlines live in the verbs (`close-story`'s verification timeout)
-// and in each agent's own Bash timeouts. The one clock read is the checkpoint (C10): past
-// `checkpoint_min` since launch, the next wave, gate step or seat dispatch is not started and the
-// run returns `checkpoint`, so the Queen's turn comes back before her 1 h cache lapses.
+// and in each agent's own Bash timeouts. The script reads no clock: the runtime refuses one at launch
+// (it breaks resume). The checkpoint (C10) takes its time from outside: past `checkpoint_min` between
+// `args.launched_at` and the `now` the last verb answer carried (both epoch seconds), the next wave,
+// gate step or seat dispatch is not started and the run returns `checkpoint`, so the Queen's turn
+// comes back before her 1 h cache lapses. Either one missing: no checkpoint, the run goes on.
 
 const TERMINAL = ['green', 'escalated', 'paused', 'shipped']
 // advance runs these itself - one reaching the driver means advance stopped short of a boundary
@@ -69,7 +71,10 @@ const FALLBACK_MODEL = 'opus'
 const fallbacks = [] // {agent, where, from, to}, carried in the return value for /vulyk-build to record
 // ab-run-fixes C10: minutes from launch after which the driver stops at the next boundary (default 50)
 const CHECKPOINT_MIN = Number.isFinite(Number(A.checkpoint_min)) && A.checkpoint_min !== null && A.checkpoint_min !== '' ? Number(A.checkpoint_min) : 50
-const STARTED = Date.now()
+// epoch seconds from a number or a numeric string; NaN for anything else (null and '' are not 0)
+const epoch = (v) => ((typeof v === 'number' || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(Number(v)) ? Number(v) : NaN)
+const LAUNCHED = epoch(A.launched_at) // the Queen passes it at launch
+let verbNow = NaN // epoch seconds of the last verb answer that carried `now`
 if (typeof stamp !== 'string' || stamp.length < 12) {
   return { stop: { verb: 'launch', error: 'args.stamp missing: launch with the 16-hex random stamp of /vulyk-build step 1' } }
 }
@@ -93,8 +98,8 @@ class Checkpoint extends Error {
 // A boundary: only after this run has done some work (a dispatch or a gate step), never at launch.
 let worked = false
 const boundary = (st) => {
-  if (!worked) return
-  const elapsed = Math.floor((Date.now() - STARTED) / 60000)
+  if (!worked || !Number.isFinite(LAUNCHED) || !Number.isFinite(verbNow)) return
+  const elapsed = Math.floor((verbNow - LAUNCHED) / 60)
   if (elapsed >= CHECKPOINT_MIN) throw new Checkpoint(st.next, elapsed)
 }
 const fail = (state, stop) => { throw new Stop({ ...state, stop }) }
@@ -111,6 +116,7 @@ const ask = async (cmd) => {
   let parsed = null
   try { parsed = JSON.parse(line) } catch { /* not JSON */ }
   if (parsed === null || typeof parsed !== 'object') throw new BadLine(line)
+  if (Number.isFinite(epoch(parsed.now))) verbNow = epoch(parsed.now)
   return parsed
 }
 

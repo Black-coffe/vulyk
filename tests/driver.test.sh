@@ -33,7 +33,12 @@ const check = (cond, label, detail) => {
 // --- compile: strip `export ` at line start and compile the rest as the body of an async
 // function taking the Workflow hooks - the runtime's own shape for a top-level-return file.
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const compile = (body) => new AsyncFunction('args', 'agent', 'parallel', 'phase', 'log', body.replace(/^export /gm, ''));
+const compile = (body) => new AsyncFunction('args', 'agent', 'parallel', 'phase', 'log', 'Date', body.replace(/^export /gm, ''));
+// The Workflow runtime refuses a clock read at launch (run wf_904b0c18-ea3, 2026-11-09): the driver
+// runs with a Date that throws its message on Date.now(), new Date() and Date(); the rest of Date stays.
+const CLOCK_REFUSED = 'Date.now() / new Date() are unavailable in workflow scripts (breaks resume). Stamp results after the workflow returns, or pass timestamps via args.';
+const refuse = () => { throw new Error(CLOCK_REFUSED); };
+const NoClock = new Proxy(Date, { apply: refuse, construct: refuse, get: (t, p) => (p === 'now' ? refuse : t[p]) });
 let driverFn = null;
 try { driverFn = compile(src); check(true, 'compile: the driver compiles as an async body'); }
 catch (e) { check(false, 'compile: the driver compiles as an async body', String(e)); }
@@ -140,7 +145,7 @@ async function run(args, script) {
   const parallel = (thunks) => Promise.all(thunks.map((t) => {
     try { return Promise.resolve(t()).catch(() => null); } catch { return Promise.resolve(null); }
   }));
-  const result = await driverFn(args, agent, parallel, (p) => phases.push(p), (l) => logs.push(l));
+  const result = await driverFn(args, agent, parallel, (p) => phases.push(p), (l) => logs.push(l), NoClock);
   return { result, clerkCmds, suiteCmds, mismatches, dispatches, logs, phases };
 }
 const seq = (r) => r.clerkCmds.join(' | ');
@@ -149,6 +154,13 @@ const blindPromptsClean = (r) => r.dispatches
   .every((d) => !d.prompt.includes(SPEC) && !d.prompt.includes('council/round-') && !d.prompt.includes(S));
 
 (async () => {
+  // --- ab-run-fixes-08: the driver reads no clock - a run under the refusing Date does not throw
+  {
+    let err = null;
+    try { await run(ARGS, { clerk: [[CLAIM, adv(green())], [RELEASE, releaseOk]] }); } catch (e) { err = String(e && e.message || e); }
+    check(err === null, 'driver: the script reads no clock (Date.now / new Date refused like the Workflow runtime)', err);
+  }
+
   // --- launch guards: no clerk call at all
   for (const [label, args] of [['args undefined', undefined], ['stamp missing', { spec: SPEC }], ['spec missing', { stamp: S }]]) {
     const r = await run(args, { clerk: [] });
@@ -643,9 +655,14 @@ const blindPromptsClean = (r) => r.dispatches
       'manual wave: the ready wave-mate is built, then the run stops at the hand step', { d: r.dispatches.length, result: r.result });
   }
 
-  // --- ab-run-fixes C10: checkpoint_min 0 returns checkpoint at the first boundary after work, and releases
+  // --- ab-run-fixes C10: checkpoint_min 0 returns checkpoint at the first boundary after work, and releases.
+  // Elapsed time is args.launched_at (epoch seconds, the Queen's) against the `now` a verb answer carries.
+  const T0 = 1762700000;
+  const at = (o, now) => ({ ...o, now });
   {
-    const CP = { ...ARGS, checkpoint_min: 0 };
+    const CP = { ...ARGS, checkpoint_min: 0, launched_at: T0 };
+    const adv = (st, extra) => at({ ok: true, verb: 'advance', exit: 0, next: st.next, steps: [], rejected: [], status: st, ...extra }, T0);
+    const suiteDone = at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: 0, steps: 0, done: true, suite: 'none' }, T0);
     const isCp = (res, next) => res && res.status === 'checkpoint' && res.next === next && typeof res.elapsed_min === 'number' && !res.stop
     const w = await run(CP, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(build([story(2)]))], [RELEASE, releaseOk]] });
     check(isCp(w.result, 'build:1') && w.dispatches.length === 1 && w.mismatches.length === 0 && w.clerkCmds[w.clerkCmds.length - 1] === RELEASE,
@@ -653,15 +670,30 @@ const blindPromptsClean = (r) => r.dispatches
     const c = await run(CP, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(round('review'))], [RELEASE, releaseOk]] });
     check(isCp(c.result, 'dispatch:review') && c.dispatches.length === 1 && c.suiteCmds.length === 0 && c.clerkCmds[c.clerkCmds.length - 1] === RELEASE,
       'checkpoint: after a wave, before the gate and the seats', { result: c.result, s: c.suiteCmds.length });
-    const notDone = (k) => ({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: k, steps: 3, done: false, suite: 'ok' });
+    const notDone = (k) => at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: k, steps: 3, done: false, suite: 'ok' }, T0);
     const g = await run(CP, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]], suite: (cmd, k) => notDone(k + 1) });
     check(isCp(g.result, 'dispatch:review') && g.suiteCmds.length === 1 && g.dispatches.length === 0 && g.clerkCmds[g.clerkCmds.length - 1] === RELEASE,
       'checkpoint: after one gate step, before the next', { result: g.result, s: g.suiteCmds.length });
-    const s = await run(CP, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]] });
+    const s = await run(CP, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]], suite: () => suiteDone });
     check(isCp(s.result, 'dispatch:review') && s.suiteCmds.length === 1 && s.dispatches.length === 0,
       'checkpoint: after the gate finished, before the seat dispatch', { result: s.result, s: s.suiteCmds.length, d: s.dispatches.length });
     const t = await run(CP, { clerk: [[CLAIM, adv(green())], [RELEASE, releaseOk]] });
     check(t.result.next === 'green' && t.result.status !== 'checkpoint', 'checkpoint: a terminal state returns as itself, no checkpoint', t.result);
+  }
+  // the default 50 min against the verb's `now`; no time source (no launched_at, or no `now`) never fires
+  {
+    const two = (now) => [[CLAIM, at(adv(build([story(1)])), T0)], [ADV, at(adv(build([story(2)])), now)]];
+    const due = await run({ ...ARGS, launched_at: T0 }, { clerk: [...two(T0 + 50 * 60), [RELEASE, releaseOk]] });
+    check(due.result && due.result.status === 'checkpoint' && due.result.elapsed_min === 50 && due.dispatches.length === 1,
+      'checkpoint: 50 min after launched_at by the verb clock, the default fires', due.result);
+    const early = await run({ ...ARGS, launched_at: T0 }, { clerk: [...two(T0 + 49 * 60), [ADV, at(adv(green()), T0 + 49 * 60)], [RELEASE, releaseOk]] });
+    check(early.result && early.result.next === 'green' && early.dispatches.length === 2, 'checkpoint: 49 min, the default does not fire', early.result);
+    const blind = await run({ ...ARGS, checkpoint_min: 0 }, { clerk: [...two(T0), [ADV, adv(green())], [RELEASE, releaseOk]] });
+    check(blind.result && blind.result.next === 'green' && blind.dispatches.length === 2,
+      'checkpoint: no launched_at, no time source - the checkpoint does not fire and the driver runs on', blind.result);
+    const mute = await run({ ...ARGS, checkpoint_min: 0, launched_at: T0 }, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(build([story(2)]))], [ADV, adv(green())], [RELEASE, releaseOk]] });
+    check(mute.result && mute.result.next === 'green' && mute.dispatches.length === 2,
+      'checkpoint: no `now` in any verb answer - the checkpoint does not fire', mute.result);
   }
 
   check(!everyAgentType.has('queen-planner'), 'no queen-planner dispatch in any scenario', [...everyAgentType]);
