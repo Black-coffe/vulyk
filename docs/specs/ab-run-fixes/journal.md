@@ -11,3 +11,4 @@
 - 2026-11-08T22:48:48Z · 03-building · 07, 06, 08 closed; 08 leaves the checkpoint off live (no now, no launched_at): story 09 added in wave 4 · next: build 09, then the round gate
 - 2026-11-08T22:58:00Z · 03-building · 09 NEEDS_CONTEXT: now breaks whole-line asserts in council.test.sh; Queen added tests/council.test.sh to its Files (strip now before comparing) · next: 09's worker continues
 - 2026-11-08T23:07:48Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/ab-run-fixes/round-1 · next: dispatch:opus,review
+- 2026-11-08T23:39:57Z · 04-council:RED · round 1 verdict RED at c89d3bc pack d2df65182f50 · next: repair
