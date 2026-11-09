@@ -37,9 +37,9 @@ Plan: "$ARGUMENTS"
    planner dispatch receives it. Checklist, Tier 2-4: meta-tests, docs/ADR, `.env.example`, re-exports,
    sibling files with the same pattern.
 3a. Horizon, Tier 2-4 on new ground (ADR-022). Skip it for study work, Tier 0-1, no-question mode and
-   `--no-horizon`; `--horizon` runs it anyway. In a repo whose `memory/memory.md` `## Codebase map` lists
-   a module, it runs only with `--horizon`: no lens, no horizon question. Only a repo with no mapped
-   module uses the trigger that follows. New ground is a recon fact: take two to four terms that
+   `--no-horizon`; `--horizon` runs it anyway. In a repo whose `memory/memory.md` `## Codebase map` or
+   `## Unmapped territory` lists a module, it runs only with `--horizon`: no lens, no horizon question.
+   Only a repo whose `memory/memory.md` lists no module under either heading uses the trigger that follows. New ground is a recon fact: take two to four terms that
    name the asked capability (its nouns and verbs, not the project's) and Grep them in `memory/memory.md`,
    `memory/map/` and the source. Zero hits on the capability fires the step; a hit on its container (a
    folder or file family, such as `.claude/commands/` for a new command) does not count. An empty repo

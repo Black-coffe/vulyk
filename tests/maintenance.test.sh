@@ -910,6 +910,11 @@ brief_of "$H" | expect_absent "git-guard: no such mod, no line" "tool.check"
 rm -f "$T/fakemod/hooks/register.ts"
 BRIEF_CONF="$MC" brief_of "$H" | expect_absent "git-guard: an enabled mod without tool.check, no line" "tool.check"
 
+echo "--- plan step 3a: the existing-repo horizon gate"
+sed -n '/^3a\. /,/^4\. /p' "$SRC/.claude/commands/vulyk-plan.md" | tr '\n' ' ' | tr -s ' ' \
+  | expect "plan 3a: the existing-repo gate counts a module under ## Unmapped territory beside ## Codebase map" \
+    '`## Codebase map` or `## Unmapped territory` lists'
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1
