@@ -3,3 +3,4 @@
 - 2026-11-09T12:49:49Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/mass-audit-fixes; to edit, run /vulyk-pause mass-audit-fixes
 - 2026-11-09T12:50:01Z · 03-building · branch vulyk/mass-audit-fixes created · next: build:1
 - 2026-11-09T12:50:53Z · 03-building · relaunch: clerk truncated the --claim advance line (4 of 6 wave stories, no closing brace) · next: relaunching with a fresh stamp
+- 2026-11-09T12:51:37Z · 03-building · driver stopped twice: clerk garbled the long --claim line (story 06 names vulyk-cycle.js, so no driver edit mid-build) · next: running the advance loop from the Queen session, stamp 399ca9fca72ce8c3
