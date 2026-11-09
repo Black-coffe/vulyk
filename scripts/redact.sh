@@ -65,7 +65,7 @@ SED_ARGS=( -E
   -e "s#([\"']?[A-Za-z0-9_-]*($KEYWORDS)[A-Za-z0-9_-]*[\"']?[[:space:]]*[=:][[:space:]]*)$VALUE#\1$MASK#g"
   -e "s#$END_KEY$VALUE#\1\2$MASK#g"
   -e "s#$DSN_KEY$DSN_VALUE#\1\2$MASK#g"
-  -e "s#([\"']?$TOKEN_KEY[\"']?[[:space:]]*[=:][[:space:]]*)$TOKEN_VALUE#\1$MASK#g"
+  -e "s#([\"']?${TOKEN_KEY}[\"']?[[:space:]]*[=:][[:space:]]*)$TOKEN_VALUE#\1$MASK#g"
 )
 
 # Degrade to cat unless every tool is present AND this sed dialect accepts the script.
