@@ -1,0 +1,214 @@
+## scripts/cycle.sh
+tests:
+  exact    tests/council.test.sh
+  textual  11 not shown
+importers:
+  textual  17 not shown
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  280 not shown
+
+## scripts/lib.sh
+tests:
+  exact    tests/council.test.sh
+  exact    tests/cycle.test.sh
+  exact    tests/defects.test.sh
+  exact    tests/full-suite.sh
+  exact    tests/full-suite.test.sh
+  exact    tests/handoff.test.sh
+  exact    tests/inject.test.sh
+  exact    tests/intake.test.sh
+  exact    tests/maintenance.test.sh
+  exact    tests/mods.test.sh
+  exact    tests/solo.test.sh
+  exact    tests/symbol-map.test.sh
+  exact    tests/telemetry.test.sh
+  exact    tests/token-report.test.sh
+  textual  1 not shown
+importers:
+  exact    install.sh
+  exact    scripts/acceptance-log.sh
+  exact    scripts/cycle.sh
+  exact    scripts/human-check.sh
+  exact    scripts/injection-check.sh
+  exact    scripts/leak-check.sh
+  exact    scripts/portability-check.sh
+  exact    scripts/prompt-check.sh
+  exact    scripts/py.sh
+  exact    scripts/release-check.sh
+  exact    scripts/scope-check.sh
+  exact    scripts/ship-check.sh
+  exact    scripts/state.sh
+  exact    scripts/symbol-map.sh
+  exact    scripts/telemetry.sh
+  exact    scripts/top-model.sh
+  exact    scripts/trace-autopsy.sh
+  exact    scripts/trace-check.sh
+  exact    scripts/wave-check.sh
+  textual  4 not shown
+imported:
+  exact    scripts/run-capped.py
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  108 not shown
+
+## scripts/scope-check.sh
+tests:
+  textual  3 not shown
+importers:
+  textual  6 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  27 not shown
+
+## scripts/ship-check.sh
+tests:
+  textual  3 not shown
+importers:
+  textual  7 not shown
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  81 not shown
+
+## scripts/defects-check.sh
+tests:
+  textual  3 not shown
+importers:
+  textual  3 not shown
+imported:
+  exact    .claude/hooks/defects_lib.py
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  74 not shown
+
+## scripts/redact.sh
+tests:
+  textual  4 not shown
+importers:
+  textual  5 not shown
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  32 not shown
+
+## scripts/vulyk-update.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  3 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  26 not shown
+
+## install.sh
+tests:
+  textual  8 not shown
+importers:
+  textual  9 not shown
+imported:
+  exact    scripts/lib.sh
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  290 not shown
+
+## .claude/hooks/git-guard.sh
+tests:
+  textual  1 not shown
+importers:
+  textual  1 not shown
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  9 not shown
+
+## .claude/hooks/defects-inject.sh
+tests:
+  textual  3 not shown
+importers:
+  textual  2 not shown
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  17 not shown
+
+## .claude/hooks/defect-intake.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  2 not shown
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  18 not shown
+
+## .claude/hooks/handoff.py
+tests:
+  exact    tests/maintenance.test.sh
+  exact    tests/telemetry.test.sh
+  textual  3 not shown
+importers:
+  exact    .claude/hooks/handoff.sh
+  textual  1 not shown
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  27 not shown
+
+## .claude/hooks/handoff.sh
+tests:
+  textual  5 not shown
+importers:
+  textual  6 not shown
+imported:
+  exact    .claude/hooks/handoff.py
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  57 not shown
+
+## .claude/hooks/vulyk-update-check.sh
+tests:
+  textual  1 not shown
+importers:
+  textual  1 not shown
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  9 not shown
+
+## .claude/settings.json
+  ! imports not parsed for .json: search callers yourself
+tests:
+  textual  4 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  92 not shown
+
+## scripts/leak-check.sh
+imported:
+  exact    scripts/lib.sh
+guard tests:
+  textual  4 not shown
+path mentions:
+  textual  14 not shown
+
+## tests/full-suite.sh
+tests:
+  textual  5 not shown
+importers:
+  textual  3 not shown
+imported:
+  exact    scripts/lib.sh
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  76 not shown
+
