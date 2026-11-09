@@ -313,3 +313,4 @@
 {"v":1,"ts":"2026-11-09T12:48:56Z","code":"context_high","value":156325,"threshold":140000,"vulyk":"0.49.0","tier":0,"model":"opus","agent":"","spec":"","story":"","ref":"session:aa76b720-7c73-4ee3-a15f-06306d16ccf3.jsonl"}
 {"v":1,"ts":"2026-11-09T15:27:00Z","code":"context_high","value":221738,"threshold":140000,"vulyk":"0.49.0","tier":0,"model":"opus","agent":"","spec":"","story":"","ref":"session:8f323d64-92d6-437c-b967-286028d8cee5.jsonl"}
 {"v":1,"ts":"2026-11-09T18:06:22Z","code":"context_high","value":176484,"threshold":140000,"vulyk":"0.49.0","tier":0,"model":"opus","agent":"","spec":"","story":"","ref":"session:49704988-62ff-4841-9d06-208790d5f974.jsonl"}
+{"v":1,"ts":"2026-11-09T19:30:50Z","code":"context_high","value":197160,"threshold":140000,"vulyk":"0.49.0","tier":0,"model":"opus","agent":"","spec":"","story":"","ref":"session:5ea4d24c-46d5-4c25-9d36-0de81af46148.jsonl"}
