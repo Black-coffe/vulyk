@@ -1,14 +1,14 @@
 ---
 story: mass-audit-fixes-18
-status: todo
-returned: NEEDS_CONTEXT
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 5
 blocked_by: []
 red: required
 red_reason: an owner's removal of a hook --upgrade used to put back stays removed: the six named unwired
-red_verified_at: 2026-11-09T16:56:18Z 7c131889f7c744d0b02edf3eba530267950730064ec13283d819b284bafc6a12
+red_verified_at: 2026-11-09T17:30:16Z 927431239109fe19745da6c29b93f6152c7dc11a292e597a9a3bcca81675bc9d
 ---
 
 # Repair round 1
@@ -58,12 +58,14 @@ ASK 18: RED - --upgrade names unwired hooks and never wires unasked - run: fresh
 - install-xp: split; the mass-audit-fixes-17/18 unwired cases move to a new part `install-xp2` (in PARTS), each part under 150 s alone (Queen ruling on NEEDS_CONTEXT: one line held 331 s under a 300 s cap).
 - council:suite: split into `suite` and `suite2` (both in PARTS), each under 150 s alone on this box.
 
+- After the ruling: install-xp split at the mass-audit-fixes-17 block into install-xp2 (in PARTS); re-stamped with install.sh at HEAD, fix re-applied; install-xp 112 s, install-xp2 119 s alone.
+
 ## Red receipt
-- command: bash tests/telemetry.test.sh --part install-xp && bash tests/telemetry.test.sh --part install
+- command: bash tests/telemetry.test.sh --part install-xp2
 - exit: 1
-- tests: 7c131889f7c744d0b02edf3eba530267950730064ec13283d819b284bafc6a12 (tests/council.test.sh, tests/e2e.test.sh, tests/telemetry.test.sh)
+- tests: 927431239109fe19745da6c29b93f6152c7dc11a292e597a9a3bcca81675bc9d (tests/council.test.sh, tests/e2e.test.sh, tests/telemetry.test.sh)
 - impl: 4ccd2964c2c3d225422ffa367c42b80a051dc68bc737fb4bed485ff958d00d5f
-- stamped: 2026-11-09T16:56:18Z
+- stamped: 2026-11-09T17:30:16Z
 
 ```
 ::error::an owner's removal of a hook --upgrade used to put back stays removed: the six named unwired - expected [PostToolUse: defect-intake.sh
@@ -76,11 +78,5 @@ ASK 18: RED - --upgrade names unwired hooks and never wires unasked - run: fresh
   ok    ... not named as unwired
   ok    a 0.32-matcher inject on a 0.49 hive is not named as unwired
   ok    ... it is rewired once, under the new matcher
-telemetry.test.sh: 68 checks, 5 failed
+telemetry.test.sh: 25 checks, 5 failed
 ```
-- Files: install.sh (wire_entry + six SHIPPED_HOOKS rows), tests/telemetry.test.sh (six-removal hive, v0.31 and old-matcher neighbours, library fixture), tests/e2e.test.sh (fixture subject), tests/council.test.sh (r2m2 wording, suite/suite2 split).
-- wire_entry reads a removal against v$PREV's own settings.json (entry + argument), not script presence: an entry an older release did not wire yet (v0.31 lacks the AskUserQuestion intake) is still wired.
-- A move is wired outright: the Stop scan going to SessionEnd and the inject leaving the 0.32 matcher; when the entry is present wire_hook still prints its kept line.
-- library part's hand-arranged hive now has no vulyk-version (a 0.49 one would read its missing entries as removals).
-- Surprise: the first sealed jq filter lost its backslash (fixture never applied); reverted install.sh, fixed the test with [.] and a fixture assertion, re-stamped, re-applied.
-- Measured alone-ish: council suite 120 s, suite2 73 s.

@@ -114,7 +114,7 @@ app.txt says fixed.
 ## Verification
 `bash check.sh`
 EOF
-  git add -A && git commit -q -m init
+  git add -A && git commit -q -m "vulyk(demo): plan"   # a paperwork subject, as a real plan commit (approved_rev)
 }
 
 run_driver() { # run_driver <fixture> <scenario>

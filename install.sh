@@ -947,7 +947,7 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
 
 wire_session_hook() { wire_hook SessionStart "$1"; }
 
-# mass-audit-fixes-17 (Ask 18): the hooks wired only by the release that brings them (wire_shipped, git-guard.sh).
+# mass-audit-fixes-17 (Ask 18): the hooks wired only by the release that brings them (wire_shipped, git-guard.sh, wire_entry).
 # One line each: <event> <script> <matcher> <arg>, `-` for none. `--wire <event>:<script>` looks its entry up here.
 SHIPPED_HOOKS='SessionStart session-start-brief.sh - -
 SessionStart handoff.sh - sessionstart
@@ -957,7 +957,13 @@ Stop handoff.sh - stop
 PreCompact context-guard.sh - -
 PreCompact handoff.sh - precompact
 PostToolUse skill-usage-counter.sh Skill -
-PreToolUse git-guard.sh Bash|PowerShell -'
+PreToolUse git-guard.sh Bash|PowerShell -
+SessionEnd anomaly-scan.sh - -
+UserPromptSubmit defect-intake.sh - -
+PostToolUse defect-intake.sh AskUserQuestion answer
+PreToolUse defects-inject.sh Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.* -
+SessionStart defects-inject.sh - reset
+SessionStart ysk-offer.sh - -'
 # A shipped hook the hive's settings.json does not wire is named, never wired: a missing entry may be the owner's
 # removal, or a hook the pre-0.50 wiring dropped. The line carries the command that wires that one hook.
 report_unwired() { # report_unwired <event> <script> [matcher] [arg]
@@ -1561,17 +1567,31 @@ wire_session_hook top-model-brief.sh
 # run). On upgrade, the entries this release no longer wants leave the hive's settings.json: the
 # Stop scan, and the learnings hook - wiring follows the file, so a learnings hook kept because
 # the owner edited it (or a hive with no manifest yet) stays wired.
+# mass-audit-fixes-18 repair 1 (Ask 18): wire_entry (below) never puts back an entry the installed release wired;
+# an entry this run moves (the Stop scan to SessionEnd, the inject to the new matcher) is a move, wired outright.
+wire_entry() { # wire_entry <event> <script> [matcher] [arg] - wired unless v$PREV's own settings.json already ran it
+  if git -C "$SRC" show "v$PREV:.claude/settings.json" 2>/dev/null | grep -qF "hooks/$2${4:+ $4}\""; then
+    local named; named="$(report_unwired "$@")"                # empty: the entry is there, wire_hook says kept
+    [ -z "$named" ] || { printf '%s\n' "$named"; return 0; }
+  fi
+  wire_hook "$@"
+}
+ANOMALY_MOVED=""
 if [ -n "$UPGRADE" ]; then
+  vulyk_python || true; PYBIN="$VULYK_PY"
+  if [ -f "$DEST/.claude/settings.json" ] && grep -qF anomaly-scan.sh "$DEST/.claude/settings.json" 2>/dev/null; then
+    if [ -z "$PYBIN" ] || py_unwire "$DEST/.claude/settings.json" anomaly-scan.sh Stop --dry; then ANOMALY_MOVED=1; fi
+  fi
   unwire_hook Stop anomaly-scan.sh
   if [ ! -e "$DEST/.claude/hooks/session-end-learnings.sh" ] || \
      grep -qxF ".claude/hooks/session-end-learnings.sh" <<< "$RETIRED_GONE"; then
     unwire_hook SessionEnd session-end-learnings.sh
   fi
 fi
-wire_hook SessionEnd anomaly-scan.sh
+if [ -n "$ANOMALY_MOVED" ]; then wire_hook SessionEnd anomaly-scan.sh; else wire_entry SessionEnd anomaly-scan.sh; fi
 # The defect library (0.19, contract §3): intake on every prompt, the class's Never lines before
 # an edit or a command, and the per-session dedup cleared when /clear or compaction starts over.
-wire_hook UserPromptSubmit defect-intake.sh
+wire_entry UserPromptSubmit defect-intake.sh
 # rules-tree: delivery widened to web, agent and MCP tools. py_wire ignores a changed matcher, so a
 # hive still on the 0.19 or the 0.32 matcher is unwired and rewired; a matcher the owner set by hand is
 # kept. 0.41: Read joins it, for the cards of a story's ## Files when the story file is read.
@@ -1579,13 +1599,15 @@ INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|A
 if grep -qE '"matcher"[[:space:]]*:[[:space:]]*"Edit\|Write\|MultiEdit\|NotebookEdit\|Bash(\|WebFetch\|WebSearch\|Agent\|mcp__\.\*)?"' \
      "$DEST/.claude/settings.json" 2>/dev/null; then
   unwire_hook PreToolUse defects-inject.sh
+  wire_hook PreToolUse defects-inject.sh "$INJECT_MATCHER"
+else
+  wire_entry PreToolUse defects-inject.sh "$INJECT_MATCHER"
 fi
-wire_hook PreToolUse defects-inject.sh "$INJECT_MATCHER"
-wire_hook SessionStart defects-inject.sh '' reset
+wire_entry SessionStart defects-inject.sh '' reset
 # Claude Code's built-in "You should know" mod is offered, never switched on: ysk-offer.sh (0.29.0).
-wire_hook SessionStart ysk-offer.sh
+wire_entry SessionStart ysk-offer.sh
 # rules-tree: the owner's answers in AskUserQuestion windows reach the intake (decision or quote).
-wire_hook PostToolUse defect-intake.sh AskUserQuestion answer
+wire_entry PostToolUse defect-intake.sh AskUserQuestion answer
 # uncommitted-work-guard: the git guard is wired by the release that brings it, once. When v$PREV
 # already shipped the hook, a missing entry is the owner's removal and stays removed (like unwire_hook).
 if git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/git-guard.sh" 2>/dev/null; then

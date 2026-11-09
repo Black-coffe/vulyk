@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite hardening" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite suite2 hardening" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -2112,7 +2112,8 @@ EOF
 git add -A && git commit -qm "spec(cstorylock1): fixture" >/dev/null
 touch .git/index.lock
 out="$(council close-story docs/specs/cstorylock1/cstorylock1-01-first.md --commit 2>&1)"; ex=$?
-[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'commit' && echo "  ok    r2m2: locked index -> exit 2, error names the commit" \
+# G6 (cs_add) may refuse at `git add` before the commit: the error names the git step that failed, add or commit.
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiE 'git (add|commit)' && echo "  ok    r2m2: locked index -> exit 2, error names the failed git step" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 grep -qE '^status: (todo|in-progress)$' docs/specs/cstorylock1/cstorylock1-01-first.md && echo "  ok    r2m2: story still reads todo|in-progress on disk" \
   || { echo "::error::status: $(grep '^status:' docs/specs/cstorylock1/cstorylock1-01-first.md)"; fail=1; }
@@ -4474,6 +4475,20 @@ echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every p
 council status docs/specs/r18ad --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
 fi # part advance
 
+if part suite || part suite2; then # the two suite parts' shared fixture helpers (council:suite split in mass-audit-fixes-18 repair 1)
+sx_row() { # sx_row [<purpose> <command>] - the fixture constitution's one round-only full-suite row (none without args), committed
+  grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+  [ $# -eq 2 ] && printf '| %s | `%s` |\n' "$1" "$2" >> CLAUDE.md
+  git add -A && git commit -qm "fixture: full-suite row ${1:-none}" >/dev/null
+}
+sx_open() { # sx_open <slug> [<tier>] - a Tier 1 (or <tier>) spec, approved and branched, its round 1 opened --commit (no court below Tier 3)
+  mk_open_spec "$1" 2
+  set_tier "$1" "${2:-1}"
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+}
+sx_last() { printf '%s\n' "$1" | tail -1; } # sx_last <output> -> its JSON line
+fi
+
 if part suite; then # --- part suite: cycle.sh suite (gate-split-04) - the round's gate, one step per call, into council/round-N/suite.log
 # A fixture runner answers --steps / --step K the way tests/full-suite.sh does: two steps, PART lines.
 # FX_FAIL: step 2 fails a part; FX_GROW: step 2 reports a part past 70% of its cap and still exits 0,
@@ -4490,17 +4505,6 @@ case "$1" in
 esac
 EOF
 git add -A && git commit -qm "fixture: a stepped runner" >/dev/null
-sx_row() { # sx_row [<purpose> <command>] - the fixture constitution's one round-only full-suite row (none without args), committed
-  grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
-  [ $# -eq 2 ] && printf '| %s | `%s` |\n' "$1" "$2" >> CLAUDE.md
-  git add -A && git commit -qm "fixture: full-suite row ${1:-none}" >/dev/null
-}
-sx_open() { # sx_open <slug> [<tier>] - a Tier 1 (or <tier>) spec, approved and branched, its round 1 opened --commit (no court below Tier 3)
-  mk_open_spec "$1" 2
-  set_tier "$1" "${2:-1}"
-  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
-}
-sx_last() { printf '%s\n' "$1" | tail -1; } # sx_last <output> -> its JSON line
 
 echo "suite: no open round -> exit 2, nothing written"
 mk_open_spec sxnone 2
@@ -4755,6 +4759,9 @@ out="$(council suite docs/specs/sxno 2>&1)"; ex=$?
   && [ "$(tail -1 docs/specs/sxno/council/round-1/suite.log)" = "SUITE: none" ] \
   && echo "  ok    no row -> SUITE: none, steps 0, done" || { echo "::error::suite none: exit=$ex out=$out"; fail=1; }
 
+fi # part suite
+
+if part suite2; then # --- part suite2: cycle.sh suite, second half - the narrow repair round (ab-run-fixes C5) and the LOAD sample order (X-08)
 echo "ab-run-fixes C5: a RED round with one item in one file -> a narrow repair story and a review-only round: no blind seat, no suite step"
 sx_row 'Full suite (round-only)' 'true'
 nx_red() { # nx_red <slug> <review-report> - a Tier 3 spec with stories on app/x.py and app/y.py, round 1 judged RED on <review-report>, then repaired
@@ -4853,7 +4860,7 @@ capn="$(sed -n 's/^STEP 1\/1: FAIL [0-9]*s - timed out after \([0-9]*\)s.*/\1/p'
   && echo "  ok    a 2 s sample under a 6 s call cap leaves the step at most 4 s: the 5 s step times out, the FAIL step carries both LOAD lines" \
   || { echo "::error::suite: the stepped call cap must be cut by the seconds the sample spent - exit=$ex cap=$capn log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
 rm -rf "$SXTS"; unset SXTS
-fi # part suite
+fi # part suite2
 
 if part hardening; then # --- part hardening: free text and odd values that broke a ledger, a report or a path (audit P9)
 

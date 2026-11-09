@@ -34,6 +34,7 @@ PARTS="telemetry
 scan
 install
 install-xp
+install-xp2
 terminal
 wiring
 ledger
@@ -1529,6 +1530,9 @@ expect_eq "... and a normal retired path is still removed" "0" "$([ -e "$BP/scri
 expect_eq "an owner's model pin survives --upgrade" "sonnet" "$(jq -r '.model' "$BP/.claude/settings.local.json" | tr -d '\r')"
 cat "$T/xp-badpath.out" | expect "... and the log says it is kept" "kept: model = sonnet (yours)"
 
+fi # install-xp
+
+if part_on install-xp2; then # mass-audit-fixes-18 repair 1: install-xp, second half - the unwired shipped hooks (Ask 18)
 # mass-audit-fixes-17 (Ask 18): a hive that lost hooks to the pre-0.50 wiring. The previous release (pinned at
 # v0.49.0, which shipped every hook below) already shipped them, so --upgrade reads a missing entry as the owner's
 # removal and never wires it; it names each one with the command that wires only that hook.
@@ -1565,7 +1569,54 @@ cat "$T/xp-unwired-up2.out" | expect "... and still names the one left unwired" 
 # Neighbour form: a hive that wires every shipped hook prints no unwired line.
 UWF="$T/hive-xp-allwired"; fresh_install "$UWF"; printf '0.49.0\n' > "$UWF/.claude/vulyk-version"
 bash "$SRC/install.sh" "$UWF" --upgrade --telemetry off 2>&1 | expect_absent "a hive that wires every shipped hook: no unwired line" "unwired "
-fi # install-xp
+# mass-audit-fixes-18 repair 1 (Ask 18): the six entries --upgrade used to wire unconditionally (anomaly-scan, defect-intake
+# x2, defects-inject x2, ysk-offer) honour an owner's removal as git-guard.sh does: v0.49.0 wired each, so a missing one
+# is named with its --wire command and never put back, on --upgrade and on --check.
+UR="$T/hive-xp-removed"; fresh_install "$UR"; printf '0.49.0\n' > "$UR/.claude/vulyk-version"
+URS="$UR/.claude/settings.json"
+jq 'del(.hooks[][].hooks[] | select(.command | test("anomaly-scan[.]sh|defect-intake[.]sh|defects-inject[.]sh|ysk-offer[.]sh")))' \
+  "$URS" > "$T/xp-removed.json" && cat "$T/xp-removed.json" > "$URS"
+expect_eq "fixture: the six entries are gone from the hive's settings.json" "0" \
+  "$(jq '[.hooks[][].hooks[] | select(.command | test("anomaly-scan|defect-intake|defects-inject|ysk-offer"))] | length' "$URS" | tr -d '\r')"
+cp "$URS" "$T/xp-removed.before"
+bash "$SRC/install.sh" "$UR" --upgrade --check --telemetry off > "$T/xp-removed-chk.out" 2>&1
+bash "$SRC/install.sh" "$UR" --upgrade --telemetry off > "$T/xp-removed-up.out" 2>&1
+UR_NAMES='SessionEnd: anomaly-scan.sh
+UserPromptSubmit: defect-intake.sh
+PostToolUse: defect-intake.sh
+PreToolUse: defects-inject.sh
+SessionStart: defects-inject.sh
+SessionStart: ysk-offer.sh'
+ur_lines() { sed -n 's/^  unwired \([A-Za-z]*: [a-z-]*\.sh\) - to wire it: .*/\1/p' "$1" | grep -E 'anomaly|defect|ysk' | LC_ALL=C sort; }
+expect_eq "an owner's removal of a hook --upgrade used to put back stays removed: the six named unwired" \
+  "$(printf '%s\n' "$UR_NAMES" | LC_ALL=C sort)" "$(ur_lines "$T/xp-removed-up.out")"
+expect_eq "... and --check names the same six" "$(printf '%s\n' "$UR_NAMES" | LC_ALL=C sort)" "$(ur_lines "$T/xp-removed-chk.out")"
+cat "$T/xp-removed-up.out" | expect_absent "... --upgrade wires none of them back" "wire           .claude/settings.json ->"
+cat "$T/xp-removed-chk.out" | expect_absent "... --check would wire none of them" "would wire     .claude/settings.json ->"
+expect_eq "... and settings.json is unchanged" "0" "$(cmp -s "$T/xp-removed.before" "$URS"; echo $?)"
+# The printed command wires that one entry, under its own matcher and argument.
+URCMD="$(grep -m1 'unwired PostToolUse: defect-intake.sh' "$T/xp-removed-up.out" | sed 's/.* - to wire it: //')"
+UR_RC=0; eval "$URCMD" > "$T/xp-removed-wire.out" 2>&1 || UR_RC=$?
+expect_eq "the printed --wire PostToolUse:defect-intake.sh exits 0 and wires AskUserQuestion: defect-intake.sh answer" "0 1" \
+  "$UR_RC $(jq '[.hooks.PostToolUse[]? | select(.matcher == "AskUserQuestion") | .hooks[] | select(.command | endswith("defect-intake.sh answer"))] | length' "$URS" | tr -d '\r')"
+# Neighbour forms: a removal is read against what the installed release wired. v0.31.0 did not wire the AskUserQuestion
+# intake yet, so its missing entry is wired, not named; and a 0.49 hive whose inject sits on the old 0.32 matcher is
+# moved to the new one, not reported.
+UO="$T/hive-xp-old"; fresh_install "$UO"; printf '0.31.0\n' > "$UO/.claude/vulyk-version"
+jq '.hooks.PostToolUse |= map(select(.matcher != "AskUserQuestion"))' "$UO/.claude/settings.json" > "$T/xp-old.json" \
+  && cat "$T/xp-old.json" > "$UO/.claude/settings.json"
+bash "$SRC/install.sh" "$UO" --upgrade --check --telemetry off > "$T/xp-old.out" 2>&1
+cat "$T/xp-old.out" | expect "an entry the installed release did not wire yet is wired on upgrade" \
+  "would wire     .claude/settings.json -> PostToolUse [AskUserQuestion]: defect-intake.sh answer"
+cat "$T/xp-old.out" | expect_absent "... not named as unwired" "unwired PostToolUse: defect-intake.sh"
+UM="$T/hive-xp-matcher"; fresh_install "$UM"; printf '0.49.0\n' > "$UM/.claude/vulyk-version"
+jq --arg m "$PRE_M" '.hooks.PreToolUse |= map(if .matcher == $m then .matcher = "Edit|Write|MultiEdit|NotebookEdit|Bash" else . end)' \
+  "$UM/.claude/settings.json" > "$T/xp-matcher.json" && cat "$T/xp-matcher.json" > "$UM/.claude/settings.json"
+bash "$SRC/install.sh" "$UM" --upgrade --telemetry off > "$T/xp-matcher.out" 2>&1
+cat "$T/xp-matcher.out" | expect_absent "a 0.32-matcher inject on a 0.49 hive is not named as unwired" "unwired PreToolUse: defects-inject.sh"
+expect_eq "... it is rewired once, under the new matcher" "1" \
+  "$(jq --arg m "$PRE_M" '[.hooks.PreToolUse[] | select(.matcher == $m) | .hooks[] | select(.command | contains("defects-inject.sh"))] | length' "$UM/.claude/settings.json" | tr -d '\r')"
+fi # install-xp2
 
 if part_on terminal; then
 # The hive's own updater, then the Telemetry question with and without a terminal. The question
@@ -2255,6 +2306,7 @@ if part_on library; then
 # the inject script already on SessionStart WITHOUT the argument, intake already wired, and an
 # own Bash guard on PreToolUse.
 DW="$T/hive-defect-wire"; fresh_install "$DW"
+rm -f "$DW/.claude/vulyk-version"   # no installed release: what an owner's file lacks is wired, not read as a removal (Ask 18)
 cat > "$DW/.claude/settings.json" <<'EOF'
 {"hooks":{
  "SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/vulyk-update-check.sh\" 2>/dev/null || true"}]},
