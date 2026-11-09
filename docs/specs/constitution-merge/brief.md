@@ -17,7 +17,7 @@ and the `/vulyk-update` step 4 advice "little hand-written text outside the two 
   `VULYK:PROFILE` and `VULYK:COMMANDS`; "Hand-written sections outside those blocks stay only in the backup"
   (`.claude/commands/vulyk-update.md:21-26`, `install.sh:311-351`). A plain upgrade never writes the constitution and
   leaves the owner to "merge by hand" (step 6).
-- Host constitutions on this machine: YouTube_AI 14.6 KB, katan 16.3 KB (sidecar `CLAUDE.vulyk.md`), senseti-doker
+- Host constitutions on this machine: YouTube_AI 14.6 KB, katan 16.3 KB (sidecar `CLAUDE.vulyk.md`), client
   35.4 KB, mmorpg 12.1 KB (sidecar); VULYK's own is 7.2 KB. 24 hives carry `.claude/vulyk-version` (0.11.0-0.25.0).
 - The original case: `E:/Projects/AI` was replaced at 0.19 - `CLAUDE.md` 16 360 B -> 8 151 B; `CLAUDE.pre-0.19.md`
   holds 129 non-blank lines the current file lacks, among them the project's own sections "Complexity routing",

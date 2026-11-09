@@ -53,7 +53,7 @@ A3: all four - the owner's "запиши на потом", ship's tails (minor /
     back while Claude works on longer tasks... shows you a note above the prompt", code.claude.com/docs/en/plugins/mods/overview;
     CHANGELOG 2.1.287 "Added You should know, a built-in mod where a side agent watches your back"). Enabled in every hive by
     VULYK 0.25.0. Local: only notes answered "1: Learn more" reach the transcript, as a user message "Here is a note offered
-    by a side agent: > Heads up · ..."; 4 on this machine (2 senseti-doker, 2 vulyk); "2"/"0" leave no trace.
+    by a side agent: > Heads up · ..."; 4 on this machine (2 client, 2 vulyk); "2"/"0" leave no trace.
 
 Q4 (D3): how to collect Heads up notes when Claude Code keeps only the "Learn more" ones?
 A4: a short study first (can a VULYK mod see every note, incl. "0"/"2", and at what cost); meanwhile "1" notes are
@@ -113,7 +113,7 @@ CLAUDE.md ("чтобы не потерялся смысл, сенс, логик�
 - "You should know" = built-in mod `cc-plugin-you-should-know`, side agent, note above the prompt — docs + CHANGELOG 2.1.287.
 - Only "Learn more" notes persist (user message "Here is a note offered by a side agent"), 4 on this machine — local grep.
 - litopys records carry `## Brainstorm` ("ideas raised and not decided"), per session, git-ignored by default,
-  11 journals pending distill here — `E:/Projects/litopys/agents/distiller.md`, SessionStart banner.
+  11 journals pending distill here — `litopys/agents/distiller.md`, SessionStart banner.
 ### 🎯 Decisions — with why
 - G2 queue: yes. G3 mission/audience: open. G1 digest at GREEN: not a felt pain, dropped. G8 portability: rejected.
 - Queue surfaces at session start, one line (A2).
