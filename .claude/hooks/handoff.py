@@ -643,12 +643,14 @@ _REDACT_FALLBACK = [
     re.compile(r"((?:proxy-)?authorization[\"']?[^\S\n]*[:=][^\S\n]*[\"']?(?:basic|token)[^\S\n]+)"
                r"[A-Za-z0-9._~+/-]{8,}=*", re.I),
     # A URL password may hold a raw '/'; a port before a path (host:443/@scope) is all digits, so it is not one.
-    re.compile(r"(://)[^/\s:@]+:(?:[^/\s@]*[^0-9/\s@][^\s@]*|[^/\s@]+)(?=@)"),
+    re.compile(r"((?:ssh-(?:rsa|ed25519|dss)|ecdsa-sha2-nistp[0-9]+)[^\S\n]+)AAAA[A-Za-z0-9+/]{16,}=*"),
+    # The user may be empty (redis://:pw@host).
+    re.compile(r"(://)[^/\s:@]*:(?:[^/\s@]*[^0-9/\s@][^\s@]*|[^/\s@]+)(?=@)"),
     # key = value: a whole quoted string (spaces and all, to its closing quote however short), else one
     # unquoted word of 6+ chars that does not open with ':' (token::Kind, secret::Name stay readable).
     # Line-bound, as sed is.
     re.compile(r"([\"']?[A-Za-z0-9_-]*(?:password|passwd|secret|api[_-]?key|access[_-]?key|access[_-]?token"
-               r"|refresh[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|credentials?)"
+               r"|refresh[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|credentials?|passphrase|cookie)"
                r"[A-Za-z0-9_-]*[\"']?[^\S\n]*[=:][^\S\n]*)" + _VALUE, re.I),
     # A short secret name ENDS the key, alone or after '_'/'-': SMTP_PASS, PASS, DB_PWD - not bypass,
     # password_reset_count or a bare PWD (the shell's current folder).
@@ -657,6 +659,11 @@ _REDACT_FALLBACK = [
     # A DSN key is masked whole when its URL carries a credential (scheme://key@host); dsn_timeout=30 is not.
     re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:[A-Za-z0-9_-]*[_-])?(?:DSN|dsn|Dsn)[\"']?[^\S\n]*[=:][^\S\n]*)"
                r"[\"']?[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'@]+@[^\s\"']*[\"']?"),
+    # A one-time code key ENDS the key, alone or after '_'/'-' (OTP, SMS_OTP) - not footprint.
+    re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:[A-Za-z0-9_-]*[_-])?(?:OTP|otp|Otp)[\"']?[^\S\n]*[=:][^\S\n]*)" + _VALUE),
+    # A *_KEY name (ENCRYPTION_KEY, signing-key, appKey) with a key-shaped value: 16+ chars, no spaces.
+    re.compile(r"([\"']?(?:[A-Za-z0-9_-]*[_-](?:KEY|key|Key)|[A-Za-z0-9_-]*[a-z0-9]Key)[\"']?[^\S\n]*[=:][^\S\n]*)"
+               r"[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
     # A bare token key must END in token (max_tokens, token_budget are counters) and hold a 16+ char value.
     re.compile(r"([\"']?[A-Za-z0-9_-]*(?:token|TOKEN|Token)[\"']?[^\S\n]*[=:][^\S\n]*)"
                r"[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"),

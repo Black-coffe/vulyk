@@ -470,6 +470,20 @@ S2=(
   "leaves pass in prose alone|we pass the test and bypass: nothing|we pass the test and bypass: nothing"
   "leaves pwd as a shell command alone|cd /tmp && pwd && ls|cd /tmp && pwd && ls"
   "leaves dsn_timeout alone|dsn_timeout=30 dsn_pool=connections|dsn_timeout=30 dsn_pool=connections"
+  # redact-gaps: the names round 2 found open (passphrase, *_KEY, a session cookie, OTP, a bare ssh key, a userless URL)
+  "masks a passphrase|passphrase=$val|passphrase=$M"
+  "masks an ENCRYPTION_KEY|ENCRYPTION_KEY=$val|ENCRYPTION_KEY=$M"
+  "masks a quoted exported SIGNING_KEY|export SIGNING_KEY=\"$val\"|export SIGNING_KEY=$M"
+  "masks a camelCase appKey in JSON|\"appKey\": \"$val\"|\"appKey\": $M"
+  "masks a SESSION_COOKIE|SESSION_COOKIE=$val|SESSION_COOKIE=$M"
+  "masks a Cookie header value|Cookie: session=$val|Cookie: $M"
+  "masks an OTP|OTP=482913|OTP=$M"
+  "masks an SMS_OTP|SMS_OTP: 482913|SMS_OTP: $M"
+  "masks a bare ssh-rsa key|ssh-rsa AAAAB3NzaC1yc2E$(rep 24 Q) me@host|ssh-rsa $M me@host"
+  "masks a URL password with no user|redis://:$val@cache:6379/0|redis://$M@cache:6379/0"
+  "leaves footprint alone|footprint=482913|footprint=482913"
+  "leaves a short primary_key alone|primary_key=True foreign_key: users.id|primary_key=True foreign_key: users.id"
+  "leaves prose about a key alone|the key: value here|the key: value here"
 )
 : > "$T/s2-in"
 for row in ${S2[@]+"${S2[@]}"}; do
