@@ -32,81 +32,22 @@ ASK 18: RED - --upgrade names unwired hooks and never wires unasked - run: fresh
 - [regression] PART e2e:red FAIL 9s cap 300s
 
 ## Files
-- .claude/hooks/defects-inject.sh
-- scripts/defects-check.sh
-- .claude/hooks/defects_lib.py
-- docs/defects/README.md
-- tests/inject.test.sh
-- tests/defects.test.sh
-- .claude/hooks/git-guard.sh
-- tests/maintenance.test.sh
-- .claude/hooks/defect-intake.sh
-- tests/intake.test.sh
 - install.sh
-- .claude/settings.json
 - tests/telemetry.test.sh
-- scripts/cycle.sh
-- tests/cycle.test.sh
+- tests/e2e.test.sh
 - tests/council.test.sh
-- .claude/workflows/vulyk-cycle.js
-- tests/driver.test.sh
-- docs/model-cascade.md
-- .claude/hooks/top-model-brief.sh
-- tests/model-profile.test.sh
-- scripts/top-model.sh
-- scripts/redact.sh
-- .claude/hooks/handoff.py
-- .claude/hooks/handoff.sh
-- tests/handoff-hooks.test.py
-- tests/handoff.test.sh
-- scripts/ship-check.sh
-- scripts/scope-check.sh
-- scripts/wave-check.sh
-- templates/plan.md
-- tests/solo.test.sh
-- scripts/vulyk-update.sh
-- .claude/hooks/vulyk-update-check.sh
-- scripts/telemetry.sh
-- scripts/lib.sh
-- .github/workflows/ci.yml
-- .claude/hooks/anomaly-scan.sh
-- scripts/leak-check.sh
-- scripts/injection-check.sh
-- .claude/hooks/skill-usage-counter.sh
-- docs/adr/032-story-trust-from-git.md
-- docs/adr/025-red-receipt.md
-- docs/adr/001-cycle-state-contract.md
-- docs/cycle.md
-- docs/hooks-reference.md
-- CLAUDE.md
-- .claude/agents/lead-review.md
-- .claude/agents/worker-code.md
-- .claude/commands/vulyk-build.md
-- .claude/commands/vulyk-plan.md
-- .claude/commands/vulyk-ship.md
-- CITATION.cff
-- docs/grill/2026-10-07-sdd-course-improvements.md
-- docs/specs/constitution-merge/brief.md
-- docs/specs/token-audit/evidence/forensics.md
-- docs/specs/token-audit/report.md
 
 ## Verification
-`bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh`
-`bash tests/maintenance.test.sh`
-`bash tests/telemetry.test.sh --part wiring && bash tests/telemetry.test.sh --part install`
-`git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
-`bash tests/cycle.test.sh --part ship && bash tests/cycle.test.sh --part close && bash tests/cycle.test.sh --part red`
-`bash tests/council.test.sh --part verbs && bash tests/council.test.sh --part close`
-`bash tests/driver.test.sh`
-`bash tests/model-profile.test.sh`
-`bash tests/cycle.test.sh --part ship && bash tests/cycle.test.sh --part close`
-`bash tests/cycle.test.sh --part gates && bash tests/cycle.test.sh --part hooklog`
-`bash tests/solo.test.sh`
-`bash tests/telemetry.test.sh --part install-xp && bash tests/telemetry.test.sh --part scan`
-`bash tests/cycle.test.sh --part red && bash tests/cycle.test.sh --part close`
-`bash tests/council.test.sh --part suite && bash tests/council.test.sh --part hardening`
-`bash tests/telemetry.test.sh --part install && bash tests/telemetry.test.sh --part install-xp`
-`bash tests/cycle.test.sh --part bsd`
-`git ls-files '*.sh' | xargs -n1 bash -n`
-`bash tests/cycle.test.sh --part gates`
 `bash tests/telemetry.test.sh --part install-xp && bash tests/telemetry.test.sh --part install`
+`bash tests/telemetry.test.sh --part wiring`
+`bash tests/e2e.test.sh`
+`bash tests/council.test.sh --part escalate`
+`bash tests/council.test.sh --part suite && bash tests/council.test.sh --part suite2`
+`git ls-files '*.sh' | xargs -n1 bash -n`
+
+## Implementation notes
+- Revised by the Queen: the generated Files and Verification inherited all 17 stories; the four findings need only these four files (tests/e2e.test.sh was missing). Only the RED findings above are in scope; the seats' Minor and UNASKED lines are not.
+- Ask 18: every hook `--upgrade` would put back (anomaly-scan, defect-intake x2, defects-inject x2, ysk-offer) honours an owner's removal the way git-guard does - a hive whose installed release already shipped the hook and lacks its entry gets the `unwired ... --wire ...` line, never the wire. A fresh install still wires all of them. Prove it on a hive with each such entry removed.
+- e2e: the fixture commits the plan and story under a paperwork subject (`vulyk(demo): ...`), as a real plan commit does; the test keeps calling the real cycle.sh guard.
+- r2m2: the assertion follows G6 - exit 2, story not done on disk, retry closes with one commit; the error names the failed git step (add or commit).
+- council:suite: split into `suite` and `suite2` (both in PARTS), each under 150 s alone on this box.
