@@ -1187,6 +1187,46 @@ rm -f "$LLMSET" "$HIVE/.claude/hooks/learn.sh" "$HIVE/.claude/hooks/quiet.sh"; :
 
 # --- session-start-brief.sh: the litopys offer (0.19, plan 1.7) --------------------------------
 # One line, until litopys is in enabledPlugins (either settings file) or the Profile declines it.
+# --- mass-audit-fixes-09 (O4): the SessionEnd scan forks one awk for every journal, one wc for every subagent
+echo "--- scan: one journal awk, one subagent wc, the same rows"
+SH="$T/hive-scanfork"; mkdir -p "$SH/scripts" "$SH/memory/stats" "$SH/.claude/agents" "$SH/.claude/hooks"
+cp "$SRC/scripts/telemetry.sh" "$SRC/scripts/lib.sh" "$SH/scripts/"
+cp "$SRC"/.claude/agents/*.md "$SH/.claude/agents/"
+cp "$SRC/.claude/hooks/handoff.py" "$SRC/.claude/hooks/handoff.sh" "$SH/.claude/hooks/"
+printf '# Fixture hive\n' > "$SH/CLAUDE.md"
+for s in fork-a fork-b fork-c; do mkdir -p "$SH/docs/specs/$s"; done
+printf -- '- 2026-01-01T00:00:00Z · 01-spec · start · next: plan\n- 2026-01-02T06:00:00Z · 02-plan · planned · next: build\n' \
+  > "$SH/docs/specs/fork-a/journal.md"
+printf -- '- 2026-01-01T00:00:00Z · 01-spec · start · next: plan\n- 2026-01-01T02:00:00Z · 02-plan · planned · next: build\n' \
+  > "$SH/docs/specs/fork-b/journal.md"
+printf -- '- 2026-02-01T00:00:00Z · 01-spec · start\n- 2026-02-02T01:00:00Z · 02-plan · planned\n- 2026-02-02T03:00:00Z · 03-build · built\n- 2026-02-04T03:00:00Z · 04-round · GREEN\n' \
+  > "$SH/docs/specs/fork-c/journal.md"
+FKPROJ="$T/forkproj"; mkdir -p "$FKPROJ/sf1/subagents/workflows/wf1"
+agent_file "$FKPROJ/sf1/subagents/agent-f1.jsonl"              60000 text     cycle-clerk
+agent_file "$FKPROJ/sf1/subagents/workflows/wf1/agent-f2.jsonl" 70000 tool_use worker-code
+agent_file "$FKPROJ/sf1/subagents/agent-f3.jsonl"              100   text     drone-scout
+cp "$PROJ/sid1.jsonl" "$FKPROJ/sf1.jsonl"
+FORKSHIM="$T/forkshim"; FORKLOG="$T/forks.txt"; mkdir -p "$FORKSHIM"; : > "$FORKLOG"
+# Each shim logs one line per start: its name and how many journal.md arguments it was handed.
+for tool in awk wc; do
+  printf '#!/bin/sh\nj=0; for a in "$@"; do case "$a" in *journal.md) j=$((j+1)) ;; esac; done\necho "%s $j" >> "%s"\nexec "%s" "$@"\n' \
+    "$tool" "$FORKLOG" "$(command -v "$tool")" > "$FORKSHIM/$tool"
+  chmod +x "$FORKSHIM/$tool"
+done
+( cd "$SH" && PATH="$FORKSHIM:$PATH" VULYK_HIVE="$SH" bash scripts/telemetry.sh scan --transcript "$FKPROJ/sf1.jsonl" --final ) >/dev/null 2>&1
+expect_eq "the journal-stage detector forks one awk for three journals" "awk 3" \
+  "$(grep -v '^awk 0$' "$FORKLOG" | grep '^awk' | paste -sd'|' -)"
+expect_eq "the scan sizes three subagents with one wc" "1" "$(grep -c '^wc' "$FORKLOG" || true)"
+# The rows the scan wrote before the change, captured from it: ts and the version stamp aside, byte for byte.
+expect_eq "the scan's rows on the fixture are byte-identical to the per-file forks'" \
+'{"v":1,"code":"agent_prefix_high","value":60000,"threshold":50000,"tier":0,"model":"","agent":"cycle-clerk","spec":"","story":"","ref":"agent:agent-f1.jsonl"}
+{"v":1,"code":"agent_prefix_high","value":70000,"threshold":50000,"tier":0,"model":"","agent":"worker-code","spec":"","story":"","ref":"agent:agent-f2.jsonl"}
+{"v":1,"code":"agent_empty","value":1,"threshold":0,"tier":0,"model":"","agent":"worker-code","spec":"","story":"","ref":"agent:agent-f2.jsonl"}
+{"v":1,"code":"stage_long","value":30,"threshold":24,"tier":0,"model":"","agent":"","spec":"fork-a","story":"","ref":"stage:fork-a:2"}
+{"v":1,"code":"stage_long","value":25,"threshold":24,"tier":0,"model":"","agent":"","spec":"fork-c","story":"","ref":"stage:fork-c:2"}
+{"v":1,"code":"stage_long","value":48,"threshold":24,"tier":0,"model":"","agent":"","spec":"fork-c","story":"","ref":"stage:fork-c:4"}' \
+  "$(jq -c 'del(.ts, .vulyk)' "$SH/memory/stats/anomalies.jsonl" 2>/dev/null | tr -d '\r')"
+
 echo "--- session-start-brief.sh: litopys"
 if bash -n "$SRC/.claude/hooks/session-start-brief.sh" 2>/dev/null; then ok "bash -n session-start-brief.sh"
 else bad "bash -n session-start-brief.sh failed"; fi
@@ -1361,19 +1401,58 @@ git -C "$XREL" init -q -b main && git -C "$XREL" config core.autocrlf false \
   && git -C "$XREL" tag v9.9.9
 git clone -q "$XREL" "$T/xp-relcache"
 XU="$T/hive-xp-update"; fresh_install "$XU"
-XU_RC=0; ( cd "$XCWD" && VULYK_SRC="$T/xp-relcache" bash "$SRC/scripts/vulyk-update.sh" "$XU" --check --version 9.9.9 --telemetry off ) \
-  > "$T/xp-update.out" 2>&1 || XU_RC=$?
+# The cache's origin is the release repository, so the project declares that same origin (VULYK_REPO).
+upd() { ( cd "$XCWD" && VULYK_REPO="${UPD_REPO:-$XREL}" VULYK_SRC="${UPD_SRC:-$T/xp-relcache}" \
+  bash "$SRC/scripts/vulyk-update.sh" "$XU" --check --telemetry off "$@" ); }
+XU_RC=0; upd --version 9.9.9 > "$T/xp-update.out" 2>&1 || XU_RC=$?
 expect_eq "scripts/vulyk-update.sh --check runs the release's install.sh, exit 0" "0" "$XU_RC"
 cat "$T/xp-update.out" | expect "... reaching the release's installer" "Dry run done."
 cat "$T/xp-update.out" | expect_absent "... which finds its lib.sh" "lib.sh not found"
 cat "$T/xp-update.out" | expect_absent "... with every helper defined" "command not found"
 # P9-10: with no --version the newest tag wins by version, not by text, and without `sort -V` (stock macOS).
-git -C "$T/xp-relcache" tag v9.10.0 && git -C "$T/xp-relcache" tag v9.2.0
+# The tags live on the origin: the fetch prunes a tag the origin does not have.
+git -C "$XREL" tag v9.10.0 && git -C "$XREL" tag v9.2.0
 NOSORTV="$T/nosortv"; mkdir -p "$NOSORTV"
 printf '#!/bin/sh\nfor a in "$@"; do case "$a" in -V|--version-sort) echo "sort: invalid option -- V" >&2; exit 2 ;; esac; done\nexec %s "$@"\n' \
   "$(command -v sort)" > "$NOSORTV/sort"; chmod +x "$NOSORTV/sort"
-( cd "$XCWD" && PATH="$NOSORTV:$PATH" VULYK_SRC="$T/xp-relcache" bash "$SRC/scripts/vulyk-update.sh" "$XU" --check --telemetry off ) \
-  2>&1 | expect "vulyk-update.sh picks the newest tag by version, with no sort -V" "upgrading to v9.10.0"
+PATH="$NOSORTV:$PATH" upd 2>&1 | expect "vulyk-update.sh picks the newest tag by version, with no sort -V" "upgrading to v9.10.0"
+
+# mass-audit-fixes-09 (S2-shell): a cache cloned from another repository is refused, naming both URLs.
+XOTHER="$T/xp-other"; git init -q "$XOTHER"
+XO_RC=0; UPD_REPO="$XOTHER" upd > "$T/xp-other.out" 2>&1 || XO_RC=$?
+expect_eq "a cache whose origin is another repository: exit 1 (cache remote differs)" "1" "$XO_RC"
+cat "$T/xp-other.out" | expect "... refused with the label cache remote differs" "update: cache remote differs:"
+cat "$T/xp-other.out" | expect "... naming the cache's URL" "/xp-rel != "
+cat "$T/xp-other.out" | expect "... and the declared one" "/xp-other ("
+cat "$T/xp-other.out" | expect_absent "... before anything is run" "upgrading to"
+XG_RC=0; UPD_REPO="$XREL.git" upd --version 9.9.9 > "$T/xp-dotgit.out" 2>&1 || XG_RC=$?
+expect_eq "the matching origin spelled with .git passes" "0" "$XG_RC"
+cat "$T/xp-dotgit.out" | expect_absent "... with no remote complaint" "cache remote differs"
+
+# P3: a tag that moved on the origin is fetched (--force), a tag it dropped is pruned, a new one is reported.
+git -C "$XREL" -c user.name=t -c user.email=t@t commit -q --allow-empty -m moved
+git -C "$XREL" tag -f v9.10.0 >/dev/null && git -C "$XREL" tag v9.11.0 && git -C "$XREL" tag -d v9.2.0 >/dev/null
+XM_RC=0; upd > "$T/xp-moved.out" 2>&1 || XM_RC=$?
+expect_eq "a moved tag on the origin: vulyk-update.sh --check exits 0" "0" "$XM_RC"
+cat "$T/xp-moved.out" | expect "... and reports the new tag" "upgrading to v9.11.0"
+expect_eq "... the cache's moved tag points where the origin's does" "$(git -C "$XREL" rev-parse v9.10.0)" \
+  "$(git -C "$T/xp-relcache" rev-parse v9.10.0 2>/dev/null)"
+expect_eq "... and the tag the origin dropped is gone from the cache" "" "$(git -C "$T/xp-relcache" tag --list v9.2.0)"
+# A fetch that fails says so on one line and exits 1, instead of stopping silently under set -e.
+git clone -q "$XREL" "$T/xp-failcache" && git -C "$T/xp-failcache" config remote.origin.uploadpack false
+XF_RC=0; UPD_SRC="$T/xp-failcache" upd > "$T/xp-fail.out" 2>&1 || XF_RC=$?
+expect_eq "a fetch that fails: exit 1" "1" "$XF_RC"
+cat "$T/xp-fail.out" | expect "... with one line saying why" "update: fetch failed: "
+
+# Ask 4: the SessionStart update check picks the newest tag without `sort -V`.
+UC="$T/hive-xp-uc"; mkdir -p "$UC/.claude" "$T/xp-curl"
+printf '#!/bin/sh\necho %s\n' "'[{\"name\":\"v0.9.0\"},{\"name\":\"v0.10.0\"},{\"name\":\"v0.2.0\"}]'" > "$T/xp-curl/curl"
+chmod +x "$T/xp-curl/curl"
+ucheck() { printf '%s\n' "$1" > "$UC/.claude/vulyk-version"; rm -f "$UC/.claude/.vulyk-update-cache"
+  CLAUDE_PROJECT_DIR="$UC" VULYK_REPO=o/r PATH="$T/xp-curl:$NOSORTV:$PATH" bash "$SRC/.claude/hooks/vulyk-update-check.sh" 2>&1; }
+ucheck 0.9.0 | expect "vulyk-update-check.sh names v0.10.0 newer than v0.9.0, with no sort -V" \
+  "installed v0.9.0, latest v0.10.0"
+ucheck 0.11.0 | expect_absent "... and stays silent for a version ahead of the tags" "update available"
 
 # Ask 9, upgrade half: a hive's own filled ## Commands block - the old bare-python cell included - is the host's,
 # carried byte for byte through --upgrade.

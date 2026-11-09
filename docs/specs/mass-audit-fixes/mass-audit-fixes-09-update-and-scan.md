@@ -1,14 +1,15 @@
 ---
 story: mass-audit-fixes-09
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 2
 blocked_by: [mass-audit-fixes-04]
 red: required
 red_reason: cache remote differs
+red_verified_at: 2026-11-09T13:42:37Z ca183da6a04742f12f13483c1d3075457a3b59e770d298ace48327b7e74b6b07
 ---
 
 # The update path survives a moved tag and a foreign cache; the SessionEnd scan stops rescanning every journal
@@ -59,5 +60,33 @@ Gotchas (bash 3.2 / BSD: no `sort -V`, no `date -d`).
 `bash tests/telemetry.test.sh --part install-xp && bash tests/telemetry.test.sh --part scan`
 
 ## Implementation notes
+- scripts/vulyk-update.sh: VULYK_REPO may now be a URL or a local path (owner/name still means GitHub); `canon` drops `/` and `.git` and names a local repo by `git rev-parse --absolute-git-dir`, so Git for Windows' `C:/...` spelling equals the MSYS `/tmp/...` one.
+- scripts/vulyk-update.sh: the cache is refused on a differing origin (`update: cache remote differs: cache origin A != declared origin B`); fetch is `--tags --force --prune --prune-tags` (`--prune-tags` acts only with `--prune`); a failing fetch or clone prints `update: fetch failed: <first stderr line>` and exits 1.
+- .claude/hooks/vulyk-update-check.sh: `vsort` = `sort -t. -k1,1n -k2,2n -k3,3n` for both the newest-tag pick and the installed-vs-latest compare (its tags come from curl, so `git tag --sort` does not apply).
+- scripts/telemetry.sh: detect_stage runs one awk over every journal (FNR==1 resets n/prev, spec from FILENAME); detect_agents takes every size from one `find -exec wc -c {} +`; the unused `file_bytes` helper is removed.
+- tests/telemetry.test.sh install-xp: the existing update cases now declare the cache's origin (VULYK_REPO=$XREL) and put the tags on the origin, since the fetch now prunes cache-only tags; fetch failure is staged with `remote.origin.uploadpack false`.
+- tests/telemetry.test.sh scan: the golden rows were captured from the pre-change code (ts and vulyk dropped); the shims count awk starts handed journal.md and every wc start.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/telemetry.test.sh --part install-xp && bash tests/telemetry.test.sh --part scan
+- exit: 1
+- tests: ca183da6a04742f12f13483c1d3075457a3b59e770d298ace48327b7e74b6b07 (tests/telemetry.test.sh)
+- impl: 8c8ea2e72a20da104f92c6e2f494a2ff0298fe31cca101ece5b07671c2600d15
+- stamped: 2026-11-09T13:42:37Z
+
+```
+::error::a cache whose origin is another repository: exit 1 (cache remote differs) - expected [1], got [0]
+::error::... refused with the label cache remote differs - expected 'update: cache remote differs:' in:
+        fatal: Could not read from remote repository.
+        
+        Please make sure you have the correct access rights
+        and the repository exists.
+::error::vulyk-update-check.sh names v0.10.0 newer than v0.9.0, with no sort -V - expected 'installed v0.9.0, latest v0.10.0' in:
+        
+  ok    ... and stays silent for a version ahead of the tags
+  ok    the hive's block holds the old python cell
+  ok    install.sh --upgrade keeps the hive's ## Commands block (old python cell included) byte-identical
+telemetry.test.sh: 37 checks, 12 failed
+```

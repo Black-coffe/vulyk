@@ -39,6 +39,9 @@ INTERVAL_H="${VULYK_UPDATE_INTERVAL_HOURS:-24}"
 case "$INTERVAL_H" in ''|*[!0-9]*) INTERVAL_H=24 ;; esac
 NOW="$(date +%s 2>/dev/null || echo 0)"
 
+# Versions oldest first, one per line: each dot field compared as a number (0.10.0 after 0.9.0).
+vsort() { sort -t. -k1,1n -k2,2n -k3,3n 2>/dev/null; }
+
 LATEST=""
 CACHED_AT=0
 if [ -f "$CACHE" ]; then
@@ -52,14 +55,15 @@ if [ "$NOW" -gt 0 ] && [ $((NOW - CACHED_AT)) -ge $((INTERVAL_H * 3600)) ]; then
   AUTH=()
   [ -n "${GITHUB_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
   # Tags, not releases: VULYK tags every version, and a repository may carry no GitHub
-  # Release at all. `sort -V` picks the newest rather than trusting the API's ordering.
+  # Release at all. A numeric sort per dot field picks the newest rather than trusting the API's
+  # ordering; never `sort -V`, which stock macOS sort does not have.
   FETCHED="$(curl -fsSL -m 4 ${AUTH[@]+"${AUTH[@]}"} \
       -H 'Accept: application/vnd.github+json' \
       "https://api.github.com/repos/$REPO/tags?per_page=100" 2>/dev/null \
     | grep -o '"name"[[:space:]]*:[[:space:]]*"v\{0,1\}[0-9][^"]*"' \
     | sed 's/.*"\(v\{0,1\}[0-9][^"]*\)"$/\1/' \
     | sed 's/^v//' \
-    | sort -V 2>/dev/null | tail -1)"
+    | vsort | tail -1)"
   if [ -n "$FETCHED" ]; then
     LATEST="$FETCHED"
     printf '%s %s\n' "$NOW" "$LATEST" > "$CACHE" 2>/dev/null || true
@@ -73,9 +77,9 @@ fi
 [ -n "$LATEST" ] || exit 0
 [ "$LATEST" = "$INSTALLED" ] && exit 0
 
-# Older-or-equal is not an update. `sort -V` decides; if it cannot, stay silent rather
+# Older-or-equal is not an update. vsort decides; if it cannot, stay silent rather
 # than nag someone running ahead of the tags (a maintainer, or a fork).
-NEWEST="$(printf '%s\n%s\n' "$INSTALLED" "$LATEST" | sort -V 2>/dev/null | tail -1)"
+NEWEST="$(printf '%s\n%s\n' "$INSTALLED" "$LATEST" | vsort | tail -1)"
 [ "$NEWEST" = "$LATEST" ] || exit 0
 
 cat <<EOF
