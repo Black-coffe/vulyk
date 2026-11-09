@@ -62,7 +62,8 @@ No driver, no clerk, no court. Loop:
    docs/specs/<slug> 03-building "launching the hive" "the loop holds the working tree of vulyk/<slug>; to edit, run /vulyk-pause <slug>"`.
 3. Call the Workflow tool with `scriptPath: ".claude/workflows/vulyk-cycle.js"` (never `name:`, which
    its permission handler rejects) and `args: {spec: "docs/specs/<slug>", stamp, top_model,
-   second_model}`, plus `worker_model`, `review_model`, `seat_model` only when the profile is not
+   second_model, launched_at}`, `launched_at="$(date +%s)"` resolved right before the call (the driver's
+   50-minute checkpoint counts from it against the `now` each verb answer carries), plus `worker_model`, `review_model`, `seat_model` only when the profile is not
    `sonnet-builds` (absent, each agent's frontmatter decides). The driver claims the spec itself; run no `claim` first, and nothing else while it
    runs. If the call itself throws, run `bash scripts/telemetry.sh record driver_refused 1 0 --spec
    <slug> --ref driver:<slug>:$(date -u +%Y-%m-%d)`, print the error and stop.
@@ -72,12 +73,23 @@ No driver, no clerk, no court. Loop:
    - First, every entry `{agent, where, from, to}` of the returned `fallbacks`: the driver already
      redispatched that role on `opus` after the Fable-limit refusal; write the journal line, the
      telemetry row and the owner sentence of the Fable-limit fallback (below), once per entry.
+   - `status` `checkpoint` (50 min since launch, at a wave, gate-step or seat boundary; the driver
+     released its claim): run `bash scripts/journal.sh docs/specs/<slug> 03-building "checkpoint after
+     <elapsed_min> min at <next>" "relaunching with a fresh stamp"`, make a fresh `stamp`, and call step 3
+     again with the same other args. This keeps your cache warm between waves; one wave or seat dispatch
+     longer than ~55 min still lets it lapse.
+   - A worker that returned without closing left edits in its `## Files`: the relaunch's claim accepts
+     them (`leftover`, only for todo stories of the current wave; any other dirty path is still refused)
+     and the driver dispatches that story again with a note to read `git diff` and finish.
    - `stop` with a `file` (a story missed twice): set that story's `status: blocked`, append the error
      under `## Findings`, dispatch `lead-architect` (`model: <top_model>`) with the story and both
      failures, and stop.
    - `stop.verb` `claim`: another driver holds the spec. Run the release command the error names only
      if that driver is known dead.
    - Any other `stop`: print `stop.error` and the journal tail, and stop. No `stop`: see Terminal.
+   - A story a worker returned unclosed is never finished here (Law 5): no edit to its files, no
+     `close-story` (the git guard denies it at Tier 3-4). Its error goes under `## Findings`, its worker is
+     dispatched again, or the owner decides.
 
 Without the Workflow tool, run the solo loop from this session with the stamp, but agents do the work:
 - Begin with `advance --stamp <S> --claim`; every later call carries `--stamp <S>`; every exit runs
@@ -94,10 +106,10 @@ Without the Workflow tool, run the solo loop from this session with the stamp, b
   `haiku`: `council-<seat>` with `Council round <round> for <slug>, seat <seat>. COURT: <court>.
   Report: <path>.` and nothing more (never `round_dir`), with `model: <seat_model>` only when the profile is not
   `sonnet-builds`. `review`: `lead-review` as in solo, with `model: <review_model>` only when the profile is not
-  `sonnet-builds`; at Tier 4
-  two dispatches, `model: <top_model>` writing `review-top.attempt-<k>.md` and `model: <second_model>`
-  writing `review-second.attempt-<k>.md`, the second told to probe concurrency, security and migration
-  safety. Then `advance --stamp <S> --ingest`. A seat still listed is re-dispatched once with its
+  `sonnet-builds`; at Tier 4 `review` is one dispatch on `model: <top_model>`. `review2` (Tier 4
+  only, named by `next` on a risk path or after a `review` BLOCK): one `lead-review` on
+  `model: <second_model>` writing `review2.attempt-<k>.md`, told to probe concurrency, security and
+  migration safety. Dispatch exactly the seats `next` names, never doubled by tier. Then `advance --stamp <S> --ingest`. A seat still listed is re-dispatched once with its
   `rejected` error; one needing a third dispatch in a round stops the loop.
 - Any dispatch above (worker, retry, seat, reviewer, architect) that returns the Fable-limit refusal
   (`You've reached your Fable limit` / `model_requires_usage_credits`) gets the Fable-limit fallback
@@ -136,7 +148,8 @@ Then go on. A refusal on the redispatch is the existing stop: an absent seat, a 
 - `manual:<ids>` (or a driver `stop.verb` `manual`): a story waits on a hand step. Do it (or ask the
   owner), run `bash scripts/cycle.sh manual-done docs/specs/<slug> <id> "<note>"` per id, then build again.
 - `close-story:<file>`: a story from before 0.18 still says `status: in-progress`. Set it to `todo`
-  if its work is unfinished, or run `bash scripts/cycle.sh close-story <file> --commit` if it is done,
+  if its work is unfinished, or, if it is done, run `bash scripts/cycle.sh close-story <file> --commit`
+  (Tier 1-2) or dispatch its worker to close it (Tier 3-4),
   then build again.
 - `ok:false` from any verb: print `failed` and `error`, run `bash scripts/journal.sh docs/specs/<slug>
   03-building "<failed> exit <exit>" "<error>, stopped for a human"`, and stop.

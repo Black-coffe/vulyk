@@ -236,9 +236,69 @@ verify_path_tokens() { # verify_path_tokens <verification-text> -> each whitespa
   printf '%s\n' "$1" | grep -v '^repeat:' | tr ' \t' '\n\n' | grep -v '^-' | tr -d "\"'" | grep -v '^$'
 }
 
-sealed_tests() { # sealed_tests <verification-text> <files-text> -> the red-receipt sealed set: every
-  # literal token (no glob character) of the verification that equals a `## Files` entry or matches
-  # a `## Files` glob, sorted, deduplicated. A quoted glob such as `'*.sh'` is never sealed.
+is_test_path() { # is_test_path <path> -> 0 iff the path is test-shaped: a folder named test, tests,
+  # spec or __tests__, or a file named test_*, *_test.*, *.test.*, *.spec.*, *_spec.*, *Test.*,
+  # *Tests.* or *Spec.*. `docs/specs/` is no test folder.
+  local p="/${1#./}" b="${1##*/}"
+  case "$p" in */test/*|*/tests/*|*/spec/*|*/__tests__/*) return 0 ;; esac
+  case "$b" in test_*|*_test.*|*.test.*|*.spec.*|*_spec.*|*Test.*|*Tests.*|*Spec.*) return 0 ;; esac
+  return 1
+}
+
+verify_programs() { # verify_programs <verification-text> -> the program each &&-segment runs: its first
+  # word after `VAR=value` assignments, or, after an interpreter (bash, sh, python, python3, py, node,
+  # npx, php, pwsh, ruby, perl), its first word that is no option; quotes stripped, one per line
+  local line seg w prog interp
+  printf '%s\n' "$1" | grep -v '^repeat:' | while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    verification_segments "$line" | while IFS= read -r seg; do
+      prog=""; interp=0
+      for w in $seg; do
+        w="$(printf '%s' "$w" | tr -d "\"'")"
+        [ -n "$w" ] || continue
+        if [ "$interp" = 1 ]; then
+          case "$w" in -*) continue ;; esac
+          prog="$w"; break
+        fi
+        case "$w" in [A-Za-z_]*=*) continue ;; esac
+        case "${w##*/}" in
+          bash|sh|python|python3|py|node|npx|php|pwsh|ruby|perl|*.exe) interp=1 ;;
+          *) prog="$w"; break ;;
+        esac
+      done
+      [ -n "$prog" ] && printf '%s\n' "$prog"
+    done
+  done
+}
+
+sealed_tests() { # sealed_tests <verification-text> <files-text> -> the red-receipt sealed set, drawn from
+  # the verification's literal tokens (no glob character) that equal a `## Files` entry or match a
+  # `## Files` glob: the test-shaped ones (is_test_path) and the program each line runs (verify_programs),
+  # sorted. A plain argument that is no test - the implementation or a lint file the story changes - stays
+  # out of the seal (0.48.1). With no test-shaped path among them, every such token is sealed, as before
+  # 0.48.1. A quoted glob such as `'*.sh'` is never sealed.
+  local all progs tok tests=""
+  all="$(sealed_candidates "$1" "$2")"
+  while IFS= read -r tok; do
+    [ -n "$tok" ] && is_test_path "$tok" && { tests=1; break; }
+  done <<EOF
+$all
+EOF
+  if [ -z "$tests" ]; then
+    [ -z "$all" ] || printf '%s\n' "$all"
+    return 0
+  fi
+  progs="$(verify_programs "$1")"
+  while IFS= read -r tok; do
+    [ -n "$tok" ] || continue
+    if is_test_path "$tok" || printf '%s\n' "$progs" | grep -qxF -- "$tok"; then printf '%s\n' "$tok"; fi
+  done <<EOF
+$all
+EOF
+}
+
+sealed_candidates() { # sealed_candidates <verification-text> <files-text> -> every literal token of
+  # the verification under `## Files` (sealed_tests before 0.48.1), sorted, deduplicated
   local tok d
   verify_path_tokens "$1" | while IFS= read -r tok; do
     case "$tok" in *[*?[]*) continue ;; esac

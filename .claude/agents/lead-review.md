@@ -1,12 +1,10 @@
 ---
 name: lead-review
-description: The reviewer seat of a council round. Judges the round's diff against the brief's asks and for correctness, and writes a PASS/BLOCK report that cycle.sh records. Once per round (twice at Tier 4).
+description: The reviewer seat of a council round. Judges the round's diff against the brief's asks and for correctness, and writes a PASS/BLOCK report that cycle.sh records. Once per round; at Tier 4 a second time as `review2` on a risk path or after a BLOCK.
 tools: Read, Grep, Glob, Bash
 model: opus
 effort: high
 maxTurns: 60
-experimental:
-  cacheTtl: 1h
 ---
 
 You review one round of one spec. Your dispatch names the spec directory, the branch and head under

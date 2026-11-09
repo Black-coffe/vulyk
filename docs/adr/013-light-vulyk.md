@@ -282,6 +282,23 @@ rounds, per spec. It deduplicates by `message.id` and counts subagents and workf
 never reports the Workflow's `totalTokens` as spend, because that figure is the sum of final
 contexts. `/vulyk-status` and `/vulyk-evolve` show its per-spec lines.
 
+### Amendment (2026-11-08) - spec `ab-run-fixes`, story 04: D1 roster and D4 repair
+
+- **D1, the roster (C1).** Tier 3-4 require `review` plus exactly one blind seat: `haiku` when the
+  Profile's Client path is filled, else `opus`. Tier 1-2 keep `review`.
+- **D1, the Tier 4 second reviewer (C2, C3).** It is the seat `review2`, one `lead-review` on
+  `second_model`, called only when `open-round` froze `second=risk` (a path of the fixed risk set in
+  the reviewed range, named in `docs/cycle.md`) or when the recorded `review` is a BLOCK. `judge`
+  folds `review` and `review2` (BLOCK if either); `advance --ingest` no longer folds
+  `review-top` / `review-second` files, and the driver dispatches exactly the seats `next` names.
+- **D3, carry (C4).** A blind seat is not carried into round n when its report has an `ASK <k>:`
+  line for an ask the round n-1 repair story touched.
+- **D4, narrow repair (C5).** A RED round with one item in one non-test file gets a `narrow: true`
+  repair story (that file, its exact tests, `docs/defects/*`, the verification of the stories that
+  named it, the card line). A worker still builds it. The next round freezes `seats=review` and
+  `narrow=1`, `cycle.sh suite` runs no step, and `judge` decides on the review alone. Two files or
+  two items still get a full round.
+
 ## Consequences
 
 - **Dispatches per task:**

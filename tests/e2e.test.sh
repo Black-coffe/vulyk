@@ -221,7 +221,7 @@ OUT="$(run_driver "$TMP/red" red)"
 expect "red: the run ends green after one repair" "$([ "$(jqr '.result.next')" = green ]; echo $?)"
 expect "red: two workers - the story and its repair" \
   "$([ "$(jqr '[.trace.agents[] | select(.type=="worker-code")] | length')" = 2 ]; echo $?)"
-expect "red: the intent seat runs once - round 2 carries it forward" \
+expect "red: the intent seat runs once - round 2 is review-only" \
   "$([ "$(jqr '[.trace.agents[] | select(.type=="council-opus")] | length')" = 1 ]; echo $?)"
 expect "red: the reviewer runs twice" \
   "$([ "$(jqr '[.trace.agents[] | select(.type=="lead-review")] | length')" = 2 ]; echo $?)"
@@ -235,7 +235,12 @@ expect "red: the repair story carries the anchored finding" \
   "$(grep -q '\[ask 1\] app.txt must say it is really fixed' docs/specs/demo/demo-02-repair-round-1.md 2>/dev/null; echo $?)"
 expect "red: round 1 RED, round 2 GREEN in the ledger" \
   "$(grep -q '"round":1,"verdict":"RED"' memory/stats/council.jsonl && grep -q '"round":2,"verdict":"GREEN"' memory/stats/council.jsonl; echo $?)"
-expect "red: round 2's intent seat is marked carried" "$(head -1 docs/specs/demo/council/round-2/opus.md | grep -q 'carried: round 1'; echo $?)"
+# ab-run-fixes C5: one ask, one file - a narrow repair, so round 2 is review-only: no intent seat, no gate step
+expect "red: the repair story is marked narrow" "$(grep -qx 'narrow: true' docs/specs/demo/demo-02-repair-round-1.md 2>/dev/null; echo $?)"
+expect "red: round 2 is review-only (seats=review, narrow=1)" \
+  "$(grep -qx 'seats=review' docs/specs/demo/council/round-2/ROUND && grep -qx 'narrow=1' docs/specs/demo/council/round-2/ROUND; echo $?)"
+expect "red: round 2 has no intent seat, carried or run" "$([ ! -e docs/specs/demo/council/round-2/opus.md ]; echo $?)"
+expect "red: round 2's gate ran no step" "$(grep -q 'SUITE: none - narrow repair round' docs/specs/demo/council/round-2/suite.log; echo $?)"
 expect "red: the DRIVER lock is released" "$([ ! -f docs/specs/demo/DRIVER ]; echo $?)"
 cd "$SRC" || exit 1
 fi

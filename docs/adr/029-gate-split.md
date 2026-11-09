@@ -46,3 +46,8 @@ wall time than one 698 s run. `install.sh --upgrade` tells a hive; it never edit
 
 ## Revisit when
 The first CI run measures macOS parts (a part red there is cut, never given a bigger cap), or a Windows CI job is planned.
+
+## Amendment (2026-11-08) - spec `ab-run-fixes`, story 03
+`suite --commit` commits `council/round-N/suite.log` once, on the call that returns `done:true`; earlier steps leave the
+log written and uncommitted (paperwork, so the round stays fresh and the next call resumes from it). Steps, parts and
+caps are unchanged.

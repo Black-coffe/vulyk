@@ -1177,7 +1177,9 @@ if bash -n "$SRC/.claude/hooks/session-start-brief.sh" 2>/dev/null; then ok "bas
 else bad "bash -n session-start-brief.sh failed"; fi
 BRIEF="$T/hive-brief"; mkdir -p "$BRIEF/memory" "$BRIEF/.claude"
 printf '# Hive\n\n| Field | Value |\n|---|---|\n| Stack | shell |\n' > "$BRIEF/CLAUDE.md"
-brief() { echo '{}' | CLAUDE_PROJECT_DIR="$BRIEF" bash "$SRC/.claude/hooks/session-start-brief.sh" 2>&1; }
+# A temp config folder: the owner's real user settings (litopys enabled there) decide nothing here.
+mkdir -p "$T/brief-conf"
+brief() { echo '{}' | CLAUDE_PROJECT_DIR="$BRIEF" CLAUDE_CONFIG_DIR="$T/brief-conf" bash "$SRC/.claude/hooks/session-start-brief.sh" 2>&1; }
 brief | expect "absent: the hive brief line is still first" "[VULYK] no map yet"
 brief | expect "absent: the offer names the install commands" \
   "claude plugin marketplace add Black-coffe/litopys --scope project\` then \`claude plugin install litopys@litopys --scope project"
@@ -1280,6 +1282,17 @@ cat "$T/nomark-upgrade.out" | expect "marker-less Profile: warns and names the r
   "warning: Profile block has no markers - not writing | Telemetry | on |; add the row by hand"
 expect_eq "marker-less Profile: the file is unchanged" "1" \
   "$([ "$NOMARK_BEFORE" = "$(cat "$NOMARK/CLAUDE.md")" ] && echo 1 || echo 0)"
+
+# ab-run-fixes-06: a bare install asks nothing even with a terminal and writes off; only
+# --telemetry ask puts the question. Through a pseudo-terminal when util-linux `script` is on PATH.
+if command -v script >/dev/null 2>&1 && script --version 2>&1 | grep -qi 'util-linux'; then
+  BARE="$T/hive-pty-bare"; mkdir -p "$BARE"
+  printf 'y\n' | script -qec "bash '$SRC/install.sh' '$BARE'" /dev/null > "$T/pty-bare.out" 2>&1 || true
+  cat "$T/pty-bare.out" | expect_absent "install: no telemetry question without --telemetry ask" "Enable telemetry?"
+  expect_eq "install: a bare install with a terminal writes the row as off" "off" "$(rowval "$BARE/CLAUDE.md")"
+else
+  echo "  skip  bare-install terminal case: no util-linux \`script\` on PATH to drive a pseudo-terminal"
+fi
 
 fi # install
 
@@ -1409,9 +1422,9 @@ fi
 # The real thing, through a pseudo-terminal, when util-linux `script` is on PATH.
 if command -v script >/dev/null 2>&1 && script --version 2>&1 | grep -qi 'util-linux'; then
   PTY="$T/hive-pty"; mkdir -p "$PTY"
-  printf 'y\n' | script -qec "bash '$SRC/install.sh' '$PTY'" /dev/null > "$T/pty.out" 2>&1 || true
-  cat "$T/pty.out" | expect "a terminal gets the explanation, naming off as the default" "Default: off."
-  cat "$T/pty.out" | expect "a terminal gets exactly one question" "Enable telemetry? [y/N]"
+  printf 'y\n' | script -qec "bash '$SRC/install.sh' '$PTY' --telemetry ask" /dev/null > "$T/pty.out" 2>&1 || true
+  cat "$T/pty.out" | expect "--telemetry ask: a terminal gets the explanation, naming off as the default" "Default: off."
+  expect_eq "--telemetry ask prompts once" "1" "$(grep -c 'Enable telemetry? \[y/N\]' "$T/pty.out")"
   expect_eq "answering y lands the row as on" "on" "$(rowval "$PTY/CLAUDE.md")"
 else
   echo "  skip  terminal case: no util-linux \`script\` on PATH to drive a pseudo-terminal"

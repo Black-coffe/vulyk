@@ -1,0 +1,90 @@
+head=c89d3bc steps=9
+STEP 1/9: ok 86s
+PART council:seats3 ok 37s cap 300s
+PART council:seats2 ok 43s cap 300s
+PART council:judge2 ok 44s cap 300s
+PART council:close ok 44s cap 300s
+PART council:ceilings ok 45s cap 300s
+PART council:judge ok 49s cap 300s
+PART council:escalate ok 48s cap 300s
+PART council:escalate2 ok 52s cap 300s
+PART council:verbs ok 60s cap 300s
+PART council:replays ok 59s cap 300s
+PART council:ceilings2 ok 64s cap 300s
+PART council:seats ok 86s cap 300s
+STEP 2/9: ok 162s
+PART cycle:hooklog ok 21s cap 300s
+PART council:replays3 ok 34s cap 300s
+PART council:walks3 ok 35s cap 300s
+PART council:roster2 ok 38s cap 300s
+PART council:walks2 ok 43s cap 300s
+PART council:replays2 ok 55s cap 300s
+PART council:walks ok 57s cap 300s
+PART council:driver ok 84s cap 300s
+PART cycle:ship ok 93s cap 300s
+PART council:roster ok 101s cap 300s
+PART council:advance ok 118s cap 300s
+PART council:suite ok 161s cap 300s
+STEP 3/9: FAIL 94s
+PART driver ok 0s cap 300s
+PART inject:functional ok 16s cap 300s
+PART cycle:manual ok 16s cap 300s
+PART cycle:gates ok 19s cap 300s
+PART e2e:green ok 20s cap 300s
+PART cycle:safety ok 24s cap 300s
+PART e2e:red FAIL 35s cap 300s
+PART cycle:close ok 41s cap 300s
+PART defects ok 48s cap 300s
+PART full-suite ok 57s cap 300s
+PART cycle:bsd ok 65s cap 300s
+PART cycle:red FAIL 92s cap 300s
+LOAD: start cpu 1% top: MsMpEng 10%, bash#28 5%, Creative Cloud UI Helper 5%, msedgewebview2#2 0%, msedgewebview2#1 0%
+LOAD: end cpu 0% top: claude 5%, msedgewebview2#11 0%, msedgewebview2#9 0%, msedgewebview2#10 0%, msedgewebview2#6 0%
+STEP 4/9: ok 90s
+PART mods ok 4s cap 300s
+PART model-profile:edges ok 14s cap 300s
+PART model-profile:defaults ok 15s cap 300s
+PART solo:green ok 15s cap 300s
+PART symbol-map ok 17s cap 300s
+PART solo:rejected ok 19s cap 300s
+PART model-profile:set ok 21s cap 300s
+PART solo:block ok 30s cap 300s
+PART telemetry:telemetry ok 45s cap 300s
+PART intake:functional ok 79s cap 300s
+PART telemetry:scan ok 81s cap 300s
+PART maintenance ok 87s cap 300s
+STEP 5/9: ok 100s
+PART telemetry:ysk ok 28s cap 300s
+PART telemetry:constitution2 ok 36s cap 300s
+PART telemetry:ysk3 ok 52s cap 300s
+PART telemetry:install-xp ok 57s cap 300s
+PART telemetry:constitution ok 62s cap 300s
+PART telemetry:ysk2 ok 65s cap 300s
+PART telemetry:terminal ok 72s cap 300s
+PART telemetry:library ok 77s cap 300s
+PART telemetry:wiring ok 79s cap 300s
+PART telemetry:constitution3 ok 82s cap 300s
+PART telemetry:ledger ok 84s cap 300s
+PART telemetry:install ok 99s cap 300s
+STEP 6/9: ok 81s
+PART telemetry:ysk-hook ok 3s cap 300s
+PART telemetry:rg ok 47s cap 300s
+PART telemetry:crlf ok 48s cap 300s
+PART telemetry:rg2 ok 52s cap 300s
+PART telemetry:wrapper ok 52s cap 300s
+PART telemetry:wrapper2 ok 53s cap 300s
+PART telemetry:crlf2 ok 55s cap 300s
+PART telemetry:mods2 ok 66s cap 300s
+PART telemetry:mods ok 70s cap 300s
+PART telemetry:upgrade ok 76s cap 300s
+PART telemetry:wrapper3 ok 77s cap 300s
+PART telemetry:watcher ok 79s cap 300s
+STEP 7/9: ok 96s
+PART token-report ok 4s cap 300s
+PART telemetry:launchers ok 64s cap 300s
+PART telemetry:edits ok 94s cap 300s
+STEP 8/9: ok 14s
+PART inject:latency ok 13s cap 300s
+STEP 9/9: ok 6s
+PART intake:latency ok 5s cap 300s
+SUITE: FAIL 729s - part e2e:red failed, part cycle:red failed

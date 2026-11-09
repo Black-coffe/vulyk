@@ -1,16 +1,16 @@
 # Bootstrap interview script
 
-Ask in three batches. Keep it brisk - infer what the repo already answers and confirm instead of asking cold.
+Facts first (`/vulyk-bootstrap` step 1): answer each question from the repo - manifests, lockfiles, CI, compose files and Dockerfiles, the README. Ask the owner only the questions no fact answers, or where two facts disagree (name both sources), one batch per section below. A question the repo answered is quoted back in the summary, not asked.
 
 ## Batch 1 - Context
 1. What does this project do, in one sentence?
 2. Stack and versions? (language, framework, package manager - confirm what manifests show)
-3. Approximate size? (files / LOC / age) - affects mapping strategy
+3. Approximate size? (files / LOC / age) - counted from the repo, never asked; it sizes the unmapped list in `memory/memory.md`
 4. Solo or team? Any conventions imposed from outside (org style guides, CI gates)?
 5. Which language should reports and questions reach you in? (`ru`, `uk`, ... - goes in the *Owner language* row; `en` is the default. File names, commands and flags stay as they are.)
 
 ## Batch 2 - Conventions & safety
-6. Exact verification commands, in their quiet form: build, test, lint, typecheck, and the full suite. (These go into the constitution's `## Commands` table verbatim; a story's `## Verification` may only name commands from it.)
+6. Exact verification commands, in their quiet form: build, test, lint, typecheck, and the full suite. (These go into the constitution's `## Commands` table verbatim; a story's `## Verification` may only name commands from it.) In a docker stack each row is `docker compose exec -u <user> <service> <cmd>`, `<user>` from the service's compose `user:` or the Dockerfile `USER`; ask only when the repo names neither.
 7. Does a fresh checkout need an install step before those tests run? (`npm ci`, `uv sync`, a venv - or a link to the main checkout's `node_modules`/`.venv` through `$VULYK_ROOT`.) The answer becomes `.claude/vulyk-setup`, which `open-round` runs in the council's court before each Tier 3-4 round, so a blind seat's probe does not end in `N/A` on a missing dependency; "none" writes no file
 8. Code conventions worth enforcing as rules? (error handling shape, naming, layering)
 9. No-go zones: paths agents must never touch (generated code, vendored deps, migrations history)?

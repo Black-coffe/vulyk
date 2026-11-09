@@ -25,8 +25,8 @@ branch). Every call below that runs `advance` carries `timeout: 600000`.
    blind seats get slug, round, `court` and the report path only, never `round_dir`; `lead-review` gets
    the spec, branch, head, report path, and from round 2 `since` and the previous round's directory,
    at Tier 1-3 with `model: <r>` from `r="$(bash scripts/model-profile.sh --role review)"` only when the
-   profile is not `sonnet-builds` (else no model parameter), and two reviewers (`review-top`,
-   `review-second`) at Tier 4. Blind seats get `model: <s>` from `s="$(bash scripts/model-profile.sh --role
+   profile is not `sonnet-builds` (else no model parameter), at Tier 4 on `model: <top_model>`; `review2`,
+   when `next` names it (Tier 4: a risk path or a `review` BLOCK), is one `lead-review` on `model: <second_model>`. Blind seats get `model: <s>` from `s="$(bash scripts/model-profile.sh --role
    seat)"` only when the profile (`bash scripts/model-profile.sh`) is not `sonnet-builds`.
    A seat whose dispatch returns the Fable-limit refusal (an error carrying `You've reached your Fable
    limit` / `model_requires_usage_credits`, or a text that starts with `Agent terminated early due to an

@@ -303,6 +303,20 @@ H="$(hive mp-usage)"; mkdir -p "$H/scripts"; printf 'exit 2
 ' > "$H/scripts/model-profile.sh"
 brief_of "$H" | expect_absent "a usage error (exit 2) is not 'not chosen'" "model profile"
 
+# --- the litopys offer reads the user's settings too (ab-run-fixes-06) -----------------------------
+echo "--- litopys offer: user, project and no scope"
+LIT_LINE="litopys (session chronicle plugin) is not installed here"
+brief_home() { echo '{}' | env -u CLAUDE_CONFIG_DIR HOME="$2" CLAUDE_PROJECT_DIR="$1" bash "$BRIEF_HOOK" 2>&1; }
+H="$(hive lit-user)"; LH="$T/lit-home"; mkdir -p "$LH/.claude"
+printf '{\n  "enabledPlugins": {\n    "litopys@litopys": true\n  }\n}\n' > "$LH/.claude/settings.json"
+if brief_home "$H" "$LH" | grep -qF "$LIT_LINE"; then bad "brief: no litopys offer when the plugin is enabled at user scope"
+else ok "brief: no litopys offer when the plugin is enabled at user scope"; fi
+H="$(hive lit-project)"; LN="$T/lit-home-none"; mkdir -p "$LN/.claude" "$H/.claude"
+printf '{"enabledPlugins":{"litopys@litopys":true}}\n' > "$H/.claude/settings.json"
+brief_home "$H" "$LN" | expect_absent "brief: project scope still silences the offer" "$LIT_LINE"
+H="$(hive lit-none)"
+brief_home "$H" "$LN" | expect "brief: neither scope, the offer still shows" "$LIT_LINE"
+
 # --- the evolve ledger (auto-maintenance-03) ------------------------------------------------------
 echo "--- evolve ledger"
 EL="$SRC/scripts/evolve-ledger.py"
@@ -846,6 +860,28 @@ case "$(git -C "$SRC" ls-files -s .claude/hooks/git-guard.sh)" in
 esac
 echo a > "$GG/sub/f"
 
+echo "--- git guard: Law 5 - the main session never closes a Tier 3-4 story (0.48.1)"
+mkdir -p "$GG/docs/specs/hv" "$GG/docs/specs/solo"
+printf '# hv\n\n**Tier:** 3 · **Spec slug:** `hv`\n' > "$GG/docs/specs/hv/plan.md"
+printf '# solo\n\n**Tier:** 2 · **Spec slug:** `solo`\n' > "$GG/docs/specs/solo/plan.md"
+printf -- '---\nstory: hv-01\nstatus: todo\nreturned: DONE\n---\n' > "$GG/docs/specs/hv/hv-01.md"
+printf -- '---\nstory: solo-01\nstatus: todo\nreturned: DONE\n---\n' > "$GG/docs/specs/solo/solo-01.md"
+out="$(guard Bash "bash scripts/cycle.sh close-story docs/specs/hv/hv-01.md --commit --stamp s1")"
+printf '%s' "$out" | expect "law5: the original case (the Queen closes a returned Tier 3 story) is denied" '"deny"'
+printf '%s' "$out" | expect "law5: the refusal names the re-dispatch" "dispatch"
+guard PowerShell "bash scripts/cycle.sh close-story ./docs/specs/hv/hv-01.md" \
+  | expect "law5: the neighbour form (PowerShell, ./path, no flags) is denied" '"deny"'
+guard Bash "git add -A && bash scripts/cycle.sh close-story docs/specs/hv/hv-01.md --commit" \
+  | expect "law5: a close-story after another command is denied" '"deny"'
+guard Bash "bash scripts/cycle.sh close-story docs/specs/hv/hv-01.md --commit --stamp s1" a1 \
+  | silent "law5: a worker (subagent) closes its own Tier 3 story"
+guard Bash "bash scripts/cycle.sh close-story docs/specs/solo/solo-01.md --commit" \
+  | silent "law5: the Queen closes a Tier 2 story herself"
+guard Bash "bash scripts/cycle.sh stamp-red docs/specs/hv/hv-01.md" \
+  | silent "law5: stamp-red stays the Queen's escape (ADR-025), not a close"
+guard Bash "grep -n close-story scripts/cycle.sh" | silent "law5: a grep for close-story passes"
+rm -rf "$GG/docs/specs"
+
 echo "--- git guard: fails open, card fixtures"
 out="$(printf 'not json' | bash "$GUARD" 2>&1; echo "exit=$?")"
 [ "$out" = "exit=0" ] && ok "git-guard: broken JSON exits 0, silent" || bad "git-guard: broken JSON - got: $out"
@@ -873,6 +909,11 @@ printf '%s' "$out" | expect_absent "git-guard: a disabled mod is not named" "off
 brief_of "$H" | expect_absent "git-guard: no such mod, no line" "tool.check"
 rm -f "$T/fakemod/hooks/register.ts"
 BRIEF_CONF="$MC" brief_of "$H" | expect_absent "git-guard: an enabled mod without tool.check, no line" "tool.check"
+
+echo "--- plan step 3a: the existing-repo horizon gate"
+sed -n '/^3a\. /,/^4\. /p' "$SRC/.claude/commands/vulyk-plan.md" | tr '\n' ' ' | tr -s ' ' \
+  | expect "plan 3a: the existing-repo gate counts a module under ## Unmapped territory beside ## Codebase map" \
+    '`## Codebase map` or `## Unmapped territory` lists'
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

@@ -33,7 +33,12 @@ const check = (cond, label, detail) => {
 // --- compile: strip `export ` at line start and compile the rest as the body of an async
 // function taking the Workflow hooks - the runtime's own shape for a top-level-return file.
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const compile = (body) => new AsyncFunction('args', 'agent', 'parallel', 'phase', 'log', body.replace(/^export /gm, ''));
+const compile = (body) => new AsyncFunction('args', 'agent', 'parallel', 'phase', 'log', 'Date', body.replace(/^export /gm, ''));
+// The Workflow runtime refuses a clock read at launch (run wf_904b0c18-ea3, 2026-11-09): the driver
+// runs with a Date that throws its message on Date.now(), new Date() and Date(); the rest of Date stays.
+const CLOCK_REFUSED = 'Date.now() / new Date() are unavailable in workflow scripts (breaks resume). Stamp results after the workflow returns, or pass timestamps via args.';
+const refuse = () => { throw new Error(CLOCK_REFUSED); };
+const NoClock = new Proxy(Date, { apply: refuse, construct: refuse, get: (t, p) => (p === 'now' ? refuse : t[p]) });
 let driverFn = null;
 try { driverFn = compile(src); check(true, 'compile: the driver compiles as an async body'); }
 catch (e) { check(false, 'compile: the driver compiles as an async body', String(e)); }
@@ -49,7 +54,7 @@ if (!driverFn) { console.log('FAIL: nothing to run'); process.exit(1); }
   try { literal = !!m && typeof new Function('"use strict"; return (' + m[1] + ')')() === 'object'; } catch { literal = false; }
   check(literal, 'static: meta is a pure literal');
   check(!src.includes('queen-planner'), 'static: no queen-planner anywhere in the driver');
-  check(!/\bfoldReviews\b/.test(src), 'static: no JS review fold - advance --ingest folds');
+  check(!/\bfoldReviews\b/.test(src), 'static: no JS review fold - judge folds review and review2');
   const advances = src.match(/`advance \$\{spec\}[^`]*`/g) || [];
   check(advances.length > 0 && advances.every((t) => t.includes('--stamp ${stamp}')), 'static: every advance template carries --stamp', advances);
   check(/close-story \$\{story\.file\} --commit --stamp \$\{stamp\}/.test(src), 'static: the worker prompt names close-story --commit --stamp');
@@ -140,7 +145,7 @@ async function run(args, script) {
   const parallel = (thunks) => Promise.all(thunks.map((t) => {
     try { return Promise.resolve(t()).catch(() => null); } catch { return Promise.resolve(null); }
   }));
-  const result = await driverFn(args, agent, parallel, (p) => phases.push(p), (l) => logs.push(l));
+  const result = await driverFn(args, agent, parallel, (p) => phases.push(p), (l) => logs.push(l), NoClock);
   return { result, clerkCmds, suiteCmds, mismatches, dispatches, logs, phases };
 }
 const seq = (r) => r.clerkCmds.join(' | ');
@@ -149,6 +154,13 @@ const blindPromptsClean = (r) => r.dispatches
   .every((d) => !d.prompt.includes(SPEC) && !d.prompt.includes('council/round-') && !d.prompt.includes(S));
 
 (async () => {
+  // --- ab-run-fixes-08: the driver reads no clock - a run under the refusing Date does not throw
+  {
+    let err = null;
+    try { await run(ARGS, { clerk: [[CLAIM, adv(green())], [RELEASE, releaseOk]] }); } catch (e) { err = String(e && e.message || e); }
+    check(err === null, 'driver: the script reads no clock (Date.now / new Date refused like the Workflow runtime)', err);
+  }
+
   // --- launch guards: no clerk call at all
   for (const [label, args] of [['args undefined', undefined], ['stamp missing', { spec: SPEC }], ['spec missing', { stamp: S }]]) {
     const r = await run(args, { clerk: [] });
@@ -306,16 +318,27 @@ const blindPromptsClean = (r) => r.dispatches
     check(haiku && haiku.prompt.includes('round-2/haiku.attempt-1.md') && blindPromptsClean(r), 'round 2: haiku stays blind', haiku && haiku.prompt);
   }
 
-  // --- Tier 4: two reviewers, review-top on TOP and review-second on SECOND, one ingest
+  // --- Tier 4 (ab-run-fixes C2): exactly the seats `next` names - review on TOP; review2, one lead-review on SECOND, only when named
   {
     const r = await run(ARGS, {
-      clerk: [[CLAIM, adv(round('opus,review', { tier: 4 }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
+      clerk: [
+        [CLAIM, adv(round('opus,review', { tier: 4 }))],
+        [INGEST, adv(round('review2', { tier: 4 }))],
+        [INGEST, adv(green({ tier: 4 }))],
+        [RELEASE, releaseOk],
+      ],
     });
     const revs = r.dispatches.filter((d) => d.agentType === 'lead-review');
-    check(revs.length === 2 && revs[0].model === 'fable' && revs[0].prompt.includes('round-1/review-top.attempt-1.md')
-      && revs[1].model === 'opus' && revs[1].prompt.includes('round-1/review-second.attempt-1.md'),
-      'tier 4: two reviewers, review-top on TOP and review-second on SECOND', revs.map((d) => [d.model, d.prompt]));
-    check(r.mismatches.length === 0 && r.clerkCmds.length === 3 && r.result.next === 'green', 'tier 4: one ingest folds both', seq(r));
+    check(r.dispatches.length === 3 && revs.length === 2 && revs[0].model === 'fable' && revs[0].prompt.includes('round-1/review.attempt-1.md')
+      && revs[1].model === 'opus' && revs[1].prompt.includes('round-1/review2.attempt-1.md'),
+      'tier 4: one reviewer on TOP beside the blind seat; review2 dispatched on second_model once next names it', revs.map((d) => [d.model, d.prompt]));
+    check(r.mismatches.length === 0 && r.clerkCmds.length === 4 && r.result.next === 'green', 'tier 4: an ingest per dispatch, then green', seq(r));
+    const rk = await run(ARGS, {
+      clerk: [[CLAIM, adv(round('opus,review,review2', { tier: 4 }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
+    });
+    const types = rk.dispatches.map((d) => `${d.agentType}:${d.model}`).join(',');
+    check(types === 'council-opus:undefined,lead-review:fable,lead-review:opus' && rk.mismatches.length === 0,
+      'tier 4 risk path: the three seats next names in one dispatch, review2 on second_model, no doubling by tier', types);
   }
   for (const [label, args] of [['second_model missing', { spec: SPEC, top_model: 'fable', stamp: S }], ['second_model equal to top_model', { ...ARGS, second_model: 'fable' }]]) {
     const r = await run(args, { clerk: [[CLAIM, adv(build([story(1)], { tier: 4 }))], [RELEASE, releaseOk]] });
@@ -358,12 +381,12 @@ const blindPromptsClean = (r) => r.dispatches
       clerk: [[CLAIM, adv(round('review', { tier: 4, court: null }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
     });
     const revs = r3.dispatches.filter((d) => d.agentType === 'lead-review');
-    check(revs.length === 2 && revs[0].model === 'fable' && revs[1].model === 'sonnet', 'profile: the Tier 4 pair stays TOP/SECOND, review_model is not used',
+    check(revs.length === 1 && revs[0].model === 'fable', 'profile: the Tier 4 review runs on TOP alone, review_model is not used',
       revs.map((d) => d.model));
     const r4 = await run({ ...ARGS, review_model: 'haiku' }, {
       clerk: [[CLAIM, adv(round('review', { tier: 4, court: null }))], [INGEST, adv(green({ tier: 4 }))], [RELEASE, releaseOk]],
     });
-    check(r4.dispatches.map((d) => d.model).join(',') === 'fable,opus', 'profile: review_model leaves the Tier 4 pair on the launch pair', r4.dispatches.map((d) => d.model));
+    check(r4.dispatches.map((d) => d.model).join(',') === 'fable', 'profile: review_model leaves the Tier 4 review on TOP, one dispatch', r4.dispatches.map((d) => d.model));
   }
 
   // --- unreadable clerk lines: one read-only status, then on from that status
@@ -593,6 +616,85 @@ const blindPromptsClean = (r) => r.dispatches
     check(rg.suiteCmds.length === 32 && rg.dispatches.length === 0 && rg.result.stop && rg.result.stop.verb === 'suite'
       && /garbage/.test(rg.result.stop.error) && rg.clerkCmds[rg.clerkCmds.length - 1] === RELEASE,
       'suite: unreadable lines stop after 32 calls with the raw line, no dispatch, still releases', { n: rg.suiteCmds.length, result: rg.result });
+  }
+
+  // --- ab-run-fixes C9: a story claim names in leftover is dispatched with the leftover note; the retry model and the two-miss stop are as before
+  {
+    const a = story(1, { model: 'sonnet' });
+    const b = story(2, { model: 'sonnet' });
+    const note = 'a previous attempt left uncommitted edits in your ## Files: read `git diff` first, finish the story and close it';
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, adv(build([a, b]), { leftover: [a.file] })],
+        [ADV, adv(build([a]))],
+        [ADV, adv(build([a]))],
+        [RELEASE, releaseOk],
+      ],
+    });
+    const [wa, wb, wa2] = r.dispatches;
+    check(r.dispatches.length === 3 && wa.prompt.includes(note) && !wb.prompt.includes(note) && !wb.prompt.includes('git diff') && wa2.prompt.includes(note),
+      'leftover: the leftover story is dispatched with the leftover note, its wave-mate without', r.dispatches.map((d) => d.prompt));
+    check(wa.model === 'sonnet' && wa2.model === 'fable', 'leftover: the first dispatch keeps the story model, the retry climbs to TOP', r.dispatches.map((d) => d.model));
+    check(r.result.stop && r.result.stop.verb === 'build' && r.result.stop.file === a.file && /still todo/.test(r.result.stop.error)
+      && r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
+      'leftover: a second miss stops the run naming the file, and releases', { result: r.result, seq: seq(r) });
+  }
+
+  // --- ab-run-fixes ask 18 repro: a ready story beside a manual:-blocked wave-mate is built; the hand-step stop comes after
+  {
+    const b = story(2);
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, adv(build([b]))],
+        [ADV, adv(status({ next: 'manual:tape', manual: ['tape'] }))],
+        [RELEASE, releaseOk],
+      ],
+    });
+    check(r.dispatches.length === 1 && r.dispatches[0].prompt.includes(b.file) && r.result.stop && r.result.stop.verb === 'manual'
+      && JSON.stringify(r.result.stop.manual) === '["tape"]' && r.mismatches.length === 0,
+      'manual wave: the ready wave-mate is built, then the run stops at the hand step', { d: r.dispatches.length, result: r.result });
+  }
+
+  // --- ab-run-fixes C10: checkpoint_min 0 returns checkpoint at the first boundary after work, and releases.
+  // Elapsed time is args.launched_at (epoch seconds, the Queen's) against the `now` a verb answer carries.
+  const T0 = 1762700000;
+  // the real advance and suite lines carry `now` inside `status` only (cmd_status prints it), not at the top level
+  const at = (o, now) => ({ ...o, status: { ...o.status, now } });
+  {
+    const CP = { ...ARGS, checkpoint_min: 0, launched_at: T0 };
+    const adv = (st, extra) => at({ ok: true, verb: 'advance', exit: 0, next: st.next, steps: [], rejected: [], status: st, ...extra }, T0);
+    const suiteDone = at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: 0, steps: 0, done: true, suite: 'none', status: round('review') }, T0);
+    const isCp = (res, next) => res && res.status === 'checkpoint' && res.next === next && typeof res.elapsed_min === 'number' && !res.stop
+    const w = await run(CP, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(build([story(2)]))], [RELEASE, releaseOk]] });
+    check(isCp(w.result, 'build:1') && w.dispatches.length === 1 && w.mismatches.length === 0 && w.clerkCmds[w.clerkCmds.length - 1] === RELEASE,
+      'checkpoint: after a wave, before the next build wave, the claim released', { result: w.result, seq: seq(w) });
+    const c = await run(CP, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(round('review'))], [RELEASE, releaseOk]] });
+    check(isCp(c.result, 'dispatch:review') && c.dispatches.length === 1 && c.suiteCmds.length === 0 && c.clerkCmds[c.clerkCmds.length - 1] === RELEASE,
+      'checkpoint: after a wave, before the gate and the seats', { result: c.result, s: c.suiteCmds.length });
+    const notDone = (k) => at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: k, steps: 3, done: false, suite: 'ok', status: round('review') }, T0);
+    const g = await run(CP, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]], suite: (cmd, k) => notDone(k + 1) });
+    check(isCp(g.result, 'dispatch:review') && g.suiteCmds.length === 1 && g.dispatches.length === 0 && g.clerkCmds[g.clerkCmds.length - 1] === RELEASE,
+      'checkpoint: after one gate step, before the next', { result: g.result, s: g.suiteCmds.length });
+    const s = await run(CP, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]], suite: () => suiteDone });
+    check(isCp(s.result, 'dispatch:review') && s.suiteCmds.length === 1 && s.dispatches.length === 0,
+      'checkpoint: after the gate finished, before the seat dispatch', { result: s.result, s: s.suiteCmds.length, d: s.dispatches.length });
+    const t = await run(CP, { clerk: [[CLAIM, adv(green())], [RELEASE, releaseOk]] });
+    check(t.result.next === 'green' && t.result.status !== 'checkpoint', 'checkpoint: a terminal state returns as itself, no checkpoint', t.result);
+  }
+  // the default 50 min against the verb's `now`; no time source (no launched_at, or no `now`) never fires
+  {
+    const two = (now) => [[CLAIM, at(adv(build([story(1)])), T0)], [ADV, at(adv(build([story(2)])), now)]];
+    const due = await run({ ...ARGS, launched_at: T0 }, { clerk: [...two(T0 + 50 * 60), [RELEASE, releaseOk]] });
+    check(due.result && due.result.status === 'checkpoint' && due.result.elapsed_min === 50 && due.dispatches.length === 1,
+      'checkpoint: 50 min after launched_at by the verb clock, the default fires', due.result);
+    const early = await run({ ...ARGS, launched_at: T0 }, { clerk: [...two(T0 + 49 * 60), [ADV, at(adv(green()), T0 + 49 * 60)], [RELEASE, releaseOk]] });
+    check(early.result && early.result.next === 'green' && early.dispatches.length === 2, 'checkpoint: 49 min, the default does not fire', early.result);
+    const blind = await run({ ...ARGS, checkpoint_min: 0 }, { clerk: [...two(T0), [ADV, adv(green())], [RELEASE, releaseOk]] });
+    check(blind.result && blind.result.next === 'green' && blind.dispatches.length === 2,
+      'checkpoint: no launched_at, no time source - the checkpoint does not fire and the driver runs on', blind.result);
+    const mute = await run({ ...ARGS, checkpoint_min: 0, launched_at: T0 }, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(build([story(2)]))], [ADV, adv(green())], [RELEASE, releaseOk]] });
+    check(mute.result && mute.result.next === 'green' && mute.dispatches.length === 2,
+      'checkpoint: no `now` in any verb answer - the checkpoint does not fire', mute.result);
   }
 
   check(!everyAgentType.has('queen-planner'), 'no queen-planner dispatch in any scenario', [...everyAgentType]);

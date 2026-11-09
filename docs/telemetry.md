@@ -93,12 +93,12 @@ the hive's `CLAUDE.md` Profile table:
 | Telemetry | off - anonymized weekly anomaly bundle (codes and numbers only, docs/telemetry.md); on = /vulyk-evolve prints the send command, never sends |
 ```
 
-Only the value cell's first token (`on` or `off`) is read. `install.sh` asks the question once,
-on a fresh install and on `--upgrade`, over `/dev/tty` (never a stdin a pipeline may be
-consuming) - a short explanation followed by `Enable telemetry? [y/N]` - and writes the answer
-into that row. The same install can be driven non-interactively with
-`install.sh --telemetry on|off|ask` or the `VULYK_TELEMETRY` env var; no terminal reachable
-means no prompt and the row stays (or becomes) `off`.
+Only the value cell's first token (`on` or `off`) is read. A plain `install.sh` (fresh or
+`--upgrade`) asks nothing: a missing row is written as `off`, an existing answer stays.
+`install.sh --telemetry ask` (or `VULYK_TELEMETRY=ask`) asks the question once, over `/dev/tty`
+(never a stdin a pipeline may be consuming) - a short explanation followed by
+`Enable telemetry? [y/N]` - and writes the answer into that row; with no terminal reachable it
+asks nothing and the row stays (or becomes) `off`. `--telemetry on|off` sets the row directly.
 
 ## Sending a bundle - always a pull request, never automatic
 

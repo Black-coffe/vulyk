@@ -36,3 +36,5 @@ spread unseen (docs/specs/cross-platform/report.md).
 ## How-to
 - Pass a value that can hold a newline to awk through the environment (`name="$val" awk '... ENVIRON["name"] ...'`),
   never `awk -v`: BSD awk refuses a newline there (`awk: newline in string`), and no grep can see what a variable holds.
+- Put a comment above the line that opens a `$( )`, never inside its body: the gate (and likely bash 3.2) reads
+  it as code, so an apostrophe or `(` in it leaves the substitution open for every line below.

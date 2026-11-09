@@ -23,11 +23,13 @@ One thing it deliberately does *not* copy verbatim: the `## Commands` table. Tho
 ```bash
 cd your-project
 claude
-> /vulyk-bootstrap        # ~10 minutes: interview -> tailored config -> initial map -> wiki seed
+> /vulyk-bootstrap        # facts from the repo -> questions only on a gap or a clash -> tailored config -> wiki seed
 ```
 The first line of every session is the `[VULYK] gate model:` brief. It names the model that holds the gate (the Tier 4 review, `lead-architect`, the Tier 4 planner, a missed story's retry) on this account: Fable where the plan carries it (Max, premium seats), Opus where Fable would bill to credits (Pro, standard seats). Below Tier 4 the reviewer runs on Opus, and the workers build on Sonnet. The brief also says whether your own session is pinned to `opus` (the Queen runs on Opus on every plan), and whether any model in reach is below the floor. `bash scripts/top-model.sh --apply` pins it; bootstrap does that for you.
 
-For large repos the initial mapping runs on scout drones in batches (Sonnet at `effort: low`) - cheap by design. A 1000-file repo maps breadth-first: the 8-12 load-bearing modules now, the rest recorded as unmapped territory.
+Bootstrap builds no map: it lists the modules in `memory/memory.md` as unmapped territory. `/vulyk-plan` recon maps what a task touches, on scout drones (Sonnet at `effort: low`), and `/vulyk-map` maps an area on request.
+
+Telemetry is off after install and the installer asks nothing about it; `install.sh <project> --telemetry ask` puts the question once ([telemetry.md](telemetry.md)).
 
 ## Context hygiene (once, then rarely)
 

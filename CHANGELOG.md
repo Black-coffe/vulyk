@@ -4,6 +4,50 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-11-09
+
+Fixes from the VULYK-vs-plain-Claude-Code A/B run and its autopsy, 22 owner asks (spec `ab-run-fixes`, Tier 3, council
+GREEN in round 3; plan for a fair re-measurement in study `ab-measurement`, nothing run).
+
+### Changed
+- **Model profile: `--recommend` always says `sonnet-builds`.** `opus-builds` is only the owner's explicit `--set`; the
+  plan header names the profile (`**Model profile:**`). `cacheTtl: 1h` is gone from `lead-review`, `worker-code` and
+  `worker-test`.
+- **`/vulyk-plan`:** no scout for an area whose map slice is fresh; the grill asks in batches of up to 4 with no separate
+  confirm question; the horizon step in an existing repo (a module under `## Codebase map` or `## Unmapped territory`)
+  runs only with `--horizon`; the Tier 3-4 approval starts the build in the same turn; the plan is committed before the
+  approval stop, so `claim` never meets an uncommitted plan.
+- **Council at Tier 3-4: one blind seat** (`haiku` with a filled Client path, else `opus`) plus `review`; the Tier 4
+  second reviewer (`review2`) runs only after a BLOCK or on a risk path. Round n no longer carries a seat whose ask the
+  repair touched.
+- **Narrow repair:** one RED item in one non-test file cuts a story with that file, its tests and `docs/defects/*`, and
+  the next round is review-only, with no court and no suite.
+- **`suite`: one commit per suite**, on the call that finishes it; the parts still run one per call.
+- **Onboarding:** `/vulyk-bootstrap` takes facts from the repo and asks only where they disagree or are missing, maps
+  no area, writes docker Commands rows as `docker compose exec -u <user> <service> <cmd>`, and does not push `/clear`.
+  `install.sh` asks about telemetry only with `--telemetry ask` (default off). The litopys offer stays quiet when the
+  plugin is enabled at user scope.
+- **README states the A/B result honestly:** n=1, 1.8x the weighted tokens, 18 stops against 4, the model cascade not
+  measured (workers ran on Opus), the 1M-window claim not confirmed.
+
+### Added
+- **Workflow driver checkpoint:** past ~50 minutes the driver stops at the next wave, gate step or seat boundary and
+  returns `{status:"checkpoint"}`, so the Queen's cache survives. The time comes from `args.launched_at` and the `now`
+  every `cycle.sh` verb line now carries; the script reads no clock (the Workflow runtime refuses `Date.now()`, and the
+  driver test sandbox now refuses it too).
+- **A worker back without a commit gets its story again:** `claim` lists `leftover` edits inside a todo story's
+  `## Files` instead of refusing; the driver re-dispatches that worker, a second miss stops the run.
+- **ADR-031:** a comment inside a `$( )` body is code to the portability gate; put it above the line that opens it.
+
+### Fixed
+- **`verify_run` no longer lets a verification line eat the next line's stdin** (`< /dev/null`, close-story and stamp-red).
+- **An unknown story status (`open`) is an error** in `status` and every verb that derives it, not a silent skip.
+- **`close-story`'s refusal of a non-Commands verification segment names up to three ready `## Commands` lines.**
+- The manual step in a wave was reproduced and is not a bug: ready stories of the wave are built before the stop
+  (regression check kept).
+- **`stamp-red` seals the test, not every file a verification line names.** The sealed set was every `## Verification` path under `## Files`, so a line such as `pint --test app/Foo.php tests/FooTest.php` sealed the implementation and the lint config too, and the story could not close after the worker touched them (`test changed after red receipt`). Now `lib.sh` `is_test_path` keeps only test-shaped paths (`test/`, `tests/`, `spec/`, `__tests__/`, `test_*`, `*_test.*`, `*.test.*`, `*.spec.*`, `*_spec.*`, `*Test.*`, `*Tests.*`, `*Spec.*`); plus the program each line runs (`lib.sh` `verify_programs`: the first word, or the first non-option word after `bash`, `sh`, `python`, `python3`, `py`, `node`, `npx`, `php`, `pwsh`, `ruby`, `perl`), so a repo checker such as `bash scripts/check-x.sh tests/foo_test.sh` cannot be weakened after the receipt. With no test-shaped path among them, every one is sealed as before. ADR-025 D2 amended. Still sealed: a lint fix to the test file itself.
+- **Law 5 is enforced: the Queen cannot close a Tier 3-4 story.** A run closed a worker's story by hand after its `close-story` failed. `git-guard.sh` now also denies the main session `cycle.sh close-story <story>` when the story's plan.md says Tier 3 or 4; a worker (subagent), Tier 1-2 and `stamp-red` (ADR-025's re-stamp escape) pass. `/vulyk-build` says a returned story is re-dispatched or left to the owner. Not covered: the Queen's `Edit` of a story's files, `bash -c` and scripts.
+
 ## [0.48.0] - 2026-11-06
 
 The uncommitted-work guard, the diff before ACCEPTED, quotes that are not corrections (spec `uncommitted-work-guard`,

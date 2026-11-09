@@ -146,11 +146,28 @@ expect_eq "surrounding whitespace is ignored" "opus-builds" "$(mp)"
 rm -f "$CFG/vulyk-model-profile"
 
 echo "--- --recommend and --plan"
-PLANFILE="$T/max.json";     expect_eq "--recommend on Max" "opus-builds max" "$(mp --recommend)"
+# ab-run-fixes-01: sonnet-builds on every account shape; opus-builds only through the owner's --set.
+printf '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_ultra"}}
+' > "$T/ultra.json"
+printf '{"oauthAccount":{"organizationType":"claude_team","seatTier":"premium"}}
+' > "$T/premium-seat.json"
+printf '{"oauthAccount":{"organizationType":"claude_enterprise","seatTier":"standard"}}
+' > "$T/standard-seat.json"
+REC_WANT=""; REC_GOT=""
+for fx in max ultra premium-seat pro standard-seat api missing; do
+  PLANFILE="$T/$fx.json"; KEY=""
+  [ "$fx" = api ] && { PLANFILE="$T/missing.json"; KEY="ANTHROPIC_API_KEY=test-key"; }
+  REC_WANT="$REC_WANT $fx=sonnet-builds"
+  REC_GOT="$REC_GOT $fx=$(EXTRA_ENV="$KEY" mp --recommend | cut -d' ' -f1)"
+done
+expect_eq "model-profile: --recommend gives sonnet-builds on every plan" "${REC_WANT# }" "${REC_GOT# }"
+PLANFILE="$T/max.json";     expect_eq "--recommend on Max keeps the plan word" "sonnet-builds max" "$(mp --recommend)"
 expect_eq "--plan on Max" "max premium" "$(tm --plan)"
 PLANFILE="$T/pro.json";     expect_eq "--recommend on Pro" "sonnet-builds pro" "$(mp --recommend)"
 expect_eq "--plan on Pro" "pro standard" "$(tm --plan)"
+PLANFILE="$T/premium-seat.json"; expect_eq "--plan on a premium seat" "premium-seat premium" "$(tm --plan)"
 PLANFILE="$T/missing.json"; expect_eq "--recommend with no account file" "sonnet-builds unknown" "$(mp --recommend)"
+PLANFILE="$T/missing.json"; expect_eq "--recommend with an API key" "sonnet-builds api" "$(EXTRA_ENV=ANTHROPIC_API_KEY=test-key mp --recommend)"
 PLANFILE="$T/max.json"
 mp --explain | expect "--explain names the default as not chosen" "profile : sonnet-builds (not chosen"
 mp --explain economy | expect "--explain <name> shows the named profile" "routine        haiku"

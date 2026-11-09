@@ -121,9 +121,10 @@ fi
 [ -n "$mods" ] && echo "[VULYK] a mod that handles tool.check is enabled: $mods. On a personal login it can approve a call a PreToolUse hook denied, the git guard included (a heuristic: a grep of its hooks folder). Tell the owner once."
 
 # litopys, the session chronicle plugin (0.19, plan 1.7): offered once. Installed = an
-# `enabledPlugins` key starting `litopys@` in either settings file; declined = a Profile row
-# `| Chronicle | none ... |` in the constitution. Either one silences the line for good.
-if ! grep -qsE '"litopys@[^"]*"[[:space:]]*:' "$ROOT/.claude/settings.json" "$ROOT/.claude/settings.local.json" &&
+# `enabledPlugins` key starting `litopys@` in the user's settings ($conf, above) or either project
+# settings file; declined = a Profile row `| Chronicle | none ... |` in the constitution. Either one
+# silences the line for good.
+if ! grep -qsE '"litopys@[^"]*"[[:space:]]*:' "$conf/settings.json" "$ROOT/.claude/settings.json" "$ROOT/.claude/settings.local.json" &&
    ! grep -qsE '^\|[[:space:]]*Chronicle[[:space:]]*\|[[:space:]]*`?none' "$ROOT/CLAUDE.md"; then
   echo "[VULYK] litopys (session chronicle plugin) is not installed here. Ask the owner once: install (\`claude plugin marketplace add Black-coffe/litopys --scope project\` then \`claude plugin install litopys@litopys --scope project\`) or decline (then add Profile row \`| Chronicle | none (declined <date>) |\`)."
 fi

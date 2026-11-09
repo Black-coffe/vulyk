@@ -1,6 +1,7 @@
 # <Spec title> (plan)
 
 **Tier:** <1|2|3|4> · **Spec slug:** `<slug>` · **Brief:** [brief.md](brief.md)
+**Model profile:** <name - what `bash scripts/model-profile.sh` printed at plan time: sonnet-builds | opus-builds | economy>
 **Governed by:** <ADRs, DESIGN.md sections, wiki notes that constrain this work>
 **Depends on:** <prior specs / merged work this plan builds on, with commits if known>
 

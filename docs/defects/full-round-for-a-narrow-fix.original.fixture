@@ -1,0 +1,11 @@
+# council/round-4/ROUND, vulyk-watcher: round 3 was opus GREEN and one review finding in scripts/lib.sh,
+# cut as a narrow repair, and the next round still requires the blind seat
+head=5d1c0a7
+pack=7f3e91b2c4d0
+opened=2026-10-16T14:02:11Z
+court=/repo/.vulyk/court/vulyk-watcher/round-4
+ceiling=3
+tier=3
+seats=opus review
+since=a94b2e0
+narrow=1

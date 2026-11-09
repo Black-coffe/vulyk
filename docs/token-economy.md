@@ -38,7 +38,7 @@ in the request changes:
 | Fast mode toggled | Part of the cache key: the *first* fast-mode turn of a conversation re-prefills; later toggles keep the cache |
 | `/compact` | The conversation is replaced, so nothing matches (the system prompt survives) |
 | Time, main session | Subscription: **1 h**. API key or usage credits: **5 min**, unless `ENABLE_PROMPT_CACHING_1H=1` |
-| Time, subagents and Workflow agents | **5 min** on every plan, Max included; an agent's `experimental: {cacheTtl: 1h}` frontmatter raises it for that agent (Claude Code ≥ 2.1.248), and a 1 h write bills higher |
+| Time, subagents and Workflow agents | **5 min** on every plan, Max included. An agent's `experimental: {cacheTtl: 1h}` frontmatter would raise it (Claude Code ≥ 2.1.248, a 1 h write bills higher), but since ab-run-fixes no VULYK agent carries it |
 | Resuming an old session | The cache is normally gone by then |
 
 `/rewind` is the exception worth knowing: it cuts turns off the *end*, so everything before the cut
@@ -52,15 +52,18 @@ Three operational consequences:
   conversation; inside the 1 h window that read is a cache hit, after it, full price. If you are
   going for lunch, compact *before* you go, not after. The audit counted 58 full re-writes of the
   Queen's cache after she sat idle for over an hour waiting on a long run: 25M weighted tokens.
+  Since ab-run-fixes the Workflow driver returns `checkpoint` at the first boundary past 50 min and
+  `/vulyk-build` relaunches it, so the Queen idles under an hour per launch; one wave or seat
+  dispatch longer than ~55 min still lets her cache lapse.
 - **A subagent that waits more than five minutes pays for its whole context again.** A worker or
   reviewer idle on a ten-minute suite re-writes its cache on its next request. That is one
   reason `close-story` runs verification once, under a 540 s timeout, instead of the worker
-  running the suite and then `close-story` running it again. It is also why `worker-code` and
-  `worker-test` carry `experimental: {cacheTtl: 1h}`: in 10 days of transcripts, workers lost
-  their prefix 23 times behind a suite, about 40% of `worker-code`'s cost. Since fable-fallback
-  `lead-review` is the only judge that carries it too, and on 2026-11-03 its spend per dispatch is
-  compared with the week before. The other agents stay at 5 minutes. A 1-hour write costs 1.6×
-  a 5-minute one, and on short-turn agents that premium outweighs the rare rebuild: a blanket 1 h for every subagent measured as a net loss
+  running the suite and then `close-story` running it again. cache-economy gave `worker-code`,
+  `worker-test` and later `lead-review` `experimental: {cacheTtl: 1h}` (in 10 days of transcripts
+  workers lost their prefix 23 times behind a suite). ab-run-fixes reverses that choice on the A/B
+  run's evidence: no VULYK agent carries the field now, and every agent caches for 5 minutes. The
+  cost is known and accepted: a worker or reviewer idle past 5 min re-writes its prefix on its next
+  request. A 1-hour write costs 1.6× a 5-minute one, and a blanket 1 h for every subagent measured as a net loss
   (`docs/specs/cache-economy/report.md`). So never set `subagentPromptCacheTtl`,
   `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL` or `FORCE_PROMPT_CACHING_5M`: each one overrides the
   per-agent frontmatter.
@@ -129,14 +132,18 @@ rounds took **29.5%** of the spend of the tasks that had them.
 |---|---|---|
 | 1 | 14 (10 clerks) | 1 `lead-review` |
 | 2 | 21–33 | 1–2 `lead-review` (one per round) + at most one scout |
-| 3 | 35–53 | the workers + 2 seats (3 with a *Client path*) per round + 4 clerk calls for a one-wave, one-round run |
-| 4 | 52–73 | as Tier 3, with two reviewers per round and a `lead-architect` consult |
+| 3 | 35–53 | the workers + 2 seats (`review` and one blind seat) per round + 4 clerk calls for a one-wave, one-round run |
+| 4 | 52–73 | as Tier 3, plus a `lead-architect` consult; a second reviewer (`review2`) only on a risk path or after a `review` BLOCK |
 
 The clerk count fell because the driver calls `cycle.sh advance` once per agent boundary —
 `advance --claim`, `advance` after a wave, `advance --ingest` after a council dispatch, `release` —
 instead of once per verb. Each extra wave or round adds one or two calls. Rounds are cheaper as
 well: a green blind seat is carried forward, and from round 2 `lead-review` reads only the diff
 since the last round. The estimate is −40…55% on a median task.
+
+Since ab-run-fixes a narrow repair round (one RED item in one file) is a single `lead-review`
+dispatch: no blind seat, no second reviewer, no gate step. A blind seat is not carried over an ask
+the repair touched, so that round dispatches it again.
 
 **Measure it, do not trust the printed figure.** The `totalTokens` a Workflow run prints is the
 sum of each agent's *final* context, not what was processed — about 29 times too low on the median
