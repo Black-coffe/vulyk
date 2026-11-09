@@ -989,8 +989,12 @@ reopen_names_round() { # reopen_names_round <spec> <n> -> 0 iff council/REOPEN h
 git_commit_or_fail() { # git_commit_or_fail <verb-label> <message> - commits what is already
   # staged; on failure, reports it (naming "git commit", R17) and terminates the process -
   # never called when there is nothing staged (callers check first, or see commit_paperwork).
-  local verb="$1" msg="$2" err
-  if ! err="$(git commit -q -m "$msg" 2>&1)"; then
+  # S5: with paths after the message, `--only` commits those paths alone; whatever else is staged
+  # (a wave-mate's `git add`) stays staged and out of this commit.
+  local verb="$1" msg="$2" err; shift 2
+  local -a only=()
+  [ "$#" -gt 0 ] && only=(--only -- "$@")
+  if ! err="$(git commit -q -m "$msg" ${only[@]+"${only[@]}"} 2>&1)"; then
     echo "cycle: $verb - git commit failed: $err" >&2
     emit false "$verb" 2 error "git commit failed"
     exit 2
@@ -1010,7 +1014,7 @@ commit_paperwork() { # commit_paperwork <verb-label> <message> <path...> - stage
   [ -e memory/stats/anomalies.jsonl ] && paths+=(memory/stats/anomalies.jsonl)
   [ -n "$(git status --porcelain -- ${paths[@]+"${paths[@]}"} 2>/dev/null)" ] || return 0
   git add -A -- ${paths[@]+"${paths[@]}"} >/dev/null 2>&1
-  git_commit_or_fail "$verb" "$(commit_subject "$msg")"
+  git_commit_or_fail "$verb" "$(commit_subject "$msg")" ${paths[@]+"${paths[@]}"}
 }
 
 # --- escalate row/plan-line helpers (R5/C-3, autonomous-cycle-21) -----------------------------
@@ -1488,10 +1492,27 @@ cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|en
 
 # --- briefed / branch -------------------------------------------------------------------------
 
-cmd_briefed() { # cmd_briefed <spec> <commit:0|1> <mode: ""|mini-brief|assumed>
-  local SPEC="$1" DOCOMMIT="$2" MODE="$3"
+go_guard() { # go_guard <spec> <verb> <go:0|1> - ADR-032 D4: a Tier 2-4 plan opens its build only on
+  # the owner's **Approved:**, an explicit --go on this call, or (branch) a Briefed line that recorded
+  # one. Tier 1 and a plan with no tier pass as before. The --go bypass is the owner's opt-out, and it
+  # is written down: briefed puts `(--go)` on the Briefed line, and ship-check stage 02 wants it there.
+  local spec="$1" verb="$2" go="$3" t
+  t="$(tier_of "$spec")"
+  case "$t" in 2|3|4) ;; *) return 0 ;; esac
+  [ -n "$(marker "$spec/plan.md" Approved)" ] && return 0
+  [ "$go" = 1 ] && return 0
+  if [ "$verb" = branch ]; then
+    case "$(marker "$spec/plan.md" Briefed)" in *--go*) return 0 ;; esac
+  fi
+  echo "cycle: $verb - Tier $t plan needs **Approved:** or an explicit --go (the owner approves the plan, or opts out with: bash scripts/cycle.sh briefed $spec --go --commit)" >&2
+  emit false "$verb" 2 error "Tier $t plan needs **Approved:** or an explicit --go"
+  exit 2
+}
+
+cmd_briefed() { # cmd_briefed <spec> <commit:0|1> <mode: ""|mini-brief|assumed> [<go:0|1>]
+  local SPEC="$1" DOCOMMIT="$2" MODE="$3" GO="${4:-0}"
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
-    echo "cycle: usage: $0 briefed <spec-dir> [--commit] [--mode mini-brief|assumed]" >&2
+    echo "cycle: usage: $0 briefed <spec-dir> [--go] [--commit] [--mode mini-brief|assumed]" >&2
     emit false briefed 1 error "usage"
     exit 1
   }
@@ -1511,16 +1532,29 @@ cmd_briefed() { # cmd_briefed <spec> <commit:0|1> <mode: ""|mini-brief|assumed>
     exit 2
   }
 
+  go_guard "$SPEC" briefed "$GO"
+
   local SLUG; SLUG="$(slug_of "$SPEC")"
-  local briefed_v approved_v
+  local briefed_v approved_v restamp=0
   briefed_v="$(marker "$PLAN" Briefed)"
   approved_v="$(marker "$PLAN" Approved)"
-  if [ -z "$briefed_v" ] && [ -z "$approved_v" ]; then
+  # --go on a Briefed line written without it re-stamps that line once; a line that has it is left alone
+  if [ "$GO" = 1 ] && [ -z "$approved_v" ] && [ -n "$briefed_v" ]; then
+    case "$briefed_v" in *--go*) ;; *) restamp=1 ;; esac
+  fi
+  if { [ -z "$briefed_v" ] && [ -z "$approved_v" ]; } || [ "$restamp" = 1 ]; then
     local variant="via grill"
     case "$MODE" in
       mini-brief) variant="via mini-brief" ;;
       assumed)    variant="via grill (assumed)" ;;
     esac
+    if [ "$GO" = 1 ]; then
+      case "$MODE" in
+        mini-brief) variant="via mini-brief (--go)" ;;
+        assumed)    variant="via grill (assumed, --go)" ;;
+        *)          variant="via grill (--go)" ;;
+      esac
+    fi
     local OWNER_V="${OWNER:-${USER:-${USERNAME:-owner}}}"
     local dateonly; dateonly="$(date -u +%Y-%m-%d)"
     local line="**Briefed:** $variant, $OWNER_V, $dateonly"
@@ -1529,7 +1563,11 @@ cmd_briefed() { # cmd_briefed <spec> <commit:0|1> <mode: ""|mini-brief|assumed>
     else
       printf '%s\n' "$line" >> "$PLAN"
     fi
-    bash "$HERE/journal.sh" "$SPEC" "02-approved" "briefed $variant, $OWNER_V" "branch" >/dev/null
+    if [ "$restamp" = 1 ]; then
+      bash "$HERE/journal.sh" "$SPEC" "02-approved" "briefed --go recorded, $OWNER_V" "branch" >/dev/null
+    else
+      bash "$HERE/journal.sh" "$SPEC" "02-approved" "briefed $variant, $OWNER_V" "branch" >/dev/null
+    fi
   fi
 
   [ "$DOCOMMIT" = "1" ] && commit_paperwork briefed "vulyk($SLUG): briefed" "$SPEC"
@@ -1539,10 +1577,10 @@ cmd_briefed() { # cmd_briefed <spec> <commit:0|1> <mode: ""|mini-brief|assumed>
   exit 0
 }
 
-cmd_branch() { # cmd_branch <spec> <commit:0|1>
-  local SPEC="$1" DOCOMMIT="$2"
+cmd_branch() { # cmd_branch <spec> <commit:0|1> [<go:0|1>]
+  local SPEC="$1" DOCOMMIT="$2" GO="${3:-0}"
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
-    echo "cycle: usage: $0 branch <spec-dir> [--commit]" >&2
+    echo "cycle: usage: $0 branch <spec-dir> [--go] [--commit]" >&2
     emit false branch 1 error "usage"
     exit 1
   }
@@ -1562,6 +1600,12 @@ cmd_branch() { # cmd_branch <spec> <commit:0|1>
     echo "cycle: branch - $SPEC has neither Briefed nor Approved; run briefed first" >&2
     emit false branch 2 error "no Briefed or Approved"
     exit 2
+  fi
+  go_guard "$SPEC" branch "$GO"
+  if [ "$GO" = 1 ] && [ -z "$approved_v" ]; then
+    case "$briefed_v" in *--go*) ;; *)
+      echo "cycle: branch - note: this --go is not recorded; ship-check stage 02 wants it on the Briefed line (cycle.sh briefed $SPEC --go --commit)" >&2 ;;
+    esac
   fi
 
   local SLUG; SLUG="$(slug_of "$SPEC")"
@@ -2440,6 +2484,44 @@ red_gate() { # red_gate <story-file> - close-story's refusals for a marked story
   exit 4
 }
 
+block_card_gate() { # block_card_gate <story-file> - ADR-032 D3: when a defect card says `status: block`,
+  # every such card's check runs on the story's ## Files, expanded the way close-story's commit expands
+  # them (defects-check.sh --files). Red -> exit 4 naming the card and the file; a gate that cannot run
+  # (no python, no parser, the script missing) -> exit 2, never a pass. No block card: nothing runs.
+  local story="$1" dir="${DEFECTS_DIR:-docs/defects}" e f out rc line ref file
+  [ -d "$dir" ] && grep -rqsE --include='*.md' '^status:[[:space:]]*block[[:space:]]*$' "$dir" || return 0
+  local -a specs=() files=()
+  while IFS= read -r e; do [ -n "$e" ] && specs+=("$e"); done <<EOF
+$(files_of "$story")
+EOF
+  [ "${#specs[@]}" -gt 0 ] || return 0
+  while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && files+=("$f"); done <<EOF
+$(git -c core.quotePath=false ls-files -co --exclude-standard -- ${specs[@]+"${specs[@]}"} 2>/dev/null | LC_ALL=C sort -u)
+EOF
+  [ "${#files[@]}" -gt 0 ] || return 0
+  if [ -f "$HERE/defects-check.sh" ]; then
+    out="$(bash "$HERE/defects-check.sh" --files ${files[@]+"${files[@]}"} 2>&1)"; rc=$?
+  else
+    out="defects-check.sh missing beside cycle.sh"; rc=2
+  fi
+  line=""; [ "$rc" = 1 ] && line="$(printf '%s\n' "$out" | grep -m1 ' fails on ')"
+  [ "$rc" = 1 ] && [ -z "$line" ] && rc=3   # exit 1 with no red line is the gate crashing, never a pass
+  case "$rc" in
+    0) return 0 ;;
+    1)
+      ref="${line%% fails on *}"; file="${line#* fails on }"; file="${file%%: *}"
+      printf '%s\n' "$out" >&2
+      echo "cycle: close-story - defect card $ref fails on $file" >&2
+      emit false close-story 4 repair "defect card $ref fails on $file"
+      exit 4 ;;
+    *)
+      printf '%s\n' "$out" >&2
+      echo "cycle: close-story - defect gate could not run (defects-check.sh --files exit $rc)" >&2
+      emit false close-story 2 error "defect gate could not run"
+      exit 2 ;;
+  esac
+}
+
 cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] - red-receipt: run the story's
   # ## Verification once, the close-story way, and write the receipt only for a red for the
   # declared reason - never a launch failure, a timeout, or a green. Commits nothing.
@@ -2669,6 +2751,8 @@ EOF
   # red-receipt: a story marked `red: required` closes only on stamp-red's receipt, with its sealed
   # tests unchanged since and its implementation changed since. An unmarked story runs none of this.
   [ "$(fm_red "$STORY")" = required ] && red_gate "$STORY"
+
+  block_card_gate "$STORY"
 
   # prompt-check (docs/specs/prompt-check): a story touching scripts or prompts closes only when no finding
   # involves its own ## Files; a finding elsewhere prints as a warn, so an old drift in a hive stops nothing
@@ -4147,19 +4231,23 @@ case "$VERB" in
     cmd_escalate "$SPEC" "${@:3}"
     ;;
   briefed)
-    COMMIT=0; MODE=""
+    COMMIT=0; MODE=""; GO=0
     prevarg=""
     for a in "$@"; do
       [ "$a" = "--commit" ] && COMMIT=1
+      [ "$a" = "--go" ] && GO=1
       [ "$prevarg" = "--mode" ] && MODE="$a"
       prevarg="$a"
     done
-    cmd_briefed "$SPEC" "$COMMIT" "$MODE"
+    cmd_briefed "$SPEC" "$COMMIT" "$MODE" "$GO"
     ;;
   branch)
-    COMMIT=0
-    for a in "$@"; do [ "$a" = "--commit" ] && COMMIT=1; done
-    cmd_branch "$SPEC" "$COMMIT"
+    COMMIT=0; GO=0
+    for a in "$@"; do
+      [ "$a" = "--commit" ] && COMMIT=1
+      [ "$a" = "--go" ] && GO=1
+    done
+    cmd_branch "$SPEC" "$COMMIT" "$GO"
     ;;
   record-seat)
     shift

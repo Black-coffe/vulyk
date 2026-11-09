@@ -36,6 +36,8 @@
 #                close-story refuses it with exit 2, so the story needs a faster row
 #   red-no-test - a story marked `red: required` whose verification names no path under its
 #                `## Files`: stamp-red has no test to seal (lib.sh sealed_tests)
+#   red-seals-impl - a marked story whose sealed set holds a program that is no test while
+#                nothing else is under its `## Files`: the one implementation is sealed with the test
 #   red-value  - a `red:` value other than `required`: a typo would otherwise read as unmarked
 #
 # Limits, stated rather than hidden: a verification command that names NO path (a whole
@@ -257,8 +259,27 @@ VL_EOF
   if awk 'NR == 1 && /^---[[:space:]]*$/ { i = 1; next } i && /^---[[:space:]]*$/ { exit } i && /^red:/ { m = 1; exit } END { exit !m }' "$f"; then
     redv="$(fm "$f" red | sed 's/[[:space:]]*$//')"
     if [ "$redv" = required ]; then
-      [ -n "$(sealed_tests "$verify" "$declared")" ] \
+      sealed="$(sealed_tests "$verify" "$declared")"
+      [ -n "$sealed" ] \
         || report "red-no-test: $id - marked red: required, but its ## Verification names no path under its ## Files: stamp-red has no test to seal"
+      # G8: a sealed program that is no test, with nothing else under ## Files, is the story's one
+      # implementation sealed with its test: no edit can follow the receipt without breaking it.
+      sprog=""
+      while IFS= read -r sp; do
+        [ -n "$sp" ] && ! is_test_path "$sp" && { sprog="$sp"; break; }
+      done <<SEAL_EOF
+$sealed
+SEAL_EOF
+      rest=""
+      while IFS= read -r dp; do
+        [ -n "$dp" ] && [ "$dp" != "$f" ] || continue
+        printf '%s\n' "$sealed" | grep -qxF -- "$dp" || { rest="$dp"; break; }
+      done <<DECL_EOF
+$declared
+DECL_EOF
+      if [ -n "$sprog" ] && [ -z "$rest" ]; then
+        report "red-seals-impl: $id - stamp-red seals $sprog, its only implementation under ## Files: the verification runs it, so it is sealed with the test; run the test alone, or name the implementation apart"
+      fi
     else
       report "red-value: $id $redv - only 'required' marks a story; this value leaves it unmarked"
     fi

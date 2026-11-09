@@ -345,6 +345,63 @@ echo "--show (uncommitted-work-guard-02): the pack's change as text, pasted into
   printf '%s' "$out" | expect "--show on a missing spec dir exits non-zero" "exit=2"
 )
 
+
+echo "ADR-032 D4 (mass-audit-fixes-08): a Tier 2-4 plan opens its build only on **Approved:** or an explicit --go, and ship-check stage 02 wants the same"
+(
+  mkdir -p "$T/go" && cd "$T/go" || exit 1
+  git init -q -b main . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false
+  mkdir -p scripts memory/stats
+  cp "$SRC"/scripts/lib.sh "$SRC"/scripts/cycle.sh "$SRC"/scripts/journal.sh "$SRC"/scripts/ship-check.sh "$SRC"/scripts/redact.sh scripts/
+  for g in t3 t3old t3ship t1 t0; do
+    mkdir -p "docs/specs/$g"; cp "$SRC"/templates/plan.md "docs/specs/$g/plan.md"
+    printf '# %s\n\n## Request\n> build %s\n\n## Asks\n1. one ask\n' "$g" "$g" > "docs/specs/$g/brief.md"
+  done
+  for g in t3 t3old t3ship; do sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\13/' "docs/specs/$g/plan.md"; done
+  sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\11/' docs/specs/t1/plan.md
+  for g in t3old t3ship; do sed_inplace 's/^\*\*Briefed:\*\* <.*/**Briefed:** via grill, owner, 2026-01-01/' "docs/specs/$g/plan.md"; done
+  sed_inplace 's/^\*\*Shipped:\*\* <.*/**Shipped:** v1.0.0, 2026-01-02, at abc1234/' docs/specs/t3ship/plan.md
+  git add -A && git commit -qm "go: five plans" >/dev/null
+  go_msg='Tier 3 plan needs **Approved:** or an explicit --go'
+  out="$(bash scripts/cycle.sh briefed docs/specs/t3 2>&1; echo "exit=$?")"
+  printf '%s' "$out" | expect "briefed on a Tier 3 plan with no Approved: exit 2 - needs **Approved:** or an explicit --go" "exit=2"
+  printf '%s' "$out" | expect "briefed on a Tier 3 plan with no Approved names the rule" "$go_msg"
+  [ -z "$(marker docs/specs/t3/plan.md Briefed)" ] && echo "  ok    the refusal writes no Briefed line" \
+    || expect "the refusal writes no Briefed line" "<never>" < /dev/null
+  out="$(bash scripts/cycle.sh branch docs/specs/t3old 2>&1; echo "exit=$?")"
+  printf '%s' "$out" | expect "branch on a Tier 3 plan briefed without --go: exit 2 - needs **Approved:** or an explicit --go" "exit=2"
+  printf '%s' "$out" | expect "branch names the same rule" "$go_msg"
+  [ "$(git rev-parse --abbrev-ref HEAD)" = main ] && echo "  ok    the refused branch checks nothing out" \
+    || expect "the refused branch checks nothing out" "<never>" < /dev/null
+  bash scripts/ship-check.sh docs/specs/t3old | expect "ship-check 02 fails a Tier 3 plan briefed without approval or --go" \
+    "02   OPEN     plan: Tier 3 was briefed without approval or --go - run cycle.sh briefed <spec> --go --commit if the owner opted out"
+  bash scripts/ship-check.sh docs/specs/t3ship | expect "ship-check 02 passes a shipped Tier 3 plan briefed without --go" "02   ok"
+  out="$(bash scripts/cycle.sh briefed docs/specs/t3 --go 2>&1; echo "exit=$?")"
+  printf '%s' "$out" | expect "briefed --go on a Tier 3 plan exits 0" "exit=0"
+  grep -qE '^\*\*Briefed:\*\* via grill \(--go\), Test Owner|^\*\*Briefed:\*\* via grill \(--go\), ' docs/specs/t3/plan.md \
+    && echo "  ok    briefed --go writes via grill (--go)" || expect "briefed --go writes via grill (--go)" "<never>" < /dev/null
+  bash scripts/ship-check.sh docs/specs/t3 | expect "ship-check 02 passes a Tier 3 plan briefed with --go" "02   ok       plan: briefed - via grill (--go)"
+  out="$(bash scripts/cycle.sh briefed docs/specs/t3old --go 2>&1; echo "exit=$?")"
+  printf '%s' "$out" | expect "briefed --go on an existing Briefed line exits 0" "exit=0"
+  bash scripts/cycle.sh briefed docs/specs/t3old --go >/dev/null 2>&1
+  [ "$(grep -c '^\*\*Briefed:\*\*' docs/specs/t3old/plan.md)" = 1 ] && grep -q '^\*\*Briefed:\*\* via grill (--go), ' docs/specs/t3old/plan.md \
+    && echo "  ok    --go re-stamps the existing Briefed line, one line" || expect "--go re-stamps the existing Briefed line: $(grep '^\*\*Briefed:\*\*' docs/specs/t3old/plan.md)" "<never>" < /dev/null
+  [ "$(grep -c 'briefed --go recorded' docs/specs/t3old/journal.md 2>/dev/null)" = 1 ] \
+    && echo "  ok    the re-stamp journals briefed --go recorded once (a second --go is idempotent)" \
+    || expect "the re-stamp journals briefed --go recorded once: $(cat docs/specs/t3old/journal.md 2>/dev/null)" "<never>" < /dev/null
+  out="$(bash scripts/cycle.sh branch docs/specs/t3old 2>&1; echo "exit=$?")"
+  printf '%s' "$out" | expect "branch on the --go plan exits 0" "exit=0"
+  git checkout -q main
+  out="$(bash scripts/cycle.sh briefed docs/specs/t1 2>&1; echo "exit=$?")"
+  printf '%s' "$out" | expect "a Tier 1 plan: briefed without --go exits 0 as before" "exit=0"
+  grep -q '^\*\*Briefed:\*\* via grill, ' docs/specs/t1/plan.md && echo "  ok    the Tier 1 line is the plain via grill" \
+    || expect "the Tier 1 line is the plain via grill" "<never>" < /dev/null
+  out="$(bash scripts/cycle.sh briefed docs/specs/t0 2>&1; echo "exit=$?")"
+  printf '%s' "$out" | expect "a plan with no tier: briefed without --go exits 0 as before" "exit=0"
+  bash scripts/ship-check.sh docs/specs/t1 | expect "ship-check 02 passes a Tier 1 plan briefed without --go" "02   ok"
+  bash scripts/ship-check.sh docs/specs/t0 | expect "ship-check 02 passes a no-tier plan briefed without --go" "02   ok"
+  out="$(bash scripts/cycle.sh branch docs/specs/t1 2>&1; echo "exit=$?")"
+  printf '%s' "$out" | expect "branch on a Tier 1 plan briefed without --go exits 0 as before" "exit=0"
+)
 fi # part ship
 
 # --- every other part: cycle.sh and the gate scripts on the spec branch, a ## Commands cell
@@ -488,6 +545,22 @@ printf '{"n":1}\n' > memory/stats/council.jsonl
 shiph | expect "council.jsonl alone dirty -> 03 not clean" "working tree is not clean"
 rm -f memory/stats/council.jsonl
 
+
+echo "S5 (mass-audit-fixes-08): a --commit verb commits its own paperwork paths by pathspec, never the whole index"
+mkdir -p docs/specs/pwonly
+cp "$SRC"/templates/plan.md docs/specs/pwonly/plan.md
+printf '> build the pathspec demo\n\n## Asks\n1. one ask\n' > docs/specs/pwonly/brief.md
+printf 'foreign\n' > pw-foreign.txt && git add pw-foreign.txt
+out="$(bash scripts/cycle.sh briefed docs/specs/pwonly --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    briefed --commit with a foreign file staged exits 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
+git show --name-only --format= HEAD | grep -qxF pw-foreign.txt \
+  && { echo "::error::the paperwork commit swept in a foreign staged file: $(git show --name-only --format= HEAD | tr '\n' ' ')"; fail=1; } \
+  || echo "  ok    the paperwork commit carries only its own paths"
+git show --name-only --format= HEAD | grep -qxF docs/specs/pwonly/plan.md && echo "  ok    the paperwork commit carries the plan" \
+  || { echo "::error::the paperwork commit lacks the plan: $(git show --name-only --format= HEAD | tr '\n' ' ')"; fail=1; }
+git diff --cached --name-only | grep -qxF pw-foreign.txt && echo "  ok    the foreign file is still staged" \
+  || { echo "::error::the foreign file is no longer staged: $(git status --porcelain)"; fail=1; }
+git rm -q --cached pw-foreign.txt && rm -f pw-foreign.txt
 fi # part hooklog
 if part gates; then # --- part gates: scope-check siblings, wave-check, trace-check, the ## Asks parser
 # --- 0.18 (ADR-013 D4/D5): the three gate scripts -------------------------------------------
@@ -665,6 +738,44 @@ for nverb in "status docs/specs/sib" "status docs/specs/no-such-spec"; do
 done
 [ "$nfail" -eq 0 ] && echo "  ok    an ok and a refused verb both carry an integer now within 5 s of the shell clock"
 
+
+echo "G3 (mass-audit-fixes-08): scope-check drops a sibling's declared paths only for a not-done sibling of the same wave"
+mkdir -p docs/specs/scw src/scw/in
+printf 'a\n' > src/scw/a.txt; printf 'b\n' > src/scw/b.txt; printf 'c\n' > src/scw/c.txt; printf 'o\n' > src/scw/out.txt
+scw_story() { # scw_story <nn> <file> <wave>
+  printf -- '---\nstory: scw-%s\nspec: scw\nstatus: todo\nwave: %s\n---\n# W%s\n\n## Files\n- %s\n\n## Verification\n`true`\n' \
+    "$1" "$3" "$1" "$2" > "docs/specs/scw/scw-$1-s.md"
+}
+scw_story 01 src/scw/a.txt 1
+scw_story 02 src/scw/b.txt 2
+scw_story 03 src/scw/c.txt 1
+scw_story 04 src/scw/in/ 3
+git add -A && git commit -qm "scw: two waves" >/dev/null
+printf 'a2\n' > src/scw/a.txt; printf 'b2\n' > src/scw/b.txt; printf 'c2\n' > src/scw/c.txt
+out="$(bash scripts/scope-check.sh docs/specs/scw/scw-01-s.md)"
+printf '%s' "$out" | expect "a wave-1 edit of a file only a wave-2 todo story declares is out of scope" "! src/scw/b.txt"
+printf '%s' "$out" | expect "a same-wave sibling's file is still dropped: changed 2, out of scope 1" "declared 1, changed 2, out of scope 1"
+git checkout -q -- src/scw memory/stats/scope.jsonl
+echo "G4: a git mv of an out-of-scope file into a declared directory still counts the path it left"
+git mv src/scw/out.txt src/scw/in/out.txt
+bash scripts/scope-check.sh docs/specs/scw/scw-04-s.md | expect "a rename into a declared dir reports out of scope 1" "out of scope 1"
+git mv src/scw/in/out.txt src/scw/out.txt; git checkout -q -- memory/stats/scope.jsonl
+git rm -rq docs/specs/scw src/scw && git commit -qm "scw: drop" >/dev/null
+
+echo "G8 (mass-audit-fixes-08): wave-check reports red-seals-impl when a red story seals its one implementation"
+mkdir -p docs/specs/rsi tests
+printf '#!/usr/bin/env bash\ntrue\n' > scripts/rsi.sh; printf '#!/usr/bin/env bash\ntrue\n' > tests/rsi.test.sh
+rsi_story() { # rsi_story <n> <verification>
+  printf -- '---\nstory: rsi-%s\nspec: rsi\nstatus: todo\nwave: %s\nred: required\n---\n# R%s\n\n## Files\n- scripts/rsi.sh\n- tests/rsi.test.sh\n\n## Verification\n%s\n' \
+    "$1" "$1" "$1" "$2" > "docs/specs/rsi/rsi-$1-r.md"
+}
+rsi_story 1 '`bash tests/rsi.test.sh && bash scripts/rsi.sh`'
+rsi_story 2 '`bash tests/rsi.test.sh`'
+out="$(bash scripts/wave-check.sh docs/specs/rsi)"
+printf '%s' "$out" | expect "a red story whose verification calls its one implementation script: red-seals-impl" "red-seals-impl: rsi-1"
+printf '%s' "$out" | grep -qF 'red-seals-impl: rsi-2' && { echo "::error::a suite-only verification was reported red-seals-impl: $out"; fail=1; } \
+  || echo "  ok    a suite-only verification is no red-seals-impl"
+rm -rf docs/specs/rsi scripts/rsi.sh tests/rsi.test.sh
 fi # part gates
 if part manual; then # --- part manual: blocked_by manual:<id>, the worker model source
 echo "0.19 C: blocked_by manual:<id> - a hand step stops the wave until manual-done records it; no later wave is built past it"
@@ -1051,6 +1162,52 @@ out="$(bash scripts/cycle.sh close-story docs/specs/hand/hand-01.md --commit 2>&
   && echo "  ok    a story closed by close-story stays already done" || { echo "::error::second close: exit=$ex out=$out"; fail=1; }
 git add -A && git commit -qm "hand: done" >/dev/null 2>&1
 
+
+echo "ADR-032 D3 call site (mass-audit-fixes-08): close-story runs a block card's check on the story's matching files"
+mkdir -p docs/specs/blk src/blk docs/defects .claude/hooks
+cp "$SRC"/scripts/defects-check.sh scripts/
+cp "$SRC"/.claude/hooks/defects_lib.py .claude/hooks/
+printf '.claude/hooks/\n' >> .git/info/exclude   # the parser comes and goes below; its absence is no dirt
+BLKLOG="$(mktemp -u)"
+cp "$SRC"/templates/plan.md docs/specs/blk/plan.md
+printf '> build the block demo\n' > docs/specs/blk/brief.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/blk/plan.md
+printf '# Defect library\n' > docs/defects/README.md
+printf '#!/usr/bin/env bash\necho "$1" >> "%s"\n! grep -q bad "$1"\n' "$BLKLOG" > blk-check.sh
+blk_card() { # blk_card <status> <paths-glob>
+  printf -- '---\nid: blkc\ntitle: Class blkc\nstatus: %s\ncheck: bash blk-check.sh <arg>\nfixtures: [docs/defects/README.md, blk-check.sh]\nkeys: [k-blkc]\npaths: ["%s"]\n---\n\n# Class blkc\nWhat it is.\n\n## Never\n- write bad\n' \
+    "$1" "$2" > docs/defects/blkc.md
+}
+blk_story() { # blk_story <nn>
+  printf -- '---\nstory: blk-%s\nspec: blk\nstatus: in-progress\nreturned: DONE\nwave: %s\n---\n# B%s\n\n## Files\n- src/blk/\n\n## Verification\n`true`\n' \
+    "$1" "$1" "$1" > "docs/specs/blk/blk-$1-b.md"
+}
+blk_card block 'src/blk/**'; blk_story 01; printf 'fine\n' > src/blk/ok.txt
+git add -A && git commit -qm "blk: setup" >/dev/null
+printf 'bad\n' > src/blk/x.txt
+head_before="$(git rev-parse HEAD)"; rm -f "$BLKLOG"
+out="$(bash scripts/cycle.sh close-story docs/specs/blk/blk-01-b.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"defect card blkc fails on src/blk/x.txt"' && [ "$(git rev-parse HEAD)" = "$head_before" ] \
+  && echo "  ok    a block card failing on a declared file: exit 4 naming the card and the file, nothing committed" \
+  || { echo "::error::block card red: exit=$ex out=$out"; fail=1; }
+mv .claude/hooks/defects_lib.py .claude/hooks/defects_lib.off
+out="$(bash scripts/cycle.sh close-story docs/specs/blk/blk-01-b.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"defect gate could not run"' \
+  && echo "  ok    a gate that cannot run (no parser): exit 2 defect gate could not run" \
+  || { echo "::error::block gate exit 2: exit=$ex out=$out"; fail=1; }
+mv .claude/hooks/defects_lib.off .claude/hooks/defects_lib.py
+blk_card block 'lib/nowhere/**'; git add -A docs/defects && git commit -qm "blk: the card scopes elsewhere" -- docs/defects >/dev/null
+rm -f "$BLKLOG"
+out="$(bash scripts/cycle.sh close-story docs/specs/blk/blk-01-b.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ ! -s "$BLKLOG" ] && echo "  ok    a block card whose paths: match nothing in ## Files runs nothing, the close goes on" \
+  || { echo "::error::block card with no match: exit=$ex log=$(cat "$BLKLOG" 2>/dev/null) out=$out"; fail=1; }
+blk_card text 'src/blk/**'; blk_story 02; git add -A && git commit -qm "blk: a text card, story 02" >/dev/null
+printf 'bad again\n' > src/blk/y.txt
+mv .claude/hooks/defects_lib.py .claude/hooks/defects_lib.off   # were the gate to run, it would exit 2
+out="$(bash scripts/cycle.sh close-story docs/specs/blk/blk-02-b.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ ! -s "$BLKLOG" ] && echo "  ok    no block card: the gate does not run" \
+  || { echo "::error::no block card: exit=$ex out=$out"; fail=1; }
+rm -rf .claude/hooks; rm -f "$BLKLOG"
 fi # part close
 if part bsd; then # --- part bsd: cycle.sh under a BSD sed, conventional subjects, command_cell_exists
 echo "cycle.sh under a BSD (macOS) sed, and a Profile whose Commit convention is conventional: chore(...) subjects"
