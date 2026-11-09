@@ -665,10 +665,14 @@ cmd_status() {
   local TODO=0 PROG=0 DONE=0 BLOCKED=0 f st
   local BUILD_WAVE="" CLOSE_FILE="" WAVE_STORIES="" MAXWAVE=0 wv MANUAL_IDS=""
   local -a S_FILE=() S_ST=() S_WV=()
+  # ADR-032 D2: `done` is closed only with close-story's own commit in the spec's log; without one the
+  # story is in progress, so wave_stories keeps it and `next` stays build:/close-story:.
+  local CS=""; close_subjects "$SPEC"
   for f in "$SPEC"/*.md; do
     [ -f "$f" ] || continue
     is_story_file "$f" || continue
     fm_status_wave "$f"; st="$FM_STATUS"; wv="$FM_WAVE"; [ -n "$wv" ] || wv=1
+    [ "$st" = done ] && ! has_close_commit "$CS" "$(fm_field "$f" story)" && st=in-progress
     case "$st" in
       done) DONE=$((DONE+1)) ;;
       blocked) BLOCKED=$((BLOCKED+1)) ;;
@@ -2235,6 +2239,69 @@ fm_red() { # fm_red <story-file> - the `red:` mark from the frontmatter only, cu
   printf '%s' "${v%"${v##*[![:space:]]}"}"
 }
 
+approved_rev() { # approved_rev <story-file> -> the sha of the newest commit touching the story whose
+  # subject is a paperwork subject of its spec, `vulyk(<slug>): ...` or `chore(vulyk-<slug>): ...`
+  # (ADR-032 D1), or nothing: the story's approved version.
+  local slug sha subj
+  slug="$(slug_of "$(dirname "$1")")"
+  while IFS="$(printf '\t')" read -r sha subj; do
+    case "$subj" in
+      "vulyk($slug): "*|"chore(vulyk-$slug): "*) printf '%s' "$sha"; return 0 ;;
+    esac
+  done <<EOF
+$(git log --format='%H%x09%s' -- "$1" 2>/dev/null)
+EOF
+  return 0
+}
+
+story_blocks_guard() { # story_blocks_guard <story-file> <verb> - ADR-032 D1: the gate blocks
+  # (`## Verification` with `repeat:`, `## Files`, `red:`) of the working copy must equal the approved
+  # version's, each read through its own parser; any difference is exit 4. No approved version is
+  # exit 2 at Tier 3-4, a stderr note at Tier 1-2 or with no tier.
+  local story="$1" verb="$2" sha rel base diffs="" msg
+  sha="$(approved_rev "$story")"
+  if [ -z "$sha" ]; then
+    case "$(tier_of "$(dirname "$story")")" in
+      3|4)
+        msg="no approved version in git for $story: commit the plan or a revision first"
+        echo "cycle: $verb - $msg" >&2
+        emit false "$verb" 2 error "$msg"
+        exit 2 ;;
+    esac
+    echo "cycle: $verb - note: no approved version in git for $story; its working copy stands" >&2
+    return 0
+  fi
+  rel="${story#./}"
+  case "$rel" in /*|[A-Za-z]:/*) rel="$(git -c core.quotePath=false ls-files --full-name -- "$story" | head -n 1)" ;; esac
+  base="$(mktemp)"
+  git show "$sha:$rel" 2>/dev/null | tr -d '\r' > "$base"
+  [ "$(verify_of "$base")" = "$(verify_of "$story" | tr -d '\r')" ] || diffs="## Verification"
+  [ "$(files_of "$base")" = "$(files_of "$story" | tr -d '\r')" ] || diffs="${diffs:+$diffs, }## Files"
+  [ "$(fm_red "$base")" = "$(fm_red "$story" | tr -d '\r')" ] || diffs="${diffs:+$diffs, }red:"
+  rm -f "$base"
+  [ -n "$diffs" ] || return 0
+  msg="story blocks differ from the approved version ($(git rev-parse --short "$sha")): $diffs"
+  echo "cycle: $verb - $story: $msg" >&2
+  emit false "$verb" 4 repair "$msg"
+  exit 4
+}
+
+close_subjects() { # close_subjects <spec-dir> -> CS: the subjects of every commit touching the spec,
+  # one per line, read once (ADR-032 D2)
+  CS="$(git log --format=%s -- "$1" 2>/dev/null)"
+}
+
+has_close_commit() { # has_close_commit <subjects> <story-id> -> 0 iff a `story(<id>):` subject (or its
+  # conventional `chore(story-<id>):` form) is among <subjects>: close-story's own commit (ADR-032 D2)
+  local nl='
+'
+  [ -n "$2" ] || return 1
+  case "$nl$1" in
+    *"${nl}story($2):"*|*"${nl}chore(story-$2):"*) return 0 ;;
+  esac
+  return 1
+}
+
 path_overlap() { # path_overlap <path-or-glob> <path-or-glob> - 0 if the two can hit one file
   # (wave-check.sh's overlap rule: exact path, glob, directory prefix)
   local a="$1" b="$2"
@@ -2386,6 +2453,7 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] - red-receipt: run the 
   pause_guard "$SPECDIR" stamp-red
   driver_guard "$SPECDIR" stamp-red "$STAMP"
   branch_guard "$SPECDIR" stamp-red
+  story_blocks_guard "$STORY" stamp-red # ADR-032 D1: before anything reads red:, ## Files or ## Verification
 
   red_refuse() { echo "cycle: stamp-red - $STORY: $1" >&2; emit false stamp-red 4 repair "$1"; exit 4; }
   [ "$(fm_red "$STORY")" = required ] || red_refuse "story is not red: required"
@@ -2496,7 +2564,7 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1> [<stamp>]
   driver_guard "$SPECDIR" close-story "$STAMP"
   branch_guard "$SPECDIR" close-story
 
-  local ST SELFMARKED=0; ST="$(fm_field "$STORY" status)"
+  local ST SELFMARKED=0 HANDCOMMITTED=0; ST="$(fm_field "$STORY" status)"
   case "$ST" in
     todo|in-progress) ;;
     done)
@@ -2516,9 +2584,15 @@ $(files_of "$STORY")
 EOF
       local DONE_DIRTY; DONE_DIRTY="$(git status --porcelain -- ${DONE_PATHS[@]+"${DONE_PATHS[@]}"} 2>/dev/null)"
       if [ -z "$DONE_DIRTY" ]; then
-        echo "cycle: $(fm_field "$STORY" story) - already done, nothing to close"
-        emit_status close-story "$SPECDIR"
-        exit 0
+        # ADR-032 D2: a clean tree is a real prior close only when close-story's own commit is in
+        # the spec's log; a `done` committed by hand takes the self-marked path and is closed here.
+        local CS=""; close_subjects "$SPECDIR"
+        if has_close_commit "$CS" "$(fm_field "$STORY" story)"; then
+          echo "cycle: $(fm_field "$STORY" story) - already done, nothing to close"
+          emit_status close-story "$SPECDIR"
+          exit 0
+        fi
+        HANDCOMMITTED=1
       fi
       # C3 revised (Minors 5, 6): the journal line is written once, below, only after
       # verification is green - every exit-4 path leaves journal.md untouched, so a retried
@@ -2550,6 +2624,9 @@ EOF
       exit 4
       ;;
   esac
+
+  # ADR-032 D1: every gate below reads a working copy proven equal to the story's approved version.
+  story_blocks_guard "$STORY" close-story
 
   local SCOPE_OUT; SCOPE_OUT="$(bash "$HERE/scope-check.sh" "$STORY")"
   printf '%s\n' "$SCOPE_OUT"
@@ -2654,7 +2731,11 @@ EOF
     # with the story's own wave as `next` (Minor 5: never a hardcoded build:1).
     local SMWAVE; SMWAVE="$(fm_field "$STORY" wave)"
     case "$SMWAVE" in ''|*[!0-9]*) SMWAVE=1 ;; esac
-    bash "$HERE/journal.sh" "$SPECDIR" "03-building" "close-story $(fm_field "$STORY" story): worker marked status: done itself, closing on the uncommitted diff" "build:$SMWAVE" >/dev/null
+    if [ "$HANDCOMMITTED" = "1" ]; then
+      bash "$HERE/journal.sh" "$SPECDIR" "03-building" "close-story $(fm_field "$STORY" story): closed over a hand-committed tree" "build:$SMWAVE" >/dev/null
+    else
+      bash "$HERE/journal.sh" "$SPECDIR" "03-building" "close-story $(fm_field "$STORY" story): worker marked status: done itself, closing on the uncommitted diff" "build:$SMWAVE" >/dev/null
+    fi
   fi
 
   if [ "$DOCOMMIT" = "1" ]; then
@@ -2687,14 +2768,21 @@ EOF
     while IFS= read -r p; do [ -n "$p" ] && SPECS+=("$p"); done <<EOF
 $(files_of "$STORY")
 EOF
+    # ADR-032 D2: over a hand-committed tree nothing of the story is left to stage, so the close
+    # commit carries the spec's journal line (status reads the spec's log) and may be empty.
+    local -a ALLOW=()
+    if [ "$HANDCOMMITTED" = "1" ]; then
+      ALLOW=(--allow-empty)
+      [ -f "$SPECDIR/journal.md" ] && git add -- "$SPECDIR/journal.md" >/dev/null 2>&1 && SPECS+=("$SPECDIR/journal.md")
+    fi
     # -z and quotePath off: a non-ASCII name must come back as itself, not as a C-quoted string
     # that matches no path. The globs of `## Files` expand here, and only here: the commit and the
     # resets below read OWN literally (GIT_LITERAL_PATHSPECS), so `app/[id]/p.ts` is one file.
     while IFS= read -r -d '' p; do OWN+=("$p"); done < <(git -c core.quotePath=false diff --cached \
       --name-only -z --no-renames -- ${SPECS[@]+"${SPECS[@]}"} 2>/dev/null)
     local commit_err="nothing of this story is staged"
-    if [ "${#OWN[@]}" -eq 0 ] \
-      || ! commit_err="$(GIT_LITERAL_PATHSPECS=1 git commit -q -m "$(commit_subject "story($ID): $TITLE")" --only -- ${OWN[@]+"${OWN[@]}"} 2>&1)"; then
+    if { [ "${#OWN[@]}" -eq 0 ] && [ "${#ALLOW[@]}" -eq 0 ]; } \
+      || ! commit_err="$(GIT_LITERAL_PATHSPECS=1 git commit -q ${ALLOW[@]+"${ALLOW[@]}"} -m "$(commit_subject "story($ID): $TITLE")" --only -- ${OWN[@]+"${OWN[@]}"} 2>&1)"; then
       [ "${#OWN[@]}" -eq 0 ] || GIT_LITERAL_PATHSPECS=1 git reset -q -- ${OWN[@]+"${OWN[@]}"} >/dev/null 2>&1
       set_story_status "$STORY" done "$ST"
       echo "cycle: close-story - git commit failed: $commit_err" >&2

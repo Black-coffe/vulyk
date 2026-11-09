@@ -92,6 +92,17 @@ export VULYK_LOAD_SAMPLER='echo "cpu 7% top: stub 7%"' # post-046-tails: every `
 
 # --- fixture helpers -------------------------------------------------------------------------
 
+done_story() { # done_story <story-file> [<printf-format> <args>...] - a `done` fixture story: written from the
+  # format (or, with none, its status: line set to done) and committed alone under `story(<id>): <title>`,
+  # since a done story without close-story's own commit is in progress (ADR-032 D2)
+  local f="$1" fmt id title; shift
+  if [ $# -gt 0 ]; then fmt="$1"; shift; printf -- "$fmt" "$@" > "$f"
+  else sed_inplace 's/^status: [a-z-]*$/status: done/' "$f"; fi
+  id="$(sed -n 's/^story:[[:space:]]*//p' "$f" | head -n 1)"
+  title="$(sed -n 's/^# //p' "$f" | head -n 1)"; [ -n "$title" ] || title="$id"
+  git add -- "$f" && git commit -qm "story($id): $title" -- "$f" >/dev/null
+}
+
 mk_spec() { # mk_spec <slug> <n-asks> - brief.md with an N-item ## Asks, plan.md, one done story
   local slug="$1" n="$2" i
   mkdir -p "docs/specs/$slug"
@@ -100,7 +111,7 @@ mk_spec() { # mk_spec <slug> <n-asks> - brief.md with an N-item ## Asks, plan.md
     printf '# %s (brief)\n\n## Request\n> build the thing\n\n## Asks\n' "$slug"
     i=1; while [ "$i" -le "$n" ]; do printf '%d. ask number %d works\n' "$i" "$i"; i=$((i+1)); done # not seq: BSD `seq 1 0` counts down to 0
   } > "docs/specs/$slug/brief.md"
-  printf -- '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# S1\n' "$slug" "$slug" > "docs/specs/$slug/$slug-01-first.md"
+  done_story "docs/specs/$slug/$slug-01-first.md" '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# S1\n' "$slug" "$slug"
   git add -A && git commit -qm "spec($slug): fixture" >/dev/null
 }
 
@@ -2161,8 +2172,7 @@ git add -A && git commit -qm "spec(lr31w): fixture" >/dev/null
 out="$(council status docs/specs/lr31w --json)"
 printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: ready A and not-ready B (blocked_by todo/blocked C) -> wave_stories names only A" \
   '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"","repeat":1}]'
-sed_inplace 's/^status: blocked/status: done/' docs/specs/lr31w/lr31w-02-c.md
-git add -A && git commit -qm "lr31w: blocker C done" >/dev/null
+done_story docs/specs/lr31w/lr31w-02-c.md
 out="$(council status docs/specs/lr31w --json)"
 printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: blocker C done -> both A and B are listed" \
   '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"","repeat":1},{"file":"docs/specs/lr31w/lr31w-03-b.md","story":"lr31w-03","worker":"worker-code","model":"","repeat":1}]'
@@ -4060,7 +4070,7 @@ echo "ab-run-fixes C4: a blind seat is not carried over an ask the repair touche
 c4_round2() { # c4_round2 <slug> - repair round 1, mark the repair story done, commit a code change, open round 2
   council repair "docs/specs/$1" --commit >/dev/null 2>&1
   C4_RS="$(ls "docs/specs/$1"/*-repair-round-1.md 2>/dev/null | head -1)"
-  [ -n "$C4_RS" ] && sed_inplace 's/^status: todo$/status: done/' "$C4_RS"
+  [ -n "$C4_RS" ] && done_story "$C4_RS"
   echo "repair" > "$1-code.txt" && git add -A && git commit -qm "$1: the repair" >/dev/null
   council open-round "docs/specs/$1" --commit >/dev/null 2>&1
 }
@@ -4153,6 +4163,7 @@ wave: 2
 `true`
 `sh -c 'true && true'`
 EOF
+done_story docs/specs/r18rp/r18rp-01-a.md; done_story docs/specs/r18rp/r18rp-02-b.md
 git add -A && git commit -qm "r18rp: fixture" >/dev/null
 out="$(council repair docs/specs/r18rp 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'next is open-round, not repair' && echo "  ok    repair refuses while status says anything but repair" \
@@ -4220,7 +4231,7 @@ cp "$SRC/templates/plan.md" docs/specs/r18rq/plan.md
 printf '# r18rq (brief)\n\n## Request\nbuild the thing\n\n## Asks\n> quoted ask one works\n>\n> quoted ask two works\n\n## Answers\n> not an ask\n' > docs/specs/r18rq/brief.md
 sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-16/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rq/plan.md
 printf 'q\n' > r18rq-a.txt
-printf -- '---\nstory: r18rq-01\nstatus: done\nwave: 1\n---\n# A\n\n## Requirements\n> quoted ask one works\n\n## Files\n- r18rq-a.txt\n\n## Verification\n`true`\n' > docs/specs/r18rq/r18rq-01-a.md
+done_story docs/specs/r18rq/r18rq-01-a.md '---\nstory: r18rq-01\nstatus: done\nwave: 1\n---\n# A\n\n## Requirements\n> quoted ask one works\n\n## Files\n- r18rq-a.txt\n\n## Verification\n`true`\n'
 git add -A && git commit -qm "r18rq: fixture" >/dev/null
 out="$(council open-round docs/specs/r18rq --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && echo "  ok    open-round counts the quoted asks (it stopped on '## Asks missing or empty' before)" \
@@ -4434,8 +4445,8 @@ rm -rf "$CAPS"
 echo "gate-split-02: repair keeps only the verification lines covering the paths its findings name"
 vf_spec() { # vf_spec <slug> <finding-line> - done stories 01 (a) and 02 (b), a RED round 1 with the finding, its repair
   mk_open_spec "$1" 2; set_tier "$1" 2
-  printf -- '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# A\n\n## Files\n- %s-a.txt\n\n## Verification\n`test -f %s-a.txt`\n`echo unrelated`\n' "$1" "$1" "$1" "$1" > "docs/specs/$1/$1-01-a.md"
-  printf -- '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# B\n\n## Files\n- %s-b.txt\n\n## Verification\n`test -f %s-b.txt`\n`test -f %s-b.txt`\n' "$1" "$1" "$1" "$1" "$1" > "docs/specs/$1/$1-02-b.md"
+  done_story "docs/specs/$1/$1-01-a.md" '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# A\n\n## Files\n- %s-a.txt\n\n## Verification\n`test -f %s-a.txt`\n`echo unrelated`\n' "$1" "$1" "$1" "$1"
+  done_story "docs/specs/$1/$1-02-b.md" '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# B\n\n## Files\n- %s-b.txt\n\n## Verification\n`test -f %s-b.txt`\n`test -f %s-b.txt`\n' "$1" "$1" "$1" "$1" "$1"
   git add -A && git commit -qm "$1: stories" >/dev/null
   council open-round "docs/specs/$1" --commit >/dev/null 2>&1
   seat_report opus 1 GG | council record-seat "docs/specs/$1" 1 opus >/dev/null 2>&1
@@ -4746,8 +4757,8 @@ echo "ab-run-fixes C5: a RED round with one item in one file -> a narrow repair 
 sx_row 'Full suite (round-only)' 'true'
 nx_red() { # nx_red <slug> <review-report> - a Tier 3 spec with stories on app/x.py and app/y.py, round 1 judged RED on <review-report>, then repaired
   mk_open_spec "$1" 2; set_tier "$1" 3
-  printf -- '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# S2\n\n## Files\n- app/x.py\n\n## Verification\n`true`\n' "$1" "$1" > "docs/specs/$1/$1-02-x.md"
-  printf -- '---\nstory: %s-03\nspec: %s\nstatus: done\nwave: 1\n---\n# S3\n\n## Files\n- app/y.py\n\n## Verification\n`false`\n' "$1" "$1" > "docs/specs/$1/$1-03-y.md"
+  done_story "docs/specs/$1/$1-02-x.md" '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# S2\n\n## Files\n- app/x.py\n\n## Verification\n`true`\n' "$1" "$1"
+  done_story "docs/specs/$1/$1-03-y.md" '---\nstory: %s-03\nspec: %s\nstatus: done\nwave: 1\n---\n# S3\n\n## Files\n- app/y.py\n\n## Verification\n`false`\n' "$1" "$1"
   mkdir -p app && echo "x = 1" > app/x.py && echo "y = 1" > app/y.py
   git add -A && git commit -qm "$1: two built stories" >/dev/null
   council open-round "docs/specs/$1" --commit >/dev/null 2>&1
@@ -4759,7 +4770,7 @@ nx_red() { # nx_red <slug> <review-report> - a Tier 3 spec with stories on app/x
   NX_RS="docs/specs/$1/$1-04-repair-round-1.md"
 }
 nx_round2() { # nx_round2 <slug> - the repair story marked done with a code change, round 2 opened; prints open-round's JSON line
-  sed_inplace 's/^status: todo$/status: done/' "$NX_RS"
+  done_story "$NX_RS"
   echo "x = 2" > app/x.py && git add -A && git commit -qm "$1: the repair" >/dev/null
   council open-round "docs/specs/$1" --commit 2>/dev/null | tail -1
 }

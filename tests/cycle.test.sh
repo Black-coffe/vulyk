@@ -39,6 +39,16 @@ expect() { # expect <label> <needle>   (reads the output to judge from stdin)
   if printf '%s' "$out" | grep -qF -- "$needle"; then echo "  ok    $label"
   else echo "::error::$label - expected '$needle' in:"; printf '%s\n' "$out" | sed 's/^/        /'; fail=1; : > "$MARK"; fi
 }   # `x | expect` runs in a subshell, where fail=1 is lost - the marker file carries it to the exit
+done_story() { # done_story <story-file> [<printf-format> <args>...] - a `done` fixture story: written from the
+  # format (or, with none, its status: line set to done) and committed alone under `story(<id>): <title>`,
+  # since a done story without close-story's own commit is in progress (ADR-032 D2)
+  local f="$1" fmt id title; shift
+  if [ $# -gt 0 ]; then fmt="$1"; shift; printf -- "$fmt" "$@" > "$f"
+  else sed_inplace 's/^status: [a-z-]*$/status: done/' "$f"; fi
+  id="$(sed -n 's/^story:[[:space:]]*//p' "$f" | head -n 1)"
+  title="$(sed -n 's/^# //p' "$f" | head -n 1)"; [ -n "$title" ] || title="$id"
+  git add -- "$f" && git commit -qm "story($id): $title" -- "$f" >/dev/null
+}
 ship()  { bash scripts/ship-check.sh docs/specs/demo; }
 hcheck(){ bash scripts/human-check.sh --check docs/specs/demo; }
 
@@ -70,8 +80,7 @@ git checkout -q -b vulyk/demo
 sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/demo/plan.md
 git add -A && git commit -qm "branch"
 ship | expect "open story keeps 03 OPEN"         "still open"
-sed_inplace 's/^status: todo/status: done/' docs/specs/demo/demo-01-first.md
-git add -A && git commit -qm "story(demo-01): first"
+done_story docs/specs/demo/demo-01-first.md
 ship | expect "all done closes 03"               "stories 1/1 done"
 ship | expect "no verdict keeps 04 OPEN"         "no acceptance verdict"
 
@@ -182,7 +191,7 @@ esac
 rm -rf docs/specs/study1
 # P9-14: a spec dir with a space is one spec, not two missing ones; a BSD-only stat still reads the mtime.
 mkdir -p "docs/specs/a b"
-printf -- '---\nstory: ab-01\nspec: a b\nstatus: done\n---\n' > "docs/specs/a b/ab 01 x.md"
+done_story "docs/specs/a b/ab 01 x.md" '---\nstory: ab-01\nspec: a b\nstatus: done\n---\n'
 bash scripts/state.sh >/dev/null
 st_ab="$(sed -n '/"spec": "a b"/,/"stage"/p' .claude/state.json | tr -d ' \n')"
 case "$st_ab" in
@@ -202,10 +211,10 @@ bash scripts/release-check.sh | grep -E '^  a b +no ' >/dev/null && echo "  ok  
   || { echo "::error::release-check.sh lost the spaced spec: $(bash scripts/release-check.sh)"; fail=1; }
 rm -f scripts/release-check.sh
 rm -rf "docs/specs/a b" "$BSDBIN"
+git add -A && git commit -qm "drop the spaced fixture" >/dev/null
 
 # A stale pack (a story cut after the look) reopens 04 and 05 both.
-printf -- '---\nstory: demo-02\nspec: demo\nstatus: done\nwave: 2\n---\n# S2\n' > docs/specs/demo/demo-02-repair.md
-git add -A && git commit -qm "story(demo-02): repair"
+done_story docs/specs/demo/demo-02-repair.md '---\nstory: demo-02\nspec: demo\nstatus: done\nwave: 2\n---\n# S2\n'
 ship | expect "new story stales acceptance"      "STALE - given against pack"
 ship | expect "new story stales the check"       "STALE (pack)"
 
@@ -215,7 +224,7 @@ printf '> build the council demo\n' > docs/specs/council-demo/brief.md
 cp "$SRC"/templates/plan.md docs/specs/council-demo/plan.md
 sed_inplace 's/^\*\*Briefed:\*\* <.*/**Briefed:** via grill, owner, 2026-01-01/' docs/specs/council-demo/plan.md
 sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/council-demo/plan.md
-printf -- '---\nstory: council-demo-01\nspec: council-demo\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/council-demo/council-demo-01-first.md
+done_story docs/specs/council-demo/council-demo-01-first.md '---\nstory: council-demo-01\nspec: council-demo\nstatus: done\nwave: 1\n---\n# S1\n'
 git add -A && git commit -qm "council-demo: setup"
 C0="$(git rev-parse --short HEAD)"
 PACK0="$(pack_fingerprint docs/specs/council-demo)"
@@ -267,7 +276,7 @@ printf '> build the gate demo\n' > docs/specs/gate-demo/brief.md
 cp "$SRC"/templates/plan.md docs/specs/gate-demo/plan.md
 sed_inplace 's/^\*\*Briefed:\*\* <.*/**Briefed:** via grill, owner, 2026-01-02/' docs/specs/gate-demo/plan.md
 sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/gate-demo/plan.md
-printf -- '---\nstory: gate-demo-01\nspec: gate-demo\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/gate-demo/gate-demo-01-first.md
+done_story docs/specs/gate-demo/gate-demo-01-first.md '---\nstory: gate-demo-01\nspec: gate-demo\nstatus: done\nwave: 1\n---\n# S1\n'
 git add -A && git commit -qm "gate-demo: setup"
 shipg() { bash scripts/ship-check.sh docs/specs/gate-demo; }
 gate_rows() { # gate_rows <n>: a GREEN council row, then a later ACCEPTED human row, both at HEAD for this pack
@@ -291,8 +300,7 @@ printf '9.9.9\n' > VERSION; printf '# changelog\n' > CHANGELOG.md
 git add -A && git commit -qm "release paperwork after the ACCEPTED override"
 shipg | expect "VERSION + CHANGELOG.md after ACCEPTED stays READY" "READY."
 gate_rows 3
-printf -- '---\nstory: gate-demo-02\nspec: gate-demo\nstatus: done\nwave: 2\n---\n# S2\n' > docs/specs/gate-demo/gate-demo-02-repair.md
-git add -A && git commit -qm "story(gate-demo-02): repair after the ACCEPTED override"
+done_story docs/specs/gate-demo/gate-demo-02-repair.md '---\nstory: gate-demo-02\nspec: gate-demo\nstatus: done\nwave: 2\n---\n# S2\n'
 G="$(shipg)"
 printf '%s' "$G" | expect "a new story after ACCEPTED: 05 names STALE (pack)" "STALE (pack)"
 printf '%s' "$G" | expect "a new story after ACCEPTED: NOT READY" "NOT READY"
@@ -302,7 +310,7 @@ mkdir -p docs/specs/anchor-demo
 cp "$SRC"/templates/plan.md docs/specs/anchor-demo/plan.md
 printf '> build the anchor demo\n' > docs/specs/anchor-demo/brief.md
 sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-01-01/' docs/specs/anchor-demo/plan.md
-printf -- '---\nstory: anchor-demo-01\nspec: anchor-demo\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/anchor-demo/anchor-demo-01-first.md
+done_story docs/specs/anchor-demo/anchor-demo-01-first.md '---\nstory: anchor-demo-01\nspec: anchor-demo\nstatus: done\nwave: 1\n---\n# S1\n'
 git add -A && git commit -qm "anchor-demo: setup" >/dev/null
 bash scripts/human-check.sh docs/specs/anchor-demo ACCEPTED "looks right" >/dev/null
 git add -A && git commit -qm "anchor-demo: record check" >/dev/null
@@ -668,6 +676,7 @@ sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/man#' docs/specs/man/plan.
 man_story() { # man_story <nn> <status> <wave> <blocked_by>
   printf -- '---\nstory: man-%s\nspec: man\nstatus: %s\nwave: %s\nblocked_by: %s   # a comment\n---\n# M%s\n\n## Files\n- app.txt\n\n## Verification\n`true`\n' \
     "$1" "$2" "$3" "$4" "$1" > "docs/specs/man/man-$1-m.md"
+  [ "$2" != done ] || done_story "docs/specs/man/man-$1-m.md"
 }
 man_story 01 done 1 '[]'
 man_story 02 todo 2 '[man-01, manual:music]'
@@ -735,9 +744,8 @@ printf '%s' "$st" | expect "manual wave: wave_stories lists only the ready story
 printf '%s' "$st" | grep -qF 'manw-01-w.md' && { echo "::error::manual wave: the blocked story was listed: $st"; fail=1; } \
   || echo "  ok    manual wave: the manual-blocked story is not dispatched"
 bash scripts/cycle.sh advance docs/specs/manw 2>&1 | tail -1 | expect "manual wave: advance stops at build:1, not at the hand step" '"next":"build:1"'
-sed_inplace 's/^status: todo$/status: done/' docs/specs/manw/manw-02-w.md
+done_story docs/specs/manw/manw-02-w.md
 bash scripts/cycle.sh status docs/specs/manw --json | expect "manual wave: once the ready story is done, next is manual:tape" '"next":"manual:tape"'
-git checkout -q -- docs/specs/manw/manw-02-w.md
 
 fi # part manual
 if part close; then # --- part close: close-story scope refusal, own-path commits, odd path names
@@ -938,6 +946,110 @@ out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-10.md 2>&1)"; ex
   && echo "  ok    close-story: a segment like no cell points at the ## Commands table" \
   || { echo "::error::close-story: a segment like no cell points at ## Commands - exit=$ex out=$out"; fail=1; }
 git add -A && git commit -qm "vfy: done" >/dev/null 2>&1
+
+echo "ADR-032 D1: close-story and stamp-red read ## Verification, ## Files and red: from the story's approved commit"
+mkdir -p docs/specs/trust docs/specs/trust1
+cp "$SRC"/templates/plan.md docs/specs/trust/plan.md; cp "$SRC"/templates/plan.md docs/specs/trust1/plan.md
+sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\13/' docs/specs/trust/plan.md
+sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\11/' docs/specs/trust1/plan.md
+printf 'v1\n' > trust-app.txt
+trust_story() { # trust_story <spec> <nn> <frontmatter-lines> - in progress, `returned:` empty, ## Files trust-app.txt, ## Verification `true`
+  printf -- '---\nstory: %s-%s\nspec: %s\nstatus: in-progress\nreturned:\nwave: %s\n%s---\n# Trust fixture %s\n\n## Files\n- trust-app.txt\n\n## Verification\n`true`\n' \
+    "$1" "$2" "$1" "$2" "$3" "$2" > "docs/specs/$1/$1-$2.md"
+}
+trust_story trust 01 ''; trust_story trust 02 $'red: required\nred_reason:\n'; trust_story trust 03 ''
+git add -A && git commit -qm "vulyk(trust): plan" >/dev/null
+TSHA="$(git rev-parse --short HEAD)"; TBAK="$(mktemp)"
+t1=docs/specs/trust/trust-01.md; t2=docs/specs/trust/trust-02.md; t3=docs/specs/trust/trust-03.md
+for f in "$t1" "$t2" "$t3"; do sed_inplace 's/^returned:$/returned: DONE/' "$f"; done
+cp "$t1" "$TBAK"
+sed_inplace 's/^`true`$/none - reviewed by lead-review/' "$t1"
+out="$(bash scripts/cycle.sh close-story "$t1" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF "\"error\":\"story blocks differ from the approved version ($TSHA): ## Verification\"" && grep -q '^status: in-progress' "$t1" \
+  && echo "  ok    a ## Verification line swapped for the none literal: exit 4 naming the block and the short sha" \
+  || { echo "::error::a ## Verification swapped for none: story blocks differ from the approved version - exit=$ex out=$out"; fail=1; }
+awk '{ print } /^- trust-app\.txt$/ { print "- trust-other.txt" }' "$TBAK" > "$t1"
+out="$(bash scripts/cycle.sh close-story "$t1" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF "\"error\":\"story blocks differ from the approved version ($TSHA): ## Files\"" \
+  && echo "  ok    a widened ## Files: exit 4 naming ## Files" \
+  || { echo "::error::a widened ## Files: story blocks differ from the approved version - exit=$ex out=$out"; fail=1; }
+sed_inplace '/^red: required$/d' "$t2"
+out="$(bash scripts/cycle.sh close-story "$t2" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF "\"error\":\"story blocks differ from the approved version ($TSHA): red:\"" \
+  && echo "  ok    red: required dropped: close-story exits 4 naming red:" \
+  || { echo "::error::red: required dropped: story blocks differ from the approved version - exit=$ex out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh stamp-red "$t2" 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF "\"verb\":\"stamp-red\",\"exit\":4,\"next\":\"repair\",\"error\":\"story blocks differ from the approved version ($TSHA): red:\"" \
+  && echo "  ok    red: required dropped: stamp-red exits 4 before it runs anything" \
+  || { echo "::error::stamp-red with red: dropped: story blocks differ from the approved version - exit=$ex out=$out"; fail=1; }
+git show HEAD:"$t2" > "$t2"; sed_inplace 's/^returned:$/returned: DONE/; s/^red_reason:$/red_reason: boom/' "$t2"
+out="$(bash scripts/cycle.sh stamp-red "$t2" 2>&1)"
+printf '%s' "$out" | tail -1 | expect "red_reason: and returned: differ freely: stamp-red goes on to its own checks (not: blocks differ from the approved version)" \
+  '"error":"no test to seal: ## Verification names no path under ## Files"'
+cp "$TBAK" "$t1"; printf '\n## Implementation notes\n- trust-app.txt changed\n\n## Findings\n- none\n' >> "$t1"; printf 'v2\n' > trust-app.txt
+out="$(bash scripts/cycle.sh close-story "$t1" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && git show HEAD:"$t1" | grep -q '^status: done' \
+  && echo "  ok    returned:, ## Findings and notes differ freely: the story closes" \
+  || { echo "::error::free fields refused: story blocks differ from the approved version - exit=$ex out=$out"; fail=1; }
+git show HEAD:"$t2" > "$t2"
+awk '{ print } /^- trust-app\.txt$/ { print "- trust-b.txt" }' "$t3" > "$TBAK" && cp "$TBAK" "$t3"
+sed_inplace 's/^returned: DONE$/returned:/' "$t3"
+git add -- "$t3" && git commit -qm "vulyk(trust): revised trust-03" -- "$t3" >/dev/null
+sed_inplace 's/^returned:$/returned: DONE/' "$t3"; printf 'b\n' > trust-b.txt
+out="$(bash scripts/cycle.sh close-story "$t3" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && git show --name-only --format= HEAD | grep -qx trust-b.txt \
+  && echo "  ok    a story revised under vulyk(<slug>): revised <id> closes against the revision" \
+  || { echo "::error::the revision is not the baseline: story blocks differ from the approved version - exit=$ex out=$out"; fail=1; }
+trust_story trust 04 ''; sed_inplace 's/^returned:$/returned: DONE/' docs/specs/trust/trust-04.md
+out="$(bash scripts/cycle.sh close-story docs/specs/trust/trust-04.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"no approved version in git for docs/specs/trust/trust-04.md: commit the plan or a revision first"' \
+  && echo "  ok    a Tier 3 story with no approved version: exit 2 no approved version in git" \
+  || { echo "::error::Tier 3 untracked: exit=$ex out=$out"; fail=1; }
+rm -f docs/specs/trust/trust-04.md
+trust_story trust1 01 ''; sed_inplace 's/^returned:$/returned: DONE/' docs/specs/trust1/trust1-01.md
+out="$(bash scripts/cycle.sh close-story docs/specs/trust1/trust1-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(printf '%s\n' "$out" | grep -c 'no approved version in git')" -eq 1 ] \
+  && echo "  ok    a Tier 1 story with no approved version closes with one stderr note" \
+  || { echo "::error::Tier 1 untracked: exit=$ex out=$out"; fail=1; }
+rm -f "$TBAK"; git add -A && git commit -qm "trust: done" >/dev/null 2>&1
+
+echo "ADR-032 D2: a done story is closed only by close-story's own story(<id>) commit"
+mkdir -p docs/specs/hand
+cp "$SRC"/templates/plan.md docs/specs/hand/plan.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-09/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/hand/plan.md
+cat >> CLAUDE.md <<'EOF'
+| Hand flag | `test -f hand-flag.txt` |
+EOF
+hand_story() { # hand_story <nn> <wave> <verification> - todo, `returned:` empty, ## Files hand-app.txt
+  printf -- '---\nstory: hand-%s\nspec: hand\nstatus: todo\nreturned:\nwave: %s\n---\n# Hand fixture %s\n\n## Files\n- hand-app.txt\n\n## Verification\n%s\n' \
+    "$1" "$2" "$1" "$3" > "docs/specs/hand/hand-$1.md"
+}
+hand_story 01 1 '`true`'; hand_story 02 2 '`test -f hand-flag.txt`'; hand_story 03 2 '`true`'
+printf 'v1\n' > hand-app.txt
+git add -A && git commit -qm "vulyk(hand): plan" >/dev/null
+for f in docs/specs/hand/hand-01.md docs/specs/hand/hand-02.md; do sed_inplace 's/^status: todo$/status: done/; s/^returned:$/returned: DONE/' "$f"; done
+git add -A && git commit -qm "hand-marked done" >/dev/null
+st="$(bash scripts/cycle.sh status docs/specs/hand --json)"
+printf '%s' "$st" | expect "a done story with no close commit counts as in-progress" '"stories":{"todo":1,"in-progress":2,"done":0,"blocked":0}'
+printf '%s' "$st" | expect "and next is close-story:<its file>" '"next":"close-story:docs/specs/hand/hand-01.md"'
+out="$(bash scripts/cycle.sh close-story docs/specs/hand/hand-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(git log -1 --format=%s)" = "story(hand-01): Hand fixture 01" ] \
+  && git show HEAD:docs/specs/hand/journal.md | grep -qF 'close-story hand-01: closed over a hand-committed tree' && [ -z "$(git status --porcelain)" ] \
+  && echo "  ok    close-story over a hand-committed done story runs the gates and writes the close commit with its journal line" \
+  || { echo "::error::hand-committed close: exit=$ex log=$(git log -1 --format=%s) out=$out"; fail=1; }
+st="$(bash scripts/cycle.sh status docs/specs/hand --json)"
+printf '%s' "$st" | expect "after the story(<id>) commit the story is done" '"stories":{"todo":1,"in-progress":1,"done":1,"blocked":0}'
+printf '%s' "$st" | expect "and the next wave's build lists the hand-marked story too" '"next":"build:2"'
+printf '%s' "$st" | expect "wave_stories keeps the hand-marked story" '"file":"docs/specs/hand/hand-02.md"'
+head_before="$(git rev-parse HEAD)"
+out="$(bash scripts/cycle.sh close-story docs/specs/hand/hand-02.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"test -f hand-flag.txt"' && [ "$(git rev-parse HEAD)" = "$head_before" ] \
+  && echo "  ok    a hand-marked story whose verification fails: exit 4, not already done" \
+  || { echo "::error::hand-marked failing verification: exit=$ex out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh close-story docs/specs/hand/hand-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && printf '%s' "$out" | grep -qF 'already done' && [ "$(git rev-parse HEAD)" = "$head_before" ] \
+  && echo "  ok    a story closed by close-story stays already done" || { echo "::error::second close: exit=$ex out=$out"; fail=1; }
+git add -A && git commit -qm "hand: done" >/dev/null 2>&1
 
 fi # part close
 if part bsd; then # --- part bsd: cycle.sh under a BSD sed, conventional subjects, command_cell_exists
@@ -1270,7 +1382,7 @@ SS="$(mktemp -d)"
   printf '> ship it\n' > docs/specs/ss/brief.md
   cp "$SRC"/templates/plan.md docs/specs/ss/plan.md
   sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-19/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/ss#' docs/specs/ss/plan.md
-  printf -- '---\nstory: ss-01\nspec: ss\nstatus: done\nwave: 1\n---\n# S1\n' > docs/specs/ss/ss-01.md
+  done_story docs/specs/ss/ss-01.md '---\nstory: ss-01\nspec: ss\nstatus: done\nwave: 1\n---\n# S1\n'
   printf 'base\n' > app.txt
   git add -A && git commit -qm init
   git checkout -q -b vulyk/ss && printf 'spec\n' > app.txt && git commit -qam "story(ss-01)"
@@ -1444,8 +1556,8 @@ red_rp_spec() { # red_rp_spec <slug> <frontmatter-lines> - a Tier 2 spec, one do
   printf '# %s (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n' "$1" > "docs/specs/$1/brief.md"
   sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-28/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' "docs/specs/$1/plan.md"
   printf 'a\n' > "$1-a.txt"
-  printf -- '---\nstory: %s-01\nstatus: done\nwave: 1\n%s---\n# A\n\n## Requirements\n> build the thing\n\n## Files\n- %s-a.txt\n\n## Verification\n`true`\n' \
-    "$1" "$2" "$1" > "docs/specs/$1/$1-01-a.md"
+  done_story "docs/specs/$1/$1-01-a.md" '---\nstory: %s-01\nstatus: done\nwave: 1\n%s---\n# A\n\n## Requirements\n> build the thing\n\n## Files\n- %s-a.txt\n\n## Verification\n`true`\n' \
+    "$1" "$2" "$1"
   git add -A && git commit -qm "$1: fixture" >/dev/null
   bash scripts/cycle.sh open-round "docs/specs/$1" --commit >/dev/null 2>&1
   printf 'VERDICT: BLOCK\n## Major\n- [ask 1] ask 1 broke: run: t saw: f\n' | bash scripts/cycle.sh record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
@@ -1472,8 +1584,8 @@ red_rp_two() { # red_rp_two <slug> <major-lines> - done stories 01 (marked, <slu
   printf '# %s (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n' "$1" > "docs/specs/$1/brief.md"
   sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-28/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' "docs/specs/$1/plan.md"
   printf 'a\n' > "$1-a.txt"; printf 'doc\n' > "$1-doc.md"
-  printf -- '---\nstory: %s-01\nstatus: done\nwave: 1\n%s---\n# A\n\n## Files\n- %s-a.txt\n\n## Verification\n`true`\n' "$1" "$MK" "$1" > "docs/specs/$1/$1-01-a.md"
-  printf -- '---\nstory: %s-02\nstatus: done\nwave: 1\n---\n# D\n\n## Files\n- %s-doc.md\n\n## Verification\n`true`\n' "$1" "$1" > "docs/specs/$1/$1-02-doc.md"
+  done_story "docs/specs/$1/$1-01-a.md" '---\nstory: %s-01\nstatus: done\nwave: 1\n%s---\n# A\n\n## Files\n- %s-a.txt\n\n## Verification\n`true`\n' "$1" "$MK" "$1"
+  done_story "docs/specs/$1/$1-02-doc.md" '---\nstory: %s-02\nstatus: done\nwave: 1\n---\n# D\n\n## Files\n- %s-doc.md\n\n## Verification\n`true`\n' "$1" "$1"
   git add -A && git commit -qm "$1: fixture" >/dev/null
   bash scripts/cycle.sh open-round "docs/specs/$1" --commit >/dev/null 2>&1
   printf 'VERDICT: BLOCK\n## Major\n%s\n' "$2" | bash scripts/cycle.sh record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
