@@ -1,14 +1,15 @@
 ---
 story: mass-audit-fixes-10
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 3
 blocked_by: [mass-audit-fixes-08]
 red: required
 red_reason: invalidates the mark
+red_verified_at: 2026-11-09T14:31:12Z fa48b8bf6fce95008fa9e65b30bcb5f2421b29e5aaafa19cdab9fd748d15a336
 ---
 
 # The verification runner: honest resume marks, refused staging failures, the baseline re-stamp, a load sample before the step
@@ -73,5 +74,33 @@ asserts a `cpu <N>%` line (X-07). Asks 3, 8, 9, 11 (G5, G6, I5 code half). Marke
 `bash tests/council.test.sh --part suite && bash tests/council.test.sh --part hardening`
 
 ## Implementation notes
+- scripts/cycle.sh `verify_files_hash`: expands dir/glob entries via `git ls-files -co --exclude-standard` (red_sets' rule), sorted; the hash order changed, so a mark written by the old code restarts at line 1 once.
+- scripts/cycle.sh close-story: `cs_add` checks every `git add`; on failure it unstages what it staged, puts `status:` back and exits 2 `git add failed: <path>`. An entry git lists nothing for (never created, ignored) is skipped, as before.
+- scripts/cycle.sh `stamp-red --baseline`: `red_baseline_swap`/`red_baseline_restore` (EXIT trap, plus INT/TERM/HUP turned into exits); HEAD content comes from `git show HEAD:<p>` (raw blob, no eol smudge). It does not remove empty directories it creates.
+- scripts/cycle.sh suite: the `LOAD: start` sample runs in the foreground before t0 with a 5 s cap; stepcap = min(VULYK_STEP_CAP, 590) - SECONDS, floor 1. The sxhung test now uses cap 6 and accepts the cut value.
+- scripts/cycle.sh `fm_unquote` (variable, no subshell) is used by `fm_line_value` (so fm_field and fm_status_wave) and per entry in `blockers_of`; `status --json` also escapes spec, slug (needed for valid JSON), next and round_dir. `fm_field` lives in cycle.sh, not lib.sh.
+- scripts/lib.sh: `CITATION.cff` added to is_paperwork_path. ci.yml: macOS step runs load_sample and asserts `^cpu [0-9]+% top: `.
+- Tests: the red part also got a stamp-red resume-mark case (G5 runs through the same hash), which carries the red_reason text; the P9-06 hardening case now expects the unquoted values.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/cycle.test.sh --part red && bash tests/cycle.test.sh --part close
+- exit: 1
+- tests: fa48b8bf6fce95008fa9e65b30bcb5f2421b29e5aaafa19cdab9fd748d15a336 (tests/council.test.sh, tests/cycle.test.sh)
+- impl: 1be35f226b17eb37db403697571719d7b292725ad4a45fb7b8d3f52f34cbe11d
+- stamped: 2026-11-09T14:31:12Z
+
+```
+::error::stamp-red: an edit under a ## Files directory invalidates the mark - exit=0 receipt=## Red receipt
+  ok    red-14 stamped
+  ok    the receipt seals tests/red14.sh, not the implementation or the lint config
+  ok    an edit to the verification-named lint config does not break the seal: closed
+  ok    red-15 stamped
+  ok    the repo script the line runs is sealed beside its test argument
+  ok    a checker weakened after the stamp: exit 4
+  ok    no test-shaped path: the seal falls back to every verification path under ## Files
+red-receipt: close-story on a marked story that was never stamped
+  ok    the unstamped story: exit 4, nothing committed
+  ok    the refusal names stamp-red and the story
+```

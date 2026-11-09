@@ -249,7 +249,17 @@ fm_line_value() { # fm_line_value <line> -> FMV: the value fm_field reads off a 
   v="${v%%#*}"
   v="${v#"${v%%[![:space:]]*}"}"
   v="${v%"${v##*[![:space:]]}"}"
-  FMV="$v"
+  fm_unquote "$v"; FMV="$FMQ"
+}
+
+fm_unquote() { # fm_unquote <value> -> FMQ: the value with one layer of matching YAML quotes ("x" or
+  # 'x') stripped, else as given (ask 3): fm_field and blockers_of read `story: "x-01"` as x-01, together.
+  # A variable, not a subshell: fm_field runs per story per status call.
+  FMQ="$1"
+  case "$FMQ" in
+    \"*\") FMQ="${FMQ#\"}"; FMQ="${FMQ%\"}" ;;
+    \'*\') FMQ="${FMQ#\'}"; FMQ="${FMQ%\'}" ;;
+  esac
 }
 
 fm_status_wave() { # fm_status_wave <story-file> -> FM_STATUS, FM_WAVE, each by fm_field's rule
@@ -299,13 +309,15 @@ story_status_for_id() { # story_status_for_id <spec> <story-id>
 
 blockers_of() { # blockers_of <story-file> -> its `blocked_by:` entries, space-separated. Not
   # fm_field, which cuts a value at its next colon: `manual:<id>` carries one (0.19, package C).
-  local line v
+  local line v t out=""
   [ -f "$1" ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do
     [ "${line%%:*}" = blocked_by ] || continue
     v="${line#*:}"; v="${v%%#*}"; v="${v//$'\r'/}"
     v="${v//\[/}"; v="${v//\]/}"; v="${v//,/ }"
-    printf '%s\n' "$v"
+    # ask 3: each entry loses one layer of matching quotes, as fm_field's values do (`["x-01"]`)
+    for t in $v; do fm_unquote "$t"; out="${out:+$out }$FMQ"; done
+    printf '%s\n' "$out"
     return 0
   done < "$1"
 }
@@ -795,9 +807,9 @@ cmd_status() {
   # else null - it must never be null during a round (lead-review minor 18, live on this spec) -
   local ROUND_DIR_JSON="null"
   if [ "$OPEN_B" = true ]; then
-    ROUND_DIR_JSON="\"$RD\""
+    json_escape_to "$RD"; ROUND_DIR_JSON="\"$JE\""
   elif [ -n "$NEWEST_ROUND" ]; then
-    ROUND_DIR_JSON="\"$SPEC/council/round-$NEWEST_ROUND\""
+    json_escape_to "$SPEC/council/round-$NEWEST_ROUND"; ROUND_DIR_JSON="\"$JE\""
   fi
 
   # --- next: first match wins (C3) ----------------------------------------------------------
@@ -831,10 +843,13 @@ cmd_status() {
   else
     NEXT="open-round"
   fi
+  # ask 3: spec, slug and next carry the caller's paths (next names a story file): JSON-escaped
+  local SPEC_J SLUG_J NEXT_J
+  json_escape_to "$SPEC"; SPEC_J="$JE"; json_escape_to "$SLUG"; SLUG_J="$JE"; json_escape_to "$NEXT"; NEXT_J="$JE"
 
   printf '{"spec":"%s","slug":"%s","stage":"%s","next":"%s","briefed":%s,"approved":%s,"branch":%s,"head":"%s","pack":"%s","now":%s,"stories":{"todo":%s,"in-progress":%s,"done":%s,"blocked":%s},"wave":%s,"wave_stories":[%s],"round":%s,"ceiling":%s,"tier":%s,"open":%s,"court":%s,"missing":[%s],"stale":%s,"verdict":%s,"review":%s,"red":[%s],"round_dir":%s,"paused":%s,"shipped":%s,"since":%s,"seat_attempt":{%s},"seats":[%s],"manual":[%s]}\n' \
-    "$SPEC" "$SLUG" "$(compute_stage "$SPEC" "$PLAN" "$BRIEFED_B" "$BRANCH_V" "$((TODO+PROG+DONE+BLOCKED))" "$DONE" "$NEWEST_VERDICT" "$SHIPPED_B")" \
-    "$NEXT" "$BRIEFED_B" "$APPROVED_B" "$BRANCH_JSON" "$HEAD" "$PACK" "$(date +%s)" \
+    "$SPEC_J" "$SLUG_J" "$(compute_stage "$SPEC" "$PLAN" "$BRIEFED_B" "$BRANCH_V" "$((TODO+PROG+DONE+BLOCKED))" "$DONE" "$NEWEST_VERDICT" "$SHIPPED_B")" \
+    "$NEXT_J" "$BRIEFED_B" "$APPROVED_B" "$BRANCH_JSON" "$HEAD" "$PACK" "$(date +%s)" \
     "$TODO" "$PROG" "$DONE" "$BLOCKED" \
     "$WAVE_JSON" "$WAVE_STORIES_JSON" \
     "$ROUND_N" "$CEILING" "$TIER_JSON" "$OPEN_B" "$COURT_JSON" "$(json_str_array "$MISSING")" "$STALE_B" \
@@ -2088,8 +2103,8 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
   # `model:` applies, as it does for the seats (a hive's pin there holds). The driver never reads the
   # story file to learn it.
   model="$(fm_field "$f" model)"
-  # P9-06: values are taken as written - a quoted YAML value (`story: "x-01"`) keeps its quotes,
-  # JSON-escaped, so the line stays one parsable object.
+  # P9-06 + ask 3: fm_field strips one layer of matching YAML quotes (`story: "x-01"` is x-01); what is
+  # left is JSON-escaped, so the line stays one parsable object.
   json_escape_to "$f"; f="$JE"; json_escape_to "$id"; id="$JE"
   json_escape_to "$worker"; worker="$JE"; json_escape_to "$model"; model="$JE"
   printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$1")"
@@ -2221,13 +2236,25 @@ EOF
   return 0
 }
 
-verify_files_hash() { # verify_files_hash <story-file> -> set_hash of its ## Files entries (the story itself
-  # left out: the resume mark is written into it), in order
-  local story="${1#./}" p; local -a ps=()
-  while IFS= read -r p; do
-    [ -n "$p" ] && [ "${p#./}" != "$story" ] && ps+=("$p")
+verify_files_hash() { # verify_files_hash <story-file> -> set_hash of the files its ## Files entries name (the
+  # story itself left out: the resume mark is written into it). G5: a directory or glob entry is expanded
+  # as red_sets expands it (git ls-files -co --exclude-standard, a literal file entry kept even while
+  # missing), sorted, so an edit under `src/` changes the hash and drops a verify_resume mark.
+  local story="${1#./}" e p; local -a specs=() ps=()
+  while IFS= read -r e; do
+    [ -n "$e" ] && [ "${e#./}" != "$story" ] && specs+=("$e")
   done <<EOF
 $(files_of "$1")
+EOF
+  [ "${#specs[@]}" -gt 0 ] && while IFS= read -r p; do
+    [ -n "$p" ] && [ "$p" != "$story" ] && ps+=("$p")
+  done <<EOF
+$({
+  git -c core.quotePath=false ls-files -co --exclude-standard -- ${specs[@]+"${specs[@]}"} 2>/dev/null
+  for e in ${specs[@]+"${specs[@]}"}; do
+    case "$e" in (*[*?[]*|*/) ;; (*) [ -d "$e" ] || printf '%s\n' "$e" ;; esac
+  done
+} | LC_ALL=C sort -u)
 EOF
   set_hash ${ps[@]+"${ps[@]}"}
 }
@@ -2522,12 +2549,63 @@ EOF
   esac
 }
 
-cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] - red-receipt: run the story's
+red_baseline_swap() { # red_baseline_swap - ADR-032 D5, `stamp-red --baseline`: copy every RED_IMPL file
+  # aside, write each back to its HEAD content (a file new since HEAD is removed), and arm an EXIT trap
+  # that puts the copies back whatever the exit. No `git stash`: nothing enters git, nothing can be lost.
+  local p i=0
+  RB_DIR="$(mktemp -d)" || { emit false stamp-red 2 error "mktemp failed"; exit 2; }
+  : > "$RB_DIR/list"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    i=$((i+1))
+    if [ -f "$p" ]; then
+      cp -p -- "$p" "$RB_DIR/$i" || { rm -rf "$RB_DIR"; RB_DIR=""; emit false stamp-red 2 error "baseline: cannot copy $p aside"; exit 2; }
+      printf '%s\ty\t%s\n' "$i" "$p" >> "$RB_DIR/list"
+    else
+      printf '%s\tn\t%s\n' "$i" "$p" >> "$RB_DIR/list"
+    fi
+  done <<EOF
+$RED_IMPL
+EOF
+  trap red_baseline_restore EXIT
+  trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    if git cat-file -e "HEAD:$p" 2>/dev/null; then
+      mkdir -p "$(dirname "$p")" && git show "HEAD:$p" > "$p" \
+        || { emit false stamp-red 2 error "baseline: cannot write HEAD's $p"; exit 2; }
+    else
+      rm -f -- "$p"
+    fi
+  done <<EOF
+$RED_IMPL
+EOF
+}
+
+red_baseline_restore() { # red_baseline_restore - the EXIT trap of red_baseline_swap: each file back byte for
+  # byte (cp -p of the copy), a file that was absent removed again; then the copies are dropped
+  local i flag p
+  [ -n "${RB_DIR:-}" ] && [ -f "$RB_DIR/list" ] || return 0
+  while IFS="$(printf '\t')" read -r i flag p; do
+    [ -n "$p" ] || continue
+    if [ "$flag" = y ]; then
+      mkdir -p "$(dirname "$p")"; rm -f -- "$p"; cp -p -- "$RB_DIR/$i" "$p" \
+        || echo "cycle: stamp-red - baseline: could not restore $p; its copy is kept in $RB_DIR/$i" >&2
+    else
+      rm -f -- "$p"
+    fi
+  done < "$RB_DIR/list"
+  rm -rf "$RB_DIR"; RB_DIR=""
+}
+
+cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] [<baseline 0|1>] - red-receipt: run the story's
   # ## Verification once, the close-story way, and write the receipt only for a red for the
-  # declared reason - never a launch failure, a timeout, or a green. Commits nothing.
-  local STORY="$1" STAMP="${2:-}"
+  # declared reason - never a launch failure, a timeout, or a green. Commits nothing. With
+  # --baseline (ADR-032 D5, the Queen's re-stamp after a sealed-test edit) the run and the receipt's
+  # impl hash are taken against HEAD's implementation, and the working copy is put back after.
+  local STORY="$1" STAMP="${2:-}" BASELINE="${3:-0}"
   [ -n "$STORY" ] && [ -f "$STORY" ] || {
-    echo "cycle: usage: $0 stamp-red <story-file> [--stamp <s>]" >&2
+    echo "cycle: usage: $0 stamp-red <story-file> [--stamp <s>] [--baseline]" >&2
     emit false stamp-red 1 error "usage"
     exit 1
   }
@@ -2555,6 +2633,7 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] - red-receipt: run the 
 
   local CMD_LIST; CMD_LIST="$(verify_cmd_list "$STORY")"
   verify_cells_check stamp-red "$CMD_LIST"
+  [ "$BASELINE" = 1 ] && red_baseline_swap
 
   # gate-split-02: the call budget can stop the run between lines (exit 7); the earlier lines' results
   # wait in a per-story directory under the temp dir until the resumed call has them all.
@@ -2832,18 +2911,32 @@ EOF
     local ID TITLE f
     ID="$(fm_field "$STORY" story)"
     TITLE="$(grep -m1 '^# ' "$STORY" | sed 's/^#[[:space:]]*//; s/`//g')"
+    # G6: every add is checked; a failed one unstages what this close staged, puts status: back and
+    # exits 2 - never a commit missing a declared file. An entry that names nothing git lists (never
+    # created, or ignored) has nothing to stage and is skipped, as before.
+    local -a CS_ADDED=(); local CS_STATUS_SET=0
+    cs_add() { # cs_add <path> - git add one path or exit 2 naming it
+      local err
+      if err="$(git add -- "$1" 2>&1)"; then CS_ADDED+=("$1"); return 0; fi
+      [ "${#CS_ADDED[@]}" -eq 0 ] || git reset -q -- ${CS_ADDED[@]+"${CS_ADDED[@]}"} >/dev/null 2>&1
+      [ "$CS_STATUS_SET" = 1 ] && set_story_status "$STORY" done "$ST"
+      echo "cycle: close-story - git add failed: $1: $(printf '%s' "$err" | head -1)" >&2
+      emit false close-story 2 error "git add failed: $1"
+      exit 2
+    }
     while IFS= read -r f; do
       [ -n "$f" ] || continue
-      git add -- "$f" >/dev/null 2>&1
+      [ -n "$(git -c core.quotePath=false ls-files -co --exclude-standard -- "$f" 2>/dev/null | head -1)" ] || continue
+      cs_add "$f"
     done <<EOF
 $(files_of "$STORY")
 EOF
-    [ -f memory/stats/scope.jsonl ] && git add -- memory/stats/scope.jsonl >/dev/null 2>&1
+    [ -f memory/stats/scope.jsonl ] && cs_add memory/stats/scope.jsonl
     # Story 09: the anomaly-scan hook's log rides this commit too, same as scope.jsonl above.
-    [ -n "$(git status --porcelain -- memory/stats/anomalies.jsonl 2>/dev/null)" ] && git add -- memory/stats/anomalies.jsonl >/dev/null 2>&1
+    [ -n "$(git status --porcelain -- memory/stats/anomalies.jsonl 2>/dev/null)" ] && cs_add memory/stats/anomalies.jsonl
 
-    set_story_status "$STORY" '[^[:space:]#]+' done
-    git add -- "$STORY" >/dev/null 2>&1
+    set_story_status "$STORY" '[^[:space:]#]+' done; CS_STATUS_SET=1
+    cs_add "$STORY"
 
     # Commit exactly what this story staged (`--only` by pathspec), never whatever else sits in
     # the index; on a failed commit (a hook, an index.lock) unstage it again, so the next story's
@@ -2857,7 +2950,7 @@ EOF
     local -a ALLOW=()
     if [ "$HANDCOMMITTED" = "1" ]; then
       ALLOW=(--allow-empty)
-      [ -f "$SPECDIR/journal.md" ] && git add -- "$SPECDIR/journal.md" >/dev/null 2>&1 && SPECS+=("$SPECDIR/journal.md")
+      [ -f "$SPECDIR/journal.md" ] && cs_add "$SPECDIR/journal.md" && SPECS+=("$SPECDIR/journal.md")
     fi
     # -z and quotePath off: a non-ASCII name must come back as itself, not as a C-quoted string
     # that matches no path. The globs of `## Files` expand here, and only here: the commit and the
@@ -3477,17 +3570,19 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
   fi
 
   # --- run step K: its STEP line and its PART lines, appended as one block ---------------------
-  # post-046-tails: the box's load is sampled at the step's start (in the background, so the step's own
-  # clock never pays for it; `LOAD: start` therefore reads the box during the step's first seconds, the step
-  # included) and, for a FAIL step only, at its end; only a FAIL step writes the two lines.
-  local loadf loadpid loads=""; loadf="$(mktemp)"
-  suite_load start > "$loadf" & loadpid=$!
+  # post-046-tails: the box's load is sampled at the step's start and, for a FAIL step only, at its end; only
+  # a FAIL step writes the two lines. X-08: the start sample runs in the foreground before t0 (cap 5 s), so
+  # it reads the box before the step and never overlaps it; the stepped call cap pays for it below.
+  local loadstart loads=""
+  loadstart="$(suite_load start 5)"
   local t0="$SECONDS" out rc parts secs sres=ok note="" tmp
   if [ "$stepped" = 1 ]; then
-    # The call cap: 590 s (one Bash call). VULYK_STEP_CAP only lowers it, for tests.
+    # The call cap: 590 s (one Bash call), cut by the seconds this call already spent (the --steps call,
+    # the start sample), so no call passes 600 s. VULYK_STEP_CAP only lowers it, for tests.
     local stepcap="${VULYK_STEP_CAP:-590}"
     case "$stepcap" in ''|*[!0-9]*|0) stepcap=590 ;; esac
     [ "$stepcap" -gt 590 ] && stepcap=590
+    stepcap=$((stepcap - SECONDS)); [ "$stepcap" -lt 1 ] && stepcap=1
     out="$(run_capped "$stepcap" bash -c "$cmd --step $K" 2>&1)"; rc=$?
     secs=$((SECONDS - t0))
     parts="$(printf '%s\n' "$out" | tr -d '\r' | grep '^PART ')"
@@ -3525,16 +3620,14 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
   printf '%s\n' "$parts" > "$tmp"
   { [ "$rc" -ne 0 ] || ! bash "$HERE/suite-parts-check.sh" "$tmp" >/dev/null 2>&1; } && sres=FAIL
   rm -f "$tmp"
-  wait "$loadpid" 2>/dev/null
   if [ "$sres" = FAIL ]; then
     # The end sample fits inside the one Bash call (600 s) this verb runs in: at most 10 s, none when
     # under 2 s are left (a stepped step killed at its 590 s cap).
     local left=$((580 - SECONDS)); [ "$left" -gt 10 ] && left=10
-    loads="$(cat "$loadf")"
+    loads="$loadstart"
     if [ "$left" -ge 2 ]; then loads="$loads"$'\n'"$(suite_load end "$left")"
     else loads="$loads"$'\n'"LOAD: unavailable - end: no time left in this call"; fi
   fi
-  rm -f "$loadf"
   {
     printf 'STEP %s/%s: %s %ss%s\n' "$K" "$S" "$sres" "$secs" "$note"
     [ -n "$parts" ] && printf '%s\n' "$parts"
@@ -4269,13 +4362,14 @@ case "$VERB" in
     cmd_manual_done "$SPEC" "${3:-}" "${*:4}"
     ;;
   stamp-red)
-    STAMP=""
+    STAMP=""; BASELINE=0
     prevarg=""
     for a in "$@"; do
+      [ "$a" = "--baseline" ] && BASELINE=1
       [ "$prevarg" = "--stamp" ] && STAMP="$a"
       prevarg="$a"
     done
-    cmd_stamp_red "$SPEC" "$STAMP"
+    cmd_stamp_red "$SPEC" "$STAMP" "$BASELINE"
     ;;
   close-story)
     COMMIT=0; STAMP=""

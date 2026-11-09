@@ -136,6 +136,14 @@ jobs:
           [ -z "$(command -v timeout)" ] || { echo "::error::a timeout is on PATH: $(command -v timeout)"; exit 1; }
           command -v jq >/dev/null 2>&1 || brew install jq
 
+      # X-07: the macOS branch of lib.sh load_sample (top -l 2) runs for real here, not only against a stub.
+      - name: macOS - load_sample prints a real cpu line
+        if: runner.os == 'macOS'
+        run: |
+          rc=0; line="$(bash -c '. scripts/lib.sh; load_sample')" || rc=$?; echo "$line"
+          [ "$rc" -eq 0 ] && printf '%s\n' "$line" | grep -Eq '^cpu [0-9]+% top: ' \
+            || { echo "::error::load_sample gave no 'cpu <N>% top:' line on macOS (exit $rc)"; exit 1; }
+
       - uses: actions/setup-node@v4   # driver and e2e run the real Workflow driver
         with:
           node-version: 22

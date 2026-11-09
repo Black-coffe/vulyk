@@ -4737,9 +4737,11 @@ git add -A && git commit -qm "fixture: a stepped runner with a hung part" >/dev/
 sx_row 'Full suite (round-only, steps)' 'bash fx-hang.sh'
 sx_open sxhung
 rd="docs/specs/sxhung/council/round-1"
-out="$(VULYK_STEP_CAP=3 council suite docs/specs/sxhung 2>&1)"; ex=$?
+# X-08: the call cap is cut by the seconds the verb already spent (the --steps call, the load sample), so the
+# STEP note names the cap the step really ran under: 6 s or a little less.
+out="$(VULYK_STEP_CAP=6 council suite docs/specs/sxhung 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL"' >/dev/null 2>&1 \
-  && grep -qE '^STEP 1/1: FAIL [0-9]+s - timed out after 3s - no end from: fx:hung$' "$rd/suite.log" \
+  && grep -qE '^STEP 1/1: FAIL [0-9]+s - timed out after [1-6]s - no end from: fx:hung$' "$rd/suite.log" \
   && grep -qF 'PART fx:quick ok 0s cap 300s' "$rd/suite.log" \
   && tail -1 "$rd/suite.log" | grep -qE '^SUITE: FAIL [0-9]+s - step 1/1 no end from: fx:hung$' \
   && echo "  ok    the hung part is named in the STEP note and the SUITE line, the ended one is not" \
@@ -4810,6 +4812,47 @@ nx_red nxi 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n- [ask 2]
 [ -f "$NX_RS" ] && [ -z "$(fm_field_t "$NX_RS" narrow)" ] && nx_sec "$NX_RS" '## Files' | grep -qx -- '- app/y.py' \
   && echo "  ok    two items in one file: no narrow mark, the full ## Files union" \
   || { echo "::error::two items: $(cat "$NX_RS" 2>&1)"; fail=1; echo "neighbour two items" >> "$FAILS"; }
+
+echo "suite: the LOAD: start sample ends before the step starts, and the stepped call cap pays for it (mass-audit-fixes-10, X-08)"
+SXTS="$(mktemp -d)"; export SXTS
+cat > fx-ts.sh <<'TS'
+case "$1" in
+  --steps) echo 1 ;;
+  --step)
+    date +%s > "$SXTS/step.ts"
+    if [ -f "$SXTS/load.ts" ]; then echo "PART fx:ts ok 0s cap 300s"; echo "STEP 1/1: ok 0s"
+    else echo "PART fx:ts FAIL 0s cap 300s - the load sample had not ended"; exit 1; fi ;;
+  *) exit 2 ;;
+esac
+TS
+cat > fx-slow.sh <<'SLOW'
+case "$1" in
+  --steps) echo 1 ;;
+  --step) echo "PARTS 1/1: fx:slow"; sleep 5; echo "PART fx:slow ok 5s cap 300s"; echo "STEP 1/1: ok 5s" ;;
+  *) exit 2 ;;
+esac
+SLOW
+git add -A && git commit -qm "fixture: a sample-order runner and a five-second runner" >/dev/null
+sx_row 'Full suite (round-only, steps)' 'bash fx-ts.sh'
+sx_open sxorder
+rd="docs/specs/sxorder/council/round-1"
+out="$(VULYK_LOAD_SAMPLER='sleep 1; date +%s > "$SXTS/load.ts"; echo "cpu 7% top: stub 7%"' council suite docs/specs/sxorder 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "ok"' >/dev/null 2>&1 \
+  && [ -f "$SXTS/load.ts" ] && [ -f "$SXTS/step.ts" ] && [ "$(cat "$SXTS/load.ts")" -le "$(cat "$SXTS/step.ts")" ] \
+  && ! grep -q '^LOAD:' "$rd/suite.log" \
+  && echo "  ok    the stub sampler's timestamp is written before the step command starts; an ok step still writes no LOAD line" \
+  || { echo "::error::suite: the LOAD: start sample must end before the step starts - exit=$ex load=$(cat "$SXTS/load.ts" 2>&1) step=$(cat "$SXTS/step.ts" 2>&1) log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+sx_row 'Full suite (round-only, steps)' 'bash fx-slow.sh'
+sx_open sxspent
+rd="docs/specs/sxspent/council/round-1"
+out="$(VULYK_STEP_CAP=6 VULYK_LOAD_SAMPLER='sleep 2; echo "cpu 7% top: stub 7%"' council suite docs/specs/sxspent 2>&1)"; ex=$?
+capn="$(sed -n 's/^STEP 1\/1: FAIL [0-9]*s - timed out after \([0-9]*\)s.*/\1/p' "$rd/suite.log")"
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && [ -n "$capn" ] && [ "$capn" -le 4 ] \
+  && grep -qx 'LOAD: start cpu 7% top: stub 7%' "$rd/suite.log" && grep -qx 'LOAD: end cpu 7% top: stub 7%' "$rd/suite.log" \
+  && echo "  ok    a 2 s sample under a 6 s call cap leaves the step at most 4 s: the 5 s step times out, the FAIL step carries both LOAD lines" \
+  || { echo "::error::suite: the stepped call cap must be cut by the seconds the sample spent - exit=$ex cap=$capn log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+rm -rf "$SXTS"; unset SXTS
 fi # part suite
 
 if part hardening; then # --- part hardening: free text and odd values that broke a ledger, a report or a path (audit P9)
@@ -4875,8 +4918,40 @@ printf -- '---\nstory: "h06-02"\nspec: h06\nstatus: todo\nwave: 1\nworker: '"'"'
 git add -A && git commit -qm "h06: quoted values" >/dev/null
 out="$(council status docs/specs/h06 --json)"
 printf '%s' "$out" | jq -e '.branch == "\"vulyk/h06\"" and .next == "build:1"
-  and (.wave_stories | map(select(.file | endswith("h06-02-second.md"))) | .[0] | .story == "\"h06-02\"" and .model == "\"sonnet\"" and .worker == "'"'"'worker-code'"'"'")' >/dev/null 2>&1 \
-  && echo "  ok    the line parses; branch and the story's values come back as written" || { echo "::error::status: $out"; fail=1; }
+  and (.wave_stories | map(select(.file | endswith("h06-02-second.md"))) | .[0] | .story == "h06-02" and .model == "sonnet" and .worker == "worker-code")' >/dev/null 2>&1 \
+  && echo "  ok    the line parses; the marker comes back as written, the story's quoted YAML values unquoted (ask 3)" || { echo "::error::status: $out"; fail=1; }
+
+echo "status --json: a quoted blocked_by entry and a quoted worker resolve like the unquoted form (mass-audit-fixes-10, ask 3)"
+mk_open_spec h10 2
+printf -- '---\nstory: h10-02\nspec: h10\nstatus: todo\nwave: 2\nblocked_by: ["h10-01"]\nworker: "worker-code"\n---\n# Quoted\n' > docs/specs/h10/h10-02-quoted.md
+printf -- '---\nstory: h10-03\nspec: h10\nstatus: todo\nwave: 2\nblocked_by: [h10-01]\nworker: worker-code\n---\n# Plain\n' > docs/specs/h10/h10-03-plain.md
+git add -A && git commit -qm "h10: quoted and plain blockers" >/dev/null
+out="$(council status docs/specs/h10 --json)"
+printf '%s' "$out" | jq -e '.next == "build:2" and (.wave_stories | length) == 2
+  and (.wave_stories | map(.worker) | unique) == ["worker-code"]
+  and (.wave_stories | map(.story) | sort) == ["h10-02", "h10-03"]' >/dev/null 2>&1 \
+  && echo "  ok    both wave-2 stories are ready on the done h10-01, both on worker-code" || { echo "::error::quoted blocked_by/worker: $out"; fail=1; echo "quoted blocked_by" >> "$FAILS"; }
+
+echo "status --json: a spec path and a story file name holding a quote (and a backslash where the file system allows one) stay valid JSON (mass-audit-fixes-10, ask 3)"
+bsp="$(mktemp -d)"; bs=''
+mkdir "$bsp/a\\b" 2>/dev/null && [ -d "$bsp/a\\b" ] && bs='\'
+rm -rf "$bsp"
+[ -n "$bs" ] || echo "  note  this file system takes no backslash in a name: the quote alone is tested here"
+h11="h11${bs}\"q"
+mkdir -p "docs/specs/$h11"
+cp "$SRC/templates/plan.md" "docs/specs/$h11/plan.md"
+printf '# h11 (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n' > "docs/specs/$h11/brief.md"
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-09/' "docs/specs/$h11/plan.md"
+sed_inplace "s#^\*\*Branch:\*\* <.*#**Branch:** $(git rev-parse --abbrev-ref HEAD)#" "docs/specs/$h11/plan.md"
+h11f="docs/specs/$h11/h11-01-${bs}\"x.md"
+printf -- '---\nstory: h11-01\nspec: h11\nstatus: in-progress\nwave: 1\n---\n# Odd names\n' > "$h11f"
+git add -A && git commit -qm "h11: odd names" >/dev/null
+mk_open_round "$h11" 1 >/dev/null
+out="$(council status "docs/specs/$h11" --json)"
+printf '%s' "$out" | jq -e --arg s "docs/specs/$h11" --arg f "$h11f" \
+  '.spec == $s and .next == ("close-story:" + $f) and .round_dir == ($s + "/council/round-1")' >/dev/null 2>&1 \
+  && echo "  ok    the line parses; spec, next and round_dir come back as the paths themselves" || { echo "::error::odd-name status: $out"; fail=1; echo "odd-name status" >> "$FAILS"; }
+rm -rf "docs/specs/$h11/council"; git add -A && git commit -qm "h11: done" >/dev/null 2>&1
 
 echo "reopen, pause, journal.sh: a credential in the owner's text is masked before brief.md, PAUSE and journal.md (P9-07)"
 h07secret="sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"

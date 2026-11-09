@@ -1208,6 +1208,53 @@ out="$(bash scripts/cycle.sh close-story docs/specs/blk/blk-02-b.md --commit 2>&
 [ "$ex" -eq 0 ] && [ ! -s "$BLKLOG" ] && echo "  ok    no block card: the gate does not run" \
   || { echo "::error::no block card: exit=$ex out=$out"; fail=1; }
 rm -rf .claude/hooks; rm -f "$BLKLOG"
+
+echo "mass-audit-fixes-10 G5: a directory entry in ## Files is hashed by its files, so an edit under it drops a resume mark"
+git add -A && git commit -qm "vr: a clean tree to start from" >/dev/null 2>&1
+mkdir -p src/vr
+VRLOG="$(mktemp -u)"
+printf 'printf "x" >> "%s"\ngrep -qx good src/vr/a.txt\n' "$VRLOG" > vr-check.sh
+printf 'init\n' > src/vr/a.txt
+printf '| VR check | `bash vr-check.sh` |\n' >> CLAUDE.md
+printf -- '---\nstory: stray-21\nspec: stray\nstatus: in-progress\nreturned: DONE\nwave: 21\n---\n# Stray fixture 21\n\n## Files\n- src/vr/\n\n## Verification\n`bash vr-check.sh`\n`true`\n' > docs/specs/stray/stray-21.md
+git add -A && git commit -qm "vr: setup" >/dev/null
+vr_close() { VULYK_VERIFY_TIMEOUT=5 VULYK_VERIFY_CALL=4 bash scripts/cycle.sh close-story docs/specs/stray/stray-21.md --commit 2>&1; }
+printf 'good\n' > src/vr/a.txt
+out="$(vr_close)"; ex=$?
+[ "$ex" -eq 7 ] && grep -qE '^verify_resume: close-story 2 [0-9a-f]{64}$' docs/specs/stray/stray-21.md \
+  && echo "  ok    call 1: line 1 green, paused before line 2, a mark written" || { echo "::error::vr call 1: exit=$ex out=$out"; fail=1; }
+printf 'bad\n' > src/vr/a.txt
+head_before="$(git rev-parse HEAD)"
+out="$(vr_close)"; ex=$?
+[ "$ex" -eq 4 ] && [ "$(git rev-parse HEAD)" = "$head_before" ] && [ "$(wc -c < "$VRLOG" | tr -d ' ')" = 2 ] && grep -q '^status: in-progress' docs/specs/stray/stray-21.md \
+  && echo "  ok    an edit under a ## Files directory invalidates the mark: line 1 runs again on the new code and the failing change is not committed" \
+  || { echo "::error::an edit under a ## Files directory invalidates the mark - exit=$ex line-1 runs=$(wc -c < "$VRLOG" 2>/dev/null) head moved=$([ "$(git rev-parse HEAD)" = "$head_before" ] && echo no || echo yes) out=$out"; fail=1; }
+printf 'good\n' > src/vr/a.txt
+out="$(vr_close)"; ex=$?
+out2="$(vr_close)"; ex2=$?
+[ "$ex" -eq 7 ] && [ "$ex2" -eq 0 ] && [ "$(wc -c < "$VRLOG" | tr -d ' ')" = 3 ] && git show HEAD:docs/specs/stray/stray-21.md | grep -q '^status: done' \
+  && echo "  ok    with nothing under the entry changed the mark still resumes: line 1 not run again, the story closes" \
+  || { echo "::error::vr resume: exit=$ex/$ex2 line-1 runs=$(wc -c < "$VRLOG" 2>/dev/null) out=$out2"; fail=1; }
+rm -f "$VRLOG"
+
+echo "mass-audit-fixes-10 G6: a git add that fails in close-story --commit refuses with exit 2, nothing committed, status: untouched"
+printf 'v1\n' > stray-add-fail.txt
+printf -- '---\nstory: stray-22\nspec: stray\nstatus: in-progress\nreturned: DONE\nwave: 22\n---\n# Stray fixture 22\n\n## Files\n- stray-app.txt\n- stray-add-fail.txt\n\n## Verification\n`true`\n' > docs/specs/stray/stray-22.md
+git add -A && git commit -qm "add-fail: setup" >/dev/null
+GSHIM="$(mktemp -d)"
+printf '#!/usr/bin/env bash\nif [ "$1" = add ]; then for a in "$@"; do [ "$a" = stray-add-fail.txt ] && { echo "fatal: the shim refuses this add" >&2; exit 128; }; done; fi\nexec "%s" "$@"\n' "$(command -v git)" > "$GSHIM/git"
+chmod +x "$GSHIM/git"
+printf 'v22\n' > stray-app.txt; printf 'v22\n' > stray-add-fail.txt
+head_before="$(git rev-parse HEAD)"
+out="$(PATH="$GSHIM:$PATH" bash scripts/cycle.sh close-story docs/specs/stray/stray-22.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && [ "$(git rev-parse HEAD)" = "$head_before" ] && grep -q '^status: in-progress' docs/specs/stray/stray-22.md \
+  && [ -z "$(git diff --cached --name-only)" ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"git add failed: stray-add-fail.txt"' \
+  && echo "  ok    a failing git add: exit 2 naming the path, nothing committed or left staged, status: untouched" \
+  || { echo "::error::a failing git add in close-story - exit=$ex head moved=$([ "$(git rev-parse HEAD)" = "$head_before" ] && echo no || echo yes) staged=$(git diff --cached --name-only | tr '\n' ' ') out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-22.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && git show --name-only --format= HEAD | grep -qx stray-add-fail.txt \
+  && echo "  ok    without the shim the same close commits both files" || { echo "::error::add-fail rerun: exit=$ex out=$out"; fail=1; }
+rm -rf "$GSHIM"
 fi # part close
 if part bsd; then # --- part bsd: cycle.sh under a BSD sed, conventional subjects, command_cell_exists
 echo "cycle.sh under a BSD (macOS) sed, and a Profile whose Commit convention is conventional: chore(...) subjects"
@@ -1842,6 +1889,58 @@ rcpt="$(sed -n '/^## Red receipt/,$p' "$st")"
   && echo "  ok    ## Red receipt holds the red_reason line and the last lines" \
   || { echo "::error::receipt lost the red_reason line: exit=$ex $rcpt $(printf '%s\n' "$out" | tail -1)"; fail=1; }
 git add -A && git commit -qm "red: stamp fixtures" >/dev/null
+
+echo "mass-audit-fixes-10 G5: stamp-red's resume mark hashes a ## Files directory by its files - an edit under it reruns line 1"
+st=docs/specs/red/red-18.md
+mkdir -p src/r18
+printf 'one\n' > src/r18/a.txt
+printf '#!/usr/bin/env bash\necho "r18 saw $(cat src/r18/a.txt)"\necho "expected done"\nexit 1\n' > tests/red18.sh
+red_story 18 "$MK" $'- tests/red18.sh\n- src/r18/\n' $'`bash tests/red18.sh`\n`bash tests/red-pass.sh`'
+git add -A && git commit -qm "red: resume-mark story" >/dev/null
+out="$(VULYK_VERIFY_TIMEOUT=5 VULYK_VERIFY_CALL=4 bash scripts/cycle.sh stamp-red "$st" 2>&1)"; ex=$?
+[ "$ex" -eq 7 ] && grep -qE '^verify_resume: stamp-red 2 ' "$st" && echo "  ok    red-18 call 1 paused after line 1" || { echo "::error::red-18 pause: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
+printf 'two\n' > src/r18/a.txt
+n=0; ex=7
+while [ "$ex" -eq 7 ] && [ "$n" -lt 4 ]; do
+  out="$(VULYK_VERIFY_TIMEOUT=5 VULYK_VERIFY_CALL=4 bash scripts/cycle.sh stamp-red "$st" 2>&1)"; ex=$?; n=$((n+1))
+done
+rcpt="$(sed -n '/^## Red receipt/,$p' "$st")"
+[ "$ex" -eq 0 ] && printf '%s' "$rcpt" | grep -qF 'r18 saw two' && ! printf '%s' "$rcpt" | grep -qF 'r18 saw one' \
+  && echo "  ok    stamp-red: an edit under a ## Files directory invalidates the mark - the receipt is the new code's output" \
+  || { echo "::error::stamp-red: an edit under a ## Files directory invalidates the mark - exit=$ex receipt=$rcpt"; fail=1; }
+git add -A && git commit -qm "red: resume-mark story stamped" >/dev/null
+
+echo "mass-audit-fixes-10 D5: stamp-red --baseline re-stamps against HEAD's implementation and puts the working copy back"
+printf 'todo\n' > src/red16.txt
+printf '#!/usr/bin/env bash\ngrep -qx done src/red16.txt && [ -f src/red16-new.txt ] && exit 0\necho "expected done in src/red16.txt"\nexit 1\n' > tests/red16.sh
+red_story 16 "$MK" $'- tests/red16.sh\n- src/red16.txt\n- src/red16-new.txt\n' '`bash tests/red16.sh`'
+red_story 17 $'red: required\nred_reason: expected something else\n' $'- tests/red16.sh\n- src/red16.txt\n- src/red16-new.txt\n' '`bash tests/red16.sh`'
+git add -A && git commit -qm "red: baseline stories" >/dev/null
+printf 'done\n' > src/red16.txt; printf 'new\r\nbytes\n' > src/red16-new.txt   # the implementation, green and uncommitted
+printf '# edited after green\n' >> tests/red16.sh                             # the sealed test, edited after green
+wc_before="$(cksum < src/red16.txt) $(cksum < src/red16-new.txt) $(cksum < tests/red16.sh)"
+stash_before="$(git stash list | wc -l | tr -d ' ')"
+out="$(bash scripts/cycle.sh stamp-red docs/specs/red/red-16.md 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s\n' "$out" | tail -1 | grep -qF '"error":"not red: every verification line exits 0"' \
+  && echo "  ok    without --baseline the green working copy is no red" || { echo "::error::plain stamp on green: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
+out="$(bash scripts/cycle.sh stamp-red docs/specs/red/red-17.md --baseline 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s\n' "$out" | tail -1 | grep -qF '"error":"red for another reason' \
+  && [ "$(cksum < src/red16.txt) $(cksum < src/red16-new.txt) $(cksum < tests/red16.sh)" = "$wc_before" ] \
+  && echo "  ok    --baseline whose stamp exits 4: the working copy is back byte for byte, the new file too" \
+  || { echo "::error::stamp-red --baseline exit 4 restore: exit=$ex $(printf '%s\n' "$out" | tail -1) files=$(cat src/red16.txt src/red16-new.txt 2>&1)"; fail=1; }
+out="$(bash scripts/cycle.sh stamp-red docs/specs/red/red-16.md --baseline 2>&1)"; ex=$?
+sha="$( . scripts/lib.sh; sha256_tool )"   # the receipt's impl hash, worked out by hand for HEAD's state: the new file missing
+ih16="$( { printf 'missing src/red16-new.txt\n'; printf '%s  src/red16.txt\n' "$(git show HEAD:src/red16.txt | $sha | cut -c1-64)"; } | $sha | cut -c1-64)"
+[ "$ex" -eq 0 ] && grep -qx -- "- impl: $ih16" docs/specs/red/red-16.md && grep -qF 'expected done in src/red16.txt' docs/specs/red/red-16.md \
+  && [ "$(cksum < src/red16.txt) $(cksum < src/red16-new.txt) $(cksum < tests/red16.sh)" = "$wc_before" ] \
+  && [ "$(git stash list | wc -l | tr -d ' ')" = "$stash_before" ] \
+  && echo "  ok    --baseline: the receipt is HEAD's red, the working copy is back byte for byte, no stash entry" \
+  || { echo "::error::stamp-red --baseline: exit=$ex $(printf '%s\n' "$out" | tail -2) impl=$(grep -- '^- impl:' docs/specs/red/red-16.md) want=$ih16 files=$(cat src/red16.txt src/red16-new.txt 2>&1) stash=$(git stash list)"; fail=1; }
+out="$(bash scripts/cycle.sh close-story docs/specs/red/red-16.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && git show HEAD:docs/specs/red/red-16.md | grep -q '^status: done' \
+  && echo "  ok    after the --baseline re-stamp the story closes on its green implementation" \
+  || { echo "::error::close after --baseline: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
+git add -A && git commit -qm "red: baseline done" >/dev/null 2>&1
 
 echo "red-receipt: an unmarked story built from templates/story.md closes as before"
 sed -e 's/<slug>/red/g' -e 's/red-NN/red-20/' -e 's/^returned:/returned: DONE/' -e 's#^- path/to/file.ext#- src/tpl.txt#' \
