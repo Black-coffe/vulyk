@@ -1,14 +1,15 @@
 ---
 story: mass-audit-fixes-06
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: retry never runs on the judging family
+red_verified_at: 2026-11-09T12:59:15Z 4e4b76745fbd701270dbc5bf924077800292b35b2254818765d3be02b9af8461
 ---
 
 # A missed story's retry never runs on the family that judges it; the model brief says less, once
@@ -62,6 +63,11 @@ hive path, Profile-aware dispatch); `memory/map/scripts.md` → Entry points (`m
 `bash tests/model-profile.test.sh`
 
 ## Implementation notes
+- `.claude/workflows/vulyk-cycle.js`: `RETRY` constant replaced by `retryModel(st.tier)`; judges are `[REVIEW || opus]` at Tier 1-3, `[TOP, REVIEW]` at Tier 4 (the 4th test case needs REVIEW counted at Tier 4 too); a same-family pick sets `retry_same_family: true` on every return path.
+- `scripts/top-model.sh`: explain body moved into `explain_lines()`; `--brief` = explain lines then the floor block (and its exit); `--help` range bumped one line for the new usage line; other modes byte-identical (diffed against HEAD).
+- `.claude/hooks/top-model-brief.sh`: one `--brief` run split into explain/floor lines; dispatch sentence only on floor miss, profile not chosen (or no model-profile.sh), or an env/constitution pin.
+- `docs/model-cascade.md`: the "one gap" sentence became the retry rule plus a same-family table (solo Tier 1-2, repair stories, the retry with no family left, and the existing Tier 4 second-reviewer gap).
+- Tests: driver red test kept from the earlier attempt; brief checks in `tests/model-profile.test.sh` use a counting stub hive.
 
 ## Findings
 - NEEDS_CONTEXT (worker, 2026-11-09): the AC "top-model-brief.sh calls top-model.sh once" cannot be met inside
@@ -79,3 +85,26 @@ hive path, Profile-aware dispatch); `memory/map/scripts.md` → Entry points (`m
 - Queen ruling (2026-11-09): (a) taken: `scripts/top-model.sh` added to `## Files` for an additive `--brief`
   mode, Non-goal narrowed to that; economy AC rewritten to the Goal's rule (opus + `retry_same_family: true`).
   Keep the uncommitted red test in `tests/driver.test.sh`; run stamp-red once both test files hold their tests.
+
+## Red receipt
+- command: bash tests/driver.test.sh
+- exit: 1
+- tests: 4e4b76745fbd701270dbc5bf924077800292b35b2254818765d3be02b9af8461 (tests/driver.test.sh, tests/model-profile.test.sh)
+- impl: 194bfe2c0423b93fb0c5308557fc278d32d1f4f0f68c935ae6aaed08e0e91e5a
+- stamped: 2026-11-09T12:59:15Z
+
+```
+::error::retry never runs on the judging family: economy (TOP=opus, REVIEW=opus) has no other high family - opus, retry_same_family recorded - got {"m":["sonnet","opus"]}
+::error::retry never runs on the judging family: sonnet-builds Tier 4 (TOP=fable judges) retries on opus - got {"m":["sonnet","fable"]}
+  ok    retry never runs on the judging family: Tier 3 with TOP=fable (opus judges) retries on fable
+  ok    checkpoint: after a wave, before the gate and the seats
+  ok    checkpoint: after one gate step, before the next
+  ok    checkpoint: after the gate finished, before the seat dispatch
+  ok    checkpoint: a terminal state returns as itself, no checkpoint
+  ok    checkpoint: 50 min after launched_at by the verb clock, the default fires
+  ok    checkpoint: 49 min, the default does not fire
+  ok    checkpoint: no launched_at, no time source - the checkpoint does not fire and the driver runs on
+  ok    checkpoint: no `now` in any verb answer - the checkpoint does not fire
+  ok    no queen-planner dispatch in any scenario
+122 passed, 3 failed
+```

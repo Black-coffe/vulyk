@@ -200,7 +200,23 @@ LINE="$(brief)"
 case "$LINE" in *" · models economy") ok "the brief ends with the chosen profile" ;;
   *) bad "the brief does not end with ' · models economy': $LINE" ;; esac
 printf '%s\n' "$LINE" | expect "the brief says the profile decided the gate" "by profile economy"
+# mass-audit O6: one resolver run (a counting stub in front of top-model.sh), the dispatch sentence only off the default
+CNT="$T/count"; mkdir -p "$CNT/scripts"
+cp "$SRC/scripts/lib.sh" "$SRC/scripts/model-profile.sh" "$CNT/scripts/"
+cp "$SRC/scripts/top-model.sh" "$CNT/scripts/top-model.real.sh"
+printf '%s\n' 'printf "x\n" >> "$(dirname "$0")/calls"' 'exec bash "$(dirname "$0")/top-model.real.sh" "$@"' > "$CNT/scripts/top-model.sh"
+cbrief() { : > "$CNT/scripts/calls"; run "$CNT" "$SRC/.claude/hooks/top-model-brief.sh"; }
+LINE="$(cbrief)"
+expect_eq "the brief runs top-model.sh once" "1" "$(wc -l < "$CNT/scripts/calls" | tr -d ' ')"
+expect_eq "the default brief (floor ok, profile chosen, no pin) is one line" "1" "$(printf '%s\n' "$LINE" | wc -l | tr -d ' ')"
+case "$LINE" in
+  *"Dispatch model:"*) bad "the default brief still carries the dispatch sentence: $LINE" ;;
+  *) ok "the default brief drops the dispatch sentence" ;; esac
+printf '%s\n' "$LINE" | expect "the default brief still names the gate" "gate model: opus"
+EXTRA_ENV="VULYK_TOP_MODEL=fable" cbrief | expect "a pinned gate brings the dispatch sentence back" "Dispatch model: fable"
+EXTRA_ENV="ANTHROPIC_DEFAULT_OPUS_MODEL=claude-opus-4-1" cbrief | expect "a floor miss brings the dispatch sentence back" "Dispatch model:"
 rm -f "$CFG/vulyk-model-profile"
+cbrief | expect "a profile not chosen brings the dispatch sentence back" "Dispatch model:"
 
 echo "--- CLAUDE.md"
 grep -qxF '| Models | `bash tests/model-profile.test.sh` |' "$SRC/CLAUDE.md" \

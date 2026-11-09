@@ -220,9 +220,17 @@ never touch. No file, or a garbled one, reads as `sonnet-builds`.
 
 The Queen is `opus` in all three. `routine` is a story the planner marks `model: haiku` (helpers, boilerplate, a
 repeated pattern); it is a split by kind of story, not a ratio. The family that builds never judges in any profile:
-under `opus-builds` Fable judges, both blind seats included. The one gap: under `economy` the Tier 4 second reviewer
-is `sonnet`, the builders' family. A missed story's retry climbs to the gate, but under `opus-builds` the gate family
-is the judge, so there the retry runs on `opus`.
+under `opus-builds` Fable judges, both blind seats included. The retry rule: a missed story's retry runs on the first
+of `[TOP, opus]` that is not a family judging that round (`REVIEW` when passed, else `opus`, at Tier 1-3; `TOP`, and
+`REVIEW` when passed, at Tier 4); when none is left it runs on `opus` and the driver's result carries
+`retry_same_family: true`. The cases where one family both builds and judges:
+
+| case | builds | judges |
+|---|---|---|
+| solo Tier 1-2 under `sonnet-builds` | the Queen, `opus` | `lead-review`, `opus` |
+| a repair story after a RED round | `opus` | `lead-review`, `opus` (Tier 4: the gate beside it) |
+| a retry with no other family left (`economy`; Tier 4 with `REVIEW` = `opus`) | `opus` | `opus` |
+| the Tier 4 second reviewer under `economy` and `opus-builds` | `sonnet` stories | `sonnet` beside the gate |
 
 **The resolver.** `scripts/model-profile.sh` is the only reader of the file: no arguments prints the profile,
 `--role <r>` one family, `--recommend` the recommendation (`sonnet-builds` on every plan), `--explain [<name>]` the table, `--chosen` whether the owner

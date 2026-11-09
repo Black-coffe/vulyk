@@ -248,6 +248,27 @@ const blindPromptsClean = (r) => r.dispatches
     });
     check(r.result.next === 'green' && r.dispatches[1].model === 'opus', 'retry: a landed retry walks on, TOP falls back to opus', { result: r.result, m: r.dispatches.map((d) => d.model) });
   }
+  // mass-audit I3: the retry is the first of [TOP, opus] that is not the judging family; none left -> opus + retry_same_family
+  {
+    const L = 'retry never runs on the judging family';
+    const a = story(1, { model: 'sonnet' });
+    const retryRun = (args, tier) => run({ spec: SPEC, stamp: S, ...args }, {
+      clerk: [[CLAIM, adv(build([a], { tier }))], [ADV, adv(build([a], { tier }))], [ADV, adv(green({ tier }))], [RELEASE, releaseOk]],
+    });
+    const shape = (r) => ({ m: r.dispatches.map((d) => d.model), same: r.result.retry_same_family });
+    const eco = await retryRun({ top_model: 'opus', review_model: 'opus' }, 3);
+    check(eco.result.next === 'green' && eco.dispatches[1].model === 'opus' && eco.result.retry_same_family === true,
+      `${L}: economy (TOP=opus, REVIEW=opus) has no other high family - opus, retry_same_family recorded`, shape(eco));
+    const sb4 = await retryRun({ top_model: 'fable', second_model: 'opus' }, 4);
+    check(sb4.result.next === 'green' && sb4.dispatches[1].model === 'opus' && sb4.result.retry_same_family === undefined,
+      `${L}: sonnet-builds Tier 4 (TOP=fable judges) retries on opus`, shape(sb4));
+    const t3 = await retryRun({ top_model: 'fable' }, 3);
+    check(t3.result.next === 'green' && t3.dispatches[1].model === 'fable' && t3.result.retry_same_family === undefined,
+      `${L}: Tier 3 with TOP=fable (opus judges) retries on fable`, shape(t3));
+    const both = await retryRun({ top_model: 'fable', second_model: 'sonnet', review_model: 'opus' }, 4);
+    check(both.result.next === 'green' && both.dispatches[1].model === 'opus' && both.result.retry_same_family === true,
+      `${L}: Tier 4 with REVIEW=opus (fable and opus both judge) retries on opus, retry_same_family recorded`, shape(both));
+  }
   // dead workers: the reasonFor classification is the stop's error; a dead worker whose story closed is no miss
   {
     const a = story(1, { worker: 'worker-code' });

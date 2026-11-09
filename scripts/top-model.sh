@@ -9,6 +9,7 @@
 #   scripts/top-model.sh --check    -> exit 0 if settings.local.json pins the Queen's model, 1 if not
 #   scripts/top-model.sh --floor    -> exit 0 if nothing configured here can resolve a family below
 #                                      the model floor (scripts/lib.sh, ADR-015), 1 with one line each
+#   scripts/top-model.sh --brief    -> the --explain lines, then the --floor lines and its exit, from one run
 #
 # The rule (v0.18.0, ADR-013 D3): the resolved alias is the GATE model - the Tier 4
 # lead-review (beside the second reviewer), lead-architect, the Tier 4 planner and a missed
@@ -56,7 +57,8 @@ case "${1:-}" in
   --apply)       MODE="apply" ;;
   --check)       MODE="check" ;;
   --floor)       MODE="floor" ;;
-  -h|--help)     sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; echo "$GATE_HINT"; exit 0 ;;
+  --brief)       MODE="brief" ;;
+  -h|--help)     sed -n '2,46p' "$0" | sed 's/^# \{0,1\}//'; echo "$GATE_HINT"; exit 0 ;;
   *)             echo "error: unknown flag $1 (try --help)" >&2; exit 2 ;;
 esac
 
@@ -138,7 +140,7 @@ constitution_pin() {
 # The model profile: model-profile.sh is the only reader of its file; a hive without it reads as sonnet-builds.
 MPROFILE="sonnet-builds"
 case "$MODE" in
-  print|explain|floor)   # --floor too: an opus-builds profile hands the gate to fable, and that route is judged
+  print|explain|floor|brief)   # --floor too: an opus-builds profile hands the gate to fable, and that route is judged
     MP="$(dirname "$0")/model-profile.sh"
     [ -f "$MP" ] && MPROFILE="$(bash "$MP" 2>/dev/null)"
     [ -n "$MPROFILE" ] || MPROFILE="sonnet-builds" ;;
@@ -202,6 +204,29 @@ QUEEN="opus"
 LOCAL="$ROOT/.claude/settings.local.json"
 pinned_model() { [ -f "$LOCAL" ] && field "$LOCAL" model; }
 
+explain_lines() { # the --explain lines; --brief prints them before the floor lines
+  echo "top model : $MODEL ($(label "$MODEL"))"
+  echo "decided by: $SOURCE - $REASON"
+  echo "plan      : $PLAN${DETAIL:+ ($DETAIL)}"
+  echo "signal    : ${SIGNAL:-none}"
+  echo "profile   : $PROFILE"
+  echo "second reviewer (Tier 4): $(second_reviewer "$MODEL")"
+  case "$MPROFILE" in
+    opus-builds) echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner; a missed story's retry runs on opus (Fable judges it); lead-review at Tier 1-3 and the rest follow the opus-builds profile (bash scripts/model-profile.sh --explain)" ;;
+    economy)     echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner, a missed story's retry; lead-review at Tier 1-3 and the rest follow the economy profile (bash scripts/model-profile.sh --explain)" ;;
+    *)           echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner, a missed story's retry; lead-review at Tier 1-3 runs on its frontmatter (opus)" ;;
+  esac
+  echo "$GATE_HINT"
+  P="$(pinned_model)"
+  if [ -z "$P" ]; then
+    echo "queen session: not pinned - the session starts on the account default (Opus since Claude Code 2.1.280). Run: bash scripts/top-model.sh --apply"
+  elif [ "$P" = "$QUEEN" ]; then
+    echo "queen session: pinned $P in .claude/settings.local.json"
+  else
+    echo "queen session: pinned $P in .claude/settings.local.json, the Queen runs on $QUEEN - re-run --apply, or keep the pin deliberately"
+  fi
+}
+
 # ---------------------------------------------------------------- modes
 
 case "$MODE" in
@@ -212,28 +237,10 @@ case "$MODE" in
     case "$PLAN" in max|premium-seat) echo "$PLAN premium" ;; *) echo "$PLAN standard" ;; esac ;;
 
   explain)
-    echo "top model : $MODEL ($(label "$MODEL"))"
-    echo "decided by: $SOURCE - $REASON"
-    echo "plan      : $PLAN${DETAIL:+ ($DETAIL)}"
-    echo "signal    : ${SIGNAL:-none}"
-    echo "profile   : $PROFILE"
-    echo "second reviewer (Tier 4): $(second_reviewer "$MODEL")"
-    case "$MPROFILE" in
-      opus-builds) echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner; a missed story's retry runs on opus (Fable judges it); lead-review at Tier 1-3 and the rest follow the opus-builds profile (bash scripts/model-profile.sh --explain)" ;;
-      economy)     echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner, a missed story's retry; lead-review at Tier 1-3 and the rest follow the economy profile (bash scripts/model-profile.sh --explain)" ;;
-      *)           echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner, a missed story's retry; lead-review at Tier 1-3 runs on its frontmatter (opus)" ;;
-    esac
-    echo "$GATE_HINT"
-    P="$(pinned_model)"
-    if [ -z "$P" ]; then
-      echo "queen session: not pinned - the session starts on the account default (Opus since Claude Code 2.1.280). Run: bash scripts/top-model.sh --apply"
-    elif [ "$P" = "$QUEEN" ]; then
-      echo "queen session: pinned $P in .claude/settings.local.json"
-    else
-      echo "queen session: pinned $P in .claude/settings.local.json, the Queen runs on $QUEEN - re-run --apply, or keep the pin deliberately"
-    fi ;;
+    explain_lines ;;
 
-  floor)
+  floor|brief)
+    [ "$MODE" = "brief" ] && explain_lines   # the session-start brief: both halves from one run
     # Before the fact (ADR-015): every place an alias can be remapped below the floor. The after-the-
     # fact half is telemetry's `model_below_floor`, read off the model each transcript really ran on.
     FOUND=0
