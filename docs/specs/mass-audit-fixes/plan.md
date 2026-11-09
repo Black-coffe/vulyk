@@ -224,8 +224,8 @@ is missing or unparsable.
 **Branch:** vulyk/mass-audit-fixes
 **Council:** RED round 1, 2026-11-09, at 4560df8, pack 071e42715dbd - red: 18
 **Council:** RED round 2, 2026-11-09, at 7b54bf6, pack 69942212bcbb
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 **Checked:** ACCEPTED by Andrei, 2026-11-09, at 462e6fe - owner picked the option «ACCEPTED без раунда 3 (Рекомендую)» (label written by the Queen; no words of his own) after the repair-19 diff (ce2e90b, 3 test lines) was shown in chat as text
 **Checked:** ACCEPTED by Andrei, 2026-11-09, at 9aa72d0 - owner picked «Да, ACCEPTED и пуш (Рекомендую)» (label written by the Queen; no words of his own) after the repair-19 and fixture-scrub diffs (ce2e90b, 9aa72d0) were shown in chat as text
 **Checked:** ACCEPTED by Andrei, 2026-11-09, at 1c516d7 - re-ACCEPT after the CI repair (0ab4a86, 1c516d7), diff pasted in chat, branch CI 42687998836 green; owner: «ок, продолжай здесь»
 **Checked:** ACCEPTED by Andrei, 2026-11-09, at 1fb3fc5 - re-ACCEPT after the CI repair (0ab4a86, 1c516d7), diff pasted in chat, branch CI 42687998836 green; owner, asked to confirm the release explicitly: «Принимаю» (the earlier «ок, продолжай здесь» was ambiguous)
+**Shipped:** 0.50.0, 2026-11-09, at a405d9a - merged to main, publish pending

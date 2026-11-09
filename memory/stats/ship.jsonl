@@ -44,3 +44,4 @@
 {"ts":"2026-11-04T08:00:37Z","spec":"post-046-tails","version":"0.47.0","head":"c548324","pack":"dd7add9f1db3","note":"merged to main; owner accepted round 1 (human-check ACCEPTED 2026-11-04); push, tag and release run by the Queen per the owner's rule"}
 {"ts":"2026-11-06T16:30:35Z","spec":"uncommitted-work-guard","version":"0.48.0","head":"46646d8","pack":"1ea400337548","note":"merged to main, publish pending"}
 {"ts":"2026-11-09T05:27:55Z","spec":"ab-run-fixes","version":"0.49.0","head":"0e69284","pack":"530577feaddb","note":"merged to main, publish pending"}
+{"ts":"2026-11-09T20:08:50Z","spec":"mass-audit-fixes","version":"0.50.0","head":"a405d9a","pack":"6cc44d9cbc24","note":"merged to main, publish pending"}
