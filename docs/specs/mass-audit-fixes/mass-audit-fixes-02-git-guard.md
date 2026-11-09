@@ -1,14 +1,15 @@
 ---
 story: mass-audit-fixes-02
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: forced checkout -b
+red_verified_at: 2026-11-09T13:01:17Z 7bdb8bef885b882ea37fbeacac17ac95fa2d83ab2eb24f901e62d3dd52ac58c7
 ---
 
 # git-guard: every Python launcher, UTF-8 stdin, and five classified gaps closed
@@ -61,5 +62,40 @@ class). Marked red: security branches.
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- `.claude/hooks/git-guard.sh`: launcher loop `${VULYK_PY:+"$VULYK_PY"} python3 python py`; stdin read as bytes, `utf-8-sig`.
+- S4: `checkout -b/-B/--orphan` with `-f`/`--force` classifies as a whole-tree forced checkout; unforced still passes.
+- S5/I8: `story_tier` returns `UNREAD` for a token holding `$`, backtick or `%`, or an unreadable plan.md; main session denied with its own reason. A plan.md with no `**Tier:**` line still passes (story names only "cannot be read").
+- S6: continuation joined per tool (Bash `\`+newline, PowerShell backtick+newline) inside `split_segments`, after heredoc cutting; `env`/`env.exe` matched by basename; a subagent verb holding `$`/backtick is denied as unreadable.
+- P5: `subprocess.TimeoutExpired` from git status denies with the timeout message; under `--check` a `porcelain` object `{"sleep": S, "timeout": T}` runs a real Python sleep stub through the same `subprocess.run` (chosen over a sentinel so the timeout path itself is exercised; a slow `git` stub on PATH was rejected: 8 s per run).
+- `tests/maintenance.test.sh`: new block in the git-guard section, `chk` helper for `--check` payloads.
+- Surprise: Git Bash rewrote the `/usr/bin/env git stash` argv for native Python into a Windows path; the helper sets `MSYS2_ARG_CONV_EXCL`. That test edit came after the first red receipt: implementation set aside, base restored, re-stamped (same impl hash), implementation re-applied.
+- Surprise: the PowerShell backtick continuation was not denied before (the AC says "stays denied"); it is now.
 
 ## Findings
+- close-story exit 4 twice: `bash tests/maintenance.test.sh` 441 checks, 2 failed, both `portability-check: the tree ...`
+  from `install.sh:1022: heredoc-in-subst` (a `<<'PYFIX'` heredoc inside `$( )`). `install.sh` is not in this
+  story's `## Files`; it is wave-mate story 04's uncommitted edit (still `returned:` empty). Every git-guard and law5
+  check passes. Needs: story 04 to clear that hit (or close), then rerun this close-story; no change here required. Resolved: story 04 committed 727ecbc.
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: 7bdb8bef885b882ea37fbeacac17ac95fa2d83ab2eb24f901e62d3dd52ac58c7 (tests/maintenance.test.sh)
+- impl: 2e5032f3480147e9d6f53bcbca0f068088019cecaeac94c12b3afb68ee65b77a
+- stamped: 2026-11-09T13:01:17Z
+
+```
+::error::git-guard: forced checkout -b is denied: git checkout -f -b x - expected 'exit=1' in:
+::error::git-guard: forced checkout -b is denied: git checkout -fb x - expected 'exit=1' in:
+::error::git-guard: forced checkout -b is denied: git checkout --force -B x - expected 'exit=1' in:
+  ok    git-guard: --check fails on the neighbour fixture
+  ok    git-guard: --check passes a file that is no hook input
+--- git guard: a mod with tool.check
+  ok    git-guard: an enabled mod with tool.check gets a brief line
+  ok    git-guard: a disabled mod is not named
+  ok    git-guard: no such mod, no line
+  ok    git-guard: an enabled mod without tool.check, no line
+--- plan step 3a: the existing-repo horizon gate
+  ok    plan 3a: the existing-repo gate counts a module under ## Unmapped territory beside ## Codebase map
+maintenance.test.sh: 441 checks, 19 failed
+```

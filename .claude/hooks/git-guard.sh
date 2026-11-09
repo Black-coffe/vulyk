@@ -4,26 +4,36 @@
 #
 # Verbs: stash (push/save/bare, -u, drop, clear), checkout . / -f / [<ref>] -- <path> / <ref> <path>,
 # restore (worktree form), reset --hard, clean -f, switch -f / --discard-changes, branch -D,
-# worktree remove --force. Read-only forms pass: stash list/show, soft and mixed reset, checkout -b,
-# clean -n, restore --staged alone.
+# worktree remove --force. Read-only forms pass: stash list/show, soft and mixed reset, checkout -b
+# (a forced checkout -b / -B / --orphan is a forced checkout), clean -n, restore --staged alone.
+# A line continuation (backslash-newline, PowerShell backtick-newline) is joined before reading, and
+# `env` counts by basename (`/usr/bin/env git`).
 #   - A subagent (the input carries agent_id) is denied every listed verb, with no git status call,
-#     and any git call whose arguments cannot be read (unbalanced quotes).
+#     and any git call whose arguments cannot be read (unbalanced quotes, a verb holding $ or a backtick).
 #   - The main session is denied only when `git status --porcelain` shows the paths the verb would
 #     discard dirty (tracked) or untracked (clean -f, stash -u); the reason names them, 10 at most then
 #     `+N more`, and gives the safe path. stash drop/clear and branch -D lose a stash or commits, not
-#     tree files: they are denied to subagents only.
+#     tree files: they are denied to subagents only. A git status that times out denies: it cannot
+#     prove the tree is clean.
 # Not covered, on purpose: rm / Remove-Item, `bash -c`, scripts and aliases (git is matched only at a
-# command position), a ref checkout over an untracked file, and a mod that answers `tool.check` (on a
-# personal login it can approve a call this hook denied: the SessionStart brief names such a mod).
+# command position), a variable or substitution in the git command word or in an argument after the
+# verb (only the verb itself is read as unreadable), `env` with options before git, a ref checkout over
+# an untracked file, and a mod that answers `tool.check` (on a personal login it can approve a call this
+# hook denied: the SessionStart brief names such a mod).
 # Agents get no env off-switch. The owner turns the guard off by removing its entry from
 # .claude/settings.json; install.sh then leaves it removed.
 #
 # Law 5 (0.48.1): the main session is denied `cycle.sh close-story <story>` when the story's plan.md says
 # Tier 3 or 4: there a worker closes its own story, and a returned worker's story is re-dispatched, never
 # finished by the Queen. A subagent and Tier 1-2 pass; `stamp-red` passes (ADR-025's re-stamp escape).
+# A story token holding $, a backtick or %, or whose plan.md cannot be read, is of unknown tier and
+# denied (fails closed, like the git half).
+# Python: $VULYK_PY, python3, python, py, as lib.sh; an exit of 0 or 1 means it ran. Hook stdin is read
+# as bytes, decoded UTF-8 (a BOM tolerated).
 # Fails open: no python, bad JSON, a non-git command or any error -> silent exit 0.
 # `--check <file>` (the card's check): reads hook input from <file>; a `porcelain` field stands in for
-# `git status --porcelain`. Exit 1 on a deny (the reason on stdout), 0 otherwise, also for a file that
+# `git status --porcelain` (an object {"sleep": S, "timeout": T} stands in for a git status that takes S
+# seconds against a T-second timeout). Exit 1 on a deny (the reason on stdout), 0 otherwise, also for a file that
 # is no hook input.
 # The Python half lives below the `exit 0`, inside a no-op heredoc, as in defect-intake.sh.
 if [ "${1:-}" = "--check" ]; then
@@ -33,7 +43,7 @@ else
   IFS= read -r -d '' IN   # a builtin: no `cat`, so an empty PATH still exits 0 in silence
 fi
 case "$IN" in *git*|*close-story*) ;; *) exit 0 ;; esac
-for PY in python3 python; do
+for PY in ${VULYK_PY:+"$VULYK_PY"} python3 python py; do   # lib.sh's order (vulyk_python)
   command -v "$PY" >/dev/null 2>&1 || continue
   printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \
     "${BASH_SOURCE[0]}" "$@" 2>/dev/null
@@ -104,8 +114,10 @@ def cd_target(seg, now):
 
 
 def split_segments(cmd, powershell):
-    """Shell words cut into simple commands; None when the quotes do not close."""
-    lex = shlex.shlex(cmd.replace('\r', ''), posix=True, punctuation_chars=';&|()')
+    """Shell words cut into simple commands; None when the quotes do not close. A line continuation
+    (backslash-newline in Bash, backtick-newline in PowerShell) is joined first: one command, not two."""
+    cmd = cmd.replace('\r', '').replace('`\n' if powershell else '\\\n', '')
+    lex = shlex.shlex(cmd, posix=True, punctuation_chars=';&|()')
     lex.whitespace = ' \t'
     lex.whitespace_split = True
     if powershell:
@@ -138,7 +150,8 @@ def split_segments(cmd, powershell):
 def git_call(seg):
     """(dir, verb, args) when the simple command runs git, else None."""
     i = 0
-    while i < len(seg) and (re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', seg[i]) or seg[i] in ('&', 'command', 'exec', 'time', 'env')):
+    while i < len(seg) and (re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', seg[i]) or seg[i] in ('&', 'command', 'exec', 'time')
+                            or os.path.basename(seg[i].replace('\\', '/')).lower() in ('env', 'env.exe')):
         i += 1
     if i >= len(seg):
         return None
@@ -207,8 +220,8 @@ def classify(verb, args, base):
         paths = positionals(rest, ('-m', '--message', '--pathspec-from-file')) if sub == 'push' else []
         return paths, kinds, True
     if verb == 'checkout':
-        if s & {'b', 'B'} or '--orphan' in l:
-            return None
+        if s & {'b', 'B'} or '--orphan' in l:          # a new branch keeps the tree, unless forced
+            return ([], 't', True) if ('f' in s or '--force' in l) else None
         pos = positionals(args, ('--conflict', '--pathspec-from-file'))
         dash = after_dash(args)
         if dash is not None:
@@ -252,14 +265,20 @@ def classify(verb, args, base):
 
 
 def status(cwd, paths, fake):
-    """Porcelain v1 entries [(xy, path)] under paths ([] = all); None when git status fails there."""
-    if fake is not None:
+    """Porcelain v1 entries [(xy, path)] under paths ([] = all); None when git status fails there.
+    Raises subprocess.TimeoutExpired when git status does not answer in time. Under --check a fake
+    {"sleep": S, "timeout": T} runs a stub that takes S seconds against a T-second timeout."""
+    if isinstance(fake, str):
         text = fake
     else:
         cmd = ['git', '-c', 'core.quotePath=false', '-C', cwd, 'status', '--porcelain', '--untracked-files=all']
         if paths:
             cmd += ['--'] + paths
-        r = subprocess.run(cmd, capture_output=True, timeout=8)
+        limit = 8
+        if isinstance(fake, dict):
+            cmd = [sys.executable, '-S', '-c', 'import time; time.sleep(%f)' % float(fake.get('sleep', 0))]
+            limit = float(fake.get('timeout', limit))
+        r = subprocess.run(cmd, capture_output=True, timeout=limit)
         if r.returncode != 0:
             return None
         text = r.stdout.decode('utf-8', 'replace')
@@ -267,15 +286,21 @@ def status(cwd, paths, fake):
     for line in text.splitlines():
         if len(line) > 3:
             p = line[3:].split(' -> ')[-1].strip('"')
-            if fake is not None and paths and not any(
+            if isinstance(fake, str) and paths and not any(
                     q in ('.', '') or p == q.rstrip('/') or p.startswith(q.rstrip('/') + '/') for q in paths):
                 continue
             out.append((line[:2], p))
     return out
 
 
+UNREAD = -1    # a story whose tier the hook cannot read: the main session is denied (fails closed)
+
+
 def story_tier(base, story):
-    """The leading digit of the first **Tier:** line of the story's plan.md, else None."""
+    """The leading digit of the first **Tier:** line of the story's plan.md, else None; UNREAD when the
+    story token holds a variable or a substitution ($, backtick, %) or its plan.md cannot be read."""
+    if re.search(r'[$`%]', story):
+        return UNREAD
     plan = os.path.join(base, os.path.dirname(story), 'plan.md')
     try:
         with open(plan, encoding='utf-8', errors='replace') as f:
@@ -284,7 +309,7 @@ def story_tier(base, story):
                     m = re.match(r'\s*([1-4])', line[len('**Tier:**'):])
                     return int(m.group(1)) if m else None
     except OSError:
-        return None
+        return UNREAD
     return None
 
 
@@ -305,7 +330,7 @@ def deny(reason):
 
 def main():
     try:
-        data = json.loads(sys.stdin.read())
+        data = json.loads(sys.stdin.buffer.read().decode('utf-8-sig', 'replace'))   # UTF-8 bytes, BOM or not
     except Exception:
         sys.exit(0)
     if not isinstance(data, dict):
@@ -332,7 +357,13 @@ def main():
             here = moved
             continue
         story = None if sub else closes_story(seg)
-        if story and (story_tier(cwd if here == UNKNOWN else here, story) or 0) >= 3:
+        tier = story_tier(cwd if here == UNKNOWN else here, story) if story else None
+        if tier == UNREAD:
+            deny('VULYK Law 5: `cycle.sh close-story %s` from the main session - the hook cannot tell this '
+                 'story\'s tier (the path holds a variable or a substitution, or its plan.md cannot be read), '
+                 'and a Tier 3-4 story is closed by its worker. Name the story by its literal path, or dispatch '
+                 'its worker again, or stop for the owner, who can close it in their own terminal.' % story)
+        if (tier or 0) >= 3:
             deny('VULYK Law 5: `cycle.sh close-story %s` from the main session - this is a Tier 3-4 story, so its '
                  'worker closes it and the Queen never finishes a returned worker\'s story herself, nor edits '
                  'its files. Write the error under its ## Findings and dispatch its worker again, or stop for '
@@ -342,6 +373,10 @@ def main():
         if not call:
             continue
         where, verb, args = call
+        if sub and re.search(r'[$`]', verb):
+            deny('VULYK git guard: the verb of `%s` cannot be read (it holds a variable or a substitution), and '
+                 'a subagent may not run a git command that can throw away work. Spell the verb out, or leave '
+                 'the tree as it is and report the step instead.' % ' '.join(seg))
         blind = here == UNKNOWN
         base = cwd if blind else (here if not where else os.path.join(here, where))
         hit = classify(verb, args, base)
@@ -361,13 +396,19 @@ def main():
                 continue
         if blind:
             paths = []                               # relative to a folder the hook cannot name
+        timed_out = False
         try:
             entries = status(base, paths, fake)
             if entries is None and not blind:        # a folder git cannot read (a Git Bash /tmp on Windows)
                 entries = status(cwd, [], fake)
             entries = entries or []
+        except subprocess.TimeoutExpired:
+            timed_out = True
         except Exception:
             continue
+        if timed_out:
+            deny('VULYK git guard: `%s` - git status timed out, cannot prove the tree is clean. Commit or leave '
+                 'the work as it is, or run the command yourself in your own terminal.' % shown)
         lost = [p for xy, p in entries
                  if (xy == '??' and 'u' in kinds) or (xy not in ('??', '!!') and 't' in kinds)]
         if not lost:

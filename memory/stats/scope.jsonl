@@ -354,3 +354,6 @@
 {"ts":"2026-11-09T13:16:47Z","story":"mass-audit-fixes-03-intake-typed-text","declared":2,"changed":2,"out_of_scope":0}
 {"ts":"2026-11-09T13:17:59Z","story":"mass-audit-fixes-04-install-wiring","declared":3,"changed":3,"out_of_scope":0}
 {"ts":"2026-11-09T13:22:22Z","story":"mass-audit-fixes-04-install-wiring","declared":3,"changed":3,"out_of_scope":0}
+{"ts":"2026-11-09T13:22:38Z","story":"mass-audit-fixes-01-defect-gate","declared":6,"changed":5,"out_of_scope":0}
+{"ts":"2026-11-09T13:23:10Z","story":"mass-audit-fixes-02-git-guard","declared":2,"changed":2,"out_of_scope":0}
+{"ts":"2026-11-09T13:23:10Z","story":"mass-audit-fixes-03-intake-typed-text","declared":2,"changed":2,"out_of_scope":0}

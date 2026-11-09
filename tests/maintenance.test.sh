@@ -924,6 +924,61 @@ guard Bash "bash scripts/cycle.sh stamp-red docs/specs/hv/hv-01.md" \
 guard Bash "grep -n close-story scripts/cycle.sh" | silent "law5: a grep for close-story passes"
 rm -rf "$GG/docs/specs"
 
+echo "--- git guard: launchers, UTF-8 stdin, the private audit's gaps (mass-audit-fixes-02)"
+cat > "$T/guard-chk.py" <<'PY'
+import json, sys
+d = {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": sys.argv[1],
+     "tool_input": {"command": sys.argv[2]}, "cwd": sys.argv[4]}
+if sys.argv[3]:
+    d["agent_id"] = sys.argv[3]; d["agent_type"] = "worker-code"
+if sys.argv[5]:
+    d["porcelain"] = json.loads(sys.argv[5])
+with open(sys.argv[6], "w", encoding="utf-8") as f:
+    f.write(json.dumps(d))
+PY
+chk() { # chk <tool> <command> [<agent_id>] [<porcelain JSON>] - `--check` stdout + exit=N for one call in $GG
+  # (Git Bash would rewrite a /usr/bin/env command into a Windows path for the native Python: excluded)
+  ( cd "$GG" && MSYS2_ARG_CONV_EXCL='/usr/bin/env' "$PYBIN" "$T/guard-chk.py" "$1" "$2" "${3:-}" "$(pwd -W 2>/dev/null || pwd)" "${4:-}" "$T/chk.json" \
+    && bash "$GUARD" --check "$T/chk.json" 2>&1; echo "exit=$?" )
+}
+SUBPAY='{"tool_name":"Bash","agent_id":"a1","tool_input":{"command":"git reset --hard"}}'
+mkdir -p "$T/onlypy" "$T/nopy"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$PYBIN" > "$T/onlypy/py"; chmod +x "$T/onlypy/py"
+printf '%s' "$SUBPAY" | PATH="$T/onlypy" "$BASH" "$GUARD" 2>&1 \
+  | expect "git-guard: a PATH with only py still finds Python (subagent reset --hard denied)" '"deny"'
+printf '%s' "$SUBPAY" | VULYK_PY="$PYBIN" PATH="$T/nopy" "$BASH" "$GUARD" 2>&1 \
+  | expect "git-guard: VULYK_PY with no python on PATH is used (subagent reset --hard denied)" '"deny"'
+printf '\357\273\277{"tool_name":"Bash","agent_id":"a1","tool_input":{"command":"echo \320\220\320\263\320\265\320\275\321\202 && git stash"}}' \
+  | bash "$GUARD" 2>&1 | expect "git-guard: a UTF-8 BOM and Cyrillic payload is parsed (git stash denied)" '"deny"'
+for c in "git checkout -f -b x" "git checkout -fb x" "git checkout --force -B x" "git checkout -f --orphan x"; do
+  chk Bash "$c" a1 | expect "git-guard: forced checkout -b is denied: $c" "exit=1"
+done
+chk Bash "git checkout -b x" a1 | expect "git-guard: a plain checkout -b still passes" "exit=0"
+for c in "$(printf 'git \\\nstash')" "/usr/bin/env git stash" 'git $(echo stash)' 'git `echo stash`' \
+         'git "$VERB"' "git -c core.pager=cat stash push"; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's hidden or continued verb is denied: $c" "exit=1"
+done
+chk PowerShell "$(printf 'git `\nstash')" a1 | expect "git-guard: the PowerShell backtick continuation is denied" "exit=1"
+mkdir -p "$GG/docs/specs/x" "$GG/docs/specs/t1"
+printf '# x\n\n**Tier:** 3 · **Spec slug:** `x`\n' > "$GG/docs/specs/x/plan.md"
+printf '# t1\n\n**Tier:** 1 · **Spec slug:** `t1`\n' > "$GG/docs/specs/t1/plan.md"
+chk Bash 'S=docs/specs/x/01.md; bash scripts/cycle.sh close-story "$S"' \
+  | expect "law5: a story token holding \$ is unknown and denied" "exit=1"
+chk Bash 'bash scripts/cycle.sh close-story `cat s`' | expect "law5: a story token holding a backtick is denied" "exit=1"
+chk PowerShell 'bash scripts/cycle.sh close-story %S%' | expect "law5: a story token holding % is denied" "exit=1"
+chk Bash "bash scripts/cycle.sh close-story docs/specs/nope/01.md --commit" \
+  | expect "law5: a story whose plan.md cannot be read is denied" "exit=1"
+chk Bash "bash scripts/cycle.sh close-story docs/specs/x/01.md" | expect "law5: the literal Tier 3 path stays denied" "exit=1"
+chk Bash "bash scripts/cycle.sh close-story docs/specs/t1/01.md" | expect "law5: a Tier 1 path passes" "exit=0"
+chk Bash 'bash scripts/cycle.sh close-story "$S"' a1 | expect "law5: a subagent's variable story token passes" "exit=0"
+rm -rf "$GG/docs/specs"
+out="$(chk Bash "git stash" "" '{"sleep": 3, "timeout": 0.5}')"
+printf '%s' "$out" | expect "git-guard: a git status that times out denies" "exit=1"
+printf '%s' "$out" | expect "git-guard: the timeout refusal says why" "git status timed out, cannot prove the tree is clean"
+chk Bash "git stash" "" '""' | expect "git-guard: a git status that succeeds clean still passes" "exit=0"
+chk Bash "git reset --hard" "" '" M memory/stats/skills.json\n"' \
+  | expect "git-guard: a git status that succeeds dirty still denies, naming the file" "memory/stats/skills.json"
+
 echo "--- git guard: fails open, card fixtures"
 out="$(printf 'not json' | bash "$GUARD" 2>&1; echo "exit=$?")"
 [ "$out" = "exit=0" ] && ok "git-guard: broken JSON exits 0, silent" || bad "git-guard: broken JSON - got: $out"
