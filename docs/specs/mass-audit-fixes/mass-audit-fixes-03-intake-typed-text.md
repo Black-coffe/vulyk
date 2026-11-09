@@ -1,14 +1,15 @@
 ---
 story: mass-audit-fixes-03
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: bare clock time
+red_verified_at: 2026-11-09T13:12:54Z d64e3ae63edabfdfe8c08f20588a2bf224e4c905e962fa3d54ff2ca420fb8f80
 ---
 
 # defect-intake: a bare clock time is not a correction; a filing phrase inside a paste asks first
@@ -55,5 +56,32 @@ their words before filing" line instead of the write-now line, unless the paste 
 `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh`
 
 ## Implementation notes
+- .claude/hooks/defect-intake.sh: `triggers()` takes a timecode only with a MEDIA cue (video/ролик/кадр/сек/frame/voice/голос/audio/звук/clip/track/subtitle...) or a lexicon word within NEAR=48 chars; shared, so the answer pass gets it too.
+- Same file: the phrase is matched on typed text (pastes and quotes cut, a dictation-tagged paste kept); found only in the raw text (paste, quote or fence) it returns the new `phrase_ask_lines` ask line.
+- Decision: a phrase inside a ``` fence also asks first (the fence is cut from typed text like before); «снова»/"again" untouched.
+- tests/intake.test.sh: bare-clock and S3 cases plus neighbours, a --lexicon снова/again check; two fixtures that relied on a bare timecode ("at 10:04 again", the cwd case) now say "in the video"; the old in-paste phrase case flips to the ask.
+- Surprise: latency median is ~230-270 ms both for HEAD and this hook under parallel-worker load (cap 200 ms); no new Python start was added.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh
+- exit: 1
+- tests: d64e3ae63edabfdfe8c08f20588a2bf224e4c905e962fa3d54ff2ca420fb8f80 (tests/intake.test.sh)
+- impl: a1d73eb2c7d3f8d4855e7387bde34df1a5cc6cf74e8f332451a2a6872b6b97ae
+- stamped: 2026-11-09T13:12:54Z
+
+```
+::error::P10-08: a bare clock time (at 14:32 the build ran) is silent - expected no output and exit 0, got:
+::error::P10-08: a bare clock time (в 14:32 упал билд) is silent - expected no output and exit 0, got:
+  ok    --lexicon exits 0 without reading stdin
+  ok    a stem matches at a word start (переделайте)
+  ok    neighbour: a stem inside a word does not match
+  ok    a phrase with a punctuation edge matches (i told you!)
+  ok    neighbour: a phrase needs both edges (i told yours)
+  ok    P10-08: the export has no bare "again"
+  ok    P10-08: --lexicon prints no «снова» and no "again"
+  ok    a capitalised Cyrillic stem matches under a UTF-8 locale
+  ok    one ERE line per stem and phrase of the hook's own lists
+intake.test.sh: 119 checks, 6 failed
+```

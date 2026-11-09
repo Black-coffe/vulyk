@@ -190,6 +190,23 @@ describes how to exploit the old behaviour (public repo).
 
 ## Plan deltas
 
+- 2026-11-09, owner choice on story 04's reading: ask 18; story 17 (wave 4, after story 11 on the same files) makes
+  `--upgrade` name every unwired shipped hook with its wiring command. **Rollout to-do (ship):** per hive, wire the
+  hooks the old installer dropped; leave a hook the hive owner removed on purpose.
+
+- 2026-11-09, owner mid-build: «Почини драйвер сразу, не жди конца сборки». Ask 17 added to brief.md; story 16
+  (`mass-audit-fixes-16-driver-claim-proof`, wave 2, files `vulyk-cycle.js` + `tests/driver.test.sh`, disjoint from
+  story 08) proves a garbled `--claim` line by a short re-claim. The long `status` relay through the Haiku clerk
+  stays a follow-up.
+
+- 2026-11-09, story 08 NEEDS_CONTEXT: the D4 `branch` refusal breaks `tests/solo.test.sh`'s Tier 2 fixture (no
+  `**Approved:**`), so that suite joins story 08's `## Files` (the `mkfix` line only) and `## Verification`.
+
+- 2026-11-09, story 06 NEEDS_CONTEXT: one `top-model.sh` call for the brief needs a combined mode, so
+  `scripts/top-model.sh` joins story 06's `## Files` (additive `--brief`, no other mode changes); the economy
+  AC follows the Goal's rule (no family left: retry on opus, `retry_same_family: true`), a second same-family
+  case beside Tier 4 under `sonnet-builds` (narrows the I3 assumption the owner saw).
+
 <!--
 The lines below are the cycle's confirmation markers (docs/cycle.md); each placeholder is replaced by
 the command or script that owns it, and scripts/ship-check.sh reads them all. Approved is the owner's
@@ -204,7 +221,10 @@ is missing or unparsable.
 -->
 **Approved:** Andrei, 2026-11-09 (ask 16 confirmed; assumptions kept as written)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
-**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
-**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
+**Branch:** vulyk/mass-audit-fixes
+**Council:** RED round 1, 2026-11-09, at 4560df8, pack 071e42715dbd - red: 18
+**Council:** RED round 2, 2026-11-09, at 7b54bf6, pack 69942212bcbb
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Checked:** ACCEPTED by Andrei, 2026-11-09, at 462e6fe - owner picked the option «ACCEPTED без раунда 3 (Рекомендую)» (label written by the Queen; no words of his own) after the repair-19 diff (ce2e90b, 3 test lines) was shown in chat as text
+**Checked:** ACCEPTED by Andrei, 2026-11-09, at 9aa72d0 - owner picked «Да, ACCEPTED и пуш (Рекомендую)» (label written by the Queen; no words of his own) after the repair-19 and fixture-scrub diffs (ce2e90b, 9aa72d0) were shown in chat as text
+**Checked:** ACCEPTED by Andrei, 2026-11-09, at 1c516d7 - re-ACCEPT after the CI repair (0ab4a86, 1c516d7), diff pasted in chat, branch CI 42687998836 green; owner: «ок, продолжай здесь»

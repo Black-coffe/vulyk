@@ -1,8 +1,8 @@
 ---
 story: mass-audit-fixes-13
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 4
@@ -79,5 +79,17 @@ version and date follow `VERSION`, and `.claude/commands/vulyk-ship.md` bumps it
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- ADR-032: `Status: accepted` (2026-11-09, pointing at plan.md's `**Approved:**` line, not quoting it as the owner's words); D5's "until it ships" sentence dropped, the verb ships.
+- ADR-025: dated amendment under D3 (red: from the approved version, both refusals), a named bypass "the builder deletes the mark" (closed by ADR-032 D1), Consequences bullet points to `stamp-red --baseline`.
+- ADR-001 D1: the Briefed row marks "accept either" amended, and a dated paragraph below the table states the D4 rule with its exits.
+- docs/cycle.md: four rows in "What invalidates a confirmation" (blocks differ / no approved version, done without a close commit, block card red, Tier 2-4 without approval or --go), the sealed-test row names `--baseline`; a short paragraph on the step barrier pointing at hooks-reference.
+- docs/hooks-reference.md: the quoted command form and install/upgrade lines, defects-inject's no-card and tool-only exits and block-as-text, git-guard row synced with its header, `## Accepted costs` (O2, O7, O8) with the audit's verifier numbers, no audit path.
+- CLAUDE.md: `Handoff` row; gap note lists solo Tier 1-2, repair stories, a retry with no family left, the Tier 4 second reviewer; trims are wording only (shorter script paths, the model-cascade link folded into Details). 7158 B LF, under both the 7168 cap and the baa5219 size (7162).
+- worker-code step 6: `story blocks differ`, `defect card <ref> fails` (exit 4) and `no approved version` / `defect gate could not run` (exit 2) map to NEEDS_CONTEXT.
+- lead-review: "cannot occur" replaced by a check that every story marked in its approved version still carries the mark and a receipt.
+- vulyk-build / vulyk-plan: `revised <story-id>` commit, `briefed --go --commit` as the --go path, `stamp-red --baseline` after `/vulyk-pause`; vulyk-ship bumps CITATION.cff with VERSION (already paperwork in lib.sh).
+- CITATION.cff: 0.49.0, 2026-11-09 (sed wrote it LF; git normalises).
+- Surprise: tests/telemetry.test.sh is dirty in the tree, not mine (a wave-mate's).
+
 
 ## Findings

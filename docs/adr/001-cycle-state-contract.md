@@ -187,7 +187,7 @@ parallel step (ADR-011).
 | File | Writer | Content / schema | Committed |
 |---|---|---|---|
 | `docs/specs/<slug>/brief.md` `## Asks` | `/vulyk-plan` at grill close | numbered list `1. <verbatim ask>`; A = its length; the council judges only these | yes |
-| `plan.md` `**Briefed:** via grill, <owner>, <date>` | `cycle.sh briefed` (called by `/vulyk-plan`) | stage 01+02 in autonomous mode; `**Approved:**` stays for the two-stop mode; `/vulyk-build` and `ship-check.sh` accept either | yes |
+| `plan.md` `**Briefed:** via grill, <owner>, <date>` | `cycle.sh briefed` (called by `/vulyk-plan`) | stage 01+02 in autonomous mode; `**Approved:**` stays for the two-stop mode; `/vulyk-build` and `ship-check.sh` accept either *(amended 2026-11-09 by ADR-032 D4, below the table)* | yes |
 | `plan.md` `**Branch:** vulyk/<slug>` | `cycle.sh branch` (called by `/vulyk-build` / the driver) | unchanged meaning | yes |
 | `plan.md` `**Council:** <GREEN\|RED\|ESCALATE\|STALE> round <N>, <date>, at <head>, pack <fp>[ - red: 2,5]` | `cycle.sh judge` / `escalate` | appended, never replaced, one line per round - a mirror of the ledger row, human-readable | yes |
 | `plan.md` `## Needs a human` | `cycle.sh escalate` | reason (`ceiling` / `half` / `env` / `no-progress` / `suite-timeout` *(amended 2026-10-26, fast-verification-06)*), one row per RED ask with its evidence across rounds, for `suite-timeout` a `- suite: <N> s, budget <B> s` line, paths of the seat files | yes |
@@ -201,6 +201,12 @@ parallel step (ADR-011).
 | `docs/specs/<slug>/PAUSE` | `cycle.sh pause` or a human's `touch` | first line: who/why; a semaphore, not a record - the journal line is the record | **no** (gitignored) |
 | `.vulyk/court/<slug>/round-N/` | `cycle.sh open-round` / `judge` | git worktree at the pack commit, `docs/specs/<slug>/` reduced to `brief.md` | **no** (gitignored) |
 | `.claude/state.json` | `state.sh` (unchanged) | gains stages `04-council:<verdict>` and `paused`; derived, never truth | no |
+
+*Amended 2026-11-09 by ADR-032 D4 (spec `mass-audit-fixes`):* "accept either" holds at Tier 1 and for a plan
+with no tier. At Tier 2-4 the build opens only on `**Approved:**` or a `**Briefed:**` line that records `--go`
+(`cycle.sh briefed <spec> --go` writes `via grill (--go)` or `via grill (assumed, --go)`): `briefed` and `branch`
+refuse otherwise with exit 2 `Tier <N> plan needs **Approved:** or an explicit --go`, and `ship-check.sh` stage 02
+fails with `plan: Tier <N> was briefed without approval or --go`, unless `**Shipped:**` is already set.
 
 `council.jsonl` row (flat on purpose - the existing readers extract fields with a greedy
 `sed`, so no nested object may contain a key named `verdict`):

@@ -326,7 +326,7 @@ In 4 katan runs the driver re-dispatched the Tier 4 review pair (gate `claude-op
 
 Scripts: `F\item6.py`, `F\item6b.py` (code-line proxy), `F\item6c.py` (same-project contrast), `F\item6d.py` (elapsed time); data `F\item6_units.csv`.
 
-**Groups (recent period).** A = the 44 VULYK cycle tasks (summed over their sessions). B = 49 VULYK sessions that dispatched >= 1 worker. C = 71 non-VULYK work sessions (no VULYK marker, no VULYK constitution loaded, >= 3 edits) - 37 from READINESS, 15 senseti-doker, 6 demo-skills-build, 4 research-machine, the rest scattered. D = 19 sessions in VULYK-installed projects that used none of the machinery. **Size proxy** = changed lines in code files (Edit old+new lines, Write content lines), excluding paperwork (`docs/specs/`, `memory/`, `.claude/`, `.vulyk/`, `docs/adr/`, `docs/wiki/`, `*.md`). Tests count as code, which flatters VULYK (its workers write tests).
+**Groups (recent period).** A = the 44 VULYK cycle tasks (summed over their sessions). B = 49 VULYK sessions that dispatched >= 1 worker. C = 71 non-VULYK work sessions (no VULYK marker, no VULYK constitution loaded, >= 3 edits) - 37 from READINESS, 15 client, 6 demo-skills-build, 4 research-machine, the rest scattered. D = 19 sessions in VULYK-installed projects that used none of the machinery. **Size proxy** = changed lines in code files (Edit old+new lines, Write content lines), excluding paperwork (`docs/specs/`, `memory/`, `.claude/`, `.vulyk/`, `docs/adr/`, `docs/wiki/`, `*.md`). Tests count as code, which flatters VULYK (its workers write tests).
 
 ### 6a. Raw medians (not size-matched)
 
@@ -357,7 +357,7 @@ Per 100 changed code lines (medians): VULYK 0.93M weighted, 11.2 active min; non
 Honest reading:
 - On matched code volume, VULYK costs **~2.2-2.3x the weighted tokens and ~2-3x the active time** for mid and large changes (500+ code lines), and is at **parity for small changes** (101-500 lines). The owner's "5x" is reached on *elapsed* time (21 h vs ~2 h median, ~11x, but the VULYK tasks are also ~4x larger) and in individual bad tasks (the katan and mmorpg tasks in section 1c), not in the median.
 - Where the extra goes on a matched task is sections 2-5: the review apparatus (~31% of weighted), the Queen re-reading a 240k context for ~120 turns per session, ~44 clerk dispatches, and the 30% of spend inside extra circles.
-- Comparability limits: group C is dominated by two codebases (READINESS, senseti-doker) and runs mostly without subagents; half of its sessions changed no code at all (research and docs work) and are excluded from 6b; the matched buckets hold 6-18 VULYK tasks and 7-12 non-VULYK sessions each. Treat the ratios as +/-30%.
+- Comparability limits: group C is dominated by two codebases (READINESS, client) and runs mostly without subagents; half of its sessions changed no code at all (research and docs work) and are excluded from 6b; the matched buckets hold 6-18 VULYK tasks and 7-12 non-VULYK sessions each. Treat the ratios as +/-30%.
 
 ## 7. Two expensive recent tasks as timelines
 

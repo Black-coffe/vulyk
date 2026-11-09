@@ -37,13 +37,26 @@ FB="$T/py-exit1"; mkdir -p "$FB"
 printf '#!/bin/sh\necho "ImportError: cannot import name timezone" >&2\nexit 1\n' > "$FB/python3"
 printf '#!/bin/sh\nexec "%s" "$@"\n' "$PYBIN" > "$FB/python"
 chmod +x "$FB/python3" "$FB/python"
-( cd "$T" && PATH="$FB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null 2>/dev/null; echo "exit=$?" ) > "$T/exit1.out"
+( cd "$T" && VULYK_PY= PATH="$FB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null 2>/dev/null; echo "exit=$?" ) > "$T/exit1.out"
 if grep -q '^root *:' "$T/exit1.out" && grep -q '^exit=0$' "$T/exit1.out"; then
   ok "handoff.sh status falls through a python3 that exits 1 to the next working Python"
 else bad "handoff.sh stopped at a python3 that exits 1:"; sed 's/^/        /' "$T/exit1.out"; fi
 printf '#!/bin/sh\nexit 1\n' > "$FB/python"; cp "$FB/python" "$FB/py"; chmod +x "$FB/python" "$FB/py"
-( cd "$T" && PATH="$FB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null > /dev/null 2>&1; echo "exit=$?" ) > "$T/allbad.out"
+( cd "$T" && VULYK_PY= PATH="$FB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null > /dev/null 2>&1; echo "exit=$?" ) > "$T/allbad.out"
 expect_eq "handoff.sh exits 0 when every interpreter exits 1 (fail-open)" "exit=0" "$(tr -d '\r' < "$T/allbad.out")"
+
+echo "--- handoff.sh: a preset \$VULYK_PY goes first, as in the defect hooks"
+# Every python name on PATH is shadowed by a stub that logs and exits 1, so a run that reaches PATH shows up.
+VP="$T/vulyk-py"; mkdir -p "$VP/bin"
+for n in python3 python py; do printf '#!/bin/sh\necho %s >> "%s/path-hits"\nexit 1\n' "$n" "$VP" > "$VP/bin/$n"; done
+printf '#!/bin/sh\necho x >> "%s/count"\nexec "%s" "$@"\n' "$VP" "$PYBIN" > "$VP/counting-py"
+chmod +x "$VP/bin/"* "$VP/counting-py"
+( cd "$T" && VULYK_PY="$VP/counting-py" PATH="$VP/bin:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status < /dev/null 2>/dev/null
+  echo "exit=$?" ) > "$T/vp.out"
+if grep -q '^root *:' "$T/vp.out" && [ "$(grep -c . "$VP/count" 2>/dev/null)" = 1 ] && [ ! -s "$VP/path-hits" ]; then
+  ok "handoff.sh status runs through \$VULYK_PY once and never reaches a python on PATH"
+else bad "handoff.sh did not run through \$VULYK_PY (count=$(grep -c . "$VP/count" 2>/dev/null), PATH hits: $(tr '\n' ' ' < "$VP/path-hits" 2>/dev/null)):"
+  sed 's/^/        /' "$T/vp.out"; fi
 
 echo "--- settings.json: SessionEnd hooks carry an explicit timeout (P10-03)"
 # Without one a SessionEnd hook gets Claude Code's short exit budget (1.5 s); the dump takes 1.4-7 s.

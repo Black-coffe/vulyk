@@ -81,9 +81,16 @@ if [ -f "$SPEC/brief.md" ]; then ok 01 "spec: brief.md exists"
 else fail 01 "spec: no brief.md - there is no verbatim request for anything below to answer to"; fi
 
 # 02 Plan - **Approved:** (the default) or **Briefed:** (--go / Tier 1) close this
-# stage; ship-check.sh accepts either (ADR-001 D1).
+# stage; ship-check.sh accepts either (ADR-001 D1). At Tier 2-4 (ADR-032 D4) a Briefed line counts only
+# when it recorded the owner's --go, or once the spec has shipped (a plan briefed before the rule).
+TIER_N=""
+[ -f "$PLAN" ] && TIER_N="$(grep -m1 '^\*\*Tier:\*\*' "$PLAN" | sed 's/^\*\*Tier:\*\*[[:space:]]*//' | cut -c1)"
+case "$TIER_N" in 2|3|4) ;; *) TIER_N="" ;; esac
 if [ ! -f "$PLAN" ]; then
   fail 02 "plan: no plan.md"
+elif [ -n "$TIER_N" ] && [ -z "$(marker "$PLAN" Approved)" ] && [ -n "$(marker "$PLAN" Briefed)" ] \
+  && [ -z "$(marker "$PLAN" Shipped)" ] && case "$(marker "$PLAN" Briefed)" in *--go*) false ;; *) true ;; esac; then
+  fail 02 "plan: Tier $TIER_N was briefed without approval or --go - run cycle.sh briefed <spec> --go --commit if the owner opted out"
 elif [ -n "$(marker "$PLAN" Briefed)" ]; then
   ok 02 "plan: briefed - $(marker "$PLAN" Briefed)"
 elif [ -n "$(marker "$PLAN" Approved)" ]; then

@@ -30,9 +30,10 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    the rollback points and the review units. Work out the version from the Profile's *Commit
    convention* (a semver bump sized to the change). If a story on this branch already wrote `VERSION`
    and the top `CHANGELOG.md` entry for that version, there is nothing to bump. Otherwise add one commit
-   on the branch with the version bump and the CHANGELOG entry. This is release paperwork: Law 5 does
-   not apply, and `VERSION` and `CHANGELOG.md` are paperwork to the cycle, so this commit does not stale
-   a GREEN round. Then merge into the default branch the way the Profile's *Release / deploy* row says;
+   on the branch with the version bump and the CHANGELOG entry. When the repo has a `CITATION.cff`, the
+   same commit sets its `version` to the new `VERSION` and its `date-released` to today. This is release
+   paperwork: Law 5 does not apply, and `VERSION`, `CHANGELOG.md` and `CITATION.cff` are paperwork to the
+   cycle, so this commit does not stale a GREEN round. Then merge into the default branch the way the Profile's *Release / deploy* row says;
    a local merge is reversible and yours to run. A local merge: switch to the default branch only when
    `git status --porcelain` prints nothing, then `git merge --no-ff <branch>`. If it fails, run
    `git merge --abort`, switch back to the spec branch, tell the owner what git printed, and stop. After

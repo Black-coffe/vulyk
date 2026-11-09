@@ -3,6 +3,7 @@
 #
 #   Install:  ./install.sh /path/to/your/project [--check]
 #   Upgrade:  ./install.sh /path/to/your/project --upgrade [--check] [--constitution replace]
+#   One hook: ./install.sh /path/to/your/project --wire <event>:<script> [--check]   (wires that one shipped hook)
 #
 # Install copies file-by-file and skips anything that already exists.
 # Upgrade additionally REPLACES framework-owned files that changed between versions
@@ -26,8 +27,8 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # into the stamp, the messages and the `v$PREV` tag lookup below.
 VER="$(cat "$SRC/VERSION" 2>/dev/null | tr -d '[:space:]' || true)"; VER="${VER:-unknown}"
 
-USAGE="Usage: $0 /path/to/your/project [--upgrade] [--check] [--telemetry on|off|ask] [--constitution replace]"
-DEST=""; CHECK=""; UPGRADE=""; BLOCK_INSERTED=""; CONST_MODE=""; CONST_REPLACED=""
+USAGE="Usage: $0 /path/to/your/project [--upgrade] [--check] [--telemetry on|off|ask] [--constitution replace] [--wire <event>:<script>]"
+WIRE_ONE=""; DEST=""; CHECK=""; UPGRADE=""; BLOCK_INSERTED=""; CONST_MODE=""; CONST_REPLACED=""
 # Telemetry consent (docs/telemetry.md): the flag wins over the env var, both are optional.
 # With neither, nothing is asked and a missing row is written as off; `ask` is the only way to
 # get the question, and it asks even a hive that already answered it once.
@@ -36,6 +37,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --check)     CHECK="--check" ;;
     --upgrade)   UPGRADE=1 ;;
+    --wire)      shift; WIRE_ONE="${1:-}"; [ -n "$WIRE_ONE" ] || { echo "error: --wire needs <event>:<script>"; exit 1; } ;;
     --telemetry) shift; TEL_MODE="${1:-}"; [ -n "$TEL_MODE" ] || { echo "error: --telemetry needs a value (on|off|ask)"; exit 1; } ;;
     --constitution) shift; CONST_MODE="${1:-}"
                  [ "$CONST_MODE" = "replace" ] || { echo "error: --constitution takes one value: replace (got '$CONST_MODE')"; exit 1; } ;;
@@ -59,7 +61,10 @@ DEST="$(cd "$DEST" && pwd)"
 # .claude/mods/vulyk-watcher ships nothing since the mod was retired (0.29.0); it stays OWNED so an
 # upgrade removes the old tree through the manifest.
 OWNED=".claude/agents .claude/commands .claude/hooks .claude/mods/vulyk-pulse .claude/mods/vulyk-watcher .claude/skills/_meta .claude/workflows bootstrap templates scripts"
-owned() { local f="$1" t; for t in $OWNED; do case "$f" in "$t"/*) return 0 ;; esac; done; return 1; }
+# A manifest line is the hive's file, so it is trusted for nothing: a `..` segment, a leading `/` or a
+# backslash names a path outside the tree it claims (`scripts/../CLAUDE.md`), and is never owned.
+bad_path() { case "$1" in /*|*\\*|..|../*|*/..|*/../*) return 0 ;; esac; return 1; }
+owned() { local f="$1" t; bad_path "$f" && return 1; for t in $OWNED; do case "$f" in "$t"/*) return 0 ;; esac; done; return 1; }
 
 # VULYK's own working content never ships: its session learnings, its dev specs, and
 # anything Python compiled on the maintainer's machine. What DOES ship from these trees
@@ -81,6 +86,8 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     docs/specs/*)                 return 1 ;;   # vulyk's own dev specs (dir is still created)
     docs/adr/*|docs/wiki/*)       case "$f" in */README.md) return 0 ;; esac; return 1 ;;   # vulyk's own ADRs/wiki (dir still created; a skeleton README ships)
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
+    memory/map/.stale)            return 2 ;;   # runtime (below), named before the map's own rule
+    memory/map/*)                 case "$f" in memory/map/README.md) return 0 ;; esac; return 1 ;;   # VULYK's own code map; the skeleton README ships
     docs/defects/*)               case "$f" in docs/defects/README.md) return 0 ;; esac; return 1 ;;   # vulyk's own defect cards; the index skeleton ships
     .claude/vulyk-paperwork)      return 1 ;;   # each hive's own paperwork globs (lib.sh is_paperwork_path): never shipped, owned or removed
     .claude/vulyk-setup)          return 1 ;;   # each hive's own court setup (cycle.sh run_court_setup): never shipped, owned or removed
@@ -119,7 +126,8 @@ replace_file() { # replace_file <src> <dest> - copy beside, then rename over. An
 # conflict or with no base. A path the last install shipped that the hive no longer has stays
 # deleted. (ADR-005 amendment 2026-10-16; card upgrade-overwrites-host-edits.)
 SHIPPED_BLOBS=""; NO_HISTORY=""
-shipped_blobs() { # once per run, in the main shell: every blob id $SRC's history ever held under
+shipped_blobs() { # once per run, in the main shell, on the first release_copy (an up-to-date hive never
+  # pays for it): every blob id $SRC's history ever held under
   # OWNED - each v* tag and every commit (a hive hotfixed by hand between releases holds a commit's
   # copy, not a tag's). A source with no v* tag (a downloaded ZIP, a shallow checkout) cannot tell
   # an edit from a release copy, so it keeps the old rule - replace - and says so.
@@ -141,6 +149,7 @@ shipped_blobs() { # once per run, in the main shell: every blob id $SRC's histor
   } | sort -u > "$SHIPPED_BLOBS" || true
 }
 release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte some release's
+  [ -n "$SHIPPED_BLOBS" ] || shipped_blobs
   [ -n "$NO_HISTORY" ] && return 0
   local h; h="$(tr -d '\r' < "$DEST/$1" | git hash-object --stdin 2>/dev/null)" || return 1
   [ -n "$h" ] && grep -qxF "$h" "$SHIPPED_BLOBS"
@@ -179,12 +188,16 @@ upgrade_edited() { # upgrade_edited <rel> - a hive edit of a framework file: mer
   echo "  kept + new     $f -> $f.vulyk-new   (your edit kept; merge the new release in by hand)"
 }
 
-copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading a framework-owned file
-  local rel="$1" sc
-  ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' -print0 ) | while IFS= read -r -d '' f; do
+copy_tree() { # copy_tree <rel> - skip existing, unless upgrading a framework-owned file. The shippable paths are
+  # collected first and decided in the main shell (release_copy builds its blob list here, once); the new files
+  # then go over in one tar pass, and one awk prints the copy/skip lines, in find order, after any update line.
+  local rel="$1" sc f list plan
+  list="$(mktemp)"; plan="$(mktemp)"
+  ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' ) > "$list"
+  while IFS= read -r f <&3; do
     shippable "$f" && sc=0 || sc=$?
     if [ "$sc" -ne 0 ]; then
-      [ "$sc" -eq 2 ] && [ "$CHECK" = "--check" ] && echo "  would skip (runtime) $f"
+      if [ "$sc" -eq 2 ] && [ "$CHECK" = "--check" ]; then printf 'R %s\n' "$f" >> "$plan"; fi
       continue
     fi
     # Every path this run found shippable - copied, updated or skipped-as-existing alike -
@@ -200,17 +213,28 @@ copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading 
           upgrade_edited "$f"
         fi
       else
-        echo "  skip (exists)  $f"
+        printf 'S %s\n' "$f" >> "$plan"
       fi
-    elif [ -n "$UPGRADE" ] && owned "$f" && [ -f "$DEST/.claude/vulyk-manifest" ] \
-      && tr -d '\r' < "$DEST/.claude/vulyk-manifest" | grep -qxF "$f"; then
+    elif [ -n "$UPGRADE" ] && owned "$f" && grep -qxF "$f" "$OLD_LISTED"; then
       if [ "$CHECK" = "--check" ]; then echo "  would keep deleted $f"
       else echo "  kept deleted   $f   (the last install shipped it and this hive removed it)"; fi
     else
-      if [ "$CHECK" = "--check" ]; then echo "  would copy     $f"
-      else mkdir -p "$DEST/$(dirname "$f")"; cp -p "$SRC/$f" "$DEST/$f"; echo "  copy           $f"; fi
+      printf 'C %s\n' "$f" >> "$plan"
     fi
-  done
+  done 3< "$list"
+  if [ "$CHECK" != "--check" ]; then
+    sed -n 's/^C //p' "$plan" > "$list"
+    if [ -s "$list" ]; then   # tar keeps mode and mtime, as cp -p did, and makes the directories
+      ( cd "$SRC" && tar -cf - -T "$list" ) | ( cd "$DEST" && tar -xpf - )
+    fi
+  fi
+  awk -v chk="$CHECK" '
+    { v = substr($0, 1, 1); p = substr($0, 3) }
+    v == "R" { print "  would skip (runtime) " p; next }
+    v == "S" { print "  skip (exists)  " p; next }
+    v == "C" { print (chk == "--check" ? "  would copy     " : "  copy           ") p }
+  ' "$plan"
+  rm -f "$list" "$plan"
 }
 
 # The `## Commands` table in CLAUDE.md holds VULYK's OWN verification commands, which are wrong
@@ -730,7 +754,8 @@ py_wire() { # py_wire <settings.json> <script> <event> <matcher> <arg> [--dry]  
 import json, os, re, shlex, sys
 path, script, event, matcher, arg = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
 dry = '--dry' in sys.argv[6:]
-REL = '$CLAUDE_PROJECT_DIR/.claude/hooks/'
+REL = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'     # quoted: a project path with a space still runs
+OLD_REL = '$CLAUDE_PROJECT_DIR/.claude/hooks/'   # the plain form before 0.50; fix_hooks rewires it
 HOOKS_DIR = os.path.join(os.path.dirname(os.path.abspath(path)), 'hooks')
 try:
     with open(path, encoding='utf-8') as fh:
@@ -786,7 +811,7 @@ for groups_any in (data.get('hooks') or {}).values():
             if not isinstance(hook, dict):
                 continue
             tpl = template_of(str(hook.get('command', '')))
-            if tpl and tpl != (REL, '', ''):
+            if tpl and tpl not in ((REL, '', ''), (OLD_REL, '', '')):   # the plain form, either head
                 seen[tpl] = seen.get(tpl, 0) + 1
 cmd = REL + script + (' ' + arg if arg else '')
 for tpl in sorted(seen, key=lambda t: -seen[t]):  # stable: the first of equals stays first
@@ -815,8 +840,8 @@ groups = data.setdefault('hooks', {}).setdefault(event, [])
 if not isinstance(groups, list):
     sys.exit(4)
 def save():
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, indent=2)
+    with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write('\n')
 for group in groups:
     if isinstance(group, dict):
@@ -833,6 +858,8 @@ for group in groups:
 if dry:
     sys.exit(0)                                  # --check: would wire; nothing written
 entry = {'type': 'command', 'command': cmd}
+if event == 'SessionEnd':
+    entry['timeout'] = 30                        # P10-03: the default SessionEnd budget is 1.5 s
 # The entry joins the first group with the same matcher (no matcher = a group without one, which
 # runs for every source/tool); none such -> a group of its own, so it never inherits a narrower one.
 def same_matcher(group):
@@ -866,15 +893,17 @@ settings_backup_drop() { # settings_backup_drop <file> - undo the backup this ca
 wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
   local event="$1" script="$2" matcher="${3:-}" arg="${4:-}" file="$DEST/.claude/settings.json" took=""
   local label="$event${matcher:+ [$matcher]}: $script${arg:+ $arg}"
-  local by_hand="{ \"type\": \"command\", \"command\": \"\$CLAUDE_PROJECT_DIR/.claude/hooks/$script${arg:+ $arg}\" }"
+  local by_hand="{ \"type\": \"command\", \"command\": \"\\\"\$CLAUDE_PROJECT_DIR\\\"/.claude/hooks/$script${arg:+ $arg}\" }"
+  [ "$event" = SessionEnd ] && by_hand="${by_hand% \}}, \"timeout\": 30 }"
   [ -n "$matcher" ] && by_hand="{ \"matcher\": \"$matcher\", \"hooks\": [ $by_hand ] }"
+  local kept="  kept           .claude/settings.json -> $label"
   [ -f "$file" ] || return 0                                   # fresh install: ours was copied whole
   vulyk_python || true; PYBIN="$VULYK_PY"
   if [ -z "$PYBIN" ]; then
     if [ -n "$arg" ]; then                                     # no python: file-wide check is all we have
-      grep -qE "$script\"? $arg" "$file" 2>/dev/null && return 0
+      grep -qE "$script\"? $arg" "$file" 2>/dev/null && { echo "$kept"; return 0; }
     else
-      grep -q "$script" "$file" 2>/dev/null && return 0
+      grep -q "$script" "$file" 2>/dev/null && { echo "$kept"; return 0; }
     fi
     if [ "$CHECK" = "--check" ]; then
       echo "  would wire     .claude/settings.json -> $label"
@@ -892,6 +921,7 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
     py_wire "$file" "$script" "$event" "$matcher" "$arg" --dry || rc=$?
     case "$rc" in
       0) echo "  would wire     .claude/settings.json -> $label" ;;
+      3) echo "$kept" ;;
       5) echo "  would repair   .claude/settings.json -> $label (its quotes do not close)" ;;
     esac
     return 0
@@ -902,7 +932,8 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
     echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
   else
     case "$?" in
-      3) [ -z "$took" ] || settings_backup_drop "$file" ;;   # already wired; nothing happened
+      3) [ -z "$took" ] || settings_backup_drop "$file"      # already wired; nothing happened
+         echo "$kept" ;;
       5) echo "  repair         .claude/settings.json -> $label (its quotes did not close)"
          echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)" ;;
       *) [ -z "$took" ] || settings_backup_drop "$file"
@@ -915,6 +946,48 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
 }
 
 wire_session_hook() { wire_hook SessionStart "$1"; }
+
+# mass-audit-fixes-17 (Ask 18): the hooks wired only by the release that brings them (wire_shipped, git-guard.sh, wire_entry).
+# One line each: <event> <script> <matcher> <arg>, `-` for none. `--wire <event>:<script>` looks its entry up here.
+SHIPPED_HOOKS='SessionStart session-start-brief.sh - -
+SessionStart handoff.sh - sessionstart
+SessionEnd handoff.sh - sessionend
+UserPromptSubmit handoff.sh - prompt
+Stop handoff.sh - stop
+PreCompact context-guard.sh - -
+PreCompact handoff.sh - precompact
+PostToolUse skill-usage-counter.sh Skill -
+PreToolUse git-guard.sh Bash|PowerShell -
+SessionEnd anomaly-scan.sh - -
+UserPromptSubmit defect-intake.sh - -
+PostToolUse defect-intake.sh AskUserQuestion answer
+PreToolUse defects-inject.sh Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.* -
+SessionStart defects-inject.sh - reset
+SessionStart ysk-offer.sh - -'
+# A shipped hook the hive's settings.json does not wire is named, never wired: a missing entry may be the owner's
+# removal, or a hook the pre-0.50 wiring dropped. The line carries the command that wires that one hook.
+report_unwired() { # report_unwired <event> <script> [matcher] [arg]
+  local event="$1" script="$2" matcher="${3:-}" arg="${4:-}" file="$DEST/.claude/settings.json" rc=0
+  [ -f "$file" ] || return 0
+  vulyk_python || true; PYBIN="$VULYK_PY"
+  if [ -n "$PYBIN" ]; then
+    py_wire "$file" "$script" "$event" "$matcher" "$arg" --dry || rc=$?
+    [ "$rc" -eq 0 ] || return 0                                # 3 = wired (any spelling), 4 = unparseable
+  else
+    grep -qF "$script${arg:+ $arg}" "$file" 2>/dev/null && return 0
+  fi
+  printf '  unwired %s: %s - to wire it: bash %q %q --wire %s\n' "$event" "$script" "$SRC/install.sh" "$DEST" "$event:$script"
+}
+if [ -n "$WIRE_ONE" ]; then
+  WIRE_ROW="$(printf '%s\n' "$SHIPPED_HOOKS" | awk -v k="$WIRE_ONE" '$1 ":" $2 == k' | head -1)"
+  [ -n "$WIRE_ROW" ] || { echo "error: --wire $WIRE_ONE is not a hook this release ships; one of:"
+    printf '%s\n' "$SHIPPED_HOOKS" | awk '{ print "  " $1 ":" $2 }'; exit 1; }
+  [ -f "$DEST/.claude/settings.json" ] || { echo "error: $DEST/.claude/settings.json not found - nothing to wire into"; exit 1; }
+  read -r w_event w_script w_matcher w_arg <<< "$WIRE_ROW"
+  [ "$w_matcher" != - ] || w_matcher=""; [ "$w_arg" != - ] || w_arg=""
+  wire_hook "$w_event" "$w_script" "$w_matcher" "$w_arg"
+  exit 0
+fi
 
 # The reverse of py_wire: a release that stops wanting a hook takes it back out of a hive's
 # settings.json, where an earlier installer put it (ADR-013 D7: anomaly-scan.sh on Stop,
@@ -957,8 +1030,8 @@ if kept:
     hooks[event] = kept
 else:
     del hooks[event]
-with open(path, 'w', encoding='utf-8') as fh:
-    json.dump(data, fh, indent=2)
+with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
     fh.write('\n')
 PYUNWIRE
 }
@@ -992,6 +1065,79 @@ unwire_hook() { # unwire_hook <event> <hook-script-name>
          echo "  This release no longer runs $script on $event; remove that entry by hand." ;;
     esac
   fi
+}
+
+# mass-audit-fixes-04 (S1/P1, P10-03): before 0.50 a hook ran as `$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh`,
+# which the shell splits at a space in the project path; a SessionEnd entry with no timeout gets Claude
+# Code's 1.5 s budget. One pass over the hive's settings.json rewires each such entry of a script this
+# release ships to `"$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh` (an owner's own hooks and wrappers stay as
+# written) and gives every SessionEnd entry without a timeout 30 s. Idempotent by inspection.
+fix_hooks() {
+  local file="$DEST/.claude/settings.json" took="" rc=0 out="" kind label
+  [ -f "$file" ] || return 0
+  vulyk_python || true; PYBIN="$VULYK_PY"
+  if [ -z "$PYBIN" ]; then
+    if grep -qF '"$CLAUDE_PROJECT_DIR/.claude/hooks/' "$file" 2>/dev/null; then
+      echo ""
+      echo "  NOTE: no python on PATH to edit .claude/settings.json safely. Quote the project dir in each"
+      echo "  hook command by hand (\"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/<name>.sh), or a path with a space breaks it."
+    fi
+    return 0
+  fi
+  [ "$CHECK" = "--check" ] || { settings_backup "$file" && took=1; }
+  out="$(mktemp)"
+  PYTHONIOENCODING=utf-8 "$PYBIN" - "$file" "$SRC/.claude/hooks" "$CHECK" > "$out" <<'PYFIX' || rc=$?
+import json, os, sys
+path, ours, dry = sys.argv[1], sys.argv[2], sys.argv[3] == '--check'
+REL, OLD_REL = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/', '$CLAUDE_PROJECT_DIR/.claude/hooks/'
+try:
+    with open(path, encoding='utf-8') as fh:
+        data = json.load(fh)
+except Exception:
+    sys.exit(4)                                  # unparseable: leave it entirely alone
+hooks = data.get('hooks') if isinstance(data, dict) else None
+if not isinstance(hooks, dict):
+    sys.exit(3)
+done = []
+for event, groups in hooks.items():
+    if not isinstance(groups, list):
+        continue
+    for group in groups:
+        if not isinstance(group, dict) or not isinstance(group.get('hooks'), list):
+            continue
+        where = event + (' [%s]' % group['matcher'] if group.get('matcher') else '')
+        for hook in group['hooks']:
+            if not isinstance(hook, dict) or not isinstance(hook.get('command'), str):
+                continue
+            cmd = hook['command']
+            rest = cmd[len(OLD_REL):] if cmd.startswith(OLD_REL) else ''
+            if rest.split() and os.path.isfile(os.path.join(ours, rest.split()[0])):
+                hook['command'] = cmd = REL + rest
+                done.append('rewire\t%s: %s' % (where, rest))
+            if event == 'SessionEnd' and 'timeout' not in hook:
+                hook['timeout'] = 30
+                done.append('timeout\t%s: %s (30 s)' % (where, cmd.rsplit('/', 1)[-1]))
+if not done:
+    sys.exit(3)
+print('\n'.join(done))
+if not dry:
+    with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+        fh.write('\n')
+PYFIX
+  if [ "$rc" -ne 0 ]; then
+    rm -f "$out"
+    [ -z "$took" ] || settings_backup_drop "$file"
+    [ "$rc" -eq 3 ] || { echo ""; echo "  NOTE: .claude/settings.json could not be parsed as JSON - hook commands left as they are."; }
+    return 0
+  fi
+  while IFS="$(printf '\t')" read -r kind label; do
+    [ -n "$kind" ] || continue
+    if [ "$CHECK" = "--check" ]; then printf '  would %-8s .claude/settings.json -> %s\n' "$kind" "$label"
+    else printf '  %-14s .claude/settings.json -> %s\n' "$kind" "$label"; fi
+  done <<< "$(tr -d '\r' < "$out")"
+  rm -f "$out"
+  [ "$CHECK" = "--check" ] || echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
 }
 
 # The Workflow driver's clerk (`cycle-clerk.md`) runs every verb by shelling out to
@@ -1041,8 +1187,8 @@ added = [r for r in RULES if r not in allow]
 if not added:
     sys.exit(3)                                  # already there under both spellings
 allow.extend(added)
-with open(path, 'w', encoding='utf-8') as fh:
-    json.dump(data, fh, indent=2)
+with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
     fh.write('\n')
 PYPERM
   then
@@ -1095,8 +1241,8 @@ if dry:
 del plugins[key]
 if not plugins:
     del data['enabledPlugins']
-with open(path, 'w', encoding='utf-8') as fh:
-    json.dump(data, fh, indent=2)
+with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
     fh.write('\n')
 PYYSK
   case "$rc" in
@@ -1143,8 +1289,8 @@ if not isinstance(env, dict):
     sys.exit(4)
 env['USE_BUILTIN_RIPGREP'] = '0'
 data['env'] = env
-with open(path, 'w', encoding='utf-8') as fh:
-    json.dump(data, fh, indent=2)
+with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
     fh.write('\n')
 PYRG
   if [ -n "$py" ] && [ "$rc" -eq 0 ]; then
@@ -1182,15 +1328,27 @@ install_mod() {
     echo "      $inst"
     return 0
   fi
-  if "$cc" plugin list 2>/dev/null | grep -qF "$id"; then
+  local listed; listed="$("$cc" plugin list 2>/dev/null || true)"
+  if grep -qF "$id" <<< "$listed"; then
     # Already on this machine: a user-scope GitHub install never refreshes itself, so each run
-    # brings it up to the release's mod (plugin.json version follows VERSION).
-    local mupd="claude plugin marketplace update vulyk" pupd="claude plugin update $id --scope user"
-    if [ "$CHECK" = "--check" ]; then
+    # brings it up to the release's mod (plugin.json version follows VERSION) - unless the user-scope
+    # entry already reads that version. `plugin update` takes no ref (2.1.x), so it updates to the
+    # marketplace head, and says so.
+    local mupd="claude plugin marketplace update vulyk" pupd="claude plugin update $id --scope user" have
+    have="$(ID="$id" awk '
+      { sub(/\r$/, ""); n = split($0, w, " ") }
+      n && w[n] == ENVIRON["ID"] { on = 1; ver = ""; next }
+      on && $1 == "Version:" { ver = $2 }
+      on && $1 == "Scope:" { if ($2 == "user" && !got) { got = 1; print ver } on = 0 }
+      NF == 0 { on = 0 }' <<< "$listed")"
+    if [ -n "$have" ] && [ "$have" = "$VER" ]; then
+      echo "  current        $id ($VER, user scope; no update needed)"
+    elif [ "$CHECK" = "--check" ]; then
       echo "  would update   $id (user scope, marketplace $MODS_REPO)"
     elif "$cc" plugin marketplace update vulyk >/dev/null 2>&1 &&
          "$cc" plugin update "$id" --scope user >/dev/null 2>&1; then
       echo "  update         $id (user scope, marketplace $MODS_REPO; a restart of claude applies it)"
+      echo "  mod: marketplace head, not pinned"
     else
       echo ""
       echo "  NOTE: the VULYK mod $id could not be updated on this machine. Run:"
@@ -1311,9 +1469,15 @@ ensure_gitattributes() {
   return 0
 }
 
-NEW_MANIFEST="$(mktemp)"
-trap 'rm -f "$NEW_MANIFEST" "$SHIPPED_BLOBS"' EXIT
-[ -n "$UPGRADE" ] && shipped_blobs
+NEW_MANIFEST="$(mktemp)"; OLD_LISTED="$(mktemp)"
+trap 'rm -f "$NEW_MANIFEST" "$OLD_LISTED" "$SHIPPED_BLOBS"' EXIT
+# The last install's manifest, read once for copy_tree's `kept deleted` lookup: CR dropped, a bad path left out.
+if [ -n "$UPGRADE" ] && [ -f "$DEST/.claude/vulyk-manifest" ]; then
+  while IFS= read -r f; do
+    f="${f%$'\r'}"
+    if [ -n "$f" ] && ! bad_path "$f"; then printf '%s\n' "$f"; fi
+  done < "$DEST/.claude/vulyk-manifest" > "$OLD_LISTED"
+fi
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr docs/defects; do
   if [ -d "$SRC/$tree" ]; then copy_tree "$tree"; fi
 done
@@ -1345,6 +1509,7 @@ if [ -n "$UPGRADE" ]; then
     while IFS= read -r f; do
       f="${f%$'\r'}"                             # a CRLF checkout of the manifest (core.autocrlf)
       [ -n "$f" ] || continue
+      if bad_path "$f"; then echo "  skip (bad path) $f"; continue; fi   # never removed, never reported as yours
       grep -qxF "$f" "$NEW_MANIFEST" && continue   # still shipped this run
       if owned "$f"; then
         if retired_edited "$f"; then
@@ -1402,17 +1567,31 @@ wire_session_hook top-model-brief.sh
 # run). On upgrade, the entries this release no longer wants leave the hive's settings.json: the
 # Stop scan, and the learnings hook - wiring follows the file, so a learnings hook kept because
 # the owner edited it (or a hive with no manifest yet) stays wired.
+# mass-audit-fixes-18 repair 1 (Ask 18): wire_entry (below) never puts back an entry the installed release wired;
+# an entry this run moves (the Stop scan to SessionEnd, the inject to the new matcher) is a move, wired outright.
+wire_entry() { # wire_entry <event> <script> [matcher] [arg] - wired unless v$PREV's own settings.json already ran it
+  if git -C "$SRC" show "v$PREV:.claude/settings.json" 2>/dev/null | grep -qF "hooks/$2${4:+ $4}\""; then
+    local named; named="$(report_unwired "$@")"                # empty: the entry is there, wire_hook says kept
+    [ -z "$named" ] || { printf '%s\n' "$named"; return 0; }
+  fi
+  wire_hook "$@"
+}
+ANOMALY_MOVED=""
 if [ -n "$UPGRADE" ]; then
+  vulyk_python || true; PYBIN="$VULYK_PY"
+  if [ -f "$DEST/.claude/settings.json" ] && grep -qF anomaly-scan.sh "$DEST/.claude/settings.json" 2>/dev/null; then
+    if [ -z "$PYBIN" ] || py_unwire "$DEST/.claude/settings.json" anomaly-scan.sh Stop --dry; then ANOMALY_MOVED=1; fi
+  fi
   unwire_hook Stop anomaly-scan.sh
   if [ ! -e "$DEST/.claude/hooks/session-end-learnings.sh" ] || \
      grep -qxF ".claude/hooks/session-end-learnings.sh" <<< "$RETIRED_GONE"; then
     unwire_hook SessionEnd session-end-learnings.sh
   fi
 fi
-wire_hook SessionEnd anomaly-scan.sh
+if [ -n "$ANOMALY_MOVED" ]; then wire_hook SessionEnd anomaly-scan.sh; else wire_entry SessionEnd anomaly-scan.sh; fi
 # The defect library (0.19, contract §3): intake on every prompt, the class's Never lines before
 # an edit or a command, and the per-session dedup cleared when /clear or compaction starts over.
-wire_hook UserPromptSubmit defect-intake.sh
+wire_entry UserPromptSubmit defect-intake.sh
 # rules-tree: delivery widened to web, agent and MCP tools. py_wire ignores a changed matcher, so a
 # hive still on the 0.19 or the 0.32 matcher is unwired and rewired; a matcher the owner set by hand is
 # kept. 0.41: Read joins it, for the cards of a story's ## Files when the story file is read.
@@ -1420,19 +1599,39 @@ INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|A
 if grep -qE '"matcher"[[:space:]]*:[[:space:]]*"Edit\|Write\|MultiEdit\|NotebookEdit\|Bash(\|WebFetch\|WebSearch\|Agent\|mcp__\.\*)?"' \
      "$DEST/.claude/settings.json" 2>/dev/null; then
   unwire_hook PreToolUse defects-inject.sh
+  wire_hook PreToolUse defects-inject.sh "$INJECT_MATCHER"
+else
+  wire_entry PreToolUse defects-inject.sh "$INJECT_MATCHER"
 fi
-wire_hook PreToolUse defects-inject.sh "$INJECT_MATCHER"
-wire_hook SessionStart defects-inject.sh '' reset
+wire_entry SessionStart defects-inject.sh '' reset
 # Claude Code's built-in "You should know" mod is offered, never switched on: ysk-offer.sh (0.29.0).
-wire_hook SessionStart ysk-offer.sh
+wire_entry SessionStart ysk-offer.sh
 # rules-tree: the owner's answers in AskUserQuestion windows reach the intake (decision or quote).
-wire_hook PostToolUse defect-intake.sh AskUserQuestion answer
+wire_entry PostToolUse defect-intake.sh AskUserQuestion answer
 # uncommitted-work-guard: the git guard is wired by the release that brings it, once. When v$PREV
 # already shipped the hook, a missing entry is the owner's removal and stays removed (like unwire_hook).
-if { [ -f "$DEST/.claude/hooks/git-guard.sh" ] || [ "$CHECK" = "--check" ]; } &&
-   ! git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/git-guard.sh" 2>/dev/null; then
+if git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/git-guard.sh" 2>/dev/null; then
+  report_unwired PreToolUse git-guard.sh 'Bash|PowerShell'
+elif [ -f "$DEST/.claude/hooks/git-guard.sh" ] || [ "$CHECK" = "--check" ]; then
   wire_hook PreToolUse git-guard.sh 'Bash|PowerShell'
 fi
+# mass-audit-fixes-04 (I2): the rest of what VULYK's own settings.json runs, which no earlier installer
+# wired into an owner's settings.json. As for git-guard.sh: wired when v$PREV did not ship the script (a
+# fresh install over an owner's file, or the release that brings it); after that a missing entry is the
+# owner's removal and stays removed.
+wire_shipped() { # wire_shipped <event> <script> [matcher] [arg]
+  if git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/$2" 2>/dev/null; then report_unwired "$@"; return 0; fi
+  wire_hook "$@"
+}
+wire_shipped SessionStart session-start-brief.sh
+wire_shipped SessionStart handoff.sh '' sessionstart
+wire_shipped SessionEnd handoff.sh '' sessionend
+wire_shipped UserPromptSubmit handoff.sh '' prompt
+wire_shipped Stop handoff.sh '' stop
+wire_shipped PreCompact context-guard.sh
+wire_shipped PreCompact handoff.sh '' precompact
+wire_shipped PostToolUse skill-usage-counter.sh Skill
+fix_hooks
 unwire_ysk
 wire_permissions
 wire_ripgrep
@@ -1568,7 +1767,15 @@ fi
 # on a dry run (nothing to apply) and silent when already pinned; any other failure (no
 # python, an unparsable settings.local.json) is printed by the resolver itself and must
 # never fail the install - pinning a session is a convenience, not a precondition.
-if [ "$CHECK" = "--check" ]; then
+# On --upgrade a pin already there is the owner's (a deliberate /model choice): kept, never re-applied.
+OWN_MODEL=""
+if [ -n "$UPGRADE" ] && [ -f "$DEST/.claude/settings.local.json" ]; then
+  OWN_MODEL="$(tr -d '\r' < "$DEST/.claude/settings.local.json" \
+    | sed -n '/"model"[[:space:]]*:/{s/.*"model"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p;q;}')"
+fi
+if [ -n "$OWN_MODEL" ]; then
+  echo "  kept: model = $OWN_MODEL (yours)"
+elif [ "$CHECK" = "--check" ]; then
   echo "  would pin      Queen session to opus (scripts/top-model.sh --apply)"
 elif [ -f "$DEST/scripts/top-model.sh" ]; then
   # top-model.sh resolves its own root from CLAUDE_PROJECT_DIR, falling back to $(pwd) - and

@@ -1,8 +1,8 @@
 ---
 story: mass-audit-fixes-12
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 model: haiku
@@ -57,5 +57,10 @@ Gotchas (portability).
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- Index mode 100755 set with `git update-index --chmod=+x` on anomaly-scan.sh, top-model-brief.sh, vulyk-update-check.sh (core.filemode is false here, so the index is the only place it lives).
+- leak-check.sh, injection-check.sh: `PYTHONIOENCODING=utf-8` on the python call, as the other report scripts do.
+- skill-usage-counter.sh: jq output piped through `tr -d '\r'`; the existing `set -o pipefail` keeps a failed jq from moving a file.
+- maintenance.test.sh: the git-guard-only check became a loop over every `.claude/hooks/*.sh` that settings.json names, failing on an empty list.
+- Criteria 2 and 3 are checked by command runs (Cyrillic leak/injection output, CRLF stub), not by a regression test: the non-goal limits maintenance.test.sh edits to the hook-bit block.
 
 ## Findings

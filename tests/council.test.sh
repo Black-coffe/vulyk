@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite hardening" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite suite2 hardening" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -92,6 +92,17 @@ export VULYK_LOAD_SAMPLER='echo "cpu 7% top: stub 7%"' # post-046-tails: every `
 
 # --- fixture helpers -------------------------------------------------------------------------
 
+done_story() { # done_story <story-file> [<printf-format> <args>...] - a `done` fixture story: written from the
+  # format (or, with none, its status: line set to done) and committed alone under `story(<id>): <title>`,
+  # since a done story without close-story's own commit is in progress (ADR-032 D2)
+  local f="$1" fmt id title; shift
+  if [ $# -gt 0 ]; then fmt="$1"; shift; printf -- "$fmt" "$@" > "$f"
+  else sed_inplace 's/^status: [a-z-]*$/status: done/' "$f"; fi
+  id="$(sed -n 's/^story:[[:space:]]*//p' "$f" | head -n 1)"
+  title="$(sed -n 's/^# //p' "$f" | head -n 1)"; [ -n "$title" ] || title="$id"
+  git add -- "$f" && git commit -qm "story($id): $title" -- "$f" >/dev/null
+}
+
 mk_spec() { # mk_spec <slug> <n-asks> - brief.md with an N-item ## Asks, plan.md, one done story
   local slug="$1" n="$2" i
   mkdir -p "docs/specs/$slug"
@@ -100,7 +111,7 @@ mk_spec() { # mk_spec <slug> <n-asks> - brief.md with an N-item ## Asks, plan.md
     printf '# %s (brief)\n\n## Request\n> build the thing\n\n## Asks\n' "$slug"
     i=1; while [ "$i" -le "$n" ]; do printf '%d. ask number %d works\n' "$i" "$i"; i=$((i+1)); done # not seq: BSD `seq 1 0` counts down to 0
   } > "docs/specs/$slug/brief.md"
-  printf -- '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# S1\n' "$slug" "$slug" > "docs/specs/$slug/$slug-01-first.md"
+  done_story "docs/specs/$slug/$slug-01-first.md" '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# S1\n' "$slug" "$slug"
   git add -A && git commit -qm "spec($slug): fixture" >/dev/null
 }
 
@@ -2101,7 +2112,8 @@ EOF
 git add -A && git commit -qm "spec(cstorylock1): fixture" >/dev/null
 touch .git/index.lock
 out="$(council close-story docs/specs/cstorylock1/cstorylock1-01-first.md --commit 2>&1)"; ex=$?
-[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'commit' && echo "  ok    r2m2: locked index -> exit 2, error names the commit" \
+# G6 (cs_add) may refuse at `git add` before the commit: the error names the git step that failed, add or commit.
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiE 'git (add|commit)' && echo "  ok    r2m2: locked index -> exit 2, error names the failed git step" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 grep -qE '^status: (todo|in-progress)$' docs/specs/cstorylock1/cstorylock1-01-first.md && echo "  ok    r2m2: story still reads todo|in-progress on disk" \
   || { echo "::error::status: $(grep '^status:' docs/specs/cstorylock1/cstorylock1-01-first.md)"; fail=1; }
@@ -2161,8 +2173,7 @@ git add -A && git commit -qm "spec(lr31w): fixture" >/dev/null
 out="$(council status docs/specs/lr31w --json)"
 printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: ready A and not-ready B (blocked_by todo/blocked C) -> wave_stories names only A" \
   '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"","repeat":1}]'
-sed_inplace 's/^status: blocked/status: done/' docs/specs/lr31w/lr31w-02-c.md
-git add -A && git commit -qm "lr31w: blocker C done" >/dev/null
+done_story docs/specs/lr31w/lr31w-02-c.md
 out="$(council status docs/specs/lr31w --json)"
 printf '%s' "$out" | jq -c '.wave_stories' | expect "LR31: blocker C done -> both A and B are listed" \
   '[{"file":"docs/specs/lr31w/lr31w-01-a.md","story":"lr31w-01","worker":"worker-code","model":"","repeat":1},{"file":"docs/specs/lr31w/lr31w-03-b.md","story":"lr31w-03","worker":"worker-code","model":"","repeat":1}]'
@@ -4060,7 +4071,7 @@ echo "ab-run-fixes C4: a blind seat is not carried over an ask the repair touche
 c4_round2() { # c4_round2 <slug> - repair round 1, mark the repair story done, commit a code change, open round 2
   council repair "docs/specs/$1" --commit >/dev/null 2>&1
   C4_RS="$(ls "docs/specs/$1"/*-repair-round-1.md 2>/dev/null | head -1)"
-  [ -n "$C4_RS" ] && sed_inplace 's/^status: todo$/status: done/' "$C4_RS"
+  [ -n "$C4_RS" ] && done_story "$C4_RS"
   echo "repair" > "$1-code.txt" && git add -A && git commit -qm "$1: the repair" >/dev/null
   council open-round "docs/specs/$1" --commit >/dev/null 2>&1
 }
@@ -4153,6 +4164,7 @@ wave: 2
 `true`
 `sh -c 'true && true'`
 EOF
+done_story docs/specs/r18rp/r18rp-01-a.md; done_story docs/specs/r18rp/r18rp-02-b.md
 git add -A && git commit -qm "r18rp: fixture" >/dev/null
 out="$(council repair docs/specs/r18rp 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'next is open-round, not repair' && echo "  ok    repair refuses while status says anything but repair" \
@@ -4220,7 +4232,7 @@ cp "$SRC/templates/plan.md" docs/specs/r18rq/plan.md
 printf '# r18rq (brief)\n\n## Request\nbuild the thing\n\n## Asks\n> quoted ask one works\n>\n> quoted ask two works\n\n## Answers\n> not an ask\n' > docs/specs/r18rq/brief.md
 sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-10-16/; s#^\*\*Branch:\*\* <.*#**Branch:** '"$(git rev-parse --abbrev-ref HEAD)"'#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/r18rq/plan.md
 printf 'q\n' > r18rq-a.txt
-printf -- '---\nstory: r18rq-01\nstatus: done\nwave: 1\n---\n# A\n\n## Requirements\n> quoted ask one works\n\n## Files\n- r18rq-a.txt\n\n## Verification\n`true`\n' > docs/specs/r18rq/r18rq-01-a.md
+done_story docs/specs/r18rq/r18rq-01-a.md '---\nstory: r18rq-01\nstatus: done\nwave: 1\n---\n# A\n\n## Requirements\n> quoted ask one works\n\n## Files\n- r18rq-a.txt\n\n## Verification\n`true`\n'
 git add -A && git commit -qm "r18rq: fixture" >/dev/null
 out="$(council open-round docs/specs/r18rq --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && echo "  ok    open-round counts the quoted asks (it stopped on '## Asks missing or empty' before)" \
@@ -4434,8 +4446,8 @@ rm -rf "$CAPS"
 echo "gate-split-02: repair keeps only the verification lines covering the paths its findings name"
 vf_spec() { # vf_spec <slug> <finding-line> - done stories 01 (a) and 02 (b), a RED round 1 with the finding, its repair
   mk_open_spec "$1" 2; set_tier "$1" 2
-  printf -- '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# A\n\n## Files\n- %s-a.txt\n\n## Verification\n`test -f %s-a.txt`\n`echo unrelated`\n' "$1" "$1" "$1" "$1" > "docs/specs/$1/$1-01-a.md"
-  printf -- '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# B\n\n## Files\n- %s-b.txt\n\n## Verification\n`test -f %s-b.txt`\n`test -f %s-b.txt`\n' "$1" "$1" "$1" "$1" "$1" > "docs/specs/$1/$1-02-b.md"
+  done_story "docs/specs/$1/$1-01-a.md" '---\nstory: %s-01\nspec: %s\nstatus: done\nwave: 1\n---\n# A\n\n## Files\n- %s-a.txt\n\n## Verification\n`test -f %s-a.txt`\n`echo unrelated`\n' "$1" "$1" "$1" "$1"
+  done_story "docs/specs/$1/$1-02-b.md" '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# B\n\n## Files\n- %s-b.txt\n\n## Verification\n`test -f %s-b.txt`\n`test -f %s-b.txt`\n' "$1" "$1" "$1" "$1" "$1"
   git add -A && git commit -qm "$1: stories" >/dev/null
   council open-round "docs/specs/$1" --commit >/dev/null 2>&1
   seat_report opus 1 GG | council record-seat "docs/specs/$1" 1 opus >/dev/null 2>&1
@@ -4463,6 +4475,20 @@ echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every p
 council status docs/specs/r18ad --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
 fi # part advance
 
+if part suite || part suite2; then # the two suite parts' shared fixture helpers (council:suite split in mass-audit-fixes-18 repair 1)
+sx_row() { # sx_row [<purpose> <command>] - the fixture constitution's one round-only full-suite row (none without args), committed
+  grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+  [ $# -eq 2 ] && printf '| %s | `%s` |\n' "$1" "$2" >> CLAUDE.md
+  git add -A && git commit -qm "fixture: full-suite row ${1:-none}" >/dev/null
+}
+sx_open() { # sx_open <slug> [<tier>] - a Tier 1 (or <tier>) spec, approved and branched, its round 1 opened --commit (no court below Tier 3)
+  mk_open_spec "$1" 2
+  set_tier "$1" "${2:-1}"
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+}
+sx_last() { printf '%s\n' "$1" | tail -1; } # sx_last <output> -> its JSON line
+fi
+
 if part suite; then # --- part suite: cycle.sh suite (gate-split-04) - the round's gate, one step per call, into council/round-N/suite.log
 # A fixture runner answers --steps / --step K the way tests/full-suite.sh does: two steps, PART lines.
 # FX_FAIL: step 2 fails a part; FX_GROW: step 2 reports a part past 70% of its cap and still exits 0,
@@ -4479,17 +4505,6 @@ case "$1" in
 esac
 EOF
 git add -A && git commit -qm "fixture: a stepped runner" >/dev/null
-sx_row() { # sx_row [<purpose> <command>] - the fixture constitution's one round-only full-suite row (none without args), committed
-  grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
-  [ $# -eq 2 ] && printf '| %s | `%s` |\n' "$1" "$2" >> CLAUDE.md
-  git add -A && git commit -qm "fixture: full-suite row ${1:-none}" >/dev/null
-}
-sx_open() { # sx_open <slug> [<tier>] - a Tier 1 (or <tier>) spec, approved and branched, its round 1 opened --commit (no court below Tier 3)
-  mk_open_spec "$1" 2
-  set_tier "$1" "${2:-1}"
-  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
-}
-sx_last() { printf '%s\n' "$1" | tail -1; } # sx_last <output> -> its JSON line
 
 echo "suite: no open round -> exit 2, nothing written"
 mk_open_spec sxnone 2
@@ -4726,9 +4741,11 @@ git add -A && git commit -qm "fixture: a stepped runner with a hung part" >/dev/
 sx_row 'Full suite (round-only, steps)' 'bash fx-hang.sh'
 sx_open sxhung
 rd="docs/specs/sxhung/council/round-1"
-out="$(VULYK_STEP_CAP=3 council suite docs/specs/sxhung 2>&1)"; ex=$?
+# X-08: the call cap is cut by the seconds the verb already spent (the --steps call, the load sample), so the
+# STEP note names the cap the step really ran under: 6 s or a little less.
+out="$(VULYK_STEP_CAP=6 council suite docs/specs/sxhung 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL"' >/dev/null 2>&1 \
-  && grep -qE '^STEP 1/1: FAIL [0-9]+s - timed out after 3s - no end from: fx:hung$' "$rd/suite.log" \
+  && grep -qE '^STEP 1/1: FAIL [0-9]+s - timed out after [1-6]s - no end from: fx:hung$' "$rd/suite.log" \
   && grep -qF 'PART fx:quick ok 0s cap 300s' "$rd/suite.log" \
   && tail -1 "$rd/suite.log" | grep -qE '^SUITE: FAIL [0-9]+s - step 1/1 no end from: fx:hung$' \
   && echo "  ok    the hung part is named in the STEP note and the SUITE line, the ended one is not" \
@@ -4742,12 +4759,15 @@ out="$(council suite docs/specs/sxno 2>&1)"; ex=$?
   && [ "$(tail -1 docs/specs/sxno/council/round-1/suite.log)" = "SUITE: none" ] \
   && echo "  ok    no row -> SUITE: none, steps 0, done" || { echo "::error::suite none: exit=$ex out=$out"; fail=1; }
 
+fi # part suite
+
+if part suite2; then # --- part suite2: cycle.sh suite, second half - the narrow repair round (ab-run-fixes C5) and the LOAD sample order (X-08)
 echo "ab-run-fixes C5: a RED round with one item in one file -> a narrow repair story and a review-only round: no blind seat, no suite step"
 sx_row 'Full suite (round-only)' 'true'
 nx_red() { # nx_red <slug> <review-report> - a Tier 3 spec with stories on app/x.py and app/y.py, round 1 judged RED on <review-report>, then repaired
   mk_open_spec "$1" 2; set_tier "$1" 3
-  printf -- '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# S2\n\n## Files\n- app/x.py\n\n## Verification\n`true`\n' "$1" "$1" > "docs/specs/$1/$1-02-x.md"
-  printf -- '---\nstory: %s-03\nspec: %s\nstatus: done\nwave: 1\n---\n# S3\n\n## Files\n- app/y.py\n\n## Verification\n`false`\n' "$1" "$1" > "docs/specs/$1/$1-03-y.md"
+  done_story "docs/specs/$1/$1-02-x.md" '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# S2\n\n## Files\n- app/x.py\n\n## Verification\n`true`\n' "$1" "$1"
+  done_story "docs/specs/$1/$1-03-y.md" '---\nstory: %s-03\nspec: %s\nstatus: done\nwave: 1\n---\n# S3\n\n## Files\n- app/y.py\n\n## Verification\n`false`\n' "$1" "$1"
   mkdir -p app && echo "x = 1" > app/x.py && echo "y = 1" > app/y.py
   git add -A && git commit -qm "$1: two built stories" >/dev/null
   council open-round "docs/specs/$1" --commit >/dev/null 2>&1
@@ -4759,7 +4779,7 @@ nx_red() { # nx_red <slug> <review-report> - a Tier 3 spec with stories on app/x
   NX_RS="docs/specs/$1/$1-04-repair-round-1.md"
 }
 nx_round2() { # nx_round2 <slug> - the repair story marked done with a code change, round 2 opened; prints open-round's JSON line
-  sed_inplace 's/^status: todo$/status: done/' "$NX_RS"
+  done_story "$NX_RS"
   echo "x = 2" > app/x.py && git add -A && git commit -qm "$1: the repair" >/dev/null
   council open-round "docs/specs/$1" --commit 2>/dev/null | tail -1
 }
@@ -4799,7 +4819,48 @@ nx_red nxi 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n- [ask 2]
 [ -f "$NX_RS" ] && [ -z "$(fm_field_t "$NX_RS" narrow)" ] && nx_sec "$NX_RS" '## Files' | grep -qx -- '- app/y.py' \
   && echo "  ok    two items in one file: no narrow mark, the full ## Files union" \
   || { echo "::error::two items: $(cat "$NX_RS" 2>&1)"; fail=1; echo "neighbour two items" >> "$FAILS"; }
-fi # part suite
+
+echo "suite: the LOAD: start sample ends before the step starts, and the stepped call cap pays for it (mass-audit-fixes-10, X-08)"
+SXTS="$(mktemp -d)"; export SXTS
+cat > fx-ts.sh <<'TS'
+case "$1" in
+  --steps) echo 1 ;;
+  --step)
+    date +%s > "$SXTS/step.ts"
+    if [ -f "$SXTS/load.ts" ]; then echo "PART fx:ts ok 0s cap 300s"; echo "STEP 1/1: ok 0s"
+    else echo "PART fx:ts FAIL 0s cap 300s - the load sample had not ended"; exit 1; fi ;;
+  *) exit 2 ;;
+esac
+TS
+cat > fx-slow.sh <<'SLOW'
+case "$1" in
+  --steps) echo 1 ;;
+  --step) echo "PARTS 1/1: fx:slow"; sleep 5; echo "PART fx:slow ok 5s cap 300s"; echo "STEP 1/1: ok 5s" ;;
+  *) exit 2 ;;
+esac
+SLOW
+git add -A && git commit -qm "fixture: a sample-order runner and a five-second runner" >/dev/null
+sx_row 'Full suite (round-only, steps)' 'bash fx-ts.sh'
+sx_open sxorder
+rd="docs/specs/sxorder/council/round-1"
+out="$(VULYK_LOAD_SAMPLER='sleep 1; date +%s > "$SXTS/load.ts"; echo "cpu 7% top: stub 7%"' council suite docs/specs/sxorder 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "ok"' >/dev/null 2>&1 \
+  && [ -f "$SXTS/load.ts" ] && [ -f "$SXTS/step.ts" ] && [ "$(cat "$SXTS/load.ts")" -le "$(cat "$SXTS/step.ts")" ] \
+  && ! grep -q '^LOAD:' "$rd/suite.log" \
+  && echo "  ok    the stub sampler's timestamp is written before the step command starts; an ok step still writes no LOAD line" \
+  || { echo "::error::suite: the LOAD: start sample must end before the step starts - exit=$ex load=$(cat "$SXTS/load.ts" 2>&1) step=$(cat "$SXTS/step.ts" 2>&1) log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+sx_row 'Full suite (round-only, steps)' 'bash fx-slow.sh'
+sx_open sxspent
+rd="docs/specs/sxspent/council/round-1"
+out="$(VULYK_STEP_CAP=6 VULYK_LOAD_SAMPLER='sleep 2; echo "cpu 7% top: stub 7%"' council suite docs/specs/sxspent 2>&1)"; ex=$?
+capn="$(sed -n 's/^STEP 1\/1: FAIL [0-9]*s - timed out after \([0-9]*\)s.*/\1/p' "$rd/suite.log")"
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && [ -n "$capn" ] && [ "$capn" -le 4 ] \
+  && grep -qx 'LOAD: start cpu 7% top: stub 7%' "$rd/suite.log" && grep -qx 'LOAD: end cpu 7% top: stub 7%' "$rd/suite.log" \
+  && echo "  ok    a 2 s sample under a 6 s call cap leaves the step at most 4 s: the 5 s step times out, the FAIL step carries both LOAD lines" \
+  || { echo "::error::suite: the stepped call cap must be cut by the seconds the sample spent - exit=$ex cap=$capn log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+rm -rf "$SXTS"; unset SXTS
+fi # part suite2
 
 if part hardening; then # --- part hardening: free text and odd values that broke a ledger, a report or a path (audit P9)
 
@@ -4864,8 +4925,40 @@ printf -- '---\nstory: "h06-02"\nspec: h06\nstatus: todo\nwave: 1\nworker: '"'"'
 git add -A && git commit -qm "h06: quoted values" >/dev/null
 out="$(council status docs/specs/h06 --json)"
 printf '%s' "$out" | jq -e '.branch == "\"vulyk/h06\"" and .next == "build:1"
-  and (.wave_stories | map(select(.file | endswith("h06-02-second.md"))) | .[0] | .story == "\"h06-02\"" and .model == "\"sonnet\"" and .worker == "'"'"'worker-code'"'"'")' >/dev/null 2>&1 \
-  && echo "  ok    the line parses; branch and the story's values come back as written" || { echo "::error::status: $out"; fail=1; }
+  and (.wave_stories | map(select(.file | endswith("h06-02-second.md"))) | .[0] | .story == "h06-02" and .model == "sonnet" and .worker == "worker-code")' >/dev/null 2>&1 \
+  && echo "  ok    the line parses; the marker comes back as written, the story's quoted YAML values unquoted (ask 3)" || { echo "::error::status: $out"; fail=1; }
+
+echo "status --json: a quoted blocked_by entry and a quoted worker resolve like the unquoted form (mass-audit-fixes-10, ask 3)"
+mk_open_spec h10 2
+printf -- '---\nstory: h10-02\nspec: h10\nstatus: todo\nwave: 2\nblocked_by: ["h10-01"]\nworker: "worker-code"\n---\n# Quoted\n' > docs/specs/h10/h10-02-quoted.md
+printf -- '---\nstory: h10-03\nspec: h10\nstatus: todo\nwave: 2\nblocked_by: [h10-01]\nworker: worker-code\n---\n# Plain\n' > docs/specs/h10/h10-03-plain.md
+git add -A && git commit -qm "h10: quoted and plain blockers" >/dev/null
+out="$(council status docs/specs/h10 --json)"
+printf '%s' "$out" | jq -e '.next == "build:2" and (.wave_stories | length) == 2
+  and (.wave_stories | map(.worker) | unique) == ["worker-code"]
+  and (.wave_stories | map(.story) | sort) == ["h10-02", "h10-03"]' >/dev/null 2>&1 \
+  && echo "  ok    both wave-2 stories are ready on the done h10-01, both on worker-code" || { echo "::error::quoted blocked_by/worker: $out"; fail=1; echo "quoted blocked_by" >> "$FAILS"; }
+
+echo "status --json: a spec path and a story file name holding a quote (and a backslash where the file system allows one) stay valid JSON (mass-audit-fixes-10, ask 3)"
+bsp="$(mktemp -d)"; bs=''
+mkdir "$bsp/a\\b" 2>/dev/null && [ -d "$bsp/a\\b" ] && bs='\'
+rm -rf "$bsp"
+[ -n "$bs" ] || echo "  note  this file system takes no backslash in a name: the quote alone is tested here"
+h11="h11${bs}\"q"
+mkdir -p "docs/specs/$h11"
+cp "$SRC/templates/plan.md" "docs/specs/$h11/plan.md"
+printf '# h11 (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n' > "docs/specs/$h11/brief.md"
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-09/' "docs/specs/$h11/plan.md"
+sed_inplace "s#^\*\*Branch:\*\* <.*#**Branch:** $(git rev-parse --abbrev-ref HEAD)#" "docs/specs/$h11/plan.md"
+h11f="docs/specs/$h11/h11-01-${bs}\"x.md"
+printf -- '---\nstory: h11-01\nspec: h11\nstatus: in-progress\nwave: 1\n---\n# Odd names\n' > "$h11f"
+git add -A && git commit -qm "h11: odd names" >/dev/null
+mk_open_round "$h11" 1 >/dev/null
+out="$(council status "docs/specs/$h11" --json)"
+printf '%s' "$out" | jq -e --arg s "docs/specs/$h11" --arg f "$h11f" \
+  '.spec == $s and .next == ("close-story:" + $f) and .round_dir == ($s + "/council/round-1")' >/dev/null 2>&1 \
+  && echo "  ok    the line parses; spec, next and round_dir come back as the paths themselves" || { echo "::error::odd-name status: $out"; fail=1; echo "odd-name status" >> "$FAILS"; }
+rm -rf "docs/specs/$h11/council"; git add -A && git commit -qm "h11: done" >/dev/null 2>&1
 
 echo "reopen, pause, journal.sh: a credential in the owner's text is masked before brief.md, PAUSE and journal.md (P9-07)"
 h07secret="sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"

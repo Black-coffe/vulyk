@@ -111,14 +111,18 @@ Plan: "$ARGUMENTS"
      both. A correction to an ask edits `## Asks`, re-runs `bash scripts/trace-check.sh docs/specs/<slug>`
      (fix the stories it flags), commits the spec directory (`vulyk(<slug>): asks revised`) and shows the
      asks and the plan again. A "no" or a change request to the plan reopens steps 5-7 once, ending in the
-     same commit; a second one is a new brief.
+     same commit; a second one is a new brief. A story changed after the plan commit (its `## Files`,
+     `## Verification` or `red:`) is committed alone as `vulyk(<slug>): revised <story-id>`
+     (`chore(vulyk-<slug>): revised <story-id>`): close-story reads those blocks from that commit.
    - On approval, fill `**Approved:**` with the owner and the date, run `bash scripts/journal.sh
      docs/specs/<slug> 02-approved "approved by <owner>" branch`, and commit only that line and its journal
      entry: `git add docs/specs/<slug>/plan.md docs/specs/<slug>/journal.md && git commit -m
      "vulyk(<slug>): approved"` (`chore(vulyk-<slug>): approved` when the Profile's Commit convention names
      conventional commits, as `cycle.sh` writes it); the plan itself is already committed (step 8).
    - Straight-through opt-in, only with `--go`: instead of waiting, `bash scripts/cycle.sh briefed
-     docs/specs/<slug> --commit` (`--mode assumed` in no-question mode) and continue.
+     docs/specs/<slug> --go --commit` (`--mode assumed` in no-question mode) and continue. The `--go` is
+     written into the `**Briefed:**` line; at Tier 2-4 `briefed` without it refuses, and so do `branch` and
+     ship-check stage 02.
 10. Launch.
    - Tier 2 after approval: tell the owner to `/clear` and run `/vulyk-build <slug>` in a fresh
      session. The build needs the files, not this planning conversation. Stop here.

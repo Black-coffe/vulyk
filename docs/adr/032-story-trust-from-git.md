@@ -1,6 +1,7 @@
 # ADR-032: A story's gates are read from its committed version; the close is a commit
 
-- Status: proposed
+- Status: accepted (2026-11-09, owner: Andrei, approved with the plan, the `**Approved:**` line of
+  `docs/specs/mass-audit-fixes/plan.md`; built by stories 01, 05, 08 and 10 of that spec)
 - Date: 2026-11-09
 - Spec: docs/specs/mass-audit-fixes (Asks 12, 13, 14; amends ADR-025 D3 and its Consequences)
 
@@ -83,9 +84,8 @@ the working copy; no new state file; a gate, not a text; a refusal in code. This
   its HEAD content (`git show HEAD:<p>`; a file new since HEAD is removed), runs the stamp, and restores the
   copies in a trap, whatever the exit. No `git stash`, so the git guard, which passes `stamp-red` already, has
   nothing to deny, and no stash entry can be lost. Workers still never run it (worker-code: NEEDS_CONTEXT
-  naming the test edit); the Queen runs it after `/vulyk-pause`, as ADR-025 says. Until it ships the escape
-  is the owner's own terminal, which the guard's deny text already names. ADR-025 Consequences, second bullet,
-  gets a one-line pointer here.
+  naming the test edit); the Queen runs it after `/vulyk-pause`, as ADR-025 says. ADR-025 Consequences,
+  second bullet, gets a one-line pointer here.
 
 ## Named bypasses (card `safeguard-bypassable-or-late`)
 - **A worker commits under a forged paperwork subject.** D1 would then take its version as approved. Nothing in

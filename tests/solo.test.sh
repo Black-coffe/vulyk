@@ -62,7 +62,7 @@ EOF
   printf '.vulyk/\ndocs/specs/*/DRIVER\ndocs/specs/*/PAUSE\n' > .gitignore
   mkdir -p docs/specs/demo memory/stats
   printf '# Brief - demo\n\n## Request (verbatim)\n\n> app.txt says fixed\n\n## Asks\n\n1. app.txt says fixed\n' > docs/specs/demo/brief.md
-  printf '# Plan - demo\n\n**Tier:** %s · **Spec slug:** `demo`\n\n**Briefed:** via mini-brief, t, 2026-09-27\n**Branch:** <written by the build>\n**Council:** <written by judge>\n**Shipped:** <written by ship-check>\n' "$2" > docs/specs/demo/plan.md
+  printf '# Plan - demo\n\n**Tier:** %s · **Spec slug:** `demo`\n\n**Briefed:** %s, t, 2026-09-27\n**Branch:** <written by the build>\n**Council:** <written by judge>\n**Shipped:** <written by ship-check>\n' "$2" "$([ "$2" -gt 1 ] && echo 'via grill (--go)' || echo 'via mini-brief')" > docs/specs/demo/plan.md
   printf -- '---\nstory: demo-01\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: 1\nblocked_by: []\n---\n\n# Make app.txt say fixed\n\n## Goal\napp.txt says fixed.\n\n## Requirements\n> app.txt says fixed\n\n## Files\n- app.txt\n\n## Verification\n`bash check.sh`\n' > docs/specs/demo/demo-01-app.md
   git add -A && git commit -q -m init
 }

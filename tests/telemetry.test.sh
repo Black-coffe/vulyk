@@ -34,6 +34,7 @@ PARTS="telemetry
 scan
 install
 install-xp
+install-xp2
 terminal
 wiring
 ledger
@@ -1187,6 +1188,46 @@ rm -f "$LLMSET" "$HIVE/.claude/hooks/learn.sh" "$HIVE/.claude/hooks/quiet.sh"; :
 
 # --- session-start-brief.sh: the litopys offer (0.19, plan 1.7) --------------------------------
 # One line, until litopys is in enabledPlugins (either settings file) or the Profile declines it.
+# --- mass-audit-fixes-09 (O4): the SessionEnd scan forks one awk for every journal, one wc for every subagent
+echo "--- scan: one journal awk, one subagent wc, the same rows"
+SH="$T/hive-scanfork"; mkdir -p "$SH/scripts" "$SH/memory/stats" "$SH/.claude/agents" "$SH/.claude/hooks"
+cp "$SRC/scripts/telemetry.sh" "$SRC/scripts/lib.sh" "$SH/scripts/"
+cp "$SRC"/.claude/agents/*.md "$SH/.claude/agents/"
+cp "$SRC/.claude/hooks/handoff.py" "$SRC/.claude/hooks/handoff.sh" "$SH/.claude/hooks/"
+printf '# Fixture hive\n' > "$SH/CLAUDE.md"
+for s in fork-a fork-b fork-c; do mkdir -p "$SH/docs/specs/$s"; done
+printf -- '- 2026-01-01T00:00:00Z · 01-spec · start · next: plan\n- 2026-01-02T06:00:00Z · 02-plan · planned · next: build\n' \
+  > "$SH/docs/specs/fork-a/journal.md"
+printf -- '- 2026-01-01T00:00:00Z · 01-spec · start · next: plan\n- 2026-01-01T02:00:00Z · 02-plan · planned · next: build\n' \
+  > "$SH/docs/specs/fork-b/journal.md"
+printf -- '- 2026-02-01T00:00:00Z · 01-spec · start\n- 2026-02-02T01:00:00Z · 02-plan · planned\n- 2026-02-02T03:00:00Z · 03-build · built\n- 2026-02-04T03:00:00Z · 04-round · GREEN\n' \
+  > "$SH/docs/specs/fork-c/journal.md"
+FKPROJ="$T/forkproj"; mkdir -p "$FKPROJ/sf1/subagents/workflows/wf1"
+agent_file "$FKPROJ/sf1/subagents/agent-f1.jsonl"              60000 text     cycle-clerk
+agent_file "$FKPROJ/sf1/subagents/workflows/wf1/agent-f2.jsonl" 70000 tool_use worker-code
+agent_file "$FKPROJ/sf1/subagents/agent-f3.jsonl"              100   text     drone-scout
+cp "$PROJ/sid1.jsonl" "$FKPROJ/sf1.jsonl"
+FORKSHIM="$T/forkshim"; FORKLOG="$T/forks.txt"; mkdir -p "$FORKSHIM"; : > "$FORKLOG"
+# Each shim logs one line per start: its name and how many journal.md arguments it was handed.
+for tool in awk wc; do
+  printf '#!/bin/sh\nj=0; for a in "$@"; do case "$a" in *journal.md) j=$((j+1)) ;; esac; done\necho "%s $j" >> "%s"\nexec "%s" "$@"\n' \
+    "$tool" "$FORKLOG" "$(command -v "$tool")" > "$FORKSHIM/$tool"
+  chmod +x "$FORKSHIM/$tool"
+done
+( cd "$SH" && PATH="$FORKSHIM:$PATH" VULYK_HIVE="$SH" bash scripts/telemetry.sh scan --transcript "$FKPROJ/sf1.jsonl" --final ) >/dev/null 2>&1
+expect_eq "the journal-stage detector forks one awk for three journals" "awk 3" \
+  "$(grep -v '^awk 0$' "$FORKLOG" | grep '^awk' | paste -sd'|' -)"
+expect_eq "the scan sizes three subagents with one wc" "1" "$(grep -c '^wc' "$FORKLOG" || true)"
+# The rows the scan wrote before the change, captured from it: ts and the version stamp aside, byte for byte.
+expect_eq "the scan's rows on the fixture are byte-identical to the per-file forks'" \
+'{"v":1,"code":"agent_prefix_high","value":60000,"threshold":50000,"tier":0,"model":"","agent":"cycle-clerk","spec":"","story":"","ref":"agent:agent-f1.jsonl"}
+{"v":1,"code":"agent_prefix_high","value":70000,"threshold":50000,"tier":0,"model":"","agent":"worker-code","spec":"","story":"","ref":"agent:agent-f2.jsonl"}
+{"v":1,"code":"agent_empty","value":1,"threshold":0,"tier":0,"model":"","agent":"worker-code","spec":"","story":"","ref":"agent:agent-f2.jsonl"}
+{"v":1,"code":"stage_long","value":30,"threshold":24,"tier":0,"model":"","agent":"","spec":"fork-a","story":"","ref":"stage:fork-a:2"}
+{"v":1,"code":"stage_long","value":25,"threshold":24,"tier":0,"model":"","agent":"","spec":"fork-c","story":"","ref":"stage:fork-c:2"}
+{"v":1,"code":"stage_long","value":48,"threshold":24,"tier":0,"model":"","agent":"","spec":"fork-c","story":"","ref":"stage:fork-c:4"}' \
+  "$(jq -c 'del(.ts, .vulyk)' "$SH/memory/stats/anomalies.jsonl" 2>/dev/null | tr -d '\r')"
+
 echo "--- session-start-brief.sh: litopys"
 if bash -n "$SRC/.claude/hooks/session-start-brief.sh" 2>/dev/null; then ok "bash -n session-start-brief.sh"
 else bad "bash -n session-start-brief.sh failed"; fi
@@ -1254,8 +1295,28 @@ expect_eq "fresh install: the scan is wired on SessionEnd only" "0 1" \
   "$(jq -r '[.hooks.Stop[]?.hooks[].command | select(test("anomaly-scan"))] | length' "$TGT/.claude/settings.json" | tr -d '\r') $(jq -r '[.hooks.SessionEnd[]?.hooks[].command | select(test("anomaly-scan"))] | length' "$TGT/.claude/settings.json" | tr -d '\r')"
 # ...and a project that already had its own settings.json gets the same through wire_hook
 cat "$T/ownset.out" | expect "an owner's settings.json gets the scan on SessionEnd" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
-cat "$T/ownset.out" | expect_absent "and no Stop wiring" "-> Stop:"
+cat "$T/ownset.out" | expect_absent "and no Stop scan wiring" "-> Stop: anomaly-scan.sh"
 expect_eq "and no learnings hook" "0" "$(grep -c 'session-end-learnings' "$OWNSET/.claude/settings.json")"
+
+# mass-audit-fixes-11 (S7-shell): VULYK's own map never ships into a hive, only the skeleton README.
+expect_eq "fresh install: the manifest's only memory/map/ entry is its README" "memory/map/README.md" \
+  "$(tr -d '\r' < "$TGT/.claude/vulyk-manifest" | grep '^memory/map/' | paste -sd' ' -)"
+expect_eq "fresh install: memory/map in the hive holds the README alone" "README.md" \
+  "$(ls "$TGT/memory/map" | tr -d '\r' | paste -sd' ' -)"
+# O1: the one-pass copy prints what the per-file loop printed - one `copy` line per shipped path, in the same
+# format (the manifest is the fixture; CLAUDE.md is the constitution's own copy line, outside copy_tree) - and
+# every listed path is on disk.
+tr -d '\r' < "$TGT/.claude/vulyk-manifest" | sed 's/^/  copy           /' | LC_ALL=C sort > "$T/o1-copy.want"
+grep '^  copy           ' "$T/install.out" | tr -d '\r' | grep -vx '  copy           CLAUDE.md' | LC_ALL=C sort > "$T/o1-copy.got"
+expect_eq "one-pass copy: a fresh install's copy lines are the manifest, line for line (fixture diff)" "" \
+  "$(diff "$T/o1-copy.want" "$T/o1-copy.got" 2>&1)"
+expect_eq "one-pass copy: every manifest path was copied" "0" \
+  "$(tr -d '\r' < "$TGT/.claude/vulyk-manifest" | while IFS= read -r f; do [ -f "$TGT/$f" ] || echo "$f"; done | wc -l | tr -d ' ')"
+# O5 + S6-shell: a counting git shim and the claude stub listing the mod at an older version than the release.
+REALGIT="$(command -v git)"; GSHIM="$T/git-shim"; mkdir -p "$GSHIM"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$T/git.log" "$REALGIT" > "$GSHIM/git"; chmod +x "$GSHIM/git"
+REL_VER="$(tr -d '[:space:]' < "$SRC/VERSION")"
+cc_list_at() { printf '  vulyk\n' > "$T/cc-mkt"; printf '  \342\235\257 vulyk-pulse@vulyk\n    Version: %s\n    Scope: user\n' "$1" > "$T/cc-list"; : > "$T/cc.log"; }
 
 # --telemetry on changes that one row's value and nothing else in the constitution
 PROF_BEFORE="$(grep -v '^| Telemetry |' "$TGT/CLAUDE.md")"
@@ -1267,10 +1328,22 @@ expect_eq "the row is still there exactly once" "1" "$(grep -c '^| Telemetry |' 
 
 # an answered row survives a plain upgrade byte for byte, and is not asked about again
 CONST_BEFORE="$(cat "$TGT/CLAUDE.md")"
-bash "$SRC/install.sh" "$TGT" --upgrade > "$T/up-plain.out" 2>&1
+cc_list_at 0.0.1; : > "$T/git.log"
+printf '%s\n' 'scripts/../CLAUDE.md' >> "$TGT/.claude/vulyk-manifest"   # S1-shell: a bad line naming the constitution
+PATH="$GSHIM:$PATH" VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$TGT" --upgrade > "$T/up-plain.out" 2>&1
+cat "$T/up-plain.out" | expect "a dot-dot manifest line on a plain --upgrade: skip (bad path), the constitution stays" \
+  "skip (bad path) scripts/../CLAUDE.md"
 expect_eq "an answered row is byte-identical after --upgrade" "1" \
   "$([ "$CONST_BEFORE" = "$(cat "$TGT/CLAUDE.md")" ] && echo 1 || echo 0)"
 cat "$T/up-plain.out" | expect_absent "no question for a hive that already answered" "Enable telemetry?"
+expect_eq "an up-to-date --upgrade runs git log --all zero times (counting git shim)" "0" "$(grep -c 'log --all' "$T/git.log")"
+tr -d '\r' < "$TGT/.claude/vulyk-manifest" | sed 's/^/  skip (exists)  /' | LC_ALL=C sort > "$T/o1-skip.want"
+grep '^  skip (exists)  ' "$T/up-plain.out" | tr -d '\r' | LC_ALL=C sort > "$T/o1-skip.got"
+expect_eq "one-pass copy: an up-to-date --upgrade's skip lines are the manifest, line for line (fixture diff)" "" \
+  "$(diff "$T/o1-skip.want" "$T/o1-skip.got" 2>&1)"
+expect_eq "the mod listed at an older version than the release: the upgrade runs plugin update" "1" \
+  "$(grep -c "plugin update vulyk-pulse@vulyk --scope user" "$T/cc.log")"
+cat "$T/up-plain.out" | expect "... and says the marketplace head is not pinned to a ref" "mod: marketplace head, not pinned"
 
 # --check reports the pending insertion and writes nothing
 sed_inplace '/^| Telemetry |/d' "$TGT/CLAUDE.md"
@@ -1297,6 +1370,14 @@ cat "$T/nomark-upgrade.out" | expect "marker-less Profile: warns and names the r
   "warning: Profile block has no markers - not writing | Telemetry | on |; add the row by hand"
 expect_eq "marker-less Profile: the file is unchanged" "1" \
   "$([ "$NOMARK_BEFORE" = "$(cat "$NOMARK/CLAUDE.md")" ] && echo 1 || echo 0)"
+
+# mass-audit-fixes-11 (S6-shell): the mod already at the release's version is not updated again.
+cc_list_at "$REL_VER"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/up-modcur.out" 2>&1
+expect_eq "the mod listed at the release's version: no plugin update, no marketplace update" "0 0" \
+  "$(grep -c 'plugin update' "$T/cc.log") $(grep -c 'plugin marketplace update' "$T/cc.log")"
+cat "$T/up-modcur.out" | expect "... and the log says it is current" "current        vulyk-pulse@vulyk ($REL_VER"
+rm -f "$T/cc-list" "$T/cc-mkt"; : > "$T/cc.log"
 
 # ab-run-fixes-06: a bare install asks nothing even with a terminal and writes off; only
 # --telemetry ask puts the question. Through a pseudo-terminal when util-linux `script` is on PATH.
@@ -1361,19 +1442,58 @@ git -C "$XREL" init -q -b main && git -C "$XREL" config core.autocrlf false \
   && git -C "$XREL" tag v9.9.9
 git clone -q "$XREL" "$T/xp-relcache"
 XU="$T/hive-xp-update"; fresh_install "$XU"
-XU_RC=0; ( cd "$XCWD" && VULYK_SRC="$T/xp-relcache" bash "$SRC/scripts/vulyk-update.sh" "$XU" --check --version 9.9.9 --telemetry off ) \
-  > "$T/xp-update.out" 2>&1 || XU_RC=$?
+# The cache's origin is the release repository, so the project declares that same origin (VULYK_REPO).
+upd() { ( cd "$XCWD" && VULYK_REPO="${UPD_REPO:-$XREL}" VULYK_SRC="${UPD_SRC:-$T/xp-relcache}" \
+  bash "$SRC/scripts/vulyk-update.sh" "$XU" --check --telemetry off "$@" ); }
+XU_RC=0; upd --version 9.9.9 > "$T/xp-update.out" 2>&1 || XU_RC=$?
 expect_eq "scripts/vulyk-update.sh --check runs the release's install.sh, exit 0" "0" "$XU_RC"
 cat "$T/xp-update.out" | expect "... reaching the release's installer" "Dry run done."
 cat "$T/xp-update.out" | expect_absent "... which finds its lib.sh" "lib.sh not found"
 cat "$T/xp-update.out" | expect_absent "... with every helper defined" "command not found"
 # P9-10: with no --version the newest tag wins by version, not by text, and without `sort -V` (stock macOS).
-git -C "$T/xp-relcache" tag v9.10.0 && git -C "$T/xp-relcache" tag v9.2.0
+# The tags live on the origin: the fetch prunes a tag the origin does not have.
+git -C "$XREL" tag v9.10.0 && git -C "$XREL" tag v9.2.0
 NOSORTV="$T/nosortv"; mkdir -p "$NOSORTV"
 printf '#!/bin/sh\nfor a in "$@"; do case "$a" in -V|--version-sort) echo "sort: invalid option -- V" >&2; exit 2 ;; esac; done\nexec %s "$@"\n' \
   "$(command -v sort)" > "$NOSORTV/sort"; chmod +x "$NOSORTV/sort"
-( cd "$XCWD" && PATH="$NOSORTV:$PATH" VULYK_SRC="$T/xp-relcache" bash "$SRC/scripts/vulyk-update.sh" "$XU" --check --telemetry off ) \
-  2>&1 | expect "vulyk-update.sh picks the newest tag by version, with no sort -V" "upgrading to v9.10.0"
+PATH="$NOSORTV:$PATH" upd 2>&1 | expect "vulyk-update.sh picks the newest tag by version, with no sort -V" "upgrading to v9.10.0"
+
+# mass-audit-fixes-09 (S2-shell): a cache cloned from another repository is refused, naming both URLs.
+XOTHER="$T/xp-other"; git init -q "$XOTHER"
+XO_RC=0; UPD_REPO="$XOTHER" upd > "$T/xp-other.out" 2>&1 || XO_RC=$?
+expect_eq "a cache whose origin is another repository: exit 1 (cache remote differs)" "1" "$XO_RC"
+cat "$T/xp-other.out" | expect "... refused with the label cache remote differs" "update: cache remote differs:"
+cat "$T/xp-other.out" | expect "... naming the cache's URL" "/xp-rel != "
+cat "$T/xp-other.out" | expect "... and the declared one" "/xp-other ("
+cat "$T/xp-other.out" | expect_absent "... before anything is run" "upgrading to"
+XG_RC=0; UPD_REPO="$XREL.git" upd --version 9.9.9 > "$T/xp-dotgit.out" 2>&1 || XG_RC=$?
+expect_eq "the matching origin spelled with .git passes" "0" "$XG_RC"
+cat "$T/xp-dotgit.out" | expect_absent "... with no remote complaint" "cache remote differs"
+
+# P3: a tag that moved on the origin is fetched (--force), a tag it dropped is pruned, a new one is reported.
+git -C "$XREL" -c user.name=t -c user.email=t@t commit -q --allow-empty -m moved
+git -C "$XREL" tag -f v9.10.0 >/dev/null && git -C "$XREL" tag v9.11.0 && git -C "$XREL" tag -d v9.2.0 >/dev/null
+XM_RC=0; upd > "$T/xp-moved.out" 2>&1 || XM_RC=$?
+expect_eq "a moved tag on the origin: vulyk-update.sh --check exits 0" "0" "$XM_RC"
+cat "$T/xp-moved.out" | expect "... and reports the new tag" "upgrading to v9.11.0"
+expect_eq "... the cache's moved tag points where the origin's does" "$(git -C "$XREL" rev-parse v9.10.0)" \
+  "$(git -C "$T/xp-relcache" rev-parse v9.10.0 2>/dev/null)"
+expect_eq "... and the tag the origin dropped is gone from the cache" "" "$(git -C "$T/xp-relcache" tag --list v9.2.0)"
+# A fetch that fails says so on one line and exits 1, instead of stopping silently under set -e.
+git clone -q "$XREL" "$T/xp-failcache" && git -C "$T/xp-failcache" config remote.origin.uploadpack false
+XF_RC=0; UPD_SRC="$T/xp-failcache" upd > "$T/xp-fail.out" 2>&1 || XF_RC=$?
+expect_eq "a fetch that fails: exit 1" "1" "$XF_RC"
+cat "$T/xp-fail.out" | expect "... with one line saying why" "update: fetch failed: "
+
+# Ask 4: the SessionStart update check picks the newest tag without `sort -V`.
+UC="$T/hive-xp-uc"; mkdir -p "$UC/.claude" "$T/xp-curl"
+printf '#!/bin/sh\necho %s\n' "'[{\"name\":\"v0.9.0\"},{\"name\":\"v0.10.0\"},{\"name\":\"v0.2.0\"}]'" > "$T/xp-curl/curl"
+chmod +x "$T/xp-curl/curl"
+ucheck() { printf '%s\n' "$1" > "$UC/.claude/vulyk-version"; rm -f "$UC/.claude/.vulyk-update-cache"
+  CLAUDE_PROJECT_DIR="$UC" VULYK_REPO=o/r PATH="$T/xp-curl:$NOSORTV:$PATH" bash "$SRC/.claude/hooks/vulyk-update-check.sh" 2>&1; }
+ucheck 0.9.0 | expect "vulyk-update-check.sh names v0.10.0 newer than v0.9.0, with no sort -V" \
+  "installed v0.9.0, latest v0.10.0"
+ucheck 0.11.0 | expect_absent "... and stays silent for a version ahead of the tags" "update available"
 
 # Ask 9, upgrade half: a hive's own filled ## Commands block - the old bare-python cell included - is the host's,
 # carried byte for byte through --upgrade.
@@ -1385,11 +1505,118 @@ awk '/VULYK:COMMANDS:START/ { inb = 1 }
 cmdblock() { awk '/VULYK:COMMANDS:START/,/VULYK:COMMANDS:END/' "$1"; }
 cmdblock "$A9/CLAUDE.md" | expect "the hive's block holds the old python cell" '| Python | `python -m py_compile .claude/hooks/*.py` |'
 cmdblock "$A9/CLAUDE.md" > "$T/xp-cells.before"
+printf '{\n  "env": {}\n}\n' > "$A9/.claude/settings.local.json"   # mass-audit-fixes-11: a hive with no model pin
 bash "$SRC/install.sh" "$A9" --upgrade --telemetry off > "$T/xp-cells.out" 2>&1
 cmdblock "$A9/CLAUDE.md" > "$T/xp-cells.after"
 expect_eq "install.sh --upgrade keeps the hive's ## Commands block (old python cell included) byte-identical" "0" \
   "$(cmp -s "$T/xp-cells.before" "$T/xp-cells.after"; echo $?)"
+expect_eq "a hive with no model pin gets it on --upgrade, as before" "opus" \
+  "$(jq -r '.model // "unset"' "$A9/.claude/settings.local.json" | tr -d '\r')"
+cat "$T/xp-cells.out" | expect "... and the log says so" "pinned: model = opus"
+
+# mass-audit-fixes-11 (S1-shell): the removal loop trusts no manifest line with a `..` segment, a leading `/`
+# or a backslash; a normal retired path still leaves. (S4-shell): an owner's own session model survives.
+BP="$T/hive-xp-badpath"; fresh_install "$BP"
+printf 'victim\n' > "$BP/VICTIM.md"; mkdir -p "$BP/a"; printf 'victim\n' > "$BP/a\\b.sh"
+printf 'retired\n' > "$BP/scripts/retired-xp.sh"
+printf '%s\n' 'scripts/../VICTIM.md' '/etc/x' 'a\b.sh' 'scripts/retired-xp.sh' >> "$BP/.claude/vulyk-manifest"
+printf '{\n  "model": "sonnet"\n}\n' > "$BP/.claude/settings.local.json"
+bash "$SRC/install.sh" "$BP" --upgrade --telemetry off > "$T/xp-badpath.out" 2>&1
+expect_eq "three bad manifest lines: three skip (bad path) lines" "3" "$(grep -c '  skip (bad path) ' "$T/xp-badpath.out")"
+cat "$T/xp-badpath.out" | expect "... skip (bad path) names the dot-dot line" "skip (bad path) scripts/../VICTIM.md"
+expect_eq "... skip (bad path): every named file still present" "1 1" \
+  "$([ -f "$BP/VICTIM.md" ] && echo 1 || echo 0) $([ -f "$BP/a\\b.sh" ] && echo 1 || echo 0)"
+expect_eq "... and a normal retired path is still removed" "0" "$([ -e "$BP/scripts/retired-xp.sh" ] && echo 1 || echo 0)"
+expect_eq "an owner's model pin survives --upgrade" "sonnet" "$(jq -r '.model' "$BP/.claude/settings.local.json" | tr -d '\r')"
+cat "$T/xp-badpath.out" | expect "... and the log says it is kept" "kept: model = sonnet (yours)"
+
 fi # install-xp
+
+if part_on install-xp2; then # mass-audit-fixes-18 repair 1: install-xp, second half - the unwired shipped hooks (Ask 18)
+# mass-audit-fixes-17 (Ask 18): a hive that lost hooks to the pre-0.50 wiring. The previous release (pinned at
+# v0.49.0, which shipped every hook below) already shipped them, so --upgrade reads a missing entry as the owner's
+# removal and never wires it; it names each one with the command that wires only that hook.
+UW="$T/hive-xp-lost"; fresh_install "$UW"; printf '0.49.0\n' > "$UW/.claude/vulyk-version"
+UWS="$UW/.claude/settings.json"
+jq '.hooks.PreCompact[0].hooks |= map(select(.command | contains("context-guard.sh") | not))
+    | .hooks.Stop[0].hooks |= map(select(.command | contains("handoff.sh stop") | not))
+    | .hooks.SessionStart[0].hooks |= map(if (.command | contains("session-start-brief.sh"))
+        then .command = "bash -c '"'"'\"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start-brief.sh\"'"'"'" else . end)' \
+  "$UWS" > "$T/xp-unwired.json" && cat "$T/xp-unwired.json" > "$UWS"
+cp "$UWS" "$T/xp-unwired.before"
+bash "$SRC/install.sh" "$UW" --upgrade --telemetry off > "$T/xp-unwired-up.out" 2>&1
+bash "$SRC/install.sh" "$UW" --upgrade --check --telemetry off > "$T/xp-unwired-chk.out" 2>&1
+expect_eq "an unwired shipped hook is not named on upgrade: two unwired lines on --upgrade and on --check" "2 2" \
+  "$(grep -c '^  unwired ' "$T/xp-unwired-up.out") $(grep -c '^  unwired ' "$T/xp-unwired-chk.out")"
+cat "$T/xp-unwired-up.out" | expect "... --upgrade names PreCompact: context-guard.sh" "unwired PreCompact: context-guard.sh - to wire it: "
+cat "$T/xp-unwired-up.out" | expect "... --upgrade names Stop: handoff.sh" "unwired Stop: handoff.sh - to wire it: "
+cat "$T/xp-unwired-chk.out" | expect "... --check names PreCompact: context-guard.sh" "unwired PreCompact: context-guard.sh - to wire it: "
+cat "$T/xp-unwired-up.out" | expect_absent "... a hook wired in the bash -c \${CLAUDE_PROJECT_DIR} form counts as wired" \
+  "unwired SessionStart: session-start-brief.sh"
+expect_eq "... and settings.json is unchanged after both" "0" "$(cmp -s "$T/xp-unwired.before" "$UWS"; echo $?)"
+# The printed command wires that one hook and nothing else; a second --upgrade no longer names it.
+UWCMD="$(grep -m1 'unwired PreCompact: context-guard.sh' "$T/xp-unwired-up.out" | sed 's/.* - to wire it: //')"
+uwcount() { jq '[.hooks[][].hooks[]] | length' "$UWS"; }
+UWN="$(uwcount)"
+UW_RC=0; eval "$UWCMD" > "$T/xp-unwired-wire.out" 2>&1 || UW_RC=$?
+expect_eq "the printed command exits 0" "0" "$UW_RC"
+expect_eq "... and adds exactly one hook entry" "$((UWN + 1))" "$(uwcount)"
+expect_eq "... which is PreCompact: context-guard.sh" "1" \
+  "$(jq '[.hooks.PreCompact[].hooks[] | select(.command | contains("context-guard.sh"))] | length' "$UWS")"
+bash "$SRC/install.sh" "$UW" --upgrade --telemetry off > "$T/xp-unwired-up2.out" 2>&1
+cat "$T/xp-unwired-up2.out" | expect_absent "a second --upgrade prints no line for the wired hook" "unwired PreCompact: context-guard.sh"
+cat "$T/xp-unwired-up2.out" | expect "... and still names the one left unwired" "unwired Stop: handoff.sh"
+# Neighbour form: a hive that wires every shipped hook prints no unwired line.
+UWF="$T/hive-xp-allwired"; fresh_install "$UWF"; printf '0.49.0\n' > "$UWF/.claude/vulyk-version"
+bash "$SRC/install.sh" "$UWF" --upgrade --telemetry off 2>&1 | expect_absent "a hive that wires every shipped hook: no unwired line" "unwired "
+# mass-audit-fixes-18 repair 1 (Ask 18): the six entries --upgrade used to wire unconditionally (anomaly-scan, defect-intake
+# x2, defects-inject x2, ysk-offer) honour an owner's removal as git-guard.sh does: v0.49.0 wired each, so a missing one
+# is named with its --wire command and never put back, on --upgrade and on --check.
+UR="$T/hive-xp-removed"; fresh_install "$UR"; printf '0.49.0\n' > "$UR/.claude/vulyk-version"
+URS="$UR/.claude/settings.json"
+jq 'del(.hooks[][].hooks[] | select(.command | test("anomaly-scan[.]sh|defect-intake[.]sh|defects-inject[.]sh|ysk-offer[.]sh")))' \
+  "$URS" > "$T/xp-removed.json" && cat "$T/xp-removed.json" > "$URS"
+expect_eq "fixture: the six entries are gone from the hive's settings.json" "0" \
+  "$(jq '[.hooks[][].hooks[] | select(.command | test("anomaly-scan|defect-intake|defects-inject|ysk-offer"))] | length' "$URS" | tr -d '\r')"
+cp "$URS" "$T/xp-removed.before"
+bash "$SRC/install.sh" "$UR" --upgrade --check --telemetry off > "$T/xp-removed-chk.out" 2>&1
+bash "$SRC/install.sh" "$UR" --upgrade --telemetry off > "$T/xp-removed-up.out" 2>&1
+UR_NAMES='SessionEnd: anomaly-scan.sh
+UserPromptSubmit: defect-intake.sh
+PostToolUse: defect-intake.sh
+PreToolUse: defects-inject.sh
+SessionStart: defects-inject.sh
+SessionStart: ysk-offer.sh'
+ur_lines() { sed -n 's/^  unwired \([A-Za-z]*: [a-z-]*\.sh\) - to wire it: .*/\1/p' "$1" | grep -E 'anomaly|defect|ysk' | LC_ALL=C sort; }
+expect_eq "an owner's removal of a hook --upgrade used to put back stays removed: the six named unwired" \
+  "$(printf '%s\n' "$UR_NAMES" | LC_ALL=C sort)" "$(ur_lines "$T/xp-removed-up.out")"
+expect_eq "... and --check names the same six" "$(printf '%s\n' "$UR_NAMES" | LC_ALL=C sort)" "$(ur_lines "$T/xp-removed-chk.out")"
+cat "$T/xp-removed-up.out" | expect_absent "... --upgrade wires none of them back" "wire           .claude/settings.json ->"
+cat "$T/xp-removed-chk.out" | expect_absent "... --check would wire none of them" "would wire     .claude/settings.json ->"
+expect_eq "... and settings.json is unchanged" "0" "$(cmp -s "$T/xp-removed.before" "$URS"; echo $?)"
+# The printed command wires that one entry, under its own matcher and argument.
+URCMD="$(grep -m1 'unwired PostToolUse: defect-intake.sh' "$T/xp-removed-up.out" | sed 's/.* - to wire it: //')"
+UR_RC=0; eval "$URCMD" > "$T/xp-removed-wire.out" 2>&1 || UR_RC=$?
+expect_eq "the printed --wire PostToolUse:defect-intake.sh exits 0 and wires AskUserQuestion: defect-intake.sh answer" "0 1" \
+  "$UR_RC $(jq '[.hooks.PostToolUse[]? | select(.matcher == "AskUserQuestion") | .hooks[] | select(.command | endswith("defect-intake.sh answer"))] | length' "$URS" | tr -d '\r')"
+# Neighbour forms: a removal is read against what the installed release wired. v0.31.0 did not wire the AskUserQuestion
+# intake yet, so its missing entry is wired, not named; and a 0.49 hive whose inject sits on the old 0.32 matcher is
+# moved to the new one, not reported.
+UO="$T/hive-xp-old"; fresh_install "$UO"; printf '0.31.0\n' > "$UO/.claude/vulyk-version"
+jq '.hooks.PostToolUse |= map(select(.matcher != "AskUserQuestion"))' "$UO/.claude/settings.json" > "$T/xp-old.json" \
+  && cat "$T/xp-old.json" > "$UO/.claude/settings.json"
+bash "$SRC/install.sh" "$UO" --upgrade --check --telemetry off > "$T/xp-old.out" 2>&1
+cat "$T/xp-old.out" | expect "an entry the installed release did not wire yet is wired on upgrade" \
+  "would wire     .claude/settings.json -> PostToolUse [AskUserQuestion]: defect-intake.sh answer"
+cat "$T/xp-old.out" | expect_absent "... not named as unwired" "unwired PostToolUse: defect-intake.sh"
+UM="$T/hive-xp-matcher"; fresh_install "$UM"; printf '0.49.0\n' > "$UM/.claude/vulyk-version"
+jq --arg m "$PRE_M" '.hooks.PreToolUse |= map(if .matcher == $m then .matcher = "Edit|Write|MultiEdit|NotebookEdit|Bash" else . end)' \
+  "$UM/.claude/settings.json" > "$T/xp-matcher.json" && cat "$T/xp-matcher.json" > "$UM/.claude/settings.json"
+bash "$SRC/install.sh" "$UM" --upgrade --telemetry off > "$T/xp-matcher.out" 2>&1
+cat "$T/xp-matcher.out" | expect_absent "a 0.32-matcher inject on a 0.49 hive is not named as unwired" "unwired PreToolUse: defects-inject.sh"
+expect_eq "... it is rewired once, under the new matcher" "1" \
+  "$(jq --arg m "$PRE_M" '[.hooks.PreToolUse[] | select(.matcher == $m) | .hooks[] | select(.command | contains("defects-inject.sh"))] | length' "$UM/.claude/settings.json" | tr -d '\r')"
+fi # install-xp2
 
 if part_on terminal; then
 # The hive's own updater, then the Telemetry question with and without a terminal. The question
@@ -1456,21 +1683,78 @@ fi # terminal
 
 if part_on wiring; then
 install_fixtures tgt
+# mass-audit-fixes-04 (I2, S1/P1, P7): every hook command is "$CLAUDE_PROJECT_DIR"/.claude/hooks/<name>.sh,
+# so a hive under a path with a space runs its hooks; an install into an owner's settings.json wires
+# all 17 entries a fresh install copies; every SessionEnd entry has its timeout.
+hook_sig() { # hook_sig <settings.json> - one sorted line per hook entry: event|matcher|command|timeout
+  jq -r '.hooks | to_entries[] | .key as $e | .value[] | (.matcher // "") as $m | .hooks[]
+         | "\($e)|\($m)|\(.command)|\(.timeout // "")"' "$1" | tr -d '\r' | LC_ALL=C sort
+}
+unquoted() { # unquoted <settings.json> - how many hook commands do not start with the quoted head
+  jq -r '[.hooks[][].hooks[].command | select(startswith("\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/") | not)] | length' "$1" | tr -d '\r'
+}
+short_se() { # short_se <settings.json> - SessionEnd entries with no timeout of 10 s or more
+  jq -r '[.hooks.SessionEnd[]?.hooks[] | select((.timeout // 0) < 10)] | length' "$1" | tr -d '\r'
+}
+SP="$T/hive with space"; mkdir -p "$SP/.claude"; cp -a "$TGT/.claude/hooks" "$SP/.claude/"
+space_run() { # space_run <label> <settings.json> - its PreToolUse defects-inject.sh command, through sh -c, from $SP
+  local c; c="$(jq -r --arg m "$PRE_M" '.hooks.PreToolUse[] | select(.matcher == $m) | .hooks[].command
+                | select(test("defects-inject"))' "$2" | tr -d '\r' | head -1)"
+  [ -n "$c" ] || { bad "$1: hook command quotes the project dir - no defects-inject.sh command in $2"; return; }
+  if (export CLAUDE_PROJECT_DIR="$SP"; sh -c "$c" < /dev/null) > "$T/space.out" 2>&1; then
+    ok "$1: hook command quotes the project dir: $c"
+  else bad "$1: hook command quotes the project dir - exit $? from sh -c: $c"; sed 's/^/        /' "$T/space.out"; fi
+}
+expect_eq "fresh install: every hook command quotes the project dir" "0" "$(unquoted "$TGT/.claude/settings.json")"
+expect_eq "fresh install: every SessionEnd entry has a timeout >= 10" "0" "$(short_se "$TGT/.claude/settings.json")"
+expect_eq "fresh install: the 17 hook entries" "17" "$(hook_sig "$TGT/.claude/settings.json" | grep -c .)"
+space_run "fresh install" "$TGT/.claude/settings.json"
+EH="$T/hive-allow-empty"; mkdir -p "$EH/.claude"
+printf '{"permissions":{"allow":[]}}\n' > "$EH/.claude/settings.json"; cp "$EH/.claude/settings.json" "$T/eh.before"
+bash "$SRC/install.sh" "$EH" --check --telemetry off > "$T/eh-check.out" 2>&1
+expect_eq "--check into an owner's settings.json: would wire for each of the 17 hooks" "17" \
+  "$(grep -E '^  would wire +\.claude/settings\.json -> ' "$T/eh-check.out" | grep -vc 'permissions\.allow')"
+expect_eq "--check into an owner's settings.json writes nothing" "1" "$(same "$T/eh.before" "$EH/.claude/settings.json")"
+bash "$SRC/install.sh" "$EH" --telemetry off > "$T/eh.out" 2>&1
+expect_eq "install into an owner's settings.json: one wire line per hook, 17" "17" \
+  "$(grep -E '^  wire +\.claude/settings\.json -> ' "$T/eh.out" | grep -vc 'permissions\.allow')"
+cat "$T/eh.out" | expect_absent "... and none kept: the owner's file had none" "kept           .claude/settings.json ->"
+expect_eq "... the same 17 entries a fresh install copies" "$(hook_sig "$TGT/.claude/settings.json")" "$(hook_sig "$EH/.claude/settings.json")"
+expect_eq "... every one quoting the project dir" "0" "$(unquoted "$EH/.claude/settings.json")"
+expect_eq "... every SessionEnd entry with a timeout >= 10" "0" "$(short_se "$EH/.claude/settings.json")"
+space_run "install into an owner's settings.json" "$EH/.claude/settings.json"
 # wire_hook / unwire_hook (ADR-013 D7): a 0.17-shaped settings.json - the scan on Stop, the
 # learnings hook on SessionEnd, no scan there yet - loses the two entries this release no longer
 # wants, gains the SessionEnd scan once, keeps everything else, and a second upgrade is
 # byte-identical. The backup is the file as the owner left it, however many edits followed.
+# Every entry is in the old unquoted form, SessionEnd has no timeout, and the owner keeps a Cyrillic rule.
 SET="$TGT/.claude/settings.json"
-jq '.hooks.Stop = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop"},{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh"}]}]
+jq '(.hooks[][].hooks[].command) |= sub("^\"\\$CLAUDE_PROJECT_DIR\"/"; "$CLAUDE_PROJECT_DIR/")
+    | .permissions.allow = ["Bash(echo привет:*)"]
+    | .hooks.Stop = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop"},{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh"}]}]
     | .hooks.SessionEnd = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/session-end-learnings.sh"},{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh sessionend"}]}]' \
   "$SET" > "$T/set.json" && mv "$T/set.json" "$SET"
+OLDFORM="$(jq -r '[.hooks[][].hooks[].command | select(startswith("$CLAUDE_PROJECT_DIR/.claude/hooks/"))
+                   | select(test("anomaly-scan|session-end-learnings") | not)] | length' "$SET" | tr -d '\r')"
 cp "$SET" "$T/set.before"
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire0.out" 2>&1
 cat "$T/wire0.out" | expect "--check reports the Stop unwiring" "would unwire   .claude/settings.json -> Stop: anomaly-scan.sh"
 cat "$T/wire0.out" | expect "--check reports the learnings unwiring" "would unwire   .claude/settings.json -> SessionEnd: session-end-learnings.sh"
 cat "$T/wire0.out" | expect "--check reports the SessionEnd wiring" "would wire     .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+cat "$T/wire0.out" | expect "--check reports an old-form rewire" "would rewire   .claude/settings.json -> Stop: handoff.sh stop"
+cat "$T/wire0.out" | expect "--check reports the missing SessionEnd timeout" "would timeout  .claude/settings.json -> SessionEnd: handoff.sh sessionend (30 s)"
 expect_eq "--check leaves settings.json untouched" "1" "$(cmp -s "$T/set.before" "$SET" && echo 1 || echo 0)"
 bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/wire.out" 2>&1
+expect_eq "--upgrade rewires each old-form entry, one rewire line each" "$OLDFORM" \
+  "$(grep -cE '^  rewire +\.claude/settings\.json -> ' "$T/wire.out")"
+cat "$T/wire.out" | expect "--upgrade logs the rewire" "rewire         .claude/settings.json -> Stop: handoff.sh stop"
+expect_eq "--upgrade: every hook command quotes the project dir" "0" "$(unquoted "$SET")"
+cat "$T/wire.out" | expect "--upgrade gives a SessionEnd entry its timeout, and says so" \
+  "timeout        .claude/settings.json -> SessionEnd: handoff.sh sessionend (30 s)"
+expect_eq "--upgrade: every SessionEnd entry has a timeout >= 10" "0" "$(short_se "$SET")"
+expect_eq "the owner's Cyrillic rule stays readable" "1" "$(grep -cF 'Bash(echo привет:*)' "$SET")"
+expect_eq "settings.json has no CR bytes" "0" "$(tr -cd '\r' < "$SET" | wc -c | tr -d ' ')"
+expect_eq "settings.json ends with a single LF" "7d0a" "$(tail -c 2 "$SET" | od -An -tx1 | tr -d ' \n\r')"
 cat "$T/wire.out" | expect "unwire_hook reports Stop" "unwire         .claude/settings.json -> Stop: anomaly-scan.sh"
 cat "$T/wire.out" | expect "unwire_hook reports the learnings hook" "unwire         .claude/settings.json -> SessionEnd: session-end-learnings.sh"
 cat "$T/wire.out" | expect "wire_hook reports SessionEnd" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
@@ -1492,8 +1776,11 @@ SET_BEFORE="$(cat "$SET")"
 bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/wire2.out" 2>&1
 expect_eq "a second upgrade leaves settings.json byte-identical" "1" \
   "$([ "$SET_BEFORE" = "$(cat "$SET")" ] && echo 1 || echo 0)"
-cat "$T/wire2.out" | expect_absent "and reports no second wiring" "-> SessionEnd: anomaly-scan.sh"
+cat "$T/wire2.out" | expect_absent "and reports no second wiring" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+cat "$T/wire2.out" | expect "it says the hook is kept" "kept           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
 cat "$T/wire2.out" | expect_absent "and no second unwiring" "unwire"
+cat "$T/wire2.out" | expect_absent "and no second rewire" "rewire"
+cat "$T/wire2.out" | expect_absent "and no second timeout" "timeout        .claude/settings.json"
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire3.out" 2>&1
 cat "$T/wire3.out" | expect_absent "--check reports no wiring for an already-wired hook" "would wire     .claude/settings.json -> SessionEnd"
 cat "$T/wire3.out" | expect_absent "--check reports no unwiring once it is done" "would unwire"
@@ -2019,6 +2306,7 @@ if part_on library; then
 # the inject script already on SessionStart WITHOUT the argument, intake already wired, and an
 # own Bash guard on PreToolUse.
 DW="$T/hive-defect-wire"; fresh_install "$DW"
+rm -f "$DW/.claude/vulyk-version"   # no installed release: what an owner's file lacks is wired, not read as a removal (Ask 18)
 cat > "$DW/.claude/settings.json" <<'EOF'
 {"hooks":{
  "SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"\"$CLAUDE_PROJECT_DIR/.claude/hooks/vulyk-update-check.sh\" 2>/dev/null || true"}]},
@@ -2031,7 +2319,7 @@ cp "$DW/.claude/settings.json" "$T/dw.before"
 bash "$SRC/install.sh" "$DW" --upgrade --check > "$T/dw-check.out" 2>&1
 cat "$T/dw-check.out" | expect "--check: the reset would be wired" "would wire     .claude/settings.json -> SessionStart: defects-inject.sh reset"
 cat "$T/dw-check.out" | expect "--check: the inject would be wired" "would wire     .claude/settings.json -> PreToolUse [$PRE_M]: defects-inject.sh"
-cat "$T/dw-check.out" | expect_absent "--check: intake is already wired" "-> UserPromptSubmit: defect-intake.sh"
+cat "$T/dw-check.out" | expect_absent "--check: intake is already wired" "would wire     .claude/settings.json -> UserPromptSubmit: defect-intake.sh"
 expect_eq "--check leaves the file alone" "1" "$(same "$T/dw.before" "$DW/.claude/settings.json")"
 bash "$SRC/install.sh" "$DW" --upgrade --telemetry off > "$T/dw.out" 2>&1
 DWS="$DW/.claude/settings.json"
@@ -2076,6 +2364,7 @@ wrapper_hive() { # wrapper_hive <name> <cmd-of vulyk-update-check.sh> <cmd-of an
   # rebuilds the bash-c one with it, post-046-tails)
   local d="$T/hive-wrap-$1" s="$T/hive-wrap-$1/.claude/settings.json" upd="$2" scan="$3"
   fresh_install "$d"
+  rm -f "$d/.claude/vulyk-version"   # no installed release: the defect entries it lacks are wired, not read as a removal (Ask 18)
   jq -n --arg upd "$upd" --arg scan "$scan" --arg tmb "${upd/vulyk-update-check.sh/top-model-brief.sh}" \
     '{hooks:{SessionStart:[{hooks:[{type:"command",command:$upd},{type:"command",command:$tmb}]}],
              SessionEnd:[{hooks:[{type:"command",command:$scan}]}]}}' > "$s"
@@ -2107,8 +2396,10 @@ wrapper_case() { # wrapper_case <name> <cmd-of vulyk-update-check.sh> <cmd-of an
 fi # wrapper wrapper2 wrapper3 launchers
 
 if part_on wrapper; then
+# The plain form, old (unquoted) entries: the upgrade rewires them, and the new ones take the quoted head.
+Q='"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
 wrapper_case plain "${P}vulyk-update-check.sh" "${P}anomaly-scan.sh" \
-  "${P}defect-intake.sh" "${P}defects-inject.sh" "${P}defects-inject.sh reset"
+  "${Q}defect-intake.sh" "${Q}defects-inject.sh" "${Q}defects-inject.sh reset"
 fi # wrapper
 
 if part_on wrapper2; then # post-046-tails: wrapper, second part - the bash -c form
@@ -2142,7 +2433,8 @@ bash "$SRC/install.sh" "$BC" --upgrade --telemetry off > "$T/bc.out" 2>&1
 cat "$T/bc.out" | expect "the broken reset is repaired" "repair         .claude/settings.json -> SessionStart: defects-inject.sh reset"
 expect_eq "settings.json is back to the correct form, byte for byte" "1" "$(same "$T/bc.good" "$BCS")"
 bash "$SRC/install.sh" "$BC" --upgrade --telemetry off > "$T/bc2.out" 2>&1
-cat "$T/bc2.out" | expect_absent "a run after the repair wires and repairs nothing" "settings.json ->"
+cat "$T/bc2.out" | expect_absent "a run after the repair wires nothing" "wire           .claude/settings.json ->"
+cat "$T/bc2.out" | expect_absent "a run after the repair repairs nothing" "repair         .claude/settings.json ->"
 
 fi # wrapper3
 

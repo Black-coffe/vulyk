@@ -429,6 +429,39 @@ ok "P9-18: defects-index finds py when python3 and python do not run" "$([ "$o" 
 run_pyonly="$(VULYK_PY= PATH="$TMP/pyonly:$PATH" bash scripts/defects-check.sh 2>&1)"
 ok "P9-18: defects-check finds py too" "$(printf '%s' "$run_pyonly" | grep -q 'python 3 not found'; [ $? -ne 0 ]; echo $?)"
 
+echo "--- defects-check --files: block checks on a story's files (mass-audit 01, D3)"
+mkrepo "$TMP/files"; cm 2026-01-01 docs/defects/README.md
+printf '#!/usr/bin/env bash\necho "$1" >> calls.log\nif grep -q bad "$1"; then echo "bad in $1"; echo second; exit 1; fi\n' > fcheck.sh
+card fcut block 'bash fcheck.sh <arg>' "$FX" 2026-01-05
+card fbare block 'bash fcheck.sh <arg>' '' 2026-01-05; sed_inplace 's|^paths: .*|paths: ["src/fbare/*.txt"]|' docs/defects/fbare.md
+card fscope block 'bash fcheck.sh <arg>' "$FX" 2026-01-05; sed_inplace 's|^paths: .*|paths: ["cmd:.*", "tool:.*"]|' docs/defects/fscope.md
+card ftext text 'bash fcheck.sh <arg>' "$FX" 2026-01-05; sed_inplace 's|^paths: .*|paths: ["src/**"]|' docs/defects/ftext.md
+card fgone revoked 'bash fcheck.sh <arg>' "$FX" 2026-01-05; sed_inplace 's|^paths: .*|paths: ["src/**"]|' docs/defects/fgone.md
+mkdir -p src/fcut src/other src/fbare
+printf 'fine\n' > src/fcut/good.txt; printf 'bad\n' > src/fcut/bad.txt; printf 'bad\n' > src/other/bad.txt; printf 'fine\n' > src/fbare/ok.txt
+rm -f calls.log; run --files src/fcut/good.txt src/fbare/ok.txt
+ok "defects-check --files: matching files that pass every block check -> exit 0, no red line" \
+  "$([ "$rc" = 0 ] && ! has 'fails on'; echo $?)"
+ok "defects-check --files: each check ran once per matching file, not on others" \
+  "$([ "$(sort calls.log | tr '\n' ' ')" = 'src/fbare/ok.txt src/fcut/good.txt ' ]; echo $?)"
+rm -f calls.log; run --files src/fcut/good.txt src/fcut/bad.txt src/other/bad.txt
+ok "defects-check --files: a block check failing on one matching file -> exit 1, '<ref> fails on <file>: <first output line>'" \
+  "$([ "$rc" = 1 ] && has '^fcut fails on src/fcut/bad.txt: bad in src/fcut/bad.txt$' && [ "$(printf '%s\n' "$out" | grep -c 'fails on')" = 1 ]; echo $?)"
+ok "defects-check --files: a file outside every glob, a cmd:/tool: scope, a text and a revoked card run nothing" \
+  "$(! grep -q 'src/other' calls.log && [ "$(grep -c . calls.log)" = 2 ]; echo $?)"
+ok "defects-check --files: no debt, index or info lines, only red lines" "$([ "$(printf '%s\n' "$out" | grep -c .)" = 1 ]; echo $?)"
+run --files; ok "defects-check --files with no file -> exit 2" "$([ "$rc" = 2 ]; echo $?)"
+mkdir -p "$TMP/nopyf"; printf '#!/bin/sh\nexit 1\n' > "$TMP/nopyf/python3"
+cp "$TMP/nopyf/python3" "$TMP/nopyf/python"; cp "$TMP/nopyf/python3" "$TMP/nopyf/py"; chmod +x "$TMP/nopyf/"*
+out="$(VULYK_PY= PATH="$TMP/nopyf:$PATH" bash scripts/defects-check.sh --files src/fcut/bad.txt 2>&1)"; rc=$?
+ok "defects-check --files with no python -> exit 2" "$([ "$rc" = 2 ]; echo $?)"
+mv .claude/hooks/defects_lib.py .claude/hooks/defects_lib.off
+run --files src/fcut/bad.txt; ok "defects-check --files with no parser -> exit 2" "$([ "$rc" = 2 ]; echo $?)"
+mv .claude/hooks/defects_lib.off .claude/hooks/defects_lib.py
+run
+ok "defects-check --files: the audit names a block card with no glob paths: as 'block with no file scope'" \
+  "$(has '^block fscope: block with no file scope' && ! has 'fcut: block with no file scope'; echo $?)"
+
 echo "--- usage"
 run a b; ok "two arguments -> exit 2" "$([ "$rc" = 2 ]; echo $?)"
 run ''; ok "an empty argument -> exit 2" "$([ "$rc" = 2 ]; echo $?)"

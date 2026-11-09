@@ -163,7 +163,7 @@ printf '%s' "$o" | expect "human text still fires next to a pasted block" "looks
 printf '%s' "$o" | expect_absent "the pasted block's timecode is not the trigger" "timecode"
 printf '%s' "$o" | expect_absent "typed words win over the paste: no are-these-your-words line" "a pasted text"
 
-o="$(run "$HIVE" '{"prompt":"at 10:04 again","session_id":"s"}')"
+o="$(run "$HIVE" '{"prompt":"at 10:04 in the video again","session_id":"s"}')"
 n="$(printf '%s' "$o" | head -1 | "$PYBIN" -c 'import json,sys; print(len(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"]))')"
 if [ "${n:-9999}" -le 600 ]; then ok "additionalContext with no ids stays within 600 chars ($n)"
 else bad "additionalContext is ${n:-unparsable} chars"; fi
@@ -182,6 +182,11 @@ run "$HIVE" '{"prompt":"see defect-intake.sh:53:12 and cycle.js:113"}' | expect_
 ctx "$HIVE" '{"prompt":"on 01:02:03 the voice drops"}' | expect "P10-08 neighbour: an h:mm:ss timecode still fires" "timecode 01:02:03"
 ctx "$HIVE" '{"prompt":"at 10:04, the voice drops"}' | expect "P10-08 neighbour: a timecode before a comma still fires" "timecode 10:04"
 ctx "$HIVE" '{"prompt":"опять не тот цвет"}' | expect "P10-08 neighbour: «опять» still fires" "looks like a correction"
+run "$HIVE" '{"prompt":"at 14:32 the build ran"}' | expect_silent "P10-08: a bare clock time (at 14:32 the build ran) is silent"
+run "$HIVE" '{"prompt":"в 14:32 упал билд"}' | expect_silent "P10-08: a bare clock time (в 14:32 упал билд) is silent"
+ctx "$HIVE" '{"prompt":"в 00:42 на ролике не то"}' | expect "P10-08 neighbour: a timecode by «ролике» still fires" "timecode 00:42"
+ctx "$HIVE" '{"prompt":"at 01:15 in the video, wrong"}' | expect "P10-08 neighbour: a timecode by \"video\" still fires" "timecode 01:15"
+ctx "$HIVE" '{"prompt":"на 02:10 опять"}' | expect "P10-08 neighbour: a timecode by a correction word names the timecode" "timecode 02:10"
 KEYHIVE="$T/keyhive"; mkdir -p "$KEYHIVE/docs/defects"
 printf -- '---\nid: cut\ntitle: Cut speech\nstatus: text\nkeys: [cut]\n---\n\n# Cut\n' > "$KEYHIVE/docs/defects/cut.md"
 run "$KEYHIVE" '{"prompt":"execute the plan, then the shortcut"}' | expect_silent "P10-08: a card key inside a longer word is silent"
@@ -192,13 +197,20 @@ echo "--- the explicit phrase"
 ctx "$HIVE" '{"prompt":"внеси в запрет: обрезка на полуслове"}' \
   | expect "RU typed \"внеси в запрет\" asks for a never card" "owner asks to file a never card: write it now, verbatim"
 ctx "$HIVE" '{"prompt":"<pasted_content id=\"1\">запиши в правило: режь только по паузе</pasted_content id=\"1\"> вот"}' \
-  | expect "RU \"запиши в правило\" inside a paste asks for a how-to card" "owner asks to file a how-to card"
+  | expect "S3: a phrase inside a paste asks the owner first" "a how-to card: ask the owner in one line whether these are their words before filing"
 ctx "$HIVE" '{"prompt":"додай до дозволу: можна різати на паузі"}' \
   | expect "UK \"додай до дозволу\" asks for an allowed card" "owner asks to file a allowed card"
 ctx "$HIVE" '{"prompt":"вот это внеси это в запрет, обрезка"}'   | expect "RU spoken \"внеси это в запрет\" asks for a never card" "owner asks to file a never card"
 ctx "$HIVE" '{"prompt":"додай оце до заборон"}'   | expect "UK \"додай оце до заборон\" asks for a never card" "owner asks to file a never card"
 ctx "$HIVE" '{"prompt":"add this to never: cutting a word in half"}' \
   | expect "EN \"add this to never\" asks for a never card" "owner asks to file a never card"
+o="$(ctx "$HIVE" '{"prompt":"<pasted_content id=\"1\">add this to the never list: no clipped endings</pasted_content id=\"1\">"}')"
+printf '%s' "$o" | expect "S3: a phrase inside a paste (only a paste) yields the ask line" "whether these are their words before filing"
+printf '%s' "$o" | expect_absent "S3: a phrase inside a paste is not the write-now line" "write it now"
+ctx "$HIVE" '{"prompt":"Он пишет «внеси в запрет: обрезка», глянь"}'   | expect "S3: a phrase inside a quote yields the ask line" "whether these are their words before filing"
+ctx "$HIVE" '{"prompt":"add this to the never list: no clipped endings"}'   | expect "S3 neighbour: the same phrase typed yields the write-now line" "owner asks to file a never card: write it now"
+o="$(VULYK_DICTATION_TAG='[VoiceDrop]' ctx "$HIVE" '{"prompt":"<pasted_content id=\"1\">[VoiceDrop] add this to the never list: no clipped endings</pasted_content id=\"1\">"}')"
+printf '%s' "$o" | expect "S3 neighbour: a dictation-tagged paste with the phrase yields the write-now line" "owner asks to file a never card: write it now"
 o="$(ctx "$HIVE" '{"prompt":"опять запрет нарушен, правило не то"}')"
 printf '%s' "$o" | expect_absent "the lexicon without the phrase does not ask for a card" "owner asks to file"
 printf '%s' "$o" | expect "and still files the typed correction" "looks like a correction"
@@ -260,8 +272,9 @@ o="$(ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Blue, R
 printf '%s' "$o" | expect "P10-09 neighbour: labels joined by \", \" are each a decision (Blue)" "[VULYK] decision: «Blue»"
 printf '%s' "$o" | expect "P10-09 neighbour: ... (Red)" "[VULYK] decision: «Red»"
 QC='"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Ship?","header":"Ship","multiSelect":false,"options":[{"label":"Yes, ship it","description":"go"},{"label":"Yes","description":"later"}]}]}'
+p="{$QC,\"tool_response\":{\"answers\":{\"Ship?\":\"Yes, ship it\"}}}"   # a variable: bash 3.2 brace-expands it inside "$(...)"
 expect_eq "P10-09 neighbour: a label holding a comma is one decision" "[VULYK] decision: «Yes, ship it» on «Ship?»" \
-  "$(ctx "$HIVE" "{$QC,\"tool_response\":{\"answers\":{\"Ship?\":\"Yes, ship it\"}}}" answer)"
+  "$(ctx "$HIVE" "$p" answer)"
 ctx "$NOLIB" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Blue\"}}}" answer | expect "answer without docs/defects/ is silent" "(silent)"
 
 # --- what stays silent ------------------------------------------------------------------------
@@ -292,7 +305,7 @@ run "$HIVE" '' | expect_silent "empty stdin is silent, exit 0"
 mkdir -p "$T/nopy"
 o="$(printf '%s' '{"prompt":"at 10:04 опять"}' | CLAUDE_PROJECT_DIR="$HIVE" PATH="$T/nopy" "$BASH" "$HOOK"; echo "rc=$?")"
 printf '%s' "$o" | expect_silent "no python on PATH is silent, exit 0"
-o="$(cd "$HIVE" && printf '%s' "{\"prompt\":\"at 10:04\",\"cwd\":\"$(pwd -W 2>/dev/null || pwd)\"}" | env -u CLAUDE_PROJECT_DIR bash "$HOOK")"
+o="$(cd "$HIVE" && printf '%s' "{\"prompt\":\"at 10:04 in the video\",\"cwd\":\"$(pwd -W 2>/dev/null || pwd)\"}" | env -u CLAUDE_PROJECT_DIR bash "$HOOK")"
 printf '%s' "$o" | expect "without CLAUDE_PROJECT_DIR the input cwd is the root" "looks like a correction ("
 
 # --- a python3 that runs nothing (review 0.19, major 1) ---------------------------------------
@@ -352,6 +365,8 @@ done
 [ -d "$ICACHE/tree" ] && cp -a "$ICACHE/tree/." "$UP/" && cp "$ICACHE/install.out" "$T/up-install.out"
 if [ -f "$UP/.claude/settings.json" ]; then
   F="$UP/.claude/settings.json"
+  # v0.31.0 did not wire the AskUserQuestion answer hook: its absence is a hive from before it, not an owner's removal (Ask 18)
+  printf '0.31.0\n' > "$UP/.claude/vulyk-version"
   jq '.hooks.PreToolUse[0].matcher = "Edit|Write|MultiEdit|NotebookEdit|Bash"
       | .hooks.PostToolUse |= map(select(.matcher != "AskUserQuestion"))' "$F" > "$T/old.json" && mv "$T/old.json" "$F"
   bash "$SRC/install.sh" "$UP" --upgrade --telemetry off > "$T/up.out" 2>&1
@@ -405,6 +420,7 @@ lex "непеределай" && bad "a stem inside a word matched (непере�
 lex "i told you!" && ok "a phrase with a punctuation edge matches (i told you!)" || bad "phrase at an edge missed"
 lex "i told yours" && bad "a phrase inside a longer word matched (i told yours)" || ok "neighbour: a phrase needs both edges (i told yours)"
 lex "ran it again" && bad "P10-08: the export still carries a bare \"again\"" || ok "P10-08: the export has no bare \"again\""
+grep -qiE 'снова|again' "$T/lex.txt" && bad "P10-08: --lexicon prints «снова» or \"again\"" || ok "P10-08: --lexicon prints no «снова» and no \"again\""
 lex "Опять не то" && ok "a capitalised Cyrillic stem matches under a UTF-8 locale" || bad "Cyrillic case not folded"
 [ "$(grep -c . "$T/lex.txt")" -eq "$("$PYBIN" -c "
 import ast,re,sys

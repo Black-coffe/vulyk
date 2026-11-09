@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The defects-inject hook contract (docs/specs/self-learning/contract.md §1 effective status, §3),
 # driven through a fixture library - no model calls, no network. Covers .claude/hooks/defects-inject.sh:
-# which cards are injected (not a declared block with a check - fixtures or not - nor revoked), how a target
+# which cards are injected (every card but a revoked one, block cards included), how a target
 # matches (path glob on file_path / notebook_path, a path token or a `cmd:` regex on a Bash line, a `tool:`
 # regex on tool_name), the session + agent dedup, `reset` on SessionStart, the 12-line budget and its fold
 # line, narrowest-first order, How-to / Allowed rendering, foldered cards, and the latency budget.
@@ -134,7 +134,7 @@ paths: ["pipeline/voiceover.py"]
 ---
 
 ## Never
-- BLOCKNEVER must not be injected.
+- BLOCKNEVER is injected like a text card.
 EOF
 cat > "$D/old-revoked.md" <<'EOF'
 ---
@@ -212,7 +212,7 @@ printf '%s' "$c" | expect "Edit on a matching glob names the text card" "voice-t
 printf '%s' "$c" | expect "its Never lines come prefixed with ✗" "✗ Never A1 cut on the word-end mark."
 printf '%s' "$c" | expect "a wrapped Never line is joined" "✗ Never A2 raise the music before lead_s."
 printf '%s' "$c" | expect "an Allowed line on a card with Never lines prints as ✓" "✓ ALLOWEDLINE is not injected."
-printf '%s' "$c" | expect_absent "a block card (check + 2 fixtures) is not injected" "BLOCKNEVER"
+printf '%s' "$c" | expect "a block card (check + 2 fixtures) is injected like a text card (defects-check --files gates it)" "✗ BLOCKNEVER is injected like a text card."
 printf '%s' "$c" | expect_absent "a revoked card is not injected" "REVOKEDNEVER"
 if [ -d "$HIVE/.claude/state/defects" ]; then ok "state lives under .claude/state/defects/"
 else bad "no .claude/state/defects/ after an injection"; fi
@@ -230,7 +230,7 @@ printf '%s' "$c" | expect "a CRLF card with ## Нельзя is read" "✗ JSONNE
 o="$(run "$HIVE" "$(bashcall s2 'cd pipeline && py -3 edit_build.py x.json')")"
 c="$(printf '%s' "$o" | ctx)"
 printf '%s' "$c" | expect "Bash injects via a cmd: regex" "✗ CMDTEXTNEVER build by hand."
-printf '%s' "$c" | expect_absent "a declared block with a check but <2 fixtures is not injected (the gate runs it)" "CMDNEVER"
+printf '%s' "$c" | expect "a declared block with a check but <2 fixtures is injected too" "✗ CMDNEVER build without the check."
 printf '%s' "$c" | expect "a block card with no check is injected" "✗ NOCHECKNEVER is injected"
 printf '%s' "$c" | expect "Bash injects via a path token" "✗ JSONNEVER hand-edit a sheet."
 printf '%s' "$c" | expect_absent "Bash: a card whose globs miss every token stays out" "voice-text"
@@ -392,9 +392,10 @@ started() { # started <root> <json>   -> yes when the hook tried a python, else 
   printf '%s' "$2" | env -u VULYK_PY PATH="$T/markbin:$PATH" CLAUDE_PROJECT_DIR="$1" bash "$HOOK" >/dev/null 2>&1
   [ -e "$T/py-started" ] && echo yes || echo no
 }
+# bash 3.2 brace-expands a JSON literal with \" inside "$(...)": each payload is built in a variable first.
 for t in Agent WebFetch mcp__chrome-devtools__click BashOutput; do
-  expect_eq "P10-11: $t in a library with no tool: card starts no python" no \
-    "$(started "$HIVE" "{\"session_id\":\"p11\",\"tool_name\":\"$t\",\"tool_input\":{\"url\":\"https://x\"}}")"
+  p="{\"session_id\":\"p11\",\"tool_name\":\"$t\",\"tool_input\":{\"url\":\"https://x\"}}"
+  expect_eq "P10-11: $t in a library with no tool: card starts no python" no "$(started "$HIVE" "$p")"
 done
 expect_eq "P10-11 neighbour: an Agent call in a library with a tool: card still starts python" yes \
   "$(started "$H2" '{"session_id":"p11","tool_name":"Agent","tool_input":{"prompt":"x"}}')"
@@ -403,6 +404,28 @@ expect_eq "P10-11 neighbour: an Edit call in a library with no tool: card still 
 expect_eq "P10-11 neighbour: a payload with no tool_name (SessionStart) still starts python" yes \
   "$(started "$HIVE" '{"session_id":"p11","source":"compact"}' )"
 run "$H2" "$(tool p11b WebFetch)" | ctx | expect "P10-11 neighbour: the tool: card itself is still injected" "✗ WEBNEVER fetch blind."
+# O3: a tool: line in README.md is not a card's; only card files count.
+cp "$D/README.md" "$T/readme.keep"; printf 'A card may scope `tool:WebFetch`.\n' >> "$D/README.md"
+expect_eq "O3: a tool: line in README.md alone does not start python for an Agent call" no \
+  "$(started "$HIVE" '{"session_id":"o3","tool_name":"Agent","tool_input":{"prompt":"x"}}')"
+cp "$T/readme.keep" "$D/README.md"
+# O3: a hive whose docs/defects/ holds no card file exits before python for every tool.
+EMPTY="$T/emptyhive"; ED="$EMPTY/docs/defects"; mkdir -p "$ED/fixtures" "$ED/pay"
+EW="$(cd "$EMPTY" && { pwd -W 2>/dev/null || pwd; })"
+printf '# Defects\n`tool:WebFetch`\n' > "$ED/README.md"; printf '# Index\ntool:\n' > "$ED/INDEX.md"
+printf -- '---\nid: fx\nstatus: text\npaths: ["**", "tool:.*"]\n---\n## Never\n- x\n' > "$ED/fixtures/fx.md"
+cp "$ED/fixtures/fx.md" "$ED/pay/ReadMe.MD"; cp "$ED/fixtures/fx.md" "$ED/pay/index.md"
+printf 'not a card\n' > "$ED/notes.txt"
+EDIT_O3="{\"session_id\":\"o3\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$EW/src/a.py\"}}"
+expect_eq "O3: no card file -> an Edit starts no python" no "$(started "$EMPTY" "$EDIT_O3")"
+expect_eq "O3: no card file -> a Bash call starts no python" no \
+  "$(started "$EMPTY" '{"session_id":"o3","tool_name":"Bash","tool_input":{"command":"ls src"}}')"
+expect_eq "O3: no card file -> an Agent call starts no python" no \
+  "$(started "$EMPTY" '{"session_id":"o3","tool_name":"Agent","tool_input":{"prompt":"x"}}')"
+printf -- '---\nid: one\nstatus: block\ncheck: false <arg>\npaths: ["src/**"]\n---\n## Never\n- x\n' > "$ED/pay/one.md"
+expect_eq "O3 neighbour: one foldered card file -> the Edit starts python" yes "$(started "$EMPTY" "$EDIT_O3")"
+expect_eq "O3 neighbour: ... and an Agent call still does not (no tool: in a card file)" no \
+  "$(started "$EMPTY" '{"session_id":"o3","tool_name":"Agent","tool_input":{"prompt":"x"}}')"
 
 # --- cards on reading a story (0.41): a Read of a story file delivers the cards for its ## Files ------
 echo "--- story read"

@@ -1,14 +1,15 @@
 ---
 story: mass-audit-fixes-04
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: hook command quotes the project dir
+red_verified_at: 2026-11-09T13:02:00Z 4621326c9bc021dc41a8b4e0b122295796e08ebd2a9a53ca1fb960f01dbde65f
 ---
 
 # install.sh wires every hook into an existing settings.json, quoted, with its timeout
@@ -65,5 +66,36 @@ P10-03. Marked red: a config write that must reach live hives.
 `git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
 
 ## Implementation notes
+- `install.sh` py_wire: REL is `"$CLAUDE_PROJECT_DIR"/.claude/hooks/`; the old plain head is excluded from sibling templates too; a new SessionEnd entry gets `"timeout": 30`.
+- `install.sh` wire_hook: an already-wired hook prints `kept ...` (real run, --check, no-python path); `by_hand` is quoted and carries the SessionEnd timeout.
+- `install.sh` new `wire_shipped` wires the 8 missing hooks under git-guard's rule (only when v$PREV did not ship the script), so an owner's removal stays.
+- `install.sh` new `fix_hooks` pass: rewires plain-form entries of scripts this release ships (`rewire`), adds timeout 30 to SessionEnd entries lacking one (`timeout`); owner hooks and wrappers untouched.
+- Every json.dump in install.sh: `ensure_ascii=False`, `newline='\n'`, trailing LF.
+- `.claude/settings.json`: all 17 commands quoted.
+- `tests/telemetry.test.sh` wiring part: 17-entry install into `{"permissions":{"allow":[]}}`, --check, space-path sh -c run, old-form upgrade (rewire, timeout, Cyrillic, LF); existing absent-needles narrowed for the new `kept` lines; wrapper plain case expects the quoted head.
+- Surprise: a heredoc inside `$(...)` fails portability-check (bash 3.2); fix_hooks writes python output to a mktemp file.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/telemetry.test.sh --part wiring && bash tests/telemetry.test.sh --part install
+- exit: 1
+- tests: 4621326c9bc021dc41a8b4e0b122295796e08ebd2a9a53ca1fb960f01dbde65f (tests/telemetry.test.sh)
+- impl: 0da64f88baf8b31d0df06daad701515004f360ec0d4bd52a199d4c9a55f426fd
+- stamped: 2026-11-09T13:02:00Z
+
+```
+::error::fresh install: every hook command quotes the project dir - expected [0], got [17]
+::error::fresh install: hook command quotes the project dir - exit 126 from sh -c: $CLAUDE_PROJECT_DIR/.claude/hooks/defects-inject.sh
+::error::install into an owner's settings.json: hook command quotes the project dir - exit 126 from sh -c: $CLAUDE_PROJECT_DIR/.claude/hooks/defects-inject.sh
+          write          .claude/vulyk-manifest (102 paths)
+        
+        Done. Upgraded framework files only; your CLAUDE.md, memory/, specs, ADRs and wiki were not touched.
+        If the constitution changed this release, the note above says by how much and how to migrate.
+  ok    and no second unwiring
+  ok    and no second rewire
+  ok    and no second timeout
+  ok    --check reports no wiring for an already-wired hook
+  ok    --check reports no unwiring once it is done
+telemetry.test.sh: 47 checks, 19 failed
+```

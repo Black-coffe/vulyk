@@ -29,7 +29,7 @@ f="${1:-}"
 vulyk_python || { echo "leak-check: needs python 3 (python3, python or py)" >&2; exit 2; }
 PY="$VULYK_PY"
 
-"$PY" - "$f" "${VULYK_PRIVATE_TERMS:-$HOME/.vulyk/private-terms}" "${VULYK_PRIVATE_TERMS_AUTO:-$HOME/.vulyk/private-terms.auto}" "${VULYK_EXTRA_TERMS:-}" <<'PY'
+PYTHONIOENCODING=utf-8 "$PY" - "$f" "${VULYK_PRIVATE_TERMS:-$HOME/.vulyk/private-terms}" "${VULYK_PRIVATE_TERMS_AUTO:-$HOME/.vulyk/private-terms.auto}" "${VULYK_EXTRA_TERMS:-}" <<'PY'
 import os, re, sys
 
 path, term_files = sys.argv[1], [t for t in sys.argv[2:] if t]

@@ -1,8 +1,8 @@
 ---
 story: mass-audit-fixes-05
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 model: opus
@@ -10,6 +10,7 @@ wave: 1
 blocked_by: []
 red: required
 red_reason: blocks differ from the approved version
+red_verified_at: 2026-11-09T13:27:20Z be1bff86924459d2038609d49fcea606f06214460f2181fd0d4f89b324d57d39
 ---
 
 # close-story reads its gate blocks from the story's approved commit; a close is a commit
@@ -73,5 +74,36 @@ gate's semantics need judgment at every site. Marked red: a security gate.
 `bash tests/council.test.sh --part verbs && bash tests/council.test.sh --part close`
 
 ## Implementation notes
+- scripts/cycle.sh: `approved_rev`, `story_blocks_guard` (D1, called in close-story after `returned:` and in stamp-red after the guards), `close_subjects` + `has_close_commit` (D2, in `cmd_status` and close-story's done path).
+- D1 compares the three blocks through `verify_of`/`files_of`/`fm_red`, CR stripped on both sides; a `git show` that fails yields an empty baseline and so refuses (fail closed).
+- D2 hand-committed close: the journal line goes into the close commit (`$SPECDIR/journal.md` staged), because an empty `--allow-empty` commit is pruned from `git log -- <spec>/` and status would never see it; `--allow-empty` stays as the fallback.
+- `story_status_for_id` (blockers) still reads the raw `done`; only status counts and the wave walk use D2, as the ADR names.
+- tests: one `done_story` helper per suite (writes or flips, commits alone under `story(<id>): <title>`); sites also found beyond the listed ones: cycle `man_story`, council r18rp heredocs; site 185 now commits the deletion of its fixture; site 738's `git checkout` restore dropped (the commit leaves a clean tree).
+- New cases in cycle part close: D1 (none literal, widened Files, dropped red: for close-story and stamp-red, free fields, revision, Tier 3/Tier 1 untracked) and D2 (status in-progress/next, hand-committed close commit + journal, failing verification exit 4, already done after).
+- Surprise: `sed_inplace` with several files leaves a `.bak` of all but the last (it removes only `${!#}.bak`); the new cases call it per file.
+- Built and run against both suites (every part) in a scratch copy of the repo before stamp-red, so the sealed tests needed no edit after the receipt.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/cycle.test.sh --part ship && bash tests/cycle.test.sh --part close && bash tests/cycle.test.sh --part red
+- exit: 1
+- tests: be1bff86924459d2038609d49fcea606f06214460f2181fd0d4f89b324d57d39 (tests/council.test.sh, tests/cycle.test.sh)
+- impl: 6d691c8bb9f99af64ebc85d3a98d2afe699e85938fe95bdac8ab880c059efa0f
+- stamped: 2026-11-09T13:27:20Z
+
+```
+::error::a ## Verification swapped for none: story blocks differ from the approved version - exit=2 out=scope-check: trust-01 - declared 1, changed 0, out of scope 0
+::error::a widened ## Files: story blocks differ from the approved version - exit=0 out=scope-check: trust-01 - declared 2, changed 0, out of scope 0
+::error::red: required dropped: story blocks differ from the approved version - exit=0 out=scope-check: trust-02 - declared 1, changed 0, out of scope 0
+::error::hand-committed close: exit=0 log=hand-marked done out=cycle: hand-01 - already done, nothing to close
+{"ok":true,"verb":"close-story","exit":0,"next":"build:2","now":1794230749,"status":{"spec":"docs/specs/hand","slug":"hand","stage":"01-spec","next":"build:2","briefed":true,"approved":true,"branch":"vulyk/demo","head":"8f15471","pack":"2dcb248740cc","now":1794230748,"stories":{"todo":1,"in-progress":0,"done":2,"blocked":0},"wave":2,"wave_stories":[{"file":"docs/specs/hand/hand-03.md","story":"hand-03","worker":"worker-code","model":"","repeat":1}],"round":0,"ceiling":3,"tier":null,"open":false,"court":null,"missing":[],"stale":false,"verdict":null,"review":null,"red":[],"round_dir":null,"paused":false,"shipped":false,"since":null,"seat_attempt":{},"seats":[],"manual":[]}}
+::error::after the story(<id>) commit the story is done - expected '"stories":{"todo":1,"in-progress":1,"done":1,"blocked":0}' in:
+        {"spec":"docs/specs/hand","slug":"hand","stage":"01-spec","next":"build:2","briefed":true,"approved":true,"branch":"vulyk/demo","head":"8f15471","pack":"2dcb248740cc","now":1794230749,"stories":{"todo":1,"in-progress":0,"done":2,"blocked":0},"wave":2,"wave_stories":[{"file":"docs/specs/hand/hand-03.md","story":"hand-03","worker":"worker-code","model":"","repeat":1}],"round":0,"ceiling":3,"tier":null,"open":false,"court":null,"missing":[],"stale":false,"verdict":null,"review":null,"red":[],"round_dir":null,"paused":false,"shipped":false,"since":null,"seat_attempt":{},"seats":[],"manual":[]}
+  ok    and the next wave's build lists the hand-marked story too
+::error::wave_stories keeps the hand-marked story - expected '"file":"docs/specs/hand/hand-02.md"' in:
+        {"spec":"docs/specs/hand","slug":"hand","stage":"01-spec","next":"build:2","briefed":true,"approved":true,"branch":"vulyk/demo","head":"8f15471","pack":"2dcb248740cc","now":1794230749,"stories":{"todo":1,"in-progress":0,"done":2,"blocked":0},"wave":2,"wave_stories":[{"file":"docs/specs/hand/hand-03.md","story":"hand-03","worker":"worker-code","model":"","repeat":1}],"round":0,"ceiling":3,"tier":null,"open":false,"court":null,"missing":[],"stale":false,"verdict":null,"review":null,"red":[],"round_dir":null,"paused":false,"shipped":false,"since":null,"seat_attempt":{},"seats":[],"manual":[]}
+::error::hand-marked failing verification: exit=0 out=cycle: hand-02 - already done, nothing to close
+{"ok":true,"verb":"close-story","exit":0,"next":"build:2","now":1794230750,"status":{"spec":"docs/specs/hand","slug":"hand","stage":"01-spec","next":"build:2","briefed":true,"approved":true,"branch":"vulyk/demo","head":"8f15471","pack":"2dcb248740cc","now":1794230750,"stories":{"todo":1,"in-progress":0,"done":2,"blocked":0},"wave":2,"wave_stories":[{"file":"docs/specs/hand/hand-03.md","story":"hand-03","worker":"worker-code","model":"","repeat":1}],"round":0,"ceiling":3,"tier":null,"open":false,"court":null,"missing":[],"stale":false,"verdict":null,"review":null,"red":[],"round_dir":null,"paused":false,"shipped":false,"since":null,"seat_attempt":{},"seats":[],"manual":[]}}
+  ok    a story closed by close-story stays already done
+```

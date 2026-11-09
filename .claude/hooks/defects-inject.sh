@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse hook: before a tool touches a place a `text` defect card names in `paths:`, put that
+# PreToolUse hook: before a tool touches a place a defect card (any but revoked) names in `paths:`, put that
 # card's Never (✗), How-to (→) and Allowed (✓) lines in front of the agent. Cards are read by
 # defects_lib.py beside this file. Contract: docs/specs/rules-tree/plan.md ## Contracts, Delivery.
 #
@@ -13,7 +13,7 @@
 # dated line; the rest fold into one `+N cards: <ref>, ...` line. An Allowed-only card whose
 # `exception:` does not name a Never card matched here gets one `✓ withheld:` line instead; beside an
 # unlinked How-to card its lines are shown marked `(the How-to of <ref> comes first)`.
-# Cards declaring block with a check: are not injected (the gate runs it, fixtures or not), revoked cards never are. Each card is shown once
+# Revoked cards are never injected. Each card is shown once
 # per session_id + agent_id; state: .claude/state/defects/inject-<session>.txt under the repo root
 # ($CLAUDE_PROJECT_DIR, else the input's cwd).
 #
@@ -30,14 +30,26 @@ re='"tool_name"[[:space:]]*:[[:space:]]*"Read"'
 if [[ $IN =~ $re ]]; then
   case "$IN" in *docs/specs/*|*'docs\\specs\\'*) ;; *) exit 0 ;; esac
 fi
-# Any other tool (WebFetch, Agent, mcp__*) has no path and no command line: only a `tool:` entry can match
-# it, so a library with no `tool:` anywhere exits here too, before python starts (P10-11). grep's 1 is
-# "read it all, none there"; a read error (2) goes on to python.
+# No card file (docs/defects/*.md, */*.md; never README.md / INDEX.md in any case, never fixtures/): exit
+# before python starts (O3). Any other tool (WebFetch, Agent, mcp__*) has no path and no command line: only
+# a `tool:` entry can match it, so with no `tool:` in a card file it exits here too (P10-11). grep's 1 is
+# "read them all, none there"; a read error (2) goes on to python. `reset` always goes on.
 re='"tool_name"[[:space:]]*:[[:space:]]*"'
 re_path='"tool_name"[[:space:]]*:[[:space:]]*"(Edit|Write|MultiEdit|NotebookEdit|Bash|Read)"'
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [[ $IN =~ $re ]] && ! [[ $IN =~ $re_path ]]; then
-  grep -rqsF 'tool:' "$CLAUDE_PROJECT_DIR/docs/defects"
-  [ $? -eq 1 ] && exit 0
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ "${1:-}" != reset ]; then
+  DD="$CLAUDE_PROJECT_DIR/docs/defects"; CARDS=()
+  for f in "$DD"/*.md "$DD"/*/*.md; do
+    [ -f "$f" ] || continue
+    case "$f" in
+      "$DD"/fixtures/*|*/[Rr][Ee][Aa][Dd][Mm][Ee].[Mm][Dd]|*/[Ii][Nn][Dd][Ee][Xx].[Mm][Dd]) continue ;;
+    esac
+    CARDS+=("$f")
+  done
+  [ "${#CARDS[@]}" -eq 0 ] && exit 0
+  if [[ $IN =~ $re ]] && ! [[ $IN =~ $re_path ]]; then
+    grep -qsF 'tool:' "${CARDS[@]}"
+    [ $? -eq 1 ] && exit 0
+  fi
 fi
 for PY in ${VULYK_PY:+"$VULYK_PY"} python3 python py; do
   command -v "$PY" >/dev/null 2>&1 || continue
@@ -61,13 +73,10 @@ STORY = re.compile(r'docs/specs/[^/]+/[^/]+\.md')
 
 
 def injected_as(card):
-    # A card that DECLARES block with a check: is not injected, fixtures or not - the gate
-    # (defects-check.sh <arg>) runs that check (0.19.1). Fixtures decide debt, not this.
-    # Anything else not revoked - text, block without a check, an unknown status - is text.
+    # Every card not revoked - text, block (its check also runs in close-story via
+    # defects-check.sh --files), an unknown status - is shown as text.
     if card.status == 'revoked':
         return 'revoked'
-    if card.status == 'block' and card.check:
-        return 'block'
     return 'text'
 
 
@@ -214,7 +223,7 @@ def main():
             continue
         if card.never:
             # Every live Never card on this target counts against an unlinked Allowed card (a How-to prohibits nothing),
-            # also one already shown or one the gate runs: the prohibition wins when unlinked.
+            # also one already shown: the prohibition wins when unlinked.
             nevers.append(card)
         elif card.howto:
             howtos.append(card)
@@ -227,7 +236,7 @@ def main():
     hits.sort(key=lambda h: h[2].ref)
     hits.sort(key=lambda h: (h[0], h[1]), reverse=True)
 
-    text = 'Defect classes for this target (docs/defects/, text cards - no check guards them):'
+    text = 'Defect classes for this target (docs/defects/):'
     room, shown, rest = budget(), [], []
     for _, _, card in hits:
         lines = [card.ref + ' — ' + (fm_scalar(card.fm.get('title', '')) or card.ref)]

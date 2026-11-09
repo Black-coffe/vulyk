@@ -40,6 +40,9 @@ You implement one story and close it. Not two, and nothing "while you are here".
      `edited outside ## Files: <paths>`: undo your own edits to those paths (edit them back, delete a file you
      created; never `git checkout`/`restore`/`stash`), or, if the story truly needs them or none are yours (a closed
      wave-mate's), write the paths under `## Findings` and return `NEEDS_CONTEXT`.
+     `story blocks differ from the approved version (<sha7>): <blocks>` and `defect card <ref> fails on
+     <file>`: not yours to rerun past (the first needs the Queen's committed revision, the second a
+     decision about the card). Write the message under `## Findings`, set `returned: NEEDS_CONTEXT` and return it.
      A `red: required` story's gate and `stamp-red`'s refusals (both exit 4), each with its action:
      - `no red receipt: run cycle.sh stamp-red <story> after writing the failing test`: go to step 2's stamp-red.
      - `test changed after red receipt: re-run stamp-red`: with no implementation yet, re-stamp; with the
@@ -55,6 +58,8 @@ You implement one story and close it. Not two, and nothing "while you are here".
      set `returned: WALL`, and return `WALL`.
    - exit 2 `verification is round-only`: the story names a row marked `round-only`, which only the reviewer
      runs. Set `returned: NEEDS_CONTEXT`, name the row, and return it.
+   - exit 2 `no approved version in git for <story>`, or `defect gate could not run`: set
+     `returned: NEEDS_CONTEXT` and return it with the `error`.
    - exit 7 `verification paused`: the verification is longer than one call. Run the same `close-story` or
      `stamp-red` command again, it resumes at the line it stopped at. It is not a failure and costs no retry.
    - any other exit (paused, another driver's stamp, a verification line that is not a `## Commands`

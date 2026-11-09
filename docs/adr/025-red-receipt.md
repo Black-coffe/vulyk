@@ -62,6 +62,11 @@ test was red, for the declared reason, before the code existed.
   - `no implementation change since red receipt` - the implementation-set hash equals the receipt's `impl:`.
 
   An unmarked story runs no new code path; a stray `red_verified_at` on it is ignored.
+  *Amended 2026-11-09 by ADR-032 D1 (spec `mass-audit-fixes`):* `red:` is read from the story's approved version in
+  git, not only from the working copy. `close-story` and `stamp-red` first prove that the working copy's `red:`,
+  `## Files` and `## Verification` equal that version's, and refuse with exit 4 `story blocks differ from the
+  approved version (<sha7>): <blocks>` when they do not; at Tier 3-4 a story with no approved version refuses with
+  exit 2 `no approved version in git for <story>: commit the plan or a revision first`.
 - **D4 - repair inherits the mark.** `cycle.sh repair` writes `red: required` and an empty `red_reason:` into the
   repair story when any story it unions is marked. With no marked story the frontmatter is unchanged.
   Amended in 0.40.1 (spec `red-repair-mark`): the mark is dropped when every line of the repair's `## Findings` names
@@ -91,6 +96,9 @@ test was red, for the declared reason, before the code existed.
   story 01 built the `red` test part first, implemented only the verb, stamped its own story (its tail shows `no red
   receipt`), and only then built the gate, the repair inheritance and the wave-check report. The exception is recorded
   here and never recurs.
+- **The builder deletes the mark.** Closed since 2026-11-09 by ADR-032 D1: the mark is read from the approved
+  version, and a working copy that drops it refuses (`story blocks differ from the approved version`). A Queen who removes it on purpose commits the
+  story as `vulyk(<slug>): revised <story-id>`, which `lead-review` reads in the branch log.
 
 ## Consequences
 - A stamp costs one verification run: zero tokens, but not zero seconds ("за секунду" is tokens, not wall time).
@@ -98,6 +106,9 @@ test was red, for the declared reason, before the code existed.
   returns `NEEDS_CONTEXT` naming the edit. The Queen, after `/vulyk-pause`, re-stamps against the baseline by hand
   (stash the implementation files only, `stamp-red`, pop) or sends the story back. This is the escape; there is no
   waiver field.
+  *Amended 2026-11-09:* superseded by ADR-032 D5. The re-stamp against the baseline is
+  `bash scripts/cycle.sh stamp-red <story> --baseline`, which sets the implementation aside at its HEAD content and
+  puts it back itself; the Queen runs it after `/vulyk-pause`, and no `git stash` is involved.
 - Stories that already exist in every hive are unmarked and close exactly as before. Only stories the planner marks
   from now on carry the gate.
 

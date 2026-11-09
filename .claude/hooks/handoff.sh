@@ -12,7 +12,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && { pwd -W 2>/dev/null || pwd; })"
 # errors included, so only 0 means Python ran it: an exit 1 is an interpreter that could not (a Python 2
 # or a broken venv named python3, failing at import before reading stdin) and moves on to the next name,
 # as does any other exit. stdin is not buffered: dump/status run from a shell, where a read would block.
-for PY in python3 python py; do
+# A preset $VULYK_PY (a path or a name) goes first, as in the defect hooks and lib.sh.
+for PY in ${VULYK_PY:+"$VULYK_PY"} python3 python py; do
   command -v "$PY" >/dev/null 2>&1 || continue
   "$PY" "$DIR/handoff.py" "$@" && exit 0
 done

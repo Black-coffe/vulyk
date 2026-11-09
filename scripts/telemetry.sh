@@ -347,10 +347,6 @@ measure_fields() { # measure_fields <measure json>
   printf '%s' "${1:-}" | jq -r "$MEASURE_FIELDS_JQ" 2>/dev/null | tr -d '\r'
 }
 
-file_bytes() { # file_bytes <path> -> byte size, digits only, empty when unreadable
-  local n; n="$(wc -c < "$1" 2>/dev/null || true)"; n="${n//[!0-9]/}"; printf '%s' "$n"
-}
-
 detect_agents() { # detect_agents <main transcript> <final 0|1>
   local transcript="${1:-}" final="${2:-0}" dir seen list fields tab
   [ -n "$transcript" ] && [ -f "$transcript" ] || return 0
@@ -380,6 +376,13 @@ $list
 $fields
 "
 
+  # Every subagent's byte size from one wc (`<bytes> <path>` per line), not a wc per file (O4); a file
+  # wc cannot read has no line, so its size stays empty and the file is measured, never cached.
+  local sizes
+  sizes="
+$(find "$dir" -type f -name 'agent-*.jsonl' -exec wc -c {} + 2>/dev/null | tr -d '\r')
+"
+
   find "$dir" -type f -name 'agent-*.jsonl' 2>/dev/null | sort | {
     local f measured first_prefix turns last_has_text agent_type model base ref size key rest cached
     local frest fline
@@ -388,7 +391,12 @@ $fields
       [ -n "$f" ] || continue
       base="$(basename "$f")"
       ref="agent:$base"
-      size="$(file_bytes "$f")"
+      size=""
+      case "$sizes" in
+        *" $f
+"*) rest="${sizes%%" $f
+"*}"; size="${rest##*[!0-9]}" ;;
+      esac
       cached=""
       if [ -n "$size" ]; then
         key="
@@ -501,7 +509,7 @@ detect_council() {
 # stage_long: the gap between two CONSECUTIVE journal.md lines, per spec. Plan A9: the still-
 # open last stage (last line to now) is never measured - it would re-fire on every scan.
 #
-# One awk pass per journal (review Major 5): the timestamps are parsed and differenced inside
+# One awk pass over every journal (review Major 5, O4): the timestamps are parsed and differenced inside
 # awk - a `date` spawn per journal line was most of the 31 s a Stop-hook scan cost. Only a gap
 # at or above the threshold leaves the pass, so `record` runs for anomalies, not for rows.
 # `<line no>` in the ref counts journal entries, as before, so refs already in a log still match.
@@ -530,23 +538,27 @@ function epoch(ts,   y, mo, d, h, mi, s, era, yoe, doy, doe, days) {
   if (cur < 0) next
   if (prev != "") {
     gap = int((cur - prev) / 3600)
-    if (gap >= th) print gap "\t" n
+    if (gap >= th) print spec "\t" gap "\t" n
   }
   prev = cur
 }'
 
+# One awk for every journal (O4): FILENAME names the spec, and a file's first line resets the
+# per-journal count and the previous timestamp, so each journal is measured on its own as before.
+STAGE_FILES_AWK='FNR == 1 { n = 0; prev = ""; spec = FILENAME; sub(/\/journal\.md$/, "", spec); sub(/.*\//, "", spec) }'
+
 detect_stage() {
-  local f spec gap line_no
+  local f spec gap line_no files=()
   for f in "$ROOT"/docs/specs/*/journal.md; do
-    [ -f "$f" ] || continue
-    spec="$(basename "$(dirname "$f")")"
-    while IFS="$(printf '\t')" read -r gap line_no; do
-      [ -n "$gap" ] || continue
-      scan_seen stage_long "stage:$spec:$line_no" && continue
-      cmd_record stage_long "$gap" "$VULYK_ANOMALY_STAGE_HOURS" \
-        --spec "$spec" --ref "stage:$spec:$line_no"
-    done < <(awk -v th="$VULYK_ANOMALY_STAGE_HOURS" "$STAGE_AWK" "$f" 2>/dev/null | tr -d '\r')
+    [ -f "$f" ] && files+=("$f")
   done
+  [ "${#files[@]}" -gt 0 ] || return 0
+  while IFS="$(printf '\t')" read -r spec gap line_no; do
+    [ -n "$gap" ] || continue
+    scan_seen stage_long "stage:$spec:$line_no" && continue
+    cmd_record stage_long "$gap" "$VULYK_ANOMALY_STAGE_HOURS" \
+      --spec "$spec" --ref "stage:$spec:$line_no"
+  done < <(awk -v th="$VULYK_ANOMALY_STAGE_HOURS" "$STAGE_FILES_AWK$STAGE_AWK" ${files[@]+"${files[@]}"} 2>/dev/null | tr -d '\r')
 }
 
 # scope_breach: any scope.jsonl row whose out_of_scope is non-zero (the count out-of-scope

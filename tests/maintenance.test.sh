@@ -456,6 +456,45 @@ redact_is "a one-line JSON key with its END on the BEGIN line does not open a bl
   "{\"private_key\": \"-----BEGIN PRIVATE KEY-----\\nMIIE\\n-----END PRIVATE KEY-----\\n\",${nl}\"client_email\": \"x@y\"}" \
   "${M}${nl}\"client_email\": \"x@y\"}"
 
+# --- redact.sh mass-audit S2: the secret names P9-04 left open, short quoted values; parity with handoff.py --
+echo "--- redact.sh S2: PASS, PWD, PASSWD, a credentialed DSN, CREDENTIALS, short quoted values - and the fallback agrees"
+S2=(
+  "masks a bare PASS key (SMTP_PASS)|SMTP_PASS=$val|SMTP_PASS=$M"
+  "masks a DB_PWD|DB_PWD=$val|DB_PWD=$M"
+  "masks an exported PASSWD|export PASSWD=$val|export PASSWD=$M"
+  "masks a DSN that carries a key|SENTRY_DSN=https://$(rep 32 k)@o1.ingest.example.io/1|SENTRY_DSN=$M"
+  "masks a quoted two-word CREDENTIALS|CREDENTIALS=\"two words\" tail|CREDENTIALS=$M tail"
+  "masks a JSON secret with spaces|\"secret\": \"my very long passphrase\", \"x\": 1|\"secret\": $M, \"x\": 1"
+  "masks a short quoted value to its closing quote|secret=\"my pw\" tail|secret=$M tail"
+  "leaves password_reset_count alone|password_reset_count=3|password_reset_count=3"
+  "leaves pass in prose alone|we pass the test and bypass: nothing|we pass the test and bypass: nothing"
+  "leaves pwd as a shell command alone|cd /tmp && pwd && ls|cd /tmp && pwd && ls"
+  "leaves dsn_timeout alone|dsn_timeout=30 dsn_pool=connections|dsn_timeout=30 dsn_pool=connections"
+)
+: > "$T/s2-in"
+for row in ${S2[@]+"${S2[@]}"}; do
+  IFS='|' read -r label input want <<EOF
+$row
+EOF
+  redact_is "$label" "$input" "$want"
+  printf '%s\n' "$input" >> "$T/s2-in"
+done
+bash "$SRC/scripts/redact.sh" < "$T/s2-in" > "$T/s2-sh"
+PYTHONIOENCODING=utf-8 "$PYBIN" - "$SRC/.claude/hooks/handoff.py" "$T/s2-in" "$T" <<'PY' > "$T/s2-py"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('handoff', sys.argv[1]); h = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(h)
+for line in open(sys.argv[2], encoding='utf-8').read().splitlines():
+    print(h.redact_text(sys.argv[3], line))
+PY
+i=0
+for row in ${S2[@]+"${S2[@]}"}; do
+  i=$((i + 1)); label="${row%%|*}"
+  sh_out="$(sed -n "${i}p" "$T/s2-sh" | tr -d '\r')"; py_out="$(sed -n "${i}p" "$T/s2-py" | tr -d '\r')"
+  [ "$sh_out" = "$py_out" ] && ok "handoff.py fallback agrees with redact.sh: $label" \
+    || bad "handoff.py fallback differs from redact.sh ($label): py '$py_out', sh '$sh_out'"
+done
+
 # --- /vulyk-gc refuses a gutted CONSOLIDATED.md (hindsight-harvest-03) --------------------------------
 echo "--- /vulyk-gc commit line refuses to commit a CONSOLIDATED.md that lost more than half"
 GC_LINE="$(tr -d '\r' < "$SRC/.claude/commands/vulyk-gc.md" | sed -n 's/^`\(f=memory\/learnings\/CONSOLIDATED\.md;.*\)`$/\1/p')"
@@ -896,10 +935,14 @@ mkdir -p "$T/norepo"; NR="$(cd "$T/norepo" && pwd -W 2>/dev/null || pwd)"
 guard Bash "cd $NR && git reset --hard" \
   | expect "git-guard: a cd into a folder git status cannot read still checks the tree (Git Bash /tmp on Windows)" "sub/f"
 guard Bash "$(printf 'echo "x <<b"\ngit reset --hard')" a1 | expect "git-guard: <<b inside quotes is no heredoc" '"deny"'
-case "$(git -C "$SRC" ls-files -s .claude/hooks/git-guard.sh)" in
-  100755*) ok "git-guard: committed executable (settings.json runs it directly)" ;;
-  *) bad "git-guard: committed without the executable bit" ;;
-esac
+HOOKS="$(grep -o '\.claude/hooks/[A-Za-z0-9._-]*\.sh' "$SRC/.claude/settings.json" | sort -u)"
+[ -n "$HOOKS" ] || bad "hook bits: settings.json names no .sh hook (a missing list is a failure)"
+for h in $HOOKS; do
+  case "$(git -C "$SRC" ls-files -s "$h")" in
+    100755*) ok "hook bit: $h committed executable (settings.json runs it directly)" ;;
+    *) bad "hook bit: $h committed without the executable bit" ;;
+  esac
+done
 echo a > "$GG/sub/f"
 
 echo "--- git guard: Law 5 - the main session never closes a Tier 3-4 story (0.48.1)"
@@ -923,6 +966,61 @@ guard Bash "bash scripts/cycle.sh stamp-red docs/specs/hv/hv-01.md" \
   | silent "law5: stamp-red stays the Queen's escape (ADR-025), not a close"
 guard Bash "grep -n close-story scripts/cycle.sh" | silent "law5: a grep for close-story passes"
 rm -rf "$GG/docs/specs"
+
+echo "--- git guard: launchers, UTF-8 stdin, the private audit's gaps (mass-audit-fixes-02)"
+cat > "$T/guard-chk.py" <<'PY'
+import json, sys
+d = {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": sys.argv[1],
+     "tool_input": {"command": sys.argv[2]}, "cwd": sys.argv[4]}
+if sys.argv[3]:
+    d["agent_id"] = sys.argv[3]; d["agent_type"] = "worker-code"
+if sys.argv[5]:
+    d["porcelain"] = json.loads(sys.argv[5])
+with open(sys.argv[6], "w", encoding="utf-8") as f:
+    f.write(json.dumps(d))
+PY
+chk() { # chk <tool> <command> [<agent_id>] [<porcelain JSON>] - `--check` stdout + exit=N for one call in $GG
+  # (Git Bash would rewrite a /usr/bin/env command into a Windows path for the native Python: excluded)
+  ( cd "$GG" && MSYS2_ARG_CONV_EXCL='/usr/bin/env' "$PYBIN" "$T/guard-chk.py" "$1" "$2" "${3:-}" "$(pwd -W 2>/dev/null || pwd)" "${4:-}" "$T/chk.json" \
+    && bash "$GUARD" --check "$T/chk.json" 2>&1; echo "exit=$?" )
+}
+SUBPAY='{"tool_name":"Bash","agent_id":"a1","tool_input":{"command":"git reset --hard"}}'
+mkdir -p "$T/onlypy" "$T/nopy"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$PYBIN" > "$T/onlypy/py"; chmod +x "$T/onlypy/py"
+printf '%s' "$SUBPAY" | PATH="$T/onlypy" "$BASH" "$GUARD" 2>&1 \
+  | expect "git-guard: a PATH with only py still finds Python (subagent reset --hard denied)" '"deny"'
+printf '%s' "$SUBPAY" | VULYK_PY="$PYBIN" PATH="$T/nopy" "$BASH" "$GUARD" 2>&1 \
+  | expect "git-guard: VULYK_PY with no python on PATH is used (subagent reset --hard denied)" '"deny"'
+printf '\357\273\277{"tool_name":"Bash","agent_id":"a1","tool_input":{"command":"echo \320\220\320\263\320\265\320\275\321\202 && git stash"}}' \
+  | bash "$GUARD" 2>&1 | expect "git-guard: a UTF-8 BOM and Cyrillic payload is parsed (git stash denied)" '"deny"'
+for c in "git checkout -f -b x" "git checkout -fb x" "git checkout --force -B x" "git checkout -f --orphan x"; do
+  chk Bash "$c" a1 | expect "git-guard: forced checkout -b is denied: $c" "exit=1"
+done
+chk Bash "git checkout -b x" a1 | expect "git-guard: a plain checkout -b still passes" "exit=0"
+for c in "$(printf 'git \\\nstash')" "/usr/bin/env git stash" 'git $(echo stash)' 'git `echo stash`' \
+         'git "$VERB"' "git -c core.pager=cat stash push"; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's hidden or continued verb is denied: $c" "exit=1"
+done
+chk PowerShell "$(printf 'git `\nstash')" a1 | expect "git-guard: the PowerShell backtick continuation is denied" "exit=1"
+mkdir -p "$GG/docs/specs/x" "$GG/docs/specs/t1"
+printf '# x\n\n**Tier:** 3 · **Spec slug:** `x`\n' > "$GG/docs/specs/x/plan.md"
+printf '# t1\n\n**Tier:** 1 · **Spec slug:** `t1`\n' > "$GG/docs/specs/t1/plan.md"
+chk Bash 'S=docs/specs/x/01.md; bash scripts/cycle.sh close-story "$S"' \
+  | expect "law5: a story token holding \$ is unknown and denied" "exit=1"
+chk Bash 'bash scripts/cycle.sh close-story `cat s`' | expect "law5: a story token holding a backtick is denied" "exit=1"
+chk PowerShell 'bash scripts/cycle.sh close-story %S%' | expect "law5: a story token holding % is denied" "exit=1"
+chk Bash "bash scripts/cycle.sh close-story docs/specs/nope/01.md --commit" \
+  | expect "law5: a story whose plan.md cannot be read is denied" "exit=1"
+chk Bash "bash scripts/cycle.sh close-story docs/specs/x/01.md" | expect "law5: the literal Tier 3 path stays denied" "exit=1"
+chk Bash "bash scripts/cycle.sh close-story docs/specs/t1/01.md" | expect "law5: a Tier 1 path passes" "exit=0"
+chk Bash 'bash scripts/cycle.sh close-story "$S"' a1 | expect "law5: a subagent's variable story token passes" "exit=0"
+rm -rf "$GG/docs/specs"
+out="$(chk Bash "git stash" "" '{"sleep": 3, "timeout": 0.5}')"
+printf '%s' "$out" | expect "git-guard: a git status that times out denies" "exit=1"
+printf '%s' "$out" | expect "git-guard: the timeout refusal says why" "git status timed out, cannot prove the tree is clean"
+chk Bash "git stash" "" '""' | expect "git-guard: a git status that succeeds clean still passes" "exit=0"
+chk Bash "git reset --hard" "" '" M memory/stats/skills.json\n"' \
+  | expect "git-guard: a git status that succeeds dirty still denies, naming the file" "memory/stats/skills.json"
 
 echo "--- git guard: fails open, card fixtures"
 out="$(printf 'not json' | bash "$GUARD" 2>&1; echo "exit=$?")"

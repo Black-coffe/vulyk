@@ -17,7 +17,8 @@
 # copying logic of its own, so an
 # upgrade can never mean something different from what that release documented.
 #
-#   VULYK_REPO=owner/name     override the origin (forks); or a `.claude/vulyk-origin` file
+#   VULYK_REPO=owner/name     override the origin (forks; a git URL or a local path works too); or a
+#                             `.claude/vulyk-origin` file. A cache cloned from another origin is refused.
 #   VULYK_SRC=/path/to/cache  where the source clone lives (default ~/.vulyk/src)
 set -euo pipefail
 
@@ -57,14 +58,48 @@ echo "  project    $DEST"
 echo "  installed  v$INSTALLED"
 echo "  origin     $REPO"
 
+# owner/name is a GitHub repository; a URL or a path (a fork's mirror, a local release) is used as given.
+case "$REPO" in
+  *://*|/*|./*|../*|~*|[A-Za-z]:*|*@*:*) URL="$REPO" ;;
+  *) URL="https://github.com/$REPO.git" ;;
+esac
+
+# canon <url-or-path> -> one spelling per repository: no trailing slash, no .git; a local repository
+# is named by the path git itself reports, so /tmp/x and C:/.../Temp/x (Git for Windows) compare equal.
+canon() {
+  local u="${1%/}" d g
+  u="${u%.git}"; u="${u%/}"
+  for d in "$u" "$u.git"; do
+    [ -d "$d" ] || continue
+    g="$(git -C "$d" rev-parse --absolute-git-dir 2>/dev/null)" || continue
+    g="${g%/}"; g="${g%/.git}"; printf '%s\n' "${g%.git}"; return 0
+  done
+  printf '%s\n' "$u"
+}
+
+# fetch_tags: a moved tag is taken (--force) and a dropped one pruned; a failure is one line and exit 1,
+# not a silent stop under set -e.
+fetch_tags() {
+  local err
+  err="$(git -C "$SRC" fetch --tags --force --prune --prune-tags --quiet origin 2>&1)" || {
+    echo "update: fetch failed: $(printf '%s\n' "$err" | grep -v '^[[:space:]]*$' | head -1)"; exit 1; }
+}
+
 # The cache is a plain clone. Refreshing it is a fetch, not a re-clone, so an upgrade on a
-# slow link costs one delta.
+# slow link costs one delta. The cache is shared by every project on this machine, so it is reused
+# only when it was cloned from this project's origin: another project's fork would hand over its tags.
 if [ -d "$SRC/.git" ]; then
-  git -C "$SRC" fetch --tags --quiet origin
+  HAVE="$(git -C "$SRC" remote get-url origin 2>/dev/null || echo none)"
+  if [ "$(canon "$HAVE")" != "$(canon "$URL")" ]; then
+    echo "update: cache remote differs: cache origin $HAVE != declared origin $URL ($SRC; set VULYK_SRC to another directory)"
+    exit 1
+  fi
+  fetch_tags
 else
   mkdir -p "$(dirname "$SRC")"
-  git clone --quiet "https://github.com/$REPO.git" "$SRC"
-  git -C "$SRC" fetch --tags --quiet origin
+  ERR="$(git clone --quiet "$URL" "$SRC" 2>&1)" || {
+    echo "update: fetch failed: $(printf '%s\n' "$ERR" | grep -v '^[[:space:]]*$' | head -1)"; exit 1; }
+  fetch_tags
 fi
 
 if [ -n "$WANT" ]; then

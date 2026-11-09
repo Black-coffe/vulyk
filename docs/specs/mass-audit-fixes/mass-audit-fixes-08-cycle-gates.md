@@ -1,14 +1,15 @@
 ---
 story: mass-audit-fixes-08
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 2
 blocked_by: [mass-audit-fixes-01, mass-audit-fixes-05]
 red: required
 red_reason: needs **Approved:** or an explicit --go
+red_verified_at: 2026-11-09T13:48:22Z 8b516e77ed67830b9e4e5b914b24cd7ea5e339cc62b54c5fc057656d1c56fd69
 ---
 
 # The approval stop, the block-card gate, same-wave scope and pathspec paperwork commits
@@ -40,6 +41,7 @@ Briefed comment names `--go`. Asks 14, 13, 11 (I4, G3, G4, G8, S5). Marked red: 
 - scripts/wave-check.sh
 - tests/cycle.test.sh
 - templates/plan.md
+- tests/solo.test.sh
 
 ## Non-goals
 - Do not touch `approved_rev`, the D1 compare or the D2 status counting (story 05, landed); do not write
@@ -73,7 +75,54 @@ Briefed comment names `--go`. Asks 14, 13, 11 (I4, G3, G4, G8, S5). Marked red: 
 ## Verification
 `bash tests/cycle.test.sh --part ship && bash tests/cycle.test.sh --part close`
 `bash tests/cycle.test.sh --part gates && bash tests/cycle.test.sh --part hooklog`
+`bash tests/solo.test.sh`
 
 ## Implementation notes
+- First pass stopped before any edit on the solo.test.sh finding below; built after the Queen's ruling.
+- scripts/cycle.sh: `go_guard` (D4) in `briefed` and `branch`, both take `--go`; branch also passes a Briefed line carrying `--go`, and a bare `branch --go` prints a note that it is not recorded.
+- scripts/cycle.sh: `briefed --go` writes `via grill (--go)` / `via grill (assumed, --go)` / `via mini-brief (--go)`; on a Briefed line without `--go` it re-stamps once, journal `briefed --go recorded`.
+- scripts/cycle.sh: `block_card_gate` (D3) after `red_gate`; exit 1 with no `fails on` line is treated as could-not-run (exit 2), and so is a missing defects-check.sh.
+- scripts/cycle.sh: `git_commit_or_fail` takes optional paths and commits `--only -- <paths>`; `commit_paperwork` passes its paths (S5).
+- scripts/ship-check.sh: stage 02 reads the plan's tier; at Tier 2-4, a Briefed line with no Approved, no `--go` and no Shipped fails with the D4 message.
+- scripts/scope-check.sh: a sibling's declared ## Files drop only when it has the same `wave:`. Surprise: dropping the sibling's own story file for every wave keeps story 05's trust fixtures (one wave per story) green; it is bookkeeping, not code.
+- scripts/wave-check.sh: `red-seals-impl` when the sealed set holds a non-test program and nothing else is under ## Files.
+- templates/plan.md: the Briefed comment names `cycle.sh briefed <spec> --go` for Tier 2-4.
+- tests/cycle.test.sh: new cases in parts ship, close, gates, hooklog; tests/solo.test.sh: a Tier >1 mkfix plan is Briefed `via grill (--go)`.
+- The close case for "no python" uses a missing parser (defects_lib.py), which is the same exit 2 branch of defects-check.sh.
 
 ## Findings
+- NEEDS_CONTEXT (worker, before any edit): D4's `cmd_branch` rule breaks `tests/solo.test.sh`, a file
+  outside `## Files`. Its `mkfix` (line 65) writes a Tier `$2` plan with `**Briefed:** via mini-brief` and no
+  `**Approved:**`; part `rejected` runs `mkfix ... 2` and `cycle.sh advance`, whose first step is `branch`.
+  With this story's gate, `branch` on that Tier 2 plan exits 2 (`Tier 2 plan needs **Approved:** or an
+  explicit --go`), so `advance` stops at `branch` and the part fails (Integration gate red). Asked: add
+  `tests/solo.test.sh` to `## Files` (the smallest fix: `mkfix` writes `**Briefed:** via grill (--go), ...`
+  when `$2` > 1, or an `**Approved:**` line), or name another story that owns it. Other suites checked by grep:
+  council.test.sh's branch/advance fixtures with a tier carry `**Approved:**`; e2e.test.sh's Tier 3 plan
+  carries `**Approved:**`; maintenance.test.sh's Tier plans never reach `branch`.
+- Queen ruling (2026-11-09): `tests/solo.test.sh` joins `## Files` (no other story names it) for the one-line
+  `mkfix` change only (a Tier >1 plan carries `**Approved:**` or a `--go` Briefed line), and `bash tests/solo.test.sh`
+  joins `## Verification`. No other edit to that suite.
+
+## Red receipt
+- command: bash tests/cycle.test.sh --part ship && bash tests/cycle.test.sh --part close
+- exit: 1
+- tests: 8b516e77ed67830b9e4e5b914b24cd7ea5e339cc62b54c5fc057656d1c56fd69 (tests/cycle.test.sh, tests/solo.test.sh)
+- impl: f561a7273b94bc948598d218bb43453359283380c077c11e975b913e58750f18
+- stamped: 2026-11-09T13:48:22Z
+
+```
+::error::briefed on a Tier 3 plan with no Approved: exit 2 - needs **Approved:** or an explicit --go - expected 'exit=2' in:
+::error::briefed on a Tier 3 plan with no Approved names the rule - expected 'Tier 3 plan needs **Approved:** or an explicit --go' in:
+::error::branch on a Tier 3 plan briefed without --go: exit 2 - needs **Approved:** or an explicit --go - expected 'exit=2' in:
+
+- 2026-11-09T13:46:55Z · 03-building · branch vulyk/t3old created · next: build:1 - expected '<never>' in:
+        
+  ok    branch on the --go plan exits 0
+  ok    a Tier 1 plan: briefed without --go exits 0 as before
+  ok    the Tier 1 line is the plain via grill
+  ok    a plan with no tier: briefed without --go exits 0 as before
+  ok    ship-check 02 passes a Tier 1 plan briefed without --go
+  ok    ship-check 02 passes a no-tier plan briefed without --go
+  ok    branch on a Tier 1 plan briefed without --go exits 0 as before
+```

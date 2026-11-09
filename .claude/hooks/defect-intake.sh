@@ -2,10 +2,10 @@
 # UserPromptSubmit hook: hears the owner in every channel and tells the session to file his words in
 # docs/defects/ (contract: docs/specs/rules-tree/plan.md `## Contracts`, Capture; cards are read by
 # .claude/hooks/defects_lib.py). One line per finding:
-#   - the explicit phrase «внеси в запрет / правило / разрешение» (RU/UK/EN), typed or pasted ->
-#     write the never / how-to / allowed card now, verbatim;
-#   - typed text that looks like a correction (a media timecode, a correction word, a card's `keys:` at
-#     a word start) ->
+#   - the explicit phrase «внеси в запрет / правило / разрешение» (RU/UK/EN), typed ->
+#     write the never / how-to / allowed card now, verbatim; found only in a paste, quote or fence -> ask first;
+#   - typed text that looks like a correction (a timecode by a media cue or a correction word, a correction
+#     word, a card's `keys:` at a word start) ->
 #     file the quote now and report one line with «отмени»;
 #   - a correction word or card key only inside <pasted_content> -> ask the owner whether these are
 #     his words first. A paste that starts with $VULYK_DICTATION_TAG (when set) counts as typed.
@@ -71,6 +71,11 @@ LEXICON = re.compile(r'(?<!\w)(?:' + '|'.join(map(re.escape, STEMS)) + r')'
 TIMECODE = re.compile(r'(?<![\w:+-])(?<!\d{4}-\d{2}-\d{2}T)(?<!\d{4}-\d{2}-\d{2} )'
                       r'\d{1,2}:[0-5]\d(?::[0-5]\d)?(?:[.,]\d+)?'
                       r'(?![\w:]|\s*(?:[ap]\.?m\b|utc\b|gmt\b|[+-]\d{2}:?\d{2}\b))', re.I)
+# A bare clock time («at 14:32 the build ran») is no correction: a timecode counts only with a media cue or a
+# correction word within NEAR characters of it (mass-audit-fixes-03).
+MEDIA = re.compile(r'(?<!\w)(?:video|видео|відео|ролик|кадр|frame|сек|second|voice|голос|audio|аудио|аудіо'
+                   r'|звук|scene|сцен|clip|клип|кліп|track|трек|subtitle|субтитр|timecode|таймкод|sec(?!\w))', re.I)
+NEAR = 48
 # The explicit phrase (RU, UK, EN); the last group names the branch. RU/UK allow up to three words
 # between the verb and the preposition («внеси это / вот это в запрет»).
 PHRASES = [
@@ -122,7 +127,12 @@ def strip(text, pats):
 def triggers(text, cards, timecode=True):
     low = text.lower()
     why, refs = [], []
-    tc = TIMECODE.search(text) if timecode else None
+    tc = None
+    for m in (TIMECODE.finditer(text) if timecode else ()):
+        near = text[max(0, m.start() - NEAR):m.end() + NEAR]
+        if MEDIA.search(near) or LEXICON.search(near.lower()):
+            tc = m
+            break
     if tc:
         why.append('timecode ' + tc.group(0))
     lx = LEXICON.search(low)
@@ -157,6 +167,11 @@ def typed_line(why, refs):
             ' (date · material · place — «words»; a class code can check gets a failing check:, Law 6)')
 
 
+def phrase_ask_lines(branches):
+    return ['[VULYK] a pasted or quoted text asks to file a ' + b + ' card: ask the owner in one line whether'
+            ' these are their words before filing' for b in branches]
+
+
 def paste_line(why):
     return ('[VULYK] a pasted text looks like a correction (' + ', '.join(why) + '): ask the owner in one'
             ' line whether these are their words before filing')
@@ -177,9 +192,6 @@ def on_prompt(data, cards):
     if not isinstance(prompt, str) or not prompt.strip():
         return []
     text = strip(SIDE_NOTE.sub(' ', prompt), HARNESS)
-    branches = phrase_branches(text)                     # pastes and fences included
-    if branches:
-        return phrase_lines(branches)
     tag = os.environ.get('VULYK_DICTATION_TAG', '')
     pastes = []
 
@@ -195,6 +207,12 @@ def on_prompt(data, cards):
         pastes.append(m.group(0))
         return ' '
     typed = QUOTES.sub(quote, typed)
+    branches = phrase_branches(typed)                    # the owner's typed words (and a dictation paste)
+    if branches:
+        return phrase_lines(branches)
+    branches = phrase_branches(text)                     # only in a paste, a quote or a fence: ask first
+    if branches:
+        return phrase_ask_lines(branches)
     why, refs = triggers(typed, cards)
     if why:
         return [typed_line(why, refs)]

@@ -27,8 +27,9 @@ round judged) and the previous round's directory.
    reaches the owner at ship, and a card broken again earns a `check:`. An Allowed (✓) line is no finding.
 5. Red receipts. For every story in the diff whose frontmatter says `red: required`, read its
    `## Red receipt` tail and its `red_reason`. A tail that shows a staged break (an error inside the
-   implementation rather than the missing behaviour) is a major `[ask N]` naming the story. A marked
-   story closed without a receipt cannot occur (close-story's gate refuses it), so ask for none.
+   implementation rather than the missing behaviour) is a major `[ask N]` naming the story. Check too
+   that every story marked in its approved version (the plan or a `revised <story-id>` commit) still
+   carries the mark and a `## Red receipt`; a marked story closed without one is a major `[ask N]`.
 
 Flag only what breaks an ask or correctness. Style, naming, a structure you would have chosen
 differently, or hardening for a configuration the Profile's *Configurations that exist today* does not

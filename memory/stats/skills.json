@@ -1,11 +1,11 @@
 {
   "vulyk-build": {
-    "count": 21,
-    "last_used": "2026-11-02"
+    "count": 23,
+    "last_used": "2026-11-09"
   },
   "vulyk-handoff": {
-    "count": 12,
-    "last_used": "2026-11-08"
+    "count": 14,
+    "last_used": "2026-11-09"
   },
   "vulyk-resume": {
     "count": 2,
@@ -16,12 +16,12 @@
     "last_used": "2026-11-08"
   },
   "vulyk-ship": {
-    "count": 34,
+    "count": 36,
     "last_used": "2026-11-09"
   },
   "fact-check": {
-    "count": 12,
-    "last_used": "2026-11-05"
+    "count": 13,
+    "last_used": "2026-11-09"
   },
   "supergrill": {
     "count": 6,
@@ -70,5 +70,9 @@
   "claude-api": {
     "count": 1,
     "last_used": "2026-10-27"
+  },
+  "andrei-voice": {
+    "count": 1,
+    "last_used": "2026-11-09"
   }
 }

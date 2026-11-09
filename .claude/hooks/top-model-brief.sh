@@ -20,8 +20,12 @@ ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 RESOLVER="$ROOT/scripts/top-model.sh"
 [ -f "$RESOLVER" ] || exit 0
 
-# Two resolver runs, not four: `--explain` carries the alias and the Queen's pin as well.
-EXPLAIN="$(bash "$RESOLVER" --explain 2>/dev/null)"
+# One resolver run: `--brief` is the `--explain` lines (alias, source, the Queen's pin) and then the `--floor` lines.
+BRIEF="$(bash "$RESOLVER" --brief 2>/dev/null)"
+EXPLAIN="$(printf '%s
+' "$BRIEF" | grep -v -E '^(below floor|model floor:)')"
+FLOOR="$(printf '%s
+' "$BRIEF" | grep -E '^(below floor|model floor:)')"
 MODEL="$(printf '%s\n' "$EXPLAIN" | sed -n 's/^top model : \([^ ]*\).*/\1/p' | head -1)"
 [ -n "$MODEL" ] || exit 0
 PLAN="$(printf '%s\n' "$EXPLAIN" | sed -n 's/^plan      : //p' | head -1)"
@@ -29,13 +33,13 @@ SECOND="$(printf '%s\n' "$EXPLAIN" | sed -n 's/^second reviewer (Tier 4): //p' |
 BY="$(printf '%s\n' "$EXPLAIN" | sed -n 's/^decided by: \([a-z]*\( [a-z-]*\)\{0,1\}\) - .*/\1/p' | head -1)"
 
 # The model profile (scripts/model-profile.sh, one per machine): named at the end of the line.
-PROFILE_TAIL=""
+PROFILE_TAIL=""; CHOSEN=0
 MPROF="$ROOT/scripts/model-profile.sh"
 if [ -f "$MPROF" ]; then
   MP="$(bash "$MPROF" 2>/dev/null)"
   if [ -n "$MP" ]; then
     PROFILE_TAIL=" · models $MP"
-    bash "$MPROF" --chosen 2>/dev/null || PROFILE_TAIL="$PROFILE_TAIL (not chosen)"
+    if bash "$MPROF" --chosen 2>/dev/null; then CHOSEN=1; else PROFILE_TAIL="$PROFILE_TAIL (not chosen)"; fi
   fi
 fi
 
@@ -44,7 +48,6 @@ NAME="$(printf '%s\n' "$EXPLAIN" | sed -n 's/^top model : [^(]*(\(.*\))$/\1/p' |
 
 # The model floor (ADR-015): what is configured here, then what really ran below it this week -
 # telemetry's model_below_floor rows, read off the transcripts' own model IDs.
-FLOOR="$(bash "$RESOLVER" --floor 2>/dev/null)"
 FLOOR_LINE="$(printf '%s\n' "$FLOOR" | tail -1)"
 HITS="$(printf '%s\n' "$FLOOR" | grep '^below floor' | head -3 | tr '\n' ';' | sed 's/;$//')"
 [ -n "$HITS" ] && FLOOR_LINE="$FLOOR_LINE: $HITS"
@@ -77,5 +80,10 @@ case "${MP:-sonnet-builds}" in
   economy)
     REST="lead-review at Tier 1-3, the blind seats and the Tier 3 planner on opus, story code on sonnet, routine stories on haiku, the clerk on haiku (bash scripts/model-profile.sh --explain)" ;;
 esac
-echo "[VULYK] gate model: $MODEL ($NAME) - by ${BY:-plan}, plan ${PLAN:-unknown}. Dispatch model: $MODEL for the Tier 4 lead-review (second reviewer: ${SECOND:-opus}), lead-architect, a Tier 4 queen-planner$RETRY; $REST. ${FLOOR_LINE:+$FLOOR_LINE. }$SESSION $WORKFLOW Details: bash scripts/top-model.sh --explain$PROFILE_TAIL"
+# The dispatch sentence only when something differs from the default: a floor miss, a profile nobody chose, a pin.
+DISPATCH=""
+case "$FLOOR_LINE" in *" - ok") FLOOR_OK=1 ;; *) FLOOR_OK=0 ;; esac
+case "${BY:-plan}" in env|constitution) PINNED=1 ;; *) PINNED=0 ;; esac
+[ "$FLOOR_OK" = 1 ] && [ "$CHOSEN" = 1 ] && [ "$PINNED" = 0 ]   || DISPATCH=" Dispatch model: $MODEL for the Tier 4 lead-review (second reviewer: ${SECOND:-opus}), lead-architect, a Tier 4 queen-planner$RETRY; $REST."
+echo "[VULYK] gate model: $MODEL ($NAME) - by ${BY:-plan}, plan ${PLAN:-unknown}.$DISPATCH ${FLOOR_LINE:+$FLOOR_LINE. }$SESSION $WORKFLOW Details: bash scripts/top-model.sh --explain$PROFILE_TAIL"
 exit 0

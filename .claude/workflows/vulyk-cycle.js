@@ -64,8 +64,17 @@ const SECOND = A.second_model
 const WORKER = A.worker_model || undefined
 const REVIEW = A.review_model || undefined
 const SEAT = A.seat_model || undefined
-// a missed story's retry climbs to the gate, unless the gate family also reviews (opus-builds): then opus, so the judge never judges its own code
-const RETRY = REVIEW && TOP === REVIEW ? 'opus' : TOP
+// a missed story's retry: the first of [TOP, opus] that is not a family judging this round (REVIEW when passed, else
+// opus at Tier 1-3; TOP at Tier 4, beside REVIEW when passed); none left -> opus, and the result says retry_same_family
+let retrySameFamily = false
+const retryModel = (tier) => {
+  const judges = tier === 4 ? [TOP, REVIEW].filter(Boolean) : [REVIEW || 'opus']
+  const pick = [TOP, 'opus'].find((m) => !judges.includes(m))
+  if (pick) return pick
+  retrySameFamily = true
+  return 'opus'
+}
+const same = () => (retrySameFamily ? { retry_same_family: true } : {})
 // a Fable-refused dispatch runs once more on this family (the owner's ADR-015 exception); no model passed means the frontmatter's opus
 const FALLBACK_MODEL = 'opus'
 const fallbacks = [] // {agent, where, from, to}, carried in the return value for /vulyk-build to record
@@ -133,8 +142,10 @@ const refusedClaim = (r) => r.ok === false && (r.verb === 'claim' || r.failed ==
 // already have acted - and a second unreadable line ends the run with that raw line.
 // Not after `--claim`, unless the line said ok:true (advance stops on a refused claim): status
 // does not name the DRIVER holder, so it cannot prove the claim, and a run on another driver's
-// claim would dispatch beside it. That run stops before any dispatch, still releasing (a stamp it
-// does not hold is refused); a relaunch claims afresh.
+// claim would dispatch beside it. A short re-claim by the same stamp proves it instead (ask 17): claim is
+// idempotent for the stamp that holds the spec, so ok:true proves the claim and status is read; a
+// refusal stops before any dispatch; an unreadable re-claim stops unproven. Both stops still release
+// (a stamp the run does not hold is refused); a relaunch claims afresh.
 const advance = async (flags) => {
   const cmd = `advance ${spec} --stamp ${stamp}${flags}`
   let res = null
@@ -145,8 +156,18 @@ const advance = async (flags) => {
   if (res !== null && (res.ok === false || isStatus(res.status))) return res
   if (flags.includes('--claim') && !(res !== null && res.ok === true)) {
     const line = bad === null ? JSON.stringify(res) : bad
-    return { ok: false, verb: 'advance', failed: 'claim', exit: 2, next: 'error', steps: [],
-      error: `unreadable result from "${cmd}": the claim is unproven, launch again; clerk line: ${line}` }
+    let re = null
+    try { re = await ask(`claim ${spec} ${stamp}`) } catch (e) { if (!(e instanceof BadLine)) throw e }
+    if (re !== null && re.exit === 3) throw new Paused()
+    if (re !== null && re.ok === false) {
+      return { ok: false, verb: 'claim', failed: 'claim', exit: re.exit, next: re.next, steps: [],
+        error: `re-claim after an unreadable "${cmd}" refused: ${re.error}` }
+    }
+    if (re === null || re.ok !== true) {
+      return { ok: false, verb: 'advance', failed: 'claim', exit: 2, next: 'error', steps: [],
+        error: `unreadable result from "${cmd}": the claim is unproven, launch again; clerk line: ${line}` }
+    }
+    // proven; the re-claim by the holder carries no leftover list, so this run dispatches without leftover notes
   }
   log(`cycle-clerk: unreadable result from "${cmd}", reading status instead`)
   const st = await ask(`status ${spec} --json`)
@@ -189,7 +210,7 @@ const build = async (st) => {
     const retry = (misses.get(story.file) || 0) >= 1
     const prompt = `Your story: ${story.file}. Stamp: ${stamp}. Implement it per your protocol; your last step is \`bash scripts/cycle.sh close-story ${story.file} --commit --stamp ${stamp}\`.`
       + (leftover.has(story.file) ? LEFTOVER_NOTE : retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
-    return dispatch(prompt, { agentType: story.worker, model: retry ? RETRY : (story.model || WORKER), phase: 'Build', label: story.story }, story.story)
+    return dispatch(prompt, { agentType: story.worker, model: retry ? retryModel(st.tier) : (story.model || WORKER), phase: 'Build', label: story.story }, story.story)
   }))
   worked = true
   const res = await advance('')
@@ -302,7 +323,7 @@ try {
     rejected = Array.isArray(res.rejected) ? res.rejected : []
     const ran = Array.isArray(res.steps) && res.steps.length ? ` · ran ${res.steps.join(', ')}` : ''
     log(`${st.slug} · ${st.stage} · next: ${st.next}${ran}`)
-    if (TERMINAL.includes(st.next)) return { ...st, fallbacks }
+    if (TERMINAL.includes(st.next)) return { ...st, fallbacks, ...same() }
     if (i >= MAX_ITERATIONS) fail(st, { verb: 'driver', error: `iteration cap ${MAX_ITERATIONS} reached at next: ${st.next}` })
     // before any worker or seat is dispatched: Tier 4's review and review2 need two different models
     if (st.tier === 4 && (!SECOND || SECOND === TOP)) {
@@ -318,13 +339,13 @@ try {
     if (st.next.startsWith('build:')) res = await build(st)
     else if (st.next.startsWith('dispatch:')) res = await council(st)
     else if (ADVANCE_VERBS.includes(st.next)) fail(st, { verb: st.next, error: `advance left ${st.next} to the driver` })
-    else return { ...st, fallbacks } // an unrecognised `next` - report it rather than guess at an action
+    else return { ...st, fallbacks, ...same() } // an unrecognised `next` - report it rather than guess at an action
   }
 } catch (e) {
-  if (e instanceof Stop) return { ...e.result, fallbacks }
-  if (e instanceof Paused) return { next: 'paused', fallbacks }
+  if (e instanceof Stop) return { ...e.result, fallbacks, ...same() }
+  if (e instanceof Paused) return { next: 'paused', fallbacks, ...same() }
   // /vulyk-build journals it and relaunches with a fresh stamp; `finally` releases the claim
-  if (e instanceof Checkpoint) return { status: 'checkpoint', next: e.next, elapsed_min: e.elapsed, fallbacks }
+  if (e instanceof Checkpoint) return { status: 'checkpoint', next: e.next, elapsed_min: e.elapsed, fallbacks, ...same() }
   // the raw line stays a string; a fallback before it is in the console log only
   if (e instanceof BadLine) return e.line
   throw e

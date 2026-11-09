@@ -178,6 +178,9 @@ run_step() { # run_step <k> (0-based) - starts the step's parts together, prints
   # the summary's fail= list keeps the job-list order, whatever order the parts ended in
   for ((i = first; i <= last; i++)); do [ -n "${failed_[i]:-}" ] && add_fail "${failed_[i]}"; done
   for i in ${tails[@]+"${tails[@]}"}; do
+    # the failed checks themselves: a part's tail alone hides a failure printed earlier in its log
+    echo "--- failed checks: ${CMDS[i]}"
+    grep -A 6 '::error::' "$LOGS/$i.log" | head -n 60
     echo "--- last 20 lines: ${CMDS[i]}"
     tail -n 20 "$LOGS/$i.log"
   done
