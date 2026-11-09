@@ -363,3 +363,4 @@
 {"ts":"2026-11-09T13:48:44Z","story":"mass-audit-fixes-07-redact-and-handoff","declared":6,"changed":6,"out_of_scope":0}
 {"ts":"2026-11-09T13:56:27Z","story":"mass-audit-fixes-16-driver-claim-proof","declared":2,"changed":2,"out_of_scope":0}
 {"ts":"2026-11-09T14:04:33Z","story":"mass-audit-fixes-08-cycle-gates","declared":7,"changed":7,"out_of_scope":0}
+{"ts":"2026-11-09T14:12:33Z","story":"mass-audit-fixes-12-hooks-portability","declared":7,"changed":7,"out_of_scope":0}

@@ -30,7 +30,7 @@ esac
 vulyk_python || { echo "injection-check: needs python 3 (python3, python or py)" >&2; exit 2; }
 PY="$VULYK_PY"
 
-"$PY" - "$f" <<'PY'
+PYTHONIOENCODING=utf-8 "$PY" - "$f" <<'PY'
 import re, shlex, sys
 
 path = sys.argv[1]

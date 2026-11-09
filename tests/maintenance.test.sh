@@ -935,10 +935,14 @@ mkdir -p "$T/norepo"; NR="$(cd "$T/norepo" && pwd -W 2>/dev/null || pwd)"
 guard Bash "cd $NR && git reset --hard" \
   | expect "git-guard: a cd into a folder git status cannot read still checks the tree (Git Bash /tmp on Windows)" "sub/f"
 guard Bash "$(printf 'echo "x <<b"\ngit reset --hard')" a1 | expect "git-guard: <<b inside quotes is no heredoc" '"deny"'
-case "$(git -C "$SRC" ls-files -s .claude/hooks/git-guard.sh)" in
-  100755*) ok "git-guard: committed executable (settings.json runs it directly)" ;;
-  *) bad "git-guard: committed without the executable bit" ;;
-esac
+HOOKS="$(grep -o '\.claude/hooks/[A-Za-z0-9._-]*\.sh' "$SRC/.claude/settings.json" | sort -u)"
+[ -n "$HOOKS" ] || bad "hook bits: settings.json names no .sh hook (a missing list is a failure)"
+for h in $HOOKS; do
+  case "$(git -C "$SRC" ls-files -s "$h")" in
+    100755*) ok "hook bit: $h committed executable (settings.json runs it directly)" ;;
+    *) bad "hook bit: $h committed without the executable bit" ;;
+  esac
+done
 echo a > "$GG/sub/f"
 
 echo "--- git guard: Law 5 - the main session never closes a Tier 3-4 story (0.48.1)"

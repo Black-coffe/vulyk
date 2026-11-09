@@ -12,7 +12,8 @@ skill=$(printf '%s' "$payload" | jq -r '.tool_input.skill_name // .tool_input.sk
 [ -n "$skill" ] || exit 0
 
 tmp=$(mktemp)
+# Windows jq prints CRLF: strip the \r so the tracked skills.json stays LF. pipefail (above) keeps a failed jq from moving.
 jq --arg s "$skill" --arg d "$(date +%Y-%m-%d)" \
    '.[$s] = ((.[$s] // {count:0}) | .count += 1 | .last_used = $d)' \
-   "$STATS" > "$tmp" 2>/dev/null && mv "$tmp" "$STATS" || rm -f "$tmp"
+   "$STATS" 2>/dev/null | tr -d '\r' > "$tmp" && mv "$tmp" "$STATS" || rm -f "$tmp"
 exit 0
