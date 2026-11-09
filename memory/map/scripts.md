@@ -68,7 +68,7 @@ re-run. No line numbers: `grep -n '^name()'`.
   (the card's check; `porcelain` field fakes status): exit 1 on deny. Python sits in a no-op heredoc below `exit 0`.
   Not covered: rm, `bash -c`, scripts/aliases. No env off-switch; owner removes the settings entry.
 - `.claude/hooks/handoff.sh` - skips a `python3` that is the Windows Store stub (exit 49) or fails to launch,
-  and starts a working Python once per call (0.43.1); `handoff.py` `_REDACT_FALLBACK` mirrors `redact.sh`.
+  and starts a working Python once per call (0.43.1); `handoff.py` `_REDACT_FALLBACK` mirrors `redact.sh` (same 0.50.1 additions).
 - `vulyk-update.sh` (-> `install.sh --upgrade`); `release-check.sh`; `git-hooks/post-merge`.
 - `model-profile.sh` (ADR-020) - `opus-builds|sonnet-builds|economy`; only `--set` writes; unknown =
   `sonnet-builds`; `--recommend` prints `sonnet-builds <plan>` on every plan (0.49). `top-model.sh`: `--floor` exit 1 prints `below floor`.
@@ -83,7 +83,9 @@ re-run. No line numbers: `grep -n '^name()'`.
   execs `symbol-map.py` (repo = `git ls-files`). Per input a `## <path>` block: `tests`, `importers`, `imported`,
   `guard tests`, `path mentions`; lines `exact` or `textual`; `--exact` folds textual into `textual <N> not shown`.
   Section cap 5; stdout <= 1536 bytes. Exit 0 / 1 input missing / 2 usage. Callers: recon, `worker-code`, solo build.
-- `redact.sh` (stdin mask). `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan`, `bundle`, `check`,
+- `redact.sh` (stdin mask; 0.50.1 also masks `passphrase`/`cookie` keywords, a `*_KEY` name with a 16+ char value,
+  an `OTP` key (the key's end), an ssh public key body, a URL password with an empty user `scheme://:pw@host`).
+  `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan`, `bundle`, `check`,
   `publish`, `inbox`; `vulyk_version`: `.claude/vulyk-version`, else `VERSION` beside `install.sh`, else `0.0.0`.
   `ENUM`/`AGENTS` are append-only (removed agents go to `RETIRED_AGENTS`; `ENUM` ends `model_below_floor`,
   `fable_limit_fallback`). The scan counts handoff Python starts (0.43.1). Dates go through `date_epoch` /
@@ -119,6 +121,8 @@ re-run. No line numbers: `grep -n '^name()'`.
   0.50: wires every hook into an existing `settings.json`; a manifest path is trusted for nothing (`..`, leading
   `/` dropped); `--upgrade` prints `unwired <event>: <script>` for a shipped hook the hive does not wire (`--wire`).
   `git-guard.sh` is wired once, only when `v$PREV` did not ship it (a later missing entry = owner's removal, stays).
+  0.50.1: `PREV_UNKNOWN` is set when `v$PREV` is not a tag in the source; then `wire_entry`, `wire_shipped` and the
+  git-guard branch only report the missing hook (`unwired ...`) and wire nothing.
   Telemetry consent is asked only on `--telemetry ask` (0.49; default off, flag `on|off|ask`).
   `install_mod vulyk-pulse@vulyk`; `retire_mod vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup`.
 
@@ -131,4 +135,4 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-09 (0.50.0 mass-audit-fixes; ship-check stage 02 at Tier 2-4 wants `**Approved:**` or `--go`, ADR-032 D4). Over the ~80-line budget.
+last-verified: 2026-11-10 (0.50.1 redact-gaps; 0.50.0 mass-audit-fixes; ship-check stage 02 at Tier 2-4 wants `**Approved:**` or `--go`, ADR-032 D4). Over the ~80-line budget.
