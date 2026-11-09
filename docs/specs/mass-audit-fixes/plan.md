@@ -224,4 +224,5 @@ is missing or unparsable.
 **Branch:** vulyk/mass-audit-fixes
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-11-09, at 4560df8, pack 071e42715dbd - red: 18
+**Council:** RED round 2, 2026-11-09, at 7b54bf6, pack 69942212bcbb
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
