@@ -142,8 +142,10 @@ const refusedClaim = (r) => r.ok === false && (r.verb === 'claim' || r.failed ==
 // already have acted - and a second unreadable line ends the run with that raw line.
 // Not after `--claim`, unless the line said ok:true (advance stops on a refused claim): status
 // does not name the DRIVER holder, so it cannot prove the claim, and a run on another driver's
-// claim would dispatch beside it. That run stops before any dispatch, still releasing (a stamp it
-// does not hold is refused); a relaunch claims afresh.
+// claim would dispatch beside it. A short re-claim by the same stamp proves it instead (ask 17): claim is
+// idempotent for the stamp that holds the spec, so ok:true proves the claim and status is read; a
+// refusal stops before any dispatch; an unreadable re-claim stops unproven. Both stops still release
+// (a stamp the run does not hold is refused); a relaunch claims afresh.
 const advance = async (flags) => {
   const cmd = `advance ${spec} --stamp ${stamp}${flags}`
   let res = null
@@ -154,8 +156,18 @@ const advance = async (flags) => {
   if (res !== null && (res.ok === false || isStatus(res.status))) return res
   if (flags.includes('--claim') && !(res !== null && res.ok === true)) {
     const line = bad === null ? JSON.stringify(res) : bad
-    return { ok: false, verb: 'advance', failed: 'claim', exit: 2, next: 'error', steps: [],
-      error: `unreadable result from "${cmd}": the claim is unproven, launch again; clerk line: ${line}` }
+    let re = null
+    try { re = await ask(`claim ${spec} ${stamp}`) } catch (e) { if (!(e instanceof BadLine)) throw e }
+    if (re !== null && re.exit === 3) throw new Paused()
+    if (re !== null && re.ok === false) {
+      return { ok: false, verb: 'claim', failed: 'claim', exit: re.exit, next: re.next, steps: [],
+        error: `re-claim after an unreadable "${cmd}" refused: ${re.error}` }
+    }
+    if (re === null || re.ok !== true) {
+      return { ok: false, verb: 'advance', failed: 'claim', exit: 2, next: 'error', steps: [],
+        error: `unreadable result from "${cmd}": the claim is unproven, launch again; clerk line: ${line}` }
+    }
+    // proven; the re-claim by the holder carries no leftover list, so this run dispatches without leftover notes
   }
   log(`cycle-clerk: unreadable result from "${cmd}", reading status instead`)
   const st = await ask(`status ${spec} --json`)

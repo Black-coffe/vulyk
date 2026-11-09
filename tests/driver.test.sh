@@ -58,8 +58,11 @@ if (!driverFn) { console.log('FAIL: nothing to run'); process.exit(1); }
   const advances = src.match(/`advance \$\{spec\}[^`]*`/g) || [];
   check(advances.length > 0 && advances.every((t) => t.includes('--stamp ${stamp}')), 'static: every advance template carries --stamp', advances);
   check(/close-story \$\{story\.file\} --commit --stamp \$\{stamp\}/.test(src), 'static: the worker prompt names close-story --commit --stamp');
-  const verbs = ['claim', 'record-seat', 'judge', 'open-round', 'branch', 'close-story'].filter((v) => new RegExp('`' + v + ' ').test(src));
-  check(verbs.length === 0, 'static: the driver sends no per-verb clerk command but advance/status/release', verbs);
+  const verbs = ['record-seat', 'judge', 'open-round', 'branch', 'close-story'].filter((v) => new RegExp('`' + v + ' ').test(src));
+  check(verbs.length === 0, 'static: the driver sends no per-verb clerk command but advance/status/release/claim', verbs);
+  // ask 17: the one per-verb command admitted is the short re-claim by the run's own stamp
+  const claims = src.match(/`claim [^`]*`/g) || [];
+  check(claims.length === 1 && claims[0] === '`claim ${spec} ${stamp}`', 'static: the only claim template is `claim ${spec} ${stamp}`', claims);
   const shout = src.match(/\b(MUST|NEVER|ALWAYS|CRITICAL|IMPORTANT)\b/g);
   check(!shout, 'static: no all-caps shouting', shout);
   // agent frontmatter is the one source of maxTurns and model: the driver keeps no per-agent
@@ -77,6 +80,7 @@ const S = '0123456789abcdef';
 const SPEC = 'docs/specs/demo';
 const ADV = `advance ${SPEC} --stamp ${S}`;
 const CLAIM = `${ADV} --claim`;
+const RECLAIM = `claim ${SPEC} ${S}`;
 const INGEST = `${ADV} --ingest`;
 const STATUS = `status ${SPEC} --json`;
 const RELEASE = `release ${SPEC} ${S}`;
@@ -436,13 +440,52 @@ const blindPromptsClean = (r) => r.dispatches
       'bad line twice: the run ends with the raw second line, still releases', { result: r.result, seq: seq(r) });
   }
   // P10-12: status does not name the DRIVER holder, so it cannot prove an unreadable claim - a run on
-  // another driver's claim dispatched beside it. It stops before any dispatch and still releases.
+  // another driver's claim dispatched beside it. Ask 17: a short re-claim by the same stamp does; an
+  // unreadable re-claim stops before any dispatch, no status read, and still releases.
   for (const line of ['garbled', '{"ok":true,"verb":"adv', JSON.stringify({ verb: 'advance', next: 'build:1' })]) {
-    const r = await run(ARGS, { clerk: [[CLAIM, line], [RELEASE, releaseOk]] });
-    check(r.mismatches.length === 0 && r.clerkCmds.length === 2 && r.dispatches.length === 0
+    const r = await run(ARGS, { clerk: [[CLAIM, line], [RECLAIM, 'garbled re-claim'], [RELEASE, releaseOk]] });
+    check(r.mismatches.length === 0 && r.clerkCmds.length === 3 && r.dispatches.length === 0
       && r.result.stop && r.result.stop.failed === 'claim' && r.result.stop.error.includes('the claim is unproven')
       && r.result.stop.error.includes(line.slice(0, 8)),
-      `P10-12: an unreadable --claim line (${line.slice(0, 12)}) stops unproven, no status read, no dispatch, still releases`, { seq: seq(r), result: r.result });
+      `P10-12: an unreadable --claim line (${line.slice(0, 12)}) and an unreadable re-claim stop unproven, no status read, no dispatch, still release`, { seq: seq(r), result: r.result });
+  }
+  // ask 17: the clerk garbled the ~1.8 KB --claim line twice on this spec's first launch - once cut
+  // off after 4 of 6 wave stories with no closing brace, once with a fragment repeated. The short
+  // re-claim by the holder answers ok:true; the run reads status and dispatches the wave.
+  {
+    const six = [1, 2, 3, 4, 5, 6].map((n) => story(n));
+    const whole = JSON.stringify(adv(build(six)));
+    const cut = whole.slice(0, whole.indexOf(JSON.stringify(six[4])) - 1); // 4 of 6 stories, no closing brace
+    const k = whole.indexOf('"wave_stories"');
+    const repeated = whole.slice(0, k + 200) + whole.slice(k + 60, k + 200) + whole.slice(k + 200);
+    for (const [label, line] of [['cut-off line', cut], ['repeated fragment', repeated]]) {
+      let parses = true;
+      try { JSON.parse(line); } catch { parses = false; }
+      const r = await run(ARGS, {
+        clerk: [
+          [CLAIM, line],
+          [RECLAIM, { ok: true, verb: 'claim', exit: 0, next: 'claimed' }],
+          [STATUS, build(six)],
+          [ADV, adv(green())],
+          [RELEASE, releaseOk],
+        ],
+      });
+      const workers = r.dispatches.filter((d) => d.phase === 'Build');
+      check(!parses && r.mismatches.length === 0 && workers.length === 6 && r.result.next === 'green'
+        && workers.every((d) => !d.prompt.includes('previous attempt left uncommitted')),
+        `ask 17 (${label}): a garbled claim line stops the run - want re-claim, status read, wave dispatched`, { seq: seq(r), mm: r.mismatches, result: r.result });
+    }
+    // a re-claim refused (held by another stamp) stops before any dispatch; the release is still attempted
+    const r = await run(ARGS, {
+      clerk: [
+        [CLAIM, cut],
+        [RECLAIM, { ok: false, verb: 'claim', exit: 2, next: 'error', error: 'held by aaaaaaaaaaaaaaaa' }],
+        [RELEASE, releaseOk],
+      ],
+    });
+    check(r.mismatches.length === 0 && r.dispatches.length === 0 && r.clerkCmds.length === 3 && r.clerkCmds[2] === RELEASE
+      && r.result.stop && r.result.stop.verb === 'claim' && /held by/.test(r.result.stop.error),
+      'ask 17: a refused re-claim stops before any dispatch, release still attempted', { seq: seq(r), result: r.result });
   }
   {
     const r = await run(ARGS, { clerk: [[CLAIM, { ok: true, verb: 'advance', exit: 0, next: 'green' }], [STATUS, green()], [RELEASE, releaseOk]] });
