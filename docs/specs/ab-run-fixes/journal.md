@@ -17,3 +17,4 @@
 - 2026-11-09T00:16:18Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/ab-run-fixes/round-2 · next: dispatch:opus,review
 - 2026-11-09T01:41:57Z · 04-council:RED · round 2 verdict RED at bbf9e69 pack 0e4daa64bf1d · next: repair
 - 2026-11-09T01:42:03Z · 03-building · repair round 2: ab-run-fixes-11-repair-round-2.md · next: build:6
+- 2026-11-09T01:47:53Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/ab-run-fixes/round-3 · next: dispatch:opus,review
