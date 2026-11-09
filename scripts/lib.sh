@@ -128,12 +128,16 @@ verdict_stale() { # verdict_stale <spec-dir> <head-sha> <pack-fp> -> CURRENT (0)
 # written only as `> ` quotes once passed trace-check, counted zero in cycle.sh and stopped
 # open-round after a finished build.
 brief_asks() { # brief_asks <brief.md> -> the `## Asks` items, one per line, trailing blanks cut:
-  # every `N. text` line as written; a block with no numbered line gives each `> ` line's text
+  # every `N. text` item, an indented non-empty continuation line joined to it with one space (a blank
+  # line, a `>` line, a new `N. ` line or a `## ` heading ends it); a block with no numbered line gives
+  # each `> ` line's text
   awk '
     /^##[[:space:]]+Asks[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/                    { if (inblock) exit }
     !inblock                            { next }
-    /^[0-9]+\.[[:space:]]/              { s=$0; sub(/[[:space:]]+$/, "", s); num[++n]=s; next }
+    /^[0-9]+\.[[:space:]]/              { s=$0; sub(/[[:space:]]+$/, "", s); num[++n]=s; open=1; next }
+    open && /^[[:blank:]]+[^[:space:]]/ { s=$0; sub(/^[[:blank:]]+/, "", s); sub(/[[:space:]]+$/, "", s); num[n]=num[n] " " s; next }
+                                        { open=0 }
     /^>/                                { s=$0; sub(/^>[[:space:]]?/, "", s); sub(/[[:space:]]+$/, "", s); if (s != "") quo[++q]=s }
     END { if (n) for (i=1; i<=n; i++) print num[i]; else for (i=1; i<=q; i++) print quo[i] }
   ' "$1" 2>/dev/null

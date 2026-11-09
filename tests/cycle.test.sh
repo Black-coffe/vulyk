@@ -705,6 +705,21 @@ out="$(bash scripts/cycle.sh briefed docs/specs/qa 2>&1)"; ex=$?
   || { echo "::error::briefed on a quoted ## Asks: exit=$ex out=$out"; fail=1; }
 rm -rf docs/specs/qa
 
+echo "mass-audit-fixes-15: a wrapped ## Asks item is read whole (an indented continuation joins it with one space)"
+mkdir -p docs/specs/qw
+printf '# qw\n\n## Request\n> build the wrap demo\n\n## Asks\n1. the first ask\n   wraps onto a second line\n2. another ask\n' > docs/specs/qw/brief.md
+[ "$(brief_asks docs/specs/qw/brief.md | tr '\n' '|')" = "1. the first ask wraps onto a second line|2. another ask|" ] \
+  && echo "  ok    a space-indented continuation joins the item above it" \
+  || { echo "::error::a wrapped ask item reads as its first line only: $(brief_asks docs/specs/qw/brief.md | tr '\n' '|')"; fail=1; }
+printf -- '---\nstory: qw-01\nspec: qw\nstatus: todo\nwave: 1\n---\n# W1\n\n## Requirements\n> 1. the first ask wraps onto a second line\n> 2. another ask\n' > docs/specs/qw/qw-01-w.md
+out="$(bash scripts/trace-check.sh docs/specs/qw)"
+printf '%s' "$out" | expect "trace-check accepts a quote of the whole joined item" "backward: 0 unfound"
+printf '## Asks\n1. a tab ask\n\tcontinues here\n2. a blank ends it\n\n   not part of it\n3. last\n' > docs/specs/qw/brief.md
+[ "$(brief_asks docs/specs/qw/brief.md | tr '\n' '|')" = "1. a tab ask continues here|2. a blank ends it|3. last|" ] \
+  && echo "  ok    a tab continuation joins; an indented line after a blank line does not" \
+  || { echo "::error::neighbour forms: $(brief_asks docs/specs/qw/brief.md | tr '\n' '|')"; fail=1; }
+rm -rf docs/specs/qw
+
 echo "ab-run-fixes C6: status and every verb that derives it refuse a story status cycle.sh does not recognise"
 mkdir -p docs/specs/ustat
 printf -- '---\nstory: ustat-01\nspec: ustat\nstatus: open\nwave: 1\n---\n# U1\n' > docs/specs/ustat/ustat-01-u.md

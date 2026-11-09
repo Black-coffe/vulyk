@@ -1,14 +1,15 @@
 ---
 story: mass-audit-fixes-15
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 4
 blocked_by: [mass-audit-fixes-10]
 red: required
 red_reason: a wrapped ask item reads as its first line only
+red_verified_at: 2026-11-09T14:48:29Z 2e74f2965bcf7c65e67d13c5edacd600a87e082e6b01db0e8a33a2b352ce250d
 ---
 
 # A wrapped `## Asks` item is read whole
@@ -49,5 +50,29 @@ fallback (no numbered line) is unchanged. Blocked by story 10, which also edits 
 `bash tests/cycle.test.sh --part gates`
 
 ## Implementation notes
+- scripts/lib.sh: brief_asks keeps an `open` flag after a numbered item; a `[[:blank:]]+`-indented non-empty line appends to num[n] with one space; any other line clears it, so blank, `>`, `N. ` and `## ` end the item.
+- tests/cycle.test.sh (part gates): new qw fixture: space-wrapped item joined, trace-check 0 unfound on the joined quote, tab continuation joins, indented line after a blank does not.
+- Decision: an unindented plain text line also ends an item (not listed in the story, the safe reading).
 
 ## Findings
+
+## Red receipt
+- command: bash tests/cycle.test.sh --part gates
+- exit: 1
+- tests: 2e74f2965bcf7c65e67d13c5edacd600a87e082e6b01db0e8a33a2b352ce250d (tests/cycle.test.sh)
+- impl: 1d770a4a34edffa62a043ca7e33d7956e3b72dc9e9b31756374b461d97e90471
+- stamped: 2026-11-09T14:48:29Z
+
+```
+::error::a wrapped ask item reads as its first line only: 1. the first ask|2. another ask|
+ab-run-fixes-09: every verb's last JSON line carries now, the epoch seconds the driver checkpoint reads
+  ok    an ok and a refused verb both carry an integer now within 5 s of the shell clock
+G3 (mass-audit-fixes-08): scope-check drops a sibling's declared paths only for a not-done sibling of the same wave
+  ok    a wave-1 edit of a file only a wave-2 todo story declares is out of scope
+  ok    a same-wave sibling's file is still dropped: changed 2, out of scope 1
+G4: a git mv of an out-of-scope file into a declared directory still counts the path it left
+  ok    a rename into a declared dir reports out of scope 1
+G8 (mass-audit-fixes-08): wave-check reports red-seals-impl when a red story seals its one implementation
+  ok    a red story whose verification calls its one implementation script: red-seals-impl
+  ok    a suite-only verification is no red-seals-impl
+```
