@@ -1254,7 +1254,7 @@ expect_eq "fresh install: the scan is wired on SessionEnd only" "0 1" \
   "$(jq -r '[.hooks.Stop[]?.hooks[].command | select(test("anomaly-scan"))] | length' "$TGT/.claude/settings.json" | tr -d '\r') $(jq -r '[.hooks.SessionEnd[]?.hooks[].command | select(test("anomaly-scan"))] | length' "$TGT/.claude/settings.json" | tr -d '\r')"
 # ...and a project that already had its own settings.json gets the same through wire_hook
 cat "$T/ownset.out" | expect "an owner's settings.json gets the scan on SessionEnd" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
-cat "$T/ownset.out" | expect_absent "and no Stop wiring" "-> Stop:"
+cat "$T/ownset.out" | expect_absent "and no Stop scan wiring" "-> Stop: anomaly-scan.sh"
 expect_eq "and no learnings hook" "0" "$(grep -c 'session-end-learnings' "$OWNSET/.claude/settings.json")"
 
 # --telemetry on changes that one row's value and nothing else in the constitution
@@ -1456,21 +1456,78 @@ fi # terminal
 
 if part_on wiring; then
 install_fixtures tgt
+# mass-audit-fixes-04 (I2, S1/P1, P7): every hook command is "$CLAUDE_PROJECT_DIR"/.claude/hooks/<name>.sh,
+# so a hive under a path with a space runs its hooks; an install into an owner's settings.json wires
+# all 17 entries a fresh install copies; every SessionEnd entry has its timeout.
+hook_sig() { # hook_sig <settings.json> - one sorted line per hook entry: event|matcher|command|timeout
+  jq -r '.hooks | to_entries[] | .key as $e | .value[] | (.matcher // "") as $m | .hooks[]
+         | "\($e)|\($m)|\(.command)|\(.timeout // "")"' "$1" | tr -d '\r' | LC_ALL=C sort
+}
+unquoted() { # unquoted <settings.json> - how many hook commands do not start with the quoted head
+  jq -r '[.hooks[][].hooks[].command | select(startswith("\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/") | not)] | length' "$1" | tr -d '\r'
+}
+short_se() { # short_se <settings.json> - SessionEnd entries with no timeout of 10 s or more
+  jq -r '[.hooks.SessionEnd[]?.hooks[] | select((.timeout // 0) < 10)] | length' "$1" | tr -d '\r'
+}
+SP="$T/hive with space"; mkdir -p "$SP/.claude"; cp -a "$TGT/.claude/hooks" "$SP/.claude/"
+space_run() { # space_run <label> <settings.json> - its PreToolUse defects-inject.sh command, through sh -c, from $SP
+  local c; c="$(jq -r --arg m "$PRE_M" '.hooks.PreToolUse[] | select(.matcher == $m) | .hooks[].command
+                | select(test("defects-inject"))' "$2" | tr -d '\r' | head -1)"
+  [ -n "$c" ] || { bad "$1: hook command quotes the project dir - no defects-inject.sh command in $2"; return; }
+  if (export CLAUDE_PROJECT_DIR="$SP"; sh -c "$c" < /dev/null) > "$T/space.out" 2>&1; then
+    ok "$1: hook command quotes the project dir: $c"
+  else bad "$1: hook command quotes the project dir - exit $? from sh -c: $c"; sed 's/^/        /' "$T/space.out"; fi
+}
+expect_eq "fresh install: every hook command quotes the project dir" "0" "$(unquoted "$TGT/.claude/settings.json")"
+expect_eq "fresh install: every SessionEnd entry has a timeout >= 10" "0" "$(short_se "$TGT/.claude/settings.json")"
+expect_eq "fresh install: the 17 hook entries" "17" "$(hook_sig "$TGT/.claude/settings.json" | grep -c .)"
+space_run "fresh install" "$TGT/.claude/settings.json"
+EH="$T/hive-allow-empty"; mkdir -p "$EH/.claude"
+printf '{"permissions":{"allow":[]}}\n' > "$EH/.claude/settings.json"; cp "$EH/.claude/settings.json" "$T/eh.before"
+bash "$SRC/install.sh" "$EH" --check --telemetry off > "$T/eh-check.out" 2>&1
+expect_eq "--check into an owner's settings.json: would wire for each of the 17 hooks" "17" \
+  "$(grep -E '^  would wire +\.claude/settings\.json -> ' "$T/eh-check.out" | grep -vc 'permissions\.allow')"
+expect_eq "--check into an owner's settings.json writes nothing" "1" "$(same "$T/eh.before" "$EH/.claude/settings.json")"
+bash "$SRC/install.sh" "$EH" --telemetry off > "$T/eh.out" 2>&1
+expect_eq "install into an owner's settings.json: one wire line per hook, 17" "17" \
+  "$(grep -E '^  wire +\.claude/settings\.json -> ' "$T/eh.out" | grep -vc 'permissions\.allow')"
+cat "$T/eh.out" | expect_absent "... and none kept: the owner's file had none" "kept           .claude/settings.json ->"
+expect_eq "... the same 17 entries a fresh install copies" "$(hook_sig "$TGT/.claude/settings.json")" "$(hook_sig "$EH/.claude/settings.json")"
+expect_eq "... every one quoting the project dir" "0" "$(unquoted "$EH/.claude/settings.json")"
+expect_eq "... every SessionEnd entry with a timeout >= 10" "0" "$(short_se "$EH/.claude/settings.json")"
+space_run "install into an owner's settings.json" "$EH/.claude/settings.json"
 # wire_hook / unwire_hook (ADR-013 D7): a 0.17-shaped settings.json - the scan on Stop, the
 # learnings hook on SessionEnd, no scan there yet - loses the two entries this release no longer
 # wants, gains the SessionEnd scan once, keeps everything else, and a second upgrade is
 # byte-identical. The backup is the file as the owner left it, however many edits followed.
+# Every entry is in the old unquoted form, SessionEnd has no timeout, and the owner keeps a Cyrillic rule.
 SET="$TGT/.claude/settings.json"
-jq '.hooks.Stop = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop"},{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh"}]}]
+jq '(.hooks[][].hooks[].command) |= sub("^\"\\$CLAUDE_PROJECT_DIR\"/"; "$CLAUDE_PROJECT_DIR/")
+    | .permissions.allow = ["Bash(echo привет:*)"]
+    | .hooks.Stop = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop"},{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh"}]}]
     | .hooks.SessionEnd = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/session-end-learnings.sh"},{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh sessionend"}]}]' \
   "$SET" > "$T/set.json" && mv "$T/set.json" "$SET"
+OLDFORM="$(jq -r '[.hooks[][].hooks[].command | select(startswith("$CLAUDE_PROJECT_DIR/.claude/hooks/"))
+                   | select(test("anomaly-scan|session-end-learnings") | not)] | length' "$SET" | tr -d '\r')"
 cp "$SET" "$T/set.before"
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire0.out" 2>&1
 cat "$T/wire0.out" | expect "--check reports the Stop unwiring" "would unwire   .claude/settings.json -> Stop: anomaly-scan.sh"
 cat "$T/wire0.out" | expect "--check reports the learnings unwiring" "would unwire   .claude/settings.json -> SessionEnd: session-end-learnings.sh"
 cat "$T/wire0.out" | expect "--check reports the SessionEnd wiring" "would wire     .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+cat "$T/wire0.out" | expect "--check reports an old-form rewire" "would rewire   .claude/settings.json -> Stop: handoff.sh stop"
+cat "$T/wire0.out" | expect "--check reports the missing SessionEnd timeout" "would timeout  .claude/settings.json -> SessionEnd: handoff.sh sessionend (30 s)"
 expect_eq "--check leaves settings.json untouched" "1" "$(cmp -s "$T/set.before" "$SET" && echo 1 || echo 0)"
 bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/wire.out" 2>&1
+expect_eq "--upgrade rewires each old-form entry, one rewire line each" "$OLDFORM" \
+  "$(grep -cE '^  rewire +\.claude/settings\.json -> ' "$T/wire.out")"
+cat "$T/wire.out" | expect "--upgrade logs the rewire" "rewire         .claude/settings.json -> Stop: handoff.sh stop"
+expect_eq "--upgrade: every hook command quotes the project dir" "0" "$(unquoted "$SET")"
+cat "$T/wire.out" | expect "--upgrade gives a SessionEnd entry its timeout, and says so" \
+  "timeout        .claude/settings.json -> SessionEnd: handoff.sh sessionend (30 s)"
+expect_eq "--upgrade: every SessionEnd entry has a timeout >= 10" "0" "$(short_se "$SET")"
+expect_eq "the owner's Cyrillic rule stays readable" "1" "$(grep -cF 'Bash(echo привет:*)' "$SET")"
+expect_eq "settings.json has no CR bytes" "0" "$(tr -cd '\r' < "$SET" | wc -c | tr -d ' ')"
+expect_eq "settings.json ends with a single LF" "7d0a" "$(tail -c 2 "$SET" | od -An -tx1 | tr -d ' \n\r')"
 cat "$T/wire.out" | expect "unwire_hook reports Stop" "unwire         .claude/settings.json -> Stop: anomaly-scan.sh"
 cat "$T/wire.out" | expect "unwire_hook reports the learnings hook" "unwire         .claude/settings.json -> SessionEnd: session-end-learnings.sh"
 cat "$T/wire.out" | expect "wire_hook reports SessionEnd" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
@@ -1492,8 +1549,11 @@ SET_BEFORE="$(cat "$SET")"
 bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/wire2.out" 2>&1
 expect_eq "a second upgrade leaves settings.json byte-identical" "1" \
   "$([ "$SET_BEFORE" = "$(cat "$SET")" ] && echo 1 || echo 0)"
-cat "$T/wire2.out" | expect_absent "and reports no second wiring" "-> SessionEnd: anomaly-scan.sh"
+cat "$T/wire2.out" | expect_absent "and reports no second wiring" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+cat "$T/wire2.out" | expect "it says the hook is kept" "kept           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
 cat "$T/wire2.out" | expect_absent "and no second unwiring" "unwire"
+cat "$T/wire2.out" | expect_absent "and no second rewire" "rewire"
+cat "$T/wire2.out" | expect_absent "and no second timeout" "timeout        .claude/settings.json"
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire3.out" 2>&1
 cat "$T/wire3.out" | expect_absent "--check reports no wiring for an already-wired hook" "would wire     .claude/settings.json -> SessionEnd"
 cat "$T/wire3.out" | expect_absent "--check reports no unwiring once it is done" "would unwire"
@@ -2031,7 +2091,7 @@ cp "$DW/.claude/settings.json" "$T/dw.before"
 bash "$SRC/install.sh" "$DW" --upgrade --check > "$T/dw-check.out" 2>&1
 cat "$T/dw-check.out" | expect "--check: the reset would be wired" "would wire     .claude/settings.json -> SessionStart: defects-inject.sh reset"
 cat "$T/dw-check.out" | expect "--check: the inject would be wired" "would wire     .claude/settings.json -> PreToolUse [$PRE_M]: defects-inject.sh"
-cat "$T/dw-check.out" | expect_absent "--check: intake is already wired" "-> UserPromptSubmit: defect-intake.sh"
+cat "$T/dw-check.out" | expect_absent "--check: intake is already wired" "would wire     .claude/settings.json -> UserPromptSubmit: defect-intake.sh"
 expect_eq "--check leaves the file alone" "1" "$(same "$T/dw.before" "$DW/.claude/settings.json")"
 bash "$SRC/install.sh" "$DW" --upgrade --telemetry off > "$T/dw.out" 2>&1
 DWS="$DW/.claude/settings.json"
@@ -2107,8 +2167,10 @@ wrapper_case() { # wrapper_case <name> <cmd-of vulyk-update-check.sh> <cmd-of an
 fi # wrapper wrapper2 wrapper3 launchers
 
 if part_on wrapper; then
+# The plain form, old (unquoted) entries: the upgrade rewires them, and the new ones take the quoted head.
+Q='"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
 wrapper_case plain "${P}vulyk-update-check.sh" "${P}anomaly-scan.sh" \
-  "${P}defect-intake.sh" "${P}defects-inject.sh" "${P}defects-inject.sh reset"
+  "${Q}defect-intake.sh" "${Q}defects-inject.sh" "${Q}defects-inject.sh reset"
 fi # wrapper
 
 if part_on wrapper2; then # post-046-tails: wrapper, second part - the bash -c form
@@ -2142,7 +2204,8 @@ bash "$SRC/install.sh" "$BC" --upgrade --telemetry off > "$T/bc.out" 2>&1
 cat "$T/bc.out" | expect "the broken reset is repaired" "repair         .claude/settings.json -> SessionStart: defects-inject.sh reset"
 expect_eq "settings.json is back to the correct form, byte for byte" "1" "$(same "$T/bc.good" "$BCS")"
 bash "$SRC/install.sh" "$BC" --upgrade --telemetry off > "$T/bc2.out" 2>&1
-cat "$T/bc2.out" | expect_absent "a run after the repair wires and repairs nothing" "settings.json ->"
+cat "$T/bc2.out" | expect_absent "a run after the repair wires nothing" "wire           .claude/settings.json ->"
+cat "$T/bc2.out" | expect_absent "a run after the repair repairs nothing" "repair         .claude/settings.json ->"
 
 fi # wrapper3
 

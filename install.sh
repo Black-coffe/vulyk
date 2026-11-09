@@ -730,7 +730,8 @@ py_wire() { # py_wire <settings.json> <script> <event> <matcher> <arg> [--dry]  
 import json, os, re, shlex, sys
 path, script, event, matcher, arg = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
 dry = '--dry' in sys.argv[6:]
-REL = '$CLAUDE_PROJECT_DIR/.claude/hooks/'
+REL = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'     # quoted: a project path with a space still runs
+OLD_REL = '$CLAUDE_PROJECT_DIR/.claude/hooks/'   # the plain form before 0.50; fix_hooks rewires it
 HOOKS_DIR = os.path.join(os.path.dirname(os.path.abspath(path)), 'hooks')
 try:
     with open(path, encoding='utf-8') as fh:
@@ -786,7 +787,7 @@ for groups_any in (data.get('hooks') or {}).values():
             if not isinstance(hook, dict):
                 continue
             tpl = template_of(str(hook.get('command', '')))
-            if tpl and tpl != (REL, '', ''):
+            if tpl and tpl not in ((REL, '', ''), (OLD_REL, '', '')):   # the plain form, either head
                 seen[tpl] = seen.get(tpl, 0) + 1
 cmd = REL + script + (' ' + arg if arg else '')
 for tpl in sorted(seen, key=lambda t: -seen[t]):  # stable: the first of equals stays first
@@ -815,8 +816,8 @@ groups = data.setdefault('hooks', {}).setdefault(event, [])
 if not isinstance(groups, list):
     sys.exit(4)
 def save():
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, indent=2)
+    with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write('\n')
 for group in groups:
     if isinstance(group, dict):
@@ -833,6 +834,8 @@ for group in groups:
 if dry:
     sys.exit(0)                                  # --check: would wire; nothing written
 entry = {'type': 'command', 'command': cmd}
+if event == 'SessionEnd':
+    entry['timeout'] = 30                        # P10-03: the default SessionEnd budget is 1.5 s
 # The entry joins the first group with the same matcher (no matcher = a group without one, which
 # runs for every source/tool); none such -> a group of its own, so it never inherits a narrower one.
 def same_matcher(group):
@@ -866,15 +869,17 @@ settings_backup_drop() { # settings_backup_drop <file> - undo the backup this ca
 wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
   local event="$1" script="$2" matcher="${3:-}" arg="${4:-}" file="$DEST/.claude/settings.json" took=""
   local label="$event${matcher:+ [$matcher]}: $script${arg:+ $arg}"
-  local by_hand="{ \"type\": \"command\", \"command\": \"\$CLAUDE_PROJECT_DIR/.claude/hooks/$script${arg:+ $arg}\" }"
+  local by_hand="{ \"type\": \"command\", \"command\": \"\\\"\$CLAUDE_PROJECT_DIR\\\"/.claude/hooks/$script${arg:+ $arg}\" }"
+  [ "$event" = SessionEnd ] && by_hand="${by_hand% \}}, \"timeout\": 30 }"
   [ -n "$matcher" ] && by_hand="{ \"matcher\": \"$matcher\", \"hooks\": [ $by_hand ] }"
+  local kept="  kept           .claude/settings.json -> $label"
   [ -f "$file" ] || return 0                                   # fresh install: ours was copied whole
   vulyk_python || true; PYBIN="$VULYK_PY"
   if [ -z "$PYBIN" ]; then
     if [ -n "$arg" ]; then                                     # no python: file-wide check is all we have
-      grep -qE "$script\"? $arg" "$file" 2>/dev/null && return 0
+      grep -qE "$script\"? $arg" "$file" 2>/dev/null && { echo "$kept"; return 0; }
     else
-      grep -q "$script" "$file" 2>/dev/null && return 0
+      grep -q "$script" "$file" 2>/dev/null && { echo "$kept"; return 0; }
     fi
     if [ "$CHECK" = "--check" ]; then
       echo "  would wire     .claude/settings.json -> $label"
@@ -892,6 +897,7 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
     py_wire "$file" "$script" "$event" "$matcher" "$arg" --dry || rc=$?
     case "$rc" in
       0) echo "  would wire     .claude/settings.json -> $label" ;;
+      3) echo "$kept" ;;
       5) echo "  would repair   .claude/settings.json -> $label (its quotes do not close)" ;;
     esac
     return 0
@@ -902,7 +908,8 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
     echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
   else
     case "$?" in
-      3) [ -z "$took" ] || settings_backup_drop "$file" ;;   # already wired; nothing happened
+      3) [ -z "$took" ] || settings_backup_drop "$file"      # already wired; nothing happened
+         echo "$kept" ;;
       5) echo "  repair         .claude/settings.json -> $label (its quotes did not close)"
          echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)" ;;
       *) [ -z "$took" ] || settings_backup_drop "$file"
@@ -957,8 +964,8 @@ if kept:
     hooks[event] = kept
 else:
     del hooks[event]
-with open(path, 'w', encoding='utf-8') as fh:
-    json.dump(data, fh, indent=2)
+with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
     fh.write('\n')
 PYUNWIRE
 }
@@ -992,6 +999,79 @@ unwire_hook() { # unwire_hook <event> <hook-script-name>
          echo "  This release no longer runs $script on $event; remove that entry by hand." ;;
     esac
   fi
+}
+
+# mass-audit-fixes-04 (S1/P1, P10-03): before 0.50 a hook ran as `$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh`,
+# which the shell splits at a space in the project path; a SessionEnd entry with no timeout gets Claude
+# Code's 1.5 s budget. One pass over the hive's settings.json rewires each such entry of a script this
+# release ships to `"$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh` (an owner's own hooks and wrappers stay as
+# written) and gives every SessionEnd entry without a timeout 30 s. Idempotent by inspection.
+fix_hooks() {
+  local file="$DEST/.claude/settings.json" took="" rc=0 out="" kind label
+  [ -f "$file" ] || return 0
+  vulyk_python || true; PYBIN="$VULYK_PY"
+  if [ -z "$PYBIN" ]; then
+    if grep -qF '"$CLAUDE_PROJECT_DIR/.claude/hooks/' "$file" 2>/dev/null; then
+      echo ""
+      echo "  NOTE: no python on PATH to edit .claude/settings.json safely. Quote the project dir in each"
+      echo "  hook command by hand (\"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/<name>.sh), or a path with a space breaks it."
+    fi
+    return 0
+  fi
+  [ "$CHECK" = "--check" ] || { settings_backup "$file" && took=1; }
+  out="$(mktemp)"
+  PYTHONIOENCODING=utf-8 "$PYBIN" - "$file" "$SRC/.claude/hooks" "$CHECK" > "$out" <<'PYFIX' || rc=$?
+import json, os, sys
+path, ours, dry = sys.argv[1], sys.argv[2], sys.argv[3] == '--check'
+REL, OLD_REL = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/', '$CLAUDE_PROJECT_DIR/.claude/hooks/'
+try:
+    with open(path, encoding='utf-8') as fh:
+        data = json.load(fh)
+except Exception:
+    sys.exit(4)                                  # unparseable: leave it entirely alone
+hooks = data.get('hooks') if isinstance(data, dict) else None
+if not isinstance(hooks, dict):
+    sys.exit(3)
+done = []
+for event, groups in hooks.items():
+    if not isinstance(groups, list):
+        continue
+    for group in groups:
+        if not isinstance(group, dict) or not isinstance(group.get('hooks'), list):
+            continue
+        where = event + (' [%s]' % group['matcher'] if group.get('matcher') else '')
+        for hook in group['hooks']:
+            if not isinstance(hook, dict) or not isinstance(hook.get('command'), str):
+                continue
+            cmd = hook['command']
+            rest = cmd[len(OLD_REL):] if cmd.startswith(OLD_REL) else ''
+            if rest.split() and os.path.isfile(os.path.join(ours, rest.split()[0])):
+                hook['command'] = cmd = REL + rest
+                done.append('rewire\t%s: %s' % (where, rest))
+            if event == 'SessionEnd' and 'timeout' not in hook:
+                hook['timeout'] = 30
+                done.append('timeout\t%s: %s (30 s)' % (where, cmd.rsplit('/', 1)[-1]))
+if not done:
+    sys.exit(3)
+print('\n'.join(done))
+if not dry:
+    with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+        fh.write('\n')
+PYFIX
+  if [ "$rc" -ne 0 ]; then
+    rm -f "$out"
+    [ -z "$took" ] || settings_backup_drop "$file"
+    [ "$rc" -eq 3 ] || { echo ""; echo "  NOTE: .claude/settings.json could not be parsed as JSON - hook commands left as they are."; }
+    return 0
+  fi
+  while IFS="$(printf '\t')" read -r kind label; do
+    [ -n "$kind" ] || continue
+    if [ "$CHECK" = "--check" ]; then printf '  would %-8s .claude/settings.json -> %s\n' "$kind" "$label"
+    else printf '  %-14s .claude/settings.json -> %s\n' "$kind" "$label"; fi
+  done <<< "$(tr -d '\r' < "$out")"
+  rm -f "$out"
+  [ "$CHECK" = "--check" ] || echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
 }
 
 # The Workflow driver's clerk (`cycle-clerk.md`) runs every verb by shelling out to
@@ -1041,8 +1121,8 @@ added = [r for r in RULES if r not in allow]
 if not added:
     sys.exit(3)                                  # already there under both spellings
 allow.extend(added)
-with open(path, 'w', encoding='utf-8') as fh:
-    json.dump(data, fh, indent=2)
+with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
     fh.write('\n')
 PYPERM
   then
@@ -1095,8 +1175,8 @@ if dry:
 del plugins[key]
 if not plugins:
     del data['enabledPlugins']
-with open(path, 'w', encoding='utf-8') as fh:
-    json.dump(data, fh, indent=2)
+with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
     fh.write('\n')
 PYYSK
   case "$rc" in
@@ -1143,8 +1223,8 @@ if not isinstance(env, dict):
     sys.exit(4)
 env['USE_BUILTIN_RIPGREP'] = '0'
 data['env'] = env
-with open(path, 'w', encoding='utf-8') as fh:
-    json.dump(data, fh, indent=2)
+with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
     fh.write('\n')
 PYRG
   if [ -n "$py" ] && [ "$rc" -eq 0 ]; then
@@ -1433,6 +1513,23 @@ if { [ -f "$DEST/.claude/hooks/git-guard.sh" ] || [ "$CHECK" = "--check" ]; } &&
    ! git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/git-guard.sh" 2>/dev/null; then
   wire_hook PreToolUse git-guard.sh 'Bash|PowerShell'
 fi
+# mass-audit-fixes-04 (I2): the rest of what VULYK's own settings.json runs, which no earlier installer
+# wired into an owner's settings.json. As for git-guard.sh: wired when v$PREV did not ship the script (a
+# fresh install over an owner's file, or the release that brings it); after that a missing entry is the
+# owner's removal and stays removed.
+wire_shipped() { # wire_shipped <event> <script> [matcher] [arg]
+  git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/$2" 2>/dev/null && return 0
+  wire_hook "$@"
+}
+wire_shipped SessionStart session-start-brief.sh
+wire_shipped SessionStart handoff.sh '' sessionstart
+wire_shipped SessionEnd handoff.sh '' sessionend
+wire_shipped UserPromptSubmit handoff.sh '' prompt
+wire_shipped Stop handoff.sh '' stop
+wire_shipped PreCompact context-guard.sh
+wire_shipped PreCompact handoff.sh '' precompact
+wire_shipped PostToolUse skill-usage-counter.sh Skill
+fix_hooks
 unwire_ysk
 wire_permissions
 wire_ripgrep
