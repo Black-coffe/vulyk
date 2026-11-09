@@ -369,3 +369,5 @@
 {"ts":"2026-11-09T14:49:09Z","story":"mass-audit-fixes-14-client-name-scrub","declared":4,"changed":4,"out_of_scope":0}
 {"ts":"2026-11-09T14:49:26Z","story":"mass-audit-fixes-14-client-name-scrub","declared":4,"changed":4,"out_of_scope":0}
 {"ts":"2026-11-09T14:50:02Z","story":"mass-audit-fixes-15-asks-wrapped-items","declared":2,"changed":2,"out_of_scope":0}
+{"ts":"2026-11-09T14:54:20Z","story":"mass-audit-fixes-13-docs-and-adrs","declared":12,"changed":12,"out_of_scope":0}
+{"ts":"2026-11-09T14:54:27Z","story":"mass-audit-fixes-17-upgrade-names-unwired-hooks","declared":2,"changed":2,"out_of_scope":0}

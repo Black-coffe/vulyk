@@ -32,10 +32,10 @@ Tier 2-4 plans stop for the owner's approval (`**Approved:**`) unless `/vulyk-pl
 
 ## Models and effort
 
-Route by family, never by version: Sonnet executes (workers, scout, docs drone), Opus orchestrates and judges (the Queen, planner, reviewers, council, coverage, librarian), Fable holds the gate, Haiku the clerk. The family that builds never judges (one recorded gap: the Tier 4 second reviewer is Sonnet where the gate is Opus). A repair story after a RED round climbs to Opus.
-Model floor: no dispatch below `scripts/lib.sh` `model_floor`; always the newest of each family. `bash scripts/top-model.sh --floor` checks the config, telemetry `model_below_floor` what really ran. `TOP_MODEL = auto` names the gate model (`scripts/top-model.sh`); an alias pins it.
-In `sonnet-builds` (default) pass it as `model:` only on the Tier 4 review, `lead-architect`, the Tier 4 `queen-planner` and a missed story's retry; other profiles: `scripts/model-profile.sh --explain`.
-Effort: agent frontmatter. Details: `docs/model-cascade.md`, ADR-015, `docs/{cycle,token-economy}.md`.
+Route by family, never by version: Sonnet executes (workers, scout, docs drone), Opus orchestrates and judges (the Queen, planner, reviewers, council, coverage, librarian), Fable holds the gate, Haiku the clerk. The family that builds never judges; recorded gaps: solo Tier 1-2, repair stories, a retry with no family left, the Tier 4 second reviewer. A repair story after a RED round climbs to Opus.
+Model floor: no dispatch below `lib.sh` `model_floor`; always the newest of each family. `top-model.sh --floor` checks the config, telemetry `model_below_floor` what ran. `TOP_MODEL = auto` lets `top-model.sh` name the gate model; an alias pins it.
+In `sonnet-builds` (default) pass it as `model:` only on `lead-architect`, the Tier 4 review and `queen-planner`, a missed story's retry; other profiles: `model-profile.sh --explain`.
+Effort: agent frontmatter. Details: ADR-015, `docs/{model-cascade,cycle,token-economy}.md`.
 
 ## Secrets
 
@@ -81,6 +81,7 @@ Quiet variants only: output is resent each turn. A story's `## Verification` nam
 | Driver | `bash tests/driver.test.sh` |
 | E2E | `bash tests/e2e.test.sh` |
 | Solo | `bash tests/solo.test.sh` |
+| Handoff | `bash tests/handoff.test.sh` |
 | Anomaly telemetry contract tests (round-only) | `bash tests/telemetry.test.sh` |
 | Telemetry part | `bash tests/telemetry.test.sh --part <topic>` |
 | Defect gate | `bash scripts/defects-check.sh [<arg>]` |

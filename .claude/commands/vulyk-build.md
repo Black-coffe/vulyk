@@ -4,7 +4,18 @@ argument-hint: [spec slug; defaults to the newest briefed or approved spec with 
 ---
 
 Build: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md carries `**Briefed:**`
-or `**Approved:**` and no `**Branch:**`).
+or `**Approved:**` and no `**Branch:**`). At Tier 2-4 a `**Briefed:**` line opens the build only when it
+records `--go`: without `**Approved:**`, `branch` refuses (`Tier <N> plan needs **Approved:** or an explicit
+--go`); stop for the owner, and only on the owner's opt-out run `bash scripts/cycle.sh briefed
+docs/specs/<slug> --go --commit`.
+
+A story you change after a worker's `NEEDS_CONTEXT` (its `## Files`, `## Verification` or `red:`) is
+committed before its worker runs again: `git add <story> && git commit -m "vulyk(<slug>): revised
+<story-id>"` (`chore(vulyk-<slug>): revised <story-id>` under conventional commits). close-story compares
+those blocks with that commit and refuses a copy that differs (`story blocks differ from the approved
+version`). A sealed test changed after its red receipt, with the implementation already written: after
+`/vulyk-pause`, run `bash scripts/cycle.sh stamp-red <story> --baseline` (it stamps against HEAD's
+implementation and puts the working copy back), then resume; never `git stash`.
 
 plan.md's `**Tier:**` picks the path: Tier 1-2 solo, Tier 3-4 hive. Every `cycle.sh` verb prints one
 JSON object as its last stdout line; decide from its `ok`, `next` and `status`, never from prose. Bash
