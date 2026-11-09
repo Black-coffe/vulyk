@@ -190,6 +190,9 @@ describes how to exploit the old behaviour (public repo).
 
 ## Plan deltas
 
+- 2026-11-09, story 08 NEEDS_CONTEXT: the D4 `branch` refusal breaks `tests/solo.test.sh`'s Tier 2 fixture (no
+  `**Approved:**`), so that suite joins story 08's `## Files` (the `mkfix` line only) and `## Verification`.
+
 - 2026-11-09, story 06 NEEDS_CONTEXT: one `top-model.sh` call for the brief needs a combined mode, so
   `scripts/top-model.sh` joins story 06's `## Files` (additive `--brief`, no other mode changes); the economy
   AC follows the Goal's rule (no family left: retry on opus, `retry_same_family: true`), a second same-family

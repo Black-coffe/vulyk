@@ -40,6 +40,7 @@ Briefed comment names `--go`. Asks 14, 13, 11 (I4, G3, G4, G8, S5). Marked red: 
 - scripts/wave-check.sh
 - tests/cycle.test.sh
 - templates/plan.md
+- tests/solo.test.sh
 
 ## Non-goals
 - Do not touch `approved_rev`, the D1 compare or the D2 status counting (story 05, landed); do not write
@@ -73,7 +74,21 @@ Briefed comment names `--go`. Asks 14, 13, 11 (I4, G3, G4, G8, S5). Marked red: 
 ## Verification
 `bash tests/cycle.test.sh --part ship && bash tests/cycle.test.sh --part close`
 `bash tests/cycle.test.sh --part gates && bash tests/cycle.test.sh --part hooklog`
+`bash tests/solo.test.sh`
 
 ## Implementation notes
+- No edit made: stopped before the red test on the scope finding below.
 
 ## Findings
+- NEEDS_CONTEXT (worker, before any edit): D4's `cmd_branch` rule breaks `tests/solo.test.sh`, a file
+  outside `## Files`. Its `mkfix` (line 65) writes a Tier `$2` plan with `**Briefed:** via mini-brief` and no
+  `**Approved:**`; part `rejected` runs `mkfix ... 2` and `cycle.sh advance`, whose first step is `branch`.
+  With this story's gate, `branch` on that Tier 2 plan exits 2 (`Tier 2 plan needs **Approved:** or an
+  explicit --go`), so `advance` stops at `branch` and the part fails (Integration gate red). Asked: add
+  `tests/solo.test.sh` to `## Files` (the smallest fix: `mkfix` writes `**Briefed:** via grill (--go), ...`
+  when `$2` > 1, or an `**Approved:**` line), or name another story that owns it. Other suites checked by grep:
+  council.test.sh's branch/advance fixtures with a tier carry `**Approved:**`; e2e.test.sh's Tier 3 plan
+  carries `**Approved:**`; maintenance.test.sh's Tier plans never reach `branch`.
+- Queen ruling (2026-11-09): `tests/solo.test.sh` joins `## Files` (no other story names it) for the one-line
+  `mkfix` change only (a Tier >1 plan carries `**Approved:**` or a `--go` Briefed line), and `bash tests/solo.test.sh`
+  joins `## Verification`. No other edit to that suite.
