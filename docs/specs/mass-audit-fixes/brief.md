@@ -81,6 +81,9 @@ E. Our findings the merged branch does not close (G7 refuted; S7-hooks, S3-shell
    твоего утверждения или явного --go и записывает, что был --go. Проверка перед выпуском требует того же. В памяти уже
    записаны случаи, когда остановку пропускали.
 
+5. Драйвер (2026-11-09, посреди сборки, после двух остановок на искажённой строке `--claim`):
+> Почини драйвер сразу, не жди конца сборки
+
 ## Asks
 
 1. P10-11 rewritten: `defects-inject.sh` starts no Python when no card can match the tool call, searching card files only (not `docs/defects/README.md`), and exits at once when the hive has no cards (our O3).
@@ -99,3 +102,4 @@ E. Our findings the merged branch does not close (G7 refuted; S7-hooks, S3-shell
 14. `cycle.sh` refuses to open the build of a Tier 2-4 plan without the owner's `**Approved:**` or an explicit `--go`, records the `--go`, and the pre-release check requires the same.
 15. The client's folder name is removed from the current public files (four places); rewriting history is left for after this release reaches the hives.
 16. (Added by the Queen at planning on 2026-11-09, from a side agent's note the owner passed on; confirm at approval.) `brief_asks` keeps a wrapped `## Asks` item whole: an indented continuation line joins the numbered item above it, so `trace-check.sh` and `cycle.sh` read the full ask, not its first line.
+17. (Added by the owner mid-build on 2026-11-09: «Почини драйвер сразу, не жди конца сборки».) The Workflow driver survives a cycle-clerk that garbles the long `advance --claim` line: it proves the claim with a short re-claim by the same stamp instead of stopping the run.

@@ -190,6 +190,11 @@ describes how to exploit the old behaviour (public repo).
 
 ## Plan deltas
 
+- 2026-11-09, owner mid-build: «Почини драйвер сразу, не жди конца сборки». Ask 17 added to brief.md; story 16
+  (`mass-audit-fixes-16-driver-claim-proof`, wave 2, files `vulyk-cycle.js` + `tests/driver.test.sh`, disjoint from
+  story 08) proves a garbled `--claim` line by a short re-claim. The long `status` relay through the Haiku clerk
+  stays a follow-up.
+
 - 2026-11-09, story 08 NEEDS_CONTEXT: the D4 `branch` refusal breaks `tests/solo.test.sh`'s Tier 2 fixture (no
   `**Approved:**`), so that suite joins story 08's `## Files` (the `mkfix` line only) and `## Verification`.
 
