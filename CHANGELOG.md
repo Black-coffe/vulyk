@@ -2,7 +2,37 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
-## [Unreleased]
+## [0.50.0] - 2026-11-09
+
+Fixes from a six-model audit of VULYK (47 findings; spec `mass-audit-fixes`, Tier 3, round 2 RED on test fixtures,
+owner ACCEPTED after repair), plus the P9/P10 audit fixes that waited on main.
+
+### Fixed
+- **Defect cards.** Block cards are injected like text cards and their check runs in `close-story` via
+  `defects-check.sh --files`; `defects-inject.sh` starts no Python when the library holds no card file.
+  `defect-intake.sh` files a clock time only beside a media cue or a correction word, and a filing phrase found
+  only in a paste or a quote asks the owner first.
+- **git-guard** tries every Python launcher, reads stdin as UTF-8 and closes five classified gaps.
+- **install.sh** wires every hook into an existing `settings.json` (quoted, with its timeout), trusts no manifest
+  path, keeps the owner's choices, ships no VULYK map and copies in one pass; `--upgrade` names every shipped hook
+  the hive does not wire. Hooks run from a Unix clone (executable bits, UTF-8 reports, LF `skills.json`).
+- **The cycle.** `close-story` reads its gate blocks from the story's approved commit and a close is a commit; the
+  approval stop, same-wave scope and pathspec paperwork commits are enforced; a wrapped `## Asks` item is read whole;
+  a garbled `advance --claim` line is proven by a short re-claim. The verification runner keeps honest resume marks,
+  refuses staging failures and re-stamps the baseline.
+- **Models.** A missed story's retry never runs on the family that judges it; the model brief is shorter, said once.
+- **Redaction** masks the remaining secret names in parity with the handoff fallback; a `/clear` dump keeps the
+  enriched handoff. The update path survives a moved tag and a foreign cache; the SessionEnd scan stops rescanning
+  every journal.
+- **Tests on macOS.** JSON payloads are built in a variable (bash 3.2 brace-expands `\"` JSON inside `"$(...)"`);
+  the BSD `stat` shim works over a real BSD `stat`; `full-suite.sh` prints a failed part's `::error::` lines.
+- ADR-032 accepted, ADR-025 and ADR-001 amended; a client folder name removed from four public files.
+
+### Known
+- `redact.sh` still misses `passphrase=`, `ENCRYPTION_KEY=`, `SESSION_COOKIE=`, `OTP=` and a bare `ssh-rsa` key;
+  `install.sh`'s `wire_entry` re-wires a removed hook when the hive has no git tag. Both are the next spec.
+
+### Earlier audit (P9/P10, Windows hive, 05.11)
 
 Fixes from a code audit of VULYK 0.46 run in a hive on Windows (05.11), re-checked against 0.48.0.
 IDs are the audit's; every fix has a regression test that fails on 0.48.0.
@@ -21,7 +51,6 @@ IDs are the audit's; every fix has a regression test that fails on 0.48.0.
 ### Known
 - A quoted front-matter value now parses in `status --json` but keeps its quotes (`"\"h06-02\""`); stripping them needs `fm_field` and `blockers_of` changed together (P9-06).
 - On Windows the `LOAD: start` sample overlaps the step's first seconds and its own powershell/CIM start, so the start figure reads high.
-- A bare clock time in typed text ("at 14:32 the build ran") still files as a correction (P10-08).
 - Existing hives keep SessionEnd entries without a timeout until `install.sh --upgrade` learns to add it (P10-03); `write_handoff()` always rewrites `index.json`, so `/vulyk-handoff` then `/clear` can replace an enriched handoff with a plain one.
 
 ## [0.49.0] - 2026-11-09
