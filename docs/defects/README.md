@@ -70,8 +70,11 @@ the material and the place, then the words in «». One line per remark; a repea
 
 ## Statuses
 
-- `block` - the class is caught by code. Whenever `check:` is set, the gate runs it and the card's
-  `## Never` lines are not injected. It has *earned* `block` (no debt, checked in the audit) only when
+- `block` - the class is caught by code. Whenever `check:` is set, the gate runs it, and `close-story` runs
+  it on the story's matching files (`defects-check.sh --files <path>...`: once per file inside one of the
+  card's glob `paths:`; a red is `<ref> fails on <file>: <first output line>` and refuses the close; a card
+  with no glob `paths:` is reported as `block with no file scope`). Its lines are shown to agents like a
+  text card's. It has *earned* `block` (no debt, checked in the audit) only when
   `fixtures:` also lists at least two files that exist; with fewer it is reported as
   `block without fixtures (check runs, not earned)`. With no `check:` it is reported as `text`.
 - `text` - a rule in words only. Its `## Never` lines are shown to whoever edits the card's `paths:`.

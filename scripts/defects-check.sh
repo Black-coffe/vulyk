@@ -4,11 +4,16 @@
 #
 #   Usage: bash scripts/defects-check.sh           # library audit
 #          bash scripts/defects-check.sh <arg>     # the gate before showing work to the owner
+#          bash scripts/defects-check.sh --files <path>...   # block checks on a story's files (close-story)
 #
 # Audit: debt, effective status, and fixtures - every effective `block` card's `check:` is run
 # once per fixture and must exit non-zero on each (a fixture that passes = the gate is blind to it).
 # Gate: debt, then the `check:` of every card that DECLARES `block` with a check, fixtures or not,
 # with <arg>; a non-zero exit is red.
+# Files: the `check:` of every card that DECLARES `block` with a check, once per given file that matches
+# one of its glob `paths:` (a `cmd:`/`tool:` entry matches no file). Nothing else is reported: exit 0
+# green, 1 red with one line per red `<ref> fails on <file>: <first output line>`, 2 no python / parser.
+# The audit names a declared block card with no glob `paths:` as `block with no file scope`.
 #
 # Effective status: `block` only with a non-empty `check:` and >= 2 existing `fixtures:`; a block
 # with a check but fewer fixtures is reported as "block without fixtures (check runs, not earned)";
@@ -42,13 +47,16 @@
 set -uo pipefail
 
 case "${1:-}" in
-  -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
-if [ "$#" -gt 1 ]; then
-  echo "defects-check: usage: bash scripts/defects-check.sh [<arg>]" >&2; exit 2
-fi
-MODE=audit; ARG=""
-if [ "$#" -eq 1 ]; then
+MODE=audit; ARG=""; FILES=()
+if [ "${1:-}" = --files ]; then
+  shift
+  [ "$#" -gt 0 ] || { echo "defects-check: usage: bash scripts/defects-check.sh --files <path>..." >&2; exit 2; }
+  MODE=files; FILES=("$@")
+elif [ "$#" -gt 1 ]; then
+  echo "defects-check: usage: bash scripts/defects-check.sh [<arg>] | --files <path>..." >&2; exit 2
+elif [ "$#" -eq 1 ]; then
   [ -n "$1" ] || { echo "defects-check: <arg> is empty" >&2; exit 2; }
   MODE=gate; ARG="$1"
 fi
@@ -83,12 +91,12 @@ done
 #   P <ref> <fixture> <cmd> <new|old never-ref>  a passes: fixture the never card's check must exit 0 on
 # The python call lives in a function: bash 3.2 cannot parse a heredoc inside a multi-line $( ).
 read_cards() {
-PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" "$ARG" "$LIB" <<'PY'
+PYTHONIOENCODING=utf-8 "$PY" - "$MODE" "$DIR" "$ARG" "$LIB" ${FILES[@]+"${FILES[@]}"} <<'PY'
 import collections, datetime, os, re, shlex, subprocess, sys
 
 sys.stdout.reconfigure(newline='\n')  # Windows python would end every record with \r
 mode, d, arg = sys.argv[1], sys.argv[2], sys.argv[3]
-hooks = sys.argv[4]
+hooks, files = sys.argv[4], sys.argv[5:]
 if os.name == 'nt' and re.match(r'^/[A-Za-z]/', hooks):  # a Git Bash path the shell did not convert
     hooks = hooks[1] + ':' + hooks[2:]
 sys.path.insert(0, hooks)
@@ -173,6 +181,19 @@ if not in_git:
 live_keys = []  # (card id, {normalised key}, time of its keys: line)
 
 cards = defects_lib.load_cards(d)
+if mode == 'files':
+    # D3: a declared block check, once per given file inside one of its glob paths:.
+    for c in cards:
+        if c.status != 'block' or not c.check:
+            continue
+        globs = [g for g in c.paths if defects_lib.parse_scope(g)[0] == 'glob']
+        for f in files:
+            f = f.replace('\\', '/')
+            while f.startswith('./'):
+                f = f[2:]
+            if any(defects_lib.scope_matches(g, None, f, None) for g in globs):
+                emit('R', c.ref, f, placeholder(c.check, f), '')
+    sys.exit(0)
 # Ids are unique across the library (revoked cards included): a card in a folder must not shadow another.
 by_id = collections.defaultdict(list)
 for c in cards:
@@ -198,6 +219,8 @@ for c in cards:
              % (cid, len(existing), len(fixtures)))
     elif reason:
         emit('I', 'text  %s: %s - counted as text' % (cid, reason))
+    if mode == 'audit' and status == 'block' and check and not any(defects_lib.parse_scope(g)[0] == 'glob' for g in c.paths):
+        emit('I', 'block %s: block with no file scope - --files (close-story) never runs its check; add a path glob to paths:' % cid)
 
     permissive = bool(c.allowed) and not c.never and not c.howto
     if permissive:
@@ -225,8 +248,8 @@ for c in cards:
         else:
             emit('I', 'old debt  %s: %d quotes, not block, none newer than the library' % (cid, len(quotes)))
 
-    # Undeliverable: defects-inject.sh shows a card as text unless it declares block with a check, and
-    # only when a target matches its paths:. With no paths: its Never lines can never reach an agent.
+    # Undeliverable: defects-inject.sh shows a card only when a target matches its paths:. With no paths:
+    # its Never lines can never reach an agent; a block card with a check is still delivered by its check.
     if not (status == 'block' and check) and not c.paths:
         added = (git('log', '--diff-filter=A', '--format=%ct', '--', name) or '').split() if in_git else []
         t = int(added[-1]) if added else float('inf')
@@ -335,6 +358,16 @@ for i in range(len(live_keys)):
 PY
 }
 plan="$(read_cards)" || { echo "defects-check: cards could not be read in $DIR" >&2; exit 2; }
+
+if [ "$MODE" = files ]; then
+  red=0
+  while IFS=$'\t' read -r kind a b c _; do
+    [ "$kind" = R ] || continue
+    out="$(bash -c "$c" 2>&1 < /dev/null)" || { echo "$a fails on $b: ${out%%$'\n'*}"; red=$((red+1)); }
+  done <<< "$plan"
+  [ "$red" -eq 0 ] && exit 0
+  exit 1
+fi
 
 LOG="${TMPDIR:-/tmp}/vulyk-defects-$(date +%Y%m%d-%H%M%S)-$$.log"
 debt=0; red=0; blind=0; runs=0; undel=0; overlap=0; escape=0; dup=0; conflict=0; exc=0; stale=0

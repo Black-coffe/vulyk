@@ -1,14 +1,15 @@
 ---
 story: mass-audit-fixes-01
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: defects-check --files
+red_verified_at: 2026-11-09T12:56:41Z a9301a247e5fdedc1ba27e3f9296568df7a78daad4b837989170d2902c8a64b5
 ---
 
 # The defect-card gate runs on real work; the inject hook costs nothing when no card can match
@@ -68,5 +69,35 @@ a new gate branch and a hook branch.
 `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh`
 
 ## Implementation notes
+- scripts/defects-check.sh: `--files <path>...` third mode; python emits one run per declared block card x matching glob file and exits before the findings; bash prints only `<ref> fails on <file>: <first line>`, exit 0/1; audit adds `block <ref>: block with no file scope`.
+- Decision: `--files` reports no debt/index/info lines (close-story reads only the red lines); `block with no file scope` is an info line, not red, and the UNDELIVERABLE exemption for block-with-check stays.
+- .claude/hooks/defects-inject.sh: `injected_as` lost its block branch; header comment and output header no longer mention the gate / "no check guards them"; bash lists card files (fixtures/ and README/INDEX any case skipped), exits with none, greps `tool:` over card files only; `reset` calls skip the pre-filter.
+- docs/defects/README.md: the `block` status paragraph only.
+- tests: defects.test.sh `--files` section (fail/pass fixture, scopes, exit 2 cases, audit line); inject.test.sh BLOCKNEVER/CMDNEVER now expected, O3 empty-hive and README-`tool:` cases.
+- .claude/hooks/defects_lib.py unchanged: `card_files` already had the needed exclusions.
+- Surprise: the latency part is over its 200/100 ms medians on this loaded box with the HEAD hook too (Bash 234 ms, HEAD copy).
 
 ## Findings
+
+## Red receipt
+- command: bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh
+- exit: 1
+- tests: a9301a247e5fdedc1ba27e3f9296568df7a78daad4b837989170d2902c8a64b5 (tests/defects.test.sh, tests/inject.test.sh)
+- impl: d1177b63f7aa2aeba15feb5c9fe5f543711cca99aaa3c118501707ad14c3a26e
+- stamped: 2026-11-09T12:56:41Z
+
+```
+--- defects-check --files: block checks on a story's files (mass-audit 01, D3)
+::error::defects-check --files: matching files that pass every block check -> exit 0, no red line
+::error::defects-check --files: each check ran once per matching file, not on others
+::error::defects-check --files: a file outside every glob, a cmd:/tool: scope, a text and a revoked card run nothing
+  ok    defects-check --files: no debt, index or info lines, only red lines
+::error::defects-check --files with no file -> exit 2
+  ok    defects-check --files with no python -> exit 2
+  ok    defects-check --files with no parser -> exit 2
+::error::defects-check --files: the audit names a block card with no glob paths: as 'block with no file scope'
+--- usage
+  ok    two arguments -> exit 2
+  ok    an empty argument -> exit 2
+defects.test.sh: FAILED
+```
