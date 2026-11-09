@@ -6,8 +6,6 @@ worker: worker-code
 model: opus
 wave: 6
 blocked_by: []
-red: required
-red_reason:
 ---
 
 # Repair round 2
@@ -28,89 +26,17 @@ No brief ask is RED in round 2 - the findings below are the whole task.
 - [regression] PART telemetry:launchers FAIL 79s cap 300s
 
 ## Files
-- .claude/hooks/defects-inject.sh
-- scripts/defects-check.sh
-- .claude/hooks/defects_lib.py
-- docs/defects/README.md
-- tests/inject.test.sh
-- tests/defects.test.sh
-- .claude/hooks/git-guard.sh
-- tests/maintenance.test.sh
-- .claude/hooks/defect-intake.sh
 - tests/intake.test.sh
-- install.sh
-- .claude/settings.json
 - tests/telemetry.test.sh
-- scripts/cycle.sh
-- tests/cycle.test.sh
-- tests/council.test.sh
-- .claude/workflows/vulyk-cycle.js
-- tests/driver.test.sh
-- docs/model-cascade.md
-- .claude/hooks/top-model-brief.sh
-- tests/model-profile.test.sh
-- scripts/top-model.sh
-- scripts/redact.sh
-- .claude/hooks/handoff.py
-- .claude/hooks/handoff.sh
-- tests/handoff-hooks.test.py
-- tests/handoff.test.sh
-- scripts/ship-check.sh
-- scripts/scope-check.sh
-- scripts/wave-check.sh
-- templates/plan.md
-- tests/solo.test.sh
-- scripts/vulyk-update.sh
-- .claude/hooks/vulyk-update-check.sh
-- scripts/telemetry.sh
-- scripts/lib.sh
-- .github/workflows/ci.yml
-- .claude/hooks/anomaly-scan.sh
-- scripts/leak-check.sh
-- scripts/injection-check.sh
-- .claude/hooks/skill-usage-counter.sh
-- docs/adr/032-story-trust-from-git.md
-- docs/adr/025-red-receipt.md
-- docs/adr/001-cycle-state-contract.md
-- docs/cycle.md
-- docs/hooks-reference.md
-- CLAUDE.md
-- .claude/agents/lead-review.md
-- .claude/agents/worker-code.md
-- .claude/commands/vulyk-build.md
-- .claude/commands/vulyk-plan.md
-- .claude/commands/vulyk-ship.md
-- CITATION.cff
-- docs/grill/2026-10-07-sdd-course-improvements.md
-- docs/specs/constitution-merge/brief.md
-- docs/specs/token-audit/evidence/forensics.md
-- docs/specs/token-audit/report.md
-- tests/e2e.test.sh
 
 ## Verification
 `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh`
-`bash tests/maintenance.test.sh`
-`bash tests/telemetry.test.sh --part wiring && bash tests/telemetry.test.sh --part install`
-`git ls-files '*.json' | xargs -n1 jq -e . > /dev/null`
-`bash tests/cycle.test.sh --part ship && bash tests/cycle.test.sh --part close && bash tests/cycle.test.sh --part red`
-`bash tests/council.test.sh --part verbs && bash tests/council.test.sh --part close`
-`bash tests/driver.test.sh`
-`bash tests/model-profile.test.sh`
-`bash tests/cycle.test.sh --part ship && bash tests/cycle.test.sh --part close`
-`bash tests/cycle.test.sh --part gates && bash tests/cycle.test.sh --part hooklog`
-`bash tests/solo.test.sh`
-`bash tests/telemetry.test.sh --part install-xp && bash tests/telemetry.test.sh --part scan`
-`bash tests/cycle.test.sh --part red && bash tests/cycle.test.sh --part close`
-`bash tests/council.test.sh --part suite && bash tests/council.test.sh --part hardening`
-`bash tests/telemetry.test.sh --part install && bash tests/telemetry.test.sh --part install-xp`
-`bash tests/cycle.test.sh --part bsd`
-`git ls-files '*.sh' | xargs -n1 bash -n`
-`bash tests/cycle.test.sh --part gates`
-`bash tests/telemetry.test.sh --part install-xp && bash tests/telemetry.test.sh --part install`
-`bash tests/telemetry.test.sh --part install-xp`
+`bash tests/telemetry.test.sh --part wrapper && bash tests/telemetry.test.sh --part wrapper2`
+`bash tests/telemetry.test.sh --part wrapper3 && bash tests/telemetry.test.sh --part launchers`
 `bash tests/telemetry.test.sh --part install-xp2`
-`bash tests/telemetry.test.sh --part install`
-`bash tests/telemetry.test.sh --part wiring`
-`bash tests/e2e.test.sh`
-`bash tests/council.test.sh --part escalate`
-`bash tests/council.test.sh --part suite && bash tests/council.test.sh --part suite2`
+`git ls-files '*.sh' | xargs -n1 bash -n`
+
+## Implementation notes
+- Revised by the Queen: the generated Files and Verification inherited all 18 stories; the finding is test fixtures only, so the story names the two test files whose parts went red and those parts (install-xp2 stays as the ask-18 guard). Only the Critical finding above is in scope; the seats' Minor and UNASKED lines are not.
+- install.sh is correct per both reviewers and council-opus (ask 18 GREEN): do not edit it. Fix the fixtures: a hive that models an upgrade wiring these hooks pins an installed release that did not yet ship them (as install-xp2's v0.31.0 neighbour or the library part's `rm -f vulyk-version` do), so the wrapper-form wiring each test checks keeps its coverage; assert the `unwired` line only where a test means an owner's removal.
+- red mark dropped by the Queen: the change touches no implementation (tests only, HEAD's install.sh already behaves as ask 18 wants), so no test can fail before an implementation edit and stamp-red has nothing to seal; the proof is the five red parts going green in this story's verification.
