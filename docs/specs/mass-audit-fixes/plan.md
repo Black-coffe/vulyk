@@ -190,6 +190,11 @@ describes how to exploit the old behaviour (public repo).
 
 ## Plan deltas
 
+- 2026-11-09, story 06 NEEDS_CONTEXT: one `top-model.sh` call for the brief needs a combined mode, so
+  `scripts/top-model.sh` joins story 06's `## Files` (additive `--brief`, no other mode changes); the economy
+  AC follows the Goal's rule (no family left: retry on opus, `retry_same_family: true`), a second same-family
+  case beside Tier 4 under `sonnet-builds` (narrows the I3 assumption the owner saw).
+
 <!--
 The lines below are the cycle's confirmation markers (docs/cycle.md); each placeholder is replaced by
 the command or script that owns it, and scripts/ship-check.sh reads them all. Approved is the owner's
