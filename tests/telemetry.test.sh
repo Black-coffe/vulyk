@@ -1545,6 +1545,8 @@ jq '.hooks.PreCompact[0].hooks |= map(select(.command | contains("context-guard.
   "$UWS" > "$T/xp-unwired.json" && cat "$T/xp-unwired.json" > "$UWS"
 cp "$UWS" "$T/xp-unwired.before"
 bash "$SRC/install.sh" "$UW" --upgrade --telemetry off > "$T/xp-unwired-up.out" 2>&1
+printf '0.49.0
+' > "$UW/.claude/vulyk-version"   # --check from the same pinned release: no v<VERSION> tag exists before the release
 bash "$SRC/install.sh" "$UW" --upgrade --check --telemetry off > "$T/xp-unwired-chk.out" 2>&1
 expect_eq "an unwired shipped hook is not named on upgrade: two unwired lines on --upgrade and on --check" "2 2" \
   "$(grep -c '^  unwired ' "$T/xp-unwired-up.out") $(grep -c '^  unwired ' "$T/xp-unwired-chk.out")"
