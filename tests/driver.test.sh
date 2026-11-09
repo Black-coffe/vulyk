@@ -658,11 +658,12 @@ const blindPromptsClean = (r) => r.dispatches
   // --- ab-run-fixes C10: checkpoint_min 0 returns checkpoint at the first boundary after work, and releases.
   // Elapsed time is args.launched_at (epoch seconds, the Queen's) against the `now` a verb answer carries.
   const T0 = 1762700000;
-  const at = (o, now) => ({ ...o, now });
+  // the real advance and suite lines carry `now` inside `status` only (cmd_status prints it), not at the top level
+  const at = (o, now) => ({ ...o, status: { ...o.status, now } });
   {
     const CP = { ...ARGS, checkpoint_min: 0, launched_at: T0 };
     const adv = (st, extra) => at({ ok: true, verb: 'advance', exit: 0, next: st.next, steps: [], rejected: [], status: st, ...extra }, T0);
-    const suiteDone = at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: 0, steps: 0, done: true, suite: 'none' }, T0);
+    const suiteDone = at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: 0, steps: 0, done: true, suite: 'none', status: round('review') }, T0);
     const isCp = (res, next) => res && res.status === 'checkpoint' && res.next === next && typeof res.elapsed_min === 'number' && !res.stop
     const w = await run(CP, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(build([story(2)]))], [RELEASE, releaseOk]] });
     check(isCp(w.result, 'build:1') && w.dispatches.length === 1 && w.mismatches.length === 0 && w.clerkCmds[w.clerkCmds.length - 1] === RELEASE,
@@ -670,7 +671,7 @@ const blindPromptsClean = (r) => r.dispatches
     const c = await run(CP, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(round('review'))], [RELEASE, releaseOk]] });
     check(isCp(c.result, 'dispatch:review') && c.dispatches.length === 1 && c.suiteCmds.length === 0 && c.clerkCmds[c.clerkCmds.length - 1] === RELEASE,
       'checkpoint: after a wave, before the gate and the seats', { result: c.result, s: c.suiteCmds.length });
-    const notDone = (k) => at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: k, steps: 3, done: false, suite: 'ok' }, T0);
+    const notDone = (k) => at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: k, steps: 3, done: false, suite: 'ok', status: round('review') }, T0);
     const g = await run(CP, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]], suite: (cmd, k) => notDone(k + 1) });
     check(isCp(g.result, 'dispatch:review') && g.suiteCmds.length === 1 && g.dispatches.length === 0 && g.clerkCmds[g.clerkCmds.length - 1] === RELEASE,
       'checkpoint: after one gate step, before the next', { result: g.result, s: g.suiteCmds.length });

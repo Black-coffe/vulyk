@@ -116,7 +116,10 @@ const ask = async (cmd) => {
   let parsed = null
   try { parsed = JSON.parse(line) } catch { /* not JSON */ }
   if (parsed === null || typeof parsed !== 'object') throw new BadLine(line)
-  if (Number.isFinite(epoch(parsed.now))) verbNow = epoch(parsed.now)
+  // `now` sits at the top level of an emit() line, and only inside `status` on advance and suite
+  const now = Number.isFinite(epoch(parsed.now)) ? epoch(parsed.now)
+    : epoch(parsed.status !== null && typeof parsed.status === 'object' ? parsed.status.now : undefined)
+  if (Number.isFinite(now)) verbNow = now
   return parsed
 }
 

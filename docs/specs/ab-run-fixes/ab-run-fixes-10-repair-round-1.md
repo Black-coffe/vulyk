@@ -1,13 +1,14 @@
 ---
 story: ab-run-fixes-10
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 5
 blocked_by: []
 red: required
-red_reason:
+red_reason: checkpoint: after a wave, before the next build wave, the claim released - got
+red_verified_at: 2026-11-09T00:01:52Z d11eb826808dad46f0730fcc8152953483bf921b77ad937e411e65b682106a80
 ---
 
 # Repair round 1
@@ -86,3 +87,32 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 `bash tests/telemetry.test.sh --part install`
 `bash scripts/py.sh -m py_compile .claude/hooks/*.py`
 `bash tests/council.test.sh --part advance`
+
+## Red receipt
+- command: bash tests/driver.test.sh
+- exit: 1
+- tests: d11eb826808dad46f0730fcc8152953483bf921b77ad937e411e65b682106a80 (tests/council.test.sh, tests/cycle.test.sh, tests/driver.test.sh, tests/maintenance.test.sh, tests/model-profile.test.sh, tests/telemetry.test.sh)
+- impl: b2b4cb7762bb680f34427f4dbcd61cb6f194536184b4cde649434d1536993494
+- stamped: 2026-11-09T00:01:52Z
+
+```
+::error::checkpoint: after a wave, before the next build wave, the claim released - got {"result":"","seq":"advance docs/specs/demo --stamp 0123456789abcdef --claim | advance docs/specs/demo --stamp 0123456789abcdef | advance docs/specs/demo --stamp 0123456789abcdef | status docs/specs/demo --json | release docs/specs/demo 0123456789abcdef"}
+::error::checkpoint: after a wave, before the gate and the seats - got {"result":"","s":1}
+::error::checkpoint: after one gate step, before the next - got {"result":{"spec":"docs/specs/demo","slug":"demo","stage":"04","tier":3,"branch":"vulyk/demo","head":"h1","wave_stories":[],"round":1,"court":"/abs/.vulyk/court/demo","round_dir":"docs/specs/demo/council/round-1","since":null,"seat_attempt":{"review":1},"seats":["review"],"red":[],"next":"dispatch:review","now":1762700000,"stop":{"verb":"suite","error":"suite not done after 32 calls"},"fallbacks":[]},"s":32}
+::error::checkpoint: after the gate finished, before the seat dispatch - got {"result":"","s":1,"d":1}
+  ok    checkpoint: a terminal state returns as itself, no checkpoint
+::error::checkpoint: 50 min after launched_at by the verb clock, the default fires - got ""
+  ok    checkpoint: 49 min, the default does not fire
+  ok    checkpoint: no launched_at, no time source - the checkpoint does not fire and the driver runs on
+  ok    checkpoint: no `now` in any verb answer - the checkpoint does not fire
+  ok    no queen-planner dispatch in any scenario
+113 passed, 5 failed
+```
+
+## Implementation notes
+- tests/driver.test.sh: C10 fake advance and suite lines now carry `now` inside `status` only, the real shape (cmd_status prints it; advance/suite printf no top-level `now`); red before the fix (5 checkpoint checks).
+- .claude/workflows/vulyk-cycle.js: `ask()` reads the top-level `now` (emit() lines), else `status.now` (advance, suite). Chose the driver fallback over adding `now` to two printfs: one place, covers every carried-status line.
+- tests/cycle.test.sh: the unmarked-repair frontmatter check compares 10 lines byte for byte, `narrow: true` being C5's one added line (the fixture is one ask, one file).
+- tests/e2e.test.sh: round 2 after the narrow repair asserts the C5 shape (story marked narrow, ROUND seats=review + narrow=1, no opus.md, suite log `SUITE: none - narrow repair round`) instead of a carried intent seat.
+- docs/defects/INDEX.md: regenerated with scripts/defects-index.sh (how-to 3); defects-check exits 0.
+- Review Minors not taken.

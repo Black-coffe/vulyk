@@ -1389,8 +1389,9 @@ sed -n '2,/^---$/p' "$rp" 2>/dev/null | grep -qx 'red_reason:' && echo "  ok    
   || { echo "::error::repair frontmatter lacks an empty red_reason: $(sed -n '1,12p' "$rp" 2>/dev/null)"; fail=1; }
 out="$(red_rp_spec redrq '')"
 rq=docs/specs/redrq/redrq-02-repair-round-1.md
-[ "$(sed -n '1,9p' "$rq" 2>/dev/null)" = "$(printf -- '---\nstory: redrq-02\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: 2\nblocked_by: []\n---')" ] \
-  && ! grep -q '^red' "$rq" && echo "  ok    an unmarked union writes the frontmatter byte for byte as before" \
+# ab-run-fixes C5: one ask reaching one non-test file is a narrow repair - `narrow: true` is the one line it adds
+[ "$(sed -n '1,10p' "$rq" 2>/dev/null)" = "$(printf -- '---\nstory: redrq-02\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: 2\nblocked_by: []\nnarrow: true\n---')" ] \
+  && ! grep -q '^red' "$rq" && echo "  ok    an unmarked union writes the frontmatter byte for byte as before, plus C5's narrow: true" \
   || { echo "::error::unmarked repair frontmatter changed: $(sed -n '1,12p' "$rq" 2>/dev/null) / $out"; fail=1; }
 
 echo "red-receipt: the repair keeps the mark unless every finding names a file and none a marked story's (0.40.1)"
