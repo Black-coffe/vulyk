@@ -364,6 +364,8 @@ done
 [ -d "$ICACHE/tree" ] && cp -a "$ICACHE/tree/." "$UP/" && cp "$ICACHE/install.out" "$T/up-install.out"
 if [ -f "$UP/.claude/settings.json" ]; then
   F="$UP/.claude/settings.json"
+  # v0.31.0 did not wire the AskUserQuestion answer hook: its absence is a hive from before it, not an owner's removal (Ask 18)
+  printf '0.31.0\n' > "$UP/.claude/vulyk-version"
   jq '.hooks.PreToolUse[0].matcher = "Edit|Write|MultiEdit|NotebookEdit|Bash"
       | .hooks.PostToolUse |= map(select(.matcher != "AskUserQuestion"))' "$F" > "$T/old.json" && mv "$T/old.json" "$F"
   bash "$SRC/install.sh" "$UP" --upgrade --telemetry off > "$T/up.out" 2>&1

@@ -1,7 +1,7 @@
 ---
 story: mass-audit-fixes-19
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 6
@@ -40,3 +40,6 @@ No brief ask is RED in round 2 - the findings below are the whole task.
 - Revised by the Queen: the generated Files and Verification inherited all 18 stories; the finding is test fixtures only, so the story names the two test files whose parts went red and those parts (install-xp2 stays as the ask-18 guard). Only the Critical finding above is in scope; the seats' Minor and UNASKED lines are not.
 - install.sh is correct per both reviewers and council-opus (ask 18 GREEN): do not edit it. Fix the fixtures: a hive that models an upgrade wiring these hooks pins an installed release that did not yet ship them (as install-xp2's v0.31.0 neighbour or the library part's `rm -f vulyk-version` do), so the wrapper-form wiring each test checks keeps its coverage; assert the `unwired` line only where a test means an owner's removal.
 - red mark dropped by the Queen: the change touches no implementation (tests only, HEAD's install.sh already behaves as ask 18 wants), so no test can fail before an implementation edit and stamp-red has nothing to seal; the proof is the five red parts going green in this story's verification.
+- tests/intake.test.sh: the --upgrade wiring fixture pins vulyk-version 0.31.0 (no AskUserQuestion answer hook then), so the missing block is wired, not read as a removal.
+- tests/telemetry.test.sh: wrapper_hive drops vulyk-version (as the library part does): v0.31.0 already wired intake/inject/reset, so only "no installed release" keeps the host-form wiring coverage for wrapper, wrapper2, wrapper3, launchers.
+- Repros rerun: intake functional 118/0, telemetry wrapper 11/0; install.sh untouched.

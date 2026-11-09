@@ -2364,6 +2364,7 @@ wrapper_hive() { # wrapper_hive <name> <cmd-of vulyk-update-check.sh> <cmd-of an
   # rebuilds the bash-c one with it, post-046-tails)
   local d="$T/hive-wrap-$1" s="$T/hive-wrap-$1/.claude/settings.json" upd="$2" scan="$3"
   fresh_install "$d"
+  rm -f "$d/.claude/vulyk-version"   # no installed release: the defect entries it lacks are wired, not read as a removal (Ask 18)
   jq -n --arg upd "$upd" --arg scan "$scan" --arg tmb "${upd/vulyk-update-check.sh/top-model-brief.sh}" \
     '{hooks:{SessionStart:[{hooks:[{type:"command",command:$upd},{type:"command",command:$tmb}]}],
              SessionEnd:[{hooks:[{type:"command",command:$scan}]}]}}' > "$s"
