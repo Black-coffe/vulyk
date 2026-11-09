@@ -190,6 +190,10 @@ describes how to exploit the old behaviour (public repo).
 
 ## Plan deltas
 
+- 2026-11-09, owner choice on story 04's reading: ask 18; story 17 (wave 4, after story 11 on the same files) makes
+  `--upgrade` name every unwired shipped hook with its wiring command. **Rollout to-do (ship):** per hive, wire the
+  hooks the old installer dropped; leave a hook the hive owner removed on purpose.
+
 - 2026-11-09, owner mid-build: «Почини драйвер сразу, не жди конца сборки». Ask 17 added to brief.md; story 16
   (`mass-audit-fixes-16-driver-claim-proof`, wave 2, files `vulyk-cycle.js` + `tests/driver.test.sh`, disjoint from
   story 08) proves a garbled `--claim` line by a short re-claim. The long `status` relay through the Haiku clerk
