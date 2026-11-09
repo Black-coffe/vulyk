@@ -148,4 +148,4 @@ is missing or unparsable.
 **Council:** RED round 1, 2026-11-08, at c89d3bc, pack d2df65182f50
 **Council:** RED round 2, 2026-11-09, at bbf9e69, pack 0e4daa64bf1d - red: 8
 **Council:** GREEN round 3, 2026-11-09, at 02e9f3f, pack 530577feaddb
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Shipped:** 0.49.0, 2026-11-09, at 0e69284 - merged to main, publish pending
