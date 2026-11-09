@@ -146,4 +146,5 @@ is missing or unparsable.
 **Branch:** vulyk/ab-run-fixes
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-11-08, at c89d3bc, pack d2df65182f50
+**Council:** RED round 2, 2026-11-09, at bbf9e69, pack 0e4daa64bf1d - red: 8
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
