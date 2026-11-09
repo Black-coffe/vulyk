@@ -202,7 +202,7 @@ a marker: the scripts read the first line that does.
 There is no default tier: `cycle.sh open-round` refuses to open a round while the `**Tier:**` line above
 is missing or unparsable.
 -->
-**Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
+**Approved:** Andrei, 2026-11-09 (ask 16 confirmed; assumptions kept as written)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path (--go, Tier 1): "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"). Alternative to **Approved:** above.>
 **Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
