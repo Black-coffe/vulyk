@@ -272,8 +272,9 @@ o="$(ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Blue, R
 printf '%s' "$o" | expect "P10-09 neighbour: labels joined by \", \" are each a decision (Blue)" "[VULYK] decision: «Blue»"
 printf '%s' "$o" | expect "P10-09 neighbour: ... (Red)" "[VULYK] decision: «Red»"
 QC='"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Ship?","header":"Ship","multiSelect":false,"options":[{"label":"Yes, ship it","description":"go"},{"label":"Yes","description":"later"}]}]}'
+p="{$QC,\"tool_response\":{\"answers\":{\"Ship?\":\"Yes, ship it\"}}}"   # a variable: bash 3.2 brace-expands it inside "$(...)"
 expect_eq "P10-09 neighbour: a label holding a comma is one decision" "[VULYK] decision: «Yes, ship it» on «Ship?»" \
-  "$(ctx "$HIVE" "{$QC,\"tool_response\":{\"answers\":{\"Ship?\":\"Yes, ship it\"}}}" answer)"
+  "$(ctx "$HIVE" "$p" answer)"
 ctx "$NOLIB" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Blue\"}}}" answer | expect "answer without docs/defects/ is silent" "(silent)"
 
 # --- what stays silent ------------------------------------------------------------------------

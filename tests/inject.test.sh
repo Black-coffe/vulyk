@@ -392,9 +392,10 @@ started() { # started <root> <json>   -> yes when the hook tried a python, else 
   printf '%s' "$2" | env -u VULYK_PY PATH="$T/markbin:$PATH" CLAUDE_PROJECT_DIR="$1" bash "$HOOK" >/dev/null 2>&1
   [ -e "$T/py-started" ] && echo yes || echo no
 }
+# bash 3.2 brace-expands a JSON literal with \" inside "$(...)": each payload is built in a variable first.
 for t in Agent WebFetch mcp__chrome-devtools__click BashOutput; do
-  expect_eq "P10-11: $t in a library with no tool: card starts no python" no \
-    "$(started "$HIVE" "{\"session_id\":\"p11\",\"tool_name\":\"$t\",\"tool_input\":{\"url\":\"https://x\"}}")"
+  p="{\"session_id\":\"p11\",\"tool_name\":\"$t\",\"tool_input\":{\"url\":\"https://x\"}}"
+  expect_eq "P10-11: $t in a library with no tool: card starts no python" no "$(started "$HIVE" "$p")"
 done
 expect_eq "P10-11 neighbour: an Agent call in a library with a tool: card still starts python" yes \
   "$(started "$H2" '{"session_id":"p11","tool_name":"Agent","tool_input":{"prompt":"x"}}')"
@@ -415,15 +416,14 @@ printf '# Defects\n`tool:WebFetch`\n' > "$ED/README.md"; printf '# Index\ntool:\
 printf -- '---\nid: fx\nstatus: text\npaths: ["**", "tool:.*"]\n---\n## Never\n- x\n' > "$ED/fixtures/fx.md"
 cp "$ED/fixtures/fx.md" "$ED/pay/ReadMe.MD"; cp "$ED/fixtures/fx.md" "$ED/pay/index.md"
 printf 'not a card\n' > "$ED/notes.txt"
-expect_eq "O3: no card file -> an Edit starts no python" no \
-  "$(started "$EMPTY" "{\"session_id\":\"o3\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$EW/src/a.py\"}}")"
+EDIT_O3="{\"session_id\":\"o3\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$EW/src/a.py\"}}"
+expect_eq "O3: no card file -> an Edit starts no python" no "$(started "$EMPTY" "$EDIT_O3")"
 expect_eq "O3: no card file -> a Bash call starts no python" no \
   "$(started "$EMPTY" '{"session_id":"o3","tool_name":"Bash","tool_input":{"command":"ls src"}}')"
 expect_eq "O3: no card file -> an Agent call starts no python" no \
   "$(started "$EMPTY" '{"session_id":"o3","tool_name":"Agent","tool_input":{"prompt":"x"}}')"
 printf -- '---\nid: one\nstatus: block\ncheck: false <arg>\npaths: ["src/**"]\n---\n## Never\n- x\n' > "$ED/pay/one.md"
-expect_eq "O3 neighbour: one foldered card file -> the Edit starts python" yes \
-  "$(started "$EMPTY" "{\"session_id\":\"o3\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$EW/src/a.py\"}}")"
+expect_eq "O3 neighbour: one foldered card file -> the Edit starts python" yes "$(started "$EMPTY" "$EDIT_O3")"
 expect_eq "O3 neighbour: ... and an Agent call still does not (no tool: in a card file)" no \
   "$(started "$EMPTY" '{"session_id":"o3","tool_name":"Agent","tool_input":{"prompt":"x"}}')"
 

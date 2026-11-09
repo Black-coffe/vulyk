@@ -200,7 +200,9 @@ case "$st_ab" in
 esac
 BSDBIN="$(mktemp -d)"   # date without -r <file> and stat without -c: the BSD pair
 printf '#!/bin/sh\ncase " $* " in *" -r "*) exit 1 ;; esac\nexec %s "$@"\n' "$(command -v date)" > "$BSDBIN/date"
-printf '#!/bin/sh\n[ "$1" = -f ] && [ "$2" = %%m ] && exec %s -c %%Y "$3"\nexit 1\n' "$(command -v stat)" > "$BSDBIN/stat"
+# -f %m is answered by the real stat as GNU (-c %Y) or, on a Mac, as itself; any other call fails like a BSD stat's
+printf '#!/bin/sh\n[ "$1" = -f ] && [ "$2" = %%m ] && { %s -c %%Y "$3" 2>/dev/null || exec %s -f %%m "$3"; exit 0; }\nexit 1\n' \
+  "$(command -v stat)" "$(command -v stat)" > "$BSDBIN/stat"
 chmod +x "$BSDBIN/date" "$BSDBIN/stat"
 touch -t 209901010000 "docs/specs/a b/ab 01 x.md"   # newer than any snapshot
 PATH="$BSDBIN:$PATH" bash scripts/state.sh >/dev/null
