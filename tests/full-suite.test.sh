@@ -44,8 +44,11 @@ printf 'sleep 30\n' > "$S/hang.sh"
 printf 'sleep 3\n' > "$S/slow.sh"
 printf ': > "%s/started-$1"\n' "$T" > "$S/mark.sh"
 printf 'echo "SKIP: no such tool"\nexit 77\n' > "$S/skip.sh"
-# lock.sh: fails when another lock.sh holds the lock - two at once means the --jobs cap broke
-printf 'mkdir "%s/lock" 2>/dev/null || { echo overlap; exit 1; }\nsleep 2\nrmdir "%s/lock"\n' "$T" "$T" > "$S/lock.sh"
+# lock.sh: fails when another lock.sh is alive at the same time - two at once means the --jobs cap broke.
+# Each copy leaves a live.<pid> mark and watches for a second one for up to 5 s, so the check needs the two jobs
+# to start within 5 s of each other, not to keep a 2 s mkdir lock under a loaded runner (a CI flake on ubuntu).
+mkdir -p "$T/live"
+printf 'm="%s/live/$$"; : > "$m"; n=0\nwhile [ "$n" -lt 50 ]; do\n  set -- "%s/live"/*\n  [ "$#" -gt 1 ] && { echo overlap; rm -f "$m"; exit 1; }\n  sleep 0.1; n=$((n + 1))\ndone\nrm -f "$m"\n' "$T" "$T" > "$S/lock.sh"
 
 echo "== all ok"
 run 300 "bash $S/ok.sh
