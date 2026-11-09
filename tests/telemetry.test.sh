@@ -1297,6 +1297,26 @@ cat "$T/ownset.out" | expect "an owner's settings.json gets the scan on SessionE
 cat "$T/ownset.out" | expect_absent "and no Stop scan wiring" "-> Stop: anomaly-scan.sh"
 expect_eq "and no learnings hook" "0" "$(grep -c 'session-end-learnings' "$OWNSET/.claude/settings.json")"
 
+# mass-audit-fixes-11 (S7-shell): VULYK's own map never ships into a hive, only the skeleton README.
+expect_eq "fresh install: the manifest's only memory/map/ entry is its README" "memory/map/README.md" \
+  "$(tr -d '\r' < "$TGT/.claude/vulyk-manifest" | grep '^memory/map/' | paste -sd' ' -)"
+expect_eq "fresh install: memory/map in the hive holds the README alone" "README.md" \
+  "$(ls "$TGT/memory/map" | tr -d '\r' | paste -sd' ' -)"
+# O1: the one-pass copy prints what the per-file loop printed - one `copy` line per shipped path, in the same
+# format (the manifest is the fixture; CLAUDE.md is the constitution's own copy line, outside copy_tree) - and
+# every listed path is on disk.
+tr -d '\r' < "$TGT/.claude/vulyk-manifest" | sed 's/^/  copy           /' | LC_ALL=C sort > "$T/o1-copy.want"
+grep '^  copy           ' "$T/install.out" | tr -d '\r' | grep -vx '  copy           CLAUDE.md' | LC_ALL=C sort > "$T/o1-copy.got"
+expect_eq "one-pass copy: a fresh install's copy lines are the manifest, line for line (fixture diff)" "" \
+  "$(diff "$T/o1-copy.want" "$T/o1-copy.got" 2>&1)"
+expect_eq "one-pass copy: every manifest path was copied" "0" \
+  "$(tr -d '\r' < "$TGT/.claude/vulyk-manifest" | while IFS= read -r f; do [ -f "$TGT/$f" ] || echo "$f"; done | wc -l | tr -d ' ')"
+# O5 + S6-shell: a counting git shim and the claude stub listing the mod at an older version than the release.
+REALGIT="$(command -v git)"; GSHIM="$T/git-shim"; mkdir -p "$GSHIM"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$T/git.log" "$REALGIT" > "$GSHIM/git"; chmod +x "$GSHIM/git"
+REL_VER="$(tr -d '[:space:]' < "$SRC/VERSION")"
+cc_list_at() { printf '  vulyk\n' > "$T/cc-mkt"; printf '  \342\235\257 vulyk-pulse@vulyk\n    Version: %s\n    Scope: user\n' "$1" > "$T/cc-list"; : > "$T/cc.log"; }
+
 # --telemetry on changes that one row's value and nothing else in the constitution
 PROF_BEFORE="$(grep -v '^| Telemetry |' "$TGT/CLAUDE.md")"
 bash "$SRC/install.sh" "$TGT" --upgrade --telemetry on > "$T/up-on.out" 2>&1
@@ -1307,10 +1327,22 @@ expect_eq "the row is still there exactly once" "1" "$(grep -c '^| Telemetry |' 
 
 # an answered row survives a plain upgrade byte for byte, and is not asked about again
 CONST_BEFORE="$(cat "$TGT/CLAUDE.md")"
-bash "$SRC/install.sh" "$TGT" --upgrade > "$T/up-plain.out" 2>&1
+cc_list_at 0.0.1; : > "$T/git.log"
+printf '%s\n' 'scripts/../CLAUDE.md' >> "$TGT/.claude/vulyk-manifest"   # S1-shell: a bad line naming the constitution
+PATH="$GSHIM:$PATH" VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$TGT" --upgrade > "$T/up-plain.out" 2>&1
+cat "$T/up-plain.out" | expect "a dot-dot manifest line on a plain --upgrade: skip (bad path), the constitution stays" \
+  "skip (bad path) scripts/../CLAUDE.md"
 expect_eq "an answered row is byte-identical after --upgrade" "1" \
   "$([ "$CONST_BEFORE" = "$(cat "$TGT/CLAUDE.md")" ] && echo 1 || echo 0)"
 cat "$T/up-plain.out" | expect_absent "no question for a hive that already answered" "Enable telemetry?"
+expect_eq "an up-to-date --upgrade runs git log --all zero times (counting git shim)" "0" "$(grep -c 'log --all' "$T/git.log")"
+tr -d '\r' < "$TGT/.claude/vulyk-manifest" | sed 's/^/  skip (exists)  /' | LC_ALL=C sort > "$T/o1-skip.want"
+grep '^  skip (exists)  ' "$T/up-plain.out" | tr -d '\r' | LC_ALL=C sort > "$T/o1-skip.got"
+expect_eq "one-pass copy: an up-to-date --upgrade's skip lines are the manifest, line for line (fixture diff)" "" \
+  "$(diff "$T/o1-skip.want" "$T/o1-skip.got" 2>&1)"
+expect_eq "the mod listed at an older version than the release: the upgrade runs plugin update" "1" \
+  "$(grep -c "plugin update vulyk-pulse@vulyk --scope user" "$T/cc.log")"
+cat "$T/up-plain.out" | expect "... and says the marketplace head is not pinned to a ref" "mod: marketplace head, not pinned"
 
 # --check reports the pending insertion and writes nothing
 sed_inplace '/^| Telemetry |/d' "$TGT/CLAUDE.md"
@@ -1337,6 +1369,14 @@ cat "$T/nomark-upgrade.out" | expect "marker-less Profile: warns and names the r
   "warning: Profile block has no markers - not writing | Telemetry | on |; add the row by hand"
 expect_eq "marker-less Profile: the file is unchanged" "1" \
   "$([ "$NOMARK_BEFORE" = "$(cat "$NOMARK/CLAUDE.md")" ] && echo 1 || echo 0)"
+
+# mass-audit-fixes-11 (S6-shell): the mod already at the release's version is not updated again.
+cc_list_at "$REL_VER"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$TGT" --upgrade --telemetry off > "$T/up-modcur.out" 2>&1
+expect_eq "the mod listed at the release's version: no plugin update, no marketplace update" "0 0" \
+  "$(grep -c 'plugin update' "$T/cc.log") $(grep -c 'plugin marketplace update' "$T/cc.log")"
+cat "$T/up-modcur.out" | expect "... and the log says it is current" "current        vulyk-pulse@vulyk ($REL_VER"
+rm -f "$T/cc-list" "$T/cc-mkt"; : > "$T/cc.log"
 
 # ab-run-fixes-06: a bare install asks nothing even with a terminal and writes off; only
 # --telemetry ask puts the question. Through a pseudo-terminal when util-linux `script` is on PATH.
@@ -1464,10 +1504,30 @@ awk '/VULYK:COMMANDS:START/ { inb = 1 }
 cmdblock() { awk '/VULYK:COMMANDS:START/,/VULYK:COMMANDS:END/' "$1"; }
 cmdblock "$A9/CLAUDE.md" | expect "the hive's block holds the old python cell" '| Python | `python -m py_compile .claude/hooks/*.py` |'
 cmdblock "$A9/CLAUDE.md" > "$T/xp-cells.before"
+printf '{\n  "env": {}\n}\n' > "$A9/.claude/settings.local.json"   # mass-audit-fixes-11: a hive with no model pin
 bash "$SRC/install.sh" "$A9" --upgrade --telemetry off > "$T/xp-cells.out" 2>&1
 cmdblock "$A9/CLAUDE.md" > "$T/xp-cells.after"
 expect_eq "install.sh --upgrade keeps the hive's ## Commands block (old python cell included) byte-identical" "0" \
   "$(cmp -s "$T/xp-cells.before" "$T/xp-cells.after"; echo $?)"
+expect_eq "a hive with no model pin gets it on --upgrade, as before" "opus" \
+  "$(jq -r '.model // "unset"' "$A9/.claude/settings.local.json" | tr -d '\r')"
+cat "$T/xp-cells.out" | expect "... and the log says so" "pinned: model = opus"
+
+# mass-audit-fixes-11 (S1-shell): the removal loop trusts no manifest line with a `..` segment, a leading `/`
+# or a backslash; a normal retired path still leaves. (S4-shell): an owner's own session model survives.
+BP="$T/hive-xp-badpath"; fresh_install "$BP"
+printf 'victim\n' > "$BP/VICTIM.md"; mkdir -p "$BP/a"; printf 'victim\n' > "$BP/a\\b.sh"
+printf 'retired\n' > "$BP/scripts/retired-xp.sh"
+printf '%s\n' 'scripts/../VICTIM.md' '/etc/x' 'a\b.sh' 'scripts/retired-xp.sh' >> "$BP/.claude/vulyk-manifest"
+printf '{\n  "model": "sonnet"\n}\n' > "$BP/.claude/settings.local.json"
+bash "$SRC/install.sh" "$BP" --upgrade --telemetry off > "$T/xp-badpath.out" 2>&1
+expect_eq "three bad manifest lines: three skip (bad path) lines" "3" "$(grep -c '  skip (bad path) ' "$T/xp-badpath.out")"
+cat "$T/xp-badpath.out" | expect "... skip (bad path) names the dot-dot line" "skip (bad path) scripts/../VICTIM.md"
+expect_eq "... skip (bad path): every named file still present" "1 1" \
+  "$([ -f "$BP/VICTIM.md" ] && echo 1 || echo 0) $([ -f "$BP/a\\b.sh" ] && echo 1 || echo 0)"
+expect_eq "... and a normal retired path is still removed" "0" "$([ -e "$BP/scripts/retired-xp.sh" ] && echo 1 || echo 0)"
+expect_eq "an owner's model pin survives --upgrade" "sonnet" "$(jq -r '.model' "$BP/.claude/settings.local.json" | tr -d '\r')"
+cat "$T/xp-badpath.out" | expect "... and the log says it is kept" "kept: model = sonnet (yours)"
 fi # install-xp
 
 if part_on terminal; then

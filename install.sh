@@ -59,7 +59,10 @@ DEST="$(cd "$DEST" && pwd)"
 # .claude/mods/vulyk-watcher ships nothing since the mod was retired (0.29.0); it stays OWNED so an
 # upgrade removes the old tree through the manifest.
 OWNED=".claude/agents .claude/commands .claude/hooks .claude/mods/vulyk-pulse .claude/mods/vulyk-watcher .claude/skills/_meta .claude/workflows bootstrap templates scripts"
-owned() { local f="$1" t; for t in $OWNED; do case "$f" in "$t"/*) return 0 ;; esac; done; return 1; }
+# A manifest line is the hive's file, so it is trusted for nothing: a `..` segment, a leading `/` or a
+# backslash names a path outside the tree it claims (`scripts/../CLAUDE.md`), and is never owned.
+bad_path() { case "$1" in /*|*\\*|..|../*|*/..|*/../*) return 0 ;; esac; return 1; }
+owned() { local f="$1" t; bad_path "$f" && return 1; for t in $OWNED; do case "$f" in "$t"/*) return 0 ;; esac; done; return 1; }
 
 # VULYK's own working content never ships: its session learnings, its dev specs, and
 # anything Python compiled on the maintainer's machine. What DOES ship from these trees
@@ -81,6 +84,8 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     docs/specs/*)                 return 1 ;;   # vulyk's own dev specs (dir is still created)
     docs/adr/*|docs/wiki/*)       case "$f" in */README.md) return 0 ;; esac; return 1 ;;   # vulyk's own ADRs/wiki (dir still created; a skeleton README ships)
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
+    memory/map/.stale)            return 2 ;;   # runtime (below), named before the map's own rule
+    memory/map/*)                 case "$f" in memory/map/README.md) return 0 ;; esac; return 1 ;;   # VULYK's own code map; the skeleton README ships
     docs/defects/*)               case "$f" in docs/defects/README.md) return 0 ;; esac; return 1 ;;   # vulyk's own defect cards; the index skeleton ships
     .claude/vulyk-paperwork)      return 1 ;;   # each hive's own paperwork globs (lib.sh is_paperwork_path): never shipped, owned or removed
     .claude/vulyk-setup)          return 1 ;;   # each hive's own court setup (cycle.sh run_court_setup): never shipped, owned or removed
@@ -119,7 +124,8 @@ replace_file() { # replace_file <src> <dest> - copy beside, then rename over. An
 # conflict or with no base. A path the last install shipped that the hive no longer has stays
 # deleted. (ADR-005 amendment 2026-10-16; card upgrade-overwrites-host-edits.)
 SHIPPED_BLOBS=""; NO_HISTORY=""
-shipped_blobs() { # once per run, in the main shell: every blob id $SRC's history ever held under
+shipped_blobs() { # once per run, in the main shell, on the first release_copy (an up-to-date hive never
+  # pays for it): every blob id $SRC's history ever held under
   # OWNED - each v* tag and every commit (a hive hotfixed by hand between releases holds a commit's
   # copy, not a tag's). A source with no v* tag (a downloaded ZIP, a shallow checkout) cannot tell
   # an edit from a release copy, so it keeps the old rule - replace - and says so.
@@ -141,6 +147,7 @@ shipped_blobs() { # once per run, in the main shell: every blob id $SRC's histor
   } | sort -u > "$SHIPPED_BLOBS" || true
 }
 release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte some release's
+  [ -n "$SHIPPED_BLOBS" ] || shipped_blobs
   [ -n "$NO_HISTORY" ] && return 0
   local h; h="$(tr -d '\r' < "$DEST/$1" | git hash-object --stdin 2>/dev/null)" || return 1
   [ -n "$h" ] && grep -qxF "$h" "$SHIPPED_BLOBS"
@@ -179,12 +186,16 @@ upgrade_edited() { # upgrade_edited <rel> - a hive edit of a framework file: mer
   echo "  kept + new     $f -> $f.vulyk-new   (your edit kept; merge the new release in by hand)"
 }
 
-copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading a framework-owned file
-  local rel="$1" sc
-  ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' -print0 ) | while IFS= read -r -d '' f; do
+copy_tree() { # copy_tree <rel> - skip existing, unless upgrading a framework-owned file. The shippable paths are
+  # collected first and decided in the main shell (release_copy builds its blob list here, once); the new files
+  # then go over in one tar pass, and one awk prints the copy/skip lines, in find order, after any update line.
+  local rel="$1" sc f list plan
+  list="$(mktemp)"; plan="$(mktemp)"
+  ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' ) > "$list"
+  while IFS= read -r f <&3; do
     shippable "$f" && sc=0 || sc=$?
     if [ "$sc" -ne 0 ]; then
-      [ "$sc" -eq 2 ] && [ "$CHECK" = "--check" ] && echo "  would skip (runtime) $f"
+      if [ "$sc" -eq 2 ] && [ "$CHECK" = "--check" ]; then printf 'R %s\n' "$f" >> "$plan"; fi
       continue
     fi
     # Every path this run found shippable - copied, updated or skipped-as-existing alike -
@@ -200,17 +211,28 @@ copy_tree() { # copy_tree <rel> - file-by-file; skip existing, unless upgrading 
           upgrade_edited "$f"
         fi
       else
-        echo "  skip (exists)  $f"
+        printf 'S %s\n' "$f" >> "$plan"
       fi
-    elif [ -n "$UPGRADE" ] && owned "$f" && [ -f "$DEST/.claude/vulyk-manifest" ] \
-      && tr -d '\r' < "$DEST/.claude/vulyk-manifest" | grep -qxF "$f"; then
+    elif [ -n "$UPGRADE" ] && owned "$f" && grep -qxF "$f" "$OLD_LISTED"; then
       if [ "$CHECK" = "--check" ]; then echo "  would keep deleted $f"
       else echo "  kept deleted   $f   (the last install shipped it and this hive removed it)"; fi
     else
-      if [ "$CHECK" = "--check" ]; then echo "  would copy     $f"
-      else mkdir -p "$DEST/$(dirname "$f")"; cp -p "$SRC/$f" "$DEST/$f"; echo "  copy           $f"; fi
+      printf 'C %s\n' "$f" >> "$plan"
     fi
-  done
+  done 3< "$list"
+  if [ "$CHECK" != "--check" ]; then
+    sed -n 's/^C //p' "$plan" > "$list"
+    if [ -s "$list" ]; then   # tar keeps mode and mtime, as cp -p did, and makes the directories
+      ( cd "$SRC" && tar -cf - -T "$list" ) | ( cd "$DEST" && tar -xpf - )
+    fi
+  fi
+  awk -v chk="$CHECK" '
+    { v = substr($0, 1, 1); p = substr($0, 3) }
+    v == "R" { print "  would skip (runtime) " p; next }
+    v == "S" { print "  skip (exists)  " p; next }
+    v == "C" { print (chk == "--check" ? "  would copy     " : "  copy           ") p }
+  ' "$plan"
+  rm -f "$list" "$plan"
 }
 
 # The `## Commands` table in CLAUDE.md holds VULYK's OWN verification commands, which are wrong
@@ -1262,15 +1284,27 @@ install_mod() {
     echo "      $inst"
     return 0
   fi
-  if "$cc" plugin list 2>/dev/null | grep -qF "$id"; then
+  local listed; listed="$("$cc" plugin list 2>/dev/null || true)"
+  if grep -qF "$id" <<< "$listed"; then
     # Already on this machine: a user-scope GitHub install never refreshes itself, so each run
-    # brings it up to the release's mod (plugin.json version follows VERSION).
-    local mupd="claude plugin marketplace update vulyk" pupd="claude plugin update $id --scope user"
-    if [ "$CHECK" = "--check" ]; then
+    # brings it up to the release's mod (plugin.json version follows VERSION) - unless the user-scope
+    # entry already reads that version. `plugin update` takes no ref (2.1.x), so it updates to the
+    # marketplace head, and says so.
+    local mupd="claude plugin marketplace update vulyk" pupd="claude plugin update $id --scope user" have
+    have="$(ID="$id" awk '
+      { sub(/\r$/, ""); n = split($0, w, " ") }
+      n && w[n] == ENVIRON["ID"] { on = 1; ver = ""; next }
+      on && $1 == "Version:" { ver = $2 }
+      on && $1 == "Scope:" { if ($2 == "user" && !got) { got = 1; print ver } on = 0 }
+      NF == 0 { on = 0 }' <<< "$listed")"
+    if [ -n "$have" ] && [ "$have" = "$VER" ]; then
+      echo "  current        $id ($VER, user scope; no update needed)"
+    elif [ "$CHECK" = "--check" ]; then
       echo "  would update   $id (user scope, marketplace $MODS_REPO)"
     elif "$cc" plugin marketplace update vulyk >/dev/null 2>&1 &&
          "$cc" plugin update "$id" --scope user >/dev/null 2>&1; then
       echo "  update         $id (user scope, marketplace $MODS_REPO; a restart of claude applies it)"
+      echo "  mod: marketplace head, not pinned"
     else
       echo ""
       echo "  NOTE: the VULYK mod $id could not be updated on this machine. Run:"
@@ -1391,9 +1425,15 @@ ensure_gitattributes() {
   return 0
 }
 
-NEW_MANIFEST="$(mktemp)"
-trap 'rm -f "$NEW_MANIFEST" "$SHIPPED_BLOBS"' EXIT
-[ -n "$UPGRADE" ] && shipped_blobs
+NEW_MANIFEST="$(mktemp)"; OLD_LISTED="$(mktemp)"
+trap 'rm -f "$NEW_MANIFEST" "$OLD_LISTED" "$SHIPPED_BLOBS"' EXIT
+# The last install's manifest, read once for copy_tree's `kept deleted` lookup: CR dropped, a bad path left out.
+if [ -n "$UPGRADE" ] && [ -f "$DEST/.claude/vulyk-manifest" ]; then
+  while IFS= read -r f; do
+    f="${f%$'\r'}"
+    if [ -n "$f" ] && ! bad_path "$f"; then printf '%s\n' "$f"; fi
+  done < "$DEST/.claude/vulyk-manifest" > "$OLD_LISTED"
+fi
 for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs/adr docs/defects; do
   if [ -d "$SRC/$tree" ]; then copy_tree "$tree"; fi
 done
@@ -1425,6 +1465,7 @@ if [ -n "$UPGRADE" ]; then
     while IFS= read -r f; do
       f="${f%$'\r'}"                             # a CRLF checkout of the manifest (core.autocrlf)
       [ -n "$f" ] || continue
+      if bad_path "$f"; then echo "  skip (bad path) $f"; continue; fi   # never removed, never reported as yours
       grep -qxF "$f" "$NEW_MANIFEST" && continue   # still shipped this run
       if owned "$f"; then
         if retired_edited "$f"; then
@@ -1665,7 +1706,15 @@ fi
 # on a dry run (nothing to apply) and silent when already pinned; any other failure (no
 # python, an unparsable settings.local.json) is printed by the resolver itself and must
 # never fail the install - pinning a session is a convenience, not a precondition.
-if [ "$CHECK" = "--check" ]; then
+# On --upgrade a pin already there is the owner's (a deliberate /model choice): kept, never re-applied.
+OWN_MODEL=""
+if [ -n "$UPGRADE" ] && [ -f "$DEST/.claude/settings.local.json" ]; then
+  OWN_MODEL="$(tr -d '\r' < "$DEST/.claude/settings.local.json" \
+    | sed -n '/"model"[[:space:]]*:/{s/.*"model"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p;q;}')"
+fi
+if [ -n "$OWN_MODEL" ]; then
+  echo "  kept: model = $OWN_MODEL (yours)"
+elif [ "$CHECK" = "--check" ]; then
   echo "  would pin      Queen session to opus (scripts/top-model.sh --apply)"
 elif [ -f "$DEST/scripts/top-model.sh" ]; then
   # top-model.sh resolves its own root from CLAUDE_PROJECT_DIR, falling back to $(pwd) - and
