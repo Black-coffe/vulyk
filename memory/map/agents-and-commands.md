@@ -55,6 +55,9 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   `не подтверждено`; WebFetch ≤ 2; reply ≤ 60 lines.
 
 ## Commands - what each runs
+- **0.50 command changes (ADR-032):** `/vulyk-build` at Tier 2-4 opens only on `**Approved:**` or a Briefed line
+  with `--go`; a story the Queen changes after `NEEDS_CONTEXT` is committed `vulyk(<slug>): revised <story-id>`
+  before its worker reruns (`/vulyk-plan` step 9 likewise). Workers never run `stamp-red --baseline`.
 - **0.49 command changes:** `/vulyk-plan` sends no scout for an area with a fresh map slice; grill asks in batches
   of <= 4, no confirm question; horizon in an existing repo only with `--horizon`; Tier 3-4 approval starts the build
   in the same turn; plan committed before the approval stop. `/vulyk-bootstrap` takes facts from the repo, asks only
@@ -110,4 +113,4 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
   script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-11-09 (0.49.0 ab-run-fixes; prior 2026-11-06 0.48.0 build --show, status tool.check; prior 2026-11-04: 0.47.0 vulyk-ship ci wording; 0.45.0 gate split; ADR-013, 015, 020, 022, 023, 024, 025, 029)
+last-verified: 2026-11-09 (0.50.0 mass-audit-fixes; ADR-013, 015, 020, 022, 023, 024, 025, 029, 032)

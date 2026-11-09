@@ -64,7 +64,7 @@ re-run. No line numbers: `grep -n '^name()'`.
   `restore`, `reset --hard`, `clean -f`, `switch -f`, `branch -D`, `worktree remove -f`. Input with `agent_id` (subagent):
   every listed verb denied, no `git status`, unreadable quotes denied. Main session: denied only if `git status --porcelain`
   shows the affected paths dirty (clean -f/stash -u: untracked too); names 10 then `+N more`; stash drop/clear and
-  `branch -D` are subagent-only. Follows `cd`/`-C`. Fails open (no python, bad JSON, error: exit 0). `--check <file>`
+  `branch -D` are subagent-only. Follows `cd`/`-C`. Fails open (no python, bad JSON, error: exit 0). Python tried in order `$VULYK_PY`, python3, python, py; stdin read as UTF-8 (0.50). `--check <file>`
   (the card's check; `porcelain` field fakes status): exit 1 on deny. Python sits in a no-op heredoc below `exit 0`.
   Not covered: rm, `bash -c`, scripts/aliases. No env off-switch; owner removes the settings entry.
 - `.claude/hooks/handoff.sh` - skips a `python3` that is the Windows Store stub (exit 49) or fails to launch,
@@ -73,8 +73,10 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `model-profile.sh` (ADR-020) - `opus-builds|sonnet-builds|economy`; only `--set` writes; unknown =
   `sonnet-builds`; `--recommend` prints `sonnet-builds <plan>` on every plan (0.49). `top-model.sh`: `--floor` exit 1 prints `below floor`.
 - `defects-index.sh [--check|--grep <regex>|--counts]` (ADR-021) - no arg writes `docs/defects/INDEX.md`;
-  `--check` exit 1 `index stale`. `defects-check.sh [<arg>]` - cards parsed only by `.claude/hooks/defects_lib.py`;
-  no arg = audit (`BLIND`); `<arg>` = gate (non-zero = `RED`). Red only when new, else an `old ...` line.
+  `--check` exit 1 `index stale`. `defects-check.sh [<arg>|--files <path>...]` - cards parsed only by `.claude/hooks/defects_lib.py`;
+  no arg = audit (`BLIND`, `block with no file scope`); `<arg>` = gate (non-zero = `RED`); `--files` (0.50, ADR-032
+  D3; what `close-story` calls) runs each block card's check per file its `paths:` glob matches: 0 / 1 red
+  (`<ref> fails on <file>: ...`) / 2 no python. `defects-inject.sh` treats block cards as text and exits before Python with no card file. Red only when new, else an `old ...` line.
   Always red: `DUPLICATE`, `INDEX`. Exit 0/1/2. `DEFECTS_DIR` overrides the library.
 - `memory-triage.sh` - read-only lister behind `/vulyk-gc memory`; `--mark` is its one write.
 - `symbol-map.sh [--exact] [--story <story.md>] [--scope <path>]... <file>...` - `vulyk_python` (none: exit 2),
@@ -114,6 +116,8 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution. Defect hooks via
   `wire_hook`/`unwire_hook` (matcher ignored on unwire). Uses `vulyk_python`/`sed_inplace` from `lib.sh` beside it
   (found via `BASH_SOURCE`); awk values pass through `ENVIRON`, never `-v` (BSD awk refuses a newline).
+  0.50: wires every hook into an existing `settings.json`; a manifest path is trusted for nothing (`..`, leading
+  `/` dropped); `--upgrade` prints `unwired <event>: <script>` for a shipped hook the hive does not wire (`--wire`).
   `git-guard.sh` is wired once, only when `v$PREV` did not ship it (a later missing entry = owner's removal, stays).
   Telemetry consent is asked only on `--telemetry ask` (0.49; default off, flag `on|off|ask`).
   `install_mod vulyk-pulse@vulyk`; `retire_mod vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup`.
@@ -127,4 +131,4 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-09 (0.49.0 ab-run-fixes; prior 2026-11-06 0.48.0 uncommitted-work-guard; git-guard.sh, human-check --show). Over the ~80-line budget.
+last-verified: 2026-11-09 (0.50.0 mass-audit-fixes; ship-check stage 02 at Tier 2-4 wants `**Approved:**` or `--go`, ADR-032 D4). Over the ~80-line budget.

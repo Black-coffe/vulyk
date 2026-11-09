@@ -27,7 +27,17 @@ Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the
   `red_reason`, no sealed test, only tests in `## Files`, every line exits 0, 126/127, timeout, or `red_reason`
   (`grep -F`) in no failing line; exit 2 no sha256 tool. `close-story` calls `red_gate` after scope-check: exit 4
   `no red receipt` / `test changed after red receipt` / `no implementation change since red receipt`.
-- **prompt-check gate (0.43):** after `red_gate`, when `## Files` has a path under `scripts/`, `.claude/agents/`,
+- **Story trust from git (0.50, ADR-032):** `approved_rev <story>` = newest commit touching it with a paperwork
+  subject (`vulyk(<slug>): ...`, incl. `revised <story-id>`). `close-story`/`stamp-red` compare `## Verification`,
+  `## Files`, `red:` with that version: differ → exit 4 `story blocks differ from the approved version (<sha7>)`;
+  none at Tier 3-4 → exit 2 `no approved version in git`. A close is a commit `story(<id>): ...`
+  (`has_close_commit`); `status` counts a `done` story with no such commit as `in-progress`; `close-story` on it
+  re-runs the gates (`--allow-empty`). After `red_gate`, `defects-check.sh --files <## Files>` runs when a
+  `status: block` card exists: red → exit 4 `defect card <ref> fails on <file>`, gate error → exit 2.
+  `stamp-red --baseline` restores `RED_IMPL` files to HEAD, stamps, restores (no stash; Queen only).
+  `briefed`/`branch` at Tier 2-4 need `**Approved:**` or `--go` (exit 2 `Tier <N> plan needs ...`; `--go` goes
+  on the Briefed line and re-stamps an old one).
+- **prompt-check gate (0.43):** after the defect gate, when `## Files` has a path under `scripts/`, `.claude/agents/`,
   `.claude/commands/` or `templates/`, `close-story` runs `prompt-check.sh --touched <## Files>`: exit 1 with an
   `error` line → exit 4 (first `error` line); exit 1 with none → exit 4 `prompt-check crashed`; 2 = stderr note.
 - `close-story <file> [--commit] [--stamp]` - scope-check; `--commit` with a dirty out-of-scope, non-paperwork
@@ -119,8 +129,11 @@ the run; `dispatch:` → `gate(st)` first, then the seats in parallel (Tier 4 re
 - **`gate`:** loops `suite <spec> --commit --stamp S` via the clerk until `done:true`; `exit 3` → Paused;
   `ok:false` stops the run; an unreadable clerk line (`BadLine`) is asked again, within `SUITE_CALLS` = 32 calls
   total, then fails `suite not done after 32 calls` (safe: steps resume, a finished log is a no-op).
+- **Claim / retry (0.50):** an unreadable `advance --claim` line is proven by a short re-claim with the same stamp
+  (no leftover list); unproven stops. A missed story's retry model = first of [TOP, opus] not judging the round;
+  none left → opus, result carries `retry_same_family`.
 - **Fable-limit fallback:** a `refused(r)` or empty-and-ping-empty result off `opus` is rerun once on `opus`;
   entries go in `fallbacks`; `/vulyk-build` journals them.
 - Tests: `cycle|council|telemetry.test.sh --part <topic>` / `--list-parts`; full set once per round (scripts.md).
 
-last-verified: 2026-11-09 (0.49.0 ab-run-fixes; prior 2026-11-04 0.47.0 post-046-tails; ADR-001, 013, 015, 023, 025, 029). Over the ~80-line budget.
+last-verified: 2026-11-09 (0.50.0 mass-audit-fixes; ADR-001, 013, 015, 023, 025, 029, 032). Over the ~80-line budget.
