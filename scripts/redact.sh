@@ -23,7 +23,7 @@ set -u
 MASK='[VULYK:REDACTED]'
 
 # Case variants spelled out instead of sed's GNU-only `I` flag - BSD sed must not choke.
-KEYWORDS='password|PASSWORD|Password|passwd|PASSWD|secret|SECRET|Secret|[Aa]pi[_-]?[Kk]ey|API[_-]?KEY|apikey|APIKEY|[Aa]ccess[_-]?[Kk]ey|ACCESS[_-]?KEY|[Aa]ccess[_-]?[Tt]oken|ACCESS[_-]?TOKEN|[Rr]efresh[_-]?[Tt]oken|REFRESH[_-]?TOKEN|[Aa]uth[_-]?[Tt]oken|AUTH[_-]?TOKEN|[Cc]lient[_-]?[Ss]ecret|CLIENT[_-]?SECRET|[Pp]rivate[_-]?[Kk]ey|PRIVATE[_-]?KEY|[Cc]redentials?|CREDENTIALS?'
+KEYWORDS='password|PASSWORD|Password|passwd|PASSWD|secret|SECRET|Secret|[Aa]pi[_-]?[Kk]ey|API[_-]?KEY|apikey|APIKEY|[Aa]ccess[_-]?[Kk]ey|ACCESS[_-]?KEY|[Aa]ccess[_-]?[Tt]oken|ACCESS[_-]?TOKEN|[Rr]efresh[_-]?[Tt]oken|REFRESH[_-]?TOKEN|[Aa]uth[_-]?[Tt]oken|AUTH[_-]?TOKEN|[Cc]lient[_-]?[Ss]ecret|CLIENT[_-]?SECRET|[Pp]rivate[_-]?[Kk]ey|PRIVATE[_-]?KEY|[Cc]redentials?|CREDENTIALS?|[Pp]assphrase|PASSPHRASE|[Cc]ookie|COOKIE'
 # A bare token key (TOKEN=, GH_TOKEN:, "token":) must END in token - max_tokens, token_budget and
 # tokenizer are counters and settings, and this framework writes them everywhere - and its value must
 # look like one: 16+ chars, no spaces. Prose says "token: see below" and "token = `agent`".
@@ -33,6 +33,11 @@ TOKEN_VALUE="[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"
 # but not password_reset_count, bypass, compass, a bare PWD (the shell's current folder) or dsn_timeout.
 # The char before the key is captured (sed has no lookbehind) and written back.
 END_KEY="(^|[^A-Za-z0-9_-])([\"']?(([A-Za-z0-9_-]*[_-])?(PASS|pass|Pass)|[A-Za-z0-9_-]*[_-](PWD|pwd|Pwd))[\"']?[[:space:]]*[=:][[:space:]]*)"
+# A one-time code key ENDS the key, alone or after '_'/'-' (OTP, SMS_OTP) - not footprint or otpauth_url.
+OTP_KEY="(^|[^A-Za-z0-9_-])([\"']?([A-Za-z0-9_-]*[_-])?(OTP|otp|Otp)[\"']?[[:space:]]*[=:][[:space:]]*)"
+# A *_KEY name (ENCRYPTION_KEY, signing-key, appKey) holds a key when its value looks like one: 16+ chars, no spaces.
+# A bare key (key: value) is prose; primary_key=True and sort_key=re.compile(...) are too short to match.
+KEY_KEY="[A-Za-z0-9_-]*[_-](KEY|key|Key)|[A-Za-z0-9_-]*[a-z0-9]Key"
 # A DSN key holds a URL; it is masked whole when the URL carries a credential (scheme://key@host).
 DSN_KEY="(^|[^A-Za-z0-9_-])([\"']?([A-Za-z0-9_-]*[_-])?(DSN|dsn|Dsn)[\"']?[[:space:]]*[=:][[:space:]]*)"
 DSN_VALUE="[\"']?[A-Za-z][A-Za-z0-9+.-]*://[^[:space:]\"'@]+@[^[:space:]\"']*[\"']?"
@@ -57,14 +62,18 @@ SED_ARGS=( -E
   -e "s|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}|$MASK|g"
   -e "s#[rs]k_(live|test)_[A-Za-z0-9]{20,}#$MASK#g"
   -e "s|hooks\.slack\.com/services/[A-Za-z0-9/_-]{20,}|hooks.slack.com/services/$MASK|g"
+  -e "s#(ssh-(rsa|ed25519|dss)|ecdsa-sha2-nistp[0-9]+)[[:space:]]+AAAA[A-Za-z0-9+/]{16,}=*#\1 $MASK#g"
   -e "s|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}|$MASK|g"
   -e "s|[Bb]earer[[:space:]]+[A-Za-z0-9._~+/-]{16,}=*|Bearer $MASK|g"
   -e "s#([Aa]uthorization|AUTHORIZATION)([\"']?[[:space:]]*[:=][[:space:]]*[\"']?)([Bb]asic|BASIC|[Tt]oken|TOKEN)[[:space:]]+[A-Za-z0-9._~+/-]{8,}=*#\1\2\3 $MASK#g"
   # A URL password may hold a raw '/'; a port before a path (host:443/@scope) is all digits, so it is not one.
-  -e "s#(://)[^/[:space:]:@]+:([^/[:space:]@]*[^0-9/[:space:]@][^[:space:]@]*|[^/[:space:]@]+)@#\1$MASK@#g"
+  # The user may be empty (redis://:pw@host).
+  -e "s#(://)[^/[:space:]:@]*:([^/[:space:]@]*[^0-9/[:space:]@][^[:space:]@]*|[^/[:space:]@]+)@#\1$MASK@#g"
   -e "s#([\"']?[A-Za-z0-9_-]*($KEYWORDS)[A-Za-z0-9_-]*[\"']?[[:space:]]*[=:][[:space:]]*)$VALUE#\1$MASK#g"
   -e "s#$END_KEY$VALUE#\1\2$MASK#g"
   -e "s#$DSN_KEY$DSN_VALUE#\1\2$MASK#g"
+  -e "s#$OTP_KEY$VALUE#\1\2$MASK#g"
+  -e "s#([\"']?($KEY_KEY)[\"']?[[:space:]]*[=:][[:space:]]*)$TOKEN_VALUE#\1$MASK#g"
   -e "s#([\"']?${TOKEN_KEY}[\"']?[[:space:]]*[=:][[:space:]]*)$TOKEN_VALUE#\1$MASK#g"
 )
 

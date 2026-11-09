@@ -1618,6 +1618,26 @@ bash "$SRC/install.sh" "$UM" --upgrade --telemetry off > "$T/xp-matcher.out" 2>&
 cat "$T/xp-matcher.out" | expect_absent "a 0.32-matcher inject on a 0.49 hive is not named as unwired" "unwired PreToolUse: defects-inject.sh"
 expect_eq "... it is rewired once, under the new matcher" "1" \
   "$(jq --arg m "$PRE_M" '[.hooks.PreToolUse[] | select(.matcher == $m) | .hooks[] | select(.command | contains("defects-inject.sh"))] | length' "$UM/.claude/settings.json" | tr -d '\r')"
+# redact-gaps: an install source without the v$PREV tag (an archive, a clone without tags) cannot tell an owner's removal
+# from a hook v$PREV never wired. It names each missing entry and wires none back - wire_entry, wire_shipped and the
+# git guard alike (the source here is the working tree, untagged: a git repo with no commits).
+NT="$T/src-notag"; mkdir -p "$NT"
+git -C "$SRC" ls-files | tar -C "$SRC" -cf - -T - | tar -C "$NT" -xf -
+git -C "$NT" init -q
+UN="$T/hive-xp-notag"; fresh_install "$UN"; printf '0.49.0\n' > "$UN/.claude/vulyk-version"
+UNS="$UN/.claude/settings.json"
+jq 'del(.hooks[][].hooks[] | select(.command | test("ysk-offer[.]sh|context-guard[.]sh|git-guard[.]sh")))' "$UNS" > "$T/xp-notag.json" \
+  && cat "$T/xp-notag.json" > "$UNS"
+bash "$NT/install.sh" "$UN" --upgrade --telemetry off > "$T/xp-notag.out" 2>&1
+cat "$T/xp-notag.out" | expect "a source without the v0.49.0 tag says why it wires nothing back" \
+  "note: v0.49.0 is not a tag in"
+expect_eq "... it names the removed ysk-offer, context-guard and git-guard entries as unwired" \
+  "PreCompact: context-guard.sh
+PreToolUse: git-guard.sh
+SessionStart: ysk-offer.sh" \
+  "$(sed -n 's/^  unwired \([A-Za-z]*: [a-z-]*\.sh\) - to wire it: .*/\1/p' "$T/xp-notag.out" | grep -E 'ysk|context-guard|git-guard' | LC_ALL=C sort)"
+expect_eq "... and wires none of them back" "0" \
+  "$(jq '[.hooks[][].hooks[] | select(.command | test("ysk-offer|context-guard|git-guard"))] | length' "$UNS" | tr -d '\r')"
 fi # install-xp2
 
 if part_on terminal; then

@@ -2,6 +2,22 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.50.1] - 2026-11-10
+
+Two gaps the 0.50.0 council named (spec `redact-gaps`, Tier 1, council GREEN round 1).
+
+### Fixed
+- **Redaction.** `redact.sh` and the `handoff.py` fallback mask a passphrase, a `*_KEY` name with a key-shaped value
+  (ENCRYPTION_KEY, SIGNING_KEY, appKey), a cookie (SESSION_COOKIE, a Cookie header), an OTP, the body of an ssh public
+  key line and a URL password with an empty user; footprint, primary_key=True and prose about a key stay readable.
+- **install.sh.** An upgrade from a source without the `v<previous>` tag (an archive, a clone without tags) says so in
+  one line and names every hook missing from `settings.json` with its `--wire` command; it no longer puts back a hook
+  the owner removed.
+
+### Known gaps
+- Still in clear: a Cookie header whose first pair is under six characters, `APP_KEY=base64:...`, `ENCRYPTIONKEY=` and
+  `encryption.key=`, `TOTP=` and `otp_code=`. `vulyk-update-check.sh` and `top-model-brief.sh` are still wired back.
+
 ## [0.50.0] - 2026-11-09
 
 Fixes from a six-model audit of VULYK (47 findings; spec `mass-audit-fixes`, Tier 3, round 2 RED on test fixtures,
