@@ -226,3 +226,4 @@ is missing or unparsable.
 **Council:** RED round 2, 2026-11-09, at 7b54bf6, pack 69942212bcbb
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 **Checked:** ACCEPTED by Andrei, 2026-11-09, at 462e6fe - owner picked the option «ACCEPTED без раунда 3 (Рекомендую)» (label written by the Queen; no words of his own) after the repair-19 diff (ce2e90b, 3 test lines) was shown in chat as text
+**Checked:** ACCEPTED by Andrei, 2026-11-09, at 9aa72d0 - owner picked «Да, ACCEPTED и пуш (Рекомендую)» (label written by the Queen; no words of his own) after the repair-19 and fixture-scrub diffs (ce2e90b, 9aa72d0) were shown in chat as text
