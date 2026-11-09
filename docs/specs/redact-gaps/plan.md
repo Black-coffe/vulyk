@@ -39,3 +39,4 @@ hive's settings.json with its `--wire` command, instead of wiring it back: wire_
 
 ## Plan deltas
 **Briefed:** via mini-brief, Andrei, 2026-11-09
+**Branch:** vulyk/redact-gaps
