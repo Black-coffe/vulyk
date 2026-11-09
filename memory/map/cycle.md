@@ -43,7 +43,10 @@ Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the
 - `open-round` refuses a tree dirty outside paperwork; `build_round` freezes `seats=`/`since=`, builds the court
   only for a blind seat, carries round n-1's GREEN/N/A blind seats (`review` never). Court setup: `build_court`
   runs `$ROOT/.claude/vulyk-setup` if present (`${VULYK_SETUP_TIMEOUT:-300}`); failure → `open-round` exit 2.
-- `claim` refuses a dirty tree; `release`, `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"`
+- `claim` refuses a dirty tree, except (0.49, `claim_leftover`) edits inside a todo wave story's `## Files`: ok,
+  `next:"claimed"`, `"leftover":[files]`. Every `emit` line and `status` carry `now` (epoch s). `verify_run` lines
+  read `< /dev/null`. `suite` commits once, on the call that finishes it.
+- `claim` otherwise as above; `release`, `pause`/`resume`/`status` are not PAUSE-guarded. `reopen "<decision>"`
   appends to `## Answers`, raises `CEILING`, emits `next:"repair"` (or re-runs on `env`, or an old `suite-timeout`).
 - **`suite <spec> [--commit] [--stamp S]` (ADR-029, `cmd_suite`):** the round's gate, one step per call, before
   the seats, into `council/round-N/suite.log` (paperwork, committed per step with `--commit`): line 1
@@ -83,7 +86,11 @@ First match: `shipped` → `paused` → `briefed` → `branch` → `build:<wave>
 stale → `open-round`, missing seat → `dispatch:<csv>`, else `judge` → `escalated` → `green` → `repair` → `open-round`.
 
 ## Seats and the verdict (`cmd_judge`)
-`required_seats_for_tier`: Tier 1-2 → `review`; 3-4 → `opus review`, plus `haiku` when `client_path_filled`.
+`required_seats_for_tier` (0.49): Tier 1-2 → `review`; 3-4 → `review` plus ONE blind seat: `haiku` when
+`client_path_filled`, else `opus` (`sonnet` in no roster; `record-seat` still accepts it). Tier 4 `review2` is not frozen:
+`review2_called` = Tier 4, not a narrow round, and ROUND `second=risk` or the recorded `review` is BLOCK;
+`record-seat review2` otherwise exits 2. With review2 recorded, judge folds both (BLOCK if either). A narrow round
+(ROUND `narrow=1`): `seats=review`, `second=none`, no court, `suite` writes `SUITE: none - narrow repair round`.
 `tier_ceiling` 1/2/3/3; `CEILING` wins. Verdict, first match: human REJECTED newer than the round → RED; required
 seat ABSENT with no RED/BLOCK → ESCALATE `env`; (`suite-timeout` only on old rows); evidenced
 RED ≥ max(2, ceil(A/2)) → `half`; anchored review BLOCK or any RED → `no-progress` (same ask RED in n-1),
@@ -95,12 +102,17 @@ exits 3. Blind seat report: `COUNCIL/MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH
 `BREACH:`; malformed → exit 4, re-asked once, then ABSENT. Court = `git worktree add --detach`, removed by `judge`.
 
 ## Repair (ADR-013 D4)
-`cmd_repair` runs only when `next == repair`. Writes `<slug>-NN-repair-round-<n>.md`: `worker: worker-code`,
+`cmd_repair` runs only when `next == repair`. 0.49 narrow: exactly one RED item in one non-test file → the story
+has `narrow: true` and `## Files` = that file, its tests, `docs/defects/*`; the next `open-round` is review-only.
+Writes `<slug>-NN-repair-round-<n>.md`: `worker: worker-code`,
 **`model: opus` on purpose** (ADR-015), `wave: <max+1>`, `red: required` kept unless `repair_unmarks`. `##
 Requirements`/`## Findings` = RED asks, anchored review lines, red suite PART lines; `## Files` = union.
 
 ## The Workflow driver (`.claude/workflows/vulyk-cycle.js`)
-Args `{spec, stamp, top_model, second_model}` (+ `worker_model`, `review_model`, `seat_model` off `sonnet-builds`).
+Args `{spec, stamp, top_model, second_model}` (+ `worker_model`, `review_model`, `seat_model` off `sonnet-builds`;
+`launched_at`, `checkpoint_min` default 50). **Checkpoint (0.49):** past `checkpoint_min` between `launched_at` and the
+last verb's `now`, the next wave/gate step/seat is not started; returns `{status:"checkpoint",next,elapsed_min}`; either
+time missing = no checkpoint; no clock read. A `leftover` story from `claim` is re-dispatched with a note; 2nd miss stops.
 Shell only via `cycle-clerk`. `build:W` → workers in parallel, a still-listed story is a miss, the second stops
 the run; `dispatch:` → `gate(st)` first, then the seats in parallel (Tier 4 review = two `lead-review`), then
 `advance --ingest`. `release` in `finally`.
@@ -111,4 +123,4 @@ the run; `dispatch:` → `gate(st)` first, then the seats in parallel (Tier 4 re
   entries go in `fallbacks`; `/vulyk-build` journals them.
 - Tests: `cycle|council|telemetry.test.sh --part <topic>` / `--list-parts`; full set once per round (scripts.md).
 
-last-verified: 2026-11-04 (0.47.0 post-046-tails; ADR-001, 013, 015, 023, 025, 029). Over the ~80-line budget.
+last-verified: 2026-11-09 (0.49.0 ab-run-fixes; prior 2026-11-04 0.47.0 post-046-tails; ADR-001, 013, 015, 023, 025, 029). Over the ~80-line budget.

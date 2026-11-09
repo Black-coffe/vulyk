@@ -10,8 +10,8 @@ model/effort/turn cap; `vulyk-cycle.js` has no `CAPS` table (its empty-result me
 drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test`, `lead-review`,
 `lead-architect`) keep the constitution (docs/architecture.md). `scripts/prompt-check.sh` enforces it
 (rule `omit-claude-md`).
-- **lead-review** (`opus`, `high`, `maxTurns:60`, `experimental: cacheTtl: 1h`; Read/Grep/Glob/Bash) - the
-  `review` seat of every round; Tier 4: two dispatches. Judges five items: 1 `## Asks` (+ `## Descoped`);
+- **lead-review** (`opus`, `high`, `maxTurns:60`; Read/Grep/Glob/Bash; `cacheTtl` removed 0.49 from this and both
+  workers) - the `review` seat of every round; Tier 4: `review2` (same agent) only after a BLOCK or on a risk path. Judges five items: 1 `## Asks` (+ `## Descoped`);
   2 correctness; 3 warn-only checks + `defects-check.sh` red debt; 4 the project's rules (a diff line breaking a
   card's Never/How-to line = major `[unanchored]` naming the card ref; Allowed is no finding); 5 for each
   `red: required` story, its `## Red receipt` tail and `red_reason` (a staged break = major `[ask N]`; no receipt
@@ -55,6 +55,11 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   `не подтверждено`; WebFetch ≤ 2; reply ≤ 60 lines.
 
 ## Commands - what each runs
+- **0.49 command changes:** `/vulyk-plan` sends no scout for an area with a fresh map slice; grill asks in batches
+  of <= 4, no confirm question; horizon in an existing repo only with `--horizon`; Tier 3-4 approval starts the build
+  in the same turn; plan committed before the approval stop. `/vulyk-bootstrap` takes facts from the repo, asks only
+  on conflict/gap, maps no area, docker rows `docker compose exec -u <user> <service> <cmd>`, no `/clear`.
+  `/vulyk-models --recommend` always `sonnet-builds`. Driver launch passes `launched_at` (cycle.md).
 - **`/vulyk-plan`** - step 0 deliverable (document → brief + report, stop); tier; brief via `redact.sh`; recon
   (scouts: T1 0-1, T2 ≤1, T3 ≤2, T4 ≤4); grill T2-4; plan (Queen T1-2, `queen-planner` T3-4, `lead-architect` T4);
   stories; `wave-check.sh` + `trace-check.sh`; `drone-coverage` T3-4. T1 → `cycle.sh briefed --mode mini-brief` +
@@ -105,4 +110,4 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
   script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-11-06 (0.48.0 build --show, status tool.check; prior 2026-11-04: 0.47.0 vulyk-ship ci wording; 0.45.0 gate split; ADR-013, 015, 020, 022, 023, 024, 025, 029)
+last-verified: 2026-11-09 (0.49.0 ab-run-fixes; prior 2026-11-06 0.48.0 build --show, status tool.check; prior 2026-11-04: 0.47.0 vulyk-ship ci wording; 0.45.0 gate split; ADR-013, 015, 020, 022, 023, 024, 025, 029)

@@ -71,7 +71,7 @@ re-run. No line numbers: `grep -n '^name()'`.
   and starts a working Python once per call (0.43.1); `handoff.py` `_REDACT_FALLBACK` mirrors `redact.sh`.
 - `vulyk-update.sh` (-> `install.sh --upgrade`); `release-check.sh`; `git-hooks/post-merge`.
 - `model-profile.sh` (ADR-020) - `opus-builds|sonnet-builds|economy`; only `--set` writes; unknown =
-  `sonnet-builds`. `top-model.sh`: `--floor` exit 1 prints `below floor`.
+  `sonnet-builds`; `--recommend` prints `sonnet-builds <plan>` on every plan (0.49). `top-model.sh`: `--floor` exit 1 prints `below floor`.
 - `defects-index.sh [--check|--grep <regex>|--counts]` (ADR-021) - no arg writes `docs/defects/INDEX.md`;
   `--check` exit 1 `index stale`. `defects-check.sh [<arg>]` - cards parsed only by `.claude/hooks/defects_lib.py`;
   no arg = audit (`BLIND`); `<arg>` = gate (non-zero = `RED`). Red only when new, else an `old ...` line.
@@ -115,6 +115,7 @@ re-run. No line numbers: `grep -n '^name()'`.
   `wire_hook`/`unwire_hook` (matcher ignored on unwire). Uses `vulyk_python`/`sed_inplace` from `lib.sh` beside it
   (found via `BASH_SOURCE`); awk values pass through `ENVIRON`, never `-v` (BSD awk refuses a newline).
   `git-guard.sh` is wired once, only when `v$PREV` did not ship it (a later missing entry = owner's removal, stays).
+  Telemetry consent is asked only on `--telemetry ask` (0.49; default off, flag `on|off|ask`).
   `install_mod vulyk-pulse@vulyk`; `retire_mod vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup`.
 
 ## Gotchas
@@ -126,4 +127,4 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-06 (0.48.0 uncommitted-work-guard; git-guard.sh, human-check --show). Over the ~80-line budget.
+last-verified: 2026-11-09 (0.49.0 ab-run-fixes; prior 2026-11-06 0.48.0 uncommitted-work-guard; git-guard.sh, human-check --show). Over the ~80-line budget.
