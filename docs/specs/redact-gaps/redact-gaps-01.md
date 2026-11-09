@@ -8,7 +8,7 @@ worker: worker-code
 wave: 1
 blocked_by: []
 red: required
-red_reason: maintenance S2 rows "redact.sh masks a passphrase" ... "masks a URL password with no user" get no mask; install-xp2 "a source without the v0.49.0 tag says why it wires nothing back" finds no note and the three removed entries are wired back
+red_reason: redact.sh masks a passphrase: got
 ---
 
 # redact.sh masks the open secret names; a tagless install source wires nothing back
