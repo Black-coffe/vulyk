@@ -60,9 +60,9 @@ if args:
 else:
     try:
         root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True,
-                              text=True, check=True).stdout.strip()
+                              text=True, encoding="utf-8", check=True).stdout.strip()
         listed = subprocess.run(["git", "-C", root, "ls-files", "*.sh"], capture_output=True,
-                                text=True, check=True).stdout.splitlines()
+                                text=True, encoding="utf-8", check=True).stdout.splitlines()
     except (OSError, subprocess.CalledProcessError):
         print("portability-check: not in a git checkout - nothing to scan", file=sys.stderr)
         sys.exit(2)

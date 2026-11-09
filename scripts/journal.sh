@@ -28,6 +28,14 @@ if [ ! -f "$JOURNAL" ]; then
 fi
 
 LINE="- $(date -u +%Y-%m-%dT%H:%M:%SZ) · $STAGE · $WHAT · next: $NEXT"
+# P9-07: journal.md is committed and <what happened> is often free text (a pause reason, a
+# fallback note) - mask credential shapes with the redact.sh beside this script. Fail-open: no
+# redact.sh, or nothing back from it, keeps the line as given.
+REDACT="$(dirname "$0")/redact.sh"
+if [ -f "$REDACT" ]; then
+  MASKED="$(printf '%s' "$LINE" | bash "$REDACT" 2>/dev/null)"
+  [ -n "$MASKED" ] && LINE="$MASKED"
+fi
 printf '%s\n' "$LINE" >> "$JOURNAL"
 printf '%s\n' "$LINE"
 exit 0

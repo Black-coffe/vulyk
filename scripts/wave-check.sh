@@ -193,15 +193,20 @@ PATHS_EOF
       # command tokens carry a slash and mean nothing of the sort - `@scope/package`,
       # `feat/branch`, a URL - and treating those as paths reported every story in a
       # pnpm/npm monorepo as a verify-gap (found by the S2.6.5a battle test, 2026-08-18).
+      # Read line by line, never `for tok in $(...)`: under nullglob/globstar (set above) a glob
+      # token that matches nothing vanished there, and with it the verify-gap.
       cmd_paths=""
-      for tok in $(verify_path_tokens "$verify" | grep '/'); do
+      while IFS= read -r tok; do
+        [ -n "$tok" ] || continue
         case "$tok" in
           *[*?[]*) cmd_paths="${cmd_paths}${tok}
 " ;;
           *) [ -e "$tok" ] && cmd_paths="${cmd_paths}${tok}
 " ;;
         esac
-      done
+      done <<TOKS_EOF
+$(verify_path_tokens "$verify" | grep '/')
+TOKS_EOF
       if [ -n "$cmd_paths" ]; then
         hit=0
         while IFS= read -r cp; do

@@ -215,7 +215,9 @@ def main(argv):
             return False
         if touched is None:
             return True
-        return any(fnmatch.fnmatch(inv, pat) or inv == pat for inv in fd[4] for pat in touched)
+        # A `## Files` entry ending in `/` covers everything beneath it (the scope-check dialect).
+        return any(fnmatch.fnmatch(inv, pat) or inv == pat or (pat.endswith("/") and inv.startswith(pat))
+                   for inv in fd[4] for pat in touched)
 
     errors = 0
     for fd in sorted(findings, key=lambda x: (x[0], x[1], x[2], x[3])):

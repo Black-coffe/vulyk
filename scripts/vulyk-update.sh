@@ -70,9 +70,9 @@ fi
 if [ -n "$WANT" ]; then
   TAG="v${WANT#v}"
 else
-  TAG="$(git -C "$SRC" tag --list 'v*' | sed 's/^v//' | sort -V | tail -1)"
+  # git's own version sort, not `sort -V`: stock macOS sort has no -V, and the tag came back empty.
+  TAG="$(git -C "$SRC" tag --list 'v*' --sort=v:refname | tail -1)"
   [ -n "$TAG" ] || { echo "error: $REPO publishes no version tags"; exit 1; }
-  TAG="v$TAG"
 fi
 git -C "$SRC" rev-parse -q --verify "refs/tags/$TAG" >/dev/null \
   || { echo "error: $REPO has no tag $TAG"; exit 1; }

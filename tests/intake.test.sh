@@ -168,6 +168,25 @@ n="$(printf '%s' "$o" | head -1 | "$PYBIN" -c 'import json,sys; print(len(json.l
 if [ "${n:-9999}" -le 600 ]; then ok "additionalContext with no ids stays within 600 chars ($n)"
 else bad "additionalContext is ${n:-unparsable} chars"; fi
 
+# P10-08: a reviewer report typed or relayed inline fired on every turn - «снова», "again", a clock time,
+# a path's line:col and a card key inside a longer word were each read as a correction.
+echo "--- P10-08: report words are not a correction"
+run "$HIVE" '{"prompt":"ran the suite again, all green"}' | expect_silent "P10-08: a bare \"again\" is silent"
+run "$HIVE" '{"prompt":"снова прогнал тесты, всё зелёное"}' | expect_silent "P10-08: a bare «снова» is silent"
+run "$HIVE" '{"prompt":"suite started 2026-11-07 14:32 and passed"}' | expect_silent "P10-08: a clock time after a date is silent"
+run "$HIVE" '{"prompt":"stamp 2026-11-07T14:32:05Z, done"}' | expect_silent "P10-08: an ISO timestamp is silent"
+run "$HIVE" '{"prompt":"finished at 14:32 UTC"}' | expect_silent "P10-08: a time with UTC is silent"
+run "$HIVE" '{"prompt":"finished at 14:32:05+02:00"}' | expect_silent "P10-08: a time with an offset is silent"
+run "$HIVE" '{"prompt":"the build ran at 9:30 am"}' | expect_silent "P10-08: a time with am is silent"
+run "$HIVE" '{"prompt":"see defect-intake.sh:53:12 and cycle.js:113"}' | expect_silent "P10-08: a path line:col is silent"
+ctx "$HIVE" '{"prompt":"on 01:02:03 the voice drops"}' | expect "P10-08 neighbour: an h:mm:ss timecode still fires" "timecode 01:02:03"
+ctx "$HIVE" '{"prompt":"at 10:04, the voice drops"}' | expect "P10-08 neighbour: a timecode before a comma still fires" "timecode 10:04"
+ctx "$HIVE" '{"prompt":"опять не тот цвет"}' | expect "P10-08 neighbour: «опять» still fires" "looks like a correction"
+KEYHIVE="$T/keyhive"; mkdir -p "$KEYHIVE/docs/defects"
+printf -- '---\nid: cut\ntitle: Cut speech\nstatus: text\nkeys: [cut]\n---\n\n# Cut\n' > "$KEYHIVE/docs/defects/cut.md"
+run "$KEYHIVE" '{"prompt":"execute the plan, then the shortcut"}' | expect_silent "P10-08: a card key inside a longer word is silent"
+ctx "$KEYHIVE" '{"prompt":"the cutting at the end is wrong"}' | expect "P10-08 neighbour: a key at a word start still fires" "file the quote now in cut "
+
 # --- capture (rules-tree-05): the explicit phrase, pastes, side-agent notes ----------------------
 echo "--- the explicit phrase"
 ctx "$HIVE" '{"prompt":"внеси в запрет: обрезка на полуслове"}' \
@@ -230,6 +249,19 @@ o="$(ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"опя�
 printf '%s' "$o" | expect "free text with only the lexicon is filed as typed" "file the quote now"
 printf '%s' "$o" | expect_absent "free text alone prints no decision" "decision:"
 ctx "$HIVE" "{$Q,\"tool_response\":{}}" answer | expect "a payload without answers is silent" "(silent)"
+# P10-09: a label found anywhere in the answer was recorded as the owner's choice.
+ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"not Blue\"}}}" answer \
+  | expect_absent "P10-09: \"not Blue\" records no decision on Blue" "decision:"
+ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Reddish please\"}}}" answer \
+  | expect_absent "P10-09: a label inside a longer word (Reddish) records no decision" "decision:"
+ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"neither, Blueish is closer\"}}}" answer \
+  | expect_absent "P10-09: a label inside a later free-text part records no decision" "decision:"
+o="$(ctx "$HIVE" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Blue, Red\"}}}" answer)"
+printf '%s' "$o" | expect "P10-09 neighbour: labels joined by \", \" are each a decision (Blue)" "[VULYK] decision: «Blue»"
+printf '%s' "$o" | expect "P10-09 neighbour: ... (Red)" "[VULYK] decision: «Red»"
+QC='"tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Ship?","header":"Ship","multiSelect":false,"options":[{"label":"Yes, ship it","description":"go"},{"label":"Yes","description":"later"}]}]}'
+expect_eq "P10-09 neighbour: a label holding a comma is one decision" "[VULYK] decision: «Yes, ship it» on «Ship?»" \
+  "$(ctx "$HIVE" "{$QC,\"tool_response\":{\"answers\":{\"Ship?\":\"Yes, ship it\"}}}" answer)"
 ctx "$NOLIB" "{$Q,\"tool_response\":{\"answers\":{\"Which cover?\":\"Blue\"}}}" answer | expect "answer without docs/defects/ is silent" "(silent)"
 
 # --- what stays silent ------------------------------------------------------------------------
@@ -273,6 +305,26 @@ if ( VULYK_PY=""; PATH="$T/stubbin:$PATH"; vulyk_python ); then
   if printf '%s' "$o" | grep -q additionalContext; then ok "a python3 stub exiting 9009 falls through to python"
   else bad "a python3 stub silenced the hook"; fi
 else echo "  skip  no python on PATH besides python3"; fi
+
+# P10-10: exit 1 was taken as "python ran" (a Python 2 named python3, a broken install), and neither a
+# preset $VULYK_PY nor Windows' `py` launcher was tried.
+echo "--- P10-10: which python runs the hook"
+REALPY="$(command -v "$PYBIN")"
+mkdir -p "$T/py1bin" "$T/pyonly"
+printf '#!/bin/sh\necho "half a line"\nexit 1\n' > "$T/py1bin/python3"; chmod +x "$T/py1bin/python3"
+o="$(printf '%s' '{"prompt":"опять обрезал голос"}' | env -u VULYK_PY PATH="$T/py1bin:$PATH" CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK")"
+printf '%s' "$o" | expect "P10-10: a python3 exiting 1 falls through to the next python" "looks like a correction"
+printf '%s' "$o" | expect_absent "P10-10: and the failed one's output is not printed" "half a line"
+printf '#!/bin/sh\n: > "%s/vpy-used"\nexec "%s" "$@"\n' "$T" "$REALPY" > "$T/vpy"; chmod +x "$T/vpy"
+o="$(printf '%s' '{"prompt":"опять обрезал голос"}' | VULYK_PY="$T/vpy" PATH="$T/py1bin:$PATH" CLAUDE_PROJECT_DIR="$HIVE" bash "$HOOK")"
+expect_eq "P10-10: a preset VULYK_PY is tried first" yes "$([ -e "$T/vpy-used" ] && echo yes || echo no)"
+printf '%s' "$o" | expect "P10-10: ... and files the correction" "looks like a correction"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$(command -v cat)" > "$T/pyonly/cat"
+printf '#!/bin/sh\nexec "%s" "$@"\n' "$REALPY" > "$T/pyonly/py"; chmod +x "$T/pyonly/cat" "$T/pyonly/py"
+o="$(printf '%s' '{"prompt":"опять обрезал голос"}' | env -u VULYK_PY PATH="$T/pyonly" CLAUDE_PROJECT_DIR="$HIVE" "$BASH" "$HOOK")"
+printf '%s' "$o" | expect "P10-10: with only py on PATH the hook still runs" "looks like a correction"
+o="$(env -u VULYK_PY PATH="$T/pyonly" "$BASH" "$HOOK" --lexicon </dev/null | tail -c 1 | od -An -c | tr -d ' ')"
+expect_eq "P10-10: --lexicon output still ends in a newline" '\n' "$o"
 
 # --- install.sh --upgrade rewires the inject matcher and adds the answer hook (rules-tree-05) ---
 echo "--- install.sh --upgrade wiring"
@@ -350,8 +402,9 @@ LX=""; for l in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do locale -a 2>/dev/null 
 lex() { printf '%s\n' "$1" | LC_ALL="${LX:-C.UTF-8}" grep -Eiq -f "$T/lex.txt"; }
 lex "переделайте это" && ok "a stem matches at a word start (переделайте)" || bad "stem at word start missed"
 lex "непеределай" && bad "a stem inside a word matched (непеределай)" || ok "neighbour: a stem inside a word does not match"
-lex "again!" && ok "a phrase with a punctuation edge matches (again!)" || bad "phrase at an edge missed"
-lex "against it" && bad "a phrase inside a longer word matched (against)" || ok "neighbour: a phrase needs both edges (against)"
+lex "i told you!" && ok "a phrase with a punctuation edge matches (i told you!)" || bad "phrase at an edge missed"
+lex "i told yours" && bad "a phrase inside a longer word matched (i told yours)" || ok "neighbour: a phrase needs both edges (i told yours)"
+lex "ran it again" && bad "P10-08: the export still carries a bare \"again\"" || ok "P10-08: the export has no bare \"again\""
 lex "Опять не то" && ok "a capitalised Cyrillic stem matches under a UTF-8 locale" || bad "Cyrillic case not folded"
 [ "$(grep -c . "$T/lex.txt")" -eq "$("$PYBIN" -c "
 import ast,re,sys

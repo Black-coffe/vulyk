@@ -416,6 +416,46 @@ PY
 for t in ${TOKENS[@]+"${TOKENS[@]}"}; do expect "handoff.py fallback masks a ${t%% *} token" "${t%% *} masked" < "$T/fallback"; done
 for t in ${KEEP[@]+"${KEEP[@]}"}; do expect "handoff.py fallback leaves a ${t%% *} alone" "${t%% *} kept" < "$T/fallback"; done
 
+# --- redact.sh audit P9-04: shapes it missed, values it cut short, a key block that ate the rest -------
+echo "--- redact.sh P9-04: Basic auth, camelCase and bare token keys, quoted values, PGP and broken key blocks"
+M='[VULYK:REDACTED]'
+redact_is() { # redact_is <label> <input> <expected output>
+  local out; out="$(printf '%s\n' "$2" | bash "$SRC/scripts/redact.sh")"
+  [ "$out" = "$3" ] && ok "redact.sh $1" || bad "redact.sh $1: got '$out', want '$3'"
+}
+b64="dXNlcjpw$(rep 16 Y)=="; val="$(rep 10 q)42$(rep 8 Z)"
+redact_is "masks Authorization: Basic" "Authorization: Basic $b64" "Authorization: Basic $M"
+redact_is "masks a quoted Authorization: token header" "-H \"Authorization: token $val\"" "-H \"Authorization: token $M\""
+redact_is "masks a camelCase apiKey" "apiKey = \"$val\"" "apiKey = $M"
+redact_is "masks a camelCase accessToken" "accessToken: $val" "accessToken: $M"
+redact_is "masks a refresh_token" "refresh_token=$val" "refresh_token=$M"
+redact_is "masks a bare TOKEN" "TOKEN=$val" "TOKEN=$M"
+redact_is "masks an env-style GH_TOKEN" "export GH_TOKEN=$val" "export GH_TOKEN=$M"
+redact_is "masks a JSON \"token\"" "{\"token\": \"$val\"}" "{\"token\": $M}"
+redact_is "masks a Stripe test key" "key s""k_test_$(rep 24 j) end" "key $M end"
+redact_is "masks a URL password holding a /" "postgres://app:pa/ss$val@db/x" "postgres://$M@db/x"
+redact_is "masks the whole quoted value, not its first word" "password = \"correct horse battery staple\" tail" "password = $M tail"
+redact_is "masks a single-quoted value with spaces" "secret='two words here' tail" "secret=$M tail"
+redact_is "leaves a token counter alone" "max_tokens: 4096000, input_tokens=123456" "max_tokens: 4096000, input_tokens=123456"
+redact_is "leaves token_budget and tokenizer alone" "token_budget=200000 tokenizer: cl100k_base" "token_budget=200000 tokenizer: cl100k_base"
+redact_is "leaves prose about a token alone" "the token: see below, a token = \`agentType\`" "the token: see below, a token = \`agentType\`"
+redact_is "leaves a code constant alone" "SLUG_TOKEN = re.compile(r'^[a-z]')" "SLUG_TOKEN = re.compile(r'^[a-z]')"
+redact_is "leaves Rust paths alone" "let k = token::Identifier; secret::Name" "let k = token::Identifier; secret::Name"
+redact_is "leaves a port before an @scope path alone" "https://registry.npmjs.org:443/@scope/pkg" "https://registry.npmjs.org:443/@scope/pkg"
+redact_is "leaves prose Authorization and basic alone" "Authorization: required. Basic auth is a basic understanding" "Authorization: required. Basic auth is a basic understanding"
+redact_is "leaves a git remote alone" "git@github.com:owner/repo.git ssh://git@host:22/x@y" "git@github.com:owner/repo.git ssh://git@host:22/x@y"
+nl='
+'
+redact_is "masks a PGP private key block and keeps what follows" \
+  "a${nl}-----BEGIN PGP PRIVATE KEY BLOCK-----${nl}Version: GnuPG v2${nl}${nl}lQOYBF$(rep 40 x)+/=${nl}=AbCd${nl}-----END PGP PRIVATE KEY BLOCK-----${nl}after" \
+  "a${nl}${M}${nl}after"
+redact_is "an unterminated PEM block ends at the first non-key line" \
+  "a${nl}-----BEGIN RSA PRIVATE KEY-----${nl}MIIE$(rep 60 x)${nl}$(rep 20 y)==${nl}next line of prose${nl}more" \
+  "a${nl}${M}${nl}next line of prose${nl}more"
+redact_is "a one-line JSON key with its END on the BEGIN line does not open a block" \
+  "{\"private_key\": \"-----BEGIN PRIVATE KEY-----\\nMIIE\\n-----END PRIVATE KEY-----\\n\",${nl}\"client_email\": \"x@y\"}" \
+  "${M}${nl}\"client_email\": \"x@y\"}"
+
 # --- /vulyk-gc refuses a gutted CONSOLIDATED.md (hindsight-harvest-03) --------------------------------
 echo "--- /vulyk-gc commit line refuses to commit a CONSOLIDATED.md that lost more than half"
 GC_LINE="$(tr -d '\r' < "$SRC/.claude/commands/vulyk-gc.md" | sed -n 's/^`\(f=memory\/learnings\/CONSOLIDATED\.md;.*\)`$/\1/p')"
@@ -594,6 +634,8 @@ pc_run --touched scripts/cycle.sh
 expect "prompt-check --touched: a finding naming a touched script exits 1" "exit=1;" < "$T/pc-out"
 pc_run --touched "./$CMDF"
 expect "prompt-check --touched: a ./-prefixed touched prompt still owns its finding (round 1 major 1)" "exit=1;" < "$T/pc-out"
+pc_run --touched .claude/commands/
+expect "prompt-check --touched: a directory entry owns the findings beneath it (P9-17)" "exit=1;" < "$T/pc-out"
 pc_case hivedel; rm "$PCD/.claude/agents/worker-test.md"; echo 0.42.0 > "$PCD/.claude/vulyk-version"; pc_run
 expect "prompt-check: a framework agent a hive deleted exits 0 (upgrade keeps host deletions)" "exit=0;" < "$T/pc-out"
 expect "prompt-check: the hive deletion is a warn line" "prompt-check: warn scripts/telemetry.sh:1: telemetry: AGENTS names worker-test" < "$T/pc-out"

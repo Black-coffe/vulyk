@@ -180,6 +180,28 @@ case "$st_study" in
   *) echo "::error::state.sh listed a story for a study spec whose report quotes story: lines: ${st_study:-absent}"; fail=1 ;;
 esac
 rm -rf docs/specs/study1
+# P9-14: a spec dir with a space is one spec, not two missing ones; a BSD-only stat still reads the mtime.
+mkdir -p "docs/specs/a b"
+printf -- '---\nstory: ab-01\nspec: a b\nstatus: done\n---\n' > "docs/specs/a b/ab 01 x.md"
+bash scripts/state.sh >/dev/null
+st_ab="$(sed -n '/"spec": "a b"/,/"stage"/p' .claude/state.json | tr -d ' \n')"
+case "$st_ab" in
+  *'"stories":1,"done":1,'*) echo "  ok    state.sh reads a spec dir and a story file with spaces in their names" ;;
+  *) echo "::error::state.sh lost the spaced spec: ${st_ab:-absent}"; fail=1 ;;
+esac
+BSDBIN="$(mktemp -d)"   # date without -r <file> and stat without -c: the BSD pair
+printf '#!/bin/sh\ncase " $* " in *" -r "*) exit 1 ;; esac\nexec %s "$@"\n' "$(command -v date)" > "$BSDBIN/date"
+printf '#!/bin/sh\n[ "$1" = -f ] && [ "$2" = %%m ] && exec %s -c %%Y "$3"\nexit 1\n' "$(command -v stat)" > "$BSDBIN/stat"
+chmod +x "$BSDBIN/date" "$BSDBIN/stat"
+touch -t 209901010000 "docs/specs/a b/ab 01 x.md"   # newer than any snapshot
+PATH="$BSDBIN:$PATH" bash scripts/state.sh >/dev/null
+sed -n '/"spec": "a b"/,/"stage"/p' .claude/state.json | expect "state.sh with a BSD stat: a story newer than the snapshot is stale" '"stale": true'
+# P9-15: release-check.sh read the same spaced dir as two missing paths and left it out of the count.
+cp "$SRC/scripts/release-check.sh" scripts/
+bash scripts/release-check.sh | grep -E '^  a b +no ' >/dev/null && echo "  ok    release-check.sh lists a spec dir with a space in its name" \
+  || { echo "::error::release-check.sh lost the spaced spec: $(bash scripts/release-check.sh)"; fail=1; }
+rm -f scripts/release-check.sh
+rm -rf "docs/specs/a b" "$BSDBIN"
 
 # A stale pack (a story cut after the look) reopens 04 and 05 both.
 printf -- '---\nstory: demo-02\nspec: demo\nstatus: done\nwave: 2\n---\n# S2\n' > docs/specs/demo/demo-02-repair.md
@@ -431,7 +453,13 @@ paperwork_only "$PWD" "$pw_base" HEAD && echo "  ok    a commit of only hive glo
   || { echo "::error::paperwork_only called $(git diff --name-only "$pw_base" HEAD | tr '\n' ' ') code"; fail=1; }
 git mv hook-app.txt docs/specs/hooklog/runs/moved.txt
 bash scripts/cycle.sh open-round docs/specs/hooklog 2>&1 | expect "open-round: code renamed into a hive glob path is still dirt" "hook-app.txt"
-git mv docs/specs/hooklog/runs/moved.txt hook-app.txt
+echo "P9-08: a commit renaming code into a paperwork path stales a round, and scope-check still counts the code path"
+git commit -qm "code moved into a hive glob path" >/dev/null
+paperwork_only "$PWD" "$pw_base" HEAD && { echo "::error::paperwork_only called code renamed into a hive glob path paperwork"; fail=1; } \
+  || echo "  ok    a commit renaming code into a hive glob path is not paperwork_only"
+bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md HEAD~1..HEAD | expect "scope-check counts the code path a rename moved away" "changed 1,"
+git checkout -- memory/stats/scope.jsonl
+git mv docs/specs/hooklog/runs/moved.txt hook-app.txt && git commit -qm "move the code back" >/dev/null
 git rm -rq -- ${pw_paths[@]+"${pw_paths[@]}"} && git commit -qm "drop the smoke reports" -- ${pw_paths[@]+"${pw_paths[@]}"}
 rm -rf docs/specs/hooklog/smoke
 git rm -q .claude/vulyk-paperwork && git commit -qm "drop the hive paperwork globs" -- .claude/vulyk-paperwork
@@ -516,6 +544,20 @@ printf '%s' "$out" | grep -qF "'no-such-cell'" && { echo "::error::the sidecar's
   || echo "  ok    the sidecar's own cell passes"
 rm -f CLAUDE.vulyk.md
 git add -A && git commit -qm "wcell fixture" >/dev/null
+
+echo "P9-12: a verification glob that matches nothing is still a path for verify-gap (globstar and nullglob are on)"
+mkdir -p docs/specs/wgap src/wgap && printf 'x\n' > src/wgap/a.txt
+wgap_story() { # wgap_story <nn> <file> <verification>
+  printf -- '---\nstory: wgap-%s\nspec: wgap\nstatus: todo\nwave: %s\n---\n# G%s\n\n## Files\n- %s\n\n## Verification\n%s\n' \
+    "$1" "$1" "$1" "$2" "$3" > "docs/specs/wgap/wgap-$1-g.md"
+}
+wgap_story 01 app.txt '`bash nothere/**/*.sh`'
+wgap_story 02 src/wgap/a.txt '`cat src/**/*.txt`'
+out="$(bash scripts/wave-check.sh docs/specs/wgap)"
+printf '%s' "$out" | expect "a glob matching nothing outside ## Files is a verify-gap" "verify-gap: wgap-01's verification"
+printf '%s' "$out" | grep -qF "verify-gap: wgap-02" && { echo "::error::a glob covering the story's file was reported: $out"; fail=1; } \
+  || echo "  ok    a ** glob covering the story's own file is no verify-gap"
+rm -rf docs/specs/wgap src/wgap
 
 echo "fast-verification-04: wave-check reports a segment naming a round-only row, not its unmarked --part neighbour"
 cat > CLAUDE.vulyk.md <<'EOF'
@@ -1058,6 +1100,30 @@ got="$( PATH="$LSD:$PATH"; load_sample 2>&1 )"; ex=$?
   || { echo "::error::WmiPrvSE and powershell are listed apart from the top five - exit=$ex got: $got"; fail=1; }
 rm -rf "$LSD"
 
+echo "X-07: off Windows, load_sample reads the load over an interval, not ps's lifetime pcpu"
+# macOS: the second sample of top -l 2 (the first has no interval behind it). A stub top prints both.
+LSD="$(mktemp -d)"
+printf '#!/bin/sh\necho Darwin\n' > "$LSD/uname"
+printf '#!/bin/sh\nprintf "Processes: 1\\nCPU usage: 1.0%%%% user, 1.0%%%% sys, 98.0%%%% idle\\nCOMMAND %%%%CPU\\nlifetime 99.0\\nProcesses: 1\\nCPU usage: 20.5%%%% user, 9.0%%%% sys, 70.5%%%% idle\\nCOMMAND          %%%%CPU\\nGoogle Chrome He 31.2\\nkernel_task      12.0\\n"\n' > "$LSD/top"
+printf '#!/bin/sh\necho "10:00  up 1 day, load averages: 2.10 1.50 1.20"\n' > "$LSD/uptime"
+chmod +x "$LSD/uname" "$LSD/top" "$LSD/uptime"
+got="$( PATH="$LSD:$PATH"; load_sample 2>&1 )"; ex=$?
+[ "$ex" -eq 0 ] && [ "$got" = "cpu 30% top: Google Chrome He 31.2%, kernel_task 12.0%; load 2.10 1.50 1.20" ] \
+  && echo "  ok    macOS: cpu and the top rows come from top's second sample" \
+  || { echo "::error::macOS load_sample - exit=$ex got: $got"; fail=1; }
+printf '#!/bin/sh\necho "top: illegal option -- l"; exit 1\n' > "$LSD/top"
+got="$( PATH="$LSD:$PATH"; load_sample 2>&1 )"; ex=$?
+[ "$ex" -ne 0 ] && echo "  ok    macOS: a top with no CPU usage line fails, so the suite says LOAD: unavailable" \
+  || { echo "::error::a broken top still gave a load: $got"; fail=1; }
+rm -rf "$LSD"
+# Linux: busy share of the /proc/stat delta; a process's share of one core from its utime+stime delta. Only a
+# pid in both snaps counts (gone and new are left out), a name with spaces and `)` stays whole.
+got="$(printf 'T 1000 800\nP\t1\t100\tinit\nP\t42\t50\tmy (odd) name\nP\t7\t10\tgone\nP\t5\t1\tidle\n--\nT 1400 1000\nP\t1\t180\tinit\nP\t42\t250\tmy (odd) name\nP\t9\t30\tnew\nP\t5\t1\tidle\n' | load_from_proc_snaps 4)"
+[ "$got" = "cpu 50% top: my (odd) name 200.0%, init 80.0%" ] && echo "  ok    Linux: the load is the interval's delta, per core" \
+  || { echo "::error::load_from_proc_snaps got: $got"; fail=1; }
+printf 'T 1000 800\n--\nT 1000 800\n' | load_from_proc_snaps 4 >/dev/null && { echo "::error::an empty interval gave a load"; fail=1; } \
+  || echo "  ok    Linux: an empty interval is no load"
+
 echo "cross-platform ask 9: close-story runs the constitution's py.sh Python cell and refuses the old bare python one"
 PRE9="$(mktemp)"; cp CLAUDE.md "$PRE9"
 grep '^| Python |' "$SRC/CLAUDE.md" | tr -d '\r' >> CLAUDE.md
@@ -1121,6 +1187,11 @@ cell_case yes 'make b foo'
 cell_case no  'make a` or `make b foo'
 cell_case no  'pytest -p evil'
 cell_case no  'pytest a.py -p evil'
+cell_case no  'pytest "-p" evil'        # P9-05: quotes, a backslash, a tab or braces smuggle an option past the class
+cell_case no  "pytest '-p' evil"
+cell_case no  'pytest \-p evil'
+cell_case no  "pytest a.py$(printf '\t')-p evil"
+cell_case no  'pytest {-p,evil}'
 cell_case yes 'bash -n deploy.sh'
 rm -f "$CELLS"
 command_cell_exists "$SRC/CLAUDE.md" 'bash scripts/py.sh -m py_compile .claude/hooks/*.py' \

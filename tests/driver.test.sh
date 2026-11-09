@@ -394,9 +394,9 @@ const blindPromptsClean = (r) => r.dispatches
     const a = story(1);
     const r = await run(ARGS, {
       clerk: [
-        [CLAIM, '{"ok":true,"verb":"adv'],
-        [STATUS, build([a])],
-        [ADV, adv(round('opus'))],
+        [CLAIM, adv(build([a]))],
+        [ADV, '{"ok":true,"verb":"adv'],
+        [STATUS, round('opus')],
         [INGEST, 'Done. The command printed a JSON line.'],
         [STATUS, round('opus', { seat_attempt: { opus: 2 } })],
         [INGEST, adv(green())],
@@ -405,21 +405,30 @@ const blindPromptsClean = (r) => r.dispatches
     });
     const opus = r.dispatches.filter((d) => d.agentType === 'council-opus');
     check(r.mismatches.length === 0 && r.result.next === 'green', 'bad line: recovered through status, the run walks on', { seq: seq(r), mm: r.mismatches, result: r.result });
-    check(r.logs.some((l) => l.includes('reading status instead') && l.includes('--claim')), 'bad line: the recovery is logged', r.logs);
+    check(r.logs.some((l) => l.includes('reading status instead') && l.includes(`"${ADV}"`)), 'bad line: the recovery is logged', r.logs);
     check(opus.length === 2 && opus[1].prompt.includes("Your previous report was rejected: no reason reached the driver")
       && opus[1].prompt.includes('opus.attempt-2.md'), 'bad line: a recovered ingest re-asks with the generic line', opus.map((d) => d.prompt));
   }
   {
-    const r = await run(ARGS, { clerk: [[CLAIM, 'garbled'], [STATUS, 'garbled too'], [RELEASE, releaseOk]] });
-    check(r.result === 'garbled too' && r.mismatches.length === 0 && r.clerkCmds.length === 3,
+    const r = await run(ARGS, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, 'garbled'], [STATUS, 'garbled too'], [RELEASE, releaseOk]] });
+    check(r.result === 'garbled too' && r.mismatches.length === 0 && r.clerkCmds.length === 4,
       'bad line twice: the run ends with the raw second line, still releases', { result: r.result, seq: seq(r) });
+  }
+  // P10-12: status does not name the DRIVER holder, so it cannot prove an unreadable claim - a run on
+  // another driver's claim dispatched beside it. It stops before any dispatch and still releases.
+  for (const line of ['garbled', '{"ok":true,"verb":"adv', JSON.stringify({ verb: 'advance', next: 'build:1' })]) {
+    const r = await run(ARGS, { clerk: [[CLAIM, line], [RELEASE, releaseOk]] });
+    check(r.mismatches.length === 0 && r.clerkCmds.length === 2 && r.dispatches.length === 0
+      && r.result.stop && r.result.stop.failed === 'claim' && r.result.stop.error.includes('the claim is unproven')
+      && r.result.stop.error.includes(line.slice(0, 8)),
+      `P10-12: an unreadable --claim line (${line.slice(0, 12)}) stops unproven, no status read, no dispatch, still releases`, { seq: seq(r), result: r.result });
   }
   {
     const r = await run(ARGS, { clerk: [[CLAIM, { ok: true, verb: 'advance', exit: 0, next: 'green' }], [STATUS, green()], [RELEASE, releaseOk]] });
     check(r.result.next === 'green' && r.mismatches.length === 0, 'bad line: an ok line with no status object reads status once', seq(r));
   }
   {
-    const r = await run(ARGS, { clerk: [[CLAIM, 'x'], [STATUS, { ok: false, verb: 'status', exit: 1, next: 'error', error: 'usage' }], [RELEASE, releaseOk]] });
+    const r = await run(ARGS, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, 'x'], [STATUS, { ok: false, verb: 'status', exit: 1, next: 'error', error: 'usage' }], [RELEASE, releaseOk]] });
     check(r.result.stop && r.result.stop.verb === 'status' && r.result.stop.error === 'usage', 'bad line: a status error envelope stops the run', r.result);
   }
 

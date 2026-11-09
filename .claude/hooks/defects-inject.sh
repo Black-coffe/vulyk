@@ -20,19 +20,32 @@
 # Never blocks: no python, no docs/defects/, bad JSON or any error -> silent exit 0.
 # The Python half lives below the `exit 0`, inside a no-op heredoc; bash never runs it, python reads
 # it back out of this file (one interpreter start, stdin passes straight through).
-# stdin is read once so a non-working interpreter (the Windows Store `python3` alias exits 9009
-# without running anything) falls through to the next one; 0 or 1 means python itself ran.
+# stdin is read once so a non-working interpreter falls through to the next one: a preset $VULYK_PY
+# (as scripts/lib.sh trusts it), then python3, python, py. Only exit 0 means the Python half ran (it
+# always ends in sys.exit(0)); its output is held until then, so the Windows Store `python3` alias
+# (9009), a Python 2 that cannot read this file (1) or a broken install prints nothing.
 IN="$(cat)"
 # Read is on the matcher for story files only: every other Read exits here, without a python start.
 re='"tool_name"[[:space:]]*:[[:space:]]*"Read"'
 if [[ $IN =~ $re ]]; then
   case "$IN" in *docs/specs/*|*'docs\\specs\\'*) ;; *) exit 0 ;; esac
 fi
-for PY in python3 python; do
+# Any other tool (WebFetch, Agent, mcp__*) has no path and no command line: only a `tool:` entry can match
+# it, so a library with no `tool:` anywhere exits here too, before python starts (P10-11). grep's 1 is
+# "read it all, none there"; a read error (2) goes on to python.
+re='"tool_name"[[:space:]]*:[[:space:]]*"'
+re_path='"tool_name"[[:space:]]*:[[:space:]]*"(Edit|Write|MultiEdit|NotebookEdit|Bash|Read)"'
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [[ $IN =~ $re ]] && ! [[ $IN =~ $re_path ]]; then
+  grep -rqsF 'tool:' "$CLAUDE_PROJECT_DIR/docs/defects"
+  [ $? -eq 1 ] && exit 0
+fi
+for PY in ${VULYK_PY:+"$VULYK_PY"} python3 python py; do
   command -v "$PY" >/dev/null 2>&1 || continue
-  printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \
-    "${BASH_SOURCE[0]}" "$@" 2>/dev/null
-  case $? in 0|1) exit 0 ;; esac
+  # the trailing `.` keeps the output's last newline through $(...)
+  OUT="$(printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \
+    "${BASH_SOURCE[0]}" "$@" 2>/dev/null && printf .)" || continue
+  printf '%s' "${OUT%.}"
+  exit 0
 done
 exit 0
 
@@ -163,7 +176,10 @@ def main():
         cmd = ti.get('command') or ''
         if not isinstance(cmd, str):
             return
-        for t in re.split(r'[\s;|&<>()]+', cmd):
+        # A quoted string with a space in it is one more token, whole: the split alone cut
+        # "docs/My Notes/a.md" into pieces no glob matches (P10-15).
+        quoted = [a or b for a, b in re.findall(r'"([^"]*)"|\'([^\']*)\'', cmd)]
+        for t in re.split(r'[\s;|&<>()]+', cmd) + [q.strip() for q in quoted if re.search(r'\s', q.strip())]:
             t = t.strip('\'"`')
             for part in {t, t.rsplit('=', 1)[-1]}:
                 part = rel(part.strip('\'"`'), root)

@@ -4,7 +4,8 @@
 # .claude/hooks/defects_lib.py). One line per finding:
 #   - the explicit phrase «внеси в запрет / правило / разрешение» (RU/UK/EN), typed or pasted ->
 #     write the never / how-to / allowed card now, verbatim;
-#   - typed text that looks like a correction (a timecode, a correction word, a card's `keys:`) ->
+#   - typed text that looks like a correction (a media timecode, a correction word, a card's `keys:` at
+#     a word start) ->
 #     file the quote now and report one line with «отмени»;
 #   - a correction word or card key only inside <pasted_content> -> ask the owner whether these are
 #     his words first. A paste that starts with $VULYK_DICTATION_TAG (when set) counts as typed.
@@ -21,16 +22,20 @@
 # Never blocks: no python, no docs/defects/, bad JSON or any error -> silent exit 0.
 # The Python half lives below the `exit 0`, inside a no-op heredoc; bash never runs it, python reads
 # it back out of this file (one interpreter start, stdin passes straight through).
-# stdin is read once so a non-working interpreter (the Windows Store `python3` alias exits 9009
-# without running anything) falls through to the next one; 0 or 1 means python itself ran.
+# stdin is read once so a non-working interpreter falls through to the next one: a preset $VULYK_PY
+# (as scripts/lib.sh trusts it), then python3, python, py. Only exit 0 means the Python half ran (it
+# always ends in sys.exit(0)); its output is held until then, so the Windows Store `python3` alias
+# (9009), a Python 2 that cannot read this file (1) or a broken install prints nothing.
 # `--lexicon` prints the correction lexicon as portable ERE lines instead (for `litopys corrections
 # --lexicon`, read by /vulyk-evolve) and reads no stdin: one word list, two consumers.
 if [ "${1:-}" = "--lexicon" ]; then IN=""; else IN="$(cat)"; fi
-for PY in python3 python; do
+for PY in ${VULYK_PY:+"$VULYK_PY"} python3 python py; do
   command -v "$PY" >/dev/null 2>&1 || continue
-  printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \
-    "${BASH_SOURCE[0]}" "$@" 2>/dev/null
-  case $? in 0|1) exit 0 ;; esac
+  # the trailing `.` keeps the output's last newline (the --lexicon list) through $(...)
+  OUT="$(printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \
+    "${BASH_SOURCE[0]}" "$@" 2>/dev/null && printf .)" || continue
+  printf '%s' "${OUT%.}"
+  exit 0
 done
 exit 0
 
@@ -55,11 +60,17 @@ SIDE_NOTE = re.compile(r'(?:^|(?<=>))[ \t]*here is a note offered by a side agen
                        r'(?:\n[ \t]*(?:>[^\n]*)?(?=\n|\Z))*',
                        re.S | re.I | re.M)
 # Stems match at a word start ("переделай" also takes "переделайте"); whole phrases need both edges.
-STEMS = ['опять', 'снова', 'я же говорил', 'я же казав', 'знову', 'переделай', 'переделать', 'обрезал']
-WORDS = ['не так', 'again', 'i said', 'i told you', 'why did you', 'not what i asked']
+# «снова» and "again" are not here: a report says "ran it again" with no complaint in it (P10-08).
+STEMS = ['опять', 'я же говорил', 'я же казав', 'знову', 'переделай', 'переделать', 'обрезал']
+WORDS = ['не так', 'i said', 'i told you', 'why did you', 'not what i asked']
 LEXICON = re.compile(r'(?<!\w)(?:' + '|'.join(map(re.escape, STEMS)) + r')'
                      r'|(?<!\w)(?:' + '|'.join(map(re.escape, WORDS)) + r')(?!\w)')
-TIMECODE = re.compile(r'\b\d{1,2}:\d{2}\b')
+# A media timecode (m:ss, mm:ss, h:mm:ss). Not a clock (after a date; before am/pm/UTC/GMT/Z or an offset),
+# a line:col (`x.sh:12:34`) or an offset itself (after `:`, `+`, `-` or a word character): those fired on
+# every report (P10-08).
+TIMECODE = re.compile(r'(?<![\w:+-])(?<!\d{4}-\d{2}-\d{2}T)(?<!\d{4}-\d{2}-\d{2} )'
+                      r'\d{1,2}:[0-5]\d(?::[0-5]\d)?(?:[.,]\d+)?'
+                      r'(?![\w:]|\s*(?:[ap]\.?m\b|utc\b|gmt\b|[+-]\d{2}:?\d{2}\b))', re.I)
 # The explicit phrase (RU, UK, EN); the last group names the branch. RU/UK allow up to three words
 # between the verb and the preposition («внеси это / вот это в запрет»).
 PHRASES = [
@@ -120,7 +131,8 @@ def triggers(text, cards, timecode=True):
     for c in cards:
         if c.status == 'revoked':
             continue
-        if any(k.strip().lower() and k.strip().lower() in low for k in c.keys):
+        # A key matches at a word start, as a stem does: "cut" takes "cutting", never "execute" (P10-08).
+        if any(k.strip() and re.search(r'(?<!\w)' + re.escape(k.strip().lower()), low) for k in c.keys):
             refs.append(c.ref)
     if refs:
         why.append('card keys')
@@ -212,8 +224,11 @@ def on_answer(data, cards):
         q = next((q for q in qs if q.get('question') == question), None)
         rest = answer
         for label in sorted(labels(q) if q else every, key=len, reverse=True):
-            if label in rest:
-                rest = rest.replace(label, ' ')
+            # A whole comma-separated part only (the answer joins chosen labels and free text with ", "):
+            # "Blue" in "not Blue" or "Reddish" is no choice the owner made (P10-09).
+            part = re.compile(r'(?:^|(?<=,))[ \t]*' + re.escape(label) + r'[ \t]*(?=,|\Z)')
+            if part.search(rest):
+                rest = part.sub(' ', rest)
                 lines.append('[VULYK] decision: «' + clip(label, 120) + '» on «' + clip(str(question), 160) + '»')
         rest = SIDE_NOTE.sub(' ', rest).strip(' \t\r\n,;"\'«»“”')
         if rest:

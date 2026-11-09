@@ -58,12 +58,18 @@ json_escape() { # json_escape <text> -> the JSON-string-safe form of <text>: bac
   # every value through, so the last stdout line is one parsable JSON object whatever a
   # hive's `## Commands` cell or a report's own text contains. Order matters: backslash first,
   # or a later substitution's own backslash would be escaped a second time.
-  local s="$1"
-  s="${s//\\/\\\\}"
-  s="${s//\"/\\\"}"
-  s="${s//$'\t'/\\t}"
-  s="${s//$'\n'/\\n}"
-  printf '%s' "$s"
+  json_escape_to "$1"
+  printf '%s' "$JE"
+}
+
+json_escape_to() { # json_escape_to <text> -> JE: json_escape's result in a variable, no subshell -
+  # for free text interpolated into a council.jsonl row (P9-01) or `status --json` (P9-06), where a
+  # note or a frontmatter value holding a quote broke the line for jq or forged a key.
+  JE="$1"
+  JE="${JE//\\/\\\\}"
+  JE="${JE//\"/\\\"}"
+  JE="${JE//$'\t'/\\t}"
+  JE="${JE//$'\n'/\\n}"
 }
 
 emit() { # emit <true|false> <verb> <exit> <next> [error] [status-json]
@@ -651,7 +657,7 @@ cmd_status() {
   [ -n "$APPROVED_V" ] && APPROVED_B=true
   [ -n "$SHIPPED_V" ] && SHIPPED_B=true
   [ -f "$SPEC/PAUSE" ] && PAUSED_B=true
-  local BRANCH_JSON="null"; [ -n "$BRANCH_V" ] && BRANCH_JSON="\"$BRANCH_V\""
+  local BRANCH_JSON="null"; [ -n "$BRANCH_V" ] && { json_escape_to "$BRANCH_V"; BRANCH_JSON="\"$JE\""; } # P9-06: a quoted marker value
 
   # --- stories: counts, and the lowest wave that is either dispatchable or closeable -------
   # One read per story (status and wave together), kept in arrays for the wave walk below -
@@ -734,7 +740,7 @@ cmd_status() {
     local RCOURT
     RCOURT="$(round_field "$RD" court)"
     CEILING="$(round_field "$RD" ceiling)"; [ -n "$CEILING" ] || CEILING="$(tier_ceiling "$(round_tier "$SPEC" "$RD")")"
-    [ -n "$RCOURT" ] && COURT_JSON="\"$RCOURT\""
+    [ -n "$RCOURT" ] && { json_escape_to "$RCOURT"; COURT_JSON="\"$JE\""; }
     if ! row_exists "$SLUG" "$ROUND_N"; then
       OPEN_B=true
       local seat
@@ -1083,11 +1089,12 @@ ASKS
 
   if ! escalate_row_exists "$slug" "$n"; then
     mkdir -p memory/stats
+    json_escape_to "$note" # P9-01: the note is free text - a quote in it must not forge a key
     printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"ESCALATE","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"review_asks":[%s],"na":0,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":"%s","note":"%s"}\n' \
       "$(now_ts)" "$slug" "$n" "$rhead" "$rpack" "$a" \
       "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$(json_num_csv "$review_asks")" \
       "$review_v" "$haiku_v" "$haiku_model" "$sonnet_v" "$sonnet_model" "$opus_v" "$opus_model" \
-      "$attempts" "$reason" "$note" >> memory/stats/council.jsonl
+      "$attempts" "$reason" "$JE" >> memory/stats/council.jsonl
   fi
 
   if [ -f "$plan" ] && ! escalate_council_line_exists "$plan" "$n"; then
@@ -1339,6 +1346,7 @@ ASKS
     local noteval=""
     [ "$escalate_reason" = "env" ] && noteval="$(redact_note "$(printf '%s' "$absent_seats" | sed 's/ /, /g') ABSENT")"
     [ -n "$review_note" ] && noteval="${noteval:+$noteval; }$review_note"
+    json_escape_to "$noteval"; noteval="$JE" # P9-01: same as write_escalate_row_for_round
     printf '{"ts":"%s","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":%s,"red":[%s],"red_unevidenced":[%s],"review_asks":[%s],"na":%s,"review":"%s","haiku":"%s","haiku_model":"%s","sonnet":"%s","sonnet_model":"%s","opus":"%s","opus_model":"%s","attempts":%s,"escalate":%s,"note":"%s"}\n' \
       "$(now_ts)" "$SLUG" "$N" "$overall" "$head7" "$RPACK" "$A" \
       "$(json_num_csv "$red_e")" "$(json_num_csv "$red_u")" "$(json_num_csv "$review_asks")" "$na_count" \
@@ -1652,6 +1660,15 @@ ask_line_of() { # ask_line_of <report> <n> -> the first line starting "ASK <n>:"
     case "$line" in "ASK $2:"*) printf '%s\n' "$line"; return ;; esac
   done <<<"$1"
 }
+replace_ask_line() { # replace_ask_line <report> <n> <new-line> -> <report>, each line starting
+  # "ASK <n>:" replaced by <new-line> verbatim. Not sed: <new-line> carries the seat's own text,
+  # and a `#`, `&` or `\` in it broke the s### expression and lost the whole report (P9-02).
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in "ASK $2:"*) line="$3" ;; esac
+    printf '%s\n' "$line"
+  done <<<"$1"
+}
 ask_num_of() { # ask_num_of <ask-line> -> its ask number
   local re='^ASK ([0-9]+):'
   [[ $1 =~ $re ]] && printf '%s\n' "${BASH_REMATCH[1]}"
@@ -1851,7 +1868,7 @@ REPORTEOF
         # this): the description before the final dash-separated segment, same as before.
         short="$(printf '%s' "$line" | sed -E "s/^ASK $u: (GREEN|RED|N\/A) - //")"
         short="$(printf '%s' "$short" | sed 's/ - [^-]*$//')"
-        FINAL_REPORT="$(printf '%s\n' "$FINAL_REPORT" | sed "s#^ASK $u:.*#ASK $u: N/A - $short - why: unevidenced on attempt 2#")"
+        FINAL_REPORT="$(replace_ask_line "$FINAL_REPORT" "$u" "ASK $u: N/A - $short - why: unevidenced on attempt 2")"
       else
         red_u_list="$red_u_list $u"
       fi
@@ -2023,7 +2040,11 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
   # `model:` applies, as it does for the seats (a hive's pin there holds). The driver never reads the
   # story file to learn it.
   model="$(fm_field "$f" model)"
-  printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$f")"
+  # P9-06: values are taken as written - a quoted YAML value (`story: "x-01"`) keeps its quotes,
+  # JSON-escaped, so the line stays one parsable object.
+  json_escape_to "$f"; f="$JE"; json_escape_to "$id"; id="$JE"
+  json_escape_to "$worker"; worker="$JE"; json_escape_to "$model"; model="$JE"
+  printf '{"file":"%s","story":"%s","worker":"%s","model":"%s","repeat":%s}' "$f" "$id" "$worker" "$model" "$(repeat_of "$1")"
 }
 
 verify_cell_hint() { # verify_cell_hint <constitution> <segment> - ab-run-fixes C7: up to 3 `try: <cell>`
@@ -2451,6 +2472,18 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] - red-receipt: run the 
   exit 0
 }
 
+set_story_status() { # set_story_status <story-file> <from-ERE> <to> - rewrites the value of the
+  # first `status:` line only, the one fm_field reads, never a later `status:` line in the body
+  # (P9-13: a body line such as an example or a quoted log was rewritten to `done` too).
+  local f="$1" n=0 at="" line
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n+1))
+    case "$line" in status:*) at="$n"; break ;; esac
+  done < "$f"
+  [ -n "$at" ] && sed_inplace -E "${at}s/^(status:[[:space:]]*)$2/\1$3/" "$f"
+  return 0
+}
+
 cmd_close_story() { # cmd_close_story <story-file> <commit:0|1> [<stamp>]
   local STORY="$1" DOCOMMIT="$2" STAMP="${3:-}"
   [ -n "$STORY" ] && [ -f "$STORY" ] || {
@@ -2644,7 +2677,7 @@ EOF
     # Story 09: the anomaly-scan hook's log rides this commit too, same as scope.jsonl above.
     [ -n "$(git status --porcelain -- memory/stats/anomalies.jsonl 2>/dev/null)" ] && git add -- memory/stats/anomalies.jsonl >/dev/null 2>&1
 
-    sed_inplace -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
+    set_story_status "$STORY" '[^[:space:]#]+' done
     git add -- "$STORY" >/dev/null 2>&1
 
     # Commit exactly what this story staged (`--only` by pathspec), never whatever else sits in
@@ -2663,7 +2696,7 @@ EOF
     if [ "${#OWN[@]}" -eq 0 ] \
       || ! commit_err="$(GIT_LITERAL_PATHSPECS=1 git commit -q -m "$(commit_subject "story($ID): $TITLE")" --only -- ${OWN[@]+"${OWN[@]}"} 2>&1)"; then
       [ "${#OWN[@]}" -eq 0 ] || GIT_LITERAL_PATHSPECS=1 git reset -q -- ${OWN[@]+"${OWN[@]}"} >/dev/null 2>&1
-      sed_inplace -E "s/^(status:[[:space:]]*)done/\1$ST/" "$STORY"
+      set_story_status "$STORY" done "$ST"
       echo "cycle: close-story - git commit failed: $commit_err" >&2
       emit false close-story 2 error "git commit failed"
       exit 2
@@ -2672,7 +2705,7 @@ EOF
     # (lint-staged, a formatter) changed the commit but not the real index. Sync it to HEAD.
     GIT_LITERAL_PATHSPECS=1 git reset -q -- ${OWN[@]+"${OWN[@]}"} >/dev/null 2>&1
   else
-    sed_inplace -E "s/^(status:[[:space:]]*)[^[:space:]#]+/\1done/" "$STORY"
+    set_story_status "$STORY" '[^[:space:]#]+' done
   fi
 
   echo "cycle: $(fm_field "$STORY" story) - closed, verification green"
@@ -2695,10 +2728,15 @@ clean_court() { # clean_court <slug> - removes every worktree (registered or orp
   # .vulyk/court/<slug>/ before a fresh one is built (D5: "an orphaned court ... is removed
   # by the next open-round before it creates its own" - covers a crashed judge's leftover
   # worktree and the previous round's court alike, unconditionally).
+  # One path per line, never word-split (P9-03): a hive path with a space split into fragments,
+  # and the first one ("/home/me/my" of "/home/me/my hive/...") was rm -rf'd.
   local slug="$1" wt
-  for wt in $(git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | grep -F "/.vulyk/court/$slug/"); do
+  while IFS= read -r wt; do
+    [ -n "$wt" ] || continue
     remove_worktree_path "$wt"
-  done
+  done <<WTEOF
+$(git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | grep -F "/.vulyk/court/$slug/")
+WTEOF
   rm -rf "$ROOT/.vulyk/court/$slug"
   git worktree prune >/dev/null 2>&1 || true
 }
@@ -3391,7 +3429,9 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
 
   local dateonly; dateonly="$(date -u +%Y-%m-%d)"
   local marker_text="**After escalation (round $N, $dateonly).**"
-  local already=0; grep -qF "$marker_text" "$BRIEF" 2>/dev/null && already=1
+  # P9-16: idempotent per round, not per day - the date stays in the marker but out of the key,
+  # or a re-run the next day appended a second decision and raised the ceiling again.
+  local already=0; grep -qF "**After escalation (round $N, " "$BRIEF" 2>/dev/null && already=1
 
   local STEP; STEP="$(tier_ceiling "$(tier_of "$SPEC")")"
   local OLDCEIL; OLDCEIL="$(head -1 "$SPEC/council/CEILING" 2>/dev/null | tr -d '[:space:]')"; [ -n "$OLDCEIL" ] || OLDCEIL="$STEP"
@@ -3409,7 +3449,8 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
   fi
 
   if [ "$already" -eq 0 ]; then
-    append_after_answers "$BRIEF" "$(printf '\n%s\n> %s\n' "$marker_text" "$DECISION")"
+    # P9-07: the owner's decision is free text bound for the committed brief.md - masked first
+    append_after_answers "$BRIEF" "$(printf '\n%s\n> %s\n' "$marker_text" "$(redact_note "$DECISION")")"
     NEWCEIL=$((OLDCEIL+STEP))
     mkdir -p "$SPEC/council"
     printf '%s\n' "$NEWCEIL" > "$SPEC/council/CEILING"
@@ -3441,6 +3482,7 @@ cmd_pause() { # cmd_pause <spec> <why>
   }
   local WHO="${OWNER:-${USER:-${USERNAME:-owner}}}"
   [ -n "$WHY" ] || WHY="no reason given"
+  WHY="$(redact_note "$WHY")" # P9-07: the reason reaches PAUSE, stdout and the committed journal masked
   local HEAD; HEAD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
   {
     printf '%s \xc2\xb7 %s \xc2\xb7 %s\n' "$WHO" "$WHY" "$(now_ts)"
