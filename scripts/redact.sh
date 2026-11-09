@@ -23,15 +23,22 @@ set -u
 MASK='[VULYK:REDACTED]'
 
 # Case variants spelled out instead of sed's GNU-only `I` flag - BSD sed must not choke.
-KEYWORDS='password|PASSWORD|Password|passwd|PASSWD|secret|SECRET|Secret|[Aa]pi[_-]?[Kk]ey|API[_-]?KEY|apikey|APIKEY|[Aa]ccess[_-]?[Kk]ey|ACCESS[_-]?KEY|[Aa]ccess[_-]?[Tt]oken|ACCESS[_-]?TOKEN|[Rr]efresh[_-]?[Tt]oken|REFRESH[_-]?TOKEN|[Aa]uth[_-]?[Tt]oken|AUTH[_-]?TOKEN|[Cc]lient[_-]?[Ss]ecret|CLIENT[_-]?SECRET|[Pp]rivate[_-]?[Kk]ey|PRIVATE[_-]?KEY'
+KEYWORDS='password|PASSWORD|Password|passwd|PASSWD|secret|SECRET|Secret|[Aa]pi[_-]?[Kk]ey|API[_-]?KEY|apikey|APIKEY|[Aa]ccess[_-]?[Kk]ey|ACCESS[_-]?KEY|[Aa]ccess[_-]?[Tt]oken|ACCESS[_-]?TOKEN|[Rr]efresh[_-]?[Tt]oken|REFRESH[_-]?TOKEN|[Aa]uth[_-]?[Tt]oken|AUTH[_-]?TOKEN|[Cc]lient[_-]?[Ss]ecret|CLIENT[_-]?SECRET|[Pp]rivate[_-]?[Kk]ey|PRIVATE[_-]?KEY|[Cc]redentials?|CREDENTIALS?'
 # A bare token key (TOKEN=, GH_TOKEN:, "token":) must END in token - max_tokens, token_budget and
 # tokenizer are counters and settings, and this framework writes them everywhere - and its value must
 # look like one: 16+ chars, no spaces. Prose says "token: see below" and "token = `agent`".
 TOKEN_KEY='[A-Za-z0-9_-]*(token|TOKEN|Token)'
 TOKEN_VALUE="[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"
-# The value: a whole quoted string (spaces and all), else one unquoted word of 6+ chars that does not
-# open with ':' (so `token::Kind` or `secret::Name` in Rust / C++ stays readable).
-VALUE="(\"[^\"]{6,}\"|'[^']{6,}'|[\"']?[^\"'[:space:]:][^\"'[:space:]]{5,}[\"']?)"
+# A short secret name must END the key and stand alone or after '_'/'-': SMTP_PASS, PASS, DB_PWD, db-pwd -
+# but not password_reset_count, bypass, compass, a bare PWD (the shell's current folder) or dsn_timeout.
+# The char before the key is captured (sed has no lookbehind) and written back.
+END_KEY="(^|[^A-Za-z0-9_-])([\"']?(([A-Za-z0-9_-]*[_-])?(PASS|pass|Pass)|[A-Za-z0-9_-]*[_-](PWD|pwd|Pwd))[\"']?[[:space:]]*[=:][[:space:]]*)"
+# A DSN key holds a URL; it is masked whole when the URL carries a credential (scheme://key@host).
+DSN_KEY="(^|[^A-Za-z0-9_-])([\"']?([A-Za-z0-9_-]*[_-])?(DSN|dsn|Dsn)[\"']?[[:space:]]*[=:][[:space:]]*)"
+DSN_VALUE="[\"']?[A-Za-z][A-Za-z0-9+.-]*://[^[:space:]\"'@]+@[^[:space:]\"']*[\"']?"
+# The value: a whole quoted string (spaces and all, to its closing quote however short), else one unquoted
+# word of 6+ chars that does not open with ':' (so `token::Kind` or `secret::Name` in Rust / C++ stays readable).
+VALUE="(\"[^\"]+\"|'[^']+'|[\"']?[^\"'[:space:]:][^\"'[:space:]]{5,}[\"']?)"
 
 SED_ARGS=( -E
   -e "s|AKIA[0-9A-Z]{16}|$MASK|g"
@@ -56,6 +63,8 @@ SED_ARGS=( -E
   # A URL password may hold a raw '/'; a port before a path (host:443/@scope) is all digits, so it is not one.
   -e "s#(://)[^/[:space:]:@]+:([^/[:space:]@]*[^0-9/[:space:]@][^[:space:]@]*|[^/[:space:]@]+)@#\1$MASK@#g"
   -e "s#([\"']?[A-Za-z0-9_-]*($KEYWORDS)[A-Za-z0-9_-]*[\"']?[[:space:]]*[=:][[:space:]]*)$VALUE#\1$MASK#g"
+  -e "s#$END_KEY$VALUE#\1\2$MASK#g"
+  -e "s#$DSN_KEY$DSN_VALUE#\1\2$MASK#g"
   -e "s#([\"']?$TOKEN_KEY[\"']?[[:space:]]*[=:][[:space:]]*)$TOKEN_VALUE#\1$MASK#g"
 )
 

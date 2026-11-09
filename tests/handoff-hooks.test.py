@@ -227,6 +227,32 @@ for reason, wanted in (("prompt_input_exit", 1), ("clear", 1), ("resume", 0)):
           rc == 0 and len(handoffs(proj)) == wanted, "rc=%d out=%r err=%r" % (rc, out[:160], err[:160]))
 
 
+# --- mass-audit 10: a /clear dump never repoints index.json away from an enriched handoff --------
+print("--- /clear dump keeps index.json on the session's enriched handoff")
+for enriched in ("true", "false"):
+    tag = "clr-" + enriched
+    home, proj = fresh(tag)
+    d = os.path.join(proj, ".claude", "handoff")
+    os.makedirs(d)
+    kept = os.path.join(d, "enriched-s10.md")
+    with open(kept, "w", encoding="utf-8") as fh:
+        fh.write("---\nhandoff: true\nsession_id: s10\nenriched: %s\n---\n\n# Handoff\n\n## Summary\n\nnext\n" % enriched)
+    with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
+        json.dump({"path": kept, "session_id": "s10", "reason": "manual", "ts": time.time()}, fh)
+    tp = write_transcript(os.path.join(ROOT, tag, "tr", "s10.jsonl"), 150000)
+    rc, out, err = run("sessionend", env_for(home, proj),
+                       {"session_id": "s10", "transcript_path": tp, "cwd": proj, "reason": "clear"})
+    with open(os.path.join(d, "index.json"), "r", encoding="utf-8") as fh:
+        now = json.load(fh).get("path")
+    check("a /clear dump with an enriched=%s handoff indexed still writes its file" % enriched,
+          rc == 0 and len(handoffs(proj)) == 2, "rc=%d docs=%r err=%r" % (rc, handoffs(proj), err[:200]))
+    if enriched == "true":
+        check("... and leaves index.json on the enriched handoff", now == kept, "index -> %r" % now)
+    else:
+        check("... and repoints index.json to the new dump when nothing is enriched",
+              now != kept and now in handoffs(proj), "index -> %r" % now)
+
+
 # --- P10-14: transcripts are found under CLAUDE_CONFIG_DIR -------------------------------------
 print("--- P10-14 CLAUDE_CONFIG_DIR")
 home, proj = fresh("p14")

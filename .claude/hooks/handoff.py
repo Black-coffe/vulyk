@@ -620,6 +620,7 @@ def harvest(entries, cfg):
 # missing, is WSL's (a Windows path is not a file there) or redact.sh degraded to `cat`.
 # Keep it a superset of that script's list; extend both together. Group 1, when a pattern
 # has one, is kept in front of the mask.
+_VALUE = r"(?:\"[^\"\n]+\"|'[^'\n]+'|[\"']?[^\"'\s:][^\"'\s]{5,}[\"']?)"  # redact.sh's VALUE
 _REDACT_FALLBACK = [
     re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"),
     re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
@@ -643,12 +644,19 @@ _REDACT_FALLBACK = [
                r"[A-Za-z0-9._~+/-]{8,}=*", re.I),
     # A URL password may hold a raw '/'; a port before a path (host:443/@scope) is all digits, so it is not one.
     re.compile(r"(://)[^/\s:@]+:(?:[^/\s@]*[^0-9/\s@][^\s@]*|[^/\s@]+)(?=@)"),
-    # key = value: a whole quoted string (spaces and all), else one unquoted word of 6+ chars that does not
-    # open with ':' (token::Kind, secret::Name stay readable). Line-bound, as sed is.
+    # key = value: a whole quoted string (spaces and all, to its closing quote however short), else one
+    # unquoted word of 6+ chars that does not open with ':' (token::Kind, secret::Name stay readable).
+    # Line-bound, as sed is.
     re.compile(r"([\"']?[A-Za-z0-9_-]*(?:password|passwd|secret|api[_-]?key|access[_-]?key|access[_-]?token"
-               r"|refresh[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key)[A-Za-z0-9_-]*[\"']?"
-               r"[^\S\n]*[=:][^\S\n]*)"
-               r"(?:\"[^\"\n]{6,}\"|'[^'\n]{6,}'|[\"']?[^\"'\s:][^\"'\s]{5,}[\"']?)", re.I),
+               r"|refresh[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|credentials?)"
+               r"[A-Za-z0-9_-]*[\"']?[^\S\n]*[=:][^\S\n]*)" + _VALUE, re.I),
+    # A short secret name ENDS the key, alone or after '_'/'-': SMTP_PASS, PASS, DB_PWD - not bypass,
+    # password_reset_count or a bare PWD (the shell's current folder).
+    re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:(?:[A-Za-z0-9_-]*[_-])?(?:PASS|pass|Pass)"
+               r"|[A-Za-z0-9_-]*[_-](?:PWD|pwd|Pwd))[\"']?[^\S\n]*[=:][^\S\n]*)" + _VALUE),
+    # A DSN key is masked whole when its URL carries a credential (scheme://key@host); dsn_timeout=30 is not.
+    re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:[A-Za-z0-9_-]*[_-])?(?:DSN|dsn|Dsn)[\"']?[^\S\n]*[=:][^\S\n]*)"
+               r"[\"']?[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'@]+@[^\s\"']*[\"']?"),
     # A bare token key must END in token (max_tokens, token_budget are counters) and hold a 16+ char value.
     re.compile(r"([\"']?[A-Za-z0-9_-]*(?:token|TOKEN|Token)[\"']?[^\S\n]*[=:][^\S\n]*)"
                r"[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
@@ -764,6 +772,21 @@ def create_unique(target_dir, base, doc):
             n += 1
 
 
+def indexed_enriched(root, session_id):
+    """True when index.json names a handoff of this session whose frontmatter says enriched: true."""
+    try:
+        with open(index_path(root), "r", encoding="utf-8") as fh:
+            meta = json.load(fh)
+        if meta.get("session_id") != session_id:
+            return False
+        with open(meta.get("path") or "", "r", encoding="utf-8") as fh:
+            head = fh.read(4000)
+        front = head.split("\n---", 1)[0] if head.startswith("---") else ""
+        return re.search(r"(?m)^enriched:[ \t]*true[ \t]*\r?$", front) is not None
+    except Exception:
+        return False
+
+
 def write_handoff(payload, cfg, reason):
     root = project_root(payload)
     cwd = payload.get("cwd") or root
@@ -841,6 +864,10 @@ def write_handoff(payload, cfg, reason):
     path = create_unique(target_dir, "%s-%s" % (stamp.strftime("%Y%m%d-%H%M%S"),
                                                 str(session_id)[:8]), doc)
 
+    # /vulyk-handoff then /clear is the documented checkpoint: the /clear dump is mechanical and
+    # must not take index.json (what the next session restores) away from the enriched one.
+    if reason == "sessionend-clear" and indexed_enriched(root, session_id):
+        return path, tokens
     try:
         with open(index_path(root), "w", encoding="utf-8") as fh:
             json.dump({

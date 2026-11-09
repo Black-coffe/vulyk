@@ -456,6 +456,45 @@ redact_is "a one-line JSON key with its END on the BEGIN line does not open a bl
   "{\"private_key\": \"-----BEGIN PRIVATE KEY-----\\nMIIE\\n-----END PRIVATE KEY-----\\n\",${nl}\"client_email\": \"x@y\"}" \
   "${M}${nl}\"client_email\": \"x@y\"}"
 
+# --- redact.sh mass-audit S2: the secret names P9-04 left open, short quoted values; parity with handoff.py --
+echo "--- redact.sh S2: PASS, PWD, PASSWD, a credentialed DSN, CREDENTIALS, short quoted values - and the fallback agrees"
+S2=(
+  "masks a bare PASS key (SMTP_PASS)|SMTP_PASS=$val|SMTP_PASS=$M"
+  "masks a DB_PWD|DB_PWD=$val|DB_PWD=$M"
+  "masks an exported PASSWD|export PASSWD=$val|export PASSWD=$M"
+  "masks a DSN that carries a key|SENTRY_DSN=https://$(rep 32 k)@o1.ingest.example.io/1|SENTRY_DSN=$M"
+  "masks a quoted two-word CREDENTIALS|CREDENTIALS=\"two words\" tail|CREDENTIALS=$M tail"
+  "masks a JSON secret with spaces|\"secret\": \"my very long passphrase\", \"x\": 1|\"secret\": $M, \"x\": 1"
+  "masks a short quoted value to its closing quote|secret=\"my pw\" tail|secret=$M tail"
+  "leaves password_reset_count alone|password_reset_count=3|password_reset_count=3"
+  "leaves pass in prose alone|we pass the test and bypass: nothing|we pass the test and bypass: nothing"
+  "leaves pwd as a shell command alone|cd /tmp && pwd && ls|cd /tmp && pwd && ls"
+  "leaves dsn_timeout alone|dsn_timeout=30 dsn_pool=connections|dsn_timeout=30 dsn_pool=connections"
+)
+: > "$T/s2-in"
+for row in ${S2[@]+"${S2[@]}"}; do
+  IFS='|' read -r label input want <<EOF
+$row
+EOF
+  redact_is "$label" "$input" "$want"
+  printf '%s\n' "$input" >> "$T/s2-in"
+done
+bash "$SRC/scripts/redact.sh" < "$T/s2-in" > "$T/s2-sh"
+PYTHONIOENCODING=utf-8 "$PYBIN" - "$SRC/.claude/hooks/handoff.py" "$T/s2-in" "$T" <<'PY' > "$T/s2-py"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('handoff', sys.argv[1]); h = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(h)
+for line in open(sys.argv[2], encoding='utf-8').read().splitlines():
+    print(h.redact_text(sys.argv[3], line))
+PY
+i=0
+for row in ${S2[@]+"${S2[@]}"}; do
+  i=$((i + 1)); label="${row%%|*}"
+  sh_out="$(sed -n "${i}p" "$T/s2-sh" | tr -d '\r')"; py_out="$(sed -n "${i}p" "$T/s2-py" | tr -d '\r')"
+  [ "$sh_out" = "$py_out" ] && ok "handoff.py fallback agrees with redact.sh: $label" \
+    || bad "handoff.py fallback differs from redact.sh ($label): py '$py_out', sh '$sh_out'"
+done
+
 # --- /vulyk-gc refuses a gutted CONSOLIDATED.md (hindsight-harvest-03) --------------------------------
 echo "--- /vulyk-gc commit line refuses to commit a CONSOLIDATED.md that lost more than half"
 GC_LINE="$(tr -d '\r' < "$SRC/.claude/commands/vulyk-gc.md" | sed -n 's/^`\(f=memory\/learnings\/CONSOLIDATED\.md;.*\)`$/\1/p')"
