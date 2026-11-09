@@ -1,14 +1,15 @@
 ---
 story: mass-audit-fixes-17
 spec: mass-audit-fixes
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 4
 worker: worker-code
 wave: 4
 blocked_by: [mass-audit-fixes-11]
 red: required
 red_reason: an unwired shipped hook is not named on upgrade
+red_verified_at: 2026-11-09T15:01:44Z 1a0eb38508cdea3a3ffd2555f1040545b3aaf1e43959160e7571c85b0544ce2b
 ---
 
 # `--upgrade` names every shipped hook the hive does not wire
@@ -51,5 +52,32 @@ unasked: a hook the hive owner removed on purpose stays removed. Ask 18. Blocked
 `bash tests/telemetry.test.sh --part install-xp && bash tests/telemetry.test.sh --part install`
 
 ## Implementation notes
+- install.sh: `SHIPPED_HOOKS` table (wire_shipped hooks + git-guard.sh), `report_unwired` (py_wire --dry; grep without python), `--wire <event>:<script>` flag that wires one table entry through wire_hook and exits.
+- install.sh: wire_shipped and the git-guard block call report_unwired on the path that used to skip in silence; what they wire is unchanged.
+- Only hooks the release can skip are reported; always-wired hooks (wire_hook) are wired by the run itself, so --check keeps its "would wire" line for them.
+- tests/telemetry.test.sh (install-xp): hive pinned at 0.49.0 (a tag that shipped every hook), two hooks dropped, one rewritten to the bash -c ${CLAUDE_PROJECT_DIR} form; neighbour all-wired hive.
+- Test fix before green: the fixture dir `hive-xp-unwired` put "unwired " into the upgrade header (count 3); renamed to `hive-xp-lost`, count anchored to `^  unwired `; implementation reverted, red re-stamped, re-applied.
+- Surprise: a Python edit through a bash heredoc turned `\n` into real newlines in printf strings; fixed with Edit.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/telemetry.test.sh --part install-xp && bash tests/telemetry.test.sh --part install
+- exit: 1
+- tests: 1a0eb38508cdea3a3ffd2555f1040545b3aaf1e43959160e7571c85b0544ce2b (tests/telemetry.test.sh)
+- impl: 568c3e406e6865bafb21cba0681e894065653c4036f34d8fb3787eb08a50c007
+- stamped: 2026-11-09T15:01:44Z
+
+```
+::error::an unwired shipped hook is not named on upgrade: two unwired lines on --upgrade and on --check - expected [2 2], got [0 0]
+          Every story '## Verification' line also runs under a 300 s cap (VULYK_VERIFY_TIMEOUT above 300 acts as 300):
+          cut any row over ~210 s into --part rows before this hive takes this release. Your constitution is not edited.
+          stamp          .claude/vulyk-version = 0.49.0
+          write          .claude/vulyk-manifest (99 paths)
+          kept: model = opus (yours)
+        
+        Done. Upgraded framework files only; your CLAUDE.md, memory/, specs, ADRs and wiki were not touched.
+        If the constitution changed this release, the note above says by how much and how to migrate.
+  ok    a hive that wires every shipped hook: no unwired line
+telemetry.test.sh: 57 checks, 7 failed
+```

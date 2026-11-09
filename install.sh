@@ -3,6 +3,7 @@
 #
 #   Install:  ./install.sh /path/to/your/project [--check]
 #   Upgrade:  ./install.sh /path/to/your/project --upgrade [--check] [--constitution replace]
+#   One hook: ./install.sh /path/to/your/project --wire <event>:<script> [--check]   (wires that one shipped hook)
 #
 # Install copies file-by-file and skips anything that already exists.
 # Upgrade additionally REPLACES framework-owned files that changed between versions
@@ -26,8 +27,8 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # into the stamp, the messages and the `v$PREV` tag lookup below.
 VER="$(cat "$SRC/VERSION" 2>/dev/null | tr -d '[:space:]' || true)"; VER="${VER:-unknown}"
 
-USAGE="Usage: $0 /path/to/your/project [--upgrade] [--check] [--telemetry on|off|ask] [--constitution replace]"
-DEST=""; CHECK=""; UPGRADE=""; BLOCK_INSERTED=""; CONST_MODE=""; CONST_REPLACED=""
+USAGE="Usage: $0 /path/to/your/project [--upgrade] [--check] [--telemetry on|off|ask] [--constitution replace] [--wire <event>:<script>]"
+WIRE_ONE=""; DEST=""; CHECK=""; UPGRADE=""; BLOCK_INSERTED=""; CONST_MODE=""; CONST_REPLACED=""
 # Telemetry consent (docs/telemetry.md): the flag wins over the env var, both are optional.
 # With neither, nothing is asked and a missing row is written as off; `ask` is the only way to
 # get the question, and it asks even a hive that already answered it once.
@@ -36,6 +37,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --check)     CHECK="--check" ;;
     --upgrade)   UPGRADE=1 ;;
+    --wire)      shift; WIRE_ONE="${1:-}"; [ -n "$WIRE_ONE" ] || { echo "error: --wire needs <event>:<script>"; exit 1; } ;;
     --telemetry) shift; TEL_MODE="${1:-}"; [ -n "$TEL_MODE" ] || { echo "error: --telemetry needs a value (on|off|ask)"; exit 1; } ;;
     --constitution) shift; CONST_MODE="${1:-}"
                  [ "$CONST_MODE" = "replace" ] || { echo "error: --constitution takes one value: replace (got '$CONST_MODE')"; exit 1; } ;;
@@ -945,6 +947,42 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
 
 wire_session_hook() { wire_hook SessionStart "$1"; }
 
+# mass-audit-fixes-17 (Ask 18): the hooks wired only by the release that brings them (wire_shipped, git-guard.sh).
+# One line each: <event> <script> <matcher> <arg>, `-` for none. `--wire <event>:<script>` looks its entry up here.
+SHIPPED_HOOKS='SessionStart session-start-brief.sh - -
+SessionStart handoff.sh - sessionstart
+SessionEnd handoff.sh - sessionend
+UserPromptSubmit handoff.sh - prompt
+Stop handoff.sh - stop
+PreCompact context-guard.sh - -
+PreCompact handoff.sh - precompact
+PostToolUse skill-usage-counter.sh Skill -
+PreToolUse git-guard.sh Bash|PowerShell -'
+# A shipped hook the hive's settings.json does not wire is named, never wired: a missing entry may be the owner's
+# removal, or a hook the pre-0.50 wiring dropped. The line carries the command that wires that one hook.
+report_unwired() { # report_unwired <event> <script> [matcher] [arg]
+  local event="$1" script="$2" matcher="${3:-}" arg="${4:-}" file="$DEST/.claude/settings.json" rc=0
+  [ -f "$file" ] || return 0
+  vulyk_python || true; PYBIN="$VULYK_PY"
+  if [ -n "$PYBIN" ]; then
+    py_wire "$file" "$script" "$event" "$matcher" "$arg" --dry || rc=$?
+    [ "$rc" -eq 0 ] || return 0                                # 3 = wired (any spelling), 4 = unparseable
+  else
+    grep -qF "$script${arg:+ $arg}" "$file" 2>/dev/null && return 0
+  fi
+  printf '  unwired %s: %s - to wire it: bash %q %q --wire %s\n' "$event" "$script" "$SRC/install.sh" "$DEST" "$event:$script"
+}
+if [ -n "$WIRE_ONE" ]; then
+  WIRE_ROW="$(printf '%s\n' "$SHIPPED_HOOKS" | awk -v k="$WIRE_ONE" '$1 ":" $2 == k' | head -1)"
+  [ -n "$WIRE_ROW" ] || { echo "error: --wire $WIRE_ONE is not a hook this release ships; one of:"
+    printf '%s\n' "$SHIPPED_HOOKS" | awk '{ print "  " $1 ":" $2 }'; exit 1; }
+  [ -f "$DEST/.claude/settings.json" ] || { echo "error: $DEST/.claude/settings.json not found - nothing to wire into"; exit 1; }
+  read -r w_event w_script w_matcher w_arg <<< "$WIRE_ROW"
+  [ "$w_matcher" != - ] || w_matcher=""; [ "$w_arg" != - ] || w_arg=""
+  wire_hook "$w_event" "$w_script" "$w_matcher" "$w_arg"
+  exit 0
+fi
+
 # The reverse of py_wire: a release that stops wanting a hook takes it back out of a hive's
 # settings.json, where an earlier installer put it (ADR-013 D7: anomaly-scan.sh on Stop,
 # session-end-learnings.sh on SessionEnd). Only entries under that event whose command runs
@@ -1550,8 +1588,9 @@ wire_hook SessionStart ysk-offer.sh
 wire_hook PostToolUse defect-intake.sh AskUserQuestion answer
 # uncommitted-work-guard: the git guard is wired by the release that brings it, once. When v$PREV
 # already shipped the hook, a missing entry is the owner's removal and stays removed (like unwire_hook).
-if { [ -f "$DEST/.claude/hooks/git-guard.sh" ] || [ "$CHECK" = "--check" ]; } &&
-   ! git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/git-guard.sh" 2>/dev/null; then
+if git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/git-guard.sh" 2>/dev/null; then
+  report_unwired PreToolUse git-guard.sh 'Bash|PowerShell'
+elif [ -f "$DEST/.claude/hooks/git-guard.sh" ] || [ "$CHECK" = "--check" ]; then
   wire_hook PreToolUse git-guard.sh 'Bash|PowerShell'
 fi
 # mass-audit-fixes-04 (I2): the rest of what VULYK's own settings.json runs, which no earlier installer
@@ -1559,7 +1598,7 @@ fi
 # fresh install over an owner's file, or the release that brings it); after that a missing entry is the
 # owner's removal and stays removed.
 wire_shipped() { # wire_shipped <event> <script> [matcher] [arg]
-  git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/$2" 2>/dev/null && return 0
+  if git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/$2" 2>/dev/null; then report_unwired "$@"; return 0; fi
   wire_hook "$@"
 }
 wire_shipped SessionStart session-start-brief.sh

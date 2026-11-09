@@ -1528,6 +1528,43 @@ expect_eq "... skip (bad path): every named file still present" "1 1" \
 expect_eq "... and a normal retired path is still removed" "0" "$([ -e "$BP/scripts/retired-xp.sh" ] && echo 1 || echo 0)"
 expect_eq "an owner's model pin survives --upgrade" "sonnet" "$(jq -r '.model' "$BP/.claude/settings.local.json" | tr -d '\r')"
 cat "$T/xp-badpath.out" | expect "... and the log says it is kept" "kept: model = sonnet (yours)"
+
+# mass-audit-fixes-17 (Ask 18): a hive that lost hooks to the pre-0.50 wiring. The previous release (pinned at
+# v0.49.0, which shipped every hook below) already shipped them, so --upgrade reads a missing entry as the owner's
+# removal and never wires it; it names each one with the command that wires only that hook.
+UW="$T/hive-xp-lost"; fresh_install "$UW"; printf '0.49.0\n' > "$UW/.claude/vulyk-version"
+UWS="$UW/.claude/settings.json"
+jq '.hooks.PreCompact[0].hooks |= map(select(.command | contains("context-guard.sh") | not))
+    | .hooks.Stop[0].hooks |= map(select(.command | contains("handoff.sh stop") | not))
+    | .hooks.SessionStart[0].hooks |= map(if (.command | contains("session-start-brief.sh"))
+        then .command = "bash -c '"'"'\"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start-brief.sh\"'"'"'" else . end)' \
+  "$UWS" > "$T/xp-unwired.json" && cat "$T/xp-unwired.json" > "$UWS"
+cp "$UWS" "$T/xp-unwired.before"
+bash "$SRC/install.sh" "$UW" --upgrade --telemetry off > "$T/xp-unwired-up.out" 2>&1
+bash "$SRC/install.sh" "$UW" --upgrade --check --telemetry off > "$T/xp-unwired-chk.out" 2>&1
+expect_eq "an unwired shipped hook is not named on upgrade: two unwired lines on --upgrade and on --check" "2 2" \
+  "$(grep -c '^  unwired ' "$T/xp-unwired-up.out") $(grep -c '^  unwired ' "$T/xp-unwired-chk.out")"
+cat "$T/xp-unwired-up.out" | expect "... --upgrade names PreCompact: context-guard.sh" "unwired PreCompact: context-guard.sh - to wire it: "
+cat "$T/xp-unwired-up.out" | expect "... --upgrade names Stop: handoff.sh" "unwired Stop: handoff.sh - to wire it: "
+cat "$T/xp-unwired-chk.out" | expect "... --check names PreCompact: context-guard.sh" "unwired PreCompact: context-guard.sh - to wire it: "
+cat "$T/xp-unwired-up.out" | expect_absent "... a hook wired in the bash -c \${CLAUDE_PROJECT_DIR} form counts as wired" \
+  "unwired SessionStart: session-start-brief.sh"
+expect_eq "... and settings.json is unchanged after both" "0" "$(cmp -s "$T/xp-unwired.before" "$UWS"; echo $?)"
+# The printed command wires that one hook and nothing else; a second --upgrade no longer names it.
+UWCMD="$(grep -m1 'unwired PreCompact: context-guard.sh' "$T/xp-unwired-up.out" | sed 's/.* - to wire it: //')"
+uwcount() { jq '[.hooks[][].hooks[]] | length' "$UWS"; }
+UWN="$(uwcount)"
+UW_RC=0; eval "$UWCMD" > "$T/xp-unwired-wire.out" 2>&1 || UW_RC=$?
+expect_eq "the printed command exits 0" "0" "$UW_RC"
+expect_eq "... and adds exactly one hook entry" "$((UWN + 1))" "$(uwcount)"
+expect_eq "... which is PreCompact: context-guard.sh" "1" \
+  "$(jq '[.hooks.PreCompact[].hooks[] | select(.command | contains("context-guard.sh"))] | length' "$UWS")"
+bash "$SRC/install.sh" "$UW" --upgrade --telemetry off > "$T/xp-unwired-up2.out" 2>&1
+cat "$T/xp-unwired-up2.out" | expect_absent "a second --upgrade prints no line for the wired hook" "unwired PreCompact: context-guard.sh"
+cat "$T/xp-unwired-up2.out" | expect "... and still names the one left unwired" "unwired Stop: handoff.sh"
+# Neighbour form: a hive that wires every shipped hook prints no unwired line.
+UWF="$T/hive-xp-allwired"; fresh_install "$UWF"; printf '0.49.0\n' > "$UWF/.claude/vulyk-version"
+bash "$SRC/install.sh" "$UWF" --upgrade --telemetry off 2>&1 | expect_absent "a hive that wires every shipped hook: no unwired line" "unwired "
 fi # install-xp
 
 if part_on terminal; then
