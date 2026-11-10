@@ -1947,6 +1947,36 @@ bash "$SRC/install.sh" "$SCF" --telemetry off > /dev/null 2>&1
 sed_inplace 's#^| Full suite / build (round-only) |#| Full test suite |#' "$SCF/CLAUDE.vulyk.md"
 bash "$SRC/install.sh" "$SCF" --upgrade --check 2>&1 | expect "a sidecar's 'Full test suite' row is named on --upgrade --check" "no 'Full suite / build (round-only)' row"
 
+# --check --constitution replace names the non-block lines only the backup would keep (upgrade-findings-04,
+# ask 15, E4): the hive's own lines, never v$PREV's own wording the new release dropped; from a source without
+# the v$PREV tag every line absent from the new file, with a note. Nothing is written.
+echo "--- install.sh: lines only in the backup"
+ER="$T/release-e4"; mkdir -p "$ER"
+tar -C "$SRC" --exclude=./.git --exclude=./.claude/worktrees -cf - . | tar -C "$ER" -xf -
+git -C "$ER" init -q -b main . && git -C "$ER" config user.email t@t &&
+  git -C "$ER" config user.name "Test Owner" && git -C "$ER" config core.autocrlf false
+cp "$ER/CLAUDE.md" "$T/e4-new.md"
+printf '9.8.0\n' > "$ER/VERSION"
+printf 'Old release wording the next release drops\n' >> "$ER/CLAUDE.md"
+git -C "$ER" add -A >/dev/null 2>&1 && git -C "$ER" commit -qm v9.8.0 >/dev/null 2>&1 && git -C "$ER" tag v9.8.0
+EH="$T/hive-e4"; mkdir -p "$EH"
+bash "$ER/install.sh" "$EH" --telemetry off > /dev/null 2>&1
+printf 'Acme house rule one\nAcme house rule two\n' >> "$EH/CLAUDE.md"
+cp "$T/e4-new.md" "$ER/CLAUDE.md"; printf '9.9.0\n' > "$ER/VERSION"
+S4="$(treesum "$EH")"
+bash "$ER/install.sh" "$EH" --upgrade --check --constitution replace > "$T/e4.out" 2>&1
+cat "$T/e4.out" | expect "--check names the backup-only lines" "constitution: 2 lines only in the backup (CLAUDE.pre-9.9.md):"
+cat "$T/e4.out" | expect "the first hand-written line is listed" "  | Acme house rule one"
+cat "$T/e4.out" | expect "the second hand-written line is listed" "  | Acme house rule two"
+cat "$T/e4.out" | expect_absent "the old release's own wording is left out" "Old release wording"
+expect_eq "the E4 report writes nothing" "$S4" "$(treesum "$EH")"
+git -C "$ER" tag -d v9.8.0 > /dev/null 2>&1
+bash "$ER/install.sh" "$EH" --upgrade --check --constitution replace > "$T/e4-notag.out" 2>&1
+cat "$T/e4-notag.out" | expect "without the tag every line absent from the new file is listed" "constitution: 3 lines only in the backup (CLAUDE.pre-9.9.md):"
+cat "$T/e4-notag.out" | expect "the old wording is then in the list" "  | Old release wording the next release drops"
+cat "$T/e4-notag.out" | expect "with a note" "so this list also holds that release's own wording"
+expect_eq "nor does the tagless report write anything" "$S4" "$(treesum "$EH")"
+
 fi # constitution
 
 if part_on constitution3; then # post-046-tails: constitution, second half - --constitution replace on the CR hive
@@ -2071,6 +2101,61 @@ bash "$REL/install.sh" "$RH2" --upgrade > "$T/rh2.out" 2>&1
 cat "$T/rh2.out" | expect "an edited learnings hook is kept" "keep (edited)  .claude/hooks/session-end-learnings.sh"
 expect_eq "and stays wired" "1" "$(grep -c 'session-end-learnings' "$RH2/.claude/settings.json")"
 cat "$T/rh2.out" | expect "the unedited retired agent beside it goes" "remove         .claude/agents/council-sonnet.md"
+
+# --- install.sh: the dry run's hive reports (upgrade-findings-04, asks 7 and 8; C1, B1) ------------
+# A measured full suite over 210 s is named with its round, then the suite-parts-check pointer once;
+# odd `## Commands` cells are named through lib.sh commands_lint. Nothing is written for either.
+echo "--- install.sh: measured suite and commands lint"
+mkround() { # mkround <hive> <slug> <n> <opened> <file> <body> - a council round with one log
+  local d="$1/docs/specs/$2/council/round-$3"; mkdir -p "$d"
+  printf 'head=abc1234\nopened=%s\n' "$4" > "$d/ROUND"; printf '%s\n' "$6" > "$d/$5"
+}
+MS="$T/hive-measured"; fresh_install "$MS"
+mkround "$MS" demo 1 2026-01-01T00:00:00Z suite.log "$(printf 'head=abc1234 steps=1\nSUITE: ok 378s')"
+sed_inplace 's#^| Lint | `<fill in>` |#| Lint | `npm run lint` (quiet) |#; s#^| Build / typecheck | `<fill in>` |#| Build / typecheck | `tsc` or `tsc -b` |#' "$MS/CLAUDE.md"
+cp "$MS/CLAUDE.md" "$T/ms.before"
+bash "$SRC/install.sh" "$MS" --upgrade --check > "$T/ms-check.out" 2>&1
+cat "$T/ms-check.out" | expect "--check: a measured 378 s suite is named with its round" \
+  "full suite measured 378s in round demo/round-1: cut before taking this release"
+cat "$T/ms-check.out" | expect "--check: and points at suite-parts-check.sh" "check a log with: bash scripts/suite-parts-check.sh"
+cat "$T/ms-check.out" | expect "--check: a noted command row is named" \
+  "commands: row 'Lint': text outside the backticked command is read as a note"
+cat "$T/ms-check.out" | expect "--check: a two-span command row is named" \
+  "commands: row 'Build / typecheck': 2 backticked commands in one cell"
+expect_eq "--check: exactly the two commands lines" "2" "$(grep -c "commands: row '" "$T/ms-check.out")"
+bash "$SRC/install.sh" "$MS" --upgrade > "$T/ms.out" 2>&1
+cat "$T/ms.out" | expect "the real upgrade names the measured suite too" \
+  "full suite measured 378s in round demo/round-1: cut before taking this release"
+expect_eq "the real upgrade: exactly the two commands lines" "2" "$(grep -c "commands: row '" "$T/ms.out")"
+expect_eq "the hive's constitution is byte-identical afterwards" "1" "$(same "$T/ms.before" "$MS/CLAUDE.md")"
+expect_eq "the council log is untouched" "SUITE: ok 378s" "$(tail -1 "$MS/docs/specs/demo/council/round-1/suite.log")"
+cat "$T/rh.out" | expect_absent "a clean Commands table gets no commands line" "commands: row '"
+cat "$T/rh.out" | expect "a hive with no measured round says so" \
+  "gate split (ADR-029): no measured full suite in this hive's council logs"
+
+eval "$(sed -n '/^report_measured_suite() {/,/^}/p' "$SRC/install.sh")"
+MP="$T/hive-measured-parts"; mkdir -p "$MP"
+mkround "$MP" demo 1 2026-02-01T00:00:00Z suite.log "$(printf 'head=abc1234 steps=1\nSTEP 1/1: ok 370s\nPART unit ok 120s cap 300s\nPART e2e ok 250s cap 300s\nSUITE: ok 370s')"
+mkround "$MP" demo 2 2026-02-02T00:00:00Z review.md "$(printf 'VERDICT: PASS\nSUITE: TIMEOUT 596s budget 595s')"
+mkround "$MP" demo 3 2026-02-03T00:00:00Z suite.log "$(printf 'head=abc1234 steps=1\nSUITE: ok 150s')"
+mkround "$MP" demo 4 2026-02-04T00:00:00Z suite.log "$(printf 'head=abc1234 steps=0\nSUITE: none')"
+mkround "$MP" demo 5 2026-02-05T00:00:00Z review.md "$(printf 'VERDICT: PASS\nSUITE: FAIL 100s - part unit failed')"
+mkround "$MP" demo 6 2026-02-06T00:00:00Z suite.log "$(printf 'head=abc1234 steps=1\nSUITE: ok 90s')"
+mkround "$MP" old 1 2026-01-01T00:00:00Z suite.log "$(printf 'head=abc1234 steps=1\nSUITE: ok 999s')"
+report_measured_suite "$MP" > "$T/mp.out" 2>&1
+cat "$T/mp.out" | expect "a part over 210 s is named by part" \
+  "full suite part e2e measured 250s in round demo/round-1: cut before taking this release"
+cat "$T/mp.out" | expect_absent "a round with parts is not judged by its SUITE seconds" "measured 370s"
+cat "$T/mp.out" | expect_absent "a part under 210 s is not named" "measured 120s"
+cat "$T/mp.out" | expect "a review.md TIMEOUT line in a round with no log is read as its seconds" \
+  "full suite measured 596s in round demo/round-2: cut before taking this release"
+cat "$T/mp.out" | expect_absent "SUITE: ok 150s prints nothing" "round demo/round-3"
+cat "$T/mp.out" | expect_absent "SUITE: none prints nothing" "round demo/round-4"
+cat "$T/mp.out" | expect_absent "a sixth-newest round over the cap is not reported" "999s"
+expect_eq "the suite-parts-check pointer comes once" "1" "$(grep -c 'suite-parts-check.sh' "$T/mp.out")"
+mkdir -p "$T/hive-unmeasured/docs/specs/demo/council/round-1"
+report_measured_suite "$T/hive-unmeasured" \
+  | expect "no measured round prints the no-measured line" "no measured full suite in this hive's council logs"
 fi # upgrade
 
 if part_on library; then

@@ -502,6 +502,64 @@ report_full_suite_row() {
   echo "  commands: no 'Full suite / build (round-only)' row - stories may run the full suite and the round's SUITE gate is off; /vulyk-update renames your full-suite row"
 }
 
+# report_commands_lint <file> - each `## Commands` row with text beside its backticked command or with several
+# spans (lib.sh commands_lint, contract B1). Named only; the rows are the hive's (ADR-005 D3).
+report_commands_lint() {
+  commands_lint "$1" | sed 's/^/  /'
+}
+
+# report_measured_suite <hive> - the 5 newest measured council rounds (newest by ROUND's opened=): a round's
+# suite.log, else its review.md. A file with PART lines is judged by part, one without by its last
+# `SUITE: ok|FAIL|TIMEOUT <N>s` line; `SUITE: none` and a file with neither are not measured. Each value over
+# 210 s prints a C1 line, then the suite-parts-check pointer once; no measured round prints the C1 none line.
+report_measured_suite() {
+  local d f ref opened lines list="" sel over="" tab prog
+  tab="$(printf '\t')"
+  # one round's C1 lines, each newline-ended; exit 1 = not measured
+  prog='
+    { sub(/\r$/, "") }
+    /^PART / && $4 ~ /^[0-9]+s$/ {
+      np++; n = $4 + 0
+      if (n > 210) out = out sprintf("full suite part %s measured %ds in round %s: cut before taking this release\n", $2, n, ENVIRON["REF"])
+      next
+    }
+    /^SUITE: (ok|FAIL|TIMEOUT) [0-9]+s/ { s = $3 + 0; hs = 1 }
+    END {
+      if (np) printf "%s", out
+      else if (hs && s > 210) printf "full suite measured %ds in round %s: cut before taking this release\n", s, ENVIRON["REF"]
+      exit !(np || hs)
+    }'
+  for d in "$1"/docs/specs/*/council/round-*; do
+    [ -d "$d" ] || continue
+    ref="$(basename "$(dirname "$(dirname "$d")")")/$(basename "$d")"
+    opened="$(sed -n 's/^opened=//p' "$d/ROUND" 2>/dev/null | tr -d '\r' | head -1)"
+    for f in "$d/suite.log" "$d/review.md"; do
+      [ -f "$f" ] || continue
+      if REF="$ref" awk "$prog" "$f" > /dev/null; then
+        list="$list${opened:-0}$tab$ref$tab$f
+"
+        break
+      fi
+    done
+  done
+  sel="$(printf '%s' "$list" | LC_ALL=C sort -r | sed -n '1,5p')"   # sed reads it all: no SIGPIPE under pipefail
+  if [ -z "$sel" ]; then
+    echo "  gate split (ADR-029): no measured full suite in this hive's council logs"
+    return 0
+  fi
+  while IFS="$tab" read -r opened ref f; do
+    [ -n "$f" ] || continue
+    lines="$(REF="$ref" awk "$prog" "$f" || true)"
+    [ -z "$lines" ] || over="$over$lines
+"
+  done <<EOF
+$sel
+EOF
+  [ -n "$over" ] || return 0
+  printf '%s' "$over" | sed 's/^/  /'
+  echo "  check a log with: bash scripts/suite-parts-check.sh <log>"
+}
+
 # --- constitution migration (ADR-013 D7) -------------------------------------------------------
 # A constitution is never overwritten on the installer's own initiative. `--constitution replace`
 # is the owner asking for it by name: the release's CLAUDE.md goes in whole, and the hive's two
@@ -601,6 +659,39 @@ print_migrate_hint() { # print_migrate_hint <constitution-file>
   rm -f "$new"
 }
 
+# report_backup_only <hive-constitution> <backup-name> - E4: the lines outside the VULYK:PROFILE / VULYK:COMMANDS
+# blocks (blank lines and the Telemetry row aside) that neither the new constitution nor v$PREV's holds, so a
+# replace would leave them in the backup only. Without the v$PREV tag in the source, v$PREV's own wording the
+# new release dropped cannot be told from the hive's, so every line absent from the new file is listed, with a note.
+report_backup_only() {
+  local old note="" lines n
+  old="$(mktemp)"
+  if git -C "$SRC" rev-parse -q --verify "refs/tags/v$PREV^{commit}" >/dev/null 2>&1 \
+     && git -C "$SRC" show "v$PREV:CLAUDE.md" > "$old" 2>/dev/null; then
+    :
+  else
+    cp "$SRC/CLAUDE.md" "$old"
+    [ "$PREV" = "$VER" ] || note=1
+  fi
+  lines="$(awk '
+    FILENAME == ARGV[1] || FILENAME == ARGV[2] { sub(/\r$/, ""); have[$0] = 1; next }
+    { sub(/\r$/, "") }
+    index($0, "VULYK:PROFILE:END") || index($0, "VULYK:COMMANDS:END") { b = 0 }
+    b { next }
+    index($0, "VULYK:PROFILE:START") || index($0, "VULYK:COMMANDS:START") { b = 1 }
+    /^[[:space:]]*$/ || /^\|[[:space:]]*Telemetry[[:space:]]*\|/ { next }
+    !($0 in have) { print "  | " $0 }
+  ' "$SRC/CLAUDE.md" "$old" "$1")"
+  rm -f "$old"
+  n=0; [ -z "$lines" ] || n="$(printf '%s\n' "$lines" | wc -l | tr -d ' ')"
+  echo "  constitution: $n lines only in the backup ($2):"
+  [ -z "$lines" ] || printf '%s\n' "$lines"
+  if [ -n "$note" ]; then
+    echo "  note: v$PREV is not a tag in $SRC, so this list also holds that release's own wording the $VER one dropped"
+  fi
+  return 0
+}
+
 # --constitution replace. The preflight before the copy loop already refused a hive without the
 # markers, so the render fails here only if the file changed under this run.
 replace_constitution() { # replace_constitution <constitution-file>
@@ -627,6 +718,7 @@ replace_constitution() { # replace_constitution <constitution-file>
   if [ "$CHECK" = "--check" ]; then
     echo "  would back up  $name -> $(basename "$backup")"
     echo "  would replace  $name with the $VER constitution ($(kb_of "$file") -> $(kb_of "$new")), Profile and Commands blocks carried over"
+    report_backup_only "$file" "$(basename "$backup")"
   else
     cp -p "$file" "$backup"
     cat "$new" > "$file"
@@ -1778,6 +1870,7 @@ if [ -f "$DEST/CLAUDE.md" ]; then
     report_fill_status "$DEST/CLAUDE.md" "VULYK:PROFILE" "profile"
     report_fill_status "$DEST/CLAUDE.md" "VULYK:COMMANDS" "commands"
     report_full_suite_row "$DEST/CLAUDE.md"
+    report_commands_lint "$DEST/CLAUDE.md"
   elif [ -e "$DEST/CLAUDE.vulyk.md" ]; then
     echo ""
     # Same treatment as the CLAUDE.md branch above - it's the same constitution under a
@@ -1794,6 +1887,7 @@ if [ -f "$DEST/CLAUDE.md" ]; then
     report_fill_status "$DEST/CLAUDE.vulyk.md" "VULYK:PROFILE" "profile"
     report_fill_status "$DEST/CLAUDE.vulyk.md" "VULYK:COMMANDS" "commands"
     report_full_suite_row "$DEST/CLAUDE.vulyk.md"
+    report_commands_lint "$DEST/CLAUDE.vulyk.md"
   else
     if [ "$CHECK" != "--check" ]; then
       cp -p "$SRC/CLAUDE.md" "$DEST/CLAUDE.vulyk.md"
@@ -1822,6 +1916,7 @@ if [ -n "$UPGRADE" ]; then
   echo "  you may list several such rows (each one part, e.g. 'Full suite unit (round-only)'). A part over 210 s is red."
   echo "  Every story '## Verification' line also runs under a 300 s cap (VULYK_VERIFY_TIMEOUT above 300 acts as 300):"
   echo "  cut any row over ~210 s into --part rows before this hive takes this release. Your constitution is not edited."
+  report_measured_suite "$DEST"
 fi
 [ -f "$DEST/AGENTS.md" ] || { [ "$CHECK" = "--check" ] || cp -p "$SRC/AGENTS.md" "$DEST/AGENTS.md"; }
 

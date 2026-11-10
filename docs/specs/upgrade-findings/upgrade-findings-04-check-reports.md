@@ -1,14 +1,15 @@
 ---
 story: upgrade-findings-04
 spec: upgrade-findings
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
 blocked_by: [upgrade-findings-01, upgrade-findings-02]
 red: required
 red_reason: full suite measured 378s in round
+red_verified_at: 2026-11-10T21:18:12Z 4ee4a0b58d07a31b2c3d609f6edffe1152d8e5bca48266ef124b837427e7dad7
 ---
 
 # The dry run reports this hive: odd command rows, a measured suite over the cap, backup-only constitution lines
@@ -83,5 +84,33 @@ cutting recipe.
 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each -->
+- `install.sh`: `report_commands_lint` (lib.sh `commands_lint`, indented) after `report_full_suite_row` in both constitution branches; `report_measured_suite` after the fixed ADR-029 note (upgrade only, `--check` and real); `report_backup_only` in `replace_constitution`'s `--check` branch.
+- "Newest" = ROUND's `opened=` timestamp, sorted as text (a round without one sorts oldest); file mtimes rejected, a checkout resets them. `SUITE: none` and a log with neither PART nor seconds are not measured; an unmeasured suite.log falls back to review.md.
+- C1 pointer printed literally as `bash scripts/suite-parts-check.sh <log>` (the contract's form). `sed -n 1,5p` instead of `head -5` so `pipefail` never sees a SIGPIPE.
+- E4: v$PREV's constitution from `git show v$PREV:CLAUDE.md` when the tag exists; PREV = VER compares with the new file alone, no note; otherwise the note.
+- `tests/telemetry.test.sh`: part `upgrade` (two real installer runs + the eval'd function on 7 synthetic rounds), part `constitution` (a tagged release clone `release-e4`, then the tag deleted). Measured here: upgrade 118 s, constitution 100 s.
+- `.claude/commands/vulyk-update.md`: step 2 (frontmatter merge, commands lines), step 4 (the backup-only list drives the recommendation), step 6 (measured-suite line + 5-point recipe).
 
 ## Findings
+
+## Red receipt
+- command: bash tests/telemetry.test.sh --part upgrade
+- exit: 1
+- tests: 4ee4a0b58d07a31b2c3d609f6edffe1152d8e5bca48266ef124b837427e7dad7 (tests/telemetry.test.sh)
+- impl: eb60fb8aa3db71628ec87acd230176f10fad111f7952c6ce68714c958cc42970
+- stamped: 2026-11-10T21:18:12Z
+
+```
+::error::--check: a measured 378 s suite is named with its round - expected 'full suite measured 378s in round demo/round-1: cut before taking this release' in:
+::error::the real upgrade names the measured suite too - expected 'full suite measured 378s in round demo/round-1: cut before taking this release' in:
+::error::a review.md TIMEOUT line in a round with no log is read as its seconds - expected 'full suite measured 596s in round demo/round-2: cut before taking this release' in:
+        tests/telemetry.test.sh: line 2145: report_measured_suite: command not found
+  ok    SUITE: ok 150s prints nothing
+  ok    SUITE: none prints nothing
+  ok    a sixth-newest round over the cap is not reported
+::error::the suite-parts-check pointer comes once - expected [1], got [0]
+tests/telemetry.test.sh: line 2157: report_measured_suite: command not found
+::error::no measured round prints the no-measured line - expected 'no measured full suite in this hive's council logs' in:
+        
+telemetry.test.sh: 37 checks, 12 failed
+```

@@ -20,7 +20,11 @@ newest published tag is.
    (a local edit the release also changed: the file stays as it is and the new release lands beside it
    as `<file>.vulyk-new` to merge by hand), and `would keep deleted` (a framework file this hive removed
    stays removed). After applying, list every `.vulyk-new` file left to merge; never merge one silently.
-   `would keep (edited)` is a local edit the release did not touch: nothing to do.
+   `would keep (edited)` is a local edit the release did not touch: nothing to do. `would merge frontmatter
+   <file>` is a local edit of the frontmatter only: the release's body lands, the keys this hive changed stay
+   (`kept <key> (yours)`), and a key both sides changed parks the file as `keep + new`. Each `commands: row
+   '<Purpose>'` line names a `## Commands` row whose cell holds text beside its backticked command (read as
+   a note) or several backticked commands (split it): quote them, the owner fixes the rows.
 3. Read the release's own account. Summarise the CHANGELOG entries between the two versions in a few
    lines, especially any change to the constitution. A plain upgrade never overwrites the constitution
    (`CLAUDE.md`, or `CLAUDE.vulyk.md` in a sidecar hive); it prints the size difference and the command
@@ -29,9 +33,10 @@ newest published tag is.
    constitution changed, offer its replacement as a separate choice: `scripts/vulyk-update.sh .
    --constitution replace` writes the new constitution with this hive's `VULYK:PROFILE` and
    `VULYK:COMMANDS` blocks and its telemetry row carried over, and keeps the old file as
-   `<name>.pre-<version>.md` (e.g. `CLAUDE.pre-0.18.md`). Hand-written sections outside those blocks stay only in the backup. Say which
-   you recommend and why (little hand-written text outside the two blocks favours replacing); the
-   owner decides. A refusal ends the command; do not raise it again this session.
+   `<name>.pre-<version>.md` (e.g. `CLAUDE.pre-0.18.md`). Hand-written sections outside those blocks stay only in the backup.
+   Run `scripts/vulyk-update.sh . --check --constitution replace` first: its `constitution: <N> lines only
+   in the backup` list is exactly that text. Say which you recommend and why, from that list (few or no
+   lines favour replacing; whole sections favour a plain upgrade and a hand merge); the owner decides. A refusal ends the command; do not raise it again this session.
 5. Apply, on yes only: `scripts/vulyk-update.sh .` (add `--version $1` when pinned, and
    `--constitution replace` only when the owner chose it). Report the new `.claude/vulyk-version`.
 6. Name the manual remainder. If the constitution changed and was not replaced, quote the sections
@@ -49,6 +54,17 @@ newest published tag is.
    into several such rows (e.g. `Full suite unit (round-only)`), each one part under 300 s (a part over
    ~210 s is red); the owner splits, the upgrade never does. Cut any story verification row over
    ~210 s into `--part` rows before the hive takes this release.
+   Measured suite: the upgrade reads the 5 newest measured rounds of this hive's council logs and prints
+   `full suite measured <N>s in round <ref>: cut before taking this release` (or `full suite part <name>
+   ...`) for each value over 210 s, then `bash scripts/suite-parts-check.sh <log>` to check a log; with no
+   measured round it says `no measured full suite`. Quote each line; cut before taking the release:
+   1. Measure once with per-file timings: your runner's per-file report, e.g. `pytest --junitxml` and the
+      sum of `testcase@time` per file.
+   2. Cut by a stable selector (file globs), never by a list of test names that drifts.
+   3. Check that the parts' test counts add up to the single run's count.
+   4. Measure each part's wall time as its own run instead of trusting the per-file sums (import and
+      collection overhead is paid once per part).
+   5. Leave every part headroom under 210 s, then add one `Full suite ... (round-only)` row per part.
 
 Never edit `.claude/vulyk-version` by hand to silence the check, and never widen the upgrade beyond
 what `install.sh --upgrade` does on its own.
