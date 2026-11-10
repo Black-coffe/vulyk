@@ -68,7 +68,7 @@ re-run. No line numbers: `grep -n '^name()'`.
   (the card's check; `porcelain` field fakes status): exit 1 on deny. Python sits in a no-op heredoc below `exit 0`.
   Not covered: rm, `bash -c`, scripts/aliases. No env off-switch; owner removes the settings entry.
 - `.claude/hooks/handoff.sh` - skips a `python3` that is the Windows Store stub (exit 49) or fails to launch,
-  and starts a working Python once per call (0.43.1); `handoff.py` `_REDACT_FALLBACK` mirrors `redact.sh` (same 0.50.1 additions).
+  and starts a working Python once per call (0.43.1); `handoff.py` `_REDACT_FALLBACK` mirrors `redact.sh` (same masks, incl. the 0.50.2 cookie-header, `*_KEY`/`*_AUTH` and OTP rules).
 - `vulyk-update.sh` (-> `install.sh --upgrade`); `release-check.sh`; `git-hooks/post-merge`.
 - `model-profile.sh` (ADR-020) - `opus-builds|sonnet-builds|economy`; only `--set` writes; unknown =
   `sonnet-builds`; `--recommend` prints `sonnet-builds <plan>` on every plan (0.49). `top-model.sh`: `--floor` exit 1 prints `below floor`.
@@ -83,8 +83,11 @@ re-run. No line numbers: `grep -n '^name()'`.
   execs `symbol-map.py` (repo = `git ls-files`). Per input a `## <path>` block: `tests`, `importers`, `imported`,
   `guard tests`, `path mentions`; lines `exact` or `textual`; `--exact` folds textual into `textual <N> not shown`.
   Section cap 5; stdout <= 1536 bytes. Exit 0 / 1 input missing / 2 usage. Callers: recon, `worker-code`, solo build.
-- `redact.sh` (stdin mask; 0.50.1 also masks `passphrase`/`cookie` keywords, a `*_KEY` name with a 16+ char value,
-  an `OTP` key (the key's end), an ssh public key body, a URL password with an empty user `scheme://:pw@host`).
+- `redact.sh` (stdin mask; masks `passphrase`/`cookie` keywords, an ssh public key body, a URL password with an
+  empty user `scheme://:pw@host`; a `Cookie:`/`Set-Cookie:` header whose value holds a name=value pair loses the
+  rest of the line (0.50.2); a `*_KEY` name (dotted names, glued upper-case `KEY`, and `*_AUTH` names included)
+  with a 16+ char value, `base64:` prefix optional (`KEY_VALUE`); an OTP key at the key's end: `OTP`, `TOTP`,
+  optional `_code` suffix).
   `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan`, `bundle`, `check`,
   `publish`, `inbox`; `vulyk_version`: `.claude/vulyk-version`, else `VERSION` beside `install.sh`, else `0.0.0`.
   `ENUM`/`AGENTS` are append-only (removed agents go to `RETIRED_AGENTS`; `ENUM` ends `model_below_floor`,
@@ -135,4 +138,4 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-10 (0.50.1 redact-gaps; 0.50.0 mass-audit-fixes; ship-check stage 02 at Tier 2-4 wants `**Approved:**` or `--go`, ADR-032 D4). Over the ~80-line budget.
+last-verified: 2026-11-10 (0.50.2 redact-gaps-2 redact lines; 0.50.1 redact-gaps; 0.50.0 mass-audit-fixes; ship-check stage 02 at Tier 2-4 wants `**Approved:**` or `--go`, ADR-032 D4). Over the ~80-line budget.
