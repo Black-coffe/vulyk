@@ -40,3 +40,4 @@ diagnosed and worked through before an ask is marked `N/A - why: environment`.
 **Briefed:** via mini-brief, Andrei, 2026-11-10
 **Branch:** vulyk/gitignore-glob
 **Council:** GREEN round 1, 2026-11-10, at 4ac8a05, pack c8340487d10f
+**Shipped:** 0.50.3, 2026-11-10, at b34c9bd6 - merged to main, publish pending

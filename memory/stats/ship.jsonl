@@ -47,3 +47,4 @@
 {"ts":"2026-11-09T20:08:50Z","spec":"mass-audit-fixes","version":"0.50.0","head":"a405d9a","pack":"6cc44d9cbc24","note":"merged to main, publish pending"}
 {"ts":"2026-11-09T22:15:01Z","spec":"redact-gaps","version":"0.50.1","head":"727f3c9","pack":"343ac5fd8394","note":"merged to main, publish pending"}
 {"ts":"2026-11-10T08:55:24Z","spec":"redact-gaps-2","version":"0.50.2","head":"8570073","pack":"d65336fe940d","note":"merged to main, publish pending"}
+{"ts":"2026-11-10T09:54:25Z","spec":"gitignore-glob","version":"0.50.3","head":"b34c9bd6","pack":"c8340487d10f","note":"merged to main, publish pending"}
