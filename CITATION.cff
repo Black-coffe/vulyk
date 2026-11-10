@@ -17,7 +17,7 @@ authors:
 repository-code: "https://github.com/Black-coffe/vulyk"
 url: "https://github.com/Black-coffe/vulyk"
 license: MIT
-version: "0.50.1"
+version: "0.50.2"
 date-released: "2026-11-10"
 keywords:
   - claude-code
