@@ -46,3 +46,4 @@
 {"ts":"2026-11-09T05:27:55Z","spec":"ab-run-fixes","version":"0.49.0","head":"0e69284","pack":"530577feaddb","note":"merged to main, publish pending"}
 {"ts":"2026-11-09T20:08:50Z","spec":"mass-audit-fixes","version":"0.50.0","head":"a405d9a","pack":"6cc44d9cbc24","note":"merged to main, publish pending"}
 {"ts":"2026-11-09T22:15:01Z","spec":"redact-gaps","version":"0.50.1","head":"727f3c9","pack":"343ac5fd8394","note":"merged to main, publish pending"}
+{"ts":"2026-11-10T08:55:24Z","spec":"redact-gaps-2","version":"0.50.2","head":"8570073","pack":"d65336fe940d","note":"merged to main, publish pending"}

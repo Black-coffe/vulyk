@@ -35,3 +35,4 @@ and a `*_AUTH` name with a key-shaped value. Prose about cookies, `otpauth_url`,
 **Briefed:** via mini-brief, Andrei, 2026-11-10
 **Branch:** vulyk/redact-gaps-2
 **Council:** GREEN round 1, 2026-11-10, at 12b7c0e, pack d65336fe940d
+**Shipped:** 0.50.2, 2026-11-10, at 8570073 - merged to main, publish pending
