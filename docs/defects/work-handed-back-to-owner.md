@@ -38,3 +38,5 @@ None, and code cannot add one generically: whether a step needs a person depends
 - Asking for a real decision (approving a plan, a design fork), or a step only a person can take, stated once with
   what was already done.
 - The framework default for owners who have not overridden it: `/vulyk-ship` prints the publish step.
+- Waiting for the owner's word before publishing VULYK itself to GitHub (push of main, a tag, a release): since
+  2026-11-10 that is his call (card public-release-per-change). Local merges and local hive upgrades stay the agent's.
