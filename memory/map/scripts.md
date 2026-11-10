@@ -127,6 +127,7 @@ re-run. No line numbers: `grep -n '^name()'`.
   0.50.1: `PREV_UNKNOWN` is set when `v$PREV` is not a tag in the source; then `wire_entry`, `wire_shipped` and the
   git-guard branch only report the missing hook (`unwired ...`) and wire nothing.
   Telemetry consent is asked only on `--telemetry ask` (0.49; default off, flag `on|off|ask`).
+  `ensure_gitignore` runs with globbing off (`set -f`, restored on each exit), so patterns like `docs/specs/*/DRIVER` are written literally (0.50.3).
   `install_mod vulyk-pulse@vulyk`; `retire_mod vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup`.
 
 ## Gotchas
@@ -138,4 +139,4 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-10 (0.50.2 redact-gaps-2 redact lines; 0.50.1 redact-gaps; 0.50.0 mass-audit-fixes; ship-check stage 02 at Tier 2-4 wants `**Approved:**` or `--go`, ADR-032 D4). Over the ~80-line budget.
+last-verified: 2026-11-10 (0.50.3 gitignore-glob; 0.50.2 redact-gaps-2 redact lines; 0.50.1 redact-gaps; 0.50.0 mass-audit-fixes; ship-check stage 02 at Tier 2-4 wants `**Approved:**` or `--go`, ADR-032 D4). Over the ~80-line budget.

@@ -27,6 +27,7 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **council-opus** (`opus`, `medium`, `maxTurns:60`; no Write/Edit) - Tier 3-4 blind seat inside `COURT`; one
   `ASK <n>` per ask, edge cases under `UNASKED:`; reading outside `COURT` or naming plan/story files is a BREACH.
   **council-haiku** (`opus` since ADR-015; Bash/Read + browser MCPs) - black-box seat on the Profile's *Client path*.
+  Both (0.50.3) carry a "Finishing work" paragraph after step 3: ordinary obstacles (errors, timeouts, locked files) are worked through before an ask becomes `N/A - why: environment`; deliberate blockers (court blindness, withheld access) are left alone.
 - **cycle-clerk** (`haiku`, `low`, `maxTurns:5`; Bash only) - runs the one `cycle.sh` command given, returns its
   last stdout line. The Workflow driver's only shell. `haiku` is at the floor only on Claude Code >= 2.1.293.
 - **worker-code** / **worker-test** (`sonnet`, `medium`, `maxTurns:90`) - Tier 3-4, one story. Close: `returned:
@@ -113,4 +114,4 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
   script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-11-09 (0.50.0 mass-audit-fixes; ADR-013, 015, 020, 022, 023, 024, 025, 029, 032)
+last-verified: 2026-11-10 (0.50.3 gitignore-glob; 0.50.0 mass-audit-fixes; ADR-013, 015, 020, 022, 023, 024, 025, 029, 032)
