@@ -39,3 +39,4 @@ diagnosed and worked through before an ask is marked `N/A - why: environment`.
 ## Plan deltas
 **Briefed:** via mini-brief, Andrei, 2026-11-10
 **Branch:** vulyk/gitignore-glob
+**Council:** GREEN round 1, 2026-11-10, at 4ac8a05, pack c8340487d10f
