@@ -484,6 +484,19 @@ S2=(
   "leaves footprint alone|footprint=482913|footprint=482913"
   "leaves a short primary_key alone|primary_key=True foreign_key: users.id|primary_key=True foreign_key: users.id"
   "leaves prose about a key alone|the key: value here|the key: value here"
+  # redact-gaps-2: the mask minors of the redact-gaps round-1 review, and *_AUTH
+  "masks a whole Cookie header|Cookie: a=1; sessionid=$val|Cookie: $M"
+  "masks a Set-Cookie header|Set-Cookie: sid=$val; Path=/; HttpOnly|Set-Cookie: $M"
+  "masks a base64 APP_KEY|APP_KEY=base64:$val$val=|APP_KEY=$M"
+  "masks a glued ENCRYPTIONKEY|ENCRYPTIONKEY=$val|ENCRYPTIONKEY=$M"
+  "masks a dotted encryption.key|encryption.key=$val|encryption.key=$M"
+  "masks a TOTP|TOTP=482913|TOTP=$M"
+  "masks an otp_code|otp_code: 482913|otp_code: $M"
+  "masks a TWILIO_AUTH|TWILIO_AUTH=$val|TWILIO_AUTH=$M"
+  "leaves prose about cookies alone|cookie: see the policy|cookie: see the policy"
+  "leaves an otpauth URL key alone|otpauth_url=otpauth://totp/x|otpauth_url=otpauth://totp/x"
+  "leaves a short basic_auth alone|basic_auth=true oauth_flow=pkce|basic_auth=true oauth_flow=pkce"
+  "leaves lower-case glued words alone|monkey business, turkey=sandwich_with_cheese|monkey business, turkey=sandwich_with_cheese"
 )
 : > "$T/s2-in"
 for row in ${S2[@]+"${S2[@]}"}; do
