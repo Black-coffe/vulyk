@@ -1402,16 +1402,21 @@ retire_mod() {
 ensure_gitignore() {
   local file="$DEST/.gitignore" missing=0 line have
   local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER .claude/state/ *.vulyk-new"
+  # gitignore-glob: the list holds patterns (docs/specs/*/DRIVER, *.vulyk-new); unquoted, bash expanded them in the
+  # installer's working directory and wrote its paths instead. No globbing inside this function.
+  local noglob=""; case $- in *f*) noglob=1 ;; esac
+  set -f
 
   # A CRLF .gitignore (core.autocrlf) must still match line for line, or every run re-appends.
   have="$( { tr -d '\r' < "$file"; } 2>/dev/null || true)"
   for line in $wanted; do
     grep -qxF "$line" <<< "$have" || missing=$((missing + 1))
   done
-  [ "$missing" -gt 0 ] || return 0
+  if [ "$missing" -eq 0 ]; then [ -n "$noglob" ] || set +f; return 0; fi
 
   if [ "$CHECK" = "--check" ]; then
     echo "  would add      $missing VULYK runtime entries to .gitignore"
+    [ -n "$noglob" ] || set +f
     return 0
   fi
 
@@ -1425,6 +1430,7 @@ ensure_gitignore() {
       grep -qxF "$line" <<< "$have" || echo "$line"
     done
   } >> "$file"
+  [ -n "$noglob" ] || set +f
   echo "  gitignore      added $missing VULYK runtime entries"
 }
 

@@ -2,6 +2,21 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.50.3] - 2026-11-10
+
+A small installer fix and one lesson from Anthropic's "Prompting Claude Fable 5.2" guide (spec `gitignore-glob`,
+Tier 1, council GREEN round 1).
+
+### Fixed
+- **install.sh** writes the `.gitignore` patterns `docs/specs/*/DRIVER`, `docs/specs/*/PAUSE` and `*.vulyk-new` as
+  patterns. Run from a directory where they matched files, it used to write those paths instead.
+
+### Changed
+- **Council seats.** `council-opus` and `council-haiku`, which may run on Fable, carry the guide's "Finishing work"
+  text: an ordinary obstacle (an error, a timeout, a failing tool) is diagnosed and worked through before an ask is
+  marked `N/A - why: environment`; deliberate blockers (the court's blindness, forbidden outward actions) stay
+  untouched. The guide measured about 30 percent more output tokens with this text.
+
 ## [0.50.2] - 2026-11-10
 
 The redaction minors of the 0.50.1 review (spec `redact-gaps-2`, Tier 1, council GREEN round 1).

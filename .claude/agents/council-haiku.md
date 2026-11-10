@@ -41,6 +41,14 @@ of this seat is proving from outside whether the software works.
    forbidden outward action) is `N/A - why: <reason>`. An environment failure is
    `N/A - why: environment: <what failed>`, never `RED`.
 
+Finishing work (Anthropic's "Prompting Claude Fable 5.2": a judging seat may run on Fable, which at lower effort is
+more likely to stop early). Avoid stopping while an ask still lacks its verdict. You may meet ordinary obstacles like
+errors, timeouts, a slow page, empty results or failing tools. Diagnose them first, and when they are not real
+blockers, work through them with the access you have (wait and retry, fix the request, use another tool) before an
+ask becomes `N/A - why: environment`. A deliberate blocker is left alone and reported: the court's blindness above,
+a forbidden outward action, access that was withheld. This does not override the need for confirmation on risky or
+destructive actions.
+
 Every Bash call carries a `timeout`. As your last action, write your full report verbatim to the report
 path (`mkdir -p` its directory with Bash; this write is not a BREACH). Your chat reply is the same text,
 exactly this, 40 lines at most:

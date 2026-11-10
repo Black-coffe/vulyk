@@ -16,6 +16,9 @@ diagnosed and worked through before an ask is marked `N/A - why: environment`.
 - The guide's text goes in near-verbatim, with "the user asked for" read as "the asks you were given"; its closing line
   (it does not override confirmation on risky actions) stays.
 - The seats' effort is not raised: that is a cost decision, left to the Fable 5.2 spec.
+- Cost: the guide measured about 30 percent more output tokens with this text (agentic coding sessions at medium).
+  The two seats were about 5 percent of a week's Fable spend (7-day measure, 2026-11-09), so the expected rise is
+  within 1-2 percent of weekly Fable; the week after the release is compared against that measure.
 - Hives already carrying a stray `docs/specs/<slug>/DRIVER` line are cleaned by hand during the rollout, not by the installer.
 
 ## Stories
@@ -35,3 +38,5 @@ diagnosed and worked through before an ask is marked `N/A - why: environment`.
 
 ## Plan deltas
 **Briefed:** via mini-brief, Andrei, 2026-11-10
+**Branch:** vulyk/gitignore-glob
+**Council:** GREEN round 1, 2026-11-10, at 4ac8a05, pack c8340487d10f

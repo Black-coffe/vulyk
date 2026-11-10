@@ -2484,6 +2484,15 @@ expect_eq "a CRLF .gitignore does not get the runtime block twice" "1" \
 expect_eq "a fresh hive's .gitattributes pins LF for hooks, drivers and the manifest" "4" \
   "$(tr -d '\r' < "$CR/.gitattributes" | grep -cxE '(\*\.sh|\.claude/hooks/\*\.py|\.claude/workflows/\*\.js|\.claude/vulyk-manifest) text eol=lf')"
 cat "$T/crlf.out" | expect_absent "and a second run adds no rule" "gitattributes  added"
+# gitignore-glob: the wanted list holds globs; run from a directory where they match, the installer still writes the
+# patterns (it used to write that directory's paths: docs/specs/weekly-budget/DRIVER from the VULYK clone).
+GC="$T/glob-cwd"; mkdir -p "$GC/docs/specs/x"; : > "$GC/docs/specs/x/DRIVER"; : > "$GC/docs/specs/x/PAUSE"; : > "$GC/a.vulyk-new"
+GH="$T/hive-glob"; fresh_install "$GH"
+tr -d '\r' < "$GH/.gitignore" | grep -vxF -e 'docs/specs/*/DRIVER' -e 'docs/specs/*/PAUSE' -e '*.vulyk-new' > "$T/glob.gi"
+cat "$T/glob.gi" > "$GH/.gitignore"
+(cd "$GC" && bash "$SRC/install.sh" "$GH" --upgrade --telemetry off > "$T/glob.out" 2>&1)
+expect_eq "run from a directory that matches its globs, install.sh still writes the patterns" "3 0" \
+  "$(tr -d '\r' < "$GH/.gitignore" | grep -cxF -e 'docs/specs/*/DRIVER' -e 'docs/specs/*/PAUSE' -e '*.vulyk-new') $(tr -d '\r' < "$GH/.gitignore" | grep -cxF -e 'docs/specs/x/DRIVER' -e 'docs/specs/x/PAUSE' -e 'a.vulyk-new')"
 
 fi # crlf
 
