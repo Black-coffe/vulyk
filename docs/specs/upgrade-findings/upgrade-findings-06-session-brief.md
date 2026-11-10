@@ -1,14 +1,15 @@
 ---
 story: upgrade-findings-06
 spec: upgrade-findings
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 3
 blocked_by: [upgrade-findings-04]
 red: required
 red_reason: a cache older than 6 hours is refetched
+red_verified_at: 2026-11-10T22:15:51Z cc1561f630fd0eb4f5c076a200ab0af224f2aac1f534696910e02b190b9796fe
 ---
 
 # The session-start lines tell the truth: a 6-hour update check with its time, the litopys offer at three scopes
@@ -79,5 +80,32 @@ no `sort -V`); `docs/hooks-reference.md` → rows `session-start-brief.sh`, `vul
 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each -->
+- `.claude/hooks/vulyk-update-check.sh`: default 6 h; cache `<epoch> <latest> <YYYY-MM-DDTHH:MMZ>` (time from `date -u` at fetch); a line without a valid third field is expired; the update line ends `(checked YYYY-MM-DD HH:MM UTC)`.
+- Decision: a failed refetch prints nothing this session and rewrites the cache with the last known tag and its own fetch time (an undated old answer is dropped to the installed version), so a later line never dates a stale answer as fresh.
+- `scripts/vulyk-update.sh`: not edited; the new install-xp test (hook cache naming v9.2.0, origin at v9.11.0) was green before any change.
+- `tests/telemetry.test.sh` (install-xp only): 7 h / 5 h / two-field / 24 h-window cases with a call-counting stub curl, plus the --check-ignores-cache case.
+- D2 not reproducible on 0.50.x: `tests/maintenance.test.sh` run with litopys enabled in fake-HOME user settings, project settings.json, project settings.local.json and none; all four green before any hook edit, so `session-start-brief.sh` is unchanged.
+- Docs: `docs/hooks-reference.md` row and the one `README.md` hooks row say 6 hours and the checked-at time.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/telemetry.test.sh --part install-xp
+- exit: 1
+- tests: cc1561f630fd0eb4f5c076a200ab0af224f2aac1f534696910e02b190b9796fe (tests/maintenance.test.sh, tests/telemetry.test.sh)
+- impl: 62b9d64ba49fcab76f3f6da14f71a5aedf991c7119e370eddc1018b9135cdf0b
+- stamped: 2026-11-10T22:15:51Z
+
+```
+::error::a cache older than 6 hours is refetched: the newer tag is named - expected 'installed v0.9.0, latest v0.11.0' in:
+  ok    install.sh --upgrade keeps the hive's ## Commands block (old python cell included) byte-identical
+  ok    a hive with no model pin gets it on --upgrade, as before
+  ok    ... and the log says so
+  ok    three bad manifest lines: three skip (bad path) lines
+  ok    ... skip (bad path) names the dot-dot line
+  ok    ... skip (bad path): every named file still present
+  ok    ... and a normal retired path is still removed
+  ok    an owner's model pin survives --upgrade
+  ok    ... and the log says it is kept
+telemetry.test.sh: 58 checks, 7 failed
+```

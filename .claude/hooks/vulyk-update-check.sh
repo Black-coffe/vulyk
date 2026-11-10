@@ -11,7 +11,7 @@
 # than a hook that misses a release.
 #
 #   VULYK_UPDATE_CHECK=0            disable entirely
-#   VULYK_UPDATE_INTERVAL_HOURS=24  how often the network is actually touched (default 24)
+#   VULYK_UPDATE_INTERVAL_HOURS=6   how often the network is actually touched (default 6)
 #   VULYK_REPO=owner/name           override the origin (forks); or a `.claude/vulyk-origin` file
 set -uo pipefail
 
@@ -35,23 +35,32 @@ fi
 REPO="${REPO:-Black-coffe/vulyk}"
 
 CACHE="$ROOT/.claude/.vulyk-update-cache"
-INTERVAL_H="${VULYK_UPDATE_INTERVAL_HOURS:-24}"
-case "$INTERVAL_H" in ''|*[!0-9]*) INTERVAL_H=24 ;; esac
+INTERVAL_H="${VULYK_UPDATE_INTERVAL_HOURS:-6}"
+case "$INTERVAL_H" in ''|*[!0-9]*) INTERVAL_H=6 ;; esac
 NOW="$(date +%s 2>/dev/null || echo 0)"
 
 # Versions oldest first, one per line: each dot field compared as a number (0.10.0 after 0.9.0).
 vsort() { sort -t. -k1,1n -k2,2n -k3,3n 2>/dev/null; }
 
+# The cache line is `<epoch> <latest> <YYYY-MM-DDTHH:MMZ>`: the third field is the fetch's own UTC time,
+# written by `date -u` at fetch time, never converted back from the epoch. A line without it counts as expired.
 LATEST=""
 CACHED_AT=0
+CHECKED=""
 if [ -f "$CACHE" ]; then
-  read -r CACHED_AT LATEST < "$CACHE" 2>/dev/null || true
+  read -r CACHED_AT LATEST CHECKED _ < "$CACHE" 2>/dev/null || true
   case "${CACHED_AT:-}" in ''|*[!0-9]*) CACHED_AT=0 ;; esac
+  case "${CHECKED:-}" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]Z) ;; *) CACHED_AT=0; CHECKED="" ;; esac
 fi
 
 # Touch the network at most once per interval; between calls the cached answer is reused,
 # so an owner who opens twenty sessions a day pays for one request.
 if [ "$NOW" -gt 0 ] && [ $((NOW - CACHED_AT)) -ge $((INTERVAL_H * 3600)) ]; then
+  # What the last real fetch said, and when; an undated answer is not kept.
+  KNOWN="$INSTALLED"; KNOWN_AT=""
+  [ -n "$LATEST" ] && [ -n "$CHECKED" ] && { KNOWN="$LATEST"; KNOWN_AT="$CHECKED"; }
+  LATEST=""; CHECKED=""
+  FETCHED_AT="$(date -u +%Y-%m-%dT%H:%MZ 2>/dev/null)"
   AUTH=()
   [ -n "${GITHUB_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
   # Tags, not releases: VULYK tags every version, and a repository may carry no GitHub
@@ -65,25 +74,27 @@ if [ "$NOW" -gt 0 ] && [ $((NOW - CACHED_AT)) -ge $((INTERVAL_H * 3600)) ]; then
     | sed 's/^v//' \
     | vsort | tail -1)"
   if [ -n "$FETCHED" ]; then
-    LATEST="$FETCHED"
-    printf '%s %s\n' "$NOW" "$LATEST" > "$CACHE" 2>/dev/null || true
+    LATEST="$FETCHED"; CHECKED="$FETCHED_AT"
+    printf '%s %s %s\n' "$NOW" "$LATEST" "$CHECKED" > "$CACHE" 2>/dev/null || true
   else
     # Network down or rate-limited: remember the ATTEMPT so a broken connection is not
-    # retried on every single session start, but keep whatever version we last knew.
-    printf '%s %s\n' "$NOW" "${LATEST:-$INSTALLED}" > "$CACHE" 2>/dev/null || true
+    # retried on every single session start, keep the version we last knew with the time it
+    # was fetched, and say nothing this time: a stale answer is never printed as a fresh one.
+    printf '%s %s %s\n' "$NOW" "$KNOWN" "${KNOWN_AT:-$FETCHED_AT}" > "$CACHE" 2>/dev/null || true
   fi
 fi
 
-[ -n "$LATEST" ] || exit 0
+[ -n "$LATEST" ] && [ -n "$CHECKED" ] || exit 0
 [ "$LATEST" = "$INSTALLED" ] && exit 0
 
 # Older-or-equal is not an update. vsort decides; if it cannot, stay silent rather
 # than nag someone running ahead of the tags (a maintainer, or a fork).
 NEWEST="$(printf '%s\n%s\n' "$INSTALLED" "$LATEST" | vsort | tail -1)"
 [ "$NEWEST" = "$LATEST" ] || exit 0
+WHEN="${CHECKED%Z}"; WHEN="${WHEN/T/ }"
 
 cat <<EOF
-[VULYK] update available: installed v$INSTALLED, latest v$LATEST on $REPO.
+[VULYK] update available: installed v$INSTALLED, latest v$LATEST on $REPO (checked $WHEN UTC).
 ASK THE OWNER whether to upgrade before doing anything - do not upgrade unprompted, and do
 not treat this line as approval. If they say yes, run \`/vulyk-update\` (dry run first:
 \`scripts/vulyk-update.sh . --check\`). It replaces framework-owned files only; CLAUDE.md,

@@ -304,7 +304,9 @@ H="$(hive mp-usage)"; mkdir -p "$H/scripts"; printf 'exit 2
 brief_of "$H" | expect_absent "a usage error (exit 2) is not 'not chosen'" "model profile"
 
 # --- the litopys offer reads the user's settings too (ab-run-fixes-06) -----------------------------
-echo "--- litopys offer: user, project and no scope"
+# upgrade-findings-06 (D2): on 0.50.x the offer is quiet at all three scopes (litopys enabled in user, project or
+# local settings), so the finding is not reproducible here; a brief from a hook older than 0.49 read the project files only.
+echo "--- litopys offer: user, project, local and no scope"
 LIT_LINE="litopys (session chronicle plugin) is not installed here"
 brief_home() { echo '{}' | env -u CLAUDE_CONFIG_DIR HOME="$2" CLAUDE_PROJECT_DIR="$1" bash "$BRIEF_HOOK" 2>&1; }
 H="$(hive lit-user)"; LH="$T/lit-home"; mkdir -p "$LH/.claude"
@@ -314,6 +316,9 @@ else ok "brief: no litopys offer when the plugin is enabled at user scope"; fi
 H="$(hive lit-project)"; LN="$T/lit-home-none"; mkdir -p "$LN/.claude" "$H/.claude"
 printf '{"enabledPlugins":{"litopys@litopys":true}}\n' > "$H/.claude/settings.json"
 brief_home "$H" "$LN" | expect_absent "brief: project scope still silences the offer" "$LIT_LINE"
+H="$(hive lit-local)"; mkdir -p "$H/.claude"
+printf '{\n  "enabledPlugins": {\n    "litopys@litopys": true\n  }\n}\n' > "$H/.claude/settings.local.json"
+brief_home "$H" "$LN" | expect_absent "brief: local scope (settings.local.json) silences the offer" "$LIT_LINE"
 H="$(hive lit-none)"
 brief_home "$H" "$LN" | expect "brief: neither scope, the offer still shows" "$LIT_LINE"
 

@@ -1484,6 +1484,9 @@ git clone -q "$XREL" "$T/xp-failcache" && git -C "$T/xp-failcache" config remote
 XF_RC=0; UPD_SRC="$T/xp-failcache" upd > "$T/xp-fail.out" 2>&1 || XF_RC=$?
 expect_eq "a fetch that fails: exit 1" "1" "$XF_RC"
 cat "$T/xp-fail.out" | expect "... with one line saying why" "update: fetch failed: "
+# upgrade-findings-06 (D1): --check asks the origin, never the SessionStart hook's cache.
+mkdir -p "$XU/.claude"; printf '%s 9.2.0 2026-01-02T03:04Z\n' "$(date +%s)" > "$XU/.claude/.vulyk-update-cache"
+upd 2>&1 | expect "vulyk-update.sh --check with a hook cache naming an old tag reports the origin's newest" "upgrading to v9.11.0"
 
 # Ask 4: the SessionStart update check picks the newest tag without `sort -V`.
 UC="$T/hive-xp-uc"; mkdir -p "$UC/.claude" "$T/xp-curl"
@@ -1494,6 +1497,35 @@ ucheck() { printf '%s\n' "$1" > "$UC/.claude/vulyk-version"; rm -f "$UC/.claude/
 ucheck 0.9.0 | expect "vulyk-update-check.sh names v0.10.0 newer than v0.9.0, with no sort -V" \
   "installed v0.9.0, latest v0.10.0"
 ucheck 0.11.0 | expect_absent "... and stays silent for a version ahead of the tags" "update available"
+
+# upgrade-findings-06 (D1): the cache lives 6 hours, its line is `<epoch> <latest> <YYYY-MM-DDTHH:MMZ>`, and the
+# update line names when the answer was fetched. A stub origin answering v0.11.0 counts its calls.
+mkdir -p "$T/xp-curl6"; UC6N="$T/xp-curl6.calls"
+printf '#!/bin/sh\necho x >> "%s"\necho %s\n' "$UC6N" "'[{\"name\":\"v0.11.0\"},{\"name\":\"v0.10.0\"}]'" > "$T/xp-curl6/curl"
+chmod +x "$T/xp-curl6/curl"
+ucache() { printf '%s\n' "$1" > "$UC/.claude/.vulyk-update-cache"; }
+ucheck6() { : > "$UC6N"; printf '0.9.0\n' > "$UC/.claude/vulyk-version"
+  CLAUDE_PROJECT_DIR="$UC" VULYK_REPO=o/r PATH="$T/xp-curl6:$PATH" "$@" bash "$SRC/.claude/hooks/vulyk-update-check.sh" 2>&1; }
+ucalls() { grep -c x "$UC6N" 2>/dev/null | tr -d ' '; }
+UNOW="$(date +%s)"
+ucache "$((UNOW - 7 * 3600)) 0.10.0 2026-01-02T03:04Z"
+ucheck6 env | expect "a cache older than 6 hours is refetched: the newer tag is named" "installed v0.9.0, latest v0.11.0"
+expect_eq "... with one call to the origin" "1" "$(ucalls)"
+read -r _ _ U6TS < "$UC/.claude/.vulyk-update-cache"
+expect_eq "... and the cache rewritten with three fields" "3" "$(awk '{ print NF }' "$UC/.claude/.vulyk-update-cache")"
+ucheck6 env | expect "... the line names the fetch's own time" "(checked $(printf '%s' "$U6TS" | sed 's/T/ /; s/Z$//') UTC)"
+ucache "$((UNOW - 5 * 3600)) 0.10.0 2026-01-02T03:04Z"
+out="$(ucheck6 env)"
+printf '%s' "$out" | expect "a cache 5 hours old is used" "installed v0.9.0, latest v0.10.0"
+printf '%s' "$out" | expect "... and the line carries the cache's timestamp" "(checked 2026-01-02 03:04 UTC)"
+expect_eq "... with no call to the origin" "0" "$(ucalls)"
+ucache "$UNOW 0.10.0"
+ucheck6 env | expect "a two-field cache counts as expired: refetched" "latest v0.11.0"
+expect_eq "... with one call to the origin" "1" "$(ucalls)"
+expect_eq "... and rewritten with three fields" "3" "$(awk '{ print NF }' "$UC/.claude/.vulyk-update-cache")"
+ucache "$((UNOW - 7 * 3600)) 0.10.0 2026-01-02T03:04Z"
+ucheck6 env VULYK_UPDATE_INTERVAL_HOURS=24 | expect "VULYK_UPDATE_INTERVAL_HOURS=24 restores the old window" "latest v0.10.0"
+expect_eq "... with no call to the origin" "0" "$(ucalls)"
 
 # Ask 9, upgrade half: a hive's own filled ## Commands block - the old bare-python cell included - is the host's,
 # carried byte for byte through --upgrade.

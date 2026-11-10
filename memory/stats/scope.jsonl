@@ -389,3 +389,4 @@
 {"ts":"2026-11-10T21:24:08Z","story":"upgrade-findings-04-check-reports","declared":3,"changed":3,"out_of_scope":0}
 {"ts":"2026-11-10T22:00:11Z","story":"upgrade-findings-03-verify-state","declared":4,"changed":4,"out_of_scope":0}
 {"ts":"2026-11-10T22:05:17Z","story":"upgrade-findings-03-verify-state","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-11-10T22:19:32Z","story":"upgrade-findings-06-session-brief","declared":7,"changed":5,"out_of_scope":0}
