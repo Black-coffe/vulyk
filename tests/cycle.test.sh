@@ -1316,8 +1316,8 @@ git add -A && git commit -qm "vr: setup" >/dev/null
 vr_close() { VULYK_VERIFY_TIMEOUT=5 VULYK_VERIFY_CALL=4 bash scripts/cycle.sh close-story docs/specs/stray/stray-21.md --commit 2>&1; }
 printf 'good\n' > src/vr/a.txt
 out="$(vr_close)"; ex=$?
-[ "$ex" -eq 7 ] && grep -qE '^verify_resume: close-story 2 [0-9a-f]{64}$' docs/specs/stray/stray-21.md \
-  && echo "  ok    call 1: line 1 green, paused before line 2, a mark written" || { echo "::error::vr call 1: exit=$ex out=$out"; fail=1; }
+[ "$ex" -eq 7 ] && [ -f .vulyk/state/stray/verify.stray-21.close-story ] && ! grep -q '^verify_resume:' docs/specs/stray/stray-21.md \
+  && echo "  ok    call 1: line 1 green, paused before line 2, a record written under .vulyk/state" || { echo "::error::vr call 1: exit=$ex out=$out"; fail=1; }
 printf 'bad\n' > src/vr/a.txt
 head_before="$(git rev-parse HEAD)"
 out="$(vr_close)"; ex=$?
@@ -1330,7 +1330,72 @@ out2="$(vr_close)"; ex2=$?
 [ "$ex" -eq 7 ] && [ "$ex2" -eq 0 ] && [ "$(wc -c < "$VRLOG" | tr -d ' ')" = 3 ] && git show HEAD:docs/specs/stray/stray-21.md | grep -q '^status: done' \
   && echo "  ok    with nothing under the entry changed the mark still resumes: line 1 not run again, the story closes" \
   || { echo "::error::vr resume: exit=$ex/$ex2 line-1 runs=$(wc -c < "$VRLOG" 2>/dev/null) out=$out2"; fail=1; }
+[ ! -e .vulyk/state/stray/verify.stray-21.close-story ] && echo "  ok    the finished close-story leaves no record behind" \
+  || { echo "::error::a finished close-story left its record: $(cat .vulyk/state/stray/verify.stray-21.close-story 2>&1)"; fail=1; }
 rm -f "$VRLOG"
+
+echo "upgrade-findings-03 A1: the resume point lives in .vulyk/state, never in the story file"
+VSLOG="$(mktemp -u)"
+printf 'printf "x" >> "%s"\n[ ! -f "%s.fail" ]\n' "$VSLOG" "$VSLOG" > vs-count.sh
+printf '| VS count | `bash vs-count.sh` |\n| VS other | `echo vs-other` |\n' >> CLAUDE.md
+vs_story() { # vs_story <nn> <verification-lines> - an in-progress stray story declaring vs-<nn>.txt only
+  printf 'v1\n' > "vs-$1.txt"
+  printf -- '---\nstory: stray-%s\nspec: stray\nstatus: in-progress\nreturned: DONE\nwave: %s\n---\n# Stray fixture %s\n\n## Files\n- vs-%s.txt\n\n## Verification\n%s\n' \
+    "$1" "$1" "$1" "$1" "$2" > "docs/specs/stray/stray-$1.md"
+}
+vs_runs() { wc -c < "$VSLOG" 2>/dev/null | tr -d ' '; }
+vs_close() { VULYK_VERIFY_TIMEOUT=5 VULYK_VERIFY_CALL=4 bash scripts/cycle.sh close-story "docs/specs/stray/stray-$1.md" --commit "${@:2}"; }
+vs_story 23 $'`bash vs-count.sh`\n`true`'
+git add -A && git commit -qm "vs: setup 23" >/dev/null
+: > "$VSLOG.fail"   # line 1 fails from here on (the flag sits outside the fixture repo)
+awk -v line="verify_resume: close-story 2 $(set_hash vs-23.txt)" 'NR > 1 && /^---$/ && !d { print line; d=1 } { print }' docs/specs/stray/stray-23.md > vs.tmp && cat vs.tmp > docs/specs/stray/stray-23.md && rm -f vs.tmp
+head_before="$(git rev-parse HEAD)"
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-23.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && [ "$(vs_runs)" = 1 ] && [ "$(git rev-parse HEAD)" = "$head_before" ] && grep -q '^status: in-progress' docs/specs/stray/stray-23.md \
+  && echo "  ok    a hand-written resume mark is ignored: close-story runs line 1, exits 4, commits nothing" \
+  || { echo "::error::a hand-written resume mark is ignored - expected exit 4 with line 1 run once and nothing committed: exit=$ex line-1 runs=$(vs_runs) head moved=$([ "$(git rev-parse HEAD)" = "$head_before" ] && echo no || echo yes) out=$out"; fail=1; }
+rm -f "$VSLOG.fail" "$VSLOG"
+git add -A && git commit -qm "vs: 23 left open" >/dev/null
+
+vs_story 24 $'`bash vs-count.sh`\n`true`'
+git add -A && git commit -qm "vs: setup 24" >/dev/null
+VSREC=.vulyk/state/stray/verify.stray-24.close-story
+out="$(vs_close 24 2>&1)"; ex=$?
+[ "$ex" -eq 7 ] && [ -f "$VSREC" ] && ! grep -q '^verify_resume:' docs/specs/stray/stray-24.md && [ -z "$(git status --porcelain | grep -v ' memory/stats/')" ] \
+  && grep -q '^line=1 0 [0-9a-f]\{64\}$' "$VSREC" && grep -q '^next=2$' "$VSREC" \
+  && echo "  ok    a real pause: exit 7, a record under .vulyk/state/stray/, no verify_resume line, git status shows nothing new" \
+  || { echo "::error::real pause: exit=$ex record=$(cat "$VSREC" 2>&1) status=$(git status --porcelain) out=$out"; fail=1; }
+out="$(vs_close 24 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(vs_runs)" = 1 ] && git show HEAD:docs/specs/stray/stray-24.md | grep -q '^status: done' && [ ! -e "$VSREC" ] \
+  && echo "  ok    the rerun starts at the paused line (line 1 ran once), closes, and removes the record" \
+  || { echo "::error::resume from the record: exit=$ex line-1 runs=$(vs_runs) record=$(cat "$VSREC" 2>&1) out=$out"; fail=1; }
+rm -f "$VSLOG"
+
+vs_story 25 $'`bash vs-count.sh`\n`true`'
+git add -A && git commit -qm "vs: setup 25" >/dev/null
+VSREC=.vulyk/state/stray/verify.stray-25.close-story
+vs_restart() { # vs_restart <label> <reason> <runs-after> - rerun after a change: line 1 runs again, stderr says why
+  out="$(vs_close 25 "${@:4}" 2>&1)"; ex=$?
+  [ "$ex" -eq 7 ] && [ "$(vs_runs)" = "$3" ] && printf '%s' "$out" | grep -qF "resume record not used ($2" \
+    && echo "  ok    $1: line 1 runs again, stderr says why" \
+    || { echo "::error::$1 - expected line 1 to run again (runs $3) with reason '$2': exit=$ex runs=$(vs_runs) out=$out"; fail=1; }
+}
+out="$(vs_close 25 2>&1)"; ex=$?
+[ "$ex" -eq 7 ] || { echo "::error::stray-25 call 1: exit=$ex out=$out"; fail=1; }
+grep -v '^line=1 ' "$VSREC" > vs.tmp && cat vs.tmp > "$VSREC" && rm -f vs.tmp
+vs_restart "a record without a line=1 0 entry" "no recorded exit 0 for line 1" 2
+printf 'v2\n' > stray-other.txt; git add -A && git commit -qm "vs: a code commit lands" >/dev/null
+vs_restart "a non-paperwork commit since the pause" "HEAD moved" 3
+vs_restart "a different --stamp" "--stamp differs" 4 --stamp other-driver
+sed_inplace 's/^`true`$/`echo vs-other`/' docs/specs/stray/stray-25.md
+vs_restart "a changed verification line" "## Verification changed" 5 --stamp other-driver
+printf '\n- vs paperwork\n' >> docs/specs/stray/journal.md
+git add docs/specs/stray/journal.md && git commit -qm "vulyk(stray): journal" -- docs/specs/stray/journal.md >/dev/null
+out="$(vs_close 25 --stamp other-driver 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(vs_runs)" = 5 ] && [ ! -e "$VSREC" ] \
+  && echo "  ok    a paperwork-only commit between pause and rerun still resumes: line 1 not run again, the story closes" \
+  || { echo "::error::paperwork-only commit: exit=$ex runs=$(vs_runs) out=$out"; fail=1; }
+rm -f "$VSLOG"
 
 echo "mass-audit-fixes-10 G6: a git add that fails in close-story --commit refuses with exit 2, nothing committed, status: untouched"
 printf 'v1\n' > stray-add-fail.txt
@@ -1993,7 +2058,7 @@ printf '#!/usr/bin/env bash\necho "r18 saw $(cat src/r18/a.txt)"\necho "expected
 red_story 18 "$MK" $'- tests/red18.sh\n- src/r18/\n' $'`bash tests/red18.sh`\n`bash tests/red-pass.sh`'
 git add -A && git commit -qm "red: resume-mark story" >/dev/null
 out="$(VULYK_VERIFY_TIMEOUT=5 VULYK_VERIFY_CALL=4 bash scripts/cycle.sh stamp-red "$st" 2>&1)"; ex=$?
-[ "$ex" -eq 7 ] && grep -qE '^verify_resume: stamp-red 2 ' "$st" && echo "  ok    red-18 call 1 paused after line 1" || { echo "::error::red-18 pause: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
+[ "$ex" -eq 7 ] && grep -q '^next=2$' .vulyk/state/red/verify.red-18.stamp-red && ! grep -q '^verify_resume:' "$st" && echo "  ok    red-18 call 1 paused after line 1, the record under .vulyk/state" || { echo "::error::red-18 pause: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
 printf 'two\n' > src/r18/a.txt
 n=0; ex=7
 while [ "$ex" -eq 7 ] && [ "$n" -lt 4 ]; do
@@ -2004,6 +2069,74 @@ rcpt="$(sed -n '/^## Red receipt/,$p' "$st")"
   && echo "  ok    stamp-red: an edit under a ## Files directory invalidates the mark - the receipt is the new code's output" \
   || { echo "::error::stamp-red: an edit under a ## Files directory invalidates the mark - exit=$ex receipt=$rcpt"; fail=1; }
 git add -A && git commit -qm "red: resume-mark story stamped" >/dev/null
+[ ! -e .vulyk/state/red/verify.red-18.stamp-red ] && echo "  ok    the finished stamp-red leaves no record behind" \
+  || { echo "::error::a finished stamp-red left its record: $(cat .vulyk/state/red/verify.red-18.stamp-red 2>&1)"; fail=1; }
+
+echo "upgrade-findings-03 A2: stamp-red's results directory comes from mktemp -d, and only this chain's results are read"
+SRLOG="$(mktemp -u)"
+sr_fixture() { # sr_fixture <nn> - a red story whose line 1 counts its runs and fails for the declared reason
+  printf 'todo\n' > "src/sr$1.txt"
+  printf '#!/usr/bin/env bash\nprintf "x" >> "%s"\necho "expected done, sr%s ran"\nexit 1\n' "$SRLOG" "$1" > "tests/sr$1.sh"
+  red_story "$1" "$MK" "- tests/sr$1.sh"$'\n'"- src/sr$1.txt"$'\n' "\`bash tests/sr$1.sh\`"$'\n''`bash tests/red-pass.sh`'
+}
+sr_runs() { wc -c < "$SRLOG" 2>/dev/null | tr -d ' '; }
+sr_stamp() { VULYK_VERIFY_TIMEOUT=5 VULYK_VERIFY_CALL=4 bash scripts/cycle.sh stamp-red "docs/specs/red/red-$1.md" 2>&1; }
+sr_outd() { sed -n 's/^outd=//p' ".vulyk/state/red/verify.red-$1.stamp-red" 2>/dev/null | tail -1; }
+sr_fixture 31
+git add -A && git commit -qm "red: sr31 fixture" >/dev/null
+st=docs/specs/red/red-31.md
+OLDD="${TMPDIR:-/tmp}/vulyk-sr-$(printf '%s' "$st" | cksum | cut -d' ' -f1)"
+rm -rf "$OLDD"; mkdir -p "$OLDD"
+printf '1' > "$OLDD/1.code"; printf '%s' 'bash tests/sr31.sh' > "$OLDD/1.line"; printf 'expected done PLANTED\n' > "$OLDD/1.out"
+awk -v line="verify_resume: stamp-red 2 $(set_hash src/sr31.txt tests/sr31.sh)" 'NR > 1 && /^---$/ && !d { print line; d=1 } { print }' "$st" > sr.tmp && cat sr.tmp > "$st" && rm -f sr.tmp
+n=0; ex=7
+while [ "$ex" -eq 7 ] && [ "$n" -lt 4 ]; do out="$(sr_stamp 31)"; ex=$?; n=$((n+1)); done
+rcpt="$(sed -n '/^## Red receipt/,$p' "$st")"
+[ "$ex" -eq 0 ] && [ "$(sr_runs)" = 1 ] && printf '%s' "$rcpt" | grep -qF 'sr31 ran' && ! printf '%s' "$rcpt" | grep -qF PLANTED \
+  && echo "  ok    a results directory planted at the old predictable path is not trusted: stamp-red runs every line itself" \
+  || { echo "::error::a results directory planted at the old predictable path is not trusted - exit=$ex line-1 runs=$(sr_runs) receipt=$rcpt"; fail=1; }
+rm -rf "$OLDD" "$SRLOG"
+git add -A && git commit -qm "red: sr31 stamped" >/dev/null
+
+sr_fixture 32
+git add -A && git commit -qm "red: sr32 fixture" >/dev/null
+out="$(sr_stamp 32)"; ex=$?; sro="$(sr_outd 32)"
+case "$sro" in "${TMPDIR:-/tmp}"/vulyk-sr-*) sro_old=1 ;; *) sro_old=0 ;; esac
+[ "$ex" -eq 7 ] && [ -n "$sro" ] && [ -d "$sro" ] && [ "$sro_old" = 0 ] \
+  && echo "  ok    a pause records a results directory that is not the old predictable path" \
+  || { echo "::error::sr32 pause: exit=$ex outd=$sro out=$out"; fail=1; }
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) echo "  skip  the 0700 mode check: Git Bash maps no POSIX mode onto an NTFS directory" ;;
+  *) [ "$(ls -ld "$sro" | cut -c1-10)" = drwx------ ] && echo "  ok    the results directory is mode 0700" \
+       || { echo "::error::results directory mode: $(ls -ld "$sro")"; fail=1; } ;;
+esac
+grep -v '^line=1 ' ".vulyk/state/red/verify.red-32.stamp-red" > sr.tmp && cat sr.tmp > ".vulyk/state/red/verify.red-32.stamp-red" && rm -f sr.tmp
+out="$(sr_stamp 32)"; ex=$?
+[ "$ex" -eq 7 ] && [ "$(sr_runs)" = 2 ] && printf '%s' "$out" | grep -qF 'resume record not used (no matching line= entry for line 1' && [ "$(sr_outd 32)" != "$sro" ] \
+  && echo "  ok    a stored result with no line= entry is not used: line 1 runs again in a new directory, stderr names the check" \
+  || { echo "::error::a stored result with no line= entry is not used - exit=$ex runs=$(sr_runs) outd=$(sr_outd 32) out=$out"; fail=1; }
+[ ! -e "$sro" ] || { echo "::error::the dropped results directory was left behind: $sro"; fail=1; }
+sro="$(sr_outd 32)"
+mv "$sro" "$sro.real" && { MSYS=winsymlinks:nativestrict ln -s "$sro.real" "$sro" 2>/dev/null \
+  || { command -v cygpath >/dev/null 2>&1 && cmd //c "mklink /J $(cygpath -w "$sro") $(cygpath -w "$sro.real")" >/dev/null 2>&1; }; } # Git Bash: a junction reads as -L
+if [ -L "$sro" ]; then
+  out="$(sr_stamp 32)"; ex=$?
+  [ "$ex" -eq 7 ] && [ "$(sr_runs)" = 3 ] && printf '%s' "$out" | grep -qF 'is a symlink' && [ "$(sr_outd 32)" != "$sro" ] \
+    && echo "  ok    a recorded directory swapped for a symlink is not used: line 1 runs again in a new directory, stderr names the check" \
+    || { echo "::error::a recorded directory swapped for a symlink is not used - exit=$ex runs=$(sr_runs) out=$out"; fail=1; }
+  rm -f "$sro"
+else
+  echo "  skip  the symlink swap: this shell cannot make a symlink"; rm -rf "$sro"; mv "$sro.real" "$sro"
+fi
+rm -rf "$sro.real"
+n=0; ex=7; sro=""
+while [ "$ex" -eq 7 ] && [ "$n" -lt 4 ]; do sro="$(sr_outd 32)"; out="$(sr_stamp 32)"; ex=$?; n=$((n+1)); done
+[ "$ex" -eq 0 ] && grep -q '^red_verified_at:' docs/specs/red/red-32.md && [ ! -e .vulyk/state/red/verify.red-32.stamp-red ] \
+  && [ -n "$sro" ] && [ ! -e "$sro" ] \
+  && echo "  ok    the finished stamp-red leaves no record and no results directory behind" \
+  || { echo "::error::finished stamp-red: exit=$ex record=$(cat .vulyk/state/red/verify.red-32.stamp-red 2>&1) out=$(printf '%s\n' "$out" | tail -3)"; fail=1; }
+rm -f "$SRLOG"
+git add -A && git commit -qm "red: sr32 stamped" >/dev/null
 
 echo "mass-audit-fixes-10 D5: stamp-red --baseline re-stamps against HEAD's implementation and puts the working copy back"
 printf 'todo\n' > src/red16.txt

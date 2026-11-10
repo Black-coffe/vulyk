@@ -387,3 +387,5 @@
 {"ts":"2026-11-10T21:05:05Z","story":"upgrade-findings-02-upgrade-writes","declared":2,"changed":2,"out_of_scope":0}
 {"ts":"2026-11-10T21:09:20Z","story":"upgrade-findings-02-upgrade-writes","declared":2,"changed":2,"out_of_scope":0}
 {"ts":"2026-11-10T21:24:08Z","story":"upgrade-findings-04-check-reports","declared":3,"changed":3,"out_of_scope":0}
+{"ts":"2026-11-10T22:00:11Z","story":"upgrade-findings-03-verify-state","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-11-10T22:05:17Z","story":"upgrade-findings-03-verify-state","declared":4,"changed":4,"out_of_scope":0}

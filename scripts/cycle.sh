@@ -2190,8 +2190,9 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
   # never above 300), so one slow line names itself and a timeout is that line's. The call has a budget,
   # VULYK_VERIFY_CALL (default 540, inside the Bash tool's 10-minute cap): a line starts only when its
   # cap still fits what is left of it (the first line of a call always runs); otherwise the runner stops
-  # with VR_PAUSE = the number of the line it would run next, and the verb writes a resume mark and exits
-  # 7. VR_START (set by the verb) is the line a resumed call begins at; lines count across <reps>. Each
+  # with VR_PAUSE = the number of the line it would run next, and the verb records it (verify_pause) and
+  # exits 7. VR_START (set by verify_resume_start) is the line a resumed call begins at; lines count across
+  # <reps>. With VR_REC set, each line that ends appends `line=<k> <rc> <hash>` to that record. Each
   # line runs under lib.sh's run_capped (timeout, gtimeout or the Python cap, else uncapped with its
   # warning); capped_by says whether a cap exists, so an uncapped run never reads a command's own 124 as
   # a timeout.
@@ -2199,7 +2200,8 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
   # (R18/M-3 - a single `bash -c "$multi_line_block"` used to report only the last line's exit
   # status), stopping at the first non-zero line. With <outdir> (stamp-red): every line once, its
   # stdout+stderr in <outdir>/<k>.out (and echoed), its exit in <k>.code and VR_CODES[k], its text in
-  # <k>.line and VR_LINES[k] (a resumed call reads the earlier lines back from those files); only a
+  # <k>.line and VR_LINES[k] (a resumed call reads the earlier lines back from those files, which
+  # verify_resume_start has checked against the record's line= entries); only a
   # timeout stops it. Sets VR_VT, VR_TIMEOUT_OK, VR_RC (the stopping or last exit), VR_LINE, VR_RUN,
   # VR_PAUSE.
   local cmds="$1" reps="$2" outdir="${3:-}" vline vrc k=0 vstart="$SECONDS" vcall start="${VR_START:-1}"
@@ -2231,12 +2233,16 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
         run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline" < /dev/null > "$outdir/$k.out" 2>&1; vrc=$?
         cat "$outdir/$k.out"
         printf '%s' "$vrc" > "$outdir/$k.code"; printf '%s' "$vline" > "$outdir/$k.line"
+        [ -z "${VR_REC:-}" ] || printf 'line=%s %s %s
+' "$k" "$vrc" "$(verify_text_hash "$vline")" >> "$VR_REC"
         VR_CODES[$k]="$vrc"; VR_LINES[$k]="$vline"; VR_RC="$vrc"; VR_LINE="$vline"
         [ "$vrc" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ] && return 0
         continue
       fi
       run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline" < /dev/null; vrc=$?
       VR_RC="$vrc"; VR_LINE="$vline"
+      [ -z "${VR_REC:-}" ] || printf 'line=%s %s %s
+' "$k" "$vrc" "$(verify_text_hash "$vline")" >> "$VR_REC"
       [ "$vrc" -ne 0 ] && return 0
     done <<EOF
 $cmds
@@ -2247,9 +2253,9 @@ EOF
 }
 
 verify_files_hash() { # verify_files_hash <story-file> -> set_hash of the files its ## Files entries name (the
-  # story itself left out: the resume mark is written into it). G5: a directory or glob entry is expanded
+  # story itself left out). G5: a directory or glob entry is expanded
   # as red_sets expands it (git ls-files -co --exclude-standard, a literal file entry kept even while
-  # missing), sorted, so an edit under `src/` changes the hash and drops a verify_resume mark.
+  # missing), sorted, so an edit under `src/` changes the hash and drops a resume record.
   local story="${1#./}" e p; local -a specs=() ps=()
   while IFS= read -r e; do
     [ -n "$e" ] && [ "${e#./}" != "$story" ] && specs+=("$e")
@@ -2269,33 +2275,109 @@ EOF
   set_hash ${ps[@]+"${ps[@]}"}
 }
 
-verify_resume_set() { # verify_resume_set <story-file> [<verb> <k> <hash>] - drop the frontmatter
-  # `verify_resume:` line, and write a new one before the closing `---` when given
-  local tmp
-  [ -n "${2:-}" ] || grep -q '^verify_resume:' "$1" || return 0
-  tmp="$(mktemp)"
-  awk -v line="${2:+verify_resume: $2 $3 $4}" '
-    NR == 1 && /^---[[:space:]]*$/ { infm=1; print; next }
-    infm && /^---[[:space:]]*$/    { if (line != "") print line; infm=0; print; next }
-    infm && /^verify_resume:/      { next }
-    { print }
-  ' "$1" > "$tmp" && cat "$tmp" > "$1"
+# upgrade-findings-03 (A1/A2, plan.md ## Contracts S1/S2): a paused verification's resume point and its
+# per-line results live in a record the cycle owns, .vulyk/state/<slug>/verify.<story-id>.<verb>, never in
+# the story file (a `verify_resume:` frontmatter line is neither read nor written). Plain key=value lines:
+# head=, stamp=, files=, verify=, next=<k>, one `line=<k> <rc> <hash>` per line run in this chain, and for
+# stamp-red outd=<its mktemp -d results directory>. A record that is missing or fails a key is the strict
+# path: line 1, a new directory.
+verify_text_hash() { printf '%s' "$1" | $(sha256_tool) | cut -c1-64; } # verify_text_hash <text> -> 64 hex
+
+verify_rec() { # verify_rec <story-file> <verb> -> the verify record's path (S2)
+  local id; id="$(fm_field "$1" story)"; [ -n "$id" ] || id="$(basename "$1" .md)"
+  printf '%s/.vulyk/state/%s/verify.%s.%s' "$ROOT" "$(slug_of "$(dirname "$1")")" "${id//[!A-Za-z0-9._-]/_}" "$2"
+}
+
+verify_rec_get() { sed -n "s/^$2=//p" "$1" 2>/dev/null | tail -n 1; } # verify_rec_get <record> <key> -> its last value
+
+verify_rec_new() { # verify_rec_new <record> <files-hash> <stamp> <verify-hash> [<outd>] - a fresh record: the
+  # state directory made on first write with its own `*` .gitignore (S1), the keys a resume is judged by
+  local dir top; dir="$(dirname "$1")"; top="$(dirname "$dir")"
+  mkdir -p "$dir" || return 1
+  [ -f "$top/.gitignore" ] || printf '*\n' > "$top/.gitignore"
+  { printf 'head=%s\nstamp=%s\nfiles=%s\nverify=%s\n' "$(git rev-parse HEAD 2>/dev/null)" "${3:--}" "$2" "$4"
+    [ -z "${5:-}" ] || printf 'outd=%s\n' "$5"; } > "$1"
+}
+
+verify_rec_drop() { # verify_rec_drop <record> - remove the record and its results directory; the directory
+  # only when it is one stamp-red made (vulyk-sr.*), a real directory the caller owns, never through a symlink
+  local od; od="$(verify_rec_get "$1" outd)"
+  case "${od##*/}" in vulyk-sr.*) [ -d "$od" ] && [ ! -L "$od" ] && [ -O "$od" ] && rm -rf -- "$od" ;; esac
+  rm -f -- "$1"
+}
+
+verify_nth_line() { # verify_nth_line <cmd-list> <reps> <k> -> the k-th line verify_run runs (counted across reps)
+  local i=1 k=0 vline
+  while [ "$i" -le "$2" ]; do
+    while IFS= read -r vline; do
+      [ -n "$vline" ] || continue
+      [ "$vline" = "none — reviewed by lead-review" ] && continue
+      k=$((k+1)); [ "$k" -eq "$3" ] && { printf '%s' "$vline"; return 0; }
+    done <<EOF2
+$1
+EOF2
+    i=$((i+1))
+  done
+  return 1
+}
+
+verify_resume_start() { # verify_resume_start <verb> <record> <files-hash> <stamp> <verify-hash> <cmd-list> <reps>
+  # -> VR_START, and for stamp-red VR_OUTD (the results directory to reuse, or empty). The record's next=
+  # is honoured only when head (equal to HEAD, or only paperwork commits since: lib.sh paperwork_only),
+  # stamp (`-` for none), the ## Files hash and the ## Verification hash all equal this call's, and every
+  # skipped line j has a line=j entry for its current text: close-story needs that entry's exit 0;
+  # stamp-red needs outd= to be a directory, not a symlink, owned by the caller ([ -d ] [ ! -L ] [ -O ]),
+  # holding j.code / j.line equal to the entry. Anything else: VR_START=1, the record and its directory
+  # dropped, one stderr line saying why. No record at all is the silent strict path.
+  local verb="$1" rec="$2" why="" h nx j e lt lrc eh od=""
+  VR_START=1; VR_OUTD=""
+  [ -e "$rec" ] || [ -L "$rec" ] || return 0
+  if [ ! -f "$rec" ] || [ ! -r "$rec" ]; then why="the record is unreadable"
+  else
+    h="$(verify_rec_get "$rec" head)"; nx="$(verify_rec_get "$rec" next)"
+    if [ "$h" != "$(git rev-parse HEAD 2>/dev/null)" ] && ! { [ -n "$h" ] && paperwork_only "$ROOT" "$h" HEAD; }; then
+      why="HEAD moved past ${h:0:7} with a commit that is not paperwork"
+    elif [ "$(verify_rec_get "$rec" stamp)" != "${4:--}" ]; then why="--stamp differs from the paused call's"
+    elif [ "$(verify_rec_get "$rec" files)" != "$3" ]; then why="## Files changed since the pause"
+    elif [ "$(verify_rec_get "$rec" verify)" != "$5" ]; then why="## Verification changed since the pause"
+    else case "$nx" in ''|*[!0-9]*|0|1) why="no resume line in the record" ;; esac
+    fi
+  fi
+  if [ -z "$why" ] && [ "$verb" = stamp-red ]; then
+    od="$(verify_rec_get "$rec" outd)"
+    if [ -z "$od" ]; then why="no results directory in the record"
+    elif [ -L "$od" ]; then why="results directory $od is a symlink"
+    elif [ ! -d "$od" ]; then why="results directory $od is not a directory"
+    elif [ ! -O "$od" ]; then why="results directory $od is not owned by the caller"
+    fi
+  fi
+  j=1
+  while [ -z "$why" ] && [ "$j" -lt "$nx" ]; do
+    lt="$(verify_nth_line "$6" "$7" "$j")" || { why="line $j is past the verification"; break; }
+    e="$(grep "^line=$j " "$rec" | tail -n 1)"; lrc=""; eh=""
+    read -r _ lrc eh <<EOF2
+${e#line=}
+EOF2
+    if [ "$verb" = close-story ]; then
+      { [ -n "$e" ] && [ "$lrc" = 0 ] && [ "$eh" = "$(verify_text_hash "$lt")" ]; } || why="no recorded exit 0 for line $j"
+    elif [ -z "$e" ] || [ "$eh" != "$(verify_text_hash "$lt")" ]; then why="no matching line= entry for line $j"
+    elif [ "$(cat "$od/$j.code" 2>/dev/null)" != "$lrc" ] || [ "$(cat "$od/$j.line" 2>/dev/null)" != "$lt" ]; then
+      why="the stored result of line $j does not match its line= entry"
+    fi
+    j=$((j+1))
+  done
+  if [ -n "$why" ]; then
+    echo "cycle: $verb - resume record not used ($why): verification starts at line 1" >&2
+    verify_rec_drop "$rec"
+    return 0
+  fi
+  VR_START="$nx"; VR_OUTD="$od"
+}
+
+verify_pause() { # verify_pause <verb> <record> <k> - record next=<k>, print the exit-7 line, exit 7
+  local tmp; tmp="$(mktemp)"
+  { grep -v '^next=' "$2"; printf 'next=%s\n' "$3"; } > "$tmp" && cat "$tmp" > "$2"
   rm -f "$tmp"
-}
-
-verify_resume_start() { # verify_resume_start <story-file> <verb> <hash> -> the line to start at: the
-  # mark's when it names this verb and this ## Files hash, else 1
-  local m v k h
-  m="$(fm_raw "$1" verify_resume)"
-  read -r v k h <<EOF
-$m
-EOF
-  if [ "$v" = "$2" ] && [ "$h" = "$3" ]; then case "$k" in ''|*[!0-9]*|0) echo 1 ;; *) echo "$k" ;; esac
-  else echo 1; fi
-}
-
-verify_pause() { # verify_pause <verb> <story-file> <k> <hash> - write the mark, print the exit-7 line, exit 7
-  verify_resume_set "$2" "$1" "$3" "$4"
   echo "cycle: $1 - verification paused before line $3 (call budget); run the same command again, it resumes" >&2
   printf '{"ok":false,"verb":"%s","exit":7,"next":"resume","resume":%s,"error":"verification paused before line %s: run the same command again"}\n' "$1" "$3" "$3"
   exit 7
@@ -2646,15 +2728,20 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] [<baseline 0|1>] - red-
   [ "$BASELINE" = 1 ] && red_baseline_swap
 
   # gate-split-02: the call budget can stop the run between lines (exit 7); the earlier lines' results
-  # wait in a per-story directory under the temp dir until the resumed call has them all.
-  local VH VSTART OUTD; VH="$(verify_files_hash "$STORY")"
-  VSTART="$(verify_resume_start "$STORY" stamp-red "$VH")"
-  OUTD="${TMPDIR:-/tmp}/vulyk-sr-$(printf '%s' "$STORY" | cksum | cut -d' ' -f1)"
-  [ "$VSTART" -gt 1 ] && [ -d "$OUTD" ] || { VSTART=1; rm -rf "$OUTD"; }
-  mkdir -p "$OUTD" || { emit false stamp-red 2 error "mkdir failed"; exit 2; }
-  VR_START="$VSTART" verify_run "$CMD_LIST" 1 "$OUTD"
-  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause stamp-red "$STORY" "$VR_PAUSE" "$VH"; fi
-  verify_resume_set "$STORY"
+  # wait in a mktemp -d directory (0700) named in the verify record until the resumed call has them all
+  # (upgrade-findings-03 A2: reused only after verify_resume_start's checks).
+  local VH VL VREC OUTD; VH="$(verify_files_hash "$STORY")"; VL="$(verify_text_hash "1
+$CMD_LIST")"
+  VREC="$(verify_rec "$STORY" stamp-red)"
+  verify_resume_start stamp-red "$VREC" "$VH" "$STAMP" "$VL" "$CMD_LIST" 1
+  OUTD="$VR_OUTD"
+  if [ "$VR_START" -eq 1 ]; then
+    OUTD="$(mktemp -d "${TMPDIR:-/tmp}/vulyk-sr.XXXXXX")" || { emit false stamp-red 2 error "mktemp -d failed"; exit 2; }
+    verify_rec_new "$VREC" "$VH" "$STAMP" "$VL" "$OUTD" || { rm -rf "$OUTD"; emit false stamp-red 2 error "could not write $VREC"; exit 2; }
+  fi
+  VR_REC="$VREC" verify_run "$CMD_LIST" 1 "$OUTD"
+  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause stamp-red "$VREC" "$VR_PAUSE"; fi
+  rm -f "$VREC"
   if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
     rm -rf "$OUTD"; red_refuse "not red: timed out after ${VR_VT}s"
   fi
@@ -2883,11 +2970,16 @@ EOF
 
   verify_cells_check close-story "$CMD_LIST"
 
-  local VH VSTART; VH="$(verify_files_hash "$STORY")"
-  VSTART="$(verify_resume_start "$STORY" close-story "$VH")"
-  VR_START="$VSTART" verify_run "$CMD_LIST" "$REPS"
-  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause close-story "$STORY" "$VR_PAUSE" "$VH"; fi
-  verify_resume_set "$STORY"
+  local VH VL VREC; VH="$(verify_files_hash "$STORY")"; VL="$(verify_text_hash "$REPS
+$CMD_LIST")"
+  VREC="$(verify_rec "$STORY" close-story)"
+  verify_resume_start close-story "$VREC" "$VH" "$STAMP" "$VL" "$CMD_LIST" "$REPS"
+  if [ "$VR_START" -eq 1 ]; then
+    verify_rec_new "$VREC" "$VH" "$STAMP" "$VL" || { emit false close-story 2 error "could not write $VREC"; exit 2; }
+  fi
+  VR_REC="$VREC" verify_run "$CMD_LIST" "$REPS"
+  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause close-story "$VREC" "$VR_PAUSE"; fi
+  rm -f "$VREC"
   if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
     echo "cycle: close-story - verification timed out after ${VR_VT}s (run $VR_RUN/$REPS): $VR_LINE" >&2
     emit false close-story 4 repair "verification timed out after ${VR_VT}s: $VR_LINE"

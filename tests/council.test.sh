@@ -4393,27 +4393,28 @@ out="$(VULYK_VERIFY_TIMEOUT=3 bash scripts/cycle.sh close-story docs/specs/r18cs
   && echo "  ok    exit 4 on the third line: the cap is per line, not one budget for the run" \
   || { echo "::error::per-line cap: exit=$ex out=$out"; fail=1; }
 
-echo "gate-split-02: close-story pauses at exit 7 with a verify_resume mark when the next line does not fit the call, and the same command resumes"
+echo "gate-split-02: close-story pauses at exit 7 with a resume record under .vulyk/state when the next line does not fit the call, and the same command resumes"
 printf -- '---\nstory: r18pl-01\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Paused\n\n## Files\n- r18pl-one.txt\n\n## Verification\n`sleep 1`\n`sleep 1`\n' > docs/specs/r18cs/r18pl-01-two.md
 printf 'v1\n' > r18pl-one.txt
 printf '| Fixture: one-second line | `sleep 1` |\n' >> CLAUDE.md
 git add -A && git commit -qm "r18pl: fixture" >/dev/null
 PLS=docs/specs/r18cs/r18pl-01-two.md
+PLR=.vulyk/state/r18cs/verify.r18pl-01.close-story
 out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
-mark1="$(grep '^verify_resume:' "$PLS")"
+mark1="$(grep '^files=' "$PLR" 2>/dev/null)"
 [ "$ex" -eq 7 ] && l18_last "$out" | jq -e '.exit == 7 and .resume == 2' >/dev/null 2>&1 \
-  && printf '%s' "$mark1" | grep -qE '^verify_resume: close-story 2 [0-9a-f]{64}$' && grep -q '^status: todo' "$PLS" \
-  && echo "  ok    call 1: exit 7, resume 2, a verify_resume mark in the frontmatter, story still todo" \
-  || { echo "::error::per-line cap: pause exit=$ex out=$out mark=$mark1"; fail=1; }
+  && printf '%s' "$mark1" | grep -qE '^files=[0-9a-f]{64}$' && grep -q '^next=2$' "$PLR" && ! grep -q '^verify_resume:' "$PLS" && grep -q '^status: todo' "$PLS" \
+  && echo "  ok    call 1: exit 7, resume 2, a resume record under .vulyk/state, no verify_resume line in the story, story still todo" \
+  || { echo "::error::per-line cap: pause exit=$ex out=$out record=$(cat "$PLR" 2>&1)"; fail=1; }
 printf 'v2\n' > r18pl-one.txt
 out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
-mark2="$(grep '^verify_resume:' "$PLS")"
-[ "$ex" -eq 7 ] && [ -n "$mark2" ] && [ "$mark2" != "$mark1" ] && printf '%s' "$mark2" | grep -qE '^verify_resume: close-story 2 ' \
+mark2="$(grep '^files=' "$PLR" 2>/dev/null)"
+[ "$ex" -eq 7 ] && [ -n "$mark2" ] && [ "$mark2" != "$mark1" ] && printf '%s' "$out" | grep -qF 'resume record not used (## Files changed' \
   && echo "  ok    a changed ## Files set between the calls restarts at line 1 (new hash, paused again)" \
-  || { echo "::error::per-line cap: restart exit=$ex out=$out mark=$mark2"; fail=1; }
+  || { echo "::error::per-line cap: restart exit=$ex out=$out record=$(cat "$PLR" 2>&1)"; fail=1; }
 out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
-[ "$ex" -eq 0 ] && grep -q '^status: done' "$PLS" && ! grep -q '^verify_resume:' "$PLS" \
-  && echo "  ok    call 2 on the same files resumes at line 2, closes, leaves no verify_resume line" \
+[ "$ex" -eq 0 ] && grep -q '^status: done' "$PLS" && ! grep -q '^verify_resume:' "$PLS" && [ ! -e "$PLR" ] \
+  && echo "  ok    call 2 on the same files resumes at line 2, closes, leaves no record behind" \
   || { echo "::error::per-line cap: resume exit=$ex out=$out"; fail=1; }
 
 echo "gate-split-02: stamp-red resumes the same way and still writes its receipt"
@@ -4422,14 +4423,15 @@ printf 'echo R18SR-RED-MARK\nexit 1\n' > r18sr-test.sh
 printf -- '---\nstory: r18sr-01\nstatus: todo\nreturned:\nwave: 1\nred: required\nred_reason: R18SR-RED-MARK\n---\n# Red resume\n\n## Files\n- r18sr-test.sh\n- r18sr-impl.txt\n\n## Verification\n`sleep 1`\n`bash r18sr-test.sh`\n' > docs/specs/r18cs/r18sr-01-red.md
 git add -A && git commit -qm "r18sr: fixture" >/dev/null
 SRS=docs/specs/r18cs/r18sr-01-red.md
+SRR=.vulyk/state/r18cs/verify.r18sr-01.stamp-red
 out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh stamp-red "$SRS" 2>&1)"; ex=$?
 [ "$ex" -eq 7 ] && l18_last "$out" | jq -e '.exit == 7 and .resume == 2' >/dev/null 2>&1 \
-  && grep -qE '^verify_resume: stamp-red 2 [0-9a-f]{64}$' "$SRS" && ! grep -q '^red_verified_at:' "$SRS" \
-  && echo "  ok    stamp-red call 1: exit 7, resume 2, mark written, no receipt yet" \
+  && grep -q '^next=2$' "$SRR" && ! grep -q '^verify_resume:' "$SRS" && ! grep -q '^red_verified_at:' "$SRS" \
+  && echo "  ok    stamp-red call 1: exit 7, resume 2, record written, no receipt yet" \
   || { echo "::error::per-line cap: stamp-red pause exit=$ex out=$out"; fail=1; }
 out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh stamp-red "$SRS" 2>&1)"; ex=$?
-[ "$ex" -eq 0 ] && grep -q '^red_verified_at:' "$SRS" && ! grep -q '^verify_resume:' "$SRS" \
-  && echo "  ok    stamp-red call 2: resumes at line 2, red for the declared reason, receipt written, mark gone" \
+[ "$ex" -eq 0 ] && grep -q '^red_verified_at:' "$SRS" && ! grep -q '^verify_resume:' "$SRS" && [ ! -e "$SRR" ] \
+  && echo "  ok    stamp-red call 2: resumes at line 2, red for the declared reason, receipt written, record gone" \
   || { echo "::error::per-line cap: stamp-red resume exit=$ex out=$out"; fail=1; }
 
 echo "gate-split-02: VULYK_VERIFY_TIMEOUT above 300 acts as 300"

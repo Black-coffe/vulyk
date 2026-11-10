@@ -123,6 +123,18 @@ something else — same rule as every gate in [pipeline.md](pipeline.md).
 `scripts/ship-check.sh docs/specs/<slug>` reads all of it at once and says which stage is
 open. It is what `/vulyk-ship` runs first, and it is free.
 
+**Run state in `.vulyk/state/`.** When `close-story` or `stamp-red` pauses at exit 7, the point
+to resume from is kept in a record under `.vulyk/state/<slug>/` (`verify.<story-id>.<verb>`),
+not in the story file. Only `cycle.sh` writes it. It holds the HEAD, the `--stamp`, the
+`## Files` and `## Verification` hashes, and the exit of each line run since line 1. For
+`stamp-red` it also names the results directory, which `mktemp -d` made. A rerun resumes only
+when every key still matches: paperwork-only commits since the pause are allowed. `close-story`
+also needs a recorded exit 0 for every line it skips. Otherwise the run starts again at line 1
+and stderr says why. The verb that finishes removes its record and results directory. The
+directory is local to the checkout and ignored: it writes its own `.gitignore`. A missing or
+unreadable record always means the strict path, line 1. A `verify_resume:` line in a story,
+from an older release, is not read.
+
 ## Tiers and the cycle
 
 The cycle is the shape of every Tier 1+ spec. Tier 0 work skips it entirely by design —
