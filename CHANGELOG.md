@@ -2,6 +2,17 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [0.50.2] - 2026-11-10
+
+The redaction minors of the 0.50.1 review (spec `redact-gaps-2`, Tier 1, council GREEN round 1).
+
+### Fixed
+- **Redaction.** `redact.sh` and the `handoff.py` fallback mask a whole Cookie / Set-Cookie header value, a key
+  value in `base64:` form, glued (`ENCRYPTIONKEY`) and dotted (`encryption.key`) key names, `TOTP` and `otp_code`,
+  and `*_AUTH` names with a key-shaped value; prose about cookies, `otpauth_url` and short flags stay readable.
+- **install.sh** on a release commit before its tag (`VERSION` not yet a tag): an entry still wired is kept and
+  repaired as before, and no tagless-source note is printed.
+
 ## [0.50.1] - 2026-11-10
 
 Two gaps the 0.50.0 council named (spec `redact-gaps`, Tier 1, council GREEN round 1).

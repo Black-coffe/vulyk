@@ -33,11 +33,14 @@ TOKEN_VALUE="[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"
 # but not password_reset_count, bypass, compass, a bare PWD (the shell's current folder) or dsn_timeout.
 # The char before the key is captured (sed has no lookbehind) and written back.
 END_KEY="(^|[^A-Za-z0-9_-])([\"']?(([A-Za-z0-9_-]*[_-])?(PASS|pass|Pass)|[A-Za-z0-9_-]*[_-](PWD|pwd|Pwd))[\"']?[[:space:]]*[=:][[:space:]]*)"
-# A one-time code key ENDS the key, alone or after '_'/'-' (OTP, SMS_OTP) - not footprint or otpauth_url.
-OTP_KEY="(^|[^A-Za-z0-9_-])([\"']?([A-Za-z0-9_-]*[_-])?(OTP|otp|Otp)[\"']?[[:space:]]*[=:][[:space:]]*)"
-# A *_KEY name (ENCRYPTION_KEY, signing-key, appKey) holds a key when its value looks like one: 16+ chars, no spaces.
-# A bare key (key: value) is prose; primary_key=True and sort_key=re.compile(...) are too short to match.
-KEY_KEY="[A-Za-z0-9_-]*[_-](KEY|key|Key)|[A-Za-z0-9_-]*[a-z0-9]Key"
+# A one-time code key ENDS the key, alone or after '_'/'-' (OTP, SMS_OTP, TOTP, otp_code) - not footprint or otpauth_url.
+OTP_KEY="(^|[^A-Za-z0-9_-])([\"']?([A-Za-z0-9_-]*[_-])?(T?OTP|t?otp|T?Otp|Totp)([_-](CODE|code|Code))?[\"']?[[:space:]]*[=:][[:space:]]*)"
+# A *_KEY name (ENCRYPTION_KEY, signing-key, appKey, ENCRYPTIONKEY, encryption.key) or a *_AUTH name (TWILIO_AUTH)
+# holds a key when its value looks like one: 16+ chars, no spaces, a `base64:` prefix allowed (APP_KEY=base64:...).
+# A bare key (key: value) is prose; primary_key=True and sort_key=re.compile(...) are too short to match; glued
+# names are upper case only (monkey, turkey stay words).
+KEY_KEY="[A-Za-z0-9_.-]*[._-](KEY|key|Key)|[A-Za-z0-9_-]*[a-z0-9]Key|[A-Za-z0-9_-]*[A-Z0-9]KEY|[A-Za-z0-9_.-]*[_-](AUTH|auth|Auth)"
+KEY_VALUE="[\"']?(base64:)?[A-Za-z0-9._~+/=-]{16,}[\"']?"
 # A DSN key holds a URL; it is masked whole when the URL carries a credential (scheme://key@host).
 DSN_KEY="(^|[^A-Za-z0-9_-])([\"']?([A-Za-z0-9_-]*[_-])?(DSN|dsn|Dsn)[\"']?[[:space:]]*[=:][[:space:]]*)"
 DSN_VALUE="[\"']?[A-Za-z][A-Za-z0-9+.-]*://[^[:space:]\"'@]+@[^[:space:]\"']*[\"']?"
@@ -69,11 +72,13 @@ SED_ARGS=( -E
   # A URL password may hold a raw '/'; a port before a path (host:443/@scope) is all digits, so it is not one.
   # The user may be empty (redis://:pw@host).
   -e "s#(://)[^/[:space:]:@]*:([^/[:space:]@]*[^0-9/[:space:]@][^[:space:]@]*|[^/[:space:]@]+)@#\1$MASK@#g"
+  # A Cookie / Set-Cookie header that carries a name=value pair loses its whole value, to the end of the line.
+  -e "s#(^|[^A-Za-z0-9_-])((Set-)?[Cc]ookie|SET-COOKIE|COOKIE)([[:space:]]*:[[:space:]]*)[^[:space:]=;:]+=[^[:space:]].*#\1\2\4$MASK#g"
   -e "s#([\"']?[A-Za-z0-9_-]*($KEYWORDS)[A-Za-z0-9_-]*[\"']?[[:space:]]*[=:][[:space:]]*)$VALUE#\1$MASK#g"
   -e "s#$END_KEY$VALUE#\1\2$MASK#g"
   -e "s#$DSN_KEY$DSN_VALUE#\1\2$MASK#g"
   -e "s#$OTP_KEY$VALUE#\1\2$MASK#g"
-  -e "s#([\"']?($KEY_KEY)[\"']?[[:space:]]*[=:][[:space:]]*)$TOKEN_VALUE#\1$MASK#g"
+  -e "s#([\"']?($KEY_KEY)[\"']?[[:space:]]*[=:][[:space:]]*)$KEY_VALUE#\1$MASK#g"
   -e "s#([\"']?${TOKEN_KEY}[\"']?[[:space:]]*[=:][[:space:]]*)$TOKEN_VALUE#\1$MASK#g"
 )
 

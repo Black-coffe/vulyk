@@ -646,6 +646,8 @@ _REDACT_FALLBACK = [
     re.compile(r"((?:ssh-(?:rsa|ed25519|dss)|ecdsa-sha2-nistp[0-9]+)[^\S\n]+)AAAA[A-Za-z0-9+/]{16,}=*"),
     # The user may be empty (redis://:pw@host).
     re.compile(r"(://)[^/\s:@]*:(?:[^/\s@]*[^0-9/\s@][^\s@]*|[^/\s@]+)(?=@)"),
+    # A Cookie / Set-Cookie header that carries a name=value pair loses its whole value, to the end of the line.
+    re.compile(r"(?<![A-Za-z0-9_-])((?:(?:Set-)?[Cc]ookie|SET-COOKIE|COOKIE)[^\S\n]*:[^\S\n]*)[^\s=;:]+=\S.*"),
     # key = value: a whole quoted string (spaces and all, to its closing quote however short), else one
     # unquoted word of 6+ chars that does not open with ':' (token::Kind, secret::Name stay readable).
     # Line-bound, as sed is.
@@ -659,11 +661,14 @@ _REDACT_FALLBACK = [
     # A DSN key is masked whole when its URL carries a credential (scheme://key@host); dsn_timeout=30 is not.
     re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:[A-Za-z0-9_-]*[_-])?(?:DSN|dsn|Dsn)[\"']?[^\S\n]*[=:][^\S\n]*)"
                r"[\"']?[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'@]+@[^\s\"']*[\"']?"),
-    # A one-time code key ENDS the key, alone or after '_'/'-' (OTP, SMS_OTP) - not footprint.
-    re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:[A-Za-z0-9_-]*[_-])?(?:OTP|otp|Otp)[\"']?[^\S\n]*[=:][^\S\n]*)" + _VALUE),
-    # A *_KEY name (ENCRYPTION_KEY, signing-key, appKey) with a key-shaped value: 16+ chars, no spaces.
-    re.compile(r"([\"']?(?:[A-Za-z0-9_-]*[_-](?:KEY|key|Key)|[A-Za-z0-9_-]*[a-z0-9]Key)[\"']?[^\S\n]*[=:][^\S\n]*)"
-               r"[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
+    # A one-time code key ENDS the key, alone or after '_'/'-' (OTP, SMS_OTP, TOTP, otp_code) - not footprint.
+    re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:[A-Za-z0-9_-]*[_-])?(?:T?OTP|t?otp|T?Otp|Totp)(?:[_-](?:CODE|code|Code))?"
+               r"[\"']?[^\S\n]*[=:][^\S\n]*)" + _VALUE),
+    # A *_KEY name (ENCRYPTION_KEY, signing-key, appKey, ENCRYPTIONKEY, encryption.key) or a *_AUTH name with a
+    # key-shaped value: 16+ chars, no spaces, a `base64:` prefix allowed.
+    re.compile(r"([\"']?(?:[A-Za-z0-9_.-]*[._-](?:KEY|key|Key)|[A-Za-z0-9_-]*[a-z0-9]Key|[A-Za-z0-9_-]*[A-Z0-9]KEY"
+               r"|[A-Za-z0-9_.-]*[_-](?:AUTH|auth|Auth))[\"']?[^\S\n]*[=:][^\S\n]*)"
+               r"[\"']?(?:base64:)?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
     # A bare token key must END in token (max_tokens, token_budget are counters) and hold a 16+ char value.
     re.compile(r"([\"']?[A-Za-z0-9_-]*(?:token|TOKEN|Token)[\"']?[^\S\n]*[=:][^\S\n]*)"
                r"[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
