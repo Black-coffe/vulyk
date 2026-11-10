@@ -4676,7 +4676,55 @@ r="$(fsr '| Full suite (round-only) | `bash t.sh` | echo PWNED |')"
 r="$(fsr '| Full suite (round-only) | `a \| b` |')"
 [ "$r" = "$(printf 'Full suite (round-only)\ta | b')" ] && echo "  ok    an escaped pipe stays inside the second cell" \
   || { echo "::error::suite row parser: an escaped pipe gave '$r'"; fail=1; }
+r="$(fsr '| Full suite (round-only) | `sh t.sh` (a note, "quoted") |')"
+[ "$r" = "$(printf 'Full suite (round-only)\tsh t.sh')" ] && echo "  ok    a noted cell gives its span alone as the command" \
+  || { echo "::error::suite row parser: a noted cell runs only the backticked span - gave '$r'"; fail=1; }
 rm -f fsr.md
+
+echo "suite: a ## Commands cell runs its backticked span, the rest is a note; several spans are a red part; no span runs as today (upgrade-findings-01)"
+sx_raw() { # sx_raw <row>... - the fixture constitution's full-suite rows, written as given, committed
+  grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+  printf '%s\n' "$@" >> CLAUDE.md
+  git add -A && git commit -qm "fixture: raw full-suite rows" >/dev/null
+}
+printf ': > "%s/fx-noted-ran"\n' "$PWD" > suite.sh
+sx_raw '| Full suite (round-only) | `sh suite.sh` (a note with spaces, "quotes" and a parenthesis) |'
+sx_open sxnoted
+rd="docs/specs/sxnoted/council/round-1"
+out="$(council suite docs/specs/sxnoted 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "ok"' >/dev/null 2>&1 \
+  && tail -1 "$rd/suite.log" | grep -qE '^SUITE: ok [0-9]+s$' && [ -e fx-noted-ran ] \
+  && echo "  ok    a noted round-only row runs only the backticked span, SUITE: ok" \
+  || { echo "::error::suite noted row: runs only the backticked span - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+rm -f fx-noted-ran
+sx_raw '| Full suite (round-only, steps) | `bash fx-runner.sh` (two steps; a note) |'
+sx_open sxnotedstep
+rd="docs/specs/sxnotedstep/council/round-1"
+council suite docs/specs/sxnotedstep >/dev/null 2>&1
+out="$(council suite docs/specs/sxnotedstep 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 2 and .steps == 2 and .done == true and .suite == "ok"' >/dev/null 2>&1 \
+  && grep -qF 'PART fx:a2 ok 0s cap 300s' "$rd/suite.log" \
+  && echo "  ok    a noted stepped row builds <span> --steps and <span> --step K from the span" \
+  || { echo "::error::suite noted stepped row: runs only the backticked span - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+printf ': > "%s/fx-two-a"\n' "$PWD" > fx-two-a.sh; printf ': > "%s/fx-two-b"\n' "$PWD" > fx-two-b.sh
+sx_raw '| Full suite (round-only) | `sh fx-two-a.sh` or `sh fx-two-b.sh` |'
+sx_open sxtwo
+rd="docs/specs/sxtwo/council/round-1"
+out="$(council suite docs/specs/sxtwo 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && grep -qxF 'PART full-suite-round-only FAIL 0s cap 300s - several backticked commands in one cell' "$rd/suite.log" \
+  && [ ! -e fx-two-a ] && [ ! -e fx-two-b ] \
+  && echo "  ok    a round-only row with two spans is a red part naming several backticked commands, neither ran" \
+  || { echo "::error::suite several spans: a red part naming 'several backticked commands in one cell', neither run - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+rm -f fx-two-a fx-two-b
+sx_raw '| Full suite (round-only) | sh suite.sh |'
+sx_open sxbare
+rd="docs/specs/sxbare/council/round-1"
+out="$(council suite docs/specs/sxbare 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "ok"' >/dev/null 2>&1 && [ -e fx-noted-ran ] \
+  && echo "  ok    a row with no backticks runs its cell as today" \
+  || { echo "::error::suite bare row: a cell with no span must run as today - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+rm -f fx-noted-ran
 
 echo "suite: a row with an empty or missing command cell is a red step that names it, never SUITE: none or a silent drop (gate-split-10 finding 2)"
 sxe=0

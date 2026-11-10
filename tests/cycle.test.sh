@@ -676,6 +676,47 @@ printf '%s' "$out" | grep -qF 'verify-cell:' && { echo "::error::a round-only ce
 rm -f CLAUDE.vulyk.md
 git add -A && git commit -qm "wro fixture" >/dev/null
 
+echo "upgrade-findings-01: wave-check matches a noted cell by its span; commands_lint names noted and several rows only"
+cat > CLAUDE.vulyk.md <<'EOF'
+# Sidecar constitution
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Plain | `sh plain.sh` |
+| Bare | sh bare.sh |
+| Noted | `sh suite.sh` (a note for Acme, "quoted") |
+| Noted slow (round-only) | `sh slow.sh` (the round gate only) |
+| Two | `sh a.sh` or `sh b.sh` |
+EOF
+mkdir -p docs/specs/wnote
+wnote_story() { # wnote_story <nn> <verification-block>
+  printf -- '---\nstory: wnote-%s\nspec: wnote\nstatus: todo\nwave: %s\n---\n# N%s\n\n## Files\n- app.txt\n\n## Verification\n%s\n' \
+    "$1" "$1" "$1" "$2" > "docs/specs/wnote/wnote-$1-n.md"
+}
+wnote_story 01 '`sh suite.sh`'
+wnote_story 02 '`sh slow.sh`'
+out="$(bash scripts/wave-check.sh docs/specs/wnote)"
+printf '%s' "$out" | grep -qF 'verify-cell: wnote-01' && { echo "::error::wave-check: a noted cell runs only the backticked span - wnote-01 reported verify-cell: $out"; fail=1; } \
+  || echo "  ok    wave-check: a line equal to a noted cell's span is a cell (no verify-cell)"
+printf '%s' "$out" | expect "wave-check: a noted round-only row is still reported round-only" "verify-round-only: wnote-02 sh slow.sh"
+want="commands: row 'Noted': text outside the backticked command is read as a note
+commands: row 'Noted slow (round-only)': text outside the backticked command is read as a note
+commands: row 'Two': 2 backticked commands in one cell (the round gate refuses it as a full-suite row; split it)"
+lint="$(commands_lint CLAUDE.vulyk.md 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$lint" = "$want" ] && echo "  ok    commands_lint: one line per noted and several row, none for one / none rows, exit 0" \
+  || { echo "::error::commands_lint: expected the B1 lines - exit=$ex got: $lint"; fail=1; }
+printf '# C\n\n## Commands\n\n| Purpose | Command |\n|---|---|\n' > wnote-empty.md
+printf '# C\n\n## Other\n\n| Purpose | Command |\n|---|---|\n| Two | `a` `b` |\n' > wnote-none.md
+for lf in wnote-empty.md wnote-none.md wnote-missing.md; do
+  lint="$(commands_lint "$lf" 2>&1)"; ex=$?
+  [ "$ex" -eq 0 ] && [ -z "$lint" ] && echo "  ok    commands_lint $lf: nothing, exit 0" \
+    || { echo "::error::commands_lint $lf: expected nothing, exit 0 - exit=$ex got: $lint"; fail=1; }
+done
+rm -f CLAUDE.vulyk.md wnote-empty.md wnote-none.md
+git add -A && git commit -qm "wnote fixture" >/dev/null
+
 echo "ADR-013 D4: trace-check accepts a quote equal to a whole ## Asks item (digits, dot, text, whitespace-normalized), and only that"
 mkdir -p docs/specs/trc
 printf '# trc\n\n## Request\n> build the trace demo\n\n## Asks\n1. the first ask works\n2. the second   ask works\n' > docs/specs/trc/brief.md
@@ -1074,6 +1115,43 @@ out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-10.md 2>&1)"; ex
   && echo "  ok    close-story: a segment like no cell points at the ## Commands table" \
   || { echo "::error::close-story: a segment like no cell points at ## Commands - exit=$ex out=$out"; fail=1; }
 git add -A && git commit -qm "vfy: done" >/dev/null 2>&1
+
+echo "upgrade-findings-01: close-story admits a noted cell's span alone, either span of a two-span cell, and hints spans only"
+printf 'true\n' > noted.sh; printf 'true\n' > two-a.sh; printf 'true\n' > two-b.sh
+cat >> CLAUDE.md <<'EOF'
+| Noted | `bash noted.sh` (a note for Acme, "quoted") |
+| Two spans | `bash two-a.sh` or `bash two-b.sh` |
+EOF
+vfy_story 11 '`bash noted.sh`'
+vfy_story 12 '`(a note for Acme, "quoted")`'
+vfy_story 13 '`bash noted.sh (a note for Acme, "quoted")`'
+vfy_story 14 '`bash two-a.sh`'
+vfy_story 15 '`bash two-b.sh`'
+vfy_story 16 '`bash noted.sh --verbose`'
+vfy_story 17 '`bash two-a.sh --verbose`'
+git add -A && git commit -qm "vfy: noted and two-span fixtures" >/dev/null
+for nn in 11 14 15; do
+  out="$(bash scripts/cycle.sh close-story "docs/specs/stray/stray-$nn.md" 2>&1)"; ex=$?
+  [ "$ex" -eq 0 ] && echo "  ok    close-story: stray-$nn's line is a span of a cell and closes" \
+    || { echo "::error::close-story: stray-$nn runs only the backticked span - exit=$ex out=$out"; fail=1; }
+  git add -A && git commit -qm "vfy: stray-$nn closed" >/dev/null 2>&1
+done
+for nn in 12 13; do
+  out="$(bash scripts/cycle.sh close-story "docs/specs/stray/stray-$nn.md" 2>&1)"; ex=$?
+  [ "$ex" -eq 2 ] && printf '%s\n' "$out" | grep -qF 'verification not in ## Commands: ' \
+    && echo "  ok    close-story: stray-$nn (the note, or span plus note) is no cell" \
+    || { echo "::error::close-story: stray-$nn names the note - a note is never a command - exit=$ex out=$out"; fail=1; }
+done
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-16.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s\n' "$out" | grep -qxF 'try: bash noted.sh' && ! printf '%s\n' "$out" | grep '^try: ' | grep -qF 'Acme' \
+  && echo "  ok    close-story: the try: hint for a noted cell prints its span, never the note" \
+  || { echo "::error::close-story: the try: hint runs only the backticked span - exit=$ex out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-17.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && ! printf '%s\n' "$out" | grep -q '^try: bash two-' \
+  && printf '%s\n' "$out" | grep -qxF "not offered: row 'Two spans': 2 backticked commands in one cell" \
+  && echo "  ok    close-story: a two-span row is not offered as a try: line, and the hint says why" \
+  || { echo "::error::close-story: a several-span row must be named, not offered - exit=$ex out=$out"; fail=1; }
+git add -A && git commit -qm "vfy: noted done" >/dev/null 2>&1
 
 echo "ADR-032 D1: close-story and stamp-red read ## Verification, ## Files and red: from the story's approved commit"
 mkdir -p docs/specs/trust docs/specs/trust1

@@ -74,7 +74,8 @@ this story invites ("do not also tidy the neighbouring module"), not generic pro
 One command per line, each `&&` segment a literal cell of the constitution's `## Commands` table
 (`wave-check.sh` reports one that is not) - in its quiet form, because output under 30 000
 characters is pasted into the builder's context and resent every turn. A cell holding several
-backticked commands offers each; `<name>` in a cell stands for one or more arguments and `[<name>]`
+backticked commands offers each; a cell's text outside its one backticked command is a note, never
+run or matched; `<name>` in a cell stands for one or more arguments and `[<name>]`
 for none or more (no shell control characters, no argument starting with `-`), so `pytest <file>`
 admits `pytest tests/test_a.py`. A placeholder hands the story author that tool's arguments: put one
 only on a tool whose arguments are paths or targets, never on `make`, `npx`, `python -m` or anything

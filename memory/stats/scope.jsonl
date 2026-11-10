@@ -382,3 +382,5 @@
 {"ts":"2026-11-09T21:20:40Z","story":"redact-gaps-01","declared":5,"changed":5,"out_of_scope":0}
 {"ts":"2026-11-10T08:04:00Z","story":"redact-gaps-2-01","declared":3,"changed":3,"out_of_scope":0}
 {"ts":"2026-11-10T09:21:00Z","story":"gitignore-glob-01","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-11-10T20:41:58Z","story":"upgrade-findings-01-commands-span","declared":6,"changed":5,"out_of_scope":0}
+{"ts":"2026-11-10T20:46:53Z","story":"upgrade-findings-01-commands-span","declared":6,"changed":5,"out_of_scope":0}

@@ -1763,24 +1763,22 @@ full_suite_row() { # full_suite_row <constitution> -> "<purpose><TAB><command>",
   # empty command, which cmd_suite turns into a red step naming the row (gate-split-10). Every such row,
   # in table order: a hive may split its full run into several part rows (gate-split-08). The command is exactly the
   # second cell (an escaped \| stays inside it); later cells are never part of it. Nothing (exit 1) when none.
+  # The command is lib.sh's cell rule (upgrade-findings B1): a noted cell runs its backticked span alone, a
+  # cell with no span runs as before; a cell with several spans has no one command and prints
+  # "<purpose><TAB><TAB>several", which cmd_suite turns into a red step naming the reason.
   [ -f "$1" ] || return 1
-  awk '
-    /^## Commands[[:space:]]*$/ { inblock=1; next }
-    /^##[[:space:]]/            { if (inblock) exit }
-    inblock && /^\|/ {
-      line = $0; sub(/\r$/, "", line); gsub(/\\[|]/, "\001", line)
-      n = split(line, cell, "|"); if (n < 2) next
-      po = cell[2]; gsub(/\001/, "|", po); sub(/^[[:space:]]+/, "", po); sub(/[[:space:]]+$/, "", po)
-      p = tolower(po)
+  commands_rows "$1" | awk -F '\t' '
+    {
+      po = $1; p = tolower(po)
       if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) {
-        c = (n >= 3) ? cell[3] : ""; gsub(/\001/, "|", c); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c); sub(/[[:space:]]+$/, "", c)
-        lc = tolower(c)
+        if ($2 == "several") { printf "%s\t\tseveral\n", po; found = 1; next }
+        c = $4; lc = tolower(c)
         if (lc ~ /^<fill in/ || lc ~ /^none([^[:alnum:]_-]|$)/) next
         printf "%s\t%s\n", po, c; found = 1
       }
     }
     END { exit !found }
-  ' "$1"
+  '
 }
 
 full_suite_row_round_only() { # full_suite_row_round_only <constitution> -> 0 iff full_suite_row finds a row
@@ -2113,22 +2111,34 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
 verify_cell_hint() { # verify_cell_hint <constitution> <segment> - ab-run-fixes C7: up to 3 `try: <cell>`
   # lines, the cells that are not round-only and whose first two words are the segment's; with none,
   # one `try: see ## Commands in <constitution>` line. close-story's refusal prints it, nothing else.
-  local c n=0 seen="" w1 w2 c1 c2 rest
+  # upgrade-findings-01: a cell's command is lib.sh's cell rule, so a noted cell offers its span, never
+  # its note; a row with several spans is one cell that is no one command: never offered, and a span of
+  # it that matches gets a `not offered: row '<Purpose>': <N> backticked commands in one cell` line instead.
+  local c n=0 seen="" w1 w2 c1 c2 rest po shape k cmds tab
+  tab="$(printf '\t')"
   read -r w1 w2 rest <<EOF
 $2
 EOF
-  while IFS= read -r c; do
-    [ -n "$c" ] || continue
-    read -r c1 c2 rest <<EOF2
+  while IFS="$tab" read -r po shape k cmds; do
+    case "$shape" in one|noted|several) ;; *) continue ;; esac
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      read -r c1 c2 rest <<EOF2
 $c
 EOF2
-    [ "$c1" = "$w1" ] && [ "$c2" = "${w2:-}" ] || continue
-    case "$seen" in *"|$c|"*) continue ;; esac
-    command_cell_round_only "$1" "$c" && continue
-    seen="$seen|$c|"; printf 'try: %s\n' "$c"; n=$((n+1))
+      [ "$c1" = "$w1" ] && [ "$c2" = "${w2:-}" ] || continue
+      if [ "$shape" = several ]; then
+        printf "not offered: row '%s': %s backticked commands in one cell\n" "$po" "$k"; break
+      fi
+      case "$seen" in *"|$c|"*) continue ;; esac
+      command_cell_round_only "$1" "$c" && continue
+      seen="$seen|$c|"; printf 'try: %s\n' "$c"; n=$((n+1))
+    done <<EOF3
+$(printf '%s\n' "$cmds" | tr '\t' '\n')
+EOF3
     [ "$n" -ge 3 ] && break
   done <<EOF
-$(command_cells "$1")
+$(commands_rows "$1")
 EOF
   [ "$n" -gt 0 ] || printf 'try: see ## Commands in %s\n' "$1"
 }
@@ -3513,11 +3523,12 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
 
   # Several round-only full-suite rows (gate-split-08): each row is one step, run as one capped part,
   # and a `steps` marker is read only on a single row. One row keeps the stepped / plain split.
-  local rows row purpose cmd stepped=0 nrows=0
+  local rows row purpose cmd why stepped=0 nrows=0
   rows="$(full_suite_row "$(constitution_file "$ROOT")")"
   [ -n "$rows" ] && nrows="$(printf '%s\n' "$rows" | grep -c .)"
   row="$(printf '%s\n' "$rows" | sed -n 1p)"
   purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
+  why="no command in its row"; case "$cmd" in $'\t'several) cmd=""; why="several backticked commands in one cell" ;; esac
   [ "$nrows" -le 1 ] && [ -n "$cmd" ] && case " $(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' ' ') " in *" steps "*) stepped=1 ;; esac
 
   # A log keyed to another head (an earlier code state) is discarded, never resumed.
@@ -3564,8 +3575,9 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
     if [ "$K" -le "$nrows" ]; then
       row="$(printf '%s\n' "$rows" | sed -n "${K}p")"
       purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
+      why="no command in its row"; case "$cmd" in $'\t'several) cmd=""; why="several backticked commands in one cell" ;; esac
     else
-      purpose="step $K: no row"; cmd=""
+      purpose="step $K: no row"; cmd=""; why="no command in its row"
     fi
   fi
 
@@ -3607,7 +3619,7 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
       pname="$pname-$K"
     fi
     if [ -z "$cmd" ]; then
-      rc=1; secs=0; parts="PART $pname FAIL 0s cap ${cap}s - no command in its row"
+      rc=1; secs=0; parts="PART $pname FAIL 0s cap ${cap}s - $why"
     else
       run_capped "$cap" bash -c "$cmd" >/dev/null 2>&1; rc=$?
       secs=$((SECONDS - t0))
