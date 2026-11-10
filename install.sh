@@ -1571,15 +1571,17 @@ wire_session_hook top-model-brief.sh
 # an entry this run moves (the Stop scan to SessionEnd, the inject to the new matcher) is a move, wired outright.
 # redact-gaps: an install source without the v$PREV tag (an archive, a clone without tags) cannot tell an owner's
 # removal from a hook v$PREV never wired, so wire_entry, wire_shipped and the git guard name a missing entry with
-# its --wire command instead of putting it back. No installed release (PREV none) is a fresh install: wired.
+# its --wire command instead of putting it back; an entry still there goes on to wire_hook (kept, or repaired).
+# No installed release (PREV none) is a fresh install: wired. PREV equal to this source's own VERSION (a release
+# commit before its tag) is this source: its hooks are what v$PREV shipped, so the same rule holds, without the note.
 PREV_UNKNOWN=""
 if [ "$PREV" != none ] && ! git -C "$SRC" rev-parse -q --verify "refs/tags/v$PREV" >/dev/null 2>&1; then
   PREV_UNKNOWN=1
-  printf '  note: v%s is not a tag in %s - a hook missing from settings.json is named below, not wired\n' "$PREV" "$SRC"
+  [ "$PREV" = "$VER" ] || \
+    printf '  note: v%s is not a tag in %s - a hook missing from settings.json is named below, not wired\n' "$PREV" "$SRC"
 fi
 wire_entry() { # wire_entry <event> <script> [matcher] [arg] - wired unless v$PREV's own settings.json already ran it
-  if [ -n "$PREV_UNKNOWN" ]; then report_unwired "$@"; return 0; fi
-  if git -C "$SRC" show "v$PREV:.claude/settings.json" 2>/dev/null | grep -qF "hooks/$2${4:+ $4}\""; then
+  if [ -n "$PREV_UNKNOWN" ] || git -C "$SRC" show "v$PREV:.claude/settings.json" 2>/dev/null | grep -qF "hooks/$2${4:+ $4}\""; then
     local named; named="$(report_unwired "$@")"                # empty: the entry is there, wire_hook says kept
     [ -z "$named" ] || { printf '%s\n' "$named"; return 0; }
   fi
