@@ -28,14 +28,21 @@ None: when to publish is the owner's call, not a property of the code.
 - Push VULYK's main, push a tag, or create a GitHub release without the owner's explicit word for that publish, in
   this session.
 - Treat a merged, version-bumped or CI-green spec as a reason to publish.
+- Push tags in bulk (`git push --tags`, `--follow-tags`), push a `-dev.N` tag, or push more than one version tag in
+  one publish.
 
 ## How to
 - After a ship, merge on the local main and roll the change out to the local hives from the local clone
   (`./install.sh <hive> --upgrade`, never `vulyk-update.sh`, which takes the published tags). Watch how it behaves
   there, collect the owner's and the hives' feedback, and keep a running list of what is unpublished and how it fared.
-- When the owner says to publish, bundle what has proved itself into one release with a CHANGELOG a user can follow.
+- When the owner says to publish, bundle what has proved itself into one release with a CHANGELOG a user can follow:
+  one public version (`0.51.0`), one CHANGELOG section, exactly one tag pushed by name.
+- Between publishes, number local builds `X.Y.Z-dev.N` (owner, 2026-11-10: «Одна публичная, dev локально»).
 
 ## Allowed
-- A local version bump and a local tag, so a hive's upgrade can name what it came from; neither leaves this machine.
+- A local `-dev.N` version and its local tag, so a hive's upgrade can name what it came from; neither leaves this
+  machine.
+- A narrow release of fixes for holes that are already public (issue #5, redact gaps), after a short trial in the local
+  hives and on the owner's word for that publish (owner, 2026-11-10: «Отдельный узкий выпуск»).
 
 ## Revoked
