@@ -37,12 +37,12 @@ None: when to publish is the owner's call, not a property of the code.
   there, collect the owner's and the hives' feedback, and keep a running list of what is unpublished and how it fared.
 - When the owner says to publish, bundle what has proved itself into one release with a CHANGELOG a user can follow:
   one public version (`0.51.0`), one CHANGELOG section, exactly one tag pushed by name.
-- Between publishes, number local builds `X.Y.Z-dev.N` (owner, 2026-11-10: «Одна публичная, dev локально»).
+- Between publishes, number local builds `X.Y.Z-dev.N` (the owner picked this option on 2026-11-10; the wording is the agent's).
 
 ## Allowed
 - A local `-dev.N` version and its local tag, so a hive's upgrade can name what it came from; neither leaves this
   machine.
 - A narrow release of fixes for holes that are already public (issue #5, redact gaps), after a short trial in the local
-  hives and on the owner's word for that publish (owner, 2026-11-10: «Отдельный узкий выпуск»).
+  hives and on the owner's word for that publish (the owner picked this option on 2026-11-10; the wording is the agent's).
 
 ## Revoked
