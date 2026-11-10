@@ -33,3 +33,4 @@ and a `*_AUTH` name with a key-shaped value. Prose about cookies, `otpauth_url`,
 
 ## Plan deltas
 **Briefed:** via mini-brief, Andrei, 2026-11-10
+**Branch:** vulyk/redact-gaps-2
