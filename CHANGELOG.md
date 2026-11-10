@@ -14,10 +14,6 @@ Two gaps the 0.50.0 council named (spec `redact-gaps`, Tier 1, council GREEN rou
   one line and names every hook missing from `settings.json` with its `--wire` command; it no longer puts back a hook
   the owner removed.
 
-### Known gaps
-- Still in clear: a Cookie header whose first pair is under six characters, `APP_KEY=base64:...`, `ENCRYPTIONKEY=` and
-  `encryption.key=`, `TOTP=` and `otp_code=`. `vulyk-update-check.sh` and `top-model-brief.sh` are still wired back.
-
 ## [0.50.0] - 2026-11-09
 
 Fixes from a six-model audit of VULYK (47 findings; spec `mass-audit-fixes`, Tier 3, round 2 RED on test fixtures,
