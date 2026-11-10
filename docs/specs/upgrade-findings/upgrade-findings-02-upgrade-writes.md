@@ -1,14 +1,15 @@
 ---
 story: upgrade-findings-02
 spec: upgrade-findings
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: a frontmatter-only edit lands the release body
+red_verified_at: 2026-11-10T20:53:03Z 6d268d7ba6c3894dcd110c87dd12270dbdf518c9ec36d5c422d3b22623d7d8e5
 ---
 
 # What the upgrade writes: a frontmatter edit merged by key, CRLF pinned, `settings.json` indent kept
@@ -77,5 +78,32 @@ Unmapped, read in place: `release_copy`, `upgrade_edited`, the five `json.dump(.
 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each -->
+- install.sh: new `fm_merge` (one awk pass over base/ours/theirs, exit 0 merged / 1 key conflict / 2 not applicable), tried in `upgrade_edited` only after a merge-file conflict, in both the `--check` and the write path.
+- Output: `  merge frontmatter <f>` / `  would merge frontmatter <f>`, key lines indented 4 spaces under it; conflict lines print under the `kept + new` line so they read as that file's.
+- A key the hive deleted (release left it alone) prints `kept <key> (yours)`: the contract names only kept/dropped, and the deletion is the hive's value.
+- E2: the CRLF release-copy test in `--part crlf` was green before any install.sh edit (`release_copy` already strips CR); no code change for it.
+- E3: all six JSON writers read the raw text, take the indent unit from the first indented line (tab or N spaces, none: 2) and dump with it; the "re-indented by the edit" notes are dropped (the backup line stays).
+- tests: the wiring indent case uses `--wire SessionEnd:anomaly-scan.sh`, since an upgrade leaves an owner-removed hook unwired and only names that command.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/telemetry.test.sh --part edits
+- exit: 1
+- tests: 6d268d7ba6c3894dcd110c87dd12270dbdf518c9ec36d5c422d3b22623d7d8e5 (tests/telemetry.test.sh)
+- impl: c6d4005deaa0c6958f62b2e3f934af5f63ec4a604dfe6775d778c87ee160ea8c
+- stamped: 2026-11-10T20:53:03Z
+
+```
+::error::a frontmatter-only edit lands the release body, the hive's key kept, the removed key dropped:
+  kept + new     .claude/agents/lead-review.md -> .claude/agents/lead-review.md.vulyk-new   (your edit kept; merge the new release in by hand)
+  merged edit    .claude/agents/worker-code.md
+  ok    .vulyk-new is gitignored
+  ok    an edit the release left alone is kept, its .vulyk-new too
+  ok    a source with no v* tag says so and replaces as before
+--- install.sh: the example rule is a template
+  ok    a fresh install ships the example as templates/rule-example.md, not as a rule
+  ok    an upgrade does not put a deleted example rule back
+  ok    an upgrade leaves a kept example rule alone (the hive's own)
+telemetry.test.sh: 22 checks, 4 failed
+```

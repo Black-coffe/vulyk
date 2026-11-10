@@ -1806,6 +1806,32 @@ cat "$T/wire2.out" | expect_absent "and no second timeout" "timeout        .clau
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire3.out" 2>&1
 cat "$T/wire3.out" | expect_absent "--check reports no wiring for an already-wired hook" "would wire     .claude/settings.json -> SessionEnd"
 cat "$T/wire3.out" | expect_absent "--check reports no unwiring once it is done" "would unwire"
+# upgrade-findings E3: a rewrite keeps the file's indent unit (from its first indented line); a new file gets 2 spaces.
+expect_eq "fresh install: the first indented line is 2 spaces" "2" "$(tr -d '\r' < "$TGT/.claude/settings.json" | grep -m1 '^[[:space:]]' | sed 's/[^ ].*//' | awk '{ print length }')"
+expect_eq "an owner's one-line settings.json comes out indented with 2 spaces" "2" \
+  "$(grep -m1 '^[[:space:]]' "$EH/.claude/settings.json" | sed 's/[^ ].*//' | awk '{ print length }')"
+for u in 4 tab; do
+  IW="$T/hive-indent-$u"; fresh_install "$IW"; IS="$IW/.claude/settings.json"
+  if [ "$u" = tab ]; then ind=--tab; else ind="--indent $u"; fi
+  # shellcheck disable=SC2086
+  jq $ind 'del(.hooks.SessionEnd[]?.hooks[]? | select(.command | test("anomaly-scan")))' "$IS" | tr -d '\r' > "$T/indent.json" && mv "$T/indent.json" "$IS"
+  cp "$IS" "$T/indent-$u.before"
+  # an upgrade leaves an owner's removal alone and names the --wire command that adds it back: run that
+  bash "$SRC/install.sh" "$IW" --wire SessionEnd:anomaly-scan.sh > "$T/indent-$u.out" 2>&1
+  cat "$T/indent-$u.out" | expect "indent $u: --wire adds the hook" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+  if [ "$u" = tab ]; then
+    expect_eq "indent tab: every indented line uses tabs only" "0 1" "$(grep -c '^	* ' "$IS") $(grep -q '^	' "$IS" && echo 1 || echo 0)"
+  else
+    expect_eq "indent 4: every indented line uses whole 4-space steps" "0" "$(grep -E '^ ' "$IS" | grep -cvE '^(    )+[^ ]')"
+    expect_eq "indent 4: no tab indent" "0" "$(grep -c '^	' "$IS")"
+  fi
+  sed 's/,$//' "$T/indent-$u.before" > "$T/ib"; sed 's/,$//' "$IS" > "$T/ia"   # a comma after the old last element is the add's
+  expect_eq "indent $u: a diff against the old file shows only the added entries" "0 1" \
+    "$(diff "$T/ib" "$T/ia" | grep -c '^<') $(diff "$T/ib" "$T/ia" | grep -q '^>' && echo 1 || echo 0)"
+  expect_eq "indent $u: LF, ending with a newline" "0 0a" "$(tr -cd '\r' < "$IS" | wc -c | tr -d ' ') $(tail -c 1 "$IS" | od -An -tx1 | tr -d ' \n\r')"
+  cat "$T/indent-$u.out" | expect_absent "indent $u: the note claims no re-indent" "re-indented"
+  expect_eq "indent $u: the backup is the file as it was" "1" "$(same "$T/indent-$u.before" "$IS.vulyk-bak")"
+done
 fi # wiring
 
 if part_on ledger; then
@@ -2493,6 +2519,36 @@ cat "$T/glob.gi" > "$GH/.gitignore"
 (cd "$GC" && bash "$SRC/install.sh" "$GH" --upgrade --telemetry off > "$T/glob.out" 2>&1)
 expect_eq "run from a directory that matches its globs, install.sh still writes the patterns" "3 0" \
   "$(tr -d '\r' < "$GH/.gitignore" | grep -cxF -e 'docs/specs/*/DRIVER' -e 'docs/specs/*/PAUSE' -e '*.vulyk-new') $(tr -d '\r' < "$GH/.gitignore" | grep -cxF -e 'docs/specs/x/DRIVER' -e 'docs/specs/x/PAUSE' -e 'a.vulyk-new')"
+# upgrade-findings E2 + E1: a CRLF checkout (core.autocrlf=true) of the installed release's copy is a release copy,
+# not an edit; a CRLF hive file with a frontmatter-only edit takes the frontmatter merge. A release clone, v9.0.0 -> v9.0.1.
+echo "--- install.sh: a CRLF release copy is replaced, a CRLF frontmatter edit is merged"
+CRL="$T/rel-crlf"; CRH="$T/crlf-edits-hive"; mkdir -p "$CRL" "$CRH"
+( cd "$SRC" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$CRL"
+git -C "$CRL" init -q && git -C "$CRL" config user.email t@t && git -C "$CRL" config user.name t
+printf '9.0.0\n' > "$CRL/VERSION"
+printf -- '---\nname: fixture-fm\ndescription: a synthetic agent\nmodel: sonnet\nmaxTurns: 40\ntools:\n  - Read\n---\nBody line one.\nBody line two.\n' \
+  > "$CRL/.claude/agents/fixture-fm.md"
+git -C "$CRL" add -A >/dev/null 2>&1 && git -C "$CRL" commit -qm v9.0.0 && git -C "$CRL" tag v9.0.0
+git -C "$CRH" init -q
+bash "$CRL/install.sh" "$CRH" --telemetry off > "$T/crlf-edits-install.out" 2>&1
+sed_inplace 's/^maxTurns: 40$/maxTurns: 140/' "$CRH/.claude/agents/fixture-fm.md"
+for f in fixture-fm drone-docs; do sed_inplace 's/$/\r/' "$CRH/.claude/agents/$f.md"; done
+expect_eq "fixture: both hive files are CRLF" "2" "$(grep -l $'\r' "$CRH/.claude/agents/fixture-fm.md" "$CRH/.claude/agents/drone-docs.md" | grep -c .)"
+sed_inplace '3s/$/ (v9.0.1)/' "$CRL/.claude/agents/drone-docs.md"
+printf -- '---\nname: fixture-fm\ndescription: a synthetic agent\nmodel: sonnet\nmaxTurns: 40\n---\nBody line one (v9.0.1).\nBody line two.\n' \
+  > "$CRL/.claude/agents/fixture-fm.md"
+printf '9.0.1\n' > "$CRL/VERSION"
+git -C "$CRL" commit -qam v9.0.1 && git -C "$CRL" tag v9.0.1
+bash "$CRL/install.sh" "$CRH" --upgrade --telemetry off > "$T/crlf-edits.out" 2>&1
+grep -q '  update         .claude/agents/drone-docs.md' "$T/crlf-edits.out" && cmp -s "$CRH/.claude/agents/drone-docs.md" "$CRL/.claude/agents/drone-docs.md" \
+  && ! grep -qE '(keep \(edited\)|kept \+ new) +\.claude/agents/drone-docs\.md' "$T/crlf-edits.out" && [ ! -e "$CRH/.claude/agents/drone-docs.md.vulyk-new" ] \
+  && ok "a CRLF checkout of the installed release's copy is replaced as a release copy" \
+  || { bad "CRLF release copy:"; grep -F 'drone-docs' "$T/crlf-edits.out"; }
+printf -- '---\nname: fixture-fm\ndescription: a synthetic agent\nmodel: sonnet\nmaxTurns: 140\n---\nBody line one (v9.0.1).\nBody line two.\n' > "$T/crlf-fm.want"
+cmp -s "$CRH/.claude/agents/fixture-fm.md" "$T/crlf-fm.want" && [ ! -e "$CRH/.claude/agents/fixture-fm.md.vulyk-new" ] \
+  && grep -q '  merge frontmatter .claude/agents/fixture-fm.md' "$T/crlf-edits.out" && grep -q '^    kept maxTurns (yours)' "$T/crlf-edits.out" \
+  && ok "a CRLF frontmatter-only edit lands the release body, the hive's maxTurns kept" \
+  || { bad "CRLF frontmatter merge:"; sed 's/^/        /' "$CRH/.claude/agents/fixture-fm.md"; grep -F 'fixture-fm' -A2 "$T/crlf-edits.out"; }
 
 fi # crlf
 
@@ -2785,10 +2841,28 @@ mkdir -p "$REL" "$HIVE"
 ( cd "$SRC" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$REL"
 git -C "$REL" init -q && git -C "$REL" config user.email t@t && git -C "$REL" config user.name t
 printf '9.0.0\n' > "$REL/VERSION"
+# upgrade-findings E1: four synthetic agents whose hive edit conflicts in git merge-file. fm_agent <name>
+# <maxTurns> <description> <body line one> [<extra key line>] [notools] [nomodel] prints one.
+fm_agent() {
+  printf -- '---\nname: %s\ndescription: %s\n' "$1" "$3"
+  case " $* " in *" nomodel "*) ;; *) printf 'model: sonnet\n' ;; esac
+  printf 'maxTurns: %s\n' "$2"
+  case " $* " in *" notools "*) ;; *) printf 'tools:\n  - Read\n' ;; esac
+  [ -n "${5:-}" ] && [ "$5" != notools ] && [ "$5" != nomodel ] && printf '%s\n' "$5"
+  printf -- '---\n%s\nBody line two.\n' "$4"
+}
+for n in fixture-fm fixture-fm-clash fixture-fm-body fixture-fm-keys; do
+  fm_agent "$n" 40 'a synthetic agent' 'Body line one.' > "$REL/.claude/agents/$n.md"
+done
 git -C "$REL" add -A >/dev/null 2>&1 && git -C "$REL" commit -qm v9.0.0 && git -C "$REL" tag v9.0.0
 git -C "$HIVE" init -q
 bash "$REL/install.sh" "$HIVE" --telemetry off > "$T/edits-install.out" 2>&1
 A="$HIVE/.claude/agents"
+fm_agent fixture-fm 140 'a synthetic agent' 'Body line one.' > "$A/fixture-fm.md"              # frontmatter-only
+fm_agent fixture-fm-clash 140 'a synthetic agent' 'Body line one.' > "$A/fixture-fm-clash.md"  # the release changes maxTurns too
+fm_agent fixture-fm-body 140 'a synthetic agent' 'Body line one, mine.' > "$A/fixture-fm-body.md"   # the body as well
+fm_agent fixture-fm-keys 40 'a synthetic agent' 'Body line one.' 'effort: high' nomodel > "$A/fixture-fm-keys.md"  # a key added, one deleted
+for n in fixture-fm fixture-fm-clash fixture-fm-body fixture-fm-keys; do cp "$A/$n.md" "$T/$n.hive"; done
 sed_inplace 's/^maxTurns: .*/maxTurns: 140/' "$A/worker-code.md"           # an edit the release does not touch
 sed_inplace 's/^maxTurns: .*/maxTurns: 140/' "$A/lead-review.md"           # an edit on the line the release changes
 rm -f "$A/drone-scout.md"                                             # a deletion
@@ -2798,6 +2872,10 @@ git -C "$REL" commit -qam hotfix
 git -C "$REL" show HEAD:.claude/agents/worker-test.md > "$A/worker-test.md"
 for f in worker-code drone-docs worker-test; do sed_inplace '3s/$/ (v9.0.1)/' "$R/$f.md"; done
 sed_inplace 's/^maxTurns: .*/maxTurns: 70/' "$R/lead-review.md"
+fm_agent fixture-fm 40 'a synthetic agent' 'Body line one (v9.0.1).' notools > "$R/fixture-fm.md"
+fm_agent fixture-fm-clash 60 'a synthetic agent' 'Body line one (v9.0.1).' notools > "$R/fixture-fm-clash.md"
+fm_agent fixture-fm-body 40 'a synthetic agent' 'Body line one (v9.0.1).' notools > "$R/fixture-fm-body.md"
+fm_agent fixture-fm-keys 40 'a synthetic agent, v9.0.1' 'Body line one (v9.0.1).' > "$R/fixture-fm-keys.md"
 printf '9.0.1\n' > "$REL/VERSION"
 git -C "$REL" commit -qam v9.0.1 && git -C "$REL" tag v9.0.1
 cp "$A/lead-review.md" "$T/lead-review.hive"
@@ -2807,6 +2885,14 @@ grep -q 'would update   .claude/agents/drone-docs.md' "$T/edits-check.out" && gr
   && grep -q 'would keep + new .claude/agents/lead-review.md' "$T/edits-check.out" && grep -q 'would keep deleted .claude/agents/drone-scout.md' "$T/edits-check.out" \
   && ok "--check names all four outcomes with 'would'" || { bad "--check outcomes:"; grep -E 'agents/(drone|worker-code|lead-review)' "$T/edits-check.out"; }
 [ ! -e "$A/lead-review.md.vulyk-new" ] && grep -q '^maxTurns: 140' "$A/worker-code.md" && ok "--check writes nothing" || bad "--check wrote files"
+fm_block() { # fm_block <out> <head> - the <head> line and the indented key lines under it
+  awk -v h="$2" '$0 == h { f = 1; print; next } f && /^    / { print; next } { f = 0 }' "$1" | tr -d '\r'
+}
+expect_eq "--check: a frontmatter-only edit would merge, naming each key" \
+  "$(printf '  would merge frontmatter .claude/agents/fixture-fm.md\n    kept maxTurns (yours)\n    dropped tools (removed by the release)')" \
+  "$(fm_block "$T/edits-check.out" '  would merge frontmatter .claude/agents/fixture-fm.md')"
+cmp -s "$A/fixture-fm.md" "$T/fixture-fm.hive" && [ ! -e "$A/fixture-fm.md.vulyk-new" ] \
+  && ok "--check: the frontmatter merge changes no file" || bad "--check: the frontmatter merge wrote files"
 TMPDIR="$T/edits-tmp" bash "$REL/install.sh" "$HIVE" --upgrade --telemetry off > "$T/edits-up.out" 2>&1
 [ -z "$(ls -A "$T/edits-tmp")" ] && ok "--check and --upgrade leave no temp file behind" || { bad "temp files left:"; ls -A "$T/edits-tmp"; }
 grep -q '  update         .claude/agents/drone-docs.md' "$T/edits-up.out" && grep -q '(v9.0.1)' "$A/drone-docs.md" \
@@ -2820,6 +2906,27 @@ grep -q '  kept + new     .claude/agents/lead-review.md' "$T/edits-up.out" && cm
   && ok "a conflicting edit is kept byte for byte, the new release beside it" || bad "lead-review conflict handling"
 grep -q '  kept deleted   .claude/agents/drone-scout.md' "$T/edits-up.out" && [ ! -e "$A/drone-scout.md" ] \
   && ok "a deleted agent is not put back" || bad "drone-scout came back"
+fm_agent fixture-fm 140 'a synthetic agent' 'Body line one (v9.0.1).' notools > "$T/fixture-fm.want"
+if cmp -s "$A/fixture-fm.md" "$T/fixture-fm.want" && [ ! -e "$A/fixture-fm.md.vulyk-new" ] \
+  && [ "$(fm_block "$T/edits-up.out" '  merge frontmatter .claude/agents/fixture-fm.md')" = \
+       "$(printf '  merge frontmatter .claude/agents/fixture-fm.md\n    kept maxTurns (yours)\n    dropped tools (removed by the release)')" ]; then
+  ok "a frontmatter-only edit lands the release body, the hive's key kept, the removed key dropped"
+else
+  bad "a frontmatter-only edit lands the release body, the hive's key kept, the removed key dropped:"
+  sed 's/^/        /' "$A/fixture-fm.md"; grep -F 'fixture-fm.md' -A2 "$T/edits-up.out" | sed 's/^/        /'
+fi
+grep -q '^    frontmatter conflict on maxTurns' "$T/edits-up.out" && grep -q '  kept + new     .claude/agents/fixture-fm-clash.md' "$T/edits-up.out" \
+  && cmp -s "$A/fixture-fm-clash.md" "$T/fixture-fm-clash.hive" && cmp -s "$A/fixture-fm-clash.md.vulyk-new" "$R/fixture-fm-clash.md" \
+  && ok "a key both sides changed: frontmatter conflict, the hive file kept byte for byte, .vulyk-new parked" \
+  || { bad "frontmatter conflict on maxTurns:"; grep -F 'fixture-fm-clash' -B2 "$T/edits-up.out"; }
+grep -q '  kept + new     .claude/agents/fixture-fm-body.md' "$T/edits-up.out" && ! grep -q 'merge frontmatter .claude/agents/fixture-fm-body.md' "$T/edits-up.out" \
+  && cmp -s "$A/fixture-fm-body.md" "$T/fixture-fm-body.hive" && [ -e "$A/fixture-fm-body.md.vulyk-new" ] \
+  && ok "a hive edit that also touches the body is parked as before" || { bad "frontmatter + body edit:"; grep -F 'fixture-fm-body' "$T/edits-up.out"; }
+fm_agent fixture-fm-keys 40 'a synthetic agent, v9.0.1' 'Body line one (v9.0.1).' 'effort: high' nomodel > "$T/fixture-fm-keys.want"
+cmp -s "$A/fixture-fm-keys.md" "$T/fixture-fm-keys.want" && [ ! -e "$A/fixture-fm-keys.md.vulyk-new" ] \
+  && grep -q '  merge frontmatter .claude/agents/fixture-fm-keys.md' "$T/edits-up.out" \
+  && ok "a key the hive added and one it deleted survive a release that left them alone" \
+  || { bad "hive-added and hive-deleted keys:"; sed 's/^/        /' "$A/fixture-fm-keys.md"; grep -F 'fixture-fm-keys' -A3 "$T/edits-up.out"; }
 grep -qxF '*.vulyk-new' "$HIVE/.gitignore" && ok ".vulyk-new is gitignored" || bad ".vulyk-new not in .gitignore"
 # Again at the same version: the release left lead-review.md alone since v9.0.1, so there is nothing
 # to merge - the edit is kept and the pending .vulyk-new stays for the owner.

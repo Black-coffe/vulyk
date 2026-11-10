@@ -384,3 +384,5 @@
 {"ts":"2026-11-10T09:21:00Z","story":"gitignore-glob-01","declared":4,"changed":4,"out_of_scope":0}
 {"ts":"2026-11-10T20:41:58Z","story":"upgrade-findings-01-commands-span","declared":6,"changed":5,"out_of_scope":0}
 {"ts":"2026-11-10T20:46:53Z","story":"upgrade-findings-01-commands-span","declared":6,"changed":5,"out_of_scope":0}
+{"ts":"2026-11-10T21:05:05Z","story":"upgrade-findings-02-upgrade-writes","declared":2,"changed":2,"out_of_scope":0}
+{"ts":"2026-11-10T21:09:20Z","story":"upgrade-findings-02-upgrade-writes","declared":2,"changed":2,"out_of_scope":0}

@@ -154,15 +154,62 @@ release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte som
   local h; h="$(tr -d '\r' < "$DEST/$1" | git hash-object --stdin 2>/dev/null)" || return 1
   [ -n "$h" ] && grep -qxF "$h" "$SHIPPED_BLOBS"
 }
+# After a git merge-file conflict: a hive edit that touched only the frontmatter (its body is the body v$PREV
+# shipped) takes the new release's body under a frontmatter merged key by key. A key is a top-level `name:` line
+# plus the lines under it, compared as text. Per key, P = v$PREV, H = the hive, N = the new release: H = P takes N,
+# N = P takes H, H = N takes it, else a conflict. Key order is N's, hive-added keys last.
+fm_merge() { # fm_merge <base> <ours> <theirs> - 0: merged (key lines on stdout, the file to $FM_OUT when set);
+  # 1: a key both sides changed (its conflict lines on stdout); 2: no frontmatter on a side, or the body was edited
+  awk '
+    FNR == 1 { fi++; st[fi] = 0 }
+    st[fi] == 0 { st[fi] = 1; if ($0 != "---") bad = 1; next }
+    st[fi] == 1 && $0 == "---" { st[fi] = 2; next }
+    st[fi] == 1 && /^[A-Za-z0-9_][A-Za-z0-9_.-]*:/ {
+      k = $0; sub(/:.*/, "", k)
+      if ((fi, k) in val) bad = 1
+      nk[fi]++; key[fi, nk[fi]] = k; val[fi, k] = $0 "\n"; cur[fi] = k; next
+    }
+    st[fi] == 1 { if (nk[fi] == 0) bad = 1; else val[fi, cur[fi]] = val[fi, cur[fi]] $0 "\n"; next }
+    { body[fi] = body[fi] $0 "\n" }
+    END {
+      if (fi != 3 || bad || st[1] != 2 || st[2] != 2 || st[3] != 2 || body[1] != body[2]) exit 2
+      A = "\001"; n = 0
+      for (i = 1; i <= nk[3]; i++) { u[++n] = key[3, i]; inn[key[3, i]] = 1 }
+      for (i = 1; i <= nk[2]; i++) if (!(key[2, i] in inn)) u[++n] = key[2, i]
+      for (i = 1; i <= n; i++) {
+        k = u[i]
+        p = ((1, k) in val) ? val[1, k] : A; h = ((2, k) in val) ? val[2, k] : A; t = ((3, k) in val) ? val[3, k] : A
+        if (h == p) r = t; else if (t == p || h == t) r = h
+        else { clash = clash "    frontmatter conflict on " k "\n"; continue }
+        res[i] = r
+        if (r == h && h != t) said = said "    kept " k " (yours)\n"
+        else if (r == A && h != A) said = said "    dropped " k " (removed by the release)\n"
+      }
+      if (clash != "") { printf "%s", clash; exit 1 }
+      printf "%s", said
+      if (ENVIRON["FM_OUT"] == "") exit 0
+      o = "---\n"; for (i = 1; i <= n; i++) if (res[i] != A) o = o res[i]
+      printf "%s---\n%s", o, body[3] > ENVIRON["FM_OUT"]
+      exit 0
+    }
+  ' "$1" "$2" "$3"
+}
 upgrade_edited() { # upgrade_edited <rel> - a hive edit of a framework file: merge, or keep + .vulyk-new
-  local f="$1" base ours theirs out rc
+  local f="$1" base ours theirs out rc fm="" frc=0
   if [ "$CHECK" = "--check" ]; then
     if git -C "$SRC" cat-file -e "v$PREV:$f" 2>/dev/null; then
       base="$(mktemp)"; ours="$(mktemp)"; theirs="$(mktemp)"
       git -C "$SRC" show "v$PREV:$f" | tr -d '\r' > "$base"; tr -d '\r' < "$DEST/$f" > "$ours"; tr -d '\r' < "$SRC/$f" > "$theirs"
       if cmp -s "$base" "$theirs"; then echo "  would keep (edited) $f"
       elif git merge-file -q -p "$ours" "$base" "$theirs" > /dev/null 2>&1; then echo "  would merge edit $f"
-      else echo "  would keep + new $f -> $f.vulyk-new"; fi
+      else
+        frc=0; fm="$(FM_OUT='' fm_merge "$base" "$ours" "$theirs")" || frc=$?
+        if [ "$frc" -eq 0 ]; then echo "  would merge frontmatter $f"; [ -z "$fm" ] || printf '%s\n' "$fm"
+        else
+          echo "  would keep + new $f -> $f.vulyk-new"
+          [ "$frc" -ne 1 ] || printf '%s\n' "$fm"
+        fi
+      fi
       rm -f "$base" "$ours" "$theirs"
     else
       echo "  would keep + new $f -> $f.vulyk-new"
@@ -182,10 +229,17 @@ upgrade_edited() { # upgrade_edited <rel> - a hive edit of a framework file: mer
       echo "  merged edit    $f"
       rm -f "$base" "$ours" "$theirs" "$out"; return 0
     fi
+    frc=0; fm="$(FM_OUT="$out" fm_merge "$base" "$ours" "$theirs")" || frc=$?
+    if [ "$frc" -eq 0 ]; then
+      replace_file "$out" "$DEST/$f"; rm -f "$DEST/$f.vulyk-new"
+      echo "  merge frontmatter $f"; [ -z "$fm" ] || printf '%s\n' "$fm"
+      rm -f "$base" "$ours" "$theirs" "$out"; return 0
+    fi
     rm -f "$base" "$ours" "$theirs" "$out"
   fi
   cp -p "$SRC/$f" "$DEST/$f.vulyk-new"
   echo "  kept + new     $f -> $f.vulyk-new   (your edit kept; merge the new release in by hand)"
+  [ "$frc" -ne 1 ] || printf '%s\n' "$fm"   # the keys both sides changed
 }
 
 copy_tree() { # copy_tree <rel> - skip existing, unless upgrading a framework-owned file. The shippable paths are
@@ -759,7 +813,10 @@ OLD_REL = '$CLAUDE_PROJECT_DIR/.claude/hooks/'   # the plain form before 0.50; f
 HOOKS_DIR = os.path.join(os.path.dirname(os.path.abspath(path)), 'hooks')
 try:
     with open(path, encoding='utf-8') as fh:
-        data = json.load(fh)
+        raw = fh.read()
+    data = json.loads(raw)
+    lead = re.search(r'^([ \t]+)\S', raw, re.M)  # the file's indent unit, from its first indented line
+    IND = ('\t' if lead.group(1)[0] == '\t' else len(lead.group(1))) if lead else 2
 except Exception:
     sys.exit(4)                                  # unparseable: leave it entirely alone
 if not isinstance(data, dict):
@@ -841,7 +898,7 @@ if not isinstance(groups, list):
     sys.exit(4)
 def save():
     with open(path, 'w', encoding='utf-8', newline='\n') as fh:
-        json.dump(data, fh, indent=2, ensure_ascii=False)
+        json.dump(data, fh, indent=IND, ensure_ascii=False)
         fh.write('\n')
 for group in groups:
     if isinstance(group, dict):
@@ -929,13 +986,13 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
   settings_backup "$file" && took=1
   if py_wire "$file" "$script" "$event" "$matcher" "$arg"; then
     echo "  wire           .claude/settings.json -> $label"
-    echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
+    echo "                 (backup at .claude/settings.json.vulyk-bak)"
   else
     case "$?" in
       3) [ -z "$took" ] || settings_backup_drop "$file"      # already wired; nothing happened
          echo "$kept" ;;
       5) echo "  repair         .claude/settings.json -> $label (its quotes did not close)"
-         echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)" ;;
+         echo "                 (backup at .claude/settings.json.vulyk-bak)" ;;
       *) [ -z "$took" ] || settings_backup_drop "$file"
          echo ""
          echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
@@ -1000,7 +1057,10 @@ path, script, event = sys.argv[1], sys.argv[2], sys.argv[3]
 dry = '--dry' in sys.argv[4:]
 try:
     with open(path, encoding='utf-8') as fh:
-        data = json.load(fh)
+        raw = fh.read()
+    data = json.loads(raw)
+    lead = re.search(r'^([ \t]+)\S', raw, re.M)  # the file's indent unit, from its first indented line
+    IND = ('\t' if lead.group(1)[0] == '\t' else len(lead.group(1))) if lead else 2
 except Exception:
     sys.exit(4)                                  # unparseable: leave it entirely alone
 if not isinstance(data, dict):
@@ -1031,7 +1091,7 @@ if kept:
 else:
     del hooks[event]
 with open(path, 'w', encoding='utf-8', newline='\n') as fh:
-    json.dump(data, fh, indent=2, ensure_ascii=False)
+    json.dump(data, fh, indent=IND, ensure_ascii=False)
     fh.write('\n')
 PYUNWIRE
 }
@@ -1055,7 +1115,7 @@ unwire_hook() { # unwire_hook <event> <hook-script-name>
   settings_backup "$file" && took=1
   if py_unwire "$file" "$script" "$event"; then
     echo "  unwire         .claude/settings.json -> $event: $script"
-    echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
+    echo "                 (backup at .claude/settings.json.vulyk-bak)"
   else
     case "$?" in
       3) [ -z "$took" ] || settings_backup_drop "$file" ;;   # not wired there; nothing happened
@@ -1087,12 +1147,15 @@ fix_hooks() {
   [ "$CHECK" = "--check" ] || { settings_backup "$file" && took=1; }
   out="$(mktemp)"
   PYTHONIOENCODING=utf-8 "$PYBIN" - "$file" "$SRC/.claude/hooks" "$CHECK" > "$out" <<'PYFIX' || rc=$?
-import json, os, sys
+import json, os, re, sys
 path, ours, dry = sys.argv[1], sys.argv[2], sys.argv[3] == '--check'
 REL, OLD_REL = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/', '$CLAUDE_PROJECT_DIR/.claude/hooks/'
 try:
     with open(path, encoding='utf-8') as fh:
-        data = json.load(fh)
+        raw = fh.read()
+    data = json.loads(raw)
+    lead = re.search(r'^([ \t]+)\S', raw, re.M)  # the file's indent unit, from its first indented line
+    IND = ('\t' if lead.group(1)[0] == '\t' else len(lead.group(1))) if lead else 2
 except Exception:
     sys.exit(4)                                  # unparseable: leave it entirely alone
 hooks = data.get('hooks') if isinstance(data, dict) else None
@@ -1122,7 +1185,7 @@ if not done:
 print('\n'.join(done))
 if not dry:
     with open(path, 'w', encoding='utf-8', newline='\n') as fh:
-        json.dump(data, fh, indent=2, ensure_ascii=False)
+        json.dump(data, fh, indent=IND, ensure_ascii=False)
         fh.write('\n')
 PYFIX
   if [ "$rc" -ne 0 ]; then
@@ -1137,7 +1200,7 @@ PYFIX
     else printf '  %-14s .claude/settings.json -> %s\n' "$kind" "$label"; fi
   done <<< "$(tr -d '\r' < "$out")"
   rm -f "$out"
-  [ "$CHECK" = "--check" ] || echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
+  [ "$CHECK" = "--check" ] || echo "                 (backup at .claude/settings.json.vulyk-bak)"
 }
 
 # The Workflow driver's clerk (`cycle-clerk.md`) runs every verb by shelling out to
@@ -1170,12 +1233,15 @@ wire_permissions() {
   fi
   settings_backup "$file" && took=1
   if "$py" - "$file" <<'PYPERM'
-import json, sys
+import json, re, sys
 path = sys.argv[1]
 RULES = ["Bash(bash scripts/cycle.sh:*)", "Bash(bash scripts/journal.sh:*)"]
 try:
     with open(path, encoding='utf-8') as fh:
-        data = json.load(fh)
+        raw = fh.read()
+    data = json.loads(raw)
+    lead = re.search(r'^([ \t]+)\S', raw, re.M)  # the file's indent unit, from its first indented line
+    IND = ('\t' if lead.group(1)[0] == '\t' else len(lead.group(1))) if lead else 2
 except Exception:
     sys.exit(4)                                  # unparseable: leave it entirely alone
 if not isinstance(data, dict):
@@ -1188,12 +1254,12 @@ if not added:
     sys.exit(3)                                  # already there under both spellings
 allow.extend(added)
 with open(path, 'w', encoding='utf-8', newline='\n') as fh:
-    json.dump(data, fh, indent=2, ensure_ascii=False)
+    json.dump(data, fh, indent=IND, ensure_ascii=False)
     fh.write('\n')
 PYPERM
   then
     echo "  wire           .claude/settings.json -> permissions.allow: cycle.sh, journal.sh"
-    echo "                 (backup at .claude/settings.json.vulyk-bak; the file was re-indented by the edit)"
+    echo "                 (backup at .claude/settings.json.vulyk-bak)"
   else
     case "$?" in
       3) [ -z "$took" ] || settings_backup_drop "$file" ;;   # already wired; nothing happened
@@ -1226,11 +1292,14 @@ unwire_ysk() {
   fi
   if [ "$CHECK" != "--check" ]; then settings_backup "$file" && took=1; fi
   "$py" - "$file" "$YSK_ID" "$CHECK" <<'PYYSK' || rc=$?
-import json, sys
+import json, re, sys
 path, key, dry = sys.argv[1], sys.argv[2], sys.argv[3] == '--check'
 try:
     with open(path, encoding='utf-8') as fh:
-        data = json.load(fh)
+        raw = fh.read()
+    data = json.loads(raw)
+    lead = re.search(r'^([ \t]+)\S', raw, re.M)  # the file's indent unit, from its first indented line
+    IND = ('\t' if lead.group(1)[0] == '\t' else len(lead.group(1))) if lead else 2
 except Exception:
     sys.exit(4)
 plugins = data.get('enabledPlugins') if isinstance(data, dict) else None
@@ -1242,7 +1311,7 @@ del plugins[key]
 if not plugins:
     del data['enabledPlugins']
 with open(path, 'w', encoding='utf-8', newline='\n') as fh:
-    json.dump(data, fh, indent=2, ensure_ascii=False)
+    json.dump(data, fh, indent=IND, ensure_ascii=False)
     fh.write('\n')
 PYYSK
   case "$rc" in
@@ -1277,11 +1346,14 @@ wire_ripgrep() {
   fi
   vulyk_python || true; py="$VULYK_PY"
   [ -n "$py" ] && "$py" - "$file" <<'PYRG' || rc=$?
-import json, sys
+import json, re, sys
 path = sys.argv[1]
 try:
     with open(path, encoding='utf-8') as fh:
-        data = json.load(fh)
+        raw = fh.read()
+    data = json.loads(raw)
+    lead = re.search(r'^([ \t]+)\S', raw, re.M)  # the file's indent unit, from its first indented line
+    IND = ('\t' if lead.group(1)[0] == '\t' else len(lead.group(1))) if lead else 2
 except Exception:
     sys.exit(4)                                  # unparseable: leave it entirely alone
 env = data.get('env', {}) if isinstance(data, dict) else None
@@ -1290,12 +1362,11 @@ if not isinstance(env, dict):
 env['USE_BUILTIN_RIPGREP'] = '0'
 data['env'] = env
 with open(path, 'w', encoding='utf-8', newline='\n') as fh:
-    json.dump(data, fh, indent=2, ensure_ascii=False)
+    json.dump(data, fh, indent=IND, ensure_ascii=False)
     fh.write('\n')
 PYRG
   if [ -n "$py" ] && [ "$rc" -eq 0 ]; then
     echo "  wire           $lbl"
-    echo "                 (the file was re-indented by the edit)"
     return 0
   fi
   echo ""
