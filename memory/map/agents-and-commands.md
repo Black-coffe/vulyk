@@ -33,7 +33,7 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **worker-code** / **worker-test** (`sonnet`, `medium`, `maxTurns:90`) - Tier 3-4, one story. Close: `returned:
   DONE`, then `cycle.sh close-story <story> --commit --stamp <S>`; exit 4 → fix and rerun (`edited outside ##
   Files` = undo your own edits; none yours → `NEEDS_CONTEXT`; exit 2 `verification is round-only` →
-  `NEEDS_CONTEXT`; exit 7 `verification paused` = rerun the same `close-story`/`stamp-red`, it resumes), after three failures `## Findings` + `returned: WALL`. **Red first (ADR-025), only for `red:
+  `NEEDS_CONTEXT`; exit 7 `verification paused` = rerun the same `close-story`/`stamp-red` with the same `--stamp`; it resumes from the cycle's own record, and restarts at line 1 with a stderr reason if the record no longer fits; never write a resume mark into the story), after three failures `## Findings` + `returned: WALL`. **Red first (ADR-025), only for `red:
   required`:** write the test `## Files` names, write `red_reason:`, run `cycle.sh stamp-red <story> --stamp <S>`,
   then implement, then `close-story`; never edit the implementation to produce a red. Step 6 maps each gate exit-4
   message to an action. Never edit `status:`, never stash/checkout/reset/clean. A bug fix first runs `symbol-map.sh
@@ -56,6 +56,11 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   `не подтверждено`; WebFetch ≤ 2; reply ≤ 60 lines.
 
 ## Commands - what each runs
+- **0.51 `/vulyk-update` (upgrade-findings):** step 2 reads three new dry-run lines to the owner: `would merge
+  frontmatter <file>` (`kept <key> (yours)`; a key both sides changed parks the file as `keep + new`) and `commands:
+  row '<Purpose>'` (a note beside the backticked command, or several commands); step 4 recommends replace-or-merge
+  from the `constitution: <N> lines only in the backup` list; step 6 carries the measured-suite lines (over 210 s,
+  cut before taking the release) and a cutting recipe. The command only quotes them; the owner fixes the rows.
 - **0.50 command changes (ADR-032):** `/vulyk-build` at Tier 2-4 opens only on `**Approved:**` or a Briefed line
   with `--go`; a story the Queen changes after `NEEDS_CONTEXT` is committed `vulyk(<slug>): revised <story-id>`
   before its worker reruns (`/vulyk-plan` step 9 likewise). Workers never run `stamp-red --baseline`.
@@ -114,4 +119,4 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
   script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-11-10 (0.50.3 gitignore-glob; 0.50.0 mass-audit-fixes; ADR-013, 015, 020, 022, 023, 024, 025, 029, 032)
+last-verified: 2026-11-11 (0.51.0-dev.1 upgrade-findings, handoff-1m; ADR-013, 015, 020, 022, 023, 024, 025, 029, 032)

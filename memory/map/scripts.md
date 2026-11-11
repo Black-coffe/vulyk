@@ -10,7 +10,11 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `cycle.sh <verb> <spec-dir> [...]` - the cycle CLI; `advance` steps the loop. Callers: the Queen,
   `cycle-clerk` (only `advance`, `status`, `release`), workers (`stamp-red` takes a story file, then `close-story`).
 - `lib.sh` - sourced only: `is_story_file`, `pack_fingerprint`, `is_paperwork_path`, `paperwork_only`, `marker`,
-  `constitution_file`, `command_cell_exists`, `command_cell_round_only`; model floor (ADR-015: `model_floor`,
+  `constitution_file`, `command_cell_exists`, `command_cell_round_only`; `## Commands` cell helpers (0.51,
+  `cell_awk`): `command_cell_shape` -> `none|one|noted|several`, `command_cell_cmd` (the backticked span; text
+  around it is a note; `several` exit 2), `commands_lint <constitution>` (names noted/several rows; the installer's
+  dry run prints it). The lookups still accept any one of several spans; only a round-gate full-suite row refuses
+  `several` (red part `several backticked commands in one cell`, `cycle.sh` `cmd_suite`); model floor (ADR-015: `model_floor`,
   `model_below_floor` fails closed, `VULYK_MODEL_FLOOR` overrides); red helpers `sealed_tests`, `set_hash`
   (a missing file hashes as `missing <path>`). Portability helpers (0.44.0): `vulyk_python` sets `VULYK_PY`
   (first of python3/python/py that runs Python 3; preset trusted; call in the current shell, not `$(...)`),
@@ -41,9 +45,7 @@ re-run. No line numbers: `grep -n '^name()'`.
   (own process group, SIGTERM, 10 s grace, SIGKILL; Windows `taskkill /T`; exit 124).
 - `portability-check.sh [<file>...]` (0.44.0) - the `check:` of card `shell-needs-gnu-or-bash4` (status block).
   No arg: `git ls-files '*.sh'` + constitution + `.claude/commands|agents/*.md` (not `tests/fixtures/`). Prints
-  `portability-check: <file>:<line>: <rule>: <text>`; rules: bash4, sed-i, sed-bre, grep-P, stat-c, readlink-f,
-  find-printf, xargs-r, date-d, pct-n, timeout, python, array, paste-s, case-in-subst, heredoc-in-subst.
-  Bypass: same-line `# portable: <reason>`. Exit 0 / 1 hits / 2 usage; CI `shell` job.
+  `portability-check: <file>:<line>: <rule>: <text>`. Exit 0 / 1 hits / 2 usage; CI `shell` job.
 - `trace-autopsy.sh <brief.md>` (0.42.0) - `vulyk_python` wrapper (none: exit 2) over `trace-autopsy.py`. Reads
   the brief's `> ` frames, resolves against `git ls-files`, writes `autopsy.md` beside the brief, <= 15 lines
   (3 frames): code line at HEAD + `git log -L` as `last touched:`. Trace text is data. Exit 0 / 2. Caller:
@@ -67,6 +69,14 @@ re-run. No line numbers: `grep -n '^name()'`.
   `branch -D` are subagent-only. Follows `cd`/`-C`. Fails open (no python, bad JSON, error: exit 0). Python tried in order `$VULYK_PY`, python3, python, py; stdin read as UTF-8 (0.50). `--check <file>`
   (the card's check; `porcelain` field fakes status): exit 1 on deny. Python sits in a no-op heredoc below `exit 0`.
   Not covered: rm, `bash -c`, scripts/aliases. No env off-switch; owner removes the settings entry.
+- `.claude/hooks/vulyk-update-check.sh` - SessionStart update check; network at most every
+  `VULYK_UPDATE_INTERVAL_HOURS` (default 6, 0.51); cache `.claude/.vulyk-update-cache` = `<epoch> <latest> <UTC time>`
+  (no time field = expired); the line ends `(checked <date time> UTC)`.
+- `.claude/hooks/handoff.py` (0.51, handoff-1m) - offers a handoff at 70/80/90% (`thresholds_pct`) of the real window.
+  A session with no statusLine copy of its own takes the window from the newest report for the same model
+  (`model_window`, `[1m]` suffix dropped, <= 30 days old); `context_limit` in `.claude/handoff.config.json` pins it.
+  `scripts/handoff-window-check.py [<handoff.py>]` is the check of card `handoff-offered-too-early` (3 sessions
+  on 1M: silent at 15% and 65%, speaks at 71%; exit 0 / 1 / 2).
 - `.claude/hooks/handoff.sh` - skips a `python3` that is the Windows Store stub (exit 49) or fails to launch,
   and starts a working Python once per call (0.43.1); `handoff.py` `_REDACT_FALLBACK` mirrors `redact.sh` (same masks, incl. the 0.50.2 cookie-header, `*_KEY`/`*_AUTH` and OTP rules).
 - `vulyk-update.sh` (-> `install.sh --upgrade`); `release-check.sh`; `git-hooks/post-merge`.
@@ -128,6 +138,13 @@ re-run. No line numbers: `grep -n '^name()'`.
   git-guard branch only report the missing hook (`unwired ...`) and wire nothing.
   Telemetry consent is asked only on `--telemetry ask` (0.49; default off, flag `on|off|ask`).
   `ensure_gitignore` runs with globbing off (`set -f`, restored on each exit), so patterns like `docs/specs/*/DRIVER` are written literally (0.50.3).
+  0.51: `--upgrade`/`--check` also report (named only, never rewritten): `## Commands` rows with a note or several
+  spans (`report_commands_lint`); `report_measured_suite` - the 5 newest measured council rounds (`suite.log` parts or
+  the `SUITE:` line), each value over 210 s named, else a line saying none was measured; under `--constitution
+  replace` the hand-written lines only the backup keeps. A conflicted file whose body equals the installed release's
+  body takes the new body with the frontmatter merged per top-level key (`merge frontmatter <f>`, `kept`/`dropped`
+  lines); a key both sides changed is `frontmatter conflict on <key>` and the file is parked as before. Every JSON
+  rewrite keeps the file's indent unit.
   `install_mod vulyk-pulse@vulyk`; `retire_mod vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup`.
 
 ## Gotchas
@@ -139,4 +156,4 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-10 (0.50.3 gitignore-glob; 0.50.2 redact-gaps-2 redact lines; 0.50.1 redact-gaps; 0.50.0 mass-audit-fixes; ship-check stage 02 at Tier 2-4 wants `**Approved:**` or `--go`, ADR-032 D4). Over the ~80-line budget.
+last-verified: 2026-11-11 (0.51.0-dev.1 upgrade-findings, handoff-1m). Over the ~80-line budget.

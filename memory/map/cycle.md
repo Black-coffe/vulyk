@@ -47,9 +47,23 @@ Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the
   value above 300, or junk/0, acts as 300; 124 → exit 4, naming the line); the call has a budget
   `VULYK_VERIFY_CALL` (default 540): a line starts only if its cap fits what is left (the first line of a call
   always runs), else `verify_pause` writes a resume mark and exits 7 `verification paused`; rerun the same verb
-  to resume at that line. No timeout/gtimeout/Python cap = uncapped; a command's own 124 is then not a timeout.
+  to resume at that line (the mark is the cycle's verify record, see "Cycle-owned run state"). No timeout/gtimeout/Python cap = uncapped; a command's own 124 is then not a timeout.
   Only the wave's last open story refuses; with a wave-mate open it notes and goes on. Done + clean tree →
   `ok:true` "already done".
+- **Cycle-owned run state (0.51, upgrade-findings; docs/cycle.md "Run state"):** `.vulyk/state/<slug>/` (local;
+  `cycle.sh` writes its own `*` `.gitignore`), plain `key=value`, written only by `cycle.sh`. Verify record
+  `verify.<story-id>.<verb>` (`verify_rec`, `verify_rec_new`): `head`, `stamp` (`-` none), `files`, `verify`
+  hashes, `next=<k>`, `line=<k> <rc> <hash>` per line run (stamp-red adds the stored-output hash and `outd=`, its
+  `mktemp -d` dir). `verify_resume_start` honours `next` only if every key matches (head = HEAD or only paperwork
+  since) and each skipped line has its entry (close-story: exit 0; stamp-red: dir is real, not a symlink, owned,
+  output hash equal); else line 1, record dropped, a stderr reason. A `verify_resume:` story line is never read
+  or written. Narrow record `narrow.round-<n>` (`story=`, `file=`, `from=`) written by `repair`; `open-round` freezes
+  `narrow=1` only via `narrow_round_holds` (record names round n-1's repair story and `narrow_file` recomputed from
+  its committed records still gives that file); else a full round with a stderr reason. The story's `narrow:` line
+  is information and joins the blocks compared with the approved version (`... differ ...: narrow:`).
+- **`## Commands` cells (0.51):** a cell runs its backticked span, the rest is a note (`lib.sh` cell helpers,
+  scripts.md); `suite` marks a `several`-span full-suite row a red part. Tier 4 risk check (`round_second`) diffs with
+  `--no-renames`, so both sides of a rename count.
 - `open-round` refuses a tree dirty outside paperwork; `build_round` freezes `seats=`/`since=`, builds the court
   only for a blind seat, carries round n-1's GREEN/N/A blind seats (`review` never). Court setup: `build_court`
   runs `$ROOT/.claude/vulyk-setup` if present (`${VULYK_SETUP_TIMEOUT:-300}`); failure → `open-round` exit 2.
@@ -113,7 +127,8 @@ exits 3. Blind seat report: `COUNCIL/MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH
 
 ## Repair (ADR-013 D4)
 `cmd_repair` runs only when `next == repair`. 0.49 narrow: exactly one RED item in one non-test file → the story
-has `narrow: true` and `## Files` = that file, its tests, `docs/defects/*`; the next `open-round` is review-only.
+has `narrow: true` (information only) and `## Files` = that file, its tests, `docs/defects/*`; `repair` also writes
+the `narrow.round-<n+1>` record, and the next `open-round` is review-only only when it re-checks.
 Writes `<slug>-NN-repair-round-<n>.md`: `worker: worker-code`,
 **`model: opus` on purpose** (ADR-015), `wave: <max+1>`, `red: required` kept unless `repair_unmarks`. `##
 Requirements`/`## Findings` = RED asks, anchored review lines, red suite PART lines; `## Files` = union.
@@ -136,4 +151,4 @@ the run; `dispatch:` → `gate(st)` first, then the seats in parallel (Tier 4 re
   entries go in `fallbacks`; `/vulyk-build` journals them.
 - Tests: `cycle|council|telemetry.test.sh --part <topic>` / `--list-parts`; full set once per round (scripts.md).
 
-last-verified: 2026-11-09 (0.50.0 mass-audit-fixes; ADR-001, 013, 015, 023, 025, 029, 032). Over the ~80-line budget.
+last-verified: 2026-11-11 (0.51.0-dev.1 upgrade-findings, handoff-1m; ADR-001, 013, 015, 023, 025, 029, 032). Over the ~80-line budget.
