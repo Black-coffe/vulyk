@@ -1,8 +1,8 @@
 ---
 story: handoff-1m-01
 spec: handoff-1m
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 wave: 1
@@ -60,6 +60,12 @@ memory/map/scripts.md (hooks: handoff)
 `bash scripts/py.sh -m py_compile .claude/hooks/*.py`
 
 ## Implementation notes
+- handoff.py: thresholds_pct 70/80/90; `model_window()` reads any claude-statusbar copy (global + per-session, newest
+  50, up to 30 days) whose model id matches with `[1m]` dropped; `resolve_window` asks it after the remembered window,
+  source `model`, never remembered. Prompt mode speaks from level 1 (Gently, Strongly from 2); the level 1 banner offers
+  `/vulyk-handoff`.
+- scripts/handoff-window-check.py is the card's check; fixtures are main's hook (original) and main's hook with only the
+  thresholds moved (neighbour): both fail it, the fixed hook passes. Live status here: 307k / 1.00M, source model.
 
 ## Findings
 

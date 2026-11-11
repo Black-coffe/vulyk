@@ -323,7 +323,7 @@ check("P10-06 ... and is still cut near the cap", len(long_body) > 5000 and len(
 print("--- P10-07 warning levels reset after compaction")
 home, proj = fresh("p07")
 sid = "s07"
-tp = write_transcript(os.path.join(ROOT, "p07", "tr", sid + ".jsonl"), 150000)  # 75% of 200k: level 2
+tp = write_transcript(os.path.join(ROOT, "p07", "tr", sid + ".jsonl"), 150000)  # 75% of 200k: level 1, which already speaks
 pl = {"session_id": sid, "transcript_path": tp, "cwd": proj}
 first = run("stop", env_for(home, proj), pl)[1]
 again = run("stop", env_for(home, proj), pl)[1]
@@ -335,6 +335,32 @@ after_prompt = run("prompt", env_for(home, proj), pl)[1]
 check("P10-07 after compaction the Stop banner fires again", "systemMessage" in after_stop, repr(after_stop[:120]))
 check("P10-07 after compaction the prompt nudge fires again", "additionalContext" in after_prompt,
       repr(after_prompt[:120]))
+
+
+# --- H1M: a handoff is offered at 70/80/90% of the real window, never earlier ------------------
+# card handoff-offered-too-early: the owner's 1M session was told «76% of 200k» at 151k tokens.
+print("--- H1M handoff offered at 70/80/90% of the real window")
+CHECK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "handoff-window-check.py")
+r = subprocess.run([sys.executable, CHECK, HOOK], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+out = r.stdout.decode("utf-8", "replace").strip()
+check("H1M silent at 151k and 650k of a 1M window, offers /vulyk-handoff at 710k", r.returncode == 0, out[:600])
+home, proj = fresh("h1m")
+tp = os.path.join(ROOT, "h1m", "tr", "s-h1m.jsonl")
+write_transcript(tp, 151000)
+with open(tp, "r", encoding="utf-8") as fh:
+    row = json.loads(fh.readline())
+row["message"]["model"] = "claude-opus-5-5"
+with open(tp, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps(row) + "\n")
+sb = os.path.join(home, ".cache", "claude-statusbar", "last_stdin.json")
+os.makedirs(os.path.dirname(sb))
+with open(sb, "w", encoding="utf-8") as fh:
+    json.dump({"session_id": "other", "model": {"id": "claude-sonnet-5-5"},
+               "context_window": {"context_window_size": 1000000}}, fh)
+old = time.time() - 8 * 3600
+os.utime(sb, (old, old))
+said = run("stop", env_for(home, proj), {"session_id": "s-h1m", "transcript_path": tp, "cwd": proj})[1]
+check("H1M a copy for another model lends no window (stock 200k stays)", "/ 200k" in said, said[:200])
 
 
 shutil.rmtree(os.path.dirname(ROOT), ignore_errors=True)
