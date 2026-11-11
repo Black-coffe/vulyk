@@ -61,8 +61,9 @@ DEFAULTS = {
     # Context window. None = detect it per session (see detect_window); an
     # integer pins it for this project, e.g. 200000 or 1000000.
     "context_limit": None,
-    # escalation levels 1, 2, 3 as a share of the detected window
-    "thresholds_pct": [55, 70, 82],
+    # escalation levels 1, 2, 3 as a share of the detected window: a handoff is
+    # offered at 70%, 80% and 90% (1M: 700k, 800k, 900k) and never earlier
+    "thresholds_pct": [70, 80, 90],
     # legacy absolute token thresholds; when set they win over thresholds_pct
     "thresholds": None,
     # below this, a session is too small to be worth dumping
@@ -183,6 +184,9 @@ LARGE_CONTEXT_WINDOW = 1000000
 STATUSBAR_DIR = os.path.join(HOME, ".cache", "claude-statusbar")
 STATUSBAR_CACHE = os.path.join(STATUSBAR_DIR, "last_stdin.json")
 STATUSBAR_CACHE_MAX_AGE_S = 6 * 3600
+# A window is a property of the model, not of the session: a report for the
+# same model this old still answers for a session that has none of its own.
+MODEL_WINDOW_MAX_AGE_S = 30 * 24 * 3600
 
 
 def positive_int(value):
@@ -260,6 +264,55 @@ def statusbar_window(payload):
     return _cached_window_size(data)
 
 
+def _model_key(model):
+    """A model id without the `[1m]` suffix the transcript never records."""
+    key = str(model or "").strip().lower()
+    if key.endswith("[1m]"):
+        key = key[:-4]
+    return key
+
+
+def model_window(model):
+    """context_window_size Claude Code last reported on this machine for the
+    same model, from any statusLine copy claude-statusbar left (the newest
+    first, up to MODEL_WINDOW_MAX_AGE_S), or None. Used only when this session
+    has no copy of its own, so a 1M session is not measured against 200k.
+    """
+    want = _model_key(model)
+    if not want:
+        return None
+    paths = [STATUSBAR_CACHE]
+    sessions = os.path.join(STATUSBAR_DIR, "sessions")
+    try:
+        for name in os.listdir(sessions):
+            paths.append(os.path.join(sessions, name, "last_stdin.json"))
+    except Exception:
+        pass
+    found = []
+    now = time.time()
+    for path in paths:
+        try:
+            mtime = os.stat(path).st_mtime
+        except Exception:
+            continue
+        if now - mtime <= MODEL_WINDOW_MAX_AGE_S:
+            found.append((mtime, path))
+    for _, path in sorted(found, reverse=True)[:50]:
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except Exception:
+            continue
+        if not isinstance(data, dict) or not isinstance(data.get("model"), dict):
+            continue
+        if _model_key(data["model"].get("id")) != want:
+            continue
+        size = _cached_window_size(data)
+        if size:
+            return size
+    return None
+
+
 def _cached_window_size(data):
     if not isinstance(data, dict):
         return None
@@ -299,7 +352,7 @@ def detect_window(cfg, payload):
     return None, ""
 
 
-def resolve_window(cfg, tokens=0, remembered=None):
+def resolve_window(cfg, tokens=0, remembered=None, model=None):
     """(window, source) actually used for percentages and thresholds.
 
     Fresh detection always wins, so switching models mid-session corrects
@@ -315,6 +368,9 @@ def resolve_window(cfg, tokens=0, remembered=None):
     limit = positive_int(remembered)
     if limit:
         return limit, "remembered"
+    limit = model_window(model)
+    if limit:
+        return limit, "model"
     if tokens > STOCK_CONTEXT_WINDOW * 0.98:
         return LARGE_CONTEXT_WINDOW, "measured"
     return STOCK_CONTEXT_WINDOW, "default"
@@ -903,8 +959,9 @@ def banner(tokens, level, limit, cfg, ts=None):
     pct = (tokens * 100.0 / limit) if limit else 0
     head = "[VULYK] Context %s / %s (%.0f%%)" % (human(tokens), human(limit), pct)
     if level == 1:
-        return ("🟡 %s. Still in the working zone, but quality degrades from here - "
-                "aim to finish the current task rather than start an adjacent one." % head)
+        return ("🟡 %s. A good point to checkpoint: `/vulyk-handoff` saves session state to "
+                ".claude/handoff/, then `/clear` - the next session picks it up. Finish the "
+                "current task rather than start an adjacent one.%s" % (head, cache_note(ts, cfg)))
     if level == 2:
         return ("🟠 %s. Time to wrap up. Run `/vulyk-handoff` to save session state to "
                 ".claude/handoff/, then `/clear` (or exit + restart): the next session "
@@ -918,8 +975,8 @@ def mode_stop(payload, cfg, root):
         emit(None)
     session_id = payload.get("session_id")
     state = load_state(root, session_id)
-    tokens, _, ts = context_tokens(payload.get("transcript_path"))
-    limit, source = resolve_window(cfg, tokens, state.get("window"))
+    tokens, model, ts = context_tokens(payload.get("transcript_path"))
+    limit, source = resolve_window(cfg, tokens, state.get("window"), model)
     remember_window(root, session_id, state, limit, source)
     if source == "default" and statusbar_available():
         # The window is merely guessed while something on this machine can
@@ -941,13 +998,13 @@ def mode_stop(payload, cfg, root):
 def mode_prompt(payload, cfg, root):
     session_id = payload.get("session_id")
     state = load_state(root, session_id)
-    tokens, _, ts = context_tokens(payload.get("transcript_path"))
-    limit, source = resolve_window(cfg, tokens, state.get("window"))
+    tokens, model, ts = context_tokens(payload.get("transcript_path"))
+    limit, source = resolve_window(cfg, tokens, state.get("window"), model)
     remember_window(root, session_id, state, limit, source)
     if source == "default" and statusbar_available():
         emit(None)  # see mode_stop: never nag against a guessed window
     level = level_for(tokens, thresholds_for(cfg, limit))
-    if level < 2:
+    if level < 1:
         emit(None)
     if state.get("prompt_level", 0) >= level:
         emit(None)
@@ -955,7 +1012,7 @@ def mode_prompt(payload, cfg, root):
     save_state(root, session_id, state)
 
     pct = (tokens * 100.0 / limit) if limit else 0
-    urgency = "Strongly" if level >= 3 else "Gently"
+    urgency = "Strongly" if level >= 2 else "Gently"
     ctx = (
         "[VULYK handoff] This session has consumed ~%s context tokens (%.0f%% of %s). "
         "%s suggest that the user checkpoint now: run `/vulyk-handoff` (saves "
@@ -1075,7 +1132,7 @@ def mode_status(payload, cfg, root):
         transcript = newest_transcript_for_cwd(cwd)
     tokens, model, ts = context_tokens(transcript)
     state = load_state(root, payload.get("session_id"))
-    limit, source = resolve_window(cfg, tokens, state.get("window"))
+    limit, source = resolve_window(cfg, tokens, state.get("window"), model)
     thresholds = thresholds_for(cfg, limit)
     age = minutes_since(ts)
     print("root       : %s" % root)

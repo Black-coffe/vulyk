@@ -1,14 +1,15 @@
 ---
 story: handoff-1m-01
 spec: handoff-1m
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
-red_reason:
+red_reason: handoff-window-check: A 151k tokens on a 1M model
+red_verified_at: 2026-11-11T14:12:17Z c42faa96842e797332d9d218de17d24c6c8d7ad3529dbf458af6a08ceb63a1e7
 ---
 
 # Handoff offered at 70/80/90% of the real window
@@ -55,9 +56,36 @@ memory/map/scripts.md (hooks: handoff)
 
 ## Verification
 `bash tests/handoff.test.sh`
-`bash scripts/defects-check.sh handoff-offered-too-early`
+`bash scripts/defects-check.sh`
 `bash scripts/py.sh -m py_compile .claude/hooks/*.py`
 
 ## Implementation notes
+- handoff.py: thresholds_pct 70/80/90; `model_window()` reads any claude-statusbar copy (global + per-session, newest
+  50, up to 30 days) whose model id matches with `[1m]` dropped; `resolve_window` asks it after the remembered window,
+  source `model`, never remembered. Prompt mode speaks from level 1 (Gently, Strongly from 2); the level 1 banner offers
+  `/vulyk-handoff`.
+- scripts/handoff-window-check.py is the card's check; fixtures are main's hook (original) and main's hook with only the
+  thresholds moved (neighbour): both fail it, the fixed hook passes. Live status here: 307k / 1.00M, source model.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/handoff.test.sh
+- exit: 1
+- tests: c42faa96842e797332d9d218de17d24c6c8d7ad3529dbf458af6a08ceb63a1e7 (tests/handoff.test.sh)
+- impl: a027edb48f2565ab7dd6de8dbb6f3273ecd7920200772faa48e5449667899f9d
+- stamped: 2026-11-11T14:12:17Z
+
+```
+          FAIL  H1M silent at 151k and 650k of a 1M window, offers /vulyk-handoff at 710k  -> handoff-window-check: A 151k tokens on a 1M model (only a stale copy from another session): the hook spoke: {"systemMessage": "🟠 [VULYK] Context 151k / 200k (76%). Time to wrap up. Run `/vulyk-handoff` to save session state to .claude/handoff/, then `/clear` (or exit 
+        
+        FAILED 1/82: H1M silent at 151k and 650k of a 1M window, offers /vulyk-handoff at 710k
+--- handoff.sh: an interpreter that exits 1 is passed over (P10-10)
+  ok    handoff.sh status falls through a python3 that exits 1 to the next working Python
+  ok    handoff.sh exits 0 when every interpreter exits 1 (fail-open)
+--- handoff.sh: a preset $VULYK_PY goes first, as in the defect hooks
+  ok    handoff.sh status runs through $VULYK_PY once and never reaches a python on PATH
+--- settings.json: SessionEnd hooks carry an explicit timeout (P10-03)
+  ok    every SessionEnd hook, handoff.sh sessionend among them, has a timeout >= 10 s
+handoff.test.sh: 5 checks, 1 failed
+```
