@@ -4,6 +4,11 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+### Added
+- **Automation recommender, docs only.** `docs/getting-started.md` points to Anthropic's read-only
+  `claude-code-setup` plugin and lists the suggestions to drop in a hive. No skill: a five-hive trial missed
+  the pass rule set in advance (study `docs/specs/automation-recommender/`).
+
 ### Fixed
 - **A1, resume record.** `close-story` and `stamp-red` resume a paused verification only from a record under
   `.vulyk/state/<slug>/`, keyed by HEAD (paperwork-only commits allowed), `--stamp`, `## Files` and

@@ -74,6 +74,25 @@ start the moment the plan is written says so on the grill's fixed last question 
 Weekly: `/vulyk-evolve` (config improvements from your own sessions) and `/vulyk-gc` (memory hygiene).
 Anytime: `/vulyk-status` for the dashboard, `/vulyk-map <path>` after big merges.
 
+## What else to automate here (optional)
+
+VULYK ships no recommender of its own. Anthropic's read-only `claude-code-setup` plugin scans a repo and
+suggests hooks, subagents, skills, plugins and MCP servers: `/plugin install
+claude-code-setup@claude-plugins-official`, then ask "recommend automations for this project" (ask for the
+full list per category, not the top two). Some of its suggestions fight VULYK, so before taking any, drop
+these (study `docs/specs/automation-recommender/`):
+
+- a reviewer or test-writer subagent (the council, `lead-review` and `worker-test` exist);
+- a PostToolUse hook that formats, lints, type-checks or runs tests on every edit (it touches files outside
+  the story and breaks the one-suite-per-round budget);
+- a Memory MCP, or a hook that writes `memory/`, the constitution or other always-loaded text;
+- `commit`, `feature-dev`, `pr-check` or `release-notes` skills, `Bash(git commit:*)` in the allow list,
+  headless `claude -p` in pre-commit (VULYK owns the commit and ship path);
+- anything you already have: a duplicate of `git-guard` or the defect hooks, a plugin or MCP already installed.
+
+What survives goes through `/vulyk-plan` like any other change. In a five-hive trial, performance or cost
+analyst subagents, LSP plugins and project scaffold skills were the suggestions owners kept.
+
 ## Recommended extras
 ```bash
 # Agent Teams (experimental) for collaborative Tier 3-4 work:
