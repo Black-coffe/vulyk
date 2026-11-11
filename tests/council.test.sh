@@ -665,6 +665,65 @@ out="$(council status docs/specs/oldrow1 --json)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | jq -e '.review == "PASS"' >/dev/null 2>&1 \
   && echo "  ok    status reads a pre-review_asks row" || { echo "::error::oldrow1: exit=$ex out=$out"; fail=1; }
 fi # --quick: end of the anchored-BLOCK skip
+
+echo "upgrade-findings-05 (A3): a round is narrow only by the cycle's own record, re-checked when it opens"
+nr_red() { # nr_red <slug> <review-report> - a Tier 3 spec with stories on app/x.py and app/y.py, round 1 judged RED on <review-report>, then repaired
+  mk_open_spec "$1" 2; set_tier "$1" 3
+  done_story "docs/specs/$1/$1-02-x.md" '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# S2\n\n## Files\n- app/x.py\n\n## Verification\n`true`\n' "$1" "$1"
+  done_story "docs/specs/$1/$1-03-y.md" '---\nstory: %s-03\nspec: %s\nstatus: done\nwave: 1\n---\n# S3\n\n## Files\n- app/y.py\n\n## Verification\n`true`\n' "$1" "$1"
+  mkdir -p app && echo "x = 1" > app/x.py && echo "y = 1" > app/y.py
+  git add -A && git commit -qm "$1: two built stories" >/dev/null
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  seat_report opus 1 GG | council record-seat "docs/specs/$1" 1 opus >/dev/null 2>&1
+  printf '%b' "$2" | council record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
+  council judge "docs/specs/$1" --commit >/dev/null 2>&1
+  council repair "docs/specs/$1" --commit >/dev/null 2>&1
+  NR_RS="docs/specs/$1/$1-04-repair-round-1.md"; NR_REC=".vulyk/state/$1/narrow.round-2"
+}
+nr_round2() { # nr_round2 <slug> - the repair story marked done with a code change, round 2 opened; open-round's stderr into NR_ERR
+  done_story "$NR_RS"
+  echo "x = 2" > app/x.py && git add -A && git commit -qm "$1: the repair" >/dev/null
+  NR_ERR="$(council open-round "docs/specs/$1" --commit 2>&1 >/dev/null)"
+}
+fm_field_v() { awk -v k="$2" 'NR == 1 && /^---/ { on = 1; next } on && /^---/ { exit } on && index($0, k ": ") == 1 { print substr($0, length(k) + 3); exit }' "$1" 2>/dev/null; } # fm_field_v <file> <key> - a frontmatter value
+nr_full() { grep -qx 'seats=opus review' "docs/specs/$1/council/round-2/ROUND" && ! grep -q '^narrow=' "docs/specs/$1/council/round-2/ROUND"; } # nr_full <slug>
+nr_red nrf 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n- [ask 2] app/x.py:2 wrong name\n'
+nrsha="$(git log -1 --format=%h -- "$NR_RS")"
+awk '{ print } /^model: opus$/ { print "narrow: true" }' "$NR_RS" > "$NR_RS.new" && mv "$NR_RS.new" "$NR_RS"
+sed_inplace 's/^returned:$/returned: DONE/' "$NR_RS"; echo "x = 3" > app/x.py
+out="$(council close-story "$NR_RS" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF "\"error\":\"story blocks differ from the approved version ($nrsha): narrow:\"" \
+  && echo "  ok    close-story: a narrow: line added to the repair story -> exit 4 naming narrow:" \
+  || { echo "::error::close-story must compare narrow: with the approved version - exit=$ex out=$out"; fail=1; echo "narrow: compared" >> "$FAILS"; }
+sed_inplace 's/^returned: DONE$/returned:/' "$NR_RS"
+nr_round2 nrf
+[ ! -f "$NR_REC" ] && nr_full nrf \
+  && echo "  ok    narrow: true in the story does not shrink the round: two RED items, the tier's full seats, no narrow=1" \
+  || { echo "::error::narrow: true in the story does not shrink the round - ROUND=$(cat docs/specs/nrf/council/round-2/ROUND 2>&1) record=$(cat "$NR_REC" 2>&1)"; fail=1; echo "forged narrow" >> "$FAILS"; }
+nr_red nrg 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n'
+[ "$(fm_field_v "$NR_RS" narrow)" = true ] && grep -qx 'story=nrg-04' "$NR_REC" && grep -qx 'file=app/x.py' "$NR_REC" && grep -qx 'from=1' "$NR_REC" \
+  && echo "  ok    a narrow repair writes the record (story, file, from) and narrow: true in the story" \
+  || { echo "::error::narrow record: $(cat "$NR_REC" 2>&1) story=$(head -12 "$NR_RS" 2>&1)"; fail=1; echo "narrow record" >> "$FAILS"; }
+sed_inplace 's/^returned:$/returned: DONE/' "$NR_RS"; echo "x = 2" > app/x.py
+out="$(council close-story "$NR_RS" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    close-story: an untouched narrow repair story closes" || { echo "::error::untouched repair story: exit=$ex out=$out"; fail=1; echo "untouched closes" >> "$FAILS"; }
+council open-round docs/specs/nrg --commit >/dev/null 2>&1
+grep -qx 'seats=review' docs/specs/nrg/council/round-2/ROUND && grep -qx 'narrow=1' docs/specs/nrg/council/round-2/ROUND \
+  && echo "  ok    the record and the re-check hold: round 2 is seats=review, narrow=1" \
+  || { echo "::error::genuine narrow round: ROUND=$(cat docs/specs/nrg/council/round-2/ROUND 2>&1)"; fail=1; echo "genuine narrow" >> "$FAILS"; }
+nr_red nrm 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n'
+rm -f "$NR_REC"
+nr_round2 nrm
+nr_full nrm && printf '%s' "$NR_ERR" | grep -qF 'narrow record' && printf '%s' "$NR_ERR" | grep -qF 'missing' \
+  && echo "  ok    no record: a full round, stderr says the record is missing" \
+  || { echo "::error::record missing: ROUND=$(cat docs/specs/nrm/council/round-2/ROUND 2>&1) stderr=$NR_ERR"; fail=1; echo "record missing" >> "$FAILS"; }
+nr_red nrr 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n'
+printf -- '- [ask 1] app/y.py:1 off by one too\n' >> docs/specs/nrr/council/round-1/review.md
+git add -A && git commit -qm "nrr: round 1's records now name two files" >/dev/null
+nr_round2 nrr
+[ -f "$NR_REC" ] && nr_full nrr && printf '%s' "$NR_ERR" | grep -qF 're-check' \
+  && echo "  ok    a record whose rule no longer holds on round 1's records: a full round, stderr names the re-check" \
+  || { echo "::error::re-check: ROUND=$(cat docs/specs/nrr/council/round-2/ROUND 2>&1) stderr=$NR_ERR"; fail=1; echo "narrow re-check" >> "$FAILS"; }
 fi # part verbs
 if part judge; then # --- part judge: the ceiling, no-progress and half walks, ABSENT/N/A/REJECTED, journal, briefed, branch, git failures, court setup
 if full; then # --quick skips: the multi-round ceiling, no-progress and half walks
@@ -4118,6 +4177,33 @@ out="$(council reopen docs/specs/r18re "the reviewer died, run it again" --commi
 l18_last "$out" | jq -r .next | expect "reopen after env -> open-round" "open-round"
 council status docs/specs/r18re --json | jq -r .next | expect "status agrees: open-round" "open-round"
 
+echo "upgrade-findings-05 (A4): round_second sees both sides of a rename"
+r5cur="$(git rev-parse --abbrev-ref HEAD)"
+git checkout -q main
+mkdir -p app/auth app/misc && echo "code" > app/auth/login.php && echo "code" > app/misc/plain.php
+git add -A && git commit -qm "fixture: a risk-path file and a neutral one on main" >/dev/null
+r5_mv() { # r5_mv <slug> <from> <to> - a Tier 4 spec on its own branch off main whose only code change is `git mv <from> <to>`; opens round 1
+  git checkout -q -b "br-$1" main
+  mkdir -p "$(dirname "$3")" && git mv "$2" "$3" && git commit -qm "$1: move" >/dev/null
+  mk_open_spec "$1" 2; set_tier "$1" 4
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+}
+r5_mv r5off app/auth/login.php app/misc/login.php
+grep -qx 'second=risk' docs/specs/r5off/council/round-1/ROUND \
+  && echo "  ok    a rename off a risk path is still risk: second=risk" \
+  || { echo "::error::a rename off a risk path is still risk - ROUND=$(cat docs/specs/r5off/council/round-1/ROUND 2>&1)"; fail=1; echo "rename off risk" >> "$FAILS"; }
+r5_mv r5nn app/misc/plain.php app/other/plain.php
+grep -qx 'second=none' docs/specs/r5nn/council/round-1/ROUND \
+  && echo "  ok    a move between two neutral paths stays second=none" \
+  || { echo "::error::neutral move: ROUND=$(cat docs/specs/r5nn/council/round-1/ROUND 2>&1)"; fail=1; echo "neutral move" >> "$FAILS"; }
+r5_mv r5on app/misc/plain.php app/security/plain.php
+grep -qx 'second=risk' docs/specs/r5on/council/round-1/ROUND \
+  && echo "  ok    a move onto a risk path is risk" \
+  || { echo "::error::move onto risk: ROUND=$(cat docs/specs/r5on/council/round-1/ROUND 2>&1)"; fail=1; echo "move onto risk" >> "$FAILS"; }
+git checkout -q main
+git rm -rq app/auth/login.php app/misc/plain.php && git commit -qm "fixture: drop the rename base files" >/dev/null
+git checkout -q "$r5cur"
+
 fi # part roster
 if part roster2; then # --- part roster2: the repair verb and the Asks parser (roster, second half)
 
@@ -4808,6 +4894,35 @@ out="$(council suite docs/specs/sxno 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "none" and .steps == 0' >/dev/null 2>&1 \
   && [ "$(tail -1 docs/specs/sxno/council/round-1/suite.log)" = "SUITE: none" ] \
   && echo "  ok    no row -> SUITE: none, steps 0, done" || { echo "::error::suite none: exit=$ex out=$out"; fail=1; }
+
+echo "upgrade-findings-05 (A3): the narrow round still runs no step; a narrow: true the cycle did not record runs it"
+sx_nr() { # sx_nr <slug> <review-report> - a Tier 2 spec, story 02 on app/x.py, round 1 RED on <review-report>, repaired; prints the repair story
+  mk_open_spec "$1" 2; set_tier "$1" 2
+  done_story "docs/specs/$1/$1-02-x.md" '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# S2\n\n## Files\n- app/x.py\n\n## Verification\n`true`\n' "$1" "$1"
+  mkdir -p app && echo "x = 1" > app/x.py && git add -A && git commit -qm "$1: built" >/dev/null
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  council suite "docs/specs/$1" --commit >/dev/null 2>&1
+  printf '%b' "$2" | council record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
+  council judge "docs/specs/$1" --commit >/dev/null 2>&1
+  council repair "docs/specs/$1" --commit >/dev/null 2>&1
+  printf 'docs/specs/%s/%s-03-repair-round-1.md' "$1" "$1"
+}
+sx_row 'Full suite (round-only)' 'true'
+rs="$(sx_nr sxnr 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n')"
+done_story "$rs"; echo "x = 2" > app/x.py && git add -A && git commit -qm "sxnr: the repair" >/dev/null
+council open-round docs/specs/sxnr --commit >/dev/null 2>&1
+council suite docs/specs/sxnr --commit >/dev/null 2>&1
+[ "$(tail -1 docs/specs/sxnr/council/round-2/suite.log 2>/dev/null)" = "SUITE: none - narrow repair round" ] \
+  && echo "  ok    a recorded narrow round: SUITE: none - narrow repair round" \
+  || { echo "::error::recorded narrow suite: $(cat docs/specs/sxnr/council/round-2/suite.log 2>&1)"; fail=1; echo "narrow suite recorded" >> "$FAILS"; }
+rs="$(sx_nr sxnf 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n- [ask 2] app/x.py:2 wrong name\n')"
+awk '{ print } /^model: opus$/ { print "narrow: true" }' "$rs" > "$rs.new" && mv "$rs.new" "$rs"
+done_story "$rs"; echo "x = 2" > app/x.py && git add -A && git commit -qm "sxnf: the repair" >/dev/null
+council open-round docs/specs/sxnf --commit >/dev/null 2>&1
+council suite docs/specs/sxnf --commit >/dev/null 2>&1
+grep -q '^SUITE: ok' docs/specs/sxnf/council/round-2/suite.log 2>/dev/null && ! grep -q 'narrow repair round' docs/specs/sxnf/council/round-2/suite.log \
+  && echo "  ok    two RED items under a narrow: true the cycle never recorded: suite runs its step" \
+  || { echo "::error::narrow: true in the story does not shrink the round (suite) - log=$(cat docs/specs/sxnf/council/round-2/suite.log 2>&1)"; fail=1; echo "forged narrow suite" >> "$FAILS"; }
 
 fi # part suite
 

@@ -489,7 +489,8 @@ round_second() { # round_second <spec> <n> <head> <since> -> risk | none: whethe
     [ -n "$db" ] && base="$(git merge-base "$db" "$3" 2>/dev/null)"
   fi
   [ -n "$base" ] || { printf 'risk'; return; }
-  names="$(git diff --name-only "$base" "$3" 2>/dev/null)" || { printf 'risk'; return; }
+  # upgrade-findings-05 (A4): --no-renames, so a moved file shows both its old and its new path
+  names="$(git diff --no-renames --name-only "$base" "$3" 2>/dev/null)" || { printf 'risk'; return; }
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     risk_path "$p" && { printf 'risk'; return; }
@@ -2418,7 +2419,7 @@ EOF
 }
 
 story_blocks_guard() { # story_blocks_guard <story-file> <verb> - ADR-032 D1: the gate blocks
-  # (`## Verification` with `repeat:`, `## Files`, `red:`) of the working copy must equal the approved
+  # (`## Verification` with `repeat:`, `## Files`, `red:`, `narrow:`) of the working copy must equal the approved
   # version's, each read through its own parser; any difference is exit 4. No approved version is
   # exit 2 at Tier 3-4, a stderr note at Tier 1-2 or with no tier.
   local story="$1" verb="$2" sha rel base diffs="" msg
@@ -2441,6 +2442,7 @@ story_blocks_guard() { # story_blocks_guard <story-file> <verb> - ADR-032 D1: th
   [ "$(verify_of "$base")" = "$(verify_of "$story" | tr -d '\r')" ] || diffs="## Verification"
   [ "$(files_of "$base")" = "$(files_of "$story" | tr -d '\r')" ] || diffs="${diffs:+$diffs, }## Files"
   [ "$(fm_red "$base")" = "$(fm_red "$story" | tr -d '\r')" ] || diffs="${diffs:+$diffs, }red:"
+  [ "$(fm_field "$base" narrow)" = "$(fm_field "$story" narrow | tr -d '\r')" ] || diffs="${diffs:+$diffs, }narrow:"
   rm -f "$base"
   [ -n "$diffs" ] || return 0
   msg="story blocks differ from the approved version ($(git rev-parse --short "$sha")): $diffs"
@@ -3248,12 +3250,12 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   local tier required narrow="" second=""
   tier="$(tier_of "$spec")"
   required="$(required_seats_for_tier "$tier")"
-  # ab-run-fixes C5: the round after a narrow repair story (`narrow: true`, cut for round n-1) is
-  # review-only: seats=review, narrow=1 - no blind seat, no court, no second reviewer, and `suite`
-  # runs no step. Every other round is a full one.
-  if [ "$n" -gt 1 ]; then
-    local nrs; nrs="$(repair_story_of_round "$spec" "$((n-1))")"
-    [ -n "$nrs" ] && [ "$(fm_field "$nrs" narrow)" = true ] && { narrow=1; required="review"; }
+  # ab-run-fixes C5: the round after a narrow repair is review-only: seats=review, narrow=1 - no blind
+  # seat, no court, no second reviewer, and `suite` runs no step. upgrade-findings-05 (A3): narrow only
+  # by the record `repair` wrote, re-checked here (narrow_round_holds); the story's `narrow:` line is
+  # never read. Every other round is a full one.
+  if [ "$n" -gt 1 ] && narrow_round_holds "$spec" "$n"; then
+    narrow=1; required="review"
   fi
 
   # No blind seat, no court (D3): the reviewer never enters one, so a review-only round would
@@ -4095,6 +4097,103 @@ story_number() { # story_number <story-file> <slug> -> the NN of its `story: <sl
   [ "$a" -gt "$b" ] && printf '%s' "$a" || printf '%s' "$b"
 }
 
+repair_asks() { # repair_asks <round-dir> <row> -> the RED asks of a round, sorted: the row's red +
+  # review_asks, then any other RED ask a seat file carries (an unevidenced RED is in the seat file,
+  # not in the row's red)
+  local rd="$1" row="$2" seat x asks=""
+  for x in $(json_num_array "$row" red) $(json_num_array "$row" review_asks); do
+    case " $asks " in *" $x "*) ;; *) asks="$asks $x" ;; esac
+  done
+  for seat in haiku sonnet opus; do
+    [ -f "$rd/$seat.md" ] || continue
+    for x in $(grep -E '^ASK [0-9]+:[[:space:]]*RED' "$rd/$seat.md" | sed -n 's/^ASK \([0-9][0-9]*\):.*/\1/p'); do
+      case " $asks " in *" $x "*) ;; *) asks="$asks $x" ;; esac
+    done
+  done
+  sort_num_list "$asks"
+}
+
+repair_findings() { # repair_findings <spec> <round-dir> -> the round's findings, one per line, in order:
+  # seat RED asks; anchored review findings; red gate parts; owner REJECTED.
+  # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
+  # ab-run-fixes C2: a second reviewer's anchored findings join the one repair story (recall)
+  # gate-split-04: the gate of the round - each red PART line of a finished suite.log is a finding.
+  # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
+  # finding (judge's override) - its note is then the only condition the repair can meet.
+  local spec="$1" rd="$2" seat ropened hlast hts slug
+  slug="$(slug_of "$spec")"
+  for seat in haiku sonnet opus; do
+    [ -f "$rd/$seat.md" ] && grep -E '^ASK [0-9]+:[[:space:]]*RED' "$rd/$seat.md"
+  done
+  for seat in review review2; do
+    [ -f "$rd/$seat.md" ] && review_blocking_lines "$rd/$seat.md" \
+      | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
+  done
+  [ -n "$(suite_log_line "$rd")" ] && suite_red_parts "$rd/suite.log" | sed 's/^/- [regression] /'
+  ropened="$(round_field "$rd" opened)"
+  hlast="$(grep -F "\"spec\":\"$slug\"" memory/stats/human.jsonl 2>/dev/null | tail -1)"
+  if [ -n "$hlast" ] && [ "$(json_field "$hlast" verdict)" = REJECTED ]; then
+    hts="$(json_field "$hlast" ts)"
+    if [ -n "$hts" ] && [ -n "$ropened" ] && { [ "$hts" \> "$ropened" ] || [ "$hts" = "$ropened" ]; }; then
+      printf -- '- owner REJECTED at %s: %s\n' "$hts" "$(printf '%s' "$hlast" | sed -n 's/.*"note":"\(.*\)"}[[:space:]]*$/\1/p')"
+    fi
+  fi
+  return 0
+}
+
+narrow_file() { # narrow_file <asks> <findings> <files> -> the one file a narrow repair reaches, or nothing.
+  # ab-run-fixes C5: narrow - exactly one RED item (one ask, or one [regression] / gate / owner
+  # finding) whose reach (the paths its findings name, else the ## Files union) is one non-test file.
+  # The one rule `repair` decides by and `open-round` re-checks by (upgrade-findings-05, A3).
+  local reach items
+  items=$(( $(printf '%s\n' $1 | grep -c .) + $(printf '%s\n' "$2" | grep -cE '\[regression\]|^- owner REJECTED') ))
+  [ "$items" -eq 1 ] || return 0
+  reach="$(finding_paths "$2" | awk 'NF && !seen[$0]++')"
+  [ -n "$reach" ] || reach="$(printf '%s' "$3" | awk 'NF && !seen[$0]++')"
+  [ "$(printf '%s\n' "$reach" | grep -c .)" -eq 1 ] || return 0
+  case "$reach" in *[*?[]*|*/) return 0 ;; esac
+  is_test_path "$reach" || printf '%s' "$reach"
+  return 0
+}
+
+narrow_rec() { # narrow_rec <spec> <n> -> the narrow record's path for round n (upgrade-findings-05, A3):
+  # .vulyk/state/<slug>/narrow.round-<n>, written by `repair` for round n-1, keys story=, file=, from=
+  printf '%s/.vulyk/state/%s/narrow.round-%s' "$ROOT" "$(slug_of "$1")" "$2"
+}
+
+narrow_round_holds() { # narrow_round_holds <spec> <n> -> 0 iff round n opens narrow: its record names
+  # round n-1's repair story and narrow_file, recomputed from round n-1's records, still names its file.
+  # Otherwise 1, with one stderr line saying which (only when round n-1 has a repair story).
+  local spec="$1" n="$2" rs rec id rid rfile slug files="" sf now
+  rs="$(repair_story_of_round "$spec" "$((n-1))")"
+  [ -n "$rs" ] || return 1
+  slug="$(slug_of "$spec")"; rec="$(narrow_rec "$spec" "$n")"
+  id="$(fm_field "$rs" story)"; [ -n "$id" ] || id="$(basename "$rs" .md)"
+  if [ ! -f "$rec" ]; then
+    echo "cycle: open-round - $slug round $n: the narrow record ${rec#"$ROOT"/} is missing: a full round" >&2
+    return 1
+  fi
+  rid="$(verify_rec_get "$rec" story)"; rfile="$(verify_rec_get "$rec" file)"
+  if [ "$rid" != "$id" ]; then
+    echo "cycle: open-round - $slug round $n: the narrow record names story '$rid', not $id: a full round" >&2
+    return 1
+  fi
+  for sf in "$spec"/*.md; do
+    is_story_file "$sf" && [ "$sf" != "$rs" ] || continue
+    [ "$(fm_field "$sf" status)" = done ] || continue
+    files="$files$(files_of "$sf")
+"
+  done
+  local rd="$spec/council/round-$((n-1))" asks
+  asks="$(repair_asks "$rd" "$(round_row "$slug" "$((n-1))")")"
+  now="$(narrow_file "$asks" "$(repair_findings "$spec" "$rd")" "$files")"
+  if [ -z "$now" ] || [ "$now" != "$rfile" ]; then
+    echo "cycle: open-round - $slug round $n: the narrow re-check on round $((n-1))'s records does not hold (${now:-not one item in one non-test file}, record: $rfile): a full round" >&2
+    return 1
+  fi
+  return 0
+}
+
 cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   local SPEC="$1" DOCOMMIT="$2" STAMP="${3:-}"
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
@@ -4135,19 +4234,8 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
     exit 2
   }
 
-  local RD="$SPEC/council/round-$N" seat x asks=""
-  # the asks: the row's red + review_asks, then any other RED ask a seat file carries (an
-  # unevidenced RED is in the seat file, not in the row's red)
-  for x in $(json_num_array "$NEWEST" red) $(json_num_array "$NEWEST" review_asks); do
-    case " $asks " in *" $x "*) ;; *) asks="$asks $x" ;; esac
-  done
-  for seat in haiku sonnet opus; do
-    [ -f "$RD/$seat.md" ] || continue
-    for x in $(grep -E '^ASK [0-9]+:[[:space:]]*RED' "$RD/$seat.md" | sed -n 's/^ASK \([0-9][0-9]*\):.*/\1/p'); do
-      case " $asks " in *" $x "*) ;; *) asks="$asks $x" ;; esac
-    done
-  done
-  asks="$(sort_num_list "$asks")"
+  local RD="$SPEC/council/round-$N" x asks
+  asks="$(repair_asks "$RD" "$NEWEST")"
 
   local maxn=0 maxw=0 sf n w files="" verifs="" marked=0 mfiles=""
   for sf in "$SPEC"/*.md; do
@@ -4172,48 +4260,16 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   # `model: opus` on purpose (ADR-015): first attempts build on Sonnet, and a repair follows a RED
   # round that judged that work wrong, so it climbs a rung, as a missed story's retry climbs to the gate.
 
-  local findings
-  # findings, in order: seat RED asks; anchored review findings; red gate parts; owner REJECTED
-  # (comments stay out of the $( ) body: the portability gate, and likely bash 3.2, read them as code).
-  # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
-  # ab-run-fixes C2: a second reviewer's anchored findings join the one repair story (recall)
-  # gate-split-04: the gate of the round - each red PART line of a finished suite.log is a finding.
-  # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
-  # finding (judge's override) - its note is then the only condition the repair can meet.
-  findings="$(
-    for seat in haiku sonnet opus; do
-      [ -f "$RD/$seat.md" ] && grep -E '^ASK [0-9]+:[[:space:]]*RED' "$RD/$seat.md"
-    done
-    for seat in review review2; do
-      [ -f "$RD/$seat.md" ] && review_blocking_lines "$RD/$seat.md" \
-        | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
-    done
-    [ -n "$(suite_log_line "$RD")" ] && suite_red_parts "$RD/suite.log" | sed 's/^/- [regression] /'
-    ropened="$(round_field "$RD" opened)"
-    hlast="$(grep -F "\"spec\":\"$SLUG\"" memory/stats/human.jsonl 2>/dev/null | tail -1)"
-    if [ -n "$hlast" ] && [ "$(json_field "$hlast" verdict)" = REJECTED ]; then
-      hts="$(json_field "$hlast" ts)"
-      if [ -n "$hts" ] && [ -n "$ropened" ] && { [ "$hts" \> "$ropened" ] || [ "$hts" = "$ropened" ]; }; then
-        printf -- '- owner REJECTED at %s: %s\n' "$hts" "$(printf '%s' "$hlast" | sed -n 's/.*"note":"\(.*\)"}[[:space:]]*$/\1/p')"
-      fi
-    fi
-  )"
+  local findings; findings="$(repair_findings "$SPEC" "$RD")"
   # red-receipt (0.40.1): a repair drops the mark only when every finding names a path of its
   # ## Files and none names a marked story's; a finding that names no file keeps it (fail closed).
   [ "$marked" = 1 ] && repair_unmarks "$findings" "$files" "$mfiles" && marked=0
 
-  # ab-run-fixes C5: narrow - exactly one RED item (one ask, or one [regression] / gate / owner
-  # finding) whose reach (the paths its findings name, else the ## Files union) is one non-test file.
-  # Its story names that file, its exact tests and the defect cards; the next round is review-only.
-  local NARROW="" nfile="" reach items
-  items=$(( $(printf '%s\n' $asks | grep -c .) + $(printf '%s\n' "$findings" | grep -cE '\[regression\]|^- owner REJECTED') ))
-  if [ "$items" -eq 1 ]; then
-    reach="$(finding_paths "$findings" | awk 'NF && !seen[$0]++')"
-    [ -n "$reach" ] || reach="$(printf '%s' "$files" | awk 'NF && !seen[$0]++')"
-    if [ "$(printf '%s\n' "$reach" | grep -c .)" -eq 1 ]; then
-      case "$reach" in *[*?[]*|*/) ;; *) is_test_path "$reach" || { NARROW=1; nfile="$reach"; } ;; esac
-    fi
-  fi
+  # ab-run-fixes C5: narrow (narrow_file). Its story names that file, its exact tests and the defect
+  # cards; the record (upgrade-findings-05, A3) is what makes the next round review-only.
+  local NARROW="" nfile
+  nfile="$(narrow_file "$asks" "$findings" "$files")"
+  [ -n "$nfile" ] && NARROW=1
   local nfiles="" nverifs=""
   if [ -n "$NARROW" ]; then
     nfiles="$nfile
@@ -4275,6 +4331,12 @@ EOF
       repair_verification "$verifs" "$findings" "$files" | awk 'NF { print "`" $0 "`" }'
     fi
   } > "$STORY"
+  # upgrade-findings-05 (A3): the round after is narrow only by this record, never by the story's line
+  if [ -n "$NARROW" ]; then
+    local nrec ndir; nrec="$(narrow_rec "$SPEC" "$((N+1))")"; ndir="$(dirname "$nrec")"
+    mkdir -p "$ndir" && { [ -f "$(dirname "$ndir")/.gitignore" ] || printf '*\n' > "$(dirname "$ndir")/.gitignore"; }
+    printf 'story=%s-%s\nfile=%s\nfrom=%s\n' "$SLUG" "$NN" "$nfile" "$N" > "$nrec"
+  fi
 
   bash "$HERE/journal.sh" "$SPEC" "03-building" "repair round $N: $(basename "$STORY")" "build:$WAVE" >/dev/null
   [ "$DOCOMMIT" = "1" ] && commit_paperwork repair "vulyk($SLUG): repair round $N" "$STORY" "$SPEC/journal.md"
