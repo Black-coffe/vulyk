@@ -9,3 +9,6 @@
 {"ts":"2026-10-26T21:30:48Z","kind":"run","branch":"vulyk/evolve-2026-10-26","commit":"1468c921221ec727d68596f52b1bb64b556675dd","proposals":1}
 {"ts":"2026-11-03T15:24:28Z","kind":"verdict","branch":"vulyk/evolve-2026-10-26","verdict":"accepted","reason":""}
 {"ts":"2026-11-03T15:25:48Z","kind":"run","branch":"","commit":"","proposals":0}
+{"ts":"2026-11-11T21:38:47Z","kind":"proposal","branch":"vulyk/evolve-2026-11-11","component":"hook","file":".claude/hooks/handoff.py","hypothesis":"context_high stops firing on 1M sessions far below 70% of their real window; a 200k session still fires","evidence":"n=11 context_high rows 2026-11-05..11-09, 156k-336k tokens, all Opus 1M sessions with no window in handoff state; replay of 4 of them resolves 1M; new check red on old code, green on new","bytes_delta":1036}
+{"ts":"2026-11-11T21:38:47Z","kind":"proposal","branch":"vulyk/evolve-2026-11-11","component":"defect","file":"docs/defects/handoff-offered-too-early.md","hypothesis":"an edit to scripts/telemetry.sh gets the handoff-offered-too-early card injected, so the window measure does not drift apart again","evidence":"n=1 escape: handoff-1m fixed handoff.py on 2026-11-11, telemetry.sh kept 70% of 200k; card paths named only handoff.py","bytes_delta":24}
+{"ts":"2026-11-11T21:38:48Z","kind":"run","branch":"vulyk/evolve-2026-11-11","commit":"76a61e7c","proposals":2}
