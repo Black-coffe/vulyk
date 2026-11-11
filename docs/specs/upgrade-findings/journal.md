@@ -6,3 +6,4 @@
 - 2026-11-10T22:08:03Z · 03-building · checkpoint after 99 min at build:3 · next: relaunching with a fresh stamp
 - 2026-11-11T08:55:37Z · 03-building · driver stopped: subscription refused agents (billing) during story 05 · next: released the dead claim, relaunching with a fresh stamp
 - 2026-11-11T09:17:54Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/upgrade-findings/round-1 · next: dispatch:opus,review
+- 2026-11-11T09:57:53Z · 04-council:RED · round 1 verdict RED at d2dfc17c pack df396030b3bb · next: repair

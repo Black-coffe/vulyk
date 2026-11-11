@@ -196,5 +196,5 @@ is missing or unparsable.
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path: Tier 1 "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"); Tier 2-4 only with `cycle.sh briefed <spec> --go`, "via grill (--go), <owner>, <date>". Alternative to **Approved:** above.>
 **Branch:** vulyk/upgrade-findings
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
-**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
+**Council:** RED round 1, 2026-11-11, at d2dfc17c, pack df396030b3bb - red: 2,5
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
