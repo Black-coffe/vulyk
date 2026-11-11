@@ -7,3 +7,4 @@
 - 2026-11-11T08:55:37Z · 03-building · driver stopped: subscription refused agents (billing) during story 05 · next: released the dead claim, relaunching with a fresh stamp
 - 2026-11-11T09:17:54Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/upgrade-findings/round-1 · next: dispatch:opus,review
 - 2026-11-11T09:57:53Z · 04-council:RED · round 1 verdict RED at d2dfc17c pack df396030b3bb · next: repair
+- 2026-11-11T09:58:00Z · 03-building · repair round 1: upgrade-findings-07-repair-round-1.md · next: build:4
