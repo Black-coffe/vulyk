@@ -317,3 +317,4 @@
 {"v":1,"ts":"2026-11-09T20:45:28Z","code":"context_high","value":231962,"threshold":140000,"vulyk":"0.50.0","tier":0,"model":"opus","agent":"","spec":"","story":"","ref":"session:789e2f04-95c3-481c-af20-815f07dd0203.jsonl"}
 {"v":1,"ts":"2026-11-11T12:14:11Z","code":"fable_limit_fallback","value":1,"threshold":0,"vulyk":"0.50.3","tier":0,"model":"fable","agent":"council-opus","spec":"upgrade-findings","story":"","ref":"upgrade-findings:round-2/opus:council-opus"}
 {"v":1,"ts":"2026-11-11T12:14:12Z","code":"fable_limit_fallback","value":1,"threshold":0,"vulyk":"0.50.3","tier":0,"model":"fable","agent":"lead-review","spec":"upgrade-findings","story":"","ref":"upgrade-findings:round-2/review:lead-review"}
+{"v":1,"ts":"2026-11-11T14:40:13Z","code":"fable_limit_fallback","value":1,"threshold":0,"vulyk":"0.50.3","tier":0,"model":"fable","agent":"lead-review","spec":"handoff-1m","story":"","ref":"handoff-1m:round-1/review:lead-review"}
