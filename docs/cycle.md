@@ -59,7 +59,8 @@ At Tier 4 a second reviewer, `review2` (one `lead-review` on `second_model`), jo
 is a reason for it (C2). `open-round` freezes `second=risk|none` into `ROUND`: `risk` when a path in
 the range the reviewer reads (round 1: the branch against its base; later rounds: `since..head`)
 is in the fixed risk set; a range git cannot name counts as `risk`. The risk set (C3), matched
-case-insensitively on the diff's `--name-only` paths, with no Profile row or env to change it:
+case-insensitively on the diff's `--name-only --no-renames` paths, so a moved file counts on both
+sides (its old path and its new one), with no Profile row or env to change it:
 - security: a path segment or file stem equal to, or starting with, `auth`, `security`, `secret`,
   `crypt`, `permission`, `password` or `credential`, or a file named `.env` or `.env.*`;
 - data: a segment `migrations` or `migrate`, a file stem `schema`, or a `*.sql` file.
@@ -81,8 +82,15 @@ A RED round with exactly one RED item (one ask, or one `[regression]`, gate or o
 reach - the paths its findings name, else the `## Files` union - is one non-test file is **narrow**
 (C5): its repair story says `narrow: true`, names that file, its `exact` tests (`symbol-map.sh
 --exact`) and `docs/defects/*`, takes the `## Verification` of the stories that named the file, and
-asks for the class card in the same commit; a worker still builds it on `opus`. The next round
-freezes `seats=review` and `narrow=1`: no blind seat, no second reviewer, and `cycle.sh suite`
+asks for the class card in the same commit; a worker still builds it on `opus`. `repair` also writes
+the narrow record `.vulyk/state/<slug>/narrow.round-<n+1>` (`story=`, `file=`, `from=`), and that
+record, not the story's frontmatter, is where the flag comes from. `open-round` recomputes the narrow
+rule from round n's committed records by the same function and freezes `seats=review` and
+`narrow=1` only when the record names the newest repair story and the rule still holds; a missing
+record (a fresh clone has none), a record naming another story, or a rule that no longer holds is a
+full round, with one stderr line saying which. `close-story` compares the repair story's `narrow:`
+line with its approved version beside `## Verification`, `## Files` and `red:`. A narrow round has
+no blind seat, no second reviewer, and `cycle.sh suite`
 writes `SUITE: none - narrow repair round` without running a step. It counts against the ceiling
 like any RED round. Two files or two items is a full round, as before.
 A round with an evidenced RED on
@@ -122,6 +130,18 @@ something else — same rule as every gate in [pipeline.md](pipeline.md).
 
 `scripts/ship-check.sh docs/specs/<slug>` reads all of it at once and says which stage is
 open. It is what `/vulyk-ship` runs first, and it is free.
+
+**Run state in `.vulyk/state/`.** When `close-story` or `stamp-red` pauses at exit 7, the point
+to resume from is kept in a record under `.vulyk/state/<slug>/` (`verify.<story-id>.<verb>`),
+not in the story file. Only `cycle.sh` writes it. It holds the HEAD, the `--stamp`, the
+`## Files` and `## Verification` hashes, and the exit of each line run since line 1. For
+`stamp-red` it also names the results directory, which `mktemp -d` made. A rerun resumes only
+when every key still matches: paperwork-only commits since the pause are allowed. `close-story`
+also needs a recorded exit 0 for every line it skips. Otherwise the run starts again at line 1
+and stderr says why. The verb that finishes removes its record and results directory. The
+directory is local to the checkout and ignored: it writes its own `.gitignore`. A missing or
+unreadable record always means the strict path, line 1. A `verify_resume:` line in a story,
+from an older release, is not read.
 
 ## Tiers and the cycle
 

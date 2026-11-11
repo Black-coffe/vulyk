@@ -1,14 +1,15 @@
 ---
 story: upgrade-findings-05
 spec: upgrade-findings
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 3
 blocked_by: [upgrade-findings-03]
 red: required
 red_reason: narrow: true in the story does not shrink the round
+red_verified_at: 2026-11-11T08:50:18Z b2f1dcaad37d9a5b661690cb5a69c8e493f9da42b9b19a5c22dea633e4add2cc
 ---
 
 # A round is narrow only by the cycle's own record; a rename cannot hide a risk path
@@ -80,5 +81,34 @@ Story trust from git), Staleness; `docs/cycle.md` → the council paragraphs (C2
 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each -->
+- scripts/cycle.sh: repair_asks, repair_findings and narrow_file lifted out of cmd_repair, so repair and open-round decide narrow by one function.
+- scripts/cycle.sh: repair writes .vulyk/state/<slug>/narrow.round-<n+1> (story=, file=, from=); build_round asks narrow_round_holds and never reads `narrow:`.
+- scripts/cycle.sh: narrow_round_holds recomputes from round n-1's row (round_row), seat files and done stories minus the repair story itself; stderr only when round n-1 has a repair story.
+- scripts/cycle.sh: story_blocks_guard compares `narrow:`; round_second lists with --no-renames.
+- docs/cycle.md: narrow paragraph names the record as the flag's source and the full round on a clone without it; the risk set counts a rename on both sides.
+- tests/council.test.sh: written before the red receipt (previous attempt); unchanged since.
+CHANGELOG: A3 - a council round runs narrow only from the record `cycle.sh repair` writes in .vulyk/state, re-checked when the round opens; a `narrow: true` written into a repair story no longer shrinks the round, and close-story refuses a changed `narrow:` line.
+CHANGELOG: A4 - the Tier 4 second-reviewer check sees both sides of a rename: moving a risk-path file to a neutral path still calls `review2`.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/council.test.sh --part verbs
+- exit: 1
+- tests: b2f1dcaad37d9a5b661690cb5a69c8e493f9da42b9b19a5c22dea633e4add2cc (tests/council.test.sh)
+- impl: 2071307de2b7d373bcf6b48d4bc576a71b9fa434e091c117663b217abc12675c
+- stamped: 2026-11-11T08:50:18Z
+
+```
+::error::narrow: true in the story does not shrink the round - ROUND=head=8f08f94
+narrow=1 stderr=
+::error::re-check: ROUND=head=0c54c6b
+pack=6a467b5c2928
+opened=2026-11-10T22:25:43Z
+court=
+ceiling=3
+tier=3
+seats=review
+since=2513b63
+narrow=1 stderr=
+```

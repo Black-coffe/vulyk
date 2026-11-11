@@ -2,6 +2,28 @@
 
 All notable changes to VULYK are documented here. `/vulyk-evolve` changesets append entries automatically (one line per change, with rationale).
 
+## [Unreleased]
+
+### Fixed
+- **A1, resume record.** `close-story` and `stamp-red` resume a paused verification only from a record under
+  `.vulyk/state/<slug>/`, keyed by HEAD (paperwork-only commits allowed), `--stamp`, `## Files` and
+  `## Verification`, with a recorded exit 0 for every close-story line it skips. A `verify_resume:` line in the
+  story is no longer read (#5).
+- **A2, stamp-red results.** A paused `stamp-red` keeps its results in a `mktemp -d` directory named in that
+  record. A resumed call reuses it only when it is a real directory the caller owns and each stored result (exit,
+  command and output) matches what the record wrote for it; the predictable `vulyk-sr-<cksum>` path is gone (#5).
+- **A3, narrow rounds.** A council round runs narrow only from the record `cycle.sh repair` writes in
+  `.vulyk/state`, checked again when the round opens. A `narrow: true` line written into a repair story no longer
+  shrinks the round, and `close-story` refuses a changed `narrow:` line (#5).
+- **A4, renames.** The Tier 4 second-reviewer check sees both sides of a rename: moving a risk-path file to a
+  neutral path still calls `review2` (#5).
+- **install.sh --upgrade** no longer stops without a message on a council round directory that has no `ROUND`
+  file.
+- **Handoff offered at 70/80/90% of the real window.** The handoff hook offers `/vulyk-handoff` at 70%, 80% and 90%
+  of the session's context window (a 1M window: 700k, 800k, 900k) and never earlier; a session with no statusLine copy
+  of its own takes the window Claude Code last reported on this machine for the same model, instead of the stock 200k
+  (card `handoff-offered-too-early`).
+
 ## [0.50.3] - 2026-11-10
 
 A small installer fix and one lesson from Anthropic's "Prompting Claude Fable 5.2" guide (spec `gitignore-glob`,

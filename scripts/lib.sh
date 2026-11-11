@@ -152,22 +152,79 @@ constitution_file() { # constitution_file <root> -> <root>/CLAUDE.vulyk.md if it
   if [ -f "$1/CLAUDE.vulyk.md" ]; then printf '%s' "$1/CLAUDE.vulyk.md"; else printf '%s' "$1/CLAUDE.md"; fi
 }
 
-command_cells() { # command_cells <constitution> -> each command a `## Commands` row offers, one per
-  # line, `\|` unescaped (R11/C-4): the whole backticked cell, and each backticked span of it on its
-  # own, so a cell holding two commands (`a` or `b`) offers both. Only that table is read.
+# The one rule for turning a `## Commands` cell into a command (upgrade-findings B1), as awk functions
+# every reader shares: a cell's shape is `none` (no backticked span), `one` (one span alone), `noted`
+# (one span plus other text, which is a note: never run, never matched) or `several` (two or more
+# spans). The command of `none` is the cell with backticks stripped and trimmed (as before), of `one`
+# and `noted` the span's inside, trimmed; `several` has no single command.
+cell_awk() { # cell_awk -> the awk source of cell_spans/cell_shape/cell_cmd, to prefix an awk program
+  printf '%s' '
+    function cell_trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+    function cell_spans(c,   n, s) { # fills SPAN[1..n], returns n
+      n = 0; s = c
+      while (match(s, /`[^`]*`/)) { n++; SPAN[n] = cell_trim(substr(s, RSTART + 1, RLENGTH - 2)); s = substr(s, RSTART + RLENGTH) }
+      return n
+    }
+    function cell_shape(c,   n, r) {
+      n = cell_spans(c)
+      if (n == 0) return "none"
+      if (n > 1) return "several"
+      r = c; sub(/`[^`]*`/, "", r)
+      return (cell_trim(r) == "") ? "one" : "noted"
+    }
+    function cell_cmd(c,   n, s) {
+      n = cell_spans(c)
+      if (n > 1) return ""
+      if (n == 1) return SPAN[1]
+      s = c; gsub(/`/, "", s); return cell_trim(s)
+    }
+  '
+}
+
+command_cell_shape() { # command_cell_shape <cell> -> none | one | noted | several
+  CELL="$1" awk "$(cell_awk)"' BEGIN { print cell_shape(ENVIRON["CELL"]) }'
+}
+
+command_cell_cmd() { # command_cell_cmd <cell> -> the command the cell runs; exit 2, nothing printed, for `several`
+  [ "$(command_cell_shape "$1")" = several ] && return 2
+  CELL="$1" awk "$(cell_awk)"' BEGIN { print cell_cmd(ENVIRON["CELL"]) }'
+}
+
+commands_rows() { # commands_rows <constitution> -> one line per `## Commands` table row:
+  # "<purpose><TAB><shape><TAB><span count><TAB><command or each span, TAB-separated>". The Command cell is
+  # the second cell exactly (an escaped \| stays inside it and is unescaped), as full_suite_row reads it.
   [ -f "$1" ] || return 0
-  awk '
+  awk "$(cell_awk)"'
     /^## Commands[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/            { if (inblock) exit }
-    inblock                     { print }
-  ' "$1" \
-    | sed -n 's/^|[^|]*|[[:space:]]*\(`.*`\)[[:space:]]*|[[:space:]]*$/\1/p' \
-    | while IFS= read -r cell; do
-        whole="${cell#\`}"; whole="${whole%\`}"
-        printf '%s\n' "$whole"
-        case "$whole" in *'`'*) printf '%s\n' "$cell" | grep -o '`[^`]*`' | sed 's/^`//; s/`$//' ;; esac
-      done \
-    | sed 's/\\|/|/g'
+    inblock && /^\|/ {
+      line = $0; sub(/\r$/, "", line); gsub(/\\[|]/, "\001", line)
+      n = split(line, cell, "|"); if (n < 2) next
+      po = cell[2]; gsub(/\001/, "|", po); po = cell_trim(po)
+      c = (n >= 3) ? cell[3] : ""; gsub(/\001/, "|", c); c = cell_trim(c)
+      sh = cell_shape(c); k = cell_spans(c)
+      out = po "\t" sh "\t" k
+      if (sh == "several") { for (i = 1; i <= k; i++) out = out "\t" SPAN[i] }
+      else out = out "\t" cell_cmd(c)
+      print out
+    }
+  ' "$1"
+}
+
+commands_lint() { # commands_lint <constitution> -> one line per `## Commands` row whose cell is `noted` or
+  # `several` (B1 wording), nothing for the rest or a missing / empty table; always exit 0
+  commands_rows "$1" | awk -F '\t' '
+    $2 == "noted"   { printf "commands: row '\''%s'\'': text outside the backticked command is read as a note\n", $1 }
+    $2 == "several" { printf "commands: row '\''%s'\'': %s backticked commands in one cell (the round gate refuses it as a full-suite row; split it)\n", $1, $3 }
+  '
+  return 0
+}
+
+command_cells() { # command_cells <constitution> -> each command a `## Commands` row offers, one per
+  # line, `\|` unescaped (R11/C-4): a `one` or `noted` cell's span (never its note), and each span of a
+  # `several` cell on its own, so a cell holding two commands (`a` or `b`) offers both. A cell with no
+  # span offers nothing. Only that table is read.
+  commands_rows "$1" | awk -F '\t' '$2 == "one" || $2 == "noted" || $2 == "several" { for (i = 4; i <= NF; i++) print $i }'
 }
 
 command_cell_exists() { # command_cell_exists <constitution> <command> -> 0 iff <command> is one of

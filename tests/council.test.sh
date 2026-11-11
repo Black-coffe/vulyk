@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite suite2 hardening" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite suite2 suite3 hardening" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -665,6 +665,65 @@ out="$(council status docs/specs/oldrow1 --json)"; ex=$?
 [ "$ex" -eq 0 ] && printf '%s' "$out" | jq -e '.review == "PASS"' >/dev/null 2>&1 \
   && echo "  ok    status reads a pre-review_asks row" || { echo "::error::oldrow1: exit=$ex out=$out"; fail=1; }
 fi # --quick: end of the anchored-BLOCK skip
+
+echo "upgrade-findings-05 (A3): a round is narrow only by the cycle's own record, re-checked when it opens"
+nr_red() { # nr_red <slug> <review-report> - a Tier 3 spec with stories on app/x.py and app/y.py, round 1 judged RED on <review-report>, then repaired
+  mk_open_spec "$1" 2; set_tier "$1" 3
+  done_story "docs/specs/$1/$1-02-x.md" '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# S2\n\n## Files\n- app/x.py\n\n## Verification\n`true`\n' "$1" "$1"
+  done_story "docs/specs/$1/$1-03-y.md" '---\nstory: %s-03\nspec: %s\nstatus: done\nwave: 1\n---\n# S3\n\n## Files\n- app/y.py\n\n## Verification\n`true`\n' "$1" "$1"
+  mkdir -p app && echo "x = 1" > app/x.py && echo "y = 1" > app/y.py
+  git add -A && git commit -qm "$1: two built stories" >/dev/null
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  seat_report opus 1 GG | council record-seat "docs/specs/$1" 1 opus >/dev/null 2>&1
+  printf '%b' "$2" | council record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
+  council judge "docs/specs/$1" --commit >/dev/null 2>&1
+  council repair "docs/specs/$1" --commit >/dev/null 2>&1
+  NR_RS="docs/specs/$1/$1-04-repair-round-1.md"; NR_REC=".vulyk/state/$1/narrow.round-2"
+}
+nr_round2() { # nr_round2 <slug> - the repair story marked done with a code change, round 2 opened; open-round's stderr into NR_ERR
+  done_story "$NR_RS"
+  echo "x = 2" > app/x.py && git add -A && git commit -qm "$1: the repair" >/dev/null
+  NR_ERR="$(council open-round "docs/specs/$1" --commit 2>&1 >/dev/null)"
+}
+fm_field_v() { awk -v k="$2" 'NR == 1 && /^---/ { on = 1; next } on && /^---/ { exit } on && index($0, k ": ") == 1 { print substr($0, length(k) + 3); exit }' "$1" 2>/dev/null; } # fm_field_v <file> <key> - a frontmatter value
+nr_full() { grep -qx 'seats=opus review' "docs/specs/$1/council/round-2/ROUND" && ! grep -q '^narrow=' "docs/specs/$1/council/round-2/ROUND"; } # nr_full <slug>
+nr_red nrf 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n- [ask 2] app/x.py:2 wrong name\n'
+nrsha="$(git log -1 --format=%h -- "$NR_RS")"
+awk '{ print } /^model: opus$/ { print "narrow: true" }' "$NR_RS" > "$NR_RS.new" && mv "$NR_RS.new" "$NR_RS"
+sed_inplace 's/^returned:$/returned: DONE/' "$NR_RS"; echo "x = 3" > app/x.py
+out="$(council close-story "$NR_RS" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF "\"error\":\"story blocks differ from the approved version ($nrsha): narrow:\"" \
+  && echo "  ok    close-story: a narrow: line added to the repair story -> exit 4 naming narrow:" \
+  || { echo "::error::close-story must compare narrow: with the approved version - exit=$ex out=$out"; fail=1; echo "narrow: compared" >> "$FAILS"; }
+sed_inplace 's/^returned: DONE$/returned:/' "$NR_RS"
+nr_round2 nrf
+[ ! -f "$NR_REC" ] && nr_full nrf \
+  && echo "  ok    narrow: true in the story does not shrink the round: two RED items, the tier's full seats, no narrow=1" \
+  || { echo "::error::narrow: true in the story does not shrink the round - ROUND=$(cat docs/specs/nrf/council/round-2/ROUND 2>&1) record=$(cat "$NR_REC" 2>&1)"; fail=1; echo "forged narrow" >> "$FAILS"; }
+nr_red nrg 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n'
+[ "$(fm_field_v "$NR_RS" narrow)" = true ] && grep -qx 'story=nrg-04' "$NR_REC" && grep -qx 'file=app/x.py' "$NR_REC" && grep -qx 'from=1' "$NR_REC" \
+  && echo "  ok    a narrow repair writes the record (story, file, from) and narrow: true in the story" \
+  || { echo "::error::narrow record: $(cat "$NR_REC" 2>&1) story=$(head -12 "$NR_RS" 2>&1)"; fail=1; echo "narrow record" >> "$FAILS"; }
+sed_inplace 's/^returned:$/returned: DONE/' "$NR_RS"; echo "x = 2" > app/x.py
+out="$(council close-story "$NR_RS" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    close-story: an untouched narrow repair story closes" || { echo "::error::untouched repair story: exit=$ex out=$out"; fail=1; echo "untouched closes" >> "$FAILS"; }
+council open-round docs/specs/nrg --commit >/dev/null 2>&1
+grep -qx 'seats=review' docs/specs/nrg/council/round-2/ROUND && grep -qx 'narrow=1' docs/specs/nrg/council/round-2/ROUND \
+  && echo "  ok    the record and the re-check hold: round 2 is seats=review, narrow=1" \
+  || { echo "::error::genuine narrow round: ROUND=$(cat docs/specs/nrg/council/round-2/ROUND 2>&1)"; fail=1; echo "genuine narrow" >> "$FAILS"; }
+nr_red nrm 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n'
+rm -f "$NR_REC"
+nr_round2 nrm
+nr_full nrm && printf '%s' "$NR_ERR" | grep -qF 'narrow record' && printf '%s' "$NR_ERR" | grep -qF 'missing' \
+  && echo "  ok    no record: a full round, stderr says the record is missing" \
+  || { echo "::error::record missing: ROUND=$(cat docs/specs/nrm/council/round-2/ROUND 2>&1) stderr=$NR_ERR"; fail=1; echo "record missing" >> "$FAILS"; }
+nr_red nrr 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n'
+printf -- '- [ask 1] app/y.py:1 off by one too\n' >> docs/specs/nrr/council/round-1/review.md
+git add -A && git commit -qm "nrr: round 1's records now name two files" >/dev/null
+nr_round2 nrr
+[ -f "$NR_REC" ] && nr_full nrr && printf '%s' "$NR_ERR" | grep -qF 're-check' \
+  && echo "  ok    a record whose rule no longer holds on round 1's records: a full round, stderr names the re-check" \
+  || { echo "::error::re-check: ROUND=$(cat docs/specs/nrr/council/round-2/ROUND 2>&1) stderr=$NR_ERR"; fail=1; echo "narrow re-check" >> "$FAILS"; }
 fi # part verbs
 if part judge; then # --- part judge: the ceiling, no-progress and half walks, ABSENT/N/A/REJECTED, journal, briefed, branch, git failures, court setup
 if full; then # --quick skips: the multi-round ceiling, no-progress and half walks
@@ -4118,6 +4177,33 @@ out="$(council reopen docs/specs/r18re "the reviewer died, run it again" --commi
 l18_last "$out" | jq -r .next | expect "reopen after env -> open-round" "open-round"
 council status docs/specs/r18re --json | jq -r .next | expect "status agrees: open-round" "open-round"
 
+echo "upgrade-findings-05 (A4): round_second sees both sides of a rename"
+r5cur="$(git rev-parse --abbrev-ref HEAD)"
+git checkout -q main
+mkdir -p app/auth app/misc && echo "code" > app/auth/login.php && echo "code" > app/misc/plain.php
+git add -A && git commit -qm "fixture: a risk-path file and a neutral one on main" >/dev/null
+r5_mv() { # r5_mv <slug> <from> <to> - a Tier 4 spec on its own branch off main whose only code change is `git mv <from> <to>`; opens round 1
+  git checkout -q -b "br-$1" main
+  mkdir -p "$(dirname "$3")" && git mv "$2" "$3" && git commit -qm "$1: move" >/dev/null
+  mk_open_spec "$1" 2; set_tier "$1" 4
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+}
+r5_mv r5off app/auth/login.php app/misc/login.php
+grep -qx 'second=risk' docs/specs/r5off/council/round-1/ROUND \
+  && echo "  ok    a rename off a risk path is still risk: second=risk" \
+  || { echo "::error::a rename off a risk path is still risk - ROUND=$(cat docs/specs/r5off/council/round-1/ROUND 2>&1)"; fail=1; echo "rename off risk" >> "$FAILS"; }
+r5_mv r5nn app/misc/plain.php app/other/plain.php
+grep -qx 'second=none' docs/specs/r5nn/council/round-1/ROUND \
+  && echo "  ok    a move between two neutral paths stays second=none" \
+  || { echo "::error::neutral move: ROUND=$(cat docs/specs/r5nn/council/round-1/ROUND 2>&1)"; fail=1; echo "neutral move" >> "$FAILS"; }
+r5_mv r5on app/misc/plain.php app/security/plain.php
+grep -qx 'second=risk' docs/specs/r5on/council/round-1/ROUND \
+  && echo "  ok    a move onto a risk path is risk" \
+  || { echo "::error::move onto risk: ROUND=$(cat docs/specs/r5on/council/round-1/ROUND 2>&1)"; fail=1; echo "move onto risk" >> "$FAILS"; }
+git checkout -q main
+git rm -rq app/auth/login.php app/misc/plain.php && git commit -qm "fixture: drop the rename base files" >/dev/null
+git checkout -q "$r5cur"
+
 fi # part roster
 if part roster2; then # --- part roster2: the repair verb and the Asks parser (roster, second half)
 
@@ -4393,27 +4479,28 @@ out="$(VULYK_VERIFY_TIMEOUT=3 bash scripts/cycle.sh close-story docs/specs/r18cs
   && echo "  ok    exit 4 on the third line: the cap is per line, not one budget for the run" \
   || { echo "::error::per-line cap: exit=$ex out=$out"; fail=1; }
 
-echo "gate-split-02: close-story pauses at exit 7 with a verify_resume mark when the next line does not fit the call, and the same command resumes"
+echo "gate-split-02: close-story pauses at exit 7 with a resume record under .vulyk/state when the next line does not fit the call, and the same command resumes"
 printf -- '---\nstory: r18pl-01\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Paused\n\n## Files\n- r18pl-one.txt\n\n## Verification\n`sleep 1`\n`sleep 1`\n' > docs/specs/r18cs/r18pl-01-two.md
 printf 'v1\n' > r18pl-one.txt
 printf '| Fixture: one-second line | `sleep 1` |\n' >> CLAUDE.md
 git add -A && git commit -qm "r18pl: fixture" >/dev/null
 PLS=docs/specs/r18cs/r18pl-01-two.md
+PLR=.vulyk/state/r18cs/verify.r18pl-01.close-story
 out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
-mark1="$(grep '^verify_resume:' "$PLS")"
+mark1="$(grep '^files=' "$PLR" 2>/dev/null)"
 [ "$ex" -eq 7 ] && l18_last "$out" | jq -e '.exit == 7 and .resume == 2' >/dev/null 2>&1 \
-  && printf '%s' "$mark1" | grep -qE '^verify_resume: close-story 2 [0-9a-f]{64}$' && grep -q '^status: todo' "$PLS" \
-  && echo "  ok    call 1: exit 7, resume 2, a verify_resume mark in the frontmatter, story still todo" \
-  || { echo "::error::per-line cap: pause exit=$ex out=$out mark=$mark1"; fail=1; }
+  && printf '%s' "$mark1" | grep -qE '^files=[0-9a-f]{64}$' && grep -q '^next=2$' "$PLR" && ! grep -q '^verify_resume:' "$PLS" && grep -q '^status: todo' "$PLS" \
+  && echo "  ok    call 1: exit 7, resume 2, a resume record under .vulyk/state, no verify_resume line in the story, story still todo" \
+  || { echo "::error::per-line cap: pause exit=$ex out=$out record=$(cat "$PLR" 2>&1)"; fail=1; }
 printf 'v2\n' > r18pl-one.txt
 out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
-mark2="$(grep '^verify_resume:' "$PLS")"
-[ "$ex" -eq 7 ] && [ -n "$mark2" ] && [ "$mark2" != "$mark1" ] && printf '%s' "$mark2" | grep -qE '^verify_resume: close-story 2 ' \
+mark2="$(grep '^files=' "$PLR" 2>/dev/null)"
+[ "$ex" -eq 7 ] && [ -n "$mark2" ] && [ "$mark2" != "$mark1" ] && printf '%s' "$out" | grep -qF 'resume record not used (## Files changed' \
   && echo "  ok    a changed ## Files set between the calls restarts at line 1 (new hash, paused again)" \
-  || { echo "::error::per-line cap: restart exit=$ex out=$out mark=$mark2"; fail=1; }
+  || { echo "::error::per-line cap: restart exit=$ex out=$out record=$(cat "$PLR" 2>&1)"; fail=1; }
 out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh close-story "$PLS" --commit 2>&1)"; ex=$?
-[ "$ex" -eq 0 ] && grep -q '^status: done' "$PLS" && ! grep -q '^verify_resume:' "$PLS" \
-  && echo "  ok    call 2 on the same files resumes at line 2, closes, leaves no verify_resume line" \
+[ "$ex" -eq 0 ] && grep -q '^status: done' "$PLS" && ! grep -q '^verify_resume:' "$PLS" && [ ! -e "$PLR" ] \
+  && echo "  ok    call 2 on the same files resumes at line 2, closes, leaves no record behind" \
   || { echo "::error::per-line cap: resume exit=$ex out=$out"; fail=1; }
 
 echo "gate-split-02: stamp-red resumes the same way and still writes its receipt"
@@ -4422,14 +4509,15 @@ printf 'echo R18SR-RED-MARK\nexit 1\n' > r18sr-test.sh
 printf -- '---\nstory: r18sr-01\nstatus: todo\nreturned:\nwave: 1\nred: required\nred_reason: R18SR-RED-MARK\n---\n# Red resume\n\n## Files\n- r18sr-test.sh\n- r18sr-impl.txt\n\n## Verification\n`sleep 1`\n`bash r18sr-test.sh`\n' > docs/specs/r18cs/r18sr-01-red.md
 git add -A && git commit -qm "r18sr: fixture" >/dev/null
 SRS=docs/specs/r18cs/r18sr-01-red.md
+SRR=.vulyk/state/r18cs/verify.r18sr-01.stamp-red
 out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh stamp-red "$SRS" 2>&1)"; ex=$?
 [ "$ex" -eq 7 ] && l18_last "$out" | jq -e '.exit == 7 and .resume == 2' >/dev/null 2>&1 \
-  && grep -qE '^verify_resume: stamp-red 2 [0-9a-f]{64}$' "$SRS" && ! grep -q '^red_verified_at:' "$SRS" \
-  && echo "  ok    stamp-red call 1: exit 7, resume 2, mark written, no receipt yet" \
+  && grep -q '^next=2$' "$SRR" && ! grep -q '^verify_resume:' "$SRS" && ! grep -q '^red_verified_at:' "$SRS" \
+  && echo "  ok    stamp-red call 1: exit 7, resume 2, record written, no receipt yet" \
   || { echo "::error::per-line cap: stamp-red pause exit=$ex out=$out"; fail=1; }
 out="$(VULYK_VERIFY_TIMEOUT=2 VULYK_VERIFY_CALL=2 bash scripts/cycle.sh stamp-red "$SRS" 2>&1)"; ex=$?
-[ "$ex" -eq 0 ] && grep -q '^red_verified_at:' "$SRS" && ! grep -q '^verify_resume:' "$SRS" \
-  && echo "  ok    stamp-red call 2: resumes at line 2, red for the declared reason, receipt written, mark gone" \
+[ "$ex" -eq 0 ] && grep -q '^red_verified_at:' "$SRS" && ! grep -q '^verify_resume:' "$SRS" && [ ! -e "$SRR" ] \
+  && echo "  ok    stamp-red call 2: resumes at line 2, red for the declared reason, receipt written, record gone" \
   || { echo "::error::per-line cap: stamp-red resume exit=$ex out=$out"; fail=1; }
 
 echo "gate-split-02: VULYK_VERIFY_TIMEOUT above 300 acts as 300"
@@ -4475,7 +4563,7 @@ echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every p
 council status docs/specs/r18ad --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
 fi # part advance
 
-if part suite || part suite2; then # the two suite parts' shared fixture helpers (council:suite split in mass-audit-fixes-18 repair 1)
+if part suite || part suite2 || part suite3; then # the suite parts' shared fixture helpers (council:suite split in mass-audit-fixes-18 repair 1, suite3 in upgrade-findings-07)
 sx_row() { # sx_row [<purpose> <command>] - the fixture constitution's one round-only full-suite row (none without args), committed
   grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
   [ $# -eq 2 ] && printf '| %s | `%s` |\n' "$1" "$2" >> CLAUDE.md
@@ -4487,12 +4575,10 @@ sx_open() { # sx_open <slug> [<tier>] - a Tier 1 (or <tier>) spec, approved and 
   council open-round "docs/specs/$1" --commit >/dev/null 2>&1
 }
 sx_last() { printf '%s\n' "$1" | tail -1; } # sx_last <output> -> its JSON line
-fi
-
-if part suite; then # --- part suite: cycle.sh suite (gate-split-04) - the round's gate, one step per call, into council/round-N/suite.log
 # A fixture runner answers --steps / --step K the way tests/full-suite.sh does: two steps, PART lines.
 # FX_FAIL: step 2 fails a part; FX_GROW: step 2 reports a part past 70% of its cap and still exits 0,
 # so the growth verdict can only come from cycle.sh's own suite-parts-check.sh read of the log.
+sx_fx_runner() { # sx_fx_runner - write and commit fx-runner.sh (parts suite and suite3)
 cat > fx-runner.sh <<'EOF'
 case "$1" in
   --steps) echo 2 ;;
@@ -4505,6 +4591,11 @@ case "$1" in
 esac
 EOF
 git add -A && git commit -qm "fixture: a stepped runner" >/dev/null
+}
+fi
+
+if part suite; then # --- part suite: cycle.sh suite (gate-split-04) - the round's gate, one step per call, into council/round-N/suite.log
+sx_fx_runner
 
 echo "suite: no open round -> exit 2, nothing written"
 mk_open_spec sxnone 2
@@ -4676,7 +4767,60 @@ r="$(fsr '| Full suite (round-only) | `bash t.sh` | echo PWNED |')"
 r="$(fsr '| Full suite (round-only) | `a \| b` |')"
 [ "$r" = "$(printf 'Full suite (round-only)\ta | b')" ] && echo "  ok    an escaped pipe stays inside the second cell" \
   || { echo "::error::suite row parser: an escaped pipe gave '$r'"; fail=1; }
+r="$(fsr '| Full suite (round-only) | `sh t.sh` (a note, "quoted") |')"
+[ "$r" = "$(printf 'Full suite (round-only)\tsh t.sh')" ] && echo "  ok    a noted cell gives its span alone as the command" \
+  || { echo "::error::suite row parser: a noted cell runs only the backticked span - gave '$r'"; fail=1; }
 rm -f fsr.md
+
+fi # part suite
+
+if part suite3; then # --- part suite3: cycle.sh suite, third part - ## Commands cells, rows with no command, duplicate names, a hung step, no row, the narrow round (split from suite in upgrade-findings-07)
+sx_fx_runner
+
+echo "suite: a ## Commands cell runs its backticked span, the rest is a note; several spans are a red part; no span runs as today (upgrade-findings-01)"
+sx_raw() { # sx_raw <row>... - the fixture constitution's full-suite rows, written as given, committed
+  grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+  printf '%s\n' "$@" >> CLAUDE.md
+  git add -A && git commit -qm "fixture: raw full-suite rows" >/dev/null
+}
+printf ': > "%s/fx-noted-ran"\n' "$PWD" > suite.sh
+sx_raw '| Full suite (round-only) | `sh suite.sh` (a note with spaces, "quotes" and a parenthesis) |'
+sx_open sxnoted
+rd="docs/specs/sxnoted/council/round-1"
+out="$(council suite docs/specs/sxnoted 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "ok"' >/dev/null 2>&1 \
+  && tail -1 "$rd/suite.log" | grep -qE '^SUITE: ok [0-9]+s$' && [ -e fx-noted-ran ] \
+  && echo "  ok    a noted round-only row runs only the backticked span, SUITE: ok" \
+  || { echo "::error::suite noted row: runs only the backticked span - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+rm -f fx-noted-ran
+sx_raw '| Full suite (round-only, steps) | `bash fx-runner.sh` (two steps; a note) |'
+sx_open sxnotedstep
+rd="docs/specs/sxnotedstep/council/round-1"
+council suite docs/specs/sxnotedstep >/dev/null 2>&1
+out="$(council suite docs/specs/sxnotedstep 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 2 and .steps == 2 and .done == true and .suite == "ok"' >/dev/null 2>&1 \
+  && grep -qF 'PART fx:a2 ok 0s cap 300s' "$rd/suite.log" \
+  && echo "  ok    a noted stepped row builds <span> --steps and <span> --step K from the span" \
+  || { echo "::error::suite noted stepped row: runs only the backticked span - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+printf ': > "%s/fx-two-a"\n' "$PWD" > fx-two-a.sh; printf ': > "%s/fx-two-b"\n' "$PWD" > fx-two-b.sh
+sx_raw '| Full suite (round-only) | `sh fx-two-a.sh` or `sh fx-two-b.sh` |'
+sx_open sxtwo
+rd="docs/specs/sxtwo/council/round-1"
+out="$(council suite docs/specs/sxtwo 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "FAIL"' >/dev/null 2>&1 \
+  && grep -qxF 'PART full-suite-round-only FAIL 0s cap 300s - several backticked commands in one cell' "$rd/suite.log" \
+  && [ ! -e fx-two-a ] && [ ! -e fx-two-b ] \
+  && echo "  ok    a round-only row with two spans is a red part naming several backticked commands, neither ran" \
+  || { echo "::error::suite several spans: a red part naming 'several backticked commands in one cell', neither run - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+rm -f fx-two-a fx-two-b
+sx_raw '| Full suite (round-only) | sh suite.sh |'
+sx_open sxbare
+rd="docs/specs/sxbare/council/round-1"
+out="$(council suite docs/specs/sxbare 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.done == true and .suite == "ok"' >/dev/null 2>&1 && [ -e fx-noted-ran ] \
+  && echo "  ok    a row with no backticks runs its cell as today" \
+  || { echo "::error::suite bare row: a cell with no span must run as today - exit=$ex out=$out log=$(cat "$rd/suite.log" 2>&1)"; fail=1; }
+rm -f fx-noted-ran
 
 echo "suite: a row with an empty or missing command cell is a red step that names it, never SUITE: none or a silent drop (gate-split-10 finding 2)"
 sxe=0
@@ -4759,7 +4903,36 @@ out="$(council suite docs/specs/sxno 2>&1)"; ex=$?
   && [ "$(tail -1 docs/specs/sxno/council/round-1/suite.log)" = "SUITE: none" ] \
   && echo "  ok    no row -> SUITE: none, steps 0, done" || { echo "::error::suite none: exit=$ex out=$out"; fail=1; }
 
-fi # part suite
+echo "upgrade-findings-05 (A3): the narrow round still runs no step; a narrow: true the cycle did not record runs it"
+sx_nr() { # sx_nr <slug> <review-report> - a Tier 2 spec, story 02 on app/x.py, round 1 RED on <review-report>, repaired; prints the repair story
+  mk_open_spec "$1" 2; set_tier "$1" 2
+  done_story "docs/specs/$1/$1-02-x.md" '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# S2\n\n## Files\n- app/x.py\n\n## Verification\n`true`\n' "$1" "$1"
+  mkdir -p app && echo "x = 1" > app/x.py && git add -A && git commit -qm "$1: built" >/dev/null
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  council suite "docs/specs/$1" --commit >/dev/null 2>&1
+  printf '%b' "$2" | council record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
+  council judge "docs/specs/$1" --commit >/dev/null 2>&1
+  council repair "docs/specs/$1" --commit >/dev/null 2>&1
+  printf 'docs/specs/%s/%s-03-repair-round-1.md' "$1" "$1"
+}
+sx_row 'Full suite (round-only)' 'true'
+rs="$(sx_nr sxnr 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n')"
+done_story "$rs"; echo "x = 2" > app/x.py && git add -A && git commit -qm "sxnr: the repair" >/dev/null
+council open-round docs/specs/sxnr --commit >/dev/null 2>&1
+council suite docs/specs/sxnr --commit >/dev/null 2>&1
+[ "$(tail -1 docs/specs/sxnr/council/round-2/suite.log 2>/dev/null)" = "SUITE: none - narrow repair round" ] \
+  && echo "  ok    a recorded narrow round: SUITE: none - narrow repair round" \
+  || { echo "::error::recorded narrow suite: $(cat docs/specs/sxnr/council/round-2/suite.log 2>&1)"; fail=1; echo "narrow suite recorded" >> "$FAILS"; }
+rs="$(sx_nr sxnf 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n- [ask 2] app/x.py:2 wrong name\n')"
+awk '{ print } /^model: opus$/ { print "narrow: true" }' "$rs" > "$rs.new" && mv "$rs.new" "$rs"
+done_story "$rs"; echo "x = 2" > app/x.py && git add -A && git commit -qm "sxnf: the repair" >/dev/null
+council open-round docs/specs/sxnf --commit >/dev/null 2>&1
+council suite docs/specs/sxnf --commit >/dev/null 2>&1
+grep -q '^SUITE: ok' docs/specs/sxnf/council/round-2/suite.log 2>/dev/null && ! grep -q 'narrow repair round' docs/specs/sxnf/council/round-2/suite.log \
+  && echo "  ok    two RED items under a narrow: true the cycle never recorded: suite runs its step" \
+  || { echo "::error::narrow: true in the story does not shrink the round (suite) - log=$(cat docs/specs/sxnf/council/round-2/suite.log 2>&1)"; fail=1; echo "forged narrow suite" >> "$FAILS"; }
+
+fi # part suite3
 
 if part suite2; then # --- part suite2: cycle.sh suite, second half - the narrow repair round (ab-run-fixes C5) and the LOAD sample order (X-08)
 echo "ab-run-fixes C5: a RED round with one item in one file -> a narrow repair story and a review-only round: no blind seat, no suite step"

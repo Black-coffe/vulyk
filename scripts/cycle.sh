@@ -489,7 +489,8 @@ round_second() { # round_second <spec> <n> <head> <since> -> risk | none: whethe
     [ -n "$db" ] && base="$(git merge-base "$db" "$3" 2>/dev/null)"
   fi
   [ -n "$base" ] || { printf 'risk'; return; }
-  names="$(git diff --name-only "$base" "$3" 2>/dev/null)" || { printf 'risk'; return; }
+  # upgrade-findings-05 (A4): --no-renames, so a moved file shows both its old and its new path
+  names="$(git diff --no-renames --name-only "$base" "$3" 2>/dev/null)" || { printf 'risk'; return; }
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     risk_path "$p" && { printf 'risk'; return; }
@@ -1763,24 +1764,22 @@ full_suite_row() { # full_suite_row <constitution> -> "<purpose><TAB><command>",
   # empty command, which cmd_suite turns into a red step naming the row (gate-split-10). Every such row,
   # in table order: a hive may split its full run into several part rows (gate-split-08). The command is exactly the
   # second cell (an escaped \| stays inside it); later cells are never part of it. Nothing (exit 1) when none.
+  # The command is lib.sh's cell rule (upgrade-findings B1): a noted cell runs its backticked span alone, a
+  # cell with no span runs as before; a cell with several spans has no one command and prints
+  # "<purpose><TAB><TAB>several", which cmd_suite turns into a red step naming the reason.
   [ -f "$1" ] || return 1
-  awk '
-    /^## Commands[[:space:]]*$/ { inblock=1; next }
-    /^##[[:space:]]/            { if (inblock) exit }
-    inblock && /^\|/ {
-      line = $0; sub(/\r$/, "", line); gsub(/\\[|]/, "\001", line)
-      n = split(line, cell, "|"); if (n < 2) next
-      po = cell[2]; gsub(/\001/, "|", po); sub(/^[[:space:]]+/, "", po); sub(/[[:space:]]+$/, "", po)
-      p = tolower(po)
+  commands_rows "$1" | awk -F '\t' '
+    {
+      po = $1; p = tolower(po)
       if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) {
-        c = (n >= 3) ? cell[3] : ""; gsub(/\001/, "|", c); gsub(/`/, "", c); sub(/^[[:space:]]+/, "", c); sub(/[[:space:]]+$/, "", c)
-        lc = tolower(c)
+        if ($2 == "several") { printf "%s\t\tseveral\n", po; found = 1; next }
+        c = $4; lc = tolower(c)
         if (lc ~ /^<fill in/ || lc ~ /^none([^[:alnum:]_-]|$)/) next
         printf "%s\t%s\n", po, c; found = 1
       }
     }
     END { exit !found }
-  ' "$1"
+  '
 }
 
 full_suite_row_round_only() { # full_suite_row_round_only <constitution> -> 0 iff full_suite_row finds a row
@@ -2113,22 +2112,34 @@ wave_story_json() { # wave_story_json <story-file> - one C3 wave_stories object,
 verify_cell_hint() { # verify_cell_hint <constitution> <segment> - ab-run-fixes C7: up to 3 `try: <cell>`
   # lines, the cells that are not round-only and whose first two words are the segment's; with none,
   # one `try: see ## Commands in <constitution>` line. close-story's refusal prints it, nothing else.
-  local c n=0 seen="" w1 w2 c1 c2 rest
+  # upgrade-findings-01: a cell's command is lib.sh's cell rule, so a noted cell offers its span, never
+  # its note; a row with several spans is one cell that is no one command: never offered, and a span of
+  # it that matches gets a `not offered: row '<Purpose>': <N> backticked commands in one cell` line instead.
+  local c n=0 seen="" w1 w2 c1 c2 rest po shape k cmds tab
+  tab="$(printf '\t')"
   read -r w1 w2 rest <<EOF
 $2
 EOF
-  while IFS= read -r c; do
-    [ -n "$c" ] || continue
-    read -r c1 c2 rest <<EOF2
+  while IFS="$tab" read -r po shape k cmds; do
+    case "$shape" in one|noted|several) ;; *) continue ;; esac
+    while IFS= read -r c; do
+      [ -n "$c" ] || continue
+      read -r c1 c2 rest <<EOF2
 $c
 EOF2
-    [ "$c1" = "$w1" ] && [ "$c2" = "${w2:-}" ] || continue
-    case "$seen" in *"|$c|"*) continue ;; esac
-    command_cell_round_only "$1" "$c" && continue
-    seen="$seen|$c|"; printf 'try: %s\n' "$c"; n=$((n+1))
+      [ "$c1" = "$w1" ] && [ "$c2" = "${w2:-}" ] || continue
+      if [ "$shape" = several ]; then
+        printf "not offered: row '%s': %s backticked commands in one cell\n" "$po" "$k"; break
+      fi
+      case "$seen" in *"|$c|"*) continue ;; esac
+      command_cell_round_only "$1" "$c" && continue
+      seen="$seen|$c|"; printf 'try: %s\n' "$c"; n=$((n+1))
+    done <<EOF3
+$(printf '%s\n' "$cmds" | tr '\t' '\n')
+EOF3
     [ "$n" -ge 3 ] && break
   done <<EOF
-$(command_cells "$1")
+$(commands_rows "$1")
 EOF
   [ "$n" -gt 0 ] || printf 'try: see ## Commands in %s\n' "$1"
 }
@@ -2180,8 +2191,9 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
   # never above 300), so one slow line names itself and a timeout is that line's. The call has a budget,
   # VULYK_VERIFY_CALL (default 540, inside the Bash tool's 10-minute cap): a line starts only when its
   # cap still fits what is left of it (the first line of a call always runs); otherwise the runner stops
-  # with VR_PAUSE = the number of the line it would run next, and the verb writes a resume mark and exits
-  # 7. VR_START (set by the verb) is the line a resumed call begins at; lines count across <reps>. Each
+  # with VR_PAUSE = the number of the line it would run next, and the verb records it (verify_pause) and
+  # exits 7. VR_START (set by verify_resume_start) is the line a resumed call begins at; lines count across
+  # <reps>. With VR_REC set, each line that ends appends `line=<k> <rc> <hash>` to that record. Each
   # line runs under lib.sh's run_capped (timeout, gtimeout or the Python cap, else uncapped with its
   # warning); capped_by says whether a cap exists, so an uncapped run never reads a command's own 124 as
   # a timeout.
@@ -2189,7 +2201,8 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
   # (R18/M-3 - a single `bash -c "$multi_line_block"` used to report only the last line's exit
   # status), stopping at the first non-zero line. With <outdir> (stamp-red): every line once, its
   # stdout+stderr in <outdir>/<k>.out (and echoed), its exit in <k>.code and VR_CODES[k], its text in
-  # <k>.line and VR_LINES[k] (a resumed call reads the earlier lines back from those files); only a
+  # <k>.line and VR_LINES[k] (a resumed call reads the earlier lines back from those files, which
+  # verify_resume_start has checked against the record's line= entries); only a
   # timeout stops it. Sets VR_VT, VR_TIMEOUT_OK, VR_RC (the stopping or last exit), VR_LINE, VR_RUN,
   # VR_PAUSE.
   local cmds="$1" reps="$2" outdir="${3:-}" vline vrc k=0 vstart="$SECONDS" vcall start="${VR_START:-1}"
@@ -2221,12 +2234,16 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
         run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline" < /dev/null > "$outdir/$k.out" 2>&1; vrc=$?
         cat "$outdir/$k.out"
         printf '%s' "$vrc" > "$outdir/$k.code"; printf '%s' "$vline" > "$outdir/$k.line"
+        [ -z "${VR_REC:-}" ] || printf 'line=%s %s %s %s
+' "$k" "$vrc" "$(verify_text_hash "$vline")" "$(verify_file_hash "$outdir/$k.out")" >> "$VR_REC"
         VR_CODES[$k]="$vrc"; VR_LINES[$k]="$vline"; VR_RC="$vrc"; VR_LINE="$vline"
         [ "$vrc" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ] && return 0
         continue
       fi
       run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline" < /dev/null; vrc=$?
       VR_RC="$vrc"; VR_LINE="$vline"
+      [ -z "${VR_REC:-}" ] || printf 'line=%s %s %s
+' "$k" "$vrc" "$(verify_text_hash "$vline")" >> "$VR_REC"
       [ "$vrc" -ne 0 ] && return 0
     done <<EOF
 $cmds
@@ -2237,9 +2254,9 @@ EOF
 }
 
 verify_files_hash() { # verify_files_hash <story-file> -> set_hash of the files its ## Files entries name (the
-  # story itself left out: the resume mark is written into it). G5: a directory or glob entry is expanded
+  # story itself left out). G5: a directory or glob entry is expanded
   # as red_sets expands it (git ls-files -co --exclude-standard, a literal file entry kept even while
-  # missing), sorted, so an edit under `src/` changes the hash and drops a verify_resume mark.
+  # missing), sorted, so an edit under `src/` changes the hash and drops a resume record.
   local story="${1#./}" e p; local -a specs=() ps=()
   while IFS= read -r e; do
     [ -n "$e" ] && [ "${e#./}" != "$story" ] && specs+=("$e")
@@ -2259,33 +2276,113 @@ EOF
   set_hash ${ps[@]+"${ps[@]}"}
 }
 
-verify_resume_set() { # verify_resume_set <story-file> [<verb> <k> <hash>] - drop the frontmatter
-  # `verify_resume:` line, and write a new one before the closing `---` when given
-  local tmp
-  [ -n "${2:-}" ] || grep -q '^verify_resume:' "$1" || return 0
-  tmp="$(mktemp)"
-  awk -v line="${2:+verify_resume: $2 $3 $4}" '
-    NR == 1 && /^---[[:space:]]*$/ { infm=1; print; next }
-    infm && /^---[[:space:]]*$/    { if (line != "") print line; infm=0; print; next }
-    infm && /^verify_resume:/      { next }
-    { print }
-  ' "$1" > "$tmp" && cat "$tmp" > "$1"
+# upgrade-findings-03 (A1/A2, plan.md ## Contracts S1/S2): a paused verification's resume point and its
+# per-line results live in a record the cycle owns, .vulyk/state/<slug>/verify.<story-id>.<verb>, never in
+# the story file (a `verify_resume:` frontmatter line is neither read nor written). Plain key=value lines:
+# head=, stamp=, files=, verify=, next=<k>, one `line=<k> <rc> <hash>` per line run in this chain (stamp-red
+# adds a fourth field, the sha256 of that line's stored output), and for
+# stamp-red outd=<its mktemp -d results directory>. A record that is missing or fails a key is the strict
+# path: line 1, a new directory.
+verify_text_hash() { printf '%s' "$1" | $(sha256_tool) | cut -c1-64; } # verify_text_hash <text> -> 64 hex
+verify_file_hash() { $(sha256_tool) < "$1" 2>/dev/null | cut -c1-64; } # verify_file_hash <file> -> 64 hex of its bytes
+
+verify_rec() { # verify_rec <story-file> <verb> -> the verify record's path (S2)
+  local id; id="$(fm_field "$1" story)"; [ -n "$id" ] || id="$(basename "$1" .md)"
+  printf '%s/.vulyk/state/%s/verify.%s.%s' "$ROOT" "$(slug_of "$(dirname "$1")")" "${id//[!A-Za-z0-9._-]/_}" "$2"
+}
+
+verify_rec_get() { sed -n "s/^$2=//p" "$1" 2>/dev/null | tail -n 1; } # verify_rec_get <record> <key> -> its last value
+
+verify_rec_new() { # verify_rec_new <record> <files-hash> <stamp> <verify-hash> [<outd>] - a fresh record: the
+  # state directory made on first write with its own `*` .gitignore (S1), the keys a resume is judged by
+  local dir top; dir="$(dirname "$1")"; top="$(dirname "$dir")"
+  mkdir -p "$dir" || return 1
+  [ -f "$top/.gitignore" ] || printf '*\n' > "$top/.gitignore"
+  { printf 'head=%s\nstamp=%s\nfiles=%s\nverify=%s\n' "$(git rev-parse HEAD 2>/dev/null)" "${3:--}" "$2" "$4"
+    [ -z "${5:-}" ] || printf 'outd=%s\n' "$5"; } > "$1"
+}
+
+verify_rec_drop() { # verify_rec_drop <record> - remove the record and its results directory; the directory
+  # only when it is one stamp-red made (vulyk-sr.*), a real directory the caller owns, never through a symlink
+  local od; od="$(verify_rec_get "$1" outd)"
+  case "${od##*/}" in vulyk-sr.*) [ -d "$od" ] && [ ! -L "$od" ] && [ -O "$od" ] && rm -rf -- "$od" ;; esac
+  rm -f -- "$1"
+}
+
+verify_nth_line() { # verify_nth_line <cmd-list> <reps> <k> -> the k-th line verify_run runs (counted across reps)
+  local i=1 k=0 vline
+  while [ "$i" -le "$2" ]; do
+    while IFS= read -r vline; do
+      [ -n "$vline" ] || continue
+      [ "$vline" = "none — reviewed by lead-review" ] && continue
+      k=$((k+1)); [ "$k" -eq "$3" ] && { printf '%s' "$vline"; return 0; }
+    done <<EOF2
+$1
+EOF2
+    i=$((i+1))
+  done
+  return 1
+}
+
+verify_resume_start() { # verify_resume_start <verb> <record> <files-hash> <stamp> <verify-hash> <cmd-list> <reps>
+  # -> VR_START, and for stamp-red VR_OUTD (the results directory to reuse, or empty). The record's next=
+  # is honoured only when head (equal to HEAD, or only paperwork commits since: lib.sh paperwork_only),
+  # stamp (`-` for none), the ## Files hash and the ## Verification hash all equal this call's, and every
+  # skipped line j has a line=j entry for its current text: close-story needs that entry's exit 0;
+  # stamp-red needs outd= to be a directory, not a symlink, owned by the caller ([ -d ] [ ! -L ] [ -O ]),
+  # holding j.code / j.line equal to the entry and j.out whose sha256 is the entry's fourth field (the
+  # output this chain wrote, upgrade-findings-07). Anything else: VR_START=1, the record and its directory
+  # dropped, one stderr line saying why. No record at all is the silent strict path.
+  local verb="$1" rec="$2" why="" h nx j e lt lrc eh oh od=""
+  VR_START=1; VR_OUTD=""
+  [ -e "$rec" ] || [ -L "$rec" ] || return 0
+  if [ ! -f "$rec" ] || [ ! -r "$rec" ]; then why="the record is unreadable"
+  else
+    h="$(verify_rec_get "$rec" head)"; nx="$(verify_rec_get "$rec" next)"
+    if [ "$h" != "$(git rev-parse HEAD 2>/dev/null)" ] && ! { [ -n "$h" ] && paperwork_only "$ROOT" "$h" HEAD; }; then
+      why="HEAD moved past ${h:0:7} with a commit that is not paperwork"
+    elif [ "$(verify_rec_get "$rec" stamp)" != "${4:--}" ]; then why="--stamp differs from the paused call's"
+    elif [ "$(verify_rec_get "$rec" files)" != "$3" ]; then why="## Files changed since the pause"
+    elif [ "$(verify_rec_get "$rec" verify)" != "$5" ]; then why="## Verification changed since the pause"
+    else case "$nx" in ''|*[!0-9]*|0|1) why="no resume line in the record" ;; esac
+    fi
+  fi
+  if [ -z "$why" ] && [ "$verb" = stamp-red ]; then
+    od="$(verify_rec_get "$rec" outd)"
+    if [ -z "$od" ]; then why="no results directory in the record"
+    elif [ -L "$od" ]; then why="results directory $od is a symlink"
+    elif [ ! -d "$od" ]; then why="results directory $od is not a directory"
+    elif [ ! -O "$od" ]; then why="results directory $od is not owned by the caller"
+    fi
+  fi
+  j=1
+  while [ -z "$why" ] && [ "$j" -lt "$nx" ]; do
+    lt="$(verify_nth_line "$6" "$7" "$j")" || { why="line $j is past the verification"; break; }
+    e="$(grep "^line=$j " "$rec" | tail -n 1)"; lrc=""; eh=""; oh=""
+    read -r _ lrc eh oh <<EOF2
+${e#line=}
+EOF2
+    if [ "$verb" = close-story ]; then
+      { [ -n "$e" ] && [ "$lrc" = 0 ] && [ "$eh" = "$(verify_text_hash "$lt")" ]; } || why="no recorded exit 0 for line $j"
+    elif [ -z "$e" ] || [ "$eh" != "$(verify_text_hash "$lt")" ]; then why="no matching line= entry for line $j"
+    elif [ "$(cat "$od/$j.code" 2>/dev/null)" != "$lrc" ] || [ "$(cat "$od/$j.line" 2>/dev/null)" != "$lt" ] \
+      || [ -z "$oh" ] || [ "$(verify_file_hash "$od/$j.out")" != "$oh" ]; then
+      why="the stored result of line $j does not match its line= entry"
+    fi
+    j=$((j+1))
+  done
+  if [ -n "$why" ]; then
+    echo "cycle: $verb - resume record not used ($why): verification starts at line 1" >&2
+    verify_rec_drop "$rec"
+    return 0
+  fi
+  VR_START="$nx"; VR_OUTD="$od"
+}
+
+verify_pause() { # verify_pause <verb> <record> <k> - record next=<k>, print the exit-7 line, exit 7
+  local tmp; tmp="$(mktemp)"
+  { grep -v '^next=' "$2"; printf 'next=%s\n' "$3"; } > "$tmp" && cat "$tmp" > "$2"
   rm -f "$tmp"
-}
-
-verify_resume_start() { # verify_resume_start <story-file> <verb> <hash> -> the line to start at: the
-  # mark's when it names this verb and this ## Files hash, else 1
-  local m v k h
-  m="$(fm_raw "$1" verify_resume)"
-  read -r v k h <<EOF
-$m
-EOF
-  if [ "$v" = "$2" ] && [ "$h" = "$3" ]; then case "$k" in ''|*[!0-9]*|0) echo 1 ;; *) echo "$k" ;; esac
-  else echo 1; fi
-}
-
-verify_pause() { # verify_pause <verb> <story-file> <k> <hash> - write the mark, print the exit-7 line, exit 7
-  verify_resume_set "$2" "$1" "$3" "$4"
   echo "cycle: $1 - verification paused before line $3 (call budget); run the same command again, it resumes" >&2
   printf '{"ok":false,"verb":"%s","exit":7,"next":"resume","resume":%s,"error":"verification paused before line %s: run the same command again"}\n' "$1" "$3" "$3"
   exit 7
@@ -2326,7 +2423,7 @@ EOF
 }
 
 story_blocks_guard() { # story_blocks_guard <story-file> <verb> - ADR-032 D1: the gate blocks
-  # (`## Verification` with `repeat:`, `## Files`, `red:`) of the working copy must equal the approved
+  # (`## Verification` with `repeat:`, `## Files`, `red:`, `narrow:`) of the working copy must equal the approved
   # version's, each read through its own parser; any difference is exit 4. No approved version is
   # exit 2 at Tier 3-4, a stderr note at Tier 1-2 or with no tier.
   local story="$1" verb="$2" sha rel base diffs="" msg
@@ -2349,6 +2446,7 @@ story_blocks_guard() { # story_blocks_guard <story-file> <verb> - ADR-032 D1: th
   [ "$(verify_of "$base")" = "$(verify_of "$story" | tr -d '\r')" ] || diffs="## Verification"
   [ "$(files_of "$base")" = "$(files_of "$story" | tr -d '\r')" ] || diffs="${diffs:+$diffs, }## Files"
   [ "$(fm_red "$base")" = "$(fm_red "$story" | tr -d '\r')" ] || diffs="${diffs:+$diffs, }red:"
+  [ "$(fm_field "$base" narrow)" = "$(fm_field "$story" narrow | tr -d '\r')" ] || diffs="${diffs:+$diffs, }narrow:"
   rm -f "$base"
   [ -n "$diffs" ] || return 0
   msg="story blocks differ from the approved version ($(git rev-parse --short "$sha")): $diffs"
@@ -2636,15 +2734,20 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] [<baseline 0|1>] - red-
   [ "$BASELINE" = 1 ] && red_baseline_swap
 
   # gate-split-02: the call budget can stop the run between lines (exit 7); the earlier lines' results
-  # wait in a per-story directory under the temp dir until the resumed call has them all.
-  local VH VSTART OUTD; VH="$(verify_files_hash "$STORY")"
-  VSTART="$(verify_resume_start "$STORY" stamp-red "$VH")"
-  OUTD="${TMPDIR:-/tmp}/vulyk-sr-$(printf '%s' "$STORY" | cksum | cut -d' ' -f1)"
-  [ "$VSTART" -gt 1 ] && [ -d "$OUTD" ] || { VSTART=1; rm -rf "$OUTD"; }
-  mkdir -p "$OUTD" || { emit false stamp-red 2 error "mkdir failed"; exit 2; }
-  VR_START="$VSTART" verify_run "$CMD_LIST" 1 "$OUTD"
-  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause stamp-red "$STORY" "$VR_PAUSE" "$VH"; fi
-  verify_resume_set "$STORY"
+  # wait in a mktemp -d directory (0700) named in the verify record until the resumed call has them all
+  # (upgrade-findings-03 A2: reused only after verify_resume_start's checks).
+  local VH VL VREC OUTD; VH="$(verify_files_hash "$STORY")"; VL="$(verify_text_hash "1
+$CMD_LIST")"
+  VREC="$(verify_rec "$STORY" stamp-red)"
+  verify_resume_start stamp-red "$VREC" "$VH" "$STAMP" "$VL" "$CMD_LIST" 1
+  OUTD="$VR_OUTD"
+  if [ "$VR_START" -eq 1 ]; then
+    OUTD="$(mktemp -d "${TMPDIR:-/tmp}/vulyk-sr.XXXXXX")" || { emit false stamp-red 2 error "mktemp -d failed"; exit 2; }
+    verify_rec_new "$VREC" "$VH" "$STAMP" "$VL" "$OUTD" || { rm -rf "$OUTD"; emit false stamp-red 2 error "could not write $VREC"; exit 2; }
+  fi
+  VR_REC="$VREC" verify_run "$CMD_LIST" 1 "$OUTD"
+  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause stamp-red "$VREC" "$VR_PAUSE"; fi
+  rm -f "$VREC"
   if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
     rm -rf "$OUTD"; red_refuse "not red: timed out after ${VR_VT}s"
   fi
@@ -2873,11 +2976,16 @@ EOF
 
   verify_cells_check close-story "$CMD_LIST"
 
-  local VH VSTART; VH="$(verify_files_hash "$STORY")"
-  VSTART="$(verify_resume_start "$STORY" close-story "$VH")"
-  VR_START="$VSTART" verify_run "$CMD_LIST" "$REPS"
-  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause close-story "$STORY" "$VR_PAUSE" "$VH"; fi
-  verify_resume_set "$STORY"
+  local VH VL VREC; VH="$(verify_files_hash "$STORY")"; VL="$(verify_text_hash "$REPS
+$CMD_LIST")"
+  VREC="$(verify_rec "$STORY" close-story)"
+  verify_resume_start close-story "$VREC" "$VH" "$STAMP" "$VL" "$CMD_LIST" "$REPS"
+  if [ "$VR_START" -eq 1 ]; then
+    verify_rec_new "$VREC" "$VH" "$STAMP" "$VL" || { emit false close-story 2 error "could not write $VREC"; exit 2; }
+  fi
+  VR_REC="$VREC" verify_run "$CMD_LIST" "$REPS"
+  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause close-story "$VREC" "$VR_PAUSE"; fi
+  rm -f "$VREC"
   if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
     echo "cycle: close-story - verification timed out after ${VR_VT}s (run $VR_RUN/$REPS): $VR_LINE" >&2
     emit false close-story 4 repair "verification timed out after ${VR_VT}s: $VR_LINE"
@@ -3146,12 +3254,12 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   local tier required narrow="" second=""
   tier="$(tier_of "$spec")"
   required="$(required_seats_for_tier "$tier")"
-  # ab-run-fixes C5: the round after a narrow repair story (`narrow: true`, cut for round n-1) is
-  # review-only: seats=review, narrow=1 - no blind seat, no court, no second reviewer, and `suite`
-  # runs no step. Every other round is a full one.
-  if [ "$n" -gt 1 ]; then
-    local nrs; nrs="$(repair_story_of_round "$spec" "$((n-1))")"
-    [ -n "$nrs" ] && [ "$(fm_field "$nrs" narrow)" = true ] && { narrow=1; required="review"; }
+  # ab-run-fixes C5: the round after a narrow repair is review-only: seats=review, narrow=1 - no blind
+  # seat, no court, no second reviewer, and `suite` runs no step. upgrade-findings-05 (A3): narrow only
+  # by the record `repair` wrote, re-checked here (narrow_round_holds); the story's `narrow:` line is
+  # never read. Every other round is a full one.
+  if [ "$n" -gt 1 ] && narrow_round_holds "$spec" "$n"; then
+    narrow=1; required="review"
   fi
 
   # No blind seat, no court (D3): the reviewer never enters one, so a review-only round would
@@ -3513,11 +3621,12 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
 
   # Several round-only full-suite rows (gate-split-08): each row is one step, run as one capped part,
   # and a `steps` marker is read only on a single row. One row keeps the stepped / plain split.
-  local rows row purpose cmd stepped=0 nrows=0
+  local rows row purpose cmd why stepped=0 nrows=0
   rows="$(full_suite_row "$(constitution_file "$ROOT")")"
   [ -n "$rows" ] && nrows="$(printf '%s\n' "$rows" | grep -c .)"
   row="$(printf '%s\n' "$rows" | sed -n 1p)"
   purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
+  why="no command in its row"; case "$cmd" in $'\t'several) cmd=""; why="several backticked commands in one cell" ;; esac
   [ "$nrows" -le 1 ] && [ -n "$cmd" ] && case " $(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' ' ') " in *" steps "*) stepped=1 ;; esac
 
   # A log keyed to another head (an earlier code state) is discarded, never resumed.
@@ -3564,8 +3673,9 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
     if [ "$K" -le "$nrows" ]; then
       row="$(printf '%s\n' "$rows" | sed -n "${K}p")"
       purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
+      why="no command in its row"; case "$cmd" in $'\t'several) cmd=""; why="several backticked commands in one cell" ;; esac
     else
-      purpose="step $K: no row"; cmd=""
+      purpose="step $K: no row"; cmd=""; why="no command in its row"
     fi
   fi
 
@@ -3607,7 +3717,7 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
       pname="$pname-$K"
     fi
     if [ -z "$cmd" ]; then
-      rc=1; secs=0; parts="PART $pname FAIL 0s cap ${cap}s - no command in its row"
+      rc=1; secs=0; parts="PART $pname FAIL 0s cap ${cap}s - $why"
     else
       run_capped "$cap" bash -c "$cmd" >/dev/null 2>&1; rc=$?
       secs=$((SECONDS - t0))
@@ -3991,6 +4101,103 @@ story_number() { # story_number <story-file> <slug> -> the NN of its `story: <sl
   [ "$a" -gt "$b" ] && printf '%s' "$a" || printf '%s' "$b"
 }
 
+repair_asks() { # repair_asks <round-dir> <row> -> the RED asks of a round, sorted: the row's red +
+  # review_asks, then any other RED ask a seat file carries (an unevidenced RED is in the seat file,
+  # not in the row's red)
+  local rd="$1" row="$2" seat x asks=""
+  for x in $(json_num_array "$row" red) $(json_num_array "$row" review_asks); do
+    case " $asks " in *" $x "*) ;; *) asks="$asks $x" ;; esac
+  done
+  for seat in haiku sonnet opus; do
+    [ -f "$rd/$seat.md" ] || continue
+    for x in $(grep -E '^ASK [0-9]+:[[:space:]]*RED' "$rd/$seat.md" | sed -n 's/^ASK \([0-9][0-9]*\):.*/\1/p'); do
+      case " $asks " in *" $x "*) ;; *) asks="$asks $x" ;; esac
+    done
+  done
+  sort_num_list "$asks"
+}
+
+repair_findings() { # repair_findings <spec> <round-dir> -> the round's findings, one per line, in order:
+  # seat RED asks; anchored review findings; red gate parts; owner REJECTED.
+  # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
+  # ab-run-fixes C2: a second reviewer's anchored findings join the one repair story (recall)
+  # gate-split-04: the gate of the round - each red PART line of a finished suite.log is a finding.
+  # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
+  # finding (judge's override) - its note is then the only condition the repair can meet.
+  local spec="$1" rd="$2" seat ropened hlast hts slug
+  slug="$(slug_of "$spec")"
+  for seat in haiku sonnet opus; do
+    [ -f "$rd/$seat.md" ] && grep -E '^ASK [0-9]+:[[:space:]]*RED' "$rd/$seat.md"
+  done
+  for seat in review review2; do
+    [ -f "$rd/$seat.md" ] && review_blocking_lines "$rd/$seat.md" \
+      | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
+  done
+  [ -n "$(suite_log_line "$rd")" ] && suite_red_parts "$rd/suite.log" | sed 's/^/- [regression] /'
+  ropened="$(round_field "$rd" opened)"
+  hlast="$(grep -F "\"spec\":\"$slug\"" memory/stats/human.jsonl 2>/dev/null | tail -1)"
+  if [ -n "$hlast" ] && [ "$(json_field "$hlast" verdict)" = REJECTED ]; then
+    hts="$(json_field "$hlast" ts)"
+    if [ -n "$hts" ] && [ -n "$ropened" ] && { [ "$hts" \> "$ropened" ] || [ "$hts" = "$ropened" ]; }; then
+      printf -- '- owner REJECTED at %s: %s\n' "$hts" "$(printf '%s' "$hlast" | sed -n 's/.*"note":"\(.*\)"}[[:space:]]*$/\1/p')"
+    fi
+  fi
+  return 0
+}
+
+narrow_file() { # narrow_file <asks> <findings> <files> -> the one file a narrow repair reaches, or nothing.
+  # ab-run-fixes C5: narrow - exactly one RED item (one ask, or one [regression] / gate / owner
+  # finding) whose reach (the paths its findings name, else the ## Files union) is one non-test file.
+  # The one rule `repair` decides by and `open-round` re-checks by (upgrade-findings-05, A3).
+  local reach items
+  items=$(( $(printf '%s\n' $1 | grep -c .) + $(printf '%s\n' "$2" | grep -cE '\[regression\]|^- owner REJECTED') ))
+  [ "$items" -eq 1 ] || return 0
+  reach="$(finding_paths "$2" | awk 'NF && !seen[$0]++')"
+  [ -n "$reach" ] || reach="$(printf '%s' "$3" | awk 'NF && !seen[$0]++')"
+  [ "$(printf '%s\n' "$reach" | grep -c .)" -eq 1 ] || return 0
+  case "$reach" in *[*?[]*|*/) return 0 ;; esac
+  is_test_path "$reach" || printf '%s' "$reach"
+  return 0
+}
+
+narrow_rec() { # narrow_rec <spec> <n> -> the narrow record's path for round n (upgrade-findings-05, A3):
+  # .vulyk/state/<slug>/narrow.round-<n>, written by `repair` for round n-1, keys story=, file=, from=
+  printf '%s/.vulyk/state/%s/narrow.round-%s' "$ROOT" "$(slug_of "$1")" "$2"
+}
+
+narrow_round_holds() { # narrow_round_holds <spec> <n> -> 0 iff round n opens narrow: its record names
+  # round n-1's repair story and narrow_file, recomputed from round n-1's records, still names its file.
+  # Otherwise 1, with one stderr line saying which (only when round n-1 has a repair story).
+  local spec="$1" n="$2" rs rec id rid rfile slug files="" sf now
+  rs="$(repair_story_of_round "$spec" "$((n-1))")"
+  [ -n "$rs" ] || return 1
+  slug="$(slug_of "$spec")"; rec="$(narrow_rec "$spec" "$n")"
+  id="$(fm_field "$rs" story)"; [ -n "$id" ] || id="$(basename "$rs" .md)"
+  if [ ! -f "$rec" ]; then
+    echo "cycle: open-round - $slug round $n: the narrow record ${rec#"$ROOT"/} is missing: a full round" >&2
+    return 1
+  fi
+  rid="$(verify_rec_get "$rec" story)"; rfile="$(verify_rec_get "$rec" file)"
+  if [ "$rid" != "$id" ]; then
+    echo "cycle: open-round - $slug round $n: the narrow record names story '$rid', not $id: a full round" >&2
+    return 1
+  fi
+  for sf in "$spec"/*.md; do
+    is_story_file "$sf" && [ "$sf" != "$rs" ] || continue
+    [ "$(fm_field "$sf" status)" = done ] || continue
+    files="$files$(files_of "$sf")
+"
+  done
+  local rd="$spec/council/round-$((n-1))" asks
+  asks="$(repair_asks "$rd" "$(round_row "$slug" "$((n-1))")")"
+  now="$(narrow_file "$asks" "$(repair_findings "$spec" "$rd")" "$files")"
+  if [ -z "$now" ] || [ "$now" != "$rfile" ]; then
+    echo "cycle: open-round - $slug round $n: the narrow re-check on round $((n-1))'s records does not hold (${now:-not one item in one non-test file}, record: $rfile): a full round" >&2
+    return 1
+  fi
+  return 0
+}
+
 cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   local SPEC="$1" DOCOMMIT="$2" STAMP="${3:-}"
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
@@ -4031,19 +4238,8 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
     exit 2
   }
 
-  local RD="$SPEC/council/round-$N" seat x asks=""
-  # the asks: the row's red + review_asks, then any other RED ask a seat file carries (an
-  # unevidenced RED is in the seat file, not in the row's red)
-  for x in $(json_num_array "$NEWEST" red) $(json_num_array "$NEWEST" review_asks); do
-    case " $asks " in *" $x "*) ;; *) asks="$asks $x" ;; esac
-  done
-  for seat in haiku sonnet opus; do
-    [ -f "$RD/$seat.md" ] || continue
-    for x in $(grep -E '^ASK [0-9]+:[[:space:]]*RED' "$RD/$seat.md" | sed -n 's/^ASK \([0-9][0-9]*\):.*/\1/p'); do
-      case " $asks " in *" $x "*) ;; *) asks="$asks $x" ;; esac
-    done
-  done
-  asks="$(sort_num_list "$asks")"
+  local RD="$SPEC/council/round-$N" x asks
+  asks="$(repair_asks "$RD" "$NEWEST")"
 
   local maxn=0 maxw=0 sf n w files="" verifs="" marked=0 mfiles=""
   for sf in "$SPEC"/*.md; do
@@ -4068,48 +4264,16 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   # `model: opus` on purpose (ADR-015): first attempts build on Sonnet, and a repair follows a RED
   # round that judged that work wrong, so it climbs a rung, as a missed story's retry climbs to the gate.
 
-  local findings
-  # findings, in order: seat RED asks; anchored review findings; red gate parts; owner REJECTED
-  # (comments stay out of the $( ) body: the portability gate, and likely bash 3.2, read them as code).
-  # `[unanchored]` findings are never copied: they wait for /vulyk-ship's next circle.
-  # ab-run-fixes C2: a second reviewer's anchored findings join the one repair story (recall)
-  # gate-split-04: the gate of the round - each red PART line of a finished suite.log is a finding.
-  # An owner's REJECTED check at or after the round's opening turns it RED with no ask and no
-  # finding (judge's override) - its note is then the only condition the repair can meet.
-  findings="$(
-    for seat in haiku sonnet opus; do
-      [ -f "$RD/$seat.md" ] && grep -E '^ASK [0-9]+:[[:space:]]*RED' "$RD/$seat.md"
-    done
-    for seat in review review2; do
-      [ -f "$RD/$seat.md" ] && review_blocking_lines "$RD/$seat.md" \
-        | grep -E '\[ask [0-9]+\]|\[regression\]' | grep -vF '[unanchored]'
-    done
-    [ -n "$(suite_log_line "$RD")" ] && suite_red_parts "$RD/suite.log" | sed 's/^/- [regression] /'
-    ropened="$(round_field "$RD" opened)"
-    hlast="$(grep -F "\"spec\":\"$SLUG\"" memory/stats/human.jsonl 2>/dev/null | tail -1)"
-    if [ -n "$hlast" ] && [ "$(json_field "$hlast" verdict)" = REJECTED ]; then
-      hts="$(json_field "$hlast" ts)"
-      if [ -n "$hts" ] && [ -n "$ropened" ] && { [ "$hts" \> "$ropened" ] || [ "$hts" = "$ropened" ]; }; then
-        printf -- '- owner REJECTED at %s: %s\n' "$hts" "$(printf '%s' "$hlast" | sed -n 's/.*"note":"\(.*\)"}[[:space:]]*$/\1/p')"
-      fi
-    fi
-  )"
+  local findings; findings="$(repair_findings "$SPEC" "$RD")"
   # red-receipt (0.40.1): a repair drops the mark only when every finding names a path of its
   # ## Files and none names a marked story's; a finding that names no file keeps it (fail closed).
   [ "$marked" = 1 ] && repair_unmarks "$findings" "$files" "$mfiles" && marked=0
 
-  # ab-run-fixes C5: narrow - exactly one RED item (one ask, or one [regression] / gate / owner
-  # finding) whose reach (the paths its findings name, else the ## Files union) is one non-test file.
-  # Its story names that file, its exact tests and the defect cards; the next round is review-only.
-  local NARROW="" nfile="" reach items
-  items=$(( $(printf '%s\n' $asks | grep -c .) + $(printf '%s\n' "$findings" | grep -cE '\[regression\]|^- owner REJECTED') ))
-  if [ "$items" -eq 1 ]; then
-    reach="$(finding_paths "$findings" | awk 'NF && !seen[$0]++')"
-    [ -n "$reach" ] || reach="$(printf '%s' "$files" | awk 'NF && !seen[$0]++')"
-    if [ "$(printf '%s\n' "$reach" | grep -c .)" -eq 1 ]; then
-      case "$reach" in *[*?[]*|*/) ;; *) is_test_path "$reach" || { NARROW=1; nfile="$reach"; } ;; esac
-    fi
-  fi
+  # ab-run-fixes C5: narrow (narrow_file). Its story names that file, its exact tests and the defect
+  # cards; the record (upgrade-findings-05, A3) is what makes the next round review-only.
+  local NARROW="" nfile
+  nfile="$(narrow_file "$asks" "$findings" "$files")"
+  [ -n "$nfile" ] && NARROW=1
   local nfiles="" nverifs=""
   if [ -n "$NARROW" ]; then
     nfiles="$nfile
@@ -4171,6 +4335,12 @@ EOF
       repair_verification "$verifs" "$findings" "$files" | awk 'NF { print "`" $0 "`" }'
     fi
   } > "$STORY"
+  # upgrade-findings-05 (A3): the round after is narrow only by this record, never by the story's line
+  if [ -n "$NARROW" ]; then
+    local nrec ndir; nrec="$(narrow_rec "$SPEC" "$((N+1))")"; ndir="$(dirname "$nrec")"
+    mkdir -p "$ndir" && { [ -f "$(dirname "$ndir")/.gitignore" ] || printf '*\n' > "$(dirname "$ndir")/.gitignore"; }
+    printf 'story=%s-%s\nfile=%s\nfrom=%s\n' "$SLUG" "$NN" "$nfile" "$N" > "$nrec"
+  fi
 
   bash "$HERE/journal.sh" "$SPEC" "03-building" "repair round $N: $(basename "$STORY")" "build:$WAVE" >/dev/null
   [ "$DOCOMMIT" = "1" ] && commit_paperwork repair "vulyk($SLUG): repair round $N" "$STORY" "$SPEC/journal.md"

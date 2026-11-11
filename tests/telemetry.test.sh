@@ -1484,6 +1484,9 @@ git clone -q "$XREL" "$T/xp-failcache" && git -C "$T/xp-failcache" config remote
 XF_RC=0; UPD_SRC="$T/xp-failcache" upd > "$T/xp-fail.out" 2>&1 || XF_RC=$?
 expect_eq "a fetch that fails: exit 1" "1" "$XF_RC"
 cat "$T/xp-fail.out" | expect "... with one line saying why" "update: fetch failed: "
+# upgrade-findings-06 (D1): --check asks the origin, never the SessionStart hook's cache.
+mkdir -p "$XU/.claude"; printf '%s 9.2.0 2026-01-02T03:04Z\n' "$(date +%s)" > "$XU/.claude/.vulyk-update-cache"
+upd 2>&1 | expect "vulyk-update.sh --check with a hook cache naming an old tag reports the origin's newest" "upgrading to v9.11.0"
 
 # Ask 4: the SessionStart update check picks the newest tag without `sort -V`.
 UC="$T/hive-xp-uc"; mkdir -p "$UC/.claude" "$T/xp-curl"
@@ -1494,6 +1497,35 @@ ucheck() { printf '%s\n' "$1" > "$UC/.claude/vulyk-version"; rm -f "$UC/.claude/
 ucheck 0.9.0 | expect "vulyk-update-check.sh names v0.10.0 newer than v0.9.0, with no sort -V" \
   "installed v0.9.0, latest v0.10.0"
 ucheck 0.11.0 | expect_absent "... and stays silent for a version ahead of the tags" "update available"
+
+# upgrade-findings-06 (D1): the cache lives 6 hours, its line is `<epoch> <latest> <YYYY-MM-DDTHH:MMZ>`, and the
+# update line names when the answer was fetched. A stub origin answering v0.11.0 counts its calls.
+mkdir -p "$T/xp-curl6"; UC6N="$T/xp-curl6.calls"
+printf '#!/bin/sh\necho x >> "%s"\necho %s\n' "$UC6N" "'[{\"name\":\"v0.11.0\"},{\"name\":\"v0.10.0\"}]'" > "$T/xp-curl6/curl"
+chmod +x "$T/xp-curl6/curl"
+ucache() { printf '%s\n' "$1" > "$UC/.claude/.vulyk-update-cache"; }
+ucheck6() { : > "$UC6N"; printf '0.9.0\n' > "$UC/.claude/vulyk-version"
+  CLAUDE_PROJECT_DIR="$UC" VULYK_REPO=o/r PATH="$T/xp-curl6:$PATH" "$@" bash "$SRC/.claude/hooks/vulyk-update-check.sh" 2>&1; }
+ucalls() { grep -c x "$UC6N" 2>/dev/null | tr -d ' '; }
+UNOW="$(date +%s)"
+ucache "$((UNOW - 7 * 3600)) 0.10.0 2026-01-02T03:04Z"
+ucheck6 env | expect "a cache older than 6 hours is refetched: the newer tag is named" "installed v0.9.0, latest v0.11.0"
+expect_eq "... with one call to the origin" "1" "$(ucalls)"
+read -r _ _ U6TS < "$UC/.claude/.vulyk-update-cache"
+expect_eq "... and the cache rewritten with three fields" "3" "$(awk '{ print NF }' "$UC/.claude/.vulyk-update-cache")"
+ucheck6 env | expect "... the line names the fetch's own time" "(checked $(printf '%s' "$U6TS" | sed 's/T/ /; s/Z$//') UTC)"
+ucache "$((UNOW - 5 * 3600)) 0.10.0 2026-01-02T03:04Z"
+out="$(ucheck6 env)"
+printf '%s' "$out" | expect "a cache 5 hours old is used" "installed v0.9.0, latest v0.10.0"
+printf '%s' "$out" | expect "... and the line carries the cache's timestamp" "(checked 2026-01-02 03:04 UTC)"
+expect_eq "... with no call to the origin" "0" "$(ucalls)"
+ucache "$UNOW 0.10.0"
+ucheck6 env | expect "a two-field cache counts as expired: refetched" "latest v0.11.0"
+expect_eq "... with one call to the origin" "1" "$(ucalls)"
+expect_eq "... and rewritten with three fields" "3" "$(awk '{ print NF }' "$UC/.claude/.vulyk-update-cache")"
+ucache "$((UNOW - 7 * 3600)) 0.10.0 2026-01-02T03:04Z"
+ucheck6 env VULYK_UPDATE_INTERVAL_HOURS=24 | expect "VULYK_UPDATE_INTERVAL_HOURS=24 restores the old window" "latest v0.10.0"
+expect_eq "... with no call to the origin" "0" "$(ucalls)"
 
 # Ask 9, upgrade half: a hive's own filled ## Commands block - the old bare-python cell included - is the host's,
 # carried byte for byte through --upgrade.
@@ -1806,6 +1838,32 @@ cat "$T/wire2.out" | expect_absent "and no second timeout" "timeout        .clau
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/wire3.out" 2>&1
 cat "$T/wire3.out" | expect_absent "--check reports no wiring for an already-wired hook" "would wire     .claude/settings.json -> SessionEnd"
 cat "$T/wire3.out" | expect_absent "--check reports no unwiring once it is done" "would unwire"
+# upgrade-findings E3: a rewrite keeps the file's indent unit (from its first indented line); a new file gets 2 spaces.
+expect_eq "fresh install: the first indented line is 2 spaces" "2" "$(tr -d '\r' < "$TGT/.claude/settings.json" | grep -m1 '^[[:space:]]' | sed 's/[^ ].*//' | awk '{ print length }')"
+expect_eq "an owner's one-line settings.json comes out indented with 2 spaces" "2" \
+  "$(grep -m1 '^[[:space:]]' "$EH/.claude/settings.json" | sed 's/[^ ].*//' | awk '{ print length }')"
+for u in 4 tab; do
+  IW="$T/hive-indent-$u"; fresh_install "$IW"; IS="$IW/.claude/settings.json"
+  if [ "$u" = tab ]; then ind=--tab; else ind="--indent $u"; fi
+  # shellcheck disable=SC2086
+  jq $ind 'del(.hooks.SessionEnd[]?.hooks[]? | select(.command | test("anomaly-scan")))' "$IS" | tr -d '\r' > "$T/indent.json" && mv "$T/indent.json" "$IS"
+  cp "$IS" "$T/indent-$u.before"
+  # an upgrade leaves an owner's removal alone and names the --wire command that adds it back: run that
+  bash "$SRC/install.sh" "$IW" --wire SessionEnd:anomaly-scan.sh > "$T/indent-$u.out" 2>&1
+  cat "$T/indent-$u.out" | expect "indent $u: --wire adds the hook" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
+  if [ "$u" = tab ]; then
+    expect_eq "indent tab: every indented line uses tabs only" "0 1" "$(grep -c '^	* ' "$IS") $(grep -q '^	' "$IS" && echo 1 || echo 0)"
+  else
+    expect_eq "indent 4: every indented line uses whole 4-space steps" "0" "$(grep -E '^ ' "$IS" | grep -cvE '^(    )+[^ ]')"
+    expect_eq "indent 4: no tab indent" "0" "$(grep -c '^	' "$IS")"
+  fi
+  sed 's/,$//' "$T/indent-$u.before" > "$T/ib"; sed 's/,$//' "$IS" > "$T/ia"   # a comma after the old last element is the add's
+  expect_eq "indent $u: a diff against the old file shows only the added entries" "0 1" \
+    "$(diff "$T/ib" "$T/ia" | grep -c '^<') $(diff "$T/ib" "$T/ia" | grep -q '^>' && echo 1 || echo 0)"
+  expect_eq "indent $u: LF, ending with a newline" "0 0a" "$(tr -cd '\r' < "$IS" | wc -c | tr -d ' ') $(tail -c 1 "$IS" | od -An -tx1 | tr -d ' \n\r')"
+  cat "$T/indent-$u.out" | expect_absent "indent $u: the note claims no re-indent" "re-indented"
+  expect_eq "indent $u: the backup is the file as it was" "1" "$(same "$T/indent-$u.before" "$IS.vulyk-bak")"
+done
 fi # wiring
 
 if part_on ledger; then
@@ -1920,6 +1978,36 @@ printf '# My project rules\n\n@CLAUDE.vulyk.md\n' > "$SCF/CLAUDE.md"
 bash "$SRC/install.sh" "$SCF" --telemetry off > /dev/null 2>&1
 sed_inplace 's#^| Full suite / build (round-only) |#| Full test suite |#' "$SCF/CLAUDE.vulyk.md"
 bash "$SRC/install.sh" "$SCF" --upgrade --check 2>&1 | expect "a sidecar's 'Full test suite' row is named on --upgrade --check" "no 'Full suite / build (round-only)' row"
+
+# --check --constitution replace names the non-block lines only the backup would keep (upgrade-findings-04,
+# ask 15, E4): the hive's own lines, never v$PREV's own wording the new release dropped; from a source without
+# the v$PREV tag every line absent from the new file, with a note. Nothing is written.
+echo "--- install.sh: lines only in the backup"
+ER="$T/release-e4"; mkdir -p "$ER"
+tar -C "$SRC" --exclude=./.git --exclude=./.claude/worktrees -cf - . | tar -C "$ER" -xf -
+git -C "$ER" init -q -b main . && git -C "$ER" config user.email t@t &&
+  git -C "$ER" config user.name "Test Owner" && git -C "$ER" config core.autocrlf false
+cp "$ER/CLAUDE.md" "$T/e4-new.md"
+printf '9.8.0\n' > "$ER/VERSION"
+printf 'Old release wording the next release drops\n' >> "$ER/CLAUDE.md"
+git -C "$ER" add -A >/dev/null 2>&1 && git -C "$ER" commit -qm v9.8.0 >/dev/null 2>&1 && git -C "$ER" tag v9.8.0
+EH="$T/hive-e4"; mkdir -p "$EH"
+bash "$ER/install.sh" "$EH" --telemetry off > /dev/null 2>&1
+printf 'Acme house rule one\nAcme house rule two\n' >> "$EH/CLAUDE.md"
+cp "$T/e4-new.md" "$ER/CLAUDE.md"; printf '9.9.0\n' > "$ER/VERSION"
+S4="$(treesum "$EH")"
+bash "$ER/install.sh" "$EH" --upgrade --check --constitution replace > "$T/e4.out" 2>&1
+cat "$T/e4.out" | expect "--check names the backup-only lines" "constitution: 2 lines only in the backup (CLAUDE.pre-9.9.md):"
+cat "$T/e4.out" | expect "the first hand-written line is listed" "  | Acme house rule one"
+cat "$T/e4.out" | expect "the second hand-written line is listed" "  | Acme house rule two"
+cat "$T/e4.out" | expect_absent "the old release's own wording is left out" "Old release wording"
+expect_eq "the E4 report writes nothing" "$S4" "$(treesum "$EH")"
+git -C "$ER" tag -d v9.8.0 > /dev/null 2>&1
+bash "$ER/install.sh" "$EH" --upgrade --check --constitution replace > "$T/e4-notag.out" 2>&1
+cat "$T/e4-notag.out" | expect "without the tag every line absent from the new file is listed" "constitution: 3 lines only in the backup (CLAUDE.pre-9.9.md):"
+cat "$T/e4-notag.out" | expect "the old wording is then in the list" "  | Old release wording the next release drops"
+cat "$T/e4-notag.out" | expect "with a note" "so this list also holds that release's own wording"
+expect_eq "nor does the tagless report write anything" "$S4" "$(treesum "$EH")"
 
 fi # constitution
 
@@ -2045,6 +2133,69 @@ bash "$REL/install.sh" "$RH2" --upgrade > "$T/rh2.out" 2>&1
 cat "$T/rh2.out" | expect "an edited learnings hook is kept" "keep (edited)  .claude/hooks/session-end-learnings.sh"
 expect_eq "and stays wired" "1" "$(grep -c 'session-end-learnings' "$RH2/.claude/settings.json")"
 cat "$T/rh2.out" | expect "the unedited retired agent beside it goes" "remove         .claude/agents/council-sonnet.md"
+
+# --- install.sh: the dry run's hive reports (upgrade-findings-04, asks 7 and 8; C1, B1) ------------
+# A measured full suite over 210 s is named with its round, then the suite-parts-check pointer once;
+# odd `## Commands` cells are named through lib.sh commands_lint. Nothing is written for either.
+echo "--- install.sh: measured suite and commands lint"
+mkround() { # mkround <hive> <slug> <n> <opened> <file> <body> - a council round with one log
+  local d="$1/docs/specs/$2/council/round-$3"; mkdir -p "$d"
+  printf 'head=abc1234\nopened=%s\n' "$4" > "$d/ROUND"; printf '%s\n' "$6" > "$d/$5"
+}
+MS="$T/hive-measured"; fresh_install "$MS"
+mkround "$MS" demo 1 2026-01-01T00:00:00Z suite.log "$(printf 'head=abc1234 steps=1\nSUITE: ok 378s')"
+sed_inplace 's#^| Lint | `<fill in>` |#| Lint | `npm run lint` (quiet) |#; s#^| Build / typecheck | `<fill in>` |#| Build / typecheck | `tsc` or `tsc -b` |#' "$MS/CLAUDE.md"
+cp "$MS/CLAUDE.md" "$T/ms.before"
+bash "$SRC/install.sh" "$MS" --upgrade --check > "$T/ms-check.out" 2>&1
+cat "$T/ms-check.out" | expect "--check: a measured 378 s suite is named with its round" \
+  "full suite measured 378s in round demo/round-1: cut before taking this release"
+cat "$T/ms-check.out" | expect "--check: and points at suite-parts-check.sh" "check a log with: bash scripts/suite-parts-check.sh"
+cat "$T/ms-check.out" | expect "--check: a noted command row is named" \
+  "commands: row 'Lint': text outside the backticked command is read as a note"
+cat "$T/ms-check.out" | expect "--check: a two-span command row is named" \
+  "commands: row 'Build / typecheck': 2 backticked commands in one cell"
+expect_eq "--check: exactly the two commands lines" "2" "$(grep -c "commands: row '" "$T/ms-check.out")"
+bash "$SRC/install.sh" "$MS" --upgrade > "$T/ms.out" 2>&1
+cat "$T/ms.out" | expect "the real upgrade names the measured suite too" \
+  "full suite measured 378s in round demo/round-1: cut before taking this release"
+expect_eq "the real upgrade: exactly the two commands lines" "2" "$(grep -c "commands: row '" "$T/ms.out")"
+expect_eq "the hive's constitution is byte-identical afterwards" "1" "$(same "$T/ms.before" "$MS/CLAUDE.md")"
+expect_eq "the council log is untouched" "SUITE: ok 378s" "$(tail -1 "$MS/docs/specs/demo/council/round-1/suite.log")"
+cat "$T/rh.out" | expect_absent "a clean Commands table gets no commands line" "commands: row '"
+cat "$T/rh.out" | expect "a hive with no measured round says so" \
+  "gate split (ADR-029): no measured full suite in this hive's council logs"
+
+eval "$(sed -n '/^report_measured_suite() {/,/^}/p' "$SRC/install.sh")"
+MP="$T/hive-measured-parts"; mkdir -p "$MP"
+mkround "$MP" demo 1 2026-02-01T00:00:00Z suite.log "$(printf 'head=abc1234 steps=1\nSTEP 1/1: ok 370s\nPART unit ok 120s cap 300s\nPART e2e ok 250s cap 300s\nSUITE: ok 370s')"
+mkround "$MP" demo 2 2026-02-02T00:00:00Z review.md "$(printf 'VERDICT: PASS\nSUITE: TIMEOUT 596s budget 595s')"
+mkround "$MP" demo 3 2026-02-03T00:00:00Z suite.log "$(printf 'head=abc1234 steps=1\nSUITE: ok 150s')"
+mkround "$MP" demo 4 2026-02-04T00:00:00Z suite.log "$(printf 'head=abc1234 steps=0\nSUITE: none')"
+mkround "$MP" demo 5 2026-02-05T00:00:00Z review.md "$(printf 'VERDICT: PASS\nSUITE: FAIL 100s - part unit failed')"
+mkround "$MP" demo 6 2026-02-06T00:00:00Z suite.log "$(printf 'head=abc1234 steps=1\nSUITE: ok 90s')"
+mkround "$MP" old 1 2026-01-01T00:00:00Z suite.log "$(printf 'head=abc1234 steps=1\nSUITE: ok 999s')"
+report_measured_suite "$MP" > "$T/mp.out" 2>&1
+cat "$T/mp.out" | expect "a part over 210 s is named by part" \
+  "full suite part e2e measured 250s in round demo/round-1: cut before taking this release"
+cat "$T/mp.out" | expect_absent "a round with parts is not judged by its SUITE seconds" "measured 370s"
+cat "$T/mp.out" | expect_absent "a part under 210 s is not named" "measured 120s"
+cat "$T/mp.out" | expect "a review.md TIMEOUT line in a round with no log is read as its seconds" \
+  "full suite measured 596s in round demo/round-2: cut before taking this release"
+cat "$T/mp.out" | expect_absent "SUITE: ok 150s prints nothing" "round demo/round-3"
+cat "$T/mp.out" | expect_absent "SUITE: none prints nothing" "round demo/round-4"
+cat "$T/mp.out" | expect_absent "a sixth-newest round over the cap is not reported" "999s"
+expect_eq "the suite-parts-check pointer comes once" "1" "$(grep -c 'suite-parts-check.sh' "$T/mp.out")"
+mkdir -p "$T/hive-unmeasured/docs/specs/demo/council/round-1"
+report_measured_suite "$T/hive-unmeasured" \
+  | expect "no measured round prints the no-measured line" "no measured full suite in this hive's council logs"
+# upgrade-findings-07: a round directory with no ROUND file must not end the real installer under set -e
+NR="$T/hive-noround"; fresh_install "$NR"
+mkdir -p "$NR/docs/specs/demo/council/round-1"
+printf 'SUITE: ok 378s\n' > "$NR/docs/specs/demo/council/round-1/review.md"
+bash "$SRC/install.sh" "$NR" --upgrade > "$T/nr.out" 2>&1; nrx=$?
+expect_eq "upgrade over a round with no ROUND file exits 0" "0" "$nrx"
+cat "$T/nr.out" | expect "upgrade over a round with no ROUND file still names the measured suite" \
+  "full suite measured 378s in round demo/round-1: cut before taking this release"
 fi # upgrade
 
 if part_on library; then
@@ -2493,6 +2644,36 @@ cat "$T/glob.gi" > "$GH/.gitignore"
 (cd "$GC" && bash "$SRC/install.sh" "$GH" --upgrade --telemetry off > "$T/glob.out" 2>&1)
 expect_eq "run from a directory that matches its globs, install.sh still writes the patterns" "3 0" \
   "$(tr -d '\r' < "$GH/.gitignore" | grep -cxF -e 'docs/specs/*/DRIVER' -e 'docs/specs/*/PAUSE' -e '*.vulyk-new') $(tr -d '\r' < "$GH/.gitignore" | grep -cxF -e 'docs/specs/x/DRIVER' -e 'docs/specs/x/PAUSE' -e 'a.vulyk-new')"
+# upgrade-findings E2 + E1: a CRLF checkout (core.autocrlf=true) of the installed release's copy is a release copy,
+# not an edit; a CRLF hive file with a frontmatter-only edit takes the frontmatter merge. A release clone, v9.0.0 -> v9.0.1.
+echo "--- install.sh: a CRLF release copy is replaced, a CRLF frontmatter edit is merged"
+CRL="$T/rel-crlf"; CRH="$T/crlf-edits-hive"; mkdir -p "$CRL" "$CRH"
+( cd "$SRC" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$CRL"
+git -C "$CRL" init -q && git -C "$CRL" config user.email t@t && git -C "$CRL" config user.name t
+printf '9.0.0\n' > "$CRL/VERSION"
+printf -- '---\nname: fixture-fm\ndescription: a synthetic agent\nmodel: sonnet\nmaxTurns: 40\ntools:\n  - Read\n---\nBody line one.\nBody line two.\n' \
+  > "$CRL/.claude/agents/fixture-fm.md"
+git -C "$CRL" add -A >/dev/null 2>&1 && git -C "$CRL" commit -qm v9.0.0 && git -C "$CRL" tag v9.0.0
+git -C "$CRH" init -q
+bash "$CRL/install.sh" "$CRH" --telemetry off > "$T/crlf-edits-install.out" 2>&1
+sed_inplace 's/^maxTurns: 40$/maxTurns: 140/' "$CRH/.claude/agents/fixture-fm.md"
+for f in fixture-fm drone-docs; do sed_inplace 's/$/\r/' "$CRH/.claude/agents/$f.md"; done
+expect_eq "fixture: both hive files are CRLF" "2" "$(grep -l $'\r' "$CRH/.claude/agents/fixture-fm.md" "$CRH/.claude/agents/drone-docs.md" | grep -c .)"
+sed_inplace '3s/$/ (v9.0.1)/' "$CRL/.claude/agents/drone-docs.md"
+printf -- '---\nname: fixture-fm\ndescription: a synthetic agent\nmodel: sonnet\nmaxTurns: 40\n---\nBody line one (v9.0.1).\nBody line two.\n' \
+  > "$CRL/.claude/agents/fixture-fm.md"
+printf '9.0.1\n' > "$CRL/VERSION"
+git -C "$CRL" commit -qam v9.0.1 && git -C "$CRL" tag v9.0.1
+bash "$CRL/install.sh" "$CRH" --upgrade --telemetry off > "$T/crlf-edits.out" 2>&1
+grep -q '  update         .claude/agents/drone-docs.md' "$T/crlf-edits.out" && cmp -s "$CRH/.claude/agents/drone-docs.md" "$CRL/.claude/agents/drone-docs.md" \
+  && ! grep -qE '(keep \(edited\)|kept \+ new) +\.claude/agents/drone-docs\.md' "$T/crlf-edits.out" && [ ! -e "$CRH/.claude/agents/drone-docs.md.vulyk-new" ] \
+  && ok "a CRLF checkout of the installed release's copy is replaced as a release copy" \
+  || { bad "CRLF release copy:"; grep -F 'drone-docs' "$T/crlf-edits.out"; }
+printf -- '---\nname: fixture-fm\ndescription: a synthetic agent\nmodel: sonnet\nmaxTurns: 140\n---\nBody line one (v9.0.1).\nBody line two.\n' > "$T/crlf-fm.want"
+cmp -s "$CRH/.claude/agents/fixture-fm.md" "$T/crlf-fm.want" && [ ! -e "$CRH/.claude/agents/fixture-fm.md.vulyk-new" ] \
+  && grep -q '  merge frontmatter .claude/agents/fixture-fm.md' "$T/crlf-edits.out" && grep -q '^    kept maxTurns (yours)' "$T/crlf-edits.out" \
+  && ok "a CRLF frontmatter-only edit lands the release body, the hive's maxTurns kept" \
+  || { bad "CRLF frontmatter merge:"; sed 's/^/        /' "$CRH/.claude/agents/fixture-fm.md"; grep -F 'fixture-fm' -A2 "$T/crlf-edits.out"; }
 
 fi # crlf
 
@@ -2785,10 +2966,28 @@ mkdir -p "$REL" "$HIVE"
 ( cd "$SRC" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$REL"
 git -C "$REL" init -q && git -C "$REL" config user.email t@t && git -C "$REL" config user.name t
 printf '9.0.0\n' > "$REL/VERSION"
+# upgrade-findings E1: four synthetic agents whose hive edit conflicts in git merge-file. fm_agent <name>
+# <maxTurns> <description> <body line one> [<extra key line>] [notools] [nomodel] prints one.
+fm_agent() {
+  printf -- '---\nname: %s\ndescription: %s\n' "$1" "$3"
+  case " $* " in *" nomodel "*) ;; *) printf 'model: sonnet\n' ;; esac
+  printf 'maxTurns: %s\n' "$2"
+  case " $* " in *" notools "*) ;; *) printf 'tools:\n  - Read\n' ;; esac
+  [ -n "${5:-}" ] && [ "$5" != notools ] && [ "$5" != nomodel ] && printf '%s\n' "$5"
+  printf -- '---\n%s\nBody line two.\n' "$4"
+}
+for n in fixture-fm fixture-fm-clash fixture-fm-body fixture-fm-keys; do
+  fm_agent "$n" 40 'a synthetic agent' 'Body line one.' > "$REL/.claude/agents/$n.md"
+done
 git -C "$REL" add -A >/dev/null 2>&1 && git -C "$REL" commit -qm v9.0.0 && git -C "$REL" tag v9.0.0
 git -C "$HIVE" init -q
 bash "$REL/install.sh" "$HIVE" --telemetry off > "$T/edits-install.out" 2>&1
 A="$HIVE/.claude/agents"
+fm_agent fixture-fm 140 'a synthetic agent' 'Body line one.' > "$A/fixture-fm.md"              # frontmatter-only
+fm_agent fixture-fm-clash 140 'a synthetic agent' 'Body line one.' > "$A/fixture-fm-clash.md"  # the release changes maxTurns too
+fm_agent fixture-fm-body 140 'a synthetic agent' 'Body line one, mine.' > "$A/fixture-fm-body.md"   # the body as well
+fm_agent fixture-fm-keys 40 'a synthetic agent' 'Body line one.' 'effort: high' nomodel > "$A/fixture-fm-keys.md"  # a key added, one deleted
+for n in fixture-fm fixture-fm-clash fixture-fm-body fixture-fm-keys; do cp "$A/$n.md" "$T/$n.hive"; done
 sed_inplace 's/^maxTurns: .*/maxTurns: 140/' "$A/worker-code.md"           # an edit the release does not touch
 sed_inplace 's/^maxTurns: .*/maxTurns: 140/' "$A/lead-review.md"           # an edit on the line the release changes
 rm -f "$A/drone-scout.md"                                             # a deletion
@@ -2798,6 +2997,10 @@ git -C "$REL" commit -qam hotfix
 git -C "$REL" show HEAD:.claude/agents/worker-test.md > "$A/worker-test.md"
 for f in worker-code drone-docs worker-test; do sed_inplace '3s/$/ (v9.0.1)/' "$R/$f.md"; done
 sed_inplace 's/^maxTurns: .*/maxTurns: 70/' "$R/lead-review.md"
+fm_agent fixture-fm 40 'a synthetic agent' 'Body line one (v9.0.1).' notools > "$R/fixture-fm.md"
+fm_agent fixture-fm-clash 60 'a synthetic agent' 'Body line one (v9.0.1).' notools > "$R/fixture-fm-clash.md"
+fm_agent fixture-fm-body 40 'a synthetic agent' 'Body line one (v9.0.1).' notools > "$R/fixture-fm-body.md"
+fm_agent fixture-fm-keys 40 'a synthetic agent, v9.0.1' 'Body line one (v9.0.1).' > "$R/fixture-fm-keys.md"
 printf '9.0.1\n' > "$REL/VERSION"
 git -C "$REL" commit -qam v9.0.1 && git -C "$REL" tag v9.0.1
 cp "$A/lead-review.md" "$T/lead-review.hive"
@@ -2807,6 +3010,14 @@ grep -q 'would update   .claude/agents/drone-docs.md' "$T/edits-check.out" && gr
   && grep -q 'would keep + new .claude/agents/lead-review.md' "$T/edits-check.out" && grep -q 'would keep deleted .claude/agents/drone-scout.md' "$T/edits-check.out" \
   && ok "--check names all four outcomes with 'would'" || { bad "--check outcomes:"; grep -E 'agents/(drone|worker-code|lead-review)' "$T/edits-check.out"; }
 [ ! -e "$A/lead-review.md.vulyk-new" ] && grep -q '^maxTurns: 140' "$A/worker-code.md" && ok "--check writes nothing" || bad "--check wrote files"
+fm_block() { # fm_block <out> <head> - the <head> line and the indented key lines under it
+  awk -v h="$2" '$0 == h { f = 1; print; next } f && /^    / { print; next } { f = 0 }' "$1" | tr -d '\r'
+}
+expect_eq "--check: a frontmatter-only edit would merge, naming each key" \
+  "$(printf '  would merge frontmatter .claude/agents/fixture-fm.md\n    kept maxTurns (yours)\n    dropped tools (removed by the release)')" \
+  "$(fm_block "$T/edits-check.out" '  would merge frontmatter .claude/agents/fixture-fm.md')"
+cmp -s "$A/fixture-fm.md" "$T/fixture-fm.hive" && [ ! -e "$A/fixture-fm.md.vulyk-new" ] \
+  && ok "--check: the frontmatter merge changes no file" || bad "--check: the frontmatter merge wrote files"
 TMPDIR="$T/edits-tmp" bash "$REL/install.sh" "$HIVE" --upgrade --telemetry off > "$T/edits-up.out" 2>&1
 [ -z "$(ls -A "$T/edits-tmp")" ] && ok "--check and --upgrade leave no temp file behind" || { bad "temp files left:"; ls -A "$T/edits-tmp"; }
 grep -q '  update         .claude/agents/drone-docs.md' "$T/edits-up.out" && grep -q '(v9.0.1)' "$A/drone-docs.md" \
@@ -2820,6 +3031,27 @@ grep -q '  kept + new     .claude/agents/lead-review.md' "$T/edits-up.out" && cm
   && ok "a conflicting edit is kept byte for byte, the new release beside it" || bad "lead-review conflict handling"
 grep -q '  kept deleted   .claude/agents/drone-scout.md' "$T/edits-up.out" && [ ! -e "$A/drone-scout.md" ] \
   && ok "a deleted agent is not put back" || bad "drone-scout came back"
+fm_agent fixture-fm 140 'a synthetic agent' 'Body line one (v9.0.1).' notools > "$T/fixture-fm.want"
+if cmp -s "$A/fixture-fm.md" "$T/fixture-fm.want" && [ ! -e "$A/fixture-fm.md.vulyk-new" ] \
+  && [ "$(fm_block "$T/edits-up.out" '  merge frontmatter .claude/agents/fixture-fm.md')" = \
+       "$(printf '  merge frontmatter .claude/agents/fixture-fm.md\n    kept maxTurns (yours)\n    dropped tools (removed by the release)')" ]; then
+  ok "a frontmatter-only edit lands the release body, the hive's key kept, the removed key dropped"
+else
+  bad "a frontmatter-only edit lands the release body, the hive's key kept, the removed key dropped:"
+  sed 's/^/        /' "$A/fixture-fm.md"; grep -F 'fixture-fm.md' -A2 "$T/edits-up.out" | sed 's/^/        /'
+fi
+grep -q '^    frontmatter conflict on maxTurns' "$T/edits-up.out" && grep -q '  kept + new     .claude/agents/fixture-fm-clash.md' "$T/edits-up.out" \
+  && cmp -s "$A/fixture-fm-clash.md" "$T/fixture-fm-clash.hive" && cmp -s "$A/fixture-fm-clash.md.vulyk-new" "$R/fixture-fm-clash.md" \
+  && ok "a key both sides changed: frontmatter conflict, the hive file kept byte for byte, .vulyk-new parked" \
+  || { bad "frontmatter conflict on maxTurns:"; grep -F 'fixture-fm-clash' -B2 "$T/edits-up.out"; }
+grep -q '  kept + new     .claude/agents/fixture-fm-body.md' "$T/edits-up.out" && ! grep -q 'merge frontmatter .claude/agents/fixture-fm-body.md' "$T/edits-up.out" \
+  && cmp -s "$A/fixture-fm-body.md" "$T/fixture-fm-body.hive" && [ -e "$A/fixture-fm-body.md.vulyk-new" ] \
+  && ok "a hive edit that also touches the body is parked as before" || { bad "frontmatter + body edit:"; grep -F 'fixture-fm-body' "$T/edits-up.out"; }
+fm_agent fixture-fm-keys 40 'a synthetic agent, v9.0.1' 'Body line one (v9.0.1).' 'effort: high' nomodel > "$T/fixture-fm-keys.want"
+cmp -s "$A/fixture-fm-keys.md" "$T/fixture-fm-keys.want" && [ ! -e "$A/fixture-fm-keys.md.vulyk-new" ] \
+  && grep -q '  merge frontmatter .claude/agents/fixture-fm-keys.md' "$T/edits-up.out" \
+  && ok "a key the hive added and one it deleted survive a release that left them alone" \
+  || { bad "hive-added and hive-deleted keys:"; sed 's/^/        /' "$A/fixture-fm-keys.md"; grep -F 'fixture-fm-keys' -A3 "$T/edits-up.out"; }
 grep -qxF '*.vulyk-new' "$HIVE/.gitignore" && ok ".vulyk-new is gitignored" || bad ".vulyk-new not in .gitignore"
 # Again at the same version: the release left lead-review.md alone since v9.0.1, so there is nothing
 # to merge - the edit is kept and the pending .vulyk-new stays for the owner.

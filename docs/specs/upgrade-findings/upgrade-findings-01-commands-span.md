@@ -1,14 +1,15 @@
 ---
 story: upgrade-findings-01
 spec: upgrade-findings
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: runs only the backticked span
+red_verified_at: 2026-11-10T20:40:08Z 625d55f3e9b3ac8274574e034f839502de5ea8c4bdba8f6f3285414f8b7a8bd6
 ---
 
 # A `## Commands` cell runs its backticked command; the rest of the cell is a note
@@ -74,5 +75,34 @@ offered (plan.md `## Assumptions`, first item). `templates/story.md` gains the n
 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each -->
+- `scripts/lib.sh`: `cell_awk` (the one rule as awk functions), `command_cell_shape`, `command_cell_cmd`, `commands_rows`, `commands_lint`; `command_cells` now reads `commands_rows` (span only, never the note; each span of a several cell).
+- `commands_rows` splits a row as `full_suite_row` did (second cell exactly, `\|` kept); a 3+-cell row now offers its second cell's span, where the old sed offered nothing.
+- `scripts/cycle.sh`: `full_suite_row` reads `commands_rows`; a several row prints `<purpose>\t\tseveral`, which `cmd_suite` turns into `PART <name> FAIL 0s cap 300s - several backticked commands in one cell`.
+- `verify_cell_hint` walks rows: a noted row offers its span; a matching several row prints `not offered: row '<Purpose>': <N> backticked commands in one cell`.
+- `scripts/wave-check.sh` unchanged: its cell match is `command_cell_exists`, which now goes through the rule. `verify_programs` unchanged: it reads `## Verification` lines (backticks stripped by `verify_of`), never a cell.
+- `templates/story.md`: one clause on the note rule. Tests: council `suite` (noted plain, noted stepped, two spans, bare, parser), cycle `close` (stray-11..17), cycle `gates` (wnote wave-check, commands_lint).
 
 ## Findings
+
+## Red receipt
+- command: bash tests/council.test.sh --part suite
+- exit: 1
+- tests: 625d55f3e9b3ac8274574e034f839502de5ea8c4bdba8f6f3285414f8b7a8bd6 (tests/council.test.sh, tests/cycle.test.sh)
+- impl: 1f251c214b03cb36335e914a5dd87ee4de385553a2eb9247ed527e26a26c4403
+- stamped: 2026-11-10T20:40:08Z
+
+```
+::error::suite row parser: a noted cell runs only the backticked span - gave 'Full suite (round-only)	sh t.sh (a note, "quoted")'
+::error::suite noted row: runs only the backticked span - exit=0 out=cycle: sxnoted - round 1 suite step 1/1: FAIL 0s
+::error::suite noted stepped row: runs only the backticked span - exit=0 out=cycle: sxnotedstep - round 1 suite already finished: SUITE: FAIL 0s - bash fx-runner.sh (two steps; a note) --steps gave no step count (exit 2)
+  ok    sole row '| Full suite (round-only) |  |' -> STEP FAIL, a PART line names the row, SUITE: FAIL
+  ok    sole row '| Full suite (round-only) |' -> STEP FAIL, a PART line names the row, SUITE: FAIL
+  ok    unit=true + e2e empty -> steps 2, the e2e row is named FAIL, SUITE: FAIL
+suite: a step beyond the row count fails, two rows with one Purpose get distinct PART names (gate-split-10 finding 3)
+  ok    two rows named 'Full suite (round-only)' -> PART full-suite-round-only-1 and PART full-suite-round-only-2, the verdict names the failed one
+  ok    step 3 of a log over 2 rows -> STEP 3/3 FAIL, PART step-3-no-row, SUITE: FAIL
+suite: a stepped step killed at its call cap names the parts that never ended, in the STEP note and the SUITE line (post-045-tails ask 5)
+  ok    the hung part is named in the STEP note and the SUITE line, the ended one is not
+suite: no round-only full-suite row -> SUITE: none, done at once
+  ok    no row -> SUITE: none, steps 0, done
+```
