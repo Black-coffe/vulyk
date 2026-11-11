@@ -5,7 +5,7 @@ status: block
 check: bash scripts/py.sh scripts/handoff-window-check.py <arg>
 fixtures: [docs/defects/handoff-offered-too-early.original.fixture, docs/defects/handoff-offered-too-early.neighbour.fixture]
 keys: [хенд-офф викликаєш, з 1 мільйону, Ран іше хенд-офф]
-paths: [".claude/hooks/handoff.py"]
+paths: [".claude/hooks/handoff.py", "scripts/telemetry.sh"]
 ---
 
 # A handoff is offered long before the session's real context window is near full

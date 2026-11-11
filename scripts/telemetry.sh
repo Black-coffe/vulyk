@@ -318,6 +318,11 @@ detect_context() { # detect_context <main transcript>
   state_file="$ROOT/.claude/handoff/state/$session_id.json"
   window=""
   [ -f "$state_file" ] && window="$(jq -r '.window // empty' "$state_file" 2>/dev/null)"
+  # No window in the hook's state: the one measure resolved as the hook would (a 1M session is
+  # not judged against 70% of the stock 200k; card handoff-offered-too-early).
+  if [ -z "$window" ] || [ "$window" = "null" ] || [ "$window" = "0" ]; then
+    window="$(printf '%s' "$measured" | jq -r '.window // empty' 2>/dev/null)"
+  fi
   if [ -n "$window" ] && is_number "$window" && [ "$window" != "0" ]; then
     threshold=$(( window * VULYK_ANOMALY_CONTEXT_PCT / 100 ))
   else

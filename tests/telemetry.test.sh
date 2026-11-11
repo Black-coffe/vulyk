@@ -837,13 +837,25 @@ CTX="$T/ctx-main.jsonl"
 cat > "$CTX" <<'EOF'
 {"type":"assistant","isSidechain":false,"message":{"model":"claude-fable-5-1","usage":{"input_tokens":100000,"cache_read_input_tokens":40000,"cache_creation_input_tokens":10000,"output_tokens":5000}}}
 EOF
-tel scan --transcript "$CTX" >/dev/null 2>&1
+# Each scan gets its own HOME: measure now asks this machine's statusLine copies for the window.
+CTXHOME="$T/ctx-home-empty"; mkdir -p "$CTXHOME"
+telhome() { (cd "$HIVE" && HOME="$1" USERPROFILE="$1" VULYK_HIVE="$HIVE" bash scripts/telemetry.sh scan --transcript "$2"); }
+telhome "$CTXHOME" "$CTX" >/dev/null 2>&1
 expect_eq "scan records one context_high row above the absolute threshold" "1" \
   "$(grep -c '"code":"context_high"' "$LOG")"
 expect_eq "context_high maps claude-fable-5-1 to fable" "fable" \
   "$(grep '"code":"context_high"' "$LOG" | jq -r '.model')"
 expect_eq "context_high carries an empty agent" "" \
   "$(grep '"code":"context_high"' "$LOG" | jq -r '.agent')"
+# Card handoff-offered-too-early, the telemetry neighbour: the same 150k session, but this machine has a
+# 1M report for the same model (from another session). 15% of 1M is no anomaly; 70% of 200k was.
+: > "$LOG"
+CTXHOME1M="$T/ctx-home-1m"; mkdir -p "$CTXHOME1M/.cache/claude-statusbar"
+printf '{"session_id":"other","model":{"id":"claude-fable-5-1"},"context_window":{"context_window_size":1000000}}\n' \
+  > "$CTXHOME1M/.cache/claude-statusbar/last_stdin.json"
+telhome "$CTXHOME1M" "$CTX" >/dev/null 2>&1
+expect_eq "no context_high row when this machine reports a 1M window for the model" "0" \
+  "$(grep -c '"code":"context_high"' "$LOG" || true)"
 
 # --- case 11b: the model floor (0.20.0, ADR-015) ---------------------------------------------------
 echo "--- model floor: lib.sh, top-model.sh --floor, scan"
