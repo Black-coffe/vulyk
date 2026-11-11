@@ -99,3 +99,31 @@ nothing survives, ship one line in the docs that points to the official plugin.
    candidates into the evolve changeset.
 4. **Fallback (if 1 fails).** One line in `docs/getting-started.md` pointing to `claude-code-setup`, with
    the never-list beside it.
+
+## Measurement (2026-11-11, candidate story 1 run)
+
+The official skill (full list, no web search) ran read-only on five local hives: a web app (TypeScript +
+Python), a Python desktop app, a TypeScript monorepo, a small Python service, a media pipeline. Per-hive
+lists stay private; counts only here.
+
+| | Count |
+|---|---|
+| Raw recommendations | 121 |
+| Already present in the hive or the account (MCP, plugins, `gh`, own skills) | 36 |
+| Never-list conflicts | 39 |
+| VULYK already does it | 9 |
+| No signal in the code | 5 |
+| Survivors shown to the owner | 32 |
+| Accepted by the owner | 9 (per hive: 2, 3, 2, 0, 2) |
+
+- **Pass rule (set before the run): at least 1 accepted per hive. Result: 4 of 5 hives, so by the rule
+  as written it is not passed.** The small Python service got 0 of 5.
+- What the owner accepted: performance and cost analyst subagents (4 of 5 offered), LSP plugins
+  (2 of 2), two project scaffold skills (2 of 9), one research MCP (1 of 1).
+- What the owner rejected: every hook that blocks edits to secrets, live data or lockfiles (0 of 9),
+  every read-only database MCP (0 of 4), every migration and deploy skill.
+- Stack change: dependency manifests changed on 2-8 distinct days in 90 days in every hive. A manifest
+  edit is not always a new library.
+- Gaps: the owner judged only the survivors, so it is unknown whether a subtracted item would have been
+  accepted. The Queen did the subtraction (rules above, applied the same way to every hive); the
+  reference is the owner's acceptance, not the Queen's labels.
