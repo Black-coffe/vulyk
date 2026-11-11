@@ -10,6 +10,8 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
   the hook resolves (pin, this machine's report for the model, the 1M proof), and `detect_context` uses it.
   Evidence: 11 `context_high` rows in 7 days, 156k-336k on 1M Opus sessions, all false; replayed, all 1M.
   New check fails on the old code (`tests/telemetry.test.sh --part scan`).
+- **evolve 2026-11-11: card handoff-offered-too-early also covers `scripts/telemetry.sh`.** The card named
+  only `handoff.py`, so the telemetry neighbour kept the 200k measure after handoff-1m.
 
 ### Added
 - **Automation recommender, docs only.** `docs/getting-started.md` points to Anthropic's read-only
