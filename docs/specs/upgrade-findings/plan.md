@@ -195,7 +195,6 @@ is missing or unparsable.
 **Approved:** Andrei, 2026-11-10 («Утверждаю»)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path: Tier 1 "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"); Tier 2-4 only with `cycle.sh briefed <spec> --go`, "via grill (--go), <owner>, <date>". Alternative to **Approved:** above.>
 **Branch:** vulyk/upgrade-findings
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-11-11, at d2dfc17c, pack df396030b3bb - red: 2,5
 **Council:** ESCALATE round 2, 2026-11-11, at bf9863ca, pack 4513d384eef0
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
@@ -205,3 +204,4 @@ is missing or unparsable.
 - ask 5: BLOCK by the reviewer - see docs/specs/upgrade-findings/council/round-2/review.md
 - no progress: ask 5 RED in rounds 1 and 2
 - seats: docs/specs/upgrade-findings/council/round-2/
+**Checked:** ACCEPTED by Andrei, 2026-11-11, at a33426f5 - принимаю
