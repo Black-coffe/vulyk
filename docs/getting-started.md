@@ -90,8 +90,9 @@ these (study `docs/specs/automation-recommender/`):
   headless `claude -p` in pre-commit (VULYK owns the commit and ship path);
 - anything you already have: a duplicate of `git-guard` or the defect hooks, a plugin or MCP already installed.
 
-What survives goes through `/vulyk-plan` like any other change. In a five-hive trial, performance or cost
-analyst subagents, LSP plugins and project scaffold skills were the suggestions owners kept.
+What survives goes through `/vulyk-plan` like any other change. In a five-hive trial judged by one owner,
+the suggestions kept were performance or cost analyst subagents, LSP plugins and project scaffold skills;
+that is one person's pick, not a rule for your project.
 
 ## Recommended extras
 ```bash
