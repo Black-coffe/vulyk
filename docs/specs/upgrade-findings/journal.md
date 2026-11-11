@@ -12,3 +12,5 @@
 - 2026-11-11T11:04:23Z · 03-building · story 07: sealed test split after its receipt; Queen re-stamped with stamp-red --baseline · next: relaunching so the worker closes story 07
 - 2026-11-11T11:29:51Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/upgrade-findings/round-2 · next: dispatch:opus,review
 - 2026-11-11T12:13:51Z · 04-council:ESCALATE · round 2 verdict ESCALATE at bf9863ca pack 4513d384eef0 · next: escalated
+- 2026-11-11T12:14:11Z · 03-building · fallback: council-opus round-2/opus fable -> opus (Fable limit; ADR-015 exception) · next: round 2 judged
+- 2026-11-11T12:14:11Z · 03-building · fallback: lead-review round-2/review fable -> opus (Fable limit; ADR-015 exception) · next: round 2 judged
