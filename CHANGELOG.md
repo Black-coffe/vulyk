@@ -19,6 +19,10 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
   neutral path still calls `review2` (#5).
 - **install.sh --upgrade** no longer stops without a message on a council round directory that has no `ROUND`
   file.
+- **Handoff offered at 70/80/90% of the real window.** The handoff hook offers `/vulyk-handoff` at 70%, 80% and 90%
+  of the session's context window (a 1M window: 700k, 800k, 900k) and never earlier; a session with no statusLine copy
+  of its own takes the window Claude Code last reported on this machine for the same model, instead of the stock 200k
+  (card `handoff-offered-too-early`).
 
 ## [0.50.3] - 2026-11-10
 
