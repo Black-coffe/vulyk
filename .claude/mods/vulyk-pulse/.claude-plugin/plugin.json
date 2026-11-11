@@ -1,6 +1,6 @@
 {
   "name": "vulyk-pulse",
-  "version": "0.50.3",
+  "version": "0.51.0",
   "description": "VULYK pulse: a live swarm row with the task timer and the tokens of every agent",
   "author": {
     "name": "VULYK"

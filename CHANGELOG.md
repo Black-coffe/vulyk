@@ -4,6 +4,12 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-11-12
+
+The fixes for issue #5 (spec `upgrade-findings`, A2 re-reviewed on Fable: PASS), the handoff offer at 70/80/90% of
+the real context window (spec `handoff-1m`), the weekly evolve changeset, and a docs pointer to Anthropic's
+automation recommender.
+
 ### Fixed
 - **evolve 2026-11-11: context_high measures the real window.** `telemetry.sh` judged a session with no
   window in the handoff state against 70% of the stock 200k; `handoff.py measure` now reports the window
@@ -13,12 +19,6 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 - **evolve 2026-11-11: card handoff-offered-too-early also covers `scripts/telemetry.sh`.** The card named
   only `handoff.py`, so the telemetry neighbour kept the 200k measure after handoff-1m.
 
-### Added
-- **Automation recommender, docs only.** `docs/getting-started.md` points to Anthropic's read-only
-  `claude-code-setup` plugin and lists the suggestions to drop in a hive. No skill: a five-hive trial missed
-  the pass rule set in advance (study `docs/specs/automation-recommender/`).
-
-### Fixed
 - **A1, resume record.** `close-story` and `stamp-red` resume a paused verification only from a record under
   `.vulyk/state/<slug>/`, keyed by HEAD (paperwork-only commits allowed), `--stamp`, `## Files` and
   `## Verification`, with a recorded exit 0 for every close-story line it skips. A `verify_resume:` line in the
@@ -37,6 +37,11 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
   of the session's context window (a 1M window: 700k, 800k, 900k) and never earlier; a session with no statusLine copy
   of its own takes the window Claude Code last reported on this machine for the same model, instead of the stock 200k
   (card `handoff-offered-too-early`).
+
+### Added
+- **Automation recommender, docs only.** `docs/getting-started.md` points to Anthropic's read-only
+  `claude-code-setup` plugin and lists the suggestions to drop in a hive. No skill: a five-hive trial, judged by
+  one owner, missed the pass rule set in advance (study `docs/specs/automation-recommender/`).
 
 ## [0.50.3] - 2026-11-10
 
