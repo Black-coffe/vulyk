@@ -197,7 +197,6 @@ is missing or unparsable.
 **Branch:** vulyk/upgrade-findings
 **Council:** RED round 1, 2026-11-11, at d2dfc17c, pack df396030b3bb - red: 2,5
 **Council:** ESCALATE round 2, 2026-11-11, at bf9863ca, pack 4513d384eef0
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 
 ## Needs a human
 - reason: no-progress · round 2 · 2026-11-11
@@ -205,3 +204,4 @@ is missing or unparsable.
 - no progress: ask 5 RED in rounds 1 and 2
 - seats: docs/specs/upgrade-findings/council/round-2/
 **Checked:** ACCEPTED by Andrei, 2026-11-11, at a33426f5 - принимаю
+**Shipped:** 0.51.0-dev.1, 2026-11-11, at 512540fa - merged to main locally, publish pending; owner chose (2026-11-11) to merge without a new council round and without CI; the narrow security release waits for a Fable re-review of A2 and for the owner's word
