@@ -48,5 +48,5 @@ is missing or unparsable.
 **Briefed:** via mini-brief, Andrei, 2026-11-11
 **Branch:** vulyk/handoff-1m
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
-**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
+**Council:** GREEN round 1, 2026-11-11, at 3e2b79da, pack 4e522bdd5bd8
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
