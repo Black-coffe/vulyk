@@ -1,13 +1,14 @@
 ---
 story: upgrade-findings-07
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 4
 blocked_by: []
 red: required
-red_reason:
+red_reason: a results file rewritten after the pause is trusted
+red_verified_at: 2026-11-11T11:04:16Z 675da1606f22d2e5d1813721124f17f610e74a09c08f33c1fc94206ef96a2c91
 ---
 
 # Repair round 1
@@ -26,6 +27,10 @@ ASK 5: RED - CHANGELOG lines for A1-A4, issue #5 closed - run: grep -n -i for ve
 1. install.sh:535 [regression] `install.sh --upgrade` must finish (version stamp and manifest written, or a named error) when a hive holds a `docs/specs/*/council/round-*` directory with no `ROUND` file: under `set -euo pipefail` the failing `sed ... "$d/ROUND"` pipeline in `report_measured_suite` (called at install.sh:1919) ends the installer with exit 2 and no message right after the gate-split note, framework files already replaced and `.claude/vulyk-version` still the old one; the base has no such call (`git show 616a3c2e:install.sh | grep -c report_measured_suite` prints 0) and upgrades the same hive with exit 0 - repro: fresh `bash install.sh <hive>`, `mkdir -p <hive>/docs/specs/demo/council/round-1 && printf 'SUITE: ok 378s\n' > <hive>/docs/specs/demo/council/round-1/review.md`, `bash install.sh <hive> --upgrade; echo $?` prints 2 and the stamp is unchanged (with a ROUND file beside it: exit 0 and the `full suite measured 378s` line); the eval'd-function test at tests/telemetry.test.sh (`hive-unmeasured`) cannot see it because it runs outside the installer's `set -e`
 2. CHANGELOG.md:5 [ask 5] A1, A2, A3 and A4 must each have a line in `CHANGELOG.md`: the branch does not touch the file (`git diff 616a3c2e..085286d4 --stat -- CHANGELOG.md` is empty, no `[Unreleased]` section), the four `CHANGELOG:` lines sit only in the `## Implementation notes` of stories 03 and 05, and plan.md `## Descoped` is empty
 - [regression] PART council:suite ok 236s cap 300s
+
+- [worker] close-story exit 4 `test changed after red receipt: re-run stamp-red`: finding 1 (council:suite) is fixed by editing tests/council.test.sh (part suite split into suite + suite3), and that file is sealed by the receipt (every test under ## Verification is). The edit came after stamp-red, with cycle.sh and install.sh already green, so a re-stamp cannot go red without staging a break. Needs a decision: re-stamp from base (revert the two impl edits, stamp-red, re-apply) or accept the receipt as is.
+
+- [worker, relaunch bede202b] close-story rerun: same exit 4 `test changed after red receipt: re-run stamp-red`; no decision recorded since. Still needs the Queen: re-stamp from base (revert cycle.sh + install.sh impl edits, stamp-red, re-apply) or accept the receipt.
 
 ## Files
 - scripts/lib.sh
@@ -60,3 +65,33 @@ ASK 5: RED - CHANGELOG lines for A1-A4, issue #5 closed - run: grep -n -i for ve
 `bash tests/council.test.sh --part roster`
 `bash tests/telemetry.test.sh --part install-xp`
 `bash tests/maintenance.test.sh`
+
+## Implementation notes
+- scripts/cycle.sh: stamp-red's line= entry gains a fourth field, the sha256 of <k>.out (verify_file_hash); verify_resume_start refuses a resume whose stored output is missing that field or hashes differently (ASK 2).
+- install.sh: report_measured_suite reads opened= only when ROUND exists, so a round with no ROUND file no longer ends the installer under set -e (finding 1, install.sh:535).
+- tests/council.test.sh: part suite split; the scenarios from the Commands-cell block to the narrow-round block move to a new part suite3; fx-runner.sh setup became sx_fx_runner in the shared block (finding 1, council:suite). Alone in parallel: suite 81 s, suite3 99 s.
+- CHANGELOG.md: [Unreleased] with A1-A4 lines and the install fix (ASK 5, finding 2); CHANGELOG.md is on the paperwork list, so not in ## Files. Closing issue #5 is the release's step.
+- tests/cycle.test.sh: red-33, a rewritten <outd>/1.out after a pause; tests/telemetry.test.sh: a real upgrade over a round with no ROUND file.
+- Surprise: the council split edits a sealed test after the red receipt (all four test files are sealed).
+
+## Red receipt
+- command: bash tests/cycle.test.sh --part red
+- exit: 1
+- tests: 675da1606f22d2e5d1813721124f17f610e74a09c08f33c1fc94206ef96a2c91 (tests/council.test.sh, tests/cycle.test.sh, tests/maintenance.test.sh, tests/telemetry.test.sh)
+- impl: 02dadb5164e6d1de0ded8f8c407024e61581c58848f84ceed8ab769e1b27285c
+- stamped: 2026-11-11T11:04:16Z
+
+```
+::error::a results file rewritten after the pause is trusted - exit=0 runs=1 out=cycle: stamp-red - note: no approved version in git for docs/specs/red/red-33.md; its working copy stands
+::error::a results file rewritten after the pause is trusted - final exit=0 out=cycle: red-33 - red receipt written (bash tests/sr33.sh exits 1)
+  ok    red-14 stamped
+  ok    the receipt seals tests/red14.sh, not the implementation or the lint config
+  ok    an edit to the verification-named lint config does not break the seal: closed
+  ok    red-15 stamped
+  ok    the repo script the line runs is sealed beside its test argument
+  ok    a checker weakened after the stamp: exit 4
+  ok    no test-shaped path: the seal falls back to every verification path under ## Files
+red-receipt: close-story on a marked story that was never stamped
+  ok    the unstamped story: exit 4, nothing committed
+  ok    the refusal names stamp-red and the story
+```

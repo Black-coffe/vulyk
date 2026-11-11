@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite suite2 hardening" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite suite2 suite3 hardening" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -4563,7 +4563,7 @@ echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every p
 council status docs/specs/r18ad --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
 fi # part advance
 
-if part suite || part suite2; then # the two suite parts' shared fixture helpers (council:suite split in mass-audit-fixes-18 repair 1)
+if part suite || part suite2 || part suite3; then # the suite parts' shared fixture helpers (council:suite split in mass-audit-fixes-18 repair 1, suite3 in upgrade-findings-07)
 sx_row() { # sx_row [<purpose> <command>] - the fixture constitution's one round-only full-suite row (none without args), committed
   grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
   [ $# -eq 2 ] && printf '| %s | `%s` |\n' "$1" "$2" >> CLAUDE.md
@@ -4575,12 +4575,10 @@ sx_open() { # sx_open <slug> [<tier>] - a Tier 1 (or <tier>) spec, approved and 
   council open-round "docs/specs/$1" --commit >/dev/null 2>&1
 }
 sx_last() { printf '%s\n' "$1" | tail -1; } # sx_last <output> -> its JSON line
-fi
-
-if part suite; then # --- part suite: cycle.sh suite (gate-split-04) - the round's gate, one step per call, into council/round-N/suite.log
 # A fixture runner answers --steps / --step K the way tests/full-suite.sh does: two steps, PART lines.
 # FX_FAIL: step 2 fails a part; FX_GROW: step 2 reports a part past 70% of its cap and still exits 0,
 # so the growth verdict can only come from cycle.sh's own suite-parts-check.sh read of the log.
+sx_fx_runner() { # sx_fx_runner - write and commit fx-runner.sh (parts suite and suite3)
 cat > fx-runner.sh <<'EOF'
 case "$1" in
   --steps) echo 2 ;;
@@ -4593,6 +4591,11 @@ case "$1" in
 esac
 EOF
 git add -A && git commit -qm "fixture: a stepped runner" >/dev/null
+}
+fi
+
+if part suite; then # --- part suite: cycle.sh suite (gate-split-04) - the round's gate, one step per call, into council/round-N/suite.log
+sx_fx_runner
 
 echo "suite: no open round -> exit 2, nothing written"
 mk_open_spec sxnone 2
@@ -4769,6 +4772,11 @@ r="$(fsr '| Full suite (round-only) | `sh t.sh` (a note, "quoted") |')"
   || { echo "::error::suite row parser: a noted cell runs only the backticked span - gave '$r'"; fail=1; }
 rm -f fsr.md
 
+fi # part suite
+
+if part suite3; then # --- part suite3: cycle.sh suite, third part - ## Commands cells, rows with no command, duplicate names, a hung step, no row, the narrow round (split from suite in upgrade-findings-07)
+sx_fx_runner
+
 echo "suite: a ## Commands cell runs its backticked span, the rest is a note; several spans are a red part; no span runs as today (upgrade-findings-01)"
 sx_raw() { # sx_raw <row>... - the fixture constitution's full-suite rows, written as given, committed
   grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
@@ -4924,7 +4932,7 @@ grep -q '^SUITE: ok' docs/specs/sxnf/council/round-2/suite.log 2>/dev/null && ! 
   && echo "  ok    two RED items under a narrow: true the cycle never recorded: suite runs its step" \
   || { echo "::error::narrow: true in the story does not shrink the round (suite) - log=$(cat docs/specs/sxnf/council/round-2/suite.log 2>&1)"; fail=1; echo "forged narrow suite" >> "$FAILS"; }
 
-fi # part suite
+fi # part suite3
 
 if part suite2; then # --- part suite2: cycle.sh suite, second half - the narrow repair round (ab-run-fixes C5) and the LOAD sample order (X-08)
 echo "ab-run-fixes C5: a RED round with one item in one file -> a narrow repair story and a review-only round: no blind seat, no suite step"

@@ -2188,6 +2188,14 @@ expect_eq "the suite-parts-check pointer comes once" "1" "$(grep -c 'suite-parts
 mkdir -p "$T/hive-unmeasured/docs/specs/demo/council/round-1"
 report_measured_suite "$T/hive-unmeasured" \
   | expect "no measured round prints the no-measured line" "no measured full suite in this hive's council logs"
+# upgrade-findings-07: a round directory with no ROUND file must not end the real installer under set -e
+NR="$T/hive-noround"; fresh_install "$NR"
+mkdir -p "$NR/docs/specs/demo/council/round-1"
+printf 'SUITE: ok 378s\n' > "$NR/docs/specs/demo/council/round-1/review.md"
+bash "$SRC/install.sh" "$NR" --upgrade > "$T/nr.out" 2>&1; nrx=$?
+expect_eq "upgrade over a round with no ROUND file exits 0" "0" "$nrx"
+cat "$T/nr.out" | expect "upgrade over a round with no ROUND file still names the measured suite" \
+  "full suite measured 378s in round demo/round-1: cut before taking this release"
 fi # upgrade
 
 if part_on library; then

@@ -2234,8 +2234,8 @@ verify_run() { # verify_run <cmd-list> <reps> [<outdir>] - the one verification 
         run_capped_as "$VULYK_CAP" "$VR_VT" bash -c "$vline" < /dev/null > "$outdir/$k.out" 2>&1; vrc=$?
         cat "$outdir/$k.out"
         printf '%s' "$vrc" > "$outdir/$k.code"; printf '%s' "$vline" > "$outdir/$k.line"
-        [ -z "${VR_REC:-}" ] || printf 'line=%s %s %s
-' "$k" "$vrc" "$(verify_text_hash "$vline")" >> "$VR_REC"
+        [ -z "${VR_REC:-}" ] || printf 'line=%s %s %s %s
+' "$k" "$vrc" "$(verify_text_hash "$vline")" "$(verify_file_hash "$outdir/$k.out")" >> "$VR_REC"
         VR_CODES[$k]="$vrc"; VR_LINES[$k]="$vline"; VR_RC="$vrc"; VR_LINE="$vline"
         [ "$vrc" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ] && return 0
         continue
@@ -2279,10 +2279,12 @@ EOF
 # upgrade-findings-03 (A1/A2, plan.md ## Contracts S1/S2): a paused verification's resume point and its
 # per-line results live in a record the cycle owns, .vulyk/state/<slug>/verify.<story-id>.<verb>, never in
 # the story file (a `verify_resume:` frontmatter line is neither read nor written). Plain key=value lines:
-# head=, stamp=, files=, verify=, next=<k>, one `line=<k> <rc> <hash>` per line run in this chain, and for
+# head=, stamp=, files=, verify=, next=<k>, one `line=<k> <rc> <hash>` per line run in this chain (stamp-red
+# adds a fourth field, the sha256 of that line's stored output), and for
 # stamp-red outd=<its mktemp -d results directory>. A record that is missing or fails a key is the strict
 # path: line 1, a new directory.
 verify_text_hash() { printf '%s' "$1" | $(sha256_tool) | cut -c1-64; } # verify_text_hash <text> -> 64 hex
+verify_file_hash() { $(sha256_tool) < "$1" 2>/dev/null | cut -c1-64; } # verify_file_hash <file> -> 64 hex of its bytes
 
 verify_rec() { # verify_rec <story-file> <verb> -> the verify record's path (S2)
   local id; id="$(fm_field "$1" story)"; [ -n "$id" ] || id="$(basename "$1" .md)"
@@ -2328,9 +2330,10 @@ verify_resume_start() { # verify_resume_start <verb> <record> <files-hash> <stam
   # stamp (`-` for none), the ## Files hash and the ## Verification hash all equal this call's, and every
   # skipped line j has a line=j entry for its current text: close-story needs that entry's exit 0;
   # stamp-red needs outd= to be a directory, not a symlink, owned by the caller ([ -d ] [ ! -L ] [ -O ]),
-  # holding j.code / j.line equal to the entry. Anything else: VR_START=1, the record and its directory
+  # holding j.code / j.line equal to the entry and j.out whose sha256 is the entry's fourth field (the
+  # output this chain wrote, upgrade-findings-07). Anything else: VR_START=1, the record and its directory
   # dropped, one stderr line saying why. No record at all is the silent strict path.
-  local verb="$1" rec="$2" why="" h nx j e lt lrc eh od=""
+  local verb="$1" rec="$2" why="" h nx j e lt lrc eh oh od=""
   VR_START=1; VR_OUTD=""
   [ -e "$rec" ] || [ -L "$rec" ] || return 0
   if [ ! -f "$rec" ] || [ ! -r "$rec" ]; then why="the record is unreadable"
@@ -2355,14 +2358,15 @@ verify_resume_start() { # verify_resume_start <verb> <record> <files-hash> <stam
   j=1
   while [ -z "$why" ] && [ "$j" -lt "$nx" ]; do
     lt="$(verify_nth_line "$6" "$7" "$j")" || { why="line $j is past the verification"; break; }
-    e="$(grep "^line=$j " "$rec" | tail -n 1)"; lrc=""; eh=""
-    read -r _ lrc eh <<EOF2
+    e="$(grep "^line=$j " "$rec" | tail -n 1)"; lrc=""; eh=""; oh=""
+    read -r _ lrc eh oh <<EOF2
 ${e#line=}
 EOF2
     if [ "$verb" = close-story ]; then
       { [ -n "$e" ] && [ "$lrc" = 0 ] && [ "$eh" = "$(verify_text_hash "$lt")" ]; } || why="no recorded exit 0 for line $j"
     elif [ -z "$e" ] || [ "$eh" != "$(verify_text_hash "$lt")" ]; then why="no matching line= entry for line $j"
-    elif [ "$(cat "$od/$j.code" 2>/dev/null)" != "$lrc" ] || [ "$(cat "$od/$j.line" 2>/dev/null)" != "$lt" ]; then
+    elif [ "$(cat "$od/$j.code" 2>/dev/null)" != "$lrc" ] || [ "$(cat "$od/$j.line" 2>/dev/null)" != "$lt" ] \
+      || [ -z "$oh" ] || [ "$(verify_file_hash "$od/$j.out")" != "$oh" ]; then
       why="the stored result of line $j does not match its line= entry"
     fi
     j=$((j+1))

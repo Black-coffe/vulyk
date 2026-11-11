@@ -2138,6 +2138,26 @@ while [ "$ex" -eq 7 ] && [ "$n" -lt 4 ]; do sro="$(sr_outd 32)"; out="$(sr_stamp
 rm -f "$SRLOG"
 git add -A && git commit -qm "red: sr32 stamped" >/dev/null
 
+echo "upgrade-findings-07 A2: a stored output rewritten between calls is not trusted"
+printf 'todo\n' > src/sr33.txt
+printf '#!/usr/bin/env bash\nprintf "x" >> "%s"\necho "sr33 other failure"\nexit 1\n' "$SRLOG" > tests/sr33.sh
+red_story 33 "$MK" $'- tests/sr33.sh\n- src/sr33.txt\n' $'`bash tests/sr33.sh`\n`bash tests/red-pass.sh`'
+git add -A && git commit -qm "red: sr33 fixture" >/dev/null
+out="$(sr_stamp 33)"; ex=$?; sro="$(sr_outd 33)"
+[ "$ex" -eq 7 ] && [ -f "$sro/1.out" ] && printf 'expected done PLANTED\n' > "$sro/1.out"
+out="$(sr_stamp 33)"; ex=$?
+[ "$ex" -eq 7 ] && [ "$(sr_runs)" = 2 ] && printf '%s' "$out" | grep -qF 'resume record not used (the stored result of line 1' \
+  && echo "  ok    a results file rewritten after the pause is not trusted: line 1 runs again, stderr names the check" \
+  || { echo "::error::a results file rewritten after the pause is trusted - exit=$ex runs=$(sr_runs) out=$out"; fail=1; }
+n=0
+while [ "$ex" -eq 7 ] && [ "$n" -lt 4 ]; do out="$(sr_stamp 33)"; ex=$?; n=$((n+1)); done
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'red for another reason' && ! grep -q '^red_verified_at:' docs/specs/red/red-33.md \
+  && ! grep -qF PLANTED docs/specs/red/red-33.md \
+  && echo "  ok    the rewritten output never reaches a receipt: the chain ends red for another reason" \
+  || { echo "::error::a results file rewritten after the pause is trusted - final exit=$ex out=$(printf '%s\n' "$out" | tail -2)"; fail=1; }
+rm -f "$SRLOG"
+git add -A && git commit -qm "red: sr33 refused" >/dev/null
+
 echo "mass-audit-fixes-10 D5: stamp-red --baseline re-stamps against HEAD's implementation and puts the working copy back"
 printf 'todo\n' > src/red16.txt
 printf '#!/usr/bin/env bash\ngrep -qx done src/red16.txt && [ -f src/red16-new.txt ] && exit 0\necho "expected done in src/red16.txt"\nexit 1\n' > tests/red16.sh

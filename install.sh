@@ -532,7 +532,8 @@ report_measured_suite() {
   for d in "$1"/docs/specs/*/council/round-*; do
     [ -d "$d" ] || continue
     ref="$(basename "$(dirname "$(dirname "$d")")")/$(basename "$d")"
-    opened="$(sed -n 's/^opened=//p' "$d/ROUND" 2>/dev/null | tr -d '\r' | head -1)"
+    opened=""   # a round with no ROUND file sorts as 0; its failing sed must not end the installer (set -e)
+    [ -f "$d/ROUND" ] && opened="$(sed -n 's/^opened=//p' "$d/ROUND" 2>/dev/null | tr -d '\r' | head -1)"
     for f in "$d/suite.log" "$d/review.md"; do
       [ -f "$f" ] || continue
       if REF="$ref" awk "$prog" "$f" > /dev/null; then
