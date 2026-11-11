@@ -1230,9 +1230,23 @@ def mode_measure(argv):
     except Exception:
         agent_type = ""
 
+    # The main thread's window, resolved as the hook resolves it (a pin, this machine's report for the
+    # same model, the measured 1M proof, else stock), so telemetry's context_high and the handoff offer
+    # measure against one window (card handoff-offered-too-early). A subagent file gets 0: unused.
+    window = 0
+    if not sidechain:
+        try:
+            cfg = load_config(os.getcwd())
+            cfg["_window"] = detect_window(cfg, {
+                "session_id": os.path.splitext(os.path.basename(path))[0], "transcript_path": path})
+            window = resolve_window(cfg, tokens or 0, None, model)[0] or 0
+        except Exception:
+            window = 0
+
     print(json.dumps({
         "tokens": tokens,
         "model": model or "",
+        "window": window,
         "first_prefix": first_prefix,
         "assistant_turns": len(turns),
         "last_has_text": last_has_text,
