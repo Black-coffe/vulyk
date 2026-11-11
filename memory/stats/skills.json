@@ -12,16 +12,16 @@
     "last_used": "2026-10-26"
   },
   "vulyk-plan": {
-    "count": 20,
-    "last_used": "2026-11-10"
+    "count": 21,
+    "last_used": "2026-11-11"
   },
   "vulyk-ship": {
     "count": 38,
     "last_used": "2026-11-11"
   },
   "fact-check": {
-    "count": 14,
-    "last_used": "2026-11-10"
+    "count": 15,
+    "last_used": "2026-11-11"
   },
   "supergrill": {
     "count": 6,
@@ -64,8 +64,8 @@
     "last_used": "2026-10-19"
   },
   "crossgrill": {
-    "count": 5,
-    "last_used": "2026-11-05"
+    "count": 6,
+    "last_used": "2026-11-11"
   },
   "claude-api": {
     "count": 2,

@@ -318,3 +318,4 @@
 {"v":1,"ts":"2026-11-11T12:14:11Z","code":"fable_limit_fallback","value":1,"threshold":0,"vulyk":"0.50.3","tier":0,"model":"fable","agent":"council-opus","spec":"upgrade-findings","story":"","ref":"upgrade-findings:round-2/opus:council-opus"}
 {"v":1,"ts":"2026-11-11T12:14:12Z","code":"fable_limit_fallback","value":1,"threshold":0,"vulyk":"0.50.3","tier":0,"model":"fable","agent":"lead-review","spec":"upgrade-findings","story":"","ref":"upgrade-findings:round-2/review:lead-review"}
 {"v":1,"ts":"2026-11-11T14:40:13Z","code":"fable_limit_fallback","value":1,"threshold":0,"vulyk":"0.50.3","tier":0,"model":"fable","agent":"lead-review","spec":"handoff-1m","story":"","ref":"handoff-1m:round-1/review:lead-review"}
+{"v":1,"ts":"2026-11-11T16:13:11Z","code":"agent_empty","value":38,"threshold":0,"vulyk":"0.51.0-dev.1","tier":0,"model":"","agent":"drone-scout","spec":"","story":"","ref":"agent:agent-a1a9b2e87bc440abb.jsonl"}
