@@ -1,7 +1,7 @@
 ---
 story: prompt-leaks-rules-01
 spec: prompt-leaks-rules
-status: open
+status: todo
 returned:
 tier: 1
 worker: worker-code
