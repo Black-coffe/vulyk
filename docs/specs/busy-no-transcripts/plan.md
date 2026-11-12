@@ -38,3 +38,9 @@ never make every hive look idle.
 
 **Briefed:** via mini-brief, Andrei, 2026-11-12
 **Branch:** vulyk/busy-no-transcripts
+**Council:** ESCALATE round 1, 2026-11-12, at e4701761, pack 16fba058c6bd
+
+## Needs a human
+- reason: ceiling · round 1 · 2026-11-12
+- ask 1: BLOCK by the reviewer - see docs/specs/busy-no-transcripts/council/round-1/review.md
+- seats: docs/specs/busy-no-transcripts/council/round-1/
