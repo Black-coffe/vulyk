@@ -1,8 +1,8 @@
 ---
 story: post-052-tails-02
 spec: post-052-tails
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 2
@@ -52,5 +52,10 @@ dispatched by the Queen with this story, then checked against the old slice bull
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- Maps written by drone-docs in two passes. Pass 1 (three slices) fit 80 lines only by joining bullets into lines up to 920 chars; rewrapped, the other-scripts slice was ~135 lines. Owner chose 4 slices + a 130-char line cap (plan delta). Pass 2: scripts.md 77, scripts-checks.md 59, scripts-hooks.md 52, scripts-install.md 35 lines; longest line 127.
+- `redact.sh`, `telemetry.sh`, `memory-triage.sh` sit in scripts-hooks.md (the hooks and the SessionStart brief call them): scripts.md would go over 80 with them.
+- Fact check by the Queen: every backticked token of the old scripts.md is found in the four slices (joined text) except the `hives-behind.sh` head (changed on purpose for `--busy`) and `docs/telemetry.md`, restored by hand in scripts-hooks.md. memory.md: `defects_lib.py` and "macOS" restored by hand; 60 lines.
+- Cap check bites: a 200-char line appended to scripts-install.md turned the check red, then restored.
+- ADR-032 bullet diffed against ba53f294^: verbatim.
 
 ## Findings

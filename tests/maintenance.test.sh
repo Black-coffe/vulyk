@@ -1169,6 +1169,16 @@ rm -f "$ZH/docs/specs/s1/DRIVER"
 hbz "$Z1 $Z2" "$BZ/nope" | expect "hives-behind --busy: a hive not on disk is not idle" "[exit=1]"
 VULYK_HIVES_FILE="$HR/none" bash "$HB" --busy >/dev/null 2>&1; [ $? -eq 2 ] && ok "hives-behind --busy: no hive argument is a refusal (exit 2)" || bad "hives-behind --busy: no hive argument is a refusal (exit 2)"
 
+echo "--- map: the scripts slices stay within the ~80-line cap (post-052-tails-02)"
+n_sl=0
+for f in "$SRC"/memory/map/scripts*.md; do
+  [ -f "$f" ] || continue; n_sl=$((n_sl + 1)); n="$(wc -l < "$f" | tr -d ' ')"
+  [ "$n" -le 80 ] && ok "map: ${f##*/} is $n lines, within 80" || bad "map: ${f##*/} is $n lines, over the 80-line cap - split it, do not cut facts"
+  w="$(awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }' "$f")"   # joined bullets would dodge the line cap
+  [ "$w" -le 130 ] && ok "map: ${f##*/} lines are within 130 chars" || bad "map: ${f##*/} has a $w-char line - wrap it, the 80-line cap counts wrapped lines"
+done
+[ "$n_sl" -ge 2 ] && ok "map: the scripts map is split into $n_sl slices" || bad "map: the scripts map is one slice ($n_sl) - split it by sub-area"
+
 echo "--- commands: ship description, status line, busy guard (post-052-tails-01)"
 sed -n '2p' "$SRC/.claude/commands/vulyk-ship.md" | expect_absent "ship: the description no longer says it never tags" "never tags"
 sed -n '2p' "$SRC/.claude/commands/vulyk-ship.md" | expect "ship: the description names the local dev-build tag" "local dev-build tag"

@@ -5,8 +5,10 @@
 
 ## Codebase map
 <!-- one line per mapped module, added by /vulyk-bootstrap and /vulyk-map -->
-- `scripts/` (every gate/helper script, entry points, exit codes, callers; incl. `trace-autopsy.sh`,
-  `prompt-check.sh`, `portability-check.sh`, lib.sh portability helpers): memory/map/scripts.md
+- `scripts/` cycle scripts (cycle.sh, lib.sh helpers, ship/acceptance gates, `hives-behind.sh`): memory/map/scripts.md
+- `scripts/` check scripts and tests (wave/prompt/portability/defects checks, symbol-map, trace-autopsy, full-suite): memory/map/scripts-checks.md
+- `.claude/hooks/` (SessionStart brief, `git-guard.sh`, update check, handoff) and `redact.sh`/`telemetry.sh`: memory/map/scripts-hooks.md
+- `install.sh` upgrade contract and `vulyk-update.sh`: memory/map/scripts-install.md
 - the cycle state contract as `cycle.sh` implements it (files, verbs, `advance`, verdict rule,
   staleness, seat/court contracts, repair, the Workflow driver): memory/map/cycle.md
 - every `.claude/agents/*.md` (incl. `drone-horizon`) and `.claude/commands/vulyk-*.md` (model, tools,
@@ -15,11 +17,9 @@
   installed by `install.sh`; no map slice): docs/pulse.md (the watcher mod is retired; `install.sh` `retire_mod` removes it)
 
 ## Unmapped territory
-- `docs/` narrative pages (architecture.md, pipeline.md, cycle.md, token-economy.md,
-  model-cascade.md, command-reference.md, getting-started.md) and `docs/adr/` beyond ADR-001
-- `templates/`, `bootstrap/interview.md`, `.claude/hooks/` (bar the SessionStart brief, `git-guard.sh` and the defect hooks/`defects_lib.py`, in scripts.md and the wiki),
-  `install.sh` (upgrade contract in scripts.md), `scripts/vulyk-update.sh`'s own mechanics, `tests/` harness internals beyond full-suite.sh and the `--part` flags (scripts.md),
-  `.github/workflows/ci.yml` beyond the `full-suite`/`install-smoke` macOS matrix and the `shell` job gates
+- `docs/` narrative pages (architecture.md, pipeline.md, cycle.md, token-economy.md, model-cascade.md, command-reference.md, getting-started.md) and `docs/adr/` beyond ADR-001
+- `templates/`, `bootstrap/interview.md`, `.claude/hooks/` (bar scripts-hooks.md and the defect hooks/`defects_lib.py` in the wiki), `install.sh` (contract: scripts-install.md),
+  `vulyk-update.sh` mechanics, `tests/` internals beyond full-suite.sh and `--part` (scripts-checks.md), `ci.yml` beyond the `full-suite`/`install-smoke` macOS matrix and `shell` job
 
 ## Wiki domains
 <!-- load-bearing domain notes in docs/wiki/ -->

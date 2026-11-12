@@ -68,6 +68,9 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   row '<Purpose>'` (a note beside the backticked command, or several commands); step 4 recommends replace-or-merge
   from the `constitution: <N> lines only in the backup` list; step 6 carries the measured-suite lines (over 210 s,
   cut before taking the release) and a cutting recipe. The command only quotes them; the owner fixes the rows.
+- **0.50 command changes (ADR-032):** `/vulyk-build` at Tier 2-4 opens only on `**Approved:**` or a Briefed line
+  with `--go`; a story the Queen changes after `NEEDS_CONTEXT` is committed `vulyk(<slug>): revised <story-id>`
+  before its worker reruns (`/vulyk-plan` step 9 likewise). Workers never run `stamp-red --baseline`.
 - **0.49 command changes:** `/vulyk-plan` sends no scout for an area with a fresh map slice; grill asks in batches
   of <= 4, no confirm question; horizon in an existing repo only with `--horizon`; Tier 3-4 approval starts the build
   in the same turn; plan committed before the approval stop. `/vulyk-bootstrap` takes facts from the repo, asks only
@@ -111,7 +114,9 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   **Step 2a Local beta** (card `public-release-per-change`; only where `install.sh` + `VERSION` are at the root; no
   registry = prints `local beta: no hive registry, rollout skipped`): step 2 makes no bump here (CHANGELOG goes under
   `## [Unreleased]`). 2a bumps `VERSION` and every tracked `.claude-plugin/plugin.json` to the next `X.Y.Z-dev.N`
-  (plain `X.Y.Z` -> `X.<Y+1>.0-dev.1`), commits `release: <v> (local, unpublished)`, tags `v<v>` locally (never pushed).
+  (plain `X.Y.Z` -> `X.<Y+1>.0-dev.1`), commits `release: <v> (local, unpublished)`, tags `v<v>` locally (never pushed; the only tag ship creates).
+  Every ship re-checks each live hold. Before every hive upgrade and again right before the hive commit it asks
+  `hives-behind.sh --busy <hive>` (busy/unknown = hold; a path the upgrade did not write stops that hive, no commit).
   Hives get `./install.sh <hive> --upgrade` from the clone, `.vulyk-new` merged by hand, hive commit `chore(vulyk):
   upgrade to <v>`; canaries (`hives-behind.sh --canaries`) first plus one test row from their `## Commands`; a red
   canary reverts its upgrade and holds it and every pending hive. A hive that cannot take it gets `| hold <date> <reason>`
@@ -121,7 +126,8 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   fences and multi-word inline spans (card `shell-needs-gnu-or-bash4`).
 - **`/vulyk-status`** - driver line, council stats, `token-report.py`, `state.sh` table, map freshness,
   `maintenance due|waits for` (0.48: also a `tool.check` brief line, naming a mod that can approve a call git-guard
-  denied). Writes only `.claude/state.json`.
+  denied). Step 1 also prints the lagging-hives summary and RED lines (`hives-behind.sh`) in the VULYK source with a
+  registry. Writes only `.claude/state.json`.
 - **`/vulyk-evolve`** - `evolve-ledger.py . resolve` + `window`; changeset in worktree on `vulyk/evolve-<date>`;
   step 2: once ≥ 3 `horizon.md` exist, counts `(horizon H` picks against ADR-022's reversal rule.
 - **`/vulyk-gc`** - dispatches `librarian`; main session `git rm`s its `Delete:` list. `/vulyk-gc memory`: main
@@ -131,4 +137,4 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
   script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-11-12 (local-beta-rollout; prompt-leaks-rules; 0.51.0-dev.1 upgrade-findings, handoff-1m; ADR-013, 015, 020, 022, 023, 024, 025, 029, 032)
+last-verified: 2026-11-12 (local-beta-rollout; prompt-leaks-rules; 0.51.0-dev.1 upgrade-findings, handoff-1m; post-052-tails-01; ADR-013, 015, 020, 022, 023, 024, 025, 029, 032)
