@@ -6,6 +6,15 @@
 #   bash scripts/hives-behind.sh                  # read the registry and each hive, then judge
 #   bash scripts/hives-behind.sh --check <state>  # judge a state file alone (the card's check:)
 #   bash scripts/hives-behind.sh --canaries       # print the canary hives' paths, one per line
+#   bash scripts/hives-behind.sh --busy <hive>    # is someone working in it? idle (0) | busy <why> (1) | unknown <why> (1)
+#   bash scripts/hives-behind.sh --slug <path>    # the folder name Claude Code gives that path under <root>/projects/
+#
+# --busy (ship step 2a asks it before every hive upgrade and again before the hive commit): busy on a
+# docs/specs/*/DRIVER file or on a session transcript (*.jsonl, subagents included) written in the last 60 minutes
+# under <root>/projects/<slug>/. Roots: $VULYK_SESSION_ROOTS (space-separated) when set, else
+# ${CLAUDE_CONFIG_DIR:-~/.claude} and every ~/.claude* dir with a projects/ folder (a second account). No transcript
+# folder under any root is `unknown`, never idle: what cannot be seen is not taken as free. An open session that has
+# written nothing for over an hour is not seen (known gap, accepted 2026-11-12).
 #
 # Registry: ${VULYK_HIVES_FILE:-$HOME/.vulyk/hives}, private, never in the repo. One hive per line:
 #   <path>                                   the hive must carry the local VERSION
@@ -89,6 +98,48 @@ if [ "${1:-}" = "--check" ]; then
   [ -f "${2:-}" ] || { echo "hives-behind: no state file '${2:-}'"; exit 2; }
   judge "$2"; exit $?
 fi
+
+hive_slug() { # hive_slug <path> -> every character but a letter or a digit turned into '-', as Claude Code names it
+  local p="$1"
+  while [ "${#p}" -gt 1 ] && [ "${p%/}" != "$p" ]; do p="${p%/}"; done
+  case "$(uname -s 2>/dev/null)" in   # Git Bash spells E:/x as /e/x; Claude Code sees E:\x
+    MINGW*|MSYS*|CYGWIN*) case "$p" in /[a-zA-Z]/*|/[a-zA-Z]) p="${p:1:1}:/${p:3}" ;; esac ;;
+  esac
+  case "$p" in [a-z]:*) p="$(printf '%s' "${p:0:1}" | tr '[:lower:]' '[:upper:]')${p:1}" ;; esac
+  printf '%s\n' "$p" | sed 's/[^A-Za-z0-9]/-/g'
+}
+
+session_roots() { # one root per line
+  local r
+  if [ -n "${VULYK_SESSION_ROOTS:-}" ]; then printf '%s\n' "$VULYK_SESSION_ROOTS" | tr ' ' '\n'; return; fi
+  printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  for r in "$HOME"/.claude*; do [ -d "$r/projects" ] && printf '%s\n' "$r"; done
+}
+
+busy() { # busy <hive> -> one line; exit 0 idle, 1 busy or unknown
+  local hive="$1" slug r d f seen=0
+  [ -d "$hive" ] || { echo "unknown $hive: not on disk"; return 1; }
+  for f in "$hive"/docs/specs/*/DRIVER; do
+    [ -f "$f" ] && { echo "busy a build driver runs (${f#"$hive"/})"; return 1; }
+  done
+  slug="$(hive_slug "$hive")"
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    d="$r/projects/$slug"; [ -d "$d" ] || continue
+    seen=1
+    f="$(find "$d" -maxdepth 3 -name '*.jsonl' -mmin -60 2>/dev/null | head -1)"
+    [ -z "$f" ] || { echo "busy a session transcript was written in the last 60 minutes ($f)"; return 1; }
+  done <<EOF
+$(session_roots)
+EOF
+  [ "$seen" = 1 ] || { echo "unknown no session transcripts for $hive (folder $slug) under any root - cannot tell it is idle"; return 1; }
+  echo "idle"
+}
+
+case "${1:-}" in
+  --slug) [ -n "${2:-}" ] || { echo "hives-behind: --slug needs a path"; exit 2; }; hive_slug "$2"; exit 0 ;;
+  --busy) [ -n "${2:-}" ] || { echo "hives-behind: --busy needs a hive path"; exit 2; }; busy "$2"; exit $? ;;
+esac
 
 reg_line() { # reg_line <line> -> path, tail (" | hold ..." or empty), canary (1 or empty)
   local seg rest; path="$1"; tail=""; canary=""

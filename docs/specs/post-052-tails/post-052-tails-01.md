@@ -1,14 +1,15 @@
 ---
 story: post-052-tails-01
 spec: post-052-tails
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required           # --busy adds branches (DRIVER, transcript age, unknown roots) that guard a write into hives
-red_reason:
+red_reason: hives-behind --slug: drive, colon and underscore become dashes
+red_verified_at: 2026-11-12T19:26:08Z 108d465a499f560bd71ae0badade9568f0ff6c1350efa09bd67125d4cb111a46
 ---
 
 # Ship and status tails after 0.52.0-dev.1
@@ -56,5 +57,30 @@ live hold on each ship. CHANGELOG `[Unreleased]` names the changes.
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- `scripts/hives-behind.sh`: new `--busy <hive>` and `--slug <path>` forms, ahead of the registry read. Slug = every non-alphanumeric character turned into `-`, checked against real `~/.claude/projects` folders (`.claude` -> `-claude`, `_` -> `-`). Git Bash `/e/x` is read as `E:/x`. Roots without an array (portability-check).
+- Stale `DRIVER` files left by old builds make a hive `busy` (the vulyk source itself has one from weekly-budget): safe direction, the hold reason names the file.
+- Impossible-day test: with the real-day `[ "$d" -le "$dim" ] || return 1` line replaced by `:`, both checks went red (2 failed), then restored.
+- Step 2a canary bullet left as written: a canary that is busy is held, so it is not green and the rollout waits, as for a red canary.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: 108d465a499f560bd71ae0badade9568f0ff6c1350efa09bd67125d4cb111a46 (tests/maintenance.test.sh)
+- impl: 01a386d039d90d5d62d31c885eaabb6e161b8cf9bf1054569d0680d91624aa53
+- stamped: 2026-11-12T19:26:08Z
+
+```
+::error::hives-behind --slug: drive, colon and underscore become dashes - expected '<hive slug, masked>' in:
+  ok    ship 2a: the local-beta step ends on hives-behind.sh
+  ok    ship 2a: the step skips by name without a registry
+  ok    ship 2a: the dev build is never pushed
+  ok    ship 2a: the plugin.json version moves with VERSION
+  ok    ship 2a: the dev build gets a local tag for the next upgrade
+  ok    ship 2a: a reverted canary is held too
+  ok    ship 2: in the VULYK source the build number comes from 2a
+  ok    ship 2a: the canaries go first
+  ok    ship 2a: a red canary stops the rollout
+maintenance.test.sh: 577 checks, 19 failed
+```
