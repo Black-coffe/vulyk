@@ -56,3 +56,4 @@ form is the card's check, with fixtures. In the VULYK source repo, `/vulyk-ship`
 - reason: ceiling · round 1 · 2026-11-12
 - ask 1: BLOCK by the reviewer - see docs/specs/local-beta-rollout/council/round-1/review.md
 - seats: docs/specs/local-beta-rollout/council/round-1/
+**Shipped:** 0.52.0-dev.1, 2026-11-12, at 4e91beef - merged to main (local), rolled out to 5 local hives (2 canaries green), 10 held; publish pending
