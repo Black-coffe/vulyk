@@ -7,3 +7,4 @@
 - 2026-11-12T17:48:07Z · 04-council:ESCALATE · reopened after round 1, ceiling now 2 · next: repair
 - 2026-11-12T17:48:12Z · 03-building · repair round 1: local-beta-rollout-02-repair-round-1.md · next: build:2
 - 2026-11-12T17:58:09Z · 04-council:open · round 2 opened, no court (no blind seat required) · next: dispatch:review
+- 2026-11-12T18:20:41Z · 04-council:GREEN · round 2 verdict GREEN at b8b80027 pack 96bc00f4a00a · next: green

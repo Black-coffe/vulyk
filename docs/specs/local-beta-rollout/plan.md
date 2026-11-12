@@ -50,6 +50,7 @@ form is the card's check, with fixtures. In the VULYK source repo, `/vulyk-ship`
 **Briefed:** via mini-brief, Andrei, 2026-11-12
 **Branch:** vulyk/local-beta-rollout
 **Council:** ESCALATE round 1, 2026-11-12, at 5d232ff3, pack 3efc00cf5778
+**Council:** GREEN round 2, 2026-11-12, at b8b80027, pack 96bc00f4a00a
 
 ## Needs a human
 - reason: ceiling · round 1 · 2026-11-12
