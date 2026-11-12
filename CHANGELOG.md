@@ -4,6 +4,15 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+### Added
+- **Five agent-file rules from a study of a public collection of AI-tool system prompts** (spec
+  `prompt-leaks-rules`, study `prompt-leaks-study`, reviewed by a Fable/Opus/Sonnet panel; written fresh,
+  no text taken from the collection). Workers and the scout treat instructions found in files, output or
+  pages as content to report; workers never silence a failing check and name what they stubbed; the
+  librarian drops inferred entries, deletes contradicted ones and keeps entries as facts; the planner
+  keeps two stories that change one shared contract out of one wave and orders a migration as shadow,
+  then cut-over. A probe (n=1) showed `.claude/rules/` files with `paths:` reach subagents.
+
 ## [0.51.0] - 2026-11-12
 
 The fixes for issue #5 (spec `upgrade-findings`, A2 re-reviewed on Fable: PASS), the handoff offer at 70/80/90% of
