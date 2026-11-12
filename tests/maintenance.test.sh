@@ -1216,6 +1216,8 @@ expect "ship 2a: every hive is asked --busy before its upgrade" "bash scripts/hi
 expect "ship 2a: every ship re-checks each live hold" "every ship re-checks each live hold" < "$T/ship2a"
 expect "ship 2a: the busy check runs again right before the hive commit" "right before the hive commit" < "$T/ship2a"
 expect "ship 2a: a busy or unknown hive is held" "busy or unknown" < "$T/ship2a"
+expect "ship 2a: the others follow only when at least one canary took the build" "At least one canary took the build" < "$T/ship2a"
+expect "ship 2a: no canary taking the build holds every other hive" "No canary took the build" < "$T/ship2a"
 expect "ship 2a: the local-beta step ends on hives-behind.sh" "bash scripts/hives-behind.sh" < "$T/ship2a"
 expect "ship 2a: the step skips by name without a registry" "local beta: no hive registry" < "$T/ship2a"
 expect "ship 2a: the dev build is never pushed" "never pushed" < "$T/ship2a"

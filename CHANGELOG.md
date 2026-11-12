@@ -31,7 +31,9 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
   takes the build at once. A session started in a subfolder of the hive counts too: its transcript folder is named
   `<hive>-<rest>`, and it counts when a fresh transcript's `cwd` is the hive or below it, so a sibling hive that
   shares the name prefix does not count; an unreadable `cwd` counts as busy. A busy line for a driver file says how
-  to free a stale one. Known gap: an open session that has written nothing for an hour is not seen.
+  to free a stale one. A busy canary is held, not red: one canary that took the build and is green carries the
+  rollout (the owner is told it was one hive shape) and the held one goes first next ship; when no canary took the
+  build, every other hive is held. Known gap: an open session that has written nothing for an hour is not seen.
 - `/vulyk-status` prints the lagging local hives (summary and red lines of `hives-behind.sh`), only in the VULYK
   source repo with a registry.
 
