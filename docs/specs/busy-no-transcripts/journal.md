@@ -7,3 +7,4 @@
 - 2026-11-12T22:32:11Z · 04-council:ESCALATE · reopened after round 1, ceiling now 2 · next: repair
 - 2026-11-12T22:32:17Z · 03-building · repair round 1: busy-no-transcripts-02-repair-round-1.md · next: build:2
 - 2026-11-12T22:41:39Z · 04-council:open · round 2 opened, no court (no blind seat required), narrow repair round (review only) · next: dispatch:review
+- 2026-11-12T22:45:48Z · 04-council:GREEN · round 2 verdict GREEN at 8e52d3ed pack 4b61f37ccd66 · next: green
