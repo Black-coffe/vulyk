@@ -21,7 +21,7 @@ form is the card's check, with fixtures. In the VULYK source repo, `/vulyk-ship`
   `<path> | hold <YYYY-MM-DD> <reason>`. The date is the day the hold ends, at most 7 days ahead. An expired hold is
   red, so a hold cannot become the new "later".
 - Dev numbering: `X.Y.Z-dev.N` -> `X.Y.Z-dev.<N+1>`; a plain `X.Y.Z` -> `X.<Y+1>.0-dev.1`. The public number is
-  chosen at publish time, on the owner's word. Nothing is tagged or pushed by the step.
+  chosen at publish time, on the owner's word. The step tags the build locally (`v<version>`, added in repair round 1) and pushes nothing.
 - The step runs only where `install.sh` and `VERSION` sit at the repo root (the VULYK source). In a hive, or with no
   registry, it prints one named skip line and the ship goes on. The default path needs no personal file.
 - Canary first (the owner chose «Канарейка, потом все (Рекомендую)» on 2026-11-12, after a side-agent warning that a

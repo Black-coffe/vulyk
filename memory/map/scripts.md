@@ -68,7 +68,7 @@ re-run. No line numbers: `grep -n '^name()'`.
   shows the affected paths dirty (clean -f/stash -u: untracked too); names 10 then `+N more`; stash drop/clear and
   `branch -D` are subagent-only. Follows `cd`/`-C`. Fails open (no python, bad JSON, error: exit 0). Python tried in order `$VULYK_PY`, python3, python, py; stdin read as UTF-8 (0.50). `--check <file>`
   (the card's check; `porcelain` field fakes status): exit 1 on deny. Python sits in a no-op heredoc below `exit 0`.
-  Not covered: rm, `bash -c`, scripts/aliases. No env off-switch; owner removes the settings entry.
+  Not covered: rm, `bash -c`, scripts/aliases.
 - `.claude/hooks/vulyk-update-check.sh` - SessionStart update check; network at most every
   `VULYK_UPDATE_INTERVAL_HOURS` (default 6, 0.51); cache `.claude/.vulyk-update-cache` = `<epoch> <latest> <UTC time>`
   (no time field = expired); the line ends `(checked <date time> UTC)`.
@@ -88,6 +88,13 @@ re-run. No line numbers: `grep -n '^name()'`.
   D3; what `close-story` calls) runs each block card's check per file its `paths:` glob matches: 0 / 1 red
   (`<ref> fails on <file>: ...`) / 2 no python. `defects-inject.sh` treats block cards as text and exits before Python with no card file. Red only when new, else an `old ...` line.
   Always red: `DUPLICATE`, `INDEX`. Exit 0/1/2. `DEFECTS_DIR` overrides the library.
+- `hives-behind.sh [--check <state>|--canaries]` (card `public-release-per-change`) - registry `${VULYK_HIVES_FILE:-~/.vulyk/hives}`
+  (private; one hive per line: `<path>` | `canary` | `hold <YYYY-MM-DD> <reason>`; `~/` expands); no arg reads each
+  hive's `.claude/vulyk-version` against `VERSION` and judges. Green = on the local build or under a live hold.
+  Red: lags, `none`, `missing`, hold expired/malformed/no reason/more than `HOLD_MAX_DAYS` (7) ahead, no hive.
+  `--check <state>` judges a state file alone (`local <v>`, `hive <installed|none|missing> <path>[ | hold ...]`);
+  `--canaries` prints canary paths (exit 1 if none). Exit 0 / 1 / 2 (registry, state or VERSION absent). Env
+  `VULYK_TODAY`, `VULYK_SRC`. Caller: `/vulyk-ship` step 2a.
 - `memory-triage.sh` - read-only lister behind `/vulyk-gc memory`; `--mark` is its one write.
 - `symbol-map.sh [--exact] [--story <story.md>] [--scope <path>]... <file>...` - `vulyk_python` (none: exit 2),
   execs `symbol-map.py` (repo = `git ls-files`). Per input a `## <path>` block: `tests`, `importers`, `imported`,
@@ -125,7 +132,7 @@ re-run. No line numbers: `grep -n '^name()'`.
   cut part <name>: <N>s of cap <C>s (cap|over-cap|grew)` for a CAP line, a cap > 300, or N*10 > C*7. Exit 1 any,
   0 none (a readable file with no PART line), 2 no argument or `no such file: <path>` (0.46). Used by `full-suite.sh` and `cmd_suite`.
 - `tests/symbol-map.test.sh` also holds the `--- trace-autopsy` block; `tests/maintenance.test.sh`: caps, brief
-  due logic, ledger, prompt-check fixture copies.
+  due logic, ledger, prompt-check fixture copies, the hives-behind section (fixture registries via `VULYK_HIVES_FILE`).
 
 ## install.sh - the upgrade contract
 - `--upgrade [--check] [--constitution replace]`; a plain upgrade never writes the constitution. Defect hooks via
@@ -138,13 +145,9 @@ re-run. No line numbers: `grep -n '^name()'`.
   git-guard branch only report the missing hook (`unwired ...`) and wire nothing.
   Telemetry consent is asked only on `--telemetry ask` (0.49; default off, flag `on|off|ask`).
   `ensure_gitignore` runs with globbing off (`set -f`, restored on each exit), so patterns like `docs/specs/*/DRIVER` are written literally (0.50.3).
-  0.51: `--upgrade`/`--check` also report (named only, never rewritten): `## Commands` rows with a note or several
-  spans (`report_commands_lint`); `report_measured_suite` - the 5 newest measured council rounds (`suite.log` parts or
-  the `SUITE:` line), each value over 210 s named, else a line saying none was measured; under `--constitution
-  replace` the hand-written lines only the backup keeps. A conflicted file whose body equals the installed release's
-  body takes the new body with the frontmatter merged per top-level key (`merge frontmatter <f>`, `kept`/`dropped`
-  lines); a key both sides changed is `frontmatter conflict on <key>` and the file is parked as before. Every JSON
-  rewrite keeps the file's indent unit.
+  0.51: `--upgrade`/`--check` also name (never rewrite) `## Commands` rows with a note or several spans and measured
+  council rounds over 210 s; a conflicted file whose body equals the installed release's merges frontmatter per key
+  (`frontmatter conflict on <key>` parks it).
   `install_mod vulyk-pulse@vulyk`; `retire_mod vulyk-watcher@vulyk`. `shippable` drops `memory/stats/*.jsonl` and `.claude/vulyk-setup`.
 
 ## Gotchas
@@ -156,4 +159,4 @@ re-run. No line numbers: `grep -n '^name()'`.
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-11 (0.51.0-dev.1 upgrade-findings, handoff-1m). Over the ~80-line budget.
+last-verified: 2026-11-12 (local-beta-rollout; 0.51.0-dev.1 upgrade-findings, handoff-1m). Over the ~80-line budget.
