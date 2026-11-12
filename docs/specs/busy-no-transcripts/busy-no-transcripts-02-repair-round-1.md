@@ -23,11 +23,13 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 1. scripts/hives-behind.sh:151 [ask 1] `naming_proven` must count only a registry line that names a hive path as proof: a line whose path is empty (spaces or a tab only, or ` | hold 2026-11-19 x`) gives an empty slug, `[ -d "$r/projects/" ]` is true for every root, and a folderless hive reads `idle` (exit 0) although no registered hive resolves to a transcript folder, where the ask says it stays `unknown` (exit 1) - repro: `R=$(mktemp -d); mkdir -p $R/r/projects $R/h; printf '%s\n   \n' $R/h > $R/reg; VULYK_HIVES_FILE=$R/reg VULYK_SESSION_ROOTS=$R/r bash scripts/hives-behind.sh --busy $R/h; echo $?` prints `idle no session transcript folder for ... (no Claude Code session has run there)` and `0` (the same registry without the blank-looking line prints `unknown ...` and `1`; the base 40d1f374 prints `unknown` for both); the tests need a case of this shape next to the two they have.
 
 ## Acceptance criteria
-- [ ] The class card under docs/defects/ (its quote, Never line or check:) is added or updated in the same commit as the fix.
+- [ ] The class card under docs/defects/ (its quote, Never line or check:) is added or updated in the same commit as the fix. (No owner correction behind this finding: no card.)
+- [ ] A registry line with no path (spaces only, a tab only, or ` | hold ...`) proves nothing: the folderless hive stays `unknown`, exit 1; tests cover all three shapes.
+- [ ] The header comment of hives-behind.sh describes the proven-idle case.
 
 ## Files
-- 1.
-- docs/defects/*
+- scripts/hives-behind.sh
+- tests/maintenance.test.sh
 
 ## Verification
 `bash tests/maintenance.test.sh`
