@@ -57,3 +57,4 @@ becomes accepted on the owner's grill answer.
 ## Plan deltas
 
 **Approved:** Andrei, 2026-11-12 («Одобряю, собирай (Рекомендую)»)
+**Branch:** vulyk/post-052-tails
