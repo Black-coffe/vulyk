@@ -1,0 +1,93 @@
+head=b8b80027 steps=9
+STEP 1/9: ok 158s
+PART council:seats3 ok 52s cap 300s
+PART council:seats2 ok 62s cap 300s
+PART council:judge2 ok 65s cap 300s
+PART council:ceilings ok 67s cap 300s
+PART council:judge ok 70s cap 300s
+PART council:escalate ok 70s cap 300s
+PART council:close ok 71s cap 300s
+PART council:escalate2 ok 76s cap 300s
+PART council:replays ok 82s cap 300s
+PART council:ceilings2 ok 92s cap 300s
+PART council:seats ok 118s cap 300s
+PART council:verbs ok 156s cap 300s
+STEP 2/9: ok 162s
+PART council:replays3 ok 47s cap 300s
+PART council:walks3 ok 48s cap 300s
+PART council:roster2 ok 52s cap 300s
+PART council:walks2 ok 61s cap 300s
+PART council:replays2 ok 79s cap 300s
+PART council:walks ok 79s cap 300s
+PART council:suite2 ok 111s cap 300s
+PART council:suite ok 116s cap 300s
+PART council:driver ok 121s cap 300s
+PART council:suite3 ok 136s cap 300s
+PART council:roster ok 152s cap 300s
+PART council:advance ok 161s cap 300s
+STEP 3/9: ok 181s
+PART driver ok 1s cap 300s
+PART cycle:manual ok 23s cap 300s
+PART cycle:hooklog ok 29s cap 300s
+PART e2e:green ok 29s cap 300s
+PART cycle:safety ok 34s cap 300s
+PART council:hardening ok 34s cap 300s
+PART cycle:gates ok 37s cap 300s
+PART defects ok 66s cap 300s
+PART cycle:bsd ok 80s cap 300s
+PART cycle:ship ok 121s cap 300s
+PART cycle:close ok 169s cap 300s
+PART cycle:red ok 179s cap 300s
+STEP 4/9: ok 122s
+PART mods ok 4s cap 300s
+PART handoff ok 8s cap 300s
+PART model-profile:defaults ok 19s cap 300s
+PART solo:green ok 19s cap 300s
+PART model-profile:edges ok 23s cap 300s
+PART inject:functional ok 26s cap 300s
+PART model-profile:set ok 26s cap 300s
+PART solo:block ok 39s cap 300s
+PART e2e:red ok 45s cap 300s
+PART full-suite ok 73s cap 300s
+PART intake:functional ok 96s cap 300s
+PART maintenance ok 122s cap 300s
+STEP 5/9: ok 166s
+PART symbol-map ok 18s cap 300s
+PART solo:rejected ok 24s cap 300s
+PART telemetry:constitution2 ok 36s cap 300s
+PART telemetry:telemetry ok 60s cap 300s
+PART telemetry:terminal ok 78s cap 300s
+PART telemetry:ledger ok 94s cap 300s
+PART telemetry:wiring ok 104s cap 300s
+PART telemetry:scan ok 111s cap 300s
+PART telemetry:constitution ok 112s cap 300s
+PART telemetry:install ok 133s cap 300s
+PART telemetry:install-xp ok 146s cap 300s
+PART telemetry:install-xp2 ok 165s cap 300s
+STEP 6/9: ok 131s
+PART telemetry:ysk-hook ok 4s cap 300s
+PART telemetry:ysk ok 24s cap 300s
+PART telemetry:rg2 ok 45s cap 300s
+PART telemetry:rg ok 48s cap 300s
+PART telemetry:ysk3 ok 52s cap 300s
+PART telemetry:ysk2 ok 66s cap 300s
+PART telemetry:mods2 ok 73s cap 300s
+PART telemetry:mods ok 75s cap 300s
+PART telemetry:library ok 78s cap 300s
+PART telemetry:constitution3 ok 85s cap 300s
+PART telemetry:watcher ok 86s cap 300s
+PART telemetry:upgrade ok 129s cap 300s
+STEP 7/9: ok 155s
+PART token-report ok 4s cap 300s
+PART telemetry:wrapper ok 49s cap 300s
+PART telemetry:wrapper2 ok 49s cap 300s
+PART telemetry:crlf2 ok 54s cap 300s
+PART telemetry:wrapper3 ok 78s cap 300s
+PART telemetry:launchers ok 83s cap 300s
+PART telemetry:crlf ok 95s cap 300s
+PART telemetry:edits ok 153s cap 300s
+STEP 8/9: ok 16s
+PART inject:latency ok 15s cap 300s
+STEP 9/9: ok 8s
+PART intake:latency ok 6s cap 300s
+SUITE: ok 1099s
