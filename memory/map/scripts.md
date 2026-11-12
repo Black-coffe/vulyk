@@ -53,12 +53,14 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   expired/malformed/no reason/more than `HOLD_MAX_DAYS` (7) ahead, no hive. `--check <state>` judges a state file
   alone (`local <v>`, `hive <installed|none|missing> <path>[ | hold ...]`); `--canaries` prints canary paths (exit
   1 if none). Exit 0 / 1 / 2 (registry, state or VERSION absent). Env `VULYK_TODAY`, `VULYK_SRC`.
-  `--busy <hive>`: `idle` exit 0 / `busy <why>` exit 1 / `unknown <why>` exit 1; busy on a `docs/specs/*/DRIVER`
-  file or a `*.jsonl` transcript (subagents included) written in the last 60 minutes under
-  `<root>/projects/<slug>/`; roots `$VULYK_SESSION_ROOTS` (space-separated), else `${CLAUDE_CONFIG_DIR:-~/.claude}`
-  plus every `~/.claude*` with `projects/`; no transcript folder under any root = unknown, never idle. `--slug
-  <path>`: every non-alphanumeric char -> `-` (Git Bash `/e/x` read as `E:/x`). Caller: `/vulyk-ship` step 2a
-  (`--busy` before every hive upgrade and again before the hive commit).
+  `--busy <hive>`: `idle` exit 0 / `busy <why>` / `unknown <why>` (both exit 1). Busy on a `docs/specs/*/DRIVER`
+  file (the line names `bash scripts/cycle.sh release <spec> <stamp>` to free a stale one) or a `*.jsonl`
+  transcript at any depth (Workflow agents write 5 levels down) written in the last 60 minutes under
+  `<root>/projects/<slug>/`. Folders `<slug>-*` (session started in a hive subfolder) count only when a fresh
+  transcript's `cwd` is the hive or below it (Windows: case-insensitive); an unreadable `cwd` is busy. Roots
+  `$VULYK_SESSION_ROOTS` (space-separated), else `${CLAUDE_CONFIG_DIR:-~/.claude}` plus every `~/.claude*` with
+  `projects/`; no transcript folder under any root = unknown, never idle. `--slug <path>`: every non-alphanumeric
+  char -> `-` (Git Bash `/e/x` read as `E:/x`). Caller: `/vulyk-ship` step 2a (before each upgrade and hive commit).
 
 ## Key contracts
 - `cycle.sh`: last stdout line is one JSON object; exits 0 ok · 1 usage · 2 precondition · 3 paused ·

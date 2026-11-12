@@ -118,8 +118,10 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   Every ship re-checks each live hold. Before every hive upgrade and again right before the hive commit it asks
   `hives-behind.sh --busy <hive>` (busy/unknown = hold; a path the upgrade did not write stops that hive, no commit).
   Hives get `./install.sh <hive> --upgrade` from the clone, `.vulyk-new` merged by hand, hive commit `chore(vulyk):
-  upgrade to <v>`; canaries (`hives-behind.sh --canaries`) first plus one test row from their `## Commands`; a red
-  canary reverts its upgrade and holds it and every pending hive. A hive that cannot take it gets `| hold <date> <reason>`
+  upgrade to <v>`; canaries (`hives-behind.sh --canaries`) first plus one test row from their `## Commands`. Rule:
+  at least one canary took the build and every canary that took it is green. A busy canary is held, not red: it
+  goes first next ship and the owner is told one hive shape was tested. No canary took the build = every other hive
+  held, naming what stops each canary. A red canary reverts its upgrade and holds it and every pending hive. A hive that cannot take it gets `| hold <date> <reason>`
   (<= 7 days). Ends on `hives-behind.sh` exit 0, printing `held` lines.
 - **Portable spelling (0.44.0):** command and agent shell blocks call Python as `bash scripts/py.sh ...` and
   date windows as `date -u -d '-N days' ... || date -u -v-Nd ...`; `portability-check.sh` reads their shell
