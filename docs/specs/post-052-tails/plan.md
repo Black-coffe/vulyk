@@ -55,6 +55,7 @@ becomes accepted on the owner's grill answer.
 *(empty)*
 
 ## Plan deltas
+- 2026-11-12, story 02 mid-build: three slices of 80 lines could not hold the scripts map without dropping facts (drone-docs fit only by joining bullets into lines up to 920 chars; rewrapped, the other-scripts slice was ~135 lines). Owner chose «4 файла, строка до 130 знаков (Рекомендую)»: ask 5 now reads 4 slices (`scripts-checks.md` added) and lines <= 130 chars, checked by the maintenance test. Rejected: compressing wording (facts lost), leaving one slice over the cap.
 
 **Approved:** Andrei, 2026-11-12 («Одобряю, собирай (Рекомендую)»)
 **Branch:** vulyk/post-052-tails
