@@ -34,10 +34,6 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   `git diff --stat` then the diff, 300 lines max; base = merge-base with the default branch off it, else parent of
   the commit that added `<spec>/plan.md`, else the empty tree; exit 2 no dir/repo; the Queen pastes it in her reply
   before asking); `scope-check.sh <story-file> [range]` runs in `close-story` (`  ! ` paths -> `--commit` exit 4).
-- `acceptance-log.sh <spec-dir> <ACCEPTED|REJECTED|CANNOT_RUN> [note]` / `--check <spec-dir>` - appends to
-  `memory/stats/acceptance.jsonl` with the pack identity (`head`, `pack`); `drift` is boolean or `"unknown"`
-  (never read unknown as false); note redacted; always exits 0. `leak-check.sh <file>` - the `check:` of the
-  `host-internals-in-public-repo` card; flags host-project internals in a public repo.
 - `py.sh <python-args>` (0.44.0) - `exec "$VULYK_PY" "$@"` via `vulyk_python`; none: exit 2. The spelling for
   Python in `CLAUDE.md` and the commands. `run-capped.py <secs> <cmd>` - the cap `run_capped` falls back to
   (own process group, SIGTERM, 10 s grace, SIGKILL; Windows `taskkill /T`; exit 124).

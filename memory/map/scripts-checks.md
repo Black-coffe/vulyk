@@ -34,6 +34,10 @@ Report-only story/prompt/portability/defect checks, the symbol map, and the test
   execs `symbol-map.py` (repo = `git ls-files`). Per input a `## <path>` block: `tests`, `importers`, `imported`,
   `guard tests`, `path mentions`; lines `exact` or `textual`; `--exact` folds textual into `textual <N> not shown`.
   Section cap 5; stdout <= 1536 bytes. Exit 0 / 1 input missing / 2 usage. Callers: recon, `worker-code`, solo build.
+- `acceptance-log.sh <spec-dir> <ACCEPTED|REJECTED|CANNOT_RUN> [note]` / `--check <spec-dir>` - appends to
+  `memory/stats/acceptance.jsonl` with the pack identity (`head`, `pack`); `drift` is boolean or `"unknown"`
+  (never read unknown as false); note redacted; always exits 0. `leak-check.sh <file>` - the `check:` of the
+  `host-internals-in-public-repo` card; flags host-project internals in a public repo.
 
 ## Tests
 - `tests/full-suite.sh [--jobs N] [--list | --steps | --step K]` (ADR-029) - every `tests/*.test.sh` as capped
