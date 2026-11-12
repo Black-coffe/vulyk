@@ -1,7 +1,7 @@
 {
   "vulyk-build": {
-    "count": 24,
-    "last_used": "2026-11-09"
+    "count": 25,
+    "last_used": "2026-11-12"
   },
   "vulyk-handoff": {
     "count": 14,
@@ -12,12 +12,12 @@
     "last_used": "2026-10-26"
   },
   "vulyk-plan": {
-    "count": 21,
-    "last_used": "2026-11-11"
+    "count": 22,
+    "last_used": "2026-11-12"
   },
   "vulyk-ship": {
-    "count": 38,
-    "last_used": "2026-11-11"
+    "count": 39,
+    "last_used": "2026-11-12"
   },
   "fact-check": {
     "count": 15,
@@ -56,16 +56,16 @@
     "last_used": "2026-10-18"
   },
   "vulyk-evolve": {
-    "count": 3,
-    "last_used": "2026-11-03"
+    "count": 4,
+    "last_used": "2026-11-11"
   },
   "recall": {
     "count": 1,
     "last_used": "2026-10-19"
   },
   "crossgrill": {
-    "count": 6,
-    "last_used": "2026-11-11"
+    "count": 7,
+    "last_used": "2026-11-12"
   },
   "claude-api": {
     "count": 2,
