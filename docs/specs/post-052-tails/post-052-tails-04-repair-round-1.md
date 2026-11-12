@@ -8,7 +8,8 @@ wave: 4
 blocked_by: []
 narrow: true
 red: required
-red_reason:
+red_reason: hives-behind --busy: a fresh Workflow agent transcript (depth 5) is busy
+red_verified_at: 2026-11-12T20:41:17Z 6b9f4efaa6f5fd2d0930643cd5809eddd11e6a3eeebfeb7f4e469f02f7489620
 ---
 
 # Repair round 1
@@ -26,6 +27,7 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 3. (minor) tests/maintenance.test.sh:1149 the fixture folder is named `busy`, so every `expect ... "busy"` also passes on an `unknown ...` line that names the path; the checks tell busy from idle, not busy from unknown.
 4. (minor) scripts/hives-behind.sh:126 the subfolder `cwd` match is case-sensitive past the drive letter, so on Windows a registry path spelled in another case than the session's `cwd` leaves a subfolder session unseen.
 5. (minor) tests/maintenance.test.sh:1198 the split check accepts 2 slices where ask 5 names 4.
+6. (owner, plan delta 2026-11-12) A busy canary is held, not red: one upgraded green canary lets the rollout go on, the owner is told it was smoke-tested on one hive shape, the held canary goes first next ship; both busy stops the rollout and names the canary sessions to close.
 
 ## Acceptance criteria
 - [ ] The class card under docs/defects/ (its quote, Never line or check:) is added or updated in the same commit as the fix. (Finding 1 has no owner correction behind it, so no card; finding 2 is card host-internals-in-public-repo, whose Allowed line already names synthetic stand-ins: the fix applies it, the card text is unchanged.)
@@ -39,6 +41,28 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 - docs/specs/post-052-tails/post-052-tails-01.md
 - docs/specs/post-052-tails/post-052-tails-03.md
 - docs/specs/post-052-tails/plan.md
+- .claude/commands/vulyk-ship.md
 
 ## Verification
 `bash tests/maintenance.test.sh`
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: 6b9f4efaa6f5fd2d0930643cd5809eddd11e6a3eeebfeb7f4e469f02f7489620 (tests/maintenance.test.sh)
+- impl: 74aa192728014b287b04428d92d38562dbd7d6c9c758bab728588ea118973c0d
+- stamped: 2026-11-12T20:41:17Z
+
+```
+::error::hives-behind --busy: a fresh Workflow agent transcript (depth 5) is busy - expected 'busy' in:
+  ok    ship 2a: the local-beta step ends on hives-behind.sh
+  ok    ship 2a: the step skips by name without a registry
+  ok    ship 2a: the dev build is never pushed
+  ok    ship 2a: the plugin.json version moves with VERSION
+  ok    ship 2a: the dev build gets a local tag for the next upgrade
+  ok    ship 2a: a reverted canary is held too
+  ok    ship 2: in the VULYK source the build number comes from 2a
+  ok    ship 2a: the canaries go first
+  ok    ship 2a: a red canary stops the rollout
+maintenance.test.sh: 595 checks, 2 failed
+```
