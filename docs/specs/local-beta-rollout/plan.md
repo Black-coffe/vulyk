@@ -44,3 +44,4 @@ form is the card's check, with fixtures. In the VULYK source repo, `/vulyk-ship`
 
 ## Plan deltas
 **Briefed:** via mini-brief, Andrei, 2026-11-12
+**Branch:** vulyk/local-beta-rollout
