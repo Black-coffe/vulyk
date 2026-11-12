@@ -1197,6 +1197,25 @@ printf '{"type":"mode"}\n' > "$Z1/projects/$zslug-x/s.jsonl"
 hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a fresh prefix-folder transcript with no cwd is busy" "busy"
 rm -rf "$Z1/projects/$zslug-x"
 
+echo "--- hives-behind --busy: no transcript folder is idle once the registry proves the naming rule (busy-no-transcripts-01)"
+NH="$BZ/Never_opened"; NH2="$BZ/Also_never"; mkdir -p "$NH" "$NH2"   # no session ever ran in either
+hbr() { VULYK_HIVES_FILE="$1" VULYK_SESSION_ROOTS="$Z1 $Z2" bash "$HB" --busy "$2" 2>&1; echo "[exit=$?]"; }
+printf '# local hives\n%s | canary\n%s | hold 2026-11-19 x\n' "$NH" "$ZH" > "$BZ/reg-ok"   # ZH resolves (root2)
+out="$(hbr "$BZ/reg-ok" "$NH")"
+printf '%s' "$out" | expect "hives-behind --busy: no folder, a registry hive resolves - idle" "idle no session transcript folder"
+printf '%s' "$out" | expect "hives-behind --busy: that idle exits 0" "[exit=0]"
+printf '%s' "$out" | expect "hives-behind --busy: the idle line says no session has run there" "no Claude Code session has run there"
+printf '%s\n%s\n' "$NH" "$NH2" > "$BZ/reg-none"
+out="$(hbr "$BZ/reg-none" "$NH")"
+printf '%s' "$out" | expect "hives-behind --busy: no registry hive resolves - unknown, never idle" "unknown"
+printf '%s' "$out" | expect "hives-behind --busy: that unknown exits 1" "[exit=1]"
+mkdir -p "$NH/docs/specs/s1"; printf 'stamp=x\n' > "$NH/docs/specs/s1/DRIVER"
+hbr "$BZ/reg-ok" "$NH" | expect "hives-behind --busy: a DRIVER still makes a folderless hive busy" "busy a build driver"
+rm -rf "$NH/docs"; nslug="$(bash "$HB" --slug "$NH")"; mkdir -p "$Z1/projects/$nslug-sub"
+printf '{"cwd":"%s/sub"}\n' "$NH" > "$Z1/projects/$nslug-sub/s.jsonl"
+hbr "$BZ/reg-ok" "$NH" | expect "hives-behind --busy: a fresh subfolder session still makes it busy" "busy a session in a subfolder"
+rm -rf "$Z1/projects/$nslug-sub"
+
 echo "--- map: the scripts slices stay within the ~80-line cap (post-052-tails-02)"
 n_sl=0
 for f in "$SRC"/memory/map/scripts*.md; do

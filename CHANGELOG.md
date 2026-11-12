@@ -34,6 +34,10 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
   to free a stale one. A busy canary is held, not red: one canary that took the build and is green carries the
   rollout (the owner is told it was one hive shape) and the held one goes first next ship; when no canary took the
   build, every other hive is held. Known gap: an open session that has written nothing for an hour is not seen.
+- **A hive where no Claude Code session ever ran is idle, not held** (spec `busy-no-transcripts`). `--busy` used to
+  call a hive with no transcript folder `unknown`, so such a hive (a canary included) was held on every ship. It is
+  now `idle no session transcript folder ...` as long as at least one registered hive resolves to its transcript
+  folder in the same run, which proves the naming rule; with no registry, or no hive resolving, it stays `unknown`.
 - `/vulyk-status` prints the lagging local hives (summary and red lines of `hives-behind.sh`), only in the VULYK
   source repo with a registry.
 

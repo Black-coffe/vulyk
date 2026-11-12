@@ -141,6 +141,20 @@ session_roots() { # one root per line
   for r in "$HOME"/.claude*; do [ -d "$r/projects" ] && printf '%s\n' "$r"; done
 }
 
+naming_proven() { # exit 0 when some registered hive has its exact <root>/projects/<slug>/ folder in this run
+  local reg="${VULYK_HIVES_FILE:-$HOME/.vulyk/hives}" line p s r
+  [ -f "$reg" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
+    p="$(printf '%s' "${line%% | *}" | sed 's/[[:space:]]*$//')"; case "$p" in "~/"*) p="$HOME/${p#\~/}" ;; esac
+    s="$(hive_slug "$p")"
+    while IFS= read -r r; do [ -n "$r" ] && [ -d "$r/projects/$s" ] && return 0; done <<EOF
+$(session_roots)
+EOF
+  done < "$reg"
+  return 1
+}
+
 busy() { # busy <hive> -> one line; exit 0 idle, 1 busy or unknown
   local hive="$1" slug nh r d f seen=0
   [ -d "$hive" ] || { echo "unknown $hive: not on disk"; return 1; }
@@ -164,7 +178,11 @@ busy() { # busy <hive> -> one line; exit 0 idle, 1 busy or unknown
   done <<EOF
 $(session_roots)
 EOF
-  [ "$seen" = 1 ] || { echo "unknown no session transcripts for $hive (folder $slug) under any root - cannot tell it is idle"; return 1; }
+  if [ "$seen" != 1 ]; then   # no folder: no session ever ran here - but only if the naming rule finds some hive
+    naming_proven && { echo "idle no session transcript folder for $hive (no Claude Code session has run there)"; return 0; }
+    echo "unknown no session transcripts for $hive (folder $slug) under any root, and no registered hive resolves" \
+      "to a transcript folder either - the naming rule is unproven, so it cannot be called idle"; return 1
+  fi
   echo "idle"
 }
 
