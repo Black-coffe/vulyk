@@ -55,6 +55,8 @@ memory/map/agents-and-commands.md
       - the per-hive upgrade conditions (ship branch, clean tree), `.vulyk-new` merged by hand, a commit in each hive;
       - holds written with a reason and an end date at most 7 days ahead;
       - a final green `hives-behind.sh`.
+- [ ] Canary first: `--canaries` lists the hives marked ` | canary` (red when none); ship 2a upgrades and smoke-tests
+      them before the rest, and a red canary stops the rollout and holds the others.
 - [ ] `bash scripts/defects-check.sh` reports no debt for the card.
 
 ## Verification
@@ -65,6 +67,7 @@ memory/map/agents-and-commands.md
 - A hive on the local build passes even with a hold line (the hold is stale but harmless); a hold is judged only for a lagging hive.
 - Card: `status: block`, check `bash scripts/hives-behind.sh --check <arg>`, fixtures original (hive one dev build behind, no hold) and neighbour (expired hold); Never line + second quote added this session; INDEX regenerated. Card `paths:` narrowed to `*.hives-state` plus `cmd:` lines for push, gh release and install.sh --upgrade: close-story runs a block check on every file its globs match, and ship.md/CHANGELOG/VERSION are not state files (first close refused: `defect card public-release-per-change fails on .claude/commands/vulyk-ship.md`). defects-check GREEN (8 blocking checks).
 - vulyk-ship.md: step 2a between the merge and the publish print; skipped silently outside the VULYK source repo, named skip without a registry.
+- After close, the owner chose canary first: `--canaries` + ` | canary` registry segment (a segment list, so canary and hold combine), ship 2a canary bullet, 7 more test checks (547, 0 failed). A literal CR byte from a Python heredoc edit was found and removed.
 - tests/maintenance.test.sh: 16 checks; the whole file ran 108 s, 540 checks, 0 failed.
 
 ## Findings

@@ -16,6 +16,8 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
   local merge out to every local hive listed in a private registry (`~/.vulyk/hives`, never in the repo):
   - bumps a local `-dev.N` build, with no tag and no push;
   - upgrades each hive from the local clone and commits there;
+  - upgrades two canary hives first and smoke-tests them with one of their own test rows; a red canary stops
+    the rollout;
   - holds a hive that cannot take it, with a reason and an end date at most 7 days ahead.
 
   `scripts/hives-behind.sh` is red on a hive that lags with no live hold; its `--check` form is the check of card

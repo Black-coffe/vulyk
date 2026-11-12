@@ -24,6 +24,10 @@ form is the card's check, with fixtures. In the VULYK source repo, `/vulyk-ship`
   chosen at publish time, on the owner's word. Nothing is tagged or pushed by the step.
 - The step runs only where `install.sh` and `VERSION` sit at the repo root (the VULYK source). In a hive, or with no
   registry, it prints one named skip line and the ship goes on. The default path needs no personal file.
+- Canary first (the owner chose «Канарейка, потом все (Рекомендую)» on 2026-11-12, after a side-agent warning that a
+  bad change would land in every hive at once; option text is the agent's): two registry hives marked ` | canary`, of
+  different shape, are upgraded and smoke-tested with one of their own test rows; only on green do the others follow,
+  in the same session. A red canary is reverted and the rest are held with its failure as the reason.
 - A hive is upgraded only when it is on the branch it ships from and `git status --porcelain` is empty. Otherwise it
   gets a hold with the reason. The upgrade's `.vulyk-new` files are merged by hand before the hive commit.
 

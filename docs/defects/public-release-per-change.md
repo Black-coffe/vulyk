@@ -5,7 +5,7 @@ status: block
 check: bash scripts/hives-behind.sh --check <arg>
 fixtures: [docs/defects/public-release-per-change.original.fixture, docs/defects/public-release-per-change.neighbour.fixture]
 keys: [выкатываем в паблик, выкатывать теперь будем очень редко, постоянное обновление]
-paths: ["*.hives-state", "cmd:git +(-C +[^ ]+ +)?push", "cmd:gh +release", "cmd:install\.sh .*--upgrade"]
+paths: ["*.hives-state", "cmd:git +(-C +[^ ]+ +)?push", "cmd:gh +release", "cmd:install[.]sh .*--upgrade"]
 ---
 
 # VULYK is published to GitHub after every small change instead of on the owner's call

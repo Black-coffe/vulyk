@@ -44,12 +44,17 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    rollout skipped` and go on. Otherwise every local hive takes this merge now, unasked (card public-release-per-change):
    - Bump `VERSION` to the next local build (`X.Y.Z-dev.N` -> `X.Y.Z-dev.<N+1>`, a plain `X.Y.Z` -> `X.<Y+1>.0-dev.1`)
      and commit it alone as `release: <version> (local, unpublished)`: no tag and no push.
-   - For each registered hive without a live hold: if it is on the branch it ships from and `git -C <hive> status
-     --porcelain` prints nothing, run `./install.sh <hive> --upgrade` from this clone, merge every `.vulyk-new` it
-     leaves into the hive's own edit by hand (card upgrade-overwrites-host-edits), then commit in the hive
+   - Upgrade a hive: if it has no live hold, is on the branch it ships from and `git -C <hive> status --porcelain`
+     prints nothing, run `./install.sh <hive> --upgrade` from this clone, merge every `.vulyk-new` it leaves into
+     the hive's own edit by hand (card upgrade-overwrites-host-edits), then commit in the hive
      (`chore(vulyk): upgrade to <version>`), never push. A hive that cannot take it now (another branch, a dirty
      tree, a running build, a red suite) gets ` | hold <YYYY-MM-DD> <reason>` on its registry line, the date at
      most 7 days ahead.
+   - Canaries first: upgrade each hive `bash scripts/hives-behind.sh --canaries` prints (registry lines marked
+     ` | canary`, two hives of different shape), then run one quick test row from each canary's own `## Commands`
+     table, preferring a row that runs its tests or `close-story` path. Green on every canary: upgrade the other
+     hives the same way. a red canary stops the rollout: revert that canary's upgrade commit, hold every hive not
+     yet upgraded with the canary's failure as the reason, and tell the owner.
    - End on `bash scripts/hives-behind.sh` exit 0, and print its `held` lines to the owner with their reasons.
 3. Publish: print, then stop. Under a `to publish, run:` heading, print the publish step exactly as the
    *Release / deploy* row names it, with the version. When that step pushes and tags and the repo has CI

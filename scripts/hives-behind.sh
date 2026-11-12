@@ -5,10 +5,13 @@
 #
 #   bash scripts/hives-behind.sh                  # read the registry and each hive, then judge
 #   bash scripts/hives-behind.sh --check <state>  # judge a state file alone (the card's check:)
+#   bash scripts/hives-behind.sh --canaries       # print the canary hives' paths, one per line
 #
 # Registry: ${VULYK_HIVES_FILE:-$HOME/.vulyk/hives}, private, never in the repo. One hive per line:
 #   <path>                                   the hive must carry the local VERSION
 #   <path> | hold <YYYY-MM-DD> <reason>      held through that day, for that reason
+#   <path> | canary                          upgraded and smoke-tested first; the others wait for it
+#   <path> | canary | hold ...               both
 # Lines starting with '#' and blank lines are skipped.
 # State: `local <version>`, then one `hive <installed|none|missing> <path>[ | hold <date> <reason>]` per hive.
 # Exit 0: every hive is on the local build or under a live hold. 1: a hive lags, has no version file, is not
@@ -65,18 +68,36 @@ if [ "${1:-}" = "--check" ]; then
   judge "$2"; exit $?
 fi
 
+reg_line() { # reg_line <line> -> path, tail (" | hold ..." or empty), canary (1 or empty)
+  local seg rest; path="$1"; tail=""; canary=""
+  case "$1" in *" | "*) path="${1%% | *}"; rest="${1#* | }" ;; *) rest="" ;; esac
+  while [ -n "$rest" ]; do
+    case "$rest" in *" | "*) seg="${rest%% | *}"; rest="${rest#* | }" ;; *) seg="$rest"; rest="" ;; esac
+    seg="$(printf '%s' "$seg" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    if [ "$seg" = "canary" ]; then canary=1; else tail="$tail | $seg"; fi
+  done
+  path="$(printf '%s' "$path" | sed 's/[[:space:]]*$//')"
+  case "$path" in "~/"*) path="$HOME/${path#\~/}" ;; esac
+}
+
 REG="${VULYK_HIVES_FILE:-$HOME/.vulyk/hives}"
 [ -f "$REG" ] || { echo "hives-behind: no hive registry at $REG - list the local hives there, one path per line"; exit 2; }
+if [ "${1:-}" = "--canaries" ]; then
+  n=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
+    reg_line "$line"; [ -n "$canary" ] && { echo "$path"; n=$((n + 1)); }
+  done < "$REG"
+  [ "$n" -gt 0 ] || { echo "hives-behind: no canary in $REG - mark one or two hives '<path> | canary'" >&2; exit 1; }
+  exit 0
+fi
 [ -f "$ROOT/VERSION" ] || { echo "hives-behind: no VERSION in $ROOT"; exit 2; }
 STATE="$(mktemp)"; trap 'rm -f "$STATE"' EXIT
 printf 'local %s\n' "$(tr -d '[:space:]' < "$ROOT/VERSION")" > "$STATE"
 while IFS= read -r line || [ -n "$line" ]; do
   line="${line%$'\r'}"
   case "$line" in ''|'#'*) continue ;; esac
-  path="$line"; tail=""
-  case "$line" in *" | "*) path="${line%% | *}"; tail=" | ${line#* | }" ;; esac
-  path="$(printf '%s' "$path" | sed 's/[[:space:]]*$//')"
-  case "$path" in "~/"*) path="$HOME/${path#\~/}" ;; esac
+  reg_line "$line"
   if [ ! -d "$path" ]; then have=missing
   else
     have="$(tr -d '[:space:]' < "$path/.claude/vulyk-version" 2>/dev/null || true)"; have="${have:-none}"
