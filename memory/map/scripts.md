@@ -59,8 +59,10 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   `<root>/projects/<slug>/`. Folders `<slug>-*` (session started in a hive subfolder) count only when a fresh
   transcript's `cwd` is the hive or below it (Windows: case-insensitive); an unreadable `cwd` is busy. Roots
   `$VULYK_SESSION_ROOTS` (space-separated), else `${CLAUDE_CONFIG_DIR:-~/.claude}` plus every `~/.claude*` with
-  `projects/`; no transcript folder under any root = unknown, never idle. `--slug <path>`: every non-alphanumeric
-  char -> `-` (Git Bash `/e/x` read as `E:/x`). Caller: `/vulyk-ship` step 2a (before each upgrade and hive commit).
+  `projects/`. No transcript folder under any root: `idle no session transcript folder ...` (exit 0) if
+  `naming_proven` (some registered hive resolves to its exact `<root>/projects/<slug>/`; path-less registry lines
+  prove nothing), else `unknown` (exit 1). `--slug <path>`: non-alphanumeric char -> `-` (Git Bash `/e/x` read as
+  `E:/x`). Caller: `/vulyk-ship` step 2a (before each upgrade and hive commit).
 
 ## Key contracts
 - `cycle.sh`: last stdout line is one JSON object; exits 0 ok · 1 usage · 2 precondition · 3 paused ·
@@ -76,4 +78,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - Scripts target bash 3.2 + BSD userland (macOS CI jobs `full-suite`, `install-smoke` pin `/bin/bash` 3.2, BSD sed,
   no `timeout`): no bare `sed -i`/`python`/`timeout`/`date -d`; run the gate after editing any `.sh`.
 
-last-verified: 2026-11-12 (post-052-tails split; cycle scripts; hives-behind --busy/--slug; 0.51.0-dev.1)
+last-verified: 2026-11-13 (cycle scripts; hives-behind --busy naming_proven; 0.52.0-dev.3)
