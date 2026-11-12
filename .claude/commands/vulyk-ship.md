@@ -29,7 +29,8 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
 2. History. The spec branch (`**Branch:**`) holds one commit per story; do not squash them, they are
    the rollback points and the review units. Work out the version from the Profile's *Commit
    convention* (a semver bump sized to the change). If a story on this branch already wrote `VERSION`
-   and the top `CHANGELOG.md` entry for that version, there is nothing to bump. Otherwise add one commit
+   and the top `CHANGELOG.md` entry for that version, there is nothing to bump. Where step 2a runs (the VULYK
+   source with a hive registry), make no bump here: the CHANGELOG entry goes under `## [Unreleased]` and step 2a numbers the build. Otherwise add one commit
    on the branch with the version bump and the CHANGELOG entry. When the repo has a `CITATION.cff`, the
    same commit sets its `version` to the new `VERSION` and its `date-released` to today. This is release
    paperwork: Law 5 does not apply, and `VERSION`, `CHANGELOG.md` and `CITATION.cff` are paperwork to the
@@ -43,7 +44,9 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    step silently). With no registry at `${VULYK_HIVES_FILE:-~/.vulyk/hives}`, print `local beta: no hive registry,
    rollout skipped` and go on. Otherwise every local hive takes this merge now, unasked (card public-release-per-change):
    - Bump `VERSION` to the next local build (`X.Y.Z-dev.N` -> `X.Y.Z-dev.<N+1>`, a plain `X.Y.Z` -> `X.<Y+1>.0-dev.1`)
-     and commit it alone as `release: <version> (local, unpublished)`: no tag and no push.
+     and the `version` of every tracked `.claude-plugin/plugin.json` with it (tests/mods.test.sh pins them to
+     `VERSION`), commit both alone as `release: <version> (local, unpublished)`, then `git tag v<version>` on that
+     commit: the next upgrade finds the build a hive came from by that tag. Tag and commit are never pushed.
    - Upgrade a hive: if it has no live hold, is on the branch it ships from and `git -C <hive> status --porcelain`
      prints nothing, run `./install.sh <hive> --upgrade` from this clone, merge every `.vulyk-new` it leaves into
      the hive's own edit by hand (card upgrade-overwrites-host-edits), then commit in the hive
@@ -53,8 +56,8 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    - Canaries first: upgrade each hive `bash scripts/hives-behind.sh --canaries` prints (registry lines marked
      ` | canary`, two hives of different shape), then run one quick test row from each canary's own `## Commands`
      table, preferring a row that runs its tests or `close-story` path. Green on every canary: upgrade the other
-     hives the same way. a red canary stops the rollout: revert that canary's upgrade commit, hold every hive not
-     yet upgraded with the canary's failure as the reason, and tell the owner.
+     hives the same way. a red canary stops the rollout: revert that canary's upgrade commit, hold the reverted canary
+     and every hive not yet upgraded with the canary's failure as the reason, and tell the owner.
    - End on `bash scripts/hives-behind.sh` exit 0, and print its `held` lines to the owner with their reasons.
 3. Publish: print, then stop. Under a `to publish, run:` heading, print the publish step exactly as the
    *Release / deploy* row names it, with the version. When that step pushes and tags and the repo has CI

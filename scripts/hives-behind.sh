@@ -21,8 +21,23 @@ set -u
 ROOT="${VULYK_SRC:-$(cd "$(dirname "$0")/.." && pwd)}"
 TODAY="${VULYK_TODAY:-$(date +%F)}"
 
+HOLD_MAX_DAYS=7   # a hold ends at most this many days ahead, so it cannot become the new "later"
+
+day_number() { # day_number <YYYY-MM-DD> -> days since 0000-03-01, or nothing when it is not a real day
+  local y m d dim era yoe mp
+  y=$((10#${1%%-*})); m="${1#*-}"; m=$((10#${m%%-*})); d=$((10#${1##*-}))
+  [ "$m" -ge 1 ] && [ "$m" -le 12 ] || return 1
+  case "$m" in 4|6|9|11) dim=30 ;; 2) dim=28
+    if [ $((y % 4)) -eq 0 ] && { [ $((y % 100)) -ne 0 ] || [ $((y % 400)) -eq 0 ]; }; then dim=29; fi ;; *) dim=31 ;; esac
+  [ "$d" -ge 1 ] && [ "$d" -le "$dim" ] || return 1
+  [ "$m" -le 2 ] && y=$((y - 1))
+  era=$((y / 400)); yoe=$((y - era * 400)); mp=$(((m + 9) % 12))
+  echo $((era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + (153 * mp + 2) / 5 + d - 1))
+}
+
 judge() { # judge <state-file>
-  local line want="" n=0 on=0 held=0 red=0 rest have path hold until reason
+  local line want="" n=0 on=0 held=0 red=0 rest have path hold until reason du dt
+  dt="$(day_number "$TODAY")" || { echo "hives-behind: today '$TODAY' is not a date"; return 2; }
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%$'\r'}"
     case "$line" in
@@ -44,8 +59,15 @@ judge() { # judge <state-file>
           if [ -z "$reason" ]; then
             red=$((red + 1)); echo "  RED   $path: hold without a reason"; continue
           fi
-          if [[ "$until" < "$TODAY" ]]; then
+          du="$(day_number "$until")" || du=""
+          if [ -z "$du" ]; then
+            red=$((red + 1)); echo "  RED   $path: hold date $until is not a real day"; continue
+          fi
+          if [ "$du" -lt "$dt" ]; then
             red=$((red + 1)); echo "  RED   $path: hold expired $until ($reason) - roll it out or hold it again"; continue
+          fi
+          if [ $((du - dt)) -gt "$HOLD_MAX_DAYS" ]; then
+            red=$((red + 1)); echo "  RED   $path: hold until $until is more than $HOLD_MAX_DAYS days ahead ($reason)"; continue
           fi
           held=$((held + 1)); echo "  held  $path $have: $reason (until $until)"; continue
         fi
