@@ -56,4 +56,4 @@ becomes accepted on the owner's grill answer.
 
 ## Plan deltas
 
-**Approved:** <owner, date>
+**Approved:** Andrei, 2026-11-12 («Одобряю, собирай (Рекомендую)»)
