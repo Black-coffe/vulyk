@@ -1146,7 +1146,8 @@ echo "--- hives-behind --busy: a hive in use is never upgraded (post-052-tails-0
 hbz() { VULYK_HIVES_FILE="$HR/none" VULYK_SESSION_ROOTS="$1" bash "$HB" --busy "$2" 2>&1; echo "[exit=$?]"; }
 bash "$HB" --slug 'E:/Hives/Acme_co' | expect "hives-behind --slug: drive, colon and underscore become dashes" "E--Hives-Acme-co"
 bash "$HB" --slug '/Users/a/.claude/my.proj' | expect "hives-behind --slug: a dot becomes a dash" "-Users-a--claude-my-proj"
-BZ="$T/busy"; Z1="$BZ/root1"; Z2="$BZ/root2"; ZH="$BZ/My_hive.x"
+BZ="$T/hbz";   # not "busy": a path in an unknown line must not satisfy a busy check
+ Z1="$BZ/root1"; Z2="$BZ/root2"; ZH="$BZ/My_hive.x"
 mkdir -p "$Z1/projects" "$Z2/projects" "$ZH/docs/specs/s1"
 zslug="$(bash "$HB" --slug "$ZH")"
 hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: no transcript dir under any root is unknown, never idle" "unknown"
@@ -1161,6 +1162,10 @@ printf '%s' "$out" | expect "hives-behind --busy: a transcript written in the la
 printf '%s' "$out" | expect "hives-behind --busy: busy exits 1" "[exit=1]"
 rm -f "$Z2/projects/$zslug/fresh.jsonl"; mkdir -p "$Z2/projects/$zslug/s/subagents"; : > "$Z2/projects/$zslug/s/subagents/a.jsonl"
 hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a fresh subagent transcript is busy too" "busy"
+mkdir -p "$Z2/projects/$zslug/sid/subagents/workflows/wf"; : > "$Z2/projects/$zslug/sid/subagents/workflows/wf/agent-a.jsonl"
+rm -rf "$Z2/projects/$zslug/s"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a fresh Workflow agent transcript (depth 5) is busy" "busy"
+rm -rf "$Z2/projects/$zslug/sid"
 rm -rf "$Z2/projects/$zslug/s"; printf 'stamp=x\n' > "$ZH/docs/specs/s1/DRIVER"
 out="$(hbz "$Z1 $Z2" "$ZH")"
 printf '%s' "$out" | expect "hives-behind --busy: a DRIVER file is busy" "busy"
@@ -1180,6 +1185,11 @@ printf '%s' "$out" | expect "hives-behind --busy: the subfolder session exits 1"
 zbs="$(printf '%s/sub' "$ZH" | sed 's#/#\\\\\\\\#g')"   # the same cwd as Windows writes it, JSON-escaped: \\tmp\\...
 printf '{"cwd":"%s"}\n' "$zbs" > "$Z1/projects/$zslug-sub/s.jsonl"
 hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a backslash cwd below the hive is busy" "busy"
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*)
+  printf '{"cwd":"%s/sub"}
+' "$(printf '%s' "$ZH" | tr '[:lower:]' '[:upper:]')" > "$Z1/projects/$zslug-sub/s.jsonl"
+  hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: on Windows a cwd in another case is the same folder" "busy" ;;
+esac
 rm -rf "$Z1/projects/$zslug-sub"; mkdir -p "$Z1/projects/$zslug-x"
 printf '{"cwd":"%s_x"}\n' "$ZH" > "$Z1/projects/$zslug-x/s.jsonl"
 hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a sibling hive sharing the name prefix leaves this one idle" "idle"
@@ -1195,7 +1205,7 @@ for f in "$SRC"/memory/map/scripts*.md; do
   w="$(awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }' "$f")"   # joined bullets would dodge the line cap
   [ "$w" -le 130 ] && ok "map: ${f##*/} lines are within 130 chars" || bad "map: ${f##*/} has a $w-char line - wrap it, the 80-line cap counts wrapped lines"
 done
-[ "$n_sl" -ge 2 ] && ok "map: the scripts map is split into $n_sl slices" || bad "map: the scripts map is one slice ($n_sl) - split it by sub-area"
+[ "$n_sl" -ge 4 ] && ok "map: the scripts map is split into $n_sl slices" || bad "map: the scripts map is one slice ($n_sl) - split it by sub-area"
 
 echo "--- commands: ship description, status line, busy guard (post-052-tails-01)"
 sed -n '2p' "$SRC/.claude/commands/vulyk-ship.md" | expect_absent "ship: the description no longer says it never tags" "never tags"

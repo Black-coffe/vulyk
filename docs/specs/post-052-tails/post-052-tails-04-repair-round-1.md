@@ -1,7 +1,7 @@
 ---
 story: post-052-tails-04
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 4
@@ -19,6 +19,12 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 
 ## Requirements
 > 7. Шаг 2a /vulyk-ship на каждом выпуске перепроверяет все паузы и перед обновлением любого улья проверяет, не занят ли он: обновляется только улей с чистым деревом на своей ветке, без файла сборки DRIVER и без записи в журнал сессии за последние 60 минут; если журналы улья не найдены - он считается занятым; занятый улей получает паузу с причиной. Перед коммитом в улье проверка повторяется: появились чужие файлы - стоп и сообщение владельцу. Первая такая проверка проходит при выпуске этой правки, до 19.11.
+
+## Implementation notes
+- Finding 1: `fresh_jsonl` drops `-maxdepth`, so Workflow agent transcripts 5 levels down count; a real hive with ~1200 transcripts answers in 0.5 s.
+- Finding 2: the `--slug` test uses `E:/Hives/Acme_co`; registered hive names and slugs masked in story 01's receipt, story 03, plan.md, this story and the round-1 review record (`<hive slug, masked>`, `X:/Acme`). Branch commits before this one still carry them: `/vulyk-ship` step 1 (fix history) must scrub them before any push. Card host-internals-in-public-repo unchanged: its Allowed line already names synthetic stand-ins.
+- Minors: fixture folder `hbz` (a path in an unknown line no longer satisfies a busy check); split check wants >= 4 slices; on Windows the cwd match is case-insensitive (`same_case`), with a test that runs only there.
+- Finding 6 (owner): step 2a canary bullet - a busy canary is held, not red; one upgraded green canary carries the rollout, owner told it was one shape; both busy stops and names the sessions. No test pin added: the test file was sealed by the receipt before the owner's answer.
 
 ## Findings
 1. scripts/hives-behind.sh:116 [ask 7] `--busy` must count a transcript written in the last 60 minutes at any depth under the hive's transcript folder: Workflow agents write `<slug>/<session>/subagents/workflows/<wf>/agent-*.jsonl` (depth 5), `-maxdepth 3` never reads them, so a hive whose only fresh writes are a running Workflow's (main session quiet for an hour, no DRIVER file) is reported `idle` and upgraded - repro: `R=$(mktemp -d); mkdir -p $R/h; s=$(bash scripts/hives-behind.sh --slug $R/h); mkdir -p $R/r/projects/$s/sid/subagents/workflows/wf; : > $R/r/projects/$s/sid/subagents/workflows/wf/agent-a.jsonl; VULYK_SESSION_ROOTS=$R/r bash scripts/hives-behind.sh --busy $R/h` prints `idle`, exit 0 (the same file one level up at `sid/subagents/` prints `busy`); in this repo's own transcript folder 593 of 1181 transcripts sit at that depth and 4 past sessions had Workflow writes with no shallower write in the hour before (one stretch 135 minutes); a build that claimed a DRIVER is still caught by the first sign.

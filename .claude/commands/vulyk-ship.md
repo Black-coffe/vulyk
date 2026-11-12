@@ -61,8 +61,11 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
      most 7 days ahead; a dirty tree is never touched.
    - Canaries first: upgrade each hive `bash scripts/hives-behind.sh --canaries` prints (registry lines marked
      ` | canary`, two hives of different shape), then run one quick test row from each canary's own `## Commands`
-     table, preferring a row that runs its tests or `close-story` path. Green on every canary: upgrade the other
-     hives the same way. a red canary stops the rollout: revert that canary's upgrade commit, hold the reverted canary
+     table, preferring a row that runs its tests or `close-story` path. Green on every canary that took the build:
+     upgrade the other hives the same way. A busy canary is held, not red: when the other canary took the build and
+     is green, the rollout goes on, the owner is told this build was smoke-tested on one hive shape only, and the
+     held canary is upgraded first next ship. Both canaries busy: hold every other hive with that reason and name to
+     the owner the canary sessions to close. a red canary stops the rollout: revert that canary's upgrade commit, hold the reverted canary
      and every hive not yet upgraded with the canary's failure as the reason, and tell the owner.
    - End on `bash scripts/hives-behind.sh` exit 0, and print its `held` lines to the owner with their reasons.
 3. Publish: print, then stop. Under a `to publish, run:` heading, print the publish step exactly as the

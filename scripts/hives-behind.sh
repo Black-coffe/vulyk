@@ -113,7 +113,11 @@ hive_slug() { # hive_slug <path> -> every character but a letter or a digit turn
   norm_path "$1" | sed 's/[^A-Za-z0-9]/-/g'
 }
 
-fresh_jsonl() { find "$1" -maxdepth 3 -name '*.jsonl' -mmin -60 2>/dev/null; } # transcripts, subagents included
+fresh_jsonl() { find "$1" -name '*.jsonl' -mmin -60 2>/dev/null; } # any depth: Workflow agents write 5 levels down
+
+same_case() { # same_case <path> -> lower-cased where the file system ignores case (Windows), else as is
+  case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) printf '%s' "$1" | tr '[:upper:]' '[:lower:]' ;; *) printf '%s' "$1" ;; esac
+}
 
 sub_session() { # sub_session <dir> <normalized hive> -> a busy line, exit 0, when a fresh transcript there ran in the hive
   local f c                                              # or below it, or carries no readable cwd; else exit 1
@@ -122,8 +126,8 @@ sub_session() { # sub_session <dir> <normalized hive> -> a busy line, exit 0, wh
     c="$(grep -o -m1 '"cwd":"[^"]*"' "$f" 2>/dev/null | head -1)"
     [ -n "$c" ] || { echo "busy a fresh transcript in ${1##*/} has no readable cwd ($f)"; return 0; }
     c="${c#\"cwd\":\"}"; c="$(norm_path "${c%\"}")"   # JSON's \\ is two backslashes: both become /, then collapse
-    c="$(printf '%s' "$c" | sed 's#//*#/#g')"
-    case "$c" in "$2"|"$2"/*) echo "busy a session in a subfolder of the hive ($c) wrote in the last 60 minutes ($f)"; return 0 ;; esac
+    c="$(same_case "$(printf '%s' "$c" | sed 's#//*#/#g')")"
+    case "$c" in "$(same_case "$2")"|"$(same_case "$2")"/*) echo "busy a session in a subfolder of the hive ($c) wrote in the last 60 minutes ($f)"; return 0 ;; esac
   done <<EOF
 $(fresh_jsonl "$1")
 EOF
