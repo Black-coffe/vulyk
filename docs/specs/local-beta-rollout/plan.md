@@ -49,3 +49,9 @@ form is the card's check, with fixtures. In the VULYK source repo, `/vulyk-ship`
 ## Plan deltas
 **Briefed:** via mini-brief, Andrei, 2026-11-12
 **Branch:** vulyk/local-beta-rollout
+**Council:** ESCALATE round 1, 2026-11-12, at 5d232ff3, pack 3efc00cf5778
+
+## Needs a human
+- reason: ceiling · round 1 · 2026-11-12
+- ask 1: BLOCK by the reviewer - see docs/specs/local-beta-rollout/council/round-1/review.md
+- seats: docs/specs/local-beta-rollout/council/round-1/
