@@ -36,3 +36,4 @@ shared contract and orders a migration as shadow, then cut-over. The probe resul
 **Briefed:** via mini-brief, Andrei, 2026-11-12
 **Branch:** vulyk/prompt-leaks-rules
 **Council:** GREEN round 1, 2026-11-12, at b61cf347, pack b4d240573b9f
+**Shipped:** Unreleased, 2026-11-12, at 2b5832ef - merged to main (local), rides the next release after 0.51.0; publish pending
