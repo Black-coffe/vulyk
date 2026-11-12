@@ -34,3 +34,8 @@ good and stop being noticed.
 ## Asks
 
 1. Every change merged to the local main of VULYK rolls out to every local hive automatically: a private hive registry with holds (reason and date), a check that goes red when a registered hive lags the local version without a live hold (the card public-release-per-change's check, with fixtures), and a `/vulyk-ship` step that bumps the local dev build, upgrades every registered hive from the local clone, commits in each and lists the hives held and why.
+
+## Answers
+
+**After escalation (round 1, 2026-11-12).**
+> owner chose «Починить всё + ревью (Рекомендую)» (option text is the agent's): repair both majors and all minors, one more review round
