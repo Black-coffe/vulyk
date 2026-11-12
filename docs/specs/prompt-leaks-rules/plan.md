@@ -34,3 +34,4 @@ shared contract and orders a migration as shadow, then cut-over. The probe resul
 
 ## Plan deltas
 **Briefed:** via mini-brief, Andrei, 2026-11-12
+**Branch:** vulyk/prompt-leaks-rules
