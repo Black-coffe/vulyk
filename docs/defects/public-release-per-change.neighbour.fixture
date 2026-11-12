@@ -1,0 +1,3 @@
+local 0.51.0-dev.2
+hive 0.51.0-dev.2 <hive>/project-a
+hive 0.50.3 <hive>/project-b | hold 2026-11-01 suite over its time cap

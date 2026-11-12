@@ -1087,6 +1087,43 @@ sed -n '/^3a\. /,/^4\. /p' "$SRC/.claude/commands/vulyk-plan.md" | tr '\n' ' ' |
   | expect "plan 3a: the existing-repo gate counts a module under ## Unmapped territory beside ## Codebase map" \
     '`## Codebase map` or `## Unmapped territory` lists'
 
+echo "--- hives-behind: every local hive carries the local build (local-beta-rollout-01)"
+HB="$SRC/scripts/hives-behind.sh"; HR="$T/hb"; mkdir -p "$HR/src"
+printf '0.51.0-dev.2\r\n' > "$HR/src/VERSION"   # a CRLF checkout: whitespace is not a version
+mkhive() { mkdir -p "$HR/$1/.claude"; [ -z "${2:-}" ] || printf '%s\n' "$2" > "$HR/$1/.claude/vulyk-version"; }
+hb() { VULYK_SRC="$HR/src" VULYK_HIVES_FILE="$HR/reg" VULYK_TODAY=2026-11-12 bash "$HB" "$@" 2>&1; echo "exit=$?"; }
+mkhive a 0.51.0-dev.2; mkhive b 0.51.0-dev.1; mkhive c
+printf '# local hives\n\n%s\n' "$HR/a" > "$HR/reg"
+hb | expect "hives-behind: a hive on the local build passes" "exit=0"
+printf '%s\n%s\n' "$HR/a" "$HR/b" > "$HR/reg"
+out="$(hb)"
+printf '%s' "$out" | expect "hives-behind: a hive one dev build behind with no hold is red" "exit=1"
+printf '%s' "$out" | expect "hives-behind: the lagging hive is named with both versions" "0.51.0-dev.1"
+printf '%s\n' "$HR/c" > "$HR/reg"
+hb | expect "hives-behind: a hive with no version file is red" "exit=1"
+printf '%s\n' "$HR/nope" > "$HR/reg"
+hb | expect "hives-behind: a registered hive that is not on disk is red" "exit=1"
+printf '%s | hold 2026-11-15 feature branch checked out\n' "$HR/b" > "$HR/reg"
+out="$(hb)"
+printf '%s' "$out" | expect "hives-behind: a live hold passes" "exit=0"
+printf '%s' "$out" | expect "hives-behind: a held hive is listed with its reason" "feature branch checked out"
+printf '%s | hold 2026-11-10 suite over cap\n' "$HR/b" > "$HR/reg"
+hb | expect "hives-behind: an expired hold is red" "exit=1"
+printf '%s | hold soon suite over cap\n' "$HR/b" > "$HR/reg"
+hb | expect "hives-behind: a malformed hold is red" "exit=1"
+printf '# nobody\n' > "$HR/reg"
+hb | expect "hives-behind: an empty registry is red" "exit=1"
+rm -f "$HR/reg"
+hb | expect "hives-behind: no registry is a refusal, not a pass" "exit=2"
+for fx in original neighbour; do
+  VULYK_TODAY=2026-11-12 bash "$HB" --check "$SRC/docs/defects/public-release-per-change.$fx.fixture" >/dev/null 2>&1
+  [ $? -eq 1 ] && ok "hives-behind: the card's $fx fixture is red" || bad "hives-behind: the card's $fx fixture is red"
+done
+sed -n '/^2a\. /,/^3\. /p' "$SRC/.claude/commands/vulyk-ship.md" | tr '\n' ' ' | tr -s ' ' > "$T/ship2a"
+expect "ship 2a: the local-beta step ends on hives-behind.sh" "bash scripts/hives-behind.sh" < "$T/ship2a"
+expect "ship 2a: the step skips by name without a registry" "local beta: no hive registry" < "$T/ship2a"
+expect "ship 2a: the dev bump is never tagged or pushed" "no tag and no push" < "$T/ship2a"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1

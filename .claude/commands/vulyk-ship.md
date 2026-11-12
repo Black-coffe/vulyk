@@ -39,6 +39,18 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    `git merge --abort`, switch back to the spec branch, tell the owner what git printed, and stop. After
    a clean merge, delete the spec branch with `git branch -d <branch>`, never `-D`; if `-d` refuses,
    quote what it printed and leave the branch.
+2a. Local beta, only in the VULYK source repo (`install.sh` and `VERSION` at the root; anywhere else skip this
+   step silently). With no registry at `${VULYK_HIVES_FILE:-~/.vulyk/hives}`, print `local beta: no hive registry,
+   rollout skipped` and go on. Otherwise every local hive takes this merge now, unasked (card public-release-per-change):
+   - Bump `VERSION` to the next local build (`X.Y.Z-dev.N` -> `X.Y.Z-dev.<N+1>`, a plain `X.Y.Z` -> `X.<Y+1>.0-dev.1`)
+     and commit it alone as `release: <version> (local, unpublished)`: no tag and no push.
+   - For each registered hive without a live hold: if it is on the branch it ships from and `git -C <hive> status
+     --porcelain` prints nothing, run `./install.sh <hive> --upgrade` from this clone, merge every `.vulyk-new` it
+     leaves into the hive's own edit by hand (card upgrade-overwrites-host-edits), then commit in the hive
+     (`chore(vulyk): upgrade to <version>`), never push. A hive that cannot take it now (another branch, a dirty
+     tree, a running build, a red suite) gets ` | hold <YYYY-MM-DD> <reason>` on its registry line, the date at
+     most 7 days ahead.
+   - End on `bash scripts/hives-behind.sh` exit 0, and print its `held` lines to the owner with their reasons.
 3. Publish: print, then stop. Under a `to publish, run:` heading, print the publish step exactly as the
    *Release / deploy* row names it, with the version. When that step pushes and tags and the repo has CI
    (`.github/workflows/`), print it in this order: push the release commit, wait for CI on that commit

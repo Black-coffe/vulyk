@@ -403,3 +403,5 @@
 {"ts":"2026-11-11T14:21:03Z","story":"handoff-1m-01-thresholds-window","declared":9,"changed":8,"out_of_scope":0}
 {"ts":"2026-11-12T12:22:28Z","story":"prompt-leaks-rules-01","declared":5,"changed":6,"out_of_scope":1}
 {"ts":"2026-11-12T12:23:01Z","story":"prompt-leaks-rules-01","declared":5,"changed":5,"out_of_scope":0}
+{"ts":"2026-11-12T17:10:10Z","story":"local-beta-rollout-01","declared":8,"changed":8,"out_of_scope":0}
+{"ts":"2026-11-12T17:11:06Z","story":"local-beta-rollout-01","declared":8,"changed":8,"out_of_scope":0}

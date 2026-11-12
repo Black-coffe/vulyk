@@ -12,6 +12,14 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
   librarian drops inferred entries, deletes contradicted ones and keeps entries as facts; the planner
   keeps two stories that change one shared contract out of one wave and orders a migration as shadow,
   then cut-over. A probe (n=1) showed `.claude/rules/` files with `paths:` reach subagents.
+- **Local beta rollout** (spec `local-beta-rollout`). In the VULYK source repo, `/vulyk-ship` step 2a rolls every
+  local merge out to every local hive listed in a private registry (`~/.vulyk/hives`, never in the repo):
+  - bumps a local `-dev.N` build, with no tag and no push;
+  - upgrades each hive from the local clone and commits there;
+  - holds a hive that cannot take it, with a reason and an end date at most 7 days ahead.
+
+  `scripts/hives-behind.sh` is red on a hive that lags with no live hold; its `--check` form is the check of card
+  `public-release-per-change`, now `block`. Without a registry the step prints a named skip.
 
 ## [0.51.0] - 2026-11-12
 
