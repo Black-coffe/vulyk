@@ -1,0 +1,40 @@
+# Tails after 0.52.0-dev.1 (brief)
+
+**Date:** 2026-11-12 · **Owner:** Andrei · **Escaped from:** local-beta-rollout
+
+## Request (verbatim)
+
+> Черновик следующего brief:
+> - в описании /vulyk-ship осталось «never tags», хотя локальный тег теперь ставится;
+> - тест на «несуществующий день» берёт уже прошедшую дату, поэтому проходит и без самого правила;
+> - строка про ульи с отставанием в /vulyk-status вынесена за рамки задачи;
+> - drone-docs, чтобы уложиться в лимит, удалил из карты пункт про изменения команд 0.50 (ADR-032); стоит вернуть;
+> - карта scripts.md по-прежнему примерно 160 строк при лимите около 80;
+> - ADR-033 «локальные ульи — бета-канал» записан в статусе proposed, его нужно подтвердить;
+> - до 19.11 пересмотреть паузы 10 ульев.
+
+## Recon
+- `.claude/commands/vulyk-ship.md:2` description: "never tags, publishes or deploys"; step 2a runs `git tag v<version>` (local only).
+- `tests/maintenance.test.sh:1116-1117`: hold `2026-02-30` judged at `VULYK_TODAY=2026-11-12` is red as expired even without the real-day rule (round-2 review minor).
+- `docs/specs/local-beta-rollout/plan.md` `## Descoped`: the `/vulyk-status` lagging-hives line.
+- `ba53f294` removed the `0.50 command changes (ADR-032)` bullet from `memory/map/agents-and-commands.md`.
+- `memory/map/scripts.md`: 162 lines; cap ~80 (`memory/map/README.md`).
+- `docs/adr/033-local-hives-are-the-beta-channel.md`: `Status: proposed`.
+- `bash scripts/hives-behind.sh` on 2026-11-12: 15 hives, 5 on 0.52.0-dev.1, 10 held until 2026-11-19, 0 red. Step 2a upgrades only hives with no live hold.
+- plan.md "Nothing is tagged" minor: already fixed in ba53f294.
+
+## Answers
+1. Карта - Разбить на 2-3 файла (Рекомендую): хуки, install.sh и остальные скрипты по отдельным слайсам, каждый до 80 строк, факты сохраняются; ссылки в memory.md поправить.
+2. Отставание - Строка в /vulyk-status (Рекомендую): только в исходниках VULYK с реестром: итог hives-behind и красные строки; в ульях строки нет.
+3. Паузы - Правило: каждый выпуск их проверяет (Рекомендую): шаг 2a /vulyk-ship на каждом выпуске перепроверяет все паузы; чистое дерево на своей ветке - улей обновляется, иначе новая пауза с причиной; первая проверка - при выпуске этой правки.
+4. ADR-033 - Принять как есть (Рекомендую): статус accepted с именем и датой, разделы «Not recorded» не дописываются.
+(Options are the agent's text; cross-checked with Sonnet before the round: agreed on all four.)
+
+## Asks
+1. Описание /vulyk-ship больше не говорит «never tags»: единственный тег - локальный тег dev-сборки, и он не пушится.
+2. Тест «несуществующий день» берёт невозможную дату, которая ещё не прошла (2026-11-31 при сегодня 2026-11-28), и краснеет, если правило о реальном дне убрать.
+3. /vulyk-status в исходниках VULYK с реестром ульев печатает строку об отстающих ульях (итог hives-behind и его красные строки); в улье и без реестра строки нет.
+4. Пункт карты «0.50 command changes (ADR-032)» возвращён в memory/map/agents-and-commands.md.
+5. memory/map/scripts.md разбита на 2-3 слайса по подобластям (хуки, install.sh, остальные скрипты), каждый не длиннее 80 строк; ни один факт не потерян; указатели в memory/memory.md обновлены.
+6. ADR-033 принят как есть: статус accepted с именем владельца и датой; разделы «Not recorded» не дописываются.
+7. Шаг 2a /vulyk-ship на каждом выпуске перепроверяет все паузы: улей с чистым деревом на своей ветке обновляется, остальные получают новую паузу с причиной; первая такая проверка проходит при выпуске этой правки, до 19.11.
