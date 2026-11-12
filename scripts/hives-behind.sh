@@ -10,11 +10,13 @@
 #   bash scripts/hives-behind.sh --slug <path>    # the folder name Claude Code gives that path under <root>/projects/
 #
 # --busy (ship step 2a asks it before every hive upgrade and again before the hive commit): busy on a
-# docs/specs/*/DRIVER file or on a session transcript (*.jsonl, subagents included) written in the last 60 minutes
-# under <root>/projects/<slug>/. Roots: $VULYK_SESSION_ROOTS (space-separated) when set, else
-# ${CLAUDE_CONFIG_DIR:-~/.claude} and every ~/.claude* dir with a projects/ folder (a second account). No transcript
-# folder under any root is `unknown`, never idle: what cannot be seen is not taken as free. An open session that has
-# written nothing for over an hour is not seen (known gap, accepted 2026-11-12).
+# docs/specs/*/DRIVER file or on a session transcript (*.jsonl, any depth) written in the last 60 minutes under
+# <root>/projects/<slug>/, or under <slug>-* when the transcript's cwd is the hive or below it (a session opened in a
+# subfolder). Roots: $VULYK_SESSION_ROOTS (space-separated) when set, else ${CLAUDE_CONFIG_DIR:-~/.claude} and every
+# ~/.claude* dir with a projects/ folder (a second account). No transcript folder under any root is `idle` (no
+# session ever ran there) only when some registered hive does resolve to its folder, which proves the naming rule;
+# otherwise it is `unknown`, never idle: what cannot be seen is not taken as free. An open session that has written
+# nothing for over an hour is not seen (known gap, accepted 2026-11-12).
 #
 # Registry: ${VULYK_HIVES_FILE:-$HOME/.vulyk/hives}, private, never in the repo. One hive per line:
 #   <path>                                   the hive must carry the local VERSION
@@ -146,8 +148,9 @@ naming_proven() { # exit 0 when some registered hive has its exact <root>/projec
   [ -f "$reg" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
-    p="$(printf '%s' "${line%% | *}" | sed 's/[[:space:]]*$//')"; case "$p" in "~/"*) p="$HOME/${p#\~/}" ;; esac
-    s="$(hive_slug "$p")"
+    p="$(printf '%s' "${line%%|*}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"; case "$p" in "~/"*) p="$HOME/${p#\~/}" ;; esac
+    [ -n "$p" ] || continue                     # a line with no path proves nothing (an empty slug matches projects/)
+    s="$(hive_slug "$p")"; [ -n "$s" ] || continue
     while IFS= read -r r; do [ -n "$r" ] && [ -d "$r/projects/$s" ] && return 0; done <<EOF
 $(session_roots)
 EOF

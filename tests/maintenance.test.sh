@@ -1209,6 +1209,10 @@ printf '%s\n%s\n' "$NH" "$NH2" > "$BZ/reg-none"
 out="$(hbr "$BZ/reg-none" "$NH")"
 printf '%s' "$out" | expect "hives-behind --busy: no registry hive resolves - unknown, never idle" "unknown"
 printf '%s' "$out" | expect "hives-behind --busy: that unknown exits 1" "[exit=1]"
+for pathless in '   ' "$(printf '\t')" ' | hold 2026-11-19 x'; do   # an empty slug would match every root's projects/
+  printf '%s\n%s\n' "$NH" "$pathless" > "$BZ/reg-pathless"
+  hbr "$BZ/reg-pathless" "$NH" | expect "hives-behind --busy: a registry line with no path proves nothing ('$pathless')" "[exit=1]"
+done
 mkdir -p "$NH/docs/specs/s1"; printf 'stamp=x\n' > "$NH/docs/specs/s1/DRIVER"
 hbr "$BZ/reg-ok" "$NH" | expect "hives-behind --busy: a DRIVER still makes a folderless hive busy" "busy a build driver"
 rm -rf "$NH/docs"; nslug="$(bash "$HB" --slug "$NH")"; mkdir -p "$Z1/projects/$nslug-sub"
