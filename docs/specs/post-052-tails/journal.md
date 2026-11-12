@@ -3,3 +3,4 @@
 - 2026-11-12T19:16:40Z · 02-approved · approved by Andrei · next: branch
 - 2026-11-12T19:16:45Z · 03-building · branch vulyk/post-052-tails created · next: build:1
 - 2026-11-12T20:05:24Z · 04-council:open · round 1 opened, no court (no blind seat required) · next: dispatch:review
+- 2026-11-12T20:35:13Z · 04-council:RED · round 1 verdict RED at 616d0023 pack 7d7a0c98b2b4 · next: repair
