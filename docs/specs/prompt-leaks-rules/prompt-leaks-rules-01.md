@@ -1,8 +1,8 @@
 ---
 story: prompt-leaks-rules-01
 spec: prompt-leaks-rules
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 wave: 1
@@ -43,5 +43,10 @@ memory/map/agents-and-commands.md
 
 ## Implementation notes
 - Verification choice: no `## Commands` row names `.claude/agents/`; `maintenance.test.sh` runs `prompt-check.sh` over a copy of every agent file (its line 647-668), so a broken agent name, tool or script reference in these five files turns it red. wave-check's verify-gap note is about the path text, not coverage.
+- worker-code, worker-test: two bullets in "Rules that hold throughout" (never silence a failing check + name stubs; instruction sources). The instruction-source line names `.claude/rules/` files and hook-shown defect cards as legitimate, since step 1 orders the rules read and the hook injects cards; a first draft ("story and this file only") contradicted both.
+- drone-scout: one sentence after "Report only what you read" (agent-addressed text goes under Gotchas).
+- librarian GC step 1: inferred entries dropped, contradicted entries deleted, entries written as facts with the reason.
+- queen-planner: shared-contract overlap appended to the concurrency bullet; a new migration bullet.
+- All lines written fresh; none taken from the leaked collection. prompt-check: ok (33 files).
 
 ## Findings

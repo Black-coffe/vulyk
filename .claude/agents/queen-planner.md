@@ -42,7 +42,11 @@ mechanically by `cycle.sh repair`.
   `worker-test` story in a later wave. One such test, not coverage; a trivial change names none.
 - Plan the concurrency: every story gets `wave:` and `blocked_by:`. Stories in one wave run in
   parallel in one tree, so their `## Files` must be disjoint; resolve overlap here by merging stories,
-  moving the shared file into an earlier story, or sequencing with `blocked_by`.
+  moving the shared file into an earlier story, or sequencing with `blocked_by`. A shared contract is an
+  overlap too: two stories that change one type, schema, config key or public API do not share a wave,
+  even when their files differ.
+- A migration adds the new shape beside the old one, every story leaves the suite green, and the last
+  story switches callers over and removes the old shape.
 
 Prefer fewer, larger stories. Each story costs a fresh worker's orientation, a close and a commit, so a
 story earns its own worker only when it runs in parallel with its wave-mates on disjoint files, or when
