@@ -1,14 +1,15 @@
 ---
 story: post-052-tails-03
 spec: post-052-tails
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 2
 worker: worker-code
 wave: 3
 blocked_by: [post-052-tails-02]
 red: required           # a new branch in the busy guard (subfolder sessions, cwd match) that decides a write into hives
-red_reason:
+red_reason: hives-behind --busy: a fresh session in a hive subfolder is busy
+red_verified_at: 2026-11-12T19:57:15Z f28b53de0fc88e59525f03e0cb55c5553423b148bea121dd68a08aad0749e1b8
 ---
 
 # A session opened in a hive's subfolder makes the hive busy
@@ -48,5 +49,30 @@ agent's note on 2026-11-12, after story 01 closed (plan delta).
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- `norm_path` (shared by `hive_slug` and the cwd match): `\` -> `/`, trailing `/` cut, Git Bash `/e/x` -> `E:/x`, drive upper-case; JSON `\\` becomes `//`, collapsed. Real transcripts write `"cwd":"E:\\Projects\\vulyk"` (checked).
+- Prefix folders `<slug>-*` are scanned in every root, also when the exact folder is absent; they never count as "found" for `unknown`.
+- Side-agent note (stale DRIVER from a dead build holds a hive forever): no age rule (a real Tier 3-4 build can run for hours); the busy line now names the file and the `cycle.sh release` command to free it. The vulyk source's own `docs/specs/weekly-budget/DRIVER` is left for the owner (vulyk is not a registered hive).
+- Real probes: three registered hives idle; vulyk busy on the stale DRIVER.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: f28b53de0fc88e59525f03e0cb55c5553423b148bea121dd68a08aad0749e1b8 (tests/maintenance.test.sh)
+- impl: ee3aa6b467e1a71cecedc502a92d138c2e43bfe21c5a4578f3ae6b16528295ab
+- stamped: 2026-11-12T19:57:15Z
+
+```
+::error::hives-behind --busy: a fresh session in a hive subfolder is busy - expected 'busy' in:
+  ok    ship 2a: the local-beta step ends on hives-behind.sh
+  ok    ship 2a: the step skips by name without a registry
+  ok    ship 2a: the dev build is never pushed
+  ok    ship 2a: the plugin.json version moves with VERSION
+  ok    ship 2a: the dev build gets a local tag for the next upgrade
+  ok    ship 2a: a reverted canary is held too
+  ok    ship 2: in the VULYK source the build number comes from 2a
+  ok    ship 2a: the canaries go first
+  ok    ship 2a: a red canary stops the rollout
+maintenance.test.sh: 593 checks, 4 failed
+```

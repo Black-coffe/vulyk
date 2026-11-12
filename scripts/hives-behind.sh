@@ -99,14 +99,35 @@ if [ "${1:-}" = "--check" ]; then
   judge "$2"; exit $?
 fi
 
-hive_slug() { # hive_slug <path> -> every character but a letter or a digit turned into '-', as Claude Code names it
-  local p="$1"
+norm_path() { # norm_path <path> -> '/' separators, no trailing '/', Git Bash /e/x read as E:/x, drive letter upper-case
+  local p; p="$(printf '%s' "$1" | tr '\\' '/')"
   while [ "${#p}" -gt 1 ] && [ "${p%/}" != "$p" ]; do p="${p%/}"; done
   case "$(uname -s 2>/dev/null)" in   # Git Bash spells E:/x as /e/x; Claude Code sees E:\x
     MINGW*|MSYS*|CYGWIN*) case "$p" in /[a-zA-Z]/*|/[a-zA-Z]) p="${p:1:1}:/${p:3}" ;; esac ;;
   esac
   case "$p" in [a-z]:*) p="$(printf '%s' "${p:0:1}" | tr '[:lower:]' '[:upper:]')${p:1}" ;; esac
-  printf '%s\n' "$p" | sed 's/[^A-Za-z0-9]/-/g'
+  printf '%s\n' "$p"
+}
+
+hive_slug() { # hive_slug <path> -> every character but a letter or a digit turned into '-', as Claude Code names it
+  norm_path "$1" | sed 's/[^A-Za-z0-9]/-/g'
+}
+
+fresh_jsonl() { find "$1" -maxdepth 3 -name '*.jsonl' -mmin -60 2>/dev/null; } # transcripts, subagents included
+
+sub_session() { # sub_session <dir> <normalized hive> -> a busy line, exit 0, when a fresh transcript there ran in the hive
+  local f c                                              # or below it, or carries no readable cwd; else exit 1
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    c="$(grep -o -m1 '"cwd":"[^"]*"' "$f" 2>/dev/null | head -1)"
+    [ -n "$c" ] || { echo "busy a fresh transcript in ${1##*/} has no readable cwd ($f)"; return 0; }
+    c="${c#\"cwd\":\"}"; c="$(norm_path "${c%\"}")"   # JSON's \\ is two backslashes: both become /, then collapse
+    c="$(printf '%s' "$c" | sed 's#//*#/#g')"
+    case "$c" in "$2"|"$2"/*) echo "busy a session in a subfolder of the hive ($c) wrote in the last 60 minutes ($f)"; return 0 ;; esac
+  done <<EOF
+$(fresh_jsonl "$1")
+EOF
+  return 1
 }
 
 session_roots() { # one root per line
@@ -117,18 +138,25 @@ session_roots() { # one root per line
 }
 
 busy() { # busy <hive> -> one line; exit 0 idle, 1 busy or unknown
-  local hive="$1" slug r d f seen=0
+  local hive="$1" slug nh r d f seen=0
   [ -d "$hive" ] || { echo "unknown $hive: not on disk"; return 1; }
   for f in "$hive"/docs/specs/*/DRIVER; do
-    [ -f "$f" ] && { echo "busy a build driver runs (${f#"$hive"/})"; return 1; }
+    [ -f "$f" ] && {   # a build that died leaves this file behind: the line says how to tell and how to free it
+      echo "busy a build driver runs (${f#"$hive"/}; if no build runs there, the file is stale - free it in that hive with" \
+        "bash scripts/cycle.sh release $(dirname "${f#"$hive"/}") <stamp from that file>)"; return 1; }
   done
-  slug="$(hive_slug "$hive")"
+  slug="$(hive_slug "$hive")"; nh="$(norm_path "$hive")"
   while IFS= read -r r; do
     [ -n "$r" ] || continue
-    d="$r/projects/$slug"; [ -d "$d" ] || continue
-    seen=1
-    f="$(find "$d" -maxdepth 3 -name '*.jsonl' -mmin -60 2>/dev/null | head -1)"
-    [ -z "$f" ] || { echo "busy a session transcript was written in the last 60 minutes ($f)"; return 1; }
+    d="$r/projects/$slug"
+    if [ -d "$d" ]; then
+      seen=1
+      f="$(fresh_jsonl "$d" | head -1)"
+      [ -z "$f" ] || { echo "busy a session transcript was written in the last 60 minutes ($f)"; return 1; }
+    fi
+    for d in "$r/projects/$slug"-*; do   # a session started in a subfolder: <slug>-<rest>, or a sibling hive
+      [ -d "$d" ] && sub_session "$d" "$nh" && return 1
+    done
   done <<EOF
 $(session_roots)
 EOF

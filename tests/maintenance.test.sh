@@ -1169,6 +1169,24 @@ rm -f "$ZH/docs/specs/s1/DRIVER"
 hbz "$Z1 $Z2" "$BZ/nope" | expect "hives-behind --busy: a hive not on disk is not idle" "[exit=1]"
 VULYK_HIVES_FILE="$HR/none" bash "$HB" --busy >/dev/null 2>&1; [ $? -eq 2 ] && ok "hives-behind --busy: no hive argument is a refusal (exit 2)" || bad "hives-behind --busy: no hive argument is a refusal (exit 2)"
 
+echo "--- hives-behind --busy: a session opened in a hive subfolder (post-052-tails-03)"
+bash "$HB" --slug 'e:/x' | expect "hives-behind --slug: a lower-case drive letter is read upper-case" "E--x"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: the subfolder fixtures start idle" "idle"
+mkdir -p "$Z1/projects/$zslug-sub"
+printf '{"type":"user","cwd":"%s/sub","x":1}\n' "$ZH" > "$Z1/projects/$zslug-sub/s.jsonl"
+out="$(hbz "$Z1 $Z2" "$ZH")"
+printf '%s' "$out" | expect "hives-behind --busy: a fresh session in a hive subfolder is busy" "busy"
+printf '%s' "$out" | expect "hives-behind --busy: the subfolder session exits 1" "[exit=1]"
+zbs="$(printf '%s/sub' "$ZH" | sed 's#/#\\\\\\\\#g')"   # the same cwd as Windows writes it, JSON-escaped: \\tmp\\...
+printf '{"cwd":"%s"}\n' "$zbs" > "$Z1/projects/$zslug-sub/s.jsonl"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a backslash cwd below the hive is busy" "busy"
+rm -rf "$Z1/projects/$zslug-sub"; mkdir -p "$Z1/projects/$zslug-x"
+printf '{"cwd":"%s_x"}\n' "$ZH" > "$Z1/projects/$zslug-x/s.jsonl"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a sibling hive sharing the name prefix leaves this one idle" "idle"
+printf '{"type":"mode"}\n' > "$Z1/projects/$zslug-x/s.jsonl"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a fresh prefix-folder transcript with no cwd is busy" "busy"
+rm -rf "$Z1/projects/$zslug-x"
+
 echo "--- map: the scripts slices stay within the ~80-line cap (post-052-tails-02)"
 n_sl=0
 for f in "$SRC"/memory/map/scripts*.md; do
