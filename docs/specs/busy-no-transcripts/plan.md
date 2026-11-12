@@ -37,3 +37,4 @@ never make every hive look idle.
 ## Plan deltas
 
 **Briefed:** via mini-brief, Andrei, 2026-11-12
+**Branch:** vulyk/busy-no-transcripts
