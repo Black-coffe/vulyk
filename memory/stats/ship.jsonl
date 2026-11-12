@@ -49,3 +49,4 @@
 {"ts":"2026-11-10T08:55:24Z","spec":"redact-gaps-2","version":"0.50.2","head":"8570073","pack":"d65336fe940d","note":"merged to main, publish pending"}
 {"ts":"2026-11-10T09:54:25Z","spec":"gitignore-glob","version":"0.50.3","head":"b34c9bd6","pack":"c8340487d10f","note":"merged to main, publish pending"}
 {"ts":"2026-11-11T15:36:22Z","spec":"upgrade-findings","version":"0.51.0-dev.1","head":"512540fa","pack":"4513d384eef0","note":"merged to main locally, publish pending; owner chose (2026-11-11) to merge without a new council round and without CI; the narrow security release waits for a Fable re-review of A2 and for the owner's word"}
+{"ts":"2026-11-12T13:12:02Z","spec":"prompt-leaks-rules","version":"Unreleased","head":"2b5832ef","pack":"b4d240573b9f","note":"merged to main (local), rides the next release after 0.51.0; publish pending"}
