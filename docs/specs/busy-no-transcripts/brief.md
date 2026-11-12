@@ -18,3 +18,8 @@
 
 ## Asks
 1. `hives-behind.sh --busy <hive>`: a hive with no transcript folder under any root is `idle`, with a reason that says no session has run there, as long as at least one hive in the registry resolves to a transcript folder; when none does (or there is no registry), it stays `unknown` (exit 1). DRIVER, fresh-transcript and subfolder checks are unchanged. Tests cover both cases.
+
+## Answers
+
+**After escalation (round 1, 2026-11-12).**
+> owner picked «Починить, раунд только с ревью (Рекомендую)» (option text is the agent's): skip registry lines with no path in naming_proven, tests for spaces/tab/'| hold' lines, header comment
