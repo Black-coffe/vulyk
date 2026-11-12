@@ -5,3 +5,4 @@
 - 2026-11-12T20:05:24Z · 04-council:open · round 1 opened, no court (no blind seat required) · next: dispatch:review
 - 2026-11-12T20:35:13Z · 04-council:RED · round 1 verdict RED at 616d0023 pack 7d7a0c98b2b4 · next: repair
 - 2026-11-12T20:35:18Z · 03-building · repair round 1: post-052-tails-04-repair-round-1.md · next: build:4
+- 2026-11-12T20:52:36Z · 04-council:open · round 2 opened, no court (no blind seat required), narrow repair round (review only) · next: dispatch:review
