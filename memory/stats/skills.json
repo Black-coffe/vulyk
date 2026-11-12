@@ -16,7 +16,7 @@
     "last_used": "2026-11-12"
   },
   "vulyk-ship": {
-    "count": 40,
+    "count": 41,
     "last_used": "2026-11-12"
   },
   "fact-check": {
@@ -74,5 +74,9 @@
   "andrei-voice": {
     "count": 1,
     "last_used": "2026-11-09"
+  },
+  "investment-banking:deal-tracker": {
+    "count": 1,
+    "last_used": "2026-11-12"
   }
 }
