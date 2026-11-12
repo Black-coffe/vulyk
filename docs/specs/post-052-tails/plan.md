@@ -44,6 +44,9 @@ becomes accepted on the owner's grill answer.
 **Wave 2**
 - `post-052-tails-02` — map: ADR-032 bullet back, `scripts.md` split into <= 80-line slices + cap check; ADR-033 accepted
 
+**Wave 3**
+- `post-052-tails-03` — `--busy` also sees a session opened in a hive subfolder (cwd-checked prefix folders) (red: required)
+
 ## Contracts
 - none
 
@@ -55,5 +58,13 @@ becomes accepted on the owner's grill answer.
 *(empty)*
 
 ## Plan deltas
+- 2026-11-12, repair round 1: a side agent noted that a busy canary (held, so never green) would stop the whole rollout, and the Queen had settled it only in story 01's notes. Owner chose «Хватит одной свободной (Рекомендую)»: one upgraded green canary is enough when the other is busy; the busy one is held and goes first next ship; the owner is told the build was smoke-tested on one hive shape; both busy = every other hive held and the canary sessions to close named. Rejected: retry for an hour, keep the stall, a stand-in canary. Story 04 takes `.claude/commands/vulyk-ship.md`.
+- 2026-11-12, after story 01 closed: a side agent noted that a session opened in a hive subfolder writes its transcript under `<slug>-<rest>`, which `--busy` never reads, so the hive looks idle. New story `post-052-tails-03` (wave 3, red: required) reads `<slug>-*` folders and counts one only when a fresh transcript's `cwd` is the hive or below it; an unreadable `cwd` is busy. Rejected: a bare prefix match (a sibling hive such as `X:/Acme_co` would hold `X:/Acme`). Within ask 7, no ask change.
+- 2026-11-12, story 02 mid-build: three slices of 80 lines could not hold the scripts map without dropping facts (drone-docs fit only by joining bullets into lines up to 920 chars; rewrapped, the other-scripts slice was ~135 lines). Owner chose «4 файла, строка до 130 знаков (Рекомендую)»: ask 5 now reads 4 slices (`scripts-checks.md` added) and lines <= 130 chars, checked by the maintenance test. Rejected: compressing wording (facts lost), leaving one slice over the cap.
 
 **Approved:** Andrei, 2026-11-12 («Одобряю, собирай (Рекомендую)»)
+**Branch:** vulyk/post-052-tails
+**Council:** RED round 1, 2026-11-12, at 616d0023, pack 7d7a0c98b2b4
+**Council:** GREEN round 2, 2026-11-12, at 0609049d, pack 595081b75183
+**Checked:** ACCEPTED by Andrei, 2026-11-12, at 55b533b2 - owner picked «Принимаю, выпускаем (Рекомендую)» (option text is the agent's) for the narrow canary fix 55b533b2 after GREEN round 2
+**Checked:** ACCEPTED by Andrei, 2026-11-12, at c8788cec - owner picked «Принимаю заново, без CI ветки (Рекомендую)» (option text is the agent's) after the history scrub at c8788cec; overrides the ci line: no branch CI, public CI is a hard gate before publish

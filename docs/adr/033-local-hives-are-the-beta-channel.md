@@ -1,6 +1,6 @@
 # ADR-033: Local hives are the beta channel, canaries first, nothing pushed
 
-- Status: proposed
+- Status: accepted (2026-11-12, owner: Andrei, grill answer «Принять как есть», approved with the post-052-tails plan)
 - Date: 2026-11-12
 - Spec: docs/specs/local-beta-rollout
 

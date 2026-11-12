@@ -1113,8 +1113,10 @@ printf '%s | hold 2026-11-20 suite over cap\n' "$HR/b" > "$HR/reg"
 hb | expect "hives-behind: a hold more than 7 days ahead is red" "[exit=1]"
 printf '%s | hold 2026-11-19 suite over cap\n' "$HR/b" > "$HR/reg"
 hb | expect "hives-behind: a hold exactly 7 days ahead passes" "[exit=0]"
-printf '%s | hold 2026-02-30 suite over cap\n' "$HR/b" > "$HR/reg"
-hb | expect "hives-behind: a hold on a day that does not exist is red" "[exit=1]"
+printf '%s | hold 2026-11-31 suite over cap\n' "$HR/b" > "$HR/reg"   # not yet past, so only the real-day rule makes it red
+out="$(VULYK_SRC="$HR/src" VULYK_HIVES_FILE="$HR/reg" VULYK_TODAY=2026-11-28 bash "$HB" 2>&1; echo "[exit=$?]")"
+printf '%s' "$out" | expect "hives-behind: a hold on a day that does not exist is red" "[exit=1]"
+printf '%s' "$out" | expect "hives-behind: the impossible day is named, not taken as expired" "is not a real day"
 printf '%s | hold 2026-12-29 suite over cap\n' "$HR/b" > "$HR/reg"
 VULYK_SRC="$HR/src" VULYK_HIVES_FILE="$HR/reg" VULYK_TODAY=2026-12-30 bash "$HB" 2>&1 | grep -q 'hold expired' \
   && ok "hives-behind: an expired hold before a year end is named expired" || bad "hives-behind: an expired hold before a year end is named expired"
@@ -1140,7 +1142,82 @@ for fx in original neighbour; do
   VULYK_TODAY=2026-11-12 bash "$HB" --check "$SRC/docs/defects/public-release-per-change.$fx.fixture" >/dev/null 2>&1
   [ $? -eq 1 ] && ok "hives-behind: the card's $fx fixture is red" || bad "hives-behind: the card's $fx fixture is red"
 done
+echo "--- hives-behind --busy: a hive in use is never upgraded (post-052-tails-01)"
+hbz() { VULYK_HIVES_FILE="$HR/none" VULYK_SESSION_ROOTS="$1" bash "$HB" --busy "$2" 2>&1; echo "[exit=$?]"; }
+bash "$HB" --slug 'E:/Hives/Acme_co' | expect "hives-behind --slug: drive, colon and underscore become dashes" "E--Hives-Acme-co"
+bash "$HB" --slug '/Users/a/.claude/my.proj' | expect "hives-behind --slug: a dot becomes a dash" "-Users-a--claude-my-proj"
+BZ="$T/hbz";   # not "busy": a path in an unknown line must not satisfy a busy check
+ Z1="$BZ/root1"; Z2="$BZ/root2"; ZH="$BZ/My_hive.x"
+mkdir -p "$Z1/projects" "$Z2/projects" "$ZH/docs/specs/s1"
+zslug="$(bash "$HB" --slug "$ZH")"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: no transcript dir under any root is unknown, never idle" "unknown"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: unknown exits 1" "[exit=1]"
+mkdir -p "$Z2/projects/$zslug"; : > "$Z2/projects/$zslug/old.jsonl"; touch -t 202601010000 "$Z2/projects/$zslug/old.jsonl"
+out="$(hbz "$Z1 $Z2" "$ZH")"
+printf '%s' "$out" | expect "hives-behind --busy: a transcript dir in the second root with only old transcripts is idle" "idle"
+printf '%s' "$out" | expect "hives-behind --busy: idle exits 0" "[exit=0]"
+: > "$Z2/projects/$zslug/fresh.jsonl"
+out="$(hbz "$Z1 $Z2" "$ZH")"
+printf '%s' "$out" | expect "hives-behind --busy: a transcript written in the last 60 minutes is busy" "busy"
+printf '%s' "$out" | expect "hives-behind --busy: busy exits 1" "[exit=1]"
+rm -f "$Z2/projects/$zslug/fresh.jsonl"; mkdir -p "$Z2/projects/$zslug/s/subagents"; : > "$Z2/projects/$zslug/s/subagents/a.jsonl"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a fresh subagent transcript is busy too" "busy"
+mkdir -p "$Z2/projects/$zslug/sid/subagents/workflows/wf"; : > "$Z2/projects/$zslug/sid/subagents/workflows/wf/agent-a.jsonl"
+rm -rf "$Z2/projects/$zslug/s"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a fresh Workflow agent transcript (depth 5) is busy" "busy"
+rm -rf "$Z2/projects/$zslug/sid"
+rm -rf "$Z2/projects/$zslug/s"; printf 'stamp=x\n' > "$ZH/docs/specs/s1/DRIVER"
+out="$(hbz "$Z1 $Z2" "$ZH")"
+printf '%s' "$out" | expect "hives-behind --busy: a DRIVER file is busy" "busy"
+printf '%s' "$out" | expect "hives-behind --busy: the DRIVER is named" "docs/specs/s1/DRIVER"
+rm -f "$ZH/docs/specs/s1/DRIVER"
+hbz "$Z1 $Z2" "$BZ/nope" | expect "hives-behind --busy: a hive not on disk is not idle" "[exit=1]"
+VULYK_HIVES_FILE="$HR/none" bash "$HB" --busy >/dev/null 2>&1; [ $? -eq 2 ] && ok "hives-behind --busy: no hive argument is a refusal (exit 2)" || bad "hives-behind --busy: no hive argument is a refusal (exit 2)"
+
+echo "--- hives-behind --busy: a session opened in a hive subfolder (post-052-tails-03)"
+bash "$HB" --slug 'e:/x' | expect "hives-behind --slug: a lower-case drive letter is read upper-case" "E--x"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: the subfolder fixtures start idle" "idle"
+mkdir -p "$Z1/projects/$zslug-sub"
+printf '{"type":"user","cwd":"%s/sub","x":1}\n' "$ZH" > "$Z1/projects/$zslug-sub/s.jsonl"
+out="$(hbz "$Z1 $Z2" "$ZH")"
+printf '%s' "$out" | expect "hives-behind --busy: a fresh session in a hive subfolder is busy" "busy"
+printf '%s' "$out" | expect "hives-behind --busy: the subfolder session exits 1" "[exit=1]"
+zbs="$(printf '%s/sub' "$ZH" | sed 's#/#\\\\\\\\#g')"   # the same cwd as Windows writes it, JSON-escaped: \\tmp\\...
+printf '{"cwd":"%s"}\n' "$zbs" > "$Z1/projects/$zslug-sub/s.jsonl"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a backslash cwd below the hive is busy" "busy"
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*)
+  printf '{"cwd":"%s/sub"}
+' "$(printf '%s' "$ZH" | tr '[:lower:]' '[:upper:]')" > "$Z1/projects/$zslug-sub/s.jsonl"
+  hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: on Windows a cwd in another case is the same folder" "busy" ;;
+esac
+rm -rf "$Z1/projects/$zslug-sub"; mkdir -p "$Z1/projects/$zslug-x"
+printf '{"cwd":"%s_x"}\n' "$ZH" > "$Z1/projects/$zslug-x/s.jsonl"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a sibling hive sharing the name prefix leaves this one idle" "idle"
+printf '{"type":"mode"}\n' > "$Z1/projects/$zslug-x/s.jsonl"
+hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a fresh prefix-folder transcript with no cwd is busy" "busy"
+rm -rf "$Z1/projects/$zslug-x"
+
+echo "--- map: the scripts slices stay within the ~80-line cap (post-052-tails-02)"
+n_sl=0
+for f in "$SRC"/memory/map/scripts*.md; do
+  [ -f "$f" ] || continue; n_sl=$((n_sl + 1)); n="$(wc -l < "$f" | tr -d ' ')"
+  [ "$n" -le 80 ] && ok "map: ${f##*/} is $n lines, within 80" || bad "map: ${f##*/} is $n lines, over the 80-line cap - split it, do not cut facts"
+  w="$(awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }' "$f")"   # joined bullets would dodge the line cap
+  [ "$w" -le 130 ] && ok "map: ${f##*/} lines are within 130 chars" || bad "map: ${f##*/} has a $w-char line - wrap it, the 80-line cap counts wrapped lines"
+done
+[ "$n_sl" -ge 4 ] && ok "map: the scripts map is split into $n_sl slices" || bad "map: the scripts map is one slice ($n_sl) - split it by sub-area"
+
+echo "--- commands: ship description, status line, busy guard (post-052-tails-01)"
+sed -n '2p' "$SRC/.claude/commands/vulyk-ship.md" | expect_absent "ship: the description no longer says it never tags" "never tags"
+sed -n '2p' "$SRC/.claude/commands/vulyk-ship.md" | expect "ship: the description names the local dev-build tag" "local dev-build tag"
+expect "status: the lagging-hives line runs hives-behind.sh" "bash scripts/hives-behind.sh" < "$SRC/.claude/commands/vulyk-status.md"
 sed -n '/^2a\. /,/^3\. /p' "$SRC/.claude/commands/vulyk-ship.md" | tr '\n' ' ' | tr -s ' ' > "$T/ship2a"
+expect "ship 2a: every hive is asked --busy before its upgrade" "bash scripts/hives-behind.sh --busy <hive>" < "$T/ship2a"
+expect "ship 2a: every ship re-checks each live hold" "every ship re-checks each live hold" < "$T/ship2a"
+expect "ship 2a: the busy check runs again right before the hive commit" "right before the hive commit" < "$T/ship2a"
+expect "ship 2a: a busy or unknown hive is held" "busy or unknown" < "$T/ship2a"
+expect "ship 2a: the others follow only when at least one canary took the build" "At least one canary took the build" < "$T/ship2a"
+expect "ship 2a: no canary taking the build holds every other hive" "No canary took the build" < "$T/ship2a"
 expect "ship 2a: the local-beta step ends on hives-behind.sh" "bash scripts/hives-behind.sh" < "$T/ship2a"
 expect "ship 2a: the step skips by name without a registry" "local beta: no hive registry" < "$T/ship2a"
 expect "ship 2a: the dev build is never pushed" "never pushed" < "$T/ship2a"

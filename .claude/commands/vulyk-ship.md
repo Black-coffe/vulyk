@@ -1,5 +1,5 @@
 ---
-description: Stage 06 of the cycle - fix history, merge locally, print the publish command, open the next circle. Pushes only the spec branch, for its CI run; never tags, publishes or deploys.
+description: Stage 06 of the cycle - fix history, merge locally, print the publish command, open the next circle. Pushes only the spec branch, for its CI run; never publishes or deploys. Its only tag is the VULYK source's local dev-build tag, never pushed.
 argument-hint: [spec slug; defaults to the newest spec with a GREEN council row or a human check recorded]
 ---
 
@@ -47,16 +47,26 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
      and the `version` of every tracked `.claude-plugin/plugin.json` with it (tests/mods.test.sh pins them to
      `VERSION`), commit both alone as `release: <version> (local, unpublished)`, then `git tag v<version>` on that
      commit: the next upgrade finds the build a hive came from by that tag. Tag and commit are never pushed.
-   - Upgrade a hive: if it has no live hold, is on the branch it ships from and `git -C <hive> status --porcelain`
-     prints nothing, run `./install.sh <hive> --upgrade` from this clone, merge every `.vulyk-new` it leaves into
-     the hive's own edit by hand (card upgrade-overwrites-host-edits), then commit in the hive
-     (`chore(vulyk): upgrade to <version>`), never push. A hive that cannot take it now (another branch, a dirty
-     tree, a running build, a red suite) gets ` | hold <YYYY-MM-DD> <reason>` on its registry line, the date at
-     most 7 days ahead.
+   - Holds: every ship re-checks each live hold, so a held hive whose reason is gone takes this build now; one
+     that still cannot take it gets its hold rewritten with the reason seen today.
+   - Upgrade a hive, held or not, only when `bash scripts/hives-behind.sh --busy <hive>` prints `idle` (no build
+     driver, no session transcript written in the last 60 minutes), it is on the branch it ships from and
+     `git -C <hive> status --porcelain` prints nothing. Then drop its hold, if any, run `./install.sh <hive>
+     --upgrade` from this clone and merge every `.vulyk-new` it leaves into the hive's own edit by hand (card
+     upgrade-overwrites-host-edits); right before the hive commit, run `--busy` and `git -C <hive> status
+     --porcelain` again: a busy verdict, or a path the upgrade did not write, stops that hive with no commit and
+     a line to the owner; never stash, reset or revert a file you did not write. Otherwise commit in the hive
+     (`chore(vulyk): upgrade to <version>`), never push. A hive that cannot take it now (busy or unknown, another
+     branch, a dirty tree, a red suite) gets ` | hold <YYYY-MM-DD> <reason>` on its registry line, the date at
+     most 7 days ahead; a dirty tree is never touched.
    - Canaries first: upgrade each hive `bash scripts/hives-behind.sh --canaries` prints (registry lines marked
      ` | canary`, two hives of different shape), then run one quick test row from each canary's own `## Commands`
-     table, preferring a row that runs its tests or `close-story` path. Green on every canary: upgrade the other
-     hives the same way. a red canary stops the rollout: revert that canary's upgrade commit, hold the reverted canary
+     table, preferring a row that runs its tests or `close-story` path. At least one canary took the build and
+     every canary that took it is green: upgrade the other hives the same way. A busy canary is held, not red: when
+     the other canary took the build and is green, the rollout goes on, the owner is told this build was smoke-tested
+     on one hive shape only, and the held canary is upgraded first next ship. No canary took the build (busy, held,
+     another branch, a dirty tree): hold every other hive with that reason and name to the owner what stops each
+     canary (for a busy one, the session to close). a red canary stops the rollout: revert that canary's upgrade commit, hold the reverted canary
      and every hive not yet upgraded with the canary's failure as the reason, and tell the owner.
    - End on `bash scripts/hives-behind.sh` exit 0, and print its `held` lines to the owner with their reasons.
 3. Publish: print, then stop. Under a `to publish, run:` heading, print the publish step exactly as the

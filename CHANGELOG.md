@@ -23,6 +23,24 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
   `scripts/hives-behind.sh` is red on a hive that lags with no live hold; its `--check` form is the check of card
   `public-release-per-change`, now `block`. Without a registry the step prints a named skip.
+- **A busy hive is never upgraded** (spec `post-052-tails`). `hives-behind.sh --busy <hive>` prints `idle`,
+  `busy <why>` or `unknown <why>`. A hive counts as busy when a build driver file is present or a Claude Code session
+  transcript for that folder was written in the last 60 minutes, under every `~/.claude*` account root. When no
+  transcript folder is found the hive is `unknown`, never idle. Step 2a asks this before every hive upgrade and
+  again right before the hive commit. Every ship also re-checks each live hold, so a hive whose reason is gone
+  takes the build at once. A session started in a subfolder of the hive counts too: its transcript folder is named
+  `<hive>-<rest>`, and it counts when a fresh transcript's `cwd` is the hive or below it, so a sibling hive that
+  shares the name prefix does not count; an unreadable `cwd` counts as busy. A busy line for a driver file says how
+  to free a stale one. A busy canary is held, not red: one canary that took the build and is green carries the
+  rollout (the owner is told it was one hive shape) and the held one goes first next ship; when no canary took the
+  build, every other hive is held. Known gap: an open session that has written nothing for an hour is not seen.
+- `/vulyk-status` prints the lagging local hives (summary and red lines of `hives-behind.sh`), only in the VULYK
+  source repo with a registry.
+
+### Fixed
+- `/vulyk-ship`'s description no longer says it never tags: its only tag is the local dev-build tag, never pushed.
+- The hives-behind "day that does not exist" test used a past date, so it passed without the real-day rule; it
+  now uses a not-yet-past impossible day.
 
 ## [0.51.0] - 2026-11-12
 

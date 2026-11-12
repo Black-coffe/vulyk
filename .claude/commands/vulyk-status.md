@@ -1,5 +1,5 @@
 ---
-description: Hive dashboard - driver, council, defects, spec token spend, unpushed merges, open stories, memory freshness, skill stats, budget posture
+description: Hive dashboard - driver, lagging local hives, council, defects, spec token spend, unpushed merges, open stories, memory freshness, skill stats, budget posture
 argument-hint: []
 ---
 
@@ -10,6 +10,9 @@ Produce the hive status report. Read only metadata; this command stays cheap.
    either way). Then `merged locally, not pushed: <n>`: resolve the default branch as `ship-check.sh`
    does (`git symbolic-ref --short refs/remotes/origin/HEAD`, else `main`/`master`), then
    `git log origin/<default>..<default> --oneline | wc -l`; print `no remote` when `origin` is absent.
+   Lagging local hives, only in the VULYK source repo (`install.sh` and `VERSION` at the root) with a hive
+   registry at `${VULYK_HIVES_FILE:-~/.vulyk/hives}`: print, as-is, the summary and red lines of
+   `bash scripts/hives-behind.sh | grep -E '^hives-behind:|RED'`. Anywhere else print nothing for it.
 2. Council. If `memory/stats/council.jsonl` does not exist, print `council: no rounds yet` and skip the
    rest of this step. Otherwise one `awk` pass over it, printed as-is:
    ```

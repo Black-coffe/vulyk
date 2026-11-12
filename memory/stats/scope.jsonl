@@ -406,3 +406,7 @@
 {"ts":"2026-11-12T17:10:10Z","story":"local-beta-rollout-01","declared":8,"changed":8,"out_of_scope":0}
 {"ts":"2026-11-12T17:11:06Z","story":"local-beta-rollout-01","declared":8,"changed":8,"out_of_scope":0}
 {"ts":"2026-11-12T17:55:59Z","story":"local-beta-rollout-02-repair-round-1","declared":8,"changed":4,"out_of_scope":0}
+{"ts":"2026-11-12T19:35:33Z","story":"post-052-tails-01","declared":5,"changed":5,"out_of_scope":0}
+{"ts":"2026-11-12T19:50:46Z","story":"post-052-tails-02","declared":8,"changed":8,"out_of_scope":0}
+{"ts":"2026-11-12T20:03:02Z","story":"post-052-tails-03","declared":3,"changed":3,"out_of_scope":0}
+{"ts":"2026-11-12T20:50:15Z","story":"post-052-tails-04-repair-round-1","declared":6,"changed":6,"out_of_scope":0}

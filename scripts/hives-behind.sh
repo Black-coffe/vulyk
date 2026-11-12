@@ -6,6 +6,15 @@
 #   bash scripts/hives-behind.sh                  # read the registry and each hive, then judge
 #   bash scripts/hives-behind.sh --check <state>  # judge a state file alone (the card's check:)
 #   bash scripts/hives-behind.sh --canaries       # print the canary hives' paths, one per line
+#   bash scripts/hives-behind.sh --busy <hive>    # is someone working in it? idle (0) | busy <why> (1) | unknown <why> (1)
+#   bash scripts/hives-behind.sh --slug <path>    # the folder name Claude Code gives that path under <root>/projects/
+#
+# --busy (ship step 2a asks it before every hive upgrade and again before the hive commit): busy on a
+# docs/specs/*/DRIVER file or on a session transcript (*.jsonl, subagents included) written in the last 60 minutes
+# under <root>/projects/<slug>/. Roots: $VULYK_SESSION_ROOTS (space-separated) when set, else
+# ${CLAUDE_CONFIG_DIR:-~/.claude} and every ~/.claude* dir with a projects/ folder (a second account). No transcript
+# folder under any root is `unknown`, never idle: what cannot be seen is not taken as free. An open session that has
+# written nothing for over an hour is not seen (known gap, accepted 2026-11-12).
 #
 # Registry: ${VULYK_HIVES_FILE:-$HOME/.vulyk/hives}, private, never in the repo. One hive per line:
 #   <path>                                   the hive must carry the local VERSION
@@ -89,6 +98,80 @@ if [ "${1:-}" = "--check" ]; then
   [ -f "${2:-}" ] || { echo "hives-behind: no state file '${2:-}'"; exit 2; }
   judge "$2"; exit $?
 fi
+
+norm_path() { # norm_path <path> -> '/' separators, no trailing '/', Git Bash /e/x read as E:/x, drive letter upper-case
+  local p; p="$(printf '%s' "$1" | tr '\\' '/')"
+  while [ "${#p}" -gt 1 ] && [ "${p%/}" != "$p" ]; do p="${p%/}"; done
+  case "$(uname -s 2>/dev/null)" in   # Git Bash spells E:/x as /e/x; Claude Code sees E:\x
+    MINGW*|MSYS*|CYGWIN*) case "$p" in /[a-zA-Z]/*|/[a-zA-Z]) p="${p:1:1}:/${p:3}" ;; esac ;;
+  esac
+  case "$p" in [a-z]:*) p="$(printf '%s' "${p:0:1}" | tr '[:lower:]' '[:upper:]')${p:1}" ;; esac
+  printf '%s\n' "$p"
+}
+
+hive_slug() { # hive_slug <path> -> every character but a letter or a digit turned into '-', as Claude Code names it
+  norm_path "$1" | sed 's/[^A-Za-z0-9]/-/g'
+}
+
+fresh_jsonl() { find "$1" -name '*.jsonl' -mmin -60 2>/dev/null; } # any depth: Workflow agents write 5 levels down
+
+same_case() { # same_case <path> -> lower-cased where the file system ignores case (Windows), else as is
+  case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) printf '%s' "$1" | tr '[:upper:]' '[:lower:]' ;; *) printf '%s' "$1" ;; esac
+}
+
+sub_session() { # sub_session <dir> <normalized hive> -> a busy line, exit 0, when a fresh transcript there ran in the hive
+  local f c                                              # or below it, or carries no readable cwd; else exit 1
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    c="$(grep -o -m1 '"cwd":"[^"]*"' "$f" 2>/dev/null | head -1)"
+    [ -n "$c" ] || { echo "busy a fresh transcript in ${1##*/} has no readable cwd ($f)"; return 0; }
+    c="${c#\"cwd\":\"}"; c="$(norm_path "${c%\"}")"   # JSON's \\ is two backslashes: both become /, then collapse
+    c="$(same_case "$(printf '%s' "$c" | sed 's#//*#/#g')")"
+    case "$c" in "$(same_case "$2")"|"$(same_case "$2")"/*) echo "busy a session in a subfolder of the hive ($c) wrote in the last 60 minutes ($f)"; return 0 ;; esac
+  done <<EOF
+$(fresh_jsonl "$1")
+EOF
+  return 1
+}
+
+session_roots() { # one root per line
+  local r
+  if [ -n "${VULYK_SESSION_ROOTS:-}" ]; then printf '%s\n' "$VULYK_SESSION_ROOTS" | tr ' ' '\n'; return; fi
+  printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  for r in "$HOME"/.claude*; do [ -d "$r/projects" ] && printf '%s\n' "$r"; done
+}
+
+busy() { # busy <hive> -> one line; exit 0 idle, 1 busy or unknown
+  local hive="$1" slug nh r d f seen=0
+  [ -d "$hive" ] || { echo "unknown $hive: not on disk"; return 1; }
+  for f in "$hive"/docs/specs/*/DRIVER; do
+    [ -f "$f" ] && {   # a build that died leaves this file behind: the line says how to tell and how to free it
+      echo "busy a build driver runs (${f#"$hive"/}; if no build runs there, the file is stale - free it in that hive with" \
+        "bash scripts/cycle.sh release $(dirname "${f#"$hive"/}") <stamp from that file>)"; return 1; }
+  done
+  slug="$(hive_slug "$hive")"; nh="$(norm_path "$hive")"
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    d="$r/projects/$slug"
+    if [ -d "$d" ]; then
+      seen=1
+      f="$(fresh_jsonl "$d" | head -1)"
+      [ -z "$f" ] || { echo "busy a session transcript was written in the last 60 minutes ($f)"; return 1; }
+    fi
+    for d in "$r/projects/$slug"-*; do   # a session started in a subfolder: <slug>-<rest>, or a sibling hive
+      [ -d "$d" ] && sub_session "$d" "$nh" && return 1
+    done
+  done <<EOF
+$(session_roots)
+EOF
+  [ "$seen" = 1 ] || { echo "unknown no session transcripts for $hive (folder $slug) under any root - cannot tell it is idle"; return 1; }
+  echo "idle"
+}
+
+case "${1:-}" in
+  --slug) [ -n "${2:-}" ] || { echo "hives-behind: --slug needs a path"; exit 2; }; hive_slug "$2"; exit 0 ;;
+  --busy) [ -n "${2:-}" ] || { echo "hives-behind: --busy needs a hive path"; exit 2; }; busy "$2"; exit $? ;;
+esac
 
 reg_line() { # reg_line <line> -> path, tail (" | hold ..." or empty), canary (1 or empty)
   local seg rest; path="$1"; tail=""; canary=""
