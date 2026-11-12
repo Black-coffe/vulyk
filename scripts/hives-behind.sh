@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# hives-behind.sh - does every local hive carry the local VULYK build? (card public-release-per-change)
+# The local hives are VULYK's beta channel: every change merged on the local main reaches each of them,
+# and a hive that cannot take it now carries a hold with a reason and an end date.
+#
+#   bash scripts/hives-behind.sh                  # read the registry and each hive, then judge
+#   bash scripts/hives-behind.sh --check <state>  # judge a state file alone (the card's check:)
+#   bash scripts/hives-behind.sh --canaries       # print the canary hives' paths, one per line
+#
+# Registry: ${VULYK_HIVES_FILE:-$HOME/.vulyk/hives}, private, never in the repo. One hive per line:
+#   <path>                                   the hive must carry the local VERSION
+#   <path> | hold <YYYY-MM-DD> <reason>      held through that day, for that reason
+#   <path> | canary                          upgraded and smoke-tested first; the others wait for it
+#   <path> | canary | hold ...               both
+# Lines starting with '#' and blank lines are skipped.
+# State: `local <version>`, then one `hive <installed|none|missing> <path>[ | hold <date> <reason>]` per hive.
+# Exit 0: every hive is on the local build or under a live hold. 1: a hive lags, has no version file, is not
+# on disk, its hold is expired or malformed, or no hive is registered. 2: the registry, the state or VERSION
+# is absent (a missing input is a refusal, never a pass).
+set -u
+ROOT="${VULYK_SRC:-$(cd "$(dirname "$0")/.." && pwd)}"
+TODAY="${VULYK_TODAY:-$(date +%F)}"
+
+HOLD_MAX_DAYS=7   # a hold ends at most this many days ahead, so it cannot become the new "later"
+
+day_number() { # day_number <YYYY-MM-DD> -> days since 0000-03-01, or nothing when it is not a real day
+  local y m d dim era yoe mp
+  y=$((10#${1%%-*})); m="${1#*-}"; m=$((10#${m%%-*})); d=$((10#${1##*-}))
+  [ "$m" -ge 1 ] && [ "$m" -le 12 ] || return 1
+  case "$m" in 4|6|9|11) dim=30 ;; 2) dim=28
+    if [ $((y % 4)) -eq 0 ] && { [ $((y % 100)) -ne 0 ] || [ $((y % 400)) -eq 0 ]; }; then dim=29; fi ;; *) dim=31 ;; esac
+  [ "$d" -ge 1 ] && [ "$d" -le "$dim" ] || return 1
+  [ "$m" -le 2 ] && y=$((y - 1))
+  era=$((y / 400)); yoe=$((y - era * 400)); mp=$(((m + 9) % 12))
+  echo $((era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + (153 * mp + 2) / 5 + d - 1))
+}
+
+judge() { # judge <state-file>
+  local line want="" n=0 on=0 held=0 red=0 rest have path hold until reason du dt
+  dt="$(day_number "$TODAY")" || { echo "hives-behind: today '$TODAY' is not a date"; return 2; }
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    case "$line" in
+      "local "*) want="${line#local }"; want="${want//[[:space:]]/}" ;;
+      "hive "*)
+        n=$((n + 1)); rest="${line#hive }"; have="${rest%% *}"; path="${rest#* }"; hold=""
+        case "$path" in *" | "*) hold="${path#* | }"; path="${path%% | *}" ;; esac
+        if [ -n "$want" ] && [ "$have" = "$want" ]; then
+          on=$((on + 1)); echo "  ok    $path $have"; continue
+        fi
+        if [ -n "$hold" ]; then
+          until="$(printf '%s' "$hold" | awk '{print $2}')"
+          reason="$(printf '%s' "$hold" | awk '{ $1=""; $2=""; sub(/^ +/, ""); print }')"
+          case "$hold" in hold\ *) ;; *) until="" ;; esac
+          case "$until" in
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+            *) red=$((red + 1)); echo "  RED   $path: malformed hold '$hold' (want: hold <YYYY-MM-DD> <reason>)"; continue ;;
+          esac
+          if [ -z "$reason" ]; then
+            red=$((red + 1)); echo "  RED   $path: hold without a reason"; continue
+          fi
+          du="$(day_number "$until")" || du=""
+          if [ -z "$du" ]; then
+            red=$((red + 1)); echo "  RED   $path: hold date $until is not a real day"; continue
+          fi
+          if [ "$du" -lt "$dt" ]; then
+            red=$((red + 1)); echo "  RED   $path: hold expired $until ($reason) - roll it out or hold it again"; continue
+          fi
+          if [ $((du - dt)) -gt "$HOLD_MAX_DAYS" ]; then
+            red=$((red + 1)); echo "  RED   $path: hold until $until is more than $HOLD_MAX_DAYS days ahead ($reason)"; continue
+          fi
+          held=$((held + 1)); echo "  held  $path $have: $reason (until $until)"; continue
+        fi
+        red=$((red + 1))
+        case "$have" in
+          missing) echo "  RED   $path: not on disk - fix or remove its registry line" ;;
+          none)    echo "  RED   $path: no .claude/vulyk-version - VULYK was never stamped there" ;;
+          *)       echo "  RED   $path: $have, local build is $want" ;;
+        esac ;;
+    esac
+  done < "$1"
+  if [ -z "$want" ]; then echo "hives-behind: no 'local <version>' line in $1"; return 2; fi
+  if [ "$n" -eq 0 ]; then echo "hives-behind: no hive registered - the local build reaches nobody"; return 1; fi
+  echo "hives-behind: $n hives, $on on $want, $held held, $red red"
+  [ "$red" -eq 0 ]
+}
+
+if [ "${1:-}" = "--check" ]; then
+  [ -f "${2:-}" ] || { echo "hives-behind: no state file '${2:-}'"; exit 2; }
+  judge "$2"; exit $?
+fi
+
+reg_line() { # reg_line <line> -> path, tail (" | hold ..." or empty), canary (1 or empty)
+  local seg rest; path="$1"; tail=""; canary=""
+  case "$1" in *" | "*) path="${1%% | *}"; rest="${1#* | }" ;; *) rest="" ;; esac
+  while [ -n "$rest" ]; do
+    case "$rest" in *" | "*) seg="${rest%% | *}"; rest="${rest#* | }" ;; *) seg="$rest"; rest="" ;; esac
+    seg="$(printf '%s' "$seg" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    if [ "$seg" = "canary" ]; then canary=1; else tail="$tail | $seg"; fi
+  done
+  path="$(printf '%s' "$path" | sed 's/[[:space:]]*$//')"
+  case "$path" in "~/"*) path="$HOME/${path#\~/}" ;; esac
+}
+
+REG="${VULYK_HIVES_FILE:-$HOME/.vulyk/hives}"
+[ -f "$REG" ] || { echo "hives-behind: no hive registry at $REG - list the local hives there, one path per line"; exit 2; }
+if [ "${1:-}" = "--canaries" ]; then
+  n=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
+    reg_line "$line"; [ -n "$canary" ] && { echo "$path"; n=$((n + 1)); }
+  done < "$REG"
+  [ "$n" -gt 0 ] || { echo "hives-behind: no canary in $REG - mark one or two hives '<path> | canary'" >&2; exit 1; }
+  exit 0
+fi
+[ -f "$ROOT/VERSION" ] || { echo "hives-behind: no VERSION in $ROOT"; exit 2; }
+STATE="$(mktemp)"; trap 'rm -f "$STATE"' EXIT
+printf 'local %s\n' "$(tr -d '[:space:]' < "$ROOT/VERSION")" > "$STATE"
+while IFS= read -r line || [ -n "$line" ]; do
+  line="${line%$'\r'}"
+  case "$line" in ''|'#'*) continue ;; esac
+  reg_line "$line"
+  if [ ! -d "$path" ]; then have=missing
+  else
+    have="$(tr -d '[:space:]' < "$path/.claude/vulyk-version" 2>/dev/null || true)"; have="${have:-none}"
+  fi
+  printf 'hive %s %s%s\n' "$have" "$path" "$tail" >> "$STATE"
+done < "$REG"
+judge "$STATE"

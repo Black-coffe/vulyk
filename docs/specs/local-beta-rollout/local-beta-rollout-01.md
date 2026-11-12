@@ -1,14 +1,15 @@
 ---
 story: local-beta-rollout-01
 spec: local-beta-rollout
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: hives-behind: a hive one dev build behind with no hold is red
+red_verified_at: 2026-11-12T17:07:04Z 985681103b62c0f94ed115a30f7d66b0b159f9a9e59d1e5cf013bc89e770bb75
 ---
 
 # Every local-main change reaches every local hive
@@ -54,11 +55,40 @@ memory/map/agents-and-commands.md
       - the per-hive upgrade conditions (ship branch, clean tree), `.vulyk-new` merged by hand, a commit in each hive;
       - holds written with a reason and an end date at most 7 days ahead;
       - a final green `hives-behind.sh`.
+- [ ] Canary first: `--canaries` lists the hives marked ` | canary` (red when none); ship 2a upgrades and smoke-tests
+      them before the rest, and a red canary stops the rollout and holds the others.
 - [ ] `bash scripts/defects-check.sh` reports no debt for the card.
 
 ## Verification
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
+- scripts/hives-behind.sh: collector (registry + each hive's `.claude/vulyk-version`, CR-stripped) writes a state file; `judge` reads it. `--check` runs the judge alone, so fixtures need no real hive. Today from `VULYK_TODAY`, source from `VULYK_SRC` (tests only). Bash 3.2 safe: no date arithmetic, a hold carries its end date and is compared as a string.
+- A hive on the local build passes even with a hold line (the hold is stale but harmless); a hold is judged only for a lagging hive.
+- Card: `status: block`, check `bash scripts/hives-behind.sh --check <arg>`, fixtures original (hive one dev build behind, no hold) and neighbour (expired hold); Never line + second quote added this session; INDEX regenerated. Card `paths:` narrowed to `*.hives-state` plus `cmd:` lines for push, gh release and install.sh --upgrade: close-story runs a block check on every file its globs match, and ship.md/CHANGELOG/VERSION are not state files (first close refused: `defect card public-release-per-change fails on .claude/commands/vulyk-ship.md`). defects-check GREEN (8 blocking checks).
+- vulyk-ship.md: step 2a between the merge and the publish print; skipped silently outside the VULYK source repo, named skip without a registry.
+- After close, the owner chose canary first: `--canaries` + ` | canary` registry segment (a segment list, so canary and hold combine), ship 2a canary bullet, 7 more test checks (547, 0 failed). A literal CR byte from a Python heredoc edit was found and removed.
+- tests/maintenance.test.sh: 16 checks; the whole file ran 108 s, 540 checks, 0 failed.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: 985681103b62c0f94ed115a30f7d66b0b159f9a9e59d1e5cf013bc89e770bb75 (tests/maintenance.test.sh)
+- impl: a58dc5c3217db6814b8c778c16f7c8e15a2163a15305b189dfdb5d75b411cefa
+- stamped: 2026-11-12T17:07:04Z
+
+```
+  ok    hives-behind: a hive one dev build behind with no hold is red
+        exit=127
+::error::hives-behind: the card's original fixture is red
+::error::hives-behind: the card's neighbour fixture is red
+::error::ship 2a: the local-beta step ends on hives-behind.sh - expected 'bash scripts/hives-behind.sh' in:
+        
+::error::ship 2a: the step skips by name without a registry - expected 'local beta: no hive registry' in:
+        
+::error::ship 2a: the dev bump is never tagged or pushed - expected 'no tag and no push' in:
+        
+maintenance.test.sh: 540 checks, 10 failed
+```
