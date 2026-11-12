@@ -67,3 +67,4 @@ becomes accepted on the owner's grill answer.
 **Council:** RED round 1, 2026-11-12, at 616d0023, pack 7d7a0c98b2b4
 **Council:** GREEN round 2, 2026-11-12, at 0609049d, pack 595081b75183
 **Checked:** ACCEPTED by Andrei, 2026-11-12, at 55b533b2 - owner picked «Принимаю, выпускаем (Рекомендую)» (option text is the agent's) for the narrow canary fix 55b533b2 after GREEN round 2
+**Checked:** ACCEPTED by Andrei, 2026-11-12, at c8788cec - owner picked «Принимаю заново, без CI ветки (Рекомендую)» (option text is the agent's) after the history scrub at c8788cec; overrides the ci line: no branch CI, public CI is a hard gate before publish
