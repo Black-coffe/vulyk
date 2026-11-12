@@ -10,11 +10,13 @@
 #   bash scripts/hives-behind.sh --slug <path>    # the folder name Claude Code gives that path under <root>/projects/
 #
 # --busy (ship step 2a asks it before every hive upgrade and again before the hive commit): busy on a
-# docs/specs/*/DRIVER file or on a session transcript (*.jsonl, subagents included) written in the last 60 minutes
-# under <root>/projects/<slug>/. Roots: $VULYK_SESSION_ROOTS (space-separated) when set, else
-# ${CLAUDE_CONFIG_DIR:-~/.claude} and every ~/.claude* dir with a projects/ folder (a second account). No transcript
-# folder under any root is `unknown`, never idle: what cannot be seen is not taken as free. An open session that has
-# written nothing for over an hour is not seen (known gap, accepted 2026-11-12).
+# docs/specs/*/DRIVER file or on a session transcript (*.jsonl, any depth) written in the last 60 minutes under
+# <root>/projects/<slug>/, or under <slug>-* when the transcript's cwd is the hive or below it (a session opened in a
+# subfolder). Roots: $VULYK_SESSION_ROOTS (space-separated) when set, else ${CLAUDE_CONFIG_DIR:-~/.claude} and every
+# ~/.claude* dir with a projects/ folder (a second account). No transcript folder under any root is `idle` (no
+# session ever ran there) only when some registered hive does resolve to its folder, which proves the naming rule;
+# otherwise it is `unknown`, never idle: what cannot be seen is not taken as free. An open session that has written
+# nothing for over an hour is not seen (known gap, accepted 2026-11-12).
 #
 # Registry: ${VULYK_HIVES_FILE:-$HOME/.vulyk/hives}, private, never in the repo. One hive per line:
 #   <path>                                   the hive must carry the local VERSION
@@ -141,6 +143,21 @@ session_roots() { # one root per line
   for r in "$HOME"/.claude*; do [ -d "$r/projects" ] && printf '%s\n' "$r"; done
 }
 
+naming_proven() { # exit 0 when some registered hive has its exact <root>/projects/<slug>/ folder in this run
+  local reg="${VULYK_HIVES_FILE:-$HOME/.vulyk/hives}" line p s r
+  [ -f "$reg" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"; case "$line" in ''|'#'*) continue ;; esac
+    p="$(printf '%s' "${line%%|*}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"; case "$p" in "~/"*) p="$HOME/${p#\~/}" ;; esac
+    [ -n "$p" ] || continue                     # a line with no path proves nothing (an empty slug matches projects/)
+    s="$(hive_slug "$p")"; [ -n "$s" ] || continue
+    while IFS= read -r r; do [ -n "$r" ] && [ -d "$r/projects/$s" ] && return 0; done <<EOF
+$(session_roots)
+EOF
+  done < "$reg"
+  return 1
+}
+
 busy() { # busy <hive> -> one line; exit 0 idle, 1 busy or unknown
   local hive="$1" slug nh r d f seen=0
   [ -d "$hive" ] || { echo "unknown $hive: not on disk"; return 1; }
@@ -164,7 +181,11 @@ busy() { # busy <hive> -> one line; exit 0 idle, 1 busy or unknown
   done <<EOF
 $(session_roots)
 EOF
-  [ "$seen" = 1 ] || { echo "unknown no session transcripts for $hive (folder $slug) under any root - cannot tell it is idle"; return 1; }
+  if [ "$seen" != 1 ]; then   # no folder: no session ever ran here - but only if the naming rule finds some hive
+    naming_proven && { echo "idle no session transcript folder for $hive (no Claude Code session has run there)"; return 0; }
+    echo "unknown no session transcripts for $hive (folder $slug) under any root, and no registered hive resolves" \
+      "to a transcript folder either - the naming rule is unproven, so it cannot be called idle"; return 1
+  fi
   echo "idle"
 }
 
