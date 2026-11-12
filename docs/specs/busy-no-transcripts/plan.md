@@ -45,3 +45,4 @@ never make every hive look idle.
 - reason: ceiling · round 1 · 2026-11-12
 - ask 1: BLOCK by the reviewer - see docs/specs/busy-no-transcripts/council/round-1/review.md
 - seats: docs/specs/busy-no-transcripts/council/round-1/
+**Shipped:** 0.52.0-dev.3, 2026-11-12, at f98a3666 - merged to main (local), rolled out to 5 local hives (both canaries green: own test row + VULYK smoke by hand), 10 held; publish pending; ci overridden by the owner: «Да, выпускаем без CI ветки (Рекомендую)» (option text is the agent's) - public CI is a hard gate before publish
