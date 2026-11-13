@@ -10,3 +10,4 @@
 - 2026-11-13T09:35:35Z · 03-building · repair round 1: beta-fixes-1113-05-repair-round-1.md · next: build:3
 - 2026-11-13T09:58:08Z · 03-building · driver lost to an expired login (API 403) during repair round 1; claim released · next: relaunching with a fresh stamp
 - 2026-11-13T10:11:33Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/beta-fixes-1113/round-2 · next: dispatch:opus,review
+- 2026-11-13T13:23:20Z · 04-council:open · round 2 gate run by hand after the 403 login loss: FAIL on cycle:close 217s and cycle:red 240s (alone: cycle:red 166s) · next: relaunching the driver for the seats
