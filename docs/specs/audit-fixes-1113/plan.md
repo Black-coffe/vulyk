@@ -145,6 +145,9 @@ evidence stays in the private audit folder.
 - `audit-fixes-1113-09-cycle-gates` — asks 8, 9, 10: scope counted from the claim head; approval bound to `cycle.sh`'s own commit; hand edits of `brief.md` / `plan.md` are not paperwork (`model: opus`)
 - `audit-fixes-1113-10-install-wiring-and-allow-list` — asks 11, 4, 13: the six-verb allow list, the two new hooks wired, the hooks reference, the CHANGELOG
 
+**Wave 4** (cut mid-build, plan delta 2026-11-13)
+- `audit-fixes-1113-11-redact-leaves-ordinary-text` — ask 7: no false masks on ordinary text (every brief and journal byte-identical); callers refuse when `redact.sh` fails
+
 ## Contracts
 <!-- Interfaces that cross a story boundary, agreed here at plan time. -->
 - **V1, version order (story 01).** `scripts/version-order.sh` is sourced. `version_newer <a> <b>` exits 0 when `a`
@@ -230,6 +233,14 @@ evidence stays in the private audit folder.
 *(empty)*
 
 ## Plan deltas
+
+- 2026-11-13, wave 1 relaunch, the Queen's rulings:
+  - 04 NEEDS_CONTEXT: the close-story block gate runs a block card's check on that card's own new fixtures, which
+    fail by design. The two fixtures leave story 04's `## Files` and the Queen commits them; the gate defect
+    (card framework-defect-deferred-mid-build) joins story 09 (`scripts/defects-check.sh`), the gates wave.
+  - New story 11, wave 4 (ask 7): `redact.sh` leaves ordinary text alone (corpus of every brief and journal
+    byte-identical, same-shape neighbours) and its callers refuse when it fails. From story 02's worker concerns
+    and a side-agent note the owner forwarded.
 
 - 2026-11-13, wave 1 NEEDS_CONTEXT (stories 02, 03, 04), the Queen's rulings:
   - 02: the red line was a 140-char line in `memory/map/scripts-hooks.md` from before the spec; the Queen
