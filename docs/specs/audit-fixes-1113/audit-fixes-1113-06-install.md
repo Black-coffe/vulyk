@@ -53,6 +53,7 @@ handling. Marked red: the branch that decides whether a hive's file is replaced.
 - docs/defects/upgrade-overwrites-host-edits.neighbour.fixture
 - docs/defects/INDEX.md
 - tests/telemetry.test.sh
+- tests/intake.test.sh
 
 ## Non-goals
 - Do not touch the allow list or the wiring of any other hook: story 10 owns those parts of `install.sh` in wave 3.
@@ -92,12 +93,18 @@ handling. Marked red: the branch that decides whether a hive's file is replaced.
   `v*` tag replaced) now expect U1: the file kept with `.vulyk-new` and one NOTE line saying why (Queen's ruling,
   plan delta 2026-11-13).
 
+- [ ] `PRE_M` in the shared header of `tests/telemetry.test.sh` is the M1 matcher (story 04 already ships it in
+  `.claude/settings.json`), and `tests/intake.test.sh` expects M1 on an upgraded hive (Queen's ruling).
+
 ## Verification
 `bash tests/telemetry.test.sh --part install-xp`
 `bash tests/telemetry.test.sh --part install`
 `bash tests/telemetry.test.sh --part wiring`
 `bash scripts/defects-check.sh`
 `bash tests/telemetry.test.sh --part edits`
+`bash tests/telemetry.test.sh --part install-xp2`
+`bash tests/telemetry.test.sh --part library`
+`bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh`
 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each. End with one `CHANGELOG:` line
@@ -116,3 +123,18 @@ per ask (19, 17, 15, 2, 12). -->
   one NOTE line), and add `edits` to `## Verification`? Otherwise `close-story` passes, because `edits` is not in
   `## Verification`, but the integration gate (`tests/full-suite.sh`) goes red. No implementation, test or red
   receipt has been made yet.
+- 2026-11-13, worker, relaunch after the wave 2 rulings, before any edit: ask 12 (M1 in the installer) needs two
+  test paths this story may not touch.
+  1. `tests/telemetry.test.sh:150`, `PRE_M` (shared header, outside the parts `install`, `install-xp`, `wiring`,
+     `edits`): it still holds the matcher without `PowerShell`. Parts `wiring` (space_run, the 17-entry signature),
+     `install-xp2` (line ~1715-1720), `library` (line ~2278-2286, ~2562) and `wrapper` (line ~2620) select on it.
+     Measured on HEAD c3c5471f, before this story: `wiring` 2 failed, `install-xp2` 1 failed, `library` 2 failed,
+     because story 04's `.claude/settings.json` (copied whole into a fresh hive) already carries M1. `--part wiring`
+     is in this story's `## Verification`, so it cannot close green without changing `PRE_M` (or shadowing it
+     inside `wiring` only, which leaves `install-xp2` and `library` red at the integration gate).
+  2. `tests/intake.test.sh` lines ~372-374 and ~387-389 expect an upgraded hive's inject matcher to be the 0.41
+     one (`...|Read|Bash|WebFetch|...`, no `PowerShell`). Green today (119/0); with M1 in `install.sh`
+     (`INJECT_MATCHER`, `SHIPPED_HOOKS`) both turn red. No open story names this file.
+  Question: may this story (a) set `PRE_M` at `tests/telemetry.test.sh:150` to M1, which also turns `install-xp2`
+  and `library` green, and (b) take `tests/intake.test.sh` into `## Files` to change those two expected matchers to
+  M1? No implementation, test or red receipt has been made yet.
