@@ -11,7 +11,7 @@
 # owner looks again -> READY -> --record. Each step asserts what ship-check.sh and
 # human-check.sh must say. Exit 1 on the first wrong answer.
 set -u
-PARTS="ship hooklog gates manual close bsd safety red" # one topic each; every part rebuilds the shared setup below
+PARTS="ship hooklog gates manual close close2 bsd safety red red2" # one topic each; every part rebuilds the shared setup below
 PART=''
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -917,8 +917,7 @@ done_story docs/specs/manw/manw-02-w.md
 bash scripts/cycle.sh status docs/specs/manw --json | expect "manual wave: once the ready story is done, next is manual:tape" '"next":"manual:tape"'
 
 fi # part manual
-if part close; then # --- part close: close-story scope refusal, own-path commits, odd path names
-echo "close-story-scope-refusal: close-story --commit refuses an edit outside ## Files that would leave the tree dirty for open-round"
+if part close || part close2; then # --- the stray fixtures parts close and close2 share
 mkdir -p docs/specs/stray
 cp "$SRC"/templates/plan.md docs/specs/stray/plan.md
 printf '> build the stray demo\n' > docs/specs/stray/brief.md
@@ -942,6 +941,9 @@ wave: $1
 \`true\`
 EOF
 }
+fi # stray fixtures
+if part close; then # --- part close: close-story scope refusal, own-path commits, odd path names
+echo "close-story-scope-refusal: close-story --commit refuses an edit outside ## Files that would leave the tree dirty for open-round"
 stray_story 01
 git add -A && git commit -qm "stray: setup" >/dev/null
 printf 'v2\n' > stray-app.txt; printf 'v2\n' > stray-other.txt
@@ -1153,6 +1155,8 @@ out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-17.md 2>&1)"; ex
   || { echo "::error::close-story: a several-span row must be named, not offered - exit=$ex out=$out"; fail=1; }
 git add -A && git commit -qm "vfy: noted done" >/dev/null 2>&1
 
+fi # part close
+if part close2; then # --- part close2: the approved-commit reads, done-only-by-close-story, the block-card gate, the verify resume record (split from close for time)
 echo "ADR-032 D1: close-story and stamp-red read ## Verification, ## Files and red: from the story's approved commit"
 mkdir -p docs/specs/trust docs/specs/trust1
 cp "$SRC"/templates/plan.md docs/specs/trust/plan.md; cp "$SRC"/templates/plan.md docs/specs/trust1/plan.md
@@ -1415,7 +1419,7 @@ out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-22.md --commit 2
 [ "$ex" -eq 0 ] && git show --name-only --format= HEAD | grep -qx stray-add-fail.txt \
   && echo "  ok    without the shim the same close commits both files" || { echo "::error::add-fail rerun: exit=$ex out=$out"; fail=1; }
 rm -rf "$GSHIM"
-fi # part close
+fi # part close2
 if part bsd; then # --- part bsd: cycle.sh under a BSD sed, conventional subjects, command_cell_exists
 echo "cycle.sh under a BSD (macOS) sed, and a Profile whose Commit convention is conventional: chore(...) subjects"
 REAL_SED="$(command -v sed)"; BSD="$(mktemp -d)"
@@ -1872,8 +1876,94 @@ out="$(bash scripts/cycle.sh claim docs/specs/lftv lftvstamp 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -qF '"leftover"' \
   && echo "  ok    neighbour: a clean tree claims with no leftover key, the line as before" || { echo "::error::clean claim: exit=$ex out=$out"; fail=1; }
 bash scripts/cycle.sh release docs/specs/lftv lftvstamp >/dev/null 2>&1
+
+echo "beta-fixes-1113-04 R1: resume switches a clean tree to the plan's **Branch:**, and only reports a dirty one"
+RS_HOME="$(git rev-parse --abbrev-ref HEAD)"
+git add -A && git commit -qm "rs: a clean tree to start from" >/dev/null 2>&1
+mkdir -p docs/specs/acme docs/specs/acmegone docs/specs/acmenob
+for rs_s in acme acmegone acmenob; do
+  cp "$SRC"/templates/plan.md "docs/specs/$rs_s/plan.md"
+  printf '> resume on the spec branch\n' > "docs/specs/$rs_s/brief.md"
+  sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-13/' "docs/specs/$rs_s/plan.md"
+done
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/acme-spec#' docs/specs/acme/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/acme-gone#' docs/specs/acmegone/plan.md
+printf -- '---\nstory: acme-01\nspec: acme\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Acme\n\n## Files\n- acme.txt\n\n## Verification\n`true`\n' > docs/specs/acme/acme-01.md
+git add -A && git commit -qm "acme: setup" >/dev/null
+git branch -f vulyk/acme-spec HEAD
+git branch -f main HEAD && git checkout -q main
+rs_pause() { printf 'owner \xc2\xb7 test \xc2\xb7 now\nhead=%s\n' "$(git rev-parse --short HEAD)" > "docs/specs/$1/PAUSE"; } # rs_pause <slug>
+rs_head="$(git rev-parse HEAD)"
+rs_pause acme
+printf 'an edit\n' >> docs/specs/acme/brief.md
+out="$(bash scripts/cycle.sh resume docs/specs/acme 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"on main, spec branch is vulyk/acme-spec: uncommitted changes in docs/specs/acme/brief.md"' \
+  && [ "$(git rev-parse --abbrev-ref HEAD)" = main ] && [ "$(git rev-parse HEAD)" = "$rs_head" ] && grep -qx 'an edit' docs/specs/acme/brief.md \
+  && [ -f docs/specs/acme/PAUSE ] \
+  && echo "  ok    a tracked edit: exit 2 naming it, HEAD, the file and PAUSE untouched" || { echo "::error::resume dirty tracked: exit=$ex out=$out"; fail=1; }
+printf '> resume on the spec branch\n' > docs/specs/acme/brief.md
+printf 'stray\n' > acme-stray.txt
+out="$(bash scripts/cycle.sh resume docs/specs/acme 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF 'uncommitted changes in acme-stray.txt"' \
+  && [ "$(git rev-parse --abbrev-ref HEAD)" = main ] && [ -f acme-stray.txt ] && [ -f docs/specs/acme/PAUSE ] \
+  && echo "  ok    an untracked file: exit 2 naming it, HEAD, the file and PAUSE untouched" || { echo "::error::resume dirty untracked: exit=$ex out=$out"; fail=1; }
+rm -f acme-stray.txt
+rs_pause acmegone
+out="$(bash scripts/cycle.sh resume docs/specs/acmegone 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF 'vulyk/acme-gone' && [ "$(git rev-parse --abbrev-ref HEAD)" = main ] \
+  && [ -f docs/specs/acmegone/PAUSE ] \
+  && echo "  ok    a **Branch:** that does not exist: exit 2 naming it, still on main" || { echo "::error::resume missing branch: exit=$ex out=$out"; fail=1; }
+rm -f docs/specs/acmegone/PAUSE
+out="$(bash scripts/cycle.sh resume docs/specs/acme 2>&1)"; ex=$?
+if [ "$ex" -eq 0 ] && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/acme-spec ] \
+   && printf '%s' "$out" | tail -1 | grep -qF '"switched":"vulyk/acme-spec"' && [ ! -f docs/specs/acme/PAUSE ]; then
+  echo "  ok    a clean tree on main: resume switches to vulyk/acme-spec and says so"
+else echo "::error::resume switch: exit=$ex head=$(git rev-parse --abbrev-ref HEAD) out=$out"; fail=1; fi
+out="$(bash scripts/cycle.sh claim docs/specs/acme rsstamp 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    the next claim passes the branch guard" || { echo "::error::claim after resume: exit=$ex out=$out"; fail=1; }
+bash scripts/cycle.sh release docs/specs/acme rsstamp >/dev/null 2>&1
+rs_pause acme
+out="$(bash scripts/cycle.sh resume docs/specs/acme 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -qF '"switched"' && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/acme-spec ] \
+  && echo "  ok    neighbour: already on the spec branch, resume as before" || { echo "::error::resume on branch: exit=$ex out=$out"; fail=1; }
+rs_pause acmenob
+out="$(bash scripts/cycle.sh resume docs/specs/acmenob 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -qF '"switched"' && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/acme-spec ] \
+  && echo "  ok    neighbour: no **Branch:** line, resume as before" || { echo "::error::resume no branch line: exit=$ex out=$out"; fail=1; }
+git add -A && git commit -qm "rs: journals" >/dev/null 2>&1
+echo "beta-fixes-1113 (ask 8): resume finds the spec branch that only that branch's plan copy names"
+git checkout -q main
+mkdir -p docs/specs/acmebr docs/specs/acmestale
+for rs_s in acmebr acmestale; do
+  cp "$SRC"/templates/plan.md "docs/specs/$rs_s/plan.md"
+  printf '> resume on the spec branch\n' > "docs/specs/$rs_s/brief.md"
+  sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-13/' "docs/specs/$rs_s/plan.md"
+done
+git add -A && git commit -qm "acmebr: plans on main" >/dev/null
+git branch -f vulyk/acmestale HEAD   # a branch by the spec's name whose plan copy names no branch
+out="$(bash scripts/cycle.sh branch docs/specs/acmebr --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/acmebr ] && git switch -q main && [ -z "$(git status --porcelain)" ] \
+  && ! grep -q '^\*\*Branch:\*\* vulyk' docs/specs/acmebr/plan.md \
+  && echo "  ok    branch --commit wrote the **Branch:** line on vulyk/acmebr only; main is clean" || { echo "::error::branch setup: exit=$ex out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh resume docs/specs/acmebr 2>&1)"; ex=$?
+if [ "$ex" -eq 0 ] && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/acmebr ] \
+   && printf '%s' "$out" | tail -1 | grep -qF '"switched":"vulyk/acmebr"' && ! printf '%s' "$out" | tail -1 | grep -qF '"next":"branch"' \
+   && [ "$(git status --porcelain | grep -cv 'docs/specs/acmebr/journal.md')" -eq 0 ]; then
+  echo "  ok    a clean tree on main: resume switches to vulyk/acmebr, named only on that branch, next is no longer branch"
+else echo "::error::resume did not switch to the spec branch named only on that branch - exit=$ex head=$(git rev-parse --abbrev-ref HEAD) out=$out"; fail=1; fi
+out="$(bash scripts/cycle.sh claim docs/specs/acmebr rsbrstamp 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/acmebr ] && echo "  ok    the next claim passes the branch guard on vulyk/acmebr" \
+  || { echo "::error::claim after a branch-only resume: exit=$ex out=$out"; fail=1; }
+bash scripts/cycle.sh release docs/specs/acmebr rsbrstamp >/dev/null 2>&1
+git add -A && git commit -qm "rs: acmebr journal" >/dev/null 2>&1
+git checkout -q main
+out="$(bash scripts/cycle.sh resume docs/specs/acmestale 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -qF '"switched"' && [ "$(git rev-parse --abbrev-ref HEAD)" = main ] \
+  && echo "  ok    neighbour: a vulyk/<slug> whose plan copy names no branch is not switched to" || { echo "::error::resume stale branch: exit=$ex out=$out"; fail=1; }
+git add -A && git commit -qm "rs: acmestale journal" >/dev/null 2>&1
+git checkout -q "$RS_HOME"
 fi # part safety
-if part red; then # --- part red: stamp-red, the close-story receipt gate, repair inherits the mark, wave-check red lines
+if part red || part red2; then # --- the red fixtures parts red and red2 share
 # Order matters for the red-receipt story's own stamp: the gate cases run last, so the tail of a
 # red run ends on the close-story refusal this part expects.
 git add -A && git commit -qm "red: a clean tree to start from" >/dev/null 2>&1
@@ -1898,6 +1988,8 @@ red_story() { # red_story <nn> <frontmatter-lines> <files-lines> <verification-l
 MK=$'red: required\nred_reason: expected done\n'
 FI=$'- tests/red.sh\n- src/red.txt\n'
 git add -A && git commit -qm "red: fixtures" >/dev/null
+fi # red fixtures
+if part red2; then # --- part red2: wave-check red lines, repair inherits the mark, a body red: line (split from red for time)
 
 echo "red-receipt: wave-check names a marked story with nothing to seal and a red: value other than required"
 mkdir -p docs/specs/redwc
@@ -1936,9 +2028,9 @@ sed -n '2,/^---$/p' "$rp" 2>/dev/null | grep -qx 'red_reason:' && echo "  ok    
   || { echo "::error::repair frontmatter lacks an empty red_reason: $(sed -n '1,12p' "$rp" 2>/dev/null)"; fail=1; }
 out="$(red_rp_spec redrq '')"
 rq=docs/specs/redrq/redrq-02-repair-round-1.md
-# ab-run-fixes C5: one ask reaching one non-test file is a narrow repair - `narrow: true` is the one line it adds
-[ "$(sed -n '1,10p' "$rq" 2>/dev/null)" = "$(printf -- '---\nstory: redrq-02\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: 2\nblocked_by: []\nnarrow: true\n---')" ] \
-  && ! grep -q '^red' "$rq" && echo "  ok    an unmarked union writes the frontmatter byte for byte as before, plus C5's narrow: true" \
+# beta-fixes-1113 (ask 1): the finding names no path, so the repair is no narrow one and adds no `narrow: true`
+[ "$(sed -n '1,9p' "$rq" 2>/dev/null)" = "$(printf -- '---\nstory: redrq-02\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: 2\nblocked_by: []\n---')" ] \
+  && ! grep -q '^red' "$rq" && echo "  ok    an unmarked union writes the frontmatter byte for byte as before; a finding with no path adds no narrow: true" \
   || { echo "::error::unmarked repair frontmatter changed: $(sed -n '1,12p' "$rq" 2>/dev/null) / $out"; fail=1; }
 
 echo "red-receipt: the repair keeps the mark unless every finding names a file and none a marked story's (0.40.1)"
@@ -1982,6 +2074,8 @@ out="$(bash scripts/cycle.sh close-story docs/specs/red/red-30.md --commit 2>&1)
 [ "$ex" -eq 0 ] && echo "  ok    close-story asks no receipt of a body red: line" \
   || { echo "::error::a body red: line gated close-story: exit=$ex $(printf '%s\n' "$out" | tail -1)"; fail=1; }
 
+fi # part red2
+if part red; then # --- part red: stamp-red, the close-story receipt gate
 echo "red-receipt: stamp-red refuses every wrong red - exit 4, the story file untouched"
 red_refuses() { # red_refuses <label> <nn> <exit> <error-text> - runs stamp-red on red-<nn>
   local st="docs/specs/red/red-$2.md" before after out ex
@@ -2266,6 +2360,27 @@ out="$(bash scripts/cycle.sh close-story "$st" --commit 2>&1)"; ex=$?
   || { echo "::error::unstamped story: exit=$ex, head moved: $(git log -1 --format=%s)"; fail=1; }
 printf '%s\n' "$out" | tail -1 | expect "the refusal names stamp-red and the story" \
   '"error":"no red receipt: run cycle.sh stamp-red docs/specs/red/red-11.md after writing the failing test"'
+
+echo "beta-fixes-1113 (ask 7): a quoted red_reason: matches as an unquoted one; an inner or unmatched quote is compared as written"
+printf '#!/usr/bin/env bash\ngrep -qx done src/red-acme.txt && exit 0\necho "acme: boom"\necho "it'"'"'s red"\necho "half"\nexit 1\n' > tests/red-acme.sh
+printf 'todo\n' > src/red-acme.txt
+git add -A && git commit -qm "red: the acme test" >/dev/null
+FA=$'- tests/red-acme.sh\n- src/red-acme.txt\n'
+red_q() { # red_q <nn> <red_reason value> <label> - stamp-red writes the receipt for this red_reason
+  local st="docs/specs/red/red-$1.md" out ex
+  red_story "$1" "red: required
+red_reason: $2
+" "$FA" '`bash tests/red-acme.sh`'
+  out="$(bash scripts/cycle.sh stamp-red "$st" 2>&1)"; ex=$?
+  [ "$ex" -eq 0 ] && grep -q '^red_verified_at: ' "$st" && grep -qx -- '- command: bash tests/red-acme.sh' "$st" && echo "  ok    $3" \
+    || { echo "::error::$3 - exit=$ex $(printf '%s\n' "$out" | tail -2)"; fail=1; }
+}
+red_q 40 '"acme: boom"' 'red_reason: "acme: boom" (double quotes) stamps on a line holding acme: boom'
+red_q 41 "'acme: boom'" "red_reason: 'acme: boom' (single quotes) stamps on a line holding acme: boom"
+red_q 42 'acme: boom' 'red_reason: acme: boom (unquoted) stamps as before'
+red_q 43 "it's red" "red_reason: it's red (an inner quote) is compared as written"
+red_story 44 $'red: required\nred_reason: "half\n' "$FA" '`bash tests/red-acme.sh`'
+red_refuses 'red_reason: "half (an unmatched quote) is compared as written: no line holds "half' 44 4 "red for another reason: red_reason not in the output of bash tests/red-acme.sh"
 fi # part red
 
 [ -e "$MARK" ] && fail=1

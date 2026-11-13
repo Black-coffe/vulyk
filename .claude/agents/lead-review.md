@@ -59,6 +59,10 @@ with `timeout: 600000` on the Bash call, and report what you saw. A `FAIL` in th
 is `VERDICT: BLOCK` with a `## Critical` `[regression]` line naming the suite and the failing check (red on
 the base too is still a BLOCK). No log, or a log whose `head=` is not the head you review: say so under
 `## Minor` and write no `SUITE:` line; `record-seat` writes the gate's own line once the gate has run.
+A `head=` that differs from your head only by paperwork commits (`git diff --name-only <log head> <your head>`
+lists nothing outside the spec's `plan.md`, `journal.md`, `brief.md`, `council/` and `memory/stats/anomalies.jsonl`,
+which every paperwork commit carries) is the round's own log: copy
+its `SUITE:` line and say nothing about the head; any other path in that list keeps the `## Minor` above.
 Beyond that, run only the targeted command a finding needs, each with a timeout.
 
 ## Verdict

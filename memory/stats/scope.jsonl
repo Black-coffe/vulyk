@@ -412,3 +412,12 @@
 {"ts":"2026-11-12T20:50:15Z","story":"post-052-tails-04-repair-round-1","declared":6,"changed":6,"out_of_scope":0}
 {"ts":"2026-11-12T21:40:30Z","story":"busy-no-transcripts-01","declared":3,"changed":3,"out_of_scope":0}
 {"ts":"2026-11-12T22:39:26Z","story":"busy-no-transcripts-02-repair-round-1","declared":2,"changed":2,"out_of_scope":0}
+{"ts":"2026-11-13T07:59:37Z","story":"beta-fixes-1113-02-driver-needs-context","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-11-13T08:13:00Z","story":"beta-fixes-1113-03-own-agents-and-wording","declared":6,"changed":6,"out_of_scope":0}
+{"ts":"2026-11-13T08:22:19Z","story":"beta-fixes-1113-01-repair-and-red-parsers","declared":3,"changed":3,"out_of_scope":0}
+{"ts":"2026-11-13T08:29:26Z","story":"beta-fixes-1113-03-own-agents-and-wording","declared":6,"changed":6,"out_of_scope":0}
+{"ts":"2026-11-13T08:32:13Z","story":"beta-fixes-1113-03-own-agents-and-wording","declared":7,"changed":7,"out_of_scope":0}
+{"ts":"2026-11-13T08:57:06Z","story":"beta-fixes-1113-04-dispatch-and-resume-guards","declared":7,"changed":5,"out_of_scope":0}
+{"ts":"2026-11-13T10:03:56Z","story":"beta-fixes-1113-05-repair-round-1","declared":17,"changed":2,"out_of_scope":0}
+{"ts":"2026-11-13T10:07:48Z","story":"beta-fixes-1113-05-repair-round-1","declared":17,"changed":2,"out_of_scope":0}
+{"ts":"2026-11-13T13:44:35Z","story":"beta-fixes-1113-06-repair-round-2","declared":17,"changed":4,"out_of_scope":0}

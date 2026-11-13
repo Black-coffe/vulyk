@@ -89,6 +89,11 @@ No driver, no clerk, no court. Loop:
      <elapsed_min> min at <next>" "relaunching with a fresh stamp"`, make a fresh `stamp`, and call step 3
      again with the same other args. This keeps your cache warm between waves; one wave or seat dispatch
      longer than ~55 min still lets it lapse.
+   - `status` `needs_context` (a worker returned `NEEDS_CONTEXT` with its story still todo; the driver
+     dispatched nothing more and released its claim): for each entry of `stories`, read that story's
+     `## Findings` (the entry's `report` is the worker's return), answer it by revising the story and
+     committing it under the `revised <story-id>` rule above, run `bash scripts/journal.sh docs/specs/<slug>
+     03-building "needs_context on <story-id>" "<the answer>"`, make a fresh `stamp` and call step 3 again.
    - A worker that returned without closing left edits in its `## Files`: the relaunch's claim accepts
      them (`leftover`, only for todo stories of the current wave; any other dirty path is still refused)
      and the driver dispatches that story again with a note to read `git diff` and finish.

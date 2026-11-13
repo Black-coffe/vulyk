@@ -162,11 +162,25 @@ A narrow repair round (C5) at any tier is `review` alone: one `lead-review`, no 
 
 Solo means no driver, no clerk and no court: the Queen runs `cycle.sh advance` from her own
 Bash. It performs every mechanical step (branch, open-round, judge, repair) and stops at the
-next thing only an agent can do.
+next thing only an agent can do. Before it ends on `build:<W>`, every story that wave lists goes
+through the segment check `close-story` uses on `## Verification` (each `&&` segment a `## Commands`
+cell, or `none — reviewed by lead-review`; a `round-only` row refused): the first story that fails
+stops `advance` with exit 2, `"error":"<story file>: <close-story's refusal>"` and the `try:` hints
+on stderr, so no worker is sent to a story it could never close.
+
+`resume` reads the plan's `**Branch:**`; when the checked-out plan names none (`branch --commit` writes
+the line on `vulyk/<slug>` only), it takes `vulyk/<slug>` if that branch's own plan copy names it. With HEAD on another branch and a clean tree it switches to
+that branch before it writes anything, and its last line gains `"switched":"<branch>"`; with a dirty
+tree it exits 2 naming the uncommitted paths, keeps `PAUSE` and touches nothing (no stash, no forced
+switch, no reset). Every other verb still only refuses off the spec branch.
 
 At Tier 3-4 the Workflow driver (`.claude/workflows/vulyk-cycle.js`) runs the same loop through the
 clerk. A worker that returns with its story still `todo` is a miss: the driver dispatches it once
-more, on the gate model, and a second miss stops the run. Its edits stay in the tree, and since
+more, on the gate model, and a second miss stops the run. A worker whose report's `STATUS:` line says
+`NEEDS_CONTEXT` is no miss: the driver dispatches nothing more and returns `{"status":"needs_context",
+"stories":[{story,report}],...}`, releasing its claim; the Queen reads the story's `## Findings`, revises
+and commits it (`revised <story-id>`), journals it and relaunches with a fresh stamp.
+A miss's edits stay in the tree, and since
 ab-run-fixes a relaunch is not refused for them: `claim` accepts dirty paths in the `## Files` (or the
 story file) of a `todo` story of the current wave, names those stories under `leftover`, and the
 driver tells each one's worker to read `git diff` and finish. Any other dirty path is refused as before.

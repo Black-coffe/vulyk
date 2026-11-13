@@ -685,15 +685,15 @@ telpy scan --transcript "$PROJ/sid1.jsonl" >/dev/null 2>&1
 expect_eq "scan finds the subagent beside the session dir, not beside the transcript" "1" \
   "$(grep -c '"ref":"agent:agent-a1.jsonl"' "$LOG")"
 expect_eq "scan finds the workflow subagent one directory deeper" "1" \
-  "$(grep -c '"ref":"agent:agent-a2.jsonl"' "$LOG")"
+  "$(grep -c '^agent-a2\.jsonl' "$HIVE/.vulyk/telemetry/seen/sid1" 2>/dev/null || true)"
 expect_eq "nothing is read from <dirname>/subagents/ beside the transcript" "0" \
   "$(grep -c '"ref":"agent:agent-a3.jsonl"' "$LOG")"
-expect_eq "scan records exactly two agent_prefix_high rows" "2" \
+expect_eq "scan records exactly one agent_prefix_high row" "1" \
   "$(grep -c '"code":"agent_prefix_high"' "$LOG")"
 expect_eq "agent_prefix_high carries the cycle-clerk agent token" "cycle-clerk" \
   "$(grep -F '"ref":"agent:agent-a1.jsonl"' "$LOG" | jq -r '.agent')"
-expect_eq "agent_prefix_high maps a non-framework agentType to other" "other" \
-  "$(grep -F '"ref":"agent:agent-a2.jsonl"' "$LOG" | jq -r '.agent')"
+expect_eq "agent_prefix_high skips an agent type VULYK does not dispatch (a hive's own)" "0" \
+  "$(grep -F '"ref":"agent:agent-a2.jsonl"' "$LOG" | grep -c '"code":"agent_prefix_high"' || true)"
 # Major 6: at Stop time a subagent whose last entry is a tool_use is mid-turn, not empty.
 expect_eq "a plain scan records no agent_empty row" "0" \
   "$(grep -c '"code":"agent_empty"' "$LOG")"
@@ -722,18 +722,30 @@ expect_eq "a second --final scan appends nothing" "$FINAL_ROWS" "$(grep -c . "$L
 BIPROJ="$T/biproj"; mkdir -p "$BIPROJ/sidb/subagents/workflows/wf1"
 agent_file "$BIPROJ/sidb/subagents/agent-g1.jsonl"              60000 tool_use general-purpose
 agent_file "$BIPROJ/sidb/subagents/workflows/wf1/agent-g2.jsonl" 60000 text     workflow-subagent
-agent_file "$BIPROJ/sidb/subagents/agent-g3.jsonl"              60000 text     explore
+agent_file "$BIPROJ/sidb/subagents/agent-g3.jsonl"              60000 tool_use explore
+agent_file "$BIPROJ/sidb/subagents/agent-g4.jsonl"              60000 text     worker-code
+agent_file "$BIPROJ/sidb/subagents/agent-g5.jsonl"              60000 text     acme-writer
 printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}\n' > "$BIPROJ/sidb.jsonl"
 : > "$LOG"
 telpy scan --transcript "$BIPROJ/sidb.jsonl" --final >/dev/null 2>&1
-expect_eq "agent_prefix_high names a general-purpose subagent" "general-purpose" \
-  "$(grep '"code":"agent_prefix_high"' "$LOG" | grep -F '"ref":"agent:agent-g1.jsonl"' | jq -r '.agent')"
-expect_eq "agent_prefix_high names a workflow subagent" "workflow-subagent" \
-  "$(grep -F '"ref":"agent:agent-g2.jsonl"' "$LOG" | jq -r '.agent')"
+# beta-fixes-1113-03 (Ask 4): the prefix of a dispatch VULYK did not make is not VULYK's to tune, so
+# agent_prefix_high counts only VULYK's own agent types - a built-in one, a hive's own one, a near-miss: no row.
+expect_eq "agent_prefix_high skips an agent type VULYK does not dispatch (general-purpose, workflow-subagent, acme-writer, explore)" \
+  "worker-code" \
+  "$(grep '"code":"agent_prefix_high"' "$LOG" | jq -r '.agent' | tr -d '\r' | paste -sd' ' -)"
 expect_eq "agent_empty names a general-purpose subagent" "general-purpose" \
-  "$(grep '"code":"agent_empty"' "$LOG" | jq -r '.agent')"
+  "$(grep '"code":"agent_empty"' "$LOG" | grep -F '"ref":"agent:agent-g1.jsonl"' | jq -r '.agent')"
 expect_eq "a near-miss of a built-in name (wrong case) is other" "other" \
-  "$(grep -F '"ref":"agent:agent-g3.jsonl"' "$LOG" | jq -r '.agent')"
+  "$(grep '"code":"agent_empty"' "$LOG" | grep -F '"ref":"agent:agent-g3.jsonl"' | jq -r '.agent')"
+# The neighbour: a window holding only types VULYK does not dispatch records no agent_prefix_high row.
+SKPROJ="$T/skproj"; mkdir -p "$SKPROJ/sidk/subagents"
+agent_file "$SKPROJ/sidk/subagents/agent-k1.jsonl" 60000 text general-purpose
+agent_file "$SKPROJ/sidk/subagents/agent-k2.jsonl" 60000 text acme-writer
+cp "$BIPROJ/sidb.jsonl" "$SKPROJ/sidk.jsonl"
+: > "$LOG"
+telpy scan --transcript "$SKPROJ/sidk.jsonl" >/dev/null 2>&1
+expect_eq "agent_prefix_high skips an agent type VULYK does not dispatch: a window of only such types records none" "0" \
+  "$(grep -c '"code":"agent_prefix_high"' "$LOG" || true)"
 
 # Major 5, the other half of the bound: with no --transcript there is no session to scope to,
 # so no subagent file is read even though one is above threshold.
@@ -1135,7 +1147,7 @@ expect_eq "anomaly-scan.sh prints nothing on the success path" "" "$(cat "$T/hoo
 : > "$LOG"
 printf '{"transcript_path":"%s","hook_event_name":"Stop"}\n' "$PROJ/sid1.jsonl" |
   CLAUDE_PROJECT_DIR="$HIVE" VULYK_HIVE="$HIVE" bash "$HIVE/.claude/hooks/anomaly-scan.sh" >/dev/null 2>&1
-expect_eq "a Stop hook records the prefix anomalies" "2" \
+expect_eq "a Stop hook records the prefix anomalies" "1" \
   "$(grep -c '"code":"agent_prefix_high"' "$LOG")"
 expect_eq "a Stop hook records no agent_empty row" "0" \
   "$(grep -c '"code":"agent_empty"' "$LOG")"

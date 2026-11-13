@@ -1252,6 +1252,12 @@ sed -n '/^2\. History/,/^2a\. /p' "$SRC/.claude/commands/vulyk-ship.md" | tr '\n
 expect "ship 2a: the canaries go first" "bash scripts/hives-behind.sh --canaries" < "$T/ship2a"
 expect "ship 2a: a red canary stops the rollout" "a red canary stops the rollout" < "$T/ship2a"
 
+echo "--- beta-fixes-1113-03: a paperwork-only suite.log head, --go from the owner"
+tr '\n' ' ' < "$SRC/.claude/agents/lead-review.md" | tr -d '\r' | tr -s ' ' \
+  | expect "lead-review: a suite.log head that differs only by paperwork commits is not reported" "only by paperwork commits"
+tr '\n' ' ' < "$SRC/.claude/commands/vulyk-plan.md" | tr -d '\r' | tr -s ' ' \
+  | expect "plan: --go comes only from the owner's own words" "only from the owner's own words"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1

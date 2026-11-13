@@ -26,6 +26,7 @@ grows is cut, not a reason to delay the release; each fix gets a failing check o
 6. `/vulyk-plan`: `--go` comes only from the owner's own words, never added by the Queen.
 7. A quoted `red_reason:` (YAML single or double quotes) matches the same as an unquoted one.
 8. `/vulyk-resume` (and the build it starts) switches to the spec branch when the tree is on another branch and clean, instead of failing the first launch.
+9. The `handoff-offered-too-early` card check judges the tree's `.claude/hooks/handoff.py` when the card fires on `scripts/telemetry.sh`, so a story that edits `telemetry.sh` can close (added by the Queen mid-build, card `framework-defect-deferred-mid-build`: it stopped story 03).
 
 ## Privacy
 Public repo: hives by root name only; fixtures use stand-ins (Acme). Evidence stays in `~/.vulyk/audits/beta-feedback-1113/`.

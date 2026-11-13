@@ -1,14 +1,15 @@
 ---
 story: beta-fixes-1113-01
 spec: beta-fixes-1113
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: a numbered finding names its file, not its number
+red_verified_at: 2026-11-13T08:21:03Z 2d2775670fb3df6b705c73753fc0b508996cfdcca75dbc1a1b28497524aad8d3
 ---
 
 # Two parsers: a numbered finding gives its file, a quoted `red_reason` matches
@@ -77,5 +78,37 @@ quotes, single or double, is removed first.
 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each -->
+- scripts/cycle.sh `finding_paths`: drops a leading `N. ` (all digits, then `. `) after `- `; `2.0/x.md` stays whole (no space after its dot).
+- scripts/cycle.sh `narrow_file`: no fallback to the ## Files union; narrow only when the findings' deduped paths are exactly one, it is a file under `$ROOT` and not a test. Decision: a second unresolvable token (e.g. `e.g.` beside a real path) makes the round full, the conservative reading. `<files>` arg kept so callers stay unchanged.
+- scripts/cycle.sh stamp-red: one matching layer of `"..."` or `'...'` stripped from `red_reason` before the compare (the only `red_reason` read in cycle.sh); `""` becomes empty and refuses as empty.
+- tests/council.test.sh part verbs: `nb_*` fixture (one story on `app/acme.sh`, `2.0/notes.md` in the tree, a temporary Full suite row `true`, removed at the end); cases `1.`, `10.`, `1. 2.0/notes.md`, `e.g.`, absent path, no path.
+- tests/cycle.test.sh part red: `red_q` cases 40-44 on `tests/red-acme.sh` with its own `src/red-acme.txt` (src/red.txt is already `done` by then).
+- Updated existing case (Non-goals exception): part red `redrq` asserted `narrow: true` from the finding `- [ask 1] ask 1 broke: ...` (no path); now asserts the frontmatter without `narrow: true`.
+- Red on HEAD: every new numbered/no-path case and both quoted red_reason cases failed before the implementation. The guards that pin old behaviour pass on HEAD by design: round 2 of `nbn` opening narrow (HEAD recorded `1.` and re-checked it), the `## Verification` line check, and red_q 42 (unquoted), 43 (`it's red`), 44 (`"half` refused).
+CHANGELOG: Repair: a reviewer's numbered finding (`1. path:line`) now yields its path, never `1.`; a repair whose findings name no existing non-test file is a full round with the suite, not a narrow one.
+CHANGELOG: stamp-red: a `red_reason:` in YAML single or double quotes matches the failing output the same as an unquoted one.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/council.test.sh --part verbs
+- exit: 1
+- tests: 2d2775670fb3df6b705c73753fc0b508996cfdcca75dbc1a1b28497524aad8d3 (tests/council.test.sh, tests/cycle.test.sh)
+- impl: cca74342007f0c8d7ef0cc03ab1c00725b207fbe8078a1a05b488bda8b495573
+- stamped: 2026-11-13T08:21:03Z
+
+```
+beta-fixes-1113 (ask 1): a numbered finding names its file, not its number; a finding with no real path is a full round
+::error::a numbered finding names its file, not its number - 1. app/acme.sh:12: narrow on app/acme.sh, ## Files holds no number, ## Verification not empty: story=---
+::error::a numbered finding names its file, not its number - 10. app/acme.sh:12: the two-digit number is stripped the same way: story=---
+from=1 ROUND=head=b40f5a6
+pack=508e4cd3d87d
+opened=2026-11-13T08:18:01Z
+court=
+ceiling=3
+tier=3
+seats=review
+since=4cfe024
+narrow=1 log=head=b40f5a6 steps=0
+SUITE: none - narrow repair round
+```

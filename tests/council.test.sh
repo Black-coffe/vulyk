@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite suite2 suite3 hardening" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs verbs2 verbs3 judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite suite2 suite3 hardening" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -666,6 +666,16 @@ out="$(council status docs/specs/oldrow1 --json)"; ex=$?
   && echo "  ok    status reads a pre-review_asks row" || { echo "::error::oldrow1: exit=$ex out=$out"; fail=1; }
 fi # --quick: end of the anchored-BLOCK skip
 
+echo "beta-fixes-1113 (ask 5): lead-review's paperwork-only head rule counts memory/stats/anomalies.jsonl, which every paperwork commit carries"
+awk '/differs from your head only by paperwork commits/ { on = 1 } on { print } on && /keeps the `## Minor` above/ { exit }' "$SRC/.claude/agents/lead-review.md" | grep -qF 'memory/stats/anomalies.jsonl' \
+  && echo "  ok    lead-review: a head moved only by commits that add memory/stats/anomalies.jsonl is still the round's own log" \
+  || { echo "::error::lead-review paperwork-only rule omits memory/stats/anomalies.jsonl"; fail=1; echo "lead-review anomalies.jsonl" >> "$FAILS"; }
+fi # part verbs
+if part verbs2 || part verbs3; then # the narrow-round helpers verbs2 and verbs3 share (beta-fixes-1113 repair 1)
+fm_field_v() { awk -v k="$2" 'NR == 1 && /^---/ { on = 1; next } on && /^---/ { exit } on && index($0, k ": ") == 1 { print substr($0, length(k) + 3); exit }' "$1" 2>/dev/null; } # fm_field_v <file> <key> - a frontmatter value
+nr_full() { grep -qx 'seats=opus review' "docs/specs/$1/council/round-2/ROUND" && ! grep -q '^narrow=' "docs/specs/$1/council/round-2/ROUND"; } # nr_full <slug>
+fi
+if part verbs2; then # --- part verbs2 (beta-fixes-1113 repair 1: verbs, second part): the narrow-round record is the cycle's own
 echo "upgrade-findings-05 (A3): a round is narrow only by the cycle's own record, re-checked when it opens"
 nr_red() { # nr_red <slug> <review-report> - a Tier 3 spec with stories on app/x.py and app/y.py, round 1 judged RED on <review-report>, then repaired
   mk_open_spec "$1" 2; set_tier "$1" 3
@@ -685,8 +695,6 @@ nr_round2() { # nr_round2 <slug> - the repair story marked done with a code chan
   echo "x = 2" > app/x.py && git add -A && git commit -qm "$1: the repair" >/dev/null
   NR_ERR="$(council open-round "docs/specs/$1" --commit 2>&1 >/dev/null)"
 }
-fm_field_v() { awk -v k="$2" 'NR == 1 && /^---/ { on = 1; next } on && /^---/ { exit } on && index($0, k ": ") == 1 { print substr($0, length(k) + 3); exit }' "$1" 2>/dev/null; } # fm_field_v <file> <key> - a frontmatter value
-nr_full() { grep -qx 'seats=opus review' "docs/specs/$1/council/round-2/ROUND" && ! grep -q '^narrow=' "docs/specs/$1/council/round-2/ROUND"; } # nr_full <slug>
 nr_red nrf 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n- [ask 2] app/x.py:2 wrong name\n'
 nrsha="$(git log -1 --format=%h -- "$NR_RS")"
 awk '{ print } /^model: opus$/ { print "narrow: true" }' "$NR_RS" > "$NR_RS.new" && mv "$NR_RS.new" "$NR_RS"
@@ -724,7 +732,67 @@ nr_round2 nrr
 [ -f "$NR_REC" ] && nr_full nrr && printf '%s' "$NR_ERR" | grep -qF 're-check' \
   && echo "  ok    a record whose rule no longer holds on round 1's records: a full round, stderr names the re-check" \
   || { echo "::error::re-check: ROUND=$(cat docs/specs/nrr/council/round-2/ROUND 2>&1) stderr=$NR_ERR"; fail=1; echo "narrow re-check" >> "$FAILS"; }
-fi # part verbs
+fi # part verbs2
+if part verbs3; then # --- part verbs3 (beta-fixes-1113 repair 1: verbs, third part): a numbered finding names its file
+echo "beta-fixes-1113 (ask 1): a numbered finding names its file, not its number; a finding with no real path is a full round"
+grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+printf '| Full suite (round-only) | `true` |\n' >> CLAUDE.md
+git add -A && git commit -qm "fixture: a full-suite row (beta-fixes-1113)" >/dev/null
+nb_red() { # nb_red <slug> <review-report> - a Tier 3 spec, one story on app/acme.sh (2.0/notes.md in the tree too), round 1 RED on <review-report>, repaired
+  mk_open_spec "$1" 2; set_tier "$1" 3
+  done_story "docs/specs/$1/$1-02-acme.md" '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# S2\n\n## Files\n- app/acme.sh\n\n## Verification\n`test -f app/acme.sh`\n' "$1" "$1"
+  mkdir -p app 2.0 && echo "echo acme" > app/acme.sh && echo "notes" > 2.0/notes.md
+  git add -A && git commit -qm "$1: one built story" >/dev/null
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  council suite "docs/specs/$1" --commit >/dev/null 2>&1
+  seat_report opus 1 GG | council record-seat "docs/specs/$1" 1 opus >/dev/null 2>&1
+  printf '%b' "$2" | council record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
+  council judge "docs/specs/$1" --commit >/dev/null 2>&1
+  council repair "docs/specs/$1" --commit >/dev/null 2>&1
+  NB_RS="docs/specs/$1/$1-03-repair-round-1.md"; NB_REC=".vulyk/state/$1/narrow.round-2"
+}
+nb_round2() { # nb_round2 <slug> - the repair story done with a code change, round 2 opened, one suite call
+  done_story "$NB_RS"
+  echo "echo acme $1" > app/acme.sh && git add -A && git commit -qm "$1: the repair" >/dev/null
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  council suite "docs/specs/$1" --commit >/dev/null 2>&1
+}
+nb_sec() { awk -v h="$2" '$0 == h { on = 1; next } on && /^## / { exit } on && NF { print }' "$1" 2>/dev/null; } # nb_sec <file> <heading> -> its non-blank lines
+NBL="a numbered finding names its file, not its number"
+nb_narrow() { # nb_narrow <slug> <file> <label> - the repair is narrow on <file>: ## Files holds it and no bare number, ## Verification not empty, the record names it
+  if [ -f "$NB_RS" ] && [ "$(fm_field_v "$NB_RS" narrow)" = true ] && nb_sec "$NB_RS" '## Files' | grep -qx -- "- $2" \
+    && ! nb_sec "$NB_RS" '## Files' | grep -qE '^- [0-9]+\.?$' && [ -n "$(nb_sec "$NB_RS" '## Verification')" ] && grep -qx "file=$2" "$NB_REC" 2>/dev/null; then
+    echo "  ok    $3"
+  else echo "::error::$NBL - $3: story=$(cat "$NB_RS" 2>&1) record=$(cat "$NB_REC" 2>&1)"; fail=1; echo "$NBL ($1)" >> "$FAILS"; fi
+}
+nb_red nbn 'VERDICT: BLOCK\n## Major\n1. app/acme.sh:12 [ask 1] the loop is off by one\n'
+nb_narrow nbn app/acme.sh "1. app/acme.sh:12: narrow on app/acme.sh, ## Files holds no number, ## Verification not empty"
+nb_sec "$NB_RS" '## Verification' | grep -qxF '`test -f app/acme.sh`' && echo "  ok    ## Verification is the line of the story that named the file" \
+  || { echo "::error::$NBL - verification: $(nb_sec "$NB_RS" '## Verification')"; fail=1; echo "$NBL (verification)" >> "$FAILS"; }
+nb_round2 nbn
+grep -qx 'seats=review' docs/specs/nbn/council/round-2/ROUND 2>/dev/null && grep -qx 'narrow=1' docs/specs/nbn/council/round-2/ROUND \
+  && echo "  ok    a numbered one-item, one-file round opens narrow, as before" \
+  || { echo "::error::$NBL - round 2: ROUND=$(cat docs/specs/nbn/council/round-2/ROUND 2>&1)"; fail=1; echo "$NBL (round 2)" >> "$FAILS"; }
+nb_red nbt 'VERDICT: BLOCK\n## Major\n10. app/acme.sh:12 [ask 1] the loop is off by one\n'
+nb_narrow nbt app/acme.sh "10. app/acme.sh:12: the two-digit number is stripped the same way"
+nb_red nbd 'VERDICT: BLOCK\n## Major\n1. 2.0/notes.md:3 [ask 1] the note is stale\n'
+nb_narrow nbd 2.0/notes.md "1. 2.0/notes.md:3: a path that starts with digits and a dot is kept whole"
+nb_full() { # nb_full <slug> <label> - no narrow mark, no record, round 2 the tier's full seats, suite ran its step
+  if [ -f "$NB_RS" ] && [ -z "$(fm_field_v "$NB_RS" narrow)" ] && [ ! -f "$NB_REC" ] && nr_full "$1" \
+    && grep -q '^SUITE: ok' "docs/specs/$1/council/round-2/suite.log" 2>/dev/null && ! grep -qF 'SUITE: none - narrow repair round' "docs/specs/$1/council/round-2/suite.log"; then
+    echo "  ok    $2"
+  else echo "::error::$NBL - $2: narrow=$(fm_field_v "$NB_RS" narrow) record=$(cat "$NB_REC" 2>&1) ROUND=$(cat "docs/specs/$1/council/round-2/ROUND" 2>&1) log=$(cat "docs/specs/$1/council/round-2/suite.log" 2>&1)"
+    fail=1; echo "$NBL ($1)" >> "$FAILS"; fi
+}
+nb_red nbe 'VERDICT: BLOCK\n## Major\n1. e.g. the loop [ask 1] is off by one\n'
+nb_round2 nbe; nb_full nbe "a dotted word as the first token: a full round, suite runs its step"
+nb_red nbg 'VERDICT: BLOCK\n## Major\n- [ask 1] app/gone.sh:3 the file is missing\n'
+nb_round2 nbg; nb_full nbg "a path absent from the tree: a full round, suite runs its step"
+nb_red nbp 'VERDICT: BLOCK\n## Major\n- [ask 1] the loop is off by one\n'
+nb_round2 nbp; nb_full nbp "a finding with no path: a full round, suite runs its step"
+grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+git add -A && git commit -qm "fixture: no full-suite row" >/dev/null
+fi # part verbs3
 if part judge; then # --- part judge: the ceiling, no-progress and half walks, ABSENT/N/A/REJECTED, journal, briefed, branch, git failures, court setup
 if full; then # --quick skips: the multi-round ceiling, no-progress and half walks
 # --- judge: three RED rounds hit the ceiling on the third -------------------------------------
@@ -4561,6 +4629,60 @@ done
 
 echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every pre-0.18 key"
 council status docs/specs/r18ad --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
+
+echo "beta-fixes-1113-04 A1: advance checks every story of the wave it would dispatch against ## Commands, close-story's own check"
+printf '| Fixture: slow suite (round-only) | `echo r18vc-slow` |\n' >> CLAUDE.md
+git add -A && git commit -qm "r18vc: a round-only cell" >/dev/null
+vc_story() { # vc_story <slug> <nn> <wave> <verification line> - a todo story, committed by the caller
+  printf -- '---\nstory: %s-%s\nspec: %s\nstatus: todo\nreturned: DONE\nwave: %s\n---\n# V%s\n\n## Files\n- %s-%s.txt\n\n## Verification\n%s\n' \
+    "$1" "$2" "$1" "$3" "$2" "$1" "$2" "$4" > "docs/specs/$1/$1-$2-v.md"
+}
+vc_spec() { mk_open_spec "$1" 2; set_tier "$1" 2; } # vc_spec <slug> - approved, on this branch, one done story
+VC_ERR="$(mktemp)"
+vc_spec r18vc
+vc_story r18vc 02 1 '`echo not-a-cell`'
+git add -A && git commit -qm "r18vc: a story naming no cell" >/dev/null
+vc_head="$(git rev-parse HEAD)"
+out="$(council advance docs/specs/r18vc 2>"$VC_ERR")"; ex=$?
+last="$(l18_last "$out")"
+if [ "$ex" -eq 2 ] && printf '%s' "$last" | jq -e '.ok == false and .verb == "advance" and .exit == 2
+     and .error == "docs/specs/r18vc/r18vc-02-v.md: verification not in ## Commands: echo not-a-cell"' >/dev/null 2>&1 \
+   && grep -q '^try: ' "$VC_ERR" && ! printf '%s' "$out" | grep -q '^try: ' && ! printf '%s' "$out" | grep -qF '"next":"build:' \
+   && [ "$(git rev-parse HEAD)" = "$vc_head" ] && [ -z "$(git status --porcelain)" ]; then
+  echo "  ok    advance stops before dispatch on a verification line that is no Commands cell"
+else echo "::error::advance stops before dispatch on a verification line that is no Commands cell - exit=$ex out=$out err=$(cat "$VC_ERR")"; fail=1; fi
+out="$(council close-story docs/specs/r18vc/r18vc-02-v.md --commit 2>"$VC_ERR")"; ex=$?
+[ "$ex" -eq 2 ] && l18_last "$out" | jq -e '.verb == "close-story" and .error == "verification not in ## Commands: echo not-a-cell"' >/dev/null 2>&1 \
+  && grep -q "^cycle: close-story - verification command not in .*CLAUDE\.md's ## Commands: echo not-a-cell\$" "$VC_ERR" \
+  && grep -q '^try: see ## Commands in .*CLAUDE\.md$' "$VC_ERR" \
+  && echo "  ok    close-story on that story refuses with its own text, as before" || { echo "::error::close-story refusal moved: exit=$ex out=$out err=$(cat "$VC_ERR")"; fail=1; }
+
+vc_spec r18vr
+vc_story r18vr 02 1 '`true && echo r18vc-slow`'
+git add -A && git commit -qm "r18vr: a round-only segment" >/dev/null
+out="$(council advance docs/specs/r18vr 2>"$VC_ERR")"; ex=$?
+[ "$ex" -eq 2 ] && l18_last "$out" | jq -e '.ok == false and .error == "docs/specs/r18vr/r18vr-02-v.md: verification is round-only: echo r18vc-slow"' >/dev/null 2>&1 \
+  && ! printf '%s' "$out" | grep -qF '"next":"build:' \
+  && echo "  ok    neighbour: a round-only segment stops advance the same way" || { echo "::error::round-only advance: exit=$ex out=$out"; fail=1; }
+
+vc_spec r18vd
+vc_story r18vd 02 1 '`echo bad-two`'
+vc_story r18vd 03 1 '`echo bad-three`'
+git add -A && git commit -qm "r18vd: two bad stories" >/dev/null
+out="$(council advance docs/specs/r18vd 2>"$VC_ERR")"; ex=$?
+[ "$ex" -eq 2 ] && l18_last "$out" | jq -e '.error == "docs/specs/r18vd/r18vd-02-v.md: verification not in ## Commands: echo bad-two"' >/dev/null 2>&1 \
+  && echo "  ok    neighbour: with two bad stories the first is named" || { echo "::error::two bad: exit=$ex out=$out"; fail=1; }
+
+vc_spec r18ve
+vc_story r18ve 02 1 '`true`'
+vc_story r18ve 03 1 'none — reviewed by lead-review'
+vc_story r18ve 04 2 '`echo bad-later`'
+git add -A && git commit -qm "r18ve: good wave 1, bad wave 2" >/dev/null
+out="$(council advance docs/specs/r18ve 2>"$VC_ERR")"; ex=$?
+[ "$ex" -eq 0 ] && l18_last "$out" | jq -e '.ok == true and .next == "build:1" and (.status.wave_stories | length) == 2' >/dev/null 2>&1 \
+  && echo "  ok    neighbour: cells and 'none — reviewed by lead-review' return build:1; a bad line in wave 2 does not stop wave 1" \
+  || { echo "::error::good wave: exit=$ex out=$out err=$(cat "$VC_ERR")"; fail=1; }
+rm -f "$VC_ERR"
 fi # part advance
 
 if part suite || part suite2 || part suite3; then # the suite parts' shared fixture helpers (council:suite split in mass-audit-fixes-18 repair 1, suite3 in upgrade-findings-07)
