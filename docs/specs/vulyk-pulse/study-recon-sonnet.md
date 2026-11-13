@@ -116,7 +116,7 @@ Facts only; "not confirmed" where the declaration is silent.
 
 ## 4. Engine status line (statusLine setting / `cs`) vs `$.ui.status`
 
-- This box: `~/.claude/settings.json` lines 109-113: `"statusLine": { "type": "command", "command": "C:/Python3129/Scripts/cs.EXE", "refreshInterval": 300 }` (the installed claude-statusbar). Read via grep.
+- This box: `~/.claude/settings.json` lines 109-113: `"statusLine": { "type": "command", "command": "<python>/Scripts/cs.EXE", "refreshInterval": 300 }` (the installed claude-statusbar). Read via grep.
 - DTS has no type for the `statusLine` setting beyond `Settings = Readonly<Record<string, unknown>>` (DTS 12256) and a mention of `StatusLineCommandInput.effort` (DTS 871). A mod can read it with `$.settings.read()` (DTS 3646-3670) but cannot write settings.
 - Coexistence: `$.ui.status` is documented as "this plugin's status line under the prompt, beside the engine's own pinned notices" (DTS 2498-2503). The DTS does not say anything about the `statusLine` command output sharing the row. NOT CONFIRMED that they coexist on separate rows; strongly suggestive that they are different surfaces (the command statusLine is the engine footer fed by the cs process; the mod's line is a pinned notice), but a live probe is required.
 - `SessionUsage` is explicitly "the status line's figures" (DTS 12159-12165): `context`, `rateLimits`, `cost`; so cs and a mod can show the same cost; both are dollars, not tokens. cs (skill description) has toggles for "running subagents", "session duration", "cost", so the existing status bar may already cover part of the goal; how cs counts subagents (transcript parsing?) is NOT CONFIRMED here.

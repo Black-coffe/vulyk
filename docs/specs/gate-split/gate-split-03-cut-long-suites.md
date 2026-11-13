@@ -36,7 +36,7 @@ and exits 77 instead of a vacuous 0. Cut lines and shared-state notes: scout rep
 ## Map slice
 memory/map/scripts.md `## Tests`; memory/map/cycle.md `## The Workflow driver` (for e2e only); plan.md `## Contracts`
 (Suites with parts, SKIP); scout report
-C:/Users/Andrei/AppData/Local/Temp/claude/E--Projects-vulyk/aeafb186-f7ba-4c02-b8a1-680b8386863e/scratchpad/gs/scout-cuts.md.
+<scratchpad>/gs/scout-cuts.md.
 
 ## Acceptance criteria
 - [ ] Each of the four files answers `--list-parts` and `--part <topic>` the way `council.test.sh` (PARTS word list,

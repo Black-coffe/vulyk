@@ -67,7 +67,7 @@ Hindsight repo = github.com/vectorize-io/hindsight ("H:" below).
 3. Broader secret-pattern set (45 labels).
 4. Out-of-band capture that does not depend on the live session's judgement (VULYK's intake hook only *reminds*; grill D4 promised "litopys picks up the rest", which is not built - checked: litopys agents/skills/bin have no correction handling).
 
-**A defect found in VULYK's own delivery while comparing** (new evidence, not from Hindsight): the only host with a real library, `D:/YouTube_AI` (VULYK 0.21.1), has 22 cards; **all 22 use `area:` and none has `paths:`** (`contract.md:22`: `area:` "ignored by VULYK logic"). `defects-inject.sh` matches only `paths:`. So its 9 `text` cards (32 owner quotes, one class alone has 13) are never delivered, and `defects-check.sh` says nothing about it. Recall coverage is the whole product of a memory system; VULYK does not measure it.
+**A defect found in VULYK's own delivery while comparing** (new evidence, not from Hindsight): the only host with a real library, `<hive>` (VULYK 0.21.1), has 22 cards; **all 22 use `area:` and none has `paths:`** (`contract.md:22`: `area:` "ignored by VULYK logic"). `defects-inject.sh` matches only `paths:`. So its 9 `text` cards (32 owner quotes, one class alone has 13) are never delivered, and `defects-check.sh` says nothing about it. Recall coverage is the whole product of a memory system; VULYK does not measure it.
 
 ## 4. Proposals
 
@@ -134,4 +134,4 @@ Order = priority. No proposal grows CLAUDE.md, adds a service, or adds a model c
 3. **P3** evidence quotes validated against the raw journal in litopys decisions: the one Hindsight data shape that improves VULYK's currency (verbatim owner words) with no server. P4 and P5 wait for data.
 
 ## Not verified
-`uvx hindsight-embed control start` (not found in the READMEs); independent reproduction of the benchmarks (README claims Virginia Tech / Washington Post reproduction, not checked); the `claude -p --max-budget-usd` flag (only quoted from Hindsight's README); whether YouTube_AI has another delivery route for its `area:` cards (its hooks dir shows none). I ran `defects-check.sh` read-only against D:/YouTube_AI (it executes that host's `check:` commands); no file in E:/Projects/vulyk was changed.
+`uvx hindsight-embed control start` (not found in the READMEs); independent reproduction of the benchmarks (README claims Virginia Tech / Washington Post reproduction, not checked); the `claude -p --max-budget-usd` flag (only quoted from Hindsight's README); whether YouTube_AI has another delivery route for its `area:` cards (its hooks dir shows none). I ran `defects-check.sh` read-only against <hive> (it executes that host's `check:` commands); no file in E:/Projects/vulyk was changed.

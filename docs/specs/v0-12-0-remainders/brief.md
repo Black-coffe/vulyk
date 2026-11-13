@@ -21,7 +21,7 @@
 
 ### The three installer tails, reproduced 2026-09-13 (not recalled)
 
-Run: `bash install.sh /e/Projects/VPN --upgrade --check` from this repo at `3e200bb`.
+Run: `bash install.sh <hive> --upgrade --check` from this repo at `3e200bb`.
 
 1. **ADR leak.** `install.sh:347` copies `docs/adr` into the hive and `shippable()` (`:49-65`)
    refuses `docs/specs/*` but names no `docs/adr/*` case. The dry run prints

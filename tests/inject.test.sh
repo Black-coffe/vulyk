@@ -11,8 +11,8 @@
 #          bash tests/inject.test.sh --list-parts     # the part names, one per line
 # tests/full-suite.sh runs the functional part among its parallel jobs and the latency part alone, last.
 #
-# Latency runs against D:/YouTube_AI/docs/defects copied to a temp dir when that library exists
-# (the pilot's 19 real cards), else against the fixture library. Asserted <= 400 ms median; the
+# Latency runs against $VULYK_LATENCY_LIBRARY (a hive's docs/defects, e.g. the pilot's 19 real cards) copied to a
+# temp dir when that variable names a folder, else against the fixture library. Asserted <= 400 ms median; the
 # contract target is <= 200 ms and the measured median is printed either way.
 set -u
 PARTS="functional latency" PART=''
@@ -200,6 +200,9 @@ edit() { # edit <session> <path> [agent]   -> an Edit PreToolUse payload
 bashcall() { # bashcall <session> <command>
   printf '{"session_id":"%s","tool_name":"Bash","tool_input":{"command":"%s"},"cwd":"%s"}' "$1" "$2" "$W"
 }
+pscall() { # pscall <session> <command>   -> a PowerShell PreToolUse payload
+  printf '{"session_id":"%s","tool_name":"PowerShell","tool_input":{"command":"%s"},"cwd":"%s"}' "$1" "$2" "$W"
+}
 
 if part functional; then # --- part functional: every case but the latency medians
 # --- what is injected -------------------------------------------------------------------------
@@ -246,6 +249,16 @@ run "$HIVE" "$(bashcall s6t 'echo \"a\" \"My Notes/d.md\"')" | ctx | expect "P10
 run "$HIVE" "$(bashcall s6u 'cat My Notes/a.md')" | expect_silent "P10-15 neighbour: the unquoted words are two arguments, no match"
 rm -f "$D/notes-space.md"
 run "$HIVE" "$(bashcall s3 'ls -la docs && git status')" | expect_silent "an unrelated Bash command is silent"
+# audit-fixes-1113-04: a PowerShell command line is read as a Bash one, for cmd: entries and for paths.
+cb="$(run "$HIVE" "$(bashcall ps1b 'cd pipeline; py -3 edit_build.py x.json')" | ctx)"
+cps="$(run "$HIVE" "$(pscall ps1p 'cd pipeline; py -3 edit_build.py x.json')" | ctx)"
+printf '%s' "$cps" | expect "a PowerShell command gets the card its cmd: entry names" "✗ CMDTEXTNEVER build by hand."
+if [ -n "$cb" ] && [ "$cps" = "$cb" ]; then ok "a PowerShell command gets the card text the same command gets under Bash"
+else bad "a PowerShell command gets the card text the same command gets under Bash - Bash:"
+  printf '%s\n' "$cb" | sed 's/^/        /'; echo "      PowerShell:"; printf '%s\n' "$cps" | sed 's/^/        /'; fi
+run "$HIVE" "$(pscall ps2 'Get-Content -Path .\\pipeline\\voiceover.py | Select-Object -First 3')" | ctx \
+  | expect "a PowerShell command naming a file inside a card's glob gets that card" "voice-text — Voice text rule"
+run "$HIVE" "$(pscall ps3 'Get-ChildItem docs; git status')" | expect_silent "an unrelated PowerShell command is silent"
 
 # --- reset on SessionStart --------------------------------------------------------------------
 echo "--- reset"
@@ -420,6 +433,8 @@ EDIT_O3="{\"session_id\":\"o3\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_pa
 expect_eq "O3: no card file -> an Edit starts no python" no "$(started "$EMPTY" "$EDIT_O3")"
 expect_eq "O3: no card file -> a Bash call starts no python" no \
   "$(started "$EMPTY" '{"session_id":"o3","tool_name":"Bash","tool_input":{"command":"ls src"}}')"
+expect_eq "O3: no card file -> a PowerShell command that can match nothing starts no python" no \
+  "$(started "$EMPTY" '{"session_id":"o3","tool_name":"PowerShell","tool_input":{"command":"Get-ChildItem src"}}')"
 expect_eq "O3: no card file -> an Agent call starts no python" no \
   "$(started "$EMPTY" '{"session_id":"o3","tool_name":"Agent","tool_input":{"prompt":"x"}}')"
 printf -- '---\nid: one\nstatus: block\ncheck: false <arg>\npaths: ["src/**"]\n---\n## Never\n- x\n' > "$ED/pay/one.md"
@@ -477,9 +492,9 @@ fi # part functional
 if part latency; then # --- part latency: the two 200 ms medians, on the fixture library above
 echo "--- latency"
 LAT="$HIVE"; LW="$W"; SRCNAME="fixture library"
-if [ -d "D:/YouTube_AI/docs/defects" ]; then
-  mkdir -p "$T/yt/docs"; cp -r "D:/YouTube_AI/docs/defects" "$T/yt/docs/"; LAT="$T/yt"
-  LW="$(cd "$LAT" && { pwd -W 2>/dev/null || pwd; })"; SRCNAME="YouTube_AI library copy"
+if [ -n "${VULYK_LATENCY_LIBRARY:-}" ] && [ -d "$VULYK_LATENCY_LIBRARY" ]; then
+  mkdir -p "$T/yt/docs"; cp -r "$VULYK_LATENCY_LIBRARY" "$T/yt/docs/defects"; LAT="$T/yt"
+  LW="$(cd "$LAT" && { pwd -W 2>/dev/null || pwd; })"; SRCNAME="real library copy"
 fi
 m="$(median_ms "$LAT" "{\"session_id\":\"lat\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd pipeline && python edit_build.py EDIT_3.json --check\"},\"cwd\":\"$LW\"}")"
 echo "  median defects-inject.sh (Bash): ${m} ms over 30 calls ($SRCNAME; target <= 200 ms)"

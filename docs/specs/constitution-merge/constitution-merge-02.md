@@ -19,7 +19,7 @@ preflight, the render used only by it) is removed. A plain `--upgrade` still nev
 printed the replace command it now prints that the constitution changed and `/vulyk-update` merges it, with the
 `constitution-merge.sh draft` line for running it by hand. `scripts/constitution-merge.sh` ships to hives. The replace
 cases in `tests/telemetry.test.sh` become refusal and hint cases. ADR-005 gets an amendment: replace removed, why
-(the owner's words, `E:/Projects/AI`), and the merge contract.
+(the owner's words, `<hive>`), and the merge contract.
 
 ## Requirements
 > чтобы не потерялся смысл, сенс, логика и правила того проекта, в который заходит Wulic

@@ -22,7 +22,7 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 
 ## Implementation notes
 - Finding 1: `fresh_jsonl` drops `-maxdepth`, so Workflow agent transcripts 5 levels down count; a real hive with ~1200 transcripts answers in 0.5 s.
-- Finding 2: the `--slug` test uses `E:/Hives/Acme_co`; registered hive names and slugs masked in story 01's receipt, story 03, plan.md, this story and the round-1 review record (`<hive slug, masked>`, `X:/Acme`). Branch commits before this one still carry them: `/vulyk-ship` step 1 (fix history) must scrub them before any push. Card host-internals-in-public-repo unchanged: its Allowed line already names synthetic stand-ins.
+- Finding 2: the `--slug` test uses `<D>:/Hives/Acme_co`; registered hive names and slugs masked in story 01's receipt, story 03, plan.md, this story and the round-1 review record (`<hive slug, masked>`, `<D>:/Acme`). Branch commits before this one still carry them: `/vulyk-ship` step 1 (fix history) must scrub them before any push. Card host-internals-in-public-repo unchanged: its Allowed line already names synthetic stand-ins.
 - Minors: fixture folder `hbz` (a path in an unknown line no longer satisfies a busy check); split check wants >= 4 slices; on Windows the cwd match is case-insensitive (`same_case`), with a test that runs only there.
 - Finding 6 (owner): step 2a canary bullet - a busy canary is held, not red; one upgraded green canary carries the rollout, owner told it was one shape; both busy stops and names the sessions. No test pin added: the test file was sealed by the receipt before the owner's answer.
 

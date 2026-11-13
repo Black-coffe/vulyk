@@ -7,7 +7,7 @@ ns = {}; exec(src, ns)
 ROOT = ns['ROOT']; code_lines = ns['code_lines']
 st = pd.read_csv('session_table.csv')
 ag = pd.read_csv('agent_table.csv', keep_default_na=False)
-PROJ = ['C--laragon-www-mmorpg', 'E--Projects-fibi-next', 'E--Projects-Recall', 'D--YouTube-AI', 'E--Projects-katan', 'E--Projects-AI', 'E--Projects-our-home', 'E--Projects-litopys']
+PROJ = [p for p in os.environ.get('VULYK_HIVE_SLUGS', '').split(',') if p]  # transcript slugs of the hives: never written here
 E = st[st.project.isin(PROJ) & (st.vulyk == 0) & (st.n_edits >= 3)].copy()
 cl = []
 for r in E.itertuples():

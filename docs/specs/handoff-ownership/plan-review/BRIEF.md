@@ -29,8 +29,8 @@ Rules of the house: E:/Projects/vulyk/CLAUDE.md (Laws 1-6, tiers). Law 2 (no ove
 out-of-scope edits) matter here.
 
 ## Why the planner (the Queen, Opus 5.5) decided what it decided
-1. Diagnosis. Transcripts of E:/Projects/AI sessions 465c0602 (2026-10-12) and cf1d2449 (2026-10-13) under
-   `~/.claude/projects/E--Projects-AI/` record `cwd` at the failing /vulyk-handoff as subfolders
+1. Diagnosis. Transcripts of <hive> sessions 465c0602 (2026-10-12) and cf1d2449 (2026-10-13) under
+   `~/.claude/projects/<hive-slug>/` record `cwd` at the failing /vulyk-handoff as subfolders
    (`docs/specs/<client>/...`), reached by the model's own Bash `cd <hive>/docs/specs/<client>/... && ...`. In the
    installed Claude Code 2.1.296 binary the cwd-reset function reads roughly
    `h=oVn(); if(h || r!==s && !Kg(r,n)) { reset to original }`, where `oVn()` reads env
@@ -60,7 +60,7 @@ out-of-scope edits) matter here.
    owner's `~/.claude/hooks/context_guard.py`, wired in `~/.claude/settings.json`) are only REPORTED - Claude Code
    cannot switch off one user hook per project; (2) the switch-off goes to `.claude/settings.local.json` (this
    machine), never the committed `settings.json`; (3) a hive whose `.claude/context-guard.json` has
-   `subproject_globs` ("directions", used by E:/Projects/AI) gets a warning and "keep" as default; teaching VULYK's
+   `subproject_globs` ("directions", used by <hive>) gets a warning and "keep" as default; teaching VULYK's
    handoff directions is the NEXT spec. These are owner decisions - challenge them only with a strong reason.
 7. Why a separate `scripts/handoff-owner.sh` instead of an installer flag: three callers - `install.sh` on a terminal,
    `/vulyk-update` run by the Queen (no tty, asks in chat), and a manual run. The installer already has one consent
@@ -98,20 +98,20 @@ out-of-scope edits) matter here.
 - The owner's global tools: `~/.claude/commands/handoff.md`, `~/.claude/hooks/context_guard.py`,
   `~/.claude/settings.json`.
 - Claude Code binary:
-  `C:/Users/Andrei/AppData/Roaming/npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe` (minified JS inside;
+  `<npm-global>/node_modules/@anthropic-ai/claude-code/bin/claude.exe` (minified JS inside;
   use `grep -aoE '.{0,300}PATTERN.{0,300}'` on e.g. `skillOverrides`, `CLAUDE_PROJECT_DIR`,
   `CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR`, `Shell cwd was reset`). Minified names are reused across modules: read
   carefully.
 - Transcripts (6-7 MB each, grep only):
-  `~/.claude/projects/E--Projects-AI/cf1d2449-0fb3-4678-a5f5-7dd561c83cac.jsonl`,
-  `~/.claude/projects/E--Projects-AI/465c0602-dae5-453c-ac93-106f236abbe2.jsonl`.
+  `~/.claude/projects/<hive-slug>/cf1d2449-0fb3-4678-a5f5-7dd561c83cac.jsonl`,
+  `~/.claude/projects/<hive-slug>/465c0602-dae5-453c-ac93-106f236abbe2.jsonl`.
 
 ## Tooling rules on this machine
 - The Grep and Glob tools return "No files found" for files that exist on this Windows box. Use `grep -rn`, `ls`,
   `sed -n`, `cat` through Bash, with absolute paths. Do not `cd` into project subfolders.
 - READ-ONLY: do not edit any file in the repo or under `~/.claude`, except your own review file.
 - Optional live probes with `claude -p` are allowed: at most 3, always `--model haiku`, only inside your own fresh dir
-  `C:/Users/Andrei/AppData/Local/Temp/claude/E--Projects-vulyk/555c8811-72e5-4a4c-8e84-d5ec863d8f7c/scratchpad/<your-dir>/`.
+  `<scratchpad>/<your-dir>/`.
   Afterwards delete that dir, its transcript dir `~/.claude/projects/<slug>/` (slug = the dir's absolute Windows path
   with every non-alphanumeric character replaced by `-`), and `~/.claude/handoff/index/<slug>.json` if the owner's
   global hook wrote one. Known headless quirks: a `cd` never survives between Bash calls in `-p`; `!` injections are

@@ -188,7 +188,7 @@ the constant `VULYK_undefined_<seat>_1` is unreachable. `stamp` appears in no se
 not the fixture: a hive whose `## Commands` cell is `` `sh -c 'echo a\b; exit 1'` `` yields
 `{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"sh -c 'echo a\\b; exit 1'"}` —
 `jq -e .` valid, `jq -r .error` byte-identical to the cell. A Windows-path cell
-`` `sh -c 'echo C:\path\to\x; exit 1'` `` likewise. `json_escape` (`cycle.sh:42-53`) runs backslash
+`` `sh -c 'echo <D>:\path\to\x; exit 1'` `` likewise. `json_escape` (`cycle.sh:42-53`) runs backslash
 first, then quote, then tab/newline, and `emit` pushes `verb`, `next` and `error` through it. The
 suite asserts both cases byte for byte and I watched them pass. Residual: only those four
 characters — **X-m1**.

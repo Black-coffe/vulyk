@@ -1,6 +1,6 @@
 # Board R2 - Sonnet 5.5 - cross-grill and vote
 
-Read-only everywhere except this file. I ran `redact.sh` and `defects-check.sh` read-only (the latter against D:/YouTube_AI, it executes that host's `check:` commands).
+Read-only everywhere except this file. I ran `redact.sh` and `defects-check.sh` read-only (the latter against <hive>, it executes that host's `check:` commands).
 
 ## 1. Checks
 

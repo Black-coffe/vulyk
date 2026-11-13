@@ -1,8 +1,8 @@
 # 0.19 build contract — defect library, hooks, manual wave dependency
 
 Shared by all build packages. Source of truth for formats; the plan is `plan.md` (approved 2026-09-27).
-Reference implementation (Russian, project-specific): `D:/YouTube_AI/docs/defects/`, `D:/YouTube_AI/scripts/defects-check.sh`,
-`D:/YouTube_AI/.claude/hooks/project-defect-intake.sh`. VULYK generalizes it; it must still read YouTube_AI's existing cards.
+Reference implementation (Russian, project-specific): `<hive>/docs/defects/`, `<hive>/scripts/defects-check.sh`,
+`<hive>/.claude/hooks/project-defect-intake.sh`. VULYK generalizes it; it must still read YouTube_AI's existing cards.
 
 ## 1. Defect card — `docs/defects/<id>.md` (one file per class; `README.md` is the index, never a card)
 

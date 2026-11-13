@@ -19,7 +19,7 @@ merged locally, not pushed.
   itself (marker: `telemetry/inbox/` exists - its Profile is the template), nor once the Profile carries a
   `| Bootstrap | declined <date> |` row (same pattern as the litopys offer's `Chronicle` row).
 - A3. Hosts are the distinct git repositories among the directories that carry `.claude/vulyk-version`
-  (`E:/Projects/*`, `D:/*`); the many `E:/Projects/fibi-*` directories are worktrees of one or a few repos -
+  (`<projects>/*`, `<D>:/*`); the many `<projects>/<hive>-*` directories are worktrees of one or a few repos -
   group them by `git rev-parse --git-common-dir` and upgrade each repo once, on its default branch.
 - A4. Host procedure (the rollout section below) runs after this spec ships, as operations in other
   repositories - not a story (Law 3: stories touch only VULYK's files).
@@ -41,7 +41,7 @@ merged locally, not pushed.
 ## Rollout (after ship, ask 4)
 For each host repository (A3), in this order - Varto first (the one on 0.19.1), then the rest:
 1. Read its state: `git -C <repo> status --short`, current branch, default branch, and whether
-   `E:/Projects/.vulyk-upgrade/<name>` (branch `vulyk/upgrade-0.19`) exists. A host whose main checkout is
+   `<projects>/.vulyk-upgrade/<name>` (branch `vulyk/upgrade-0.19`) exists. A host whose main checkout is
    dirty or not on its default branch: do the upgrade on the worktree branch, do not merge, report it.
 2. Upgrade on the branch `vulyk/upgrade-0.19` (rename to `vulyk/upgrade-0.22`), created from the default
    branch where it does not exist: `bash E:/Projects/vulyk/install.sh <worktree> --upgrade --constitution replace`

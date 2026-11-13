@@ -13,7 +13,7 @@ import json, os, re, sys, glob, csv, time, bisect
 from datetime import datetime
 from collections import defaultdict, Counter
 
-ROOT = os.path.expanduser(r'C:\Users\Andrei\.claude\projects')
+ROOT = os.path.expanduser('~/.claude/projects')
 OUT = os.path.dirname(os.path.abspath(__file__))
 SLUG_RE = re.compile(r'docs[/\\]+specs[/\\]+([A-Za-z0-9][A-Za-z0-9._-]*)')
 VULYK_AGENTS = {'worker-code', 'worker-test', 'council-sonnet', 'council-opus', 'council-haiku',

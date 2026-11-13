@@ -57,7 +57,7 @@ live hold on each ship. CHANGELOG `[Unreleased]` names the changes.
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
-- `scripts/hives-behind.sh`: new `--busy <hive>` and `--slug <path>` forms, ahead of the registry read. Slug = every non-alphanumeric character turned into `-`, checked against real `~/.claude/projects` folders (`.claude` -> `-claude`, `_` -> `-`). Git Bash `/e/x` is read as `E:/x`. Roots without an array (portability-check).
+- `scripts/hives-behind.sh`: new `--busy <hive>` and `--slug <path>` forms, ahead of the registry read. Slug = every non-alphanumeric character turned into `-`, checked against real `~/.claude/projects` folders (`.claude` -> `-claude`, `_` -> `-`). Git Bash `/<d>/x` is read as `<D>:/x`. Roots without an array (portability-check).
 - Stale `DRIVER` files left by old builds make a hive `busy` (the vulyk source itself has one from weekly-budget): safe direction, the hold reason names the file.
 - Impossible-day test: with the real-day `[ "$d" -le "$dim" ] || return 1` line replaced by `:`, both checks went red (2 failed), then restored.
 - Step 2a canary bullet left as written: a canary that is busy is held, so it is not green and the rollout waits, as for a red canary.

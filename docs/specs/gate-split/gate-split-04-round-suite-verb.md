@@ -47,7 +47,7 @@ Model: opus - a new verb inside the cycle's state machine (staleness, re-stamp, 
 memory/map/cycle.md `## Files, one writer each`, `## Verbs` (Full-suite line, Court setup), `## Staleness, PAUSE, seat
 reports`, `## Seats by tier and the verdict`, `## Repair`; memory/map/scripts.md `## Key contracts`
 (`is_paperwork_path`); plan.md `## Contracts` (Stepped row, `cycle.sh suite`, SUITE from the log, PART line);
-scout report C:/Users/Andrei/AppData/Local/Temp/claude/E--Projects-vulyk/aeafb186-f7ba-4c02-b8a1-680b8386863e/scratchpad/gs/scout-round.md.
+scout report <scratchpad>/gs/scout-round.md.
 
 ## Acceptance criteria
 - [ ] `suite` refuses (exit 2) with no open round, exits 5 on a stale one, and keeps the pause/driver/branch guards

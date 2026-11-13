@@ -7,6 +7,6 @@ None.
 ## Major
 None.
 ## Minor
-- .claude/hooks/session-start-brief.sh:20 the offer fires on any `<fill in` row, so four already-bootstrapped hosts (E:/Projects/AI, Recall, VPN, katan: only the later-added Client path and Release / deploy rows are placeholders) will be offered the full interview after the ask-4 rollout, where the brief's answer scoped it to an unconfigured project («ненастроенном проекте»); the owner can decline once, so nothing breaks
+- .claude/hooks/session-start-brief.sh:20 the offer fires on any `<fill in` row, so four already-bootstrapped hosts (<hive>, Recall, VPN, katan: only the later-added Client path and Release / deploy rows are placeholders) will be offered the full interview after the ask-4 rollout, where the brief's answer scoped it to an unconfigured project («ненастроенном проекте»); the owner can decline once, so nothing breaks
 - docs/specs/next-circle-0-22/plan.md:49 ask 4 (hosts upgraded and merged locally) has no deliverable on this branch by design (A4: post-ship operations in other repos); it stays open until the rollout report's one line per host exists
 - tests/maintenance.test.sh:235 `green_of` concatenates every `green` bullet of a command, so the needles would still pass if the question moved from the terminal bullet into another `green` bullet (vulyk-review step 1); harmless today

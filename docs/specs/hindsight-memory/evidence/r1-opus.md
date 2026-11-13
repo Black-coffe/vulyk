@@ -79,7 +79,7 @@ Evidence I gathered on disk for this section (read-only):
   them are `<task-notification>` blocks** (harness/subagent reports recorded as if the owner said them); 7 of 9
   journals affected. `raw-journal.sh` writes `.user_input // .prompt` verbatim (litopys `hooks/raw-journal.sh`
   l.98); `agents/distiller.md` has no rule separating human text from harness notices.
-- YouTube_AI's library (`D:/YouTube_AI/docs/defects/`, 22 cards, 113 `keys:`): **3 ambiguous key pairs** —
+- YouTube_AI's library (`<hive>/docs/defects/`, 22 cards, 113 `keys:`): **3 ambiguous key pairs** —
   `не дышит` in both `breath-cut` and `speech-cut`; `пустота` ⊂ `где пустота` (`dead-silence` /
   `overlay-on-busy-screen`); `неполно` ⊂ `неполноценно` (`shoot-step-guesswork` / `script-shallow`).
   `defect-intake.sh` matches keys by substring, so one remark names two classes.
@@ -212,5 +212,5 @@ a per-turn line, or prose that is supposed to change behaviour on its own.
 2. **P2** — distiller emits a `## Corrections` section of verbatim owner quotes, refused unless verbatim; VULYK's brief flags unfiled ones — builds the backstop grill 2026-09-27 D4 decided, and measures the intake regex's recall for the first time.
 3. **P3** — `defects-check.sh` goes red on a key shared or contained across two cards, so a split class cannot starve the debt counter (3 real pairs in YouTube_AI's 113 keys).
 
-_Status: complete. Nothing in E:/Projects/vulyk or D:/YouTube_AI was changed; `defects-check.sh` was run
+_Status: complete. Nothing in E:/Projects/vulyk or <hive> was changed; `defects-check.sh` was run
 read-only in YouTube_AI (it writes only a log under /tmp)._

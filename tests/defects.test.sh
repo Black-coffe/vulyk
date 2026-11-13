@@ -467,5 +467,38 @@ run a b; ok "two arguments -> exit 2" "$([ "$rc" = 2 ]; echo $?)"
 run ''; ok "an empty argument -> exit 2" "$([ "$rc" = 2 ]; echo $?)"
 cd "$SRC" || exit 1
 
+echo "--- leak-check: any outside path, the hive registry (audit-fixes-1113-04, contract K1)"
+# Deterministic lists: no private term file and a fixture registry, never the machine's own.
+LK="$TMP/leak"; mkdir -p "$LK"; : > "$LK/noterms"
+leak() { # leak <registry> <file>   -> the check's exit code; stdout+stderr in $LK/out
+  VULYK_PRIVATE_TERMS="$LK/noterms" VULYK_PRIVATE_TERMS_AUTO="$LK/noterms" VULYK_HIVES_FILE="$1" \
+    bash scripts/leak-check.sh "$2" > "$LK/out" 2>&1; echo $?
+}
+CARDX=docs/defects/host-internals-in-public-repo
+for fx in "$CARDX.abspath.fixture" "$CARDX.temppath.fixture" "$CARDX.original.fixture" "$CARDX.neighbour.fixture"; do
+  ok "leak-check: $fx -> exit 1" "$([ -f "$fx" ] && [ "$(leak "$LK/noreg" "$fx")" = 1 ]; echo $?)"
+done
+ok "leak-check: the plain-name fixture with the card's terms -> exit 1" \
+  "$([ "$(VULYK_EXTRA_TERMS="$CARDX.terms" leak "$LK/noreg" "$CARDX.plainname.fixture")" = 1 ]; echo $?)"
+ok "leak-check: the card lists both new fixtures" \
+  "$(grep -q '^fixtures: .*abspath\.fixture.*temppath\.fixture' "$CARDX.md"; echo $?)"
+DL=Q   # a stand-in hive root on a drive nobody uses, built from a variable so no literal path sits here
+printf '# fixture registry\n%s:/Stand/acme-hive | canary\n' "$DL" > "$LK/reg"
+printf 'Its transcripts sit in the folder %s--Stand-acme-hive under the projects dir.\n' "$DL" > "$LK/slug.txt"
+ok "leak-check: a file naming a root from the fixture registry -> exit 1" \
+  "$([ "$(leak "$LK/reg" "$LK/slug.txt")" = 1 ] && ! grep -q 'acme-hive' "$LK/out"; echo $?)"
+ok "leak-check: the same file with no registry -> exit 0, one stderr note" \
+  "$([ "$(leak "$LK/noreg" "$LK/slug.txt")" = 0 ] && [ "$(grep -c 'no hive registry' "$LK/out")" = 1 ]; echo $?)"
+RW="$(cd "$SRC" && { pwd -W 2>/dev/null || pwd; })"
+{ echo 'Run it with #!/usr/bin/env bash and send noise to /dev/null.'
+  echo 'The registry is ~/.vulyk/hives; a hive is written <drive>:/<hive>/docs or /home/<user>/<hive>.'
+  echo 'See https://github.com/example/repo/blob/main/x.md and file://localhost/etc/hosts.'
+  echo 'Git for Windows lives in C:/Program Files/Git/bin and C:\Windows\System32 holds cmd.exe.'
+  echo "This repo: $SRC/scripts/lib.sh and $RW/docs/defects/README.md."
+  echo 'A stand-in from a variable: $T/acme-hive/docs/specs/x.md.'
+} > "$LK/pass.txt"
+ok "leak-check: only passing forms -> exit 0" "$([ "$(leak "$LK/reg" "$LK/pass.txt")" = 0 ]; echo $?)"
+[ "$(cat "$LK/out")" = "" ] || sed 's/^/        /' "$LK/out"
+
 if [ "$fail" -eq 0 ]; then echo "defects.test.sh: all checks passed"; else echo "defects.test.sh: FAILED"; fi
 exit "$fail"

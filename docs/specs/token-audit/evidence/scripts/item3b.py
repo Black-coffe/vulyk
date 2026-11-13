@@ -11,7 +11,7 @@ x = g.instr.values; y = g.fc.values
 b, a0 = np.polyfit(x, y, 1)
 print('clerk first-request tokens ~= %.0f + %.3f * instr_chars (per-project medians, n=%d)' % (a0, b, len(g)))
 # instruction files of one recent clerk per project
-ROOT = os.path.expanduser(r'C:\Users\Andrei\.claude\projects')
+ROOT = os.path.expanduser('~/.claude/projects')
 seen = set()
 for r in cl.sort_values('start', ascending=False).itertuples():
     if r.project in seen: continue

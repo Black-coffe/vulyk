@@ -1,6 +1,6 @@
 # Research: three UI mods vs VULYK pulse (2026-11-05)
 
-Method: all three repos cloned read-only (depth 50) into `C:/Users/Andrei/AppData/Local/Temp/claude/mods-research/<name>/src`; nothing built or run. Repo code and `gh api` metadata = T1 for what a mod does. Official docs fetched 2026-11-05 from code.claude.com.
+Method: all three repos cloned read-only (depth 50) into `<claude-temp>/mods-research/<name>/src`; nothing built or run. Repo code and `gh api` metadata = T1 for what a mod does. Official docs fetched 2026-11-05 from code.claude.com.
 
 ## Snapshot (gh api + git log, 2026-11-05)
 

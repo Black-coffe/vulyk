@@ -1,6 +1,6 @@
 # Research: Anthropic mods (Blast Radius, Replay Theater, You Should Know) + platform claims
 
-Date: 2026-11-05. Local Claude Code 2.1.318. Sources read this session: repo files (raw), docs pages, CHANGELOG.md (raw, 9977 lines, last commit 2026-11-04). Clone copies (read-only, never run): `C:/Users/Andrei/AppData/Local/Temp/claude/mods-research/{blast-radius,replay-theater,CHANGELOG.md}`.
+Date: 2026-11-05. Local Claude Code 2.1.318. Sources read this session: repo files (raw), docs pages, CHANGELOG.md (raw, 9977 lines, last commit 2026-11-04). Clone copies (read-only, never run): `<claude-temp>/mods-research/{blast-radius,replay-theater,CHANGELOG.md}`.
 Grades: ✅ two T1/T2 sources fetched · ⚠️ true with a correction/nuance · ❌ contradicted · ❓ unverified.
 
 ## 1. Blast Radius (anthropics/claude-code-playground, `claude-code/mods/blast-radius`)

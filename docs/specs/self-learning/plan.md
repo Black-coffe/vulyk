@@ -6,7 +6,7 @@
   - гриль `docs/grill/2026-09-27-self-learning-corrections.md` (D1–D16 и Act 2);
   - обратная связь пилота `docs/grill/2026-09-27-self-learning-pilot-feedback.md` (YouTube_AI, спеки 15–16,
     ролик 3 принят владельцем без замечаний).
-- эталонная реализация: `D:/YouTube_AI` на `main` (b8473e8): `docs/defects/` (19 карточек), `scripts/defects-check.sh`,
+- эталонная реализация: `<hive>` на `main` (b8473e8): `docs/defects/` (19 карточек), `scripts/defects-check.sh`,
   `.claude/hooks/project-defect-intake.sh`, проверки `verify_edit.py`. VULYK переносит механизм, а не монтажные проверки.
 - масштаб: все хосты VULYK. Замечания бывают не только про монтаж: сценарий, подготовка, звук.
 

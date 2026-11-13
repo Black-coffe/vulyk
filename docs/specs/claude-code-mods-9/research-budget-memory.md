@@ -1,6 +1,6 @@
 # Research: Cache Tax, Savvy Progress, Reflect (2026-11-05)
 
-Method: shallow clones (read only, nothing run) in `C:/Users/Andrei/AppData/Local/Temp/claude/mods-research/`; `gh api` for repo meta; raw `.md` of official docs via curl (not WebFetch summaries). Repo code = T1 for what a mod does.
+Method: shallow clones (read only, nothing run) in `<claude-temp>/mods-research/`; `gh api` for repo meta; raw `.md` of official docs via curl (not WebFetch summaries). Repo code = T1 for what a mod does.
 Official sources: [CC-PC] https://code.claude.com/docs/en/prompt-caching.md (fetched 2026-11-05) · [PRICE] https://platform.claude.com/docs/en/about-claude/pricing.md (fetched 2026-11-05) · [VULYK] docs/specs/cache-economy/research-official.md (2026-09-30), docs/pulse.md, .claude/hooks/defect-intake.sh.
 
 ## Repo meta (gh api, 2026-11-05)

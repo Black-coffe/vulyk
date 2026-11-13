@@ -1,7 +1,7 @@
 """item6b.py - code-only changed lines (Edit/MultiEdit old+new lines, Write content lines; paperwork paths excluded)
 per unit of item6 (A tasks via slug of the editing agent / Queen; C and D sessions), then size-matched comparison by code lines."""
 import json, os, re, glob, collections, pandas as pd
-ROOT = os.path.expanduser(r'C:\Users\Andrei\.claude\projects')
+ROOT = os.path.expanduser('~/.claude/projects')
 PAPER = re.compile(r'(docs/specs/|/memory/|/\.claude/|/\.vulyk/|docs/adr/|docs/wiki/|\.md$|/tmp/|appdata/local/temp)')
 def nl(s): return (s.count('\n') + 1) if s else 0
 def code_lines(path):

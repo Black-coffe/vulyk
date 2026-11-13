@@ -3,9 +3,9 @@
 # card's Never (✗), How-to (→) and Allowed (✓) lines in front of the agent. Cards are read by
 # defects_lib.py beside this file. Contract: docs/specs/rules-tree/plan.md ## Contracts, Delivery.
 #
-#   defects-inject.sh          PreToolUse: globs match file_path / notebook_path (Edit family), the Bash
-#                              line's path tokens, or the `## Files` entries of a story file being Read
-#                              (docs/specs/<slug>/<name>.md with `story:`); `cmd:` the Bash line, `tool:`
+#   defects-inject.sh          PreToolUse: globs match file_path / notebook_path (Edit family), a Bash
+#                              or PowerShell line's path tokens, or the `## Files` entries of a story file being Read
+#                              (docs/specs/<slug>/<name>.md with `story:`); `cmd:` that command line, `tool:`
 #                              tool_name (any tool). Any other Read leaves in bash, before python starts.
 #   defects-inject.sh reset    SessionStart: source compact|clear forgets what this session was shown
 #
@@ -35,7 +35,7 @@ fi
 # a `tool:` entry can match it, so with no `tool:` in a card file it exits here too (P10-11). grep's 1 is
 # "read them all, none there"; a read error (2) goes on to python. `reset` always goes on.
 re='"tool_name"[[:space:]]*:[[:space:]]*"'
-re_path='"tool_name"[[:space:]]*:[[:space:]]*"(Edit|Write|MultiEdit|NotebookEdit|Bash|Read)"'
+re_path='"tool_name"[[:space:]]*:[[:space:]]*"(Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell|Read)"'
 if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ "${1:-}" != reset ]; then
   DD="$CLAUDE_PROJECT_DIR/docs/defects"; CARDS=()
   for f in "$DD"/*.md "$DD"/*/*.md; do
@@ -181,7 +181,7 @@ def main():
     if not isinstance(tool, str):
         return
     cmd, paths = '', []
-    if tool == 'Bash':
+    if tool in ('Bash', 'PowerShell'):  # a PowerShell command line is read as a Bash one
         cmd = ti.get('command') or ''
         if not isinstance(cmd, str):
             return

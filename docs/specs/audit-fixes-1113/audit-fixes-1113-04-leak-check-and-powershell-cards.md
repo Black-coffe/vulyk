@@ -1,8 +1,8 @@
 ---
 story: audit-fixes-1113-04
 spec: audit-fixes-1113
-status: todo
-returned: NEEDS_CONTEXT
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
@@ -157,6 +157,7 @@ per ask (14, 12). -->
 - Scan run: `git ls-files 'docs/**' 'memory/**' CHANGELOG.md tests/inject.test.sh` (card fixtures excluded) | `bash scripts/leak-check.sh` per file, with the real registry and term lists: no hit in any file (exit 0 for each).
 - Round 2 (Queen's ruling 31825646, scrub all): the 32 added files are scrubbed. Synthetic drive stand-ins became `<D>:/...` / `/<d>/...`; the owner's projects folder `<projects>/...` (`(path masked)` in the grill answer); home paths `<D>:/Users/<user>` and `/home/<user>`; the forensics temp path `<scratchpad>`; the Python install `<python>`; registry roots and the slug `<hive>` / `<hive slug>`. The four token-audit scripts read `~/.claude/projects`; item6c.py reads its slug list from `VULYK_HIVE_SLUGS`.
 - memory/map/scripts.md, listed in round 1's Findings, no longer hits (cleaned outside this story); not touched here.
+- Round 3: the two fixtures were committed by the Queen (5d09ae7a) and left `## Files`; the gate fix goes to story 09.
 - Suites now: defects.test.sh all passed, inject 106/0, intake 119/0, json clean (not yet run through close-story).
 CHANGELOG: leak-check flags any absolute path outside the VULYK root, Claude temp-folder paths and the hive roots of the private registry; the listed docs are scrubbed to shapes (ask 14).
 CHANGELOG: defect cards reach PowerShell commands as they reach Bash ones; the inject matcher includes PowerShell (ask 12).
