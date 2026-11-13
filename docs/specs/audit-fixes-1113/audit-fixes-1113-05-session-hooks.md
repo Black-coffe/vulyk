@@ -2,7 +2,7 @@
 story: audit-fixes-1113-05
 spec: audit-fixes-1113
 status: todo
-returned:
+returned: NEEDS_CONTEXT
 tier: 3
 worker: worker-code
 wave: 2
@@ -53,6 +53,7 @@ Marked red: new branches in hooks every session runs.
 - tests/maintenance.test.sh
 - tests/handoff-hooks.test.py
 - tests/handoff.test.sh
+- .claude/hooks/defects-inject.sh
 
 ## Non-goals
 - Do not switch the repository's template flag, push, or call the GitHub API: that is the owner's step at publish.
@@ -97,5 +98,13 @@ Marked red: new branches in hooks every session runs.
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each. End with one `CHANGELOG:` line
 per ask (16, 6, 18, 2). -->
+- agent_id check (installed Claude Code 2.1.323, read from the binary's bundled JS): the shared hook-input builder sets `agent_id: s?.agentId`; SessionStart passes `{agentId}` into it and PreCompact passes `agentId: r.agentId`, so both events carry `agent_id` for a subagent. Nothing built yet; tree left untouched apart from this file.
 
 ## Findings
+- NEEDS_CONTEXT (Non-goals: "A hook `settings.json` wires on these two events that is not in `## Files` is
+  `NEEDS_CONTEXT`, naming it"): `.claude/settings.json` wires `.claude/hooks/defects-inject.sh reset` on
+  SessionStart, and that file is not in `## Files`. Its `reset` branch writes for any caller: on `source`
+  compact/clear it deletes `.claude/state/defects/inject-<session>.txt` (the file is per session_id, which a
+  subagent shares with the main session), on `startup` it prunes week-old `inject-*` files. H1 needs it to exit
+  before that when `agent_id` is non-empty. Question: add `.claude/hooks/defects-inject.sh` to this story's
+  `## Files` (a one-line `agent_id` exit in the `reset` branch), or rule that it stays out of H1 here?
