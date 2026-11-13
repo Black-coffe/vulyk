@@ -50,11 +50,15 @@ evidence stays in the private audit folder.
   file gets the ignore line on `--upgrade` plus one line naming the untrack command; the installer never touches a
   hive's index. With the clean-tree exceptions gone, such a hive shows the counter as modified until it is
   untracked, so the rollout runs that command in each hive's upgrade commit.
-- **Ask 4, the quote rule** (contract O1): the note must contain one whole owner message, or one whole line of it,
-  or one whole `AskUserQuestion` answer, at least 8 letters or digits long, written after the spec's latest verdict.
-  A fragment cut out of a line does not count, so a refusal cannot be quoted as its last word. `briefed --go`
-  carries no note: it passes when an owner prompt of this session contains `--go`. A marker line that still holds
-  the template placeholder is not a record. Veto the numbers here if they are wrong.
+- **Ask 4, the quote rule** (contract O1; split by the owner on 2026-11-13, see `## Plan deltas`). A quote is one
+  whole owner message, one whole line of it, or one whole `AskUserQuestion` answer; a fragment cut out of a line
+  does not count. Plan approval (`**Approved:**`): the owner's latest message, written after the spec's
+  `vulyk(<slug>): plan` commit, of any length («Погнали», «да»). Release acceptance (`human-check.sh
+  ACCEPTED|REJECTED`, `**Checked:**`): only the answer to a one-question `AskUserQuestion` that names the spec
+  slug (the release question asked alone) or the owner's next message after that question, at least 8 letters
+  or digits unless it is a picked option, written after the spec's latest verdict. `briefed --go` carries no
+  note: it passes when an owner prompt of this session contains `--go`. A marker line that still holds the
+  template placeholder is not a record.
 - **Ask 7, failure.** When `redact.sh` cannot do its work, it withholds the text: one marker line on stdout, the
   reason on stderr, exit 1.
 - **Ask 8.** At Tier 3-4 a close with no recorded claim head refuses (a missing input is never a pass). Tier 1-2
@@ -158,7 +162,7 @@ evidence stays in the private audit folder.
   system locations (including `<drive>:/Program Files/` and `<drive>:/Windows/`, which `CHANGELOG.md` names today),
   a `<placeholder>` first segment.
 - **M1, inject matcher (story 04 writes `.claude/settings.json`, story 06 the installer).** The `defects-inject.sh`
-  entry's matcher is `Edit|Write|MultiEdit|Bash|PowerShell`.
+  entry's matcher is the existing one with `PowerShell` added (Read, NotebookEdit, `mcp__.*` and the rest stay).
 - **U1, upgrade base (story 06).** A hive file is a release copy only when it equals the blob of that path in tag
   `v<.claude/vulyk-version>`. Anything else is merged three-way with that blob as the base; a conflict keeps the
   hive's file and writes `<file>.vulyk-new`. The card's check is `bash scripts/upgrade-base-check.sh <arg>`, `<arg>`
@@ -226,6 +230,19 @@ evidence stays in the private audit folder.
 *(empty)*
 
 ## Plan deltas
+
+- 2026-11-13, wave 1 NEEDS_CONTEXT (stories 02, 03, 04), the Queen's rulings:
+  - 02: the red line was a 140-char line in `memory/map/scripts-hooks.md` from before the spec; the Queen
+    wrapped it (ca9ae757). Story unchanged.
+  - 03: removing `skills.json` from paperwork flips two cases in `tests/council.test.sh` (parts `seats`,
+    `escalate`) and cases in cycle parts `close`, `hooklog`: the file and the four parts join story 03.
+  - 04: the 26 further tracked files the new leak rule flags join story 04 and are scrubbed the same way, real
+    and synthetic alike (ask 14: today's hits replaced with stand-ins); `memory/map/scripts.md` was fixed by the
+    Queen (ca9ae757). M1 now reads: the existing matcher plus `PowerShell` (the worker's finding), story 06 too.
+- 2026-11-13, owner decision on the quote rule (option label, the agent's wording; cross-checked with Fable):
+  «План — одним словом, выпуск — строже (Рекомендую)». Plan approval takes the owner's latest message after the
+  plan commit, any length; release acceptance takes only the answer to the release question asked alone or the
+  owner's next message after it, 8+ letters or digits unless a picked option. Story 08 revised.
 
 <!--
 The lines below are the cycle's confirmation markers (docs/cycle.md); each placeholder is replaced by
