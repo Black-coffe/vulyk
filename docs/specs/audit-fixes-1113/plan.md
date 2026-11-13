@@ -234,6 +234,12 @@ evidence stays in the private audit folder.
 
 ## Plan deltas
 
+- 2026-11-14, story 06 NEEDS_CONTEXT: story 04's path scrub rewrote an owner-quote line of a block card, so
+  `defects-check.sh` (git-blame dating) saw a new quote and reported an ESCAPE. Root fix in story 06: blame with
+  `--ignore-revs-file docs/defects/.scrub-revs`, listing scrub-only commits; `scripts/defects-check.sh`,
+  `docs/defects/.scrub-revs` and `tests/defects.test.sh` join story 06 (none is named in wave 2; story 09 edits
+  `defects-check.sh` later, in wave 3).
+
 - 2026-11-13, story 06 NEEDS_CONTEXT: `PRE_M` (shared header of `tests/telemetry.test.sh`) moves to M1, and
   `tests/intake.test.sh` joins story 06; parts `install-xp2`, `library` and the defect-hooks row join its
   `## Verification`. Story 04 left those red when it put M1 into `.claude/settings.json`.
