@@ -1300,6 +1300,10 @@ def main():
     # Only hook modes consume stdin; dump/status are invoked from a shell where
     # a blind stdin read could block on an open pipe.
     payload = read_stdin_json() if mode in HOOK_MODES else {}
+    # H1 (audit-fixes-1113): a subagent's SessionStart or PreCompact is not the session's - no handoff
+    # offered or marked read, no dump written, nothing printed.
+    if mode in ("sessionstart", "precompact") and payload.get("agent_id"):
+        emit(None)
     root = project_root(payload)
     cfg = load_config(root)
 

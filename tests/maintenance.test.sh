@@ -322,6 +322,147 @@ brief_home "$H" "$LN" | expect_absent "brief: local scope (settings.local.json) 
 H="$(hive lit-none)"
 brief_home "$H" "$LN" | expect "brief: neither scope, the offer still shows" "$LIT_LINE"
 
+# --- H1: SessionStart and PreCompact hooks stay silent for a subagent (audit-fixes-1113-05, ask 16) -------
+# Every command .claude/settings.json wires on the two events runs in a scratch project, the way Claude Code
+# runs it, with an input carrying agent_id: no output, exit 0, no file created or changed, no network call.
+echo "--- H1: a subagent's SessionStart and PreCompact hooks print and write nothing"
+SP="$T/h1-proj"; H1C="$T/h1-conf"; H1B="$T/h1-bin"; H1L="$T/h1-curl.log"
+mkdir -p "$SP/.claude/hooks" "$SP/.claude/state/defects" "$SP/.claude/handoff" "$SP/scripts" \
+  "$SP/memory/map" "$SP/memory/stats" "$SP/docs/specs" "$H1C" "$H1B" "$T/h1-home"
+cp "$SRC"/.claude/hooks/*.sh "$SRC"/.claude/hooks/*.py "$SP/.claude/hooks/"
+cp -R "$SRC/scripts/." "$SP/scripts/"
+cp "$SRC/.claude/settings.json" "$SP/.claude/settings.json"
+echo "# index" > "$SP/memory/memory.md"; echo "0.1.0" > "$SP/.claude/vulyk-version"
+echo "seen" > "$SP/.claude/state/defects/inject-h1-s.txt"
+echo "old" > "$SP/.claude/state/defects/inject-old.txt"
+touch -t "$(date_shift -9 +%Y%m%d%H%M)" "$SP/.claude/state/defects/inject-old.txt"
+printf -- '---\nhandoff: true\n---\n\n# Handoff\n\nH1-SEED\n' > "$SP/.claude/handoff/seed.md"
+printf '{"path": "%s", "session_id": "prev", "reason": "sessionend-clear", "ts": %s}\n' \
+  "$({ cygpath -w "$SP/.claude/handoff/seed.md" 2>/dev/null || printf '%s' "$SP/.claude/handoff/seed.md"; } | sed 's#\\#\\\\#g')" "$(date +%s)" > "$SP/.claude/handoff/index.json"
+cat > "$H1B/curl" <<'SH'
+#!/usr/bin/env bash
+echo call >> "$H1_CURL_LOG"
+printf '%s\n' '[{"name":"v99.0.0"}]'
+SH
+chmod +x "$H1B/curl" "$SP"/.claude/hooks/*.sh
+"$PYBIN" -c '
+import json, sys
+s = json.load(sys.stdin)
+for ev in ("SessionStart", "PreCompact"):
+    for g in s.get("hooks", {}).get(ev, []):
+        for h in g.get("hooks", []):
+            print(ev + "\t" + h["command"])' < "$SRC/.claude/settings.json" | tr -d '\r' > "$T/h1-cmds"
+h1_tree() { # every file and folder under the scratch project and the config dir, with its checksum
+  ( cd "$T" && find h1-proj h1-conf -type d | LC_ALL=C sort && find h1-proj h1-conf -type f -exec cksum {} + | LC_ALL=C sort )
+}
+h1_run() { # h1_run <command> <payload> -> stdout in $T/h1.out, exit code in $T/h1.rc
+  ( cd "$SP" && printf '%s' "$2" | env -u VULYK_YSK_OFFER -u VULYK_UPDATE_CHECK -u VULYK_TOP_MODEL_BRIEF \
+      -u DISABLE_TELEMETRY -u CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC -u CLAUDE_CODE_USE_BEDROCK \
+      -u CLAUDE_CODE_USE_VERTEX -u CLAUDE_CODE_USE_FOUNDRY -u VULYK_REPO \
+      CLAUDE_PROJECT_DIR="$SP" CLAUDE_CONFIG_DIR="$H1C" HOME="$T/h1-home" USERPROFILE="$T/h1-home" \
+      H1_CURL_LOG="$H1L" PATH="$H1B:$PATH" bash -c "$1" > "$T/h1.out" 2>/dev/null; echo "$?" > "$T/h1.rc" )
+}
+SUB='"agent_id":"a1b2c3d4","agent_type":"worker-code"'
+if [ "$(grep -c '^SessionStart' "$T/h1-cmds")" -ge 6 ] && [ "$(grep -c '^PreCompact' "$T/h1-cmds")" -ge 2 ]; then
+  ok "H1: the SessionStart and PreCompact commands come from .claude/settings.json ($(grep -c . "$T/h1-cmds"))"
+else bad "H1: too few SessionStart/PreCompact commands read from .claude/settings.json:"; sed 's/^/        /' "$T/h1-cmds"; fi
+h1_tree > "$T/h1-before"; : > "$H1L"
+while IFS="$(printf '\t')" read -r ev cmd; do
+  case "$ev" in
+    SessionStart) payloads="startup clear" ;;
+    *) payloads="auto" ;;
+  esac
+  for src in $payloads; do
+    if [ "$ev" = SessionStart ]; then pl="{\"session_id\":\"h1-s\",\"hook_event_name\":\"SessionStart\",\"source\":\"$src\",$SUB}"
+    else pl="{\"session_id\":\"h1-s\",\"hook_event_name\":\"PreCompact\",\"trigger\":\"$src\",$SUB}"; fi
+    h1_run "$cmd" "$pl"
+    name="${cmd##*/}"
+    if [ "$(cat "$T/h1.rc")" = 0 ] && [ ! -s "$T/h1.out" ]; then
+      ok "H1 $ev $name ($src) with agent_id: a subagent session start prints nothing"
+    else
+      bad "H1 $ev $name ($src) with agent_id: a subagent session start prints nothing - exit $(cat "$T/h1.rc"), stdout:"
+      sed 's/^/        /' "$T/h1.out" | head -5
+    fi
+  done
+done < "$T/h1-cmds"
+h1_tree > "$T/h1-after"
+if cmp -s "$T/h1-before" "$T/h1-after"; then
+  ok "H1: a subagent session start prints nothing and writes nothing under the scratch project or the config dir"
+else
+  bad "H1: a subagent session start prints nothing - but it wrote files:"; diff "$T/h1-before" "$T/h1-after" | sed 's/^/        /' | head -12
+fi
+[ -s "$H1L" ] && bad "H1: a subagent session start prints nothing - but the update check called the network ($(grep -c . "$H1L"))" \
+  || ok "H1: a subagent's update check makes no network call (curl stub)"
+# The same inputs without agent_id behave as before.
+SS="$(grep '^SessionStart' "$T/h1-cmds" | cut -f2-)"; PC="$(grep '^PreCompact' "$T/h1-cmds" | cut -f2-)"
+pl_main='{"session_id":"h1-s","hook_event_name":"SessionStart","source":"startup"}'
+h1_run "$(printf '%s\n' "$SS" | grep 'session-start-brief.sh')" "$pl_main"
+expect "H1: without agent_id the brief still prints its line" "[VULYK]" < "$T/h1.out"
+h1_run "$(printf '%s\n' "$SS" | grep 'vulyk-update-check.sh')" "$pl_main"
+expect "H1: without agent_id the update check still reports a newer tag" "update available" < "$T/h1.out"
+[ -s "$H1L" ] && ok "H1: ... through the network (curl stub called)" || bad "H1: the main session's update check made no call"
+h1_run "$(printf '%s\n' "$SS" | grep 'ysk-offer.sh')" "$pl_main"
+expect "H1: without agent_id the You should know offer still shows" "systemMessage" < "$T/h1.out"
+h1_run "$(printf '%s\n' "$SS" | grep 'defects-inject.sh reset')" "$pl_main"
+[ ! -e "$SP/.claude/state/defects/inject-old.txt" ] && ok "H1: without agent_id the reset still prunes a week-old inject file" \
+  || bad "H1: the main session's reset left a 9-day-old inject file"
+h1_run "$(printf '%s\n' "$SS" | grep 'handoff.sh')" '{"session_id":"h1-m","hook_event_name":"SessionStart","source":"clear"}'
+expect "H1: without agent_id a /clear still restores the pending handoff" "H1-SEED" < "$T/h1.out"
+h1_run "$(printf '%s\n' "$PC" | grep 'context-guard.sh')" '{"session_id":"h1-s","hook_event_name":"PreCompact","trigger":"auto"}'
+expect "H1: without agent_id the PreCompact snapshot is still taken" "context-guard: snapshot saved" < "$T/h1.out"
+
+# --- the brief: no Python 3, a GitHub template copy, the skill counter (audit-fixes-1113-05, asks 6, 18, 2) -----
+echo "--- brief: one line when no Python 3 answers"
+NP="$T/nopy-bin"; mkdir -p "$NP"
+for n in python3 python py; do printf '#!/bin/sh\nexit 49\n' > "$NP/$n"; chmod +x "$NP/$n"; done
+H="$(hive nopy)"
+out="$(echo '{}' | VULYK_PY= PATH="$NP:$PATH" CLAUDE_PROJECT_DIR="$H" CLAUDE_CONFIG_DIR="$T/conf-none" bash "$BRIEF_HOOK" 2>&1)"
+n="$(printf '%s\n' "$out" | grep -c '^\[VULYK\] no Python 3 found')"
+[ "$n" = 1 ] && ok "brief: stubs that fail to launch and no VULYK_PY print exactly one 'no Python 3 found' line" \
+  || { bad "brief: expected one '[VULYK] no Python 3 found' line, got $n:"; printf '%s\n' "$out" | sed 's/^/        /'; }
+brief_of "$H" | expect_absent "brief: with Python present, no Python line" "no Python 3 found"
+
+echo "--- brief: a GitHub template copy is named once"
+H="$(hive tpl-copy)"; : > "$H/install.sh"; mkdir -p "$H/docs/specs/auto-maintenance"
+out="$(brief_of "$H")"
+n="$(printf '%s\n' "$out" | grep -c 'template copy')"
+[ "$n" = 1 ] && ok "brief: a template copy (VULYK's specs, install.sh, no stamp, no v* tag) gets one line" \
+  || { bad "brief: expected one template-copy line, got $n:"; printf '%s\n' "$out" | sed 's/^/        /'; }
+printf '%s' "$out" | expect "brief: the template-copy line points at the recovery text" "Started from the GitHub template"
+H="$(hive tpl-hive)"; : > "$H/install.sh"; mkdir -p "$H/docs/specs/auto-maintenance" "$H/.claude"
+echo "0.52.0" > "$H/.claude/vulyk-version"
+brief_of "$H" | expect_absent "brief: a hive with .claude/vulyk-version is no template copy" "template copy"
+H="$(hive tpl-clone)"; : > "$H/install.sh"; mkdir -p "$H/docs/specs/auto-maintenance"; git -C "$H" tag v0.1.0
+brief_of "$H" | expect_absent "brief: a source clone with a v* tag is no template copy" "template copy"
+for f in README.md docs/getting-started.md; do
+  if grep -qiE 'Use this template|GitHub template \(button above\)|new project from template' "$SRC/$f"; then
+    bad "$f still offers the GitHub template as a way to start: $(grep -niE 'Use this template|GitHub template \(button above\)|new project from template' "$SRC/$f" | head -2 | tr '\n' ' ')"
+  else ok "$f no longer offers the GitHub template as a way to start"; fi
+  grep -qF "Started from the GitHub template" "$SRC/$f" && ok "$f carries the recovery line for a template copy" \
+    || bad "$f carries no recovery line ('Started from the GitHub template') for a template copy"
+done
+
+echo "--- skill counter: VULYK's own skills and vulyk-* commands only"
+SK="$T/skc"; mkdir -p "$SK/.claude/skills/own-skill" "$SK/.claude/commands" "$SK/memory/stats"
+echo "x" > "$SK/.claude/skills/own-skill/SKILL.md"; echo "x" > "$SK/.claude/commands/vulyk-plan.md"
+printf '{"foreign-skill":{"count":4,"last_used":"2026-01-01"},"own-skill":{"count":1,"last_used":"2026-01-01"}}\n' \
+  > "$SK/memory/stats/skills.json"
+skill_ev() { printf '{"tool_name":"Skill","tool_input":{"skill":"%s"}}' "$1" |
+  CLAUDE_PROJECT_DIR="$SK" bash "$SRC/.claude/hooks/skill-usage-counter.sh"; }
+skill_ev own-skill; skill_ev vulyk-plan; skill_ev some-plugin:other; skill_ev other-skill
+got="$("$PYBIN" -c '
+import json, sys
+d = json.load(sys.stdin)
+print(" ".join("%s=%d" % (k, d[k]["count"]) for k in sorted(d)))' < "$SK/memory/stats/skills.json" 2>&1 | tr -d '\r')"
+[ "$got" = "own-skill=2 vulyk-plan=1" ] && ok "skill counter: a project skill and a vulyk-* command counted, others not written, a foreign key dropped" \
+  || bad "skill counter: expected 'own-skill=2 vulyk-plan=1', got '$got'"
+grep -q "$(printf '\r')" "$SK/memory/stats/skills.json" && bad "skill counter: skills.json has CR bytes" \
+  || ok "skill counter: skills.json stays LF"
+[ -z "$(git -C "$SRC" ls-files memory/stats/skills.json)" ] && git -C "$SRC" check-ignore -q memory/stats/skills.json \
+  && ok "memory/stats/skills.json is untracked and gitignored" || bad "memory/stats/skills.json is tracked or not ignored"
+grep -q 'skills.json' "$BRIEF_HOOK" && bad "the brief still special-cases memory/stats/skills.json" \
+  || ok "the brief no longer special-cases memory/stats/skills.json"
+
 # --- the evolve ledger (auto-maintenance-03) ------------------------------------------------------
 echo "--- evolve ledger"
 EL="$SRC/scripts/evolve-ledger.py"

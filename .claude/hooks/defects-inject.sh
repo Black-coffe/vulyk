@@ -25,6 +25,10 @@
 # always ends in sys.exit(0)); its output is held until then, so the Windows Store `python3` alias
 # (9009), a Python 2 that cannot read this file (1) or a broken install prints nothing.
 IN="$(cat)"
+# H1 (audit-fixes-1113): `reset` for a subagent (a non-empty agent_id) exits before python: the state file is per
+# session_id, which a subagent shares with its session, so a reset there would wipe the session's own record.
+re_agent='"agent_id"[[:space:]]*:[[:space:]]*"[^"]'
+[ "${1:-}" = reset ] && [[ $IN =~ $re_agent ]] && exit 0
 # Read is on the matcher for story files only: every other Read exits here, without a python start.
 re='"tool_name"[[:space:]]*:[[:space:]]*"Read"'
 if [[ $IN =~ $re ]]; then

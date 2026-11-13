@@ -12,6 +12,11 @@
 #   VULYK_YSK_OFFER=0        never show the offer
 #   CLAUDE_CONFIG_DIR        where the user's settings and the counter live (default ~/.claude)
 set -uo pipefail
+# H1 (audit-fixes-1113): a subagent's input carries a non-empty agent_id, and its SessionStart is not the
+# session's: exit 0, print nothing, write nothing. A shell call has no input to give: no wait on a terminal, 1 s on a pipe.
+IN=""; [ -t 0 ] || IFS= read -r -d '' -t 1 IN || true
+re_agent='"agent_id"[[:space:]]*:[[:space:]]*"[^"]'
+[[ $IN =~ $re_agent ]] && exit 0
 
 [ "${VULYK_YSK_OFFER:-1}" = "0" ] && exit 0
 

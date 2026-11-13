@@ -14,6 +14,11 @@
 #   VULYK_UPDATE_INTERVAL_HOURS=6   how often the network is actually touched (default 6)
 #   VULYK_REPO=owner/name           override the origin (forks); or a `.claude/vulyk-origin` file
 set -uo pipefail
+# H1 (audit-fixes-1113): a subagent's input carries a non-empty agent_id, and its SessionStart is not the
+# session's: exit 0, print nothing, write nothing. A shell call has no input to give: no wait on a terminal, 1 s on a pipe.
+IN=""; [ -t 0 ] || IFS= read -r -d '' -t 1 IN || true
+re_agent='"agent_id"[[:space:]]*:[[:space:]]*"[^"]'
+[[ $IN =~ $re_agent ]] && exit 0
 
 [ "${VULYK_UPDATE_CHECK:-1}" = "0" ] && exit 0
 

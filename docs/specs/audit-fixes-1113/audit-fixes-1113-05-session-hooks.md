@@ -1,14 +1,15 @@
 ---
 story: audit-fixes-1113-05
 spec: audit-fixes-1113
-status: todo
-returned: NEEDS_CONTEXT
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 2
 blocked_by: [audit-fixes-1113-01, audit-fixes-1113-02]
 red: required
 red_reason: a subagent session start prints nothing
+red_verified_at: 2026-11-13T21:31:44Z 88fab6f564035645d09ace9985250b3936c29d4eddb0be1dd3e0148166d27637
 ---
 
 # Session hooks stay silent for a subagent; the brief names a missing Python and a template copy; the counter counts VULYK's own skills
@@ -99,6 +100,20 @@ Marked red: new branches in hooks every session runs.
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each. End with one `CHANGELOG:` line
 per ask (16, 6, 18, 2). -->
 - agent_id check (installed Claude Code 2.1.323, read from the binary's bundled JS): the shared hook-input builder sets `agent_id: s?.agentId`; SessionStart passes `{agentId}` into it and PreCompact passes `agentId: r.agentId`, so both events carry `agent_id` for a subagent. Nothing built yet; tree left untouched apart from this file.
+- The Findings question above was answered by the plan delta (05: `defects-inject.sh` joined `## Files`); built on that.
+- H1 bash hooks (`session-start-brief.sh`, `top-model-brief.sh`, `vulyk-update-check.sh`, `ysk-offer.sh`, `context-guard.sh`): one guard at the top reads stdin (skipped on a terminal, `read -t 1` on a pipe so a shell call never hangs) and exits 0 on a non-empty string `agent_id`.
+- H1 `defects-inject.sh`: `reset` with an `agent_id` exits in bash before python starts (python would also write `__pycache__` beside the hook); the PreToolUse path is untouched.
+- H1 `handoff.py`: `sessionstart`/`precompact` with an `agent_id` emit nothing right after the payload read, before config or state; `handoff.sh` needed no change (stdin passes through).
+- Brief, ask 6: probes `$VULYK_PY`, python3, python, py by running `-c` with a version check (one Python start per session start; a resolving Store alias fails it); one line when none answers.
+- Brief, ask 18: template copy = no `.claude/vulyk-version`, `install.sh` at root, `docs/specs/auto-maintenance` or `docs/specs/gate-split`, no `v*` tag; the line points at "Started from the GitHub template" in README.md / docs/getting-started.md. A tagless shallow clone of VULYK would also match.
+- Brief, ask 2: the clean-tree exception for `memory/stats/skills.json` is gone from the maintenance line.
+- Counter: counts a name with a folder under `.claude/skills/` or a `vulyk-*` name with `.claude/commands/<name>.md`; names with path characters are refused; keys failing the rule are dropped on each write; creates `{}` when `memory/stats/` exists but the file does not (the file is no longer shipped or tracked, so it would otherwise never count).
+- README: Option A (template) removed, Option B renamed "Add to a project, new or existing", recovery paragraph added; getting-started: same.
+- Tests: `maintenance.test.sh` new H1 block (commands read from `.claude/settings.json`, scratch project with copied hooks/scripts, curl stub, tree checksum before/after, main-session contrast) plus brief/README/counter checks; `handoff-hooks.test.py` H1 cases (no handoff offered or marked to a subagent, delivered once to the main session after, no PreCompact dump).
+CHANGELOG: SessionStart and PreCompact hooks exit silently for a subagent: no handoff offered or marked read, no dump, no snapshot, no update-check call, no inject reset (ask 16).
+CHANGELOG: The SessionStart brief says in one line when no Python 3 answers in the hooks' launcher order (ask 6).
+CHANGELOG: The GitHub template quick start is gone from README and getting-started, a recovery paragraph replaces it, and the brief names a template copy (ask 18).
+CHANGELOG: The skill counter counts only project skills and vulyk-* commands and drops foreign keys; the brief no longer exempts skills.json from the clean tree (ask 2).
 
 ## Findings
 - NEEDS_CONTEXT (Non-goals: "A hook `settings.json` wires on these two events that is not in `## Files` is
@@ -108,3 +123,26 @@ per ask (16, 6, 18, 2). -->
   subagent shares with the main session), on `startup` it prunes week-old `inject-*` files. H1 needs it to exit
   before that when `agent_id` is non-empty. Question: add `.claude/hooks/defects-inject.sh` to this story's
   `## Files` (a one-line `agent_id` exit in the `reset` branch), or rule that it stays out of H1 here?
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: 88fab6f564035645d09ace9985250b3936c29d4eddb0be1dd3e0148166d27637 (tests/handoff.test.sh, tests/maintenance.test.sh)
+- impl: 1efd4ec98c1741a342530e3ce9b51a7b8fdad1b96147be53f3f49d412a0961d9
+- stamped: 2026-11-13T21:31:44Z
+
+```
+::error::H1 SessionStart session-start-brief.sh (startup) with agent_id: a subagent session start prints nothing - exit 0, stdout:
+::error::H1 SessionStart session-start-brief.sh (clear) with agent_id: a subagent session start prints nothing - exit 0, stdout:
+::error::H1 SessionStart top-model-brief.sh (startup) with agent_id: a subagent session start prints nothing - exit 0, stdout:
+  ok    ship 2a: the plugin.json version moves with VERSION
+  ok    ship 2a: the dev build gets a local tag for the next upgrade
+  ok    ship 2a: a reverted canary is held too
+  ok    ship 2: in the VULYK source the build number comes from 2a
+  ok    ship 2a: the canaries go first
+  ok    ship 2a: a red canary stops the rollout
+--- beta-fixes-1113-03: a paperwork-only suite.log head, --go from the owner
+  ok    lead-review: a suite.log head that differs only by paperwork commits is not reported
+  ok    plan: --go comes only from the owner's own words
+maintenance.test.sh: 741 checks, 23 failed
+```
