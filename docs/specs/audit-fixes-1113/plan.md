@@ -234,6 +234,13 @@ evidence stays in the private audit folder.
 
 ## Plan deltas
 
+- 2026-11-13, story 06 NEEDS_CONTEXT: `PRE_M` (shared header of `tests/telemetry.test.sh`) moves to M1, and
+  `tests/intake.test.sh` joins story 06; parts `install-xp2`, `library` and the defect-hooks row join its
+  `## Verification`. Story 04 left those red when it put M1 into `.claude/settings.json`.
+- 2026-11-13, owner decision (option label, cross-checked with Fable): «Чистить только новое (Рекомендую)». Only current
+  files are scrubbed (story 04). No
+  name from the private client list was found in the published versions.
+
 - 2026-11-13, wave 2 NEEDS_CONTEXT, the Queen's rulings:
   - 05: `.claude/hooks/defects-inject.sh` joins the story; its `reset` branch (SessionStart) exits for a subagent too (H1).
   - 06: the two `edits` assertions of `tests/telemetry.test.sh` that encode the old upgrade base are rewritten to
