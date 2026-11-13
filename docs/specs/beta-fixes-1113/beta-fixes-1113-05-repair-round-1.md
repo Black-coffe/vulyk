@@ -1,13 +1,14 @@
 ---
 story: beta-fixes-1113-05
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 3
 blocked_by: []
 red: required
-red_reason:
+red_reason: lead-review paperwork-only rule omits memory/stats/anomalies.jsonl
+red_verified_at: 2026-11-13T10:07:34Z bf9129c2e366cf81bd7523e093946a393a0700548c4c4b5b0c1232318de33a90
 ---
 
 # Repair round 1
@@ -45,3 +46,31 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 ## Verification
 `bash tests/council.test.sh --part verbs`
 `bash tests/council.test.sh --part advance`
+
+## Implementation notes
+- tests/council.test.sh: part `verbs` split into `verbs`, `verbs2` (narrow-round record), `verbs3` (ask 1 numbered-finding cases kept); shared helpers `fm_field_v`/`nr_full` defined for both. Local runs: verbs 54 s, verbs2 69 s, verbs3 112 s, all exit 0; cap 300 s unchanged.
+- tests/council.test.sh: ask 5 check that lead-review's paperwork-only rule names `memory/stats/anomalies.jsonl` (sealed red).
+- .claude/agents/lead-review.md: the paperwork-only head rule now also counts `memory/stats/anomalies.jsonl`, which every paperwork commit carries.
+
+- Red receipt re-stamped: the test split landed after the first receipt; lead-review edit reverted, stamp-red rerun (impl hash unchanged), edit re-applied.
+
+## Red receipt
+- command: bash tests/council.test.sh --part verbs
+- exit: 1
+- tests: bf9129c2e366cf81bd7523e093946a393a0700548c4c4b5b0c1232318de33a90 (tests/council.test.sh)
+- impl: f9bfeacc93d97db126a3964cccf6f6be9e9cfa24c5ad877149c205e828461cf2
+- stamped: 2026-11-13T10:07:34Z
+
+```
+::error::lead-review paperwork-only rule omits memory/stats/anomalies.jsonl
+  ok    unanchored BLOCK -> next green
+  ok    row GREEN, review PASS, review_asks:[], note 'review BLOCK unanchored'
+judge: review BLOCK tagged [ask 9] on a 3-ask brief -> unanchored -> GREEN
+  ok    out-of-range [ask 9] / [ask 0] count as unanchored
+judge: unanchored BLOCK does not mask a seat RED -> still RED
+  ok    seat RED still repairs; review recorded PASS
+status: an older row without review_asks still parses
+  ok    status reads a pre-review_asks row
+beta-fixes-1113 (ask 5): lead-review's paperwork-only head rule counts memory/stats/anomalies.jsonl, which every paperwork commit carries
+::error::lead-review paperwork-only rule omits memory/stats/anomalies.jsonl
+```

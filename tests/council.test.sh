@@ -20,7 +20,7 @@
 # every replay against a pinned commit. On Windows each cycle.sh call costs about a second of
 # process spawns, so the full run is ~10 minutes and stays the release gate.
 set -u
-PARTS="verbs judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite suite2 suite3 hardening" # one topic each; every part rebuilds the shared setup below
+PARTS="verbs verbs2 verbs3 judge judge2 seats seats2 seats3 close escalate escalate2 ceilings ceilings2 replays replays2 replays3 walks walks2 walks3 driver roster roster2 advance suite suite2 suite3 hardening" # one topic each; every part rebuilds the shared setup below
 QUICK=0 PART=''
 usage() { echo "usage: bash tests/council.test.sh [--quick] [--part <name>] [--list-parts]" >&2; }
 while [ $# -gt 0 ]; do
@@ -666,6 +666,16 @@ out="$(council status docs/specs/oldrow1 --json)"; ex=$?
   && echo "  ok    status reads a pre-review_asks row" || { echo "::error::oldrow1: exit=$ex out=$out"; fail=1; }
 fi # --quick: end of the anchored-BLOCK skip
 
+echo "beta-fixes-1113 (ask 5): lead-review's paperwork-only head rule counts memory/stats/anomalies.jsonl, which every paperwork commit carries"
+awk '/differs from your head only by paperwork commits/ { on = 1 } on { print } on && /keeps the `## Minor` above/ { exit }' "$SRC/.claude/agents/lead-review.md" | grep -qF 'memory/stats/anomalies.jsonl' \
+  && echo "  ok    lead-review: a head moved only by commits that add memory/stats/anomalies.jsonl is still the round's own log" \
+  || { echo "::error::lead-review paperwork-only rule omits memory/stats/anomalies.jsonl"; fail=1; echo "lead-review anomalies.jsonl" >> "$FAILS"; }
+fi # part verbs
+if part verbs2 || part verbs3; then # the narrow-round helpers verbs2 and verbs3 share (beta-fixes-1113 repair 1)
+fm_field_v() { awk -v k="$2" 'NR == 1 && /^---/ { on = 1; next } on && /^---/ { exit } on && index($0, k ": ") == 1 { print substr($0, length(k) + 3); exit }' "$1" 2>/dev/null; } # fm_field_v <file> <key> - a frontmatter value
+nr_full() { grep -qx 'seats=opus review' "docs/specs/$1/council/round-2/ROUND" && ! grep -q '^narrow=' "docs/specs/$1/council/round-2/ROUND"; } # nr_full <slug>
+fi
+if part verbs2; then # --- part verbs2 (beta-fixes-1113 repair 1: verbs, second part): the narrow-round record is the cycle's own
 echo "upgrade-findings-05 (A3): a round is narrow only by the cycle's own record, re-checked when it opens"
 nr_red() { # nr_red <slug> <review-report> - a Tier 3 spec with stories on app/x.py and app/y.py, round 1 judged RED on <review-report>, then repaired
   mk_open_spec "$1" 2; set_tier "$1" 3
@@ -685,8 +695,6 @@ nr_round2() { # nr_round2 <slug> - the repair story marked done with a code chan
   echo "x = 2" > app/x.py && git add -A && git commit -qm "$1: the repair" >/dev/null
   NR_ERR="$(council open-round "docs/specs/$1" --commit 2>&1 >/dev/null)"
 }
-fm_field_v() { awk -v k="$2" 'NR == 1 && /^---/ { on = 1; next } on && /^---/ { exit } on && index($0, k ": ") == 1 { print substr($0, length(k) + 3); exit }' "$1" 2>/dev/null; } # fm_field_v <file> <key> - a frontmatter value
-nr_full() { grep -qx 'seats=opus review' "docs/specs/$1/council/round-2/ROUND" && ! grep -q '^narrow=' "docs/specs/$1/council/round-2/ROUND"; } # nr_full <slug>
 nr_red nrf 'VERDICT: BLOCK\n## Major\n- [ask 1] app/x.py:1 off by one\n- [ask 2] app/x.py:2 wrong name\n'
 nrsha="$(git log -1 --format=%h -- "$NR_RS")"
 awk '{ print } /^model: opus$/ { print "narrow: true" }' "$NR_RS" > "$NR_RS.new" && mv "$NR_RS.new" "$NR_RS"
@@ -724,7 +732,8 @@ nr_round2 nrr
 [ -f "$NR_REC" ] && nr_full nrr && printf '%s' "$NR_ERR" | grep -qF 're-check' \
   && echo "  ok    a record whose rule no longer holds on round 1's records: a full round, stderr names the re-check" \
   || { echo "::error::re-check: ROUND=$(cat docs/specs/nrr/council/round-2/ROUND 2>&1) stderr=$NR_ERR"; fail=1; echo "narrow re-check" >> "$FAILS"; }
-
+fi # part verbs2
+if part verbs3; then # --- part verbs3 (beta-fixes-1113 repair 1: verbs, third part): a numbered finding names its file
 echo "beta-fixes-1113 (ask 1): a numbered finding names its file, not its number; a finding with no real path is a full round"
 grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
 printf '| Full suite (round-only) | `true` |\n' >> CLAUDE.md
@@ -783,7 +792,7 @@ nb_red nbp 'VERDICT: BLOCK\n## Major\n- [ask 1] the loop is off by one\n'
 nb_round2 nbp; nb_full nbp "a finding with no path: a full round, suite runs its step"
 grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
 git add -A && git commit -qm "fixture: no full-suite row" >/dev/null
-fi # part verbs
+fi # part verbs3
 if part judge; then # --- part judge: the ceiling, no-progress and half walks, ABSENT/N/A/REJECTED, journal, briefed, branch, git failures, court setup
 if full; then # --quick skips: the multi-round ceiling, no-progress and half walks
 # --- judge: three RED rounds hit the ceiling on the third -------------------------------------
