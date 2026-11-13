@@ -422,3 +422,5 @@
 {"ts":"2026-11-13T10:07:48Z","story":"beta-fixes-1113-05-repair-round-1","declared":17,"changed":2,"out_of_scope":0}
 {"ts":"2026-11-13T13:44:35Z","story":"beta-fixes-1113-06-repair-round-2","declared":17,"changed":4,"out_of_scope":0}
 {"ts":"2026-11-13T16:48:19Z","story":"audit-fixes-1113-01-version-order","declared":4,"changed":4,"out_of_scope":0}
+{"ts":"2026-11-13T16:55:01Z","story":"audit-fixes-1113-02-redact","declared":6,"changed":5,"out_of_scope":0}
+{"ts":"2026-11-13T20:39:06Z","story":"audit-fixes-1113-02-redact","declared":6,"changed":5,"out_of_scope":0}

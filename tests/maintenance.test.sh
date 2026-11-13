@@ -527,6 +527,93 @@ for row in ${S2[@]+"${S2[@]}"}; do
     || bad "handoff.py fallback differs from redact.sh ($label): py '$py_out', sh '$sh_out'"
 done
 
+# --- redact.sh audit-fixes-1113: ru/uk keywords, command-argument credentials, service tokens; a failure is loud --
+echo "--- redact.sh 1113: non-English keywords, argument credentials, token shapes - parity, and a failed filter withholds"
+aws="$(rep 10 a)/$(rep 9 B)+$(rep 9 c)7$(rep 9 D)"   # 40 chars, the bare cloud secret-key shape
+R13=(
+  "masks a non-English secret keyword (пароль:)|пароль: $val|пароль: $M"
+  "masks a Russian пароль=|пароль=$val|пароль=$M"
+  "masks a Ukrainian гасло|Гасло: $val|Гасло: $M"
+  "masks a токен|токен: $val|токен: $M"
+  "masks a Russian секретный ключ|секретный ключ: $val|секретный ключ: $M"
+  "masks a quoted Ukrainian секретний ключ|секретний ключ = \"two words\" tail|секретний ключ = $M tail"
+  "masks a password stated in prose|the password is hunter2x tail|the password is $M tail"
+  "masks a bare key=|key=$val|key=$M"
+  "masks a pwd=|pwd=$val|pwd=$M"
+  "masks a JSON pwd|{\"pwd\": \"short1\"}|{\"pwd\": $M}"
+  "leaves ru/uk keywords with no value alone|пароль: см. хранилище, токен не нужен, гасло:|пароль: см. хранилище, токен не нужен, гасло:"
+  "leaves prose about a password alone|the password is required and the secret is safe|the password is required and the secret is safe"
+  "leaves the shell PWD alone|PWD=/home/user/project|PWD=/home/user/project"
+  "leaves a short key= alone|key=short, sort key: name|key=short, sort key: name"
+  "masks a curl -u password|curl -u alice:$val https://x|curl -u alice:$M https://x"
+  "masks a --user password|curl --user 'alice:$val' x|curl --user 'alice:$M' x"
+  "masks a glued mysql -p password|mysql -u root -p$val db|mysql -u root -p$M db"
+  "masks an sshpass -p password|sshpass -p '$val' ssh host|sshpass -p $M ssh host"
+  "masks a docker login -p password|docker login -u bob -p $val reg.io|docker login -u bob -p $M reg.io"
+  "masks a --password argument|tool --password $val --x|tool --password $M --x"
+  "leaves look-alike flags alone|docker run -u 1000:1000 -p 8080:80 x && mkdir -pv /tmp/a && ssh -p22 h|docker run -u 1000:1000 -p 8080:80 x && mkdir -pv /tmp/a && ssh -p22 h"
+  "leaves --password-stdin and a prompting mysql -p alone|docker login --password-stdin -u bob r && mysql -u root -p db|docker login --password-stdin -u bob r && mysql -u root -p db"
+  "masks an app-level chat token|note xa""pp-1-A0$(rep 8 B)-$(rep 12 c) end|note $M end"
+  "masks a webhook signing secret|note wh""sec_$(rep 32 d) end|note $M end"
+  "masks an OAuth client secret|note GOC""SPX-$(rep 28 e) end|note $M end"
+  "masks a refresh token|note 1//0$(rep 40 f) end|note $M end"
+  "masks an access token|note ya""29.$(rep 40 g) end|note $M end"
+  "masks a shop admin token|note sh""pat_$(rep 32 a) end|note $M end"
+  "masks an age secret key|note AGE-SECRET-""KEY-1$(rep 58 Q) end|note $M end"
+  "masks a cloud API token|note do""p_v1_$(rep 64 a) end|note $M end"
+  "masks a mail API key of any part length|note SG.$(rep 16 h).$(rep 20 i) end|note $M end"
+  "masks a chat webhook|post https://discord.com/api/webhooks/123456789012345678/$(rep 68 j) now|post https://discord.com/api/webhooks/$M now"
+  "masks an OAuth code in a URL|https://x.io/cb?code=4/0A$(rep 30 k)&state=1|https://x.io/cb?code=$M&state=1"
+  "masks a bare cloud secret key|note $aws end|note $M end"
+  "masks a URL password holding : and @|smtp://user:p@ss:word@mail.host:25|smtp://$M@mail.host:25"
+  "leaves short prefix-sharing words alone|wh""sec_short xa""pp-short GOC""SPX-x ya""29.x 1//x shp""at_x ?code=200 $(rep 38 B)7|wh""sec_short xa""pp-short GOC""SPX-x ya""29.x 1//x shp""at_x ?code=200 $(rep 38 B)7"
+  "masks only the URL password, not a later @ in the path|https://u:pw1@host/a@b|https://$M@host/a@b"
+  "masks a lower-case set-cookie header|set-cookie: a=1; Path=/|set-cookie: $M"
+  "masks a cookie after a valueless first token|Cookie: a; sessionid=$val|Cookie: $M"
+  "masks a camelCase otpCode|otpCode=482913|otpCode=$M"
+  "masks a bare AUTH|AUTH=$val|AUTH=$M"
+  "masks a dotted x.auth|x.auth=$val|x.auth=$M"
+  "leaves oauth and author words alone|oauth=pkce author: someone_long_name_here|oauth=pkce author: someone_long_name_here"
+)
+: > "$T/r13-in"
+for row in ${R13[@]+"${R13[@]}"}; do
+  IFS='|' read -r label input want <<EOF
+$row
+EOF
+  redact_is "$label" "$input" "$want"
+  printf '%s\n' "$input" >> "$T/r13-in"
+done
+bash "$SRC/scripts/redact.sh" < "$T/r13-in" > "$T/r13-sh"
+PYTHONIOENCODING=utf-8 "$PYBIN" - "$SRC/.claude/hooks/handoff.py" "$T/r13-in" "$T" <<'PY' > "$T/r13-py"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('handoff', sys.argv[1]); h = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(h)
+for line in open(sys.argv[2], encoding='utf-8').read().splitlines():
+    print(h.redact_text(sys.argv[3], line))
+PY
+i=0
+for row in ${R13[@]+"${R13[@]}"}; do
+  i=$((i + 1)); label="${row%%|*}"
+  sh_out="$(sed -n "${i}p" "$T/r13-sh" | tr -d '\r')"; py_out="$(sed -n "${i}p" "$T/r13-py" | tr -d '\r')"
+  [ "$sh_out" = "$py_out" ] && ok "handoff.py fallback agrees with redact.sh: $label" \
+    || bad "handoff.py fallback differs from redact.sh ($label): py '$py_out', sh '$sh_out'"
+done
+# A filter tool that fails: the text is withheld, the failure is said and recorded.
+for tool in sed awk; do
+  mkdir -p "$T/stub-$tool" "$T/hive-$tool"; printf '#!/bin/sh\nexit 1\n' > "$T/stub-$tool/$tool"; chmod +x "$T/stub-$tool/$tool"
+  out="$(printf 'secret=%s\n' "$val" | PATH="$T/stub-$tool:$PATH" VULYK_HIVE="$T/hive-$tool" bash "$SRC/scripts/redact.sh" 2>"$T/rd-err")"; rc=$?
+  [ "$out" = "[VULYK:REDACT-FAILED]" ] && [ "$rc" = 1 ] && ok "redact.sh with a failing $tool prints only the failure mark, exit 1" \
+    || bad "redact.sh with a failing $tool: rc $rc, stdout '$out'"
+  head -n 1 "$T/rd-err" | grep -q '^redact: degraded:' && ok "redact.sh with a failing $tool says so on stderr" \
+    || bad "redact.sh with a failing $tool: stderr '$(cat "$T/rd-err")'"
+  grep -qF '"code":"redact_degraded"' "$T/hive-$tool/memory/stats/anomalies.jsonl" 2>/dev/null \
+    && ok "redact.sh with a failing $tool records redact_degraded" || bad "redact.sh with a failing $tool: no redact_degraded record"
+done
+[ "$(bash "$SRC/scripts/telemetry.sh" enum | tail -n 1 | tr -d '\r')" = redact_degraded ] \
+  && ok "telemetry.sh enum ends with redact_degraded" || bad "telemetry.sh enum does not end with redact_degraded"
+grep -q '^| `redact_degraded` |' "$SRC/docs/telemetry.md" && ok "docs/telemetry.md lists redact_degraded" \
+  || bad "docs/telemetry.md has no redact_degraded row"
+
 # --- /vulyk-gc refuses a gutted CONSOLIDATED.md (hindsight-harvest-03) --------------------------------
 echo "--- /vulyk-gc commit line refuses to commit a CONSOLIDATED.md that lost more than half"
 GC_LINE="$(tr -d '\r' < "$SRC/.claude/commands/vulyk-gc.md" | sed -n 's/^`\(f=memory\/learnings\/CONSOLIDATED\.md;.*\)`$/\1/p')"

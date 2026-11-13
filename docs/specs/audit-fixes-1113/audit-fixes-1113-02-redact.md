@@ -1,14 +1,15 @@
 ---
 story: audit-fixes-1113-02
 spec: audit-fixes-1113
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: masks a non-English secret keyword
+red_verified_at: 2026-11-13T16:48:11Z 51383b200c5f0ab4d4b5cd7259b0c76db02919706aa7281b0c711b7e3a0d6866
 ---
 
 # redact.sh masks more secret forms and never fails silently
@@ -73,5 +74,41 @@ synthetic values, and no comment, label or note says which form was unmasked bef
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each. End with one `CHANGELOG:` line
 that says what is masked now by class, never which form was open. -->
+- scripts/redact.sh: Russian/Ukrainian keyword rule, prose `<secret word> is <value with a digit or symbol>`, bare key/auth and lower-case pwd names, command-argument credentials, ten service-token shapes, a 40-char cloud secret key (one ERE alternative per upper-case position), URL passwords holding `:`/`@`, cookie and OTP name variants.
+- scripts/redact.sh: failure path is now `degrade()`: `[VULYK:REDACT-FAILED]` on stdout, `redact: degraded: <why>` on stderr, `telemetry.sh record redact_degraded`, exit 1; output is buffered under `pipefail` so a failing awk or sed leaks nothing.
+- .claude/hooks/handoff.py: `_REDACT_FALLBACK` mirrors every new rule in the same order; the URL rule tries the `@`-holding password first, matching sed's longest match. `redact_text` already treats exit 1 as "use the built-in pass".
+- scripts/telemetry.sh + docs/telemetry.md: `redact_degraded` appended to ENUM, one table row, "eleven" -> "twelve" codes in the same doc.
+- tests/maintenance.test.sh: block `redact.sh 1113` (43 rows + parity through `h.redact_text`, sed and awk failure stubs, enum and doc row). tests/handoff-hooks.test.py untouched (its rows still pass).
+- Decision: `PWD=` (upper case) stays readable as the shell's folder; `-u 1000:1000`, `-p 8080:80`, `mkdir -pv`, `--password-stdin` stay readable.
+- Surprise: `bash tests/maintenance.test.sh` has one failure at HEAD that is not this story's: `memory/map/scripts-hooks.md` line 46 is 140 chars (map cap 130), from commit 440c4681.
+- CHANGELOG: redact.sh and the handoff fallback now mask Russian and Ukrainian secret keywords, secrets stated in prose, credentials passed as command arguments, more service-token and webhook shapes and bare cloud secret keys; when redaction cannot run, the text is withheld and `redact_degraded` is recorded.
 
 ## Findings
+- close-story exit 4 on `bash tests/maintenance.test.sh`: 703 checks, 1 failed, and that one is not this story's:
+  `map: scripts-hooks.md has a 140-char line` (`memory/map/scripts-hooks.md` line 46, last touched by 440c4681, map cap
+  130). Every redact row, parity row, failure-stub row and enum/doc row passes. The fix is a wrap of that map line,
+  in `memory/` (outside `## Files`, and workers never edit `memory/`): who wraps it - the librarian / drone-docs,
+  or the Queen before rerunning this close-story?
+- Resolved: the map line was wrapped in ca9ae757; close-story rerun.
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: 51383b200c5f0ab4d4b5cd7259b0c76db02919706aa7281b0c711b7e3a0d6866 (tests/maintenance.test.sh)
+- impl: 200eb0e30e6b5df4f7faef0508d60ab44dc617ff102592c7dc576754181849b6
+- stamped: 2026-11-13T16:48:11Z
+
+```
+::error::redact.sh masks a non-English secret keyword (пароль:): got 'пароль: qqqqqqqqqq42ZZZZZZZZ', want 'пароль: [VULYK:REDACTED]'
+  ok    handoff.py fallback agrees with redact.sh: masks a non-English secret keyword (пароль:)
+  ok    ship 2a: the plugin.json version moves with VERSION
+  ok    ship 2a: the dev build gets a local tag for the next upgrade
+  ok    ship 2a: a reverted canary is held too
+  ok    ship 2: in the VULYK source the build number comes from 2a
+  ok    ship 2a: the canaries go first
+  ok    ship 2a: a red canary stops the rollout
+--- beta-fixes-1113-03: a paperwork-only suite.log head, --go from the owner
+  ok    lead-review: a suite.log head that differs only by paperwork commits is not reported
+  ok    plan: --go comes only from the owner's own words
+maintenance.test.sh: 703 checks, 43 failed
+```
