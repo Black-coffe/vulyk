@@ -56,6 +56,7 @@ Queen relaunches the driver and its `advance --claim` writes the records. Do not
 - tests/council.test.sh
 - tests/solo.test.sh
 - tests/e2e.test.sh
+- scripts/defects-check.sh
 
 ## Non-goals
 - Do not touch `git-guard.sh` (story 07 closes `revise` and the other Queen verbs to subagents), `install.sh`,
@@ -101,6 +102,9 @@ Gotchas; `memory/map/agents-and-commands.md` → Commands (0.50 command changes)
 - [ ] `docs/cycle.md` describes the three records and `revise`; ADR-032 has a dated amendment stating the rule.
   `bash scripts/prompt-check.sh --touched scripts/cycle.sh .claude/commands/vulyk-build.md
   .claude/commands/vulyk-plan.md` has no error.
+- [ ] `defects-check.sh --files` (the close-story block gate) does not run a card's check on that card's own
+  `fixtures:` files: a story that adds a fixture to a block card and names it in `## Files` closes; the same file
+  under a different card is still checked (original case: story 04's two new fixtures, 2026-11-13).
 - [ ] Every part of `tests/cycle.test.sh` and `tests/council.test.sh` is green, and the notes list each fixture
   site that moved.
 
