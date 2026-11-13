@@ -147,6 +147,7 @@ evidence stays in the private audit folder.
 
 **Wave 4** (cut mid-build, plan delta 2026-11-13)
 - `audit-fixes-1113-11-redact-leaves-ordinary-text` — ask 7: no false masks on ordinary text (every brief and journal byte-identical); callers refuse when `redact.sh` fails
+- `audit-fixes-1113-12-scrub-revs-mask-only` — ask 14: a `.scrub-revs` commit keeps a quote's date only for a masked-only change
 
 ## Contracts
 <!-- Interfaces that cross a story boundary, agreed here at plan time. -->
@@ -233,6 +234,9 @@ evidence stays in the private audit folder.
 *(empty)*
 
 ## Plan deltas
+
+- 2026-11-14, side-agent note the owner forwarded: `.scrub-revs` is a plain list any agent can extend. New story 12
+  (wave 4, beside 11, disjoint files): a listed commit keeps a quote's older date only for a masked-only change.
 
 - 2026-11-14, story 06 NEEDS_CONTEXT: story 04's path scrub rewrote an owner-quote line of a block card, so
   `defects-check.sh` (git-blame dating) saw a new quote and reported an ESCAPE. Root fix in story 06: blame with
