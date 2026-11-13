@@ -1,0 +1,97 @@
+head=13a39652 steps=9
+STEP 1/9: ok 171s
+PART council:seats3 ok 61s cap 300s
+PART council:seats2 ok 73s cap 300s
+PART council:judge2 ok 75s cap 300s
+PART council:ceilings ok 77s cap 300s
+PART council:judge ok 82s cap 300s
+PART council:escalate ok 82s cap 300s
+PART council:close ok 82s cap 300s
+PART council:escalate2 ok 87s cap 300s
+PART council:verbs ok 100s cap 300s
+PART council:verbs2 ok 118s cap 300s
+PART council:seats ok 135s cap 300s
+PART council:verbs3 ok 170s cap 300s
+STEP 2/9: ok 207s
+PART council:replays3 ok 58s cap 300s
+PART council:walks3 ok 62s cap 300s
+PART council:roster2 ok 66s cap 300s
+PART council:walks2 ok 78s cap 300s
+PART council:replays2 ok 99s cap 300s
+PART council:walks ok 100s cap 300s
+PART council:replays ok 101s cap 300s
+PART council:ceilings2 ok 113s cap 300s
+PART council:suite ok 140s cap 300s
+PART council:driver ok 144s cap 300s
+PART council:roster ok 181s cap 300s
+PART council:advance ok 206s cap 300s
+STEP 3/9: FAIL 242s
+PART cycle:manual ok 31s cap 300s
+PART cycle:hooklog ok 37s cap 300s
+PART council:hardening ok 44s cap 300s
+PART cycle:gates ok 48s cap 300s
+PART cycle:safety ok 56s cap 300s
+PART defects ok 96s cap 300s
+PART cycle:bsd ok 110s cap 300s
+PART council:suite2 ok 132s cap 300s
+PART council:suite3 ok 160s cap 300s
+PART cycle:ship ok 162s cap 300s
+PART cycle:close ok 217s cap 300s
+PART cycle:red ok 240s cap 300s
+LOAD: unavailable - start: timed out after 5s
+LOAD: end cpu 0% top: vmmemWSL 9%, chrome#135 9%, System 9%, warp 4%, chrome#125 4%; named like the sampler: WmiPrvSE#3 13%, WmiPrvSE 9%
+STEP 4/9: ok 168s
+PART driver ok 0s cap 300s
+PART mods ok 5s cap 300s
+PART handoff ok 9s cap 300s
+PART model-profile:defaults ok 23s cap 300s
+PART inject:functional ok 32s cap 300s
+PART model-profile:edges ok 31s cap 300s
+PART model-profile:set ok 33s cap 300s
+PART e2e:green ok 33s cap 300s
+PART e2e:red ok 54s cap 300s
+PART full-suite ok 82s cap 300s
+PART intake:functional ok 121s cap 300s
+PART maintenance ok 166s cap 300s
+STEP 5/9: ok 190s
+PART solo:green ok 22s cap 300s
+PART solo:rejected ok 30s cap 300s
+PART symbol-map ok 32s cap 300s
+PART solo:block ok 51s cap 300s
+PART telemetry:telemetry ok 69s cap 300s
+PART telemetry:terminal ok 90s cap 300s
+PART telemetry:ledger ok 108s cap 300s
+PART telemetry:wiring ok 119s cap 300s
+PART telemetry:scan ok 133s cap 300s
+PART telemetry:install ok 153s cap 300s
+PART telemetry:install-xp ok 170s cap 300s
+PART telemetry:install-xp2 ok 188s cap 300s
+STEP 6/9: ok 133s
+PART telemetry:ysk-hook ok 4s cap 300s
+PART telemetry:ysk ok 28s cap 300s
+PART telemetry:constitution2 ok 41s cap 300s
+PART telemetry:rg2 ok 50s cap 300s
+PART telemetry:rg ok 54s cap 300s
+PART telemetry:ysk3 ok 59s cap 300s
+PART telemetry:ysk2 ok 75s cap 300s
+PART telemetry:mods2 ok 81s cap 300s
+PART telemetry:mods ok 82s cap 300s
+PART telemetry:library ok 85s cap 300s
+PART telemetry:constitution3 ok 96s cap 300s
+PART telemetry:constitution ok 131s cap 300s
+STEP 7/9: ok 187s
+PART token-report ok 6s cap 300s
+PART telemetry:wrapper ok 71s cap 300s
+PART telemetry:wrapper2 ok 70s cap 300s
+PART telemetry:crlf2 ok 80s cap 300s
+PART telemetry:wrapper3 ok 111s cap 300s
+PART telemetry:watcher ok 112s cap 300s
+PART telemetry:launchers ok 116s cap 300s
+PART telemetry:crlf ok 130s cap 300s
+PART telemetry:upgrade ok 164s cap 300s
+PART telemetry:edits ok 186s cap 300s
+STEP 8/9: ok 17s
+PART inject:latency ok 15s cap 300s
+STEP 9/9: ok 11s
+PART intake:latency ok 7s cap 300s
+SUITE: FAIL 1326s - cut part cycle:close, cut part cycle:red
