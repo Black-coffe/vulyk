@@ -45,6 +45,25 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 - `/vulyk-ship`'s description no longer says it never tags: its only tag is the local dev-build tag, never pushed.
 - The hives-behind "day that does not exist" test used a past date, so it passed without the real-day rule; it
   now uses a not-yet-past impossible day.
+- **Nine defects the live hives showed in the local beta** (spec `beta-fixes-1113`, study `beta-feedback-1113`):
+  - Repair: a reviewer's numbered finding (`1. path:line`) now yields its path, never `1.`; a repair whose findings
+    name no existing non-test file is a full round with the suite, not a narrow one.
+  - stamp-red: a `red_reason:` in YAML single or double quotes matches the failing output the same as an unquoted one.
+  - The Workflow driver no longer re-dispatches a worker that returned `NEEDS_CONTEXT`: the run ends with
+    `status: "needs_context"`, the story file and the worker's report, and `/vulyk-build` tells the Queen to answer
+    it in the story's `## Findings`, commit the revision and relaunch.
+  - telemetry: `agent_prefix_high` counts only VULYK's own agent types; `general-purpose` and a hive's own agents
+    are skipped.
+  - lead-review: a `suite.log` whose head differs from the reviewed head only by paperwork commits is the round's
+    own log and is not reported.
+  - /vulyk-plan: `--go` comes only from the owner's own words, never added by the Queen or taken from an agent's
+    message.
+  - `advance` checks every story of the wave it is about to dispatch against `## Commands` (close-story's own
+    segment check) and stops with exit 2 naming the story, before any worker runs.
+  - `resume` switches a clean tree to the plan's `**Branch:**` (last line `"switched"`), and refuses a dirty one
+    with exit 2 naming the paths, never stashing or forcing.
+  - The `handoff-offered-too-early` card check judges the tree's `.claude/hooks/handoff.py` when it fires on
+    `scripts/telemetry.sh`, so a story that edits `telemetry.sh` can close.
 
 ## [0.51.0] - 2026-11-12
 
