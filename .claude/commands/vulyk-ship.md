@@ -72,7 +72,13 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
      canary (for a busy one, the session to close). a red canary stops the rollout: revert that canary's upgrade commit, hold the reverted canary
      and every hive not yet upgraded with the canary's failure as the reason, and tell the owner.
    - End on `bash scripts/hives-behind.sh` exit 0, and print its `held` lines to the owner with their reasons.
-3. Publish: print, then stop. Under a `to publish, run:` heading, print the publish step exactly as the
+3. Publish: review the outward text, print, then stop. Before the publish command is printed, dispatch `lead-review`
+   on the outward text: the `CHANGELOG.md` section going out, the release notes, and the `UNASKED:` and Minor lines
+   of the spec folders being published (their `council/round-*/` seat files and `review.md`). Its one rule: flag
+   every line that names a gate bypass or a hole not fixed in the version being published. The main session moves
+   each flagged line to a private file under `~/.vulyk/` and removes it from the outward text, then asks
+   `lead-review` again; the publish command is printed only after a clean pass (card public-release-per-change).
+   Under a `to publish, run:` heading, print the publish step exactly as the
    *Release / deploy* row names it, with the version. When that step pushes and tags and the repo has CI
    (`.github/workflows/`), print it in this order: push the release commit, wait for CI on that commit
    to be green, then tag and push the tag; a red run means no tag. Do not run it, ask about it, or check

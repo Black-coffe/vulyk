@@ -424,3 +424,6 @@
 {"ts":"2026-11-13T16:48:19Z","story":"audit-fixes-1113-01-version-order","declared":4,"changed":4,"out_of_scope":0}
 {"ts":"2026-11-13T16:55:01Z","story":"audit-fixes-1113-02-redact","declared":6,"changed":5,"out_of_scope":0}
 {"ts":"2026-11-13T20:39:06Z","story":"audit-fixes-1113-02-redact","declared":6,"changed":5,"out_of_scope":0}
+{"ts":"2026-11-13T20:54:49Z","story":"audit-fixes-1113-04-leak-check-and-powershell-cards","declared":75,"changed":74,"out_of_scope":0}
+{"ts":"2026-11-13T21:03:46Z","story":"audit-fixes-1113-03-ship-and-cycle-tails","declared":9,"changed":9,"out_of_scope":0}
+{"ts":"2026-11-13T21:08:46Z","story":"audit-fixes-1113-03-ship-and-cycle-tails","declared":9,"changed":9,"out_of_scope":0}

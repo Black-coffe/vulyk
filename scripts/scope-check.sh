@@ -100,9 +100,8 @@ CHANGED="$(printf '%s\n' "$CHANGED" | grep -v '^$' | grep -Fxv -e "$STORY_REL" -
 
 # Paperwork (is_paperwork_path, lib.sh - the hive's own .claude/vulyk-paperwork globs too) is
 # written by the cycle and its hooks on their own schedule, never a story's own edit: drop it
-# from the diff, unless the story itself names it under '## Files'. skills.json included: the
-# owner reversed A18 on 2026-10-16 (ADR-010 amendment) - the Skill counter rewrites it nearly
-# every turn, so counting it flagged almost every story.
+# from the diff, unless the story itself names it under '## Files'. memory/stats/skills.json is not
+# paperwork (audit-fixes-1113): untracked and gitignored, a tracked, modified copy counts.
 KEPT=""
 while IFS= read -r file; do
   [ -z "$file" ] && continue

@@ -404,6 +404,34 @@ echo "ADR-032 D4 (mass-audit-fixes-08): a Tier 2-4 plan opens its build only on 
   out="$(bash scripts/cycle.sh branch docs/specs/t1 2>&1; echo "exit=$?")"
   printf '%s' "$out" | expect "branch on a Tier 1 plan briefed without --go exits 0 as before" "exit=0"
 )
+
+echo "audit-fixes-1113-03: /vulyk-ship pins - the spec-branch push rule, the outward-text review before publish, no skills.json commit"
+flat() { tr '\n' ' ' < "$1" | tr -s ' '; }   # the file as one line: a sentence wrapped over lines still matches
+SHIPMD="$(flat "$SRC/.claude/commands/vulyk-ship.md")"; PRCARD="$(flat "$SRC/docs/defects/public-release-per-change.md")"
+pin() { # pin <label> <text> <needle>
+  case "$2" in *"$3"*) echo "  ok    $1" ;; *) echo "::error::$1 - '$3' is gone"; fail=1 ;; esac
+}
+pin "vulyk-ship: the spec branch is pushed only to a private origin" "$SHIPMD" 'A private origin: run it yourself, `git push -u origin <branch>`'
+pin "vulyk-ship: a public origin gets a question to the owner, not a push" "$SHIPMD" '`PUBLIC` (or no answer): never push the spec branch there, since it carries every unpublished commit of the default branch; ask the owner'
+[ "$(grep -c 'git push -u origin' "$SRC/.claude/commands/vulyk-ship.md")" = 1 ] \
+  && grep 'git push -u origin' "$SRC/.claude/commands/vulyk-ship.md" | grep -qF 'A private origin:' \
+  && echo "  ok    vulyk-ship: no instruction pushes a spec branch to origin unconditionally" \
+  || { echo "::error::vulyk-ship: a push to origin outside the private-origin sentence: $(grep -n 'git push' "$SRC/.claude/commands/vulyk-ship.md")"; fail=1; }
+pin "card public-release-per-change: the Never line on spec branches" "$PRCARD" '- Push a spec branch to a public origin for its CI run'
+pin "vulyk-ship: the review names the CHANGELOG section" "$SHIPMD" 'the `CHANGELOG.md` section going out'
+pin "vulyk-ship: the review names the release notes" "$SHIPMD" 'the release notes, and the `UNASKED:` and Minor lines'
+pin "vulyk-ship: the review names the spec folders' UNASKED/Minor lines" "$SHIPMD" 'the `UNASKED:` and Minor lines of the spec folders being published'
+pin "vulyk-ship: the review's one rule" "$SHIPMD" 'flag every line that names a gate bypass or a hole not fixed in the version being published'
+pin "vulyk-ship: a flagged line moves to private notes" "$SHIPMD" 'moves each flagged line to a private file under `~/.vulyk/` and removes it from the outward text'
+pin "vulyk-ship: the publish command only after a clean pass" "$SHIPMD" 'the publish command is printed only after a clean pass'
+rv="$(grep -n 'Before the publish command is printed, dispatch `lead-review`' "$SRC/.claude/commands/vulyk-ship.md" | head -1 | cut -d: -f1)"
+pb="$(grep -n 'Under a `to publish, run:` heading' "$SRC/.claude/commands/vulyk-ship.md" | head -1 | cut -d: -f1)"
+[ -n "$rv" ] && [ -n "$pb" ] && [ "$rv" -lt "$pb" ] && echo "  ok    vulyk-ship: the lead-review step comes before the publish command is printed" \
+  || { echo "::error::vulyk-ship: review line=$rv, publish heading line=$pb"; fail=1; }
+pin "card public-release-per-change: the Never line on the outward-text review" "$PRCARD" '- Print or run a publish before `lead-review` has passed the outward text clean'
+grep -qiE 'skills\.json' "$SRC/.claude/commands/vulyk-ship.md" \
+  && { echo "::error::vulyk-ship names skills.json: $(grep -n 'skills' "$SRC/.claude/commands/vulyk-ship.md")"; fail=1; } \
+  || echo "  ok    vulyk-ship names no step that stages or commits skills.json"
 fi # part ship
 
 # --- every other part: cycle.sh and the gate scripts on the spec branch, a ## Commands cell
@@ -485,10 +513,15 @@ printf 'v2\n' >> hook-app.txt
 shiph | expect "hook log + real code dirt -> 03 still not clean" "working tree is not clean"
 git checkout -- hook-app.txt
 
-echo "skills-json-exempt: scope-check drops skills.json like all paperwork (A18 reversed 2026-10-16); ship-check stage 03 passes it like the anomaly log"
+echo "audit-fixes-1113-03 (flips skills-json-exempt): a tracked, modified skills.json is no paperwork - is_paperwork_path says no, scope-check counts it out of scope"
+printf '{"n":0}\n' > memory/stats/skills.json
+git add -f memory/stats/skills.json && git commit -qm "an old hive still tracks skills.json" -- memory/stats/skills.json >/dev/null
 printf '{"n":1}\n' > memory/stats/skills.json
-bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | expect "scope-check: skills.json dirty and undeclared is not out of scope" "changed 0, out of scope 0"
+is_paperwork_path memory/stats/skills.json && { echo "::error::is_paperwork_path still calls memory/stats/skills.json paperwork"; fail=1; } \
+  || echo "  ok    is_paperwork_path: memory/stats/skills.json is not paperwork"
+bash scripts/scope-check.sh docs/specs/hooklog/hooklog-01-first.md | expect "scope-check: skills.json dirty and undeclared is out of scope" "! memory/stats/skills.json"
 git checkout -- memory/stats/scope.jsonl   # scope-check logs its run; that log is not this case's dirt
+git checkout -- memory/stats/skills.json
 echo "hive paperwork: .claude/vulyk-paperwork globs are paperwork for scope-check; without the file nothing changes"
 mkdir -p docs/specs/hooklog/smoke
 printf 'ran\n' > docs/specs/hooklog/smoke/run-1.md
@@ -532,17 +565,18 @@ rm -rf docs/specs/hooklog/smoke
 git rm -q .claude/vulyk-paperwork && git commit -qm "drop the hive paperwork globs" -- .claude/vulyk-paperwork
 git checkout -- memory/stats/scope.jsonl
 rm -f memory/stats/anomalies.jsonl; git checkout -- memory/stats/anomalies.jsonl 2>/dev/null
-[ "$(git status --porcelain)" = "?? memory/stats/skills.json" ] && echo "  ok    precondition: skills.json is the only dirty path" \
+printf '{"n":2}\n' > memory/stats/skills.json
+[ "$(git status --porcelain)" = " M memory/stats/skills.json" ] && echo "  ok    precondition: the tracked skills.json is the only dirty path" \
   || { echo "::error::precondition: dirty paths are $(git status --porcelain | tr '\n' ' ')"; fail=1; }
-shiph | expect "skills.json alone dirty -> 03 clean, names it" "clean (hook-written stats pending: memory/stats/skills.json)"
+shiph | expect "skills.json alone dirty -> 03 not clean (no exception for it any more)" "working tree is not clean"
 printf '{"ts":"z"}\n' >> memory/stats/anomalies.jsonl
-shiph | expect "anomaly log + skills.json dirty -> 03 clean, names both" "memory/stats/anomalies.jsonl, memory/stats/skills.json"
+shiph | expect "anomaly log + skills.json dirty -> 03 still not clean" "working tree is not clean"
 printf 'v3\n' >> hook-app.txt
 shiph | expect "skills.json + real code dirt -> 03 still not clean" "working tree is not clean"
-git checkout -- hook-app.txt
-rm -f memory/stats/skills.json
+git checkout -- hook-app.txt memory/stats/skills.json
+git rm -q memory/stats/skills.json && git commit -qm "the hive stops tracking skills.json" -- memory/stats/skills.json >/dev/null
 
-echo "story 12: council.jsonl alone dirty also blocks stage 03 - only anomalies.jsonl and skills.json pass through"
+echo "story 12: council.jsonl alone dirty also blocks stage 03 - only anomalies.jsonl passes through"
 printf '{"n":1}\n' > memory/stats/council.jsonl
 shiph | expect "council.jsonl alone dirty -> 03 not clean" "working tree is not clean"
 rm -f memory/stats/council.jsonl
@@ -971,9 +1005,12 @@ out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-02.md --commit 2
 rm -f "stray new c.txt"
 mkdir -p memory/stats; printf '{"x":1}\n' > memory/stats/skills.json
 out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-02.md --commit 2>&1)"; ex=$?
-[ "$ex" -eq 0 ] && echo "  ok    an out-of-scope paperwork path (memory/stats/skills.json) does not refuse" \
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'edited outside ## Files: memory/stats/skills.json' \
+  && echo "  ok    memory/stats/skills.json is no paperwork any more (audit-fixes-1113-03): undeclared, it refuses" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
 rm -f memory/stats/skills.json
+out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-02.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    skills.json removed, the close exits 0" || { echo "::error::exit=$ex out=$out"; fail=1; }
 stray_story 03
 git add -A && git commit -qm "stray: story 03" >/dev/null
 printf 'v4\n' > stray-app.txt; printf 'v4\n' > stray-other.txt
@@ -1001,18 +1038,18 @@ echo "close-story commits only its own paths, and a failed commit leaves nothing
 stray_story 06
 git add -A && git commit -qm "stray: story 06" >/dev/null
 printf 'v6\n' > stray-app.txt
-mkdir -p memory/stats; printf '{"x":6}\n' > memory/stats/skills.json; git add memory/stats/skills.json   # staged by someone else
+mkdir -p memory/stats; printf '{"x":6}\n' > memory/stats/evolve.jsonl; git add memory/stats/evolve.jsonl   # staged by someone else
 mkdir -p .git/hooks; printf '#!/bin/sh\nexit 1\n' > .git/hooks/pre-commit; chmod +x .git/hooks/pre-commit
 out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-06.md --commit 2>&1)"; ex=$?
-[ "$ex" -eq 2 ] && [ "$(git diff --cached --name-only)" = "memory/stats/skills.json" ] && grep -q '^status: in-progress' docs/specs/stray/stray-06.md \
+[ "$ex" -eq 2 ] && [ "$(git diff --cached --name-only)" = "memory/stats/evolve.jsonl" ] && grep -q '^status: in-progress' docs/specs/stray/stray-06.md \
   && echo "  ok    a failed commit (hook) unstages the story's paths, keeps others' staging and status:" \
   || { echo "::error::exit=$ex staged=$(git diff --cached --name-only | tr '\n' ' ') out=$out"; fail=1; }
 rm -f .git/hooks/pre-commit
 out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-06.md --commit 2>&1)"; ex=$?
-[ "$ex" -eq 0 ] && ! git show --name-only --format= HEAD | grep -qx 'memory/stats/skills.json' && [ "$(git diff --cached --name-only)" = "memory/stats/skills.json" ] \
+[ "$ex" -eq 0 ] && ! git show --name-only --format= HEAD | grep -qx 'memory/stats/evolve.jsonl' && [ "$(git diff --cached --name-only)" = "memory/stats/evolve.jsonl" ] \
   && echo "  ok    close-story's commit leaves a staged path it does not own out of the commit" \
   || { echo "::error::exit=$ex commit=$(git show --name-only --format= HEAD | tr '\n' ' ') out=$out"; fail=1; }
-git reset -q -- memory/stats/skills.json; rm -f memory/stats/skills.json
+git reset -q -- memory/stats/evolve.jsonl; rm -f memory/stats/evolve.jsonl
 
 echo "close-story --commit: a non-ASCII name and a [bracket] path commit as themselves; a formatting hook leaves the index in sync"
 mkdir -p "докс" "app/[id]"; printf 'v1\n' > "докс/нотатка.md"; printf 'v1\n' > "app/[id]/p.txt"
@@ -2251,6 +2288,52 @@ while [ "$ex" -eq 7 ] && [ "$n" -lt 4 ]; do out="$(sr_stamp 33)"; ex=$?; n=$((n+
   || { echo "::error::a results file rewritten after the pause is trusted - final exit=$ex out=$(printf '%s\n' "$out" | tail -2)"; fail=1; }
 rm -f "$SRLOG"
 git add -A && git commit -qm "red: sr33 refused" >/dev/null
+
+echo "A2 minor (Fable re-review): a later verification line rewriting an earlier line's output cannot reach the verdict"
+printf 'todo\n' > src/sr34.txt
+printf '#!/usr/bin/env bash\necho "sr34 other failure"\nexit 1\n' > tests/sr34.sh
+printf '#!/usr/bin/env bash\nod="$(sed -n "s/^outd=//p" .vulyk/state/red/verify.red-34.stamp-red 2>/dev/null | tail -1)"\n[ -n "$od" ] && printf "expected done PLANTED\\n" > "$od/1.out"\nexit 0\n' > tests/sr34-swap.sh
+red_story 34 "$MK" $'- tests/sr34.sh\n- src/sr34.txt\n' $'`bash tests/sr34.sh`\n`bash tests/sr34-swap.sh`'
+git add -A && git commit -qm "red: sr34 fixture" >/dev/null
+n=0; ex=7
+while [ "$ex" -eq 7 ] && [ "$n" -lt 4 ]; do out="$(sr_stamp 34)"; ex=$?; n=$((n+1)); done
+[ "$ex" -eq 4 ] && printf '%s' "$out" | grep -qF 'stored output of line 1 changed after it was checked' \
+  && ! grep -q '^red_verified_at:' docs/specs/red/red-34.md && ! grep -qF PLANTED docs/specs/red/red-34.md \
+  && echo "  ok    an output rewritten by a later line after its check is refused, never stamped" \
+  || { echo "::error::an output rewritten by a later line reached the verdict - exit=$ex calls=$n out=$(printf '%s\n' "$out" | tail -2)"; fail=1; }
+git add -A && git commit -qm "red: sr34 refused" >/dev/null
+
+echo "A2 minor (Fable re-review): a stored 1.code or 1.line that differs from the record, and a directory the caller does not own, are not used"
+for what in code line; do
+  nn=35; [ "$what" = line ] && nn=36
+  sr_fixture "$nn"
+  git add -A && git commit -qm "red: sr$nn fixture" >/dev/null
+  : > "$SRLOG"
+  out="$(sr_stamp "$nn")"; ex=$?; sro="$(sr_outd "$nn")"
+  if [ "$what" = code ]; then printf '0' > "$sro/1.code"; else printf '%s' 'bash tests/red-pass.sh' > "$sro/1.line"; fi
+  out="$(sr_stamp "$nn")"; ex=$?
+  [ "$ex" -eq 7 ] && [ "$(sr_runs)" = 2 ] && printf '%s' "$out" | grep -qF 'resume record not used (the stored result of line 1' \
+    && echo "  ok    a changed 1.$what is not used: line 1 runs again, stderr names the check" \
+    || { echo "::error::a changed 1.$what was used - exit=$ex runs=$(sr_runs) out=$out"; fail=1; }
+  n=0; while [ "$ex" -eq 7 ] && [ "$n" -lt 4 ]; do out="$(sr_stamp "$nn")"; ex=$?; n=$((n+1)); done
+  git add -A && git commit -qm "red: sr$nn done" >/dev/null
+done
+sr_fixture 37
+git add -A && git commit -qm "red: sr37 fixture" >/dev/null
+: > "$SRLOG"
+out="$(sr_stamp 37)"; ex=$?; sro="$(sr_outd 37)"
+if [ "$ex" -eq 7 ] && [ -d "$sro" ] && sudo -n chown 0 "$sro" 2>/dev/null; then
+  out="$(sr_stamp 37)"; ex=$?
+  [ "$ex" -eq 7 ] && [ "$(sr_runs)" = 2 ] && printf '%s' "$out" | grep -qF 'is not owned by the caller' && [ "$(sr_outd 37)" != "$sro" ] \
+    && echo "  ok    a results directory the caller does not own is not used: line 1 runs again in a new directory" \
+    || { echo "::error::a results directory owned by another user was used - exit=$ex runs=$(sr_runs) out=$out"; fail=1; }
+  sudo -n rm -rf "$sro" 2>/dev/null
+else
+  echo "  skip  the ownership refusal: no passwordless sudo here to give the directory another owner"
+fi
+n=0; while [ "$ex" -eq 7 ] && [ "$n" -lt 4 ]; do out="$(sr_stamp 37)"; ex=$?; n=$((n+1)); done
+rm -f "$SRLOG"
+git add -A && git commit -qm "red: sr37 done" >/dev/null
 
 echo "mass-audit-fixes-10 D5: stamp-red --baseline re-stamps against HEAD's implementation and puts the working copy back"
 printf 'todo\n' > src/red16.txt

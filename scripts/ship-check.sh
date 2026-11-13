@@ -141,9 +141,8 @@ if [ -n "$DIRTY" ]; then
   # Story 09: a tree dirty only in the hook-written memory/stats/anomalies.jsonl (the
   # anomaly-scan Stop hook writes it on every run, outside any commit) is not a build in
   # progress - pass it through, named, rather than blocking stage 03 on a file no story owns.
-  # skills.json joins it (spec skills-json-exempt, 2026-09-29, reversing Story 12's "real dirt"
-  # line under the owner's delegation): the PostToolUse(Skill) hook rewrites it on every Skill
-  # call, and since 0.21.0 maintenance itself runs through the Skill tool. A path the hive's own
+  # skills.json is no longer exempt (audit-fixes-1113): it is untracked and gitignored, so a
+  # tracked, modified copy is real dirt. A path the hive's own
   # .claude/vulyk-paperwork names (hive_paperwork_path, ADR-010 amendment 2026-10-16) passes too,
   # read with -z so a non-ASCII name is itself. Nothing else is exempt.
   ALLHOOK=1
@@ -151,8 +150,7 @@ if [ -n "$DIRTY" ]; then
   while IFS= read -r -d '' dline; do
     dp="${dline:3}"
     case "${dline:0:2}" in *R*|*C*) IFS= read -r -d '' _ ; ALLHOOK=0; continue ;; esac
-    if [ "$dp" = memory/stats/anomalies.jsonl ] || [ "$dp" = memory/stats/skills.json ] \
-      || hive_paperwork_path "$dp" "$ROOT"; then
+    if [ "$dp" = memory/stats/anomalies.jsonl ] || hive_paperwork_path "$dp" "$ROOT"; then
       HOOKPATHS="$HOOKPATHS${HOOKPATHS:+, }$dp"
       continue
     fi

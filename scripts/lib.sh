@@ -51,6 +51,7 @@ pack_fingerprint() { # pack_fingerprint <spec-dir> - must match every caller exa
 # joins the set because `reopen` writes it; scope.jsonl joins the memory/stats series because
 # `close-story` writes it through scope-check.sh (R4/C-3(b)). VERSION and CHANGELOG.md join in
 # 0.18 (ADR-013 D3): the release commit /vulyk-ship makes must not stale a GREEN round.
+# memory/stats/skills.json left the set in audit-fixes-1113: it is untracked and gitignored, a local counter.
 # A hive adds its own paperwork in .claude/vulyk-paperwork (hive_paperwork_path below), a file
 # the installer never ships, owns or touches (ADR-010 amendment 2026-10-16).
 # Callers pass a path as itself: read git's lists with -z, never its C-quoted `"docs/\320..."`.
@@ -58,7 +59,7 @@ is_paperwork_path() { # is_paperwork_path <repo-relative-path> [<root>]
   case "$1" in
     docs/specs/*/plan.md|docs/specs/*/journal.md|docs/specs/*/council/*|docs/specs/*/brief.md| \
     memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl|memory/stats/council.jsonl|memory/stats/scope.jsonl| \
-    memory/stats/anomalies.jsonl|memory/stats/evolve.jsonl|memory/stats/skills.json|VERSION|CHANGELOG.md|CITATION.cff) return 0 ;;
+    memory/stats/anomalies.jsonl|memory/stats/evolve.jsonl|VERSION|CHANGELOG.md|CITATION.cff) return 0 ;;
     memory/learnings/*.md)
       case "${1#memory/learnings/}" in */*) ;; *) return 0 ;; esac ;;
   esac

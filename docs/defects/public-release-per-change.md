@@ -40,6 +40,9 @@ case (a hive left on the previous dev build) and a neighbour (a hold that ran ou
 - Push tags in bulk (`git push --tags`, `--follow-tags`), push a `-dev.N` tag, or push more than one version tag in
   one publish.
 - Push a spec branch to a public origin for its CI run: it carries every unpublished commit of the local main.
+- Print or run a publish before `lead-review` has passed the outward text clean (the CHANGELOG section going out, the
+  release notes, the published spec folders' `UNASKED:` / Minor lines): a line naming a gate bypass or a hole not
+  fixed in that version moves to a private file under `~/.vulyk/` first.
 
 ## How to
 - After a ship, merge on the local main and roll the change out to the local hives from the local clone

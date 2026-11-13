@@ -2753,6 +2753,15 @@ $CMD_LIST")"
   fi
   VR_REC="$VREC" verify_run "$CMD_LIST" 1 "$OUTD"
   if [ "$VR_PAUSE" -gt 0 ]; then verify_pause stamp-red "$VREC" "$VR_PAUSE"; fi
+  # audit-fixes-1113-03: a later line can rewrite an earlier line's <k>.out after its hash was recorded; each
+  # stored output is re-hashed against its line= entry before the verdict reads it again.
+  local k oh
+  for k in "${!VR_CODES[@]}"; do
+    oh="$(grep "^line=$k " "$VREC" 2>/dev/null | tail -n 1 | cut -d' ' -f4)"
+    if [ -z "$oh" ] || [ "$(verify_file_hash "$OUTD/$k.out")" != "$oh" ]; then
+      rm -f "$VREC"; rm -rf "$OUTD"; red_refuse "stored output of line $k changed after it was checked"
+    fi
+  done
   rm -f "$VREC"
   if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
     rm -rf "$OUTD"; red_refuse "not red: timed out after ${VR_VT}s"
