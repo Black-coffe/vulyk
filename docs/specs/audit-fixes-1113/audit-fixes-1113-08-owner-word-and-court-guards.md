@@ -81,6 +81,11 @@ council-haiku); `memory/map/scripts-hooks.md` → `git-guard.sh` (the skeleton);
   owner text; a quote older than the latest verdict; a fragment cut from inside a line; a bare «ок»; text that
   stands only in an assistant message, a tool result or an agent's message.
 - [ ] `briefed --go` passes only when an owner prompt of the session carries `--go`.
+- [ ] Plan approval: an `**Approved:**` line quoting the owner's latest message after the spec's plan commit passes
+  at any length («Погнали»); one quoting an earlier owner message, or one written before the plan commit, is denied.
+- [ ] Release acceptance: `ACCEPTED`/`**Checked:**` passes only with the answer to a one-question `AskUserQuestion`
+  naming the spec slug, or the owner's next message after it (8+ letters or digits unless a picked option);
+  an owner message of 8+ letters that answers no such question is denied.
 - [ ] A Write or Edit that leaves the template placeholder on a marker line passes, for a subagent too; an edit of
   `plan.md` that changes no marker line passes; a shell command writing a `**Checked:**` line into a `plan.md` is
   judged like the Edit.
