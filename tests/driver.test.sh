@@ -770,6 +770,59 @@ const blindPromptsClean = (r) => r.dispatches
       'checkpoint: no `now` in any verb answer - the checkpoint does not fire', mute.result);
   }
 
+  // --- beta-fixes-1113-02: a worker's NEEDS_CONTEXT return goes to the Queen (N1), it is not a miss
+  {
+    const NC = '```\nSTATUS: NEEDS_CONTEXT\nFILES: none\nTESTS: not run\nINTERFACES: none\nCONCERNS: none\nBLOCKERS: which file holds the limit?\n```';
+    const a = story(1);
+    const r = await run(ARGS, { clerk: [[CLAIM, adv(build([a]))], [ADV, adv(build([a]))], [RELEASE, releaseOk]], agents: [NC] });
+    const res = r.result || {};
+    check(r.dispatches.length === 1 && res.status === 'needs_context' && res.next === 'build:1' && !res.stop
+      && Array.isArray(res.stories) && res.stories.length === 1 && res.stories[0].story === a.file && res.stories[0].report === NC
+      && Array.isArray(res.fallbacks) && r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
+      'needs_context: a NEEDS_CONTEXT return stops the build with no second dispatch, names the story and its report, releases',
+      { result: r.result, n: r.dispatches.length, seq: seq(r), mm: r.mismatches });
+  }
+  // neighbour: an empty return is still a miss, retried, and the second miss stops the run
+  {
+    const a = story(1);
+    const r = await run(ARGS, { clerk: [[CLAIM, adv(build([a]))], [ADV, adv(build([a]))], [ADV, adv(build([a]))], [RELEASE, releaseOk]], agents: ['', ''] });
+    check(r.dispatches.filter((d) => d.agentType === 'worker-code').length === 2 && r.result && r.result.stop && r.result.stop.verb === 'build' && r.result.stop.file === a.file
+      && r.result.status !== 'needs_context' && r.mismatches.length === 0,
+      'needs_context: an empty return is still retried and the second miss stops the run', { result: r.result, n: r.dispatches.length });
+  }
+  // neighbour: a DONE report that mentions NEEDS_CONTEXT in prose, its story closed, does not stop the run
+  {
+    const a = story(1);
+    const DONE = 'STATUS: DONE\nFILES: x\nTESTS: close-story exit 0\nINTERFACES: none\nCONCERNS: a NEEDS_CONTEXT return now stops the build\nBLOCKERS: none';
+    const r = await run(ARGS, { clerk: [[CLAIM, adv(build([a]))], [ADV, adv(green())], [RELEASE, releaseOk]], agents: [DONE] });
+    check(r.result && r.result.next === 'green' && r.result.status !== 'needs_context' && r.dispatches.length === 1,
+      'needs_context: a DONE report mentioning NEEDS_CONTEXT in prose is no stop', r.result);
+    // and with the story still listed it is a miss as today, retried
+    const r2 = await run(ARGS, { clerk: [[CLAIM, adv(build([a]))], [ADV, adv(build([a]))], [ADV, adv(green())], [RELEASE, releaseOk]], agents: [DONE, 'retry report'] });
+    check(r2.result && r2.result.next === 'green' && r2.dispatches.length === 2 && r2.logs.some((l) => l.startsWith(`miss 1 on ${a.file}: worker returned, but`)),
+      'needs_context: a still-listed DONE mentioning NEEDS_CONTEXT is a plain miss and retried', { result: r2.result, logs: r2.logs });
+  }
+  // a wave of three: one closes, one NEEDS_CONTEXT, one empty - only the second is named, the third is not dispatched again
+  {
+    const [a, b, c] = [story(1), story(2), story(3)];
+    const NC = 'STATUS: NEEDS_CONTEXT\nBLOCKERS: which one?';
+    const r = await run(ARGS, { clerk: [[CLAIM, adv(build([a, b, c]))], [ADV, adv(build([b, c]))], [RELEASE, releaseOk]], agents: ['STATUS: DONE', NC, ''] });
+    const res = r.result || {};
+    check(r.dispatches.length === 3 && res.status === 'needs_context' && Array.isArray(res.stories) && res.stories.length === 1
+      && res.stories[0].story === b.file && res.stories[0].report === NC && r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
+      'needs_context: a wave of three names only the NEEDS_CONTEXT story and dispatches nothing more', { result: r.result, n: r.dispatches.length, seq: seq(r) });
+  }
+  // a NEEDS_CONTEXT on the retry dispatch, after one plain miss, is needs_context and not the two-miss stop
+  {
+    const a = story(1);
+    const NC = 'STATUS: NEEDS_CONTEXT\nBLOCKERS: the input is missing';
+    const r = await run(ARGS, { clerk: [[CLAIM, adv(build([a]))], [ADV, adv(build([a]))], [ADV, adv(build([a]))], [RELEASE, releaseOk]], agents: ['', NC] });
+    const res = r.result || {};
+    check(r.dispatches.length === 2 && res.status === 'needs_context' && !res.stop && res.stories && res.stories[0].story === a.file
+      && r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
+      'needs_context: a NEEDS_CONTEXT on the retry gives needs_context, not the two-miss stop', { result: r.result, n: r.dispatches.length });
+  }
+
   check(!everyAgentType.has('queen-planner'), 'no queen-planner dispatch in any scenario', [...everyAgentType]);
   console.log(`${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);

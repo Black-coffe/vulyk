@@ -1,14 +1,15 @@
 ---
 story: beta-fixes-1113-02
 spec: beta-fixes-1113
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: a NEEDS_CONTEXT return stops the build with no second dispatch
+red_verified_at: 2026-11-13T07:58:45Z f5d1cc0ab17b5787c0083ca19fce7ea1b344d4f312380a8c089a29aea96efeb0
 ---
 
 # The driver hands a worker's `NEEDS_CONTEXT` to the Queen instead of dispatching again
@@ -72,5 +73,32 @@ path, 0.50 `revised <story-id>` rule).
 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each -->
+- `.claude/workflows/vulyk-cycle.js`: `statusOf()` reads the first line opening with `STATUS:` (report contract); `build()` collects still-listed NEEDS_CONTEXT stories, skips their miss, and throws a `Stop` with the N1 result after the loop.
+- Decision: when a wave has both a NEEDS_CONTEXT story and a story on its second miss, `needs_context` wins (the two-miss stop is deferred to after the loop, unchanged otherwise), so the worker's question is not lost.
+- `tests/driver.test.sh`: five cases; the original case, the wave of three and the retry case fail on HEAD; the two neighbours (empty retry, DONE mentioning NEEDS_CONTEXT) pass on HEAD by design.
+- Surprise: an empty return on a retry model other than opus costs a ping dispatch, so the empty-neighbour case counts worker dispatches only.
+- `vulyk-build.md` wake-up list gains the `needs_context` entry; `docs/cycle.md` driver paragraph gains two sentences.
+- CHANGELOG: The Workflow driver no longer re-dispatches a worker that returned `NEEDS_CONTEXT`: the run ends with `status: "needs_context"`, the story file and the worker's report, and `/vulyk-build` tells the Queen to answer it in the story's `## Findings`, commit the revision and relaunch.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/driver.test.sh
+- exit: 1
+- tests: f5d1cc0ab17b5787c0083ca19fce7ea1b344d4f312380a8c089a29aea96efeb0 (tests/driver.test.sh)
+- impl: 37058163986fe5064ba843d9251198404531c4e19b7abd14f2dabe61c3e534e0
+- stamped: 2026-11-13T07:58:45Z
+
+```
+::error::needs_context: a NEEDS_CONTEXT return stops the build with no second dispatch, names the story and its report, releases - got {"result":"","n":2,"seq":"advance docs/specs/demo --stamp 0123456789abcdef --claim | advance docs/specs/demo --stamp 0123456789abcdef | advance docs/specs/demo --stamp 0123456789abcdef | status docs/specs/demo --json | release docs/specs/demo 0123456789abcdef","mm":[{"n":2,"want":"release docs/specs/demo 0123456789abcdef","got":"advance docs/specs/demo --stamp 0123456789abcdef"}]}
+  ok    checkpoint: no launched_at, no time source - the checkpoint does not fire and the driver runs on
+  ok    checkpoint: no `now` in any verb answer - the checkpoint does not fire
+::error::needs_context: a NEEDS_CONTEXT return stops the build with no second dispatch, names the story and its report, releases - got {"result":"","n":2,"seq":"advance docs/specs/demo --stamp 0123456789abcdef --claim | advance docs/specs/demo --stamp 0123456789abcdef | advance docs/specs/demo --stamp 0123456789abcdef | status docs/specs/demo --json | release docs/specs/demo 0123456789abcdef","mm":[{"n":2,"want":"release docs/specs/demo 0123456789abcdef","got":"advance docs/specs/demo --stamp 0123456789abcdef"}]}
+  ok    needs_context: an empty return is still retried and the second miss stops the run
+  ok    needs_context: a DONE report mentioning NEEDS_CONTEXT in prose is no stop
+  ok    needs_context: a still-listed DONE mentioning NEEDS_CONTEXT is a plain miss and retried
+::error::needs_context: a wave of three names only the NEEDS_CONTEXT story and dispatches nothing more - got {"result":"","n":5,"seq":"advance docs/specs/demo --stamp 0123456789abcdef --claim | advance docs/specs/demo --stamp 0123456789abcdef | advance docs/specs/demo --stamp 0123456789abcdef | status docs/specs/demo --json | release docs/specs/demo 0123456789abcdef"}
+::error::needs_context: a NEEDS_CONTEXT on the retry gives needs_context, not the two-miss stop - got {"result":{"spec":"docs/specs/demo","slug":"demo","stage":"03","tier":3,"branch":"vulyk/demo","head":"h1","wave_stories":[{"file":"docs/specs/demo/demo-01-x.md","story":"demo-01","worker":"worker-code","model":"opus","repeat":1}],"round":0,"court":null,"round_dir":null,"since":null,"seat_attempt":{},"seats":[],"red":[],"next":"build:1","stop":{"verb":"build","file":"docs/specs/demo/demo-01-x.md","error":"worker returned, but docs/specs/demo/demo-01-x.md is still todo - close-story did not close it"},"fallbacks":[]},"n":2}
+  ok    no queen-planner dispatch in any scenario
+132 passed, 3 failed
+```

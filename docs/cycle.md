@@ -166,7 +166,11 @@ next thing only an agent can do.
 
 At Tier 3-4 the Workflow driver (`.claude/workflows/vulyk-cycle.js`) runs the same loop through the
 clerk. A worker that returns with its story still `todo` is a miss: the driver dispatches it once
-more, on the gate model, and a second miss stops the run. Its edits stay in the tree, and since
+more, on the gate model, and a second miss stops the run. A worker whose report's `STATUS:` line says
+`NEEDS_CONTEXT` is no miss: the driver dispatches nothing more and returns `{"status":"needs_context",
+"stories":[{story,report}],...}`, releasing its claim; the Queen reads the story's `## Findings`, revises
+and commits it (`revised <story-id>`), journals it and relaunches with a fresh stamp.
+A miss's edits stay in the tree, and since
 ab-run-fixes a relaunch is not refused for them: `claim` accepts dirty paths in the `## Files` (or the
 story file) of a `todo` story of the current wave, names those stories under `leftover`, and the
 driver tells each one's worker to read `git diff` and finish. Any other dirty path is refused as before.

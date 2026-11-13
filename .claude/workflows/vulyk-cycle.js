@@ -39,6 +39,12 @@ const reasonFor = (who, agentType, r) => {
   if (typeof r === 'string' && r.trim() !== '') return null
   return `${who} returned empty - turn cap suspected (${agentType}, maxTurns in .claude/agents/${agentType}.md)`
 }
+// The status token of a worker's report: the first line that opens with `STATUS:` (the report contract in
+// worker-code.md / worker-test.md), its first word. Null for no such line; prose elsewhere is not read.
+const statusOf = (r) => {
+  const m = typeof r === 'string' ? r.match(/^\s*STATUS:\s*([A-Z_]+)/m) : null
+  return m ? m[1] : null
+}
 const caught = (p) => p.catch((e) => ({ threw: e && e.message ? e.message : String(e) }))
 // The Fable-limit refusal. A caught error (caught() swallowed it) matches either form anywhere; a
 // returned string only when it names the limit AND is not a report: it is short (the real refusal,
@@ -217,14 +223,25 @@ const build = async (st) => {
   if (res.ok === false) return res
   // a dispatched story still listed is still todo: close-story never closed it
   const left = new Set((res.status.wave_stories || []).map((s) => s.file))
+  // a still-listed story whose worker returned NEEDS_CONTEXT is no miss: the run ends with it for the Queen (N1),
+  // who reads its ## Findings; every other still-listed story counts its miss as before
+  const needs = []
+  let second = null
   stories.forEach((story, i) => {
     if (!left.has(story.file)) return
+    if (statusOf(returns[i]) === 'NEEDS_CONTEXT') {
+      log(`needs context on ${story.file}`)
+      needs.push({ story: story.file, report: returns[i] })
+      return
+    }
     const why = reasonFor('worker', story.worker, returns[i]) ?? `worker returned, but ${story.file} is still todo - close-story did not close it`
     const n = (misses.get(story.file) || 0) + 1
     misses.set(story.file, n)
     log(`miss ${n} on ${story.file}: ${why}`)
-    if (n >= 2) fail(res.status, { verb: 'build', file: story.file, error: why })
+    if (n >= 2 && second === null) second = { verb: 'build', file: story.file, error: why }
   })
+  if (needs.length) throw new Stop({ status: 'needs_context', stories: needs, next: res.status.next })
+  if (second !== null) fail(res.status, second)
   return res
 }
 
