@@ -234,6 +234,11 @@ evidence stays in the private audit folder.
 
 ## Plan deltas
 
+- 2026-11-13, wave 2 NEEDS_CONTEXT, the Queen's rulings:
+  - 05: `.claude/hooks/defects-inject.sh` joins the story; its `reset` branch (SessionStart) exits for a subagent too (H1).
+  - 06: the two `edits` assertions of `tests/telemetry.test.sh` that encode the old upgrade base are rewritten to
+    U1, and `--part edits` joins the story's `## Verification`.
+
 - 2026-11-13, wave 1 relaunch, the Queen's rulings:
   - 04 NEEDS_CONTEXT: the close-story block gate runs a block card's check on that card's own new fixtures, which
     fail by design. The two fixtures leave story 04's `## Files` and the Queen commits them; the gate defect
