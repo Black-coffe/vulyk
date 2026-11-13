@@ -487,6 +487,52 @@ printf '%s' "$o" | ctx | expect "eight big cards on a story Read fold the rest" 
 o="$(run "$HIVE" "$(edit r3 "$W/big/x.py" f1)")"
 printf '%s' "$o" | ctx | expect "a card folded on a story Read arrives in full at the first Edit" "✗ BIG08 long line"
 printf '%s' "$o" | ctx | expect_absent "a card shown in full on the story Read is not repeated at the Edit" "BIG01"
+# --- court guard (audit-fixes-1113-08, contract C1): a blind council seat stays inside its court ---------
+echo "--- court guard"
+CG="$SRC/.claude/hooks/court-guard.sh"
+CP="$T/courtproj"; CR="$CP/.vulyk/court/acme/round-1"
+mkdir -p "$CR/docs/specs/acme" "$CR/src" "$CP/docs/specs/acme" "$CP/src"
+printf '# brief\n' > "$CR/docs/specs/acme/brief.md"; printf '# plan\n' > "$CP/docs/specs/acme/plan.md"
+CPW="$(cd "$CP" && { pwd -W 2>/dev/null || pwd; })"; CRW="$CPW/.vulyk/court/acme/round-1"
+cg() { # cg <agent_type, - for the main session> <cwd> <tool> <tool_input JSON> -> deny | allow
+  local a='' out
+  [ "$1" != - ] && a=",\"agent_id\":\"c1\",\"agent_type\":\"$1\""
+  out="$(printf '{"session_id":"c","tool_name":"%s","tool_input":%s,"cwd":"%s"%s}' "$3" "$4" "$2" "$a" |
+    CLAUDE_PROJECT_DIR="$CPW" bash "$CG")"
+  case "$out" in *'"permissionDecision": "deny"'*) echo deny ;; '') echo allow ;; *) echo other ;; esac
+}
+# bash 3.2 brace-expands a JSON literal with \" inside "$(...)": each payload is built in a variable first.
+p="{\"file_path\":\"$CRW/docs/specs/acme/brief.md\"}"
+expect_eq "court guard: a seat's Read inside the court passes" allow "$(cg council-opus "$CRW" Read "$p")"
+p="{\"file_path\":\"$CPW/docs/specs/acme/plan.md\"}"
+expect_eq "court guard: a seat's Read of the main tree's spec file is denied" deny "$(cg council-opus "$CRW" Read "$p")"
+expect_eq "court guard: the same Read by a worker passes" allow "$(cg worker-code "$CPW" Read "$p")"
+expect_eq "court guard: the same Read by the main session passes" allow "$(cg - "$CPW" Read "$p")"
+p="{\"pattern\":\"x\",\"path\":\"$CPW/src\"}"
+expect_eq "court guard: a seat's Grep outside the court is denied" deny "$(cg council-haiku "$CRW" Grep "$p")"
+p="{\"pattern\":\"x\",\"path\":\"$CRW/src\"}"
+expect_eq "court guard: a seat's Grep inside the court passes" allow "$(cg council-haiku "$CRW" Grep "$p")"
+expect_eq "court guard: a seat's Glob with no path from the main tree is denied" deny \
+  "$(cg council-opus "$CPW" Glob '{"pattern":"**/*.md"}')"
+expect_eq "court guard: a seat's Glob with no path from inside the court passes" allow \
+  "$(cg council-opus "$CRW" Glob '{"pattern":"**/*.md"}')"
+expect_eq "court guard: a Bash path inside the court passes" allow \
+  "$(cg council-opus "$CRW" Bash '{"command":"cat docs/specs/acme/brief.md"}')"
+expect_eq "court guard: a Bash path argument that climbs out of the court is denied" deny \
+  "$(cg council-opus "$CRW" Bash '{"command":"cat ../../../../docs/specs/acme/plan.md"}')"
+p="{\"command\":\"cd $CPW && ls src\"}"
+expect_eq "court guard: a cd out of the court is denied" deny "$(cg council-opus "$CRW" Bash "$p")"
+p="{\"command\":\"mkdir -p $CPW/.vulyk/reports/acme/round-1\"}"
+expect_eq "court guard: the seat's report folder passes" allow "$(cg council-opus "$CRW" Bash "$p")"
+expect_eq "court guard: git log with no pathspec is denied" deny "$(cg council-opus "$CRW" Bash '{"command":"git log --oneline"}')"
+expect_eq "court guard: git show <rev>:docs/specs/... is denied" deny \
+  "$(cg council-opus "$CRW" Bash '{"command":"git show HEAD~2:docs/specs/acme/plan.md"}')"
+expect_eq "court guard: git diff with a pathspec under docs/specs/ is denied" deny \
+  "$(cg council-opus "$CRW" Bash '{"command":"git diff HEAD~1 -- docs/specs/acme"}')"
+expect_eq "court guard: git log whose every pathspec lies elsewhere passes" allow \
+  "$(cg council-opus "$CRW" Bash '{"command":"git log --oneline -- src"}')"
+expect_eq "court guard: git status passes" allow "$(cg council-haiku "$CRW" Bash '{"command":"git status --short"}')"
+expect_eq "court guard: another agent's git log passes" allow "$(cg worker-code "$CPW" Bash '{"command":"git log --oneline"}')"
 fi # part functional
 
 if part latency; then # --- part latency: the two 200 ms medians, on the fixture library above

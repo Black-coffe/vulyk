@@ -21,7 +21,7 @@ cards 19 · never 51 · allowed 20 · how-to 3 · allowed repeats 0
 | general | [host-internals-in-public-repo](host-internals-in-public-repo.md) | A host project's insides quoted into the public VULYK repository | block | 3 | 2 | 1 | 2026-10-13 |
 | general | [measurement-unlike-reality](measurement-unlike-reality.md) | A test or measurement that does not represent the reality it is used to judge | text | 3 | 0 | 0 | - |
 | general | [outward-artifact-carries-internals](outward-artifact-carries-internals.md) | An artifact going outward carries internal or client content beyond names | text | 2 | 0 | 0 | - |
-| general | [owner-words-by-builder](owner-words-by-builder.md) | The owner's words or decision written by the builder | text | 3 | 0 | 0 | - |
+| general | [owner-words-by-builder](owner-words-by-builder.md) | The owner's words or decision written by the builder | block | 3 | 0 | 0 | - |
 | general | [public-release-per-change](public-release-per-change.md) | VULYK is published to GitHub after every small change instead of on the owner's call | block | 6 | 2 | 1 | 2026-11-12 |
 | general | [safeguard-bypassable-or-late](safeguard-bypassable-or-late.md) | A safeguard that can be bypassed, passes silently on a missing input, or ships after what it guards | text | 3 | 0 | 0 | - |
 | general | [shell-needs-gnu-or-bash4](shell-needs-gnu-or-bash4.md) | Shell that runs only on Linux - bash 4+, GNU-only flags, a bare python | block | 6 | 1 | 0 | 2026-10-28 |
@@ -45,7 +45,7 @@ cards 19 · never 51 · allowed 20 · how-to 3 · allowed repeats 0
 | general | [host-internals-in-public-repo](host-internals-in-public-repo.md) | A host project's insides quoted into the public VULYK repository | block | 1 | 2 | 0 | - |
 | general | [measurement-unlike-reality](measurement-unlike-reality.md) | A test or measurement that does not represent the reality it is used to judge | text | 1 | 0 | 0 | - |
 | general | [outward-artifact-carries-internals](outward-artifact-carries-internals.md) | An artifact going outward carries internal or client content beyond names | text | 1 | 0 | 0 | - |
-| general | [owner-words-by-builder](owner-words-by-builder.md) | The owner's words or decision written by the builder | text | 1 | 0 | 0 | - |
+| general | [owner-words-by-builder](owner-words-by-builder.md) | The owner's words or decision written by the builder | block | 1 | 0 | 0 | - |
 | general | [public-release-per-change](public-release-per-change.md) | VULYK is published to GitHub after every small change instead of on the owner's call | block | 2 | 2 | 0 | - |
 | general | [safeguard-bypassable-or-late](safeguard-bypassable-or-late.md) | A safeguard that can be bypassed, passes silently on a missing input, or ships after what it guards | text | 1 | 0 | 0 | - |
 | general | [test-gate-one-long-limit](test-gate-one-long-limit.md) | A test gate runs as one long job under one big time limit and keeps hitting it | block | 1 | 1 | 0 | 2026-11-02 |

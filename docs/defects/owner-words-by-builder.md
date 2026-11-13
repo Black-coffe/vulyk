@@ -1,11 +1,11 @@
 ---
 id: owner-words-by-builder
 title: The owner's words or decision written by the builder
-status: text
-check:
-fixtures: []
+status: block
+check: bash .claude/hooks/owner-guard.sh --check <arg>
+fixtures: [docs/defects/owner-words-by-builder.original.fixture, docs/defects/owner-words-by-builder.neighbour.fixture]
 keys: [в любое время я не могу, waived, не называл]
-paths: ["docs/defects/*.md", "docs/specs/*/plan.md", "scripts/human-check.sh", "scripts/acceptance-log.sh", ".claude/hooks/defect-intake.sh"]
+paths: ["docs/defects/*.md", "docs/specs/*/plan.md", "scripts/human-check.sh", ".claude/hooks/owner-guard.sh", "scripts/acceptance-log.sh", ".claude/hooks/defect-intake.sh"]
 ---
 
 # The owner's words or decision written by the builder
@@ -28,8 +28,17 @@ an owner field (`waived`, **Approved:**, ACCEPTED, a quote) is held only by the 
 the same risk was caught in planning on 2026-10-15: a mod's button would have filed a model's note as an owner quote.
 
 ## Check
-None, and code cannot add one generically: a file cannot show who typed a line. Where a hive can bind the line to a
-source (the video hive's waiver check demands one), that check is per hive.
+`.claude/hooks/owner-guard.sh` (PreToolUse, `Bash|PowerShell|Edit|Write|MultiEdit`) guards `human-check.sh
+ACCEPTED|REJECTED`, `cycle.sh briefed --go`, a new or changed `**Approved:**` / `**Checked:**` line of a spec's
+`plan.md` and an ACCEPTED / REJECTED row of `memory/stats/human.jsonl`. A subagent is always denied. The main
+session passes only when the note or the line quotes the owner whole, read from the session transcript: a prompt
+of type `user` with origin `human` (injected blocks, pastes and side-agent notes cut), or an `AskUserQuestion`
+answer. `**Approved:**` quotes his latest message after the `vulyk(<slug>): plan` commit; an acceptance quotes the
+answer to the release question asked alone (one question naming the slug) or his next message, after the latest
+verdict, 8+ letters or digits unless a picked option; `--go` needs an owner prompt carrying `--go`. No Python or
+an unreadable transcript: denied. `--check <file>` runs it on a fixture (hook input JSON; a `transcript` field
+stands in for the file) and exits 1 on a deny. Left open on purpose: whether the words mean yes (no word list),
+the transcript file itself (the session can write it), and text an agent wrote that the owner types or sends.
 
 ## Never
 - Write a line that records the owner (a decision, a waiver, **Approved:**, `human-check.sh ACCEPTED`, a quote under

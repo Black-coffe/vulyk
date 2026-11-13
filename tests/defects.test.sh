@@ -511,5 +511,174 @@ RW="$(cd "$SRC" && { pwd -W 2>/dev/null || pwd; })"
 ok "leak-check: only passing forms -> exit 0" "$([ "$(leak "$LK/reg" "$LK/pass.txt")" = 0 ]; echo $?)"
 [ "$(cat "$LK/out")" = "" ] || sed 's/^/        /' "$LK/out"
 
+echo "--- owner guard: only the owner's quoted words record an acceptance (audit-fixes-1113-08, contract O1)"
+# Synthetic transcripts and a throwaway spec repo; the hook reads both as it reads a live session's.
+OG="$SRC/.claude/hooks/owner-guard.sh"
+OD="$TMP/og"; mkdir -p "$OD/repo/docs/specs/acme-demo" "$OD/repo/memory/stats" "$OD/repo/src" "$OD/stubs"
+cd "$OD/repo" || exit 1
+git init -q -b main . && git config user.name t && git config user.email t@t && git config core.autocrlf false
+printf '# Acme plan\n\n**Approved:** <the owner word>\n**Checked:** <written by human-check>\n' > docs/specs/acme-demo/plan.md
+git add -A && GIT_AUTHOR_DATE='2026-01-01T10:00:00 +0000' GIT_COMMITTER_DATE='2026-01-01T10:00:00 +0000' \
+  git commit -q -m 'vulyk(acme-demo): plan'
+printf '{"ts":"2026-01-02T10:00:00Z","spec":"acme-demo","round":1,"verdict":"GREEN"}\n' > memory/stats/council.jsonl
+OW="$(pwd -W 2>/dev/null || pwd)"; ODW="$(cd "$OD" && { pwd -W 2>/dev/null || pwd; })"
+# Transcript entries, one JSON line each: <ts> then the text (no " or \ in the text, \n is a newline).
+t_owner() { printf '{"type":"user","isSidechain":false,"origin":{"kind":"human"},"promptSource":"typed","timestamp":"%s","message":{"role":"user","content":"%s"}}\n' "$1" "$2"; }
+t_meta() { printf '{"type":"user","isSidechain":false,"isMeta":true,"timestamp":"%s","message":{"role":"user","content":[{"type":"text","text":"%s"}]}}\n' "$1" "$2"; }
+t_asst() { printf '{"type":"assistant","isSidechain":false,"timestamp":"%s","message":{"role":"assistant","content":[{"type":"text","text":"%s"}]}}\n' "$1" "$2"; }
+t_tool() { printf '{"type":"user","isSidechain":false,"timestamp":"%s","toolUseResult":{"stdout":"%s"},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"b1","content":"%s"}]}}\n' "$1" "$2" "$2"; }
+t_peer() { printf '{"type":"user","isSidechain":false,"origin":{"kind":"peer","from":"audit-1"},"promptSource":"system","timestamp":"%s","message":{"role":"user","content":"%s"}}\n' "$1" "$2"; }
+t_ask() { # t_ask <ts> <id> <question> <first option label> [a second question]
+  local q2=''
+  [ -n "${5:-}" ] && q2=",{\"question\":\"$5\",\"header\":\"More\",\"multiSelect\":false,\"options\":[{\"label\":\"Yes\",\"description\":\"d\"}]}"
+  printf '{"type":"assistant","isSidechain":false,"timestamp":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"AskUserQuestion","input":{"questions":[{"question":"%s","header":"Release","multiSelect":false,"options":[{"label":"%s","description":"d"},{"label":"Hold","description":"d"}]}%s]}}]}}\n' \
+    "$1" "$2" "$3" "$4" "$q2"
+}
+t_answer() { # t_answer <ts> <id> <question> <answer>
+  printf '{"type":"user","isSidechain":false,"timestamp":"%s","toolUseResult":{"questions":[],"answers":{"%s":"%s"},"annotations":{}},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"answered"}]}}\n' \
+    "$1" "$3" "$4" "$2"
+}
+og() { # og <transcript name> <tool> <tool_input JSON> [agent_id] -> deny | allow, the hook output in $OD/why
+  local a='' out
+  [ -n "${4:-}" ] && a=",\"agent_id\":\"$4\",\"agent_type\":\"worker-code\""
+  out="$(printf '{"session_id":"s","transcript_path":"%s/%s","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"%s","tool_input":%s%s}' \
+    "$ODW" "$1" "$OW" "$2" "$3" "$a" | env -u CLAUDE_PROJECT_DIR bash "$OG")"
+  printf '%s' "$out" > "$OD/why"
+  case "$out" in *'"permissionDecision": "deny"'*) echo deny ;; '') echo allow ;; *) echo other ;; esac
+}
+hc() { printf '{"command":"bash scripts/human-check.sh docs/specs/acme-demo %s \\"%s\\""}' "$1" "$2"; }
+ed() { printf '{"file_path":"%s/docs/specs/acme-demo/plan.md","old_string":"%s","new_string":"%s"}' "$OW" "$1" "$2"; }
+Q='acme-demo: accept the release?'
+# release: the owner picks an option, then types his own words after a second release question
+{ t_owner 2026-01-01T12:00:00.000Z 'Old words about the Acme staging build'
+  t_ask 2026-01-03T09:00:00.000Z q1 "$Q" 'Accept, ship it (Recommended)'
+  t_answer 2026-01-03T09:01:00.000Z q1 "$Q" 'Accept, ship it (Recommended)'
+  t_asst 2026-01-03T09:02:00.000Z 'The assistant says the Acme build is ready to ship'
+  t_tool 2026-01-03T09:03:00.000Z 'Tool output says the Acme checks all pass'
+  t_peer 2026-01-03T09:04:00.000Z 'An agent says the Acme release is approved'
+  t_ask 2026-01-03T09:10:00.000Z q2 "$Q" 'Accept'
+  t_owner 2026-01-03T09:12:00.000Z 'I looked at the staging site.\nthe Acme login works on a new account'
+} > "$OD/rel.jsonl"
+SUB=a1
+ok "owner guard: a subagent cannot record an acceptance - human-check ACCEPTED" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'Accept, ship it (Recommended)')" "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a subagent cannot record an acceptance - the reason says so" \
+  "$(grep -q 'a subagent cannot record an acceptance' "$OD/why"; echo $?)"
+ok "owner guard: a subagent cannot record an acceptance - human-check REJECTED" \
+  "$([ "$(og rel.jsonl Bash "$(hc REJECTED 'Accept, ship it (Recommended)')" "$SUB")" = deny ]; echo $?)"
+GO='{"command":"bash scripts/cycle.sh briefed docs/specs/acme-demo --go"}'
+ok "owner guard: a subagent cannot record an acceptance - cycle.sh briefed --go" \
+  "$([ "$(og rel.jsonl Bash "$GO" "$SUB")" = deny ]; echo $?)"
+AP='**Approved:** <the owner word>'
+ok "owner guard: a subagent cannot record an acceptance - an Edit adding **Approved:**" \
+  "$([ "$(og rel.jsonl Edit "$(ed "$AP" '**Approved:** t, 2026-01-03 (Accept)')" "$SUB")" = deny ]; echo $?)"
+ok "owner guard: the picked answer to the release question, quoted whole, passes" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'owner picked «Accept, ship it (Recommended)» for the Acme build')")" = allow ]; echo $?)"
+ok "owner guard: a whole line of his next message after the question passes" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'the Acme login works on a new account')")" = allow ]; echo $?)"
+ok "owner guard: the same line with other spacing passes" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'the  Acme login   works on a new account')")" = allow ]; echo $?)"
+ok "owner guard: REJECTED takes the same rule" \
+  "$([ "$(og rel.jsonl Bash "$(hc REJECTED 'I looked at the staging site.')")" = allow ]; echo $?)"
+ok "owner guard: a note with no owner text is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'all good, shipping')")" = deny ]; echo $?)"
+ok "owner guard: a fragment cut from inside a line is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'Acme login works')")" = deny ]; echo $?)"
+ok "owner guard: a quote older than the latest verdict is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'Old words about the Acme staging build')")" = deny ]; echo $?)"
+ok "owner guard: text only in an assistant message is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'The assistant says the Acme build is ready to ship')")" = deny ]; echo $?)"
+ok "owner guard: text only in a tool result is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'Tool output says the Acme checks all pass')")" = deny ]; echo $?)"
+ok "owner guard: text only in an agent's message is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'An agent says the Acme release is approved')")" = deny ]; echo $?)"
+# a bare «ок», and an owner message of 8+ letters that answers no release question
+{ t_ask 2026-01-03T09:00:00.000Z q1 "$Q" 'Accept'
+  t_answer 2026-01-03T09:01:00.000Z q1 "$Q" 'ок'
+  t_owner 2026-01-03T09:02:00.000Z 'ок'
+} > "$OD/ok.jsonl"
+ok "owner guard: a bare «ок» (a typed answer, then a message) is denied" \
+  "$([ "$(og ok.jsonl Bash "$(hc ACCEPTED 'ок')")" = deny ]; echo $?)"
+{ t_owner 2026-01-03T09:00:00.000Z 'Everything looks right on the Acme staging site'
+  t_ask 2026-01-03T09:05:00.000Z q1 'Which Acme logo do you like?' 'Blue'
+  t_answer 2026-01-03T09:06:00.000Z q1 'Which Acme logo do you like?' 'The blue logo with round corners'
+  t_ask 2026-01-03T09:07:00.000Z q2 "$Q" 'Accept' 'Also bump the Acme version?'
+  t_answer 2026-01-03T09:08:00.000Z q2 "$Q" 'Accept it, the Acme build is fine'
+} > "$OD/noq.jsonl"
+ok "owner guard: an owner message of 8+ letters that answers no release question is denied" \
+  "$([ "$(og noq.jsonl Bash "$(hc ACCEPTED 'Everything looks right on the Acme staging site')")" = deny ]; echo $?)"
+ok "owner guard: an answer to a question that does not name the spec is denied" \
+  "$([ "$(og noq.jsonl Bash "$(hc ACCEPTED 'The blue logo with round corners')")" = deny ]; echo $?)"
+ok "owner guard: an answer to a release question asked beside another is denied" \
+  "$([ "$(og noq.jsonl Bash "$(hc ACCEPTED 'Accept it, the Acme build is fine')")" = deny ]; echo $?)"
+# **Checked:** lines, by an Edit and by a shell command, are judged like the acceptance
+CK='**Checked:** <written by human-check>'
+ok "owner guard: an Edit writing a **Checked:** line that quotes the owner passes" \
+  "$([ "$(og rel.jsonl Edit "$(ed "$CK" '**Checked:** ACCEPTED by t, 2026-01-03 - the Acme login works on a new account')")" = allow ]; echo $?)"
+ok "owner guard: an Edit writing a **Checked:** line with no owner quote is denied" \
+  "$([ "$(og rel.jsonl Edit "$(ed "$CK" '**Checked:** ACCEPTED by t, 2026-01-03 - looks fine')")" = deny ]; echo $?)"
+SHBAD='{"command":"printf %s >> docs/specs/acme-demo/plan.md"}'
+SHBAD="$(printf "$SHBAD" "'**Checked:** ACCEPTED by t - looks fine\\\\n'")"
+SHGOOD='{"command":"printf %s >> docs/specs/acme-demo/plan.md"}'
+SHGOOD="$(printf "$SHGOOD" "'**Checked:** ACCEPTED by t - the Acme login works on a new account\\\\n'")"
+ok "owner guard: a shell command writing a **Checked:** line into a plan.md is judged like the Edit" \
+  "$([ "$(og rel.jsonl Bash "$SHBAD")" = deny ] && [ "$(og rel.jsonl Bash "$SHGOOD")" = allow ]; echo $?)"
+WR="{\"file_path\":\"$OW/docs/specs/acme-demo/plan.md\",\"content\":\"# Acme plan\\n$CK\\n\"}"
+ok "owner guard: a marker line left on its template placeholder passes, for a subagent too" \
+  "$([ "$(og rel.jsonl Edit "$(ed '# Acme plan' "# Acme plan\\n\\n$AP")" "$SUB")" = allow ] &&
+     [ "$(og rel.jsonl Write "$WR" "$SUB")" = allow ]; echo $?)"
+ok "owner guard: an edit of plan.md that changes no marker line passes, for a subagent too" \
+  "$([ "$(og rel.jsonl Edit "$(ed "# Acme plan\\n\\n$CK" "# Acme plan, revised\\n\\n$CK")" "$SUB")" = allow ]; echo $?)"
+# plan approval: the owner's latest message after the plan commit (2026-01-01T10:00Z), at any length
+{ t_owner 2026-01-01T09:00:00.000Z 'Approve the Acme plan when it is ready'
+  t_owner 2026-01-01T11:00:00.000Z 'Tighten the second Acme story'
+  t_owner 2026-01-01T12:00:00.000Z 'Погнали'
+} > "$OD/plan.jsonl"
+t_owner 2026-01-01T09:30:00.000Z 'Погнали' > "$OD/early.jsonl"
+ok "owner guard: an **Approved:** line quoting the owner's latest message after the plan commit passes («Погнали»)" \
+  "$([ "$(og plan.jsonl Edit "$(ed "$AP" '**Approved:** t, 2026-01-01 («Погнали»)')")" = allow ]; echo $?)"
+ok "owner guard: an **Approved:** line quoting an earlier owner message is denied" \
+  "$([ "$(og plan.jsonl Edit "$(ed "$AP" '**Approved:** t, 2026-01-01 («Tighten the second Acme story»)')")" = deny ]; echo $?)"
+ok "owner guard: an **Approved:** line whose quote was written before the plan commit is denied" \
+  "$([ "$(og early.jsonl Edit "$(ed "$AP" '**Approved:** t, 2026-01-01 («Погнали»)')")" = deny ]; echo $?)"
+# briefed --go: an owner prompt must carry --go; a command expansion or an assistant line does not count
+{ t_owner 2026-01-03T09:00:00.000Z 'Plan the Acme task'
+  t_meta 2026-01-03T09:00:01.000Z 'Plan: run straight through with --go when the owner asks'
+  t_asst 2026-01-03T09:01:00.000Z 'I will run briefed --go now'
+} > "$OD/nogo.jsonl"
+t_owner 2026-01-03T09:00:00.000Z '<command-message>vulyk-plan</command-message>\n<command-name>/vulyk-plan</command-name>\n<command-args>--go plan the Acme task</command-args>' > "$OD/go.jsonl"
+ok "owner guard: briefed --go with no owner prompt carrying --go is denied" "$([ "$(og nogo.jsonl Bash "$GO")" = deny ]; echo $?)"
+ok "owner guard: briefed --go passes when an owner prompt (a slash command's arguments) carries --go" \
+  "$([ "$(og go.jsonl Bash "$GO")" = allow ]; echo $?)"
+ok "owner guard: an unreadable transcript denies a guarded call, saying why" \
+  "$([ "$(og missing.jsonl Bash "$(hc ACCEPTED 'the Acme login works on a new account')")" = deny ] && grep -q 'cannot be read' "$OD/why"; echo $?)"
+# no Python: every launcher is a counting stub that runs nothing
+for p in python3 python py; do
+  printf '#!/bin/sh\necho x >> "%s/count"\nexit 9009\n' "$OD" > "$OD/stubs/$p"; chmod +x "$OD/stubs/$p"
+done
+nopy() { # nopy <tool> <tool_input JSON> -> the hook's stdout, with python3 / python / py stubbed away
+  printf '{"session_id":"s","transcript_path":"%s/rel.jsonl","cwd":"%s","tool_name":"%s","tool_input":%s}' "$ODW" "$OW" "$1" "$2" |
+    env -u VULYK_PY -u CLAUDE_PROJECT_DIR PATH="$OD/stubs:$PATH" bash "$OG"
+}
+o="$(nopy Bash "$(hc ACCEPTED 'the Acme login works on a new account')")"
+ok "owner guard: with no Python a guarded call is denied, naming the missing Python" \
+  "$(printf '%s' "$o" | grep -q '"deny".*no Python 3'; echo $?)"
+: > "$OD/count"
+EDSRC="{\"file_path\":\"$OW/src/a.py\",\"old_string\":\"a\",\"new_string\":\"b\"}"
+o="$(nopy Bash '{"command":"ls src"}')$(nopy Edit "$EDSRC")"
+ok "owner guard: with no Python an unrelated Bash or Edit call passes and starts no interpreter" \
+  "$([ -z "$o" ] && [ ! -s "$OD/count" ]; echo $?)"
+cd "$SRC" || exit 1
+OGC=docs/defects/owner-words-by-builder
+bash "$OG" --check "$OGC.original.fixture" >/dev/null; a=$?
+bash "$OG" --check "$OGC.neighbour.fixture" >/dev/null; b=$?
+ok "owner guard --check: both card fixtures exit 1" "$([ "$a" = 1 ] && [ "$b" = 1 ]; echo $?)"
+ok "owner guard --check: a file that is no hook input exits 0" \
+  "$(bash "$OG" --check docs/defects/README.md >/dev/null && bash "$OG" --check "$OGC.md" >/dev/null; echo $?)"
+ok "owner guard: the card is block, the hook its check, its ## Check names what stays open" \
+  "$(grep -q '^status: block$' "$OGC.md" && grep -qF 'check: bash .claude/hooks/owner-guard.sh --check <arg>' "$OGC.md" &&
+     sed -n '/^## Check/,/^## Never/p' "$OGC.md" | grep -q 'Left open on purpose'; echo $?)"
+ok "owner guard: the defect index is current" "$(bash scripts/defects-index.sh --check >/dev/null 2>&1; echo $?)"
+
 if [ "$fail" -eq 0 ]; then echo "defects.test.sh: all checks passed"; else echo "defects.test.sh: FAILED"; fi
 exit "$fail"

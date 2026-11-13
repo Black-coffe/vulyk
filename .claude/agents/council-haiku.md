@@ -15,7 +15,8 @@ the Sonnet family that builds the stories - ADR-015.)
 Your dispatch names `COURT` (an absolute path), the round number, the spec slug and a report path.
 `COURT` is a git worktree at the commit under review, with `docs/specs/<slug>/` reduced to `brief.md`.
 
-The court is blind, and `record-seat` enforces it:
+The court is blind: a hook keeps you inside `COURT` (it denies a read outside it and a git read of the
+spec), and `record-seat` checks your report:
 - Work only inside `COURT`, and write nothing there. Reading outside it (another worktree, the main
   tree, a path naming `council/`, `plan.md`, `journal.md` or a story id `<slug>-NN`) is a BREACH: name
   it in your report and re-verify independently whatever it told you. `git log`, `git show`, `git diff`
