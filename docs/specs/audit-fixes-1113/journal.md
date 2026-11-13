@@ -11,3 +11,4 @@
 - 2026-11-13T21:46:35Z · 03-building · needs_context on audit-fixes-1113-06 · next: PRE_M -> M1 and tests/intake.test.sh join the story
 - 2026-11-13T22:33:52Z · 03-building · needs_context on audit-fixes-1113-06 · next: escape from story 04's scrub: blame --ignore-revs-file docs/defects/.scrub-revs joins story 06
 - 2026-11-13T22:51:16Z · 03-building · needs_context on audit-fixes-1113-06 · next: sealed tests changed by the Queen's own revision: stamp-red --baseline by the Queen, receipt written; rerun close-story
+- 2026-11-13T23:49:38Z · 03-building · checkpoint after 55 min at build:3 · next: story 12 cut (scrub-revs mask-only); relaunching with a fresh stamp
