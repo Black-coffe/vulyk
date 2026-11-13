@@ -163,4 +163,5 @@ is missing or unparsable.
 **Branch:** vulyk/beta-fixes-1113
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-11-13, at 09c0321d, pack 998cf68b25a6
+**Council:** RED round 2, 2026-11-13, at 13a39652, pack b1df82c900d7 - red: 8
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
