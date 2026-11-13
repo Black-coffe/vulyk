@@ -8,3 +8,4 @@
 - 2026-11-13T09:23:29Z · 03-building · checkpoint after 51 min at dispatch:opus,review · next: relaunching with a fresh stamp
 - 2026-11-13T09:35:30Z · 04-council:RED · round 1 verdict RED at 09c0321d pack 998cf68b25a6 · next: repair
 - 2026-11-13T09:35:35Z · 03-building · repair round 1: beta-fixes-1113-05-repair-round-1.md · next: build:3
+- 2026-11-13T09:58:08Z · 03-building · driver lost to an expired login (API 403) during repair round 1; claim released · next: relaunching with a fresh stamp
