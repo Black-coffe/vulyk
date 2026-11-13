@@ -63,6 +63,10 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   `не подтверждено`; WebFetch ≤ 2; reply ≤ 60 lines.
 
 ## Commands - what each runs
+- **0.52 (beta-fixes-1113):** `/vulyk-resume` switches a clean tree to the spec branch (`"switched"`, cycle.md);
+  `/vulyk-plan` `--go` only from the owner's own words, never added by the Queen; `/vulyk-build` handles the driver's
+  `needs_context` return (the Queen reads the story's `## Findings`); `lead-review` copies a `suite.log` whose
+  `head=` differs from the reviewed head only by paperwork commits, saying nothing of the head.
 - **0.51 `/vulyk-update` (upgrade-findings):** step 2 reads three new dry-run lines to the owner: `would merge
   frontmatter <file>` (`kept <key> (yours)`; a key both sides changed parks the file as `keep + new`) and `commands:
   row '<Purpose>'` (a note beside the backticked command, or several commands); step 4 recommends replace-or-merge
@@ -139,4 +143,4 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
   script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-11-12 (local-beta-rollout; prompt-leaks-rules; 0.51.0-dev.1 upgrade-findings, handoff-1m; post-052-tails-01; ADR-013, 015, 020, 022, 023, 024, 025, 029, 032)
+last-verified: 2026-11-13 (beta-fixes-1113; local-beta-rollout; prompt-leaks-rules; 0.51.0-dev.1 upgrade-findings, handoff-1m; post-052-tails-01; ADR-013, 015, 020, 022, 023, 024, 025, 029, 032)

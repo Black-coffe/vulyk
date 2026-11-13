@@ -25,7 +25,7 @@ Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the
   `red_verified_at: <ts> <test-hash>` + a `## Red receipt` section (0.47: its fenced tail leads with up to 3
   lines of the failing output carrying `red_reason`, then the last 10 lines, redacted). Exit 4, nothing written: not required, empty
   `red_reason`, no sealed test, only tests in `## Files`, every line exits 0, 126/127, timeout, or `red_reason`
-  (`grep -F`) in no failing line; exit 2 no sha256 tool. `close-story` calls `red_gate` after scope-check: exit 4
+  (`grep -F`, one layer of matching YAML quotes stripped first, 0.52) in no failing line; exit 2 no sha256 tool. `close-story` calls `red_gate` after scope-check: exit 4
   `no red receipt` / `test changed after red receipt` / `no implementation change since red receipt`.
 - **Story trust from git (0.50, ADR-032):** `approved_rev <story>` = newest commit touching it with a paperwork
   subject (`vulyk(<slug>): ...`, incl. `revised <story-id>`). `close-story`/`stamp-red` compare `## Verification`,
@@ -103,7 +103,9 @@ Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the
 `.vulyk/reports/<slug>/round-<n>/<seat>.attempt-<k>.md`; none → empty report (spends the attempt). Tier 4 `review`
 = `fold_reviews` (BLOCK if either). Exit 4s go into `rejected[]`. 3. Loop ≤ 12 steps: while `next` ∈
 `branch|open-round|judge|repair`, run it with `--commit`; exit 6 is ok; unchanged `next` = `no progress`. `suite`
-is not in the loop: the Queen or the driver calls it before the seats. Last line `{"ok":true,"verb":"advance",..}`.
+is not in the loop: the Queen or the driver calls it before the seats. 4 (0.52): at `build:<wave>` each listed
+story's `## Verification` goes through `verify_cells_check` (close-story's segment check) before the line is
+emitted; a segment not a `## Commands` cell → exit 2 naming the story, no worker sent; empty passes. Last line `{"ok":true,"verb":"advance",..}`.
 
 ## `status --json` `next`
 First match: `shipped` → `paused` → `briefed` → `branch` → `build:<wave>` → `close-story:<file>` → open round:
@@ -126,7 +128,9 @@ exits 3. Blind seat report: `COUNCIL/MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH
 `BREACH:`; malformed → exit 4, re-asked once, then ABSENT. Court = `git worktree add --detach`, removed by `judge`.
 
 ## Repair (ADR-013 D4)
-`cmd_repair` runs only when `next == repair`. 0.49 narrow: exactly one RED item in one non-test file → the story
+`cmd_repair` runs only when `next == repair`. Narrow (`narrow_file`, 0.52): exactly one RED item whose findings
+name exactly one non-test path that exists in the tree (`finding_paths` drops `- `, a leading `N. `, `[tag]`s;
+no path, a glob, a dir or a missing file = full round; `## Files` no longer a fallback) → the story
 has `narrow: true` (information only) and `## Files` = that file, its tests, `docs/defects/*`; `repair` also writes
 the `narrow.round-<n+1>` record, and the next `open-round` is review-only only when it re-checks.
 Writes `<slug>-NN-repair-round-<n>.md`: `worker: worker-code`,
@@ -139,7 +143,8 @@ Args `{spec, stamp, top_model, second_model}` (+ `worker_model`, `review_model`,
 last verb's `now`, the next wave/gate step/seat is not started; returns `{status:"checkpoint",next,elapsed_min}`; either
 time missing = no checkpoint; no clock read. A `leftover` story from `claim` is re-dispatched with a note; 2nd miss stops.
 Shell only via `cycle-clerk`. `build:W` → workers in parallel, a still-listed story is a miss, the second stops
-the run; `dispatch:` → `gate(st)` first, then the seats in parallel (Tier 4 review = two `lead-review`), then
+the run, except a still-listed story whose worker returned `NEEDS_CONTEXT` (0.52): no miss, the run stops with
+`{status:"needs_context",stories:[{story,report}],next}` for the Queen; `dispatch:` → `gate(st)` first, then the seats in parallel (Tier 4 review = two `lead-review`), then
 `advance --ingest`. `release` in `finally`.
 - **`gate`:** loops `suite <spec> --commit --stamp S` via the clerk until `done:true`; `exit 3` → Paused;
   `ok:false` stops the run; an unreadable clerk line (`BadLine`) is asked again, within `SUITE_CALLS` = 32 calls
@@ -149,6 +154,7 @@ the run; `dispatch:` → `gate(st)` first, then the seats in parallel (Tier 4 re
   none left → opus, result carries `retry_same_family`.
 - **Fable-limit fallback:** a `refused(r)` or empty-and-ping-empty result off `opus` is rerun once on `opus`;
   entries go in `fallbacks`; `/vulyk-build` journals them.
-- Tests: `cycle|council|telemetry.test.sh --part <topic>` / `--list-parts`; full set once per round (scripts.md).
+- Tests: `cycle|council|telemetry.test.sh --part <topic>` / `--list-parts` (cycle parts incl. `close`/`close2`,
+  `red`/`red2`; council `verbs`/`verbs2`/`verbs3`); full set once per round (scripts.md).
 
-last-verified: 2026-11-11 (0.51.0-dev.1 upgrade-findings, handoff-1m; ADR-001, 013, 015, 023, 025, 029, 032). Over the ~80-line budget.
+last-verified: 2026-11-13 (0.52.0 beta-fixes-1113; ADR-001, 013, 015, 023, 025, 029, 032). Over the ~80-line budget.

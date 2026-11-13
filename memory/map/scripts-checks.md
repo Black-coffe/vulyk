@@ -53,6 +53,8 @@ Report-only story/prompt/portability/defect checks, the symbol map, and the test
   cut part <name>: <N>s of cap <C>s (cap|over-cap|grew)` for a CAP line, a cap > 300, or N*10 > C*7. Exit 1 any,
   0 none (a readable file with no PART line), 2 no argument or `no such file: <path>` (0.46). Used by
   `full-suite.sh` and `cmd_suite`.
+- Split parts (0.52): `council.test.sh` `verbs`/`verbs2`/`verbs3`; `cycle.test.sh` `close`/`close2`, `red`/`red2`
+  (each pair shares one fixture block); `driver.test.sh`, `telemetry.test.sh` cover needs_context and `agent_prefix_high`.
 - `tests/symbol-map.test.sh` also holds the `--- trace-autopsy` block; `tests/maintenance.test.sh`: caps, brief
   due logic, ledger, prompt-check fixture copies, the hives-behind section (fixture registries via `VULYK_HIVES_FILE`).
 
@@ -60,4 +62,4 @@ Report-only story/prompt/portability/defect checks, the symbol map, and the test
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-12 (post-052-tails split; check scripts and tests moved verbatim from scripts.md; 0.51.0-dev.1)
+last-verified: 2026-11-13 (0.52.0 beta-fixes-1113 test parts; checks unchanged since the post-052-tails split)

@@ -37,6 +37,9 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `py.sh <python-args>` (0.44.0) - `exec "$VULYK_PY" "$@"` via `vulyk_python`; none: exit 2. The spelling for
   Python in `CLAUDE.md` and the commands. `run-capped.py <secs> <cmd>` - the cap `run_capped` falls back to
   (own process group, SIGTERM, 10 s grace, SIGKILL; Windows `taskkill /T`; exit 124).
+- `cycle.sh resume` (0.52): when HEAD is not the plan's `**Branch:**` (or, plan names none, `vulyk/<slug>` whose own
+  plan copy names itself) and the tree is clean, it `git switch`es there first and the JSON gains `"switched"`; a
+  dirty tree is only reported. `branch_guard` itself still never switches.
 - `state.sh` - writes `.claude/state.json`/table for `/vulyk-status`. Reads `story:`, `status:`, `wave:`, `tier:`
   from the leading frontmatter block only (0.43.1), so a study report quoting the story template is not a story.
 - `model-profile.sh` (ADR-020) - `opus-builds|sonnet-builds|economy`; only `--set` writes; unknown =
@@ -74,4 +77,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - Scripts target bash 3.2 + BSD userland (macOS CI jobs `full-suite`, `install-smoke` pin `/bin/bash` 3.2, BSD sed,
   no `timeout`): no bare `sed -i`/`python`/`timeout`/`date -d`; run the gate after editing any `.sh`.
 
-last-verified: 2026-11-13 (cycle scripts; hives-behind --busy naming_proven; 0.52.0-dev.3)
+last-verified: 2026-11-13 (cycle scripts; hives-behind --busy naming_proven; 0.52.0 beta-fixes-1113)

@@ -29,7 +29,8 @@ and the `defects-*` bullet in `scripts-checks.md`.
   A session with no statusLine copy of its own takes the window from the newest report for the same model
   (`model_window`, `[1m]` suffix dropped, <= 30 days old); `context_limit` in `.claude/handoff.config.json` pins it.
   `scripts/handoff-window-check.py [<handoff.py>]` is the check of card `handoff-offered-too-early` (3 sessions
-  on 1M: silent at 15% and 65%, speaks at 71%; exit 0 / 1 / 2).
+  on 1M: silent at 15% and 65%, speaks at 71%; exit 0 / 1 / 2). Given `telemetry.sh` (the path the card also
+  fires on, 0.52) it judges the tree's `.claude/hooks/handoff.py` instead.
 - `.claude/hooks/handoff.sh` - skips a `python3` that is the Windows Store stub (exit 49) or fails to launch,
   and starts a working Python once per call (0.43.1); `handoff.py` `_REDACT_FALLBACK` mirrors `redact.sh` (same
   masks, incl. the 0.50.2 cookie-header, `*_KEY`/`*_AUTH` and OTP rules).
@@ -41,7 +42,8 @@ and the `defects-*` bullet in `scripts-checks.md`.
   `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan`, `bundle`, `check`,
   `publish`, `inbox`; `vulyk_version`: `.claude/vulyk-version`, else `VERSION` beside `install.sh`, else `0.0.0`.
   `ENUM`/`AGENTS` are append-only (removed agents go to `RETIRED_AGENTS`; `ENUM` ends `model_below_floor`,
-  `fable_limit_fallback`). The scan counts handoff Python starts (0.43.1). Dates go through `date_epoch` /
+  `fable_limit_fallback`). `agent_prefix_high` (0.52) fires only when the agent type is in `AGENTS` (built-ins such
+  as `general-purpose` and a hive's own agents are skipped). The scan counts handoff Python starts (0.43.1). Dates go through `date_epoch` /
   `date_shift` (prev ISO week = `date_shift -7 +%G-W%V`).
 - `memory-triage.sh` - read-only lister behind `/vulyk-gc memory`; `--mark` is its one write.
 
@@ -49,4 +51,4 @@ and the `defects-*` bullet in `scripts-checks.md`.
 - git-guard fails open: no python, bad JSON or an error exits 0, so a missing Python removes the guard.
 - The guard does not cover `rm`, `bash -c`, scripts or aliases.
 
-last-verified: 2026-11-12 (post-052-tails split; hook, redact, telemetry bullets moved verbatim; 0.51.0-dev.1 handoff-1m)
+last-verified: 2026-11-13 (0.52.0 beta-fixes-1113: agent_prefix_high, handoff-window-check; handoff-1m)
