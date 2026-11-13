@@ -2,7 +2,7 @@
 story: audit-fixes-1113-03
 spec: audit-fixes-1113
 status: todo
-returned:
+returned: NEEDS_CONTEXT
 tier: 3
 worker: worker-code
 wave: 1
@@ -49,6 +49,7 @@ Marked red: a hash check on the red-receipt path.
 - docs/defects/public-release-per-change.md
 - docs/defects/INDEX.md
 - tests/cycle.test.sh
+- tests/council.test.sh
 
 ## Non-goals
 - In `cycle.sh` touch only the stamp-red resume path. `approved_rev`, the scope call, `claim` and
@@ -86,9 +87,22 @@ Marked red: a hash check on the red-receipt path.
 `bash tests/cycle.test.sh --part red2`
 `bash tests/cycle.test.sh --part ship`
 `bash tests/cycle.test.sh --part gates`
+`bash tests/cycle.test.sh --part close`
+`bash tests/cycle.test.sh --part hooklog`
+`bash tests/council.test.sh --part seats`
+`bash tests/council.test.sh --part escalate`
 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each. End with one `CHANGELOG:` line
 per ask (20, 3, 21, 2). -->
 
 ## Findings
+- NEEDS_CONTEXT (builder, before any edit): removing `memory/stats/skills.json` from `lib.sh` `is_paperwork_path` (ask 2,
+  required by the acceptance criteria) turns two cases in `tests/council.test.sh` red, and that file is not under
+  `## Files`: line ~1248 "record-seat: still NOT stale after a commit touching only skills.json + memory/learnings/*.md
+  (C2)" (`paperwork_only` now calls the skills.json commit code, `stale` becomes true) and line ~2369 "open-round:
+  preconditions - only skills.json/learnings dirty -> not refused as unclean" (open-round's dirty check now refuses).
+  plan.md recon question 3 says a pin outside `tests/cycle.test.sh` joins story 03 or 05; no scout ran, so it was not
+  added. Question: add `tests/council.test.sh` to this story's `## Files` (flip both cases, verification gains
+  `bash tests/council.test.sh --part <part holding them>`), or hand those two flips to story 09 (wave 3, already names
+  `tests/council.test.sh`) and accept a red council suite between waves 1 and 3?
