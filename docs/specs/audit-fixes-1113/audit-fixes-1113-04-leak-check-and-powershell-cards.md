@@ -36,8 +36,6 @@ Marked red: two parsers.
 ## Files
 - scripts/leak-check.sh
 - docs/defects/host-internals-in-public-repo.md
-- docs/defects/host-internals-in-public-repo.abspath.fixture
-- docs/defects/host-internals-in-public-repo.temppath.fixture
 - .claude/hooks/defects-inject.sh
 - .claude/settings.json
 - tests/inject.test.sh
@@ -156,16 +154,16 @@ per ask (14, 12). -->
 - `red_reason` changed from the planner's PowerShell label: the verification line chains with `&&`, and the red `defects.test.sh` stops the run before `inject.test.sh` prints. The PowerShell label was confirmed red separately (3 failures) before the stamp.
 - `tests/inject.test.sh`, `tests/intake.test.sh`: the latency library is now `$VULYK_LATENCY_LIBRARY` instead of a literal hive path.
 - Scrubbed the 33 listed docs: registry roots became `<hive>` (`<hive> (path masked)` inside the owner's quoted words), Claude temp paths became `<claude-temp>/...` or `<scratchpad>/...`, the npm path became `<npm-global>/...`, and the two collect scripts read `VULYK_HIVE_ROOTS`.
-- Scan run: `git ls-files 'docs/**' 'memory/**' CHANGELOG.md tests/inject.test.sh` (card fixtures excluded) | `bash scripts/leak-check.sh` per file, with the real registry and term lists. The listed files and tests/inject.test.sh are clean. 52 hit lines remain in 26 files outside `## Files` (see Findings).
+- Scan run: `git ls-files 'docs/**' 'memory/**' CHANGELOG.md tests/inject.test.sh` (card fixtures excluded) | `bash scripts/leak-check.sh` per file, with the real registry and term lists: no hit in any file (exit 0 for each).
+- Round 2 (Queen's ruling 31825646, scrub all): the 32 added files are scrubbed. Synthetic drive stand-ins became `<D>:/...` / `/<d>/...`; the owner's projects folder `<projects>/...` (`(path masked)` in the grill answer); home paths `<D>:/Users/<user>` and `/home/<user>`; the forensics temp path `<scratchpad>`; the Python install `<python>`; registry roots and the slug `<hive>` / `<hive slug>`. The four token-audit scripts read `~/.claude/projects`; item6c.py reads its slug list from `VULYK_HIVE_SLUGS`.
+- memory/map/scripts.md, listed in round 1's Findings, no longer hits (cleaned outside this story); not touched here.
 - Suites now: defects.test.sh all passed, inject 106/0, intake 119/0, json clean (not yet run through close-story).
 CHANGELOG: leak-check flags any absolute path outside the VULYK root, Claude temp-folder paths and the hive roots of the private registry; the listed docs are scrubbed to shapes (ask 14).
 CHANGELOG: defect cards reach PowerShell commands as they reach Bash ones; the inject matcher includes PowerShell (ask 12).
 
 ## Findings
-- NEEDS_CONTEXT (Non-goals: no edit outside `## Files` to clear a hit). After the scrub, `leak-check.sh` (K1 as written) still exits 1 on 26 tracked files outside `## Files`. The hits are listed by kind only, so this file does not carry them:
-  - real host internals: docs/specs/handoff-ownership/plan-review/fable.md:13 (registry root); docs/specs/token-audit/evidence/scripts/item6c.py:10 (registry root); docs/specs/v0-12-0-remainders/brief.md:24 (registry root, Git Bash form); docs/specs/token-audit/evidence/forensics.md:5 (Claude temp path with the owner's home); docs/specs/token-audit/evidence/scripts/item3b.py:14, item4b.py:4, item6b.py:4, parse_all.py:16 (the owner's home `.claude/projects`); docs/specs/anomaly-telemetry/council/round-1/opus.md:11, round-4/opus.md:11, round-5/opus.md:11, round-6/opus.md:11 (owner home, Windows or Linux form); docs/grill/2026-09-21-project-memory-chronicle.md:78,188, docs/specs/next-circle-0-22/plan.md:22,44, docs/specs/post-037-tails/brief.md:37, docs/specs/mass-audit-fixes/mass-audit-fixes-14-client-name-scrub.md:56 (the owner's projects folder, one with a tool or hive name); docs/specs/vulyk-pulse/study-recon-sonnet.md:119 (a local Python install path); docs/specs/anomaly-telemetry/plan.md:14 (Git Bash projects path).
-  - synthetic stand-ins written as literal drive paths (single-letter or Acme/My_App/build/tmp names): docs/adr/034-busy-hives-are-held-one-green-canary-carries.md:43,44,60; docs/specs/post-052-tails/plan.md:62; post-052-tails-01.md:60; post-052-tails-03.md:21,22,52; post-052-tails-04-repair-round-1.md:25; docs/specs/rules-tree/council/round-1/review.md:23, round-2/review.md:24, rules-tree-07-repair-round-1.md:25; docs/specs/autonomous-cycle/council/round-3/review.md:191; docs/specs/convergent-judge/council/round-2/sonnet.md:7; docs/specs/trace-autopsy/horizon.md:34, trace-autopsy-01-script.md:47; docs/specs/uncommitted-work-guard/uncommitted-work-guard-04-repair-round-1.md:57, -05-repair-round-2.md:61; memory/map/scripts.md:63,64.
-  - Question: add these 26 paths to this story's `## Files` (scrub them as I scrubbed the others), or put them in a follow-up story? The synthetic ones could instead pass by a narrower K1 (for example a one-letter first segment, or a `Acme` stand-in), but K1 as approved flags them. memory/map/scripts.md belongs to drone-docs/librarian, so it may need their pass.
+- Round 1 NEEDS_CONTEXT (26 further hits outside `## Files`) resolved by the Queen's ruling: the files joined `## Files` and were scrubbed.
+- NEEDS_CONTEXT (round 2): close-story exit 4 `defect card host-internals-in-public-repo fails on docs/defects/host-internals-in-public-repo.abspath.fixture` (the temppath fixture fails too). block_card_gate runs every block card's check on the story's `## Files` (`defects-check.sh --files`), and the card's own fixtures, which must fail the check by design, are in `## Files`. The rest is green up to that gate (scope 0 out, the 32 files scrubbed, the full scan clean). Question: should the gate skip a card's own `fixtures:` files (a scripts/defects-check.sh or scripts/cycle.sh change, outside `## Files`), or do the two fixtures leave this story's `## Files` and get committed another way?
 
 ## Red receipt
 - command: bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh
