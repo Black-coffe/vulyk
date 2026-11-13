@@ -165,4 +165,4 @@ is missing or unparsable.
 **Council:** RED round 1, 2026-11-13, at 09c0321d, pack 998cf68b25a6
 **Council:** RED round 2, 2026-11-13, at 13a39652, pack b1df82c900d7 - red: 8
 **Council:** GREEN round 3, 2026-11-13, at 7ceef003, pack 4a95f8626fb4
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+**Shipped:** 0.52.0, 2026-11-13, at c477cf75 - merged to main; release 0.52.0 at c477cf75 (candidate CI green on ubuntu+macOS); rolled out to 5 local hives (canaries skervik+koshty green: own row + VULYK smoke), 10 held; publish to GitHub on the owner's word «Выпускать сейчас (Рекомендую)»
