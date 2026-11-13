@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: shellcheck (real bugs only)
-        uses: ludeeus/action-shellcheck@2.0.0
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         env:
           # Hooks favour portable one-liners (ls|head, etc.); fail only on genuine
           # bugs (severity=error), not style/info nits.
@@ -229,7 +229,7 @@ jobs:
             echo "::error::--check wrote files into target (should be dry run)"; exit 1
           fi
           # and must plan to copy the load-bearing pieces
-          for needle in ".claude/commands/vulyk-plan.md" ".claude/agents/queen-planner.md" "memory/memory.md"; do
+          for needle in ".claude/commands/vulyk-plan.md" ".claude/agents/queen-planner.md"; do
             echo "$out" | grep -q "$needle" || { echo "::error::--check did not plan to copy $needle"; exit 1; }
           done
           # and must show it would skip the maintainer's own runtime artifacts, not ship them
@@ -271,6 +271,10 @@ jobs:
           ./install.sh "$target" --upgrade >/dev/null
           test -f "$target/.claude/mods/vulyk-pulse/hooks/hooks.json" || { echo "::error::pulse mod tree missing after an upgrade"; exit 1; }
           test -f "$target/memory/stats/skills.json"          || { echo "::error::skills.json not seeded"; exit 1; }
+          # audit-fixes-1113 (ask 17): the hive's memory index is the skeleton, never VULYK's own
+          cmp -s templates/memory.md "$target/memory/memory.md" || { echo "::error::memory/memory.md is not templates/memory.md"; exit 1; }
+          grep -q 'memory/map/' "$target/memory/memory.md" && { echo "::error::the installed memory index names a memory/map/ path"; exit 1; }
+          grep -qE '(^|[^A-Za-z0-9_.-])tests/' "$target/memory/memory.md" && { echo "::error::the installed memory index names a tests/ path"; exit 1; }
           # the blanked Profile placeholder must carry every row the source constitution
           # documents (story 16) - count instead of hardcoding a number, so a row added to
           # CLAUDE.md but not to install.sh's placeholder turns this red.

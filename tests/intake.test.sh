@@ -371,7 +371,7 @@ if [ -f "$UP/.claude/settings.json" ]; then
       | .hooks.PostToolUse |= map(select(.matcher != "AskUserQuestion"))' "$F" > "$T/old.json" && mv "$T/old.json" "$F"
   bash "$SRC/install.sh" "$UP" --upgrade --telemetry off > "$T/up.out" 2>&1
   expect_eq "an upgraded hive's inject matcher is the widened one" \
-    "Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*" \
+    "Edit|Write|MultiEdit|NotebookEdit|Read|Bash|PowerShell|WebFetch|WebSearch|Agent|mcp__.*" \
     "$(jq -r '.hooks.PreToolUse[] | select(any(.hooks[]; .command | test("defects-inject")) ) | .matcher' "$F")"
   expect_eq "defects-inject.sh is wired once on PreToolUse" "1" \
     "$(jq -r '.hooks.PreToolUse[].hooks[].command' "$F" | grep -c 'defects-inject.sh')"
@@ -385,8 +385,8 @@ if [ -f "$UP/.claude/settings.json" ]; then
   jq '(.hooks.PreToolUse[] | select(any(.hooks[]; .command | test("defects-inject")))).matcher = "Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*"' \
     "$F" > "$T/old.json" && mv "$T/old.json" "$F"
   bash "$SRC/install.sh" "$UP" --upgrade --telemetry off > "$T/up3.out" 2>&1
-  expect_eq "a hive on the 0.32 matcher gets the one with Read" \
-    "Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*" "$(inject_matcher)"
+  expect_eq "a hive on the 0.32 matcher gets M1, Read and PowerShell in it" \
+    "Edit|Write|MultiEdit|NotebookEdit|Read|Bash|PowerShell|WebFetch|WebSearch|Agent|mcp__.*" "$(inject_matcher)"
   expect_eq "... with defects-inject.sh wired once" "1" \
     "$(jq -r '.hooks.PreToolUse[].hooks[].command' "$F" | grep -c 'defects-inject.sh')"
   jq '(.hooks.PreToolUse[] | select(any(.hooks[]; .command | test("defects-inject")))).matcher = "Edit|Bash"' \

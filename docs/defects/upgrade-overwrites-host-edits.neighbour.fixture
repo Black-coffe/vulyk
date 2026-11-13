@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Fixture, card upgrade-overwrites-host-edits, a neighbour form: the three-way merge the card warns about, with the
+# wrong base. The base is the closest tag or branch whose blob equals the hive's copy, else the installed tag. With
+# ours = base the merge takes the new release whole, so an older release's line, or a branch's, is lost all the same.
+# Run as `install.sh <hive> --upgrade`; scripts/upgrade-base-check.sh must exit non-zero on it.
+set -eu
+SRC="$(cd "$(dirname "$0")" && pwd)"; DEST="$1"
+OWNED=".claude/agents"
+PREV="$(tr -d '[:space:]' < "$DEST/.claude/vulyk-version")"
+for f in $(cd "$SRC" && find $OWNED -type f); do
+  if [ ! -e "$DEST/$f" ]; then cp "$SRC/$f" "$DEST/$f"; continue; fi
+  cmp -s "$SRC/$f" "$DEST/$f" && continue
+  h="$(git hash-object "$DEST/$f")"; base="v$PREV"
+  for r in $(git -C "$SRC" for-each-ref --format='%(refname:short)' refs/tags refs/heads); do
+    if [ "$(git -C "$SRC" rev-parse -q --verify "$r:$f" 2>/dev/null || true)" = "$h" ]; then base="$r"; fi
+  done
+  git -C "$SRC" show "$base:$f" > "$DEST/$f.base"
+  if git merge-file -q "$DEST/$f" "$DEST/$f.base" "$SRC/$f"; then rm -f "$DEST/$f.base"
+  else rm -f "$DEST/$f.base"; cp "$SRC/$f" "$DEST/$f.vulyk-new"; fi
+done

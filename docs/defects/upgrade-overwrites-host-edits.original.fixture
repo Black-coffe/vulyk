@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Fixture, card upgrade-overwrites-host-edits, the original form (seen 2026-11-06, 0.44 -> 0.48): a hive file equal
+# to a blob that ANY v* tag or any commit of the source ever held counts as a release copy and is replaced, so an
+# owner who went back to an older release's line (cycle-clerk pinned to the 0.18-0.25 `model: sonnet`) loses it.
+# Run as `install.sh <hive> --upgrade`; scripts/upgrade-base-check.sh must exit non-zero on it.
+set -eu
+SRC="$(cd "$(dirname "$0")" && pwd)"; DEST="$1"
+OWNED=".claude/agents"
+known="$( { for t in HEAD $(git -C "$SRC" tag -l 'v*'); do git -C "$SRC" ls-tree -r "$t" -- $OWNED; done; } | awk '{ print $3 }')"
+for f in $(cd "$SRC" && find $OWNED -type f); do
+  if [ ! -e "$DEST/$f" ]; then cp "$SRC/$f" "$DEST/$f"; continue; fi
+  cmp -s "$SRC/$f" "$DEST/$f" && continue
+  if printf '%s\n' "$known" | grep -qxF "$(git hash-object "$DEST/$f")"; then cp "$SRC/$f" "$DEST/$f"
+  else cp "$SRC/$f" "$DEST/$f.vulyk-new"; fi
+done

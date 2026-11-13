@@ -22,7 +22,8 @@
 # cards are ignored. Debt: >= 2 owner quotes, effective status not block, and at least one quote
 # line committed after the commit that added the library's README.md (git blame committer time,
 # not the date written in the quote). Uncommitted quote lines and a library outside git are new.
-# Debt with no new quote is "old debt": reported, never red.
+# Debt with no new quote is "old debt": reported, never red. <library>/.scrub-revs (one full SHA per line,
+# `#` comments) goes to git blame --ignore-revs-file: a line changed only by a listed (masking) commit keeps its older date.
 # The same new/old rule holds for three more findings. UNDELIVERABLE: a card shown as text with no
 # `paths:` (no hook can deliver it). OVERLAP: one normalised key on two live cards (a key inside
 # another card's key is only an "ambiguous key" line). ESCAPE: a block card got a quote after its
@@ -47,7 +48,7 @@
 set -uo pipefail
 
 case "${1:-}" in
-  -h|--help) sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,46p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 MODE=audit; ARG=""; FILES=()
 if [ "${1:-}" = --files ]; then
@@ -115,7 +116,10 @@ if in_git:
 
 def blame(name):
     """line number (from 1) -> (sha, committer-time); None when the file has no history."""
-    out = git('blame', '--line-porcelain', '--', name) if in_git else None
+    # .scrub-revs: commits that only masked paths or names in card text; a line they changed keeps its older date.
+    scrub = os.path.join(os.path.abspath(d), '.scrub-revs')
+    ign = ['--ignore-revs-file', scrub] if os.path.isfile(scrub) else []
+    out = git('blame', '--line-porcelain', *ign, '--', name) if in_git else None
     if out is None:
         return None
     res, sha, t, n = {}, None, None, 0

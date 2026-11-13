@@ -242,6 +242,17 @@ run; ok "a fixture committed after the quote -> green" "$([ "$rc" = 0 ] && ! has
 card cut block 'bash check.sh <arg>' "$FX" 2026-01-05 2026-01-10 2026-01-12
 run; ok "neighbour: an uncommitted quote with committed fixtures -> ESCAPE uncommitted" \
   "$([ "$rc" = 1 ] && has '^ESCAPE  cut: quote uncommitted'; echo $?)"
+echo "--- a masking commit listed in .scrub-revs keeps the quote's date"
+mkrepo "$TMP/scrub"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
+card mask block 'bash check.sh <arg>' "$FX" 2026-01-05; cm 2026-01-05 docs/defects/mask.md
+sed_inplace 's/«words»/«words at <hive>»/' docs/defects/mask.md; cm 2026-01-10 docs/defects/mask.md
+scrub="$(git rev-parse HEAD)"
+run; ok "neighbour: a quote edited by an unlisted commit -> ESCAPE, RED" \
+  "$([ "$rc" = 1 ] && has '^ESCAPE  mask: quote [0-9a-f]\{7\} 2026-01-10'; echo $?)"
+printf '# masking commits\n%s # masked a path in a quote\n' "$scrub" > docs/defects/.scrub-revs
+run; ok "the masked quote of a commit listed in .scrub-revs keeps its older date -> no ESCAPE, green" \
+  "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
+
 mkrepo "$TMP/escape-prep"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
 card prep text '' '' 2026-01-05 2026-01-06; cm 2026-01-06 docs/defects/prep.md
 card prep block 'bash check.sh <arg>' "$FX" 2026-01-05 2026-01-06; cm 2026-01-08 docs/defects/prep.md

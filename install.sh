@@ -86,6 +86,8 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     docs/specs/*)                 return 1 ;;   # vulyk's own dev specs (dir is still created)
     docs/adr/*|docs/wiki/*)       case "$f" in */README.md) return 0 ;; esac; return 1 ;;   # vulyk's own ADRs/wiki (dir still created; a skeleton README ships)
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
+    memory/memory.md|memory/MEMORY.md) return 1 ;;   # VULYK's own index; a fresh hive gets templates/memory.md (seed_memory_index)
+    memory/stats/skills.json)     return 2 ;;   # the skill counter: local and gitignored, per hive (audit-fixes-1113)
     memory/map/.stale)            return 2 ;;   # runtime (below), named before the map's own rule
     memory/map/*)                 case "$f" in memory/map/README.md) return 0 ;; esac; return 1 ;;   # VULYK's own code map; the skeleton README ships
     docs/defects/*)               case "$f" in docs/defects/README.md) return 0 ;; esac; return 1 ;;   # vulyk's own defect cards; the index skeleton ships
@@ -120,39 +122,28 @@ replace_file() { # replace_file <src> <dest> - copy beside, then rename over. An
 }
 
 # An upgrade replaces a framework-owned file only when the hive's copy is a release copy: it equals
-# (line endings ignored) a blob some v* tag of the release clone shipped. Anything else is the
-# hive's decision (a tuned maxTurns, a patched hook): merged three-way onto the new release, base =
-# what v$PREV shipped, or kept byte for byte with the new release beside it as <f>.vulyk-new on a
-# conflict or with no base. A path the last install shipped that the hive no longer has stays
-# deleted. (ADR-005 amendment 2026-10-16; card upgrade-overwrites-host-edits.)
-SHIPPED_BLOBS=""; NO_HISTORY=""
-shipped_blobs() { # once per run, in the main shell, on the first release_copy (an up-to-date hive never
-  # pays for it): every blob id $SRC's history ever held under
-  # OWNED - each v* tag and every commit (a hive hotfixed by hand between releases holds a commit's
-  # copy, not a tag's). A source with no v* tag (a downloaded ZIP, a shallow checkout) cannot tell
-  # an edit from a release copy, so it keeps the old rule - replace - and says so.
-  SHIPPED_BLOBS="$(mktemp)"
-  if [ -z "$(git -C "$SRC" tag -l 'v*' 2>/dev/null)" ]; then
-    NO_HISTORY=1
-    echo "  NOTE: $SRC holds no release history (no v* tag), so this upgrade cannot tell your edits"
-    echo "        from release copies and replaces framework files as before. To keep your edits,"
-    echo "        upgrade from a git clone: scripts/vulyk-update.sh"
-    return 0
-  fi
-  local t
-  # shellcheck disable=SC2086
-  {
-    for t in HEAD $(git -C "$SRC" tag -l 'v*' 2>/dev/null); do
-      git -C "$SRC" ls-tree -r "$t" -- $OWNED 2>/dev/null | awk '{ print $3 }'
-    done
-    git -C "$SRC" log --all --no-renames --no-abbrev --format= --raw -- $OWNED 2>/dev/null | awk '{ print $4 }'
-  } | sort -u > "$SHIPPED_BLOBS" || true
+# (line endings ignored) the blob of that path in tag v$PREV, the release the hive is installed at
+# (contract U1, audit-fixes-1113). No other tag, commit or branch counts: an owner who went back to an
+# older release's line made an edit. Anything else is the hive's decision (a tuned maxTurns, a patched
+# hook): merged three-way onto the new release, base = that same blob, or kept byte for byte with the
+# new release beside it as <f>.vulyk-new on a conflict or with no base. A path the last install shipped
+# that the hive no longer has stays deleted. (ADR-005 amendment 2026-10-16; card upgrade-overwrites-host-edits.)
+PREV_TAG_SEEN=""; PREV_TAG_OK=""
+prev_tag() { # once per run, in the main shell, on the first release_copy (an up-to-date hive never pays
+  # for it): is v$PREV a tag in $SRC? Without it (a downloaded ZIP, a clone without tags, a pre-0.5.0 hive)
+  # nothing tells a release copy from an edit, so no file is one, and one NOTE line says so.
+  PREV_TAG_SEEN=1
+  if git -C "$SRC" rev-parse -q --verify "refs/tags/v$PREV^{commit}" >/dev/null 2>&1; then PREV_TAG_OK=1; return 0; fi
+  echo "  NOTE: v$PREV is not a tag in $SRC - no file counts as a release copy; each differing framework file is kept, the new release beside it (.vulyk-new)"
 }
-release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte some release's
-  [ -n "$SHIPPED_BLOBS" ] || shipped_blobs
-  [ -n "$NO_HISTORY" ] && return 0
-  local h; h="$(tr -d '\r' < "$DEST/$1" | git hash-object --stdin 2>/dev/null)" || return 1
-  [ -n "$h" ] && grep -qxF "$h" "$SHIPPED_BLOBS"
+release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte what v$PREV shipped at <rel>
+  [ -n "$PREV_TAG_SEEN" ] || prev_tag
+  [ -n "$PREV_TAG_OK" ] || return 1
+  git -C "$SRC" cat-file -e "v$PREV:$1" 2>/dev/null || return 1
+  local h b
+  h="$(tr -d '\r' < "$DEST/$1" | git hash-object --stdin 2>/dev/null)" || return 1
+  b="$(git -C "$SRC" show "v$PREV:$1" 2>/dev/null | tr -d '\r' | git hash-object --stdin 2>/dev/null)" || return 1
+  [ -n "$h" ] && [ "$h" = "$b" ]
 }
 # After a git merge-file conflict: a hive edit that touched only the frontmatter (its body is the body v$PREV
 # shipped) takes the new release's body under a frontmatter merged key by key. A key is a top-level `name:` line
@@ -1111,7 +1102,7 @@ PreToolUse git-guard.sh Bash|PowerShell -
 SessionEnd anomaly-scan.sh - -
 UserPromptSubmit defect-intake.sh - -
 PostToolUse defect-intake.sh AskUserQuestion answer
-PreToolUse defects-inject.sh Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.* -
+PreToolUse defects-inject.sh Edit|Write|MultiEdit|NotebookEdit|Read|Bash|PowerShell|WebFetch|WebSearch|Agent|mcp__.* -
 SessionStart defects-inject.sh - reset
 SessionStart ysk-offer.sh - -'
 # A shipped hook the hive's settings.json does not wire is named, never wired: a missing entry may be the owner's
@@ -1565,7 +1556,7 @@ retire_mod() {
 # wiring: append only what is missing, in a marked block, and say what was added.
 ensure_gitignore() {
   local file="$DEST/.gitignore" missing=0 line have
-  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER .claude/state/ *.vulyk-new"
+  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER .claude/state/ *.vulyk-new memory/stats/skills.json"
   # gitignore-glob: the list holds patterns (docs/specs/*/DRIVER, *.vulyk-new); unquoted, bash expanded them in the
   # installer's working directory and wrote its paths instead. No globbing inside this function.
   local noglob=""; case $- in *f*) noglob=1 ;; esac
@@ -1640,7 +1631,7 @@ ensure_gitattributes() {
 }
 
 NEW_MANIFEST="$(mktemp)"; OLD_LISTED="$(mktemp)"
-trap 'rm -f "$NEW_MANIFEST" "$OLD_LISTED" "$SHIPPED_BLOBS"' EXIT
+trap 'rm -f "$NEW_MANIFEST" "$OLD_LISTED"' EXIT
 # The last install's manifest, read once for copy_tree's `kept deleted` lookup: CR dropped, a bad path left out.
 if [ -n "$UPGRADE" ] && [ -f "$DEST/.claude/vulyk-manifest" ]; then
   while IFS= read -r f; do
@@ -1652,6 +1643,12 @@ for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs
   if [ -d "$SRC/$tree" ]; then copy_tree "$tree"; fi
 done
 LC_ALL=C sort -u -o "$NEW_MANIFEST" "$NEW_MANIFEST"
+# audit-fixes-1113 (ask 17): VULYK's own memory index never ships (shippable); a fresh install starts the hive's
+# from the skeleton. An upgrade leaves memory/ alone: the hive's index is its own, never written, merged or deleted.
+if [ -z "$UPGRADE" ] && [ -f "$SRC/templates/memory.md" ] && [ ! -e "$DEST/memory/memory.md" ] && [ ! -e "$DEST/memory/MEMORY.md" ]; then
+  if [ "$CHECK" = "--check" ]; then echo "  would seed     memory/memory.md (from templates/memory.md)"
+  else mkdir -p "$DEST/memory"; cp "$SRC/templates/memory.md" "$DEST/memory/memory.md"; echo "  seed           memory/memory.md (from templates/memory.md)"; fi
+fi
 
 # Removal (ADR-005 D2), after the copy loop and before the new manifest is written: a path
 # that shipped last run, does not ship this run, and lives under OWNED is deleted outright -
@@ -1730,6 +1727,11 @@ clean_seeded_council() {
 [ -n "$UPGRADE" ] && clean_seeded_council
 
 ensure_gitignore
+# audit-fixes-1113 (ask 2): the skill counter is local now. A hive that still tracks it is told the one command that
+# untracks it; the installer runs nothing in the hive's index (ls-files only reads it).
+if git -C "$DEST" ls-files --error-unmatch memory/stats/skills.json >/dev/null 2>&1; then
+  printf '  tracked        memory/stats/skills.json - a local counter now, gitignored; to untrack it: git -C %q rm --cached memory/stats/skills.json\n' "$DEST"
+fi
 ensure_gitattributes
 wire_session_hook vulyk-update-check.sh
 wire_session_hook top-model-brief.sh
@@ -1776,11 +1778,43 @@ wire_entry UserPromptSubmit defect-intake.sh
 # rules-tree: delivery widened to web, agent and MCP tools. py_wire ignores a changed matcher, so a
 # hive still on the 0.19 or the 0.32 matcher is unwired and rewired; a matcher the owner set by hand is
 # kept. 0.41: Read joins it, for the cards of a story's ## Files when the story file is read.
-INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*'
-if grep -qE '"matcher"[[:space:]]*:[[:space:]]*"Edit\|Write\|MultiEdit\|NotebookEdit\|Bash(\|WebFetch\|WebSearch\|Agent\|mcp__\.\*)?"' \
-     "$DEST/.claude/settings.json" 2>/dev/null; then
+# audit-fixes-1113 (contract M1): PowerShell joins it, so the cards reach a PowerShell command as a Bash one. An
+# entry still on a matcher an earlier release shipped is moved; one the hive changed itself is kept and named.
+INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Read|Bash|PowerShell|WebFetch|WebSearch|Agent|mcp__.*'
+OLD_INJECT_MATCHERS='Edit|Write|MultiEdit|NotebookEdit|Bash
+Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*
+Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*'
+inject_matchers() { # the matcher of each PreToolUse group running defects-inject.sh (not `reset`), one per line;
+  # nothing with no settings.json, no python or an unreadable file
+  [ -f "$DEST/.claude/settings.json" ] || return 0
+  vulyk_python || return 0
+  "$VULYK_PY" - "$DEST/.claude/settings.json" <<'PYINJ' | tr -d '\r'
+import json, re, sys
+try:
+    with open(sys.argv[1], encoding='utf-8') as fh:
+        groups = json.load(fh)['hooks']['PreToolUse']
+except Exception:
+    sys.exit(0)
+runs = re.compile(r'(^|[\s"\'/\\])defects-inject\.sh(?!["\']?\s+reset)($|[\s"\'])')
+for g in groups if isinstance(groups, list) else []:
+    if isinstance(g, dict) and any(isinstance(h, dict) and runs.search(str(h.get('command', ''))) for h in g.get('hooks') or []):
+        print(g.get('matcher', ''))
+PYINJ
+}
+INJ_NOW="$(inject_matchers)"; INJ_MOVE=""; INJ_OWN=""
+while IFS= read -r m; do
+  if [ -z "$INJ_NOW" ]; then   # no python to read the groups: a shipped old matcher anywhere in the file, as before
+    grep -qF "\"$m\"" "$DEST/.claude/settings.json" 2>/dev/null && INJ_MOVE=1
+  elif printf '%s\n' "$INJ_NOW" | grep -qxF -- "$m"; then INJ_MOVE=1; fi
+done <<< "$OLD_INJECT_MATCHERS"
+if [ -z "$INJ_MOVE" ] && [ -n "$INJ_NOW" ] && ! printf '%s\n' "$INJ_NOW" | grep -qxF -- "$INJECT_MATCHER"; then
+  INJ_OWN="$(printf '%s\n' "$INJ_NOW" | head -1)"
+fi
+if [ -n "$INJ_MOVE" ]; then
   unwire_hook PreToolUse defects-inject.sh
   wire_hook PreToolUse defects-inject.sh "$INJECT_MATCHER"
+elif [ -n "$INJ_OWN" ]; then
+  echo "  kept (yours)   .claude/settings.json -> PreToolUse [$INJ_OWN]: defects-inject.sh - this release ships [$INJECT_MATCHER]"
 else
   wire_entry PreToolUse defects-inject.sh "$INJECT_MATCHER"
 fi
