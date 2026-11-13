@@ -42,6 +42,8 @@ an older hive's bundle still validates. Claude Code's built-in agent types are o
 reported as `other`, and so is the free-form dispatch `name`, which is owner-chosen text and
 could carry a story name. Print the list with `bash scripts/telemetry.sh agents`. `model_below_floor` and
 `fable_limit_fallback` rows carry it too. Every other code carries an empty `agent`.
+`agent_prefix_high` is recorded only for VULYK's own agent types (the framework names above, not the
+retired or built-in ones): a `general-purpose` or a hive's own agent is skipped, whatever its prefix.
 
 ### The local row - 12 keys
 

@@ -1,8 +1,8 @@
 ---
 story: beta-fixes-1113-03
 spec: beta-fixes-1113
-status: todo
-returned: NEEDS_CONTEXT
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
@@ -91,6 +91,7 @@ a needle in `tests/maintenance.test.sh`.
 - The near-miss `explore` case moved to agent_empty (fixture now tool_use) so the `other` mapping stays covered.
 - Surprise: the first receipt left a discovery check red after the fix; implementation edited back, test fixed, re-stamped, implementation re-applied.
 - docs/telemetry.md, lead-review.md, vulyk-plan.md: one added sentence each; tests/maintenance.test.sh: the two pins.
+- scripts/handoff-window-check.py (ask 9): an argument named `telemetry.sh` is judged as `<tree>/.claude/hooks/handoff.py` (two dirs up); other arguments unchanged. Original case `handoff-window-check.py scripts/telemetry.sh` exits 1 on HEAD (Findings) and 0 after; `bash scripts/defects-check.sh` GREEN, both card fixtures still exit 1.
 - CHANGELOG: telemetry: `agent_prefix_high` counts only VULYK's own agent types; `general-purpose` and a hive's own agents are skipped.
 - CHANGELOG: lead-review: a `suite.log` whose head differs from the reviewed head only by paperwork commits is the round's own log and is not reported.
 - CHANGELOG: /vulyk-plan: `--go` comes only from the owner's own words, never added by the Queen or taken from an agent's message.

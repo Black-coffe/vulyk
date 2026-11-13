@@ -452,7 +452,9 @@ EOF
       [ "$agent_type" = "-" ] && agent_type=""
       [ "$model" = "-" ] && model=""
 
-      if is_number "$first_prefix" && [ "$first_prefix" -gt "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" ] 2>/dev/null; then
+      # Only a dispatch VULYK made has a prefix VULYK can tune: a built-in or a hive's own agent is skipped.
+      if in_set "$agent_type" "$AGENTS" && is_number "$first_prefix" &&
+         [ "$first_prefix" -gt "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" ] 2>/dev/null; then
         cmd_record agent_prefix_high "$first_prefix" "$VULYK_ANOMALY_AGENT_PREFIX_TOKENS" \
           --ref "$ref" --agent "$agent_type"
       fi

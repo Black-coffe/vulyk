@@ -77,6 +77,9 @@ def main():
         print(__doc__.strip().splitlines()[2], file=sys.stderr)
         return 2
     hook = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(".claude", "hooks", "handoff.py"))
+    if os.path.basename(hook) == "telemetry.sh":
+        # The card guards telemetry.sh for its shared window logic; the hook that speaks is the tree's handoff.py.
+        hook = os.path.join(os.path.dirname(os.path.dirname(hook)), ".claude", "hooks", "handoff.py")
     if not os.path.isfile(hook):
         print("handoff-window-check: no such file: %s" % hook, file=sys.stderr)
         return 2
