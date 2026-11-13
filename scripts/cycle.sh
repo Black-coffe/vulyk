@@ -3892,6 +3892,20 @@ cmd_resume() { # cmd_resume <spec>
   local SW_REC SW_NOW SWITCHED_KEY=""
   SW_REC="$(marker "$SPEC/plan.md" Branch)"
   SW_NOW="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+  if [ -z "$SW_REC" ]; then
+    # beta-fixes-1113 ask 8: `branch --commit` writes **Branch:** on vulyk/<slug> only, so the default
+    # branch's plan copy names none. That branch is the spec's when its own plan copy names it.
+    local sw_cand sw_pre sw_line sw_v=""
+    sw_cand="vulyk/$(slug_of "$SPEC")"
+    if [ "$SW_NOW" != "$sw_cand" ] && git show-ref --verify --quiet "refs/heads/$sw_cand"; then
+      sw_pre="$(cd "$SPEC" && git rev-parse --show-prefix 2>/dev/null)"
+      while IFS= read -r sw_line || [ -n "$sw_line" ]; do
+        case "$sw_line" in '**Branch:**'*) sw_v="${sw_line#'**Branch:**'}" ;; esac
+      done < <(git show "refs/heads/$sw_cand:${sw_pre}plan.md" 2>/dev/null)
+      sw_v="${sw_v%$'\r'}"; sw_v="${sw_v#"${sw_v%%[![:space:]]*}"}"
+      [ "$sw_v" = "$sw_cand" ] && SW_REC="$sw_cand"
+    fi
+  fi
   if [ -n "$SW_REC" ] && [ "$SW_NOW" != "$SW_REC" ]; then
     git show-ref --verify --quiet "refs/heads/$SW_REC" || {
       echo "cycle: resume - on $SW_NOW, and the spec branch $SW_REC does not exist" >&2

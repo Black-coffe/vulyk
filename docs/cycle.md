@@ -168,7 +168,8 @@ cell, or `none — reviewed by lead-review`; a `round-only` row refused): the fi
 stops `advance` with exit 2, `"error":"<story file>: <close-story's refusal>"` and the `try:` hints
 on stderr, so no worker is sent to a story it could never close.
 
-`resume` reads the plan's `**Branch:**`. With HEAD on another branch and a clean tree it switches to
+`resume` reads the plan's `**Branch:**`; when the checked-out plan names none (`branch --commit` writes
+the line on `vulyk/<slug>` only), it takes `vulyk/<slug>` if that branch's own plan copy names it. With HEAD on another branch and a clean tree it switches to
 that branch before it writes anything, and its last line gains `"switched":"<branch>"`; with a dirty
 tree it exits 2 naming the uncommitted paths, keeps `PAUSE` and touches nothing (no stash, no forced
 switch, no reset). Every other verb still only refuses off the spec branch.

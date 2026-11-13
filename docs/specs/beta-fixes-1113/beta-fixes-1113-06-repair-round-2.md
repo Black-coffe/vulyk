@@ -1,13 +1,14 @@
 ---
 story: beta-fixes-1113-06
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 4
 blocked_by: []
 red: required
-red_reason:
+red_reason: resume did not switch to the spec branch named only on that branch
+red_verified_at: 2026-11-13T13:43:16Z 8982f420903cc7b53ef66dfebe9997ec5ae93a18479329b30fd0cfe88b2e70c4
 ---
 
 # Repair round 2
@@ -46,3 +47,31 @@ ASK 8: RED - resume switches to the spec branch from a clean tree instead of fai
 ## Verification
 `bash tests/cycle.test.sh --part red`
 `bash tests/cycle.test.sh --part safety`
+
+## Red receipt
+- command: bash tests/cycle.test.sh --part safety
+- exit: 1
+- tests: 8982f420903cc7b53ef66dfebe9997ec5ae93a18479329b30fd0cfe88b2e70c4 (tests/cycle.test.sh)
+- impl: 690f34f7e84a63043c5efab3d6c336b4111c89e9a94f85c83a17f3db2b09c44d
+- stamped: 2026-11-13T13:43:16Z
+
+```
+::error::resume did not switch to the spec branch named only on that branch - exit=0 head=main out=cycle: acmebr - resumed
+  ok    the next claim passes the branch guard
+  ok    neighbour: already on the spec branch, resume as before
+  ok    neighbour: no **Branch:** line, resume as before
+beta-fixes-1113 (ask 8): resume finds the spec branch that only that branch's plan copy names
+  ok    branch --commit wrote the **Branch:** line on vulyk/acmebr only; main is clean
+::error::resume did not switch to the spec branch named only on that branch - exit=0 head=main out=cycle: acmebr - resumed
+{"ok":true,"verb":"resume","exit":0,"next":"branch","stale":false,"held":""}
+::error::claim after a branch-only resume: exit=0 out=cycle: acmebr - claimed by rsbrstamp
+{"ok":true,"verb":"claim","exit":0,"next":"claimed","now":1794577394}
+  ok    neighbour: a vulyk/<slug> whose plan copy names no branch is not switched to
+```
+
+## Implementation notes
+- scripts/cycle.sh: cmd_resume, with no **Branch:** in the checked-out plan, takes vulyk/<slug> when that branch exists and its own plan.md copy (git show) names it; the existing clean/dirty switch logic then runs unchanged.
+- tests/cycle.test.sh part safety: ask 8 repro (branch --commit, back to main, resume switches, claim passes) plus a neighbour: a vulyk/<slug> whose plan copy names no branch is not switched to.
+- tests/cycle.test.sh: part close split into close + close2 (trust/hand/blk/verify-resume sections), part red into red + red2 (wave-check, repair mark, body red: line); the stray and red fixture preambles are shared blocks, so a full run executes the same lines in the same order. Checks: close 28 + close2 35 = 63, red 48 + red2 14 = 62, same as before; under 5 parts in parallel locally close 67 s, close2 71 s, red 125 s, red2 63 s.
+- docs/cycle.md, .claude/commands/vulyk-resume.md: one sentence each on the branch-only plan copy.
+- tests/council.test.sh left as is: the split of the cycle parts answers the finding without touching the council parts.

@@ -7,7 +7,8 @@ Resume: "$ARGUMENTS" (the spec slug).
 
 1. `bash scripts/cycle.sh resume docs/specs/<slug>`. Print exactly what it prints: the
    `cycle: <slug> - resumed` line and its JSON, which carries `stale` and `held` fields.
-   When the checkout stands on another branch than the plan's `**Branch:**`, resume switches to that branch
+   When the checkout stands on another branch than the plan's `**Branch:**` (or, when the checked-out plan names
+   none, than `vulyk/<slug>` whose own plan copy names itself), resume switches to that branch
    itself before it writes anything, and its JSON gains `"switched":"<branch>"`. A dirty tree is never switched:
    resume exits 2 naming the uncommitted paths and keeps `PAUSE`; commit or move those changes, then resume
    again. A `**Branch:**` that does not exist is exit 2 too, naming it.
