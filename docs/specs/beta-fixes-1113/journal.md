@@ -4,3 +4,4 @@
 - 2026-11-13T07:56:53Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/beta-fixes-1113; to edit, run /vulyk-pause beta-fixes-1113
 - 2026-11-13T07:57:13Z · 03-building · branch vulyk/beta-fixes-1113 created · next: build:1
 - 2026-11-13T08:31:21Z · 03-building · story 03 NEEDS_CONTEXT resolved: card check defect added as ask 9 · next: relaunching with a fresh stamp
+- 2026-11-13T09:01:39Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/beta-fixes-1113/round-1 · next: dispatch:opus,review
