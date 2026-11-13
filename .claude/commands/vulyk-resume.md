@@ -7,6 +7,10 @@ Resume: "$ARGUMENTS" (the spec slug).
 
 1. `bash scripts/cycle.sh resume docs/specs/<slug>`. Print exactly what it prints: the
    `cycle: <slug> - resumed` line and its JSON, which carries `stale` and `held` fields.
+   When the checkout stands on another branch than the plan's `**Branch:**`, resume switches to that branch
+   itself before it writes anything, and its JSON gains `"switched":"<branch>"`. A dirty tree is never switched:
+   resume exits 2 naming the uncommitted paths and keeps `PAUSE`; commit or move those changes, then resume
+   again. A `**Branch:**` that does not exist is exit 2 too, naming it.
    `held` non-empty means a driver claim is still on disk; resume never removes it. Look at your task list
    (`/tasks`, the Workflow run): a run still going is finishing its agent in flight, so wait for its
    notification before step 3. Only a run that is gone (session restarted, run ended without releasing) is

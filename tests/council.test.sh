@@ -4620,6 +4620,60 @@ done
 
 echo "ADR-013 D2: status --json appends since, seat_attempt, seats after every pre-0.18 key"
 council status docs/specs/r18ad --json | jq -r 'keys_unsorted | .[-7:] | join(",")' | expect "the last seven keys (0.19 appends manual)" "round_dir,paused,shipped,since,seat_attempt,seats,manual"
+
+echo "beta-fixes-1113-04 A1: advance checks every story of the wave it would dispatch against ## Commands, close-story's own check"
+printf '| Fixture: slow suite (round-only) | `echo r18vc-slow` |\n' >> CLAUDE.md
+git add -A && git commit -qm "r18vc: a round-only cell" >/dev/null
+vc_story() { # vc_story <slug> <nn> <wave> <verification line> - a todo story, committed by the caller
+  printf -- '---\nstory: %s-%s\nspec: %s\nstatus: todo\nreturned: DONE\nwave: %s\n---\n# V%s\n\n## Files\n- %s-%s.txt\n\n## Verification\n%s\n' \
+    "$1" "$2" "$1" "$3" "$2" "$1" "$2" "$4" > "docs/specs/$1/$1-$2-v.md"
+}
+vc_spec() { mk_open_spec "$1" 2; set_tier "$1" 2; } # vc_spec <slug> - approved, on this branch, one done story
+VC_ERR="$(mktemp)"
+vc_spec r18vc
+vc_story r18vc 02 1 '`echo not-a-cell`'
+git add -A && git commit -qm "r18vc: a story naming no cell" >/dev/null
+vc_head="$(git rev-parse HEAD)"
+out="$(council advance docs/specs/r18vc 2>"$VC_ERR")"; ex=$?
+last="$(l18_last "$out")"
+if [ "$ex" -eq 2 ] && printf '%s' "$last" | jq -e '.ok == false and .verb == "advance" and .exit == 2
+     and .error == "docs/specs/r18vc/r18vc-02-v.md: verification not in ## Commands: echo not-a-cell"' >/dev/null 2>&1 \
+   && grep -q '^try: ' "$VC_ERR" && ! printf '%s' "$out" | grep -q '^try: ' && ! printf '%s' "$out" | grep -qF '"next":"build:' \
+   && [ "$(git rev-parse HEAD)" = "$vc_head" ] && [ -z "$(git status --porcelain)" ]; then
+  echo "  ok    advance stops before dispatch on a verification line that is no Commands cell"
+else echo "::error::advance stops before dispatch on a verification line that is no Commands cell - exit=$ex out=$out err=$(cat "$VC_ERR")"; fail=1; fi
+out="$(council close-story docs/specs/r18vc/r18vc-02-v.md --commit 2>"$VC_ERR")"; ex=$?
+[ "$ex" -eq 2 ] && l18_last "$out" | jq -e '.verb == "close-story" and .error == "verification not in ## Commands: echo not-a-cell"' >/dev/null 2>&1 \
+  && grep -q "^cycle: close-story - verification command not in .*CLAUDE\.md's ## Commands: echo not-a-cell\$" "$VC_ERR" \
+  && grep -q '^try: see ## Commands in .*CLAUDE\.md$' "$VC_ERR" \
+  && echo "  ok    close-story on that story refuses with its own text, as before" || { echo "::error::close-story refusal moved: exit=$ex out=$out err=$(cat "$VC_ERR")"; fail=1; }
+
+vc_spec r18vr
+vc_story r18vr 02 1 '`true && echo r18vc-slow`'
+git add -A && git commit -qm "r18vr: a round-only segment" >/dev/null
+out="$(council advance docs/specs/r18vr 2>"$VC_ERR")"; ex=$?
+[ "$ex" -eq 2 ] && l18_last "$out" | jq -e '.ok == false and .error == "docs/specs/r18vr/r18vr-02-v.md: verification is round-only: echo r18vc-slow"' >/dev/null 2>&1 \
+  && ! printf '%s' "$out" | grep -qF '"next":"build:' \
+  && echo "  ok    neighbour: a round-only segment stops advance the same way" || { echo "::error::round-only advance: exit=$ex out=$out"; fail=1; }
+
+vc_spec r18vd
+vc_story r18vd 02 1 '`echo bad-two`'
+vc_story r18vd 03 1 '`echo bad-three`'
+git add -A && git commit -qm "r18vd: two bad stories" >/dev/null
+out="$(council advance docs/specs/r18vd 2>"$VC_ERR")"; ex=$?
+[ "$ex" -eq 2 ] && l18_last "$out" | jq -e '.error == "docs/specs/r18vd/r18vd-02-v.md: verification not in ## Commands: echo bad-two"' >/dev/null 2>&1 \
+  && echo "  ok    neighbour: with two bad stories the first is named" || { echo "::error::two bad: exit=$ex out=$out"; fail=1; }
+
+vc_spec r18ve
+vc_story r18ve 02 1 '`true`'
+vc_story r18ve 03 1 'none — reviewed by lead-review'
+vc_story r18ve 04 2 '`echo bad-later`'
+git add -A && git commit -qm "r18ve: good wave 1, bad wave 2" >/dev/null
+out="$(council advance docs/specs/r18ve 2>"$VC_ERR")"; ex=$?
+[ "$ex" -eq 0 ] && l18_last "$out" | jq -e '.ok == true and .next == "build:1" and (.status.wave_stories | length) == 2' >/dev/null 2>&1 \
+  && echo "  ok    neighbour: cells and 'none — reviewed by lead-review' return build:1; a bad line in wave 2 does not stop wave 1" \
+  || { echo "::error::good wave: exit=$ex out=$out err=$(cat "$VC_ERR")"; fail=1; }
+rm -f "$VC_ERR"
 fi # part advance
 
 if part suite || part suite2 || part suite3; then # the suite parts' shared fixture helpers (council:suite split in mass-audit-fixes-18 repair 1, suite3 in upgrade-findings-07)

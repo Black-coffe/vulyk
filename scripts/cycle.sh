@@ -2144,12 +2144,13 @@ EOF
   [ "$n" -gt 0 ] || printf 'try: see ## Commands in %s\n' "$1"
 }
 
-verify_cells_check() { # verify_cells_check <verb> <cmd-list> - C2 amended (R11/C-4): every &&-segment
+verify_cells_check() { # verify_cells_check <verb> <cmd-list> [<story>] - C2 amended (R11/C-4): every &&-segment
   # of every line must be a literal cell of the constitution's `## Commands` table (CLAUDE.vulyk.md
   # in a sidecar hive, ADR-013 D1), or the line is the literal "none - reviewed by lead-review"
   # (which runs nothing) - a story author never gets unprompted execution. Exits 2 on a refusal.
-  # One check, two callers: close-story and stamp-red (red-receipt).
-  local verb="$1" vline seg CONSTITUTION; CONSTITUTION="$(constitution_file "$ROOT")"
+  # One check, three callers: close-story, stamp-red (red-receipt) and advance (beta-fixes-1113-04
+  # A1), which passes <story>: its refusal text is prefixed "<story>: ", close-story's stays as it was.
+  local verb="$1" vline seg CONSTITUTION pre="${3:+$3: }"; CONSTITUTION="$(constitution_file "$ROOT")"
   while IFS= read -r vline; do
     [ -n "$vline" ] || continue
     [ "$vline" = "none — reviewed by lead-review" ] && continue
@@ -2159,8 +2160,8 @@ verify_cells_check() { # verify_cells_check <verb> <cmd-list> - C2 amended (R11/
     # never close-story - refused before anything runs, so the worker returns NEEDS_CONTEXT.
     if command_cell_exists "$CONSTITUTION" "$vline"; then
       command_cell_round_only "$CONSTITUTION" "$vline" && {
-        echo "cycle: $verb - verification is round-only in $CONSTITUTION's ## Commands: $vline" >&2
-        emit false "$verb" 2 error "verification is round-only: $vline"
+        echo "cycle: $verb - ${pre}verification is round-only in $CONSTITUTION's ## Commands: $vline" >&2
+        emit false "$verb" 2 error "${pre}verification is round-only: $vline"
         exit 2
       }
       continue
@@ -2168,14 +2169,14 @@ verify_cells_check() { # verify_cells_check <verb> <cmd-list> - C2 amended (R11/
     while IFS= read -r seg; do
       [ -n "$seg" ] || continue
       command_cell_exists "$CONSTITUTION" "$seg" || {
-        echo "cycle: $verb - verification command not in $CONSTITUTION's ## Commands: $seg" >&2
-        [ "$verb" = close-story ] && verify_cell_hint "$CONSTITUTION" "$seg" >&2
-        emit false "$verb" 2 error "verification not in ## Commands: $seg"
+        echo "cycle: $verb - ${pre}verification command not in $CONSTITUTION's ## Commands: $seg" >&2
+        case "$verb" in close-story|advance) verify_cell_hint "$CONSTITUTION" "$seg" >&2 ;; esac
+        emit false "$verb" 2 error "${pre}verification not in ## Commands: $seg"
         exit 2
       }
       command_cell_round_only "$CONSTITUTION" "$seg" && {
-        echo "cycle: $verb - verification is round-only in $CONSTITUTION's ## Commands: $seg" >&2
-        emit false "$verb" 2 error "verification is round-only: $seg"
+        echo "cycle: $verb - ${pre}verification is round-only in $CONSTITUTION's ## Commands: $seg" >&2
+        emit false "$verb" 2 error "${pre}verification is round-only: $seg"
         exit 2
       }
     done <<SEGEOF
@@ -3884,6 +3885,41 @@ cmd_resume() { # cmd_resume <spec>
     emit false resume 1 error "usage"
     exit 1
   }
+  # beta-fixes-1113-04 R1: the plan's **Branch:** is where the build's commits go. HEAD elsewhere
+  # (a restarted session left the checkout on the default branch): a clean tree is switched to it
+  # before anything is written, so the relaunch's first verb passes branch_guard; a dirty tree is
+  # only reported - never stashed, forced or reset. branch_guard itself still refuses, never switches.
+  local SW_REC SW_NOW SWITCHED_KEY=""
+  SW_REC="$(marker "$SPEC/plan.md" Branch)"
+  SW_NOW="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+  if [ -n "$SW_REC" ] && [ "$SW_NOW" != "$SW_REC" ]; then
+    git show-ref --verify --quiet "refs/heads/$SW_REC" || {
+      echo "cycle: resume - on $SW_NOW, and the spec branch $SW_REC does not exist" >&2
+      emit false resume 2 error "on $SW_NOW, spec branch $SW_REC does not exist"
+      exit 2
+    }
+    local sw_line sw_orig sw_paths=""
+    while IFS= read -r -d '' sw_line; do
+      sw_orig=""
+      case "${sw_line:0:2}" in *R*|*C*) IFS= read -r -d '' sw_orig ;; esac
+      # the spec's own semaphores (resume clears PAUSE; DRIVER is reported below) are no one's work
+      case "${sw_line:3}" in "${SPEC%/}/PAUSE"|"${SPEC%/}/DRIVER") [ -z "$sw_orig" ] && continue ;; esac
+      sw_paths="${sw_paths:+$sw_paths, }${sw_orig:+$sw_orig -> }${sw_line:3}"
+    done < <(git status --porcelain -uall -z 2>/dev/null)
+    [ -z "$sw_paths" ] || {
+      echo "cycle: resume - on $SW_NOW, spec branch is $SW_REC, and the tree has uncommitted changes; commit or move them, then resume again: $sw_paths" >&2
+      emit false resume 2 error "on $SW_NOW, spec branch is $SW_REC: uncommitted changes in $sw_paths"
+      exit 2
+    }
+    local sw_err; sw_err="$(git switch -q "$SW_REC" 2>&1)" || {
+      sw_err="$(printf '%s' "$sw_err" | head -1)"
+      echo "cycle: resume - could not switch from $SW_NOW to $SW_REC: $sw_err" >&2
+      emit false resume 2 error "could not switch from $SW_NOW to $SW_REC: $sw_err"
+      exit 2
+    }
+    echo "cycle: $(slug_of "$SPEC") - switched from $SW_NOW to the spec branch $SW_REC"
+    json_escape_to "$SW_REC"; SWITCHED_KEY=",\"switched\":\"$JE\""
+  fi
   local WAS_HEAD=""
   [ -f "$SPEC/PAUSE" ] && WAS_HEAD="$(sed -n 's/^head=//p' "$SPEC/PAUSE" | head -1)"
   rm -f "$SPEC/PAUSE"
@@ -3909,7 +3945,7 @@ cmd_resume() { # cmd_resume <spec>
   status_out="$(cmd_status "$SPEC")"
   real_next="$(json_field "$status_out" next)"
   echo "cycle: $(slug_of "$SPEC") - resumed"
-  printf '{"ok":true,"verb":"resume","exit":0,"next":"%s","stale":%s,"held":"%s"}\n' "$real_next" "$STALE" "$HELD"
+  printf '{"ok":true,"verb":"resume","exit":0,"next":"%s","stale":%s,"held":"%s"%s}\n' "$real_next" "$STALE" "$HELD" "$SWITCHED_KEY"
   exit 0
 }
 
@@ -4455,6 +4491,18 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
     case "$VERB_LINE" in *',"status":{'*) st="${VERB_LINE#*,\"status\":}"; st="${st%\}}" ;; esac
   done
 
+  # beta-fixes-1113-04 A1: before advance hands a wave to workers, every story it lists goes through
+  # close-story's own segment check - a story whose ## Verification it could never close stops here,
+  # exit 2, before any worker is sent. An empty ## Verification passes (close-story judges that).
+  case "$next" in
+    build:*)
+      local vfile re_vf='"file":"([^"]*)"' wrest
+      wrest=${st#*'"wave_stories":['}; wrest="${wrest%%]*}"
+      while [[ $wrest =~ $re_vf ]]; do
+        vfile="${BASH_REMATCH[1]}"; wrest="${wrest#*"${BASH_REMATCH[0]}"}"
+        [ -f "$vfile" ] && verify_cells_check advance "$(verify_cmd_list "$vfile")" "$vfile"
+      done ;;
+  esac
   echo "cycle: $SLUG - advanced ${nsteps} step(s), next: $next"
   # 0.19 C: the human line for a hand step - what to do and the exact command that records it
   case "$next" in

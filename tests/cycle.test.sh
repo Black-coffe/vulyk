@@ -1872,6 +1872,62 @@ out="$(bash scripts/cycle.sh claim docs/specs/lftv lftvstamp 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -qF '"leftover"' \
   && echo "  ok    neighbour: a clean tree claims with no leftover key, the line as before" || { echo "::error::clean claim: exit=$ex out=$out"; fail=1; }
 bash scripts/cycle.sh release docs/specs/lftv lftvstamp >/dev/null 2>&1
+
+echo "beta-fixes-1113-04 R1: resume switches a clean tree to the plan's **Branch:**, and only reports a dirty one"
+RS_HOME="$(git rev-parse --abbrev-ref HEAD)"
+git add -A && git commit -qm "rs: a clean tree to start from" >/dev/null 2>&1
+mkdir -p docs/specs/acme docs/specs/acmegone docs/specs/acmenob
+for rs_s in acme acmegone acmenob; do
+  cp "$SRC"/templates/plan.md "docs/specs/$rs_s/plan.md"
+  printf '> resume on the spec branch\n' > "docs/specs/$rs_s/brief.md"
+  sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-13/' "docs/specs/$rs_s/plan.md"
+done
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/acme-spec#' docs/specs/acme/plan.md
+sed_inplace 's#^\*\*Branch:\*\* <.*#**Branch:** vulyk/acme-gone#' docs/specs/acmegone/plan.md
+printf -- '---\nstory: acme-01\nspec: acme\nstatus: todo\nreturned: DONE\nwave: 1\n---\n# Acme\n\n## Files\n- acme.txt\n\n## Verification\n`true`\n' > docs/specs/acme/acme-01.md
+git add -A && git commit -qm "acme: setup" >/dev/null
+git branch -f vulyk/acme-spec HEAD
+git branch -f main HEAD && git checkout -q main
+rs_pause() { printf 'owner \xc2\xb7 test \xc2\xb7 now\nhead=%s\n' "$(git rev-parse --short HEAD)" > "docs/specs/$1/PAUSE"; } # rs_pause <slug>
+rs_head="$(git rev-parse HEAD)"
+rs_pause acme
+printf 'an edit\n' >> docs/specs/acme/brief.md
+out="$(bash scripts/cycle.sh resume docs/specs/acme 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"on main, spec branch is vulyk/acme-spec: uncommitted changes in docs/specs/acme/brief.md"' \
+  && [ "$(git rev-parse --abbrev-ref HEAD)" = main ] && [ "$(git rev-parse HEAD)" = "$rs_head" ] && grep -qx 'an edit' docs/specs/acme/brief.md \
+  && [ -f docs/specs/acme/PAUSE ] \
+  && echo "  ok    a tracked edit: exit 2 naming it, HEAD, the file and PAUSE untouched" || { echo "::error::resume dirty tracked: exit=$ex out=$out"; fail=1; }
+printf '> resume on the spec branch\n' > docs/specs/acme/brief.md
+printf 'stray\n' > acme-stray.txt
+out="$(bash scripts/cycle.sh resume docs/specs/acme 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF 'uncommitted changes in acme-stray.txt"' \
+  && [ "$(git rev-parse --abbrev-ref HEAD)" = main ] && [ -f acme-stray.txt ] && [ -f docs/specs/acme/PAUSE ] \
+  && echo "  ok    an untracked file: exit 2 naming it, HEAD, the file and PAUSE untouched" || { echo "::error::resume dirty untracked: exit=$ex out=$out"; fail=1; }
+rm -f acme-stray.txt
+rs_pause acmegone
+out="$(bash scripts/cycle.sh resume docs/specs/acmegone 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF 'vulyk/acme-gone' && [ "$(git rev-parse --abbrev-ref HEAD)" = main ] \
+  && [ -f docs/specs/acmegone/PAUSE ] \
+  && echo "  ok    a **Branch:** that does not exist: exit 2 naming it, still on main" || { echo "::error::resume missing branch: exit=$ex out=$out"; fail=1; }
+rm -f docs/specs/acmegone/PAUSE
+out="$(bash scripts/cycle.sh resume docs/specs/acme 2>&1)"; ex=$?
+if [ "$ex" -eq 0 ] && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/acme-spec ] \
+   && printf '%s' "$out" | tail -1 | grep -qF '"switched":"vulyk/acme-spec"' && [ ! -f docs/specs/acme/PAUSE ]; then
+  echo "  ok    a clean tree on main: resume switches to vulyk/acme-spec and says so"
+else echo "::error::resume switch: exit=$ex head=$(git rev-parse --abbrev-ref HEAD) out=$out"; fail=1; fi
+out="$(bash scripts/cycle.sh claim docs/specs/acme rsstamp 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    the next claim passes the branch guard" || { echo "::error::claim after resume: exit=$ex out=$out"; fail=1; }
+bash scripts/cycle.sh release docs/specs/acme rsstamp >/dev/null 2>&1
+rs_pause acme
+out="$(bash scripts/cycle.sh resume docs/specs/acme 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -qF '"switched"' && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/acme-spec ] \
+  && echo "  ok    neighbour: already on the spec branch, resume as before" || { echo "::error::resume on branch: exit=$ex out=$out"; fail=1; }
+rs_pause acmenob
+out="$(bash scripts/cycle.sh resume docs/specs/acmenob 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && ! printf '%s' "$out" | grep -qF '"switched"' && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/acme-spec ] \
+  && echo "  ok    neighbour: no **Branch:** line, resume as before" || { echo "::error::resume no branch line: exit=$ex out=$out"; fail=1; }
+git add -A && git commit -qm "rs: journals" >/dev/null 2>&1
+git checkout -q "$RS_HOME"
 fi # part safety
 if part red; then # --- part red: stamp-red, the close-story receipt gate, repair inherits the mark, wave-check red lines
 # Order matters for the red-receipt story's own stamp: the gate cases run last, so the tail of a

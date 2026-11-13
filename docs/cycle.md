@@ -162,7 +162,16 @@ A narrow repair round (C5) at any tier is `review` alone: one `lead-review`, no 
 
 Solo means no driver, no clerk and no court: the Queen runs `cycle.sh advance` from her own
 Bash. It performs every mechanical step (branch, open-round, judge, repair) and stops at the
-next thing only an agent can do.
+next thing only an agent can do. Before it ends on `build:<W>`, every story that wave lists goes
+through the segment check `close-story` uses on `## Verification` (each `&&` segment a `## Commands`
+cell, or `none — reviewed by lead-review`; a `round-only` row refused): the first story that fails
+stops `advance` with exit 2, `"error":"<story file>: <close-story's refusal>"` and the `try:` hints
+on stderr, so no worker is sent to a story it could never close.
+
+`resume` reads the plan's `**Branch:**`. With HEAD on another branch and a clean tree it switches to
+that branch before it writes anything, and its last line gains `"switched":"<branch>"`; with a dirty
+tree it exits 2 naming the uncommitted paths, keeps `PAUSE` and touches nothing (no stash, no forced
+switch, no reset). Every other verb still only refuses off the spec branch.
 
 At Tier 3-4 the Workflow driver (`.claude/workflows/vulyk-cycle.js`) runs the same loop through the
 clerk. A worker that returns with its story still `todo` is a miss: the driver dispatches it once
