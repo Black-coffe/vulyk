@@ -1,0 +1,1 @@
+{"hook_event_name": "PreToolUse", "tool_name": "Bash", "agent_id": "a1", "agent_type": "worker-code", "tool_input": {"command": "bash <<'X'\ngit reset --hard\nX"}, "cwd": ".", "porcelain": " M scripts/lib.sh\n"}

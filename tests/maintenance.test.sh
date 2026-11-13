@@ -1282,12 +1282,108 @@ chk Bash "git stash" "" '""' | expect "git-guard: a git status that succeeds cle
 chk Bash "git reset --hard" "" '" M memory/stats/skills.json\n"' \
   | expect "git-guard: a git status that succeeds dirty still denies, naming the file" "memory/stats/skills.json"
 
+echo "--- git guard: every discarding form, through a shell, an alias, a heredoc (audit-fixes-1113-07)"
+DIRTY='" M memory/stats/skills.json\n?? new.txt\n"'
+chk Bash 'bash -c "git reset --hard"' a1 | expect "git-guard: a discarding verb fed to a shell is denied: bash -c" "exit=1"
+for c in "git rm -f memory/stats/skills.json" "git rm -r -f ." "git rm --force memory/stats/skills.json" \
+         "git checkout-index -f -a" "git checkout-index --force -- memory/stats/skills.json" \
+         "git read-tree -u --reset HEAD" "git read-tree -u -m HEAD" \
+         'sh -c "git reset --hard"' 'bash -lc "git clean -fd"' 'zsh -c "cd sub && git checkout ."' \
+         'pwsh -Command "git reset --hard"' 'powershell.exe -Command git stash' \
+         'git -c alias.wipe="reset --hard" wipe' 'git -c alias.x="!git reset --hard" x' \
+         "$(printf "bash <<'X'\ngit reset --hard\nX")" "$(printf "sh -s <<X\ngit stash\nX")" \
+         "$(printf "cat <<X | bash\ngit clean -fd\nX")"; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c is denied" "exit=1"
+  chk Bash "$c" "" "$DIRTY" | expect "git-guard: main-session $c over a dirty tree is denied" "exit=1"
+  chk Bash "$c" "" '""' | expect "git-guard: main-session $c on a clean tree passes" "exit=0"
+done
+chk PowerShell 'bash -c "git reset --hard"' a1 | expect "git-guard: a shell-fed verb from PowerShell is denied" "exit=1"
+for c in "git branch -f main HEAD~3" "git branch --force main HEAD~3" "git branch -M x main" \
+         "git checkout -B main HEAD~3" "git switch -C main HEAD~3" "git switch --force-create x" \
+         "git update-ref -d refs/heads/main" "git update-ref refs/heads/main HEAD~3" 'bash -c "git branch -D x"'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c (loses commits) is denied" "exit=1"
+  chk Bash "$c" "" "$DIRTY" | expect "git-guard: main-session $c follows the branch -D rule and passes" "exit=0"
+done
+for c in "git rm --cached memory/stats/skills.json" "git rm memory/stats/skills.json" "git rm -n -f x" \
+         "git checkout-index -a" "git read-tree HEAD" "git read-tree -m HEAD" "git branch x" "git branch -d x" \
+         "git checkout -b x" "git switch -c x" "git show-ref" 'bash -c "git status"' 'sh -c "echo hi"' \
+         'pwsh -Command "git log"' 'git -c alias.st="status" st' "$(printf "cat <<'X'\ngit reset --hard\nX")" \
+         "$(printf "cat > r.sh <<X\ngit stash\nX")" "bash scripts/x.sh" "git update-index --chmod=+x f"; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c passes (read-only or unforced)" "exit=0"
+done
+( cd "$SRC" && bash "$GUARD" --check docs/defects/work-discarded-by-git-verb.shell.fixture > /dev/null 2>&1 )
+[ $? -eq 1 ] && ok "git-guard: --check fails on the shell fixture (a heredoc fed to a shell)" \
+  || bad "git-guard: --check passed the shell fixture"
+
+echo "--- git guard: a subagent under a DRIVER, cycle.sh verbs (audit-fixes-1113-07)"
+mkdir -p "$GG/docs/specs/dv"; : > "$GG/docs/specs/dv/DRIVER"
+for c in "git commit -m x" "git add ." "git -C sub commit -m x" 'bash -c "git commit -m x"' 'sh -c "git add -A"'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c is denied while a DRIVER exists" "exit=1"
+  chk Bash "$c" | expect "git-guard: main-session $c under a DRIVER passes" "exit=0"
+done
+chk PowerShell "git commit -m x" a1 | expect "git-guard: a subagent's PowerShell git commit under a DRIVER is denied" "exit=1"
+chk Bash "git update-index --chmod=+x f" a1 | expect "git-guard: update-index --chmod stays allowed under a DRIVER" "exit=0"
+rm -f "$GG/docs/specs/dv/DRIVER"
+for c in "git commit -m x" "git add ." "git -C sub commit -m x" 'bash -c "git commit -m x"'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c with no DRIVER passes" "exit=0"
+done
+for c in "bash scripts/cycle.sh revise docs/specs/dv/dv-01.md" "bash scripts/cycle.sh branch dv" \
+         "bash scripts/cycle.sh reopen dv" "bash scripts/cycle.sh stamp-red docs/specs/dv/dv-01.md --baseline" \
+         "./scripts/cycle.sh claim dv s1" 'bash -c "bash scripts/cycle.sh revise x"'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c is denied" "exit=1"
+done
+for c in "bash scripts/cycle.sh close-story docs/specs/dv/dv-01.md --commit --stamp s1" \
+         "bash scripts/cycle.sh stamp-red docs/specs/dv/dv-01.md --stamp s1" "bash scripts/cycle.sh advance dv --stamp s1" \
+         "bash scripts/cycle.sh status dv --json" "bash scripts/cycle.sh release dv s1" \
+         "bash scripts/cycle.sh suite dv --commit --stamp s1" "grep -n revise scripts/cycle.sh scripts/lib.sh"; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c passes" "exit=0"
+done
+chk Bash "bash scripts/cycle.sh revise docs/specs/dv/dv-01.md" | expect "git-guard: main-session cycle.sh revise passes" "exit=0"
+rm -rf "$GG/docs/specs"
+
+echo "--- git guard: no Python - the bash fallback, a crashed interpreter (audit-fixes-1113-07)"
+BL="$(sed -n "s/^GUARD_VERBS='\(.*\)'.*/\1/p" "$GUARD" | tr ' ' '\n' | sed '/^$/d' | sort)"
+PL="$(sed -n 's/^VERBS = (\(.*\))[[:space:]]*$/\1/p' "$GUARD" | tr -d "' " | tr ',' '\n' | sed '/^$/d' | sort)"
+if [ -n "$BL" ] && [ "$BL" = "$PL" ]; then ok "git-guard: the fallback's verb list equals the Python part's"
+else bad "git-guard: the verb lists differ - fallback: $(printf '%s' "$BL" | tr '\n' ' ') / python: $(printf '%s' "$PL" | tr '\n' ' ')"; fi
+nopy() { # nopy <tool> <command> [<agent_id>] [<launcher dir>] - `--check` stdout + exit=N with only <launcher dir> on PATH
+  ( cd "$GG" && "$PYBIN" "$T/guard-chk.py" "$1" "$2" "${3:-}" "$(pwd -W 2>/dev/null || pwd)" "" "$T/nopy.json" )
+  ( cd "$GG" && VULYK_PY='' PATH="${4:-$T/nopy}" "$BASH" "$GUARD" --check "$T/nopy.json" 2>&1; echo "exit=$?" )
+}
+for v in $BL; do
+  for tool in Bash PowerShell; do
+    nopy "$tool" "git $v" | expect "git-guard: no Python, $tool git $v is denied" "exit=1"
+  done
+done
+nopy Bash "git -C sub reset --hard" a1 | expect "git-guard: no Python, a subagent's git -C sub reset is denied" "exit=1"
+nopy Bash 'bash -c "git reset --hard"' | expect "git-guard: no Python, a shell-fed git reset is denied" "exit=1"
+nopy PowerShell "& git.exe stash" | expect "git-guard: no Python, PowerShell & git.exe stash is denied" "exit=1"
+out="$(nopy Bash "git stash")"
+printf '%s' "$out" | expect "git-guard: the no-Python refusal says Python is missing" "no Python"
+for c in "git status" "git log --oneline" "ls -la" "Get-ChildItem"; do
+  nopy Bash "$c" | expect "git-guard: no Python, $c passes" "exit=0"
+  nopy PowerShell "$c" | expect "git-guard: no Python, PowerShell $c passes" "exit=0"
+done
+mkdir -p "$T/py3"; printf '#!/bin/sh\nexit 3\n' > "$T/py3/python3"; chmod +x "$T/py3/python3"
+out="$(nopy Bash "git status" "" "$T/py3")"
+printf '%s' "$out" | expect "git-guard: a launcher that exits 3 on a git command denies" "exit=1"
+printf '%s' "$out" | expect "git-guard: the crash refusal says the guard failed" "the guard failed"
+printf '%s' "$out" | expect "git-guard: the crash refusal says the owner can run it" "owner can run"
+nopy Bash "ls digital" "" "$T/py3" | expect "git-guard: a launcher that exits 3 on a non-git command passes" "exit=0"
+
+echo "--- git guard: worker prompts never commit (audit-fixes-1113-07)"
+for w in worker-code worker-test; do
+  grep -qF 'Never run `git commit` or `git add`' "$SRC/.claude/agents/$w.md" \
+    && ok "git-guard: $w.md says never to run git commit or git add" \
+    || bad "git-guard: $w.md does not say never to run git commit or git add"
+done
+
 echo "--- git guard: fails open, card fixtures"
 out="$(printf 'not json' | bash "$GUARD" 2>&1; echo "exit=$?")"
 [ "$out" = "exit=0" ] && ok "git-guard: broken JSON exits 0, silent" || bad "git-guard: broken JSON - got: $out"
 mkdir -p "$T/nopy"
 out="$(printf '{"tool_name":"Bash","agent_id":"a","tool_input":{"command":"git stash"}}' | PATH="$T/nopy" "$BASH" "$GUARD" 2>&1; echo "exit=$?")"
-[ "$out" = "exit=0" ] && ok "git-guard: no interpreter exits 0, silent" || bad "git-guard: no interpreter - got: $out"
+printf '%s' "$out" | expect "git-guard: no interpreter, the bash fallback denies a subagent's git stash" '"deny"'
 for f in original neighbour; do
   ( cd "$SRC" && bash "$GUARD" --check "docs/defects/work-discarded-by-git-verb.$f.fixture" > /dev/null 2>&1 )
   [ $? -eq 1 ] && ok "git-guard: --check fails on the $f fixture" || bad "git-guard: --check passed the $f fixture"
