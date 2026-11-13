@@ -1,0 +1,15 @@
+<!-- seat: review · model: claude-fable-5-2 · round: 1 · head: ed702992 · pack: 998cf68b25a6 · attempt: 1 · recorded: 2026-11-13T09:35:27Z · verdict: BLOCK -->
+VERDICT: BLOCK
+SUITE: FAIL 1240s - cut part council:verbs
+MODEL: claude-fable-5-2
+
+## Critical
+1. tests/council.test.sh:728 [regression] suite `tests/council.test.sh` part `verbs` must run to its end under 70% of its 300 s cap (210 s) with the ask 1 cases kept, by splitting the part and not by raising the cap: the round's log reads `PART council:verbs ok 243s cap 300s` and `SUITE: FAIL 1240s - cut part council:verbs`, and `bash scripts/suite-parts-check.sh docs/specs/beta-fixes-1113/council/round-1/suite.log` prints `cut part council:verbs: 243s of cap 300s (grew)`; a rerun of `bash tests/council.test.sh --part verbs` on this tree gave exit 0, every check ok, 234 s; base evidence: `PART council:verbs ok 160s cap 300s` with `SUITE: ok` in docs/specs/busy-no-transcripts/council/round-1/suite.log (163 s in post-052-tails round 1), so the six `nb_red` fixtures the branch added to the part carry the growth (card test-gate-one-long-limit)
+## Major
+1. .claude/agents/lead-review.md:62 [ask 5] the paperwork-only rule must also count `memory/stats/anomalies.jsonl`, which `commit_paperwork` adds to every paperwork commit (scripts/cycle.sh:1030), so a head that differs from the log's head only by such commits is not reported: in this very round `git diff --name-only 09c0321d 95ed9ea2` lists `docs/specs/beta-fixes-1113/council/round-1/ROUND`, `docs/specs/beta-fixes-1113/journal.md` and `memory/stats/anomalies.jsonl` (commits `open-round 1` and `journal checkpoint`), and the delivered sentence still makes the reviewer write the head Minor the ask removes
+## Minor
+- docs/specs/beta-fixes-1113/council/round-1/suite.log `head=09c0321d` is not the reviewed head 95ed9ea2: the difference lists `memory/stats/anomalies.jsonl` beside the spec's `journal.md` and `council/`, so no `SUITE:` line is written here (the log's own last line is `SUITE: FAIL 1240s - cut part council:verbs`, and its head equals the ROUND's head)
+- scripts/cycle.sh:3911 the dirty-tree refusal of `resume` names every path from `git status --porcelain -uall` with no cap; plan.md's Assumptions say 10 paths, then `+N more`
+- scripts/cycle.sh:3900 `resume` treats hook-written tracked stats (`memory/stats/*.jsonl`) as dirt, so in a live hive whose Stop hook wrote a row since the last paperwork commit the switch is refused; it matches the approved meaning of "clean", yet it is the common state of a hive after a session restart
+- scripts/handoff-window-check.py:80 ask 9 holds (`bash scripts/py.sh scripts/handoff-window-check.py scripts/telemetry.sh` exits 0, `bash scripts/defects-check.sh` GREEN: 8 blocking checks), but no test under tests/ fails if the `telemetry.sh` branch is removed
+- CHANGELOG.md is not in the diff: the `CHANGELOG:` lines of the four stories' `## Implementation notes` are not yet under `## [Unreleased]` (plan.md Assumptions, Docs)
