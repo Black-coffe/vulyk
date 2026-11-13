@@ -4,6 +4,12 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-11-13
+
+Local hives as the beta channel (specs `local-beta-rollout`, `post-052-tails`, `busy-no-transcripts`), five agent-file
+rules (spec `prompt-leaks-rules`), and nine fixes for defects the live hives showed (spec `beta-fixes-1113`).
+Includes everything listed under 0.51.0, which was never published on its own.
+
 ### Added
 - **Five agent-file rules from a study of a public collection of AI-tool system prompts** (spec
   `prompt-leaks-rules`, study `prompt-leaks-study`, reviewed by a Fable/Opus/Sonnet panel; written fresh,
@@ -67,7 +73,7 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [0.51.0] - 2026-11-12
 
-The fixes for issue #5 (spec `upgrade-findings`, A2 re-reviewed on Fable: PASS), the handoff offer at 70/80/90% of
+The fixes for issue #5 (spec `upgrade-findings`; A2 re-reviewed on Fable before the public release), the handoff offer at 70/80/90% of
 the real context window (spec `handoff-1m`), the weekly evolve changeset, and a docs pointer to Anthropic's
 automation recommender.
 
