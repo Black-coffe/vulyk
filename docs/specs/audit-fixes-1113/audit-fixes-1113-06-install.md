@@ -2,7 +2,7 @@
 story: audit-fixes-1113-06
 spec: audit-fixes-1113
 status: todo
-returned:
+returned: NEEDS_CONTEXT
 tier: 3
 worker: worker-code
 model: opus
@@ -88,14 +88,31 @@ handling. Marked red: the branch that decides whether a hive's file is replaced.
   entry; a matcher the hive changed itself is left alone and named.
 - [ ] Every `uses:` in `ci.yml` with an owner other than `actions` ends in a 40-hex SHA and a `# <tag>` comment.
 
+- [ ] `--part edits`: the two assertions that held the old base (an untagged-commit copy replaced; a source with no
+  `v*` tag replaced) now expect U1: the file kept with `.vulyk-new` and one NOTE line saying why (Queen's ruling,
+  plan delta 2026-11-13).
+
 ## Verification
 `bash tests/telemetry.test.sh --part install-xp`
 `bash tests/telemetry.test.sh --part install`
 `bash tests/telemetry.test.sh --part wiring`
 `bash scripts/defects-check.sh`
+`bash tests/telemetry.test.sh --part edits`
 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each. End with one `CHANGELOG:` line
 per ask (19, 17, 15, 2, 12). -->
 
 ## Findings
+- 2026-11-13, worker, before any edit: ask 19 (U1) turns two assertions of `tests/telemetry.test.sh` part `edits`
+  (case 21) red. Non-goals allow edits only in parts `install`, `install-xp`, `wiring`.
+  1. Line ~3093, `a copy from an untagged commit is a release copy (update)`: the hive holds a commit's copy (the
+     `hotfix` commit, untagged). U1 consults no other tag and no branch, so it becomes an edit. Its line 3 conflicts
+     with v9.0.1's line 3, so the result is `kept + new`, not `update`.
+  2. Line ~3131-3138, `a source with no v* tag says so and replaces as before`: U1 says that with tag `v$PREV`
+     missing, no file is a release copy, so the ZIP source keeps `lead-review.md` with `.vulyk-new` and does not
+     replace it. The NOTE text changes too.
+  Question: may this story rewrite those two assertions in part `edits` to the U1 behaviour (keep + `.vulyk-new`,
+  one NOTE line), and add `edits` to `## Verification`? Otherwise `close-story` passes, because `edits` is not in
+  `## Verification`, but the integration gate (`tests/full-suite.sh`) goes red. No implementation, test or red
+  receipt has been made yet.
