@@ -1322,6 +1322,43 @@ cat "$T/ownset.out" | expect "an owner's settings.json gets the scan on SessionE
 cat "$T/ownset.out" | expect_absent "and no Stop scan wiring" "-> Stop: anomaly-scan.sh"
 expect_eq "and no learnings hook" "0" "$(grep -c 'session-end-learnings' "$OWNSET/.claude/settings.json")"
 
+# audit-fixes-1113-10 (W1, ask 11): the allow list names the six verbs the clerk and the workers run, one rule each;
+# no rule lets an owner-only verb run unprompted. allow_hits reads a rule as Claude Code does: `Bash(<p>:*)` runs
+# <p> and <p> followed by arguments, `Bash(<p>*)` any command starting with <p>, `Bash(<p>)` exactly <p>.
+allow_hits() { # allow_hits <settings.json> <command> - the allow rules that let <command> run, one per line
+  local r p pre
+  jq -r '.permissions.allow[]?' "$1" | tr -d '\r' | while IFS= read -r r; do
+    case "$r" in Bash\(*\)) p="${r#Bash(}"; p="${p%)}" ;; *) continue ;; esac
+    case "$p" in
+      *:\*) pre="${p%:\*}"; case "$2" in "$pre"|"$pre "*) echo "$r" ;; esac ;;
+      *\*)  pre="${p%\*}";  case "$2" in "$pre"*) echo "$r" ;; esac ;;
+      *)    [ "$2" = "$p" ] && echo "$r" ;;
+    esac
+  done
+}
+cyc_rules() { jq -r '.permissions.allow[]?' "$1" | tr -d '\r' | grep -F 'scripts/cycle.sh' | LC_ALL=C sort; }
+CYC6="$(for v in advance status release suite stamp-red close-story; do printf 'Bash(bash scripts/cycle.sh %s:*)\n' "$v"; done | LC_ALL=C sort)"
+OWNER_ONLY='bash scripts/cycle.sh briefed demo --go
+bash scripts/cycle.sh reopen demo
+bash scripts/cycle.sh manual-done demo-01
+bash scripts/cycle.sh escalate demo
+bash scripts/human-check.sh demo ACCEPTED'
+for s in "$SRC" "$TGT" "$OWNSET"; do
+  expect_eq "install ($(basename "$s")): the allow list holds exactly the six cycle.sh verbs" "$CYC6" "$(cyc_rules "$s/.claude/settings.json")"
+  while IFS= read -r c; do
+    expect_eq "install ($(basename "$s")): the allow list holds no owner-only verb: $c" "" "$(allow_hits "$s/.claude/settings.json" "$c")"
+  done <<< "$OWNER_ONLY"
+  expect_eq "install ($(basename "$s")): a clerk's close-story and the journal still run unprompted" "1 1" \
+    "$(allow_hits "$s/.claude/settings.json" 'bash scripts/cycle.sh close-story x.md --commit' | grep -c .) $(allow_hits "$s/.claude/settings.json" 'bash scripts/journal.sh demo note' | grep -c .)"
+done
+expect_eq "install over an owner's settings.json: the owner's own rule stays" "1" "$(grep -cF '"Bash(ls:*)"' "$OWNSET/.claude/settings.json")"
+# Neighbour (on the upgrades of $TGT below, which cost no extra run): a hive holding the broad rule an older installer
+# wrote is narrowed by --upgrade, once; its own rules (an unrelated one, a non-ASCII one, one naming an owner-only
+# script) stay byte for byte, the last one named; --check says it would narrow and writes nothing.
+NAS="$TGT/.claude/settings.json"
+jq '.permissions.allow = ["Bash(ls:*)", "Bash(bash scripts/cycle.sh:*)", "Bash(bash scripts/journal.sh:*)", "Bash(echo привет:*)", "Bash(bash scripts/human-check.sh:*)"]' \
+  "$NAS" | tr -d '\r' > "$T/na.before" && cat "$T/na.before" > "$NAS"
+
 # mass-audit-fixes-11 (S7-shell): VULYK's own map never ships into a hive, only the skeleton README.
 expect_eq "fresh install: the manifest's only memory/map/ entry is its README" "memory/map/README.md" \
   "$(tr -d '\r' < "$TGT/.claude/vulyk-manifest" | grep '^memory/map/' | paste -sd' ' -)"
@@ -1366,6 +1403,16 @@ cc_list_at() { printf '  vulyk\n' > "$T/cc-mkt"; printf '  \342\235\257 vulyk-pu
 # --telemetry on changes that one row's value and nothing else in the constitution
 PROF_BEFORE="$(grep -v '^| Telemetry |' "$TGT/CLAUDE.md")"
 bash "$SRC/install.sh" "$TGT" --upgrade --telemetry on > "$T/up-on.out" 2>&1
+cat "$T/up-on.out" | expect "--upgrade narrows the broad cycle.sh rule and says so" "narrowed allow: cycle.sh"
+expect_eq "... the allow list then holds exactly the six cycle.sh verbs" "$CYC6" "$(cyc_rules "$NAS")"
+expect_eq "... and no cycle.sh owner-only verb runs unprompted" "" \
+  "$(printf '%s\n' "$OWNER_ONLY" | grep 'cycle.sh' | while IFS= read -r c; do allow_hits "$NAS" "$c"; done)"
+expect_eq "... the hive's unrelated rule and its non-ASCII rule survive byte for byte" "1 1 0" \
+  "$(grep -cF '"Bash(ls:*)"' "$NAS") $(grep -cF '"Bash(echo привет:*)"' "$NAS") $(grep -c '\\u' "$NAS")"
+expect_eq "... the journal rule stays once" "1" "$(grep -cF '"Bash(bash scripts/journal.sh:*)"' "$NAS")"
+expect_eq "... a rule the installer never wrote stays" "1" "$(grep -cF '"Bash(bash scripts/human-check.sh:*)"' "$NAS")"
+cat "$T/up-on.out" | expect "... and is named in the log" "kept (yours)   .claude/settings.json -> permissions.allow: Bash(bash scripts/human-check.sh:*)"
+cp "$NAS" "$T/na.after"
 expect_eq "--telemetry on flips the row" "on" "$(rowval "$TGT/CLAUDE.md")"
 expect_eq "nothing else in the constitution moved" "1" \
   "$([ "$PROF_BEFORE" = "$(grep -v '^| Telemetry |' "$TGT/CLAUDE.md")" ] && echo 1 || echo 0)"
@@ -1389,14 +1436,20 @@ expect_eq "one-pass copy: an up-to-date --upgrade's skip lines are the manifest,
 expect_eq "the mod listed at an older version than the release: the upgrade runs plugin update" "1" \
   "$(grep -c "plugin update vulyk-pulse@vulyk --scope user" "$T/cc.log")"
 cat "$T/up-plain.out" | expect "... and says the marketplace head is not pinned to a ref" "mod: marketplace head, not pinned"
+expect_eq "a second --upgrade after the narrowing changes nothing in settings.json" "1" "$(same "$T/na.after" "$NAS")"
+cat "$T/up-plain.out" | expect_absent "... and narrows nothing" "narrowed allow"
 
 # --check reports the pending insertion and writes nothing
 sed_inplace '/^| Telemetry |/d' "$TGT/CLAUDE.md"
 CONST_BEFORE="$(cat "$TGT/CLAUDE.md")"
+cat "$T/na.before" > "$NAS"   # the broad rule again, for --check
 bash "$SRC/install.sh" "$TGT" --upgrade --check > "$T/up-check.out" 2>&1
 expect_eq "--check never writes the row" "1" \
   "$([ "$CONST_BEFORE" = "$(cat "$TGT/CLAUDE.md")" ] && echo 1 || echo 0)"
 cat "$T/up-check.out" | expect "--check reports the pending row" "would set      CLAUDE.md Profile row: Telemetry"
+cat "$T/up-check.out" | expect "--check on a hive with the broad cycle.sh rule: would narrow" "would narrow"
+expect_eq "... and writes nothing to settings.json" "1" "$(same "$T/na.before" "$NAS")"
+cat "$T/na.after" > "$NAS"
 
 # a Profile block with no markers: warn, and never write the row (ADR-005: only exception is
 # the Telemetry row itself, and only inside existing markers)
@@ -1895,11 +1948,25 @@ if part_on wiring; then
 install_fixtures tgt
 # mass-audit-fixes-04 (I2, S1/P1, P7): every hook command is "$CLAUDE_PROJECT_DIR"/.claude/hooks/<name>.sh,
 # so a hive under a path with a space runs its hooks; an install into an owner's settings.json wires
-# all 17 entries a fresh install copies; every SessionEnd entry has its timeout.
-hook_sig() { # hook_sig <settings.json> - one sorted line per hook entry: event|matcher|command|timeout
+# all 19 entries a fresh install copies; every SessionEnd entry has its timeout.
+hook_sig() { # hook_sig <settings.json> - one sorted line per hook entry: event|matcher|command|timeout|onFailure
   jq -r '.hooks | to_entries[] | .key as $e | .value[] | (.matcher // "") as $m | .hooks[]
-         | "\($e)|\($m)|\(.command)|\(.timeout // "")"' "$1" | tr -d '\r' | LC_ALL=C sort
+         | "\($e)|\($m)|\(.command)|\(.timeout // "")|\(.onFailure // "")"' "$1" | tr -d '\r' | LC_ALL=C sort
 }
+# audit-fixes-1113-10 (W1): $GS is this source with the two guards story 08 builds - its own files when they are
+# there, else a stub - and two tags: v0.49.0 without the guards (a release that did not ship them), v0.49.1 with.
+GS="$T/src-guards"; mkdir -p "$GS" "$T/gs-aside"
+git -C "$SRC" ls-files | tar -C "$SRC" -cf - -T - | tar -C "$GS" -xf -
+for g in owner-guard.sh court-guard.sh; do
+  if [ -f "$GS/.claude/hooks/$g" ]; then mv "$GS/.claude/hooks/$g" "$T/gs-aside/$g"
+  elif [ -f "$SRC/.claude/hooks/$g" ]; then cp -p "$SRC/.claude/hooks/$g" "$T/gs-aside/$g"
+  else printf '#!/usr/bin/env bash\nexit 0\n' > "$T/gs-aside/$g"; chmod +x "$T/gs-aside/$g"; fi
+done
+git -C "$GS" init -q -b main . && git -C "$GS" config user.email t@t && git -C "$GS" config user.name "Test Owner" &&
+  git -C "$GS" config core.autocrlf false
+git -C "$GS" add -A && git -C "$GS" commit -qm "without the guards" >/dev/null && git -C "$GS" tag v0.49.0
+cp -p "$T/gs-aside/owner-guard.sh" "$T/gs-aside/court-guard.sh" "$GS/.claude/hooks/"
+git -C "$GS" add -A && git -C "$GS" commit -qm "with the guards" >/dev/null && git -C "$GS" tag v0.49.1
 unquoted() { # unquoted <settings.json> - how many hook commands do not start with the quoted head
   jq -r '[.hooks[][].hooks[].command | select(startswith("\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/") | not)] | length' "$1" | tr -d '\r'
 }
@@ -1917,19 +1984,19 @@ space_run() { # space_run <label> <settings.json> - its PreToolUse defects-injec
 }
 expect_eq "fresh install: every hook command quotes the project dir" "0" "$(unquoted "$TGT/.claude/settings.json")"
 expect_eq "fresh install: every SessionEnd entry has a timeout >= 10" "0" "$(short_se "$TGT/.claude/settings.json")"
-expect_eq "fresh install: the 17 hook entries" "17" "$(hook_sig "$TGT/.claude/settings.json" | grep -c .)"
+expect_eq "fresh install: the 19 hook entries" "19" "$(hook_sig "$TGT/.claude/settings.json" | grep -c .)"
 space_run "fresh install" "$TGT/.claude/settings.json"
 EH="$T/hive-allow-empty"; mkdir -p "$EH/.claude"
 printf '{"permissions":{"allow":[]}}\n' > "$EH/.claude/settings.json"; cp "$EH/.claude/settings.json" "$T/eh.before"
-bash "$SRC/install.sh" "$EH" --check --telemetry off > "$T/eh-check.out" 2>&1
-expect_eq "--check into an owner's settings.json: would wire for each of the 17 hooks" "17" \
+bash "$GS/install.sh" "$EH" --check --telemetry off > "$T/eh-check.out" 2>&1
+expect_eq "--check into an owner's settings.json: would wire for each of the 19 hooks" "19" \
   "$(grep -E '^  would wire +\.claude/settings\.json -> ' "$T/eh-check.out" | grep -vc 'permissions\.allow')"
 expect_eq "--check into an owner's settings.json writes nothing" "1" "$(same "$T/eh.before" "$EH/.claude/settings.json")"
-bash "$SRC/install.sh" "$EH" --telemetry off > "$T/eh.out" 2>&1
-expect_eq "install into an owner's settings.json: one wire line per hook, 17" "17" \
+bash "$GS/install.sh" "$EH" --telemetry off > "$T/eh.out" 2>&1
+expect_eq "install into an owner's settings.json: one wire line per hook, 19" "19" \
   "$(grep -E '^  wire +\.claude/settings\.json -> ' "$T/eh.out" | grep -vc 'permissions\.allow')"
 cat "$T/eh.out" | expect_absent "... and none kept: the owner's file had none" "kept           .claude/settings.json ->"
-expect_eq "... the same 17 entries a fresh install copies" "$(hook_sig "$TGT/.claude/settings.json")" "$(hook_sig "$EH/.claude/settings.json")"
+expect_eq "... the same 19 entries a fresh install copies" "$(hook_sig "$TGT/.claude/settings.json")" "$(hook_sig "$EH/.claude/settings.json")"
 expect_eq "... every one quoting the project dir" "0" "$(unquoted "$EH/.claude/settings.json")"
 expect_eq "... every SessionEnd entry with a timeout >= 10" "0" "$(short_se "$EH/.claude/settings.json")"
 space_run "install into an owner's settings.json" "$EH/.claude/settings.json"
@@ -2037,6 +2104,53 @@ jq '(.hooks.PreToolUse[] | select(any(.hooks[]; .command | test("defects-inject"
 bash "$SRC/install.sh" "$M1H" --upgrade --telemetry off > "$T/m1-own.out" 2>&1
 expect_eq "a matcher the hive changed itself is left alone" "Edit|Write|PowerShell" "$(inj_m "$M1S")"
 cat "$T/m1-own.out" | expect "... and named" "kept (yours)   .claude/settings.json -> PreToolUse [Edit|Write|PowerShell]: defects-inject.sh"
+# audit-fixes-1113-10 (W1, asks 4 and 13): owner-guard.sh and court-guard.sh are PreToolUse hooks on the W1 matchers,
+# in the quoted "$CLAUDE_PROJECT_DIR" form, fail-closed like git-guard.sh. A fresh install has both; --upgrade wires
+# each once, only when the installed release did not ship the script; a missing entry after that stays missing.
+OG_M='Bash|PowerShell|Edit|Write|MultiEdit'; CG_M='Read|Grep|Glob|Bash|PowerShell'
+guard_sig() { # guard_sig <settings.json> <script> - "<matcher>|<command>|<onFailure>" of each PreToolUse entry running it
+  jq -r --arg s "$2" '.hooks.PreToolUse[]? | (.matcher // "") as $m | .hooks[] | select(.command | endswith("/" + $s))
+                       | "\($m)|\(.command)|\(.onFailure // "")"' "$1" | tr -d '\r'
+}
+for s in "$TGT" "$EH"; do
+  expect_eq "$(basename "$s"): owner-guard.sh on the W1 matcher, quoted head" \
+    "$OG_M|\"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/owner-guard.sh|block" "$(guard_sig "$s/.claude/settings.json" owner-guard.sh)"
+  expect_eq "$(basename "$s"): court-guard.sh on the W1 matcher, quoted head" \
+    "$CG_M|\"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/court-guard.sh|block" "$(guard_sig "$s/.claude/settings.json" court-guard.sh)"
+  expect_eq "$(basename "$s"): git-guard.sh fails closed too" \
+    "Bash|PowerShell|\"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/git-guard.sh|block" "$(guard_sig "$s/.claude/settings.json" git-guard.sh)"
+done
+expect_eq "this repo's settings.json carries the same two guard entries" \
+  "$OG_M|\"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/owner-guard.sh|block $CG_M|\"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/court-guard.sh|block" \
+  "$(guard_sig "$SRC/.claude/settings.json" owner-guard.sh) $(guard_sig "$SRC/.claude/settings.json" court-guard.sh)"
+no_guards() { # no_guards <hive> <version> - a fresh hive at <version> whose settings.json lost both guard entries
+  fresh_install "$1"; printf '%s\n' "$2" > "$1/.claude/vulyk-version"
+  jq 'del(.hooks.PreToolUse[]?.hooks[]? | select(.command | test("(owner|court)-guard[.]sh")))
+      | .hooks.PreToolUse |= map(select((.hooks | length) > 0))' "$1/.claude/settings.json" | tr -d '\r' > "$T/ng.json" \
+    && cat "$T/ng.json" > "$1/.claude/settings.json"
+}
+GN="$T/hive-guards-new"; no_guards "$GN" 0.49.0
+bash "$GS/install.sh" "$GN" --upgrade --telemetry off > "$T/gn-up.out" 2>&1
+cat "$T/gn-up.out" | expect "--upgrade from a release without the guards: wire PreToolUse owner-guard" \
+  "wire           .claude/settings.json -> PreToolUse [$OG_M]: owner-guard.sh"
+cat "$T/gn-up.out" | expect "... wire PreToolUse court-guard" \
+  "wire           .claude/settings.json -> PreToolUse [$CG_M]: court-guard.sh"
+expect_eq "... each wired once, on its matcher, failing closed" \
+  "$OG_M|\"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/owner-guard.sh|block $CG_M|\"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/court-guard.sh|block" \
+  "$(guard_sig "$GN/.claude/settings.json" owner-guard.sh) $(guard_sig "$GN/.claude/settings.json" court-guard.sh)"
+for v in 0.49.1 0.48.0; do   # 0.49.1 shipped both scripts; 0.48.0 is no tag in $GS (installed tag unknown)
+  GO="$T/hive-guards-$v"; no_guards "$GO" "$v"; cp "$GO/.claude/settings.json" "$T/go.before"
+  bash "$GS/install.sh" "$GO" --upgrade --telemetry off > "$T/go-$v.out" 2>&1
+  cat "$T/go-$v.out" | expect "from $v: a missing owner-guard entry is reported unwired" "unwired PreToolUse: owner-guard.sh - to wire it: "
+  cat "$T/go-$v.out" | expect "from $v: a missing court-guard entry is reported unwired" "unwired PreToolUse: court-guard.sh - to wire it: "
+  expect_eq "from $v: neither is wired back" "" \
+    "$(guard_sig "$GO/.claude/settings.json" owner-guard.sh)$(guard_sig "$GO/.claude/settings.json" court-guard.sh)"
+done
+GWCMD="$(grep -m1 'unwired PreToolUse: court-guard.sh' "$T/go-0.49.1.out" | sed 's/.* - to wire it: //')"
+GW_RC=0; eval "$GWCMD" > "$T/gw.out" 2>&1 || GW_RC=$?
+expect_eq "the printed --wire command wires court-guard.sh on its W1 matcher" \
+  "0 $CG_M|\"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/court-guard.sh|block" \
+  "$GW_RC $(guard_sig "$T/hive-guards-0.49.1/.claude/settings.json" court-guard.sh)"
 fi # wiring
 
 if part_on ledger; then

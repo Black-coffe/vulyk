@@ -895,6 +895,7 @@ dry = '--dry' in sys.argv[6:]
 REL = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'     # quoted: a project path with a space still runs
 OLD_REL = '$CLAUDE_PROJECT_DIR/.claude/hooks/'   # the plain form before 0.50; fix_hooks rewires it
 HOOKS_DIR = os.path.join(os.path.dirname(os.path.abspath(path)), 'hooks')
+GUARDS = ('git-guard.sh', 'owner-guard.sh', 'court-guard.sh')   # PreToolUse guards: entries carry onFailure "block"
 try:
     with open(path, encoding='utf-8') as fh:
         raw = fh.read()
@@ -999,6 +1000,8 @@ for group in groups:
 if dry:
     sys.exit(0)                                  # --check: would wire; nothing written
 entry = {'type': 'command', 'command': cmd}
+if script in GUARDS:
+    entry['onFailure'] = 'block'                 # W1: a guard that crashes or is missing blocks, never waves through
 if event == 'SessionEnd':
     entry['timeout'] = 30                        # P10-03: the default SessionEnd budget is 1.5 s
 # The entry joins the first group with the same matcher (no matcher = a group without one, which
@@ -1036,6 +1039,7 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
   local label="$event${matcher:+ [$matcher]}: $script${arg:+ $arg}"
   local by_hand="{ \"type\": \"command\", \"command\": \"\\\"\$CLAUDE_PROJECT_DIR\\\"/.claude/hooks/$script${arg:+ $arg}\" }"
   [ "$event" = SessionEnd ] && by_hand="${by_hand% \}}, \"timeout\": 30 }"
+  case "$script" in git-guard.sh|owner-guard.sh|court-guard.sh) by_hand="${by_hand% \}}, \"onFailure\": \"block\" }" ;; esac
   [ -n "$matcher" ] && by_hand="{ \"matcher\": \"$matcher\", \"hooks\": [ $by_hand ] }"
   local kept="  kept           .claude/settings.json -> $label"
   [ -f "$file" ] || return 0                                   # fresh install: ours was copied whole
@@ -1099,6 +1103,8 @@ PreCompact context-guard.sh - -
 PreCompact handoff.sh - precompact
 PostToolUse skill-usage-counter.sh Skill -
 PreToolUse git-guard.sh Bash|PowerShell -
+PreToolUse owner-guard.sh Bash|PowerShell|Edit|Write|MultiEdit -
+PreToolUse court-guard.sh Read|Grep|Glob|Bash|PowerShell -
 SessionEnd anomaly-scan.sh - -
 UserPromptSubmit defect-intake.sh - -
 PostToolUse defect-intake.sh AskUserQuestion answer
@@ -1290,36 +1296,49 @@ PYFIX
 # The Workflow driver's clerk (`cycle-clerk.md`) runs every verb by shelling out to
 # `scripts/cycle.sh` and `scripts/journal.sh`, and a subagent's Bash tool is deny-by-default -
 # without an explicit `permissions.allow` entry every dispatch stalls on a prompt nobody is
-# watching. VULYK's OWN settings.json deliberately carries neither rule (only a target hive
-# runs the cycle unattended); this helper is what puts them there. Same treatment as
-# wire_session_hook: append only what is missing, in place, after a backup, idempotent by
-# inspection of the file.
+# watching. Only the verbs the clerk and the workers run are allowed, one rule each (contract W1,
+# audit-fixes-1113): the owner-only verbs (`briefed --go`, `reopen`, `manual-done`, `escalate`) and
+# `human-check.sh` stay behind a prompt. VULYK's own settings.json carries the same list. Same
+# treatment as wire_session_hook: append only what is missing, in place, after a backup, idempotent
+# by inspection of the file. The broad `cycle.sh` rule an older installer wrote is replaced by the
+# six verbs (`narrowed allow: cycle.sh`); a rule the installer never wrote stays, and one naming
+# `cycle.sh` or `human-check.sh` is named in the log.
+ALLOW_VERBS="advance status release suite stamp-red close-story"
+ALLOW_BROAD='Bash(bash scripts/cycle.sh:*)'
+allow_rules() { # the allow rules this release writes, one per line
+  local v; for v in $ALLOW_VERBS; do printf 'Bash(bash scripts/cycle.sh %s:*)\n' "$v"; done
+  printf '%s\n' 'Bash(bash scripts/journal.sh:*)'
+}
 wire_permissions() {
-  local file="$DEST/.claude/settings.json" py="" took=""
+  local file="$DEST/.claude/settings.json" py="" took="" out rc=0 kind rule
   [ -f "$file" ] || return 0                                   # nothing to edit
-  if grep -q 'Bash(bash scripts/cycle.sh:\*)' "$file" 2>/dev/null && \
-     grep -q 'Bash(bash scripts/journal.sh:\*)' "$file" 2>/dev/null; then
-    return 0                                                    # already wired
-  fi
-  if [ "$CHECK" = "--check" ]; then
-    echo "  would wire     .claude/settings.json -> permissions.allow: cycle.sh, journal.sh"
-    return 0
-  fi
   vulyk_python || true; py="$VULYK_PY"
   if [ -z "$py" ]; then
+    local missing="" r
+    while IFS= read -r r; do grep -qF "\"$r\"" "$file" 2>/dev/null || missing=1; done <<< "$(allow_rules)"
+    grep -qF "\"$ALLOW_BROAD\"" "$file" 2>/dev/null && missing=1
+    [ -n "$missing" ] || return 0                              # already the six verbs and the journal
+    if [ "$CHECK" = "--check" ]; then
+      echo "  would wire     .claude/settings.json -> permissions.allow: cycle.sh ($ALLOW_VERBS), journal.sh"
+      return 0
+    fi
     echo ""
     echo "  NOTE: the Workflow driver's clerk needs Bash access but could NOT be wired -"
-    echo "  no python on PATH to edit .claude/settings.json safely. Add these to your"
-    echo "  permissions.allow by hand, or every cycle-clerk dispatch will stall on a prompt:"
-    echo "      \"Bash(bash scripts/cycle.sh:*)\""
-    echo "      \"Bash(bash scripts/journal.sh:*)\""
+    echo "  no python on PATH to edit .claude/settings.json safely. Set your permissions.allow by"
+    echo "  hand to hold these, or every cycle-clerk dispatch will stall on a prompt:"
+    allow_rules | sed 's/^/      "/; s/$/"/'
+    echo "  and remove \"$ALLOW_BROAD\" if it is there: it lets the owner-only verbs run unprompted."
     return 0
   fi
-  settings_backup "$file" && took=1
-  if "$py" - "$file" <<'PYPERM'
-import json, re, sys
+  out="$(mktemp)"
+  [ "$CHECK" = "--check" ] || { settings_backup "$file" && took=1; }
+  VULYK_ALLOW_RULES="$(allow_rules)" VULYK_ALLOW_BROAD="$ALLOW_BROAD" \
+    "$py" - "$file" "${CHECK:+--dry}" > "$out" <<'PYPERM' || rc=$?
+import json, os, re, sys
 path = sys.argv[1]
-RULES = ["Bash(bash scripts/cycle.sh:*)", "Bash(bash scripts/journal.sh:*)"]
+dry = sys.argv[2:3] == ['--dry']
+RULES = [r for r in os.environ['VULYK_ALLOW_RULES'].splitlines() if r]
+BROAD = os.environ['VULYK_ALLOW_BROAD']
 try:
     with open(path, encoding='utf-8') as fh:
         raw = fh.read()
@@ -1330,31 +1349,67 @@ except Exception:
     sys.exit(4)                                  # unparseable: leave it entirely alone
 if not isinstance(data, dict):
     sys.exit(4)
-allow = data.setdefault('permissions', {}).setdefault('allow', [])
+perms = data.setdefault('permissions', {})
+if not isinstance(perms, dict):
+    sys.exit(4)
+allow = perms.setdefault('allow', [])
 if not isinstance(allow, list):
     sys.exit(4)
+for rule in allow:                               # the hive's own rules on the cycle's scripts: kept, named
+    if isinstance(rule, str) and rule not in RULES and rule != BROAD and \
+            re.search(r'scripts/(cycle|human-check)\.sh', rule):
+        print('kept\t' + rule)
+narrowed = BROAD in allow
 added = [r for r in RULES if r not in allow]
-if not added:
-    sys.exit(3)                                  # already there under both spellings
+if not narrowed and not added:
+    sys.exit(3)                                  # already the release's list
+if narrowed:
+    print('narrowed')
+if added:
+    print('added')
+if dry:
+    sys.exit(0)
+if narrowed:
+    at = allow.index(BROAD)                      # the six verbs take the broad rule's place
+    fresh = [r for r in added if r != BROAD]
+    allow[at:at + 1] = [r for r in fresh if 'scripts/cycle.sh ' in r]
+    added = [r for r in fresh if 'scripts/cycle.sh ' not in r]
 allow.extend(added)
 with open(path, 'w', encoding='utf-8', newline='\n') as fh:
     json.dump(data, fh, indent=IND, ensure_ascii=False)
     fh.write('\n')
 PYPERM
-  then
-    echo "  wire           .claude/settings.json -> permissions.allow: cycle.sh, journal.sh"
-    echo "                 (backup at .claude/settings.json.vulyk-bak)"
-  else
-    case "$?" in
-      3) [ -z "$took" ] || settings_backup_drop "$file" ;;   # already wired; nothing happened
-      *) [ -z "$took" ] || settings_backup_drop "$file"
-         echo ""
-         echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
-         echo "  Add these to permissions.allow by hand:"
-         echo "      \"Bash(bash scripts/cycle.sh:*)\""
-         echo "      \"Bash(bash scripts/journal.sh:*)\"" ;;
-    esac
-  fi
+  case "$rc" in
+    0) while IFS="$(printf '\t')" read -r kind rule; do
+         case "$kind" in
+           narrowed)
+             if [ "$CHECK" = "--check" ]; then
+               echo "  would narrow   .claude/settings.json -> permissions.allow: cycle.sh to $ALLOW_VERBS"
+             else
+               echo "  narrowed allow: cycle.sh -> .claude/settings.json permissions.allow: $ALLOW_VERBS"
+             fi ;;
+           added)
+             if [ "$CHECK" = "--check" ]; then
+               echo "  would wire     .claude/settings.json -> permissions.allow: cycle.sh ($ALLOW_VERBS), journal.sh"
+             else
+               echo "  wire           .claude/settings.json -> permissions.allow: cycle.sh ($ALLOW_VERBS), journal.sh"
+             fi ;;
+           kept) echo "  kept (yours)   .claude/settings.json -> permissions.allow: $rule" ;;
+         esac
+       done <<< "$(tr -d '\r' < "$out")"
+       [ "$CHECK" = "--check" ] || echo "                 (backup at .claude/settings.json.vulyk-bak)" ;;
+    3) [ -z "$took" ] || settings_backup_drop "$file"           # already the release's list; nothing happened
+       tr -d '\r' < "$out" | while IFS="$(printf '\t')" read -r kind rule; do
+         [ "$kind" != kept ] || echo "  kept (yours)   .claude/settings.json -> permissions.allow: $rule"
+       done ;;
+    *) [ -z "$took" ] || settings_backup_drop "$file"
+       echo ""
+       echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
+       echo "  Set its permissions.allow by hand to hold these:"
+       allow_rules | sed 's/^/      "/; s/$/"/'
+       echo "  and remove \"$ALLOW_BROAD\" if it is there: it lets the owner-only verbs run unprompted." ;;
+  esac
+  rm -f "$out"
 }
 
 # Claude Code's built-in "You should know" mod is offered (ysk-offer.sh), never switched on (0.29.0).
@@ -1825,11 +1880,19 @@ wire_entry SessionStart ysk-offer.sh
 wire_entry PostToolUse defect-intake.sh AskUserQuestion answer
 # uncommitted-work-guard: the git guard is wired by the release that brings it, once. When v$PREV
 # already shipped the hook, a missing entry is the owner's removal and stays removed (like unwire_hook).
-if [ -n "$PREV_UNKNOWN" ] || git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/git-guard.sh" 2>/dev/null; then
-  report_unwired PreToolUse git-guard.sh 'Bash|PowerShell'
-elif [ -f "$DEST/.claude/hooks/git-guard.sh" ] || [ "$CHECK" = "--check" ]; then
-  wire_hook PreToolUse git-guard.sh 'Bash|PowerShell'
-fi
+# audit-fixes-1113 (contract W1): the owner-word and court guards follow the same rule. An entry is written only
+# when the hive has the script: a guard entry fails closed (onFailure "block"), so one naming a missing file would
+# block every tool it matches.
+wire_guard() { # wire_guard <script> <matcher>
+  if [ -n "$PREV_UNKNOWN" ] || git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/$1" 2>/dev/null; then
+    report_unwired PreToolUse "$1" "$2"
+  elif [ -f "$DEST/.claude/hooks/$1" ] || [ "$CHECK" = "--check" ]; then
+    wire_hook PreToolUse "$1" "$2"
+  fi
+}
+wire_guard git-guard.sh 'Bash|PowerShell'
+wire_guard owner-guard.sh 'Bash|PowerShell|Edit|Write|MultiEdit'
+wire_guard court-guard.sh 'Read|Grep|Glob|Bash|PowerShell'
 # mass-audit-fixes-04 (I2): the rest of what VULYK's own settings.json runs, which no earlier installer
 # wired into an owner's settings.json. As for git-guard.sh: wired when v$PREV did not ship the script (a
 # fresh install over an owner's file, or the release that brings it); after that a missing entry is the

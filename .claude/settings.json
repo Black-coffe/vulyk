@@ -1,5 +1,16 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(bash scripts/cycle.sh advance:*)",
+      "Bash(bash scripts/cycle.sh status:*)",
+      "Bash(bash scripts/cycle.sh release:*)",
+      "Bash(bash scripts/cycle.sh suite:*)",
+      "Bash(bash scripts/cycle.sh stamp-red:*)",
+      "Bash(bash scripts/cycle.sh close-story:*)",
+      "Bash(bash scripts/journal.sh:*)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -39,7 +50,19 @@
       {
         "matcher": "Bash|PowerShell",
         "hooks": [
-          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/git-guard.sh" }
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/git-guard.sh", "onFailure": "block" }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell|Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/owner-guard.sh", "onFailure": "block" }
+        ]
+      },
+      {
+        "matcher": "Read|Grep|Glob|Bash|PowerShell",
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/court-guard.sh", "onFailure": "block" }
         ]
       }
     ],

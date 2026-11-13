@@ -437,3 +437,5 @@
 {"ts":"2026-11-13T23:01:42Z","story":"audit-fixes-1113-06-install","declared":14,"changed":14,"out_of_scope":0}
 {"ts":"2026-11-13T23:21:33Z","story":"audit-fixes-1113-07-git-guard","declared":6,"changed":6,"out_of_scope":0}
 {"ts":"2026-11-13T23:32:03Z","story":"audit-fixes-1113-08-owner-word-and-court-guards","declared":10,"changed":10,"out_of_scope":0}
+{"ts":"2026-11-13T23:41:57Z","story":"audit-fixes-1113-10-install-wiring-and-allow-list","declared":5,"changed":5,"out_of_scope":0}
+{"ts":"2026-11-13T23:47:08Z","story":"audit-fixes-1113-10-install-wiring-and-allow-list","declared":5,"changed":5,"out_of_scope":0}
