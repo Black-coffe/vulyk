@@ -724,6 +724,65 @@ nr_round2 nrr
 [ -f "$NR_REC" ] && nr_full nrr && printf '%s' "$NR_ERR" | grep -qF 're-check' \
   && echo "  ok    a record whose rule no longer holds on round 1's records: a full round, stderr names the re-check" \
   || { echo "::error::re-check: ROUND=$(cat docs/specs/nrr/council/round-2/ROUND 2>&1) stderr=$NR_ERR"; fail=1; echo "narrow re-check" >> "$FAILS"; }
+
+echo "beta-fixes-1113 (ask 1): a numbered finding names its file, not its number; a finding with no real path is a full round"
+grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+printf '| Full suite (round-only) | `true` |\n' >> CLAUDE.md
+git add -A && git commit -qm "fixture: a full-suite row (beta-fixes-1113)" >/dev/null
+nb_red() { # nb_red <slug> <review-report> - a Tier 3 spec, one story on app/acme.sh (2.0/notes.md in the tree too), round 1 RED on <review-report>, repaired
+  mk_open_spec "$1" 2; set_tier "$1" 3
+  done_story "docs/specs/$1/$1-02-acme.md" '---\nstory: %s-02\nspec: %s\nstatus: done\nwave: 1\n---\n# S2\n\n## Files\n- app/acme.sh\n\n## Verification\n`test -f app/acme.sh`\n' "$1" "$1"
+  mkdir -p app 2.0 && echo "echo acme" > app/acme.sh && echo "notes" > 2.0/notes.md
+  git add -A && git commit -qm "$1: one built story" >/dev/null
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  council suite "docs/specs/$1" --commit >/dev/null 2>&1
+  seat_report opus 1 GG | council record-seat "docs/specs/$1" 1 opus >/dev/null 2>&1
+  printf '%b' "$2" | council record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
+  council judge "docs/specs/$1" --commit >/dev/null 2>&1
+  council repair "docs/specs/$1" --commit >/dev/null 2>&1
+  NB_RS="docs/specs/$1/$1-03-repair-round-1.md"; NB_REC=".vulyk/state/$1/narrow.round-2"
+}
+nb_round2() { # nb_round2 <slug> - the repair story done with a code change, round 2 opened, one suite call
+  done_story "$NB_RS"
+  echo "echo acme $1" > app/acme.sh && git add -A && git commit -qm "$1: the repair" >/dev/null
+  council open-round "docs/specs/$1" --commit >/dev/null 2>&1
+  council suite "docs/specs/$1" --commit >/dev/null 2>&1
+}
+nb_sec() { awk -v h="$2" '$0 == h { on = 1; next } on && /^## / { exit } on && NF { print }' "$1" 2>/dev/null; } # nb_sec <file> <heading> -> its non-blank lines
+NBL="a numbered finding names its file, not its number"
+nb_narrow() { # nb_narrow <slug> <file> <label> - the repair is narrow on <file>: ## Files holds it and no bare number, ## Verification not empty, the record names it
+  if [ -f "$NB_RS" ] && [ "$(fm_field_v "$NB_RS" narrow)" = true ] && nb_sec "$NB_RS" '## Files' | grep -qx -- "- $2" \
+    && ! nb_sec "$NB_RS" '## Files' | grep -qE '^- [0-9]+\.?$' && [ -n "$(nb_sec "$NB_RS" '## Verification')" ] && grep -qx "file=$2" "$NB_REC" 2>/dev/null; then
+    echo "  ok    $3"
+  else echo "::error::$NBL - $3: story=$(cat "$NB_RS" 2>&1) record=$(cat "$NB_REC" 2>&1)"; fail=1; echo "$NBL ($1)" >> "$FAILS"; fi
+}
+nb_red nbn 'VERDICT: BLOCK\n## Major\n1. app/acme.sh:12 [ask 1] the loop is off by one\n'
+nb_narrow nbn app/acme.sh "1. app/acme.sh:12: narrow on app/acme.sh, ## Files holds no number, ## Verification not empty"
+nb_sec "$NB_RS" '## Verification' | grep -qxF '`test -f app/acme.sh`' && echo "  ok    ## Verification is the line of the story that named the file" \
+  || { echo "::error::$NBL - verification: $(nb_sec "$NB_RS" '## Verification')"; fail=1; echo "$NBL (verification)" >> "$FAILS"; }
+nb_round2 nbn
+grep -qx 'seats=review' docs/specs/nbn/council/round-2/ROUND 2>/dev/null && grep -qx 'narrow=1' docs/specs/nbn/council/round-2/ROUND \
+  && echo "  ok    a numbered one-item, one-file round opens narrow, as before" \
+  || { echo "::error::$NBL - round 2: ROUND=$(cat docs/specs/nbn/council/round-2/ROUND 2>&1)"; fail=1; echo "$NBL (round 2)" >> "$FAILS"; }
+nb_red nbt 'VERDICT: BLOCK\n## Major\n10. app/acme.sh:12 [ask 1] the loop is off by one\n'
+nb_narrow nbt app/acme.sh "10. app/acme.sh:12: the two-digit number is stripped the same way"
+nb_red nbd 'VERDICT: BLOCK\n## Major\n1. 2.0/notes.md:3 [ask 1] the note is stale\n'
+nb_narrow nbd 2.0/notes.md "1. 2.0/notes.md:3: a path that starts with digits and a dot is kept whole"
+nb_full() { # nb_full <slug> <label> - no narrow mark, no record, round 2 the tier's full seats, suite ran its step
+  if [ -f "$NB_RS" ] && [ -z "$(fm_field_v "$NB_RS" narrow)" ] && [ ! -f "$NB_REC" ] && nr_full "$1" \
+    && grep -q '^SUITE: ok' "docs/specs/$1/council/round-2/suite.log" 2>/dev/null && ! grep -qF 'SUITE: none - narrow repair round' "docs/specs/$1/council/round-2/suite.log"; then
+    echo "  ok    $2"
+  else echo "::error::$NBL - $2: narrow=$(fm_field_v "$NB_RS" narrow) record=$(cat "$NB_REC" 2>&1) ROUND=$(cat "docs/specs/$1/council/round-2/ROUND" 2>&1) log=$(cat "docs/specs/$1/council/round-2/suite.log" 2>&1)"
+    fail=1; echo "$NBL ($1)" >> "$FAILS"; fi
+}
+nb_red nbe 'VERDICT: BLOCK\n## Major\n1. e.g. the loop [ask 1] is off by one\n'
+nb_round2 nbe; nb_full nbe "a dotted word as the first token: a full round, suite runs its step"
+nb_red nbg 'VERDICT: BLOCK\n## Major\n- [ask 1] app/gone.sh:3 the file is missing\n'
+nb_round2 nbg; nb_full nbg "a path absent from the tree: a full round, suite runs its step"
+nb_red nbp 'VERDICT: BLOCK\n## Major\n- [ask 1] the loop is off by one\n'
+nb_round2 nbp; nb_full nbp "a finding with no path: a full round, suite runs its step"
+grep -v '^| Full suite' CLAUDE.md > CLAUDE.md.new && mv CLAUDE.md.new CLAUDE.md
+git add -A && git commit -qm "fixture: no full-suite row" >/dev/null
 fi # part verbs
 if part judge; then # --- part judge: the ceiling, no-progress and half walks, ABSENT/N/A/REJECTED, journal, briefed, branch, git failures, court setup
 if full; then # --quick skips: the multi-round ceiling, no-progress and half walks

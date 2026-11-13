@@ -2485,10 +2485,13 @@ path_overlap() { # path_overlap <path-or-glob> <path-or-glob> - 0 if the two can
 }
 
 finding_paths() { # finding_paths <findings> -> the path each finding starts with, one per line: its
-  # leading `- ` and `[tag]`s dropped, the first word cut at a `:`, kept only if it holds a `/` or a `.`
-  local line tok
+  # leading `- `, `N. ` item number (lead-review's list form) and `[tag]`s dropped, the first word cut
+  # at a `:`, kept only if it holds a `/` or a `.`. `2.0/x.md` stays whole: no space follows its dot.
+  local line tok n
   while IFS= read -r line; do
     line="${line#- }"
+    n="${line%%. *}"
+    case "$n" in ''|*[!0-9]*) ;; *) line="${line#"$n". }" ;; esac
     while :; do case "$line" in "["*"] "*) line="${line#*] }" ;; *) break ;; esac; done
     tok="${line%% *}"; tok="${tok%%:*}"; tok="${tok//\`/}"
     case "$tok" in */*|*.*) printf '%s\n' "$tok" ;; esac
@@ -2716,6 +2719,8 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] [<baseline 0|1>] - red-
   red_refuse() { echo "cycle: stamp-red - $STORY: $1" >&2; emit false stamp-red 4 repair "$1"; exit 4; }
   [ "$(fm_red "$STORY")" = required ] || red_refuse "story is not red: required"
   local REASON; REASON="$(fm_raw "$STORY" red_reason)"
+  # beta-fixes-1113 ask 7: one layer of matching YAML quotes comes off; an inner or unmatched quote stays
+  case "$REASON" in \"*\"|\'*\') REASON="${REASON#?}"; REASON="${REASON%?}" ;; esac
   [ -n "$REASON" ] || red_refuse "red_reason is empty"
   red_sets "$STORY"
   [ -n "$RED_SEALED" ] || red_refuse "no test to seal: ## Verification names no path under ## Files"
@@ -4147,15 +4152,18 @@ repair_findings() { # repair_findings <spec> <round-dir> -> the round's findings
 
 narrow_file() { # narrow_file <asks> <findings> <files> -> the one file a narrow repair reaches, or nothing.
   # ab-run-fixes C5: narrow - exactly one RED item (one ask, or one [regression] / gate / owner
-  # finding) whose reach (the paths its findings name, else the ## Files union) is one non-test file.
-  # The one rule `repair` decides by and `open-round` re-checks by (upgrade-findings-05, A3).
+  # finding) whose reach (the paths its findings name) is one non-test file that exists in the tree.
+  # Findings naming no such path (none, a dotted word, a file not yet there) are a full round
+  # (beta-fixes-1113 ask 1). The one rule `repair` decides by and `open-round` re-checks by
+  # (upgrade-findings-05, A3). <files> is kept for the callers' signature; the reach no longer falls back to it.
   local reach items
   items=$(( $(printf '%s\n' $1 | grep -c .) + $(printf '%s\n' "$2" | grep -cE '\[regression\]|^- owner REJECTED') ))
   [ "$items" -eq 1 ] || return 0
   reach="$(finding_paths "$2" | awk 'NF && !seen[$0]++')"
-  [ -n "$reach" ] || reach="$(printf '%s' "$3" | awk 'NF && !seen[$0]++')"
+  [ -n "$reach" ] || return 0
   [ "$(printf '%s\n' "$reach" | grep -c .)" -eq 1 ] || return 0
   case "$reach" in *[*?[]*|*/) return 0 ;; esac
+  [ -f "$ROOT/$reach" ] || return 0
   is_test_path "$reach" || printf '%s' "$reach"
   return 0
 }

@@ -1936,9 +1936,9 @@ sed -n '2,/^---$/p' "$rp" 2>/dev/null | grep -qx 'red_reason:' && echo "  ok    
   || { echo "::error::repair frontmatter lacks an empty red_reason: $(sed -n '1,12p' "$rp" 2>/dev/null)"; fail=1; }
 out="$(red_rp_spec redrq '')"
 rq=docs/specs/redrq/redrq-02-repair-round-1.md
-# ab-run-fixes C5: one ask reaching one non-test file is a narrow repair - `narrow: true` is the one line it adds
-[ "$(sed -n '1,10p' "$rq" 2>/dev/null)" = "$(printf -- '---\nstory: redrq-02\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: 2\nblocked_by: []\nnarrow: true\n---')" ] \
-  && ! grep -q '^red' "$rq" && echo "  ok    an unmarked union writes the frontmatter byte for byte as before, plus C5's narrow: true" \
+# beta-fixes-1113 (ask 1): the finding names no path, so the repair is no narrow one and adds no `narrow: true`
+[ "$(sed -n '1,9p' "$rq" 2>/dev/null)" = "$(printf -- '---\nstory: redrq-02\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: 2\nblocked_by: []\n---')" ] \
+  && ! grep -q '^red' "$rq" && echo "  ok    an unmarked union writes the frontmatter byte for byte as before; a finding with no path adds no narrow: true" \
   || { echo "::error::unmarked repair frontmatter changed: $(sed -n '1,12p' "$rq" 2>/dev/null) / $out"; fail=1; }
 
 echo "red-receipt: the repair keeps the mark unless every finding names a file and none a marked story's (0.40.1)"
@@ -2266,6 +2266,27 @@ out="$(bash scripts/cycle.sh close-story "$st" --commit 2>&1)"; ex=$?
   || { echo "::error::unstamped story: exit=$ex, head moved: $(git log -1 --format=%s)"; fail=1; }
 printf '%s\n' "$out" | tail -1 | expect "the refusal names stamp-red and the story" \
   '"error":"no red receipt: run cycle.sh stamp-red docs/specs/red/red-11.md after writing the failing test"'
+
+echo "beta-fixes-1113 (ask 7): a quoted red_reason: matches as an unquoted one; an inner or unmatched quote is compared as written"
+printf '#!/usr/bin/env bash\ngrep -qx done src/red-acme.txt && exit 0\necho "acme: boom"\necho "it'"'"'s red"\necho "half"\nexit 1\n' > tests/red-acme.sh
+printf 'todo\n' > src/red-acme.txt
+git add -A && git commit -qm "red: the acme test" >/dev/null
+FA=$'- tests/red-acme.sh\n- src/red-acme.txt\n'
+red_q() { # red_q <nn> <red_reason value> <label> - stamp-red writes the receipt for this red_reason
+  local st="docs/specs/red/red-$1.md" out ex
+  red_story "$1" "red: required
+red_reason: $2
+" "$FA" '`bash tests/red-acme.sh`'
+  out="$(bash scripts/cycle.sh stamp-red "$st" 2>&1)"; ex=$?
+  [ "$ex" -eq 0 ] && grep -q '^red_verified_at: ' "$st" && grep -qx -- '- command: bash tests/red-acme.sh' "$st" && echo "  ok    $3" \
+    || { echo "::error::$3 - exit=$ex $(printf '%s\n' "$out" | tail -2)"; fail=1; }
+}
+red_q 40 '"acme: boom"' 'red_reason: "acme: boom" (double quotes) stamps on a line holding acme: boom'
+red_q 41 "'acme: boom'" "red_reason: 'acme: boom' (single quotes) stamps on a line holding acme: boom"
+red_q 42 'acme: boom' 'red_reason: acme: boom (unquoted) stamps as before'
+red_q 43 "it's red" "red_reason: it's red (an inner quote) is compared as written"
+red_story 44 $'red: required\nred_reason: "half\n' "$FA" '`bash tests/red-acme.sh`'
+red_refuses 'red_reason: "half (an unmatched quote) is compared as written: no line holds "half' 44 4 "red for another reason: red_reason not in the output of bash tests/red-acme.sh"
 fi # part red
 
 [ -e "$MARK" ] && fail=1
