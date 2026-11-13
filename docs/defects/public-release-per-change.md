@@ -39,6 +39,7 @@ case (a hive left on the previous dev build) and a neighbour (a hold that ran ou
   them only with a publish.
 - Push tags in bulk (`git push --tags`, `--follow-tags`), push a `-dev.N` tag, or push more than one version tag in
   one publish.
+- Push a spec branch to a public origin for its CI run: it carries every unpublished commit of the local main.
 
 ## How to
 - After a ship, merge on the local main and roll the change out to the local hives from the local clone

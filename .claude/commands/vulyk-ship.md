@@ -1,5 +1,5 @@
 ---
-description: Stage 06 of the cycle - fix history, merge locally, print the publish command, open the next circle. Pushes only the spec branch, for its CI run; never publishes or deploys. Its only tag is the VULYK source's local dev-build tag, never pushed.
+description: Stage 06 of the cycle - fix history, merge locally, print the publish command, open the next circle. Pushes only the spec branch, for its CI run, and only to a private origin; never publishes or deploys. Its only tag is the VULYK source's local dev-build tag, never pushed.
 argument-hint: [spec slug; defaults to the newest spec with a GREEN council row or a human check recorded]
 ---
 
@@ -17,7 +17,10 @@ Ship: "$ARGUMENTS" (default: the newest spec under `docs/specs/` whose plan.md c
    merging the default branch into the spec branch and opening a new council round, because the
    resolution is code no GREEN round has seen. Run it only on the owner's yes.
    The `ci` line wants a green CI run on the branch head (or the newest commit with only paperwork after
-   it). On `ci: no CI run for <sha>`, run it yourself: `git push -u origin <branch>`, then
+   it). On `ci: no CI run for <sha>`, first ask where `origin` points: `gh repo view --json visibility -q
+   .visibility`. `PUBLIC` (or no answer): never push the spec branch there, since it carries every unpublished
+   commit of the default branch; ask the owner (a private CI mirror, or his override to ship without branch CI)
+   and stop until he answers. A private origin: run it yourself, `git push -u origin <branch>`, then
    `gh workflow run <file under .github/workflows/> --ref <branch>` (skip it when the push itself started
    a run; a workflow with neither a push nor a `workflow_dispatch` trigger for the branch: say so and stop).
    Wait for the run (`gh run watch <id> --exit-status`, Bash `timeout: 600000`, again while it runs), then
