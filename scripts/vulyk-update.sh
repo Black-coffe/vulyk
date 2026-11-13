@@ -21,6 +21,9 @@
 #                             `.claude/vulyk-origin` file. A cache cloned from another origin is refused.
 #   VULYK_SRC=/path/to/cache  where the source clone lives (default ~/.vulyk/src)
 set -euo pipefail
+# The one version order (version_newer, version_newest), shared with the update-check hook.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/version-order.sh" \
+  || { echo "error: scripts/version-order.sh not found beside vulyk-update.sh"; exit 1; }
 
 DEST="."; CHECK=""; WANT=""; TEL=""; CONST=""
 USAGE="Usage: $0 [project-dir] [--check] [--version X.Y.Z] [--telemetry on|off|ask] [--constitution replace]"
@@ -105,12 +108,17 @@ fi
 if [ -n "$WANT" ]; then
   TAG="v${WANT#v}"
 else
-  # git's own version sort, not `sort -V`: stock macOS sort has no -V, and the tag came back empty.
-  TAG="$(git -C "$SRC" tag --list 'v*' --sort=v:refname | tail -1)"
+  # version_newest, not `sort -V` (stock macOS sort has none) nor git's v:refname (it puts 0.52.0-dev.3 after 0.52.0).
+  TAG="$(git -C "$SRC" tag --list 'v*' | version_newest)"
   [ -n "$TAG" ] || { echo "error: $REPO publishes no version tags"; exit 1; }
 fi
 git -C "$SRC" rev-parse -q --verify "refs/tags/$TAG" >/dev/null \
   || { echo "error: $REPO has no tag $TAG"; exit 1; }
+# An older target is a downgrade, not an update: refused before anything is checked out or written. An equal
+# one runs as before.
+if [ "$INSTALLED" != "none" ] && version_newer "$INSTALLED" "$TAG"; then
+  echo "update: $TAG is not newer than the installed v$INSTALLED"; exit 1
+fi
 
 git -C "$SRC" -c advice.detachedHead=false checkout --quiet "$TAG"
 echo "  upgrading to ${TAG}"

@@ -1522,6 +1522,50 @@ ucheck 0.9.0 | expect "vulyk-update-check.sh names v0.10.0 newer than v0.9.0, wi
   "installed v0.9.0, latest v0.10.0"
 ucheck 0.11.0 | expect_absent "... and stays silent for a version ahead of the tags" "update available"
 
+# audit-fixes-1113-01 (V1): one version order, scripts/version-order.sh, for the hook and vulyk-update.sh.
+vo() ( . "$SRC/scripts/version-order.sh" && "$@" )
+VO_RC=0; vo version_newer 0.52.0 0.52.0-dev.3 || VO_RC=$?
+expect_eq "version_newer: a release is newer than its dev builds" "0" "$VO_RC"
+VO_RC=0; vo version_newer 0.52.0-dev.3 0.52.0 || VO_RC=$?
+expect_eq "version_newer: a dev build is not newer than its release" "1" "$VO_RC"
+VO_RC=0; vo version_newer 0.52.0-dev.10 0.52.0-dev.3 || VO_RC=$?
+expect_eq "version_newer: dev.10 is newer than dev.3" "0" "$VO_RC"
+VO_RC=0; vo version_newer 0.52.0-dev.3 0.51.9 || VO_RC=$?
+expect_eq "version_newer: 0.52.0-dev.3 is newer than 0.51.9" "0" "$VO_RC"
+VO_RC=0; vo version_newer 0.52.0-dev.3 0.50.3 || VO_RC=$?
+expect_eq "version_newer: 0.52.0-dev.3 is newer than 0.50.3" "0" "$VO_RC"
+VO_RC=0; vo version_newer 0.52.0 0.52.0 || VO_RC=$?
+expect_eq "version_newer: equal versions are not newer" "1" "$VO_RC"
+VO_RC=0; vo version_newer v0.10.0 0.9.0 || VO_RC=$?
+expect_eq "version_newer: a leading v on the left is accepted" "0" "$VO_RC"
+VO_RC=0; vo version_newer 0.52.0 v0.52.0-dev.3 || VO_RC=$?
+expect_eq "version_newer: a leading v on the right is accepted" "0" "$VO_RC"
+expect_eq "version_newest picks the release over its dev builds" "v0.52.0" \
+  "$(printf '%s\n' v0.50.3 v0.52.0-dev.3 v0.52.0 v0.52.0-dev.10 | vo version_newest)"
+printf '#!/bin/sh\necho %s\n' "'[{\"name\":\"v0.52.0-dev.3\"},{\"name\":\"v0.52.0\"}]'" > "$T/xp-curl/curl"
+ucheck 0.52.0-dev.3 | expect "the update check, installed 0.52.0-dev.3: names v0.52.0 as the latest" \
+  "installed v0.52.0-dev.3, latest v0.52.0"
+ucheck 0.52.0 | expect_absent "... and installed 0.52.0 with the same tags: silent" "update available"
+VREL="$T/xp-vorel"; git init -q -b main "$VREL"
+git -C "$VREL" -c user.name=t -c user.email=t@t commit -q --allow-empty -m r && git -C "$VREL" tag v0.50.3 \
+  && git -C "$VREL" tag v0.52.0-dev.3
+VH="$T/hive-xp-vo"; mkdir -p "$VH/.claude"; printf '0.52.0\n' > "$VH/.claude/vulyk-version"
+vupd() { ( cd "$XCWD" && VULYK_REPO="$VREL" VULYK_SRC="$T/xp-vocache" bash "$SRC/scripts/vulyk-update.sh" "$VH" "$@" ); }
+VU_RC=0; vupd > "$T/xp-vo.out" 2>&1 || VU_RC=$?
+expect_eq "vulyk-update.sh, installed 0.52.0, newest tag v0.52.0-dev.3: exit 1" "1" "$VU_RC"
+cat "$T/xp-vo.out" | expect "... with the refusal line" "update: v0.52.0-dev.3 is not newer than the installed v0.52.0"
+expect_eq "... and no file of the hive written" ".claude/vulyk-version" "$(cd "$VH" && find . -type f | sed 's|^\./||')"
+VU_RC=0; vupd --check > "$T/xp-vo.out" 2>&1 || VU_RC=$?
+expect_eq "... --check: exit 1" "1" "$VU_RC"
+cat "$T/xp-vo.out" | expect "... --check prints the same line" "update: v0.52.0-dev.3 is not newer than the installed v0.52.0"
+VU_RC=0; vupd --version 0.50.3 > "$T/xp-vo.out" 2>&1 || VU_RC=$?
+expect_eq "vulyk-update.sh, installed 0.52.0, target v0.50.3: exit 1" "1" "$VU_RC"
+cat "$T/xp-vo.out" | expect "... with the refusal line" "update: v0.50.3 is not newer than the installed v0.52.0"
+git -C "$VREL" tag v0.52.0
+vupd --check 2>&1 | expect_absent "... an equal version is not refused" "is not newer than"
+expect_eq "both scripts source scripts/version-order.sh" "yes yes" \
+  "$(grep -q '^\. .*version-order\.sh' "$SRC/scripts/vulyk-update.sh" && echo yes || echo no) $(grep -q '^\. .*version-order\.sh' "$SRC/.claude/hooks/vulyk-update-check.sh" && echo yes || echo no)"
+
 # upgrade-findings-06 (D1): the cache lives 6 hours, its line is `<epoch> <latest> <YYYY-MM-DDTHH:MMZ>`, and the
 # update line names when the answer was fetched. A stub origin answering v0.11.0 counts its calls.
 mkdir -p "$T/xp-curl6"; UC6N="$T/xp-curl6.calls"
