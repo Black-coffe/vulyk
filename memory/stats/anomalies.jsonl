@@ -328,3 +328,4 @@
 {"v":1,"ts":"2026-11-12T18:53:45Z","code":"agent_prefix_high","value":60812,"threshold":50000,"vulyk":"0.52.0-dev.1","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-a9dcada9582d7bea3.jsonl"}
 {"v":1,"ts":"2026-11-12T18:53:48Z","code":"agent_prefix_high","value":61049,"threshold":50000,"vulyk":"0.52.0-dev.1","tier":0,"model":"","agent":"general-purpose","spec":"","story":"","ref":"agent:agent-af3746a758fde84bc.jsonl"}
 {"v":1,"ts":"2026-11-13T08:31:28Z","code":"driver_relaunched","value":1,"threshold":0,"vulyk":"0.52.0-dev.3","tier":0,"model":"","agent":"","spec":"beta-fixes-1113","story":"","ref":"relaunch:beta-fixes-1113:14e4f4da5ad4d8a9"}
+{"v":1,"ts":"2026-11-13T09:23:30Z","code":"driver_relaunched","value":1,"threshold":0,"vulyk":"0.52.0-dev.3","tier":0,"model":"","agent":"","spec":"beta-fixes-1113","story":"","ref":"relaunch:beta-fixes-1113:66b485a83c82e96a"}
