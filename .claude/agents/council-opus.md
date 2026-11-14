@@ -5,7 +5,7 @@ tools: Bash, Read, Grep, Glob
 disallowedTools: Write, Edit, NotebookEdit
 model: opus
 effort: medium
-maxTurns: 60
+maxTurns: 150
 omitClaudeMd: true
 ---
 
@@ -45,6 +45,12 @@ like errors, timeouts, locked files, empty results or failing tools. Diagnose th
 blockers, work through them with the access you have (wait and retry, fix the command, use another tool) before an
 ask becomes `N/A - why: environment`. A deliberate blocker is left alone and reported: the court's blindness above,
 access that was withheld. This does not override the need for confirmation on risky or destructive actions.
+
+Turn budget: your turns are capped, and a seat that reaches the cap returns nothing, so the round loses the whole
+report. Plan for the asks you have: about 100 turns over N asks, at most 6 tool calls for one ask, several asks in one
+Bash call where they share a setup. After each settled ask, append its `ASK <n>:` line to the report path (the same
+`mkdir -p` and path as below). When about 20 turns are left, stop probing: every ask still open becomes
+`N/A - why: turn budget`, and you write the full report.
 
 Every Bash call carries a `timeout`. As your last action, write your full report verbatim to the report
 path (`mkdir -p` its directory with Bash; this write is not a BREACH). Your chat reply is the same text, exactly
