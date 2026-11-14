@@ -18,6 +18,55 @@ fi
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 export VULYK_DRIVER_PATH="$SRC/.claude/workflows/vulyk-cycle.js"
 
+# --- audit-fixes-1113-17 (the clerk line): the real lines cycle.sh prints under --short, the only form the driver
+# asks for, on a spec with a long path and a wave of eight; one `<name><TAB><line>` per line in $VULYK_SHORT_LINES
+T="$(mktemp -d)"
+trap 'git -C "$T/r" worktree remove --force "$T/r/.vulyk/court/$LONG/round-1" >/dev/null 2>&1; rm -rf "$T"' EXIT
+export VULYK_SHORT_LINES="$T/lines"
+LONG=a-long-spec-slug-for-the-clerk-line-check
+export VULYK_LONG_SPEC="docs/specs/$LONG"
+(
+  set -e
+  mkdir -p "$T/r" && cd "$T/r"
+  git init -q -b main . && git config user.email t@t && git config user.name t && git config core.autocrlf false
+  cp -R "$SRC/scripts" scripts
+  printf '.vulyk/\ndocs/specs/*/DRIVER\n' > .gitignore
+  SP="docs/specs/$LONG"; S=0123456789abcdef
+  mkdir -p "$SP"
+  sed -e 's/^\*\*Tier:\*\* <[^>]*>/**Tier:** 3/' -e 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-14/' \
+    "$SRC/templates/plan.md" > "$SP/plan.md"
+  printf '> check the clerk line\n\n## Asks\n1. the driver reads a short line\n' > "$SP/brief.md"
+  printf '# t\n\n## Commands\n\n| Purpose | Command |\n|---|---|\n| Trivial pass | `true` |\n' > CLAUDE.md
+  sf() { printf '%s' "$SP/$LONG-0$1-a-story-title-of-some-length.md"; }
+  story() { # story <n> <status> <returned>
+    printf -- '---\nstory: %s-0%s\nspec: %s\nstatus: %s\nreturned: %s\nworker: worker-code\nmodel: opus\nwave: 1\nblocked_by: []\n---\n# S%s\n\n## Files\n- app-%s.txt\n\n## Verification\n`true`\n' \
+      "$LONG" "$1" "$LONG" "$2" "$3" "$1" "$1" > "$(sf "$1")"
+  }
+  for n in 1 2 3 4 5 6 7 8; do story "$n" todo ''; done
+  git add -A && git commit -qm init
+  line() { # line <name> <cycle.sh args...> - the verb's last stdout line, recorded under <name>
+    local name="$1"; shift
+    printf '%s\t%s\n' "$name" "$(bash scripts/cycle.sh "$@" 2>/dev/null | tail -n 1)" >> "$VULYK_SHORT_LINES"
+  }
+  line claim-build advance "$SP" --stamp $S --claim --short
+  line release-build release "$SP" $S --short
+  echo x > app-2.txt                              # a worker that returned without closing: claim's leftover
+  line claim-leftover advance "$SP" --stamp $S --claim --short
+  line status-build status "$SP" --short
+  line reclaim claim "$SP" $S --short
+  echo x > app-1.txt; story 1 todo DONE
+  line close-story close-story "$(sf 1)" --commit --stamp $S --short
+  for n in 2 3 4 5 6 7 8; do
+    story "$n" done DONE
+    git add -A -- "$(sf "$n")" "app-$n.txt" 2>/dev/null || git add -- "$(sf "$n")"
+    git commit -qm "story($LONG-0$n): S$n"
+  done
+  line advance-dispatch advance "$SP" --stamp $S --short
+  line suite suite "$SP" --commit --stamp $S --short
+  line status-dispatch status "$SP" --short
+  line release release "$SP" $S --short
+) > /dev/null 2>&1
+
 node <<'NODE_EOF'
 'use strict';
 const fs = require('fs');
@@ -57,7 +106,7 @@ if (!driverFn) { console.log('FAIL: nothing to run'); process.exit(1); }
   check(!/\bfoldReviews\b/.test(src), 'static: no JS review fold - judge folds review and review2');
   const advances = src.match(/`advance \$\{spec\}[^`]*`/g) || [];
   check(advances.length > 0 && advances.every((t) => t.includes('--stamp ${stamp}')), 'static: every advance template carries --stamp', advances);
-  check(/close-story \$\{story\.file\} --commit --stamp \$\{stamp\}/.test(src), 'static: the worker prompt names close-story --commit --stamp');
+  check(/close-story <that file> --commit --stamp \$\{stamp\}/.test(src), 'static: the worker prompt names close-story --commit --stamp');
   const verbs = ['record-seat', 'judge', 'open-round', 'branch', 'close-story'].filter((v) => new RegExp('`' + v + ' ').test(src));
   check(verbs.length === 0, 'static: the driver sends no per-verb clerk command but advance/status/release/claim', verbs);
   // ask 17: the one per-verb command admitted is the short re-claim by the run's own stamp
@@ -82,25 +131,32 @@ const ADV = `advance ${SPEC} --stamp ${S}`;
 const CLAIM = `${ADV} --claim`;
 const RECLAIM = `claim ${SPEC} ${S}`;
 const INGEST = `${ADV} --ingest`;
-const STATUS = `status ${SPEC} --json`;
+const STATUS = `status ${SPEC}`;
 const RELEASE = `release ${SPEC} ${S}`;
 const SUITE = `suite ${SPEC} --commit --stamp ${S}`;
-const suiteDone = { ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: 0, steps: 0, done: true, suite: 'none' };
+const suiteDone = { ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', done: true };
 const ARGS = { spec: SPEC, top_model: 'fable', second_model: 'opus', stamp: S };
 const releaseOk = { ok: true, verb: 'release', exit: 0, next: 'released' };
-const COURT = '/abs/.vulyk/court/demo';
+const COURT = '/abs/.vulyk/court/demo/round-1';
 
-const status = (o) => ({
-  spec: SPEC, slug: 'demo', stage: '03', tier: 3, branch: 'vulyk/demo', head: 'h1',
-  wave_stories: [], round: 0, court: null, round_dir: null, since: null, seat_attempt: {}, seats: [], red: [],
-  ...o,
-});
-const adv = (st, extra) => ({ ok: true, verb: 'advance', exit: 0, next: st.next, steps: [], rejected: [], status: st, ...extra });
-const story = (n, o) => ({ file: `${SPEC}/demo-0${n}-x.md`, story: `demo-0${n}`, worker: 'worker-code', model: 'opus', repeat: 1, ...o });
+// audit-fixes-1113-17: the line `--short` prints, the only one the clerk carries - flat, the keys the driver reads,
+// a story by its id (`-NN` when the `<slug>` before it is left out), the court as its absolute path or null. status() takes the
+// state in the long form below and answers with that line.
+const wire = (s) => [s.story.startsWith('demo-') ? s.story.slice(4) : s.story, s.worker].concat(s.model ? [s.model] : []);
+const status = (o) => {
+  const d = { stage: '03', tier: 3, branch: 'vulyk/demo', head: 'h1', wave_stories: [], round: 0, court: null, since: null, seat_attempt: {}, ...o };
+  const f = { next: d.next, stage: d.stage, tier: d.tier, round: d.round };
+  if (d.next.startsWith('build:')) f.wave = d.wave_stories.map(wire);
+  if (d.next.startsWith('dispatch:')) Object.assign(f, { head: d.head, since: d.since, branch: d.branch, court: d.court, seat_attempt: d.seat_attempt });
+  return f;
+};
+const adv = (st, extra) => ({ ok: true, verb: 'advance', exit: 0, next: st.next, steps: [], rejected: [], ...st, ...extra });
+const story = (n, o) => ({ story: `demo-0${n}`, worker: 'worker-code', model: 'opus', ...o });
+const told = (s) => `Your story: ${s.story} - the story file in ${SPEC}/ whose frontmatter says \`story: ${s.story}\``;
 const build = (stories, o) => status({ next: 'build:1', wave_stories: stories, ...o });
 const round = (seats, o) => status({
-  next: 'dispatch:' + seats, stage: '04', round: 1, court: COURT, round_dir: `${SPEC}/council/round-1`,
-  seats: seats.split(','), seat_attempt: Object.fromEntries(seats.split(',').map((s) => [s, 1])), ...o,
+  next: 'dispatch:' + seats, stage: '04', round: 1, court: COURT,
+  seat_attempt: Object.fromEntries(seats.split(',').map((s) => [s, 1])), ...o,
 });
 const green = (o) => status({ next: 'green', stage: '05', ...o });
 
@@ -119,7 +175,7 @@ async function run(args, script) {
   const phases = [];
   const agent = (prompt, opts) => {
     if (opts && opts.agentType === 'cycle-clerk') {
-      const m = prompt.match(/^Run exactly: bash scripts\/cycle\.sh (.*)\nReturn the last stdout line verbatim\.$/);
+      const m = prompt.match(/^Run exactly: bash scripts\/cycle\.sh (.*) --short\nReturn the last stdout line verbatim\.$/);
       const cmd = m ? m[1] : '<malformed clerk prompt> ' + prompt;
       if (cmd.startsWith('suite ')) { // the gate before the seats: tracked apart, so the clerk scripts below stay as they are
         const k = suiteCmds.length;
@@ -190,8 +246,8 @@ const blindPromptsClean = (r) => r.dispatches
     check(r.dispatches.length === 4, 'tier 3: two workers and two seats, nothing else', r.dispatches.map((d) => d.agentType));
     check(wa.agentType === 'worker-code' && wa.model === 'opus' && wb.agentType === 'worker-test' && wb.model === undefined,
       'tier 3: workers take agentType and model from the story; no model means none passed, so the frontmatter applies', [wa, wb]);
-    check(wa.prompt.includes(a.file) && wa.prompt.includes(`Stamp: ${S}`)
-      && wa.prompt.includes(`bash scripts/cycle.sh close-story ${a.file} --commit --stamp ${S}`)
+    check(wa.prompt.startsWith(told(a)) && wa.prompt.includes(`Stamp: ${S}`)
+      && wa.prompt.includes(`bash scripts/cycle.sh close-story <that file> --commit --stamp ${S}`)
       && !wa.prompt.includes('git diff'), 'tier 3: worker prompt names the story, the stamp and close-story as the last step', wa.prompt);
     check(opus.agentType === 'council-opus' && opus.model === undefined && opus.prompt.includes(`COURT: ${COURT}`)
       && opus.prompt.includes('.vulyk/reports/demo/round-1/opus.attempt-1.md'), 'tier 3: opus seat gets COURT and its attempt-1 report path', opus);
@@ -240,7 +296,7 @@ const blindPromptsClean = (r) => r.dispatches
     const [w1, w2] = r.dispatches;
     check(r.dispatches.length === 2 && w1.model === 'opus' && w2.model === 'fable', 'retry: the second attempt runs on TOP', r.dispatches.map((d) => d.model));
     check(!w1.prompt.includes(sentence) && w2.prompt.includes(sentence), 'retry: only the second prompt carries the git-diff sentence', [w1.prompt, w2.prompt]);
-    check(r.result.stop && r.result.stop.verb === 'build' && r.result.stop.file === a.file
+    check(r.result.stop && r.result.stop.verb === 'build' && r.result.stop.file === a.story
       && /still todo/.test(r.result.stop.error), 'retry: the second miss stops the run naming the file', r.result);
     check(r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE, 'retry: the stop still releases', seq(r));
   }
@@ -281,13 +337,13 @@ const blindPromptsClean = (r) => r.dispatches
       agents: [{ throw: 'died' }, '   '],
     });
     check(r.result.stop && r.result.stop.error === 'worker returned empty - turn cap suspected (worker-code, maxTurns in .claude/agents/worker-code.md)'
-      && r.logs.includes(`miss 1 on ${a.file}: worker threw: died`), 'dead worker: threw then empty - the second reason stops the run', { result: r.result, logs: r.logs });
+      && r.logs.includes(`miss 1 on ${a.story}: worker threw: died`), 'dead worker: threw then empty - the second reason stops the run', { result: r.result, logs: r.logs });
     const b = story(2);
     const r2 = await run(ARGS, {
       clerk: [[CLAIM, adv(build([a, b]))], [ADV, adv(build([b]))], [ADV, adv(green())], [RELEASE, releaseOk]],
       agents: [null, 'b report', 'b again'],
     });
-    const second = r2.dispatches.slice(2).map((d) => d.prompt.includes(b.file));
+    const second = r2.dispatches.slice(2).map((d) => d.prompt.startsWith(told(b)));
     check(r2.result.next === 'green' && r2.dispatches.length === 3 && second.length === 1 && second[0],
       'dead worker: a closed story is no miss, only the still-todo story is re-dispatched', { result: r2.result, n: r2.dispatches.length });
   }
@@ -455,9 +511,9 @@ const blindPromptsClean = (r) => r.dispatches
   {
     const six = [1, 2, 3, 4, 5, 6].map((n) => story(n));
     const whole = JSON.stringify(adv(build(six)));
-    const cut = whole.slice(0, whole.indexOf(JSON.stringify(six[4])) - 1); // 4 of 6 stories, no closing brace
-    const k = whole.indexOf('"wave_stories"');
-    const repeated = whole.slice(0, k + 200) + whole.slice(k + 60, k + 200) + whole.slice(k + 200);
+    const cut = whole.slice(0, whole.indexOf(JSON.stringify(wire(six[4]))) - 1); // 4 of 6 stories, no closing brace
+    const k = whole.indexOf('"wave"');
+    const repeated = whole.slice(0, k + 100) + whole.slice(k + 36, k + 100) + whole.slice(k + 100);
     for (const [label, line] of [['cut-off line', cut], ['repeated fragment', repeated]]) {
       let parses = true;
       try { JSON.parse(line); } catch { parses = false; }
@@ -551,7 +607,7 @@ const blindPromptsClean = (r) => r.dispatches
     const r = await run(ARGS, {
       clerk: (cmd, n) => cmd === RELEASE ? releaseOk
         : n > 100 ? 'garbled'
-        : adv(build([story(1, { file: `${SPEC}/demo-${n}.md` })])),
+        : adv(build([story(1, { story: `demo-${n}` })])),
     });
     check(r.result.stop && r.result.stop.verb === 'driver' && /iteration cap 40/.test(r.result.stop.error)
       && r.dispatches.length === 40 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
@@ -698,7 +754,7 @@ const blindPromptsClean = (r) => r.dispatches
     const note = 'a previous attempt left uncommitted edits in your ## Files: read `git diff` first, finish the story and close it';
     const r = await run(ARGS, {
       clerk: [
-        [CLAIM, adv(build([a, b]), { leftover: [a.file] })],
+        [CLAIM, adv(build([a, b]), { leftover: [wire(a)[0]] })],
         [ADV, adv(build([a]))],
         [ADV, adv(build([a]))],
         [RELEASE, releaseOk],
@@ -708,7 +764,7 @@ const blindPromptsClean = (r) => r.dispatches
     check(r.dispatches.length === 3 && wa.prompt.includes(note) && !wb.prompt.includes(note) && !wb.prompt.includes('git diff') && wa2.prompt.includes(note),
       'leftover: the leftover story is dispatched with the leftover note, its wave-mate without', r.dispatches.map((d) => d.prompt));
     check(wa.model === 'sonnet' && wa2.model === 'fable', 'leftover: the first dispatch keeps the story model, the retry climbs to TOP', r.dispatches.map((d) => d.model));
-    check(r.result.stop && r.result.stop.verb === 'build' && r.result.stop.file === a.file && /still todo/.test(r.result.stop.error)
+    check(r.result.stop && r.result.stop.verb === 'build' && r.result.stop.file === a.story && /still todo/.test(r.result.stop.error)
       && r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
       'leftover: a second miss stops the run naming the file, and releases', { result: r.result, seq: seq(r) });
   }
@@ -723,7 +779,7 @@ const blindPromptsClean = (r) => r.dispatches
         [RELEASE, releaseOk],
       ],
     });
-    check(r.dispatches.length === 1 && r.dispatches[0].prompt.includes(b.file) && r.result.stop && r.result.stop.verb === 'manual'
+    check(r.dispatches.length === 1 && r.dispatches[0].prompt.startsWith(told(b)) && r.result.stop && r.result.stop.verb === 'manual'
       && JSON.stringify(r.result.stop.manual) === '["tape"]' && r.mismatches.length === 0,
       'manual wave: the ready wave-mate is built, then the run stops at the hand step', { d: r.dispatches.length, result: r.result });
   }
@@ -731,12 +787,12 @@ const blindPromptsClean = (r) => r.dispatches
   // --- ab-run-fixes C10: checkpoint_min 0 returns checkpoint at the first boundary after work, and releases.
   // Elapsed time is args.launched_at (epoch seconds, the Queen's) against the `now` a verb answer carries.
   const T0 = 1762700000;
-  // the real advance and suite lines carry `now` inside `status` only (cmd_status prints it), not at the top level
-  const at = (o, now) => ({ ...o, status: { ...o.status, now } });
+  // the short advance and suite lines carry `now` at the top level, like every other line
+  const at = (o, now) => ({ ...o, now });
   {
     const CP = { ...ARGS, checkpoint_min: 0, launched_at: T0 };
-    const adv = (st, extra) => at({ ok: true, verb: 'advance', exit: 0, next: st.next, steps: [], rejected: [], status: st, ...extra }, T0);
-    const suiteDone = at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: 0, steps: 0, done: true, suite: 'none', status: round('review') }, T0);
+    const adv = (st, extra) => at({ ok: true, verb: 'advance', exit: 0, next: st.next, steps: [], rejected: [], ...st, ...extra }, T0);
+    const suiteDone = at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', done: true }, T0);
     const isCp = (res, next) => res && res.status === 'checkpoint' && res.next === next && typeof res.elapsed_min === 'number' && !res.stop
     const w = await run(CP, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(build([story(2)]))], [RELEASE, releaseOk]] });
     check(isCp(w.result, 'build:1') && w.dispatches.length === 1 && w.mismatches.length === 0 && w.clerkCmds[w.clerkCmds.length - 1] === RELEASE,
@@ -744,7 +800,7 @@ const blindPromptsClean = (r) => r.dispatches
     const c = await run(CP, { clerk: [[CLAIM, adv(build([story(1)]))], [ADV, adv(round('review'))], [RELEASE, releaseOk]] });
     check(isCp(c.result, 'dispatch:review') && c.dispatches.length === 1 && c.suiteCmds.length === 0 && c.clerkCmds[c.clerkCmds.length - 1] === RELEASE,
       'checkpoint: after a wave, before the gate and the seats', { result: c.result, s: c.suiteCmds.length });
-    const notDone = (k) => at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', step: k, steps: 3, done: false, suite: 'ok', status: round('review') }, T0);
+    const notDone = () => at({ ok: true, verb: 'suite', exit: 0, next: 'dispatch:review', done: false }, T0);
     const g = await run(CP, { clerk: [[CLAIM, adv(round('review'))], [RELEASE, releaseOk]], suite: (cmd, k) => notDone(k + 1) });
     check(isCp(g.result, 'dispatch:review') && g.suiteCmds.length === 1 && g.dispatches.length === 0 && g.clerkCmds[g.clerkCmds.length - 1] === RELEASE,
       'checkpoint: after one gate step, before the next', { result: g.result, s: g.suiteCmds.length });
@@ -777,7 +833,7 @@ const blindPromptsClean = (r) => r.dispatches
     const r = await run(ARGS, { clerk: [[CLAIM, adv(build([a]))], [ADV, adv(build([a]))], [RELEASE, releaseOk]], agents: [NC] });
     const res = r.result || {};
     check(r.dispatches.length === 1 && res.status === 'needs_context' && res.next === 'build:1' && !res.stop
-      && Array.isArray(res.stories) && res.stories.length === 1 && res.stories[0].story === a.file && res.stories[0].report === NC
+      && Array.isArray(res.stories) && res.stories.length === 1 && res.stories[0].story === a.story && res.stories[0].report === NC
       && Array.isArray(res.fallbacks) && r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
       'needs_context: a NEEDS_CONTEXT return stops the build with no second dispatch, names the story and its report, releases',
       { result: r.result, n: r.dispatches.length, seq: seq(r), mm: r.mismatches });
@@ -786,7 +842,7 @@ const blindPromptsClean = (r) => r.dispatches
   {
     const a = story(1);
     const r = await run(ARGS, { clerk: [[CLAIM, adv(build([a]))], [ADV, adv(build([a]))], [ADV, adv(build([a]))], [RELEASE, releaseOk]], agents: ['', ''] });
-    check(r.dispatches.filter((d) => d.agentType === 'worker-code').length === 2 && r.result && r.result.stop && r.result.stop.verb === 'build' && r.result.stop.file === a.file
+    check(r.dispatches.filter((d) => d.agentType === 'worker-code').length === 2 && r.result && r.result.stop && r.result.stop.verb === 'build' && r.result.stop.file === a.story
       && r.result.status !== 'needs_context' && r.mismatches.length === 0,
       'needs_context: an empty return is still retried and the second miss stops the run', { result: r.result, n: r.dispatches.length });
   }
@@ -799,7 +855,7 @@ const blindPromptsClean = (r) => r.dispatches
       'needs_context: a DONE report mentioning NEEDS_CONTEXT in prose is no stop', r.result);
     // and with the story still listed it is a miss as today, retried
     const r2 = await run(ARGS, { clerk: [[CLAIM, adv(build([a]))], [ADV, adv(build([a]))], [ADV, adv(green())], [RELEASE, releaseOk]], agents: [DONE, 'retry report'] });
-    check(r2.result && r2.result.next === 'green' && r2.dispatches.length === 2 && r2.logs.some((l) => l.startsWith(`miss 1 on ${a.file}: worker returned, but`)),
+    check(r2.result && r2.result.next === 'green' && r2.dispatches.length === 2 && r2.logs.some((l) => l.startsWith(`miss 1 on ${a.story}: worker returned, but`)),
       'needs_context: a still-listed DONE mentioning NEEDS_CONTEXT is a plain miss and retried', { result: r2.result, logs: r2.logs });
   }
   // a wave of three: one closes, one NEEDS_CONTEXT, one empty - only the second is named, the third is not dispatched again
@@ -809,7 +865,7 @@ const blindPromptsClean = (r) => r.dispatches
     const r = await run(ARGS, { clerk: [[CLAIM, adv(build([a, b, c]))], [ADV, adv(build([b, c]))], [RELEASE, releaseOk]], agents: ['STATUS: DONE', NC, ''] });
     const res = r.result || {};
     check(r.dispatches.length === 3 && res.status === 'needs_context' && Array.isArray(res.stories) && res.stories.length === 1
-      && res.stories[0].story === b.file && res.stories[0].report === NC && r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
+      && res.stories[0].story === b.story && res.stories[0].report === NC && r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
       'needs_context: a wave of three names only the NEEDS_CONTEXT story and dispatches nothing more', { result: r.result, n: r.dispatches.length, seq: seq(r) });
   }
   // a NEEDS_CONTEXT on the retry dispatch, after one plain miss, is needs_context and not the two-miss stop
@@ -818,9 +874,71 @@ const blindPromptsClean = (r) => r.dispatches
     const NC = 'STATUS: NEEDS_CONTEXT\nBLOCKERS: the input is missing';
     const r = await run(ARGS, { clerk: [[CLAIM, adv(build([a]))], [ADV, adv(build([a]))], [ADV, adv(build([a]))], [RELEASE, releaseOk]], agents: ['', NC] });
     const res = r.result || {};
-    check(r.dispatches.length === 2 && res.status === 'needs_context' && !res.stop && res.stories && res.stories[0].story === a.file
+    check(r.dispatches.length === 2 && res.status === 'needs_context' && !res.stop && res.stories && res.stories[0].story === a.story
       && r.mismatches.length === 0 && r.clerkCmds[r.clerkCmds.length - 1] === RELEASE,
       'needs_context: a NEEDS_CONTEXT on the retry gives needs_context, not the two-miss stop', { result: r.result, n: r.dispatches.length });
+  }
+
+  // --- audit-fixes-1113-17: the real --short lines of a long spec path and a wave of eight (written by the bash part above)
+  {
+    const L = 'clerk line';
+    let text = '';
+    try { text = fs.readFileSync(process.env.VULYK_SHORT_LINES, 'utf8'); } catch { text = ''; }
+    const lines = Object.fromEntries(text.split('\n').filter(Boolean).map((l) => [l.slice(0, l.indexOf('\t')), l.slice(l.indexOf('\t') + 1)]));
+    const names = ['claim-build', 'release-build', 'claim-leftover', 'status-build', 'reclaim', 'close-story', 'advance-dispatch', 'suite', 'status-dispatch', 'release'];
+    const parsed = {};
+    for (const n of names) { try { parsed[n] = JSON.parse(lines[n]); } catch { parsed[n] = null; } }
+    const long = names.filter((n) => !lines[n] || lines[n].length > 400);
+    check(long.length === 0, `${L}: every driver line from a long spec with eight wave stories is at most 400 characters`,
+      names.map((n) => `${n}=${lines[n] ? lines[n].length : 'missing'}`));
+    check(names.every((n) => parsed[n] && typeof parsed[n] === 'object'), `${L}: every such line is one JSON object`, lines);
+    check(names.every((n) => lines[n] && !/\.md"|"status":\{|"wave_stories"/.test(lines[n])),
+      `${L}: flat, no story file path`, lines);
+    const SP = process.env.VULYK_LONG_SPEC;
+    const slug = SP.split('/').pop();
+    const LA = { spec: SP, top_model: 'fable', second_model: 'opus', stamp: S };
+    const la = `advance ${SP} --stamp ${S}`;
+    const ids = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `${slug}-0${n}`);
+    const tell = (id) => `Your story: ${id} - the story file in ${SP}/ whose frontmatter says \`story: ${id}\``;
+    const note = 'a previous attempt left uncommitted edits in your ## Files';
+    const r = await run(LA, {
+      clerk: [
+        [`${la} --claim`, lines['claim-leftover'] || ''],
+        [la, lines['advance-dispatch'] || ''],
+        [`${la} --ingest`, adv(green())],
+        [`release ${SP} ${S}`, lines.release || ''],
+      ],
+      suite: () => lines.suite || '',
+    });
+    const workers = r.dispatches.filter((d) => d.phase === 'Build');
+    check(workers.length === 8 && ids.every((id, i) => workers[i].prompt.startsWith(tell(id)) && workers[i].model === 'opus'
+      && workers[i].agentType === 'worker-code' && workers[i].prompt.includes(note) === (i === 1)),
+      `${L}: the driver dispatches all eight stories by id, worker and model, the leftover one with its note`, workers.map((d) => [d.agentType, d.model, d.prompt]));
+    const opus = r.dispatches.find((d) => d.agentType === 'council-opus');
+    const rev = r.dispatches.find((d) => d.agentType === 'lead-review');
+    const head = parsed['advance-dispatch'] && parsed['advance-dispatch'].head;
+    const court = parsed['advance-dispatch'] && parsed['advance-dispatch'].court;
+    check(!!opus && typeof court === 'string' && court.endsWith(`/.vulyk/court/${slug}/round-1`) && opus.prompt.includes(`COURT: ${court}.`) && opus.prompt.includes(`.vulyk/reports/${slug}/round-1/opus.attempt-1.md`)
+      && !!rev && !!head && rev.prompt.includes(`Branch vulyk/${slug} at ${head}`) && rev.prompt.includes('review the whole branch'),
+      `${L}: the dispatch line gives the seat its court and the reviewer its branch and head`, { opus: opus && opus.prompt, rev: rev && rev.prompt });
+    check(r.mismatches.length === 0 && r.suiteCmds.length === 1 && r.result && r.result.next === 'green',
+      `${L}: the run walks claim, wave, gate, seats to green on the real lines`, { seq: seq(r), mm: r.mismatches, result: r.result });
+    // a garbled claim: the real re-claim and status lines carry the run on
+    const r2 = await run(LA, {
+      clerk: [
+        [`${la} --claim`, 'garbled'],
+        [`claim ${SP} ${S}`, lines.reclaim || ''],
+        [`status ${SP}`, lines['status-build'] || ''],
+        [la, adv(green())],
+        [`release ${SP} ${S}`, lines['release-build'] || ''],
+      ],
+    });
+    check(r2.mismatches.length === 0 && r2.dispatches.length === 8 && r2.result && r2.result.next === 'green',
+      `${L}: the real re-claim and status lines recover a garbled claim and dispatch the wave`, { seq: seq(r2), mm: r2.mismatches, result: r2.result });
+    const cs = parsed['close-story'] || {};
+    check(cs.ok === true && cs.verb === 'close-story' && cs.exit === 0 && typeof cs.next === 'string' && Number.isFinite(cs.now)
+      && parsed['claim-build'] && parsed['claim-build'].next === 'build:1' && parsed['claim-build'].wave.length === 8,
+      `${L}: close-story and the first claim keep ok, verb, exit, next and now`, { cs, claim: parsed['claim-build'] });
   }
 
   check(!everyAgentType.has('queen-planner'), 'no queen-planner dispatch in any scenario', [...everyAgentType]);

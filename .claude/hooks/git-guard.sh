@@ -4,11 +4,11 @@
 #
 # Verbs (GUARD_VERBS below, VERBS in the Python half: one list each, a test compares them):
 #   tree files: stash (push/save/bare, -u), checkout . / -f / [<ref>] -- <path> / <ref> <path>, restore (worktree
-#   form), reset --hard, clean -f, switch -f / --discard-changes, worktree remove --force, rm -f / --force (not
-#   --cached, not -n), checkout-index -f, read-tree -u with --reset or -m;
+#   form), reset --hard / --merge, merge --abort, clean -f, switch -f / --discard-changes, worktree remove --force,
+#   rm -f / --force (not --cached, not -n), checkout-index -f, read-tree -u with --reset or -m;
 #   a stash or commits: stash drop/clear, branch -D / -f / -M / -C / -d --force, checkout -B, switch -C /
 #   --force-create, update-ref (every form: it deletes or moves a ref by force).
-# Read-only and unforced forms pass: stash list/show, soft and mixed reset, checkout -b (a forced checkout -b / -B /
+# Read-only and unforced forms pass: stash list/show, soft and mixed reset, a merge that is not --abort, checkout -b (a forced checkout -b / -B /
 # --orphan is a forced checkout), clean -n, restore --staged alone, rm --cached, rm without -f, checkout-index
 # without -f, read-tree without -u, branch -d, switch -c.
 # The same verbs are read where a shell is handed them: `bash|sh|zsh|dash|ksh -c <string>`, `pwsh|powershell
@@ -29,8 +29,10 @@
 #     `+N more`, and gives the safe path. The forms that lose a stash or commits, not tree files, are denied
 #     to subagents only. A git status that times out denies: it cannot prove the tree is clean.
 # Not covered, on purpose: rm / Remove-Item; a script file run by a shell (`bash x.sh`) and any other interpreter
-# that runs git (`python -c`, `node -e`, a heredoc fed to python); `pwsh -EncodedCommand` and a PowerShell
-# here-string fed to a shell; an alias defined in git config rather than by `-c` on the command line; a variable
+# that runs git (`python -c`, `node -e`, a heredoc fed to python); command text piped into a shell (`echo 'git
+# stash' | bash`), a here-string fed to a shell (`bash <<< 'git stash'`) and PowerShell `Invoke-Expression` (`iex`):
+# the text may come from anywhere, so these cannot be enumerated (the no-Python fallback, reading every word, denies
+# a literal one); `pwsh -EncodedCommand` and a PowerShell here-string fed to a shell; an alias defined in git config rather than by `-c` on the command line; a variable
 # or substitution in the git command word or in an argument after the verb (only the verb itself is read as
 # unreadable); any other wrapper command (stdbuf, ionice, watch, a shell function or alias of the session); a
 # ref checkout over an untracked file; tag -f, push --force and the other remote forms, rebase, commit --amend,
@@ -59,7 +61,7 @@
 # is no hook input.
 # The Python half lives below the `exit 0`, inside a no-op heredoc, as in defect-intake.sh. The bash part uses
 # builtins only, so an empty PATH still runs it.
-GUARD_VERBS='stash checkout restore reset clean switch branch worktree rm checkout-index read-tree update-ref'
+GUARD_VERBS='stash checkout restore reset merge clean switch branch worktree rm checkout-index read-tree update-ref'
 ARG1="${1:-}"
 if [ "$ARG1" = "--check" ]; then
   [ -f "${2:-}" ] || exit 0
@@ -133,7 +135,7 @@ import glob, json, os, re, shlex, subprocess, sys
 CHECK = len(sys.argv) > 1 and sys.argv[1] == '--check'
 CAP = 10
 SEP = {';', '&&', '||', '|', '&', '\n', '(', ')', '{', '}'}
-VERBS = ('stash', 'checkout', 'restore', 'reset', 'clean', 'switch', 'branch', 'worktree', 'rm', 'checkout-index', 'read-tree', 'update-ref')
+VERBS = ('stash', 'checkout', 'restore', 'reset', 'merge', 'clean', 'switch', 'branch', 'worktree', 'rm', 'checkout-index', 'read-tree', 'update-ref')
 SHELLS = ('bash', 'sh', 'zsh', 'dash', 'ksh', 'pwsh', 'powershell')
 # a shell named as a command word somewhere on a heredoc's line: `bash <<X`, `cat <<X | sh`
 SHELL_RE = re.compile(r'(^|[\s;&|(])([^\s;&|()<>]*[/\\])?(%s)(\.exe)?(?=$|[\s;&|)<])' % '|'.join(SHELLS), re.I)
@@ -418,8 +420,10 @@ def classify(verb, args, base):
             return None
         pos = positionals(args, ('-s', '--source', '--pathspec-from-file'))
         return (pos, 't', True) if pos else None
-    if verb == 'reset':
-        return ([], 't', True) if '--hard' in l else None
+    if verb == 'reset':                                # --merge drops a file's changes the reset touches, like --hard
+        return ([], 't', True) if ('--hard' in l or '--merge' in l) else None
+    if verb == 'merge':                                # --abort resets the tree to the pre-merge head
+        return ([], 't', True) if '--abort' in l else None
     if verb == 'clean':
         if 'n' in s or '--dry-run' in l:
             return None

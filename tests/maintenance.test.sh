@@ -1403,7 +1403,8 @@ for c in "git rm -f memory/stats/skills.json" "git rm -r -f ." "git rm --force m
          'pwsh -Command "git reset --hard"' 'powershell.exe -Command git stash' \
          'git -c alias.wipe="reset --hard" wipe' 'git -c alias.x="!git reset --hard" x' \
          "$(printf "bash <<'X'\ngit reset --hard\nX")" "$(printf "sh -s <<X\ngit stash\nX")" \
-         "$(printf "cat <<X | bash\ngit clean -fd\nX")"; do
+         "$(printf "cat <<X | bash\ngit clean -fd\nX")" "git reset --merge" "git reset --merge HEAD~1" "git merge --abort" \
+         'bash -c "git merge --abort"'; do
   chk Bash "$c" a1 | expect "git-guard: a subagent's $c is denied" "exit=1"
   chk Bash "$c" "" "$DIRTY" | expect "git-guard: main-session $c over a dirty tree is denied" "exit=1"
   chk Bash "$c" "" '""' | expect "git-guard: main-session $c on a clean tree passes" "exit=0"
@@ -1425,6 +1426,14 @@ done
 ( cd "$SRC" && bash "$GUARD" --check docs/defects/work-discarded-by-git-verb.shell.fixture > /dev/null 2>&1 )
 [ $? -eq 1 ] && ok "git-guard: --check fails on the shell fixture (a heredoc fed to a shell)" \
   || bad "git-guard: --check passed the shell fixture"
+# audit-fixes-1113-17: the shell-indirection forms the guard cannot enumerate are named in its left-open list
+GH="$(sed -n '/^# Not covered, on purpose:/,/^# Agents get no env off-switch/p' "$GUARD" | tr -d '\r' | sed 's/^# *//' | tr '\n' ' ')"
+for n in 'command text piped into a shell' 'a here-string fed to a shell' 'PowerShell `Invoke-Expression`'; do
+  case "$GH" in *"$n"*) ok "git-guard: the header's left-open list names $n" ;;
+    *) bad "git-guard: the header's left-open list does not name $n" ;; esac
+done
+case "$GH" in *'reset --merge'*|*'merge --abort'*) bad "git-guard: the left-open list still names the reset --merge / merge --abort pair" ;;
+  *) ok "git-guard: reset --merge and merge --abort are no longer left open" ;; esac
 
 echo "--- git guard: a subagent under a DRIVER, cycle.sh verbs (audit-fixes-1113-07)"
 mkdir -p "$GG/docs/specs/dv"; : > "$GG/docs/specs/dv/DRIVER"

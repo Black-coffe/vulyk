@@ -736,6 +736,16 @@ ok "owner guard: the card is block, the hook its check, its ## Check names what 
   "$(grep -q '^status: block$' "$OGC.md" && grep -qF 'check: bash .claude/hooks/owner-guard.sh --check <arg>' "$OGC.md" &&
      sed -n '/^## Check/,/^## Never/p' "$OGC.md" | grep -q 'Left open on purpose'; echo $?)"
 ok "owner guard: the defect index is current" "$(bash scripts/defects-index.sh --check >/dev/null 2>&1; echo $?)"
+# audit-fixes-1113-17 (round 2 review, Major 1): the header names every shell form the plan.md rewrite check leaves open
+OGH="$(sed -n '1,/^# The Python half lives/p' "$OG" | tr -d '\r' | sed 's/^# *//' | tr '\n' ' ' | tr -s ' ')"
+for n in 'a bare `plan.md` after a `cd`' 'from a cwd inside the spec folder' 'a glob (`docs/specs/*/plan.md`)' \
+         'a variable or a substitution' 'a writer outside its list' 'command text a shell reads from a file' \
+         'with no Python, every shell rewrite'; do
+  hit=1; case "$OGH" in *"$n"*) hit=0 ;; esac
+  ok "owner guard: the header names the open plan.md rewrite form: $n" "$hit"
+done
+hit=0; case "$OGH" in *'sed or awk -i): the hook cannot read'*) hit=1 ;; esac
+ok "owner guard: the header no longer says every plan.md rewrite is denied to everyone" "$hit"
 
 echo "--- this tree's library: green, one info line per .scrub-revs commit (audit-fixes-1113-12)"
 run

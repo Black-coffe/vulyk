@@ -4817,6 +4817,125 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
   exit 0
 }
 
+# --- --short: the line the Workflow driver reads (audit-fixes-1113-17) ---------------------------------
+
+SHORT_CUT=160
+short_cut() { # short_cut <JSON-escaped text> -> SC: the text cut at SHORT_CUT characters, ` [cut]` marking a cut;
+  # a cut never leaves half an escape (an odd run of backslashes at its end loses one)
+  local s n=0
+  SC="$1"
+  [ "${#SC}" -gt "$SHORT_CUT" ] || return 0
+  SC="${SC:0:$SHORT_CUT}"; s="$SC"
+  while [ "${s%\\}" != "$s" ]; do s="${s%\\}"; n=$((n+1)); done
+  [ $((n % 2)) -eq 0 ] || SC="${SC%\\}"
+  SC="$SC [cut]"
+}
+
+short_jv() { # short_jv <json> <key> <value-ERE> -> JV: the raw JSON value of the first "<key>": that matches, else empty
+  local re="\"$2\":($3)"
+  JV=""
+  [[ $1 =~ $re ]] && JV="${BASH_REMATCH[1]}"
+}
+
+short_id() { # short_id <story-file> <id> -> SI: the id (else the file name without .md), `-NN` when it is <slug>-NN
+  local d="${1%/*}"
+  SI="$2"; [ -n "$SI" ] || { SI="${1##*/}"; SI="${SI%.md}"; }
+  d="${d##*/}"
+  [ -n "$d" ] && case "$SI" in "$d"-?*) SI="-${SI#"$d"-}" ;; esac
+}
+
+short_line() { # short_line <line> - the line a verb run with `--short` prints in place of its own last line: the only
+  # form the Workflow driver asks for through cycle-clerk (advance, status, suite, claim, release, close-story), so a
+  # clerk echoes it whole. One flat JSON object of the keys vulyk-cycle.js reads: ok, verb, exit, next, error,
+  # failed, steps, done and now of the verb; stage, tier and round of the status it carries (or is); on build:<W>
+  # `wave`, each story as [id, worker] plus its model when it has one; on dispatch:<seats> head, since, branch,
+  # court (its absolute path, the blind seats' COURT, or null) and seat_attempt; advance's rejected and
+  # leftover. A key with nothing in it (since null, steps or rejected empty) is left out: the driver reads it as
+  # empty. A story is its id, `-NN` when the id is `<slug>-NN`; an error is cut at SHORT_CUT characters.
+  # A line that is no JSON object passes unchanged. The full line stays the verb's own, without the flag.
+  local L="$1" env st="" out="" next re w ent f id rs
+  local QS='"([^"\\]|\\.)*"' QC='"(([^"\\]|\\.)*)"'
+  case "$L" in '{'*'}') ;; *) printf '%s\n' "$L"; return 0 ;; esac
+  case "$L" in
+    *',"status":{'*) env="${L%%,\"status\":\{*}}"; st="${L#*,\"status\":}"; st="${st%\}}" ;;
+    '{"ok":'*) env="$L" ;;
+    *) env=""; st="$L" ;;
+  esac
+  short_jv "$env" ok 'true|false'; [ -z "$JV" ] || out="$out,\"ok\":$JV"
+  short_jv "$env" verb "$QS"; [ -z "$JV" ] || out="$out,\"verb\":$JV"
+  short_jv "$env" exit '[0-9]+'; [ -z "$JV" ] || out="$out,\"exit\":$JV"
+  short_jv "$env" next "$QS"; [ -n "$JV" ] || short_jv "$st" next "$QS"
+  next="$JV"; [ -z "$JV" ] || out="$out,\"next\":$JV"
+  short_jv "$env" error "$QS"; [ -z "$JV" ] || { short_cut "${JV:1:${#JV}-2}"; out="$out,\"error\":\"$SC\""; }
+  short_jv "$env" failed "$QS"; [ -z "$JV" ] || out="$out,\"failed\":$JV"
+  short_jv "$env" steps '\[[^]]*\]|[0-9]+'; [ -z "$JV" ] || [ "$JV" = '[]' ] || out="$out,\"steps\":$JV"
+  short_jv "$env" done 'true|false'; [ -z "$JV" ] || out="$out,\"done\":$JV"
+  short_jv "$env" now '[0-9]+'; [ -n "$JV" ] || short_jv "$st" now '[0-9]+'
+  [ -z "$JV" ] || out="$out,\"now\":$JV"
+  if [ -n "$st" ]; then
+    short_jv "$st" stage "$QS"; [ -z "$JV" ] || out="$out,\"stage\":$JV"
+    short_jv "$st" tier '[0-9]+|null'; [ -z "$JV" ] || out="$out,\"tier\":$JV"
+    short_jv "$st" round '[0-9]+'; [ -z "$JV" ] || out="$out,\"round\":$JV"
+    case "$next" in
+      '"build:'*)
+        rs=""; w="${st#*\"wave_stories\":[}"
+        re="^\\{\"file\":$QC,\"story\":$QC,\"worker\":$QC,\"model\":$QC,\"repeat\":[0-9]+\\},?"
+        while [[ $w =~ $re ]]; do
+          f="${BASH_REMATCH[1]}"; id="${BASH_REMATCH[3]}"
+          ent="\"${BASH_REMATCH[5]}\"${BASH_REMATCH[7]:+,\"${BASH_REMATCH[7]}\"}"
+          w="${w#"${BASH_REMATCH[0]}"}"
+          short_id "$f" "$id"
+          rs="$rs,[\"$SI\",$ent]"
+        done
+        out="$out,\"wave\":[${rs#,}]" ;;
+      '"dispatch:'*)
+        short_jv "$st" head "$QS"; [ -z "$JV" ] || out="$out,\"head\":$JV"
+        short_jv "$st" since "$QS"; [ -z "$JV" ] || out="$out,\"since\":$JV"
+        short_jv "$st" branch "$QS|null"; [ -z "$JV" ] || out="$out,\"branch\":$JV"
+        short_jv "$st" court "$QS|null"; [ -z "$JV" ] || out="$out,\"court\":$JV"
+        short_jv "$st" seat_attempt '\{[^}]*\}'; [ -z "$JV" ] || out="$out,\"seat_attempt\":$JV" ;;
+    esac
+  fi
+  case "$env" in
+    *'"rejected":['*)
+      rs=""; w="${env#*\"rejected\":[}"
+      re="^\\{\"seat\":$QC,\"attempt\":([0-9]+),\"error\":$QC\\},?"
+      while [[ $w =~ $re ]]; do
+        ent="{\"seat\":\"${BASH_REMATCH[1]}\",\"attempt\":${BASH_REMATCH[3]}"
+        id="${BASH_REMATCH[4]}"; w="${w#"${BASH_REMATCH[0]}"}"
+        short_cut "$id"
+        rs="$rs,$ent,\"error\":\"$SC\"}"
+      done
+      [ -z "$rs" ] || out="$out,\"rejected\":[${rs#,}]" ;;
+  esac
+  case "$env" in
+    *'"leftover":['*)
+      rs=""; w="${env#*\"leftover\":[}"
+      re="^$QC,?"
+      while [[ $w =~ $re ]]; do
+        f="${BASH_REMATCH[1]}"; w="${w#"${BASH_REMATCH[0]}"}"
+        json_escape_to "$(story_id_of "$f")"; short_id "$f" "$JE"
+        rs="$rs,\"$SI\""
+      done
+      out="$out,\"leftover\":[${rs#,}]" ;;
+  esac
+  printf '{%s}\n' "${out#,}"
+}
+
+# `--short` anywhere after the verb: the verb runs as it is, its prose lines pass, and short_line of its last line
+# ends the output; the exit code is the verb's.
+SHORT=0; SHORT_ARGS=()
+for a in "$@"; do
+  if [ "$a" = --short ]; then SHORT=1; else SHORT_ARGS+=("$a"); fi
+done
+if [ "$SHORT" = 1 ]; then
+  SHORT_OUT="$(bash "$HERE/cycle.sh" ${SHORT_ARGS[@]+"${SHORT_ARGS[@]}"})"; SHORT_RC=$?
+  SHORT_LAST="${SHORT_OUT##*$'\n'}"
+  [ "$SHORT_LAST" = "$SHORT_OUT" ] || printf '%s\n' "${SHORT_OUT%$'\n'*}"
+  short_line "$SHORT_LAST"
+  exit "$SHORT_RC"
+fi
+
 # --- dispatch ---------------------------------------------------------------------------------
 
 # C6: every verb that derives status refuses an unknown story status before it reads or writes anything.

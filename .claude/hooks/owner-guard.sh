@@ -11,8 +11,10 @@
 #     and one that adds an ACCEPTED or REJECTED row to `memory/stats/human.jsonl`. An Edit or MultiEdit is
 #     judged on the file as it stands after it, so one that replaces only the text after the marker counts;
 #   - a shell command that may rewrite a plan.md holding such a line without spelling the marker (a redirect
-#     into it; tee, cp, mv, a script interpreter; sed or awk -i): the hook cannot read the line it leaves, so it
-#     is denied to everyone, with the Edit tool named as the way.
+#     into it; tee, cp, mv, a script interpreter; sed or awk -i) and that names it by its `docs/specs/<slug>/plan.md`
+#     path, also inside a word that holds a whole command (`bash -c`, a heredoc, a pipe or a here-string with the
+#     path spelled): the hook cannot read the line it leaves, so it is denied to everyone, with the Edit tool named
+#     as the way.
 # A subagent (the input carries agent_id) is denied every guarded call. The main session passes only under the
 # quote rule, read from the session transcript (`transcript_path`); whitespace runs are collapsed on both sides
 # and a quote is a whole owner message, a whole line of it, or a whole AskUserQuestion answer, never a piece
@@ -31,6 +33,12 @@
 # `toolUseResult.answers` value of the tool_result for an AskUserQuestion tool_use of the main thread.
 # Not judged, on purpose: whether the words mean yes (no word list), and who wrote the transcript file itself
 # (the session can write that file); an owner who types or dictates text an agent wrote counts as the owner.
+# Left open by the plan.md rewrite check, on purpose (it reads the path as the command spells it and does not follow
+# the shell): a plan named without its `docs/specs/<slug>/` path (a bare `plan.md` after a `cd`, or from a cwd inside
+# the spec folder), a glob (`docs/specs/*/plan.md`), a variable or a substitution; a writer outside its list (ed, ex,
+# patch, rsync, ln, a git verb that writes the tree); command text a shell reads from a file (a script, `cat cmds |
+# bash`) or code an interpreter runs from one; and, with no Python, every shell rewrite (the fallback denies only a
+# command that spells a marker beside plan.md, and every Edit, MultiEdit or Write of a plan.md).
 # No Python, or a transcript the hook cannot read: a guarded call is denied with a message naming the cause;
 # without Python every Edit, MultiEdit or Write of a plan.md counts as one.
 # The owner can always run the command in his own terminal.

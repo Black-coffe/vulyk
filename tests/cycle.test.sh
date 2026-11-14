@@ -406,8 +406,14 @@ echo "ADR-032 D4 (mass-audit-fixes-08): a Tier 2-4 plan opens its build only on 
 )
 
 echo "audit-fixes-1113-03: /vulyk-ship pins - the spec-branch push rule, the outward-text review before publish, no skills.json commit"
-flat() { tr '\n' ' ' < "$1" | tr -s ' '; }   # the file as one line: a sentence wrapped over lines still matches
+flat() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; }   # the file as one line, CR dropped: a sentence wrapped over lines still matches
 SHIPMD="$(flat "$SRC/.claude/commands/vulyk-ship.md")"; PRCARD="$(flat "$SRC/docs/defects/public-release-per-change.md")"
+# audit-fixes-1113-17: a stock Git for Windows checkout (core.autocrlf=true) has CRLF in vulyk-ship.md; the flat text is the same
+SHIPCRLF="$(mktemp)"; awk '{ printf "%s\r\n", $0 }' "$SRC/.claude/commands/vulyk-ship.md" > "$SHIPCRLF"
+[ "$(flat "$SHIPCRLF")" = "$(tr -d '\r' < "$SRC/.claude/commands/vulyk-ship.md" > "$SHIPCRLF.lf"; flat "$SHIPCRLF.lf")" ] \
+  && echo "  ok    vulyk-ship pins: a CRLF checkout of the page flattens to the same text as an LF one" \
+  || { echo "::error::vulyk-ship pins: the CRLF copy flattens with carriage returns left in"; fail=1; }
+rm -f "$SHIPCRLF" "$SHIPCRLF.lf"
 pin() { # pin <label> <text> <needle>
   case "$2" in *"$3"*) echo "  ok    $1" ;; *) echo "::error::$1 - '$3' is gone"; fail=1 ;; esac
 }

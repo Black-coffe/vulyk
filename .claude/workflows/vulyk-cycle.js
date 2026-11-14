@@ -11,10 +11,12 @@ export const meta = {
 // branch, round or repair. `scripts/cycle.sh advance` runs every mechanical verb up to the next
 // agent boundary and hands back the state (ADR-013 D2, D6). The runtime has no shell, so each
 // boundary costs one cycle-clerk call - `advance --claim` at the start, `advance` after a wave,
-// `advance --ingest` after a council dispatch - and `release` closes the run. Every state the
-// loop acts on is the `status` object the last `advance` carried; `status` itself is asked only
+// `advance --ingest` after a council dispatch - and `release` closes the run. Every verb is asked with
+// `--short` (audit-fixes-1113-17): one flat line of only the keys read here, a story by its id (`-NN`
+// when the `<slug>` before it is left out), the court as its absolute path, so a clerk echoes it whole.
+// Every state the loop acts on is the last `advance` line; `status` itself is asked only
 // to recover a clerk line that cannot be read, never re-running a verb that may have acted.
-// What the driver remembers is per run and bounds re-dispatch only: misses per story file (two
+// What the driver remembers is per run and bounds re-dispatch only: misses per story id (two
 // end the run) and dispatches per seat per round (a third ends the run).
 // There is no deadline in here: deadlines live in the verbs (`close-story`'s verification timeout)
 // and in each agent's own Bash timeouts. The script reads no clock: the runtime refuses one at launch
@@ -97,6 +99,16 @@ if (typeof spec !== 'string' || spec === '') {
   return { stop: { verb: 'launch', error: 'args.spec missing: launch with the spec dir' } }
 }
 log(`vulyk-cycle: ${spec} · stamp ${stamp}`)
+const slug = spec.replace(/\/+$/, '').split('/').pop() // cycle.sh's slug_of: the spec folder's name
+const idOf = (t) => (String(t).startsWith('-') ? slug + t : String(t))
+// a short line's wave: [id, worker, model?] per story
+const waveOf = (st) => (Array.isArray(st.wave) ? st.wave : []).filter(Array.isArray)
+  .map((e) => ({ story: idOf(e[0]), worker: e[1] || 'worker-code', model: e[2] || '' }))
+// the verb's own keys; the rest of a short line is the state the loop acts on
+const stateOf = (res) => {
+  const { ok, verb, exit, error, failed, steps, rejected, leftover, recovered, ...st } = res
+  return st
+}
 
 class BadLine extends Error {
   constructor(line) { super('cycle-clerk returned a line that is not a JSON object'); this.line = line }
@@ -119,21 +131,23 @@ const boundary = (st) => {
 }
 const fail = (state, stop) => { throw new Stop({ ...state, stop }) }
 
-// A status object, not a verb's error envelope (which carries `ok`).
-const isStatus = (o) => o !== null && typeof o === 'object' && typeof o.next === 'string' && !('ok' in o)
+// A line that carries the state: `next` and `stage` (every short line made from a status has both).
+// A wave, when present, is whole: every entry [id, worker] or [id, worker, model], all strings - a clerk that
+// repeated or dropped a fragment leaves an entry that is not, and the line counts as unreadable.
+const waveWhole = (w) => w === undefined || (Array.isArray(w) && w.every((e) => Array.isArray(e)
+  && e.length >= 2 && e.length <= 3 && e.every((x) => typeof x === 'string' && x !== '') && /^worker-/.test(e[1])))
+const carries = (o) => o !== null && typeof o === 'object' && typeof o.next === 'string' && typeof o.stage === 'string'
 
 const ask = async (cmd) => {
   const out = await agent(
-    `Run exactly: bash scripts/cycle.sh ${cmd}\nReturn the last stdout line verbatim.`,
+    `Run exactly: bash scripts/cycle.sh ${cmd} --short\nReturn the last stdout line verbatim.`,
     { agentType: 'cycle-clerk', effort: 'low' },
   ).catch(() => null)
   const line = (out === null || out === undefined ? '' : String(out)).trim().split('\n').pop()
   let parsed = null
   try { parsed = JSON.parse(line) } catch { /* not JSON */ }
-  if (parsed === null || typeof parsed !== 'object') throw new BadLine(line)
-  // `now` sits at the top level of an emit() line, and only inside `status` on advance and suite
-  const now = Number.isFinite(epoch(parsed.now)) ? epoch(parsed.now)
-    : epoch(parsed.status !== null && typeof parsed.status === 'object' ? parsed.status.now : undefined)
+  if (parsed === null || typeof parsed !== 'object' || !waveWhole(parsed.wave)) throw new BadLine(line)
+  const now = epoch(parsed.now) // every short line carries `now` at the top level
   if (Number.isFinite(now)) verbNow = now
   return parsed
 }
@@ -144,7 +158,7 @@ let claimed = true
 const refusedClaim = (r) => r.ok === false && (r.verb === 'claim' || r.failed === 'claim')
 
 // One `advance`; its ok:false line comes back for the caller to stop on. A line that is not
-// JSON, or an ok line without a status, costs one read-only `status --json` - the verb may
+// JSON, or an ok line without the state, costs one read-only `status` - the verb may
 // already have acted - and a second unreadable line ends the run with that raw line.
 // Not after `--claim`, unless the line said ok:true (advance stops on a refused claim): status
 // does not name the DRIVER holder, so it cannot prove the claim, and a run on another driver's
@@ -159,7 +173,7 @@ const advance = async (flags) => {
   try { res = await ask(cmd) } catch (e) { if (!(e instanceof BadLine)) throw e; bad = e.line }
   if (res !== null && refusedClaim(res)) claimed = false
   if (res !== null && res.exit === 3) throw new Paused()
-  if (res !== null && (res.ok === false || isStatus(res.status))) return res
+  if (res !== null && (res.ok === false || carries(res))) return res
   if (flags.includes('--claim') && !(res !== null && res.ok === true)) {
     const line = bad === null ? JSON.stringify(res) : bad
     let re = null
@@ -176,11 +190,11 @@ const advance = async (flags) => {
     // proven; the re-claim by the holder carries no leftover list, so this run dispatches without leftover notes
   }
   log(`cycle-clerk: unreadable result from "${cmd}", reading status instead`)
-  const st = await ask(`status ${spec} --json`)
+  const st = await ask(`status ${spec}`)
   if (st.exit === 3) throw new Paused()
   if (st.ok === false) return st
-  if (!isStatus(st)) throw new BadLine(JSON.stringify(st))
-  return { ok: true, verb: 'advance', exit: 0, next: st.next, steps: [], rejected: [], status: st, recovered: 'status' }
+  if (!carries(st) || 'ok' in st) throw new BadLine(JSON.stringify(st))
+  return { ...st, ok: true, verb: 'advance', exit: 0, steps: [], rejected: [], recovered: 'status' }
 }
 
 // Every worker and seat dispatch: on a Fable refusal with a model other than FALLBACK_MODEL passed,
@@ -203,61 +217,63 @@ const dispatch = async (prompt, opts, where) => {
   return caught(agent(prompt, { ...opts, model: FALLBACK_MODEL }))
 }
 
-const misses = new Map() // story file -> misses this run
-let leftover = new Set() // story files claim found leftover edits in (ab-run-fixes C9)
+const misses = new Map() // story id -> misses this run
+let leftover = new Set() // story ids claim found leftover edits in (ab-run-fixes C9)
 const LEFTOVER_NOTE = ' Note: a previous attempt left uncommitted edits in your ## Files: read `git diff` first, finish the story and close it.'
 const dispatched = new Map() // `${round}:${seat}` -> dispatches this run
 let rejected = [] // the last advance's `rejected`, for the one re-ask
 
 const build = async (st) => {
   phase('Build')
-  const stories = st.wave_stories || []
+  const stories = waveOf(st)
   const returns = await parallel(stories.map((story) => () => {
-    const retry = (misses.get(story.file) || 0) >= 1
-    const prompt = `Your story: ${story.file}. Stamp: ${stamp}. Implement it per your protocol; your last step is \`bash scripts/cycle.sh close-story ${story.file} --commit --stamp ${stamp}\`.`
-      + (leftover.has(story.file) ? LEFTOVER_NOTE : retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
+    const retry = (misses.get(story.story) || 0) >= 1
+    // the short line names a story by its id; the worker finds the file by its frontmatter
+    const prompt = `Your story: ${story.story} - the story file in ${spec}/ whose frontmatter says \`story: ${story.story}\`. Stamp: ${stamp}. Implement it per your protocol; your last step is \`bash scripts/cycle.sh close-story <that file> --commit --stamp ${stamp}\`.`
+      + (leftover.has(story.story) ? LEFTOVER_NOTE : retry ? ' Note: a previous attempt may have left uncommitted edits in your files; `git diff` them first.' : '')
     return dispatch(prompt, { agentType: story.worker, model: retry ? retryModel(st.tier) : (story.model || WORKER), phase: 'Build', label: story.story }, story.story)
   }))
   worked = true
   const res = await advance('')
   if (res.ok === false) return res
   // a dispatched story still listed is still todo: close-story never closed it
-  const left = new Set((res.status.wave_stories || []).map((s) => s.file))
+  const left = new Set(waveOf(res).map((s) => s.story))
   // a still-listed story whose worker returned NEEDS_CONTEXT is no miss: the run ends with it for the Queen (N1),
   // who reads its ## Findings; every other still-listed story counts its miss as before
   const needs = []
   let second = null
   stories.forEach((story, i) => {
-    if (!left.has(story.file)) return
+    if (!left.has(story.story)) return
     if (statusOf(returns[i]) === 'NEEDS_CONTEXT') {
-      log(`needs context on ${story.file}`)
-      needs.push({ story: story.file, report: returns[i] })
+      log(`needs context on ${story.story}`)
+      needs.push({ story: story.story, report: returns[i] })
       return
     }
-    const why = reasonFor('worker', story.worker, returns[i]) ?? `worker returned, but ${story.file} is still todo - close-story did not close it`
-    const n = (misses.get(story.file) || 0) + 1
-    misses.set(story.file, n)
-    log(`miss ${n} on ${story.file}: ${why}`)
-    if (n >= 2 && second === null) second = { verb: 'build', file: story.file, error: why }
+    const why = reasonFor('worker', story.worker, returns[i]) ?? `worker returned, but ${story.story} is still todo - close-story did not close it`
+    const n = (misses.get(story.story) || 0) + 1
+    misses.set(story.story, n)
+    log(`miss ${n} on ${story.story}: ${why}`)
+    // `file` keeps its key for /vulyk-build; it holds the story id
+    if (n >= 2 && second === null) second = { verb: 'build', file: story.story, error: why }
   })
-  if (needs.length) throw new Stop({ status: 'needs_context', stories: needs, next: res.status.next })
-  if (second !== null) fail(res.status, second)
+  if (needs.length) throw new Stop({ status: 'needs_context', stories: needs, next: res.next })
+  if (second !== null) fail(stateOf(res), second)
   return res
 }
 
 // A blind seat gets slug, round and COURT only: no spec dir, no round dir (the taint rule), no stamp.
 const seatPrompt = (seat, st) =>
-  `Council round ${st.round} for ${st.slug}, seat ${seat}. Work only inside COURT: ${st.court}. Judge COURT/brief.md's ## Asks per your seat contract.`
+  `Council round ${st.round} for ${slug}, seat ${seat}. Work only inside COURT: ${st.court}. Judge COURT/brief.md's ## Asks per your seat contract.`
 // Round 1 reviews the branch; a later round reviews only what changed since the last one.
 const reviewPrompt = (st) => {
   const scope = st.since
-    ? `review only ${st.since}..${st.head} and whether it fixes the findings in ${st.spec}/council/round-${st.round - 1}/`
+    ? `review only ${st.since}..${st.head} and whether it fixes the findings in ${spec}/council/round-${st.round - 1}/`
     : 'review the whole branch against its base'
-  return `Review for ${st.slug}, round ${st.round}. Spec: ${st.spec}. Branch ${st.branch} at ${st.head}: ${scope}.`
+  return `Review for ${slug}, round ${st.round}. Spec: ${spec}. Branch ${st.branch} at ${st.head}: ${scope}.`
 }
 // `advance --ingest` records these files; a missing one is recorded empty and spends the attempt.
 const reportNote = (st, name, k) =>
-  ` As your last action, write your full report verbatim to .vulyk/reports/${st.slug}/round-${st.round}/${name}.attempt-${k}.md (mkdir -p its directory); your chat reply is the same text.`
+  ` As your last action, write your full report verbatim to .vulyk/reports/${slug}/round-${st.round}/${name}.attempt-${k}.md (mkdir -p its directory); your chat reply is the same text.`
 const rejectionFor = (seat) => {
   const r = rejected.filter((x) => x && x.seat === seat).pop()
   return r && r.error ? r.error : 'no reason reached the driver - write the report again, exactly in your contract\'s format.'
@@ -331,15 +347,15 @@ const council = async (st) => {
 let st = {}
 try {
   let res = await advance(' --claim')
-  if (Array.isArray(res.leftover)) leftover = new Set(res.leftover)
+  if (Array.isArray(res.leftover)) leftover = new Set(res.leftover.map(idOf))
   for (let i = 0; ; i++) {
     if (res.ok === false) {
       fail(st, { verb: res.verb, failed: res.failed, exit: res.exit, next: res.next, error: res.error, steps: res.steps })
     }
-    st = res.status
+    st = stateOf(res)
     rejected = Array.isArray(res.rejected) ? res.rejected : []
     const ran = Array.isArray(res.steps) && res.steps.length ? ` · ran ${res.steps.join(', ')}` : ''
-    log(`${st.slug} · ${st.stage} · next: ${st.next}${ran}`)
+    log(`${slug} · ${st.stage} · next: ${st.next}${ran}`)
     if (TERMINAL.includes(st.next)) return { ...st, fallbacks, ...same() }
     if (i >= MAX_ITERATIONS) fail(st, { verb: 'driver', error: `iteration cap ${MAX_ITERATIONS} reached at next: ${st.next}` })
     // before any worker or seat is dispatched: Tier 4's review and review2 need two different models
