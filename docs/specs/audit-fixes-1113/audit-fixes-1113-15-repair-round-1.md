@@ -19,6 +19,7 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 > 4. Only the owner's own words record his acceptance (`human-check.sh ACCEPTED|REJECTED`) or a plan's straight-through `--go`: a subagent is always refused; the main session passes only when the note quotes, verbatim and after the latest verdict, an owner prompt or AskUserQuestion answer from this session, with whitespace normalised and a bare «ок» not enough; direct edits of the record file and of the `**Approved:**` line are guarded the same way; without Python the guard refuses with a loud message.
 > 5. git-guard covers every git form that discards uncommitted work or commits, including git run through a shell, an alias or a heredoc fed to a shell. Every form it leaves open on purpose is named in its header.
 > 6. git-guard without Python: a pure-bash fallback with the same verb list (a test compares both lists) still denies the work-losing verbs in Bash and PowerShell; a real interpreter that crashes on a git command denies it; the SessionStart brief says when Python is missing.
+> 13. A hook keeps a blind council seat inside its court: no reads outside the court, no git reads of the spec. Seat prompts no longer say `record-seat` enforces blindness.
 
 ## Findings
 1. tests/telemetry.test.sh:247 [regression] suite telemetry, part `telemetry`: the check `enum is exactly 11 codes` must agree with the ENUM list, which now holds twelve (scripts/telemetry.sh:47 adds `redact_degraded`) - repro: `bash tests/telemetry.test.sh --part telemetry` prints `enum is exactly 11 codes - expected [11], got [12]`, 147 checks, 1 failed; on the base f66a24db the list holds eleven and the part is `ok` in the previous specs' suite logs.
@@ -30,8 +31,21 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 - [regression] PART telemetry:telemetry FAIL 52s cap 300s
 - [regression] PART maintenance ok 216s cap 300s
 - [regression] PART telemetry:terminal FAIL 81s cap 300s
+4. .claude/hooks/court-guard.sh [ask 13, regression found by the Queen] the guard must not take a command's
+   non-path arguments for paths: a `sed` or `awk` script (`/^## Profile/,/^## [A-Z]/p`), a `tr` set (`'
+'`), a quoted
+   string or an expression built from `$` inside a script argument. In round 1 both `council-opus` dispatches spent
+   their whole turn budget (about 125 tool calls each) on such denials and returned no report, so the round had no
+   blind seat. An argument is a path only when it names an existing file or folder, or starts with a drive, `/`,
+   `~` or `..` and is the operand of a command that reads files; a read that resolves inside the court passes. Test:
+   the denied commands of round 1 (synthetic paths) pass, and a real read of the main tree's spec folder is still
+   denied (`tests/defects.test.sh`, where story 08 put the court-guard cases).
+5. docs/adr/032-story-trust-from-git.md:144 (review Minor, privacy) the amendment says how the approval record can
+   still be walked around; the plan's Privacy assumption keeps that out of repo text. State what the gate does now,
+   and drop the claim that `reanchor` is not denied to a subagent (git-guard's `CYCLE_OK` list refuses it).
 
 ## Files
+- docs/adr/032-story-trust-from-git.md
 - scripts/version-order.sh
 - .claude/hooks/vulyk-update-check.sh
 - scripts/vulyk-update.sh
