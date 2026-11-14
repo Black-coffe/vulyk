@@ -1,8 +1,8 @@
 ---
 story: audit-fixes-1113-18
 spec: audit-fixes-1113
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 10
@@ -35,3 +35,5 @@ rule: own tests only).
 `bash tests/e2e.test.sh`
 
 ## Implementation notes
+- tests/e2e.test.sh: worker stub parses "Your story: <id> - the story file in <spec>/" and picks the .md in that folder whose frontmatter line is `story: <id>`.
+- Driver, cycle.sh untouched; green and red parts pass locally.

@@ -146,7 +146,9 @@ const agent = async (prompt, opts) => {
   }
   trace.agents.push({ type, prompt });
   if (type === 'worker-code') {
-    const file = prompt.match(/Your story: (\S+?)\. /)[1];
+    const [, id, dir] = prompt.match(/Your story: (\S+) - the story file in (\S+?)\/ whose/);
+    const file = fs.readdirSync(path.join(FIX, dir)).map((n) => dir + '/' + n)
+      .find((f) => f.endsWith('.md') && new RegExp('^story: ' + id + '\\s*$', 'm').test(fs.readFileSync(path.join(FIX, f), 'utf8')));
     fs.writeFileSync(path.join(FIX, 'app.txt'), file.includes('repair') ? 'fixed, really\n' : (SCEN === 'red' ? 'fixed\n' : 'fixed\n'));
     const story = path.join(FIX, file);
     fs.writeFileSync(story, fs.readFileSync(story, 'utf8').replace(/^returned:.*$/m, 'returned: DONE'));
