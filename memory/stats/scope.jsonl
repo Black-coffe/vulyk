@@ -442,3 +442,6 @@
 {"ts":"2026-11-14T01:11:12Z","story":"audit-fixes-1113-09-cycle-gates","declared":7,"changed":5,"out_of_scope":0}
 {"ts":"2026-11-14T01:15:37Z","story":"audit-fixes-1113-09-cycle-gates","declared":7,"changed":5,"out_of_scope":0}
 {"ts":"2026-11-14T01:27:15Z","story":"audit-fixes-1113-12-scrub-revs-mask-only","declared":2,"changed":2,"out_of_scope":0}
+{"ts":"2026-11-14T01:34:30Z","story":"audit-fixes-1113-11-redact-leaves-ordinary-text","declared":6,"changed":6,"out_of_scope":0}
+{"ts":"2026-11-14T01:38:58Z","story":"audit-fixes-1113-11-redact-leaves-ordinary-text","declared":6,"changed":8,"out_of_scope":2}
+{"ts":"2026-11-14T01:41:12Z","story":"audit-fixes-1113-11-redact-leaves-ordinary-text","declared":6,"changed":6,"out_of_scope":0}

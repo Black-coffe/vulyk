@@ -118,9 +118,15 @@ usage() {
 
 redact_note() { # redact_note <text> -> <text> piped through scripts/redact.sh (N-m7) - a
   # free-text note (escalate's CLI arg, judge's env-absence note) never reaches the ledger
-  # or the plan's ## Needs a human block unmasked. redact.sh always exits 0 and degrades to
-  # `cat` if its own tools are missing, so this never blocks a write.
-  printf '%s' "$1" | bash "$HERE/redact.sh" 2>/dev/null
+  # or the plan's ## Needs a human block unmasked. redact.sh exits 1 when it cannot mask, and its
+  # stdout is then the [VULYK:REDACT-FAILED] marker, not the note: the note is withheld (empty
+  # output, one stderr line, return 1) and the write goes on without it.
+  local out
+  out="$(printf '%s' "$1" | bash "$HERE/redact.sh" 2>/dev/null)" || {
+    echo "cycle: redact.sh failed; the note is withheld" >&2
+    return 1
+  }
+  printf '%s' "$out"
 }
 
 commit_subject() { # commit_subject <message> -> <message>, or, when the Profile's Commit convention

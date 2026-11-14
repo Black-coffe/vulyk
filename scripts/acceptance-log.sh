@@ -123,12 +123,16 @@ fi
 
 # The note is free text a model wrote while summarising a drone's report, and it lands in
 # memory/stats/acceptance.jsonl, which is committed. Same exposure as a learning or a
-# handoff, so it gets the same filter first - redact.sh degrades to cat on its own, but
-# guard its absence too. Then keep it JSON-safe the blunt way: double quotes become
+# handoff, so it gets the same filter first; a redact.sh that fails refuses the record, and its
+# absence is guarded too. Then keep it JSON-safe the blunt way: double quotes become
 # apostrophes, backslashes and newlines are dropped. Losing a character beats emitting a
 # broken line, and a note is a hint sitting beside the numbers, not data anything parses.
 if [ -f "$ROOT/scripts/redact.sh" ]; then
-  SAFE_NOTE="$(printf '%s' "$NOTE" | bash "$ROOT/scripts/redact.sh")"
+  # redact.sh exits 1 when it cannot mask; its stdout is then a marker, not the note. Nothing is recorded.
+  SAFE_NOTE="$(printf '%s' "$NOTE" | bash "$ROOT/scripts/redact.sh")" || {
+    echo "acceptance-log: REFUSED - scripts/redact.sh failed (its stderr says why), so the note cannot be masked; nothing is recorded. Fix it and run this again." >&2
+    exit 1
+  }
 else
   SAFE_NOTE="$NOTE"
 fi

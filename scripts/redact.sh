@@ -55,20 +55,18 @@ VALUE="(\"[^\"]+\"|'[^']+'|[\"']?[^\"'[:space:]:][^\"'[:space:]]{5,}[\"']?)"
 CYR_KEYWORDS='Секретный ключ|секретный ключ|СЕКРЕТНЫЙ КЛЮЧ|Секретний ключ|секретний ключ|СЕКРЕТНИЙ КЛЮЧ|Пароль|пароль|ПАРОЛЬ|Гасло|гасло|ГАСЛО|Токен|токен|ТОКЕН|Секрет|секрет|СЕКРЕТ'
 CYR_VALUE="(\"[^\"]+\"|'[^']+'|[A-Za-z0-9._~+/=!@\$%^&*-]{6,})"
 PROSE_KEY='(password|Password|PASSWORD|passphrase|Passphrase|secret|Secret|token|Token)[[:space:]]+(is|was)[[:space:]]+'
-PROSE_VALUE="(\"[^\"]+\"|'[^']+'|[^\"'[:space:]]*[0-9!@\$%^&*][^\"'[:space:]]*)"
+# Its unquoted value is 6+ chars (one alternative per place of the digit or symbol), so a length or a count
+# stays prose: `the password is 8 chars`.
+PS="[^\"'[:space:]]"; PD='[0-9!@$%^&*]'
+PROSE_VALUE="(\"[^\"]+\"|'[^']+'|$PS{5,}$PD$PS*|$PS{4}$PD$PS+|$PS{3}$PD$PS{2,}|$PS{2}$PD$PS{3,}|$PS$PD$PS{4,}|$PD$PS{5,})"
 # A command-line credential: an argument value that is not another flag.
 ARG_VALUE="(\"[^\"]+\"|'[^']+'|[^\"'[:space:]-][^\"'[:space:]]*)"
-# A bare cloud secret key: exactly 40 of [A-Za-z0-9/+] with an upper-case letter (a git SHA has none),
-# spelled as one alternative per position of that letter - ERE has no lookahead.
-CLOUD_KEY=''
-i=0
-while [ "$i" -lt 40 ]; do
-  part='[A-Z]'
-  [ "$i" -gt 0 ] && part="[A-Za-z0-9/+]{$i}$part"
-  [ "$i" -lt 39 ] && part="$part[A-Za-z0-9/+]{$((39 - i))}"
-  CLOUD_KEY="$CLOUD_KEY${CLOUD_KEY:+|}$part"
-  i=$((i + 1))
-done
+# The arguments between a command and its -p: words and flags, none of them a -p - so the command's own -p
+# is the one masked, never a later command's on the same line (ssh -p 22, docker run -p 8080:80).
+ARG_TOK='[^[:space:];&|]'
+NOT_P="([[:space:]]+([^-[:space:];&|]$ARG_TOK*|-[^p[:space:];&|]$ARG_TOK*))*"
+# sshpass takes only its own flags before -p (-f, -d and -P carry one argument); a word there is the command.
+SSHPASS_OPTS="([[:space:]]+(-[fdP][[:space:]]+$ARG_TOK+|-[^p[:space:];&|]$ARG_TOK*))*"
 
 SED_ARGS=( -E
   -e "s|AKIA[0-9A-Z]{16}|$MASK|g"
@@ -117,13 +115,13 @@ SED_ARGS=( -E
   # A bare key or auth name (key=, AUTH=) with a key-shaped value; a lower-case pwd (PWD is the shell's folder).
   -e "s#(^|[^A-Za-z0-9_.-])([\"']?(AUTH|auth|Auth|KEY|key|Key)[\"']?[[:space:]]*[=:][[:space:]]*)$KEY_VALUE#\1\2$MASK#g"
   -e "s#(^|[^A-Za-z0-9_-])([\"']?(pwd|Pwd)[\"']?[[:space:]]*[=:][[:space:]]*)$VALUE#\1\2$MASK#g"
-  # Credentials in command arguments: -u user:pw (an all-digit uid:gid is not one), a glued mysql -p<pw>,
-  # sshpass / docker login -p <pw>, --password <pw>.
-  -e "s#(^|[[:space:]])(-u|--user)([[:space:]]+[\"']?[^\"'[:space:]:]+:)[^\"'[:space:]]*[^0-9\"'[:space:]][^\"'[:space:]]*#\1\2\3$MASK#g"
-  -e "s#((mysql|mariadb)[a-z]*[^;&|]*[[:space:]]-p)(\"[^\"]+\"|'[^']+'|[^\"'[:space:]]+)#\1$MASK#g"
-  -e "s#((sshpass|(docker|podman)[[:space:]]+login)[^;&|]*[[:space:]]-p[[:space:]]*)$ARG_VALUE#\1$MASK#g"
+  # Credentials in command arguments: curl / lftp -u user:pw (an all-digit uid:gid is not one, and docker -u
+  # name:group is a user and a group), a glued mysql -p<pw>, sshpass / docker login -p <pw>, --password <pw>.
+  -e "s#(^|[^A-Za-z0-9_.-])((curl|lftp)[^;&|]*[[:space:]](-u|--user)[[:space:]]+[\"']?[^\"'[:space:]:]+:)[^\"'[:space:]]*[^0-9\"'[:space:]][^\"'[:space:]]*#\1\2$MASK#g"
+  -e "s#((mysql|mariadb)[a-z]*$NOT_P[[:space:]]+-p)(\"[^\"]+\"|'[^']+'|[^\"'[:space:]]+)#\1$MASK#g"
+  -e "s#((docker|podman)[[:space:]]+login$NOT_P[[:space:]]+-p[[:space:]]*)$ARG_VALUE#\1$MASK#g"
+  -e "s#(sshpass$SSHPASS_OPTS[[:space:]]+-p[[:space:]]*)$ARG_VALUE#\1$MASK#g"
   -e "s#(^|[[:space:]])(--password|--passwd)([[:space:]]+|=)$ARG_VALUE#\1\2\3$MASK#g"
-  -e "s#(^|[^A-Za-z0-9/+=_.-])($CLOUD_KEY)([^A-Za-z0-9/+=_-]|\$)#\1$MASK\3#g"
 )
 
 degrade() { # degrade <why> - withhold the text, say why, record it; the text never passes unmasked
@@ -140,8 +138,8 @@ printf '' | sed ${SED_ARGS[@]+"${SED_ARGS[@]}"} >/dev/null 2>&1 || degrade "this
 # Pass 1 (awk): PEM and PGP private key blocks - multi-line, sed can't span lines. A block runs to its
 #   END line or, when no END comes (a truncated paste), to the first line that is not key body (base64,
 #   an armor header, blank) - so the text after a broken key still reaches the file.
-# Pass 2 (sed): single-line token shapes and key=value assignments.
-# Both write into a buffer (the trailing x keeps final newlines); it reaches stdout only when every stage exits 0.
+# Pass 2 (sed): single-line token shapes and key=value assignments. Pass 3 (awk): bare cloud secret keys.
+# All three write into a buffer (the trailing x keeps final newlines); it reaches stdout only when every stage exits 0.
 OUT="$(set -o pipefail; awk -v mask="$MASK" '
   function body(l) {
     sub(/\r$/, "", l)
@@ -156,6 +154,23 @@ OUT="$(set -o pipefail; awk -v mask="$MASK" '
     next
   }
   { print }
-' | sed ${SED_ARGS[@]+"${SED_ARGS[@]}"} && printf x)" || degrade "the awk | sed filter failed"
+' | sed ${SED_ARGS[@]+"${SED_ARGS[@]}"} | awk -v mask="$MASK" '
+  # Pass 3 (awk): a bare cloud secret key - a run of exactly 40 of [A-Za-z0-9/+] holding an upper-case letter,
+  # a lower-case letter and a digit (a git SHA has no upper case, an identifier no digit), that neither starts
+  # nor ends with / (an absolute path) and is not followed by .<letter> (a file name), nor glued to = _ . -.
+  function key(r) {
+    return length(r) == 40 && r ~ /[A-Z]/ && r ~ /[a-z]/ && r ~ /[0-9]/ && r !~ /^\// && r !~ /\/$/
+  }
+  {
+    l = $0; out = ""
+    while (match(l, /[A-Za-z0-9\/+]+/)) {
+      pre = substr(l, 1, RSTART - 1); run = substr(l, RSTART, RLENGTH); l = substr(l, RSTART + RLENGTH)
+      b = substr(pre, length(pre), 1); a = substr(l, 1, 1)
+      if (key(run) && b !~ /[=_.-]/ && a !~ /[=_-]/ && !(a == "." && substr(l, 2, 1) ~ /[A-Za-z]/)) run = mask
+      out = out pre run
+    }
+    print out l
+  }
+' && printf x)" || degrade "the awk | sed | awk filter failed"
 printf '%s' "${OUT%x}"
 exit 0

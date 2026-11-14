@@ -677,6 +677,7 @@ def harvest(entries, cfg):
 # Keep it a superset of that script's list; extend both together. Group 1, when a pattern
 # has one, is kept in front of the mask.
 _VALUE = r"(?:\"[^\"\n]+\"|'[^'\n]+'|[\"']?[^\"'\s:][^\"'\s]{5,}[\"']?)"  # redact.sh's VALUE
+_NOT_P = r"(?:[^\S\n]+(?:[^-\s;&|][^\s;&|]*|-[^p\s;&|][^\s;&|]*))*"  # redact.sh's NOT_P
 _REDACT_FALLBACK = [
     re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"),
     re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
@@ -744,22 +745,32 @@ _REDACT_FALLBACK = [
     re.compile(r"((?:Секретный ключ|секретный ключ|СЕКРЕТНЫЙ КЛЮЧ|Секретний ключ|секретний ключ|СЕКРЕТНИЙ КЛЮЧ"
                r"|Пароль|пароль|ПАРОЛЬ|Гасло|гасло|ГАСЛО|Токен|токен|ТОКЕН|Секрет|секрет|СЕКРЕТ)"
                r"[^\S\n]*[=:][^\S\n]*)(?:\"[^\"\n]+\"|'[^'\n]+'|[A-Za-z0-9._~+/=!@$%^&*-]{6,})"),
-    # A password said in prose holds a digit or a symbol (`the password is required` stays).
+    # A password said in prose holds a digit or a symbol and is 6+ chars (`the password is required` and
+    # `the password is 8 chars` stay).
     re.compile(r"((?:password|Password|PASSWORD|passphrase|Passphrase|secret|Secret|token|Token)"
-               r"[^\S\n]+(?:is|was)[^\S\n]+)(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s]*[0-9!@$%^&*][^\"'\s]*)"),
+               r"[^\S\n]+(?:is|was)[^\S\n]+)(?:\"[^\"\n]+\"|'[^'\n]+'"
+               r"|[^\"'\s]{5,}[0-9!@$%^&*][^\"'\s]*|[^\"'\s]{4}[0-9!@$%^&*][^\"'\s]+|[^\"'\s]{3}[0-9!@$%^&*][^\"'\s]{2,}"
+               r"|[^\"'\s]{2}[0-9!@$%^&*][^\"'\s]{3,}|[^\"'\s][0-9!@$%^&*][^\"'\s]{4,}|[0-9!@$%^&*][^\"'\s]{5,})"),
     # A bare key or auth name with a key-shaped value; a lower-case pwd (PWD is the shell's folder).
     re.compile(r"(?<![A-Za-z0-9_.-])([\"']?(?:AUTH|auth|Auth|KEY|key|Key)[\"']?[^\S\n]*[=:][^\S\n]*)"
                r"[\"']?(?:base64:)?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
     re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:pwd|Pwd)[\"']?[^\S\n]*[=:][^\S\n]*)" + _VALUE),
-    # Credentials in command arguments: -u user:pw (an all-digit uid:gid is not one), a glued mysql -p<pw>,
-    # sshpass / docker login -p <pw>, --password <pw>.
-    re.compile(r"(?<!\S)((?:-u|--user)[^\S\n]+[\"']?[^\"'\s:]+:)[^\"'\s]*[^0-9\"'\s][^\"'\s]*"),
-    re.compile(r"((?:mysql|mariadb)[a-z]*[^;&|\n]*[^\S\n]-p)(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s]+)"),
-    re.compile(r"((?:sshpass|(?:docker|podman)[^\S\n]+login)[^;&|\n]*[^\S\n]-p[^\S\n]*)"
+    # Credentials in command arguments: curl / lftp -u user:pw (an all-digit uid:gid is not one, and docker -u
+    # name:group is a user and a group), a glued mysql -p<pw>, sshpass / docker login -p <pw>, --password <pw>.
+    # Between a command and its -p only words and flags that are not a -p, so a later command's -p stays.
+    re.compile(r"(?<![A-Za-z0-9_.-])((?:curl|lftp)[^;&|\n]*[^\S\n](?:-u|--user)[^\S\n]+[\"']?[^\"'\s:]+:)"
+               r"[^\"'\s]*[^0-9\"'\s][^\"'\s]*"),
+    re.compile(r"((?:mysql|mariadb)[a-z]*" + _NOT_P + r"[^\S\n]+-p)(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s]+)"),
+    re.compile(r"((?:docker|podman)[^\S\n]+login" + _NOT_P + r"[^\S\n]+-p[^\S\n]*)"
+               r"(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s-][^\"'\s]*)"),
+    re.compile(r"(sshpass(?:[^\S\n]+(?:-[fdP][^\S\n]+[^\s;&|]+|-[^p\s;&|][^\s;&|]*))*[^\S\n]+-p[^\S\n]*)"
                r"(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s-][^\"'\s]*)"),
     re.compile(r"(?<!\S)((?:--password|--passwd)(?:[^\S\n]+|=))(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s-][^\"'\s]*)"),
-    # A bare cloud secret key: exactly 40 of [A-Za-z0-9/+] with an upper-case letter (a git SHA has none).
-    re.compile(r"(?<![A-Za-z0-9/+=_.-])(?=[A-Za-z0-9/+]{0,39}[A-Z])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+=_-])"),
+    # A bare cloud secret key: exactly 40 of [A-Za-z0-9/+] with an upper-case letter (a git SHA has none), a
+    # lower-case letter and a digit (an identifier has none), no / at either end (an absolute path), no
+    # .<letter> after it (a file name).
+    re.compile(r"(?<![A-Za-z0-9/+=_.-])(?=[A-Za-z0-9/+]{0,39}[A-Z])(?=[A-Za-z0-9/+]{0,39}[a-z])"
+               r"(?=[A-Za-z0-9/+]{0,39}[0-9])[A-Za-z0-9+][A-Za-z0-9/+]{38}[A-Za-z0-9+](?![A-Za-z0-9/+=_-])(?!\.[A-Za-z])"),
 ]
 
 _KEY_BEGIN = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----")

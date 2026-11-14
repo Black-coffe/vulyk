@@ -140,7 +140,11 @@ PACK="$(pack_fingerprint "$SPEC")"
 # The note is the owner's own words about what they saw, and it lands in two committed
 # files - same exposure as an acceptance note, same filter first.
 if [ -f "$ROOT/scripts/redact.sh" ]; then
-  SAFE_NOTE="$(printf '%s' "$NOTE" | bash "$ROOT/scripts/redact.sh")"
+  # redact.sh exits 1 when it cannot mask; its stdout is then a marker, not the note. Nothing is recorded.
+  SAFE_NOTE="$(printf '%s' "$NOTE" | bash "$ROOT/scripts/redact.sh")" || {
+    echo "human-check: REFUSED - scripts/redact.sh failed (its stderr says why), so the note cannot be masked; nothing is recorded. Fix it and run this again." >&2
+    exit 1
+  }
 else
   SAFE_NOTE="$NOTE"
 fi

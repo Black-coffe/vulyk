@@ -755,6 +755,84 @@ done
 grep -q '^| `redact_degraded` |' "$SRC/docs/telemetry.md" && ok "docs/telemetry.md lists redact_degraded" \
   || bad "docs/telemetry.md has no redact_degraded row"
 
+# --- redact.sh leaves ordinary text alone; its callers refuse when it fails (audit-fixes-1113-11) -----------
+echo "--- redact.sh 1113-11: the repo's briefs and journals pass unchanged, ordinary neighbours beside their secrets"
+# Corpus: every tracked brief and journal is the owner's words or the cycle's record; a mask there rewrites them.
+# CR is stripped first: the git blob is LF, and Git Bash's sed drops CR on its own.
+corpus_bad=""; corpus_n=0
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  corpus_n=$((corpus_n + 1))
+  tr -d '\r' < "$SRC/$f" > "$T/corpus-in"
+  bash "$SRC/scripts/redact.sh" < "$T/corpus-in" > "$T/corpus-out" 2>/dev/null
+  cmp -s "$T/corpus-in" "$T/corpus-out" || corpus_bad="$corpus_bad $f"
+done <<EOF
+$(git -C "$SRC" ls-files 'docs/specs/*/brief.md' 'docs/specs/*/journal.md')
+EOF
+[ "$corpus_n" -gt 0 ] && [ -z "$corpus_bad" ] && ok "a brief of the repo passes redact.sh unchanged ($corpus_n files)" \
+  || bad "a brief of the repo passes redact.sh unchanged: $corpus_n files read, changed:${corpus_bad:- none read}"
+ck="$(rep 10 a)7$(rep 9 B)$(rep 10 c)$(rep 10 D)"   # 40 chars: upper, lower and a digit - the cloud secret-key shape
+R11=(
+  "leaves a password length in prose alone|the password is 8 chars and the token was 2 days old|the password is 8 chars and the token was 2 days old"
+  "masks a password stated in prose beside it|the secret was 8chars! long|the secret was $M long"
+  "leaves a 40-letter identifier alone|call ReadTheConfigurationFileAndValidateItNow now|call ReadTheConfigurationFileAndValidateItNow now"
+  "leaves a 40-char absolute path alone|open /home/someone/Projects/App2/src/mainfile now|open /home/someone/Projects/App2/src/mainfile now"
+  "leaves a 40-char path with an extension alone|see docs/Specs/audit2/stories/one/storyfiles.md now|see docs/Specs/audit2/stories/one/storyfiles.md now"
+  "masks a bare cloud key beside them|note $ck end|note $M end"
+  "masks a bare cloud key ending a sentence|the key is $ck.|the key is $M."
+  "leaves docker -u name:group alone, masks curl -u beside it|docker run -u app:staff img && podman exec -u www:www-data c sh && curl -u alice:$val https://x|docker run -u app:staff img && podman exec -u www:www-data c sh && curl -u alice:$M https://x"
+  "masks every credential -p on a line and no other -p|sshpass -p $val ssh -p 2222 host && docker login -u bob -p $val reg.io && docker run -p 8080:80 x && mysql -u root -P 3306 -p$val -h db|sshpass -p $M ssh -p 2222 host && docker login -u bob -p $M reg.io && docker run -p 8080:80 x && mysql -u root -P 3306 -p$M -h db"
+  "masks the login -p, not a later -p in the same command|docker login -p $val reg.io then docker run -p 8080:80 x|docker login -p $M reg.io then docker run -p 8080:80 x"
+  "masks an sshpass -p after its -P prompt option|sshpass -P assword -p $val ssh -p 22 h|sshpass -P assword -p $M ssh -p 22 h"
+)
+: > "$T/r11-in"
+for row in ${R11[@]+"${R11[@]}"}; do
+  IFS='|' read -r label input want <<EOF
+$row
+EOF
+  redact_is "$label" "$input" "$want"
+  printf '%s\n' "$input" >> "$T/r11-in"
+done
+# Parity with the built-in pass alone (no redact.sh run first), so the fallback is judged on its own.
+bash "$SRC/scripts/redact.sh" < "$T/r11-in" > "$T/r11-sh"
+PYTHONIOENCODING=utf-8 "$PYBIN" - "$SRC/.claude/hooks/handoff.py" "$T/r11-in" <<'PY' > "$T/r11-py"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('handoff', sys.argv[1]); h = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(h)
+for line in open(sys.argv[2], encoding='utf-8').read().splitlines():
+    print(h.redact_builtin(line))
+PY
+i=0
+for row in ${R11[@]+"${R11[@]}"}; do
+  i=$((i + 1)); label="${row%%|*}"
+  sh_out="$(sed -n "${i}p" "$T/r11-sh" | tr -d '\r')"; py_out="$(sed -n "${i}p" "$T/r11-py" | tr -d '\r')"
+  [ "$sh_out" = "$py_out" ] && ok "handoff.py built-in pass agrees with redact.sh: $label" \
+    || bad "handoff.py built-in pass differs from redact.sh ($label): py '$py_out', sh '$sh_out'"
+done
+# Callers: a redact.sh that fails (exit 1, the marker on stdout) - no record is written, no marker becomes a note.
+RF="$T/redact-fail"; mkdir -p "$RF/scripts" "$RF/docs/specs/demo"
+cp "$SRC/scripts/lib.sh" "$SRC/scripts/state.sh" "$SRC/scripts/human-check.sh" "$SRC/scripts/acceptance-log.sh" "$RF/scripts/"
+printf '#!/usr/bin/env bash\ncat >/dev/null\necho "[VULYK:REDACT-FAILED]"\necho "redact: degraded: stub" >&2\nexit 1\n' > "$RF/scripts/redact.sh"
+cp "$SRC/templates/plan.md" "$RF/docs/specs/demo/plan.md"
+printf -- '---\nstory: demo-01\nspec: demo\nstatus: done\nwave: 1\n---\n# S1\n' > "$RF/docs/specs/demo/demo-01-first.md"
+( cd "$RF" && git init -q . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false \
+  && git add -A && git commit -qm init ) >/dev/null 2>&1
+cp "$RF/docs/specs/demo/plan.md" "$T/rf-plan"
+for tool in human-check acceptance-log; do
+  ( cd "$RF" && bash "scripts/$tool.sh" docs/specs/demo ACCEPTED "looked at it" ) >"$T/rf-out" 2>&1; rc=$?
+  [ "$rc" -ne 0 ] && ok "$tool.sh refuses when redact.sh fails (exit $rc)" || bad "$tool.sh exit 0 with a failing redact.sh: $(cat "$T/rf-out")"
+  cmp -s "$RF/docs/specs/demo/plan.md" "$T/rf-plan" && ! ls "$RF/memory/stats/"*.jsonl >/dev/null 2>&1 \
+    && ok "$tool.sh writes no record when redact.sh fails" || bad "$tool.sh wrote a record with a failing redact.sh"
+  grep -q 'redact' "$T/rf-out" && ok "$tool.sh names redact.sh in its refusal" || bad "$tool.sh refusal does not name redact.sh: $(cat "$T/rf-out")"
+done
+sed -n '/^redact_note() {/,/^}/p' "$SRC/scripts/cycle.sh" > "$T/redact-note.sh"
+note_out="$(HERE="$RF/scripts"; . "$T/redact-note.sh"; redact_note "secret=$val" 2>/dev/null)"
+[ -s "$T/redact-note.sh" ] && case "$note_out" in *REDACT-FAILED*|*"$val"*) false ;; *) true ;; esac \
+  && ok "cycle.sh redact_note passes on neither the marker nor the text when redact.sh fails" \
+  || bad "cycle.sh redact_note with a failing redact.sh returned '$note_out'"
+grep -q 'redact.sh always exits 0' "$SRC/scripts/cycle.sh" && bad "cycle.sh still says redact.sh always exits 0" \
+  || ok "cycle.sh no longer says redact.sh always exits 0"
+
 # --- /vulyk-gc refuses a gutted CONSOLIDATED.md (hindsight-harvest-03) --------------------------------
 echo "--- /vulyk-gc commit line refuses to commit a CONSOLIDATED.md that lost more than half"
 GC_LINE="$(tr -d '\r' < "$SRC/.claude/commands/vulyk-gc.md" | sed -n 's/^`\(f=memory\/learnings\/CONSOLIDATED\.md;.*\)`$/\1/p')"
