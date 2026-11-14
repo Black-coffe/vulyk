@@ -55,6 +55,16 @@ Guards, gates and installer fixes from a framework audit (spec `audit-fixes-1113
 - `stamp-red` re-hashes each stored line output against its record before the verdict reads it.
 - `/vulyk-ship` has `lead-review` read the outward text (the CHANGELOG section, the release notes, the published
   `UNASKED:` / Minor lines) before it prints a publish command; a flagged line moves to a private file first.
+- `git-guard.sh` also denies `git reset --merge` and `git merge --abort`; its header names the forms it leaves open on
+  purpose, and `owner-guard.sh`'s header names the plan.md rewrites its check cannot see.
+- Every `cycle.sh` verb takes `--short`: one flat line with only the fields the Workflow driver reads (stories by
+  id), so the clerk agent no longer has a long line to echo; the driver asks for it and hands a worker its story id.
+- `cycle.sh reanchor` moves a wave's recorded claim head with a journal line (main session only).
+- `defects-check.sh` dates owner quotes past commits listed in `docs/defects/.scrub-revs`, only where such a
+  commit did nothing but mask a span with a placeholder; `--files` skips a card's own fixtures.
+- `council-opus` gets 150 turns and a turn budget, so a large spec still gets its report.
+- `redact.sh` leaves ordinary text alone (every brief and journal of the repo passes byte-identical), and
+  `human-check.sh` / `acceptance-log.sh` refuse instead of writing a note when redaction fails.
 
 ## [0.52.0] - 2026-11-13
 
