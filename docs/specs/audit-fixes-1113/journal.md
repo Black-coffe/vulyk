@@ -22,3 +22,4 @@
 - 2026-11-14T03:14:38Z · 04-council · checkpoint after 50 min at dispatch:opus,review · next: relaunching with a fresh stamp
 - 2026-11-14T04:15:57Z · 04-council:RED · round 1 verdict RED at d974e00c pack 475733085b95 · next: repair
 - 2026-11-14T04:16:05Z · 03-building · repair round 1: audit-fixes-1113-15-repair-round-1.md · next: build:7
+- 2026-11-14T04:18:23Z · 03-building · checkpoint after 61 min at build:7; repair 15 widened · next: court-guard false positives starved the blind seat (no opus report in round 1); ADR-032 privacy minor; relaunching
