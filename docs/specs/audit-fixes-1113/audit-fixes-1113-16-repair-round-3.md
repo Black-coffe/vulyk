@@ -1,7 +1,7 @@
 ---
 story: audit-fixes-1113-16
-status: todo
-returned: NEEDS_CONTEXT
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 8
@@ -35,6 +35,12 @@ cannot go red for a timing finding without a staged break. The fix itself looks 
 `wiring` and `wiring2`, assuming tests/full-suite.sh picks parts up via `--list-parts` (full-suite.sh is not
 in `## Files`). Needed from the Queen: `red: none` (or a verification naming a sealed test that can go red,
 e.g. a parts-check over a fresh suite log), committed as the approved revision.
+
+## Implementation notes
+- tests/telemetry.test.sh: `wiring` split into `wiring` (quoting, owner settings, wire/unwire upgrade, indent) and `wiring2` (M1 matcher, W1 guards); PARTS lists `wiring2`.
+- Shared block `part_on wiring wiring2` builds $TGT, $GS and $EH (its --check and install), since wiring2's guard loop reads $EH.
+- The "--check writes nothing" assertion now compares against a copy taken right after --check (`$T/eh.after-check`), because the install now runs in the shared block before the assertion.
+- Measured alone on this box: wiring 84 s (62 checks, 0 failed), wiring2 101 s (25 checks, 0 failed); not measured inside a full step-6 run.
 
 ## Files
 - scripts/version-order.sh

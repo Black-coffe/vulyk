@@ -37,6 +37,7 @@ install-xp
 install-xp2
 terminal
 wiring
+wiring2
 ledger
 constitution
 constitution2
@@ -1952,7 +1953,7 @@ fi
 
 fi # terminal
 
-if part_on wiring; then
+if part_on wiring wiring2; then
 install_fixtures tgt
 # mass-audit-fixes-04 (I2, S1/P1, P7): every hook command is "$CLAUDE_PROJECT_DIR"/.claude/hooks/<name>.sh,
 # so a hive under a path with a space runs its hooks; an install into an owner's settings.json wires
@@ -1975,6 +1976,15 @@ git -C "$GS" init -q -b main . && git -C "$GS" config user.email t@t && git -C "
 git -C "$GS" add -A && git -C "$GS" commit -qm "without the guards" >/dev/null && git -C "$GS" tag v0.49.0
 cp -p "$T/gs-aside/owner-guard.sh" "$T/gs-aside/court-guard.sh" "$GS/.claude/hooks/"
 git -C "$GS" add -A && git -C "$GS" commit -qm "with the guards" >/dev/null && git -C "$GS" tag v0.49.1
+# $EH: an owner's settings.json with an empty allow list, checked then installed from $GS (wiring asserts on both runs)
+EH="$T/hive-allow-empty"; mkdir -p "$EH/.claude"
+printf '{"permissions":{"allow":[]}}\n' > "$EH/.claude/settings.json"; cp "$EH/.claude/settings.json" "$T/eh.before"
+bash "$GS/install.sh" "$EH" --check --telemetry off > "$T/eh-check.out" 2>&1
+cp "$EH/.claude/settings.json" "$T/eh.after-check"   # the file as --check left it, for wiring to judge
+bash "$GS/install.sh" "$EH" --telemetry off > "$T/eh.out" 2>&1
+fi # the fixtures wiring and wiring2 share
+
+if part_on wiring; then
 unquoted() { # unquoted <settings.json> - how many hook commands do not start with the quoted head
   jq -r '[.hooks[][].hooks[].command | select(startswith("\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/") | not)] | length' "$1" | tr -d '\r'
 }
@@ -1994,13 +2004,9 @@ expect_eq "fresh install: every hook command quotes the project dir" "0" "$(unqu
 expect_eq "fresh install: every SessionEnd entry has a timeout >= 10" "0" "$(short_se "$TGT/.claude/settings.json")"
 expect_eq "fresh install: the 19 hook entries" "19" "$(hook_sig "$TGT/.claude/settings.json" | grep -c .)"
 space_run "fresh install" "$TGT/.claude/settings.json"
-EH="$T/hive-allow-empty"; mkdir -p "$EH/.claude"
-printf '{"permissions":{"allow":[]}}\n' > "$EH/.claude/settings.json"; cp "$EH/.claude/settings.json" "$T/eh.before"
-bash "$GS/install.sh" "$EH" --check --telemetry off > "$T/eh-check.out" 2>&1
 expect_eq "--check into an owner's settings.json: would wire for each of the 19 hooks" "19" \
   "$(grep -E '^  would wire +\.claude/settings\.json -> ' "$T/eh-check.out" | grep -vc 'permissions\.allow')"
-expect_eq "--check into an owner's settings.json writes nothing" "1" "$(same "$T/eh.before" "$EH/.claude/settings.json")"
-bash "$GS/install.sh" "$EH" --telemetry off > "$T/eh.out" 2>&1
+expect_eq "--check into an owner's settings.json writes nothing" "1" "$(same "$T/eh.before" "$T/eh.after-check")"
 expect_eq "install into an owner's settings.json: one wire line per hook, 19" "19" \
   "$(grep -E '^  wire +\.claude/settings\.json -> ' "$T/eh.out" | grep -vc 'permissions\.allow')"
 cat "$T/eh.out" | expect_absent "... and none kept: the owner's file had none" "kept           .claude/settings.json ->"
@@ -2095,6 +2101,9 @@ for u in 4 tab; do
   cat "$T/indent-$u.out" | expect_absent "indent $u: the note claims no re-indent" "re-indented"
   expect_eq "indent $u: the backup is the file as it was" "1" "$(same "$T/indent-$u.before" "$IS.vulyk-bak")"
 done
+fi # wiring
+
+if part_on wiring2; then # audit-fixes-1113-16: wiring, second half - the M1 matcher and the W1 guards
 # audit-fixes-1113-06 (M1, ask 12): the inject entry's matcher carries PowerShell. A fresh install has it; an upgrade
 # moves an entry still on the old shipped 0.41 matcher; a matcher the hive changed itself is left alone and named.
 inj_m() { jq -r '.hooks.PreToolUse[] | select(any(.hooks[]; .command | test("defects-inject"))) | .matcher' "$1" | tr -d '\r'; }
@@ -2159,7 +2168,7 @@ GW_RC=0; eval "$GWCMD" > "$T/gw.out" 2>&1 || GW_RC=$?
 expect_eq "the printed --wire command wires court-guard.sh on its W1 matcher" \
   "0 $CG_M|\"\$CLAUDE_PROJECT_DIR\"/.claude/hooks/court-guard.sh|block" \
   "$GW_RC $(guard_sig "$T/hive-guards-0.49.1/.claude/settings.json" court-guard.sh)"
-fi # wiring
+fi # wiring2
 
 if part_on ledger; then
 install_fixtures tgt
