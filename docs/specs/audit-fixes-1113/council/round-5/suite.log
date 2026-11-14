@@ -1,0 +1,106 @@
+head=459211bd steps=10
+STEP 1/10: ok 137s
+PART council:seats3 ok 46s cap 300s
+PART council:seats2 ok 57s cap 300s
+PART council:judge2 ok 61s cap 300s
+PART council:ceilings ok 61s cap 300s
+PART council:close ok 65s cap 300s
+PART council:judge ok 66s cap 300s
+PART council:escalate ok 68s cap 300s
+PART council:escalate2 ok 71s cap 300s
+PART council:verbs ok 86s cap 300s
+PART council:verbs2 ok 101s cap 300s
+PART council:seats ok 111s cap 300s
+PART council:verbs3 ok 136s cap 300s
+STEP 2/10: ok 171s
+PART council:replays3 ok 45s cap 300s
+PART council:walks3 ok 45s cap 300s
+PART council:roster2 ok 50s cap 300s
+PART council:walks2 ok 56s cap 300s
+PART council:replays2 ok 75s cap 300s
+PART council:walks ok 75s cap 300s
+PART council:replays ok 79s cap 300s
+PART council:ceilings2 ok 86s cap 300s
+PART council:suite ok 108s cap 300s
+PART council:driver ok 119s cap 300s
+PART council:roster ok 153s cap 300s
+PART council:advance ok 170s cap 300s
+STEP 3/10: ok 122s
+PART cycle:manual ok 23s cap 300s
+PART cycle:hooklog ok 29s cap 300s
+PART council:hardening ok 35s cap 300s
+PART cycle:scope ok 37s cap 300s
+PART cycle:gates ok 37s cap 300s
+PART cycle:paperwork ok 40s cap 300s
+PART cycle:approved ok 48s cap 300s
+PART cycle:close ok 85s cap 300s
+PART cycle:close2 ok 90s cap 300s
+PART council:suite2 ok 97s cap 300s
+PART council:suite3 ok 117s cap 300s
+PART cycle:ship ok 120s cap 300s
+STEP 4/10: FAIL 154s
+PART handoff ok 9s cap 300s
+PART e2e:green FAIL 12s cap 300s
+PART e2e:red FAIL 12s cap 300s
+PART inject:functional ok 31s cap 300s
+PART driver ok 41s cap 300s
+PART cycle:safety ok 48s cap 300s
+PART cycle:red2 ok 70s cap 300s
+PART cycle:bsd ok 71s cap 300s
+PART full-suite ok 75s cap 300s
+PART defects ok 90s cap 300s
+PART intake:functional ok 103s cap 300s
+PART cycle:red ok 153s cap 300s
+LOAD: start cpu 1% top: MsMpEng 40%, msedgewebview2#12 0%, msedgewebview2#14 0%, msedgewebview2#13 0%, msedgewebview2#11 0%; named like the sampler: WmiPrvSE 50%
+LOAD: end cpu 0% top: vmmemWSL 14%, claude 9%, FoxitPDFReaderUpdateService 4%, FoxitPDFEditorUpdateService 4%, msedgewebview2#15 0%; named like the sampler: WmiPrvSE 74%, WmiPrvSE#3 4%
+STEP 5/10: ok 102s
+PART mods ok 5s cap 300s
+PART model-profile:defaults ok 18s cap 300s
+PART symbol-map ok 20s cap 300s
+PART solo:green ok 22s cap 300s
+PART model-profile:edges ok 23s cap 300s
+PART model-profile:set ok 25s cap 300s
+PART solo:rejected ok 26s cap 300s
+PART solo:block ok 42s cap 300s
+PART telemetry:telemetry ok 52s cap 300s
+PART maintenance:upkeep ok 65s cap 300s
+PART maintenance:redact ok 84s cap 300s
+PART maintenance:guards ok 100s cap 300s
+STEP 6/10: ok 183s
+PART telemetry:constitution2 ok 38s cap 300s
+PART telemetry:library ok 90s cap 300s
+PART telemetry:terminal ok 94s cap 300s
+PART telemetry:constitution3 ok 101s cap 300s
+PART telemetry:ledger ok 107s cap 300s
+PART telemetry:scan ok 123s cap 300s
+PART telemetry:wiring ok 125s cap 300s
+PART telemetry:constitution ok 131s cap 300s
+PART telemetry:wiring2 ok 146s cap 300s
+PART telemetry:install ok 174s cap 300s
+PART telemetry:install-xp ok 177s cap 300s
+PART telemetry:install-xp2 ok 182s cap 300s
+STEP 7/10: ok 136s
+PART telemetry:ysk-hook ok 3s cap 300s
+PART telemetry:ysk ok 25s cap 300s
+PART telemetry:rg2 ok 47s cap 300s
+PART telemetry:rg ok 50s cap 300s
+PART telemetry:ysk3 ok 56s cap 300s
+PART telemetry:crlf2 ok 63s cap 300s
+PART telemetry:ysk2 ok 71s cap 300s
+PART telemetry:mods ok 77s cap 300s
+PART telemetry:mods2 ok 76s cap 300s
+PART telemetry:watcher ok 90s cap 300s
+PART telemetry:crlf ok 105s cap 300s
+PART telemetry:upgrade ok 134s cap 300s
+STEP 8/10: ok 146s
+PART token-report ok 4s cap 300s
+PART telemetry:wrapper ok 46s cap 300s
+PART telemetry:wrapper2 ok 46s cap 300s
+PART telemetry:wrapper3 ok 75s cap 300s
+PART telemetry:launchers ok 79s cap 300s
+PART telemetry:edits ok 144s cap 300s
+STEP 9/10: ok 13s
+PART inject:latency ok 11s cap 300s
+STEP 10/10: ok 6s
+PART intake:latency ok 4s cap 300s
+SUITE: FAIL 1170s - part e2e:green failed, part e2e:red failed
