@@ -37,7 +37,13 @@ Report-only story/prompt/portability/defect checks, the symbol map, and the test
 - `acceptance-log.sh <spec-dir> <ACCEPTED|REJECTED|CANNOT_RUN> [note]` / `--check <spec-dir>` - appends to
   `memory/stats/acceptance.jsonl` with the pack identity (`head`, `pack`); `drift` is boolean or `"unknown"`
   (never read unknown as false); note redacted; always exits 0. `leak-check.sh <file>` - the `check:` of the
-  `host-internals-in-public-repo` card; flags host-project internals in a public repo.
+  `host-internals-in-public-repo` card; flags host-project internals in a public repo: absolute paths outside the VULYK
+  root (drive, Git Bash/WSL, home), Claude temp-folder paths, transcript slugs of other projects, every hive root of the
+  private registry and terms of the private lists (hits reported without the root/term; passes `~/`, `<placeholder>`
+  paths, URLs, system paths); exit 1 hits, 0 clean/missing file, 2 no python (0.53).
+- `upgrade-base-check.sh <installer>` (0.53) - the `check:` of card `upgrade-overwrites-host-edits` (`scripts-install.md`).
+  `defects-check.sh` (0.53) dates owner quotes past commits listed in `<library>/.scrub-revs` only where the commit did
+  nothing but mask a span (checked from git); `--files` never runs a card's check on that card's own fixtures.
 
 ## Tests
 - `tests/full-suite.sh [--jobs N] [--list | --steps | --step K]` (ADR-029) - every `tests/*.test.sh` as capped
@@ -62,4 +68,4 @@ Report-only story/prompt/portability/defect checks, the symbol map, and the test
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
 
-last-verified: 2026-11-13 (0.52.0 beta-fixes-1113 test parts; checks unchanged since the post-052-tails split)
+last-verified: 2026-11-14 (0.53.0-dev.1 audit-fixes-1113: leak-check, defects-check, upgrade-base-check)

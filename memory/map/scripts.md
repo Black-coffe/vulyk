@@ -1,6 +1,7 @@
 # Scout report: scripts/ (cycle scripts)
 
-Other slices: `scripts-checks.md` (checks, tests), `scripts-hooks.md` (hooks, redact, telemetry), `scripts-install.md`.
+Other slices: `scripts-checks.md` (checks, tests), `scripts-hooks.md` (hooks, redact, telemetry), `scripts-guards.md`,
+`scripts-install.md`.
 
 ## Purpose
 Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh`, `lib.sh`, `journal.sh`;
@@ -33,7 +34,8 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   CI`); `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`; `human-check.sh --show <spec-dir>` (0.48; writes nothing;
   `git diff --stat` then the diff, 300 lines max; base = merge-base with the default branch off it, else parent of
   the commit that added `<spec>/plan.md`, else the empty tree; exit 2 no dir/repo; the Queen pastes it in her reply
-  before asking); `scope-check.sh <story-file> [range]` runs in `close-story` (`  ! ` paths -> `--commit` exit 4).
+  before asking); `scope-check.sh <story-file> [range | --since <claim-head>]` runs in `close-story` (`  ! ` paths -> `--commit`
+  exit 4). `human-check.sh`/`acceptance-log.sh` refuse (nothing recorded) when `redact.sh` fails (0.53).
 - `py.sh <python-args>` (0.44.0) - `exec "$VULYK_PY" "$@"` via `vulyk_python`; none: exit 2. The spelling for
   Python in `CLAUDE.md` and the commands. `run-capped.py <secs> <cmd>` - the cap `run_capped` falls back to
   (own process group, SIGTERM, 10 s grace, SIGKILL; Windows `taskkill /T`; exit 124).
@@ -45,30 +47,17 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `model-profile.sh` (ADR-020) - `opus-builds|sonnet-builds|economy`; only `--set` writes; unknown =
   `sonnet-builds`; `--recommend` prints `sonnet-builds <plan>` on every plan (0.49). `top-model.sh`: `--floor` exit
   1 prints `below floor`.
-- `hives-behind.sh [--check <state>|--canaries|--busy <hive>|--slug <path>]` (card `public-release-per-change`) -
-  registry `${VULYK_HIVES_FILE:-~/.vulyk/hives}` (private; one hive per line: `<path>` | `canary` | `hold
-  <YYYY-MM-DD> <reason>`; `~/` expands); no arg reads each hive's `.claude/vulyk-version` against `VERSION` and
-  judges. Green = on the local build or under a live hold. Red: lags, `none`, `missing`, hold
-  expired/malformed/no reason/more than `HOLD_MAX_DAYS` (7) ahead, no hive. `--check <state>` judges a state file
-  alone (`local <v>`, `hive <installed|none|missing> <path>[ | hold ...]`); `--canaries` prints canary paths (exit
-  1 if none). Exit 0 / 1 / 2 (registry, state or VERSION absent). Env `VULYK_TODAY`, `VULYK_SRC`.
-  `--busy <hive>`: `idle` exit 0 / `busy <why>` / `unknown <why>` (both exit 1). Busy on a `docs/specs/*/DRIVER`
-  file (the line names `bash scripts/cycle.sh release <spec> <stamp>` to free a stale one) or a `*.jsonl`
-  transcript at any depth (Workflow agents write 5 levels down) written in the last 60 minutes under
-  `<root>/projects/<slug>/`. Folders `<slug>-*` (session started in a hive subfolder) count only when a fresh
-  transcript's `cwd` is the hive or below it (Windows: case-insensitive); an unreadable `cwd` is busy. Roots
-  `$VULYK_SESSION_ROOTS` (space-separated), else `${CLAUDE_CONFIG_DIR:-~/.claude}` plus every `~/.claude*` with
-  `projects/`. No transcript folder under any root: `idle no session transcript folder ...` (exit 0) if
-  `naming_proven` (some registered hive resolves to its exact `<root>/projects/<slug>/`; path-less registry lines
-  prove nothing), else `unknown` (exit 1). `--slug <path>`: non-alphanumeric char -> `-` (Git Bash `/<drive>/x` read as
-  `<drive>:/x`). Caller: `/vulyk-ship` step 2a (before each upgrade and hive commit).
+- `hives-behind.sh [--check|--canaries|--busy <hive>|--slug]` (registry, canaries, holds, busy test): `scripts-hives.md`.
+  Caller: `/vulyk-ship` step 2a.
 
 ## Key contracts
 - `cycle.sh`: last stdout line is one JSON object; exits 0 ok · 1 usage · 2 precondition · 3 paused ·
   4 malformed report / red verify · 5 stale · 6 escalate. Other gates exit 0 and report; `telemetry.sh check`
   and `defects-*` are exceptions.
-- `is_paperwork_path` whitelist: spec `plan/journal/brief/council/*`, `memory/stats/*.jsonl`, `skills.json`,
-  `memory/learnings/*.md`, `VERSION`, `CHANGELOG.md`.
+- `is_paperwork_path` whitelist: spec `journal.md`, `council/*`; `memory/stats/{human,acceptance,ship,council,scope,
+  anomalies,evolve}.jsonl`; top-level `memory/learnings/*.md`; `VERSION`, `CHANGELOG.md`, `CITATION.cff`; the hive's
+  `.claude/vulyk-paperwork` globs. 0.53: `plan.md`/`brief.md` are paperwork only for the lines a cycle script writes
+  (`spec_doc_strip`, `cycle.md`); `memory/stats/skills.json` is no paperwork (local, gitignored, not exempt in ship-check).
 
 ## Gotchas
 - `close-story`'s `## Commands` match, `record-seat`'s taint and `is_paperwork_path` are security-relevant string
@@ -77,4 +66,4 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - Scripts target bash 3.2 + BSD userland (macOS CI jobs `full-suite`, `install-smoke` pin `/bin/bash` 3.2, BSD sed,
   no `timeout`): no bare `sed -i`/`python`/`timeout`/`date -d`; run the gate after editing any `.sh`.
 
-last-verified: 2026-11-13 (cycle scripts; hives-behind --busy naming_proven; 0.52.0 beta-fixes-1113)
+last-verified: 2026-11-14 (cycle scripts; 0.53.0-dev.1 audit-fixes-1113: paperwork set, state_get/cycle_state_dir, --since)

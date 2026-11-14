@@ -1,30 +1,31 @@
 # Scout report: .claude/hooks/ (split from scripts.md)
 
-Other slices: `scripts.md` (cycle scripts), `scripts-checks.md` (checks, tests), `scripts-install.md` (install.sh).
+Other slices: `scripts.md` (cycle scripts), `scripts-checks.md` (checks, tests), `scripts-install.md` (install.sh),
+`scripts-guards.md` (`git-guard.sh`, `owner-guard.sh`, `court-guard.sh`).
 
 ## Purpose
-The hook scripts wired into a hive's `settings.json`: the SessionStart brief and update check, the `git-guard.sh`
-PreToolUse gate, and the handoff offer; with the helpers those hooks call (`redact.sh`, `telemetry.sh` (`docs/telemetry.md`),
-`memory-triage.sh`). `install.sh` wiring: `scripts-install.md`. Defect hooks and `defects_lib.py`: `docs/wiki/rules-tree.md`
-and the `defects-*` bullet in `scripts-checks.md`.
+The hook scripts wired into a hive's `settings.json`: the SessionStart brief and update check, the three PreToolUse guards
+(`scripts-guards.md`), and the handoff offer; with the helpers those hooks call (`redact.sh`, `telemetry.sh`
+(`docs/telemetry.md`), `memory-triage.sh`). `install.sh` wiring: `scripts-install.md`. Defect hooks and `defects_lib.py`:
+`docs/wiki/rules-tree.md` and the `defects-*` bullet in `scripts-checks.md`. `defects-inject.sh` matcher (0.53) includes
+`PowerShell`; a PowerShell line is read as a Bash one. SessionStart, PreCompact and `defects-inject.sh reset` exit
+silently for a subagent (input carries a non-empty `agent_id`; `handoff.py` `mode` check too).
 
 ## Entry points
 - `.claude/hooks/session-start-brief.sh` - map line, profile/bootstrap offers, `maintenance due: ...` for gc,
-  evolve, map, its `[VULYK] memory triage (...)` ask-once line (a no runs `--mark`), and (0.48) a line naming an
-  enabled plugin whose `hooks/` greps `tool.check` (heuristic; such a mod can approve a call git-guard denied).
-- `.claude/hooks/git-guard.sh` (0.48, PreToolUse `Bash|PowerShell`; card `work-discarded-by-git-verb`;
-  `docs/hooks-reference.md`)
-  - denies git verbs that discard uncommitted work: stash push/save/bare/-u/drop/clear, `checkout .|-f|-- <path>`,
-  worktree `restore`, `reset --hard`, `clean -f`, `switch -f`, `branch -D`, `worktree remove -f`. Input with
-  `agent_id` (subagent): every listed verb denied, no `git status`, unreadable quotes denied. Main session: denied
-  only if `git status --porcelain` shows the affected paths dirty (clean -f/stash -u: untracked too); names 10 then
-  `+N more`; stash drop/clear and `branch -D` are subagent-only. Follows `cd`/`-C`. Fails open (no python, bad JSON,
-  error: exit 0). Python tried in order `$VULYK_PY`, python3, python, py; stdin read as UTF-8 (0.50). `--check <file>`
-  (the card's check; `porcelain` field fakes status): exit 1 on deny. Python sits in a no-op heredoc below `exit 0`.
-  Not covered: rm, `bash -c`, scripts/aliases.
+  evolve, map, its `[VULYK] memory triage (...)` ask-once line (a no runs `--mark`), (0.48) a line naming an
+  enabled plugin whose `hooks/` greps `tool.check` (heuristic; such a mod can approve a call git-guard denied), (0.53) a
+  `[VULYK] no Python 3 found ...` line when none of `$VULYK_PY`, python3, python, py runs, and a line for a GitHub template
+  copy of VULYK (VULYK's own `docs/specs` and `install.sh`, no `.claude/vulyk-version`, no `v*` tag).
 - `.claude/hooks/vulyk-update-check.sh` - SessionStart update check; network at most every
   `VULYK_UPDATE_INTERVAL_HOURS` (default 6, 0.51); cache `.claude/.vulyk-update-cache` = `<epoch> <latest> <UTC time>`
-  (no time field = expired); the line ends `(checked <date time> UTC)`.
+  (no time field = expired); the line ends `(checked <date time> UTC)`. Sources `scripts/version-order.sh`
+  (missing: exit 0); latest = `version_newest` over the tags, shown only if `version_newer "$LATEST" "$INSTALLED"`.
+- `scripts/version-order.sh` (0.53, sourced; also by `vulyk-update.sh`) - `version_newer <a> <b>` (rc 0 = a newer),
+  `version_newest` (newest of stdin lines). Leading `v` dropped; X.Y.Z numeric; a release beats its `-<pre>`; two
+  pre-releases compare by the number after the last dot (`dev.10` > `dev.3`); a non-number field = 0. No `sort -V`.
+- `.claude/hooks/skill-usage-counter.sh` - PostToolUse `Skill`; counts only project skill folders and `vulyk-*` commands
+  into `memory/stats/skills.json` (local, gitignored, never shipped; a key failing the rule is dropped on the next write).
 - `.claude/hooks/handoff.py` (0.51, handoff-1m) - offers a handoff at 70/80/90% (`thresholds_pct`) of the real window.
   A session with no statusLine copy of its own takes the window from the newest report for the same model
   (`model_window`, `[1m]` suffix dropped, <= 30 days old); `context_limit` in `.claude/handoff.config.json` pins it.
@@ -33,23 +34,25 @@ and the `defects-*` bullet in `scripts-checks.md`.
   fires on, 0.52) it judges the tree's `.claude/hooks/handoff.py` instead.
 - `.claude/hooks/handoff.sh` - skips a `python3` that is the Windows Store stub (exit 49) or fails to launch,
   and starts a working Python once per call (0.43.1); `handoff.py` `_REDACT_FALLBACK` mirrors `redact.sh` (same
-  masks, incl. the 0.50.2 cookie-header, `*_KEY`/`*_AUTH` and OTP rules).
+  masks, incl. the 0.50.2 cookie-header, `*_KEY`/`*_AUTH` and OTP rules; 0.53: Russian/Ukrainian secret keywords too).
 - `redact.sh` (stdin mask; masks `passphrase`/`cookie` keywords, an ssh public key body, a URL password with an
   empty user `scheme://:pw@host`; a `Cookie:`/`Set-Cookie:` header whose value holds a name=value pair loses the
-  rest of the line (0.50.2); a `*_KEY` name (dotted names, glued upper-case `KEY`, and `*_AUTH` names included)
-  with a 16+ char value, `base64:` prefix optional (`KEY_VALUE`); an OTP key at the key's end: `OTP`, `TOTP`,
-  optional `_code` suffix).
+  rest of the line (0.50.2); a `*_KEY`/`*_AUTH` name with a 16+ char value, `base64:` prefix optional; an OTP key
+  (`OTP`, `TOTP`, optional `_code`); 0.53: Russian and Ukrainian secret keywords, secrets stated in prose,
+  credentials passed as command arguments, more service-token/webhook shapes, bare cloud secret keys; ordinary text
+  passes byte-identical). When it cannot mask (sed/awk missing, dialect rejected, a filter fails) it withholds: stdout is
+  `[VULYK:REDACT-FAILED]`, stderr `redact: degraded: <why>`, `telemetry.sh record redact_degraded` runs, exit 1.
+  `human-check.sh` and `acceptance-log.sh` then refuse (`REFUSED`) and record nothing.
   `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan`, `bundle`, `check`,
   `publish`, `inbox`; `vulyk_version`: `.claude/vulyk-version`, else `VERSION` beside `install.sh`, else `0.0.0`.
   `ENUM`/`AGENTS` are append-only (removed agents go to `RETIRED_AGENTS`; `ENUM` ends `model_below_floor`,
-  `fable_limit_fallback`). `agent_prefix_high` (0.52) fires only when the agent type is in `AGENTS` (built-ins such
-  as `general-purpose` and a hive's own agents are skipped).
+  `fable_limit_fallback`, `redact_degraded`). `agent_prefix_high` (0.52) fires only when the agent type is in `AGENTS`.
   The scan counts handoff Python starts (0.43.1). Dates go through `date_epoch` /
   `date_shift` (prev ISO week = `date_shift -7 +%G-W%V`).
 - `memory-triage.sh` - read-only lister behind `/vulyk-gc memory`; `--mark` is its one write.
 
 ## Gotchas
-- git-guard fails open: no python, bad JSON or an error exits 0, so a missing Python removes the guard.
-- The guard does not cover `rm`, `bash -c`, scripts or aliases.
+- A hook's missing Python is not uniform: git-guard/owner-guard/court-guard fail closed (`scripts-guards.md`); the update check,
+  session brief and handoff fail open (no Python = the feature is off, the brief says so).
 
-last-verified: 2026-11-13 (0.52.0 beta-fixes-1113: agent_prefix_high, handoff-window-check; handoff-1m)
+last-verified: 2026-11-14 (0.53.0-dev.1 audit-fixes-1113; guards split out to scripts-guards.md)
