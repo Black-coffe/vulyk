@@ -33,3 +33,4 @@
 - 2026-11-14T07:30:09Z · 03-building · repair round 3: audit-fixes-1113-16-repair-round-3.md · next: build:8
 - 2026-11-14T07:30:52Z · 03-building · checkpoint after 56 min at build:8 · next: round 3 RED (wiring 212 s > 210, owner-guard header); council-opus empty again in round 3 despite d224211d; relaunching for repair 16
 - 2026-11-14T07:32:41Z · 03-building · revised audit-fixes-1113-16 · next: build
+- 2026-11-14T07:45:57Z · 04-council:open · round 4 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-4 · next: dispatch:opus,review
