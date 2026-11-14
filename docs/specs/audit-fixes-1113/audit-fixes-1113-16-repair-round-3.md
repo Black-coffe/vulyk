@@ -6,7 +6,7 @@ worker: worker-code
 model: opus
 wave: 8
 blocked_by: []
-red: none
+red:
 red_reason:
 ---
 
