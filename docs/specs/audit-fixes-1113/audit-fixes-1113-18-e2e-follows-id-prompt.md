@@ -7,7 +7,6 @@ tier: 3
 worker: worker-code
 wave: 10
 blocked_by: [audit-fixes-1113-17]
-red:
 ---
 
 # The e2e worker stub follows the driver's story-id prompt
