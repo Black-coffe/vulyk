@@ -20,3 +20,4 @@
 - 2026-11-14T02:23:42Z · 03-building · approved records seeded from commit subjects: 14 stories (claim) · next: build
 - 2026-11-14T03:11:51Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-1 · next: dispatch:opus,review
 - 2026-11-14T03:14:38Z · 04-council · checkpoint after 50 min at dispatch:opus,review · next: relaunching with a fresh stamp
+- 2026-11-14T04:15:57Z · 04-council:RED · round 1 verdict RED at d974e00c pack 475733085b95 · next: repair
