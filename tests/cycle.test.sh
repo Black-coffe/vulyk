@@ -11,7 +11,7 @@
 # owner looks again -> READY -> --record. Each step asserts what ship-check.sh and
 # human-check.sh must say. Exit 1 on the first wrong answer.
 set -u
-PARTS="ship hooklog gates manual close close2 scope bsd safety red red2" # one topic each; every part rebuilds the shared setup below
+PARTS="ship hooklog gates manual close close2 scope approved bsd safety red red2" # one topic each; every part rebuilds the shared setup below
 PART=''
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -1197,7 +1197,7 @@ if part close2; then # --- part close2: the approved-commit reads, done-only-by-
 echo "ADR-032 D1: close-story and stamp-red read ## Verification, ## Files and red: from the story's approved commit"
 mkdir -p docs/specs/trust docs/specs/trust1
 cp "$SRC"/templates/plan.md docs/specs/trust/plan.md; cp "$SRC"/templates/plan.md docs/specs/trust1/plan.md
-sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\13/' docs/specs/trust/plan.md
+sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\13/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/trust/plan.md   # branched: claim seeds the records (A1)
 sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\11/' docs/specs/trust1/plan.md
 printf 'v1\n' > trust-app.txt
 trust_story() { # trust_story <spec> <nn> <frontmatter-lines> - in progress, `returned:` empty, wave 1, ## Files trust-app.txt, ## Verification `true`
@@ -1206,7 +1206,7 @@ trust_story() { # trust_story <spec> <nn> <frontmatter-lines> - in progress, `re
 }
 trust_story trust 01 ''; trust_story trust 02 $'red: required\nred_reason:\n'; trust_story trust 03 ''
 git add -A && git commit -qm "vulyk(trust): plan" >/dev/null
-bash scripts/cycle.sh claim docs/specs/trust t9 >/dev/null 2>&1; bash scripts/cycle.sh release docs/specs/trust t9 >/dev/null 2>&1   # S1: the Tier 3 wave's claim head
+bash scripts/cycle.sh claim docs/specs/trust t9 >/dev/null 2>&1; bash scripts/cycle.sh release docs/specs/trust t9 >/dev/null 2>&1   # S1: the Tier 3 wave's claim head; A1: claim seeds each story's record
 TSHA="$(git rev-parse --short HEAD)"; TBAK="$(mktemp)"
 t1=docs/specs/trust/trust-01.md; t2=docs/specs/trust/trust-02.md; t3=docs/specs/trust/trust-03.md
 for f in "$t1" "$t2" "$t3"; do sed_inplace 's/^returned:$/returned: DONE/' "$f"; done
@@ -1242,22 +1242,22 @@ out="$(bash scripts/cycle.sh close-story "$t1" --commit 2>&1)"; ex=$?
 git show HEAD:"$t2" > "$t2"
 awk '{ print } /^- trust-app\.txt$/ { print "- trust-b.txt" }' "$t3" > "$TBAK" && cp "$TBAK" "$t3"
 sed_inplace 's/^returned: DONE$/returned:/' "$t3"
-git add -- "$t3" && git commit -qm "vulyk(trust): revised trust-03" -- "$t3" >/dev/null
+bash scripts/cycle.sh revise "$t3" >/dev/null 2>&1
 sed_inplace 's/^returned:$/returned: DONE/' "$t3"; printf 'b\n' > trust-b.txt
 out="$(bash scripts/cycle.sh close-story "$t3" --commit 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && git show --name-only --format= HEAD | grep -qx trust-b.txt \
-  && echo "  ok    a story revised under vulyk(<slug>): revised <id> closes against the revision" \
+  && echo "  ok    a story revised through cycle.sh revise closes against the revision" \
   || { echo "::error::the revision is not the baseline: story blocks differ from the approved version - exit=$ex out=$out"; fail=1; }
 trust_story trust 04 ''; sed_inplace 's/^returned:$/returned: DONE/' docs/specs/trust/trust-04.md
 out="$(bash scripts/cycle.sh close-story docs/specs/trust/trust-04.md --commit 2>&1)"; ex=$?
-[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"no approved version in git for docs/specs/trust/trust-04.md: commit the plan or a revision first"' \
-  && echo "  ok    a Tier 3 story with no approved version: exit 2 no approved version in git" \
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"no approved record for docs/specs/trust/trust-04.md: run bash scripts/cycle.sh revise docs/specs/trust/trust-04.md"' \
+  && echo "  ok    a Tier 3 story with no approved record: exit 2 no approved record" \
   || { echo "::error::Tier 3 untracked: exit=$ex out=$out"; fail=1; }
 rm -f docs/specs/trust/trust-04.md
 trust_story trust1 01 ''; sed_inplace 's/^returned:$/returned: DONE/' docs/specs/trust1/trust1-01.md
 out="$(bash scripts/cycle.sh close-story docs/specs/trust1/trust1-01.md --commit 2>&1)"; ex=$?
-[ "$ex" -eq 0 ] && [ "$(printf '%s\n' "$out" | grep -c 'no approved version in git')" -eq 1 ] \
-  && echo "  ok    a Tier 1 story with no approved version closes with one stderr note" \
+[ "$ex" -eq 0 ] && [ "$(printf '%s\n' "$out" | grep -c 'no approved record')" -eq 1 ] \
+  && echo "  ok    a Tier 1 story with no approved record closes with one stderr note" \
   || { echo "::error::Tier 1 untracked: exit=$ex out=$out"; fail=1; }
 rm -f "$TBAK"; git add -A && git commit -qm "trust: done" >/dev/null 2>&1
 
@@ -1471,7 +1471,8 @@ sone_story() { # sone_story <spec> <nn> <wave> <file> - todo, `returned:` empty,
 sone_story sone 01 1 sone-a.txt; sone_story sone 02 1 sone-b.txt; sone_story sone 03 2 sone-c.txt; sone_story sonet 01 1 sonet-a.txt
 printf 'a\n' > sone-a.txt; printf 'b\n' > sone-b.txt; printf 'c\n' > sone-c.txt; printf 'x\n' > sone-x.txt; printf 't\n' > sonet-a.txt
 git add -A && git commit -qm "vulyk(sone): plan" >/dev/null
-SONE_PLAN="$(git rev-parse HEAD)"; SONE_REC=.vulyk/state/sone/claim
+for n in 01 02 03; do bash scripts/cycle.sh revise "docs/specs/sone/sone-$n.md" >/dev/null 2>&1; done   # A1: each Tier 3 story's approved record
+SONE_REC=.vulyk/state/sone/claim
 sed_inplace 's/^returned:$/returned: DONE/' docs/specs/sone/sone-03.md; printf 'c2\n' > sone-c.txt
 out="$(bash scripts/cycle.sh close-story docs/specs/sone/sone-03.md --commit 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"no claim head recorded for wave 2"' && grep -q '^status: todo' docs/specs/sone/sone-03.md \
@@ -1519,6 +1520,136 @@ out="$(bash scripts/cycle.sh close-story docs/specs/sone/sone-01.md --commit 2>&
   && echo "  ok    the edit undone: the close passes over the wave-mate's close and the paperwork commit in the range" \
   || { echo "::error::the clean close refused - exit=$ex out=$out"; fail=1; }
 fi # part scope
+if part approved; then # --- part approved: a story's approved version is a commit cycle.sh made (branch, revise, repair), reanchor
+echo "audit-fixes-1113-13 (A1): branch records each story's approved version and wants the plan committed first"
+mkdir -p docs/specs/appr
+cp "$SRC"/templates/plan.md docs/specs/appr/plan.md
+printf '> build the approved demo\n' > docs/specs/appr/brief.md
+sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\13/; s/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-14/' docs/specs/appr/plan.md
+appr_story() { # appr_story <nn> <file> <frontmatter-lines> - todo, `returned:` empty, wave 1, ## Files <file>, ## Verification `true`
+  printf -- '---\nstory: appr-%s\nspec: appr\nstatus: todo\nreturned:\nwave: 1\n%s---\n# Approved fixture %s\n\n## Files\n- %s\n\n## Verification\n`true`\n' \
+    "$1" "$3" "$1" "$2" > "docs/specs/appr/appr-$1.md"
+}
+appr_story 01 appr-a.txt ''; appr_story 02 appr-b.txt ''; appr_story 03 appr-c.txt $'red: required\nred_reason: x\n'
+printf 'a\n' > appr-a.txt; printf 'b\n' > appr-b.txt; printf 'c\n' > appr-c.txt
+git add -A && git commit -qm "appr: plan, by hand" >/dev/null
+appr_story 04 appr-d.txt ''
+out="$(bash scripts/cycle.sh branch docs/specs/appr --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"commit the plan first: docs/specs/appr/appr-04.md"' \
+  && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/demo ] && [ -z "$(marker docs/specs/appr/plan.md Branch)" ] \
+  && echo "  ok    branch with an untracked story: exit 2 commit the plan first, nothing checked out" \
+  || { echo "::error::branch with an untracked story must refuse: commit the plan first - exit=$ex out=$out"; fail=1; }
+rm -f docs/specs/appr/appr-04.md
+printf '\nA hand note.\n' >> docs/specs/appr/appr-01.md
+out="$(bash scripts/cycle.sh branch docs/specs/appr --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"commit the plan first: docs/specs/appr/appr-01.md"' \
+  && echo "  ok    branch with a story that differs from HEAD: exit 2 commit the plan first" \
+  || { echo "::error::branch with a modified story must refuse: commit the plan first - exit=$ex out=$out"; fail=1; }
+git show HEAD:docs/specs/appr/appr-01.md > docs/specs/appr/appr-01.md
+out="$(bash scripts/cycle.sh branch docs/specs/appr --commit 2>&1)"; ex=$?
+BSHA="$(git rev-parse HEAD)"; BSHA7="$(git rev-parse --short HEAD)"
+[ "$ex" -eq 0 ] && [ "$(git rev-parse --abbrev-ref HEAD)" = vulyk/appr ] \
+  && grep -qx "appr-01=$BSHA" .vulyk/state/appr/approved 2>/dev/null && grep -qx "appr-03=$BSHA" .vulyk/state/appr/approved \
+  && grep -qF 'approved records written by branch: 3 stories' docs/specs/appr/journal.md \
+  && echo "  ok    branch --commit records every story at its own commit, with a journal line" \
+  || { echo "::error::branch records: exit=$ex record=$(cat .vulyk/state/appr/approved 2>&1) out=$out"; fail=1; }
+bash scripts/cycle.sh claim docs/specs/appr a1 >/dev/null 2>&1; bash scripts/cycle.sh release docs/specs/appr a1 >/dev/null 2>&1   # S1: the wave's claim head
+
+echo "A1 original case: a story change committed outside cycle.sh leaves the approved version where it was"
+a1=docs/specs/appr/appr-01.md; a3=docs/specs/appr/appr-03.md
+sed_inplace 's/^`true`$/&\n&/' "$a1"   # a second ## Verification line
+git commit -qm "vulyk(appr): revised appr-01" -- "$a1" >/dev/null
+sed_inplace 's/^returned:$/returned: DONE/' "$a1"; printf 'a2\n' > appr-a.txt
+out="$(bash scripts/cycle.sh close-story "$a1" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF "\"error\":\"story blocks differ from the approved version ($BSHA7): ## Verification\"" && grep -q '^status: todo' "$a1" \
+  && echo "  ok    a hand commit under a vulyk(<slug>): revised subject: the close exits 4 against branch's version" \
+  || { echo "::error::a story change committed outside cycle.sh is not approved (vulyk subject, ## Verification) - exit=$ex out=$out"; fail=1; }
+sed_inplace '/^red: required$/d' "$a3"
+git commit -qm "tidy the story" -- "$a3" >/dev/null
+sed_inplace 's/^returned:$/returned: DONE/' "$a3"
+out="$(bash scripts/cycle.sh close-story "$a3" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF "\"error\":\"story blocks differ from the approved version ($BSHA7): red:\"" \
+  && echo "  ok    a hand commit under any other subject dropping red: is refused the same way" \
+  || { echo "::error::a story change committed outside cycle.sh is not approved (plain subject, red:) - exit=$ex out=$out"; fail=1; }
+git show HEAD:"$a3" > "$a3"
+sed_inplace 's/^returned: DONE$/returned:/' "$a1"
+out="$(bash scripts/cycle.sh revise "$a1" 2>&1)"; ex=$?
+RSHA="$(git rev-parse HEAD)"
+[ "$ex" -eq 0 ] && [ "$(git log -1 --format=%s)" = "vulyk(appr): revised appr-01" ] && [ "$(sed -n 's/^appr-01=//p' .vulyk/state/appr/approved | tail -n 1)" = "$RSHA" ] \
+  && git show --name-only --format= HEAD | grep -qx docs/specs/appr/journal.md \
+  && echo "  ok    neighbour: cycle.sh revise commits the story with a journal line and records that commit" \
+  || { echo "::error::revise: exit=$ex subject=$(git log -1 --format=%s) record=$(cat .vulyk/state/appr/approved 2>&1) out=$out"; fail=1; }
+sed_inplace 's/^returned:$/returned: DONE/' "$a1"
+out="$(bash scripts/cycle.sh close-story "$a1" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && git show HEAD:"$a1" | grep -q '^status: done' \
+  && echo "  ok    the same change through cycle.sh revise is approved and closes" \
+  || { echo "::error::a revised story must close against its revise commit - exit=$ex out=$out"; fail=1; }
+
+echo "A1: a Tier 3 story with no record refuses in close-story and stamp-red"
+appr_story 05 appr-e.txt $'red: required\nred_reason: x\n'; sed_inplace 's/^returned:$/returned: DONE/' docs/specs/appr/appr-05.md
+a5msg='no approved record for docs/specs/appr/appr-05.md: run bash scripts/cycle.sh revise docs/specs/appr/appr-05.md'
+out="$(bash scripts/cycle.sh close-story docs/specs/appr/appr-05.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF "\"error\":\"$a5msg\"" \
+  && echo "  ok    close-story: exit 2 no approved record" || { echo "::error::close-story with no record - exit=$ex out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh stamp-red docs/specs/appr/appr-05.md 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF "\"error\":\"$a5msg\"" \
+  && echo "  ok    stamp-red: exit 2 no approved record" || { echo "::error::stamp-red with no record - exit=$ex out=$out"; fail=1; }
+rm -f docs/specs/appr/appr-05.md
+
+echo "reanchor: a main-session commit between two claims is out of scope until reanchor moves the head"
+printf 'hook bits\n' > appr-queen.txt; git add -- appr-queen.txt && git commit -qm "the Queen's hook bits" -- appr-queen.txt >/dev/null
+a2=docs/specs/appr/appr-02.md
+sed_inplace 's/^returned:$/returned: DONE/' "$a2"; printf 'b2\n' > appr-b.txt
+out="$(bash scripts/cycle.sh close-story "$a2" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"edited outside ## Files: appr-queen.txt"' \
+  && echo "  ok    before reanchor the main-session commit counts as out of scope" || { echo "::error::before reanchor - exit=$ex out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh reanchor docs/specs/appr 2>&1)"; ex=$?
+[ "$ex" -ne 0 ] && echo "  ok    reanchor with no --reason refuses" || { echo "::error::reanchor without a reason passed: $out"; fail=1; }
+QSHA="$(git rev-parse HEAD)"
+out="$(bash scripts/cycle.sh reanchor docs/specs/appr --reason "hook bits set by the Queen" 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(sed -n 's/^wave\.1=//p' .vulyk/state/appr/claim | tail -n 1)" = "$QSHA" ] \
+  && grep -qF "claim head of wave 1 moved from $BSHA to $QSHA by reanchor: hook bits set by the Queen" docs/specs/appr/journal.md \
+  && echo "  ok    reanchor moves the wave's head to HEAD and the journal names the move" \
+  || { echo "::error::reanchor: exit=$ex claim=$(cat .vulyk/state/appr/claim 2>&1) journal=$(tail -2 docs/specs/appr/journal.md 2>&1) out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh close-story "$a2" --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    after reanchor the same close passes" || { echo "::error::after reanchor - exit=$ex out=$out"; fail=1; }
+
+echo "A1 seeding: a spec built before this release gets its records once, from claim, with a journal line"
+mkdir -p docs/specs/seed
+cp "$SRC"/templates/plan.md docs/specs/seed/plan.md
+sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\13/; s/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-14/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/appr#' docs/specs/seed/plan.md
+for n in 01 02; do
+  printf -- '---\nstory: seed-%s\nspec: seed\nstatus: todo\nreturned:\nwave: 1\n---\n# Seed %s\n\n## Files\n- seed-%s.txt\n\n## Verification\n`true`\n' "$n" "$n" "$n" > "docs/specs/seed/seed-$n.md"
+done
+git add -A && git commit -qm "vulyk(seed): plan" >/dev/null
+SSHA="$(git rev-parse HEAD)"
+out="$(bash scripts/cycle.sh claim docs/specs/seed s1 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && grep -qx "seed-01=$SSHA" .vulyk/state/seed/approved 2>/dev/null && grep -qx "seed-02=$SSHA" .vulyk/state/seed/approved \
+  && [ "$(grep -c 'approved records seeded from commit subjects: 2 stories (claim)' docs/specs/seed/journal.md 2>/dev/null)" = 1 ] \
+  && echo "  ok    claim seeds each story from the old subject rule and journals it once" \
+  || { echo "::error::seeding: exit=$ex record=$(cat .vulyk/state/seed/approved 2>&1) out=$out"; fail=1; }
+bash scripts/cycle.sh release docs/specs/seed s1 >/dev/null 2>&1
+rm -f .vulyk/state/seed/approved
+out="$(bash scripts/cycle.sh claim docs/specs/seed s1 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF 'cycle.sh revise' && [ ! -f docs/specs/seed/DRIVER ] \
+  && echo "  ok    a record lost after the seeding line: claim exits 2 naming cycle.sh revise" \
+  || { echo "::error::a lost record must refuse the claim - exit=$ex out=$out"; fail=1; }
+
+echo "A1: repair records its story at repair's own commit"
+mkdir -p docs/specs/apprp
+cp "$SRC/templates/plan.md" docs/specs/apprp/plan.md
+printf '# apprp (brief)\n\n## Request\n> build the thing\n\n## Asks\n1. ask number 1 works\n' > docs/specs/apprp/brief.md
+sed_inplace 's/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-14/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/appr#; s/^\(\*\*Tier:\*\* \)<[^>]*>/\12/' docs/specs/apprp/plan.md
+printf 'a\n' > apprp-a.txt
+done_story docs/specs/apprp/apprp-01-a.md '---\nstory: apprp-01\nstatus: done\nwave: 1\n---\n# A\n\n## Requirements\n> build the thing\n\n## Files\n- apprp-a.txt\n\n## Verification\n`true`\n'
+git add -A && git commit -qm "apprp: fixture" >/dev/null
+bash scripts/cycle.sh open-round docs/specs/apprp --commit >/dev/null 2>&1
+printf 'VERDICT: BLOCK\n## Major\n- [ask 1] ask 1 broke: run: t saw: f\n' | bash scripts/cycle.sh record-seat docs/specs/apprp 1 review >/dev/null 2>&1
+bash scripts/cycle.sh judge docs/specs/apprp --commit >/dev/null 2>&1
+out="$(bash scripts/cycle.sh repair docs/specs/apprp --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ -f docs/specs/apprp/apprp-02-repair-round-1.md ] && grep -qx "apprp-02=$(git rev-parse HEAD)" .vulyk/state/apprp/approved 2>/dev/null \
+  && echo "  ok    repair --commit records the repair story" || { echo "::error::repair record: exit=$ex record=$(cat .vulyk/state/apprp/approved 2>&1) out=$out"; fail=1; }
+fi # part approved
 if part bsd; then # --- part bsd: cycle.sh under a BSD sed, conventional subjects, command_cell_exists
 echo "cycle.sh under a BSD (macOS) sed, and a Profile whose Commit convention is conventional: chore(...) subjects"
 REAL_SED="$(command -v sed)"; BSD="$(mktemp -d)"

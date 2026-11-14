@@ -1,8 +1,8 @@
 ---
 story: audit-fixes-1113-13
 spec: audit-fixes-1113
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -10,6 +10,7 @@ wave: 5
 blocked_by: [audit-fixes-1113-09]
 red: required
 red_reason: a story change committed outside cycle.sh is not approved
+red_verified_at: 2026-11-14T02:21:26Z 34cdd221c30b3ed937c8334cd0c447a89c1e4192cac98b909a85cce3afebc2bd
 ---
 
 # A story's approved version is a commit cycle.sh made
@@ -85,3 +86,34 @@ line; the Queen relaunches the driver and its `advance --claim` writes the recor
 
 ## Implementation notes
 <!-- files changed, decisions, surprises - 1-2 lines each; end with one `CHANGELOG:` line for the ask. -->
+- scripts/cycle.sh: records in `.vulyk/state/<slug>/approved` (record_approved/approved_sha); `branch` refuses an untracked or modified story and records each story; `revise` and `reanchor` verbs; `repair --commit` records; `claim`/`branch` seed once from the old subject rule (seed_approved), `claim` refuses a missing record after that (approved_missing_guard); story_blocks_guard reads the record, no subject.
+- Ported by hand from the partial patch, not copied: `branch` still commits the spec folder (named-path staging is P1, story 14); no `status_hand_note`; seeding writes its journal line only when it seeded at least one story, so claims on fixture specs with no paperwork subjects stay journal-free.
+- `claim_wave` split out of record_claim_head so `reanchor` picks the same wave; reanchor's reason goes through redact_note.
+- tests/cycle.test.sh: new part `approved`; close2's trust fixture is branched (claim seeds) and uses `revise`; scope's sone stories get `revise` first. council/solo/e2e needed no fixture change.
+- Before stamp-red the implementation was prototyped in a scratchpad copy to check the sealed tests (cycle all parts, council verbs/verbs2/verbs3/judge2/advance/roster/close, solo, e2e green there; council driver needs $SRC git history, not checkable in a copy); the tree got it only after the receipt.
+- CHANGELOG: (ask 9) a story's approved version is the commit `cycle.sh` made and recorded (`branch`, the new `revise`, `repair`), never a commit subject; `cycle.sh reanchor` moves a wave's claim head with a journaled reason.
+
+## Red receipt
+- command: bash tests/cycle.test.sh --part approved
+- exit: 1
+- tests: 34cdd221c30b3ed937c8334cd0c447a89c1e4192cac98b909a85cce3afebc2bd (tests/council.test.sh, tests/cycle.test.sh, tests/e2e.test.sh, tests/solo.test.sh)
+- impl: 82de847dcc93a7a173d88897035d8913d8d1cf69b2471f2421ae201336e02235
+- stamped: 2026-11-14T02:21:26Z
+
+```
+::error::a story change committed outside cycle.sh is not approved (vulyk subject, ## Verification) - exit=2 out=scope-check: appr-01 - declared 1, changed 1, out of scope 0
+::error::a story change committed outside cycle.sh is not approved (plain subject, red:) - exit=2 out=cycle: close-story - no approved version in git for docs/specs/appr/appr-03.md: commit the plan or a revision first
+::error::after reanchor - exit=2 out=cycle: close-story - no approved version in git for docs/specs/appr/appr-02.md: commit the plan or a revision first
+{"ok":false,"verb":"close-story","exit":2,"next":"error","error":"no approved version in git for docs/specs/appr/appr-02.md: commit the plan or a revision first","now":1794622553}
+A1 seeding: a spec built before this release gets its records once, from claim, with a journal line
+::error::seeding: exit=0 record=cat: .vulyk/state/seed/approved: No such file or directory out=cycle: seed - claimed by s1
+{"ok":true,"verb":"claim","exit":0,"next":"claimed","now":1794622554}
+::error::a lost record must refuse the claim - exit=0 out=cycle: seed - claimed by s1
+{"ok":true,"verb":"claim","exit":0,"next":"claimed","now":1794622555}
+A1: repair records its story at repair's own commit
+::error::repair record: exit=0 record=cat: .vulyk/state/apprp/approved: No such file or directory out=cycle: apprp - repair story for round 1: docs/specs/apprp/apprp-02-repair-round-1.md
+{"ok":true,"verb":"repair","exit":0,"next":"build:2","now":1794622562,"status":{"spec":"docs/specs/apprp","slug":"apprp","stage":"04-council:RED","next":"build:2","briefed":true,"approved":true,"branch":"vulyk/appr","head":"50f7ff0","pack":"df0173297742","now":1794622562,"stories":{"todo":1,"in-progress":0,"done":1,"blocked":0},"wave":2,"wave_stories":[{"file":"docs/specs/apprp/apprp-02-repair-round-1.md","story":"apprp-02","worker":"worker-code","model":"opus","repeat":1}],"round":1,"ceiling":2,"tier":2,"open":false,"court":null,"missing":[],"stale":false,"verdict":"RED","review":"BLOCK","red":[],"round_dir":"docs/specs/apprp/council/round-1","paused":false,"shipped":false,"since":null,"seat_attempt":{},"seats":[],"manual":[]}}
+```
+
+## Findings
+- (resolved after the relaunch seeded the records) close-story exit 2, the expected gate line (story Goal): `no approved record for docs/specs/audit-fixes-1113/audit-fixes-1113-13-approved-record.md: run bash scripts/cycle.sh revise docs/specs/audit-fixes-1113/audit-fixes-1113-13-approved-record.md`. The wave was claimed by the old script, so no record exists; relaunch the driver so `advance --claim` seeds the records (journal line `approved records seeded from commit subjects`), then rerun close-story. Red receipt is in place; implementation and docs are in the tree, uncommitted.

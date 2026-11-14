@@ -10,10 +10,10 @@ records `--go`: without `**Approved:**`, `branch` refuses (`Tier <N> plan needs 
 docs/specs/<slug> --go --commit`.
 
 A story you change after a worker's `NEEDS_CONTEXT` (its `## Files`, `## Verification` or `red:`) is
-committed before its worker runs again: `git add <story> && git commit -m "vulyk(<slug>): revised
-<story-id>"` (`chore(vulyk-<slug>): revised <story-id>` under conventional commits). close-story compares
-those blocks with that commit and refuses a copy that differs (`story blocks differ from the approved
-version`). A sealed test changed after its red receipt, with the implementation already written: after
+committed before its worker runs again with `bash scripts/cycle.sh revise <story>`: it commits the story
+with `plan.md`, `brief.md` and a journal line and records that commit as the approved version. A hand
+commit approves nothing, whatever its subject. close-story compares those blocks with the recorded commit
+and refuses a copy that differs (`story blocks differ from the approved version`). A sealed test changed after its red receipt, with the implementation already written: after
 `/vulyk-pause`, run `bash scripts/cycle.sh stamp-red <story> --baseline` (it stamps against HEAD's
 implementation and puts the working copy back), then resume; never `git stash`.
 
@@ -92,7 +92,7 @@ No driver, no clerk, no court. Loop:
    - `status` `needs_context` (a worker returned `NEEDS_CONTEXT` with its story still todo; the driver
      dispatched nothing more and released its claim): for each entry of `stories`, read that story's
      `## Findings` (the entry's `report` is the worker's return), answer it by revising the story and
-     committing it under the `revised <story-id>` rule above, run `bash scripts/journal.sh docs/specs/<slug>
+     committing it with `cycle.sh revise` as above, run `bash scripts/journal.sh docs/specs/<slug>
      03-building "needs_context on <story-id>" "<the answer>"`, make a fresh `stamp` and call step 3 again.
    - A worker that returned without closing left edits in its `## Files`: the relaunch's claim accepts
      them (`leftover`, only for todo stories of the current wave; any other dirty path is still refused)

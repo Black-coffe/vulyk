@@ -1634,6 +1634,19 @@ cmd_branch() { # cmd_branch <spec> <commit:0|1> [<go:0|1>]
   local BR="vulyk/$SLUG"
   local branch_v; branch_v="$(marker "$PLAN" Branch)"
   if [ -z "$branch_v" ]; then
+    # A1 (audit-fixes-1113): `branch` records every story's approved version, so each must be the
+    # committed plan's copy - an untracked story or one that differs from HEAD has no version to record.
+    local sf
+    while IFS= read -r sf; do
+      [ -n "$sf" ] || continue
+      if [ -z "$(git -c core.quotePath=false ls-files -- "$sf" 2>/dev/null)" ] || ! git diff --quiet HEAD -- "$sf" 2>/dev/null; then
+        echo "cycle: branch - $sf is untracked or differs from HEAD: commit the plan first" >&2
+        emit false branch 2 error "commit the plan first: $sf"
+        exit 2
+      fi
+    done <<EOF
+$(spec_story_files "$SPEC")
+EOF
     local co_err co_status
     if git rev-parse --verify -q "$BR" >/dev/null 2>&1; then
       # ship-safety: an old spec's branch, merged and behind the default tip, is not a place to
@@ -1664,9 +1677,22 @@ cmd_branch() { # cmd_branch <spec> <commit:0|1> [<go:0|1>]
       printf '%s\n' "$line" >> "$PLAN"
     fi
     bash "$HERE/journal.sh" "$SPEC" "03-building" "branch $BR created" "build:1" >/dev/null
+    bash "$HERE/journal.sh" "$SPEC" "03-building" "$APPROVED_LINE written by branch: $(spec_story_files "$SPEC" | grep -c .) stories" "build:1" >/dev/null
   fi
 
   [ "$DOCOMMIT" = "1" ] && commit_paperwork branch "vulyk($SLUG): branch $BR" "$SPEC"
+  if [ -z "$branch_v" ]; then
+    # each story at branch's own commit (HEAD without --commit), whose copy equals the committed plan's
+    local rsf rsha; rsha="$(git rev-parse HEAD)"
+    while IFS= read -r rsf; do
+      [ -n "$rsf" ] || continue
+      record_approved "$rsf" "$rsha" || { emit false branch 2 error "could not write the approved record"; exit 2; }
+    done <<EOF
+$(spec_story_files "$SPEC")
+EOF
+  else
+    seed_approved "$SPEC" branch
+  fi
 
   echo "cycle: $SLUG - branch $BR"
   emit_status branch "$SPEC" "build:1"
@@ -2415,8 +2441,9 @@ fm_red() { # fm_red <story-file> - the `red:` mark from the frontmatter only, cu
 }
 
 approved_rev() { # approved_rev <story-file> -> the sha of the newest commit touching the story whose
-  # subject is a paperwork subject of its spec, `vulyk(<slug>): ...` or `chore(vulyk-<slug>): ...`
-  # (ADR-032 D1), or nothing: the story's approved version.
+  # subject is a paperwork subject of its spec, `vulyk(<slug>): ...` or `chore(vulyk-<slug>): ...`, or
+  # nothing. Only the one-time seeding of `claim` and `branch` reads it (seed_approved, audit-fixes-1113
+  # A1): the approved version itself is the run state's record (approved_sha).
   local slug sha subj
   slug="$(slug_of "$(dirname "$1")")"
   while IFS="$(printf '\t')" read -r sha subj; do
@@ -2429,21 +2456,80 @@ EOF
   return 0
 }
 
-story_blocks_guard() { # story_blocks_guard <story-file> <verb> - ADR-032 D1: the gate blocks
-  # (`## Verification` with `repeat:`, `## Files`, `red:`, `narrow:`) of the working copy must equal the approved
-  # version's, each read through its own parser; any difference is exit 4. No approved version is
-  # exit 2 at Tier 3-4, a stderr note at Tier 1-2 or with no tier.
+story_id_of() { # story_id_of <story-file> -> its `story:` id, else its file name without .md
+  local id; id="$(fm_field "$1" story)"; [ -n "$id" ] || id="$(basename "$1" .md)"
+  printf '%s' "$id"
+}
+
+approved_sha() { state_get "$ROOT" "$(slug_of "$(dirname "$1")")" "$(story_id_of "$1")" approved; } # approved_sha <story-file>
+
+record_approved() { # record_approved <story-file> <sha> - A1: <sha> is a commit cycle.sh itself made
+  state_put "$(dirname "$1")" approved "$(story_id_of "$1")" "$2"
+}
+
+spec_story_files() { # spec_story_files <spec> -> each story file of the spec, one per line
+  local f
+  for f in "$1"/*.md; do [ -f "$f" ] && is_story_file "$f" && printf '%s\n' "$f"; done
+  return 0
+}
+
+APPROVED_LINE="approved records" # the journal phrase of a spec whose records are written: no seeding after it
+
+seed_approved() { # seed_approved <spec> <verb> - A1: a spec built before audit-fixes-1113 (branched, no
+  # record file, no journal line) gets its records once, from the old subject rule, and one journal line.
+  # A spec seeded or recorded before is never seeded again: a record lost after the line stays lost.
+  local spec="$1" verb="$2" f sha n=0
+  [ -n "$(marker "$spec/plan.md" Branch)" ] || return 0
+  [ -f "$(cycle_state_dir "$ROOT" "$(slug_of "$spec")")/approved" ] && return 0
+  grep -qF "$APPROVED_LINE" "$spec/journal.md" 2>/dev/null && return 0
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    sha="$(approved_rev "$f")"
+    [ -n "$sha" ] || continue
+    record_approved "$f" "$sha" || { emit false "$verb" 2 error "could not write the approved record"; exit 2; }
+    n=$((n+1))
+  done <<EOF
+$(spec_story_files "$spec")
+EOF
+  [ "$n" -gt 0 ] || return 0   # nothing seeded: no line, so a later claim may still seed
+  bash "$HERE/journal.sh" "$spec" "03-building" "$APPROVED_LINE seeded from commit subjects: $n stories ($verb)" "build" >/dev/null
+  echo "cycle: $verb - $(slug_of "$spec"): $APPROVED_LINE seeded from commit subjects for $n stories" >&2
+}
+
+approved_missing_guard() { # approved_missing_guard <spec> <verb> - A1: after the one-time seeding, a branched
+  # Tier 3-4 spec whose open story has no approved record refuses; `cycle.sh revise <story>` records it
+  local spec="$1" verb="$2" f msg
+  [ -n "$(marker "$spec/plan.md" Branch)" ] || return 0
+  case "$(tier_of "$spec")" in 3|4) ;; *) return 0 ;; esac
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [ "$(fm_field "$f" status)" = done ] && continue
+    [ -n "$(approved_sha "$f")" ] && continue
+    msg="no approved record for $f: run bash scripts/cycle.sh revise $f"
+    echo "cycle: $verb - $msg" >&2
+    emit false "$verb" 2 error "$msg"
+    exit 2
+  done <<EOF
+$(spec_story_files "$spec")
+EOF
+}
+
+story_blocks_guard() { # story_blocks_guard <story-file> <verb> - ADR-032 D1, A1 (audit-fixes-1113): the gate
+  # blocks (`## Verification` with `repeat:`, `## Files`, `red:`, `narrow:`) of the working copy must equal
+  # those of the approved version, the story file in the commit `cycle.sh` itself made and recorded for it
+  # (`branch`, `revise`, `repair`), each read through its own parser; any difference is exit 4. No commit
+  # subject is read here. No record is exit 2 at Tier 3-4, a stderr note at Tier 1-2 or with no tier.
   local story="$1" verb="$2" sha rel base diffs="" msg
-  sha="$(approved_rev "$story")"
+  sha="$(approved_sha "$story")"
   if [ -z "$sha" ]; then
     case "$(tier_of "$(dirname "$story")")" in
       3|4)
-        msg="no approved version in git for $story: commit the plan or a revision first"
+        msg="no approved record for $story: run bash scripts/cycle.sh revise $story"
         echo "cycle: $verb - $msg" >&2
         emit false "$verb" 2 error "$msg"
         exit 2 ;;
     esac
-    echo "cycle: $verb - note: no approved version in git for $story; its working copy stands" >&2
+    echo "cycle: $verb - note: no approved record for $story; its working copy stands" >&2
     return 0
   fi
   rel="${story#./}"
@@ -4073,23 +4159,28 @@ state_put() { # state_put <spec> <record> <key> <value> - appends one `key=value
   printf '%s=%s\n' "$3" "$4" >> "$dir/$2"
 }
 
+claim_wave() { # claim_wave <spec> -> the wave the build is on: status's `wave`, else the lowest wave of a
+  # story not done, else nothing
+  local w f fw
+  w="$(json_field "$(cmd_status "$1" 2>/dev/null)" wave)"
+  case "$w" in ''|*[!0-9]*)
+    w=""
+    for f in "$1"/*.md; do
+      [ -f "$f" ] && is_story_file "$f" || continue
+      fm_status_wave "$f"
+      [ "$FM_STATUS" = done ] && continue
+      fw="${FM_WAVE:-1}"; case "$fw" in ''|*[!0-9]*) fw=1 ;; esac; fw=$((10#$fw))
+      { [ -z "$w" ] || [ "$fw" -lt "$w" ]; } && w="$fw"
+    done ;;
+  esac
+  printf '%s' "$w"
+}
+
 record_claim_head() { # record_claim_head <spec> [<wave>] - S1: the head of the wave the build is on (<wave>, else
   # status's `wave`, else the lowest wave of a story not done), written once per wave: a second claim of the
   # same wave keeps the first head. close-story at Tier 3-4 counts its scope from it.
-  local w="${2:-}" f fw
-  if [ -z "$w" ]; then
-    w="$(json_field "$(cmd_status "$1" 2>/dev/null)" wave)"
-    case "$w" in ''|*[!0-9]*)
-      w=""
-      for f in "$1"/*.md; do
-        [ -f "$f" ] && is_story_file "$f" || continue
-        fm_status_wave "$f"
-        [ "$FM_STATUS" = done ] && continue
-        fw="${FM_WAVE:-1}"; case "$fw" in ''|*[!0-9]*) fw=1 ;; esac; fw=$((10#$fw))
-        { [ -z "$w" ] || [ "$fw" -lt "$w" ]; } && w="$fw"
-      done ;;
-    esac
-  fi
+  local w="${2:-}"
+  [ -n "$w" ] || w="$(claim_wave "$1")"
   case "$w" in ''|*[!0-9]*) return 0 ;; esac
   w=$((10#$w))
   [ -n "$(state_get "$ROOT" "$(slug_of "$1")" "wave.$w" claim)" ] && return 0
@@ -4118,6 +4209,11 @@ cmd_claim() { # cmd_claim <spec> <stamp>
     emit false claim 2 error "held by $holder; run: bash scripts/cycle.sh release $SPEC $holder if that driver is dead"
     exit 2
   fi
+
+  # A1 (audit-fixes-1113): a spec built before this release gets its approved records once, here or at
+  # `branch`; a record missing after that refuses before the DRIVER is written.
+  seed_approved "$SPEC" claim
+  approved_missing_guard "$SPEC" claim
 
   # ADR-013 D5: the same predicate open-round applies, checked before the build instead of
   # after it - an owner's stray file used to surface only when the first round tried to open.
@@ -4362,6 +4458,7 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
       if [ "$DOCOMMIT" = "1" ]; then
         local -a cpaths=("$f"); [ -f "$SPEC/journal.md" ] && cpaths+=("$SPEC/journal.md")
         commit_paperwork repair "vulyk($SLUG): repair round $N" ${cpaths[@]+"${cpaths[@]}"}
+        [ -n "$(approved_sha "$f")" ] || record_approved "$f" "$(git rev-parse HEAD)"   # A1: the first run's commit failed
       fi
       emit_status repair "$SPEC"
       exit 0
@@ -4480,10 +4577,68 @@ EOF
   fi
 
   bash "$HERE/journal.sh" "$SPEC" "03-building" "repair round $N: $(basename "$STORY")" "build:$WAVE" >/dev/null
-  [ "$DOCOMMIT" = "1" ] && commit_paperwork repair "vulyk($SLUG): repair round $N" "$STORY" "$SPEC/journal.md"
+  if [ "$DOCOMMIT" = "1" ]; then
+    commit_paperwork repair "vulyk($SLUG): repair round $N" "$STORY" "$SPEC/journal.md"
+    record_approved "$STORY" "$(git rev-parse HEAD)" || { emit false repair 2 error "could not write the approved record"; exit 2; } # A1
+  fi
 
   echo "cycle: $SLUG - repair story for round $N: $STORY${NARROW:+ (narrow: $nfile, the next round is review-only)}"
   emit_status repair "$SPEC"
+  exit 0
+}
+
+# --- revise (A1, audit-fixes-1113): the one way to change a story's gate blocks, or plan.md / brief.md,
+# once the plan is committed. It commits the story with the spec's plan.md, brief.md and a journal line,
+# subject `vulyk(<slug>): revised <story-id>`, and records that commit as the story's approved version.
+
+cmd_revise() { # cmd_revise <story-file>
+  local STORY="$1"
+  [ -n "$STORY" ] && [ -f "$STORY" ] && is_story_file "$STORY" || {
+    echo "cycle: usage: $0 revise <story-file>" >&2
+    emit false revise 1 error "usage"
+    exit 1
+  }
+  local SPEC SLUG ID f; SPEC="$(dirname "$STORY")"; SLUG="$(slug_of "$SPEC")"; ID="$(story_id_of "$STORY")"
+  pause_guard "$SPEC" revise
+  branch_guard "$SPEC" revise
+  bash "$HERE/journal.sh" "$SPEC" "03-building" "revised $ID" "build" >/dev/null
+  local -a paths=()
+  for f in plan brief journal; do [ -e "$SPEC/$f.md" ] && paths+=("$SPEC/$f.md"); done
+  paths+=("$STORY")
+  commit_paperwork revise "vulyk($SLUG): revised $ID" ${paths[@]+"${paths[@]}"}
+  record_approved "$STORY" "$(git rev-parse HEAD)" || { emit false revise 2 error "could not write the approved record"; exit 2; }
+  echo "cycle: $ID - revised, approved at $(git rev-parse --short HEAD)"
+  emit_status revise "$SPEC"
+  exit 0
+}
+
+# --- reanchor (audit-fixes-1113): the main session moves the claim head of the wave the build is on to
+# HEAD, with a reason in the journal - a commit of its own made between two claims (hook bits, a revise)
+# then no longer counts as a worker's out-of-scope edit. A recorded head is never moved by hand.
+
+cmd_reanchor() { # cmd_reanchor <spec> <reason> <commit:0|1>
+  local SPEC="$1" REASON="$2" DOCOMMIT="$3" w old new
+  [ -n "$SPEC" ] && [ -d "$SPEC" ] && [ -n "$REASON" ] || {
+    echo "cycle: usage: $0 reanchor <spec-dir> --reason <text> [--commit]" >&2
+    emit false reanchor 1 error "usage: reanchor needs a spec and --reason"
+    exit 1
+  }
+  pause_guard "$SPEC" reanchor
+  branch_guard "$SPEC" reanchor
+  w="$(claim_wave "$SPEC")"
+  case "$w" in ''|*[!0-9]*)
+    echo "cycle: reanchor - $(slug_of "$SPEC") has no open wave" >&2
+    emit false reanchor 2 error "no open wave"
+    exit 2 ;;
+  esac
+  w=$((10#$w))
+  old="$(state_get "$ROOT" "$(slug_of "$SPEC")" "wave.$w" claim)"; new="$(git rev-parse HEAD)"
+  state_put "$SPEC" claim "wave.$w" "$new" || { emit false reanchor 2 error "could not write the claim head"; exit 2; }
+  REASON="$(redact_note "$REASON")" || REASON="(reason withheld)"
+  bash "$HERE/journal.sh" "$SPEC" "03-building" "claim head of wave $w moved from ${old:-none} to $new by reanchor: $REASON" "build:$w" >/dev/null
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork reanchor "vulyk($(slug_of "$SPEC")): reanchor wave $w" "$SPEC/journal.md"
+  echo "cycle: $(slug_of "$SPEC") - claim head of wave $w now $(git rev-parse --short "$new")"
+  emit_status reanchor "$SPEC"
   exit 0
 }
 
@@ -4618,8 +4773,10 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
 case "$VERB" in
   status|judge|branch|record-seat|resume|manual-done|open-round|suite|reopen|repair|advance)
     [ -n "$SPEC" ] && [ -d "$SPEC" ] && story_status_guard "$SPEC" "$VERB" ;;
-  close-story)
-    [ -f "$SPEC" ] && story_status_guard "$(dirname "$SPEC")" close-story ;;
+  close-story|revise)
+    [ -f "$SPEC" ] && story_status_guard "$(dirname "$SPEC")" "$VERB" ;;
+  reanchor)
+    [ -n "$SPEC" ] && [ -d "$SPEC" ] && story_status_guard "$SPEC" reanchor ;;
 esac
 
 case "$VERB" in
@@ -4701,6 +4858,19 @@ case "$VERB" in
       prevarg="$a"
     done
     cmd_close_story "$SPEC" "$COMMIT" "$STAMP"
+    ;;
+  revise)
+    cmd_revise "$SPEC"
+    ;;
+  reanchor)
+    COMMIT=0; REASON=""
+    prevarg=""
+    for a in "$@"; do
+      [ "$a" = "--commit" ] && COMMIT=1
+      [ "$prevarg" = "--reason" ] && REASON="$a"
+      prevarg="$a"
+    done
+    cmd_reanchor "$SPEC" "$REASON" "$COMMIT"
     ;;
   open-round)
     COMMIT=0; STAMP=""

@@ -112,8 +112,8 @@ Plan: "$ARGUMENTS"
      (fix the stories it flags), commits the spec directory (`vulyk(<slug>): asks revised`) and shows the
      asks and the plan again. A "no" or a change request to the plan reopens steps 5-7 once, ending in the
      same commit; a second one is a new brief. A story changed after the plan commit (its `## Files`,
-     `## Verification` or `red:`) is committed alone as `vulyk(<slug>): revised <story-id>`
-     (`chore(vulyk-<slug>): revised <story-id>`): close-story reads those blocks from that commit.
+     `## Verification` or `red:`) is committed with `bash scripts/cycle.sh revise <story>`, never by hand:
+     close-story reads those blocks from the commit `branch` or `revise` recorded.
    - On approval, fill `**Approved:**` with the owner and the date, run `bash scripts/journal.sh
      docs/specs/<slug> 02-approved "approved by <owner>" branch`, and commit only that line and its journal
      entry: `git add docs/specs/<slug>/plan.md docs/specs/<slug>/journal.md && git commit -m

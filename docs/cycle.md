@@ -123,7 +123,7 @@ something else — same rule as every gate in [pipeline.md](pipeline.md).
 | An `ESCALATE` is on the record | 05 | three exits, all on the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen "<decision>"` (another tier's worth of rounds, starting with a repair story; with a fresh round instead when the escalation was `env` or the round is stale), or leaving the spec open |
 | The owner records `**Checked:** REJECTED` after a GREEN council row | 05, then 03–04 via repair | the council verdict — treated as RED regardless of what the seats said; the repair story goes through `/vulyk-build`, then a fresh round |
 | A sealed test of a `red: required` story is edited after its red receipt | 04 | `red_verified_at` — close-story refuses (`test changed after red receipt`); cure: re-run `cycle.sh stamp-red`; with the implementation already written, the Queen runs `cycle.sh stamp-red <story> --baseline` after `/vulyk-pause` (it stamps against HEAD's implementation and puts the working copy back itself; ADR-032 D5) |
-| A story's `## Verification`, `## Files` or `red:` differs from its approved version (the newest commit touching it whose subject is a paperwork subject: `plan`, `asks revised`, `briefed`, `repair round N`, `revised <story-id>`) | 04 | the story's gate blocks — `close-story` and `stamp-red` refuse, exit 4 (`story blocks differ from the approved version (<sha7>): <blocks>`); at Tier 3-4 a story with no approved version refuses, exit 2 (`no approved version in git for <story>: commit the plan or a revision first`); cure: the Queen commits her change as `vulyk(<slug>): revised <story-id>`, or the worker puts the blocks back (ADR-032 D1) |
+| A story's `## Verification`, `## Files` or `red:` differs from its approved version (the story file in the commit `cycle.sh` itself made and recorded for it in `.vulyk/state/<slug>/approved`: `branch`, `revise`, `repair`; no commit subject is read) | 04 | the story's gate blocks — `close-story` and `stamp-red` refuse, exit 4 (`story blocks differ from the approved version (<sha7>): <blocks>`); at Tier 3-4 a story with no record refuses, exit 2 (`no approved record for <story>: run bash scripts/cycle.sh revise <story>`); cure: the Queen runs `cycle.sh revise <story>`, or the worker puts the blocks back (ADR-032 D1, amended 2026-11-14) |
 | A story reads `status: done` but no `story(<id>):` commit closed it | 03–04 | the `done` mark — `status` counts it as in progress, so its wave keeps it; `close-story` runs the whole gate over it and, green, writes the close commit (journal `closed over a hand-committed tree`; ADR-032 D2) |
 | A `block` defect card's `check:` is red on a file the story's `## Files` expand to | 04 | the close — `close-story` refuses, exit 4 (`defect card <ref> fails on <file>`), after the red gate and before prompt-check; a gate that cannot run is exit 2 (`defect gate could not run`); cure: fix the file (ADR-032 D3) |
 | A Tier 2-4 plan has neither `**Approved:**` nor a `**Briefed:**` line that records `--go` | 02 | `**Briefed:**` — `cycle.sh briefed` and `cycle.sh branch` refuse, exit 2 (`Tier <N> plan needs **Approved:** or an explicit --go`); ship-check stage 02 fails (`plan: Tier <N> was briefed without approval or --go`) unless `**Shipped:**` is set; cure: the owner's `**Approved:**`, or, when the owner opted out, `cycle.sh briefed <spec> --go --commit` (journal `briefed --go recorded`; ADR-032 D4) |
@@ -179,7 +179,21 @@ clerk. A worker that returns with its story still `todo` is a miss: the driver d
 more, on the gate model, and a second miss stops the run. A worker whose report's `STATUS:` line says
 `NEEDS_CONTEXT` is no miss: the driver dispatches nothing more and returns `{"status":"needs_context",
 "stories":[{story,report}],...}`, releasing its claim; the Queen reads the story's `## Findings`, revises
-and commits it (`revised <story-id>`), journals it and relaunches with a fresh stamp.
+it and commits it with `cycle.sh revise <story>`, journals it and relaunches with a fresh stamp.
+
+**The approved record (audit-fixes-1113 A1).** A story's approved version is the story file in a commit
+`cycle.sh` itself made and recorded, one `<story-id>=<sha>` line per record in the run state
+`.vulyk/state/<slug>/approved` (never committed): `branch` records every story at its own commit and refuses,
+exit 2 `commit the plan first`, while a story is untracked or differs from HEAD; `revise <story-file>` commits
+the story with `plan.md`, `brief.md` and a journal line (`vulyk(<slug>): revised <story-id>`) and records that
+commit; `repair --commit` records the repair story. A commit made by hand approves nothing, whatever its
+subject. A spec branched before this release is seeded once, by `claim` or `branch`, from the old subject rule,
+with a journal line `approved records seeded from commit subjects`; after that line, or after `branch` wrote
+the records, an open Tier 3-4 story with no record makes `claim` exit 2 naming `cycle.sh revise`.
+`reanchor <spec> --reason <text> [--commit]` moves the claim head of the wave the build is on to HEAD and
+journals the move (`claim head of wave <W> moved from <old> to <new> by reanchor: <reason>`): a main-session
+commit made between two claims then no longer counts as the next worker's out-of-scope edit. Both verbs are
+the main session's.
 A miss's edits stay in the tree, and since
 ab-run-fixes a relaunch is not refused for them: `claim` accepts dirty paths in the `## Files` (or the
 story file) of a `todo` story of the current wave, names those stories under `leftover`, and the

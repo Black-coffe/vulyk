@@ -126,3 +126,22 @@ A hive needs a second paperwork subject grammar (D1's set grows past what one re
 of 40+ stories measurably slows on the extra `git log`; a forged-subject close is seen in a review (then the
 subagent `git commit` deny is on the table); or a block card legitimately needs a `cmd:`-only scope to run at
 close time.
+
+## Amendment (2026-11-14) - spec `audit-fixes-1113`, story 13 (ask 9)
+D1's approved version is no longer found by a commit subject: anyone who can commit can write a
+`vulyk(<slug>): revised <id>` subject. The approved version of a story is now the story file in a commit
+`cycle.sh` itself made and recorded in the run state `.vulyk/state/<slug>/approved` (`<story-id>=<sha>`, never
+committed): `branch` records every story at its own commit (an untracked story, or one that differs from HEAD,
+is exit 2 `commit the plan first`), the new verb `revise <story-file>` commits the story with `plan.md`,
+`brief.md` and a journal line and records that commit, and `repair --commit` records the repair story.
+`close-story` and `stamp-red` compare `## Verification`, `## Files`, `red:` and `narrow:` with
+`git show <sha>:<story>` and read no commit subject; with no record at Tier 3-4 they exit 2 `no approved record
+for <story>: run bash scripts/cycle.sh revise <story>`. The subject walk (`approved_rev`) is kept only for the
+one-time seeding of a spec branched before this release: `claim` or `branch` writes its records from it, with
+one journal line, and after that line an open Tier 3-4 story with no record makes `claim` exit 2 naming
+`cycle.sh revise`. The invariant reads: the gate blocks are proven equal to a commit `cycle.sh` made, not to a
+commit a subject names.
+Named bypasses: `revise` and `reanchor` move what a worker is measured against, so they are the main
+session's verbs; git-guard's subagent deny list names `revise` (story 07 of this spec) and does not yet name
+`reanchor`. The record file is plain run state, so an agent that writes `.vulyk/state/<slug>/approved` or
+`claim` by hand walks around the gate, which only a reviewer reading the diff and the journal catches today.
