@@ -747,6 +747,28 @@ done
 hit=0; case "$OGH" in *'sed or awk -i): the hook cannot read'*) hit=1 ;; esac
 ok "owner guard: the header no longer says every plan.md rewrite is denied to everyone" "$hit"
 
+echo "--- owner guard: a record row is written only by a command that writes the file (owner-guard-commit-fp)"
+# original case, 2026-11-14: committing the row human-check had just written, with ACCEPTED in the message
+CM='{"command":"git add docs/specs/acme-demo/plan.md memory/stats/human.jsonl && git commit -m \"vulyk(acme-demo): human check ACCEPTED\""}'
+ok "owner guard: a git commit that only names the record file passes - subagent" \
+  "$([ "$(og rel.jsonl Bash "$CM" "$SUB")" = allow ]; echo $?)"
+ok "owner guard: a git commit that only names the record file passes - main session" \
+  "$([ "$(og rel.jsonl Bash "$CM")" = allow ]; echo $?)"
+ok "owner guard: git add -u memory/stats passes" \
+  "$([ "$(og rel.jsonl Bash '{"command":"git add -u memory/stats && git commit -m \"human check ACCEPTED\""}' "$SUB")" = allow ]; echo $?)"
+ok "owner guard: reading the record file passes" \
+  "$([ "$(og rel.jsonl Bash '{"command":"grep ACCEPTED memory/stats/human.jsonl"}' "$SUB")" = allow ]; echo $?)"
+ok "owner guard: a heredoc to another file that only mentions the record passes" \
+  "$([ "$(og rel.jsonl Bash '{"command":"cat > /tmp/acme-brief.md <<X\nnote: memory/stats/human.jsonl holds ACCEPTED rows\nX"}' "$SUB")" = allow ]; echo $?)"
+ok "owner guard: a redirect into the record is still denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"echo {\\\"spec\\\":\\\"acme-demo\\\",\\\"verdict\\\":\\\"ACCEPTED\\\"} >> memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: tee into the record is still denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"printf x | tee -a memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: an interpreter writing the record is still denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"python -c \"open(\\\"memory/stats/human.jsonl\\\",\\\"a\\\").write(\\\"x\\\")\""}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a redirect into the record is still denied - main session without a quote" \
+  "$([ "$(og rel.jsonl Bash '{"command":"echo {\\\"spec\\\":\\\"acme-demo\\\",\\\"verdict\\\":\\\"ACCEPTED\\\"} >> memory/stats/human.jsonl"}')" = deny ]; echo $?)"
+
 echo "--- this tree's library: green, one info line per .scrub-revs commit (audit-fixes-1113-12)"
 run
 ok "defects-check on this tree is green, no ESCAPE (story 04's masked quote of command-injection-follows-cwd)" \

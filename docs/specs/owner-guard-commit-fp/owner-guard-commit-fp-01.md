@@ -1,14 +1,15 @@
 ---
 story: owner-guard-commit-fp-01
 spec: owner-guard-commit-fp
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 1
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: a git commit that only names the record file passes
+red_verified_at: 2026-11-14T16:35:17Z 132f4dff9af38f38c1eada819f3467835972bc8b54f2f0c6917a34b8a469bedc
 ---
 
 # A record row counts as written only by a command that writes the file
@@ -44,3 +45,34 @@ the path passes. The subagent rule stays: a subagent is still denied every real 
 `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh`
 
 ## Implementation notes
+- `.claude/hooks/owner-guard.sh`: `rewrites_plan` takes a `target` pattern (default the plan.md path); the record
+  rule now asks `rewrites_plan(cmd, powershell, target=RECORD)` instead of "names human.jsonl and says ACCEPTED".
+  So a git add/commit, a read or a heredoc to another file passes, and any write into the record is guarded
+  whatever it says: the red receipt showed `tee -a` and `python -c open(...)` into the record passed before.
+- Header: says what counts as a row write, and that with no Python the bash fallback still denies every command
+  naming the record (unchanged, fails closed).
+- `tests/defects.test.sh`: 9 rows, the original commit case for a subagent and the main session, 3 passing
+  neighbours, 4 still-denied writes.
+CHANGELOG: owner-guard counts a `memory/stats/human.jsonl` row as written only by a command that writes the file; committing or reading the record passes, and every real write into it is guarded.
+
+## Red receipt
+- command: bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh
+- exit: 1
+- tests: 132f4dff9af38f38c1eada819f3467835972bc8b54f2f0c6917a34b8a469bedc (tests/defects.test.sh)
+- impl: 0a47ce2c1ec24c22aeca8ac4cefdaa2d8c0a4f3f285de2aa59dcc3f799dd5bb0
+- stamped: 2026-11-14T16:35:17Z
+
+```
+::error::owner guard: a git commit that only names the record file passes - subagent
+::error::owner guard: a git commit that only names the record file passes - main session
+::error::owner guard: reading the record file passes
+::error::owner guard: a heredoc to another file that only mentions the record passes
+  ok    owner guard: a redirect into the record is still denied - subagent
+::error::owner guard: tee into the record is still denied - subagent
+::error::owner guard: an interpreter writing the record is still denied - subagent
+  ok    owner guard: a redirect into the record is still denied - main session without a quote
+--- this tree's library: green, one info line per .scrub-revs commit (audit-fixes-1113-12)
+  ok    defects-check on this tree is green, no ESCAPE (story 04's masked quote of command-injection-follows-cwd)
+  ok    the audit of this tree prints one info line per listed commit
+defects.test.sh: FAILED
+```

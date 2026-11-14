@@ -8,7 +8,9 @@
 #   - a command running `cycle.sh briefed <spec> ... --go`;
 #   - an Edit, MultiEdit, Write or shell command that adds or changes a `**Approved:**` or `**Checked:**` line
 #     of a `docs/specs/<slug>/plan.md` (a line still holding the template placeholder `<...>` is no record),
-#     and one that adds an ACCEPTED or REJECTED row to `memory/stats/human.jsonl`. An Edit or MultiEdit is
+#     and one that writes `memory/stats/human.jsonl` (a redirect into it, a writer or interpreter naming it, sed
+#     or awk -i): a `git add` or `git commit` of it, a read, or text that only names the path is no row (with no
+#     Python the bash fallback still denies every command naming it). An Edit or MultiEdit is
 #     judged on the file as it stands after it, so one that replaces only the text after the marker counts;
 #   - a shell command that may rewrite a plan.md holding such a line without spelling the marker (a redirect
 #     into it; tee, cp, mv, a script interpreter; sed or awk -i) and that names it by its `docs/specs/<slug>/plan.md`
@@ -407,7 +409,10 @@ def command_actions(cmd, powershell, cwd):
                 held = False
             if held:
                 acts.append(('rewrite', os.path.dirname(full), '', 'a command that rewrites %s' % target))
-    if 'human.jsonl' in cmd and re.search(r'ACCEPTED|REJECTED', cmd) and not any(a[0] == 'release' for a in acts):
+    # a human.jsonl row counts as written only by a command that writes the file (a redirect into it, a writer
+    # naming it, sed/awk -i): a git add or commit, a read, or text that merely names the path is no row
+    if 'human.jsonl' in cmd and rewrites_plan(cmd, powershell, target=RECORD) and \
+            not any(a[0] == 'release' for a in acts):
         m = re.search(r'"spec\\?"\s*:\s*\\?"([^"\\]+)', cmd)
         acts.append(('release', spec_of('docs/specs/' + m.group(1), cwd) if m else None, cmd,
                      'a human.jsonl row written by a command'))
@@ -440,15 +445,20 @@ WRITERS = ('tee', 'cp', 'mv', 'install', 'dd', 'truncate', 'set-content', 'add-c
            'move-item', 'python', 'python3', 'py', 'node', 'perl', 'ruby')
 
 
-def rewrites_plan(cmd, powershell, depth=0):
-    """The first docs/specs/<slug>/plan.md path a command may rewrite, else None: a redirect into it; a simple
-    command naming it run by one of WRITERS (cp, mv, install, Copy-Item, Move-Item only as the last word), or by
-    sed or awk with an in-place flag; a word holding a whole command (`bash -c "..."`) is read the same way."""
-    m = re.search(r'(?<![0-9&])>{1,2}\s*[\'"]?([^\s\'";&|<>]*docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md)\b', cmd)
+PLAN_PATH = r'docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md'
+RECORD = r'memory[/\\]stats[/\\]human\.jsonl'
+
+
+def rewrites_plan(cmd, powershell, depth=0, target=PLAN_PATH):
+    """The first path matching target (default: a docs/specs/<slug>/plan.md) a command may rewrite, else None: a
+    redirect into it; a simple command naming it run by one of WRITERS (cp, mv, install, Copy-Item, Move-Item only
+    as the last word), or by sed or awk with an in-place flag; a word holding a whole command (`bash -c "..."`) is
+    read the same way. With target=RECORD it answers whether a command writes memory/stats/human.jsonl."""
+    m = re.search(r'(?<![0-9&])>{1,2}\s*[\'"]?([^\s\'";&|<>]*' + target + r')\b', cmd)
     if m:
         return m.group(1)
     for seg in split_segments(cmd, powershell) or []:
-        hits = [w for w in seg if re.search(r'docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md', w)]
+        hits = [w for w in seg if re.search(target, w)]
         if not hits:
             continue
         lead = base(seg[0]).lower()
@@ -457,12 +467,12 @@ def rewrites_plan(cmd, powershell, depth=0):
             hits = hits if seg[-1] in hits else []
         if (hits and lead in WRITERS) or (lead in ('sed', 'gsed', 'awk', 'gawk') and any(
                 re.match(r'^(-[a-zA-Z]*i\S*|--in-place\S*)$', w) for w in seg[1:])):
-            m = re.search(r'[^\s\'"]*docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md', hits[0])
+            m = re.search(r'[^\s\'"]*' + target, hits[0])
             return m.group(0)
         if depth < 2:
             for w in hits:
                 if re.search(r'\s', w):
-                    found = rewrites_plan(w, powershell, depth + 1)
+                    found = rewrites_plan(w, powershell, depth + 1, target)
                     if found:
                         return found
     return None
