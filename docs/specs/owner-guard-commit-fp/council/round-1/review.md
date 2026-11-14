@@ -1,0 +1,16 @@
+<!-- seat: review · model: claude-fable-5-2 · round: 1 · head: 3d3e7e21 · pack: 3a8a9b920fb6 · attempt: 1 · recorded: 2026-11-14T17:25:41Z · verdict: BLOCK -->
+VERDICT: BLOCK
+SUITE: ok 1155s
+MODEL: claude-fable-5-2
+
+## Critical
+None.
+## Major
+1. .claude/hooks/owner-guard.sh:461 [ask 1] a command that only names or reads the record must pass even when its text holds a redirect sign followed by `$` or a backtick, while the variable rows at tests/defects.test.sh:773-776 stay green: the second reproduction in the brief is still refused at head with the same message (main session: "a human.jsonl row written by a command for a spec the hook cannot name"), tripped by the arrow-then-backtick at docs/specs/owner-guard-commit-fp/brief.md:11, and a read sent to a variable path (`tail -1 memory/stats/human.jsonl` redirected into "$TMP/last.json") is denied at head though bc962e77 allowed it; the passing fixture at tests/defects.test.sh:761 is a one-line stand-in, not the original text - repro: pipe to `bash .claude/hooks/owner-guard.sh` a Bash hook input whose command is `cat > /tmp/acme-brief.md <<X`, then the text of brief.md, then `X`: it prints a deny, expected no output
+2. .claude/hooks/owner-guard.sh:482 [regression] a command that spells the record and writes it by a form the ask lists must stay denied to a subagent and to the main session without a quote: an interpreter fed by a heredoc, by a PowerShell here-string or by a pipe (the story Goal names "a heredoc fed to one"), `tee` behind a prefix word (`command`, `sudo`, `LC_ALL=C`) and a clobber redirect (`>|`), each writing an ACCEPTED row, all pass at head and were denied at bc962e77 (`git show bc962e77:.claude/hooks/owner-guard.sh` line 410) - repro: a hook input with `agent_id` set and the four-line command `python3 <<PY` / `f = open("memory/stats/human.jsonl", "a")` / `f.write("ACCEPTED")` / `PY`, piped to `bash .claude/hooks/owner-guard.sh`, prints nothing at 3d3e7e21 and the subagent deny at bc962e77
+3. .claude/hooks/owner-guard.sh:14 [unanchored] the left-open list the header gives for the record must name every way a spelled record is still written unseen (card safeguard-bypassable-or-late): a writer outside the list (`git apply` or `patch` fed a heredoc, `sponge`, `[IO.File]::AppendAllText`) carrying an ACCEPTED row was denied at bc962e77 and passes at head, and the list names only a record name the command never spells - repro: a hook input with `agent_id` set and the command `patch memory/stats/human.jsonl` plus a heredoc adding an ACCEPTED row prints nothing at head and a deny at bc962e77
+## Minor
+- .claude/hooks/owner-guard.sh:468 a commit of the record chained with an unrelated writer holding a variable (`git add`, `git commit`, then `cp "$A" /tmp/b`) is denied; the base denied it too when the message said ACCEPTED
+- docs/specs/owner-guard-commit-fp/owner-guard-commit-fp-01.md:48 the Implementation notes describe only the first design; the variable rules and the seven test rows added by 05ffb3a7 and db39ef68 came after the red receipt was stamped and are not in the notes
+- Finding 1 was met live by this seat; details (moved to a private file before publishing)
+- `bash scripts/defects-check.sh` ran once: GREEN, 10 blocking checks
