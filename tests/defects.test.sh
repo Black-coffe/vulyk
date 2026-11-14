@@ -244,14 +244,31 @@ run; ok "neighbour: an uncommitted quote with committed fixtures -> ESCAPE uncom
   "$([ "$rc" = 1 ] && has '^ESCAPE  cut: quote uncommitted'; echo $?)"
 echo "--- a masking commit listed in .scrub-revs keeps the quote's date"
 mkrepo "$TMP/scrub"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
-card mask block 'bash check.sh <arg>' "$FX" 2026-01-05; cm 2026-01-05 docs/defects/mask.md
-sed_inplace 's/«words»/«words at <hive>»/' docs/defects/mask.md; cm 2026-01-10 docs/defects/mask.md
+card mask block 'bash check.sh <arg>' "$FX" 2026-01-05; sed_inplace 's/«words»/«words at acme-hive»/' docs/defects/mask.md
+cm 2026-01-05 docs/defects/mask.md
+sed_inplace 's/«words at acme-hive»/«words at <hive>»/' docs/defects/mask.md; cm 2026-01-10 docs/defects/mask.md
 scrub="$(git rev-parse HEAD)"
 run; ok "neighbour: a quote edited by an unlisted commit -> ESCAPE, RED" \
   "$([ "$rc" = 1 ] && has '^ESCAPE  mask: quote [0-9a-f]\{7\} 2026-01-10'; echo $?)"
 printf '# masking commits\n%s # masked a path in a quote\n' "$scrub" > docs/defects/.scrub-revs
 run; ok "the masked quote of a commit listed in .scrub-revs keeps its older date -> no ESCAPE, green" \
   "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
+ok "the audit names the listed commit in one info line" \
+  "$([ "$(printf '%s\n' "$out" | grep -c "^scrub-rev ${scrub:0:7}")" = 1 ]; echo $?)"
+# audit-fixes-1113-12: the listed commit keeps a line's older date only when the line differs solely in <...> spans.
+mkrepo "$TMP/scrub-words"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
+card mask block 'bash check.sh <arg>' "$FX" 2026-01-05; cm 2026-01-05 docs/defects/mask.md
+sed_inplace 's/«words»/«other words at <hive>»/' docs/defects/mask.md; cm 2026-01-10 docs/defects/mask.md
+printf '%s # masked a path in a quote\n' "$(git rev-parse HEAD)" > docs/defects/.scrub-revs
+run; ok "neighbour: a listed commit that also changes a quote's words is still an ESCAPE" \
+  "$([ "$rc" = 1 ] && has '^ESCAPE  mask: quote [0-9a-f]\{7\} 2026-01-10'; echo $?)"
+mkrepo "$TMP/scrub-add"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
+card mask block 'bash check.sh <arg>' "$FX" 2026-01-05; cm 2026-01-05 docs/defects/mask.md
+card mask block 'bash check.sh <arg>' "$FX" 2026-01-05 2026-01-10
+sed_inplace 's/^\(- 2026-01-05 .*\)«words»/\1«words at <hive>»/' docs/defects/mask.md; cm 2026-01-10 docs/defects/mask.md
+printf '%s # masked a path in a quote\n' "$(git rev-parse HEAD)" > docs/defects/.scrub-revs
+run; ok "a listed commit that adds a new quote is still an ESCAPE" \
+  "$([ "$rc" = 1 ] && has '^ESCAPE  mask: quote [0-9a-f]\{7\} 2026-01-10'; echo $?)"
 
 mkrepo "$TMP/escape-prep"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
 card prep text '' '' 2026-01-05 2026-01-06; cm 2026-01-06 docs/defects/prep.md
@@ -472,6 +489,18 @@ mv .claude/hooks/defects_lib.off .claude/hooks/defects_lib.py
 run
 ok "defects-check --files: the audit names a block card with no glob paths: as 'block with no file scope'" \
   "$(has '^block fscope: block with no file scope' && ! has 'fcut: block with no file scope'; echo $?)"
+# audit-fixes-1113-12 (from 09): a card's own fixtures: fail its check by design; --files skips them for that card only.
+mkrepo "$TMP/ownfx"; cm 2026-01-01 docs/defects/README.md
+mkdir -p fx; printf 'bad\n' > fx/fxa-bad.fixture; printf 'fine\n' > fx/fxa-ok.fixture
+card fxa block 'bash check.sh <arg>' '[fx/fxa-bad.fixture, fx/fxa-ok.fixture]' 2026-01-05
+sed_inplace 's|^paths: .*|paths: ["fx/**"]|' docs/defects/fxa.md
+run --files fx/fxa-bad.fixture ./fx/fxa-ok.fixture
+ok "defects-check --files: a block card's own fixtures in ## Files are not run through its check (story 04's two fixtures, 2026-11-13)" \
+  "$([ "$rc" = 0 ] && ! has 'fails on'; echo $?)"
+card fxb block 'bash check.sh <arg>' "$FX" 2026-01-05; sed_inplace 's|^paths: .*|paths: ["fx/**"]|' docs/defects/fxb.md
+run --files fx/fxa-bad.fixture
+ok "defects-check --files: the same file under a different card is still checked" \
+  "$([ "$rc" = 1 ] && has '^fxb fails on fx/fxa-bad.fixture' && ! has 'fxa fails'; echo $?)"
 
 echo "--- usage"
 run a b; ok "two arguments -> exit 2" "$([ "$rc" = 2 ]; echo $?)"
@@ -679,6 +708,16 @@ ok "owner guard: the card is block, the hook its check, its ## Check names what 
   "$(grep -q '^status: block$' "$OGC.md" && grep -qF 'check: bash .claude/hooks/owner-guard.sh --check <arg>' "$OGC.md" &&
      sed -n '/^## Check/,/^## Never/p' "$OGC.md" | grep -q 'Left open on purpose'; echo $?)"
 ok "owner guard: the defect index is current" "$(bash scripts/defects-index.sh --check >/dev/null 2>&1; echo $?)"
+
+echo "--- this tree's library: green, one info line per .scrub-revs commit (audit-fixes-1113-12)"
+run
+ok "defects-check on this tree is green, no ESCAPE (story 04's masked quote of command-injection-follows-cwd)" \
+  "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
+srv_ok=0
+for s in $(grep -v '^[[:space:]]*#' docs/defects/.scrub-revs 2>/dev/null | awk 'NF { print $1 }'); do
+  [ "$(printf '%s\n' "$out" | grep -c "^scrub-rev ${s:0:7}")" = 1 ] || srv_ok=1
+done
+ok "the audit of this tree prints one info line per listed commit" "$srv_ok"
 
 if [ "$fail" -eq 0 ]; then echo "defects.test.sh: all checks passed"; else echo "defects.test.sh: FAILED"; fi
 exit "$fail"

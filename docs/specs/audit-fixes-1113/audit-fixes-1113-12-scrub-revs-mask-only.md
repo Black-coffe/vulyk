@@ -1,14 +1,15 @@
 ---
 story: audit-fixes-1113-12
 spec: audit-fixes-1113
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 4
 blocked_by: [audit-fixes-1113-06, audit-fixes-1113-08, audit-fixes-1113-09]
 red: required
 red_reason: a listed commit that adds a new quote is still an ESCAPE
+red_verified_at: 2026-11-14T01:25:28Z d4c252cdb4cc8b1345c5aeadcaf2ca526b601824362f583a66882ed6a08c836e
 ---
 
 # A scrub-only exception holds only for a masked change
@@ -51,3 +52,29 @@ Queen mid-build (plan.md `## Plan deltas`, 2026-11-14) on a note the owner forwa
 `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh`
 
 ## Implementation notes
+- scripts/defects-check.sh: blame() now blames without ignore-revs, then for each line a .scrub-revs commit changed takes the ignore-revs date only when the older line maps to it alone and differs solely in the new text's `<...>` spans (regex from the new text); else the listed commit's date stands.
+- scripts/defects-check.sh: an unresolvable or failing ignore-revs blame keeps the listed commit's date (fail closed); the audit prints one `scrub-rev <sha7>: <note>` info line per listed commit.
+- scripts/defects-check.sh: --files skips a card's own `fixtures:` for that card only (patch 725-755 of story-09-partial); header comment and --help range updated.
+- tests/defects.test.sh: added the reworded-quote and added-quote neighbours, the own-fixture --files pair, and an audit of this tree (green, one info line per listed commit).
+- Surprise: story 06's scrub fixture inserted " at <hive>" (not a pure mask), so it now fails the rule; changed it to mask `acme-hive` -> `<hive>`, re-stamped red with the implementation reverted, then re-applied it.
+
+## Red receipt
+- command: bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh
+- exit: 1
+- tests: d4c252cdb4cc8b1345c5aeadcaf2ca526b601824362f583a66882ed6a08c836e (tests/defects.test.sh)
+- impl: d69e261e6e18f1545178936f805c193c40d3994de954d527670f61a9eb8caa77
+- stamped: 2026-11-14T01:25:28Z
+
+```
+::error::a listed commit that adds a new quote is still an ESCAPE
+  ok    owner guard: with no Python a guarded call is denied, naming the missing Python
+  ok    owner guard: with no Python an unrelated Bash or Edit call passes and starts no interpreter
+  ok    owner guard --check: both card fixtures exit 1
+  ok    owner guard --check: a file that is no hook input exits 0
+  ok    owner guard: the card is block, the hook its check, its ## Check names what stays open
+  ok    owner guard: the defect index is current
+--- this tree's library: green, one info line per .scrub-revs commit (audit-fixes-1113-12)
+  ok    defects-check on this tree is green, no ESCAPE (story 04's masked quote of command-injection-follows-cwd)
+::error::the audit of this tree prints one info line per listed commit
+defects.test.sh: FAILED
+```
