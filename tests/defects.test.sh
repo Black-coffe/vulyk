@@ -776,6 +776,18 @@ ok "owner guard: a writer aimed at a variable in a command naming the record is 
   "$([ "$(og rel.jsonl Bash '{"command":"f=memory/stats/human.jsonl; cp /tmp/row \"$f\""}' "$SUB")" = deny ]; echo $?)"
 hit=1; case "$(tr -d '\r' < "$OG" | tr '\n' ' ' | tr -s ' #' ' ')" in *'a record name the command never spells'*) hit=0 ;; esac
 ok "owner guard: the header names the record forms left open on purpose" "$hit"
+ok "owner guard: a heredoc to cat holding the brief's real text (arrows, backticks, the record, ACCEPTED) passes" \
+  "$([ "$(og rel.jsonl Bash "$(bash "$SRC/scripts/py.sh" -c 'import json,sys; print(json.dumps({"command": "cat > /tmp/acme-brief.md <<X\n" + open(sys.argv[1], encoding="utf-8").read() + "X"}))' "$SRC/docs/specs/owner-guard-commit-fp/brief.md")" "$SUB")" = allow ]; echo $?)"
+ok "owner guard: a read of the record redirected into a variable path passes" \
+  "$([ "$(og rel.jsonl Bash '{"command":"tail -1 memory/stats/human.jsonl > \"$TMP/last.json\""}' "$SUB")" = allow ]; echo $?)"
+ok "owner guard: an interpreter fed by a heredoc that writes the record is denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"python3 <<PY\nf = open(\"memory/stats/human.jsonl\", \"a\")\nf.write(\"ACCEPTED\")\nPY"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: tee behind a prefix word into the record is denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"printf x | sudo tee -a memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a clobber redirect into the record is denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"echo ACCEPTED >| memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: patch on the record is denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"patch memory/stats/human.jsonl <<P\n+row\nP"}' "$SUB")" = deny ]; echo $?)"
 ok "owner guard: git add of the record by its bare name passes" \
   "$([ "$(og rel.jsonl Bash '{"command":"cd memory/stats && git add human.jsonl"}' "$SUB")" = allow ]; echo $?)"
 ok "owner guard: a redirect into the record is still denied - main session without a quote" \

@@ -8,10 +8,10 @@
 #   - a command running `cycle.sh briefed <spec> ... --go`;
 #   - an Edit, MultiEdit, Write or shell command that adds or changes a `**Approved:**` or `**Checked:**` line
 #     of a `docs/specs/<slug>/plan.md` (a line still holding the template placeholder `<...>` is no record),
-#     and one that writes `memory/stats/human.jsonl` (a redirect into it or a writer or interpreter naming it, by
-#     file name with any path or none, sed or awk -i; in a command naming it, also a redirect into a variable or
-#     a substitution, or a writer aimed at one): a `git add` or `git commit` of it, a read, or text that only
-#     names it is no row (with no Python the bash fallback still denies every command naming it). Left open on
+#     and any shell command naming `human.jsonl` (by file name, any path or none) unless every simple command in
+#     it is a known safe form - cd, a reader (cat, grep, head, tail, wc, ls, stat), echo or printf, git add /
+#     commit / diff / log / show / status - and no redirect leads into the record; a heredoc fed to `cat` that
+#     writes another file is text (with no Python the bash fallback denies every command naming it). Left open on
 #     purpose: a record name the command never spells (built from quotes, globs, braces or variables assembled
 #     elsewhere, a script file that writes it); the hook reads the text it is given and does not expand a shell.
 #     An Edit or MultiEdit is
@@ -453,20 +453,37 @@ PLAN_PATH = r'docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md'
 RECORD = r'(?<![\w.-])human\.jsonl'   # the file name with any path or none (`cd memory/stats` first counts too)
 
 
+SAFE_LEADS = ('cd', 'cat', 'grep', 'head', 'tail', 'wc', 'ls', 'stat', 'echo', 'printf', 'git')
+SAFE_GIT = ('add', 'commit', 'diff', 'log', 'show', 'status')
+CAT_HEREDOC = re.compile(r'(?m)^(?P<head>[^\n]*\bcat\b[^\n]*<<-?\s*[\'"]?(?P<tag>[A-Za-z_]\w*)[\'"]?[^\n]*)\n'
+                         r'.*?\n(?P=tag)[ \t]*$', re.S)
+
+
 def writes_record(cmd, powershell):
-    """True when a command naming human.jsonl may write it: a redirect into it or a writer naming it (by name,
-    with or without a path), or a redirect into a variable or a substitution, which the hook cannot resolve."""
-    if rewrites_plan(cmd, powershell, target=RECORD):
+    """True unless a command naming human.jsonl is one of the known safe forms: deny by default. Safe: every
+    simple command is cd, a reader (cat, grep, head, tail, wc, ls, stat), echo or printf, or git add / commit /
+    diff / log / show / status, and no redirect leads into the record. A heredoc fed to `cat` that writes another
+    file is text, not commands. Anything else (a writer, an interpreter, a prefix word, an assignment, a patch, a
+    PowerShell call) counts as a write."""
+    def strip_cat_heredoc(m):
+        return m.group('head') if not re.search(r'>\|?\s*["\']?[^\s"\']*' + RECORD, m.group('head')) else m.group(0)
+    text = CAT_HEREDOC.sub(strip_cat_heredoc, cmd.replace('\r', ''))
+    if re.search(r'(?<![0-9&])>[>|]?\s*["\']?[^\s;&|<>"\']*' + RECORD, text):
         return True
-    if re.search(r'(?<![0-9&])>{1,2}\s*["\']?(\$|`)', cmd):
+    segs = split_segments(text, powershell)
+    if segs is None:
         return True
-    for seg in split_segments(cmd, powershell) or []:   # a writer, or sed/awk -i, aimed at a variable
+    for seg in segs:
         lead = base(seg[0]).lower() if seg else ''
         lead = lead[:-4] if lead.endswith('.exe') else lead
-        inplace = lead in ('sed', 'gsed', 'awk', 'gawk') and any(
-            re.match(r'^(-[a-zA-Z]*i\S*|--in-place\S*)$', w) for w in seg[1:])
-        if (lead in WRITERS or inplace) and any('$' in w or '`' in w for w in seg[1:]):
+        if lead not in SAFE_LEADS:
             return True
+        if lead == 'git':
+            words, i = seg[1:], 0
+            while i < len(words) and words[i].startswith('-'):
+                i += 2 if words[i] in ('-C', '-c') else 1
+            if i >= len(words) or words[i] not in SAFE_GIT:
+                return True
     return False
 
 
