@@ -50,6 +50,13 @@ strikes or narrows the ask in brief.md's ## Asks: the blind seats read only the 
 *(empty)*
 
 ## Plan deltas
+
+- 2026-11-14/15, after the round-1 BLOCK and four automated security scans: the detect-a-write rule missed write
+  forms, so the rule is deny by default with a short safe-form list. Regex parsing of heredoc bodies kept opening
+  parser gaps, so any heredoc or here-string in a command naming the record counts as a write: ask 1's "text that
+  only names the path passes" holds for echo, printf and commit messages, not for heredocs (that text goes through
+  the Write tool). The owner chose a review-only re-check of the diff, then his acceptance.
+
 <!--
 One entry per change to the plan after approval - a new story, expanded story files, a changed
 contract - written from a return report, never from a diff: date, trigger, decision, what was

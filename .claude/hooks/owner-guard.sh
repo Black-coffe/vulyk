@@ -10,8 +10,9 @@
 #     of a `docs/specs/<slug>/plan.md` (a line still holding the template placeholder `<...>` is no record),
 #     and any shell command naming `human.jsonl` (by file name, any path or none) unless every simple command in
 #     it is a known safe form - cd, a reader (cat, grep, head, tail, wc, ls, stat), echo or printf, git add /
-#     commit / diff / log / show / status - and no redirect leads into the record; a heredoc fed to `cat` that
-#     writes another file is text (with no Python the bash fallback denies every command naming it). Left open on
+#     commit / diff / log / show / status - and no redirect leads into the record (quotes removed first); any
+#     heredoc or here-string counts as a write, so text naming the record goes through the Write tool (with no
+#     Python the bash fallback denies every command naming it). Left open on
 #     purpose: a record name the command never spells (built from quotes, globs, braces or variables assembled
 #     elsewhere, a script file that writes it); the hook reads the text it is given and does not expand a shell.
 #     An Edit or MultiEdit is
@@ -455,8 +456,6 @@ RECORD = r'(?<![\w.-])human\.jsonl'   # the file name with any path or none (`cd
 
 SAFE_LEADS = ('cd', 'cat', 'grep', 'head', 'tail', 'wc', 'ls', 'stat', 'echo', 'printf', 'git')
 SAFE_GIT = ('add', 'commit', 'diff', 'log', 'show', 'status')
-CAT_HEREDOC = re.compile(r'(?m)^(?P<head>[ \t]*cat\b[^\n<]*<<(?P<dash>-?)\s*(?P<q>[\'"]?)(?P<tag>[A-Za-z_]\w*)'
-                         r'(?P<rest>[^\n]*))\n(?P<body>.*?)\n(?(dash)\t*)(?P=tag)$', re.S)
 GIT_BAD_GLOBAL = ('-c', '--config-env', '--exec-path', '--git-dir', '--work-tree', '--namespace')
 GIT_BAD_ARG = re.compile(r'^(-o|--output|--ext-diff|--textconv|--exec|--upload-pack|--receive-pack)')
 
@@ -464,24 +463,14 @@ GIT_BAD_ARG = re.compile(r'^(-o|--output|--ext-diff|--textconv|--exec|--upload-p
 def writes_record(cmd, powershell):
     """True unless a command naming human.jsonl is one of the known safe forms: deny by default. Safe: every
     simple command is cd, a reader (cat, grep, head, tail, wc, ls, stat), echo or printf, or git add / commit /
-    diff / log / show / status, and no redirect leads into the record. A heredoc fed to `cat` that writes another
-    file is text, not commands. Anything else (a writer, an interpreter, a prefix word, an assignment, a patch, a
-    PowerShell call) counts as a write."""
-    def strip_cat_heredoc(m):
-        # the body is text only when bash reads the same delimiter (nothing but the closing quote and an optional
-        # redirect after the tag), cat does not write the record, and an unquoted body holds no substitution
-        q, rest = m.group('q'), m.group('rest')
-        if q and not rest.startswith(q):
-            return m.group(0)
-        if not re.match(r'^[ \t]*(\d?>[>|]?[ \t]*[^\s;&|<>`$]+[ \t]*)?$', rest[len(q):]):
-            return m.group(0)
-        if re.search(r'>\|?\s*["\']?[^\s"\']*' + RECORD, m.group('head')):
-            return m.group(0)
-        if not q and re.search(r'\$\(|`|<\(|>\(', m.group('body')):
-            return m.group(0)
-        return m.group('head')
-    text = CAT_HEREDOC.sub(strip_cat_heredoc, cmd.replace('\r', ''))
-    if re.search(r'(?<![0-9&])>[>|]?\s*["\']?[^\s;&|<>"\']*' + RECORD, text):
+    diff / log / show / status, and no redirect leads into the record. Any heredoc or here-string counts as a write
+    (text naming the record goes through the Write tool). Anything else (a writer, an interpreter, a prefix word,
+    an assignment, a patch, a PowerShell call) counts as a write."""
+    text = cmd.replace('\r', '')
+    if '<<' in text:
+        return True
+    unquoted = re.sub(r'["\'\\]', '', text)          # `> "memory/stats/"human.jsonl` is the record too
+    if re.search(r'(?<![0-9&])>[>|]?\s*[^\s;&|<>]*' + RECORD, unquoted):
         return True
     if re.search(r'\$\(|`|<\(|>\(', text):            # a substitution runs a command the hook does not read
         return True

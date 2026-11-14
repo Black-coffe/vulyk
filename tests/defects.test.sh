@@ -758,8 +758,12 @@ ok "owner guard: git add -u memory/stats passes" \
   "$([ "$(og rel.jsonl Bash '{"command":"git add -u memory/stats && git commit -m \"human check ACCEPTED\""}' "$SUB")" = allow ]; echo $?)"
 ok "owner guard: reading the record file passes" \
   "$([ "$(og rel.jsonl Bash '{"command":"grep ACCEPTED memory/stats/human.jsonl"}' "$SUB")" = allow ]; echo $?)"
-ok "owner guard: a heredoc to another file that only mentions the record passes" \
-  "$([ "$(og rel.jsonl Bash '{"command":"cat > /tmp/acme-brief.md <<X\nnote: memory/stats/human.jsonl holds ACCEPTED rows\nX"}' "$SUB")" = allow ]; echo $?)"
+ok "owner guard: a heredoc in a command naming the record counts as a write (text goes through the Write tool)" \
+  "$([ "$(og rel.jsonl Bash '{"command":"cat > /tmp/acme-brief.md <<X\nnote: memory/stats/human.jsonl holds ACCEPTED rows\nX"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a redirect into the record by a quoted path is denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"echo x > \"memory/stats/\"human.jsonl"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: echo naming the record passes (text, no redirect into it)" \
+  "$([ "$(og rel.jsonl Bash '{"command":"echo see memory/stats/human.jsonl for ACCEPTED rows"}' "$SUB")" = allow ]; echo $?)"
 ok "owner guard: a redirect into the record is still denied - subagent" \
   "$([ "$(og rel.jsonl Bash '{"command":"echo {\\\"spec\\\":\\\"acme-demo\\\",\\\"verdict\\\":\\\"ACCEPTED\\\"} >> memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
 ok "owner guard: tee into the record is still denied - subagent" \
@@ -776,8 +780,8 @@ ok "owner guard: a writer aimed at a variable in a command naming the record is 
   "$([ "$(og rel.jsonl Bash '{"command":"f=memory/stats/human.jsonl; cp /tmp/row \"$f\""}' "$SUB")" = deny ]; echo $?)"
 hit=1; case "$(tr -d '\r' < "$OG" | tr '\n' ' ' | tr -s ' #' ' ')" in *'a record name the command never spells'*) hit=0 ;; esac
 ok "owner guard: the header names the record forms left open on purpose" "$hit"
-ok "owner guard: a heredoc to cat holding the brief's real text (arrows, backticks, the record, ACCEPTED) passes" \
-  "$([ "$(og rel.jsonl Bash "$(bash "$SRC/scripts/py.sh" -c 'import json,sys; print(json.dumps({"command": "cat > /tmp/acme-brief.md <<'"'"'X'"'"'\n" + open(sys.argv[1], encoding="utf-8").read() + "X"}))' "$SRC/docs/specs/owner-guard-commit-fp/brief.md")" "$SUB")" = allow ]; echo $?)"
+ok "owner guard: the brief's real text in a quoted heredoc is denied too (no heredoc in a command naming the record)" \
+  "$([ "$(og rel.jsonl Bash "$(bash "$SRC/scripts/py.sh" -c 'import json,sys; print(json.dumps({"command": "cat > /tmp/acme-brief.md <<'"'"'X'"'"'\n" + open(sys.argv[1], encoding="utf-8").read() + "X"}))' "$SRC/docs/specs/owner-guard-commit-fp/brief.md")" "$SUB")" = deny ]; echo $?)"
 ok "owner guard: the same text under an unquoted delimiter is denied (bash would run its backticks) - subagent" \
   "$([ "$(og rel.jsonl Bash "$(bash "$SRC/scripts/py.sh" -c 'import json,sys; print(json.dumps({"command": "cat > /tmp/acme-brief.md <<X\n" + open(sys.argv[1], encoding="utf-8").read() + "X"}))' "$SRC/docs/specs/owner-guard-commit-fp/brief.md")" "$SUB")" = deny ]; echo $?)"
 ok "owner guard: a delimiter word bash reads longer than the tag does not hide a write - subagent" \
