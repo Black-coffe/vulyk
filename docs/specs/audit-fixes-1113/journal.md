@@ -38,3 +38,4 @@
 - 2026-11-14T08:36:20Z · 04-council:ESCALATE · reopened after round 4, ceiling now 6 · next: repair
 - 2026-11-14T08:36:43Z · 03-building · repair round 4: audit-fixes-1113-17-repair-round-4.md · next: build:9
 - 2026-11-14T08:40:40Z · 03-building · revised audit-fixes-1113-16 · next: build
+- 2026-11-14T08:40:42Z · 03-building · revised audit-fixes-1113-17 · next: build
