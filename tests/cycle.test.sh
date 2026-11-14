@@ -11,7 +11,7 @@
 # owner looks again -> READY -> --record. Each step asserts what ship-check.sh and
 # human-check.sh must say. Exit 1 on the first wrong answer.
 set -u
-PARTS="ship hooklog gates manual close close2 bsd safety red red2" # one topic each; every part rebuilds the shared setup below
+PARTS="ship hooklog gates manual close close2 scope bsd safety red red2" # one topic each; every part rebuilds the shared setup below
 PART=''
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -1200,12 +1200,13 @@ cp "$SRC"/templates/plan.md docs/specs/trust/plan.md; cp "$SRC"/templates/plan.m
 sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\13/' docs/specs/trust/plan.md
 sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\11/' docs/specs/trust1/plan.md
 printf 'v1\n' > trust-app.txt
-trust_story() { # trust_story <spec> <nn> <frontmatter-lines> - in progress, `returned:` empty, ## Files trust-app.txt, ## Verification `true`
-  printf -- '---\nstory: %s-%s\nspec: %s\nstatus: in-progress\nreturned:\nwave: %s\n%s---\n# Trust fixture %s\n\n## Files\n- trust-app.txt\n\n## Verification\n`true`\n' \
-    "$1" "$2" "$1" "$2" "$3" "$2" > "docs/specs/$1/$1-$2.md"
+trust_story() { # trust_story <spec> <nn> <frontmatter-lines> - in progress, `returned:` empty, wave 1, ## Files trust-app.txt, ## Verification `true`
+  printf -- '---\nstory: %s-%s\nspec: %s\nstatus: in-progress\nreturned:\nwave: 1\n%s---\n# Trust fixture %s\n\n## Files\n- trust-app.txt\n\n## Verification\n`true`\n' \
+    "$1" "$2" "$1" "$3" "$2" > "docs/specs/$1/$1-$2.md"
 }
 trust_story trust 01 ''; trust_story trust 02 $'red: required\nred_reason:\n'; trust_story trust 03 ''
 git add -A && git commit -qm "vulyk(trust): plan" >/dev/null
+bash scripts/cycle.sh claim docs/specs/trust t9 >/dev/null 2>&1; bash scripts/cycle.sh release docs/specs/trust t9 >/dev/null 2>&1   # S1: the Tier 3 wave's claim head
 TSHA="$(git rev-parse --short HEAD)"; TBAK="$(mktemp)"
 t1=docs/specs/trust/trust-01.md; t2=docs/specs/trust/trust-02.md; t3=docs/specs/trust/trust-03.md
 for f in "$t1" "$t2" "$t3"; do sed_inplace 's/^returned:$/returned: DONE/' "$f"; done
@@ -1457,6 +1458,67 @@ out="$(bash scripts/cycle.sh close-story docs/specs/stray/stray-22.md --commit 2
   && echo "  ok    without the shim the same close commits both files" || { echo "::error::add-fail rerun: exit=$ex out=$out"; fail=1; }
 rm -rf "$GSHIM"
 fi # part close2
+if part scope; then # --- part scope: close-story at Tier 3-4 counts the scope from the head claim recorded for the wave
+echo "audit-fixes-1113-09 (S1): at Tier 3 the scope counts from the claim head, committed edits included"
+mkdir -p docs/specs/sone docs/specs/sonet
+cp "$SRC"/templates/plan.md docs/specs/sone/plan.md; cp "$SRC"/templates/plan.md docs/specs/sonet/plan.md
+sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\13/; s/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-14/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/sone/plan.md
+sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\11/' docs/specs/sonet/plan.md
+sone_story() { # sone_story <spec> <nn> <wave> <file> - todo, `returned:` empty, ## Files <file>, ## Verification `true`
+  printf -- '---\nstory: %s-%s\nspec: %s\nstatus: todo\nreturned:\nwave: %s\n---\n# Sone fixture %s\n\n## Files\n- %s\n\n## Verification\n`true`\n' \
+    "$1" "$2" "$1" "$3" "$2" "$4" > "docs/specs/$1/$1-$2.md"
+}
+sone_story sone 01 1 sone-a.txt; sone_story sone 02 1 sone-b.txt; sone_story sone 03 2 sone-c.txt; sone_story sonet 01 1 sonet-a.txt
+printf 'a\n' > sone-a.txt; printf 'b\n' > sone-b.txt; printf 'c\n' > sone-c.txt; printf 'x\n' > sone-x.txt; printf 't\n' > sonet-a.txt
+git add -A && git commit -qm "vulyk(sone): plan" >/dev/null
+SONE_PLAN="$(git rev-parse HEAD)"; SONE_REC=.vulyk/state/sone/claim
+sed_inplace 's/^returned:$/returned: DONE/' docs/specs/sone/sone-03.md; printf 'c2\n' > sone-c.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/sone/sone-03.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 2 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"no claim head recorded for wave 2"' && grep -q '^status: todo' docs/specs/sone/sone-03.md \
+  && echo "  ok    a Tier 3 close with no claim record: exit 2 no claim head recorded for wave 2" \
+  || { echo "::error::a Tier 3 close with no claim record must refuse - exit=$ex out=$out"; fail=1; }
+sed_inplace 's/^returned: DONE$/returned:/' docs/specs/sone/sone-03.md; printf 'c\n' > sone-c.txt
+sed_inplace 's/^returned:$/returned: DONE/' docs/specs/sonet/sonet-01.md; printf 't2\n' > sonet-a.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/sonet/sonet-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && [ "$(printf '%s\n' "$out" | grep -c 'keeps no claim head: the scope check counts the uncommitted diff only')" -eq 1 ] \
+  && echo "  ok    a Tier 1 close passes with one stderr note" || { echo "::error::Tier 1 close with no claim head - exit=$ex out=$out"; fail=1; }
+out="$(bash scripts/cycle.sh claim docs/specs/sone s9 2>&1)"; ex=$?
+SONE_HEAD="$(git rev-parse HEAD)"
+[ "$ex" -eq 0 ] && [ "$(sed -n 's/^wave\.1=//p' "$SONE_REC" 2>/dev/null)" = "$SONE_HEAD" ] \
+  && echo "  ok    claim records the head of the wave it builds" || { echo "::error::claim head: exit=$ex out=$out rec=$(cat "$SONE_REC" 2>&1)"; fail=1; }
+bash scripts/cycle.sh release docs/specs/sone s9 >/dev/null 2>&1
+git commit -q --allow-empty -m "an empty commit moves HEAD" >/dev/null
+bash scripts/cycle.sh claim docs/specs/sone s9 >/dev/null 2>&1; bash scripts/cycle.sh release docs/specs/sone s9 >/dev/null 2>&1
+[ "$(grep -c '^wave\.1=' "$SONE_REC" 2>/dev/null)" = 1 ] && [ "$(sed -n 's/^wave\.1=//p' "$SONE_REC")" = "$SONE_HEAD" ] \
+  && echo "  ok    a second claim of the same wave keeps the first head" || { echo "::error::second claim: $(cat "$SONE_REC" 2>&1)"; fail=1; }
+sed_inplace 's/^returned:$/returned: DONE/' docs/specs/sone/sone-02.md; printf 'b2\n' > sone-b.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/sone/sone-02.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && echo "  ok    a wave-mate closes first (its close commit lands in the range)" || { echo "::error::wave-mate close: exit=$ex out=$out"; fail=1; }
+printf -- '- a note by hand\n' >> docs/specs/sone/journal.md
+git add -- docs/specs/sone/journal.md && git commit -qm "vulyk(sone): journal" -- docs/specs/sone/journal.md >/dev/null   # a paperwork commit in the range
+sed_inplace 's/^returned:$/returned: DONE/' docs/specs/sone/sone-01.md; printf 'a2\n' > sone-a.txt
+printf 'x2\n' > sone-x.txt; git commit -qm "an edit by hand" -- sone-x.txt >/dev/null
+head_before="$(git rev-parse HEAD)"
+out="$(bash scripts/cycle.sh close-story docs/specs/sone/sone-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"edited outside ## Files: sone-x.txt"' && grep -q '^status: todo' docs/specs/sone/sone-01.md \
+  && [ "$(git rev-parse HEAD)" = "$head_before" ] \
+  && echo "  ok    an edit committed before the close is out of scope: exit 4 naming it, not the wave-mate's close or the paperwork commit" \
+  || { echo "::error::an edit committed before the close is out of scope - exit=$ex out=$out"; fail=1; }
+git commit -q --allow-empty -m "a later commit" >/dev/null
+out="$(bash scripts/cycle.sh close-story docs/specs/sone/sone-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"edited outside ## Files: sone-x.txt"' \
+  && echo "  ok    an edit committed two commits back is out of scope" || { echo "::error::an edit committed two commits back is out of scope - exit=$ex out=$out"; fail=1; }
+printf 'x\n' > sone-x.txt; git commit -qm "the hand edit undone" -- sone-x.txt >/dev/null
+printf 'x3\n' > sone-x.txt; git add -- sone-x.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/sone/sone-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"edited outside ## Files: sone-x.txt"' \
+  && echo "  ok    the same edit staged only is out of scope" || { echo "::error::an edit staged only is out of scope - exit=$ex out=$out"; fail=1; }
+printf 'x\n' > sone-x.txt; git add -- sone-x.txt
+out="$(bash scripts/cycle.sh close-story docs/specs/sone/sone-01.md --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && git show HEAD:docs/specs/sone/sone-01.md | grep -q '^status: done' \
+  && echo "  ok    the edit undone: the close passes over the wave-mate's close and the paperwork commit in the range" \
+  || { echo "::error::the clean close refused - exit=$ex out=$out"; fail=1; }
+fi # part scope
 if part bsd; then # --- part bsd: cycle.sh under a BSD sed, conventional subjects, command_cell_exists
 echo "cycle.sh under a BSD (macOS) sed, and a Profile whose Commit convention is conventional: chore(...) subjects"
 REAL_SED="$(command -v sed)"; BSD="$(mktemp -d)"

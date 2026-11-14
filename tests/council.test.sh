@@ -688,6 +688,7 @@ nr_red() { # nr_red <slug> <review-report> - a Tier 3 spec with stories on app/x
   printf '%b' "$2" | council record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
   council judge "docs/specs/$1" --commit >/dev/null 2>&1
   council repair "docs/specs/$1" --commit >/dev/null 2>&1
+  council claim "docs/specs/$1" nr >/dev/null 2>&1; council release "docs/specs/$1" nr >/dev/null 2>&1   # S1: the repair wave's claim head
   NR_RS="docs/specs/$1/$1-04-repair-round-1.md"; NR_REC=".vulyk/state/$1/narrow.round-2"
 }
 nr_round2() { # nr_round2 <slug> - the repair story marked done with a code change, round 2 opened; open-round's stderr into NR_ERR

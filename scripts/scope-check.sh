@@ -8,6 +8,7 @@
 #   Usage: scripts/scope-check.sh <story-file> [git-diff-range]
 #          scripts/scope-check.sh docs/specs/oauth/oauth-01.md
 #          scripts/scope-check.sh docs/specs/oauth/oauth-01.md main...HEAD
+#          scripts/scope-check.sh docs/specs/oauth/oauth-01.md --since <claim-head>
 #
 # Default range is the working tree (staged + unstaged) against HEAD. Since v0.5.0 the
 # build loop commits per story, so at the moment /vulyk-build runs this - after a worker
@@ -29,17 +30,26 @@
 # this story's excess. A path this story declares itself is always its own. With an explicit
 # range nothing is excluded.
 #
+# With `--since <sha>` (S1, audit-fixes-1113: close-story at Tier 3-4 passes the head `claim` recorded for
+# the story's wave) the count is every file changed between that commit and the working tree, committed or
+# not, plus untracked ones: an edit committed before the close counts too. Excluded as with no range, and
+# besides: a same-wave story's declared paths and story file whatever its status (a closed wave-mate's
+# close commit lies in the range).
+#
 # Exit status is always 0: this reports, it does not block. Blocking is lead-review's job.
 
 set -u
 
 STORY="${1:-}"
 RANGE="${2:-}"
+SINCE=""
+if [ "$RANGE" = --since ]; then SINCE="${3:-}"; RANGE=""; fi
 
 if [ -z "$STORY" ] || [ ! -f "$STORY" ]; then
-  echo "scope-check: usage: $0 <story-file> [git-diff-range]" >&2
+  echo "scope-check: usage: $0 <story-file> [git-diff-range | --since <sha>]" >&2
   exit 0
 fi
+case "$SINCE" in -*) echo "scope-check: --since needs a commit" >&2; exit 0 ;; esac
 
 # shellcheck source=scripts/lib.sh
 . "$(dirname "$0")/lib.sh"   # is_paperwork_path
@@ -87,6 +97,9 @@ fi
 # --- what actually changed ---------------------------------------------------
 if [ -n "$RANGE" ]; then
   CHANGED="$(git -c core.quotePath=false diff --name-only --no-renames "$RANGE" 2>/dev/null)"
+elif [ -n "$SINCE" ]; then
+  # the claim head against the working tree: committed, staged and unstaged changes alike
+  CHANGED="$(git -c core.quotePath=false diff --name-only --no-renames "$SINCE" -- 2>/dev/null; git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null)"
 else
   # quotePath off: a non-ASCII name must come back as itself to match its `## Files` line. --no-renames
   # (both diffs): a rename names only its new path, so code moved into paperwork vanished from the count.
@@ -125,11 +138,12 @@ if [ -z "$RANGE" ]; then
     [ -f "$sib" ] && [ "$sib" != "$STORY_REL" ] || continue
     grep -q '^story:' "$sib" 2>/dev/null || continue
     sst="$(awk -F': *' '$1 == "status" { sub(/[[:space:]]*#.*$/, "", $2); gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit }' "$sib")"
-    [ "$sst" = done ] && continue
+    swave="$(fm_wave "$sib")"; [ -n "$swave" ] || swave=1
+    # --since: a closed wave-mate's close commit lies in the range, so a same-wave story counts whatever its status
+    if [ "$sst" = done ]; then [ -n "$SINCE" ] && [ "$swave" = "$MYWAVE" ] || continue; fi
     # the sibling's own story file too: its worker writes `returned:` there, in the same tree
     SIBLING_DECLARED="${SIBLING_DECLARED}${sib}
 "
-    swave="$(fm_wave "$sib")"; [ -n "$swave" ] || swave=1
     [ "$swave" = "$MYWAVE" ] || continue
     SIBLING_DECLARED="${SIBLING_DECLARED}$(files_of "$sib")
 "

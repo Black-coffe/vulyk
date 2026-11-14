@@ -529,6 +529,12 @@ now_ts() { date -u +%Y-%m-%dT%H:%M:%SZ; } # the one timestamp shape every ledger
 
 slug_of() { basename "$1"; } # slug_of <spec-dir>
 
+# The cycle's run state (`.vulyk/state/<slug>/`, gitignored, beside the verify records) holds `claim`: one
+# `wave.<W>=<sha>` line per wave, the head `claim` saw when that wave's build began (S1, audit-fixes-1113).
+# The last line of a key wins.
+cycle_state_dir() { printf '%s/.vulyk/state/%s' "$1" "$2"; } # cycle_state_dir <root> <slug>
+state_get() { sed -n "s/^${3//./\\.}=//p" "$(cycle_state_dir "$1" "$2")/$4" 2>/dev/null | tail -n 1; } # state_get <root> <slug> <key> <record>
+
 # --- portability helpers (cross-platform) ----------------------------------------------------
 # One spelling each for what GNU, BSD (macOS) and Git Bash disagree on: which Python, `sed -i`,
 # `date -d`, and a time cap. Callers use these instead of their own probes.

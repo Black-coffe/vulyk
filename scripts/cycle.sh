@@ -2907,7 +2907,27 @@ EOF
   # ADR-032 D1: every gate below reads a working copy proven equal to the story's approved version.
   story_blocks_guard "$STORY" close-story
 
-  local SCOPE_OUT; SCOPE_OUT="$(bash "$HERE/scope-check.sh" "$STORY")"
+  # S1 (audit-fixes-1113): at Tier 3-4 the scope counts from the head `claim` recorded for the story's wave,
+  # so an edit committed before this close counts as well as an uncommitted one. No record is a refusal,
+  # never a pass. Tier 1-2 (no claim) keeps the uncommitted-only count, with one note.
+  local SCOPE_TIER SCOPE_WAVE SCOPE_HEAD="" SCOPE_MSG=""; SCOPE_TIER="$(tier_of "$SPECDIR")"
+  case "$SCOPE_TIER" in
+    3|4)
+      SCOPE_WAVE="$(fm_field "$STORY" wave)"; case "$SCOPE_WAVE" in ''|*[!0-9]*) SCOPE_WAVE=1 ;; esac; SCOPE_WAVE=$((10#$SCOPE_WAVE))
+      SCOPE_HEAD="$(state_get "$ROOT" "$(slug_of "$SPECDIR")" "wave.$SCOPE_WAVE" claim)"
+      if [ -z "$SCOPE_HEAD" ]; then
+        SCOPE_MSG="no claim head recorded for wave $SCOPE_WAVE"
+      elif ! git rev-parse --verify -q "$SCOPE_HEAD^{commit}" >/dev/null 2>&1; then
+        SCOPE_MSG="the claim head of wave $SCOPE_WAVE is no commit here: $SCOPE_HEAD"
+      fi
+      if [ -n "$SCOPE_MSG" ]; then
+        echo "cycle: close-story - $SCOPE_MSG: claim (advance --claim) records it; a record is never written by hand" >&2
+        emit false close-story 2 error "$SCOPE_MSG"
+        exit 2
+      fi ;;
+    *) echo "cycle: close-story - note: Tier ${SCOPE_TIER:-unset} keeps no claim head: the scope check counts the uncommitted diff only" >&2 ;;
+  esac
+  local SCOPE_OUT; SCOPE_OUT="$(bash "$HERE/scope-check.sh" "$STORY" ${SCOPE_HEAD:+--since "$SCOPE_HEAD"})"
   printf '%s\n' "$SCOPE_OUT"
 
   # An out-of-scope edit the commit below would leave behind (it stages the declared Files only) is
@@ -2916,16 +2936,27 @@ EOF
   # refuses only if it is still dirty and not paperwork, i.e. what would stop open-round. While a
   # wave-mate is still open the path may be its in-flight work, so only the wave's last close (and
   # the solo path) refuses; the others print a note.
+  # S1: a path changed in a commit since the claim head refuses at once, whoever is still open: no
+  # worker commits, and nothing of a wave-mate's in-flight work is committed before its own close.
   if [ "$DOCOMMIT" = "1" ]; then
-    local STRAY="" sp
+    local STRAY="" COMMITTED="" sp
     while IFS= read -r sp; do
       sp="${sp#  ! }"
       [ -n "$sp" ] || continue
       is_paperwork_path "$sp" && continue
-      [ -n "$(GIT_LITERAL_PATHSPECS=1 git status --porcelain -uall -- "$sp" 2>/dev/null)" ] && STRAY="${STRAY:+$STRAY, }$sp"
+      if [ -n "$SCOPE_HEAD" ] && ! GIT_LITERAL_PATHSPECS=1 git diff --quiet "$SCOPE_HEAD" HEAD -- "$sp" 2>/dev/null; then
+        COMMITTED="${COMMITTED:+$COMMITTED, }$sp"
+      elif [ -n "$(GIT_LITERAL_PATHSPECS=1 git status --porcelain -uall -- "$sp" 2>/dev/null)" ]; then
+        STRAY="${STRAY:+$STRAY, }$sp"
+      fi
     done <<EOF
 $(printf '%s\n' "$SCOPE_OUT" | grep '^  ! ')
 EOF
+    if [ -n "$COMMITTED" ]; then
+      echo "cycle: close-story - edited outside ## Files: $COMMITTED - committed since the claim head $(git rev-parse --short "$SCOPE_HEAD"); return NEEDS_CONTEXT naming them" >&2
+      emit false close-story 4 repair "edited outside ## Files: $COMMITTED${STRAY:+, $STRAY}"
+      exit 4
+    fi
     if [ -n "$STRAY" ]; then
       local MYWAVE OPEN="" sib
       MYWAVE="$(fm_field "$STORY" wave)"
@@ -4028,6 +4059,37 @@ $dirty
 EOF
 }
 
+state_put() { # state_put <spec> <record> <key> <value> - appends one `key=value` line to the cycle's run state
+  # (lib.sh cycle_state_dir), the directory made on first write with its own `*` .gitignore
+  local dir top; dir="$(cycle_state_dir "$ROOT" "$(slug_of "$1")")"; top="$(dirname "$dir")"
+  mkdir -p "$dir" || return 1
+  [ -f "$top/.gitignore" ] || printf '*\n' > "$top/.gitignore"
+  printf '%s=%s\n' "$3" "$4" >> "$dir/$2"
+}
+
+record_claim_head() { # record_claim_head <spec> [<wave>] - S1: the head of the wave the build is on (<wave>, else
+  # status's `wave`, else the lowest wave of a story not done), written once per wave: a second claim of the
+  # same wave keeps the first head. close-story at Tier 3-4 counts its scope from it.
+  local w="${2:-}" f fw
+  if [ -z "$w" ]; then
+    w="$(json_field "$(cmd_status "$1" 2>/dev/null)" wave)"
+    case "$w" in ''|*[!0-9]*)
+      w=""
+      for f in "$1"/*.md; do
+        [ -f "$f" ] && is_story_file "$f" || continue
+        fm_status_wave "$f"
+        [ "$FM_STATUS" = done ] && continue
+        fw="${FM_WAVE:-1}"; case "$fw" in ''|*[!0-9]*) fw=1 ;; esac; fw=$((10#$fw))
+        { [ -z "$w" ] || [ "$fw" -lt "$w" ]; } && w="$fw"
+      done ;;
+    esac
+  fi
+  case "$w" in ''|*[!0-9]*) return 0 ;; esac
+  w=$((10#$w))
+  [ -n "$(state_get "$ROOT" "$(slug_of "$1")" "wave.$w" claim)" ] && return 0
+  state_put "$1" claim "wave.$w" "$(git rev-parse HEAD)" || { emit false claim 2 error "could not write the claim head"; exit 2; }
+}
+
 cmd_claim() { # cmd_claim <spec> <stamp>
   local SPEC="$1" STAMP="${2:-}"
   [ -n "$SPEC" ] && [ -d "$SPEC" ] && [ -n "$STAMP" ] || {
@@ -4041,6 +4103,7 @@ cmd_claim() { # cmd_claim <spec> <stamp>
   local holder; holder="$(driver_stamp "$SPEC")"
   if [ -n "$holder" ]; then
     if [ "$holder" = "$STAMP" ]; then
+      record_claim_head "$SPEC"
       echo "cycle: $(slug_of "$SPEC") - already claimed by $STAMP"
       emit true claim 0 claimed
       exit 0
@@ -4069,6 +4132,7 @@ cmd_claim() { # cmd_claim <spec> <stamp>
   fi
 
   if ( set -o noclobber; { printf 'stamp=%s\n' "$STAMP"; printf 'claimed=%s\n' "$(now_ts)"; } > "$SPEC/DRIVER" ) 2>/dev/null; then
+    record_claim_head "$SPEC"
     echo "cycle: $(slug_of "$SPEC") - claimed by $STAMP"
     if [ -n "$LEFT_JSON" ]; then
       echo "cycle: claim - leftover edits in the ## Files of: $CL_LEFT"
@@ -4519,6 +4583,8 @@ cmd_advance() { # cmd_advance <spec> <stamp> <claim:0|1> <ingest:0|1>
   # exit 2, before any worker is sent. An empty ## Verification passes (close-story judges that).
   case "$next" in
     build:*)
+      # S1: a wave the driver reaches after its claim gets its head here, once, before any worker runs
+      [ -n "$(driver_stamp "$SPEC")" ] && record_claim_head "$SPEC" "${next#build:}"
       local vfile re_vf='"file":"([^"]*)"' wrest
       wrest=${st#*'"wave_stories":['}; wrest="${wrest%%]*}"
       while [[ $wrest =~ $re_vf ]]; do
