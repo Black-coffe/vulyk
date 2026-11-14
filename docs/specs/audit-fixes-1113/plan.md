@@ -241,6 +241,11 @@ evidence stays in the private audit folder.
 
 ## Plan deltas
 
+- 2026-11-14, story 11 NEEDS_CONTEXT: the new scope check (S1) counted the Queen's hook-bit commit b0721b25,
+  made between two driver runs, as the worker's out-of-scope edit. The Queen re-recorded the
+  wave's claim head, journaled. Root fix: story 13 adds `cycle.sh reanchor`
+  (journaled, main session only), so a recorded head never moves by hand again.
+
 - 2026-11-14, story 09 missed twice at the turn cap (both workers built in a scratchpad copy).
   lead-architect (Fable) cut it by ask into three serial stories, each alone in its wave because each
   rewrites `close-story`/`claim`: 09 (ask 8, wave 3), 13 (ask 9, wave 5), 14 (ask 10, wave 6); the
