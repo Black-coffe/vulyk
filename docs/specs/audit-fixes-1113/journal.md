@@ -14,3 +14,4 @@
 - 2026-11-13T23:49:38Z · 03-building · checkpoint after 55 min at build:3 · next: story 12 cut (scrub-revs mask-only); relaunching with a fresh stamp
 - 2026-11-14T00:50:08Z · 03-building · stop on audit-fixes-1113-09 (missed twice) · next: lead-architect cut it into 09/13/14 (waves 3/5/6), fixture item to 12; relaunching
 - 2026-11-14T01:10:42Z · 03-building · needs_context on audit-fixes-1113-09 · next: expected: wave 3 claimed by the old script, no claim head; relaunch so advance --claim records it
+- 2026-11-14T01:38:28Z · 03-building · needs_context on audit-fixes-1113-11 · next: hook bits set by the Queen (plan step 4); rerun close-story
