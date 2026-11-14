@@ -21,3 +21,4 @@
 - 2026-11-14T03:11:51Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-1 · next: dispatch:opus,review
 - 2026-11-14T03:14:38Z · 04-council · checkpoint after 50 min at dispatch:opus,review · next: relaunching with a fresh stamp
 - 2026-11-14T04:15:57Z · 04-council:RED · round 1 verdict RED at d974e00c pack 475733085b95 · next: repair
+- 2026-11-14T04:16:05Z · 03-building · repair round 1: audit-fixes-1113-15-repair-round-1.md · next: build:7
