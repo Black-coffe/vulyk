@@ -142,12 +142,18 @@ evidence stays in the private audit folder.
 **Wave 3** (the gates that judge this build)
 - `audit-fixes-1113-07-git-guard` — asks 5, 6, 8, 9: wider verb coverage, the no-Python fallback, no subagent commit under a DRIVER, the Queen's verbs closed to a subagent
 - `audit-fixes-1113-08-owner-word-and-court-guards` — asks 4, 13: only the owner's quoted words record an acceptance or `--go`; a blind seat stays inside its court
-- `audit-fixes-1113-09-cycle-gates` — asks 8, 9, 10: scope counted from the claim head; approval bound to `cycle.sh`'s own commit; hand edits of `brief.md` / `plan.md` are not paperwork (`model: opus`)
+- `audit-fixes-1113-09-cycle-gates` — ask 8: scope counted from the claim head (cut by lead-architect 2026-11-14; asks 9, 10 moved to 13, 14) (`model: opus`)
 - `audit-fixes-1113-10-install-wiring-and-allow-list` — asks 11, 4, 13: the six-verb allow list, the two new hooks wired, the hooks reference, the CHANGELOG
 
 **Wave 4** (cut mid-build, plan delta 2026-11-13)
 - `audit-fixes-1113-11-redact-leaves-ordinary-text` — ask 7: no false masks on ordinary text (every brief and journal byte-identical); callers refuse when `redact.sh` fails
-- `audit-fixes-1113-12-scrub-revs-mask-only` — ask 14: a `.scrub-revs` commit keeps a quote's date only for a masked-only change
+- `audit-fixes-1113-12-scrub-revs-mask-only` — ask 14: a `.scrub-revs` commit keeps a quote's date only for a masked-only change; and `--files` skips a card's own fixtures (from 09)
+
+**Wave 5**
+- `audit-fixes-1113-13-approved-record` — ask 9: approval bound to a commit cycle.sh made; `cycle.sh revise` (`model: opus`)
+
+**Wave 6**
+- `audit-fixes-1113-14-paperwork` — ask 10: paperwork is only what a cycle script writes; named staging (`model: opus`)
 
 ## Contracts
 <!-- Interfaces that cross a story boundary, agreed here at plan time. -->
@@ -234,6 +240,13 @@ evidence stays in the private audit folder.
 *(empty)*
 
 ## Plan deltas
+
+- 2026-11-14, story 09 missed twice at the turn cap (both workers built in a scratchpad copy).
+  lead-architect (Fable) cut it by ask into three serial stories, each alone in its wave because each
+  rewrites `close-story`/`claim`: 09 (ask 8, wave 3), 13 (ask 9, wave 5), 14 (ask 10, wave 6); the
+  own-fixtures gate item moved to story 12. Contracts S1/A1/P1 unchanged. The workers' untested diff is a
+  reference to port by hand, by line range. Invariant: a story that edits `close-story` or `claim` in
+  `scripts/cycle.sh` runs alone in its wave.
 
 - 2026-11-14, side-agent note the owner forwarded: `.scrub-revs` is a plain list any agent can extend. New story 12
   (wave 4, beside 11, disjoint files): a listed commit keeps a quote's older date only for a masked-only change.
