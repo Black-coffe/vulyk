@@ -8,8 +8,9 @@
 #   - a command running `cycle.sh briefed <spec> ... --go`;
 #   - an Edit, MultiEdit, Write or shell command that adds or changes a `**Approved:**` or `**Checked:**` line
 #     of a `docs/specs/<slug>/plan.md` (a line still holding the template placeholder `<...>` is no record),
-#     and one that writes `memory/stats/human.jsonl` (a redirect into it, a writer or interpreter naming it, sed
-#     or awk -i): a `git add` or `git commit` of it, a read, or text that only names the path is no row (with no
+#     and one that writes `memory/stats/human.jsonl` (a redirect into it or a writer or interpreter naming it, by
+#     file name with any path or none, sed or awk -i; in a command naming it, also a redirect into a variable or
+#     a substitution): a `git add` or `git commit` of it, a read, or text that only names it is no row (with no
 #     Python the bash fallback still denies every command naming it). An Edit or MultiEdit is
 #     judged on the file as it stands after it, so one that replaces only the text after the marker counts;
 #   - a shell command that may rewrite a plan.md holding such a line without spelling the marker (a redirect
@@ -411,7 +412,7 @@ def command_actions(cmd, powershell, cwd):
                 acts.append(('rewrite', os.path.dirname(full), '', 'a command that rewrites %s' % target))
     # a human.jsonl row counts as written only by a command that writes the file (a redirect into it, a writer
     # naming it, sed/awk -i): a git add or commit, a read, or text that merely names the path is no row
-    if 'human.jsonl' in cmd and rewrites_plan(cmd, powershell, target=RECORD) and \
+    if 'human.jsonl' in cmd and writes_record(cmd, powershell) and \
             not any(a[0] == 'release' for a in acts):
         m = re.search(r'"spec\\?"\s*:\s*\\?"([^"\\]+)', cmd)
         acts.append(('release', spec_of('docs/specs/' + m.group(1), cwd) if m else None, cmd,
@@ -446,7 +447,15 @@ WRITERS = ('tee', 'cp', 'mv', 'install', 'dd', 'truncate', 'set-content', 'add-c
 
 
 PLAN_PATH = r'docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md'
-RECORD = r'memory[/\\]stats[/\\]human\.jsonl'
+RECORD = r'(?<![\w.-])human\.jsonl'   # the file name with any path or none (`cd memory/stats` first counts too)
+
+
+def writes_record(cmd, powershell):
+    """True when a command naming human.jsonl may write it: a redirect into it or a writer naming it (by name,
+    with or without a path), or a redirect into a variable or a substitution, which the hook cannot resolve."""
+    if rewrites_plan(cmd, powershell, target=RECORD):
+        return True
+    return bool(re.search(r'(?<![0-9&])>{1,2}\s*["\']?(\$|`)', cmd))
 
 
 def rewrites_plan(cmd, powershell, depth=0, target=PLAN_PATH):
