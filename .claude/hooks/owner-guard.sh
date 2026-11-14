@@ -455,8 +455,8 @@ RECORD = r'(?<![\w.-])human\.jsonl'   # the file name with any path or none (`cd
 
 SAFE_LEADS = ('cd', 'cat', 'grep', 'head', 'tail', 'wc', 'ls', 'stat', 'echo', 'printf', 'git')
 SAFE_GIT = ('add', 'commit', 'diff', 'log', 'show', 'status')
-CAT_HEREDOC = re.compile(r'(?m)^(?P<head>[ \t]*cat\b[^\n<]*<<(?P<dash>-?)\s*[\'"]?(?P<tag>[A-Za-z_]\w*)[\'"]?[^\n<]*)\n'
-                         r'.*?\n(?(dash)\t*)(?P=tag)$', re.S)
+CAT_HEREDOC = re.compile(r'(?m)^(?P<head>[ \t]*cat\b[^\n<]*<<(?P<dash>-?)\s*(?P<q>[\'"]?)(?P<tag>[A-Za-z_]\w*)'
+                         r'(?P<rest>[^\n]*))\n(?P<body>.*?)\n(?(dash)\t*)(?P=tag)$', re.S)
 GIT_BAD_GLOBAL = ('-c', '--config-env', '--exec-path', '--git-dir', '--work-tree', '--namespace')
 GIT_BAD_ARG = re.compile(r'^(-o|--output|--ext-diff|--textconv|--exec|--upload-pack|--receive-pack)')
 
@@ -468,7 +468,18 @@ def writes_record(cmd, powershell):
     file is text, not commands. Anything else (a writer, an interpreter, a prefix word, an assignment, a patch, a
     PowerShell call) counts as a write."""
     def strip_cat_heredoc(m):
-        return m.group('head') if not re.search(r'>\|?\s*["\']?[^\s"\']*' + RECORD, m.group('head')) else m.group(0)
+        # the body is text only when bash reads the same delimiter (nothing but the closing quote and an optional
+        # redirect after the tag), cat does not write the record, and an unquoted body holds no substitution
+        q, rest = m.group('q'), m.group('rest')
+        if q and not rest.startswith(q):
+            return m.group(0)
+        if not re.match(r'^[ \t]*(\d?>[>|]?[ \t]*[^\s;&|<>`$]+[ \t]*)?$', rest[len(q):]):
+            return m.group(0)
+        if re.search(r'>\|?\s*["\']?[^\s"\']*' + RECORD, m.group('head')):
+            return m.group(0)
+        if not q and re.search(r'\$\(|`|<\(|>\(', m.group('body')):
+            return m.group(0)
+        return m.group('head')
     text = CAT_HEREDOC.sub(strip_cat_heredoc, cmd.replace('\r', ''))
     if re.search(r'(?<![0-9&])>[>|]?\s*["\']?[^\s;&|<>"\']*' + RECORD, text):
         return True

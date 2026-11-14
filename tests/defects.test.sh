@@ -777,7 +777,11 @@ ok "owner guard: a writer aimed at a variable in a command naming the record is 
 hit=1; case "$(tr -d '\r' < "$OG" | tr '\n' ' ' | tr -s ' #' ' ')" in *'a record name the command never spells'*) hit=0 ;; esac
 ok "owner guard: the header names the record forms left open on purpose" "$hit"
 ok "owner guard: a heredoc to cat holding the brief's real text (arrows, backticks, the record, ACCEPTED) passes" \
-  "$([ "$(og rel.jsonl Bash "$(bash "$SRC/scripts/py.sh" -c 'import json,sys; print(json.dumps({"command": "cat > /tmp/acme-brief.md <<X\n" + open(sys.argv[1], encoding="utf-8").read() + "X"}))' "$SRC/docs/specs/owner-guard-commit-fp/brief.md")" "$SUB")" = allow ]; echo $?)"
+  "$([ "$(og rel.jsonl Bash "$(bash "$SRC/scripts/py.sh" -c 'import json,sys; print(json.dumps({"command": "cat > /tmp/acme-brief.md <<'"'"'X'"'"'\n" + open(sys.argv[1], encoding="utf-8").read() + "X"}))' "$SRC/docs/specs/owner-guard-commit-fp/brief.md")" "$SUB")" = allow ]; echo $?)"
+ok "owner guard: the same text under an unquoted delimiter is denied (bash would run its backticks) - subagent" \
+  "$([ "$(og rel.jsonl Bash "$(bash "$SRC/scripts/py.sh" -c 'import json,sys; print(json.dumps({"command": "cat > /tmp/acme-brief.md <<X\n" + open(sys.argv[1], encoding="utf-8").read() + "X"}))' "$SRC/docs/specs/owner-guard-commit-fp/brief.md")" "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a delimiter word bash reads longer than the tag does not hide a write - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"cat > /tmp/n <<X'"'"'Y'"'"'\nnote\nXY\necho x >> memory/stats/human.jsonl\nX"}' "$SUB")" = deny ]; echo $?)"
 ok "owner guard: a read of the record redirected into a variable path passes" \
   "$([ "$(og rel.jsonl Bash '{"command":"tail -1 memory/stats/human.jsonl > \"$TMP/last.json\""}' "$SUB")" = allow ]; echo $?)"
 ok "owner guard: an interpreter fed by a heredoc that writes the record is denied - subagent" \
