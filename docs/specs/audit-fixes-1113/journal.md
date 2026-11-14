@@ -29,3 +29,4 @@
 - 2026-11-14T06:33:16Z · 04-council · council-opus empty three times (60-turn cap on 21 asks) · next: owner: «Лимит 150 + бюджет (Рекомендую)»; d224211d raises the cap and adds a turn budget; round 2 goes stale, relaunching
 - 2026-11-14T06:33:30Z · 04-council:STALE · round 2 stale, code moved after dispatch · next: open-round
 - 2026-11-14T06:33:31Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-3 · next: dispatch:opus,review
+- 2026-11-14T07:30:01Z · 04-council:RED · round 3 verdict RED at 0b2de955 pack b1039f68f2f5 · next: repair

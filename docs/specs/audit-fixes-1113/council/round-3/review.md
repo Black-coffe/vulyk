@@ -1,0 +1,15 @@
+<!-- seat: review · model: claude-fable-5-2 · round: 3 · head: b77685ed · pack: b1039f68f2f5 · attempt: 1 · recorded: 2026-11-14T07:10:53Z · verdict: BLOCK -->
+VERDICT: BLOCK
+SUITE: FAIL 1265s - cut part telemetry:wiring
+MODEL: claude-fable-5-2
+
+## Critical
+1. tests/full-suite.sh:172 [regression] the round's suite must end `SUITE: ok`: the part `telemetry:wiring` (`bash tests/telemetry.test.sh --part wiring`) must finish under 70% of its 300 s cap (210 s) when it runs inside step 6 beside its eleven neighbours; at the head it took 212 s and the gate cut it (STEP 6/10 FAIL), while the base 11ab8fe3 ran it in 200 s with `SUITE: ok 1192s` (docs/specs/audit-fixes-1113/council/round-2/suite.log). No check failed: rerun alone it gave `85 checks, 0 failed`, exit 0, 174 s, and the round's diff (one agent prompt) changes nothing the part runs, so the condition is time headroom for this part with the cap and the 70% line left as they are (card test-gate-one-long-limit) - repro: `bash scripts/suite-parts-check.sh docs/specs/audit-fixes-1113/council/round-3/suite.log` prints `cut part telemetry:wiring: 212s of cap 300s (grew)` and exits 1; the same command on the round-2 log exits 0.
+## Major
+1. .claude/hooks/owner-guard.sh:13 [unanchored] carried from round 2 unchanged (the diff does not touch the file): the header must name every shell form the plan.md rewrite check (owner-guard.sh:435) leaves open, or the check must cover them (card safeguard-bypassable-or-late) - repro and base evidence: Major 1 of docs/specs/audit-fixes-1113/council/round-2/review.md.
+## Minor
+- Round 2 had no anchored finding to fix (review PASS; the intent seat returned empty three times at its 60-turn cap). The diff answers that: `.claude/agents/council-opus.md:8` raises the cap to 150 and lines 49-53 add a turn budget; `bash scripts/prompt-check.sh --touched .claude/agents/council-opus.md` is ok, `bash scripts/defects-check.sh` is GREEN (10 blocking checks), and no story or red receipt is in the diff.
+- .claude/agents/council-opus.md:51 the turn budget should say that the last write replaces the report file: a final report appended after the per-ask lines repeats every `ASK <n>:` and `record-seat` rejects it as MALFORMED (`ASK n appears more than once`, scripts/cycle.sh:1947), which spends the attempt.
+- .claude/agents/council-opus.md:51 a seat that still dies at the cap now leaves a file of bare `ASK` lines; ingest records it as MALFORMED `missing label COUNCIL:` (scripts/cycle.sh:1934), never as a verdict, so no false pass, but the retry is told about a missing label instead of the turn cap.
+- docs/specs/audit-fixes-1113/council/round-3/suite.log three more parts of the same step sit close to the 210 s line (`telemetry:install-xp2` 189 s, `telemetry:install-xp` 184 s, `telemetry:install` 180 s) and `council:advance` is at 181 s; the whole run was about 6% slower than round 2 (1265 s against 1192 s), so the next run can cut one of them.
+- CHANGELOG.md:5 `[Unreleased]` has no line for the seat's new turn cap and budget.

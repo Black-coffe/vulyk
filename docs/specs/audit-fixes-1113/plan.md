@@ -313,4 +313,5 @@ is missing or unparsable.
 **Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-11-14, at d974e00c, pack 475733085b95
 **Council:** STALE round 2, 2026-11-14, at 11ab8fe3, pack b1039f68f2f5
+**Council:** RED round 3, 2026-11-14, at 0b2de955, pack b1039f68f2f5
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
