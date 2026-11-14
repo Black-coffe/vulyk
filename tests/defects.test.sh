@@ -772,6 +772,10 @@ ok "owner guard: tee into the record by its bare name is still denied - subagent
   "$([ "$(og rel.jsonl Bash '{"command":"cd memory/stats; printf x | tee -a human.jsonl"}' "$SUB")" = deny ]; echo $?)"
 ok "owner guard: a redirect into a variable in a command naming the record is still denied - subagent" \
   "$([ "$(og rel.jsonl Bash '{"command":"f=memory/stats/human.jsonl; echo x >> \"$f\""}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a writer aimed at a variable in a command naming the record is still denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"f=memory/stats/human.jsonl; cp /tmp/row \"$f\""}' "$SUB")" = deny ]; echo $?)"
+hit=1; case "$(tr -d '\r' < "$OG" | tr '\n' ' ' | tr -s ' #' ' ')" in *'a record name the command never spells'*) hit=0 ;; esac
+ok "owner guard: the header names the record forms left open on purpose" "$hit"
 ok "owner guard: git add of the record by its bare name passes" \
   "$([ "$(og rel.jsonl Bash '{"command":"cd memory/stats && git add human.jsonl"}' "$SUB")" = allow ]; echo $?)"
 ok "owner guard: a redirect into the record is still denied - main session without a quote" \

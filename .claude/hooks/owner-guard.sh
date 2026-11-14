@@ -10,8 +10,11 @@
 #     of a `docs/specs/<slug>/plan.md` (a line still holding the template placeholder `<...>` is no record),
 #     and one that writes `memory/stats/human.jsonl` (a redirect into it or a writer or interpreter naming it, by
 #     file name with any path or none, sed or awk -i; in a command naming it, also a redirect into a variable or
-#     a substitution): a `git add` or `git commit` of it, a read, or text that only names it is no row (with no
-#     Python the bash fallback still denies every command naming it). An Edit or MultiEdit is
+#     a substitution, or a writer aimed at one): a `git add` or `git commit` of it, a read, or text that only
+#     names it is no row (with no Python the bash fallback still denies every command naming it). Left open on
+#     purpose: a record name the command never spells (built from quotes, globs, braces or variables assembled
+#     elsewhere, a script file that writes it); the hook reads the text it is given and does not expand a shell.
+#     An Edit or MultiEdit is
 #     judged on the file as it stands after it, so one that replaces only the text after the marker counts;
 #   - a shell command that may rewrite a plan.md holding such a line without spelling the marker (a redirect
 #     into it; tee, cp, mv, a script interpreter; sed or awk -i) and that names it by its `docs/specs/<slug>/plan.md`
@@ -455,7 +458,16 @@ def writes_record(cmd, powershell):
     with or without a path), or a redirect into a variable or a substitution, which the hook cannot resolve."""
     if rewrites_plan(cmd, powershell, target=RECORD):
         return True
-    return bool(re.search(r'(?<![0-9&])>{1,2}\s*["\']?(\$|`)', cmd))
+    if re.search(r'(?<![0-9&])>{1,2}\s*["\']?(\$|`)', cmd):
+        return True
+    for seg in split_segments(cmd, powershell) or []:   # a writer, or sed/awk -i, aimed at a variable
+        lead = base(seg[0]).lower() if seg else ''
+        lead = lead[:-4] if lead.endswith('.exe') else lead
+        inplace = lead in ('sed', 'gsed', 'awk', 'gawk') and any(
+            re.match(r'^(-[a-zA-Z]*i\S*|--in-place\S*)$', w) for w in seg[1:])
+        if (lead in WRITERS or inplace) and any('$' in w or '`' in w for w in seg[1:]):
+            return True
+    return False
 
 
 def rewrites_plan(cmd, powershell, depth=0, target=PLAN_PATH):
