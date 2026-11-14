@@ -71,6 +71,9 @@ line; the Queen relaunches the driver and its `advance --claim` writes the recor
 - [ ] Seeding: a spec with stories committed before this release and no record gets one from `claim`, with a journal line; a record missing after that line makes `claim` exit 2 naming `cycle.sh revise`.
 - [ ] `docs/cycle.md` describes the record and `revise`; ADR-032 has a dated amendment stating the rule. `bash scripts/prompt-check.sh --touched scripts/cycle.sh .claude/commands/vulyk-build.md .claude/commands/vulyk-plan.md` has no error.
 
+- [ ] `reanchor`: after a main-session commit outside every story's `## Files` between two claims, a close counts
+  that commit as out of scope; after `reanchor` with a reason it does not, and the journal names the move.
+
 ## Verification
 `bash tests/cycle.test.sh --part approved`
 `bash tests/cycle.test.sh --part close`
