@@ -455,8 +455,10 @@ RECORD = r'(?<![\w.-])human\.jsonl'   # the file name with any path or none (`cd
 
 SAFE_LEADS = ('cd', 'cat', 'grep', 'head', 'tail', 'wc', 'ls', 'stat', 'echo', 'printf', 'git')
 SAFE_GIT = ('add', 'commit', 'diff', 'log', 'show', 'status')
-CAT_HEREDOC = re.compile(r'(?m)^(?P<head>[^\n]*\bcat\b[^\n]*<<-?\s*[\'"]?(?P<tag>[A-Za-z_]\w*)[\'"]?[^\n]*)\n'
-                         r'.*?\n(?P=tag)[ \t]*$', re.S)
+CAT_HEREDOC = re.compile(r'(?m)^(?P<head>[ \t]*cat\b[^\n<]*<<(?P<dash>-?)\s*[\'"]?(?P<tag>[A-Za-z_]\w*)[\'"]?[^\n<]*)\n'
+                         r'.*?\n(?(dash)\t*)(?P=tag)$', re.S)
+GIT_BAD_GLOBAL = ('-c', '--config-env', '--exec-path', '--git-dir', '--work-tree', '--namespace')
+GIT_BAD_ARG = re.compile(r'^(-o|--output|--ext-diff|--textconv|--exec|--upload-pack|--receive-pack)')
 
 
 def writes_record(cmd, powershell):
@@ -470,6 +472,8 @@ def writes_record(cmd, powershell):
     text = CAT_HEREDOC.sub(strip_cat_heredoc, cmd.replace('\r', ''))
     if re.search(r'(?<![0-9&])>[>|]?\s*["\']?[^\s;&|<>"\']*' + RECORD, text):
         return True
+    if re.search(r'\$\(|`|<\(|>\(', text):            # a substitution runs a command the hook does not read
+        return True
     segs = split_segments(text, powershell)
     if segs is None:
         return True
@@ -481,8 +485,12 @@ def writes_record(cmd, powershell):
         if lead == 'git':
             words, i = seg[1:], 0
             while i < len(words) and words[i].startswith('-'):
-                i += 2 if words[i] in ('-C', '-c') else 1
+                if words[i].split('=', 1)[0] in GIT_BAD_GLOBAL:
+                    return True
+                i += 2 if words[i] == '-C' else 1
             if i >= len(words) or words[i] not in SAFE_GIT:
+                return True
+            if any(GIT_BAD_ARG.match(w) for w in words[i + 1:]):
                 return True
     return False
 

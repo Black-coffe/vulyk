@@ -788,6 +788,14 @@ ok "owner guard: a clobber redirect into the record is denied - subagent" \
   "$([ "$(og rel.jsonl Bash '{"command":"echo ACCEPTED >| memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
 ok "owner guard: patch on the record is denied - subagent" \
   "$([ "$(og rel.jsonl Bash '{"command":"patch memory/stats/human.jsonl <<P\n+row\nP"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a substitution inside a safe command naming the record is denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"cat $(python -c 1) memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: git -c config naming the record is denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"git -c core.pager=x log memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: git diff --output naming the record is denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"git diff --output=memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a <<- heredoc ends at its tab-indented terminator, so a write after it is denied - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"cat > /tmp/n <<-X\nnote\n\tX\necho x >> memory/stats/human.jsonl\nX"}' "$SUB")" = deny ]; echo $?)"
 ok "owner guard: git add of the record by its bare name passes" \
   "$([ "$(og rel.jsonl Bash '{"command":"cd memory/stats && git add human.jsonl"}' "$SUB")" = allow ]; echo $?)"
 ok "owner guard: a redirect into the record is still denied - main session without a quote" \
