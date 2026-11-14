@@ -314,4 +314,10 @@ is missing or unparsable.
 **Council:** RED round 1, 2026-11-14, at d974e00c, pack 475733085b95
 **Council:** STALE round 2, 2026-11-14, at 11ab8fe3, pack b1039f68f2f5
 **Council:** RED round 3, 2026-11-14, at 0b2de955, pack b1039f68f2f5
+**Council:** ESCALATE round 4, 2026-11-14, at 85a09311, pack c204ad9ef3c7 - red: 5
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+
+## Needs a human
+- reason: ceiling · round 4 · 2026-11-14
+- ask 5: RED - see docs/specs/audit-fixes-1113/council/round-4/*.md for evidence
+- seats: docs/specs/audit-fixes-1113/council/round-4/
