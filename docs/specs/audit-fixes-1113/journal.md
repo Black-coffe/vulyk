@@ -25,3 +25,4 @@
 - 2026-11-14T04:18:23Z · 03-building · checkpoint after 61 min at build:7; repair 15 widened · next: court-guard false positives starved the blind seat (no opus report in round 1); ADR-032 privacy minor; relaunching
 - 2026-11-14T04:18:29Z · 03-building · revised audit-fixes-1113-15 · next: build
 - 2026-11-14T05:12:25Z · 03-building · checkpoint after 53 min at build:7 · next: repair 15 written, receipt stamped, close pending; relaunching with a fresh stamp
+- 2026-11-14T05:33:39Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-2 · next: dispatch:opus,review
