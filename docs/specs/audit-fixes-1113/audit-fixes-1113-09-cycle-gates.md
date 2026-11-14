@@ -1,7 +1,7 @@
 ---
 story: audit-fixes-1113-09
 spec: audit-fixes-1113
-status: todo
+status: blocked
 returned:
 tier: 3
 worker: worker-code
@@ -120,3 +120,8 @@ Gotchas; `memory/map/agents-and-commands.md` → Commands (0.50 command changes)
 per ask (8, 9, 10) that says what the gate does now. -->
 
 ## Findings
+- 2026-11-14, driver stop: missed twice, "worker returned empty - turn cap suspected (worker-code, maxTurns 90)".
+  Both workers built in a scratchpad copy of the repo (cycle.sh 4.7k lines, long test parts) and hit the cap before
+  moving anything into the tree; the tree stayed clean. Their partial diff (~660 lines: cycle.sh, lib.sh,
+  scope-check.sh, defects-check.sh, cycle and council tests) is saved, untracked, at
+  `.vulyk/reports/audit-fixes-1113/story-09-partial.patch`. Sent to lead-architect for a split.
