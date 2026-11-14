@@ -548,7 +548,8 @@ seat_next_attempt() { # seat_next_attempt <round-dir> <seat> -> the attempt a mi
 }
 
 dirty_outside_paperwork() { # dirty_outside_paperwork -> the `git status --porcelain` lines that
-  # are not the cycle's own paperwork (is_paperwork_path), one per line; empty means clean.
+  # are not the cycle's own paperwork (paperwork_change: a spec's plan.md / brief.md only when its change
+  # against HEAD is cycle lines alone, P1), one per line; empty means clean.
   # The one predicate open-round and claim share (ADR-013 D5). -uall lists a directory with
   # nothing tracked in it (a fresh hive's memory/learnings/) file by file, instead of one
   # `?? <dir>/` line the one-level whitelist would reject (C2 addendum). -z: a non-ASCII or spaced
@@ -557,7 +558,7 @@ dirty_outside_paperwork() { # dirty_outside_paperwork -> the `git status --porce
   while IFS= read -r -d '' line; do
     orig=""
     case "${line:0:2}" in *R*|*C*) IFS= read -r -d '' orig ;; esac
-    if ! is_paperwork_path "${line:3}" || { [ -n "$orig" ] && ! is_paperwork_path "$orig"; }; then
+    if ! paperwork_change "${line:3}" . HEAD @ || { [ -n "$orig" ] && ! paperwork_change "$orig" . HEAD @; }; then
       printf '%s\n' "${line:0:3}${orig:+$orig -> }${line:3}"
     fi
   done < <(git status --porcelain -uall -z 2>/dev/null)
@@ -864,6 +865,23 @@ cmd_status() {
     "$SINCE_JSON" "$SEAT_ATTEMPT_JSON" "$(json_str_array "$REQUIRED")" "$(json_str_array "$MANUAL_IDS")"
 }
 
+status_hand_note() { # status_hand_note <spec> - P1: when the newest round is stale through a hand edit of a
+  # spec's plan.md or brief.md, one stderr line per such commit names the file and the commit. A commit
+  # cycle.sh recorded as a story's approved version (`revise`) is the accepted way, never called a hand edit.
+  local rd n rhead line recs
+  rd="$(current_round_dir "$1")"; [ -n "$rd" ] || return 0
+  n="${rd##*/round-}"; rhead="$(round_field "$rd" head)"
+  [ -n "$rhead" ] && round_is_stale "$1" "$n" || return 0
+  recs="$(approved_shas "$ROOT" "$(slug_of "$1")")"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    [ -n "$recs" ] && printf '%s\n' "$recs" | grep -qxF -- "${line##* }" && continue
+    echo "cycle: status - round $n is stale: ${line% *} hand-edited in $(git rev-parse --short "${line##* }") (not a cycle line; cycle.sh revise is the way to change it)" >&2
+  done <<EOF
+$(hand_edits "$ROOT" "$rhead" HEAD)
+EOF
+}
+
 compute_stage() { # compute_stage <spec> <plan> <briefed:true|false> <branch> <stories> <done>
   # <newest-verdict> <shipped:true|false> - a best-effort mirror of state.sh's ladder, extended
   # with the council stage (C9). cmd_status (its one caller) passes what it has already read -
@@ -1037,6 +1055,28 @@ commit_paperwork() { # commit_paperwork <verb-label> <message> <path...> - stage
   [ -n "$(git status --porcelain -- ${paths[@]+"${paths[@]}"} 2>/dev/null)" ] || return 0
   git add -A -- ${paths[@]+"${paths[@]}"} >/dev/null 2>&1
   git_commit_or_fail "$verb" "$(commit_subject "$msg")" ${paths[@]+"${paths[@]}"}
+}
+
+named_spec_paths() { # named_spec_paths <spec> <kind>... -> SPATHS, the spec's named files a cycle commit
+  # stages (P1: never the spec folder, so a stray file in it stays out). Each verb names the kinds it writes:
+  # plan, brief, journal, council, docs (the planning files beside the brief: horizon.md, autopsy.md,
+  # report.md), stories. Only what exists; an unknown kind is a caller's typo and exits 2.
+  local spec="$1" k f; shift
+  SPATHS=()
+  for k in "$@"; do
+    case "$k" in
+      plan|brief|journal) [ -e "$spec/$k.md" ] && SPATHS+=("$spec/$k.md") ;;
+      council) [ -d "$spec/council" ] && SPATHS+=("$spec/council") ;;
+      docs) for f in horizon autopsy report; do [ -e "$spec/$f.md" ] && SPATHS+=("$spec/$f.md"); done ;;
+      stories)
+        while IFS= read -r f; do [ -n "$f" ] && SPATHS+=("$f"); done <<EOF
+$(spec_story_files "$spec")
+EOF
+        ;;
+      *) echo "cycle: named_spec_paths - unknown kind '$k'" >&2; emit false paperwork 2 error "unknown spec path kind: $k"; exit 2 ;;
+    esac
+  done
+  return 0
 }
 
 # --- escalate row/plan-line helpers (R5/C-3, autonomous-cycle-21) -----------------------------
@@ -1428,7 +1468,8 @@ ASKS
     git worktree prune >/dev/null 2>&1 || true
   fi
 
-  [ "$DOCOMMIT" = "1" ] && commit_paperwork "$VERBLABEL" "vulyk($SLUG): $VERBLABEL round $N -> $overall" "$SPEC" memory/stats/council.jsonl
+  local -a SPATHS=(); named_spec_paths "$SPEC" plan journal council
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork "$VERBLABEL" "vulyk($SLUG): $VERBLABEL round $N -> $overall" ${SPATHS[@]+"${SPATHS[@]}"} memory/stats/council.jsonl
 
   echo "cycle: $SLUG - round $N judged: $overall"
   # R24/C2: 4 is record-seat MALFORMED and close-story red verification only - a RED verdict
@@ -1505,7 +1546,8 @@ cmd_escalate() { # cmd_escalate <spec-dir> [--commit] [--reason <ceiling|half|en
     git worktree prune >/dev/null 2>&1 || true
   fi
 
-  [ "$DOCOMMIT" = "1" ] && commit_paperwork escalate "vulyk($SLUG): escalate round $N ($REASON)" "$SPEC" memory/stats/council.jsonl
+  local -a SPATHS=(); named_spec_paths "$SPEC" plan journal council
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork escalate "vulyk($SLUG): escalate round $N ($REASON)" ${SPATHS[@]+"${SPATHS[@]}"} memory/stats/council.jsonl
 
   echo "cycle: $SLUG - round $N escalated ($REASON): ${missing:-none missing}"
   emit true escalate 6 escalated
@@ -1592,7 +1634,9 @@ cmd_briefed() { # cmd_briefed <spec> <commit:0|1> <mode: ""|mini-brief|assumed> 
     fi
   fi
 
-  [ "$DOCOMMIT" = "1" ] && commit_paperwork briefed "vulyk($SLUG): briefed" "$SPEC"
+  # the straight-through path's first commit of the spec: its planning files and stories, by name
+  local -a SPATHS=(); named_spec_paths "$SPEC" plan brief journal docs stories
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork briefed "vulyk($SLUG): briefed" ${SPATHS[@]+"${SPATHS[@]}"}
 
   echo "cycle: $SLUG - briefed"
   emit true briefed 0 branch
@@ -1680,7 +1724,8 @@ EOF
     bash "$HERE/journal.sh" "$SPEC" "03-building" "$APPROVED_LINE written by branch: $(spec_story_files "$SPEC" | grep -c .) stories" "build:1" >/dev/null
   fi
 
-  [ "$DOCOMMIT" = "1" ] && commit_paperwork branch "vulyk($SLUG): branch $BR" "$SPEC"
+  local -a SPATHS=(); named_spec_paths "$SPEC" plan journal
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork branch "vulyk($SLUG): branch $BR" ${SPATHS[@]+"${SPATHS[@]}"}
   if [ -z "$branch_v" ]; then
     # each story at branch's own commit (HEAD without --commit), whose copy equals the committed plan's
     local rsf rsha; rsha="$(git rev-parse HEAD)"
@@ -3442,7 +3487,8 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   [ -n "$carried" ] && note="$note, carried from round $((n-1)): $(printf '%s' "$carried" | sed 's/ /, /g')"
   bash "$HERE/journal.sh" "$spec" "04-council:open" "$note" "$dispatch_val" >/dev/null
 
-  [ "$docommit" = "1" ] && commit_paperwork open-round "vulyk($slug): open-round $n" "$spec"
+  local -a SPATHS=(); named_spec_paths "$spec" plan journal council
+  [ "$docommit" = "1" ] && commit_paperwork open-round "vulyk($slug): open-round $n" ${SPATHS[@]+"${SPATHS[@]}"}
 
   echo "cycle: $slug - $note"
   emit_status open-round "$spec" "$dispatch_val"
@@ -3602,7 +3648,8 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
       # r2m3: an earlier --commit here may have failed after ROUND/journal.md were already
       # written (e.g. an index.lock) - a true no-op has nothing left to commit; anything still
       # uncommitted under this spec's own paperwork is finished now, not silently left behind.
-      [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): open-round $N" "$SPEC"
+      local -a SPATHS=(); named_spec_paths "$SPEC" plan journal council
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): open-round $N" ${SPATHS[@]+"${SPATHS[@]}"}
       local missing required next_val
       required="$(round_needed_seats "$SPEC" "$RD")"
       missing="$(missing_required_seats "$RD" "$required")"
@@ -3629,7 +3676,8 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
       # line, ## Needs a human and the journal line - not just exit 6 into a silent loop.
       echo "cycle: open-round - $SLUG round $NEXTN would exceed ceiling $CEILING RED rounds" >&2
       write_ceiling_escalate "$SPEC" "$SLUG" "$N" "$RD"
-      [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $N" "$SPEC" memory/stats/council.jsonl
+      local -a SPATHS=(); named_spec_paths "$SPEC" plan journal council
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $N" ${SPATHS[@]+"${SPATHS[@]}"} memory/stats/council.jsonl
       emit true open-round 6 escalated
       exit 6
     }
@@ -3644,7 +3692,8 @@ cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
     echo "cycle: open-round - $SLUG is at the ceiling ($CEILING RED rounds)" >&2
     [ "$ROUND_COUNT" -gt 0 ] && {
       write_ceiling_escalate "$SPEC" "$SLUG" "$ROUND_COUNT" "$SPEC/council/round-$ROUND_COUNT"
-      [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $ROUND_COUNT" "$SPEC" memory/stats/council.jsonl
+      local -a SPATHS=(); named_spec_paths "$SPEC" plan journal council
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork open-round "vulyk($SLUG): escalate ceiling round $ROUND_COUNT" ${SPATHS[@]+"${SPATHS[@]}"} memory/stats/council.jsonl
     }
     emit true open-round 6 escalated
     exit 6
@@ -3976,7 +4025,8 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
   mkdir -p "$SPEC/council"
   reopen_names_round "$SPEC" "$N" || printf 'round=%s \xc2\xb7 %s\n' "$N" "$(now_ts)" >> "$SPEC/council/REOPEN"
 
-  [ "$DOCOMMIT" = "1" ] && commit_paperwork reopen "vulyk($SLUG): reopen after round $N" "$SPEC"
+  local -a SPATHS=(); named_spec_paths "$SPEC" brief journal council
+  [ "$DOCOMMIT" = "1" ] && commit_paperwork reopen "vulyk($SLUG): reopen after round $N" ${SPATHS[@]+"${SPATHS[@]}"}
 
   echo "cycle: $SLUG - reopened after round $N, ceiling now $NEWCEIL"
   emit_status reopen "$SPEC" "$REOPEN_NEXT"
@@ -4136,7 +4186,7 @@ claim_leftover() { # claim_leftover <spec> <dirty lines> - ab-run-fixes C9: a wo
     # dirty_outside_paperwork prints a rename as `<orig> -> <path>`: both sides must be covered
     case "$rest" in *' -> '*) PP=("${rest%% -> *}" "${rest#* -> }") ;; *) PP=("$rest") ;; esac
     for p in ${PP[@]+"${PP[@]}"}; do
-      is_paperwork_path "$p" && continue
+      paperwork_change "$p" . HEAD @ && continue
       hit=""
       for i in "${!LS[@]}"; do
         if [ "$p" = "${LS[$i]}" ] || in_files "$p" "${LF[$i]}"; then hit="${LS[$i]}"; break; fi
@@ -4787,6 +4837,7 @@ case "$VERB" in
       exit 1
     }
     cmd_status "$SPEC"
+    status_hand_note "$SPEC"
     ;;
   judge)
     COMMIT=0; STAMP=""

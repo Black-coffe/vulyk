@@ -11,7 +11,7 @@
 # owner looks again -> READY -> --record. Each step asserts what ship-check.sh and
 # human-check.sh must say. Exit 1 on the first wrong answer.
 set -u
-PARTS="ship hooklog gates manual close close2 scope approved bsd safety red red2" # one topic each; every part rebuilds the shared setup below
+PARTS="ship hooklog paperwork gates manual close close2 scope approved bsd safety red red2" # one topic each; every part rebuilds the shared setup below
 PART=''
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -598,6 +598,103 @@ git diff --cached --name-only | grep -qxF pw-foreign.txt && echo "  ok    the fo
   || { echo "::error::the foreign file is no longer staged: $(git status --porcelain)"; fail=1; }
 git rm -q --cached pw-foreign.txt && rm -f pw-foreign.txt
 fi # part hooklog
+if part paperwork; then # --- part paperwork: in brief.md and plan.md only the lines a cycle script writes are paperwork (P1)
+echo "audit-fixes-1113-14 (P1): in brief.md and plan.md only the lines a cycle script writes are paperwork"
+mkdir -p docs/specs/pone
+cp "$SRC"/templates/plan.md docs/specs/pone/plan.md
+sed_inplace 's/^\(\*\*Tier:\*\* \)<[^>]*>/\13/; s/^\*\*Approved:\*\* <.*/**Approved:** owner, 2026-11-14/; s#^\*\*Branch:\*\* <.*#**Branch:** vulyk/demo#' docs/specs/pone/plan.md
+printf '# pone (brief)\n\n## Asks\n1. the first ask works\n2. the second ask works\n\n## Answers\n- none yet\n' > docs/specs/pone/brief.md
+printf -- '---\nstory: pone-01\nspec: pone\nstatus: todo\nreturned:\nwave: 1\n---\n# Pone fixture\n\n## Files\n- pone-a.txt\n\n## Verification\n`true`\n' > docs/specs/pone/pone-01.md
+printf 'a\n' > pone-a.txt
+git add -A && git commit -qm "vulyk(pone): plan" >/dev/null
+bash scripts/cycle.sh claim docs/specs/pone p1 >/dev/null 2>&1; bash scripts/cycle.sh release docs/specs/pone p1 >/dev/null 2>&1
+P1TMP="$(mktemp)"   # outside the fixture repo
+p1_ready() { sed_inplace 's/^returned:$/returned: DONE/' docs/specs/pone/pone-01.md; printf 'a2\n' > pone-a.txt; } # the worker's return
+p1_unready() { sed_inplace 's/^returned: DONE$/returned:/' docs/specs/pone/pone-01.md; printf 'a\n' > pone-a.txt; }
+p1_close() { bash scripts/cycle.sh close-story docs/specs/pone/pone-01.md --commit 2>&1; }
+p1_ready
+cp docs/specs/pone/brief.md "$P1TMP"
+sed_inplace 's/^2\. the second ask works$/2. the second ask is gone/' docs/specs/pone/brief.md
+out="$(p1_close)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"edited outside ## Files: docs/specs/pone/brief.md"' \
+  && echo "  ok    a ## Asks line of brief.md changed by hand, dirty at close: exit 4 naming brief.md" \
+  || { echo "::error::a hand-edited ## Asks line at close must exit 4 naming brief.md: exit=$ex out=$out"; fail=1; }
+cp "$P1TMP" docs/specs/pone/brief.md; cp docs/specs/pone/plan.md "$P1TMP"
+sed_inplace 's/^\(\*\*Tier:\*\* \)3/\14/' docs/specs/pone/plan.md
+out="$(p1_close)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"edited outside ## Files: docs/specs/pone/plan.md"' \
+  && echo "  ok    the **Tier:** line of plan.md changed by hand, dirty at close: exit 4 naming plan.md" \
+  || { echo "::error::a hand-edited Tier line at close must exit 4 naming plan.md: exit=$ex out=$out"; fail=1; }
+cp "$P1TMP" docs/specs/pone/plan.md
+p1_unready
+awk '{ print } /^## Stories/ { print "- a story line added by hand" }' docs/specs/pone/plan.md > "$P1TMP" && cp "$P1TMP" docs/specs/pone/plan.md
+git commit -qm "a story line by hand" -- docs/specs/pone/plan.md >/dev/null
+bash scripts/cycle.sh revise docs/specs/pone/pone-01.md >/dev/null 2>&1   # a record commit that leaves plan.md alone
+git show --name-only --format= HEAD | grep -qx docs/specs/pone/plan.md && { echo "::error::precondition: the revise commit touched plan.md"; fail=1; }
+p1_ready
+out="$(p1_close)"; ex=$?
+[ "$ex" -eq 4 ] && printf '%s' "$out" | tail -1 | grep -qF '"error":"edited outside ## Files: docs/specs/pone/plan.md"' \
+  && echo "  ok    a plan.md hand edit committed after the claim, then a revise record commit that left plan.md alone: still exit 4 naming plan.md" \
+  || { echo "::error::a later record commit must not hide an earlier hand edit of plan.md: exit=$ex out=$out"; fail=1; }
+p1_unready
+sed_inplace 's/^- a story line added by hand$/- a story line, revised/' docs/specs/pone/plan.md
+bash scripts/cycle.sh revise docs/specs/pone/pone-01.md >/dev/null 2>&1
+git show --name-only --format= HEAD | grep -qx docs/specs/pone/plan.md || { echo "::error::precondition: the revise commit left plan.md out"; fail=1; }
+p1_ready
+out="$(p1_close)"; ex=$?
+[ "$ex" -eq 0 ] && git show HEAD:docs/specs/pone/pone-01.md | grep -q '^status: done' \
+  && echo "  ok    a revise commit of plan.md during the build is accepted by the wave's close" \
+  || { echo "::error::a revise commit of plan.md must be accepted by the close: exit=$ex out=$out"; fail=1; }
+git add -A && git commit -qm "vulyk(pone): journal" >/dev/null
+p1_round() { # p1_round <n> - a round opened at HEAD, its ROUND committed as the cycle's own paperwork
+  mkdir -p "docs/specs/pone/council/round-$1"
+  printf 'head=%s\npack=%s\nopened=2026-11-14T00:00:00Z\nceiling=3\ntier=3\nseats=review\n' \
+    "$(git rev-parse --short HEAD)" "$(pack_fingerprint docs/specs/pone)" > "docs/specs/pone/council/round-$1/ROUND"
+  git add -- docs/specs/pone/council && git commit -qm "vulyk(pone): open-round $1" -- docs/specs/pone/council >/dev/null
+}
+p1_status() { bash scripts/cycle.sh status docs/specs/pone --json 2>&1; } # stdout and the stderr note
+p1_round 1
+sed_inplace 's/^\*\*Council:\*\* <.*/**Council:** GREEN round 0, 2026-11-14, at abc1234, pack x/' docs/specs/pone/plan.md
+git commit -qm "a marker line" -- docs/specs/pone/plan.md >/dev/null
+awk '{ print } /^- none yet$/ { print ""; print "**After escalation (round 1, 2026-11-14).**"; print "> keep going" }' docs/specs/pone/brief.md > "$P1TMP" && cp "$P1TMP" docs/specs/pone/brief.md
+git commit -qm "reopen's answer" -- docs/specs/pone/brief.md >/dev/null
+p1_status | expect "commits of only a marker line and reopen's ## Answers lines keep the round current" '"stale":false'
+awk '{ print } /^## Stories/ { print "- a second story line added by hand" }' docs/specs/pone/plan.md > "$P1TMP" && cp "$P1TMP" docs/specs/pone/plan.md
+git commit -qm "a story line" -- docs/specs/pone/plan.md >/dev/null
+out="$(p1_status)"
+printf '%s' "$out" | expect "neighbour: a ## Stories line of plan.md committed after ROUND.head stales the round" '"stale":true'
+printf '%s' "$out" | expect "status names plan.md and the commit" "docs/specs/pone/plan.md hand-edited in $(git rev-parse --short HEAD)"
+p1_round 2
+sed_inplace 's/^1\. the first ask works$/1. the first ask is easier/' docs/specs/pone/brief.md
+git commit -qm "an ask edited" -- docs/specs/pone/brief.md >/dev/null
+out="$(p1_status)"
+printf '%s' "$out" | expect "a hand edit of the brief asks stales the round (a ## Asks line committed after ROUND.head)" '"stale":true'
+printf '%s' "$out" | expect "status names brief.md and its commit" "docs/specs/pone/brief.md hand-edited in $(git rev-parse --short HEAD)"
+p1_round 3
+sed_inplace 's/^\(\*\*Tier:\*\* \)3/\14/' docs/specs/pone/plan.md
+git commit -qm "tier by hand" -- docs/specs/pone/plan.md >/dev/null
+p1_status | expect "the **Tier:** line of plan.md committed after ROUND.head stales the round" '"stale":true'
+p1_round 4
+sed_inplace 's/^- a story line, revised$/- a story line, revised again/' docs/specs/pone/plan.md
+bash scripts/cycle.sh revise docs/specs/pone/pone-01.md >/dev/null 2>&1
+out="$(p1_status)"
+printf '%s' "$out" | grep -q 'hand-edited' && { echo "::error::status called a revise commit hand-edited: $out"; fail=1; } \
+  || echo "  ok    status does not call a revise commit of plan.md hand-edited"
+rm -f "$P1TMP"
+
+echo "audit-fixes-1113-14 (P1): a --commit verb commits its named files and leaves a stray file in the spec folder out"
+mkdir -p docs/specs/pwname
+cp "$SRC"/templates/plan.md docs/specs/pwname/plan.md
+printf '# pwname\n\n## Asks\n1. one ask\n' > docs/specs/pwname/brief.md
+printf 'my notes\n' > docs/specs/pwname/notes.txt
+out="$(bash scripts/cycle.sh briefed docs/specs/pwname --commit 2>&1)"; ex=$?
+[ "$ex" -eq 0 ] && git show --name-only --format= HEAD | grep -qx docs/specs/pwname/plan.md \
+  && ! git show --name-only --format= HEAD | grep -qx docs/specs/pwname/notes.txt \
+  && [ "$(git status --porcelain -- docs/specs/pwname/notes.txt)" = "?? docs/specs/pwname/notes.txt" ] \
+  && echo "  ok    briefed --commit carries its named files; the stray notes.txt stays out, untracked" \
+  || { echo "::error::a cycle commit took the spec folder: exit=$ex files=$(git show --name-only --format= HEAD | tr '\n' ' ') out=$out"; fail=1; }
+rm -f docs/specs/pwname/notes.txt
+fi # part paperwork
 if part gates; then # --- part gates: scope-check siblings, wave-check, trace-check, the ## Asks parser
 # --- 0.18 (ADR-013 D4/D5): the three gate scripts -------------------------------------------
 git add -A && git commit -qm "0.18 gates: a clean tree to measure from" >/dev/null 2>&1

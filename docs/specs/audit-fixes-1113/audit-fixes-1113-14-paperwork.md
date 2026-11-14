@@ -1,8 +1,8 @@
 ---
 story: audit-fixes-1113-14
 spec: audit-fixes-1113
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -10,6 +10,7 @@ wave: 6
 blocked_by: [audit-fixes-1113-13]
 red: required
 red_reason: a hand edit of the brief asks stales the round
+red_verified_at: 2026-11-14T03:04:42Z 6afcb65478b0b20887a51be1557383baaeb9133bb5226404d8f646a19184d8fc
 ---
 
 # Paperwork is only what a cycle script writes
@@ -77,3 +78,32 @@ line; the Queen relaunches the driver and its `advance --claim` writes the recor
 
 ## Implementation notes
 <!-- files changed, decisions, surprises - 1-2 lines each; end with one `CHANGELOG:` line for the ask. -->
+- scripts/lib.sh: plan.md/brief.md left is_paperwork_path; new spec_doc_kind/strip/text/same, paperwork_change, hand_edits, approved_shas; paperwork_only reads paperwork_change.
+- scripts/cycle.sh: dirty_outside_paperwork and claim_leftover use paperwork_change; named_spec_paths (unknown kind exits 2) replaces "$SPEC" in judge, escalate, briefed, branch, open-round (x4), reopen commits; status_hand_note on the `status` verb skips approved-record (revise) commits.
+- Kinds checked against each verb's writes: judge/escalate/open-round plan+journal+council, briefed plan+brief+journal+docs+stories, branch plan+journal, reopen brief+journal+council.
+- scripts/scope-check.sh: doc_base reads `git rev-list "$SINCE..HEAD" -- <file>` (a later record commit that left the file alone no longer hides a hand edit); an explicit range measures the docs between its two ends.
+- tests/cycle.test.sh: new part `paperwork` (in PARTS); tests/council.test.sh: the escalate part's uncommitted plan-only descope now refuses as dirt (patch fixture).
+- docs/cycle.md: one row in "What invalidates a confirmation" for the paperwork rule.
+- Surprise: built and swept first in a scratch copy (no implementation in the tree before the receipt); every cycle/council part, solo, e2e, driver, handoff passed there except four council parts (driver, replays2, walks, walks2) whose pinned replays need the repo's .git.
+- CHANGELOG: brief.md and plan.md are paperwork only in the lines a cycle script writes; a hand edit refuses a close, stales a round and is named by `status`, and cycle commits stage their named files, never the spec folder.
+
+## Red receipt
+- command: bash tests/cycle.test.sh --part paperwork
+- exit: 1
+- tests: 6afcb65478b0b20887a51be1557383baaeb9133bb5226404d8f646a19184d8fc (tests/council.test.sh, tests/cycle.test.sh)
+- impl: 859d8eb02094932c38b0e88c4d61292898b7c39c0f820f6a034aeb9c5cd74b67
+- stamped: 2026-11-14T03:04:42Z
+
+```
+::error::a hand edit of the brief asks stales the round (a ## Asks line committed after ROUND.head) - expected '"stale":true' in:
+::error::a hand edit of the brief asks stales the round (a ## Asks line committed after ROUND.head) - expected '"stale":true' in:
+        {"spec":"docs/specs/pone","slug":"pone","stage":"03-built","next":"dispatch:review","briefed":true,"approved":true,"branch":"vulyk/demo","head":"55427a7","pack":"5edd069aae37","now":1794625191,"stories":{"todo":0,"in-progress":0,"done":1,"blocked":0},"wave":null,"wave_stories":[],"round":2,"ceiling":3,"tier":3,"open":true,"court":null,"missing":["review"],"stale":false,"verdict":null,"review":null,"red":[],"round_dir":"docs/specs/pone/council/round-2","paused":false,"shipped":false,"since":"bde7ca2","seat_attempt":{"review":1},"seats":["review"],"manual":[]}
+::error::status names brief.md and its commit - expected 'docs/specs/pone/brief.md hand-edited in 55427a7' in:
+        {"spec":"docs/specs/pone","slug":"pone","stage":"03-built","next":"dispatch:review","briefed":true,"approved":true,"branch":"vulyk/demo","head":"55427a7","pack":"5edd069aae37","now":1794625191,"stories":{"todo":0,"in-progress":0,"done":1,"blocked":0},"wave":null,"wave_stories":[],"round":2,"ceiling":3,"tier":3,"open":true,"court":null,"missing":["review"],"stale":false,"verdict":null,"review":null,"red":[],"round_dir":"docs/specs/pone/council/round-2","paused":false,"shipped":false,"since":"bde7ca2","seat_attempt":{"review":1},"seats":["review"],"manual":[]}
+::error::the **Tier:** line of plan.md committed after ROUND.head stales the round - expected '"stale":true' in:
+        {"spec":"docs/specs/pone","slug":"pone","stage":"03-built","next":"dispatch:review","briefed":true,"approved":true,"branch":"vulyk/demo","head":"212904e","pack":"5edd069aae37","now":1794625192,"stories":{"todo":0,"in-progress":0,"done":1,"blocked":0},"wave":null,"wave_stories":[],"round":3,"ceiling":3,"tier":3,"open":true,"court":null,"missing":["review"],"stale":false,"verdict":null,"review":null,"red":[],"round_dir":"docs/specs/pone/council/round-3","paused":false,"shipped":false,"since":"b863a10","seat_attempt":{"review":1},"seats":["review"],"manual":[]}
+  ok    status does not call a revise commit of plan.md hand-edited
+audit-fixes-1113-14 (P1): a --commit verb commits its named files and leaves a stray file in the spec folder out
+::error::a cycle commit took the spec folder: exit=0 files=docs/specs/pwname/brief.md docs/specs/pwname/journal.md docs/specs/pwname/notes.txt docs/specs/pwname/plan.md  out=cycle: pwname - briefed
+{"ok":true,"verb":"briefed","exit":0,"next":"branch","now":1794625195}
+```

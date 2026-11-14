@@ -52,7 +52,7 @@ fi
 case "$SINCE" in -*) echo "scope-check: --since needs a commit" >&2; exit 0 ;; esac
 
 # shellcheck source=scripts/lib.sh
-. "$(dirname "$0")/lib.sh"   # is_paperwork_path
+. "$(dirname "$0")/lib.sh"   # is_paperwork_path, spec_doc_kind, spec_doc_same, approved_shas
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "scope-check: not a git repo" >&2; exit 0; }
 cd "$ROOT" || exit 0
@@ -115,10 +115,44 @@ CHANGED="$(printf '%s\n' "$CHANGED" | grep -v '^$' | grep -Fxv -e "$STORY_REL" -
 # written by the cycle and its hooks on their own schedule, never a story's own edit: drop it
 # from the diff, unless the story itself names it under '## Files'. memory/stats/skills.json is not
 # paperwork (audit-fixes-1113): untracked and gitignored, a tracked, modified copy counts.
+# A spec's plan.md / brief.md (P1, lib.sh spec_doc_same): dropped only when its change is cycle lines alone.
+# Measured against HEAD with no range; between the range's two ends with one; with --since from the
+# newest commit since the claim head that touched the file and is a story's approved record (a `revise`,
+# the accepted way to change either during a build), else from the claim head itself. Only commits that
+# touched the file are read, so a later record commit that left it alone never hides an earlier hand edit.
+doc_base() { # doc_base <path> -> the revision a spec doc's change is measured from (--since mode)
+  local slug sha recs
+  slug="${1#docs/specs/}"; slug="${slug%%/*}"
+  recs="$(approved_shas "$ROOT" "$slug")"
+  if [ -n "$recs" ]; then
+    while IFS= read -r sha; do
+      [ -n "$sha" ] && printf '%s\n' "$recs" | grep -qxF -- "$sha" && { printf '%s' "$sha"; return 0; }
+    done <<EOF
+$(git rev-list "$SINCE..HEAD" -- "$1" 2>/dev/null)
+EOF
+  fi
+  printf '%s' "$SINCE"
+}
+doc_unchanged() { # doc_unchanged <path> -> 0 iff the measured change of a spec's plan.md / brief.md is cycle lines alone
+  local from to
+  if [ -n "$RANGE" ]; then
+    case "$RANGE" in
+      *..*) from="${RANGE%%..*}"; to="${RANGE##*..}"; [ -n "$to" ] || to=HEAD ;;
+      *) from="$RANGE"; to=@ ;;
+    esac
+    [ -n "$from" ] || from=HEAD
+  elif [ -n "$SINCE" ]; then from="$(doc_base "$1")"; to=@
+  else from=HEAD; to=@
+  fi
+  spec_doc_same "$ROOT" "$1" "$from" "$to"
+}
 KEPT=""
 while IFS= read -r file; do
   [ -z "$file" ] && continue
-  is_paperwork_path "$file" && ! matches_any "$file" "$DECLARED" && continue
+  if ! matches_any "$file" "$DECLARED"; then
+    is_paperwork_path "$file" && continue
+    spec_doc_kind "$file" >/dev/null && doc_unchanged "$file" && continue
+  fi
   KEPT="${KEPT}${file}
 "
 done <<EOF
