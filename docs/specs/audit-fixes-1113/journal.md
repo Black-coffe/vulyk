@@ -15,3 +15,4 @@
 - 2026-11-14T00:50:08Z · 03-building · stop on audit-fixes-1113-09 (missed twice) · next: lead-architect cut it into 09/13/14 (waves 3/5/6), fixture item to 12; relaunching
 - 2026-11-14T01:10:42Z · 03-building · needs_context on audit-fixes-1113-09 · next: expected: wave 3 claimed by the old script, no claim head; relaunch so advance --claim records it
 - 2026-11-14T01:38:28Z · 03-building · needs_context on audit-fixes-1113-11 · next: hook bits set by the Queen (plan step 4); rerun close-story
+- 2026-11-14T01:40:46Z · 03-building · claim head of wave 4 moved by the Queen · next: from 7713358b to 9ca063ca43a95ef222810b667a2e57d7d8752142: the Queen's hook-bit commit b0721b25 sat between two driver runs and read as story 11's edit; reanchor verb added to story 13
