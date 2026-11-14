@@ -12,3 +12,4 @@
 - 2026-11-13T22:33:52Z · 03-building · needs_context on audit-fixes-1113-06 · next: escape from story 04's scrub: blame --ignore-revs-file docs/defects/.scrub-revs joins story 06
 - 2026-11-13T22:51:16Z · 03-building · needs_context on audit-fixes-1113-06 · next: sealed tests changed by the Queen's own revision: stamp-red --baseline by the Queen, receipt written; rerun close-story
 - 2026-11-13T23:49:38Z · 03-building · checkpoint after 55 min at build:3 · next: story 12 cut (scrub-revs mask-only); relaunching with a fresh stamp
+- 2026-11-14T00:50:08Z · 03-building · stop on audit-fixes-1113-09 (missed twice) · next: lead-architect cut it into 09/13/14 (waves 3/5/6), fixture item to 12; relaunching
