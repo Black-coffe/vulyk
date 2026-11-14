@@ -19,10 +19,8 @@ Owner, 2026-11-14: «Узкий ремонт + раунд (Рекомендую)
 seat round follows it; a review of this diff alone and the owner's acceptance close the spec.
 
 ## Requirements
-> 5. Без Python — «Запасной сторож на bash (Рекомендую)»: Даже без Python сторож запрещает очевидно опасные команды git (и в Bash, и в PowerShell) по общему списку с Python-частью. Тест проверяет, что обе части совпадают. Остальные команды git проходят, а бриф в начале сессии пишет, что Python нет. Если настоящий Python упал на команде git, команда запрещается.
-5. git-guard covers every git form that discards uncommitted work or commits, including git run through a shell, an alias or a heredoc fed to a shell. Every form it leaves open on purpose is named in its header.
-> 3. Client path — «Оставить «вместо», поправить доки (Рекомендую)»: решение ab-run-fixes (C1) остаётся; правятся только доки и конституция. This decision belongs to the later docs spec; it is recorded here so it is not lost.
-3. `/vulyk-ship` pushes a spec branch only to a private origin; with a public origin it asks the owner (landed as Tier 0 in 86e15292); a test pins it.
+> 5. git-guard covers every git form that discards uncommitted work or commits, including git run through a shell, an alias or a heredoc fed to a shell. Every form it leaves open on purpose is named in its header.
+> 3. `/vulyk-ship` pushes a spec branch only to a private origin; with a public origin it asks the owner (landed as Tier 0 in 86e15292); a test pins it.
 
 ## Findings
 1. ASK 5 (round 4 seat): `.claude/hooks/git-guard.sh` denies `git reset --merge` and `git merge --abort` like the
