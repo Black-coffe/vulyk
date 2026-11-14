@@ -27,3 +27,5 @@
 - 2026-11-14T05:12:25Z · 03-building · checkpoint after 53 min at build:7 · next: repair 15 written, receipt stamped, close pending; relaunching with a fresh stamp
 - 2026-11-14T05:33:39Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-2 · next: dispatch:opus,review
 - 2026-11-14T06:33:16Z · 04-council · council-opus empty three times (60-turn cap on 21 asks) · next: owner: «Лимит 150 + бюджет (Рекомендую)»; d224211d raises the cap and adds a turn budget; round 2 goes stale, relaunching
+- 2026-11-14T06:33:30Z · 04-council:STALE · round 2 stale, code moved after dispatch · next: open-round
+- 2026-11-14T06:33:31Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-3 · next: dispatch:opus,review
