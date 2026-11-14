@@ -27,3 +27,4 @@
 {"ts":"2026-11-11T15:34:13Z","spec":"upgrade-findings","verdict":"ACCEPTED","by":"Andrei","head":"a33426f5","pack":"4513d384eef0","note":"принимаю"}
 {"ts":"2026-11-12T21:05:46Z","spec":"post-052-tails","verdict":"ACCEPTED","by":"Andrei","head":"55b533b2","pack":"595081b75183","note":"owner picked «Принимаю, выпускаем (Рекомендую)» (option text is the agent's) for the narrow canary fix 55b533b2 after GREEN round 2"}
 {"ts":"2026-11-12T21:13:18Z","spec":"post-052-tails","verdict":"ACCEPTED","by":"Andrei","head":"c8788cec","pack":"595081b75183","note":"owner picked «Принимаю заново, без CI ветки (Рекомендую)» (option text is the agent's) after the history scrub at c8788cec; overrides the ci line: no branch CI, public CI is a hard gate before publish"}
+{"ts":"2026-11-14T15:26:35Z","spec":"audit-fixes-1113","verdict":"ACCEPTED","by":"Andrei","head":"bfe5f895","pack":"b77681633627","note":"Принимаю, выкатка поэтапно (Рекомендую)"}

@@ -310,7 +310,6 @@ is missing or unparsable.
 **Approved:** Andrei, 2026-11-13 («Погнали»)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path: Tier 1 "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"); Tier 2-4 only with `cycle.sh briefed <spec> --go`, "via grill (--go), <owner>, <date>". Alternative to **Approved:** above.>
 **Branch:** vulyk/audit-fixes-1113
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** RED round 1, 2026-11-14, at d974e00c, pack 475733085b95
 **Council:** STALE round 2, 2026-11-14, at 11ab8fe3, pack b1039f68f2f5
 **Council:** RED round 3, 2026-11-14, at 0b2de955, pack b1039f68f2f5
@@ -321,3 +320,4 @@ is missing or unparsable.
 - reason: ceiling · round 4 · 2026-11-14
 - ask 5: RED - see docs/specs/audit-fixes-1113/council/round-4/*.md for evidence
 - seats: docs/specs/audit-fixes-1113/council/round-4/
+**Checked:** ACCEPTED by Andrei, 2026-11-14, at bfe5f895 - Принимаю, выкатка поэтапно (Рекомендую)
