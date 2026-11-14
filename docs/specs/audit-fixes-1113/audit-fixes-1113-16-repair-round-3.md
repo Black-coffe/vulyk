@@ -1,12 +1,12 @@
 ---
 story: audit-fixes-1113-16
 status: todo
-returned:
+returned: NEEDS_CONTEXT
 worker: worker-code
 model: opus
 wave: 8
 blocked_by: []
-red: required
+red: none
 red_reason:
 ---
 
@@ -18,9 +18,23 @@ Make the asks and findings council round 3 left RED pass, and change nothing els
 ## Requirements
 No brief ask is RED in round 3 - the findings below are the whole task.
 
+## Queen's note (2026-11-14)
+A timing finding cannot turn red by a test, so `red: none`. Split the `wiring` part of `tests/telemetry.test.sh` into
+`wiring` and `wiring2` (PARTS list and the `part_on` blocks); `tests/full-suite.sh` finds parts through `--list-parts`
+(line 75), so it needs no edit. Each half must run well under 210 s.
+
 ## Findings
 1. tests/full-suite.sh:172 [regression] the round's suite must end `SUITE: ok`: the part `telemetry:wiring` (`bash tests/telemetry.test.sh --part wiring`) must finish under 70% of its 300 s cap (210 s) when it runs inside step 6 beside its eleven neighbours; at the head it took 212 s and the gate cut it (STEP 6/10 FAIL), while the base 11ab8fe3 ran it in 200 s with `SUITE: ok 1192s` (docs/specs/audit-fixes-1113/council/round-2/suite.log). No check failed: rerun alone it gave `85 checks, 0 failed`, exit 0, 174 s, and the round's diff (one agent prompt) changes nothing the part runs, so the condition is time headroom for this part with the cap and the 70% line left as they are (card test-gate-one-long-limit) - repro: `bash scripts/suite-parts-check.sh docs/specs/audit-fixes-1113/council/round-3/suite.log` prints `cut part telemetry:wiring: 212s of cap 300s (grew)` and exits 1; the same command on the round-2 log exits 0.
 - [regression] PART telemetry:wiring ok 212s cap 300s
+
+Worker (NEEDS_CONTEXT, nothing edited): the story is `red: required`, but its only `## Verification` line is
+`git ls-files '*.sh' | xargs -n1 bash -n`, which names no path under `## Files`; `cycle.sh stamp-red`
+(line 2864) refuses with `no test to seal: ## Verification names no path under ## Files`. A syntax check also
+cannot go red for a timing finding without a staged break. The fix itself looks in scope: split the
+`wiring` part of tests/telemetry.test.sh (PARTS list + its `part_on wiring` block, lines ~1955-2162) into
+`wiring` and `wiring2`, assuming tests/full-suite.sh picks parts up via `--list-parts` (full-suite.sh is not
+in `## Files`). Needed from the Queen: `red: none` (or a verification naming a sealed test that can go red,
+e.g. a parts-check over a fresh suite log), committed as the approved revision.
 
 ## Files
 - scripts/version-order.sh
@@ -158,4 +172,5 @@ No brief ask is RED in round 3 - the findings below are the whole task.
 - docs/adr/032-story-trust-from-git.md
 
 ## Verification
-`git ls-files '*.sh' | xargs -n1 bash -n`
+`bash tests/telemetry.test.sh --part wiring`
+`bash tests/telemetry.test.sh --part wiring2`
