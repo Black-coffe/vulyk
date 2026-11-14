@@ -1,13 +1,14 @@
 ---
 story: audit-fixes-1113-15
-status: todo
-returned:
+status: done
+returned: DONE
 worker: worker-code
 model: opus
 wave: 7
 blocked_by: []
 red: required
-red_reason:
+red_reason: ::error::git-guard: a subagent's if true; then git stash; fi is denied
+red_verified_at: 2026-11-14T04:48:33Z 3489dada21418758a228758073afe52dbdf07c61afa3585ea467a86f22841dde
 ---
 
 # Repair round 1
@@ -188,3 +189,34 @@ Make the asks and findings council round 1 left RED pass, and change nothing els
 `bash tests/telemetry.test.sh --part install-xp2`
 `bash tests/telemetry.test.sh --part library`
 `git ls-files '*.sh' | xargs -n1 bash -n`
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: 3489dada21418758a228758073afe52dbdf07c61afa3585ea467a86f22841dde (tests/maintenance.test.sh, tests/telemetry.test.sh)
+- impl: f818f1539260042eea9933b93f02379a9d03d14452194b17f280f3254cfedeb4
+- stamped: 2026-11-14T04:48:33Z
+
+```
+::error::git-guard: a subagent's if true; then git stash; fi is denied - expected 'exit=1' in:
+  ok    ship 2a: the plugin.json version moves with VERSION
+  ok    ship 2a: the dev build gets a local tag for the next upgrade
+  ok    ship 2a: a reverted canary is held too
+  ok    ship 2: in the VULYK source the build number comes from 2a
+  ok    ship 2a: the canaries go first
+  ok    ship 2a: a red canary stops the rollout
+--- beta-fixes-1113-03: a paperwork-only suite.log head, --go from the owner
+  ok    lead-review: a suite.log head that differs only by paperwork commits is not reported
+  ok    plan: --go comes only from the owner's own words
+maintenance.test.sh: 981 checks, 36 failed
+```
+
+## Implementation notes
+- tests/telemetry.test.sh: enum check is 12 codes (redact_degraded); the terminal self-update fixture is now a git repo whose tag v$PREV ships the hand-written updater, so U1 replaces it as a release copy.
+- tests/maintenance.test.sh: split into parts upkeep / redact / guards (--list-parts, --part); alone 51 s / 68 s / 86 s against 195 s whole; the brief helpers moved outside the parts (guards uses them).
+- .claude/hooks/git-guard.sh: command_word skips shell keywords (if/then/else/elif/do/while/until/!) and the wrappers env/timeout/nohup/nice/sudo/xargs (to the next git, shell, eval, cycle.sh or wrapper word); `eval <words>` is re-read as a command; exit 1 outside --check is a crash; the Python half's catch-all exits 3. Header names the other wrappers left open.
+- .claude/hooks/owner-guard.sh: an Edit/MultiEdit of a plan.md is judged on the file after the edit; a shell command that may rewrite a plan.md holding a record line without spelling the marker is denied to all (Edit tool named); the bash prefilter now lets plan.md through and the no-Python fallback denies a plan.md Edit/Write.
+- .claude/hooks/court-guard.sh: a word is a path when it exists, or when it is a file-reading command's operand starting with a drive, /, ~ or ..; sed/awk/grep/rg/jq scripts and patterns, echo/printf/tr words and option values are not operands.
+- Court-guard cases live in tests/inject.test.sh (part functional), not defects.test.sh as finding 4 says; owner-guard cases in tests/defects.test.sh.
+- docs/adr/032: the bypass paragraph now states the CYCLE_OK gate only; docs/hooks-reference.md rows follow the three hooks.
+- tests/defects.test.sh: the two sed -i hook-input strings carry the card's same-line '# portable:' bypass (text, never run).

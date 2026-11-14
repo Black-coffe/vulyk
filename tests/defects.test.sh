@@ -670,6 +670,31 @@ ok "owner guard: an **Approved:** line quoting an earlier owner message is denie
   "$([ "$(og plan.jsonl Edit "$(ed "$AP" '**Approved:** t, 2026-01-01 («Tighten the second Acme story»)')")" = deny ]; echo $?)"
 ok "owner guard: an **Approved:** line whose quote was written before the plan commit is denied" \
   "$([ "$(og early.jsonl Edit "$(ed "$AP" '**Approved:** t, 2026-01-01 («Погнали»)')")" = deny ]; echo $?)"
+# the line as it stands after the edit (audit-fixes-1113-15): an edit that leaves the marker out of its strings
+ok "owner guard: a subagent's Edit replacing only the placeholder after **Approved:** is denied" \
+  "$([ "$(og plan.jsonl Edit "$(ed '<the owner word>' 'yes, ship it')" "$SUB")" = deny ]; echo $?)"
+ME="{\"file_path\":\"$OW/docs/specs/acme-demo/plan.md\",\"edits\":[{\"old_string\":\"<written by human-check>\",\"new_string\":\"ACCEPTED by t - looks fine\"}]}"
+ok "owner guard: a subagent's MultiEdit replacing only the placeholder after **Checked:** is denied" \
+  "$([ "$(og rel.jsonl MultiEdit "$ME" "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a main-session Edit of the placeholder alone, quoting the latest message, passes" \
+  "$([ "$(og plan.jsonl Edit "$(ed '<the owner word>' 't, 2026-01-01 («Погнали»)')")" = allow ]; echo $?)"
+ok "owner guard: a main-session Edit of the placeholder alone, quoting an earlier message, is denied" \
+  "$([ "$(og plan.jsonl Edit "$(ed '<the owner word>' 't, 2026-01-01 («Tighten the second Acme story»)')")" = deny ]; echo $?)"
+SEDI="sed -i 's/<the owner word>/yes/' docs/specs/acme-demo/plan.md" # portable: hook input text, never run
+SEDC="bash -c \\\"sed -i s/x/y/ docs/specs/acme-demo/plan.md\\\"" # portable: hook input text, never run
+for c in "$SEDI" "echo yes > docs/specs/acme-demo/plan.md" \
+         "cp /tmp/p.md docs/specs/acme-demo/plan.md" "python -c 'x' docs/specs/acme-demo/plan.md" "$SEDC"; do
+  ok "owner guard: a subagent's $c (a plan.md with a record line, no marker spelled) is denied" \
+    "$([ "$(og plan.jsonl Bash "{\"command\":\"$c\"}" "$SUB")" = deny ]; echo $?)"
+  ok "owner guard: main-session $c is denied, naming the Edit tool" \
+    "$([ "$(og plan.jsonl Bash "{\"command\":\"$c\"}")" = deny ] && grep -q 'Edit tool' "$OD/why"; echo $?)"
+done
+for c in "cat docs/specs/acme-demo/plan.md" "grep -n Approved docs/specs/acme-demo/plan.md" \
+         "cp docs/specs/acme-demo/plan.md /tmp/p.md" "git show HEAD:docs/specs/acme-demo/plan.md > /tmp/p.md" \
+         "sed -n 1,5p docs/specs/acme-demo/plan.md"; do
+  ok "owner guard: a subagent's $c (reads a plan.md) passes" \
+    "$([ "$(og plan.jsonl Bash "{\"command\":\"$c\"}" "$SUB")" = allow ]; echo $?)"
+done
 # briefed --go: an owner prompt must carry --go; a command expansion or an assistant line does not count
 { t_owner 2026-01-03T09:00:00.000Z 'Plan the Acme task'
   t_meta 2026-01-03T09:00:01.000Z 'Plan: run straight through with --go when the owner asks'
@@ -691,6 +716,9 @@ nopy() { # nopy <tool> <tool_input JSON> -> the hook's stdout, with python3 / py
 }
 o="$(nopy Bash "$(hc ACCEPTED 'the Acme login works on a new account')")"
 ok "owner guard: with no Python a guarded call is denied, naming the missing Python" \
+  "$(printf '%s' "$o" | grep -q '"deny".*no Python 3'; echo $?)"
+o="$(nopy Edit "$(ed '<the owner word>' 'yes, ship it')")"
+ok "owner guard: with no Python an Edit of a plan.md that leaves the marker out is denied" \
   "$(printf '%s' "$o" | grep -q '"deny".*no Python 3'; echo $?)"
 : > "$OD/count"
 EDSRC="{\"file_path\":\"$OW/src/a.py\",\"old_string\":\"a\",\"new_string\":\"b\"}"

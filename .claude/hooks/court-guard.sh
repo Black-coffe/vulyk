@@ -4,18 +4,22 @@
 # or `council-haiku`; any other agent and the main session pass untouched.
 #   - Read, Grep, Glob: a path (Grep / Glob with no path: the call's cwd) that resolves outside
 #     <project>/.vulyk/court/ is denied.
-#   - Bash, PowerShell: a path argument that leaves the court is denied (each `cd` is followed). A path argument
-#     is an absolute, home or ./ ../ path, or a relative word that names an existing file from the current
-#     folder; a URL is none. Allowed outside the court: <project>/.vulyk/reports/ (where the seat writes its
+#   - Bash, PowerShell: a path argument that leaves the court is denied (each `cd` is followed). A word is a path
+#     argument when it names an existing file or folder from the current folder, or when it starts with a drive,
+#     /, ~ or .. and is an operand of a command that reads files (a redirect's target included). The script or
+#     pattern of sed, awk, grep, rg and jq (their first word, or an -e value), every word of echo, printf, tr and
+#     the like, and an option's value are operands of no such command, so a sed script (`/^## X/,/^## Y/p`), a tr
+#     set or a quoted string that exists nowhere is no path; a URL is none. Allowed outside the court: <project>/.vulyk/reports/ (where the seat writes its
 #     report) and system locations (/dev, /tmp, /usr, /bin, /etc, /opt, /proc, the Windows system folders).
 #   - A git command that reads objects (log, show, diff, grep, blame, cat-file, ls-tree, archive, rev-list,
 #     reflog, shortlog, whatchanged, format-patch, checkout, restore, stash, ...) is denied unless it names
 #     pathspecs and every one lies outside docs/specs/ (a `<rev>:<path>` counts by its path).
-#   - A command the hook cannot read (open quotes, a path argument or `cd` built from a variable or a
-#     substitution) is denied. A heredoc body is text (the seat's report), not commands.
+#   - A command the hook cannot read (open quotes, a path operand or `cd` built from a variable or a
+#     substitution) is denied; a `$` inside a script, a pattern or an echo word is no path. A heredoc body is text (the seat's report), not commands.
 # Not covered, on purpose: a command run from outside the court that names no path (`ls`, `grep -r x` with
 # no folder), what a program opens on its own (a script, an interpreter's -c code, a heredoc fed to a
-# shell), and the temp folder.
+# shell), a word that exists nowhere outside a reading command's operands (a script, a pattern, an option's
+# value), and the temp folder.
 # `record-seat` still checks the report itself.
 # <project> is $CLAUDE_PROJECT_DIR, else the input cwd cut at /.vulyk/court/.
 # No Python: a blind seat's every call is denied (the court cannot be checked); other callers pass.
@@ -63,6 +67,16 @@ READS = {'log', 'show', 'diff', 'diff-tree', 'diff-index', 'diff-files', 'grep',
          'switch', 'worktree'}
 SYSTEM = ('/dev/', '/tmp/', '/usr/', '/bin/', '/etc/', '/opt/', '/proc/', '/mingw64/')
 CD = ('cd', 'chdir', 'pushd', 'popd', 'set-location', 'sl', 'push-location', 'pop-location')
+# Commands whose first word (or an -e value) is a script or a pattern, not a file; and their options that take
+# a script, a file, or another value.
+SCRIPTED = ('sed', 'gsed', 'awk', 'gawk', 'mawk', 'grep', 'egrep', 'fgrep', 'rg', 'jq')
+SCRIPT_OPT = ('-e', '--expression', '--regexp')
+FILE_OPT = ('-f', '--file', '--from-file')
+VALUE_OPT = ('-v', '-F', '-m', '-A', '-B', '-C', '-g', '-t', '-T', '--glob', '--type', '--arg', '--argjson',
+             '--max-count', '-d')
+# Commands that read no file their words name (echo, printf, tr, ...): a word is a path only when it exists.
+NO_FILES = ('echo', 'printf', 'tr', 'expr', 'test', '[', '[[', 'seq', 'date', 'sleep', 'true', 'false', 'export',
+            'set', 'unset', 'write-output', 'write-host', 'basename', 'dirname')
 TAIL = (' Work only inside COURT (cd into it first); a read outside it is a BREACH.')
 
 
@@ -201,33 +215,70 @@ def main():
             tok in ('/dev/null', '/tmp', 'NUL', '$null') or \
             re.match(r'^[A-Za-z]:[/\\](windows|program files)', tok, re.I) is not None
 
-    def check_path(tok, here):
-        """Deny when the word is a path argument leaving the court; return its full path or None."""
+    def check_path(tok, here, operand):
+        """Deny when the word is a path argument leaving the court; return its full path or None. A word is a
+        path when it names an existing file or folder, or, as an operand of a command that reads files, starts
+        with a drive, /, ~ or .. (a script, a pattern, a tr set or a quoted string is none)."""
         t = re.sub(r'^\d*[<>]+&?', '', tok)
+        if t != tok:
+            operand = True                              # `<file`, `>file`: the redirect's own target
         if t.startswith('-') and '=' in t:
-            t = t.split('=', 1)[1]
+            t, operand = t.split('=', 1)[1], False      # an option's value: a path only when it exists
         if not t or t.startswith('-') or '://' in t or t in ('$null',):
             return None
-        absolute = re.match(r'^([/\\~]|[A-Za-z]:([/\\]|$))', t) is not None
-        dotted = t in ('.', '..') or re.match(r'^\.\.?[/\\]', t) is not None
-        if absolute or dotted:
-            if re.search(r'[$`]', t):
+        looks = re.match(r'^(~|/|[A-Za-z]:([/\\]|$)|\.\.([/\\]|$))', t) is not None
+        if re.search(r'[$`]', t):
+            if operand and (looks or (t.startswith(('$', '"$', '`')) and re.search(r'[/\\]', t))):
                 deny('VULYK court guard: the path `%s` is built from a variable or a substitution, so the hook '
                      'cannot tell whether it leaves the court.%s' % (t, TAIL))
-        elif t.startswith(('$', '"$', '`')) and re.search(r'[/\\]', t):
-            deny('VULYK court guard: the path `%s` is built from a variable or a substitution, so the hook '
-                 'cannot tell whether it leaves the court.%s' % (t, TAIL))
-        else:
-            try:
-                if not os.path.exists(os.path.join(here, native(t))):
-                    return None
-            except (ValueError, OSError):
-                return None
+            return None
+        try:
+            exists = os.path.exists(os.path.join(here, native(t)))
+        except (ValueError, OSError):
+            exists = False
+        if not exists and not (looks and operand):
+            return None
         p = full(t, here)
         if not allowed(t, p):
             deny('VULYK court guard: `%s` names %s, outside the court, in a blind seat\'s command.%s'
                  % (' '.join(seg), t, TAIL))
         return p
+
+    def operands(seg, i):
+        """(word, operand) for each word after the command word seg[i]: False for the script or pattern of
+        sed, awk, grep, rg and jq (their first word, or an -e value) and for every word of a command that reads
+        no files (echo, printf, tr, ...); a redirect's target is an operand."""
+        name = os.path.basename(seg[i].replace('\\', '/')).lower() if i < len(seg) else ''
+        name = name[:-4] if name.endswith('.exe') else name
+        out, script, skip, redirect = [], name not in SCRIPTED, None, False
+        for k in range(i + 1, len(seg)):
+            w = seg[k]
+            if redirect or w in ('<', '>', '>>', '<<<') or re.match(r'^\d*[<>]+&?$', w):
+                out.append((w, redirect))
+                redirect = not redirect and w != '<<<'
+                continue
+            if name in NO_FILES:
+                out.append((w, False))
+            elif skip is not None:
+                out.append((w, skip))
+                skip = None
+            elif name in SCRIPTED and w in SCRIPT_OPT:
+                out.append((w, False))
+                skip, script = False, True
+            elif name in SCRIPTED and w in FILE_OPT:
+                out.append((w, False))
+                skip = True
+            elif name in SCRIPTED and w in VALUE_OPT:
+                out.append((w, False))
+                skip = False
+            elif w.startswith('-'):
+                out.append((w, False))
+            elif not script:
+                out.append((w, False))
+                script = True
+            else:
+                out.append((w, True))
+        return out
 
     def rel_hit(rel):
         """True when a pathspec relative to the repo top is docs/specs, inside it, or above it."""
@@ -265,12 +316,14 @@ def main():
                 deny('VULYK court guard: `%s` leaves the court.%s' % (' '.join(seg), TAIL))
             here = p
             continue
-        for tok in seg[1:]:
-            check_path(tok, here)
         i = 0
         while i < len(seg) and (re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', seg[i]) or seg[i] in ('command', 'exec', 'time', '&')
                                 or os.path.basename(seg[i].replace('\\', '/')).lower() in ('env', 'env.exe')):
             i += 1
+        for k in range(1, min(i, len(seg))):
+            check_path(seg[k], here, False)             # assignments and env's words: a path only when it exists
+        for tok, operand in operands(seg, i):
+            check_path(tok, here, operand)
         if i >= len(seg) or os.path.basename(seg[i].replace('\\', '/')).lower() not in ('git', 'git.exe'):
             continue
         i += 1

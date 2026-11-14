@@ -141,7 +141,6 @@ one-time seeding of a spec branched before this release: `claim` or `branch` wri
 one journal line, and after that line an open Tier 3-4 story with no record makes `claim` exit 2 naming
 `cycle.sh revise`. The invariant reads: the gate blocks are proven equal to a commit `cycle.sh` made, not to a
 commit a subject names.
-Named bypasses: `revise` and `reanchor` move what a worker is measured against, so they are the main
-session's verbs; git-guard's subagent deny list names `revise` (story 07 of this spec) and does not yet name
-`reanchor`. The record file is plain run state, so an agent that writes `.vulyk/state/<slug>/approved` or
-`claim` by hand walks around the gate, which only a reviewer reading the diff and the journal catches today.
+`revise` and `reanchor` move what a worker is measured against, so they are the main session's verbs:
+git-guard lets a subagent run only the cycle.sh verbs on its `CYCLE_OK` list (advance, status, release, suite,
+stamp-red without `--baseline`, close-story), which names neither.

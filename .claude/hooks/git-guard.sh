@@ -15,8 +15,10 @@
 # -Command <words>`, a heredoc fed to such a shell (`bash <<X`, `cat <<X | sh`: its body is read as commands; a
 # heredoc fed to anything else is text), and a `git -c alias.<name>=<value>` given on the same command line (a `!`
 # value is read as a shell command).
-# A line continuation (backslash-newline, PowerShell backtick-newline) is joined before reading, and
-# `env` counts by basename (`/usr/bin/env git`).
+# A line continuation (backslash-newline, PowerShell backtick-newline) is joined before reading. The command word
+# is found past assignments, the shell keywords if/then/else/elif/do/while/until and `!`, `command`, `exec`, `time`,
+# and the wrappers env, timeout, nohup, nice, sudo and xargs (by basename, `/usr/bin/env git`; their options and
+# values skipped); `eval <words>` is read as the command its words make.
 #   - A subagent (the input carries agent_id) is denied every listed verb, with no git status call,
 #     and any git call whose arguments cannot be read (unbalanced quotes, a verb holding $ or a backtick).
 #     While any docs/specs/*/DRIVER file exists it is also denied `git commit` and `git add` (close-story commits
@@ -30,10 +32,10 @@
 # that runs git (`python -c`, `node -e`, a heredoc fed to python); `pwsh -EncodedCommand` and a PowerShell
 # here-string fed to a shell; an alias defined in git config rather than by `-c` on the command line; a variable
 # or substitution in the git command word or in an argument after the verb (only the verb itself is read as
-# unreadable); `env` with options before git; a ref checkout over an untracked file; tag -f, push --force and the
-# other remote forms, rebase, commit --amend, reflog expire, gc --prune, filter-branch; and a mod that answers
-# `tool.check` (on a personal login it can approve a call this hook denied: the SessionStart brief names such a
-# mod).
+# unreadable); any other wrapper command (stdbuf, ionice, watch, a shell function or alias of the session); a
+# ref checkout over an untracked file; tag -f, push --force and the other remote forms, rebase, commit --amend,
+# reflog expire, gc --prune, filter-branch; and a mod that answers `tool.check` (on a personal login it can approve
+# a call this hook denied: the SessionStart brief names such a mod).
 # Agents get no env off-switch. The owner turns the guard off by removing its entry from
 # .claude/settings.json; install.sh then leaves it removed.
 #
@@ -42,13 +44,15 @@
 # finished by the Queen. A subagent and Tier 1-2 pass; `stamp-red` passes (ADR-025's re-stamp escape).
 # A story token holding $, a backtick or %, or whose plan.md cannot be read, is of unknown tier and
 # denied (fails closed, like the git half).
-# Python: $VULYK_PY, python3, python, py, as lib.sh. An exit of 0 or 1 means it ran; 126, 127, 9009 or 49 that it
-# did not start (Windows' python3 alias), so the next launcher is tried; any other exit on a command naming git is
-# a deny that says the guard failed. Hook stdin is read as bytes, decoded UTF-8 (a BOM tolerated).
+# Python: $VULYK_PY, python3, python, py, as lib.sh. An exit of 0 means it ran (and 1 under --check, its deny); 126,
+# 127, 9009 or 49 that it did not start (Windows' python3 alias), so the next launcher is tried; any other exit,
+# 1 outside --check included (Python's own status for an uncaught error), on a command naming git is a deny that
+# says the guard failed. An error inside the Python half exits 3, so it is denied the same way. Hook stdin is
+# read as bytes, decoded UTF-8 (a BOM tolerated).
 # No Python at all: a bash fallback denies every listed verb that follows a `git` word, for any caller, in Bash and
 # PowerShell. It reads every word of the command, quoted or not, so it is stricter than the Python half; other
 # git commands pass.
-# Passes silently: bad JSON, a command naming neither git nor cycle.sh, an error inside the Python half.
+# Passes silently: bad JSON, a command naming neither git nor cycle.sh.
 # `--check <file>` (the card's check): reads hook input from <file>; a `porcelain` field stands in for
 # `git status --porcelain` (an object {"sleep": S, "timeout": T} stands in for a git status that takes S
 # seconds against a T-second timeout). Exit 1 on a deny (the reason on stdout), 0 otherwise, also for a file that
@@ -110,8 +114,9 @@ for PY in ${VULYK_PY:+"$VULYK_PY"} python3 python py; do   # lib.sh's order (vul
   printf '%s' "$IN" | "$PY" -S -c 'import sys;sys.argv=sys.argv[1:];p=sys.argv[0];s=open(p,encoding="utf-8").read();exec(compile(s.split("\n#<py>\n",1)[1].split("\nPYTHON\n",1)[0],p,"exec"))' \
     "${BASH_SOURCE[0]}" "$@" 2>/dev/null
   rc=$?
+  [ "$rc" = 1 ] && [ "$ARG1" = "--check" ] && exit 1      # under --check, 1 is its deny; outside, a crash
   case $rc in
-    0|1) [ "$ARG1" = "--check" ] && exit "$rc"; exit 0 ;;
+    0) exit 0 ;;
     126|127|9009|49) ;;                                   # it did not start: the next launcher
     *) fb_scan
        [ -n "$FB_GIT" ] && fb_deny "VULYK git guard: the guard failed (its Python exited $rc) on a git command, so the command is denied. Fix that Python or set VULYK_PY to a working one; the owner can run the command in their own terminal." ;;
@@ -228,19 +233,35 @@ def split_segments(cmd, powershell):
     return segs
 
 
+KEYWORDS = ('if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '&', 'command', 'exec', 'time')
+WRAPPERS = ('env', 'timeout', 'nohup', 'nice', 'sudo', 'xargs')
+LANDS = ('git', 'cycle.sh', 'eval') + SHELLS + WRAPPERS   # a wrapper's options end at the first of these
+
+
 def command_word(seg):
-    """The index of the simple command's command word: assignments, `&`, command, exec, time and env skipped."""
+    """The index of the simple command's command word: assignments, shell keywords (then, do, else, !, ...),
+    `&`, command, exec and time skipped; behind a wrapper (env, timeout, nohup, nice, sudo, xargs) the next word
+    that is git, cycle.sh, eval, a shell or another wrapper, its options and values (`timeout -s KILL 5`) skipped."""
     i = 0
-    while i < len(seg) and (re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', seg[i]) or seg[i] in ('&', 'command', 'exec', 'time')
-                            or base(seg[i]) == 'env'):
-        i += 1
+    while i < len(seg):
+        if re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', seg[i]) or seg[i] in KEYWORDS:
+            i += 1
+        elif base(seg[i]) in WRAPPERS:
+            nxt = [j for j in range(i + 1, len(seg)) if base(seg[j]) in LANDS]
+            if not nxt:
+                return i + 1
+            i = nxt[0]
+        else:
+            break
     return i
 
 
 def fed_string(seg):
     """(text, powershell) when the simple command hands a shell a command string (`bash -c <s>`, `pwsh -Command
-    <words>`), else None."""
+    <words>`, `eval <words>`), else None."""
     i = command_word(seg)
+    if i < len(seg) and seg[i] == 'eval':
+        return ' '.join(seg[i + 1:]), False
     if i >= len(seg) or base(seg[i]) not in SHELLS:
         return None
     ps = base(seg[i]) in ('pwsh', 'powershell')
@@ -624,5 +645,5 @@ try:
 except SystemExit:
     raise
 except Exception:
-    sys.exit(0)
+    sys.exit(3)    # an error inside this half: the bash part denies a command naming git, as for a crash
 PYTHON

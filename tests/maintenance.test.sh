@@ -2,12 +2,36 @@
 # Self-maintenance contract (docs/specs/auto-maintenance): the always-loaded text stays inside its byte
 # budget. No model calls, no network.
 #
-#   Usage: bash tests/maintenance.test.sh            # from the VULYK repo root
+#   Usage: bash tests/maintenance.test.sh                  # every part, from the VULYK repo root
+#          bash tests/maintenance.test.sh --part <name>    # one part
+#          bash tests/maintenance.test.sh --list-parts     # the part names, one per line
+#
+# Parts (card test-gate-one-long-limit: each well under 70% of the 300 s part cap): upkeep (the budget, due
+# maintenance, the offers, the brief, the evolve ledger), redact (redact.sh and the hooks and scripts after it, up
+# to handoff.sh), guards (portability-check, the git guard, hives-behind and the command prose checks).
 #
 # Budget (ADR-013 D7, report rrsi-self-improvement §5.3). The caps are numbers here on purpose:
 # raising one is a visible diff the owner reviews, paid only by an owner quote or an accepted ADR.
 # Sizes are measured CR-stripped, which equals the git blob on every platform.
 set -u
+PARTS="upkeep
+redact
+guards"
+PART=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list-parts) printf '%s\n' "$PARTS"; exit 0 ;;
+    --part)
+      if [ -z "${2:-}" ] || ! printf '%s\n' "$PARTS" | grep -qxF -- "$2"; then
+        echo "maintenance.test.sh: --part needs one of:" >&2; printf '%s\n' "$PARTS" >&2; exit 1
+      fi
+      PART="$2"; shift 2 ;;
+    *) echo "maintenance.test.sh: unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+part_on() { # part_on <name> - true when no part was named or this one was
+  [ -z "$PART" ] || [ "$PART" = "$1" ]
+}
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
@@ -66,6 +90,7 @@ open(sys.argv[4], 'wb').write(swap(swap(b, 'VULYK:COMMANDS', cmd), 'VULYK:PROFIL
 PY
 }
 
+if part_on upkeep; then
 echo "--- budget: the checker itself"
 git -C "$SRC" show d519f22:CLAUDE.md > "$T/original.md" 2>/dev/null
 if [ -s "$T/original.md" ]; then
@@ -129,7 +154,10 @@ case "$over" in "always.md 41 lines") ok "a 41-line path-less rules file fails t
 over="$(rules_always_over "$SRC/.claude/rules")"
 [ -z "$over" ] && ok "path-less rules files within $RULES_ALWAYS_MAX_LINES lines" || bad "always-loaded rules over $RULES_ALWAYS_MAX_LINES lines: $over"
 
+fi # upkeep
+
 # --- due maintenance: the SessionStart brief (auto-maintenance-02) ---------------------------------
+# These helpers serve the upkeep and guards parts both: defined outside the parts.
 BRIEF_HOOK="$SRC/.claude/hooks/session-start-brief.sh"
 iso_ago() { date_shift -"$1" +%Y-%m-%dT%H:%M:%SZ; }
 hive() { # hive <name> - a fresh fixture hive: git repo on main with one commit, empty memory
@@ -146,6 +174,7 @@ stub()   { printf '# Session x\n<!-- Stub captured by VULYK. Replace with 1-6 bu
 council_row() { printf '{"ts":"%s","spec":"s","round":1,"verdict":"GREEN"}\n' "$2" >> "$1/memory/stats/council.jsonl"; }
 run_row()     { printf '{"ts":"%s","kind":"run","proposals":0}\n' "$2" >> "$1/memory/stats/evolve.jsonl"; }
 
+if part_on upkeep; then
 echo "--- due maintenance: gc"
 H="$(hive gc-stub)"; stub "$H/memory/learnings/2026-09-14_090058.md"
 brief_of "$H" | expect "a stub learning makes gc due" "gc (1 stub, 0 raw learnings)"
@@ -516,7 +545,9 @@ for c in vulyk-build vulyk-review; do
   green_of "$c" | expect "$c green runs vulyk-ship with the Skill tool on yes" "run \`vulyk-ship\` with the Skill"
   green_of "$c" | expect "$c green keeps the one-line fallback" "recommend \`/vulyk-ship\` in one line"
 done
+fi # upkeep
 
+if part_on redact; then
 # --- redact.sh masks the token shapes Hindsight's list names (hindsight-harvest-02) ----------------
 echo "--- redact.sh and the handoff.py fallback mask nine more token shapes"
 rep() { printf "%${1}s" '' | tr ' ' "$2"; }   # rep <n> <char> - samples are built, never literal tokens
@@ -1036,7 +1067,9 @@ chmod +x "$CB/python3"
 ( cd "$T" && PATH="$CB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status > /dev/null 2>&1 )
 echo "starts=$(grep -c . "$T/hs-calls");" > "$T/hs-count"
 expect "handoff.sh starts a working python3 once per call, never a probe beside it" "starts=1;" < "$T/hs-count"
+fi # redact
 
+if part_on guards; then
 echo "--- portability-check.sh: the static gate of card shell-needs-gnu-or-bash4 (cross-platform-05)"
 # Each case is one line in a temp file under `set -u`: `hit <rule>` must exit 1 naming the rule, `ok -` exit 0.
 # The cases live in a heredoc, whose body the gate does not read, so this file stays clean on the tree run.
@@ -1449,6 +1482,32 @@ printf '%s' "$out" | expect "git-guard: the crash refusal says the guard failed"
 printf '%s' "$out" | expect "git-guard: the crash refusal says the owner can run it" "owner can run"
 nopy Bash "ls digital" "" "$T/py3" | expect "git-guard: a launcher that exits 3 on a non-git command passes" "exit=0"
 
+echo "--- git guard: shell keywords, eval, wrapper commands; an interpreter that exits 1 (audit-fixes-1113-15)"
+for c in 'if true; then git stash; fi' 'for f in a; do git reset --hard; done' 'if false; then :; else git clean -fd; fi' \
+         'if false; then :; elif true; then git stash; fi' 'while false; do git checkout .; done' '! git stash' \
+         'eval git reset --hard' 'eval "git checkout ."' 'timeout 5 git stash' 'timeout -s KILL 5 git reset --hard' \
+         'nohup git stash' 'nice -n 5 git clean -fd' 'nice git reset --hard' 'sudo -u x git reset --hard' \
+         'echo f | xargs git checkout --' 'timeout 5 bash -c "git stash"'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c is denied" "exit=1"
+  chk Bash "$c" "" "$DIRTY" | expect "git-guard: main-session $c over a dirty tree is denied" "exit=1"
+done
+chk Bash 'ls | xargs -I{} git rm -f {}' a1 | expect "git-guard: a subagent's xargs -I{} git rm -f is denied" "exit=1"
+for c in 'if git diff --quiet; then echo clean; fi' 'timeout 5 git status' 'nice git log --oneline' 'eval echo git' \
+         'nohup ls' 'for f in a; do git log; done'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c passes" "exit=0"
+done
+mkdir -p "$T/py1"; printf '#!/bin/sh\nexit 1\n' > "$T/py1/python3"; chmod +x "$T/py1/python3"
+out="$(printf '%s' "$SUBPAY" | VULYK_PY="$T/py1/python3" bash "$GUARD" 2>&1)"
+printf '%s' "$out" | expect "git-guard: an interpreter that exits 1 on a git command denies" '"deny"'
+printf '%s' "$out" | expect "git-guard: the exit-1 refusal says the guard failed" "the guard failed"
+out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | VULYK_PY="$T/py1/python3" bash "$GUARD" 2>&1)"
+[ -z "$out" ] && ok "git-guard: an interpreter that exits 1 on a non-git command passes" \
+  || bad "git-guard: an interpreter that exits 1 on a non-git command - got: $out"
+# an error inside the Python half (a broken shlex module on its path) is a crash, not a pass
+mkdir -p "$T/badmod"; printf 'class shlex:\n    def __init__(self, *a, **k):\n        raise RuntimeError("broken")\n' > "$T/badmod/shlex.py"
+out="$(printf '%s' "$SUBPAY" | PYTHONPATH="$(cd "$T/badmod" && (pwd -W 2>/dev/null || pwd))" VULYK_PY="$PYBIN" bash "$GUARD" 2>&1)"
+printf '%s' "$out" | expect "git-guard: an error inside the Python half on a git command denies" "the guard failed"
+
 echo "--- git guard: worker prompts never commit (audit-fixes-1113-07)"
 for w in worker-code worker-test; do
   grep -qF 'Never run `git commit` or `git add`' "$SRC/.claude/agents/$w.md" \
@@ -1659,6 +1718,7 @@ tr '\n' ' ' < "$SRC/.claude/agents/lead-review.md" | tr -d '\r' | tr -s ' ' \
   | expect "lead-review: a suite.log head that differs only by paperwork commits is not reported" "only by paperwork commits"
 tr '\n' ' ' < "$SRC/.claude/commands/vulyk-plan.md" | tr -d '\r' | tr -s ' ' \
   | expect "plan: --go comes only from the owner's own words" "only from the owner's own words"
+fi # guards
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

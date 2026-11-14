@@ -533,6 +533,22 @@ expect_eq "court guard: git log whose every pathspec lies elsewhere passes" allo
   "$(cg council-opus "$CRW" Bash '{"command":"git log --oneline -- src"}')"
 expect_eq "court guard: git status passes" allow "$(cg council-haiku "$CRW" Bash '{"command":"git status --short"}')"
 expect_eq "court guard: another agent's git log passes" allow "$(cg worker-code "$CPW" Bash '{"command":"git log --oneline"}')"
+# Round 1 (audit-fixes-1113-15): a command's non-path words were read as paths and starved the blind seat.
+printf '# Acme\n## Profile\nx\n## Next\n' > "$CR/CLAUDE.md"
+for c in "sed -n '/^## Profile/,/^## [A-Z]/p' CLAUDE.md" "awk '/^## Profile/{on=1} on' CLAUDE.md" \
+         "tr '\\\\n' ' ' < CLAUDE.md" "grep -n '/api/v1' src" "grep -e '/^##/' CLAUDE.md" \
+         "awk '{print \$1/2}' CLAUDE.md" "echo '/acme/round-1 done'" "printf '%s\\\\n' '/x/y'" \
+         "sed -e 's/~/home/' -e '/^\$/d' CLAUDE.md" "cat CLAUDE.md | tr -d '\\\\r' | sed -n '/## Profile/,\$p'" \
+         "jq '.a' docs/specs/acme/brief.md"; do
+  p="{\"command\":\"$c\"}"
+  expect_eq "court guard: a non-path word passes: $c" allow "$(cg council-opus "$CRW" Bash "$p")"
+done
+for c in "cat $CPW/docs/specs/acme/plan.md" "ls ../../../../docs/specs" "sed -n 1p $CPW/docs/specs/acme/plan.md" \
+         "grep -n plan $CPW/docs/specs" "awk 1 < $CPW/docs/specs/acme/plan.md" "cat ~/x.md" "cat \$HOME/x.md" \
+         "grep -f $CPW/docs/specs/acme/plan.md x" "echo $CPW/docs/specs/acme/plan.md"; do
+  p="{\"command\":\"$c\"}"
+  expect_eq "court guard: a real read outside the court is still denied: $c" deny "$(cg council-opus "$CRW" Bash "$p")"
+done
 fi # part functional
 
 if part latency; then # --- part latency: the two 200 ms medians, on the fixture library above

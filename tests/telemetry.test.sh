@@ -244,7 +244,8 @@ tel enum | expect "enum prints scope_breach"  "scope_breach"
 tel enum | expect "enum prints sessionend_llm (0.19)" "sessionend_llm"
 tel enum | expect "enum prints model_below_floor (0.20)" "model_below_floor"
 tel enum | expect "enum prints fable_limit_fallback (0.39)" "fable_limit_fallback"
-expect_eq "enum is exactly 11 codes" "11" "$(tel enum | grep -c .)"
+tel enum | expect "enum prints redact_degraded (audit-fixes-1113)" "redact_degraded"
+expect_eq "enum is exactly 12 codes" "12" "$(tel enum | grep -c .)"
 tel enum | expect_absent "enum prints codes only, no prose" " "
 tel agents | expect "agents prints a framework agent" "cycle-clerk"
 tel agents | expect "agents prints the catch-all token" "other"
@@ -1888,12 +1889,13 @@ install_fixtures tgt
 sed_inplace '/^| Telemetry |/d' "$TGT/CLAUDE.md"
 # An upgrade run through the hive's own scripts/vulyk-update.sh replaces that very script. An
 # in-place copy made the old process read the new file from its old offset and execute the
-# tail (upgrading a 0.17 hive to 0.18); install.sh now copies beside and renames over. The
-# hand-written updater below is a hive edit to a source with release history (case 21), so the
-# upgrade runs from a copy with none, which replaces as before.
+# tail (upgrading a 0.17 hive to 0.18); install.sh now copies beside and renames over. An upgrade
+# replaces only a release copy (contract U1: the blob of tag v$PREV), so the source below is a git
+# repo whose tag v$PREV ships the hand-written updater, and a later commit ships the release's own.
 SELF="$T/hive-self"; SELFSRC="$T/rel-self"; mkdir -p "$SELF" "$SELFSRC"
 ( cd "$SRC" && git ls-files -z | tar --null -T - -cf - ) | tar -xf - -C "$SELFSRC"
 bash "$SELFSRC/install.sh" "$SELF" --telemetry off > "$T/self-install.out" 2>&1
+cp -p "$SELFSRC/scripts/vulyk-update.sh" "$T/self-release-updater"
 {
   printf '#!/usr/bin/env bash\n'
   printf '# padding line %s - the offset the old process resumes from must land inside the new file\n' $(seq 1 40)
@@ -1901,6 +1903,12 @@ bash "$SELFSRC/install.sh" "$SELF" --telemetry off > "$T/self-install.out" 2>&1
   printf 'echo "updater: after the upgrade"\n'
   printf 'echo "updater: done"\n'
 } > "$SELF/scripts/vulyk-update.sh"
+cp -p "$SELF/scripts/vulyk-update.sh" "$SELFSRC/scripts/vulyk-update.sh"
+self_git() { git -C "$SELFSRC" -c user.email=t@t -c user.name=t -c core.autocrlf=false "$@"; }
+self_git init -q && self_git add -A && self_git commit -q -m prev \
+  && self_git tag "v$(tr -d '[:space:]' < "$SELF/.claude/vulyk-version")"
+cp -p "$T/self-release-updater" "$SELFSRC/scripts/vulyk-update.sh"
+self_git commit -q -am release
 expect_eq "an upgrade run from the hive's own updater lets that updater finish cleanly" \
   "updater: after the upgrade|updater: done" "$(bash "$SELF/scripts/vulyk-update.sh" 2>&1 | paste -sd'|' -)"
 expect_eq "... and leaves the release's updater in place" "0" \

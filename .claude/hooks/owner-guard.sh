@@ -8,7 +8,11 @@
 #   - a command running `cycle.sh briefed <spec> ... --go`;
 #   - an Edit, MultiEdit, Write or shell command that adds or changes a `**Approved:**` or `**Checked:**` line
 #     of a `docs/specs/<slug>/plan.md` (a line still holding the template placeholder `<...>` is no record),
-#     and one that adds an ACCEPTED or REJECTED row to `memory/stats/human.jsonl`.
+#     and one that adds an ACCEPTED or REJECTED row to `memory/stats/human.jsonl`. An Edit or MultiEdit is
+#     judged on the file as it stands after it, so one that replaces only the text after the marker counts;
+#   - a shell command that may rewrite a plan.md holding such a line without spelling the marker (a redirect
+#     into it; tee, cp, mv, a script interpreter; sed or awk -i): the hook cannot read the line it leaves, so it
+#     is denied to everyone, with the Edit tool named as the way.
 # A subagent (the input carries agent_id) is denied every guarded call. The main session passes only under the
 # quote rule, read from the session transcript (`transcript_path`); whitespace runs are collapsed on both sides
 # and a quote is a whole owner message, a whole line of it, or a whole AskUserQuestion answer, never a piece
@@ -27,7 +31,8 @@
 # `toolUseResult.answers` value of the tool_result for an AskUserQuestion tool_use of the main thread.
 # Not judged, on purpose: whether the words mean yes (no word list), and who wrote the transcript file itself
 # (the session can write that file); an owner who types or dictates text an agent wrote counts as the owner.
-# No Python, or a transcript the hook cannot read: a guarded call is denied with a message naming the cause.
+# No Python, or a transcript the hook cannot read: a guarded call is denied with a message naming the cause;
+# without Python every Edit, MultiEdit or Write of a plan.md counts as one.
 # The owner can always run the command in his own terminal.
 # `--check <file>` (the card's check): reads hook input from <file>; a `transcript` field (a list of entries)
 # stands in for the file. Exit 1 on a deny (the reason on stdout), 0 otherwise, also for a file that is no
@@ -39,7 +44,7 @@ if [ "${1:-}" = "--check" ]; then
 else
   IFS= read -r -d '' IN   # a builtin: an unrelated call starts no process
 fi
-case "$IN" in *human-check*|*briefed*|*Approved:*|*Checked:*|*human.jsonl*) ;; *) exit 0 ;; esac
+case "$IN" in *human-check*|*briefed*|*Approved:*|*Checked:*|*human.jsonl*|*plan.md*) ;; *) exit 0 ;; esac
 case "$IN" in *'"tool_name"'*) ;; *) exit 0 ;; esac
 for PY in ${VULYK_PY:+"$VULYK_PY"} python3 python py; do   # lib.sh's order (vulyk_python)
   command -v "$PY" >/dev/null 2>&1 || continue
@@ -58,6 +63,9 @@ case "${IN#"$LEAD"}" in '{'*) ;; *) exit 0 ;; esac
 GUARDED=''
 case "$IN" in *human-check*ACCEPTED*|*human-check*REJECTED*|*briefed*--go*|*human.jsonl*) GUARDED=1 ;; esac
 case "$IN" in *Approved:*plan.md*|*Checked:*plan.md*|*plan.md*Approved:*|*plan.md*Checked:*) GUARDED=1 ;; esac
+# an Edit, MultiEdit or Write of a plan.md may change a record line without spelling its marker
+RE='"file_path"[[:space:]]*:[[:space:]]*"[^"]*plan\.md"'
+[[ $IN =~ $RE ]] && GUARDED=1
 [ -n "$GUARDED" ] || exit 0
 printf '%s\n' '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "VULYK owner guard: no Python 3 answered ($VULYK_PY, python3, python, py), so this hook cannot read the transcript to see whether the owner said these words. A call that may record his acceptance, a plan approval or --go is refused. Install Python 3 or set VULYK_PY, or the owner runs the command in his own terminal."}}'
 [ "${1:-}" = "--check" ] && exit 1
@@ -379,11 +387,77 @@ def command_actions(cmd, powershell, cwd):
                 continue
             kind = 'plan' if mm.group(1) == 'Approved' else 'release'
             acts.append((kind, spec, text, 'a **%s:** line written by a command' % mm.group(1)))
+        # a command that rewrites a plan.md holding a record line without spelling the marker: the hook cannot
+        # read that line as it will stand, so it is judged as a record (`sed -i 's/<placeholder>/yes/' plan.md`)
+        target = None if re.search(r'\*\*(Approved|Checked):\*\*', flat) else rewrites_plan(cmd, powershell)
+        if target:
+            full = os.path.normpath(os.path.join(cwd, target.strip('\'"')))
+            try:
+                with open(full, encoding='utf-8', errors='replace') as f:
+                    held = any(MARKER.match(line) for line in f)
+            except OSError:
+                held = False
+            if held:
+                acts.append(('rewrite', os.path.dirname(full), '', 'a command that rewrites %s' % target))
     if 'human.jsonl' in cmd and re.search(r'ACCEPTED|REJECTED', cmd) and not any(a[0] == 'release' for a in acts):
         m = re.search(r'"spec\\?"\s*:\s*\\?"([^"\\]+)', cmd)
         acts.append(('release', spec_of('docs/specs/' + m.group(1), cwd) if m else None, cmd,
                      'a human.jsonl row written by a command'))
     return acts
+
+
+def after_edit(tool, ti, path):
+    """[(file before, file after)] for an Edit or MultiEdit whose old_strings all apply to the file as it is,
+    else None: a marker line is judged as it stands after the edit, also when the edit leaves the marker
+    itself out of its strings and replaces only the text after it."""
+    if tool not in ('Edit', 'MultiEdit'):
+        return None
+    try:
+        with open(path, encoding='utf-8', errors='replace', newline='') as f:
+            text = f.read()
+    except OSError:
+        return None
+    edits = [ti] if tool == 'Edit' else [e for e in (ti.get('edits') or []) if isinstance(e, dict)]
+    before = text
+    for e in edits:
+        old, new = str(e.get('old_string') or ''), str(e.get('new_string') or '')
+        if not old or old not in text:
+            return None
+        text = text.replace(old, new) if e.get('replace_all') else text.replace(old, new, 1)
+    return [(before, text)]
+
+
+# Programs that may write a file they name without spelling what they write (sed and awk count with -i only).
+WRITERS = ('tee', 'cp', 'mv', 'install', 'dd', 'truncate', 'set-content', 'add-content', 'out-file', 'copy-item',
+           'move-item', 'python', 'python3', 'py', 'node', 'perl', 'ruby')
+
+
+def rewrites_plan(cmd, powershell, depth=0):
+    """The first docs/specs/<slug>/plan.md path a command may rewrite, else None: a redirect into it; a simple
+    command naming it run by one of WRITERS (cp, mv, install, Copy-Item, Move-Item only as the last word), or by
+    sed or awk with an in-place flag; a word holding a whole command (`bash -c "..."`) is read the same way."""
+    m = re.search(r'(?<![0-9&])>{1,2}\s*[\'"]?([^\s\'";&|<>]*docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md)\b', cmd)
+    if m:
+        return m.group(1)
+    for seg in split_segments(cmd, powershell) or []:
+        hits = [w for w in seg if re.search(r'docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md', w)]
+        if not hits:
+            continue
+        lead = base(seg[0]).lower()
+        lead = lead[:-4] if lead.endswith('.exe') else lead
+        if lead in ('cp', 'mv', 'install', 'copy-item', 'move-item'):
+            hits = hits if seg[-1] in hits else []
+        if (hits and lead in WRITERS) or (lead in ('sed', 'gsed', 'awk', 'gawk') and any(
+                re.match(r'^(-[a-zA-Z]*i\S*|--in-place\S*)$', w) for w in seg[1:])):
+            m = re.search(r'[^\s\'"]*docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md', hits[0])
+            return m.group(0)
+        if depth < 2:
+            for w in hits:
+                if re.search(r'\s', w):
+                    found = rewrites_plan(w, powershell, depth + 1)
+                    if found:
+                        return found
+    return None
 
 
 def edit_pairs(tool, ti, path):
@@ -411,7 +485,7 @@ def file_actions(tool, ti, cwd):
     acts = []
     m = PLAN.search(norm_path)
     if m:
-        for old, new in edit_pairs(tool, ti, full):
+        for old, new in after_edit(tool, ti, full) or edit_pairs(tool, ti, full):
             had = {l.strip() for l in old.splitlines()}
             for line in new.splitlines():
                 mm = MARKER.match(line)
@@ -538,6 +612,10 @@ def main():
         root = repo_root(spec, cwd) if spec else cwd
         if kind == 'go':
             why = judge_go(evs)
+        elif kind == 'rewrite':
+            why = ('VULYK owner guard: %s, which holds an **Approved:** or **Checked:** line, and the hook cannot '
+                   'read that line as it will stand after the command. Change the plan with the Edit tool, which '
+                   'it judges line by line.' % what) + OWNER_CAN
         elif kind == 'plan':
             why = judge_plan(evs, root, slug, note)
         else:
