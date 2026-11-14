@@ -14,6 +14,11 @@
 #   VULYK_UPDATE_INTERVAL_HOURS=6   how often the network is actually touched (default 6)
 #   VULYK_REPO=owner/name           override the origin (forks); or a `.claude/vulyk-origin` file
 set -uo pipefail
+# H1 (audit-fixes-1113): a subagent's input carries a non-empty agent_id, and its SessionStart is not the
+# session's: exit 0, print nothing, write nothing. A shell call has no input to give: no wait on a terminal, 1 s on a pipe.
+IN=""; [ -t 0 ] || IFS= read -r -d '' -t 1 IN || true
+re_agent='"agent_id"[[:space:]]*:[[:space:]]*"[^"]'
+[[ $IN =~ $re_agent ]] && exit 0
 
 [ "${VULYK_UPDATE_CHECK:-1}" = "0" ] && exit 0
 
@@ -39,8 +44,9 @@ INTERVAL_H="${VULYK_UPDATE_INTERVAL_HOURS:-6}"
 case "$INTERVAL_H" in ''|*[!0-9]*) INTERVAL_H=6 ;; esac
 NOW="$(date +%s 2>/dev/null || echo 0)"
 
-# Versions oldest first, one per line: each dot field compared as a number (0.10.0 after 0.9.0).
-vsort() { sort -t. -k1,1n -k2,2n -k3,3n 2>/dev/null; }
+# The one version order (version_newer, version_newest), shared with scripts/vulyk-update.sh; found beside
+# this hook's tree, not the project's, and a missing copy fails open like everything else here.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../scripts/version-order.sh" 2>/dev/null || exit 0
 
 # The cache line is `<epoch> <latest> <YYYY-MM-DDTHH:MMZ>`: the third field is the fetch's own UTC time,
 # written by `date -u` at fetch time, never converted back from the epoch. A line without it counts as expired.
@@ -64,15 +70,14 @@ if [ "$NOW" -gt 0 ] && [ $((NOW - CACHED_AT)) -ge $((INTERVAL_H * 3600)) ]; then
   AUTH=()
   [ -n "${GITHUB_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
   # Tags, not releases: VULYK tags every version, and a repository may carry no GitHub
-  # Release at all. A numeric sort per dot field picks the newest rather than trusting the API's
-  # ordering; never `sort -V`, which stock macOS sort does not have.
+  # Release at all. version_newest picks the newest rather than trusting the API's ordering.
   FETCHED="$(curl -fsSL -m 4 ${AUTH[@]+"${AUTH[@]}"} \
       -H 'Accept: application/vnd.github+json' \
       "https://api.github.com/repos/$REPO/tags?per_page=100" 2>/dev/null \
     | grep -o '"name"[[:space:]]*:[[:space:]]*"v\{0,1\}[0-9][^"]*"' \
     | sed 's/.*"\(v\{0,1\}[0-9][^"]*\)"$/\1/' \
     | sed 's/^v//' \
-    | vsort | tail -1)"
+    | version_newest)"
   if [ -n "$FETCHED" ]; then
     LATEST="$FETCHED"; CHECKED="$FETCHED_AT"
     printf '%s %s %s\n' "$NOW" "$LATEST" "$CHECKED" > "$CACHE" 2>/dev/null || true
@@ -85,12 +90,9 @@ if [ "$NOW" -gt 0 ] && [ $((NOW - CACHED_AT)) -ge $((INTERVAL_H * 3600)) ]; then
 fi
 
 [ -n "$LATEST" ] && [ -n "$CHECKED" ] || exit 0
-[ "$LATEST" = "$INSTALLED" ] && exit 0
-
-# Older-or-equal is not an update. vsort decides; if it cannot, stay silent rather
-# than nag someone running ahead of the tags (a maintainer, or a fork).
-NEWEST="$(printf '%s\n%s\n' "$INSTALLED" "$LATEST" | vsort | tail -1)"
-[ "$NEWEST" = "$LATEST" ] || exit 0
+# Older-or-equal is not an update: stay silent rather than nag someone running ahead of the tags
+# (a maintainer, or a fork). A release is newer than its own dev builds.
+version_newer "$LATEST" "$INSTALLED" || exit 0
 WHEN="${CHECKED%Z}"; WHEN="${WHEN/T/ }"
 
 cat <<EOF

@@ -40,8 +40,8 @@ plan.md `## Plan deltas`, verbatim (line 62):
 > 2026-11-12, after story 01 closed: a side agent noted that a session opened in a hive subfolder writes its
 > transcript under `<slug>-<rest>`, which `--busy` never reads, so the hive looks idle. New story `post-052-tails-03`
 > (wave 3, red: required) reads `<slug>-*` folders and counts one only when a fresh transcript's `cwd` is the hive or
-> below it; an unreadable `cwd` is busy. Rejected: a bare prefix match (a sibling hive such as `X:/Acme_co` would hold
-> `X:/Acme`). Within ask 7, no ask change.
+> below it; an unreadable `cwd` is busy. Rejected: a bare prefix match (a sibling hive such as `<D>:/Acme_co` would hold
+> `<D>:/Acme`). Within ask 7, no ask change.
 
 (Option texts are the agent's; the owner picked them.)
 
@@ -57,7 +57,7 @@ Busy canary (line 61):
 
 Subfolder sessions (line 62):
 1. Read `<slug>-*` folders, count one only when the transcript's `cwd` is the hive or below - chosen.
-2. A bare prefix match - rejected: a sibling hive such as `X:/Acme_co` would hold `X:/Acme`.
+2. A bare prefix match - rejected: a sibling hive such as `<D>:/Acme_co` would hold `<D>:/Acme`.
 
 ## Decision
 Before any hive is upgraded, and again right before its commit, step 2a asks whether the hive is busy (DRIVER file,

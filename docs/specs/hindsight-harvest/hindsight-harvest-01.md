@@ -53,6 +53,6 @@ memory/map/scripts.md: the `defects-check.sh` section.
 ## Implementation notes
 - `defects-check.sh`: new records U/O/E (red) beside D; `when()`/`is_new()` reuse the blame and the README-time rule of debt, `touched()` reads a fixture's newest commit (dirty = newest). The verdict names `N undeliverable`, `N overlaps`, `N escapes`.
 - `tests/defects.test.sh`: the `card` helper now writes `keys: [k-<id>]` and `paths: ["src/<id>/**"]`, otherwise every old fixture card would be undeliverable and share key `x`. There are 18 new cases, each with an original and a neighbour form.
-- Read-only run on D:/YouTube_AI: 8 old undeliverable (info), `review-take-uncut` new → red, old overlap `не дышит`, 2 ambiguous keys, 0 escapes.
+- Read-only run on <hive>: 8 old undeliverable (info), `review-take-uncut` new → red, old overlap `не дышит`, 2 ambiguous keys, 0 escapes.
 
 ## Findings

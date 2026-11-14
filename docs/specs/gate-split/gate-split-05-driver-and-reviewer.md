@@ -44,7 +44,7 @@ and may rerun single parts to look at a FAIL. The escalation texts stop naming `
 ## Map slice
 memory/map/cycle.md `## The Workflow driver`, `## advance`; memory/map/agents-and-commands.md `lead-review`,
 `cycle-clerk`, `/vulyk-build`, `/vulyk-review`; plan.md `## Contracts` (Driver, `cycle.sh suite`, SUITE from the log);
-scout report C:/Users/Andrei/AppData/Local/Temp/claude/E--Projects-vulyk/aeafb186-f7ba-4c02-b8a1-680b8386863e/scratchpad/gs/scout-round.md.
+scout report <scratchpad>/gs/scout-round.md.
 
 ## Acceptance criteria
 - [ ] `council(st)` (vulyk-cycle.js 191-227) loops `ask("suite <spec> --commit --stamp <S>")` until `done:true`, at

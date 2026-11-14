@@ -75,7 +75,7 @@ A12: Sonnet на дистилляцию и сводку, топ-модель н�
 Q13 (D2): Контракт VULYK → хроника?
 A13: Одна CLI-команда `append --kind grill|brief|verdict|ship|handoff --ref <path> --note` в bin/ плагина; VULYK зовёт из journal.sh, /vulyk-handoff, supergrill при синтезе; без плагина вызов тихо пропускается. — design
 Q14 (D2): Репо и дистрибуция?
-A14: Отдельный репо в E:/Projects/, первые недели --plugin-dir в VULYK и одном хайве, затем свой marketplace, /plugin install в каждый проект. — design
+A14: Отдельный репо в <projects>/ (path masked), первые недели --plugin-dir в VULYK и одном хайве, затем свой marketplace, /plugin install в каждый проект. — design
 Q15 (D5): Что заставит выключить?
 A15: Если ответы сабагента с wiki на золотые вопросы не точнее и не дешевле, чем сабагент с git log и docs/. Цена и шум в git вторичны, крутятся порогами. — opinion
 
@@ -185,4 +185,4 @@ Owner's answers:
 | 2 Дистилляция | agents/distiller sonnet; запись сессии = плоский файл с frontmatter (date, topics, links, source: live\|backfill); redact; коммит мимо рабочих веток; lock + cap N очереди; PreCompact-блок; повторный замер золотых вопросов vs baseline | delta vs baseline |
 | 3 Recall + index | root index тем (≤60 строк) генерируется консолидатором; календарь скриптом из frontmatter; скилл recall; validate (инварианты + золотые вопросы + jsonl) | зелёный validate |
 | 4 VULYK 0.16 | journal.sh / handoff / supergrill зовут append; хук learnings удалён; librarian читает хронику; memory.md указывает на индекс | VULYK 0.16 shipped |
-| 5 Backfill + раскатка | backfill-скилл с пометкой источника; marketplace (образец: E:/Projects/tools/crisp); 12 хайвов; 2 недели метрик; решение о векторах и о том, оправдали ли фазы 1-3 базовую линию (D15) | решение D15 |
+| 5 Backfill + раскатка | backfill-скилл с пометкой источника; marketplace (образец: <projects>/tools/<plugin>); 12 хайвов; 2 недели метрик; решение о векторах и о том, оправдали ли фазы 1-3 базовую линию (D15) | решение D15 |

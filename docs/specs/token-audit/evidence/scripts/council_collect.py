@@ -1,6 +1,6 @@
 """council_collect.py - merge memory/stats/council.jsonl from every VULYK project into council_all.jsonl"""
 import json, glob, os
-roots = glob.glob('E:/Projects/*') + ['C:/laragon/www/mmorpg', 'D:/YouTube_AI'] + glob.glob('C:/Projects/*')
+roots = [r for r in os.environ.get('VULYK_HIVE_ROOTS', '').split(os.pathsep) if r]  # hive roots: never written here
 out = open('council_all.jsonl', 'w', encoding='utf-8')
 seen = set()
 for r in roots:

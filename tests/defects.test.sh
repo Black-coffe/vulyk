@@ -242,6 +242,34 @@ run; ok "a fixture committed after the quote -> green" "$([ "$rc" = 0 ] && ! has
 card cut block 'bash check.sh <arg>' "$FX" 2026-01-05 2026-01-10 2026-01-12
 run; ok "neighbour: an uncommitted quote with committed fixtures -> ESCAPE uncommitted" \
   "$([ "$rc" = 1 ] && has '^ESCAPE  cut: quote uncommitted'; echo $?)"
+echo "--- a masking commit listed in .scrub-revs keeps the quote's date"
+mkrepo "$TMP/scrub"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
+card mask block 'bash check.sh <arg>' "$FX" 2026-01-05; sed_inplace 's/«words»/«words at acme-hive»/' docs/defects/mask.md
+cm 2026-01-05 docs/defects/mask.md
+sed_inplace 's/«words at acme-hive»/«words at <hive>»/' docs/defects/mask.md; cm 2026-01-10 docs/defects/mask.md
+scrub="$(git rev-parse HEAD)"
+run; ok "neighbour: a quote edited by an unlisted commit -> ESCAPE, RED" \
+  "$([ "$rc" = 1 ] && has '^ESCAPE  mask: quote [0-9a-f]\{7\} 2026-01-10'; echo $?)"
+printf '# masking commits\n%s # masked a path in a quote\n' "$scrub" > docs/defects/.scrub-revs
+run; ok "the masked quote of a commit listed in .scrub-revs keeps its older date -> no ESCAPE, green" \
+  "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
+ok "the audit names the listed commit in one info line" \
+  "$([ "$(printf '%s\n' "$out" | grep -c "^scrub-rev ${scrub:0:7}")" = 1 ]; echo $?)"
+# audit-fixes-1113-12: the listed commit keeps a line's older date only when the line differs solely in <...> spans.
+mkrepo "$TMP/scrub-words"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
+card mask block 'bash check.sh <arg>' "$FX" 2026-01-05; cm 2026-01-05 docs/defects/mask.md
+sed_inplace 's/«words»/«other words at <hive>»/' docs/defects/mask.md; cm 2026-01-10 docs/defects/mask.md
+printf '%s # masked a path in a quote\n' "$(git rev-parse HEAD)" > docs/defects/.scrub-revs
+run; ok "neighbour: a listed commit that also changes a quote's words is still an ESCAPE" \
+  "$([ "$rc" = 1 ] && has '^ESCAPE  mask: quote [0-9a-f]\{7\} 2026-01-10'; echo $?)"
+mkrepo "$TMP/scrub-add"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
+card mask block 'bash check.sh <arg>' "$FX" 2026-01-05; cm 2026-01-05 docs/defects/mask.md
+card mask block 'bash check.sh <arg>' "$FX" 2026-01-05 2026-01-10
+sed_inplace 's/^\(- 2026-01-05 .*\)«words»/\1«words at <hive>»/' docs/defects/mask.md; cm 2026-01-10 docs/defects/mask.md
+printf '%s # masked a path in a quote\n' "$(git rev-parse HEAD)" > docs/defects/.scrub-revs
+run; ok "a listed commit that adds a new quote is still an ESCAPE" \
+  "$([ "$rc" = 1 ] && has '^ESCAPE  mask: quote [0-9a-f]\{7\} 2026-01-10'; echo $?)"
+
 mkrepo "$TMP/escape-prep"; cm 2026-01-01 docs/defects/README.md docs/defects/fixtures check.sh
 card prep text '' '' 2026-01-05 2026-01-06; cm 2026-01-06 docs/defects/prep.md
 card prep block 'bash check.sh <arg>' "$FX" 2026-01-05 2026-01-06; cm 2026-01-08 docs/defects/prep.md
@@ -461,11 +489,273 @@ mv .claude/hooks/defects_lib.off .claude/hooks/defects_lib.py
 run
 ok "defects-check --files: the audit names a block card with no glob paths: as 'block with no file scope'" \
   "$(has '^block fscope: block with no file scope' && ! has 'fcut: block with no file scope'; echo $?)"
+# audit-fixes-1113-12 (from 09): a card's own fixtures: fail its check by design; --files skips them for that card only.
+mkrepo "$TMP/ownfx"; cm 2026-01-01 docs/defects/README.md
+mkdir -p fx; printf 'bad\n' > fx/fxa-bad.fixture; printf 'fine\n' > fx/fxa-ok.fixture
+card fxa block 'bash check.sh <arg>' '[fx/fxa-bad.fixture, fx/fxa-ok.fixture]' 2026-01-05
+sed_inplace 's|^paths: .*|paths: ["fx/**"]|' docs/defects/fxa.md
+run --files fx/fxa-bad.fixture ./fx/fxa-ok.fixture
+ok "defects-check --files: a block card's own fixtures in ## Files are not run through its check (story 04's two fixtures, 2026-11-13)" \
+  "$([ "$rc" = 0 ] && ! has 'fails on'; echo $?)"
+card fxb block 'bash check.sh <arg>' "$FX" 2026-01-05; sed_inplace 's|^paths: .*|paths: ["fx/**"]|' docs/defects/fxb.md
+run --files fx/fxa-bad.fixture
+ok "defects-check --files: the same file under a different card is still checked" \
+  "$([ "$rc" = 1 ] && has '^fxb fails on fx/fxa-bad.fixture' && ! has 'fxa fails'; echo $?)"
 
 echo "--- usage"
 run a b; ok "two arguments -> exit 2" "$([ "$rc" = 2 ]; echo $?)"
 run ''; ok "an empty argument -> exit 2" "$([ "$rc" = 2 ]; echo $?)"
 cd "$SRC" || exit 1
+
+echo "--- leak-check: any outside path, the hive registry (audit-fixes-1113-04, contract K1)"
+# Deterministic lists: no private term file and a fixture registry, never the machine's own.
+LK="$TMP/leak"; mkdir -p "$LK"; : > "$LK/noterms"
+leak() { # leak <registry> <file>   -> the check's exit code; stdout+stderr in $LK/out
+  VULYK_PRIVATE_TERMS="$LK/noterms" VULYK_PRIVATE_TERMS_AUTO="$LK/noterms" VULYK_HIVES_FILE="$1" \
+    bash scripts/leak-check.sh "$2" > "$LK/out" 2>&1; echo $?
+}
+CARDX=docs/defects/host-internals-in-public-repo
+for fx in "$CARDX.abspath.fixture" "$CARDX.temppath.fixture" "$CARDX.original.fixture" "$CARDX.neighbour.fixture"; do
+  ok "leak-check: $fx -> exit 1" "$([ -f "$fx" ] && [ "$(leak "$LK/noreg" "$fx")" = 1 ]; echo $?)"
+done
+ok "leak-check: the plain-name fixture with the card's terms -> exit 1" \
+  "$([ "$(VULYK_EXTRA_TERMS="$CARDX.terms" leak "$LK/noreg" "$CARDX.plainname.fixture")" = 1 ]; echo $?)"
+ok "leak-check: the card lists both new fixtures" \
+  "$(grep -q '^fixtures: .*abspath\.fixture.*temppath\.fixture' "$CARDX.md"; echo $?)"
+DL=Q   # a stand-in hive root on a drive nobody uses, built from a variable so no literal path sits here
+printf '# fixture registry\n%s:/Stand/acme-hive | canary\n' "$DL" > "$LK/reg"
+printf 'Its transcripts sit in the folder %s--Stand-acme-hive under the projects dir.\n' "$DL" > "$LK/slug.txt"
+ok "leak-check: a file naming a root from the fixture registry -> exit 1" \
+  "$([ "$(leak "$LK/reg" "$LK/slug.txt")" = 1 ] && ! grep -q 'acme-hive' "$LK/out"; echo $?)"
+ok "leak-check: the same file with no registry -> exit 0, one stderr note" \
+  "$([ "$(leak "$LK/noreg" "$LK/slug.txt")" = 0 ] && [ "$(grep -c 'no hive registry' "$LK/out")" = 1 ]; echo $?)"
+RW="$(cd "$SRC" && { pwd -W 2>/dev/null || pwd; })"
+{ echo 'Run it with #!/usr/bin/env bash and send noise to /dev/null.'
+  echo 'The registry is ~/.vulyk/hives; a hive is written <drive>:/<hive>/docs or /home/<user>/<hive>.'
+  echo 'See https://github.com/example/repo/blob/main/x.md and file://localhost/etc/hosts.'
+  echo 'Git for Windows lives in C:/Program Files/Git/bin and C:\Windows\System32 holds cmd.exe.'
+  echo "This repo: $SRC/scripts/lib.sh and $RW/docs/defects/README.md."
+  echo 'A stand-in from a variable: $T/acme-hive/docs/specs/x.md.'
+} > "$LK/pass.txt"
+ok "leak-check: only passing forms -> exit 0" "$([ "$(leak "$LK/reg" "$LK/pass.txt")" = 0 ]; echo $?)"
+[ "$(cat "$LK/out")" = "" ] || sed 's/^/        /' "$LK/out"
+
+echo "--- owner guard: only the owner's quoted words record an acceptance (audit-fixes-1113-08, contract O1)"
+# Synthetic transcripts and a throwaway spec repo; the hook reads both as it reads a live session's.
+OG="$SRC/.claude/hooks/owner-guard.sh"
+OD="$TMP/og"; mkdir -p "$OD/repo/docs/specs/acme-demo" "$OD/repo/memory/stats" "$OD/repo/src" "$OD/stubs"
+cd "$OD/repo" || exit 1
+git init -q -b main . && git config user.name t && git config user.email t@t && git config core.autocrlf false
+printf '# Acme plan\n\n**Approved:** <the owner word>\n**Checked:** <written by human-check>\n' > docs/specs/acme-demo/plan.md
+git add -A && GIT_AUTHOR_DATE='2026-01-01T10:00:00 +0000' GIT_COMMITTER_DATE='2026-01-01T10:00:00 +0000' \
+  git commit -q -m 'vulyk(acme-demo): plan'
+printf '{"ts":"2026-01-02T10:00:00Z","spec":"acme-demo","round":1,"verdict":"GREEN"}\n' > memory/stats/council.jsonl
+OW="$(pwd -W 2>/dev/null || pwd)"; ODW="$(cd "$OD" && { pwd -W 2>/dev/null || pwd; })"
+# Transcript entries, one JSON line each: <ts> then the text (no " or \ in the text, \n is a newline).
+t_owner() { printf '{"type":"user","isSidechain":false,"origin":{"kind":"human"},"promptSource":"typed","timestamp":"%s","message":{"role":"user","content":"%s"}}\n' "$1" "$2"; }
+t_meta() { printf '{"type":"user","isSidechain":false,"isMeta":true,"timestamp":"%s","message":{"role":"user","content":[{"type":"text","text":"%s"}]}}\n' "$1" "$2"; }
+t_asst() { printf '{"type":"assistant","isSidechain":false,"timestamp":"%s","message":{"role":"assistant","content":[{"type":"text","text":"%s"}]}}\n' "$1" "$2"; }
+t_tool() { printf '{"type":"user","isSidechain":false,"timestamp":"%s","toolUseResult":{"stdout":"%s"},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"b1","content":"%s"}]}}\n' "$1" "$2" "$2"; }
+t_peer() { printf '{"type":"user","isSidechain":false,"origin":{"kind":"peer","from":"audit-1"},"promptSource":"system","timestamp":"%s","message":{"role":"user","content":"%s"}}\n' "$1" "$2"; }
+t_ask() { # t_ask <ts> <id> <question> <first option label> [a second question]
+  local q2=''
+  [ -n "${5:-}" ] && q2=",{\"question\":\"$5\",\"header\":\"More\",\"multiSelect\":false,\"options\":[{\"label\":\"Yes\",\"description\":\"d\"}]}"
+  printf '{"type":"assistant","isSidechain":false,"timestamp":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"AskUserQuestion","input":{"questions":[{"question":"%s","header":"Release","multiSelect":false,"options":[{"label":"%s","description":"d"},{"label":"Hold","description":"d"}]}%s]}}]}}\n' \
+    "$1" "$2" "$3" "$4" "$q2"
+}
+t_answer() { # t_answer <ts> <id> <question> <answer>
+  printf '{"type":"user","isSidechain":false,"timestamp":"%s","toolUseResult":{"questions":[],"answers":{"%s":"%s"},"annotations":{}},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"answered"}]}}\n' \
+    "$1" "$3" "$4" "$2"
+}
+og() { # og <transcript name> <tool> <tool_input JSON> [agent_id] -> deny | allow, the hook output in $OD/why
+  local a='' out
+  [ -n "${4:-}" ] && a=",\"agent_id\":\"$4\",\"agent_type\":\"worker-code\""
+  out="$(printf '{"session_id":"s","transcript_path":"%s/%s","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"%s","tool_input":%s%s}' \
+    "$ODW" "$1" "$OW" "$2" "$3" "$a" | env -u CLAUDE_PROJECT_DIR bash "$OG")"
+  printf '%s' "$out" > "$OD/why"
+  case "$out" in *'"permissionDecision": "deny"'*) echo deny ;; '') echo allow ;; *) echo other ;; esac
+}
+hc() { printf '{"command":"bash scripts/human-check.sh docs/specs/acme-demo %s \\"%s\\""}' "$1" "$2"; }
+ed() { printf '{"file_path":"%s/docs/specs/acme-demo/plan.md","old_string":"%s","new_string":"%s"}' "$OW" "$1" "$2"; }
+Q='acme-demo: accept the release?'
+# release: the owner picks an option, then types his own words after a second release question
+{ t_owner 2026-01-01T12:00:00.000Z 'Old words about the Acme staging build'
+  t_ask 2026-01-03T09:00:00.000Z q1 "$Q" 'Accept, ship it (Recommended)'
+  t_answer 2026-01-03T09:01:00.000Z q1 "$Q" 'Accept, ship it (Recommended)'
+  t_asst 2026-01-03T09:02:00.000Z 'The assistant says the Acme build is ready to ship'
+  t_tool 2026-01-03T09:03:00.000Z 'Tool output says the Acme checks all pass'
+  t_peer 2026-01-03T09:04:00.000Z 'An agent says the Acme release is approved'
+  t_ask 2026-01-03T09:10:00.000Z q2 "$Q" 'Accept'
+  t_owner 2026-01-03T09:12:00.000Z 'I looked at the staging site.\nthe Acme login works on a new account'
+} > "$OD/rel.jsonl"
+SUB=a1
+ok "owner guard: a subagent cannot record an acceptance - human-check ACCEPTED" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'Accept, ship it (Recommended)')" "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a subagent cannot record an acceptance - the reason says so" \
+  "$(grep -q 'a subagent cannot record an acceptance' "$OD/why"; echo $?)"
+ok "owner guard: a subagent cannot record an acceptance - human-check REJECTED" \
+  "$([ "$(og rel.jsonl Bash "$(hc REJECTED 'Accept, ship it (Recommended)')" "$SUB")" = deny ]; echo $?)"
+GO='{"command":"bash scripts/cycle.sh briefed docs/specs/acme-demo --go"}'
+ok "owner guard: a subagent cannot record an acceptance - cycle.sh briefed --go" \
+  "$([ "$(og rel.jsonl Bash "$GO" "$SUB")" = deny ]; echo $?)"
+AP='**Approved:** <the owner word>'
+ok "owner guard: a subagent cannot record an acceptance - an Edit adding **Approved:**" \
+  "$([ "$(og rel.jsonl Edit "$(ed "$AP" '**Approved:** t, 2026-01-03 (Accept)')" "$SUB")" = deny ]; echo $?)"
+ok "owner guard: the picked answer to the release question, quoted whole, passes" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'owner picked «Accept, ship it (Recommended)» for the Acme build')")" = allow ]; echo $?)"
+ok "owner guard: a whole line of his next message after the question passes" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'the Acme login works on a new account')")" = allow ]; echo $?)"
+ok "owner guard: the same line with other spacing passes" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'the  Acme login   works on a new account')")" = allow ]; echo $?)"
+ok "owner guard: REJECTED takes the same rule" \
+  "$([ "$(og rel.jsonl Bash "$(hc REJECTED 'I looked at the staging site.')")" = allow ]; echo $?)"
+ok "owner guard: a note with no owner text is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'all good, shipping')")" = deny ]; echo $?)"
+ok "owner guard: a fragment cut from inside a line is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'Acme login works')")" = deny ]; echo $?)"
+ok "owner guard: a quote older than the latest verdict is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'Old words about the Acme staging build')")" = deny ]; echo $?)"
+ok "owner guard: text only in an assistant message is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'The assistant says the Acme build is ready to ship')")" = deny ]; echo $?)"
+ok "owner guard: text only in a tool result is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'Tool output says the Acme checks all pass')")" = deny ]; echo $?)"
+ok "owner guard: text only in an agent's message is denied" \
+  "$([ "$(og rel.jsonl Bash "$(hc ACCEPTED 'An agent says the Acme release is approved')")" = deny ]; echo $?)"
+# a bare «ок», and an owner message of 8+ letters that answers no release question
+{ t_ask 2026-01-03T09:00:00.000Z q1 "$Q" 'Accept'
+  t_answer 2026-01-03T09:01:00.000Z q1 "$Q" 'ок'
+  t_owner 2026-01-03T09:02:00.000Z 'ок'
+} > "$OD/ok.jsonl"
+ok "owner guard: a bare «ок» (a typed answer, then a message) is denied" \
+  "$([ "$(og ok.jsonl Bash "$(hc ACCEPTED 'ок')")" = deny ]; echo $?)"
+{ t_owner 2026-01-03T09:00:00.000Z 'Everything looks right on the Acme staging site'
+  t_ask 2026-01-03T09:05:00.000Z q1 'Which Acme logo do you like?' 'Blue'
+  t_answer 2026-01-03T09:06:00.000Z q1 'Which Acme logo do you like?' 'The blue logo with round corners'
+  t_ask 2026-01-03T09:07:00.000Z q2 "$Q" 'Accept' 'Also bump the Acme version?'
+  t_answer 2026-01-03T09:08:00.000Z q2 "$Q" 'Accept it, the Acme build is fine'
+} > "$OD/noq.jsonl"
+ok "owner guard: an owner message of 8+ letters that answers no release question is denied" \
+  "$([ "$(og noq.jsonl Bash "$(hc ACCEPTED 'Everything looks right on the Acme staging site')")" = deny ]; echo $?)"
+ok "owner guard: an answer to a question that does not name the spec is denied" \
+  "$([ "$(og noq.jsonl Bash "$(hc ACCEPTED 'The blue logo with round corners')")" = deny ]; echo $?)"
+ok "owner guard: an answer to a release question asked beside another is denied" \
+  "$([ "$(og noq.jsonl Bash "$(hc ACCEPTED 'Accept it, the Acme build is fine')")" = deny ]; echo $?)"
+# **Checked:** lines, by an Edit and by a shell command, are judged like the acceptance
+CK='**Checked:** <written by human-check>'
+ok "owner guard: an Edit writing a **Checked:** line that quotes the owner passes" \
+  "$([ "$(og rel.jsonl Edit "$(ed "$CK" '**Checked:** ACCEPTED by t, 2026-01-03 - the Acme login works on a new account')")" = allow ]; echo $?)"
+ok "owner guard: an Edit writing a **Checked:** line with no owner quote is denied" \
+  "$([ "$(og rel.jsonl Edit "$(ed "$CK" '**Checked:** ACCEPTED by t, 2026-01-03 - looks fine')")" = deny ]; echo $?)"
+SHBAD='{"command":"printf %s >> docs/specs/acme-demo/plan.md"}'
+SHBAD="$(printf "$SHBAD" "'**Checked:** ACCEPTED by t - looks fine\\\\n'")"
+SHGOOD='{"command":"printf %s >> docs/specs/acme-demo/plan.md"}'
+SHGOOD="$(printf "$SHGOOD" "'**Checked:** ACCEPTED by t - the Acme login works on a new account\\\\n'")"
+ok "owner guard: a shell command writing a **Checked:** line into a plan.md is judged like the Edit" \
+  "$([ "$(og rel.jsonl Bash "$SHBAD")" = deny ] && [ "$(og rel.jsonl Bash "$SHGOOD")" = allow ]; echo $?)"
+WR="{\"file_path\":\"$OW/docs/specs/acme-demo/plan.md\",\"content\":\"# Acme plan\\n$CK\\n\"}"
+ok "owner guard: a marker line left on its template placeholder passes, for a subagent too" \
+  "$([ "$(og rel.jsonl Edit "$(ed '# Acme plan' "# Acme plan\\n\\n$AP")" "$SUB")" = allow ] &&
+     [ "$(og rel.jsonl Write "$WR" "$SUB")" = allow ]; echo $?)"
+ok "owner guard: an edit of plan.md that changes no marker line passes, for a subagent too" \
+  "$([ "$(og rel.jsonl Edit "$(ed "# Acme plan\\n\\n$CK" "# Acme plan, revised\\n\\n$CK")" "$SUB")" = allow ]; echo $?)"
+# plan approval: the owner's latest message after the plan commit (2026-01-01T10:00Z), at any length
+{ t_owner 2026-01-01T09:00:00.000Z 'Approve the Acme plan when it is ready'
+  t_owner 2026-01-01T11:00:00.000Z 'Tighten the second Acme story'
+  t_owner 2026-01-01T12:00:00.000Z 'Погнали'
+} > "$OD/plan.jsonl"
+t_owner 2026-01-01T09:30:00.000Z 'Погнали' > "$OD/early.jsonl"
+ok "owner guard: an **Approved:** line quoting the owner's latest message after the plan commit passes («Погнали»)" \
+  "$([ "$(og plan.jsonl Edit "$(ed "$AP" '**Approved:** t, 2026-01-01 («Погнали»)')")" = allow ]; echo $?)"
+ok "owner guard: an **Approved:** line quoting an earlier owner message is denied" \
+  "$([ "$(og plan.jsonl Edit "$(ed "$AP" '**Approved:** t, 2026-01-01 («Tighten the second Acme story»)')")" = deny ]; echo $?)"
+ok "owner guard: an **Approved:** line whose quote was written before the plan commit is denied" \
+  "$([ "$(og early.jsonl Edit "$(ed "$AP" '**Approved:** t, 2026-01-01 («Погнали»)')")" = deny ]; echo $?)"
+# the line as it stands after the edit (audit-fixes-1113-15): an edit that leaves the marker out of its strings
+ok "owner guard: a subagent's Edit replacing only the placeholder after **Approved:** is denied" \
+  "$([ "$(og plan.jsonl Edit "$(ed '<the owner word>' 'yes, ship it')" "$SUB")" = deny ]; echo $?)"
+ME="{\"file_path\":\"$OW/docs/specs/acme-demo/plan.md\",\"edits\":[{\"old_string\":\"<written by human-check>\",\"new_string\":\"ACCEPTED by t - looks fine\"}]}"
+ok "owner guard: a subagent's MultiEdit replacing only the placeholder after **Checked:** is denied" \
+  "$([ "$(og rel.jsonl MultiEdit "$ME" "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a main-session Edit of the placeholder alone, quoting the latest message, passes" \
+  "$([ "$(og plan.jsonl Edit "$(ed '<the owner word>' 't, 2026-01-01 («Погнали»)')")" = allow ]; echo $?)"
+ok "owner guard: a main-session Edit of the placeholder alone, quoting an earlier message, is denied" \
+  "$([ "$(og plan.jsonl Edit "$(ed '<the owner word>' 't, 2026-01-01 («Tighten the second Acme story»)')")" = deny ]; echo $?)"
+SEDI="sed -i 's/<the owner word>/yes/' docs/specs/acme-demo/plan.md" # portable: hook input text, never run
+SEDC="bash -c \\\"sed -i s/x/y/ docs/specs/acme-demo/plan.md\\\"" # portable: hook input text, never run
+for c in "$SEDI" "echo yes > docs/specs/acme-demo/plan.md" \
+         "cp /tmp/p.md docs/specs/acme-demo/plan.md" "python -c 'x' docs/specs/acme-demo/plan.md" "$SEDC"; do
+  ok "owner guard: a subagent's $c (a plan.md with a record line, no marker spelled) is denied" \
+    "$([ "$(og plan.jsonl Bash "{\"command\":\"$c\"}" "$SUB")" = deny ]; echo $?)"
+  ok "owner guard: main-session $c is denied, naming the Edit tool" \
+    "$([ "$(og plan.jsonl Bash "{\"command\":\"$c\"}")" = deny ] && grep -q 'Edit tool' "$OD/why"; echo $?)"
+done
+for c in "cat docs/specs/acme-demo/plan.md" "grep -n Approved docs/specs/acme-demo/plan.md" \
+         "cp docs/specs/acme-demo/plan.md /tmp/p.md" "git show HEAD:docs/specs/acme-demo/plan.md > /tmp/p.md" \
+         "sed -n 1,5p docs/specs/acme-demo/plan.md"; do
+  ok "owner guard: a subagent's $c (reads a plan.md) passes" \
+    "$([ "$(og plan.jsonl Bash "{\"command\":\"$c\"}" "$SUB")" = allow ]; echo $?)"
+done
+# briefed --go: an owner prompt must carry --go; a command expansion or an assistant line does not count
+{ t_owner 2026-01-03T09:00:00.000Z 'Plan the Acme task'
+  t_meta 2026-01-03T09:00:01.000Z 'Plan: run straight through with --go when the owner asks'
+  t_asst 2026-01-03T09:01:00.000Z 'I will run briefed --go now'
+} > "$OD/nogo.jsonl"
+t_owner 2026-01-03T09:00:00.000Z '<command-message>vulyk-plan</command-message>\n<command-name>/vulyk-plan</command-name>\n<command-args>--go plan the Acme task</command-args>' > "$OD/go.jsonl"
+ok "owner guard: briefed --go with no owner prompt carrying --go is denied" "$([ "$(og nogo.jsonl Bash "$GO")" = deny ]; echo $?)"
+ok "owner guard: briefed --go passes when an owner prompt (a slash command's arguments) carries --go" \
+  "$([ "$(og go.jsonl Bash "$GO")" = allow ]; echo $?)"
+ok "owner guard: an unreadable transcript denies a guarded call, saying why" \
+  "$([ "$(og missing.jsonl Bash "$(hc ACCEPTED 'the Acme login works on a new account')")" = deny ] && grep -q 'cannot be read' "$OD/why"; echo $?)"
+# no Python: every launcher is a counting stub that runs nothing
+for p in python3 python py; do
+  printf '#!/bin/sh\necho x >> "%s/count"\nexit 9009\n' "$OD" > "$OD/stubs/$p"; chmod +x "$OD/stubs/$p"
+done
+nopy() { # nopy <tool> <tool_input JSON> -> the hook's stdout, with python3 / python / py stubbed away
+  printf '{"session_id":"s","transcript_path":"%s/rel.jsonl","cwd":"%s","tool_name":"%s","tool_input":%s}' "$ODW" "$OW" "$1" "$2" |
+    env -u VULYK_PY -u CLAUDE_PROJECT_DIR PATH="$OD/stubs:$PATH" bash "$OG"
+}
+o="$(nopy Bash "$(hc ACCEPTED 'the Acme login works on a new account')")"
+ok "owner guard: with no Python a guarded call is denied, naming the missing Python" \
+  "$(printf '%s' "$o" | grep -q '"deny".*no Python 3'; echo $?)"
+o="$(nopy Edit "$(ed '<the owner word>' 'yes, ship it')")"
+ok "owner guard: with no Python an Edit of a plan.md that leaves the marker out is denied" \
+  "$(printf '%s' "$o" | grep -q '"deny".*no Python 3'; echo $?)"
+: > "$OD/count"
+EDSRC="{\"file_path\":\"$OW/src/a.py\",\"old_string\":\"a\",\"new_string\":\"b\"}"
+o="$(nopy Bash '{"command":"ls src"}')$(nopy Edit "$EDSRC")"
+ok "owner guard: with no Python an unrelated Bash or Edit call passes and starts no interpreter" \
+  "$([ -z "$o" ] && [ ! -s "$OD/count" ]; echo $?)"
+cd "$SRC" || exit 1
+OGC=docs/defects/owner-words-by-builder
+bash "$OG" --check "$OGC.original.fixture" >/dev/null; a=$?
+bash "$OG" --check "$OGC.neighbour.fixture" >/dev/null; b=$?
+ok "owner guard --check: both card fixtures exit 1" "$([ "$a" = 1 ] && [ "$b" = 1 ]; echo $?)"
+ok "owner guard --check: a file that is no hook input exits 0" \
+  "$(bash "$OG" --check docs/defects/README.md >/dev/null && bash "$OG" --check "$OGC.md" >/dev/null; echo $?)"
+ok "owner guard: the card is block, the hook its check, its ## Check names what stays open" \
+  "$(grep -q '^status: block$' "$OGC.md" && grep -qF 'check: bash .claude/hooks/owner-guard.sh --check <arg>' "$OGC.md" &&
+     sed -n '/^## Check/,/^## Never/p' "$OGC.md" | grep -q 'Left open on purpose'; echo $?)"
+ok "owner guard: the defect index is current" "$(bash scripts/defects-index.sh --check >/dev/null 2>&1; echo $?)"
+# audit-fixes-1113-17 (round 2 review, Major 1): the header names every shell form the plan.md rewrite check leaves open
+OGH="$(sed -n '1,/^# The Python half lives/p' "$OG" | tr -d '\r' | sed 's/^# *//' | tr '\n' ' ' | tr -s ' ')"
+for n in 'a bare `plan.md` after a `cd`' 'from a cwd inside the spec folder' 'a glob (`docs/specs/*/plan.md`)' \
+         'a variable or a substitution' 'a writer outside its list' 'command text a shell reads from a file' \
+         'with no Python, every shell rewrite'; do
+  hit=1; case "$OGH" in *"$n"*) hit=0 ;; esac
+  ok "owner guard: the header names the open plan.md rewrite form: $n" "$hit"
+done
+hit=0; case "$OGH" in *'sed or awk -i): the hook cannot read'*) hit=1 ;; esac
+ok "owner guard: the header no longer says every plan.md rewrite is denied to everyone" "$hit"
+
+echo "--- this tree's library: green, one info line per .scrub-revs commit (audit-fixes-1113-12)"
+run
+ok "defects-check on this tree is green, no ESCAPE (story 04's masked quote of command-injection-follows-cwd)" \
+  "$([ "$rc" = 0 ] && ! has 'ESCAPE'; echo $?)"
+srv_ok=0
+for s in $(grep -v '^[[:space:]]*#' docs/defects/.scrub-revs 2>/dev/null | awk 'NF { print $1 }'); do
+  [ "$(printf '%s\n' "$out" | grep -c "^scrub-rev ${s:0:7}")" = 1 ] || srv_ok=1
+done
+ok "the audit of this tree prints one info line per listed commit" "$srv_ok"
 
 if [ "$fail" -eq 0 ]; then echo "defects.test.sh: all checks passed"; else echo "defects.test.sh: FAILED"; fi
 exit "$fail"

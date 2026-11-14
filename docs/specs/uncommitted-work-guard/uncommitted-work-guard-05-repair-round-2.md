@@ -58,7 +58,7 @@ maintenance.test.sh: 379 checks, 7 failed
 - `git-guard.sh`: a cd the hook cannot follow (`$VAR`, `$(...)`, backticks, `cd -`, `popd`, a target that is no
   folder) sets `here` to UNKNOWN; a later git verb is then checked against the whole tree of the call's cwd, pathspecs
   dropped (they are relative to a folder it cannot name). Errs toward a deny.
-- When `git status` fails in a resolved folder (on Windows Python reads Git Bash `/tmp` as `C:/tmp`, not a repo), the
+- When `git status` fails in a resolved folder (on Windows Python reads Git Bash `/tmp` as `<D>:/tmp`, not a repo), the
   check falls back to the whole tree of the call's cwd instead of reading the failure as "nothing dirty". Found by the
   repro's `cd /tmp` form after the first fix; its test was added by reverting the hook to HEAD, re-stamping the red
   receipt and putting the implementation back.

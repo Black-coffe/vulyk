@@ -64,16 +64,7 @@ VULYK uses **only** official Claude Code mechanisms: subagents, slash commands, 
 
 ## Quickstart
 
-**Option A — new project from template**
-
-```bash
-# Use this repository as a GitHub template (button above), then:
-cd your-new-project
-claude
-> /vulyk-bootstrap
-```
-
-**Option B — add to an existing project**
+**Add to a project, new or existing**
 
 ```bash
 git clone https://github.com/Black-coffe/vulyk /tmp/vulyk
@@ -82,6 +73,8 @@ cd /path/to/your/project
 claude
 > /vulyk-bootstrap
 ```
+
+**Started from the GitHub template?** Such a copy holds VULYK's own repository: its `docs/specs/`, `docs/adr/`, `tests/`, `CHANGELOG.md` and `install.sh` are VULYK's, not your project's, and it has no version stamp. Run `install.sh` from a VULYK clone on it (`/tmp/vulyk/install.sh /path/to/your/project`): that gives the repo its version stamp (`.claude/vulyk-version`), permissions and hook wiring.
 
 **Upgrading an existing install**
 

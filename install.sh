@@ -86,6 +86,8 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     docs/specs/*)                 return 1 ;;   # vulyk's own dev specs (dir is still created)
     docs/adr/*|docs/wiki/*)       case "$f" in */README.md) return 0 ;; esac; return 1 ;;   # vulyk's own ADRs/wiki (dir still created; a skeleton README ships)
     memory/learnings/*)           case "$f" in */README.md) return 0 ;; esac; return 1 ;;
+    memory/memory.md|memory/MEMORY.md) return 1 ;;   # VULYK's own index; a fresh hive gets templates/memory.md (seed_memory_index)
+    memory/stats/skills.json)     return 2 ;;   # the skill counter: local and gitignored, per hive (audit-fixes-1113)
     memory/map/.stale)            return 2 ;;   # runtime (below), named before the map's own rule
     memory/map/*)                 case "$f" in memory/map/README.md) return 0 ;; esac; return 1 ;;   # VULYK's own code map; the skeleton README ships
     docs/defects/*)               case "$f" in docs/defects/README.md) return 0 ;; esac; return 1 ;;   # vulyk's own defect cards; the index skeleton ships
@@ -120,39 +122,28 @@ replace_file() { # replace_file <src> <dest> - copy beside, then rename over. An
 }
 
 # An upgrade replaces a framework-owned file only when the hive's copy is a release copy: it equals
-# (line endings ignored) a blob some v* tag of the release clone shipped. Anything else is the
-# hive's decision (a tuned maxTurns, a patched hook): merged three-way onto the new release, base =
-# what v$PREV shipped, or kept byte for byte with the new release beside it as <f>.vulyk-new on a
-# conflict or with no base. A path the last install shipped that the hive no longer has stays
-# deleted. (ADR-005 amendment 2026-10-16; card upgrade-overwrites-host-edits.)
-SHIPPED_BLOBS=""; NO_HISTORY=""
-shipped_blobs() { # once per run, in the main shell, on the first release_copy (an up-to-date hive never
-  # pays for it): every blob id $SRC's history ever held under
-  # OWNED - each v* tag and every commit (a hive hotfixed by hand between releases holds a commit's
-  # copy, not a tag's). A source with no v* tag (a downloaded ZIP, a shallow checkout) cannot tell
-  # an edit from a release copy, so it keeps the old rule - replace - and says so.
-  SHIPPED_BLOBS="$(mktemp)"
-  if [ -z "$(git -C "$SRC" tag -l 'v*' 2>/dev/null)" ]; then
-    NO_HISTORY=1
-    echo "  NOTE: $SRC holds no release history (no v* tag), so this upgrade cannot tell your edits"
-    echo "        from release copies and replaces framework files as before. To keep your edits,"
-    echo "        upgrade from a git clone: scripts/vulyk-update.sh"
-    return 0
-  fi
-  local t
-  # shellcheck disable=SC2086
-  {
-    for t in HEAD $(git -C "$SRC" tag -l 'v*' 2>/dev/null); do
-      git -C "$SRC" ls-tree -r "$t" -- $OWNED 2>/dev/null | awk '{ print $3 }'
-    done
-    git -C "$SRC" log --all --no-renames --no-abbrev --format= --raw -- $OWNED 2>/dev/null | awk '{ print $4 }'
-  } | sort -u > "$SHIPPED_BLOBS" || true
+# (line endings ignored) the blob of that path in tag v$PREV, the release the hive is installed at
+# (contract U1, audit-fixes-1113). No other tag, commit or branch counts: an owner who went back to an
+# older release's line made an edit. Anything else is the hive's decision (a tuned maxTurns, a patched
+# hook): merged three-way onto the new release, base = that same blob, or kept byte for byte with the
+# new release beside it as <f>.vulyk-new on a conflict or with no base. A path the last install shipped
+# that the hive no longer has stays deleted. (ADR-005 amendment 2026-10-16; card upgrade-overwrites-host-edits.)
+PREV_TAG_SEEN=""; PREV_TAG_OK=""
+prev_tag() { # once per run, in the main shell, on the first release_copy (an up-to-date hive never pays
+  # for it): is v$PREV a tag in $SRC? Without it (a downloaded ZIP, a clone without tags, a pre-0.5.0 hive)
+  # nothing tells a release copy from an edit, so no file is one, and one NOTE line says so.
+  PREV_TAG_SEEN=1
+  if git -C "$SRC" rev-parse -q --verify "refs/tags/v$PREV^{commit}" >/dev/null 2>&1; then PREV_TAG_OK=1; return 0; fi
+  echo "  NOTE: v$PREV is not a tag in $SRC - no file counts as a release copy; each differing framework file is kept, the new release beside it (.vulyk-new)"
 }
-release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte some release's
-  [ -n "$SHIPPED_BLOBS" ] || shipped_blobs
-  [ -n "$NO_HISTORY" ] && return 0
-  local h; h="$(tr -d '\r' < "$DEST/$1" | git hash-object --stdin 2>/dev/null)" || return 1
-  [ -n "$h" ] && grep -qxF "$h" "$SHIPPED_BLOBS"
+release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte what v$PREV shipped at <rel>
+  [ -n "$PREV_TAG_SEEN" ] || prev_tag
+  [ -n "$PREV_TAG_OK" ] || return 1
+  git -C "$SRC" cat-file -e "v$PREV:$1" 2>/dev/null || return 1
+  local h b
+  h="$(tr -d '\r' < "$DEST/$1" | git hash-object --stdin 2>/dev/null)" || return 1
+  b="$(git -C "$SRC" show "v$PREV:$1" 2>/dev/null | tr -d '\r' | git hash-object --stdin 2>/dev/null)" || return 1
+  [ -n "$h" ] && [ "$h" = "$b" ]
 }
 # After a git merge-file conflict: a hive edit that touched only the frontmatter (its body is the body v$PREV
 # shipped) takes the new release's body under a frontmatter merged key by key. A key is a top-level `name:` line
@@ -904,6 +895,7 @@ dry = '--dry' in sys.argv[6:]
 REL = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'     # quoted: a project path with a space still runs
 OLD_REL = '$CLAUDE_PROJECT_DIR/.claude/hooks/'   # the plain form before 0.50; fix_hooks rewires it
 HOOKS_DIR = os.path.join(os.path.dirname(os.path.abspath(path)), 'hooks')
+GUARDS = ('git-guard.sh', 'owner-guard.sh', 'court-guard.sh')   # PreToolUse guards: entries carry onFailure "block"
 try:
     with open(path, encoding='utf-8') as fh:
         raw = fh.read()
@@ -1008,6 +1000,8 @@ for group in groups:
 if dry:
     sys.exit(0)                                  # --check: would wire; nothing written
 entry = {'type': 'command', 'command': cmd}
+if script in GUARDS:
+    entry['onFailure'] = 'block'                 # W1: a guard that crashes or is missing blocks, never waves through
 if event == 'SessionEnd':
     entry['timeout'] = 30                        # P10-03: the default SessionEnd budget is 1.5 s
 # The entry joins the first group with the same matcher (no matcher = a group without one, which
@@ -1045,6 +1039,7 @@ wire_hook() { # wire_hook <event> <hook-script-name> [matcher] [arg]
   local label="$event${matcher:+ [$matcher]}: $script${arg:+ $arg}"
   local by_hand="{ \"type\": \"command\", \"command\": \"\\\"\$CLAUDE_PROJECT_DIR\\\"/.claude/hooks/$script${arg:+ $arg}\" }"
   [ "$event" = SessionEnd ] && by_hand="${by_hand% \}}, \"timeout\": 30 }"
+  case "$script" in git-guard.sh|owner-guard.sh|court-guard.sh) by_hand="${by_hand% \}}, \"onFailure\": \"block\" }" ;; esac
   [ -n "$matcher" ] && by_hand="{ \"matcher\": \"$matcher\", \"hooks\": [ $by_hand ] }"
   local kept="  kept           .claude/settings.json -> $label"
   [ -f "$file" ] || return 0                                   # fresh install: ours was copied whole
@@ -1108,10 +1103,12 @@ PreCompact context-guard.sh - -
 PreCompact handoff.sh - precompact
 PostToolUse skill-usage-counter.sh Skill -
 PreToolUse git-guard.sh Bash|PowerShell -
+PreToolUse owner-guard.sh Bash|PowerShell|Edit|Write|MultiEdit -
+PreToolUse court-guard.sh Read|Grep|Glob|Bash|PowerShell -
 SessionEnd anomaly-scan.sh - -
 UserPromptSubmit defect-intake.sh - -
 PostToolUse defect-intake.sh AskUserQuestion answer
-PreToolUse defects-inject.sh Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.* -
+PreToolUse defects-inject.sh Edit|Write|MultiEdit|NotebookEdit|Read|Bash|PowerShell|WebFetch|WebSearch|Agent|mcp__.* -
 SessionStart defects-inject.sh - reset
 SessionStart ysk-offer.sh - -'
 # A shipped hook the hive's settings.json does not wire is named, never wired: a missing entry may be the owner's
@@ -1299,36 +1296,49 @@ PYFIX
 # The Workflow driver's clerk (`cycle-clerk.md`) runs every verb by shelling out to
 # `scripts/cycle.sh` and `scripts/journal.sh`, and a subagent's Bash tool is deny-by-default -
 # without an explicit `permissions.allow` entry every dispatch stalls on a prompt nobody is
-# watching. VULYK's OWN settings.json deliberately carries neither rule (only a target hive
-# runs the cycle unattended); this helper is what puts them there. Same treatment as
-# wire_session_hook: append only what is missing, in place, after a backup, idempotent by
-# inspection of the file.
+# watching. Only the verbs the clerk and the workers run are allowed, one rule each (contract W1,
+# audit-fixes-1113): the owner-only verbs (`briefed --go`, `reopen`, `manual-done`, `escalate`) and
+# `human-check.sh` stay behind a prompt. VULYK's own settings.json carries the same list. Same
+# treatment as wire_session_hook: append only what is missing, in place, after a backup, idempotent
+# by inspection of the file. The broad `cycle.sh` rule an older installer wrote is replaced by the
+# six verbs (`narrowed allow: cycle.sh`); a rule the installer never wrote stays, and one naming
+# `cycle.sh` or `human-check.sh` is named in the log.
+ALLOW_VERBS="advance status release suite stamp-red close-story"
+ALLOW_BROAD='Bash(bash scripts/cycle.sh:*)'
+allow_rules() { # the allow rules this release writes, one per line
+  local v; for v in $ALLOW_VERBS; do printf 'Bash(bash scripts/cycle.sh %s:*)\n' "$v"; done
+  printf '%s\n' 'Bash(bash scripts/journal.sh:*)'
+}
 wire_permissions() {
-  local file="$DEST/.claude/settings.json" py="" took=""
+  local file="$DEST/.claude/settings.json" py="" took="" out rc=0 kind rule
   [ -f "$file" ] || return 0                                   # nothing to edit
-  if grep -q 'Bash(bash scripts/cycle.sh:\*)' "$file" 2>/dev/null && \
-     grep -q 'Bash(bash scripts/journal.sh:\*)' "$file" 2>/dev/null; then
-    return 0                                                    # already wired
-  fi
-  if [ "$CHECK" = "--check" ]; then
-    echo "  would wire     .claude/settings.json -> permissions.allow: cycle.sh, journal.sh"
-    return 0
-  fi
   vulyk_python || true; py="$VULYK_PY"
   if [ -z "$py" ]; then
+    local missing="" r
+    while IFS= read -r r; do grep -qF "\"$r\"" "$file" 2>/dev/null || missing=1; done <<< "$(allow_rules)"
+    grep -qF "\"$ALLOW_BROAD\"" "$file" 2>/dev/null && missing=1
+    [ -n "$missing" ] || return 0                              # already the six verbs and the journal
+    if [ "$CHECK" = "--check" ]; then
+      echo "  would wire     .claude/settings.json -> permissions.allow: cycle.sh ($ALLOW_VERBS), journal.sh"
+      return 0
+    fi
     echo ""
     echo "  NOTE: the Workflow driver's clerk needs Bash access but could NOT be wired -"
-    echo "  no python on PATH to edit .claude/settings.json safely. Add these to your"
-    echo "  permissions.allow by hand, or every cycle-clerk dispatch will stall on a prompt:"
-    echo "      \"Bash(bash scripts/cycle.sh:*)\""
-    echo "      \"Bash(bash scripts/journal.sh:*)\""
+    echo "  no python on PATH to edit .claude/settings.json safely. Set your permissions.allow by"
+    echo "  hand to hold these, or every cycle-clerk dispatch will stall on a prompt:"
+    allow_rules | sed 's/^/      "/; s/$/"/'
+    echo "  and remove \"$ALLOW_BROAD\" if it is there: it lets the owner-only verbs run unprompted."
     return 0
   fi
-  settings_backup "$file" && took=1
-  if "$py" - "$file" <<'PYPERM'
-import json, re, sys
+  out="$(mktemp)"
+  [ "$CHECK" = "--check" ] || { settings_backup "$file" && took=1; }
+  VULYK_ALLOW_RULES="$(allow_rules)" VULYK_ALLOW_BROAD="$ALLOW_BROAD" \
+    "$py" - "$file" "${CHECK:+--dry}" > "$out" <<'PYPERM' || rc=$?
+import json, os, re, sys
 path = sys.argv[1]
-RULES = ["Bash(bash scripts/cycle.sh:*)", "Bash(bash scripts/journal.sh:*)"]
+dry = sys.argv[2:3] == ['--dry']
+RULES = [r for r in os.environ['VULYK_ALLOW_RULES'].splitlines() if r]
+BROAD = os.environ['VULYK_ALLOW_BROAD']
 try:
     with open(path, encoding='utf-8') as fh:
         raw = fh.read()
@@ -1339,31 +1349,67 @@ except Exception:
     sys.exit(4)                                  # unparseable: leave it entirely alone
 if not isinstance(data, dict):
     sys.exit(4)
-allow = data.setdefault('permissions', {}).setdefault('allow', [])
+perms = data.setdefault('permissions', {})
+if not isinstance(perms, dict):
+    sys.exit(4)
+allow = perms.setdefault('allow', [])
 if not isinstance(allow, list):
     sys.exit(4)
+for rule in allow:                               # the hive's own rules on the cycle's scripts: kept, named
+    if isinstance(rule, str) and rule not in RULES and rule != BROAD and \
+            re.search(r'scripts/(cycle|human-check)\.sh', rule):
+        print('kept\t' + rule)
+narrowed = BROAD in allow
 added = [r for r in RULES if r not in allow]
-if not added:
-    sys.exit(3)                                  # already there under both spellings
+if not narrowed and not added:
+    sys.exit(3)                                  # already the release's list
+if narrowed:
+    print('narrowed')
+if added:
+    print('added')
+if dry:
+    sys.exit(0)
+if narrowed:
+    at = allow.index(BROAD)                      # the six verbs take the broad rule's place
+    fresh = [r for r in added if r != BROAD]
+    allow[at:at + 1] = [r for r in fresh if 'scripts/cycle.sh ' in r]
+    added = [r for r in fresh if 'scripts/cycle.sh ' not in r]
 allow.extend(added)
 with open(path, 'w', encoding='utf-8', newline='\n') as fh:
     json.dump(data, fh, indent=IND, ensure_ascii=False)
     fh.write('\n')
 PYPERM
-  then
-    echo "  wire           .claude/settings.json -> permissions.allow: cycle.sh, journal.sh"
-    echo "                 (backup at .claude/settings.json.vulyk-bak)"
-  else
-    case "$?" in
-      3) [ -z "$took" ] || settings_backup_drop "$file" ;;   # already wired; nothing happened
-      *) [ -z "$took" ] || settings_backup_drop "$file"
-         echo ""
-         echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
-         echo "  Add these to permissions.allow by hand:"
-         echo "      \"Bash(bash scripts/cycle.sh:*)\""
-         echo "      \"Bash(bash scripts/journal.sh:*)\"" ;;
-    esac
-  fi
+  case "$rc" in
+    0) while IFS="$(printf '\t')" read -r kind rule; do
+         case "$kind" in
+           narrowed)
+             if [ "$CHECK" = "--check" ]; then
+               echo "  would narrow   .claude/settings.json -> permissions.allow: cycle.sh to $ALLOW_VERBS"
+             else
+               echo "  narrowed allow: cycle.sh -> .claude/settings.json permissions.allow: $ALLOW_VERBS"
+             fi ;;
+           added)
+             if [ "$CHECK" = "--check" ]; then
+               echo "  would wire     .claude/settings.json -> permissions.allow: cycle.sh ($ALLOW_VERBS), journal.sh"
+             else
+               echo "  wire           .claude/settings.json -> permissions.allow: cycle.sh ($ALLOW_VERBS), journal.sh"
+             fi ;;
+           kept) echo "  kept (yours)   .claude/settings.json -> permissions.allow: $rule" ;;
+         esac
+       done <<< "$(tr -d '\r' < "$out")"
+       [ "$CHECK" = "--check" ] || echo "                 (backup at .claude/settings.json.vulyk-bak)" ;;
+    3) [ -z "$took" ] || settings_backup_drop "$file"           # already the release's list; nothing happened
+       tr -d '\r' < "$out" | while IFS="$(printf '\t')" read -r kind rule; do
+         [ "$kind" != kept ] || echo "  kept (yours)   .claude/settings.json -> permissions.allow: $rule"
+       done ;;
+    *) [ -z "$took" ] || settings_backup_drop "$file"
+       echo ""
+       echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched."
+       echo "  Set its permissions.allow by hand to hold these:"
+       allow_rules | sed 's/^/      "/; s/$/"/'
+       echo "  and remove \"$ALLOW_BROAD\" if it is there: it lets the owner-only verbs run unprompted." ;;
+  esac
+  rm -f "$out"
 }
 
 # Claude Code's built-in "You should know" mod is offered (ysk-offer.sh), never switched on (0.29.0).
@@ -1565,7 +1611,7 @@ retire_mod() {
 # wiring: append only what is missing, in a marked block, and say what was added.
 ensure_gitignore() {
   local file="$DEST/.gitignore" missing=0 line have
-  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER .claude/state/ *.vulyk-new"
+  local wanted=".claude/handoff/ .claude/.vulyk-update-cache .claude/settings.json.vulyk-bak .claude/state.json .claude/settings.local.json CLAUDE.local.md memory/snapshots/ memory/map/.stale __pycache__/ .vulyk/ .claude/worktrees/ docs/specs/*/PAUSE docs/specs/*/DRIVER .claude/state/ *.vulyk-new memory/stats/skills.json"
   # gitignore-glob: the list holds patterns (docs/specs/*/DRIVER, *.vulyk-new); unquoted, bash expanded them in the
   # installer's working directory and wrote its paths instead. No globbing inside this function.
   local noglob=""; case $- in *f*) noglob=1 ;; esac
@@ -1640,7 +1686,7 @@ ensure_gitattributes() {
 }
 
 NEW_MANIFEST="$(mktemp)"; OLD_LISTED="$(mktemp)"
-trap 'rm -f "$NEW_MANIFEST" "$OLD_LISTED" "$SHIPPED_BLOBS"' EXIT
+trap 'rm -f "$NEW_MANIFEST" "$OLD_LISTED"' EXIT
 # The last install's manifest, read once for copy_tree's `kept deleted` lookup: CR dropped, a bad path left out.
 if [ -n "$UPGRADE" ] && [ -f "$DEST/.claude/vulyk-manifest" ]; then
   while IFS= read -r f; do
@@ -1652,6 +1698,12 @@ for tree in .claude memory bootstrap templates scripts docs/wiki docs/specs docs
   if [ -d "$SRC/$tree" ]; then copy_tree "$tree"; fi
 done
 LC_ALL=C sort -u -o "$NEW_MANIFEST" "$NEW_MANIFEST"
+# audit-fixes-1113 (ask 17): VULYK's own memory index never ships (shippable); a fresh install starts the hive's
+# from the skeleton. An upgrade leaves memory/ alone: the hive's index is its own, never written, merged or deleted.
+if [ -z "$UPGRADE" ] && [ -f "$SRC/templates/memory.md" ] && [ ! -e "$DEST/memory/memory.md" ] && [ ! -e "$DEST/memory/MEMORY.md" ]; then
+  if [ "$CHECK" = "--check" ]; then echo "  would seed     memory/memory.md (from templates/memory.md)"
+  else mkdir -p "$DEST/memory"; cp "$SRC/templates/memory.md" "$DEST/memory/memory.md"; echo "  seed           memory/memory.md (from templates/memory.md)"; fi
+fi
 
 # Removal (ADR-005 D2), after the copy loop and before the new manifest is written: a path
 # that shipped last run, does not ship this run, and lives under OWNED is deleted outright -
@@ -1730,6 +1782,11 @@ clean_seeded_council() {
 [ -n "$UPGRADE" ] && clean_seeded_council
 
 ensure_gitignore
+# audit-fixes-1113 (ask 2): the skill counter is local now. A hive that still tracks it is told the one command that
+# untracks it; the installer runs nothing in the hive's index (ls-files only reads it).
+if git -C "$DEST" ls-files --error-unmatch memory/stats/skills.json >/dev/null 2>&1; then
+  printf '  tracked        memory/stats/skills.json - a local counter now, gitignored; to untrack it: git -C %q rm --cached memory/stats/skills.json\n' "$DEST"
+fi
 ensure_gitattributes
 wire_session_hook vulyk-update-check.sh
 wire_session_hook top-model-brief.sh
@@ -1776,11 +1833,43 @@ wire_entry UserPromptSubmit defect-intake.sh
 # rules-tree: delivery widened to web, agent and MCP tools. py_wire ignores a changed matcher, so a
 # hive still on the 0.19 or the 0.32 matcher is unwired and rewired; a matcher the owner set by hand is
 # kept. 0.41: Read joins it, for the cards of a story's ## Files when the story file is read.
-INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*'
-if grep -qE '"matcher"[[:space:]]*:[[:space:]]*"Edit\|Write\|MultiEdit\|NotebookEdit\|Bash(\|WebFetch\|WebSearch\|Agent\|mcp__\.\*)?"' \
-     "$DEST/.claude/settings.json" 2>/dev/null; then
+# audit-fixes-1113 (contract M1): PowerShell joins it, so the cards reach a PowerShell command as a Bash one. An
+# entry still on a matcher an earlier release shipped is moved; one the hive changed itself is kept and named.
+INJECT_MATCHER='Edit|Write|MultiEdit|NotebookEdit|Read|Bash|PowerShell|WebFetch|WebSearch|Agent|mcp__.*'
+OLD_INJECT_MATCHERS='Edit|Write|MultiEdit|NotebookEdit|Bash
+Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*
+Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*'
+inject_matchers() { # the matcher of each PreToolUse group running defects-inject.sh (not `reset`), one per line;
+  # nothing with no settings.json, no python or an unreadable file
+  [ -f "$DEST/.claude/settings.json" ] || return 0
+  vulyk_python || return 0
+  "$VULYK_PY" - "$DEST/.claude/settings.json" <<'PYINJ' | tr -d '\r'
+import json, re, sys
+try:
+    with open(sys.argv[1], encoding='utf-8') as fh:
+        groups = json.load(fh)['hooks']['PreToolUse']
+except Exception:
+    sys.exit(0)
+runs = re.compile(r'(^|[\s"\'/\\])defects-inject\.sh(?!["\']?\s+reset)($|[\s"\'])')
+for g in groups if isinstance(groups, list) else []:
+    if isinstance(g, dict) and any(isinstance(h, dict) and runs.search(str(h.get('command', ''))) for h in g.get('hooks') or []):
+        print(g.get('matcher', ''))
+PYINJ
+}
+INJ_NOW="$(inject_matchers)"; INJ_MOVE=""; INJ_OWN=""
+while IFS= read -r m; do
+  if [ -z "$INJ_NOW" ]; then   # no python to read the groups: a shipped old matcher anywhere in the file, as before
+    grep -qF "\"$m\"" "$DEST/.claude/settings.json" 2>/dev/null && INJ_MOVE=1
+  elif printf '%s\n' "$INJ_NOW" | grep -qxF -- "$m"; then INJ_MOVE=1; fi
+done <<< "$OLD_INJECT_MATCHERS"
+if [ -z "$INJ_MOVE" ] && [ -n "$INJ_NOW" ] && ! printf '%s\n' "$INJ_NOW" | grep -qxF -- "$INJECT_MATCHER"; then
+  INJ_OWN="$(printf '%s\n' "$INJ_NOW" | head -1)"
+fi
+if [ -n "$INJ_MOVE" ]; then
   unwire_hook PreToolUse defects-inject.sh
   wire_hook PreToolUse defects-inject.sh "$INJECT_MATCHER"
+elif [ -n "$INJ_OWN" ]; then
+  echo "  kept (yours)   .claude/settings.json -> PreToolUse [$INJ_OWN]: defects-inject.sh - this release ships [$INJECT_MATCHER]"
 else
   wire_entry PreToolUse defects-inject.sh "$INJECT_MATCHER"
 fi
@@ -1791,11 +1880,19 @@ wire_entry SessionStart ysk-offer.sh
 wire_entry PostToolUse defect-intake.sh AskUserQuestion answer
 # uncommitted-work-guard: the git guard is wired by the release that brings it, once. When v$PREV
 # already shipped the hook, a missing entry is the owner's removal and stays removed (like unwire_hook).
-if [ -n "$PREV_UNKNOWN" ] || git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/git-guard.sh" 2>/dev/null; then
-  report_unwired PreToolUse git-guard.sh 'Bash|PowerShell'
-elif [ -f "$DEST/.claude/hooks/git-guard.sh" ] || [ "$CHECK" = "--check" ]; then
-  wire_hook PreToolUse git-guard.sh 'Bash|PowerShell'
-fi
+# audit-fixes-1113 (contract W1): the owner-word and court guards follow the same rule. An entry is written only
+# when the hive has the script: a guard entry fails closed (onFailure "block"), so one naming a missing file would
+# block every tool it matches.
+wire_guard() { # wire_guard <script> <matcher>
+  if [ -n "$PREV_UNKNOWN" ] || git -C "$SRC" cat-file -e "v$PREV:.claude/hooks/$1" 2>/dev/null; then
+    report_unwired PreToolUse "$1" "$2"
+  elif [ -f "$DEST/.claude/hooks/$1" ] || [ "$CHECK" = "--check" ]; then
+    wire_hook PreToolUse "$1" "$2"
+  fi
+}
+wire_guard git-guard.sh 'Bash|PowerShell'
+wire_guard owner-guard.sh 'Bash|PowerShell|Edit|Write|MultiEdit'
+wire_guard court-guard.sh 'Read|Grep|Glob|Bash|PowerShell'
 # mass-audit-fixes-04 (I2): the rest of what VULYK's own settings.json runs, which no earlier installer
 # wired into an owner's settings.json. As for git-guard.sh: wired when v$PREV did not ship the script (a
 # fresh install over an owner's file, or the release that brings it); after that a missing entry is the

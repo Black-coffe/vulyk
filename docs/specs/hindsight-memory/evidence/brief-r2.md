@@ -5,7 +5,7 @@ Read the other two in full (you know your own). Then grill them: every factual c
 on that you can check on disk or in a repo — check it (e.g. "61 of 110 user blocks are task-notifications",
 "9 of 9 YouTube_AI text cards have no `paths:`", "redact.sh masks 5 of 15 shapes", "`не дышит` in two
 cards", "memory/learnings is being retired", "the grill decided sorting by repeats×freshness",
-"hindsight-memory plugin deprecated"). Read-only: change no file in E:/Projects/vulyk, D:/YouTube_AI or
+"hindsight-memory plugin deprecated"). Read-only: change no file in E:/Projects/vulyk, <hive> or
 litopys. Running `defects-check.sh` or `redact.sh` read-only is fine.
 
 ## Canonical list (the Queen merged the three reports)

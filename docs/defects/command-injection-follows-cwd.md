@@ -14,7 +14,7 @@ Claude Code keeps a Bash `cd` that stays inside the project. An injection such a
 from the project root and aborts the whole command the moment the session has drifted into a subfolder.
 
 ## Owner quotes
-- 2026-10-13 · /vulyk-handoff · E:/Projects/AI — «Пытаюсь сделать в проектах work handoff и получаю ошибки. Ты можешь разобраться, в чём проблема, почему так выходит и как это побороть?» (the screenshot: «Shell command failed for pattern "!`bash scripts/state.sh`": [stderr] bash: scripts/state.sh: No such file or directory»)
+- 2026-10-13 · /vulyk-handoff · <hive> — «Пытаюсь сделать в проектах work handoff и получаю ошибки. Ты можешь разобраться, в чём проблема, почему так выходит и как это побороть?» (the screenshot: «Shell command failed for pattern "!`bash scripts/state.sh`": [stderr] bash: scripts/state.sh: No such file or directory»)
 
 ## Cause
 `vulyk-handoff.md` named `scripts/state.sh` and `.claude/hooks/handoff.sh` relative to the cwd (v0.3.0, v0.9.1). The

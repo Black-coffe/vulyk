@@ -11,7 +11,8 @@
 # Gate: debt, then the `check:` of every card that DECLARES `block` with a check, fixtures or not,
 # with <arg>; a non-zero exit is red.
 # Files: the `check:` of every card that DECLARES `block` with a check, once per given file that matches
-# one of its glob `paths:` (a `cmd:`/`tool:` entry matches no file). Nothing else is reported: exit 0
+# one of its glob `paths:` (a `cmd:`/`tool:` entry matches no file) and is not one of that card's own
+# `fixtures:` (they fail its check by design). Nothing else is reported: exit 0
 # green, 1 red with one line per red `<ref> fails on <file>: <first output line>`, 2 no python / parser.
 # The audit names a declared block card with no glob `paths:` as `block with no file scope`.
 #
@@ -22,7 +23,10 @@
 # cards are ignored. Debt: >= 2 owner quotes, effective status not block, and at least one quote
 # line committed after the commit that added the library's README.md (git blame committer time,
 # not the date written in the quote). Uncommitted quote lines and a library outside git are new.
-# Debt with no new quote is "old debt": reported, never red.
+# Debt with no new quote is "old debt": reported, never red. <library>/.scrub-revs (one full SHA per line,
+# `#` comments) names masking commits: a line such a commit changed keeps its older date only when its text before and
+# after differs solely in the new text's <...> spans (checked from git); any other change or added line keeps the listed
+# commit's date. The audit names each listed commit in one `scrub-rev` info line.
 # The same new/old rule holds for three more findings. UNDELIVERABLE: a card shown as text with no
 # `paths:` (no hook can deliver it). OVERLAP: one normalised key on two live cards (a key inside
 # another card's key is only an "ambiguous key" line). ESCAPE: a block card got a quote after its
@@ -47,7 +51,7 @@
 set -uo pipefail
 
 case "${1:-}" in
-  -h|--help) sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,49p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 MODE=audit; ARG=""; FILES=()
 if [ "${1:-}" = --files ]; then
@@ -113,21 +117,78 @@ if in_git:
     if stamps:
         lib_time = int(stamps[-1])
 
+scrub_file = os.path.join(os.path.abspath(d), '.scrub-revs')
+_scrub = None
+def scrub_revs():
+    """The commits listed in <library>/.scrub-revs: [(full sha or '', token, note)]; [] with no list."""
+    global _scrub
+    if _scrub is None:
+        _scrub = []
+        if in_git and os.path.isfile(scrub_file):
+            with open(scrub_file, encoding='utf-8', errors='replace') as fh:
+                for raw in fh:
+                    tok, _, note = raw.strip().partition('#')
+                    if not tok.strip():
+                        continue
+                    tok = tok.split()[0]
+                    full = (git('rev-parse', '--verify', '-q', tok + '^{commit}') or '').strip()
+                    _scrub.append((full, tok, note.strip()))
+    return _scrub
+
+def porcelain(out):
+    """git blame --line-porcelain -> line number (from 1) -> (sha, committer-time, original line, filename, text)."""
+    res, cur, n = {}, {}, 0
+    for line in out.split('\n'):
+        if line.startswith('\t'):
+            n += 1
+            res[n] = (cur.get('sha'), cur.get('t'), cur.get('orig'), cur.get('file'), line[1:].rstrip('\r'))
+        elif re.match(r'^[0-9a-f]{40} \d+ \d+', line):
+            p = line.split(' ')
+            cur = {'sha': p[0], 'orig': int(p[1])}
+        elif line.startswith('committer-time '):
+            cur['t'] = int(line.split(' ', 1)[1])
+        elif line.startswith('filename '):
+            cur['file'] = line[len('filename '):]
+    return res
+
+_shown = {}
+def line_at(sha, path, n):
+    """Line n (from 1) of path (repo-root relative) at commit sha; None when it cannot be read."""
+    if (sha, path) not in _shown:
+        out = git('show', '%s:%s' % (sha, path)) if path else None
+        _shown[(sha, path)] = None if out is None else [x.rstrip('\r') for x in out.split('\n')]
+    lines = _shown[(sha, path)]
+    return lines[n - 1] if lines is not None and n and 0 < n <= len(lines) else None
+
+def mask_only(old, new):
+    """True when old and new differ solely in spans that new holds as <...> placeholders."""
+    parts = re.split(r'(<[^<>\s]+>)', new)
+    pat = ''.join('.+?' if i % 2 else re.escape(p) for i, p in enumerate(parts))
+    return re.fullmatch(pat, old, re.S) is not None
+
 def blame(name):
     """line number (from 1) -> (sha, committer-time); None when the file has no history."""
     out = git('blame', '--line-porcelain', '--', name) if in_git else None
     if out is None:
         return None
-    res, sha, t, n = {}, None, None, 0
-    for line in out.split('\n'):
-        if line.startswith('\t'):
-            n += 1
-            res[n] = (sha, t)
-        elif re.match(r'^[0-9a-f]{40} \d+ \d+', line):
-            sha, t = line.split(' ', 1)[0], None
-        elif line.startswith('committer-time '):
-            t = int(line.split(' ', 1)[1])
-    return res
+    res = porcelain(out)
+    # .scrub-revs lists commits that only masked paths or names in card text. A line such a commit changed keeps
+    # its older date only when git, skipping the listed commits, traces it to one older line alone and the two texts
+    # differ solely in the new text's <...> spans; a line the commit added or reworded keeps the listed commit's date.
+    # Checked here from git, not trusted from the list (audit-fixes-1113-12).
+    listed = {full for full, _, _ in scrub_revs() if full}
+    if listed and any(v[0] in listed for v in res.values()):
+        ign = git('blame', '--line-porcelain', '--ignore-revs-file', scrub_file, '--', name)
+        alt = porcelain(ign) if ign is not None else {}
+        claims = collections.Counter((v[0], v[2]) for v in alt.values())
+        for n, v in list(res.items()):
+            a = alt.get(n)
+            if v[0] not in listed or a is None or a[0] in listed or claims[(a[0], a[2])] != 1:
+                continue
+            old = line_at(a[0], a[3], a[2])
+            if old is not None and mask_only(old, v[4]):
+                res[n] = a
+    return {n: (v[0], v[1]) for n, v in res.items()}
 
 def placeholder(cmd, target):
     m = re.search(r'(<[^<>\s]+>)(\.[A-Za-z0-9]+)?', cmd)
@@ -187,13 +248,29 @@ if mode == 'files':
         if c.status != 'block' or not c.check:
             continue
         globs = [g for g in c.paths if defects_lib.parse_scope(g)[0] == 'glob']
+        # A card's own fixtures fail its check by design: never run it on them; another card still checks them.
+        own = set()
+        for x in c.fixtures:
+            x = x.replace('\\', '/')
+            while x.startswith('./'):
+                x = x[2:]
+            own.add(x)
         for f in files:
             f = f.replace('\\', '/')
             while f.startswith('./'):
                 f = f[2:]
+            if f in own:
+                continue
             if any(defects_lib.scope_matches(g, None, f, None) for g in globs):
                 emit('R', c.ref, f, placeholder(c.check, f), '')
     sys.exit(0)
+if mode == 'audit':
+    for full, tok, note in scrub_revs():
+        if full:
+            emit('I', 'scrub-rev %s: %s - git blame skips it only on lines it changed solely in <...> spans'
+                 % (full[:7], note or 'no note'))
+        else:
+            emit('I', 'scrub-rev %s: not a commit in this repository - every line it names keeps its own date' % tok)
 # Ids are unique across the library (revoked cards included): a card in a folder must not shadow another.
 by_id = collections.defaultdict(list)
 for c in cards:

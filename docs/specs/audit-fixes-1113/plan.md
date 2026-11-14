@@ -50,11 +50,15 @@ evidence stays in the private audit folder.
   file gets the ignore line on `--upgrade` plus one line naming the untrack command; the installer never touches a
   hive's index. With the clean-tree exceptions gone, such a hive shows the counter as modified until it is
   untracked, so the rollout runs that command in each hive's upgrade commit.
-- **Ask 4, the quote rule** (contract O1): the note must contain one whole owner message, or one whole line of it,
-  or one whole `AskUserQuestion` answer, at least 8 letters or digits long, written after the spec's latest verdict.
-  A fragment cut out of a line does not count, so a refusal cannot be quoted as its last word. `briefed --go`
-  carries no note: it passes when an owner prompt of this session contains `--go`. A marker line that still holds
-  the template placeholder is not a record. Veto the numbers here if they are wrong.
+- **Ask 4, the quote rule** (contract O1; split by the owner on 2026-11-13, see `## Plan deltas`). A quote is one
+  whole owner message, one whole line of it, or one whole `AskUserQuestion` answer; a fragment cut out of a line
+  does not count. Plan approval (`**Approved:**`): the owner's latest message, written after the spec's
+  `vulyk(<slug>): plan` commit, of any length («Погнали», «да»). Release acceptance (`human-check.sh
+  ACCEPTED|REJECTED`, `**Checked:**`): only the answer to a one-question `AskUserQuestion` that names the spec
+  slug (the release question asked alone) or the owner's next message after that question, at least 8 letters
+  or digits unless it is a picked option, written after the spec's latest verdict. `briefed --go` carries no
+  note: it passes when an owner prompt of this session contains `--go`. A marker line that still holds the
+  template placeholder is not a record.
 - **Ask 7, failure.** When `redact.sh` cannot do its work, it withholds the text: one marker line on stdout, the
   reason on stderr, exit 1.
 - **Ask 8.** At Tier 3-4 a close with no recorded claim head refuses (a missing input is never a pass). Tier 1-2
@@ -138,8 +142,18 @@ evidence stays in the private audit folder.
 **Wave 3** (the gates that judge this build)
 - `audit-fixes-1113-07-git-guard` — asks 5, 6, 8, 9: wider verb coverage, the no-Python fallback, no subagent commit under a DRIVER, the Queen's verbs closed to a subagent
 - `audit-fixes-1113-08-owner-word-and-court-guards` — asks 4, 13: only the owner's quoted words record an acceptance or `--go`; a blind seat stays inside its court
-- `audit-fixes-1113-09-cycle-gates` — asks 8, 9, 10: scope counted from the claim head; approval bound to `cycle.sh`'s own commit; hand edits of `brief.md` / `plan.md` are not paperwork (`model: opus`)
+- `audit-fixes-1113-09-cycle-gates` — ask 8: scope counted from the claim head (cut by lead-architect 2026-11-14; asks 9, 10 moved to 13, 14) (`model: opus`)
 - `audit-fixes-1113-10-install-wiring-and-allow-list` — asks 11, 4, 13: the six-verb allow list, the two new hooks wired, the hooks reference, the CHANGELOG
+
+**Wave 4** (cut mid-build, plan delta 2026-11-13)
+- `audit-fixes-1113-11-redact-leaves-ordinary-text` — ask 7: no false masks on ordinary text (every brief and journal byte-identical); callers refuse when `redact.sh` fails
+- `audit-fixes-1113-12-scrub-revs-mask-only` — ask 14: a `.scrub-revs` commit keeps a quote's date only for a masked-only change; and `--files` skips a card's own fixtures (from 09)
+
+**Wave 5**
+- `audit-fixes-1113-13-approved-record` — ask 9: approval bound to a commit cycle.sh made; `cycle.sh revise` (`model: opus`)
+
+**Wave 6**
+- `audit-fixes-1113-14-paperwork` — ask 10: paperwork is only what a cycle script writes; named staging (`model: opus`)
 
 ## Contracts
 <!-- Interfaces that cross a story boundary, agreed here at plan time. -->
@@ -158,7 +172,7 @@ evidence stays in the private audit folder.
   system locations (including `<drive>:/Program Files/` and `<drive>:/Windows/`, which `CHANGELOG.md` names today),
   a `<placeholder>` first segment.
 - **M1, inject matcher (story 04 writes `.claude/settings.json`, story 06 the installer).** The `defects-inject.sh`
-  entry's matcher is `Edit|Write|MultiEdit|Bash|PowerShell`.
+  entry's matcher is the existing one with `PowerShell` added (Read, NotebookEdit, `mcp__.*` and the rest stay).
 - **U1, upgrade base (story 06).** A hive file is a release copy only when it equals the blob of that path in tag
   `v<.claude/vulyk-version>`. Anything else is merged three-way with that blob as the base; a conflict keeps the
   hive's file and writes `<file>.vulyk-new`. The card's check is `bash scripts/upgrade-base-check.sh <arg>`, `<arg>`
@@ -227,6 +241,60 @@ evidence stays in the private audit folder.
 
 ## Plan deltas
 
+- 2026-11-14, story 11 NEEDS_CONTEXT: the new scope check (S1) counted the Queen's hook-bit commit b0721b25,
+  made between two driver runs, as the worker's out-of-scope edit. The Queen re-recorded the
+  wave's claim head, journaled. Root fix: story 13 adds `cycle.sh reanchor`
+  (journaled, main session only), so a recorded head never moves by hand again.
+
+- 2026-11-14, story 09 missed twice at the turn cap (both workers built in a scratchpad copy).
+  lead-architect (Fable) cut it by ask into three serial stories, each alone in its wave because each
+  rewrites `close-story`/`claim`: 09 (ask 8, wave 3), 13 (ask 9, wave 5), 14 (ask 10, wave 6); the
+  own-fixtures gate item moved to story 12. Contracts S1/A1/P1 unchanged. The workers' untested diff is a
+  reference to port by hand, by line range. Invariant: a story that edits `close-story` or `claim` in
+  `scripts/cycle.sh` runs alone in its wave.
+
+- 2026-11-14, side-agent note the owner forwarded: `.scrub-revs` is a plain list any agent can extend. New story 12
+  (wave 4, beside 11, disjoint files): a listed commit keeps a quote's older date only for a masked-only change.
+
+- 2026-11-14, story 06 NEEDS_CONTEXT: story 04's path scrub rewrote an owner-quote line of a block card, so
+  `defects-check.sh` (git-blame dating) saw a new quote and reported an ESCAPE. Root fix in story 06: blame with
+  `--ignore-revs-file docs/defects/.scrub-revs`, listing scrub-only commits; `scripts/defects-check.sh`,
+  `docs/defects/.scrub-revs` and `tests/defects.test.sh` join story 06 (none is named in wave 2; story 09 edits
+  `defects-check.sh` later, in wave 3).
+
+- 2026-11-13, story 06 NEEDS_CONTEXT: `PRE_M` (shared header of `tests/telemetry.test.sh`) moves to M1, and
+  `tests/intake.test.sh` joins story 06; parts `install-xp2`, `library` and the defect-hooks row join its
+  `## Verification`. Story 04 left those red when it put M1 into `.claude/settings.json`.
+- 2026-11-13, owner decision (option label, cross-checked with Fable): «Чистить только новое (Рекомендую)». Only current
+  files are scrubbed (story 04). No
+  name from the private client list was found in the published versions.
+
+- 2026-11-13, wave 2 NEEDS_CONTEXT, the Queen's rulings:
+  - 05: `.claude/hooks/defects-inject.sh` joins the story; its `reset` branch (SessionStart) exits for a subagent too (H1).
+  - 06: the two `edits` assertions of `tests/telemetry.test.sh` that encode the old upgrade base are rewritten to
+    U1, and `--part edits` joins the story's `## Verification`.
+
+- 2026-11-13, wave 1 relaunch, the Queen's rulings:
+  - 04 NEEDS_CONTEXT: the close-story block gate runs a block card's check on that card's own new fixtures, which
+    fail by design. The two fixtures leave story 04's `## Files` and the Queen commits them; the gate defect
+    (card framework-defect-deferred-mid-build) joins story 09 (`scripts/defects-check.sh`), the gates wave.
+  - New story 11, wave 4 (ask 7): `redact.sh` leaves ordinary text alone (corpus of every brief and journal
+    byte-identical, same-shape neighbours) and its callers refuse when it fails. From story 02's worker concerns
+    and a side-agent note the owner forwarded.
+
+- 2026-11-13, wave 1 NEEDS_CONTEXT (stories 02, 03, 04), the Queen's rulings:
+  - 02: the red line was a 140-char line in `memory/map/scripts-hooks.md` from before the spec; the Queen
+    wrapped it (ca9ae757). Story unchanged.
+  - 03: removing `skills.json` from paperwork flips two cases in `tests/council.test.sh` (parts `seats`,
+    `escalate`) and cases in cycle parts `close`, `hooklog`: the file and the four parts join story 03.
+  - 04: the 26 further tracked files the new leak rule flags join story 04 and are scrubbed the same way, real
+    and synthetic alike (ask 14: today's hits replaced with stand-ins); `memory/map/scripts.md` was fixed by the
+    Queen (ca9ae757). M1 now reads: the existing matcher plus `PowerShell` (the worker's finding), story 06 too.
+- 2026-11-13, owner decision on the quote rule (option label, the agent's wording; cross-checked with Fable):
+  «План — одним словом, выпуск — строже (Рекомендую)». Plan approval takes the owner's latest message after the
+  plan commit, any length; release acceptance takes only the answer to the release question asked alone or the
+  owner's next message after it, 8+ letters or digits unless a picked option. Story 08 revised.
+
 <!--
 The lines below are the cycle's confirmation markers (docs/cycle.md); each placeholder is replaced by
 the command or script that owns it, and scripts/ship-check.sh reads them all. Approved is the owner's
@@ -241,7 +309,15 @@ is missing or unparsable.
 -->
 **Approved:** Andrei, 2026-11-13 («Погнали»)
 **Briefed:** <written by scripts/cycle.sh briefed - stage 01+02 on the straight-through path: Tier 1 "via grill, <owner>, <date>" (or "via grill (assumed)" / "via mini-brief"); Tier 2-4 only with `cycle.sh briefed <spec> --go`, "via grill (--go), <owner>, <date>". Alternative to **Approved:** above.>
-**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
-**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
+**Branch:** vulyk/audit-fixes-1113
+**Council:** RED round 1, 2026-11-14, at d974e00c, pack 475733085b95
+**Council:** STALE round 2, 2026-11-14, at 11ab8fe3, pack b1039f68f2f5
+**Council:** RED round 3, 2026-11-14, at 0b2de955, pack b1039f68f2f5
+**Council:** ESCALATE round 4, 2026-11-14, at 85a09311, pack c204ad9ef3c7 - red: 5
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+
+## Needs a human
+- reason: ceiling · round 4 · 2026-11-14
+- ask 5: RED - see docs/specs/audit-fixes-1113/council/round-4/*.md for evidence
+- seats: docs/specs/audit-fixes-1113/council/round-4/
+**Checked:** ACCEPTED by Andrei, 2026-11-14, at bfe5f895 - Принимаю, выкатка поэтапно (Рекомендую)

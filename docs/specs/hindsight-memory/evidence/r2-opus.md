@@ -7,7 +7,7 @@ not re-run._
 
 | Claim | Author | Holds? | How I checked |
 |---|---|---|---|
-| YouTube_AI: all 22 cards use `area:`, none `paths:`; 9 of 9 `text` cards undeliverable | Sonnet | **Holds** | `grep -l '^paths:' D:/YouTube_AI/docs/defects/*.md` → 0; `^area:` on every card; `defects-inject.sh` matches only `fm['paths']` (l.251-262); the hook **is** wired in YouTube_AI (`.claude/settings.json` PreToolUse and SessionStart `reset`); VULYK `contract.md:22`: `area:` "ignored by VULYK logic" |
+| YouTube_AI: all 22 cards use `area:`, none `paths:`; 9 of 9 `text` cards undeliverable | Sonnet | **Holds** | `grep -l '^paths:' <hive>/docs/defects/*.md` → 0; `^area:` on every card; `defects-inject.sh` matches only `fm['paths']` (l.251-262); the hook **is** wired in YouTube_AI (`.claude/settings.json` PreToolUse and SessionStart `reset`); VULYK `contract.md:22`: `area:` "ignored by VULYK logic" |
 | …"32 owner quotes undelivered, `shoot-step-guesswork` alone 13" | Sonnet | **Overstated** | counting by the README rule (`- YYYY-MM-DD · ` lines under `## Owner quotes`/`## Цитаты владельца`): **19** across the 9 text cards, `shoot-step-guesswork` **7** (matches the audit's own "7 quotes"). 32/13 counts dated lines in other sections too. The conclusion is unchanged |
 | `redact.sh` masks 5 of 15 shapes, Telegram bot token passes | Sonnet | **Holds** | replayed 15 samples through `bash scripts/redact.sh`: AKIA, AIza, `sk-ant-`, `ghp_`, `postgres://u:p@` masked; `glpat-`, `npm_`, `pypi-`, `hf_`, `gsk_`, `SG.`, `sk_live_`, Slack webhook, `123456789:AA…`, 16-digit card pass |
 | litopys uses the host's `scripts/redact.sh` first | Sonnet | **Holds** | `bin/litopys` l.73-81 (`redactor()`) |

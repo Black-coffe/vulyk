@@ -11,8 +11,8 @@
 #          bash tests/intake.test.sh --list-parts     # the part names, one per line
 # tests/full-suite.sh runs the functional part among its parallel jobs and the latency part alone, last.
 #
-# Latency runs against D:/YouTube_AI/docs/defects copied to a temp dir when that library exists
-# (the pilot's 19 real cards), else against the fixture library. Asserted <= 400 ms median; the
+# Latency runs against $VULYK_LATENCY_LIBRARY (a hive's docs/defects, e.g. the pilot's 19 real cards) copied to a
+# temp dir when that variable names a folder, else against the fixture library. Asserted <= 400 ms median; the
 # contract target is <= 200 ms and the measured median is printed either way.
 set -u
 PARTS="functional latency" PART=''
@@ -371,7 +371,7 @@ if [ -f "$UP/.claude/settings.json" ]; then
       | .hooks.PostToolUse |= map(select(.matcher != "AskUserQuestion"))' "$F" > "$T/old.json" && mv "$T/old.json" "$F"
   bash "$SRC/install.sh" "$UP" --upgrade --telemetry off > "$T/up.out" 2>&1
   expect_eq "an upgraded hive's inject matcher is the widened one" \
-    "Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*" \
+    "Edit|Write|MultiEdit|NotebookEdit|Read|Bash|PowerShell|WebFetch|WebSearch|Agent|mcp__.*" \
     "$(jq -r '.hooks.PreToolUse[] | select(any(.hooks[]; .command | test("defects-inject")) ) | .matcher' "$F")"
   expect_eq "defects-inject.sh is wired once on PreToolUse" "1" \
     "$(jq -r '.hooks.PreToolUse[].hooks[].command' "$F" | grep -c 'defects-inject.sh')"
@@ -385,8 +385,8 @@ if [ -f "$UP/.claude/settings.json" ]; then
   jq '(.hooks.PreToolUse[] | select(any(.hooks[]; .command | test("defects-inject")))).matcher = "Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Agent|mcp__.*"' \
     "$F" > "$T/old.json" && mv "$T/old.json" "$F"
   bash "$SRC/install.sh" "$UP" --upgrade --telemetry off > "$T/up3.out" 2>&1
-  expect_eq "a hive on the 0.32 matcher gets the one with Read" \
-    "Edit|Write|MultiEdit|NotebookEdit|Read|Bash|WebFetch|WebSearch|Agent|mcp__.*" "$(inject_matcher)"
+  expect_eq "a hive on the 0.32 matcher gets M1, Read and PowerShell in it" \
+    "Edit|Write|MultiEdit|NotebookEdit|Read|Bash|PowerShell|WebFetch|WebSearch|Agent|mcp__.*" "$(inject_matcher)"
   expect_eq "... with defects-inject.sh wired once" "1" \
     "$(jq -r '.hooks.PreToolUse[].hooks[].command' "$F" | grep -c 'defects-inject.sh')"
   jq '(.hooks.PreToolUse[] | select(any(.hooks[]; .command | test("defects-inject")))).matcher = "Edit|Bash"' \
@@ -399,8 +399,8 @@ fi # part functional
 if part latency; then # --- part latency: the 200 ms median, on the fixture library above
 echo "--- latency"
 LAT="$HIVE"; SRCNAME="fixture library"
-if [ -d "D:/YouTube_AI/docs/defects" ]; then
-  mkdir -p "$T/yt/docs"; cp -r "D:/YouTube_AI/docs/defects" "$T/yt/docs/"; LAT="$T/yt"; SRCNAME="YouTube_AI library copy"
+if [ -n "${VULYK_LATENCY_LIBRARY:-}" ] && [ -d "$VULYK_LATENCY_LIBRARY" ]; then
+  mkdir -p "$T/yt/docs"; cp -r "$VULYK_LATENCY_LIBRARY" "$T/yt/docs/defects"; LAT="$T/yt"; SRCNAME="real library copy"
 fi
 m="$(median_ms "$LAT" '{"prompt":"На 01:03 обрів слова после \"глубоко\", опять","session_id":"lat"}')"
 echo "  median defect-intake.sh: ${m} ms over 30 calls ($SRCNAME; target <= 200 ms)"

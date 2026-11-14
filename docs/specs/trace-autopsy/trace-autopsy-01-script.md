@@ -44,7 +44,7 @@ past-EOF frames. Contract and every rule: plan.md `## Contracts` and `## Assumpt
 
 ## Acceptance criteria
 - [ ] Python traceback with a deployment path (`File "/app/<repo path>", line N`), a Node frame
-      (`at f (C:\build\<repo path>:L:C)`), a bash frame (`<path>.sh: line N:`) and a plain `path:N` each resolve to
+      (`at f (<D>:\build\<repo path>:L:C)`), a bash frame (`<path>.sh: line N:`) and a plain `path:N` each resolve to
       the tracked file in a fixture repo; innermost frame first.
 - [ ] A frame outside the repo, an ambiguous suffix and a line past EOF each give a mark line, exit 0.
 - [ ] Hostile frames (`-L1,1:x`, `../../etc/passwd`, `$(touch pwned)`) reach no git argument: no file `pwned`

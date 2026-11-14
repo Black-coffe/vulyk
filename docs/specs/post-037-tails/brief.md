@@ -34,7 +34,7 @@ release; item F (stats commit, untracking the litopys chronicle) was done in `7c
   tree-sitter/ctags/LSP.
 - D. Telemetry rows in the VULYK repo carry `"vulyk":"0.0.0"`. Cause (Queen's recon): `vulyk_version()` reads only
   `.claude/vulyk-version`, which `install.sh` writes into hives; VULYK's own tree has `VERSION` (0.37.0) and no stamp
-  (`scripts/telemetry.sh:154-163`). No hive under `E:/Projects` carries `install.sh` or `VERSION`.
+  (`scripts/telemetry.sh:154-163`). No hive under `<projects>` carries `install.sh` or `VERSION`.
 
 ## Answers (grill, 2026-10-27; the owner picked the options quoted)
 

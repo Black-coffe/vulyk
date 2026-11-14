@@ -1,9 +1,9 @@
 ---
 id: upgrade-overwrites-host-edits
 title: An upgrade overwrites a hive's own edits and deletions in framework files
-status: text
-check:
-fixtures: []
+status: block
+check: bash scripts/upgrade-base-check.sh <arg>
+fixtures: [docs/defects/upgrade-overwrites-host-edits.original.fixture, docs/defects/upgrade-overwrites-host-edits.neighbour.fixture]
 keys: [местные правки, заменяет местные, maxTurns]
 paths: ["install.sh", "scripts/vulyk-update.sh", ".claude/commands/vulyk-update.md"]
 ---
@@ -21,12 +21,15 @@ hook, an agent the project removed (copied back). The hive learns about it only 
 installed from, and a path missing from the hive is copied in as new. Fixed 2026-10-16 (ADR-005 amendment): release
 copies only, edits merged or kept with `.vulyk-new`, deletions kept; covered by `tests/telemetry.test.sh` case 21.
 
-Still open (seen 2026-11-06, 0.44 -> 0.48 on a hive): "release copy" means equal to *any* release, so an edit that
-puts back an older release's text is taken for a stale copy and replaced. The hive had pinned `cycle-clerk` to
-`model: sonnet`, which is the 0.18-0.25 text; the upgrade wrote 0.48's `haiku`. Only the hive's own patch check
-caught it. A three-way merge with base = the closest tag would lose it too (ours = base). The base must be the
-release the hive is installed at (`.claude/vulyk-version`): a file equal to that release is a release copy; anything
-else, older release text included, is an edit to merge.
+Seen again 2026-11-06 (0.44 -> 0.48 on a hive): "release copy" then meant equal to *any* release's or commit's blob,
+so an edit that put back an older release's text (`cycle-clerk` pinned to the 0.18-0.25 `model: sonnet`) was taken
+for a stale copy and replaced. Since audit-fixes-1113 (contract U1) the base is the tag of the release the hive is
+installed at, `v<.claude/vulyk-version>`: a file equal to that tag's blob of its path is a release copy; anything
+else, an older release's text or a branch's included, is merged three-way with that blob as the base, and a conflict
+keeps the hive's file with `<file>.vulyk-new` beside it. No other tag and no branch is consulted; with that tag
+missing from the source no file is a release copy, and one NOTE line says so. `scripts/upgrade-base-check.sh`
+upgrades a throwaway hive from 0.2.0 to 0.3.0 with the installer it is given and fails when the older release's
+line or the branch's is lost.
 
 ## Never
 - Replace a framework file in a hive without first telling a release copy from a project edit.

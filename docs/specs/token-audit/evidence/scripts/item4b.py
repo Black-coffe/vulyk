@@ -1,7 +1,7 @@
 """item4b.py - hook-injected and harness-injected context in Queen sessions: chars per session and per user prompt,
 classified by source from the injected text (VULYK hooks vs the owner's global hooks)."""
 import json, os, re, collections, pandas as pd
-ROOT = os.path.expanduser(r'C:\Users\Andrei\.claude\projects')
+ROOT = os.path.expanduser('~/.claude/projects')
 st = pd.read_csv('session_table.csv')
 def classify(txt):
     t = txt[:400]

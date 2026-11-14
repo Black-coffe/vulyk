@@ -58,6 +58,9 @@ Side-agent notes the owner forwarded (2026-11-13), carried as plan constraints, 
   paperwork) land in the last wave, each with a test on the original case.
 - A security item dropped from this spec or left half done moves to the private audit folder; no repo text describes it.
 
+
+**After escalation (round 4, 2026-11-14).**
+> Владелец 2026-11-14 выбрал «Узкий ремонт + раунд (Рекомендую)»: ремонт git-guard и шапок owner-guard и git-guard, CRLF-тест ship; подробности (moved to a private file before publishing).
 ## Asks
 1. Version order: a release `X.Y.Z` is newer than any `X.Y.Z-dev.N`, and `dev.10` is newer than `dev.3`. The update-check hook and `vulyk-update.sh` use one shared comparison, and `vulyk-update.sh` refuses a target that is not newer than the installed version.
 2. `memory/stats/skills.json` is no longer tracked (`git rm --cached`, gitignored) and public history is not rewritten. It counts only VULYK's own skills and `vulyk-*` commands and lives locally. `install.sh` does not ship it, no ship step commits it, and the clean-tree exceptions made for it are gone.

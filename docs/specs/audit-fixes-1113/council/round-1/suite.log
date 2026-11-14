@@ -1,0 +1,105 @@
+head=d974e00c steps=10
+STEP 1/10: ok 136s
+PART council:seats3 ok 45s cap 300s
+PART council:seats2 ok 55s cap 300s
+PART council:judge2 ok 60s cap 300s
+PART council:ceilings ok 60s cap 300s
+PART council:close ok 63s cap 300s
+PART council:judge ok 64s cap 300s
+PART council:escalate ok 66s cap 300s
+PART council:escalate2 ok 69s cap 300s
+PART council:verbs ok 85s cap 300s
+PART council:verbs2 ok 100s cap 300s
+PART council:seats ok 110s cap 300s
+PART council:verbs3 ok 135s cap 300s
+STEP 2/10: ok 172s
+PART council:replays3 ok 46s cap 300s
+PART council:walks3 ok 46s cap 300s
+PART council:roster2 ok 50s cap 300s
+PART council:walks2 ok 58s cap 300s
+PART council:replays2 ok 75s cap 300s
+PART council:walks ok 75s cap 300s
+PART council:replays ok 79s cap 300s
+PART council:ceilings2 ok 88s cap 300s
+PART council:suite ok 107s cap 300s
+PART council:driver ok 119s cap 300s
+PART council:roster ok 153s cap 300s
+PART council:advance ok 170s cap 300s
+STEP 3/10: ok 121s
+PART cycle:manual ok 23s cap 300s
+PART cycle:hooklog ok 29s cap 300s
+PART council:hardening ok 35s cap 300s
+PART cycle:scope ok 37s cap 300s
+PART cycle:gates ok 38s cap 300s
+PART cycle:paperwork ok 40s cap 300s
+PART cycle:approved ok 48s cap 300s
+PART cycle:close ok 85s cap 300s
+PART cycle:close2 ok 91s cap 300s
+PART council:suite2 ok 98s cap 300s
+PART council:suite3 ok 117s cap 300s
+PART cycle:ship ok 120s cap 300s
+STEP 4/10: ok 155s
+PART driver ok 0s cap 300s
+PART handoff ok 8s cap 300s
+PART e2e:green ok 27s cap 300s
+PART inject:functional ok 28s cap 300s
+PART cycle:safety ok 50s cap 300s
+PART e2e:red ok 50s cap 300s
+PART cycle:red2 ok 71s cap 300s
+PART cycle:bsd ok 72s cap 300s
+PART full-suite ok 74s cap 300s
+PART defects ok 87s cap 300s
+PART intake:functional ok 104s cap 300s
+PART cycle:red ok 154s cap 300s
+STEP 5/10: FAIL 218s
+PART mods ok 6s cap 300s
+PART model-profile:defaults ok 18s cap 300s
+PART symbol-map ok 19s cap 300s
+PART solo:green ok 21s cap 300s
+PART model-profile:edges ok 23s cap 300s
+PART model-profile:set ok 25s cap 300s
+PART solo:rejected ok 26s cap 300s
+PART solo:block ok 43s cap 300s
+PART telemetry:telemetry FAIL 52s cap 300s
+PART telemetry:scan ok 99s cap 300s
+PART telemetry:install ok 154s cap 300s
+PART maintenance ok 216s cap 300s
+LOAD: start cpu 1% top: vmmemWSL 10%, FortiESNAC 5%, chrome#30 5%, FortiSSLVPNdaemon 5%, dllhost#2 5%; named like the sampler: WmiPrvSE 30%, WmiPrvSE#3 10%
+LOAD: end cpu 0% top: chrome 4%, System 4%, msedgewebview2#16 0%, msedgewebview2#17 0%, msedgewebview2#19 0%; named like the sampler: WmiPrvSE#3 14%
+STEP 6/10: FAIL 195s
+PART telemetry:ysk ok 25s cap 300s
+PART telemetry:constitution2 ok 38s cap 300s
+PART telemetry:ysk3 ok 56s cap 300s
+PART telemetry:ysk2 ok 74s cap 300s
+PART telemetry:terminal FAIL 81s cap 300s
+PART telemetry:library ok 85s cap 300s
+PART telemetry:constitution3 ok 95s cap 300s
+PART telemetry:ledger ok 99s cap 300s
+PART telemetry:constitution ok 123s cap 300s
+PART telemetry:install-xp ok 167s cap 300s
+PART telemetry:install-xp2 ok 172s cap 300s
+PART telemetry:wiring ok 195s cap 300s
+LOAD: start cpu 1% top: vmmemWSL 13%, msedgewebview2#14 0%, msedgewebview2#15 0%, msedgewebview2#16 0%, msedgewebview2#17 0%; named like the sampler: WmiPrvSE#3 4%
+LOAD: end cpu 3% top: dllhost#2 4%, FoxitPDFEditorUpdateService 4%, System 4%, msedgewebview2#17 0%, msedgewebview2#14 0%; named like the sampler: WmiPrvSE 24%, WmiPrvSE#3 4%
+STEP 7/10: ok 138s
+PART telemetry:ysk-hook ok 3s cap 300s
+PART telemetry:rg2 ok 48s cap 300s
+PART telemetry:rg ok 51s cap 300s
+PART telemetry:wrapper ok 58s cap 300s
+PART telemetry:wrapper2 ok 58s cap 300s
+PART telemetry:crlf2 ok 64s cap 300s
+PART telemetry:mods2 ok 77s cap 300s
+PART telemetry:mods ok 79s cap 300s
+PART telemetry:wrapper3 ok 90s cap 300s
+PART telemetry:watcher ok 91s cap 300s
+PART telemetry:crlf ok 107s cap 300s
+PART telemetry:upgrade ok 137s cap 300s
+STEP 8/10: ok 141s
+PART token-report ok 3s cap 300s
+PART telemetry:launchers ok 71s cap 300s
+PART telemetry:edits ok 139s cap 300s
+STEP 9/10: ok 13s
+PART inject:latency ok 12s cap 300s
+STEP 10/10: ok 6s
+PART intake:latency ok 4s cap 300s
+SUITE: FAIL 1295s - cut part maintenance, part telemetry:telemetry failed, part telemetry:terminal failed

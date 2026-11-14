@@ -6,13 +6,13 @@
 
 ## Install
 
-**New project:** click *Use this template* on GitHub, clone, done.
-
-**Existing project:**
+**New or existing project:**
 ```bash
 git clone https://github.com/Black-coffe/vulyk /tmp/vulyk
 /tmp/vulyk/install.sh /path/to/your/project
 ```
+
+**Started from the GitHub template?** Such a copy holds VULYK's own repository: its `docs/specs/`, `docs/adr/`, `tests/`, `CHANGELOG.md` and `install.sh` are VULYK's, not your project's, and it has no version stamp. Run `install.sh` from a VULYK clone on it (`/tmp/vulyk/install.sh /path/to/your/project`): that gives the repo its version stamp (`.claude/vulyk-version`), permissions and hook wiring.
 The installer copies `.claude/`, `memory/`, `docs/wiki/`, `templates/`, `bootstrap/`, and the constitution. It never overwrites an existing `CLAUDE.md` - it writes `CLAUDE.vulyk.md` and prints the one-line import to add.
 
 **Upgrading** (`install.sh <project> --upgrade`, or `/vulyk-update` from inside the project) replaces changed framework files and removes retired ones you did not edit. It never touches your constitution on its own. When the constitution changed, it prints the size difference and the command that replaces it with your Profile and Commands blocks carried over, the old file kept as `<name>.pre-0.18.md`: `install.sh <project> --upgrade --constitution replace`. Hives upgrading from 0.17 or earlier get the 0.18 prefix saving only after that replace.

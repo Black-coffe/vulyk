@@ -8,6 +8,7 @@
 #   Usage: scripts/scope-check.sh <story-file> [git-diff-range]
 #          scripts/scope-check.sh docs/specs/oauth/oauth-01.md
 #          scripts/scope-check.sh docs/specs/oauth/oauth-01.md main...HEAD
+#          scripts/scope-check.sh docs/specs/oauth/oauth-01.md --since <claim-head>
 #
 # Default range is the working tree (staged + unstaged) against HEAD. Since v0.5.0 the
 # build loop commits per story, so at the moment /vulyk-build runs this - after a worker
@@ -29,20 +30,29 @@
 # this story's excess. A path this story declares itself is always its own. With an explicit
 # range nothing is excluded.
 #
+# With `--since <sha>` (S1, audit-fixes-1113: close-story at Tier 3-4 passes the head `claim` recorded for
+# the story's wave) the count is every file changed between that commit and the working tree, committed or
+# not, plus untracked ones: an edit committed before the close counts too. Excluded as with no range, and
+# besides: a same-wave story's declared paths and story file whatever its status (a closed wave-mate's
+# close commit lies in the range).
+#
 # Exit status is always 0: this reports, it does not block. Blocking is lead-review's job.
 
 set -u
 
 STORY="${1:-}"
 RANGE="${2:-}"
+SINCE=""
+if [ "$RANGE" = --since ]; then SINCE="${3:-}"; RANGE=""; fi
 
 if [ -z "$STORY" ] || [ ! -f "$STORY" ]; then
-  echo "scope-check: usage: $0 <story-file> [git-diff-range]" >&2
+  echo "scope-check: usage: $0 <story-file> [git-diff-range | --since <sha>]" >&2
   exit 0
 fi
+case "$SINCE" in -*) echo "scope-check: --since needs a commit" >&2; exit 0 ;; esac
 
 # shellcheck source=scripts/lib.sh
-. "$(dirname "$0")/lib.sh"   # is_paperwork_path
+. "$(dirname "$0")/lib.sh"   # is_paperwork_path, spec_doc_kind, spec_doc_same, approved_shas
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "scope-check: not a git repo" >&2; exit 0; }
 cd "$ROOT" || exit 0
@@ -87,6 +97,9 @@ fi
 # --- what actually changed ---------------------------------------------------
 if [ -n "$RANGE" ]; then
   CHANGED="$(git -c core.quotePath=false diff --name-only --no-renames "$RANGE" 2>/dev/null)"
+elif [ -n "$SINCE" ]; then
+  # the claim head against the working tree: committed, staged and unstaged changes alike
+  CHANGED="$(git -c core.quotePath=false diff --name-only --no-renames "$SINCE" -- 2>/dev/null; git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null)"
 else
   # quotePath off: a non-ASCII name must come back as itself to match its `## Files` line. --no-renames
   # (both diffs): a rename names only its new path, so code moved into paperwork vanished from the count.
@@ -100,13 +113,46 @@ CHANGED="$(printf '%s\n' "$CHANGED" | grep -v '^$' | grep -Fxv -e "$STORY_REL" -
 
 # Paperwork (is_paperwork_path, lib.sh - the hive's own .claude/vulyk-paperwork globs too) is
 # written by the cycle and its hooks on their own schedule, never a story's own edit: drop it
-# from the diff, unless the story itself names it under '## Files'. skills.json included: the
-# owner reversed A18 on 2026-10-16 (ADR-010 amendment) - the Skill counter rewrites it nearly
-# every turn, so counting it flagged almost every story.
+# from the diff, unless the story itself names it under '## Files'. memory/stats/skills.json is not
+# paperwork (audit-fixes-1113): untracked and gitignored, a tracked, modified copy counts.
+# A spec's plan.md / brief.md (P1, lib.sh spec_doc_same): dropped only when its change is cycle lines alone.
+# Measured against HEAD with no range; between the range's two ends with one; with --since from the
+# newest commit since the claim head that touched the file and is a story's approved record (a `revise`,
+# the accepted way to change either during a build), else from the claim head itself. Only commits that
+# touched the file are read, so a later record commit that left it alone never hides an earlier hand edit.
+doc_base() { # doc_base <path> -> the revision a spec doc's change is measured from (--since mode)
+  local slug sha recs
+  slug="${1#docs/specs/}"; slug="${slug%%/*}"
+  recs="$(approved_shas "$ROOT" "$slug")"
+  if [ -n "$recs" ]; then
+    while IFS= read -r sha; do
+      [ -n "$sha" ] && printf '%s\n' "$recs" | grep -qxF -- "$sha" && { printf '%s' "$sha"; return 0; }
+    done <<EOF
+$(git rev-list "$SINCE..HEAD" -- "$1" 2>/dev/null)
+EOF
+  fi
+  printf '%s' "$SINCE"
+}
+doc_unchanged() { # doc_unchanged <path> -> 0 iff the measured change of a spec's plan.md / brief.md is cycle lines alone
+  local from to
+  if [ -n "$RANGE" ]; then
+    case "$RANGE" in
+      *..*) from="${RANGE%%..*}"; to="${RANGE##*..}"; [ -n "$to" ] || to=HEAD ;;
+      *) from="$RANGE"; to=@ ;;
+    esac
+    [ -n "$from" ] || from=HEAD
+  elif [ -n "$SINCE" ]; then from="$(doc_base "$1")"; to=@
+  else from=HEAD; to=@
+  fi
+  spec_doc_same "$ROOT" "$1" "$from" "$to"
+}
 KEPT=""
 while IFS= read -r file; do
   [ -z "$file" ] && continue
-  is_paperwork_path "$file" && ! matches_any "$file" "$DECLARED" && continue
+  if ! matches_any "$file" "$DECLARED"; then
+    is_paperwork_path "$file" && continue
+    spec_doc_kind "$file" >/dev/null && doc_unchanged "$file" && continue
+  fi
   KEPT="${KEPT}${file}
 "
 done <<EOF
@@ -126,11 +172,12 @@ if [ -z "$RANGE" ]; then
     [ -f "$sib" ] && [ "$sib" != "$STORY_REL" ] || continue
     grep -q '^story:' "$sib" 2>/dev/null || continue
     sst="$(awk -F': *' '$1 == "status" { sub(/[[:space:]]*#.*$/, "", $2); gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit }' "$sib")"
-    [ "$sst" = done ] && continue
+    swave="$(fm_wave "$sib")"; [ -n "$swave" ] || swave=1
+    # --since: a closed wave-mate's close commit lies in the range, so a same-wave story counts whatever its status
+    if [ "$sst" = done ]; then [ -n "$SINCE" ] && [ "$swave" = "$MYWAVE" ] || continue; fi
     # the sibling's own story file too: its worker writes `returned:` there, in the same tree
     SIBLING_DECLARED="${SIBLING_DECLARED}${sib}
 "
-    swave="$(fm_wave "$sib")"; [ -n "$swave" ] || swave=1
     [ "$swave" = "$MYWAVE" ] || continue
     SIBLING_DECLARED="${SIBLING_DECLARED}$(files_of "$sib")
 "

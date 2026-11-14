@@ -1,14 +1,15 @@
 ---
 story: audit-fixes-1113-07
 spec: audit-fixes-1113
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 3
 blocked_by: [audit-fixes-1113-02, audit-fixes-1113-05]
 red: required
 red_reason: a discarding verb fed to a shell is denied
+red_verified_at: 2026-11-13T23:16:36Z 475b9abddc26af40a7f87a88a4a43df248b9e2f00ff41d03781629bea1233c1c
 ---
 
 # git-guard: every discarding form, a bash fallback without Python, no subagent commit under a DRIVER
@@ -92,5 +93,36 @@ Agents (worker-code / worker-test); `memory/map/cycle.md` → Files, one writer 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each. End with one `CHANGELOG:` line
 per ask (5, 6, 8, 9) that says what the guard does now. -->
+- `.claude/hooks/git-guard.sh`: `classify` gains rm -f, checkout-index -f, read-tree -u --reset/-m (tree) and branch -f/-M/-C, checkout -B, switch -C, update-ref (commits, subagents only); `fed_string` reads `bash|sh|zsh|dash|ksh -c` and `pwsh|powershell -Command`; `drop_heredocs` keeps a body whose line names a shell; `git -c alias.x=` is expanded (`!` values as shell commands).
+- Same file: `VERBS` (Python) and `GUARD_VERBS` (bash) are the two lists; the bash fallback (`fb_scan`, builtins only, bash 3.2) denies any listed verb after a `git` word for any caller; exit 126/127/9009/49 means "did not start", any other non-0/1 exit on a git command denies with "the guard failed".
+- Same file: a subagent is denied `git commit`/`git add` while `docs/specs/*/DRIVER` exists (looked up from the input cwd up to the first `.git` folder, not `CLAUDE_PROJECT_DIR`, so a test hive is not judged by the live repo's DRIVER), and every cycle.sh verb outside the contract's six; cycle.sh counts only at a command position or right after a shell, so `grep x scripts/cycle.sh` passes.
+- Decision: the subagent cycle.sh rule holds with or without a DRIVER (the AC names none); the wrapper's and Python's early exits now also let `cycle.sh` through.
+- Surprise: `vulyk-cycle.js` asks the clerk (a subagent) to run `claim` as a recovery after an unreadable `advance --claim` line; the contract's list leaves `claim` out, so that recovery now ends in a stop. Built as the contract says.
+- Card: Never bullet and `## Check` extended, the "not covered" list in both header and card, `shell.fixture` added to `fixtures:`; worker-code.md and worker-test.md each gain "Never run `git commit` or `git add`".
+- CHANGELOG: (ask 5) git-guard denies rm -f, checkout-index -f, read-tree -u --reset, branch -f/-M, checkout -B, switch -C and update-ref, and reads git handed to `bash -c`/`pwsh -Command`, a heredoc fed to a shell, or a `-c alias.` definition; every form left open is named in its header.
+- CHANGELOG: (ask 6) without Python a bash fallback with the same verb list denies those verbs in Bash and PowerShell; a Python that crashes on a git command denies it.
+- CHANGELOG: (ask 8) a subagent cannot `git commit` or `git add` while a DRIVER holds a spec, and worker prompts say never to commit.
+- CHANGELOG: (ask 9) a subagent cannot run `cycle.sh revise`, `branch`, `reopen`, `claim` or `stamp-red --baseline`, so it cannot make the commit that binds an approved story version.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/maintenance.test.sh
+- exit: 1
+- tests: 475b9abddc26af40a7f87a88a4a43df248b9e2f00ff41d03781629bea1233c1c (tests/maintenance.test.sh)
+- impl: ddcb709a69249272b09344c72a34e2f88a23cdbb0c6d62476a976dd08a880881
+- stamped: 2026-11-13T23:16:36Z
+
+```
+::error::git-guard: a discarding verb fed to a shell is denied: bash -c - expected 'exit=1' in:
+  ok    ship 2a: the plugin.json version moves with VERSION
+  ok    ship 2a: the dev build gets a local tag for the next upgrade
+  ok    ship 2a: a reverted canary is held too
+  ok    ship 2: in the VULYK source the build number comes from 2a
+  ok    ship 2a: the canaries go first
+  ok    ship 2a: a red canary stops the rollout
+--- beta-fixes-1113-03: a paperwork-only suite.log head, --go from the owner
+  ok    lead-review: a suite.log head that differs only by paperwork commits is not reported
+  ok    plan: --go comes only from the owner's own words
+maintenance.test.sh: 881 checks, 69 failed
+```

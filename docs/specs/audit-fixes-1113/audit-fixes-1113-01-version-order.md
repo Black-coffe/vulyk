@@ -1,14 +1,15 @@
 ---
 story: audit-fixes-1113-01
 spec: audit-fixes-1113
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 wave: 1
 blocked_by: []
 red: required
 red_reason: a release is newer than its dev builds
+red_verified_at: 2026-11-13T16:44:09Z 51fc756ebca4ee1f7ab98f842cd0460bf8008f2b83fa16510239cd3a053c6750
 ---
 
 # One version comparison for the update check and vulyk-update.sh
@@ -61,5 +62,31 @@ points, Gotchas; `memory/map/scripts.md` → Gotchas (bash 3.2 / BSD).
 
 ## Implementation notes
 <!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each. End with one `CHANGELOG:` line. -->
+- `scripts/version-order.sh` (new): `version_newer`, `version_newest`; key "X Y Z R N" (R=1 release, 0 pre-release; N the number after the pre-release's last dot), built with parameter expansion, no subshell per comparison.
+- `.claude/hooks/vulyk-update-check.sh`: `vsort` gone; sources the file from its own tree (`../../scripts/`), a missing copy exits 0 (fails open); `version_newest` picks the tag, `version_newer "$LATEST" "$INSTALLED"` decides.
+- `scripts/vulyk-update.sh`: sources the file beside it (missing: one error line, exit 1); `git tag --sort=v:refname` replaced by `version_newest`; a target older than the installed version is refused before checkout, pinned `--version` included; equal passes as before; an unstamped hive (`none`) is not compared.
+- `tests/telemetry.test.sh` (install-xp): order cases, the hook's dev/release cases, the refusal (default, `--check`, pinned), equal not refused, both scripts source the file.
+CHANGELOG: the update check and `vulyk-update.sh` share one version order (a release is newer than its dev builds, dev.10 after dev.3); `vulyk-update.sh` refuses a target older than the installed version.
 
 ## Findings
+
+## Red receipt
+- command: bash tests/telemetry.test.sh --part install-xp
+- exit: 1
+- tests: 51fc756ebca4ee1f7ab98f842cd0460bf8008f2b83fa16510239cd3a053c6750 (tests/telemetry.test.sh)
+- impl: b274a2340c3344fe2bfa28b682f29993320712d672c641ce2221492c737c6044
+- stamped: 2026-11-13T16:44:09Z
+
+```
+::error::version_newer: a release is newer than its dev builds - expected [0], got [1]
+  ok    install.sh --upgrade keeps the hive's ## Commands block (old python cell included) byte-identical
+  ok    a hive with no model pin gets it on --upgrade, as before
+  ok    ... and the log says so
+  ok    three bad manifest lines: three skip (bad path) lines
+  ok    ... skip (bad path) names the dot-dot line
+  ok    ... skip (bad path): every named file still present
+  ok    ... and a normal retired path is still removed
+  ok    an owner's model pin survives --upgrade
+  ok    ... and the log says it is kept
+telemetry.test.sh: 78 checks, 16 failed
+```

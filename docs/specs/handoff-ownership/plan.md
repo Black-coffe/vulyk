@@ -26,7 +26,7 @@ user-level hook keeps writing its own handoffs and keeps suggesting `/handoff`.
   quiet where the project switched `handoff` off - a separate change to the owner's tool, outside VULYK (owner's word,
   2026-10-13, after the plan review).
 - Switched off only in `.claude/settings.local.json`, merged, never in the committed `settings.json` (owner answer 2);
-  `install.sh:1022` already gitignores it; the owner already keeps `skillOverrides` there in `E:/Projects/AI`.
+  `install.sh:1022` already gitignores it; the owner already keeps `skillOverrides` there in `<hive>`.
 - No terminal (CI, a pipe, `/vulyk-update` run by the Queen): the installer writes nothing and prints what it found and
   the one command that switches it off. `--check` writes nothing either. Claude Code rewrites `settings.local.json` in a
   live session, so the script says the change takes effect in a new session.
@@ -57,7 +57,7 @@ user-level hook keeps writing its own handoffs and keeps suggesting `/handoff`.
 
 ## Next circle
 - VULYK's `handoff.py` learns the folder split: reads `.claude/context-guard.json` (`subproject_globs`,
-  `subproject_aliases`) and writes the handoff into the matching folder, so a hive like `E:/Projects/AI` can switch the
+  `subproject_aliases`) and writes the handoff into the matching folder, so a hive like `<hive>` can switch the
   global one off too (owner answer 3).
 
 ## Descoped

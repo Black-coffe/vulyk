@@ -54,7 +54,7 @@ maintenance.test.sh: 370 checks, 6 failed
 
 ## Implementation notes
 - `git-guard.sh`: the main loop follows each `cd` / `chdir` / `pushd` / `Set-Location` / `sl` of the command in
-  order (`cd_target`; a bare `cd` is home; on Windows a Git Bash `/e/x` becomes `e:/x`), and `-C` resolves from there.
+  order (`cd_target`; a bare `cd` is home; on Windows a Git Bash `/<d>/x` becomes `<d>:/x`), and `-C` resolves from there.
   Fixes the finding's under-deny (`cd sub && git checkout -- f`) and the review minor's over-deny (`cd docs && git
   checkout .`). Parentheses still split segments, so a cd inside a subshell is taken as lasting: errs toward a deny.
 - Review minor fixed in the same file: heredoc bodies are cut before parsing (`drop_heredocs`; `<<<` is not a heredoc

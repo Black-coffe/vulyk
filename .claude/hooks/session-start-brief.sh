@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # SessionStart hook: inject a one-line hive brief into context (stdout becomes context).
 set -uo pipefail
+# H1 (audit-fixes-1113): a subagent's input carries a non-empty agent_id, and its SessionStart is not the
+# session's: exit 0, print nothing, write nothing. A shell call has no input to give: no wait on a terminal, 1 s on a pipe.
+IN=""; [ -t 0 ] || IFS= read -r -d '' -t 1 IN || true
+re_agent='"agent_id"[[:space:]]*:[[:space:]]*"[^"]'
+[[ $IN =~ $re_agent ]] && exit 0
 ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 MEM="$ROOT/memory"
 [ -d "$MEM" ] || exit 0
@@ -11,6 +16,23 @@ if [ -n "${newest_map:-}" ]; then
   map_age="newest map slice: $(basename "$newest_map"), modified $(date -r "$newest_map" +%Y-%m-%d 2>/dev/null || stat -c %y "$newest_map" 2>/dev/null | cut -d' ' -f1)"
 fi
 echo "[VULYK] $map_age | start at memory/memory.md"
+
+# No Python 3 in the hooks' launcher order (audit-fixes-1113, ask 6): each name must run, since the Windows Store
+# alias resolves and then fails every call. One line; nothing when one answers.
+py_ok=""
+for PY in ${VULYK_PY:+"$VULYK_PY"} python3 python py; do
+  command -v "$PY" >/dev/null 2>&1 || continue
+  "$PY" -c 'import sys; sys.exit(sys.version_info[0] != 3)' </dev/null >/dev/null 2>&1 && { py_ok=1; break; }
+done
+[ -n "$py_ok" ] || echo "[VULYK] no Python 3 found (\$VULYK_PY, python3, python, py; the Windows Store alias does not count): the session handoff and the defect cards are off, the git guard is limited, and the cycle and check scripts cannot run. Tell the owner once: install Python 3 or set VULYK_PY to one."
+
+# A GitHub template copy (audit-fixes-1113, ask 18): VULYK's own spec folders and install.sh came along, but no
+# version stamp (only install.sh writes it) and no v* tag (only a clone of VULYK carries them).
+if [ ! -f "$ROOT/.claude/vulyk-version" ] && [ -f "$ROOT/install.sh" ] &&
+   { [ -d "$ROOT/docs/specs/auto-maintenance" ] || [ -d "$ROOT/docs/specs/gate-split" ]; } &&
+   [ -z "$(git -C "$ROOT" tag -l 'v*' 2>/dev/null | head -1)" ]; then
+  echo "[VULYK] this repo looks like a GitHub template copy of VULYK (VULYK's own docs/specs, install.sh at the root, no .claude/vulyk-version, no v* tag). Tell the owner once and point at \"Started from the GitHub template\" in README.md or docs/getting-started.md: what is VULYK's own here, and install.sh from a VULYK clone gives the repo its version stamp, permissions and hook wiring."
+fi
 
 # bootstrap (0.22): offered once, before the first task, while the Profile block still holds a
 # `<fill in` row. Never in VULYK itself (telemetry/inbox/: its Profile is the template); a
@@ -94,7 +116,7 @@ if [ -n "$adir" ] && [ -f "$idx" ]; then
 fi
 
 if [ -n "$items" ]; then
-  echo "[VULYK] maintenance due: $items. After the owner's current task, on ${def:-the default branch} with a clean tree (memory/stats/skills.json aside: the Skill counter rewrites it), run each through the Skill tool ($skills) without asking, then tell the owner in one line what changed; otherwise leave it for a later session."
+  echo "[VULYK] maintenance due: $items. After the owner's current task, on ${def:-the default branch} with a clean tree, run each through the Skill tool ($skills) without asking, then tell the owner in one line what changed; otherwise leave it for a later session."
 fi
 [ -n "$memline" ] && echo "$memline"
 [ -n "$pending" ] && echo "[VULYK] evolve changeset $pending waits for the owner's review (merge = accept, delete the branch = reject): tell the owner once."

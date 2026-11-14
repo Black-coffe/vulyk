@@ -24,7 +24,7 @@ own lines are defined mechanically: non-blank lines that appear in no released V
   error that names the merge.
 - A sidecar hive merges its `CLAUDE.vulyk.md`; the foreign `CLAUDE.md` beside it is never opened (ADR-005 unchanged).
 - The `.pre-<version>.md` backup is still written before a merge lands: cheap, and the check compares against it.
-- Fixtures are synthetic. Hive constitutions are private and VULYK is public, so the original case (`E:/Projects/AI`,
+- Fixtures are synthetic. Hive constitutions are private and VULYK is public, so the original case (`<hive>`,
   0.19) is reproduced in shape - a project section dropped by a replace - not copied.
 - Released together with 0.26.0, on the owner's word; this spec ships as 0.27.0.
 

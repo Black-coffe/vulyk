@@ -43,7 +43,8 @@ and the `defects-*` bullet in `scripts-checks.md`.
   `publish`, `inbox`; `vulyk_version`: `.claude/vulyk-version`, else `VERSION` beside `install.sh`, else `0.0.0`.
   `ENUM`/`AGENTS` are append-only (removed agents go to `RETIRED_AGENTS`; `ENUM` ends `model_below_floor`,
   `fable_limit_fallback`). `agent_prefix_high` (0.52) fires only when the agent type is in `AGENTS` (built-ins such
-  as `general-purpose` and a hive's own agents are skipped). The scan counts handoff Python starts (0.43.1). Dates go through `date_epoch` /
+  as `general-purpose` and a hive's own agents are skipped).
+  The scan counts handoff Python starts (0.43.1). Dates go through `date_epoch` /
   `date_shift` (prev ISO week = `date_shift -7 +%G-W%V`).
 - `memory-triage.sh` - read-only lister behind `/vulyk-gc memory`; `--mark` is its one write.
 

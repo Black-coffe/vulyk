@@ -363,6 +363,42 @@ said = run("stop", env_for(home, proj), {"session_id": "s-h1m", "transcript_path
 check("H1M a copy for another model lends no window (stock 200k stays)", "/ 200k" in said, said[:200])
 
 
+# --- H1 (audit-fixes-1113-05): a subagent's SessionStart and PreCompact are not the session's ---------
+print("--- H1 a subagent gets no handoff and writes no dump")
+
+
+def tree(p):
+    out = []
+    for d, _, files in os.walk(p):
+        for f in files:
+            fp = os.path.join(d, f)
+            out.append((fp, read(fp)))
+    return sorted(out)
+
+
+SUB = {"agent_id": "a-h1", "agent_type": "worker-code"}
+home, proj = fresh("h1ss")
+seed_handoff(proj, "prev")
+before = tree(proj)
+for src in ("startup", "clear", "compact"):
+    pl = dict({"session_id": "main-1", "cwd": proj, "source": src}, **SUB)
+    rc, out, err = run("sessionstart", env_for(home, proj), pl)
+    check("H1 a subagent's SessionStart (source %s) is offered no handoff" % src, rc == 0 and out == "", out[:200])
+check("H1 ... and marks none as read (the project is unchanged)", tree(proj) == before, repr(tree(proj))[:300])
+rc, out = restore(proj, home, "clear", "main-2")
+check("H1 the main session's next SessionStart still gets the pending handoff", rc == 0 and "SEED-prev" in out,
+      out[:200])
+rc, out = restore(proj, home, "clear", "main-3")
+check("H1 ... once", rc == 0 and out == "", out[:200])
+home, proj = fresh("h1pc")
+tp = write_transcript(os.path.join(ROOT, "h1pc", "tr", "s-h1.jsonl"), 150000)
+before = tree(proj)
+rc, out, err = run("precompact", env_for(home, proj),
+                   dict({"session_id": "s-h1", "transcript_path": tp, "cwd": proj, "trigger": "auto"}, **SUB))
+check("H1 a subagent's PreCompact writes no dump", rc == 0 and out == "" and handoffs(proj) == [] and tree(proj) == before,
+      "rc=%d out=%r docs=%r" % (rc, out[:120], handoffs(proj)))
+
+
 shutil.rmtree(os.path.dirname(ROOT), ignore_errors=True)
 print()
 if fails:

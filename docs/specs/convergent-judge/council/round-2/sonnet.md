@@ -4,7 +4,7 @@ MODEL: claude-sonnet-5
 COURT: E:/Projects/vulyk/.vulyk/court/convergent-judge/round-2
 VERDICT: GREEN
 ASSUMED CONFIG: VULYK's own repo (shell+Python+markdown toolkit, no compiler/build); "Full suite" = the four silent commands
-RAN: bash -n on all *.sh; python -m py_compile hooks; jq -e on all *.json; .claude/hooks/handoff.sh status; tests/council.test.sh (full, EXIT:0); scripts/install.sh fresh + --upgrade against scratch dests; scripts/cycle.sh open-round/record-seat/judge against a live scratch spec (C:/tmp/cjtest/repo)
+RAN: bash -n on all *.sh; python -m py_compile hooks; jq -e on all *.json; .claude/hooks/handoff.sh status; tests/council.test.sh (full, EXIT:0); scripts/install.sh fresh + --upgrade against scratch dests; scripts/cycle.sh open-round/record-seat/judge against a live scratch spec (<tmp>/cjtest/repo)
 PATH: CLI only (no client path) - drove scripts/cycle.sh and install.sh directly against scratch git worktrees
 ASK 1: GREEN - ceiling by tier (T1=1,T2=2,T3-4=3) - run: cycle.sh open-round on a Tier-2 scratch spec saw: status ceiling:2, tier:2 (tier_ceiling() in scripts/cycle.sh matches exactly)
 ASK 2: GREEN - same ask RED two rounds -> ESCALATE no-progress - run: recorded sonnet ASK 1 RED in round 1 and again round 2, then judge saw: `judge` exit 6, council.jsonl row `"verdict":"ESCALATE","escalate":"no-progress"`, plan.md gained `## Needs a human` / `no progress: ask 1 RED in rounds 1 and 2`

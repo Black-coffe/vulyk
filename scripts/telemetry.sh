@@ -43,7 +43,8 @@ driver_relaunched
 scope_breach
 sessionend_llm
 model_below_floor
-fable_limit_fallback"
+fable_limit_fallback
+redact_degraded"
 
 MODELS="fable
 opus

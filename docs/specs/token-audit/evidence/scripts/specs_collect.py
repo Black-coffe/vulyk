@@ -1,6 +1,6 @@
 """specs_collect.py - inventory docs/specs/<slug>/ across VULYK projects -> specs_all.jsonl"""
 import json, glob, os, re
-roots = glob.glob('E:/Projects/*') + ['C:/laragon/www/mmorpg', 'D:/YouTube_AI'] + glob.glob('C:/Projects/*')
+roots = [r for r in os.environ.get('VULYK_HIVE_ROOTS', '').split(os.pathsep) if r]  # hive roots: never written here
 out = open('specs_all.jsonl', 'w', encoding='utf-8')
 for r in roots:
     sd = os.path.join(r, 'docs', 'specs')

@@ -3,7 +3,7 @@ id: host-internals-in-public-repo
 title: A host project's insides quoted into the public VULYK repository
 status: block
 check: VULYK_EXTRA_TERMS=docs/defects/host-internals-in-public-repo.terms bash scripts/leak-check.sh <arg>
-fixtures: [docs/defects/host-internals-in-public-repo.original.fixture, docs/defects/host-internals-in-public-repo.neighbour.fixture, docs/defects/host-internals-in-public-repo.plainname.fixture]
+fixtures: [docs/defects/host-internals-in-public-repo.original.fixture, docs/defects/host-internals-in-public-repo.neighbour.fixture, docs/defects/host-internals-in-public-repo.plainname.fixture, docs/defects/host-internals-in-public-repo.abspath.fixture, docs/defects/host-internals-in-public-repo.temppath.fixture]
 keys: [клиентского проекта, client folder, public repo]
 paths: ["docs/**", "memory/**", "CHANGELOG.md", "cmd:git push"]
 ---
@@ -25,7 +25,11 @@ reviews; everything was pushed with the release. Purged on 2026-10-13 by rewriti
 `main` and `v0.26.1`. The first private list held only that day's names; since then a local harvester rebuilds
 it from every hive on the machine (direction folders and aliases, their subfolders, spec slugs, Cyrillic proper
 nouns of the hives' texts), dropping anything that already occurs in VULYK, and the check matches whole words and
-Cyrillic case endings.
+Cyrillic case endings. Since 2026-11-13 the check no longer needs a `Projects` folder in the path: it reads any
+absolute path that leaves the VULYK root (a drive path either way round, a Git Bash or WSL drive path, a home
+path), a Claude temp-folder path, a transcript slug, and every hive root in the private registry
+(`${VULYK_HIVES_FILE:-~/.vulyk/hives}`; with none it says so on stderr). System locations, `~/...`, a `<placeholder>`
+first segment and paths under the VULYK root pass.
 
 ## Never
 - Write a path that goes inside another project, or its transcript slug, into this repository: describe it by shape

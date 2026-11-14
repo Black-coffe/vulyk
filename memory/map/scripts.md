@@ -60,8 +60,8 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   `$VULYK_SESSION_ROOTS` (space-separated), else `${CLAUDE_CONFIG_DIR:-~/.claude}` plus every `~/.claude*` with
   `projects/`. No transcript folder under any root: `idle no session transcript folder ...` (exit 0) if
   `naming_proven` (some registered hive resolves to its exact `<root>/projects/<slug>/`; path-less registry lines
-  prove nothing), else `unknown` (exit 1). `--slug <path>`: non-alphanumeric char -> `-` (Git Bash `/e/x` read as
-  `E:/x`). Caller: `/vulyk-ship` step 2a (before each upgrade and hive commit).
+  prove nothing), else `unknown` (exit 1). `--slug <path>`: non-alphanumeric char -> `-` (Git Bash `/<drive>/x` read as
+  `<drive>:/x`). Caller: `/vulyk-ship` step 2a (before each upgrade and hive commit).
 
 ## Key contracts
 - `cycle.sh`: last stdout line is one JSON object; exits 0 ok · 1 usage · 2 precondition · 3 paused ·

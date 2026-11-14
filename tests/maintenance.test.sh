@@ -2,12 +2,36 @@
 # Self-maintenance contract (docs/specs/auto-maintenance): the always-loaded text stays inside its byte
 # budget. No model calls, no network.
 #
-#   Usage: bash tests/maintenance.test.sh            # from the VULYK repo root
+#   Usage: bash tests/maintenance.test.sh                  # every part, from the VULYK repo root
+#          bash tests/maintenance.test.sh --part <name>    # one part
+#          bash tests/maintenance.test.sh --list-parts     # the part names, one per line
+#
+# Parts (card test-gate-one-long-limit: each well under 70% of the 300 s part cap): upkeep (the budget, due
+# maintenance, the offers, the brief, the evolve ledger), redact (redact.sh and the hooks and scripts after it, up
+# to handoff.sh), guards (portability-check, the git guard, hives-behind and the command prose checks).
 #
 # Budget (ADR-013 D7, report rrsi-self-improvement §5.3). The caps are numbers here on purpose:
 # raising one is a visible diff the owner reviews, paid only by an owner quote or an accepted ADR.
 # Sizes are measured CR-stripped, which equals the git blob on every platform.
 set -u
+PARTS="upkeep
+redact
+guards"
+PART=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list-parts) printf '%s\n' "$PARTS"; exit 0 ;;
+    --part)
+      if [ -z "${2:-}" ] || ! printf '%s\n' "$PARTS" | grep -qxF -- "$2"; then
+        echo "maintenance.test.sh: --part needs one of:" >&2; printf '%s\n' "$PARTS" >&2; exit 1
+      fi
+      PART="$2"; shift 2 ;;
+    *) echo "maintenance.test.sh: unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+part_on() { # part_on <name> - true when no part was named or this one was
+  [ -z "$PART" ] || [ "$PART" = "$1" ]
+}
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
@@ -66,6 +90,7 @@ open(sys.argv[4], 'wb').write(swap(swap(b, 'VULYK:COMMANDS', cmd), 'VULYK:PROFIL
 PY
 }
 
+if part_on upkeep; then
 echo "--- budget: the checker itself"
 git -C "$SRC" show d519f22:CLAUDE.md > "$T/original.md" 2>/dev/null
 if [ -s "$T/original.md" ]; then
@@ -129,7 +154,10 @@ case "$over" in "always.md 41 lines") ok "a 41-line path-less rules file fails t
 over="$(rules_always_over "$SRC/.claude/rules")"
 [ -z "$over" ] && ok "path-less rules files within $RULES_ALWAYS_MAX_LINES lines" || bad "always-loaded rules over $RULES_ALWAYS_MAX_LINES lines: $over"
 
+fi # upkeep
+
 # --- due maintenance: the SessionStart brief (auto-maintenance-02) ---------------------------------
+# These helpers serve the upkeep and guards parts both: defined outside the parts.
 BRIEF_HOOK="$SRC/.claude/hooks/session-start-brief.sh"
 iso_ago() { date_shift -"$1" +%Y-%m-%dT%H:%M:%SZ; }
 hive() { # hive <name> - a fresh fixture hive: git repo on main with one commit, empty memory
@@ -146,6 +174,7 @@ stub()   { printf '# Session x\n<!-- Stub captured by VULYK. Replace with 1-6 bu
 council_row() { printf '{"ts":"%s","spec":"s","round":1,"verdict":"GREEN"}\n' "$2" >> "$1/memory/stats/council.jsonl"; }
 run_row()     { printf '{"ts":"%s","kind":"run","proposals":0}\n' "$2" >> "$1/memory/stats/evolve.jsonl"; }
 
+if part_on upkeep; then
 echo "--- due maintenance: gc"
 H="$(hive gc-stub)"; stub "$H/memory/learnings/2026-09-14_090058.md"
 brief_of "$H" | expect "a stub learning makes gc due" "gc (1 stub, 0 raw learnings)"
@@ -322,6 +351,147 @@ brief_home "$H" "$LN" | expect_absent "brief: local scope (settings.local.json) 
 H="$(hive lit-none)"
 brief_home "$H" "$LN" | expect "brief: neither scope, the offer still shows" "$LIT_LINE"
 
+# --- H1: SessionStart and PreCompact hooks stay silent for a subagent (audit-fixes-1113-05, ask 16) -------
+# Every command .claude/settings.json wires on the two events runs in a scratch project, the way Claude Code
+# runs it, with an input carrying agent_id: no output, exit 0, no file created or changed, no network call.
+echo "--- H1: a subagent's SessionStart and PreCompact hooks print and write nothing"
+SP="$T/h1-proj"; H1C="$T/h1-conf"; H1B="$T/h1-bin"; H1L="$T/h1-curl.log"
+mkdir -p "$SP/.claude/hooks" "$SP/.claude/state/defects" "$SP/.claude/handoff" "$SP/scripts" \
+  "$SP/memory/map" "$SP/memory/stats" "$SP/docs/specs" "$H1C" "$H1B" "$T/h1-home"
+cp "$SRC"/.claude/hooks/*.sh "$SRC"/.claude/hooks/*.py "$SP/.claude/hooks/"
+cp -R "$SRC/scripts/." "$SP/scripts/"
+cp "$SRC/.claude/settings.json" "$SP/.claude/settings.json"
+echo "# index" > "$SP/memory/memory.md"; echo "0.1.0" > "$SP/.claude/vulyk-version"
+echo "seen" > "$SP/.claude/state/defects/inject-h1-s.txt"
+echo "old" > "$SP/.claude/state/defects/inject-old.txt"
+touch -t "$(date_shift -9 +%Y%m%d%H%M)" "$SP/.claude/state/defects/inject-old.txt"
+printf -- '---\nhandoff: true\n---\n\n# Handoff\n\nH1-SEED\n' > "$SP/.claude/handoff/seed.md"
+printf '{"path": "%s", "session_id": "prev", "reason": "sessionend-clear", "ts": %s}\n' \
+  "$({ cygpath -w "$SP/.claude/handoff/seed.md" 2>/dev/null || printf '%s' "$SP/.claude/handoff/seed.md"; } | sed 's#\\#\\\\#g')" "$(date +%s)" > "$SP/.claude/handoff/index.json"
+cat > "$H1B/curl" <<'SH'
+#!/usr/bin/env bash
+echo call >> "$H1_CURL_LOG"
+printf '%s\n' '[{"name":"v99.0.0"}]'
+SH
+chmod +x "$H1B/curl" "$SP"/.claude/hooks/*.sh
+"$PYBIN" -c '
+import json, sys
+s = json.load(sys.stdin)
+for ev in ("SessionStart", "PreCompact"):
+    for g in s.get("hooks", {}).get(ev, []):
+        for h in g.get("hooks", []):
+            print(ev + "\t" + h["command"])' < "$SRC/.claude/settings.json" | tr -d '\r' > "$T/h1-cmds"
+h1_tree() { # every file and folder under the scratch project and the config dir, with its checksum
+  ( cd "$T" && find h1-proj h1-conf -type d | LC_ALL=C sort && find h1-proj h1-conf -type f -exec cksum {} + | LC_ALL=C sort )
+}
+h1_run() { # h1_run <command> <payload> -> stdout in $T/h1.out, exit code in $T/h1.rc
+  ( cd "$SP" && printf '%s' "$2" | env -u VULYK_YSK_OFFER -u VULYK_UPDATE_CHECK -u VULYK_TOP_MODEL_BRIEF \
+      -u DISABLE_TELEMETRY -u CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC -u CLAUDE_CODE_USE_BEDROCK \
+      -u CLAUDE_CODE_USE_VERTEX -u CLAUDE_CODE_USE_FOUNDRY -u VULYK_REPO \
+      CLAUDE_PROJECT_DIR="$SP" CLAUDE_CONFIG_DIR="$H1C" HOME="$T/h1-home" USERPROFILE="$T/h1-home" \
+      H1_CURL_LOG="$H1L" PATH="$H1B:$PATH" bash -c "$1" > "$T/h1.out" 2>/dev/null; echo "$?" > "$T/h1.rc" )
+}
+SUB='"agent_id":"a1b2c3d4","agent_type":"worker-code"'
+if [ "$(grep -c '^SessionStart' "$T/h1-cmds")" -ge 6 ] && [ "$(grep -c '^PreCompact' "$T/h1-cmds")" -ge 2 ]; then
+  ok "H1: the SessionStart and PreCompact commands come from .claude/settings.json ($(grep -c . "$T/h1-cmds"))"
+else bad "H1: too few SessionStart/PreCompact commands read from .claude/settings.json:"; sed 's/^/        /' "$T/h1-cmds"; fi
+h1_tree > "$T/h1-before"; : > "$H1L"
+while IFS="$(printf '\t')" read -r ev cmd; do
+  case "$ev" in
+    SessionStart) payloads="startup clear" ;;
+    *) payloads="auto" ;;
+  esac
+  for src in $payloads; do
+    if [ "$ev" = SessionStart ]; then pl="{\"session_id\":\"h1-s\",\"hook_event_name\":\"SessionStart\",\"source\":\"$src\",$SUB}"
+    else pl="{\"session_id\":\"h1-s\",\"hook_event_name\":\"PreCompact\",\"trigger\":\"$src\",$SUB}"; fi
+    h1_run "$cmd" "$pl"
+    name="${cmd##*/}"
+    if [ "$(cat "$T/h1.rc")" = 0 ] && [ ! -s "$T/h1.out" ]; then
+      ok "H1 $ev $name ($src) with agent_id: a subagent session start prints nothing"
+    else
+      bad "H1 $ev $name ($src) with agent_id: a subagent session start prints nothing - exit $(cat "$T/h1.rc"), stdout:"
+      sed 's/^/        /' "$T/h1.out" | head -5
+    fi
+  done
+done < "$T/h1-cmds"
+h1_tree > "$T/h1-after"
+if cmp -s "$T/h1-before" "$T/h1-after"; then
+  ok "H1: a subagent session start prints nothing and writes nothing under the scratch project or the config dir"
+else
+  bad "H1: a subagent session start prints nothing - but it wrote files:"; diff "$T/h1-before" "$T/h1-after" | sed 's/^/        /' | head -12
+fi
+[ -s "$H1L" ] && bad "H1: a subagent session start prints nothing - but the update check called the network ($(grep -c . "$H1L"))" \
+  || ok "H1: a subagent's update check makes no network call (curl stub)"
+# The same inputs without agent_id behave as before.
+SS="$(grep '^SessionStart' "$T/h1-cmds" | cut -f2-)"; PC="$(grep '^PreCompact' "$T/h1-cmds" | cut -f2-)"
+pl_main='{"session_id":"h1-s","hook_event_name":"SessionStart","source":"startup"}'
+h1_run "$(printf '%s\n' "$SS" | grep 'session-start-brief.sh')" "$pl_main"
+expect "H1: without agent_id the brief still prints its line" "[VULYK]" < "$T/h1.out"
+h1_run "$(printf '%s\n' "$SS" | grep 'vulyk-update-check.sh')" "$pl_main"
+expect "H1: without agent_id the update check still reports a newer tag" "update available" < "$T/h1.out"
+[ -s "$H1L" ] && ok "H1: ... through the network (curl stub called)" || bad "H1: the main session's update check made no call"
+h1_run "$(printf '%s\n' "$SS" | grep 'ysk-offer.sh')" "$pl_main"
+expect "H1: without agent_id the You should know offer still shows" "systemMessage" < "$T/h1.out"
+h1_run "$(printf '%s\n' "$SS" | grep 'defects-inject.sh reset')" "$pl_main"
+[ ! -e "$SP/.claude/state/defects/inject-old.txt" ] && ok "H1: without agent_id the reset still prunes a week-old inject file" \
+  || bad "H1: the main session's reset left a 9-day-old inject file"
+h1_run "$(printf '%s\n' "$SS" | grep 'handoff.sh')" '{"session_id":"h1-m","hook_event_name":"SessionStart","source":"clear"}'
+expect "H1: without agent_id a /clear still restores the pending handoff" "H1-SEED" < "$T/h1.out"
+h1_run "$(printf '%s\n' "$PC" | grep 'context-guard.sh')" '{"session_id":"h1-s","hook_event_name":"PreCompact","trigger":"auto"}'
+expect "H1: without agent_id the PreCompact snapshot is still taken" "context-guard: snapshot saved" < "$T/h1.out"
+
+# --- the brief: no Python 3, a GitHub template copy, the skill counter (audit-fixes-1113-05, asks 6, 18, 2) -----
+echo "--- brief: one line when no Python 3 answers"
+NP="$T/nopy-bin"; mkdir -p "$NP"
+for n in python3 python py; do printf '#!/bin/sh\nexit 49\n' > "$NP/$n"; chmod +x "$NP/$n"; done
+H="$(hive nopy)"
+out="$(echo '{}' | VULYK_PY= PATH="$NP:$PATH" CLAUDE_PROJECT_DIR="$H" CLAUDE_CONFIG_DIR="$T/conf-none" bash "$BRIEF_HOOK" 2>&1)"
+n="$(printf '%s\n' "$out" | grep -c '^\[VULYK\] no Python 3 found')"
+[ "$n" = 1 ] && ok "brief: stubs that fail to launch and no VULYK_PY print exactly one 'no Python 3 found' line" \
+  || { bad "brief: expected one '[VULYK] no Python 3 found' line, got $n:"; printf '%s\n' "$out" | sed 's/^/        /'; }
+brief_of "$H" | expect_absent "brief: with Python present, no Python line" "no Python 3 found"
+
+echo "--- brief: a GitHub template copy is named once"
+H="$(hive tpl-copy)"; : > "$H/install.sh"; mkdir -p "$H/docs/specs/auto-maintenance"
+out="$(brief_of "$H")"
+n="$(printf '%s\n' "$out" | grep -c 'template copy')"
+[ "$n" = 1 ] && ok "brief: a template copy (VULYK's specs, install.sh, no stamp, no v* tag) gets one line" \
+  || { bad "brief: expected one template-copy line, got $n:"; printf '%s\n' "$out" | sed 's/^/        /'; }
+printf '%s' "$out" | expect "brief: the template-copy line points at the recovery text" "Started from the GitHub template"
+H="$(hive tpl-hive)"; : > "$H/install.sh"; mkdir -p "$H/docs/specs/auto-maintenance" "$H/.claude"
+echo "0.52.0" > "$H/.claude/vulyk-version"
+brief_of "$H" | expect_absent "brief: a hive with .claude/vulyk-version is no template copy" "template copy"
+H="$(hive tpl-clone)"; : > "$H/install.sh"; mkdir -p "$H/docs/specs/auto-maintenance"; git -C "$H" tag v0.1.0
+brief_of "$H" | expect_absent "brief: a source clone with a v* tag is no template copy" "template copy"
+for f in README.md docs/getting-started.md; do
+  if grep -qiE 'Use this template|GitHub template \(button above\)|new project from template' "$SRC/$f"; then
+    bad "$f still offers the GitHub template as a way to start: $(grep -niE 'Use this template|GitHub template \(button above\)|new project from template' "$SRC/$f" | head -2 | tr '\n' ' ')"
+  else ok "$f no longer offers the GitHub template as a way to start"; fi
+  grep -qF "Started from the GitHub template" "$SRC/$f" && ok "$f carries the recovery line for a template copy" \
+    || bad "$f carries no recovery line ('Started from the GitHub template') for a template copy"
+done
+
+echo "--- skill counter: VULYK's own skills and vulyk-* commands only"
+SK="$T/skc"; mkdir -p "$SK/.claude/skills/own-skill" "$SK/.claude/commands" "$SK/memory/stats"
+echo "x" > "$SK/.claude/skills/own-skill/SKILL.md"; echo "x" > "$SK/.claude/commands/vulyk-plan.md"
+printf '{"foreign-skill":{"count":4,"last_used":"2026-01-01"},"own-skill":{"count":1,"last_used":"2026-01-01"}}\n' \
+  > "$SK/memory/stats/skills.json"
+skill_ev() { printf '{"tool_name":"Skill","tool_input":{"skill":"%s"}}' "$1" |
+  CLAUDE_PROJECT_DIR="$SK" bash "$SRC/.claude/hooks/skill-usage-counter.sh"; }
+skill_ev own-skill; skill_ev vulyk-plan; skill_ev some-plugin:other; skill_ev other-skill
+got="$("$PYBIN" -c '
+import json, sys
+d = json.load(sys.stdin)
+print(" ".join("%s=%d" % (k, d[k]["count"]) for k in sorted(d)))' < "$SK/memory/stats/skills.json" 2>&1 | tr -d '\r')"
+[ "$got" = "own-skill=2 vulyk-plan=1" ] && ok "skill counter: a project skill and a vulyk-* command counted, others not written, a foreign key dropped" \
+  || bad "skill counter: expected 'own-skill=2 vulyk-plan=1', got '$got'"
+grep -q "$(printf '\r')" "$SK/memory/stats/skills.json" && bad "skill counter: skills.json has CR bytes" \
+  || ok "skill counter: skills.json stays LF"
+[ -z "$(git -C "$SRC" ls-files memory/stats/skills.json)" ] && git -C "$SRC" check-ignore -q memory/stats/skills.json \
+  && ok "memory/stats/skills.json is untracked and gitignored" || bad "memory/stats/skills.json is tracked or not ignored"
+grep -q 'skills.json' "$BRIEF_HOOK" && bad "the brief still special-cases memory/stats/skills.json" \
+  || ok "the brief no longer special-cases memory/stats/skills.json"
+
 # --- the evolve ledger (auto-maintenance-03) ------------------------------------------------------
 echo "--- evolve ledger"
 EL="$SRC/scripts/evolve-ledger.py"
@@ -375,7 +545,9 @@ for c in vulyk-build vulyk-review; do
   green_of "$c" | expect "$c green runs vulyk-ship with the Skill tool on yes" "run \`vulyk-ship\` with the Skill"
   green_of "$c" | expect "$c green keeps the one-line fallback" "recommend \`/vulyk-ship\` in one line"
 done
+fi # upkeep
 
+if part_on redact; then
 # --- redact.sh masks the token shapes Hindsight's list names (hindsight-harvest-02) ----------------
 echo "--- redact.sh and the handoff.py fallback mask nine more token shapes"
 rep() { printf "%${1}s" '' | tr ' ' "$2"; }   # rep <n> <char> - samples are built, never literal tokens
@@ -526,6 +698,171 @@ for row in ${S2[@]+"${S2[@]}"}; do
   [ "$sh_out" = "$py_out" ] && ok "handoff.py fallback agrees with redact.sh: $label" \
     || bad "handoff.py fallback differs from redact.sh ($label): py '$py_out', sh '$sh_out'"
 done
+
+# --- redact.sh audit-fixes-1113: ru/uk keywords, command-argument credentials, service tokens; a failure is loud --
+echo "--- redact.sh 1113: non-English keywords, argument credentials, token shapes - parity, and a failed filter withholds"
+aws="$(rep 10 a)/$(rep 9 B)+$(rep 9 c)7$(rep 9 D)"   # 40 chars, the bare cloud secret-key shape
+R13=(
+  "masks a non-English secret keyword (пароль:)|пароль: $val|пароль: $M"
+  "masks a Russian пароль=|пароль=$val|пароль=$M"
+  "masks a Ukrainian гасло|Гасло: $val|Гасло: $M"
+  "masks a токен|токен: $val|токен: $M"
+  "masks a Russian секретный ключ|секретный ключ: $val|секретный ключ: $M"
+  "masks a quoted Ukrainian секретний ключ|секретний ключ = \"two words\" tail|секретний ключ = $M tail"
+  "masks a password stated in prose|the password is hunter2x tail|the password is $M tail"
+  "masks a bare key=|key=$val|key=$M"
+  "masks a pwd=|pwd=$val|pwd=$M"
+  "masks a JSON pwd|{\"pwd\": \"short1\"}|{\"pwd\": $M}"
+  "leaves ru/uk keywords with no value alone|пароль: см. хранилище, токен не нужен, гасло:|пароль: см. хранилище, токен не нужен, гасло:"
+  "leaves prose about a password alone|the password is required and the secret is safe|the password is required and the secret is safe"
+  "leaves the shell PWD alone|PWD=/home/user/project|PWD=/home/user/project"
+  "leaves a short key= alone|key=short, sort key: name|key=short, sort key: name"
+  "masks a curl -u password|curl -u alice:$val https://x|curl -u alice:$M https://x"
+  "masks a --user password|curl --user 'alice:$val' x|curl --user 'alice:$M' x"
+  "masks a glued mysql -p password|mysql -u root -p$val db|mysql -u root -p$M db"
+  "masks an sshpass -p password|sshpass -p '$val' ssh host|sshpass -p $M ssh host"
+  "masks a docker login -p password|docker login -u bob -p $val reg.io|docker login -u bob -p $M reg.io"
+  "masks a --password argument|tool --password $val --x|tool --password $M --x"
+  "leaves look-alike flags alone|docker run -u 1000:1000 -p 8080:80 x && mkdir -pv /tmp/a && ssh -p22 h|docker run -u 1000:1000 -p 8080:80 x && mkdir -pv /tmp/a && ssh -p22 h"
+  "leaves --password-stdin and a prompting mysql -p alone|docker login --password-stdin -u bob r && mysql -u root -p db|docker login --password-stdin -u bob r && mysql -u root -p db"
+  "masks an app-level chat token|note xa""pp-1-A0$(rep 8 B)-$(rep 12 c) end|note $M end"
+  "masks a webhook signing secret|note wh""sec_$(rep 32 d) end|note $M end"
+  "masks an OAuth client secret|note GOC""SPX-$(rep 28 e) end|note $M end"
+  "masks a refresh token|note 1//0$(rep 40 f) end|note $M end"
+  "masks an access token|note ya""29.$(rep 40 g) end|note $M end"
+  "masks a shop admin token|note sh""pat_$(rep 32 a) end|note $M end"
+  "masks an age secret key|note AGE-SECRET-""KEY-1$(rep 58 Q) end|note $M end"
+  "masks a cloud API token|note do""p_v1_$(rep 64 a) end|note $M end"
+  "masks a mail API key of any part length|note SG.$(rep 16 h).$(rep 20 i) end|note $M end"
+  "masks a chat webhook|post https://discord.com/api/webhooks/123456789012345678/$(rep 68 j) now|post https://discord.com/api/webhooks/$M now"
+  "masks an OAuth code in a URL|https://x.io/cb?code=4/0A$(rep 30 k)&state=1|https://x.io/cb?code=$M&state=1"
+  "masks a bare cloud secret key|note $aws end|note $M end"
+  "masks a URL password holding : and @|smtp://user:p@ss:word@mail.host:25|smtp://$M@mail.host:25"
+  "leaves short prefix-sharing words alone|wh""sec_short xa""pp-short GOC""SPX-x ya""29.x 1//x shp""at_x ?code=200 $(rep 38 B)7|wh""sec_short xa""pp-short GOC""SPX-x ya""29.x 1//x shp""at_x ?code=200 $(rep 38 B)7"
+  "masks only the URL password, not a later @ in the path|https://u:pw1@host/a@b|https://$M@host/a@b"
+  "masks a lower-case set-cookie header|set-cookie: a=1; Path=/|set-cookie: $M"
+  "masks a cookie after a valueless first token|Cookie: a; sessionid=$val|Cookie: $M"
+  "masks a camelCase otpCode|otpCode=482913|otpCode=$M"
+  "masks a bare AUTH|AUTH=$val|AUTH=$M"
+  "masks a dotted x.auth|x.auth=$val|x.auth=$M"
+  "leaves oauth and author words alone|oauth=pkce author: someone_long_name_here|oauth=pkce author: someone_long_name_here"
+)
+: > "$T/r13-in"
+for row in ${R13[@]+"${R13[@]}"}; do
+  IFS='|' read -r label input want <<EOF
+$row
+EOF
+  redact_is "$label" "$input" "$want"
+  printf '%s\n' "$input" >> "$T/r13-in"
+done
+bash "$SRC/scripts/redact.sh" < "$T/r13-in" > "$T/r13-sh"
+PYTHONIOENCODING=utf-8 "$PYBIN" - "$SRC/.claude/hooks/handoff.py" "$T/r13-in" "$T" <<'PY' > "$T/r13-py"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('handoff', sys.argv[1]); h = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(h)
+for line in open(sys.argv[2], encoding='utf-8').read().splitlines():
+    print(h.redact_text(sys.argv[3], line))
+PY
+i=0
+for row in ${R13[@]+"${R13[@]}"}; do
+  i=$((i + 1)); label="${row%%|*}"
+  sh_out="$(sed -n "${i}p" "$T/r13-sh" | tr -d '\r')"; py_out="$(sed -n "${i}p" "$T/r13-py" | tr -d '\r')"
+  [ "$sh_out" = "$py_out" ] && ok "handoff.py fallback agrees with redact.sh: $label" \
+    || bad "handoff.py fallback differs from redact.sh ($label): py '$py_out', sh '$sh_out'"
+done
+# A filter tool that fails: the text is withheld, the failure is said and recorded.
+for tool in sed awk; do
+  mkdir -p "$T/stub-$tool" "$T/hive-$tool"; printf '#!/bin/sh\nexit 1\n' > "$T/stub-$tool/$tool"; chmod +x "$T/stub-$tool/$tool"
+  out="$(printf 'secret=%s\n' "$val" | PATH="$T/stub-$tool:$PATH" VULYK_HIVE="$T/hive-$tool" bash "$SRC/scripts/redact.sh" 2>"$T/rd-err")"; rc=$?
+  [ "$out" = "[VULYK:REDACT-FAILED]" ] && [ "$rc" = 1 ] && ok "redact.sh with a failing $tool prints only the failure mark, exit 1" \
+    || bad "redact.sh with a failing $tool: rc $rc, stdout '$out'"
+  head -n 1 "$T/rd-err" | grep -q '^redact: degraded:' && ok "redact.sh with a failing $tool says so on stderr" \
+    || bad "redact.sh with a failing $tool: stderr '$(cat "$T/rd-err")'"
+  grep -qF '"code":"redact_degraded"' "$T/hive-$tool/memory/stats/anomalies.jsonl" 2>/dev/null \
+    && ok "redact.sh with a failing $tool records redact_degraded" || bad "redact.sh with a failing $tool: no redact_degraded record"
+done
+[ "$(bash "$SRC/scripts/telemetry.sh" enum | tail -n 1 | tr -d '\r')" = redact_degraded ] \
+  && ok "telemetry.sh enum ends with redact_degraded" || bad "telemetry.sh enum does not end with redact_degraded"
+grep -q '^| `redact_degraded` |' "$SRC/docs/telemetry.md" && ok "docs/telemetry.md lists redact_degraded" \
+  || bad "docs/telemetry.md has no redact_degraded row"
+
+# --- redact.sh leaves ordinary text alone; its callers refuse when it fails (audit-fixes-1113-11) -----------
+echo "--- redact.sh 1113-11: the repo's briefs and journals pass unchanged, ordinary neighbours beside their secrets"
+# Corpus: every tracked brief and journal is the owner's words or the cycle's record; a mask there rewrites them.
+# CR is stripped first: the git blob is LF, and Git Bash's sed drops CR on its own.
+corpus_bad=""; corpus_n=0
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  corpus_n=$((corpus_n + 1))
+  tr -d '\r' < "$SRC/$f" > "$T/corpus-in"
+  bash "$SRC/scripts/redact.sh" < "$T/corpus-in" > "$T/corpus-out" 2>/dev/null
+  cmp -s "$T/corpus-in" "$T/corpus-out" || corpus_bad="$corpus_bad $f"
+done <<EOF
+$(git -C "$SRC" ls-files 'docs/specs/*/brief.md' 'docs/specs/*/journal.md')
+EOF
+[ "$corpus_n" -gt 0 ] && [ -z "$corpus_bad" ] && ok "a brief of the repo passes redact.sh unchanged ($corpus_n files)" \
+  || bad "a brief of the repo passes redact.sh unchanged: $corpus_n files read, changed:${corpus_bad:- none read}"
+ck="$(rep 10 a)7$(rep 9 B)$(rep 10 c)$(rep 10 D)"   # 40 chars: upper, lower and a digit - the cloud secret-key shape
+R11=(
+  "leaves a password length in prose alone|the password is 8 chars and the token was 2 days old|the password is 8 chars and the token was 2 days old"
+  "masks a password stated in prose beside it|the secret was 8chars! long|the secret was $M long"
+  "leaves a 40-letter identifier alone|call ReadTheConfigurationFileAndValidateItNow now|call ReadTheConfigurationFileAndValidateItNow now"
+  "leaves a 40-char absolute path alone|open /home/someone/Projects/App2/src/mainfile now|open /home/someone/Projects/App2/src/mainfile now"
+  "leaves a 40-char path with an extension alone|see docs/Specs/audit2/stories/one/storyfiles.md now|see docs/Specs/audit2/stories/one/storyfiles.md now"
+  "masks a bare cloud key beside them|note $ck end|note $M end"
+  "masks a bare cloud key ending a sentence|the key is $ck.|the key is $M."
+  "leaves docker -u name:group alone, masks curl -u beside it|docker run -u app:staff img && podman exec -u www:www-data c sh && curl -u alice:$val https://x|docker run -u app:staff img && podman exec -u www:www-data c sh && curl -u alice:$M https://x"
+  "masks every credential -p on a line and no other -p|sshpass -p $val ssh -p 2222 host && docker login -u bob -p $val reg.io && docker run -p 8080:80 x && mysql -u root -P 3306 -p$val -h db|sshpass -p $M ssh -p 2222 host && docker login -u bob -p $M reg.io && docker run -p 8080:80 x && mysql -u root -P 3306 -p$M -h db"
+  "masks the login -p, not a later -p in the same command|docker login -p $val reg.io then docker run -p 8080:80 x|docker login -p $M reg.io then docker run -p 8080:80 x"
+  "masks an sshpass -p after its -P prompt option|sshpass -P assword -p $val ssh -p 22 h|sshpass -P assword -p $M ssh -p 22 h"
+)
+: > "$T/r11-in"
+for row in ${R11[@]+"${R11[@]}"}; do
+  IFS='|' read -r label input want <<EOF
+$row
+EOF
+  redact_is "$label" "$input" "$want"
+  printf '%s\n' "$input" >> "$T/r11-in"
+done
+# Parity with the built-in pass alone (no redact.sh run first), so the fallback is judged on its own.
+bash "$SRC/scripts/redact.sh" < "$T/r11-in" > "$T/r11-sh"
+PYTHONIOENCODING=utf-8 "$PYBIN" - "$SRC/.claude/hooks/handoff.py" "$T/r11-in" <<'PY' > "$T/r11-py"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('handoff', sys.argv[1]); h = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(h)
+for line in open(sys.argv[2], encoding='utf-8').read().splitlines():
+    print(h.redact_builtin(line))
+PY
+i=0
+for row in ${R11[@]+"${R11[@]}"}; do
+  i=$((i + 1)); label="${row%%|*}"
+  sh_out="$(sed -n "${i}p" "$T/r11-sh" | tr -d '\r')"; py_out="$(sed -n "${i}p" "$T/r11-py" | tr -d '\r')"
+  [ "$sh_out" = "$py_out" ] && ok "handoff.py built-in pass agrees with redact.sh: $label" \
+    || bad "handoff.py built-in pass differs from redact.sh ($label): py '$py_out', sh '$sh_out'"
+done
+# Callers: a redact.sh that fails (exit 1, the marker on stdout) - no record is written, no marker becomes a note.
+RF="$T/redact-fail"; mkdir -p "$RF/scripts" "$RF/docs/specs/demo"
+cp "$SRC/scripts/lib.sh" "$SRC/scripts/state.sh" "$SRC/scripts/human-check.sh" "$SRC/scripts/acceptance-log.sh" "$RF/scripts/"
+printf '#!/usr/bin/env bash\ncat >/dev/null\necho "[VULYK:REDACT-FAILED]"\necho "redact: degraded: stub" >&2\nexit 1\n' > "$RF/scripts/redact.sh"
+cp "$SRC/templates/plan.md" "$RF/docs/specs/demo/plan.md"
+printf -- '---\nstory: demo-01\nspec: demo\nstatus: done\nwave: 1\n---\n# S1\n' > "$RF/docs/specs/demo/demo-01-first.md"
+( cd "$RF" && git init -q . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false \
+  && git add -A && git commit -qm init ) >/dev/null 2>&1
+cp "$RF/docs/specs/demo/plan.md" "$T/rf-plan"
+for tool in human-check acceptance-log; do
+  ( cd "$RF" && bash "scripts/$tool.sh" docs/specs/demo ACCEPTED "looked at it" ) >"$T/rf-out" 2>&1; rc=$?
+  [ "$rc" -ne 0 ] && ok "$tool.sh refuses when redact.sh fails (exit $rc)" || bad "$tool.sh exit 0 with a failing redact.sh: $(cat "$T/rf-out")"
+  cmp -s "$RF/docs/specs/demo/plan.md" "$T/rf-plan" && ! ls "$RF/memory/stats/"*.jsonl >/dev/null 2>&1 \
+    && ok "$tool.sh writes no record when redact.sh fails" || bad "$tool.sh wrote a record with a failing redact.sh"
+  grep -q 'redact' "$T/rf-out" && ok "$tool.sh names redact.sh in its refusal" || bad "$tool.sh refusal does not name redact.sh: $(cat "$T/rf-out")"
+done
+sed -n '/^redact_note() {/,/^}/p' "$SRC/scripts/cycle.sh" > "$T/redact-note.sh"
+note_out="$(HERE="$RF/scripts"; . "$T/redact-note.sh"; redact_note "secret=$val" 2>/dev/null)"
+[ -s "$T/redact-note.sh" ] && case "$note_out" in *REDACT-FAILED*|*"$val"*) false ;; *) true ;; esac \
+  && ok "cycle.sh redact_note passes on neither the marker nor the text when redact.sh fails" \
+  || bad "cycle.sh redact_note with a failing redact.sh returned '$note_out'"
+grep -q 'redact.sh always exits 0' "$SRC/scripts/cycle.sh" && bad "cycle.sh still says redact.sh always exits 0" \
+  || ok "cycle.sh no longer says redact.sh always exits 0"
 
 # --- /vulyk-gc refuses a gutted CONSOLIDATED.md (hindsight-harvest-03) --------------------------------
 echo "--- /vulyk-gc commit line refuses to commit a CONSOLIDATED.md that lost more than half"
@@ -730,7 +1067,9 @@ chmod +x "$CB/python3"
 ( cd "$T" && PATH="$CB:$PATH" bash "$SRC/.claude/hooks/handoff.sh" status > /dev/null 2>&1 )
 echo "starts=$(grep -c . "$T/hs-calls");" > "$T/hs-count"
 expect "handoff.sh starts a working python3 once per call, never a probe beside it" "starts=1;" < "$T/hs-count"
+fi # redact
 
+if part_on guards; then
 echo "--- portability-check.sh: the static gate of card shell-needs-gnu-or-bash4 (cross-platform-05)"
 # Each case is one line in a temp file under `set -u`: `hit <rule>` must exit 1 naming the rule, `ok -` exit 0.
 # The cases live in a heredoc, whose body the gate does not read, so this file stays clean on the tree run.
@@ -1054,12 +1393,143 @@ chk Bash "git stash" "" '""' | expect "git-guard: a git status that succeeds cle
 chk Bash "git reset --hard" "" '" M memory/stats/skills.json\n"' \
   | expect "git-guard: a git status that succeeds dirty still denies, naming the file" "memory/stats/skills.json"
 
+echo "--- git guard: every discarding form, through a shell, an alias, a heredoc (audit-fixes-1113-07)"
+DIRTY='" M memory/stats/skills.json\n?? new.txt\n"'
+chk Bash 'bash -c "git reset --hard"' a1 | expect "git-guard: a discarding verb fed to a shell is denied: bash -c" "exit=1"
+for c in "git rm -f memory/stats/skills.json" "git rm -r -f ." "git rm --force memory/stats/skills.json" \
+         "git checkout-index -f -a" "git checkout-index --force -- memory/stats/skills.json" \
+         "git read-tree -u --reset HEAD" "git read-tree -u -m HEAD" \
+         'sh -c "git reset --hard"' 'bash -lc "git clean -fd"' 'zsh -c "cd sub && git checkout ."' \
+         'pwsh -Command "git reset --hard"' 'powershell.exe -Command git stash' \
+         'git -c alias.wipe="reset --hard" wipe' 'git -c alias.x="!git reset --hard" x' \
+         "$(printf "bash <<'X'\ngit reset --hard\nX")" "$(printf "sh -s <<X\ngit stash\nX")" \
+         "$(printf "cat <<X | bash\ngit clean -fd\nX")" "git reset --merge" "git reset --merge HEAD~1" "git merge --abort" \
+         'bash -c "git merge --abort"'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c is denied" "exit=1"
+  chk Bash "$c" "" "$DIRTY" | expect "git-guard: main-session $c over a dirty tree is denied" "exit=1"
+  chk Bash "$c" "" '""' | expect "git-guard: main-session $c on a clean tree passes" "exit=0"
+done
+chk PowerShell 'bash -c "git reset --hard"' a1 | expect "git-guard: a shell-fed verb from PowerShell is denied" "exit=1"
+for c in "git branch -f main HEAD~3" "git branch --force main HEAD~3" "git branch -M x main" \
+         "git checkout -B main HEAD~3" "git switch -C main HEAD~3" "git switch --force-create x" \
+         "git update-ref -d refs/heads/main" "git update-ref refs/heads/main HEAD~3" 'bash -c "git branch -D x"'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c (loses commits) is denied" "exit=1"
+  chk Bash "$c" "" "$DIRTY" | expect "git-guard: main-session $c follows the branch -D rule and passes" "exit=0"
+done
+for c in "git rm --cached memory/stats/skills.json" "git rm memory/stats/skills.json" "git rm -n -f x" \
+         "git checkout-index -a" "git read-tree HEAD" "git read-tree -m HEAD" "git branch x" "git branch -d x" \
+         "git checkout -b x" "git switch -c x" "git show-ref" 'bash -c "git status"' 'sh -c "echo hi"' \
+         'pwsh -Command "git log"' 'git -c alias.st="status" st' "$(printf "cat <<'X'\ngit reset --hard\nX")" \
+         "$(printf "cat > r.sh <<X\ngit stash\nX")" "bash scripts/x.sh" "git update-index --chmod=+x f"; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c passes (read-only or unforced)" "exit=0"
+done
+( cd "$SRC" && bash "$GUARD" --check docs/defects/work-discarded-by-git-verb.shell.fixture > /dev/null 2>&1 )
+[ $? -eq 1 ] && ok "git-guard: --check fails on the shell fixture (a heredoc fed to a shell)" \
+  || bad "git-guard: --check passed the shell fixture"
+# audit-fixes-1113-17: the shell-indirection forms the guard cannot enumerate are named in its left-open list
+GH="$(sed -n '/^# Not covered, on purpose:/,/^# Agents get no env off-switch/p' "$GUARD" | tr -d '\r' | sed 's/^# *//' | tr '\n' ' ')"
+for n in 'command text piped into a shell' 'a here-string fed to a shell' 'PowerShell `Invoke-Expression`'; do
+  case "$GH" in *"$n"*) ok "git-guard: the header's left-open list names $n" ;;
+    *) bad "git-guard: the header's left-open list does not name $n" ;; esac
+done
+case "$GH" in *'reset --merge'*|*'merge --abort'*) bad "git-guard: the left-open list still names the reset --merge / merge --abort pair" ;;
+  *) ok "git-guard: reset --merge and merge --abort are no longer left open" ;; esac
+
+echo "--- git guard: a subagent under a DRIVER, cycle.sh verbs (audit-fixes-1113-07)"
+mkdir -p "$GG/docs/specs/dv"; : > "$GG/docs/specs/dv/DRIVER"
+for c in "git commit -m x" "git add ." "git -C sub commit -m x" 'bash -c "git commit -m x"' 'sh -c "git add -A"'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c is denied while a DRIVER exists" "exit=1"
+  chk Bash "$c" | expect "git-guard: main-session $c under a DRIVER passes" "exit=0"
+done
+chk PowerShell "git commit -m x" a1 | expect "git-guard: a subagent's PowerShell git commit under a DRIVER is denied" "exit=1"
+chk Bash "git update-index --chmod=+x f" a1 | expect "git-guard: update-index --chmod stays allowed under a DRIVER" "exit=0"
+rm -f "$GG/docs/specs/dv/DRIVER"
+for c in "git commit -m x" "git add ." "git -C sub commit -m x" 'bash -c "git commit -m x"'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c with no DRIVER passes" "exit=0"
+done
+for c in "bash scripts/cycle.sh revise docs/specs/dv/dv-01.md" "bash scripts/cycle.sh branch dv" \
+         "bash scripts/cycle.sh reopen dv" "bash scripts/cycle.sh stamp-red docs/specs/dv/dv-01.md --baseline" \
+         "./scripts/cycle.sh claim dv s1" 'bash -c "bash scripts/cycle.sh revise x"'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c is denied" "exit=1"
+done
+for c in "bash scripts/cycle.sh close-story docs/specs/dv/dv-01.md --commit --stamp s1" \
+         "bash scripts/cycle.sh stamp-red docs/specs/dv/dv-01.md --stamp s1" "bash scripts/cycle.sh advance dv --stamp s1" \
+         "bash scripts/cycle.sh status dv --json" "bash scripts/cycle.sh release dv s1" \
+         "bash scripts/cycle.sh suite dv --commit --stamp s1" "grep -n revise scripts/cycle.sh scripts/lib.sh"; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c passes" "exit=0"
+done
+chk Bash "bash scripts/cycle.sh revise docs/specs/dv/dv-01.md" | expect "git-guard: main-session cycle.sh revise passes" "exit=0"
+rm -rf "$GG/docs/specs"
+
+echo "--- git guard: no Python - the bash fallback, a crashed interpreter (audit-fixes-1113-07)"
+BL="$(sed -n "s/^GUARD_VERBS='\(.*\)'.*/\1/p" "$GUARD" | tr ' ' '\n' | sed '/^$/d' | sort)"
+PL="$(sed -n 's/^VERBS = (\(.*\))[[:space:]]*$/\1/p' "$GUARD" | tr -d "' " | tr ',' '\n' | sed '/^$/d' | sort)"
+if [ -n "$BL" ] && [ "$BL" = "$PL" ]; then ok "git-guard: the fallback's verb list equals the Python part's"
+else bad "git-guard: the verb lists differ - fallback: $(printf '%s' "$BL" | tr '\n' ' ') / python: $(printf '%s' "$PL" | tr '\n' ' ')"; fi
+nopy() { # nopy <tool> <command> [<agent_id>] [<launcher dir>] - `--check` stdout + exit=N with only <launcher dir> on PATH
+  ( cd "$GG" && "$PYBIN" "$T/guard-chk.py" "$1" "$2" "${3:-}" "$(pwd -W 2>/dev/null || pwd)" "" "$T/nopy.json" )
+  ( cd "$GG" && VULYK_PY='' PATH="${4:-$T/nopy}" "$BASH" "$GUARD" --check "$T/nopy.json" 2>&1; echo "exit=$?" )
+}
+for v in $BL; do
+  for tool in Bash PowerShell; do
+    nopy "$tool" "git $v" | expect "git-guard: no Python, $tool git $v is denied" "exit=1"
+  done
+done
+nopy Bash "git -C sub reset --hard" a1 | expect "git-guard: no Python, a subagent's git -C sub reset is denied" "exit=1"
+nopy Bash 'bash -c "git reset --hard"' | expect "git-guard: no Python, a shell-fed git reset is denied" "exit=1"
+nopy PowerShell "& git.exe stash" | expect "git-guard: no Python, PowerShell & git.exe stash is denied" "exit=1"
+out="$(nopy Bash "git stash")"
+printf '%s' "$out" | expect "git-guard: the no-Python refusal says Python is missing" "no Python"
+for c in "git status" "git log --oneline" "ls -la" "Get-ChildItem"; do
+  nopy Bash "$c" | expect "git-guard: no Python, $c passes" "exit=0"
+  nopy PowerShell "$c" | expect "git-guard: no Python, PowerShell $c passes" "exit=0"
+done
+mkdir -p "$T/py3"; printf '#!/bin/sh\nexit 3\n' > "$T/py3/python3"; chmod +x "$T/py3/python3"
+out="$(nopy Bash "git status" "" "$T/py3")"
+printf '%s' "$out" | expect "git-guard: a launcher that exits 3 on a git command denies" "exit=1"
+printf '%s' "$out" | expect "git-guard: the crash refusal says the guard failed" "the guard failed"
+printf '%s' "$out" | expect "git-guard: the crash refusal says the owner can run it" "owner can run"
+nopy Bash "ls digital" "" "$T/py3" | expect "git-guard: a launcher that exits 3 on a non-git command passes" "exit=0"
+
+echo "--- git guard: shell keywords, eval, wrapper commands; an interpreter that exits 1 (audit-fixes-1113-15)"
+for c in 'if true; then git stash; fi' 'for f in a; do git reset --hard; done' 'if false; then :; else git clean -fd; fi' \
+         'if false; then :; elif true; then git stash; fi' 'while false; do git checkout .; done' '! git stash' \
+         'eval git reset --hard' 'eval "git checkout ."' 'timeout 5 git stash' 'timeout -s KILL 5 git reset --hard' \
+         'nohup git stash' 'nice -n 5 git clean -fd' 'nice git reset --hard' 'sudo -u x git reset --hard' \
+         'echo f | xargs git checkout --' 'timeout 5 bash -c "git stash"'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c is denied" "exit=1"
+  chk Bash "$c" "" "$DIRTY" | expect "git-guard: main-session $c over a dirty tree is denied" "exit=1"
+done
+chk Bash 'ls | xargs -I{} git rm -f {}' a1 | expect "git-guard: a subagent's xargs -I{} git rm -f is denied" "exit=1"
+for c in 'if git diff --quiet; then echo clean; fi' 'timeout 5 git status' 'nice git log --oneline' 'eval echo git' \
+         'nohup ls' 'for f in a; do git log; done'; do
+  chk Bash "$c" a1 | expect "git-guard: a subagent's $c passes" "exit=0"
+done
+mkdir -p "$T/py1"; printf '#!/bin/sh\nexit 1\n' > "$T/py1/python3"; chmod +x "$T/py1/python3"
+out="$(printf '%s' "$SUBPAY" | VULYK_PY="$T/py1/python3" bash "$GUARD" 2>&1)"
+printf '%s' "$out" | expect "git-guard: an interpreter that exits 1 on a git command denies" '"deny"'
+printf '%s' "$out" | expect "git-guard: the exit-1 refusal says the guard failed" "the guard failed"
+out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | VULYK_PY="$T/py1/python3" bash "$GUARD" 2>&1)"
+[ -z "$out" ] && ok "git-guard: an interpreter that exits 1 on a non-git command passes" \
+  || bad "git-guard: an interpreter that exits 1 on a non-git command - got: $out"
+# an error inside the Python half (a broken shlex module on its path) is a crash, not a pass
+mkdir -p "$T/badmod"; printf 'class shlex:\n    def __init__(self, *a, **k):\n        raise RuntimeError("broken")\n' > "$T/badmod/shlex.py"
+out="$(printf '%s' "$SUBPAY" | PYTHONPATH="$(cd "$T/badmod" && (pwd -W 2>/dev/null || pwd))" VULYK_PY="$PYBIN" bash "$GUARD" 2>&1)"
+printf '%s' "$out" | expect "git-guard: an error inside the Python half on a git command denies" "the guard failed"
+
+echo "--- git guard: worker prompts never commit (audit-fixes-1113-07)"
+for w in worker-code worker-test; do
+  grep -qF 'Never run `git commit` or `git add`' "$SRC/.claude/agents/$w.md" \
+    && ok "git-guard: $w.md says never to run git commit or git add" \
+    || bad "git-guard: $w.md does not say never to run git commit or git add"
+done
+
 echo "--- git guard: fails open, card fixtures"
 out="$(printf 'not json' | bash "$GUARD" 2>&1; echo "exit=$?")"
 [ "$out" = "exit=0" ] && ok "git-guard: broken JSON exits 0, silent" || bad "git-guard: broken JSON - got: $out"
 mkdir -p "$T/nopy"
 out="$(printf '{"tool_name":"Bash","agent_id":"a","tool_input":{"command":"git stash"}}' | PATH="$T/nopy" "$BASH" "$GUARD" 2>&1; echo "exit=$?")"
-[ "$out" = "exit=0" ] && ok "git-guard: no interpreter exits 0, silent" || bad "git-guard: no interpreter - got: $out"
+printf '%s' "$out" | expect "git-guard: no interpreter, the bash fallback denies a subagent's git stash" '"deny"'
 for f in original neighbour; do
   ( cd "$SRC" && bash "$GUARD" --check "docs/defects/work-discarded-by-git-verb.$f.fixture" > /dev/null 2>&1 )
   [ $? -eq 1 ] && ok "git-guard: --check fails on the $f fixture" || bad "git-guard: --check passed the $f fixture"
@@ -1257,6 +1727,7 @@ tr '\n' ' ' < "$SRC/.claude/agents/lead-review.md" | tr -d '\r' | tr -s ' ' \
   | expect "lead-review: a suite.log head that differs only by paperwork commits is not reported" "only by paperwork commits"
 tr '\n' ' ' < "$SRC/.claude/commands/vulyk-plan.md" | tr -d '\r' | tr -s ' ' \
   | expect "plan: --go comes only from the owner's own words" "only from the owner's own words"
+fi # guards
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

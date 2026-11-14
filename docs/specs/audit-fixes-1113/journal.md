@@ -2,3 +2,45 @@
 
 - 2026-11-13T16:39:37Z · 02-approved · approved by Andrei («Погнали») · next: branch
 - 2026-11-13T16:39:59Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/audit-fixes-1113; to edit, run /vulyk-pause audit-fixes-1113
+- 2026-11-13T16:40:08Z · 03-building · branch vulyk/audit-fixes-1113 created · next: build:1
+- 2026-11-13T20:38:30Z · 03-building · needs_context on audit-fixes-1113-02 · next: pre-spec 140-char map line wrapped by the Queen (ca9ae757); rerun close-story
+- 2026-11-13T20:38:31Z · 03-building · needs_context on audit-fixes-1113-03 · next: tests/council.test.sh + parts seats, escalate, close, hooklog joined the story (3c69bf28)
+- 2026-11-13T20:38:31Z · 03-building · needs_context on audit-fixes-1113-04 · next: 26 further flagged files joined the story, scrub all; M1 = existing matcher + PowerShell (31825646)
+- 2026-11-13T21:15:02Z · 03-building · needs_context on audit-fixes-1113-04 · next: fixtures committed by the Queen, gate fix to story 09; story 11 cut (wave 4)
+- 2026-11-13T21:21:34Z · 03-building · needs_context on audit-fixes-1113-05, -06 · next: 05 + defects-inject.sh reset exit; 06 rewrites two edits assertions to U1 + --part edits
+- 2026-11-13T21:46:35Z · 03-building · needs_context on audit-fixes-1113-06 · next: PRE_M -> M1 and tests/intake.test.sh join the story
+- 2026-11-13T22:33:52Z · 03-building · needs_context on audit-fixes-1113-06 · next: escape from story 04's scrub: blame --ignore-revs-file docs/defects/.scrub-revs joins story 06
+- 2026-11-13T22:51:16Z · 03-building · needs_context on audit-fixes-1113-06 · next: sealed tests changed by the Queen's own revision: stamp-red --baseline by the Queen, receipt written; rerun close-story
+- 2026-11-13T23:49:38Z · 03-building · checkpoint after 55 min at build:3 · next: story 12 cut (scrub-revs mask-only); relaunching with a fresh stamp
+- 2026-11-14T00:50:08Z · 03-building · stop on audit-fixes-1113-09 (missed twice) · next: lead-architect cut it into 09/13/14 (waves 3/5/6), fixture item to 12; relaunching
+- 2026-11-14T01:10:42Z · 03-building · needs_context on audit-fixes-1113-09 · next: expected: wave 3 claimed by the old script, no claim head; relaunch so advance --claim records it
+- 2026-11-14T01:38:28Z · 03-building · needs_context on audit-fixes-1113-11 · next: hook bits set by the Queen (plan step 4); rerun close-story
+- 2026-11-14T01:40:46Z · 03-building · claim head of wave 4 moved by the Queen · next: from 7713358b to 9ca063ca43a95ef222810b667a2e57d7d8752142: the Queen's hook-bit commit b0721b25 sat between two driver runs and read as story 11's edit; reanchor verb added to story 13
+- 2026-11-14T02:23:32Z · 03-building · needs_context on audit-fixes-1113-13 · next: expected: no approved record before the new claim seeds it; git-guard checked: reanchor and revise denied to a subagent; relaunch
+- 2026-11-14T02:23:42Z · 03-building · approved records seeded from commit subjects: 14 stories (claim) · next: build
+- 2026-11-14T03:11:51Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-1 · next: dispatch:opus,review
+- 2026-11-14T03:14:38Z · 04-council · checkpoint after 50 min at dispatch:opus,review · next: relaunching with a fresh stamp
+- 2026-11-14T04:15:57Z · 04-council:RED · round 1 verdict RED at d974e00c pack 475733085b95 · next: repair
+- 2026-11-14T04:16:05Z · 03-building · repair round 1: audit-fixes-1113-15-repair-round-1.md · next: build:7
+- 2026-11-14T04:18:23Z · 03-building · checkpoint after 61 min at build:7; repair 15 widened · next: court-guard false positives starved the blind seat (no opus report in round 1); ADR-032 privacy minor; relaunching
+- 2026-11-14T04:18:29Z · 03-building · revised audit-fixes-1113-15 · next: build
+- 2026-11-14T05:12:25Z · 03-building · checkpoint after 53 min at build:7 · next: repair 15 written, receipt stamped, close pending; relaunching with a fresh stamp
+- 2026-11-14T05:33:39Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-2 · next: dispatch:opus,review
+- 2026-11-14T06:33:16Z · 04-council · council-opus empty three times (60-turn cap on 21 asks) · next: owner: «Лимит 150 + бюджет (Рекомендую)»; d224211d raises the cap and adds a turn budget; round 2 goes stale, relaunching
+- 2026-11-14T06:33:30Z · 04-council:STALE · round 2 stale, code moved after dispatch · next: open-round
+- 2026-11-14T06:33:31Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-3 · next: dispatch:opus,review
+- 2026-11-14T07:30:01Z · 04-council:RED · round 3 verdict RED at 0b2de955 pack b1039f68f2f5 · next: repair
+- 2026-11-14T07:30:09Z · 03-building · repair round 3: audit-fixes-1113-16-repair-round-3.md · next: build:8
+- 2026-11-14T07:30:52Z · 03-building · checkpoint after 56 min at build:8 · next: round 3 RED (wiring 212 s > 210, owner-guard header); council-opus empty again in round 3 despite d224211d; relaunching for repair 16
+- 2026-11-14T07:32:41Z · 03-building · revised audit-fixes-1113-16 · next: build
+- 2026-11-14T07:45:57Z · 04-council:open · round 4 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-4 · next: dispatch:opus,review
+- 2026-11-14T08:34:31Z · 04-council:ESCALATE · round 4 verdict ESCALATE at 85a09311 pack c204ad9ef3c7 · next: escalated
+- 2026-11-14T08:36:20Z · 04-council:ESCALATE · reopened after round 4, ceiling now 6 · next: repair
+- 2026-11-14T08:36:43Z · 03-building · repair round 4: audit-fixes-1113-17-repair-round-4.md · next: build:9
+- 2026-11-14T08:40:40Z · 03-building · revised audit-fixes-1113-16 · next: build
+- 2026-11-14T08:40:42Z · 03-building · revised audit-fixes-1113-17 · next: build
+- 2026-11-14T08:42:00Z · 03-building · revised audit-fixes-1113-16 · next: build
+- 2026-11-14T08:43:21Z · 03-building · revised audit-fixes-1113-17 · next: build
+- 2026-11-14T09:44:34Z · 04-council:open · round 5 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-5 · next: dispatch:opus,review
+- 2026-11-14T10:07:30Z · 03-building · revised audit-fixes-1113-18 · next: build
+- 2026-11-14T10:07:37Z · 03-building · revised audit-fixes-1113-18 · next: build

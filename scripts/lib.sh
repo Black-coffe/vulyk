@@ -47,18 +47,20 @@ pack_fingerprint() { # pack_fingerprint <spec-dir> - must match every caller exa
 # open-round's own dirty-tree precondition - goes through this single function, so the ADR
 # invariant ("paperwork_only() lists every file the cycle writes") cannot drift into two lists
 # that quietly disagree. Anchored to docs/specs/*/ (R23/m-2): an unanchored `*/council/*` or
-# `*/journal.md` matched any hive path sharing those names, not just the cycle's own. brief.md
-# joins the set because `reopen` writes it; scope.jsonl joins the memory/stats series because
+# `*/journal.md` matched any hive path sharing those names, not just the cycle's own. scope.jsonl joins the memory/stats series because
 # `close-story` writes it through scope-check.sh (R4/C-3(b)). VERSION and CHANGELOG.md join in
 # 0.18 (ADR-013 D3): the release commit /vulyk-ship makes must not stale a GREEN round.
+# memory/stats/skills.json left the set in audit-fixes-1113: it is untracked and gitignored, a local counter.
+# A spec's brief.md and plan.md left it too (audit-fixes-1113, P1): only the lines a cycle script writes
+# in them are paperwork, so a change to either goes through paperwork_change() below, line by line.
 # A hive adds its own paperwork in .claude/vulyk-paperwork (hive_paperwork_path below), a file
 # the installer never ships, owns or touches (ADR-010 amendment 2026-10-16).
 # Callers pass a path as itself: read git's lists with -z, never its C-quoted `"docs/\320..."`.
 is_paperwork_path() { # is_paperwork_path <repo-relative-path> [<root>]
   case "$1" in
-    docs/specs/*/plan.md|docs/specs/*/journal.md|docs/specs/*/council/*|docs/specs/*/brief.md| \
+    docs/specs/*/journal.md|docs/specs/*/council/*| \
     memory/stats/human.jsonl|memory/stats/acceptance.jsonl|memory/stats/ship.jsonl|memory/stats/council.jsonl|memory/stats/scope.jsonl| \
-    memory/stats/anomalies.jsonl|memory/stats/evolve.jsonl|memory/stats/skills.json|VERSION|CHANGELOG.md|CITATION.cff) return 0 ;;
+    memory/stats/anomalies.jsonl|memory/stats/evolve.jsonl|VERSION|CHANGELOG.md|CITATION.cff) return 0 ;;
     memory/learnings/*.md)
       case "${1#memory/learnings/}" in */*) ;; *) return 0 ;; esac ;;
   esac
@@ -82,8 +84,66 @@ hive_paperwork_path() { # hive_paperwork_path <repo-relative-path> <root>
   return 1
 }
 
+# P1 (audit-fixes-1113): in a spec's plan.md only the marker lines a cycle script writes (**Briefed:**,
+# **Branch:**, **Council:**, **Checked:**, **Shipped:**) and the `## Needs a human` block are paperwork;
+# in brief.md only what `reopen` appends under `## Answers` (an `**After escalation (round N, ...).**`
+# line and its `> ` lines). spec_doc_strip drops exactly those lines and the blank ones; two versions
+# whose stripped texts are equal differ only in the cycle's own lines. Any other change is a hand edit.
+spec_doc_kind() { # spec_doc_kind <repo-relative-path> -> plan | brief for a spec's own plan.md / brief.md
+  case "$1" in
+    docs/specs/*/*/*) return 1 ;;
+    docs/specs/*/plan.md) printf 'plan' ;;
+    docs/specs/*/brief.md) printf 'brief' ;;
+    *) return 1 ;;
+  esac
+}
+
+spec_doc_strip() { # spec_doc_strip <plan|brief> < text -> the text without the cycle-written lines
+  tr -d '\r' | awk -v kind="$1" '
+    kind == "plan" && /^\*\*(Briefed|Branch|Council|Checked|Shipped):\*\*/ { next }
+    kind == "plan" && /^## Needs a human/        { skip = 1; next }
+    skip && /^## /                               { skip = 0 }
+    skip                                         { next }
+    kind == "brief" && /^\*\*After escalation \(round [0-9]+, / { inb = 1; next }
+    inb && /^> /                                 { next }
+    /^[[:space:]]*$/                             { next }
+    { inb = 0 }
+    kind == "brief" && /^## Answers[[:space:]]*$/ { held = $0; next }
+    held != "" { if ($0 !~ /^## /) print held; held = "" }
+    { print }
+  '
+}
+
+spec_doc_text() { # spec_doc_text <root> <rev | @ for the working tree> <path> -> that version, empty when absent
+  if [ "$2" = @ ]; then cat -- "$1/$3" 2>/dev/null; else git -C "$1" show "$2:$3" 2>/dev/null; fi
+  return 0
+}
+
+spec_doc_same() { # spec_doc_same <root> <path> <from-rev|@> <to-rev|@> -> 0 iff the two versions of a
+  # spec's plan.md / brief.md differ only in cycle-written lines (P1); any other path: 1
+  local kind; kind="$(spec_doc_kind "$2")" || return 1
+  [ "$(spec_doc_text "$1" "$3" "$2" | spec_doc_strip "$kind")" = "$(spec_doc_text "$1" "$4" "$2" | spec_doc_strip "$kind")" ]
+}
+
+paperwork_change() { # paperwork_change <path> <root> <from-rev|@> <to-rev|@> -> 0 iff this change of
+  # <path> is the cycle's own: a paperwork path, or a spec's plan.md / brief.md changed only in its cycle lines
+  is_paperwork_path "$1" "$2" || spec_doc_same "$2" "$1" "$3" "$4"
+}
+
+hand_edits() { # hand_edits <root> <from-commit> <to-commit> -> "<path> <sha>" for each commit in the range
+  # that changed a spec's plan.md or brief.md outside its cycle lines (P1), oldest first
+  local sha p
+  git -C "$1" rev-list --reverse "$2..$3" -- 'docs/specs/*/plan.md' 'docs/specs/*/brief.md' 2>/dev/null | while IFS= read -r sha; do
+    git -C "$1" -c core.quotePath=false diff-tree --no-commit-id --name-only -r --no-renames "$sha" 2>/dev/null | while IFS= read -r p; do
+      spec_doc_kind "$p" >/dev/null || continue
+      spec_doc_same "$1" "$p" "$sha^" "$sha" || printf '%s %s\n' "$p" "$sha"
+    done
+  done
+}
+
 # A commit range is paperwork-only iff every changed path is one the cycle writes itself -
-# never the software. See is_paperwork_path() above for the whitelist itself.
+# never the software. See is_paperwork_path() above for the whitelist itself; a spec's plan.md
+# and brief.md count only when the range changed nothing but their cycle lines (P1).
 paperwork_only() { # paperwork_only <root> <from-commit> <to-commit>
   local p list rc=0
   git -C "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null || return 1
@@ -92,7 +152,7 @@ paperwork_only() { # paperwork_only <root> <from-commit> <to-commit>
   # --no-renames: a rename lists only its new path, so code moved into a paperwork path read as paperwork
   git -C "$1" diff --name-only -z --no-renames "$2" "$3" > "$list" 2>/dev/null || rc=1   # a diff git could not produce is not paperwork
   while [ "$rc" -eq 0 ] && IFS= read -r -d '' p; do
-    is_paperwork_path "$p" "$1" || rc=1
+    paperwork_change "$p" "$1" "$2" "$3" || rc=1
   done < "$list"
   rm -f "$list"
   return "$rc"
@@ -527,6 +587,13 @@ EOF
 now_ts() { date -u +%Y-%m-%dT%H:%M:%SZ; } # the one timestamp shape every ledger row uses
 
 slug_of() { basename "$1"; } # slug_of <spec-dir>
+
+# The cycle's run state (`.vulyk/state/<slug>/`, gitignored, beside the verify records) holds `claim`: one
+# `wave.<W>=<sha>` line per wave, the head `claim` saw when that wave's build began (S1, audit-fixes-1113).
+# The last line of a key wins.
+cycle_state_dir() { printf '%s/.vulyk/state/%s' "$1" "$2"; } # cycle_state_dir <root> <slug>
+state_get() { sed -n "s/^${3//./\\.}=//p" "$(cycle_state_dir "$1" "$2")/$4" 2>/dev/null | tail -n 1; } # state_get <root> <slug> <key> <record>
+approved_shas() { sed -n 's/^[^=]*=//p' "$(cycle_state_dir "$1" "$2")/approved" 2>/dev/null; return 0; } # approved_shas <root> <slug> -> every recorded sha
 
 # --- portability helpers (cross-platform) ----------------------------------------------------
 # One spelling each for what GNU, BSD (macOS) and Git Bash disagree on: which Python, `sed -i`,

@@ -4,6 +4,68 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+Guards, gates and installer fixes from a framework audit (spec `audit-fixes-1113`).
+
+### Changed
+- `vulyk-update.sh` and the update check share one version order: a release is newer than its dev builds and
+  `dev.10` is newer than `dev.3`; `vulyk-update.sh` refuses a target older than the installed version.
+- `memory/stats/skills.json` is local to each checkout: untracked, gitignored, never shipped by `install.sh` and
+  never committed by a ship step or exempted from a clean tree; it counts only project skills and `vulyk-*`
+  commands, and an upgrade prints the command that untracks it in a hive that tracks it.
+- A test pins `/vulyk-ship`'s spec-branch rule: a spec branch is pushed only to a private origin, and on a public
+  one the owner is asked.
+- A new PreToolUse hook, `owner-guard.sh`, lets only the owner's own words record his acceptance, a plan approval
+  or a straight-through `--go`: it refuses `human-check.sh ACCEPTED|REJECTED`, `cycle.sh briefed --go` and new
+  `**Approved:**` / `**Checked:**` lines to a subagent, and to the main session unless the note quotes the owner
+  from this session's transcript, after the latest verdict; without Python it refuses and says why.
+- `git-guard.sh` denies the git forms that discard uncommitted work or move a branch or ref by force, also when git
+  runs through `bash -c`, `pwsh -Command`, a `-c alias.` definition or a heredoc fed to a shell.
+- Without Python, a bash fallback in `git-guard.sh` reads the same verb list as the Python part and denies those
+  verbs in Bash and PowerShell; a Python that crashes on a git command denies it; the SessionStart brief says when
+  no Python answers.
+- `redact.sh` and the handoff fallback mask Russian and Ukrainian secret keywords, secrets stated in prose,
+  credentials passed as command arguments, more service-token and webhook shapes and bare cloud secret keys; when
+  redaction cannot run, the text is withheld and `redact_degraded` is recorded.
+- `close-story` counts a story's scope from the head `claim` recorded for its wave, so an edit outside `## Files`
+  committed before the close is out of scope; a subagent cannot `git commit` or `git add` while a DRIVER holds a
+  spec, and the worker prompts say never to commit.
+- A story's approved version is the commit `cycle.sh` itself made (`branch`, `revise`, `repair`), kept in the run
+  state; `close-story` and `stamp-red` compare the story with it, and a subagent cannot run the verbs that make it.
+- Paperwork is what `cycle.sh` writes: a hand edit of `brief.md` or `plan.md` stales the round and is named, a
+  `revise` commit is the way to change either during a build, and cycle commits stage their named files.
+- `install.sh` allows six `cycle.sh` verbs (`advance`, `status`, `release`, `suite`, `stamp-red`, `close-story`),
+  one rule each, and `journal.sh`; the owner-only verbs and `human-check.sh` ask first. `--upgrade` replaces the
+  broad `cycle.sh` rule an older installer wrote, logs `narrowed allow: cycle.sh`, and keeps the hive's own rules.
+- Defect cards reach PowerShell commands as they reach Bash ones: the inject matcher includes PowerShell, and an
+  upgrade moves the old shipped matcher.
+- A new PreToolUse hook, `court-guard.sh`, keeps a blind council seat inside its court: no reads outside it and no
+  git reads of the spec. `install.sh` wires it and `owner-guard.sh` once, by the release that ships them, and
+  the three guards fail closed (`"onFailure": "block"`).
+- `leak-check.sh` flags any absolute path outside the VULYK root, Claude temp-folder paths and the hive roots of
+  the private registry; the docs use stand-ins.
+- CI pins third-party actions by full commit SHA.
+- SessionStart and PreCompact hooks exit silently for a subagent: no handoff offered or marked read, no dump, no
+  snapshot, no update-check call, no inject reset.
+- A fresh install gets the memory skeleton from `templates/memory.md`; a test checks that the installed index
+  names no `memory/map/` or `tests/` path.
+- README and getting-started start from the installer; a recovery paragraph serves a copy made from the GitHub
+  template, and the SessionStart brief names such a copy.
+- `install.sh --upgrade` takes a hive file as a release copy only when it equals the blob in the tag of the hive's
+  installed version, and merges anything else three-way; card `upgrade-overwrites-host-edits` gates it.
+- `stamp-red` re-hashes each stored line output against its record before the verdict reads it.
+- `/vulyk-ship` has `lead-review` read the outward text (the CHANGELOG section, the release notes, the published
+  `UNASKED:` / Minor lines) before it prints a publish command; a flagged line moves to a private file first.
+- `git-guard.sh` also denies `git reset --merge` and `git merge --abort`; its header names the forms it leaves open on
+  purpose, and `owner-guard.sh`'s header names the plan.md rewrites its check cannot see.
+- Every `cycle.sh` verb takes `--short`: one flat line with only the fields the Workflow driver reads (stories by
+  id), so the clerk agent no longer has a long line to echo; the driver asks for it and hands a worker its story id.
+- `cycle.sh reanchor` moves a wave's recorded claim head with a journal line (main session only).
+- `defects-check.sh` dates owner quotes past commits listed in `docs/defects/.scrub-revs`, only where such a
+  commit did nothing but mask a span with a placeholder; `--files` skips a card's own fixtures.
+- `council-opus` gets 150 turns and a turn budget, so a large spec still gets its report.
+- `redact.sh` leaves ordinary text alone (every brief and journal of the repo passes byte-identical), and
+  `human-check.sh` / `acceptance-log.sh` refuse instead of writing a note when redaction fails.
+
 ## [0.52.0] - 2026-11-13
 
 Local hives as the beta channel (specs `local-beta-rollout`, `post-052-tails`, `busy-no-transcripts`), five agent-file

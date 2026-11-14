@@ -31,7 +31,7 @@ the container (`.claude/commands/vulyk-plan.md` step 2); `bisect` only a `token-
 
 ### H1
 - what: parse the common trace forms (Python `File "x", line N`, Node `at f (x.js:L:C)`, bash `x.sh: line N:`,
-  plain `path:N`), map absolute and Windows paths from another machine (`/app/src/a.py`, `C:\build\src\a.py`) to
+  plain `path:N`), map absolute and Windows paths from another machine (`/app/src/a.py`, `<D>:\build\src\a.py`) to
   repo files by unique suffix of `git ls-files`, innermost repo frame first.
 - why: production traces carry deployment paths; a literal match finds no repo file and the summary comes back empty.
 - cost: about 40 lines of parser plus one fixture per form.

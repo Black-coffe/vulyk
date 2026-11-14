@@ -11,8 +11,8 @@
 #          bash tests/inject.test.sh --list-parts     # the part names, one per line
 # tests/full-suite.sh runs the functional part among its parallel jobs and the latency part alone, last.
 #
-# Latency runs against D:/YouTube_AI/docs/defects copied to a temp dir when that library exists
-# (the pilot's 19 real cards), else against the fixture library. Asserted <= 400 ms median; the
+# Latency runs against $VULYK_LATENCY_LIBRARY (a hive's docs/defects, e.g. the pilot's 19 real cards) copied to a
+# temp dir when that variable names a folder, else against the fixture library. Asserted <= 400 ms median; the
 # contract target is <= 200 ms and the measured median is printed either way.
 set -u
 PARTS="functional latency" PART=''
@@ -200,6 +200,9 @@ edit() { # edit <session> <path> [agent]   -> an Edit PreToolUse payload
 bashcall() { # bashcall <session> <command>
   printf '{"session_id":"%s","tool_name":"Bash","tool_input":{"command":"%s"},"cwd":"%s"}' "$1" "$2" "$W"
 }
+pscall() { # pscall <session> <command>   -> a PowerShell PreToolUse payload
+  printf '{"session_id":"%s","tool_name":"PowerShell","tool_input":{"command":"%s"},"cwd":"%s"}' "$1" "$2" "$W"
+}
 
 if part functional; then # --- part functional: every case but the latency medians
 # --- what is injected -------------------------------------------------------------------------
@@ -246,6 +249,16 @@ run "$HIVE" "$(bashcall s6t 'echo \"a\" \"My Notes/d.md\"')" | ctx | expect "P10
 run "$HIVE" "$(bashcall s6u 'cat My Notes/a.md')" | expect_silent "P10-15 neighbour: the unquoted words are two arguments, no match"
 rm -f "$D/notes-space.md"
 run "$HIVE" "$(bashcall s3 'ls -la docs && git status')" | expect_silent "an unrelated Bash command is silent"
+# audit-fixes-1113-04: a PowerShell command line is read as a Bash one, for cmd: entries and for paths.
+cb="$(run "$HIVE" "$(bashcall ps1b 'cd pipeline; py -3 edit_build.py x.json')" | ctx)"
+cps="$(run "$HIVE" "$(pscall ps1p 'cd pipeline; py -3 edit_build.py x.json')" | ctx)"
+printf '%s' "$cps" | expect "a PowerShell command gets the card its cmd: entry names" "✗ CMDTEXTNEVER build by hand."
+if [ -n "$cb" ] && [ "$cps" = "$cb" ]; then ok "a PowerShell command gets the card text the same command gets under Bash"
+else bad "a PowerShell command gets the card text the same command gets under Bash - Bash:"
+  printf '%s\n' "$cb" | sed 's/^/        /'; echo "      PowerShell:"; printf '%s\n' "$cps" | sed 's/^/        /'; fi
+run "$HIVE" "$(pscall ps2 'Get-Content -Path .\\pipeline\\voiceover.py | Select-Object -First 3')" | ctx \
+  | expect "a PowerShell command naming a file inside a card's glob gets that card" "voice-text — Voice text rule"
+run "$HIVE" "$(pscall ps3 'Get-ChildItem docs; git status')" | expect_silent "an unrelated PowerShell command is silent"
 
 # --- reset on SessionStart --------------------------------------------------------------------
 echo "--- reset"
@@ -420,6 +433,8 @@ EDIT_O3="{\"session_id\":\"o3\",\"tool_name\":\"Edit\",\"tool_input\":{\"file_pa
 expect_eq "O3: no card file -> an Edit starts no python" no "$(started "$EMPTY" "$EDIT_O3")"
 expect_eq "O3: no card file -> a Bash call starts no python" no \
   "$(started "$EMPTY" '{"session_id":"o3","tool_name":"Bash","tool_input":{"command":"ls src"}}')"
+expect_eq "O3: no card file -> a PowerShell command that can match nothing starts no python" no \
+  "$(started "$EMPTY" '{"session_id":"o3","tool_name":"PowerShell","tool_input":{"command":"Get-ChildItem src"}}')"
 expect_eq "O3: no card file -> an Agent call starts no python" no \
   "$(started "$EMPTY" '{"session_id":"o3","tool_name":"Agent","tool_input":{"prompt":"x"}}')"
 printf -- '---\nid: one\nstatus: block\ncheck: false <arg>\npaths: ["src/**"]\n---\n## Never\n- x\n' > "$ED/pay/one.md"
@@ -472,14 +487,76 @@ printf '%s' "$o" | ctx | expect "eight big cards on a story Read fold the rest" 
 o="$(run "$HIVE" "$(edit r3 "$W/big/x.py" f1)")"
 printf '%s' "$o" | ctx | expect "a card folded on a story Read arrives in full at the first Edit" "✗ BIG08 long line"
 printf '%s' "$o" | ctx | expect_absent "a card shown in full on the story Read is not repeated at the Edit" "BIG01"
+# --- court guard (audit-fixes-1113-08, contract C1): a blind council seat stays inside its court ---------
+echo "--- court guard"
+CG="$SRC/.claude/hooks/court-guard.sh"
+CP="$T/courtproj"; CR="$CP/.vulyk/court/acme/round-1"
+mkdir -p "$CR/docs/specs/acme" "$CR/src" "$CP/docs/specs/acme" "$CP/src"
+printf '# brief\n' > "$CR/docs/specs/acme/brief.md"; printf '# plan\n' > "$CP/docs/specs/acme/plan.md"
+CPW="$(cd "$CP" && { pwd -W 2>/dev/null || pwd; })"; CRW="$CPW/.vulyk/court/acme/round-1"
+cg() { # cg <agent_type, - for the main session> <cwd> <tool> <tool_input JSON> -> deny | allow
+  local a='' out
+  [ "$1" != - ] && a=",\"agent_id\":\"c1\",\"agent_type\":\"$1\""
+  out="$(printf '{"session_id":"c","tool_name":"%s","tool_input":%s,"cwd":"%s"%s}' "$3" "$4" "$2" "$a" |
+    CLAUDE_PROJECT_DIR="$CPW" bash "$CG")"
+  case "$out" in *'"permissionDecision": "deny"'*) echo deny ;; '') echo allow ;; *) echo other ;; esac
+}
+# bash 3.2 brace-expands a JSON literal with \" inside "$(...)": each payload is built in a variable first.
+p="{\"file_path\":\"$CRW/docs/specs/acme/brief.md\"}"
+expect_eq "court guard: a seat's Read inside the court passes" allow "$(cg council-opus "$CRW" Read "$p")"
+p="{\"file_path\":\"$CPW/docs/specs/acme/plan.md\"}"
+expect_eq "court guard: a seat's Read of the main tree's spec file is denied" deny "$(cg council-opus "$CRW" Read "$p")"
+expect_eq "court guard: the same Read by a worker passes" allow "$(cg worker-code "$CPW" Read "$p")"
+expect_eq "court guard: the same Read by the main session passes" allow "$(cg - "$CPW" Read "$p")"
+p="{\"pattern\":\"x\",\"path\":\"$CPW/src\"}"
+expect_eq "court guard: a seat's Grep outside the court is denied" deny "$(cg council-haiku "$CRW" Grep "$p")"
+p="{\"pattern\":\"x\",\"path\":\"$CRW/src\"}"
+expect_eq "court guard: a seat's Grep inside the court passes" allow "$(cg council-haiku "$CRW" Grep "$p")"
+expect_eq "court guard: a seat's Glob with no path from the main tree is denied" deny \
+  "$(cg council-opus "$CPW" Glob '{"pattern":"**/*.md"}')"
+expect_eq "court guard: a seat's Glob with no path from inside the court passes" allow \
+  "$(cg council-opus "$CRW" Glob '{"pattern":"**/*.md"}')"
+expect_eq "court guard: a Bash path inside the court passes" allow \
+  "$(cg council-opus "$CRW" Bash '{"command":"cat docs/specs/acme/brief.md"}')"
+expect_eq "court guard: a Bash path argument that climbs out of the court is denied" deny \
+  "$(cg council-opus "$CRW" Bash '{"command":"cat ../../../../docs/specs/acme/plan.md"}')"
+p="{\"command\":\"cd $CPW && ls src\"}"
+expect_eq "court guard: a cd out of the court is denied" deny "$(cg council-opus "$CRW" Bash "$p")"
+p="{\"command\":\"mkdir -p $CPW/.vulyk/reports/acme/round-1\"}"
+expect_eq "court guard: the seat's report folder passes" allow "$(cg council-opus "$CRW" Bash "$p")"
+expect_eq "court guard: git log with no pathspec is denied" deny "$(cg council-opus "$CRW" Bash '{"command":"git log --oneline"}')"
+expect_eq "court guard: git show <rev>:docs/specs/... is denied" deny \
+  "$(cg council-opus "$CRW" Bash '{"command":"git show HEAD~2:docs/specs/acme/plan.md"}')"
+expect_eq "court guard: git diff with a pathspec under docs/specs/ is denied" deny \
+  "$(cg council-opus "$CRW" Bash '{"command":"git diff HEAD~1 -- docs/specs/acme"}')"
+expect_eq "court guard: git log whose every pathspec lies elsewhere passes" allow \
+  "$(cg council-opus "$CRW" Bash '{"command":"git log --oneline -- src"}')"
+expect_eq "court guard: git status passes" allow "$(cg council-haiku "$CRW" Bash '{"command":"git status --short"}')"
+expect_eq "court guard: another agent's git log passes" allow "$(cg worker-code "$CPW" Bash '{"command":"git log --oneline"}')"
+# Round 1 (audit-fixes-1113-15): a command's non-path words were read as paths and starved the blind seat.
+printf '# Acme\n## Profile\nx\n## Next\n' > "$CR/CLAUDE.md"
+for c in "sed -n '/^## Profile/,/^## [A-Z]/p' CLAUDE.md" "awk '/^## Profile/{on=1} on' CLAUDE.md" \
+         "tr '\\\\n' ' ' < CLAUDE.md" "grep -n '/api/v1' src" "grep -e '/^##/' CLAUDE.md" \
+         "awk '{print \$1/2}' CLAUDE.md" "echo '/acme/round-1 done'" "printf '%s\\\\n' '/x/y'" \
+         "sed -e 's/~/home/' -e '/^\$/d' CLAUDE.md" "cat CLAUDE.md | tr -d '\\\\r' | sed -n '/## Profile/,\$p'" \
+         "jq '.a' docs/specs/acme/brief.md"; do
+  p="{\"command\":\"$c\"}"
+  expect_eq "court guard: a non-path word passes: $c" allow "$(cg council-opus "$CRW" Bash "$p")"
+done
+for c in "cat $CPW/docs/specs/acme/plan.md" "ls ../../../../docs/specs" "sed -n 1p $CPW/docs/specs/acme/plan.md" \
+         "grep -n plan $CPW/docs/specs" "awk 1 < $CPW/docs/specs/acme/plan.md" "cat ~/x.md" "cat \$HOME/x.md" \
+         "grep -f $CPW/docs/specs/acme/plan.md x" "echo $CPW/docs/specs/acme/plan.md"; do
+  p="{\"command\":\"$c\"}"
+  expect_eq "court guard: a real read outside the court is still denied: $c" deny "$(cg council-opus "$CRW" Bash "$p")"
+done
 fi # part functional
 
 if part latency; then # --- part latency: the two 200 ms medians, on the fixture library above
 echo "--- latency"
 LAT="$HIVE"; LW="$W"; SRCNAME="fixture library"
-if [ -d "D:/YouTube_AI/docs/defects" ]; then
-  mkdir -p "$T/yt/docs"; cp -r "D:/YouTube_AI/docs/defects" "$T/yt/docs/"; LAT="$T/yt"
-  LW="$(cd "$LAT" && { pwd -W 2>/dev/null || pwd; })"; SRCNAME="YouTube_AI library copy"
+if [ -n "${VULYK_LATENCY_LIBRARY:-}" ] && [ -d "$VULYK_LATENCY_LIBRARY" ]; then
+  mkdir -p "$T/yt/docs"; cp -r "$VULYK_LATENCY_LIBRARY" "$T/yt/docs/defects"; LAT="$T/yt"
+  LW="$(cd "$LAT" && { pwd -W 2>/dev/null || pwd; })"; SRCNAME="real library copy"
 fi
 m="$(median_ms "$LAT" "{\"session_id\":\"lat\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cd pipeline && python edit_build.py EDIT_3.json --check\"},\"cwd\":\"$LW\"}")"
 echo "  median defects-inject.sh (Bash): ${m} ms over 30 calls ($SRCNAME; target <= 200 ms)"

@@ -69,6 +69,7 @@ Rules that hold throughout:
 - Every Bash call carries a `timeout`: `600000` for `close-story` and suites, less for quick checks.
 - Other stories of your wave may be editing the same tree right now: never `git stash`, `git checkout`,
   `git restore`, `git reset` or `git clean`.
+- Never run `git commit` or `git add`: `close-story` commits the story's paths.
 - Never edit the story's `status:` line; `close-story` writes it. You write `returned:` only, and it
   always matches your `STATUS:` word.
 - Deploying, publishing, sending, paying, deleting data and rewriting history are never yours; if the

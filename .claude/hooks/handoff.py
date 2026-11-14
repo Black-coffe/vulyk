@@ -673,10 +673,11 @@ def harvest(entries, cfg):
 
 
 # Mirror of scripts/redact.sh, applied after it too: it is the only redaction where bash is
-# missing, is WSL's (a Windows path is not a file there) or redact.sh degraded to `cat`.
+# missing, is WSL's (a Windows path is not a file there) or redact.sh failed (exit 1, text withheld).
 # Keep it a superset of that script's list; extend both together. Group 1, when a pattern
 # has one, is kept in front of the mask.
 _VALUE = r"(?:\"[^\"\n]+\"|'[^'\n]+'|[\"']?[^\"'\s:][^\"'\s]{5,}[\"']?)"  # redact.sh's VALUE
+_NOT_P = r"(?:[^\S\n]+(?:[^-\s;&|][^\s;&|]*|-[^p\s;&|][^\s;&|]*))*"  # redact.sh's NOT_P
 _REDACT_FALLBACK = [
     re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"),
     re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
@@ -690,9 +691,19 @@ _REDACT_FALLBACK = [
     re.compile(r"pypi-[A-Za-z0-9_-]{50,}"),
     re.compile(r"hf_[A-Za-z0-9]{30,}"),
     re.compile(r"gsk_[A-Za-z0-9]{40,}"),
-    re.compile(r"SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}"),
+    re.compile(r"SG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}"),
     re.compile(r"[rs]k_(?:live|test)_[A-Za-z0-9]{20,}"),
     re.compile(r"(?<=hooks\.slack\.com/services/)[A-Za-z0-9/_-]{20,}"),
+    re.compile(r"xapp-[A-Za-z0-9-]{10,}"),
+    re.compile(r"whsec_[A-Za-z0-9]{20,}"),
+    re.compile(r"GOCSPX-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"(?<![A-Za-z0-9/:.])1//0[A-Za-z0-9_-]{20,}"),
+    re.compile(r"ya29\.[A-Za-z0-9._-]{20,}"),
+    re.compile(r"shp(?:at|ca|pa|ss)_[A-Za-z0-9]{20,}"),
+    re.compile(r"AGE-SECRET-KEY-1[0-9A-Z]{20,}"),
+    re.compile(r"do[por]_v1_[A-Za-z0-9]{20,}"),
+    re.compile(r"(discord(?:app)?\.com/api/webhooks/)[0-9]{5,}/[A-Za-z0-9_-]{20,}"),
+    re.compile(r"([?&]code=)[^&#\s\"']{10,}"),
     re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}"),
     re.compile(r"([Bb]earer[^\S\n]+)[A-Za-z0-9._~+/-]{16,}=*"),
     # Basic / token credentials only inside an Authorization header: a bare "Basic <word>" is prose.
@@ -700,10 +711,12 @@ _REDACT_FALLBACK = [
                r"[A-Za-z0-9._~+/-]{8,}=*", re.I),
     # A URL password may hold a raw '/'; a port before a path (host:443/@scope) is all digits, so it is not one.
     re.compile(r"((?:ssh-(?:rsa|ed25519|dss)|ecdsa-sha2-nistp[0-9]+)[^\S\n]+)AAAA[A-Za-z0-9+/]{16,}=*"),
-    # The user may be empty (redis://:pw@host).
-    re.compile(r"(://)[^/\s:@]*:(?:[^/\s@]*[^0-9/\s@][^\s@]*|[^/\s@]+)(?=@)"),
+    # The user may be empty (redis://:pw@host); a password with no '/' may hold ':' and '@' (to the last '@').
+    # Tried first, as sed's longest match takes it whenever it matches.
+    re.compile(r"(://)[^/\s:@]*:(?:[^/\s]+|[^/\s@]*[^0-9/\s@][^\s@]*|[^/\s@]+)(?=@)"),
     # A Cookie / Set-Cookie header that carries a name=value pair loses its whole value, to the end of the line.
-    re.compile(r"(?<![A-Za-z0-9_-])((?:(?:Set-)?[Cc]ookie|SET-COOKIE|COOKIE)[^\S\n]*:[^\S\n]*)[^\s=;:]+=\S.*"),
+    re.compile(r"(?<![A-Za-z0-9_-])((?:(?:[Ss]et-)?[Cc]ookie|SET-COOKIE|COOKIE)[^\S\n]*:[^\S\n]*)"
+               r"[^\s=;:]+(?:=\S|;[^=\n]*=\S).*"),
     # key = value: a whole quoted string (spaces and all, to its closing quote however short), else one
     # unquoted word of 6+ chars that does not open with ':' (token::Kind, secret::Name stay readable).
     # Line-bound, as sed is.
@@ -718,16 +731,46 @@ _REDACT_FALLBACK = [
     re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:[A-Za-z0-9_-]*[_-])?(?:DSN|dsn|Dsn)[\"']?[^\S\n]*[=:][^\S\n]*)"
                r"[\"']?[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'@]+@[^\s\"']*[\"']?"),
     # A one-time code key ENDS the key, alone or after '_'/'-' (OTP, SMS_OTP, TOTP, otp_code) - not footprint.
-    re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:[A-Za-z0-9_-]*[_-])?(?:T?OTP|t?otp|T?Otp|Totp)(?:[_-](?:CODE|code|Code))?"
+    re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:[A-Za-z0-9_-]*[_-])?(?:T?OTP|t?otp|T?Otp|Totp)(?:[_-]?(?:CODE|code|Code))?"
                r"[\"']?[^\S\n]*[=:][^\S\n]*)" + _VALUE),
     # A *_KEY name (ENCRYPTION_KEY, signing-key, appKey, ENCRYPTIONKEY, encryption.key) or a *_AUTH name with a
     # key-shaped value: 16+ chars, no spaces, a `base64:` prefix allowed.
     re.compile(r"([\"']?(?:[A-Za-z0-9_.-]*[._-](?:KEY|key|Key)|[A-Za-z0-9_-]*[a-z0-9]Key|[A-Za-z0-9_-]*[A-Z0-9]KEY"
-               r"|[A-Za-z0-9_.-]*[_-](?:AUTH|auth|Auth))[\"']?[^\S\n]*[=:][^\S\n]*)"
+               r"|[A-Za-z0-9_.-]*[._-](?:AUTH|auth|Auth))[\"']?[^\S\n]*[=:][^\S\n]*)"
                r"[\"']?(?:base64:)?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
     # A bare token key must END in token (max_tokens, token_budget are counters) and hold a 16+ char value.
     re.compile(r"([\"']?[A-Za-z0-9_-]*(?:token|TOKEN|Token)[\"']?[^\S\n]*[=:][^\S\n]*)"
                r"[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
+    # A Russian / Ukrainian keyword: its unquoted value is ASCII, 6+ chars, so a Cyrillic word stays prose.
+    re.compile(r"((?:Секретный ключ|секретный ключ|СЕКРЕТНЫЙ КЛЮЧ|Секретний ключ|секретний ключ|СЕКРЕТНИЙ КЛЮЧ"
+               r"|Пароль|пароль|ПАРОЛЬ|Гасло|гасло|ГАСЛО|Токен|токен|ТОКЕН|Секрет|секрет|СЕКРЕТ)"
+               r"[^\S\n]*[=:][^\S\n]*)(?:\"[^\"\n]+\"|'[^'\n]+'|[A-Za-z0-9._~+/=!@$%^&*-]{6,})"),
+    # A password said in prose holds a digit or a symbol and is 6+ chars (`the password is required` and
+    # `the password is 8 chars` stay).
+    re.compile(r"((?:password|Password|PASSWORD|passphrase|Passphrase|secret|Secret|token|Token)"
+               r"[^\S\n]+(?:is|was)[^\S\n]+)(?:\"[^\"\n]+\"|'[^'\n]+'"
+               r"|[^\"'\s]{5,}[0-9!@$%^&*][^\"'\s]*|[^\"'\s]{4}[0-9!@$%^&*][^\"'\s]+|[^\"'\s]{3}[0-9!@$%^&*][^\"'\s]{2,}"
+               r"|[^\"'\s]{2}[0-9!@$%^&*][^\"'\s]{3,}|[^\"'\s][0-9!@$%^&*][^\"'\s]{4,}|[0-9!@$%^&*][^\"'\s]{5,})"),
+    # A bare key or auth name with a key-shaped value; a lower-case pwd (PWD is the shell's folder).
+    re.compile(r"(?<![A-Za-z0-9_.-])([\"']?(?:AUTH|auth|Auth|KEY|key|Key)[\"']?[^\S\n]*[=:][^\S\n]*)"
+               r"[\"']?(?:base64:)?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
+    re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:pwd|Pwd)[\"']?[^\S\n]*[=:][^\S\n]*)" + _VALUE),
+    # Credentials in command arguments: curl / lftp -u user:pw (an all-digit uid:gid is not one, and docker -u
+    # name:group is a user and a group), a glued mysql -p<pw>, sshpass / docker login -p <pw>, --password <pw>.
+    # Between a command and its -p only words and flags that are not a -p, so a later command's -p stays.
+    re.compile(r"(?<![A-Za-z0-9_.-])((?:curl|lftp)[^;&|\n]*[^\S\n](?:-u|--user)[^\S\n]+[\"']?[^\"'\s:]+:)"
+               r"[^\"'\s]*[^0-9\"'\s][^\"'\s]*"),
+    re.compile(r"((?:mysql|mariadb)[a-z]*" + _NOT_P + r"[^\S\n]+-p)(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s]+)"),
+    re.compile(r"((?:docker|podman)[^\S\n]+login" + _NOT_P + r"[^\S\n]+-p[^\S\n]*)"
+               r"(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s-][^\"'\s]*)"),
+    re.compile(r"(sshpass(?:[^\S\n]+(?:-[fdP][^\S\n]+[^\s;&|]+|-[^p\s;&|][^\s;&|]*))*[^\S\n]+-p[^\S\n]*)"
+               r"(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s-][^\"'\s]*)"),
+    re.compile(r"(?<!\S)((?:--password|--passwd)(?:[^\S\n]+|=))(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s-][^\"'\s]*)"),
+    # A bare cloud secret key: exactly 40 of [A-Za-z0-9/+] with an upper-case letter (a git SHA has none), a
+    # lower-case letter and a digit (an identifier has none), no / at either end (an absolute path), no
+    # .<letter> after it (a file name).
+    re.compile(r"(?<![A-Za-z0-9/+=_.-])(?=[A-Za-z0-9/+]{0,39}[A-Z])(?=[A-Za-z0-9/+]{0,39}[a-z])"
+               r"(?=[A-Za-z0-9/+]{0,39}[0-9])[A-Za-z0-9+][A-Za-z0-9/+]{38}[A-Za-z0-9+](?![A-Za-z0-9/+=_-])(?!\.[A-Za-z])"),
 ]
 
 _KEY_BEGIN = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----")
@@ -1268,6 +1311,10 @@ def main():
     # Only hook modes consume stdin; dump/status are invoked from a shell where
     # a blind stdin read could block on an open pipe.
     payload = read_stdin_json() if mode in HOOK_MODES else {}
+    # H1 (audit-fixes-1113): a subagent's SessionStart or PreCompact is not the session's - no handoff
+    # offered or marked read, no dump written, nothing printed.
+    if mode in ("sessionstart", "precompact") and payload.get("agent_id"):
+        emit(None)
     root = project_root(payload)
     cfg = load_config(root)
 

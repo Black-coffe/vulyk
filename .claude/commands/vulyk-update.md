@@ -24,7 +24,11 @@ newest published tag is.
    <file>` is a local edit of the frontmatter only: the release's body lands, the keys this hive changed stay
    (`kept <key> (yours)`), and a key both sides changed parks the file as `keep + new`. Each `commands: row
    '<Purpose>'` line names a `## Commands` row whose cell holds text beside its backticked command (read as
-   a note) or several backticked commands (split it): quote them, the owner fixes the rows.
+   a note) or several backticked commands (split it): quote them, the owner fixes the rows. A `NOTE: v<x> is
+   not a tag` line means the source cannot show what the installed release shipped, so every differing
+   framework file is kept with `.vulyk-new`: say so. `kept (yours) ... defects-inject.sh` names an inject
+   matcher this hive set itself, left as it is. `tracked memory/stats/skills.json` carries the command that
+   untracks the local skill counter: quote it and offer to run it.
 3. Read the release's own account. Summarise the CHANGELOG entries between the two versions in a few
    lines, especially any change to the constitution. A plain upgrade never overwrites the constitution
    (`CLAUDE.md`, or `CLAUDE.vulyk.md` in a sidecar hive); it prints the size difference and the command

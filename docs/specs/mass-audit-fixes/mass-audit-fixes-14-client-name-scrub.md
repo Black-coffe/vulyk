@@ -53,6 +53,6 @@ None needed; the change is a word in four named files.
 - Files changed: the four named files, one word each (grill 1, constitution-merge brief 1, token-audit forensics 2, token-audit report 1); the name became `client`, the lowercase neutral word, in the same places.
 - Each file: `leak-check.sh` no longer reports the name; whole-word check over `git ls-files` with the hand-kept and harvested lists finds no tracked file with the name.
 - Left alone (outside `## Files` or not the name): `docs/grill/2026-10-07-sdd-course-improvements.md` line 116 is a path into `litopys`, a public project, which leak-check still flags; `docs/defects/host-internals-in-public-repo.original.fixture` holds a synthetic substring match in the hand-kept list.
-- The defect gate (`host-internals-in-public-repo`) failed on that litopys path at close, so the same file's line 116 drops the absolute `E:/Projects/` prefix and keeps `litopys/agents/distiller.md`; the gate needs it, the file is named, no other change.
+- The defect gate (`host-internals-in-public-repo`) failed on that litopys path at close, so the same file's line 116 drops the absolute `<projects>/` prefix and keeps `litopys/agents/distiller.md`; the gate needs it, the file is named, no other change.
 
 ## Findings

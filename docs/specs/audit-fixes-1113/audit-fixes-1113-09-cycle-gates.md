@@ -1,8 +1,8 @@
 ---
 story: audit-fixes-1113-09
 spec: audit-fixes-1113
-status: todo
-returned:
+status: done
+returned: DONE
 tier: 3
 worker: worker-code
 model: opus
@@ -10,109 +10,102 @@ wave: 3
 blocked_by: [audit-fixes-1113-03]
 red: required
 red_reason: an edit committed before the close is out of scope
+red_verified_at: 2026-11-14T01:01:11Z 19a72a60640311331bcae9c20f434e9c7617069e8caf09229511021569e451cb
 ---
 
-# The cycle's three gates: scope from the claim head, approval bound to cycle.sh's own commit, a narrower paperwork rule
+# Scope is counted from the claim head
 
 ## Goal
-Three gates in `scripts/cycle.sh` and its two helpers, each to the letter of plan.md `## Contracts`.
-1. **S1, scope.** `claim` records the wave's head once. `close-story` at Tier 3-4 hands it to `scope-check.sh`,
-   which counts every file changed between that head and the working tree, committed or not, plus untracked ones.
-   A Tier 3-4 close with no recorded head refuses; Tier 1-2 keeps today's check with one stderr note.
-2. **A1, approval.** The approved version of a story is the story file in a commit `cycle.sh` itself made and
-   recorded: at `branch`, at the new verb `revise <story-file>`, at `repair`. `close-story` and `stamp-red` compare
-   `## Verification`, `## Files` and `red:` with that commit and read no commit subject. The subject walk survives
-   only as the one-time seeding that `claim` and `branch` do for a spec built before this release.
-   `/vulyk-build` and `/vulyk-plan` tell the Queen to run `cycle.sh revise` where they told her to commit by hand.
-3. **P1, paperwork.** `brief.md` and `plan.md` are paperwork only in the lines a cycle script writes. Any other
-   change is a hand edit: it refuses a close, stales an open round and is named by `status`. Every cycle commit
-   stages its named files, never the whole spec folder.
+**S1** (plan.md `## Contracts`). `claim` records the wave's head once. `close-story` at Tier 3-4 hands it to
+`scope-check.sh`, which counts every file changed between that head and the working tree, committed or not,
+plus untracked ones. A Tier 3-4 close with no recorded head refuses; Tier 1-2 keeps today's check with one
+stderr note. Add the new part `scope` to `tests/cycle.test.sh` (`PARTS`).
 
-`model: opus`: long-horizon and judgment-heavy. Three gates change in the script that closes this very story, and
-the fixtures of two suites move with them. Marked red: security gates.
+`model: opus`: a gate in the script that closes this very story, with the
+fixtures of several suites moving with it. Cut from story 09 by lead-architect (plan delta 2026-11-14).
+Patch ranges for this story: patch lines 162-180, 226-284, 348-372, 394-421, 478-486, 611-619, 627-675, 708-722, 861-915, 1033-1039.
 
-Private input: the sections on the scope check, the approved version and the paperwork list in
-`~/.vulyk/audits/framework-audit-2026-11-13/FINAL.md`. Comments, test labels and the ADR say what the gates do
-now, never what used to pass.
+How to work (lead-architect, 2026-11-14; two earlier attempts died at the turn cap in a scratchpad copy):
+1. Build in the tree, never in a copy: the suites build their own fixture repo from `$SRC`, and this story runs
+   alone in its wave.
+2. A head start: `.vulyk/reports/audit-fixes-1113/story-09-partial.patch` holds an untested diff from those attempts. Read only the line ranges named above and
+   port them by hand (the hunks interleave three asks, so no `git apply`). Fix while porting: guard every array
+   expansion as `${A[@]+"${A[@]}"}` (card `shell-needs-gnu-or-bash4`).
+3. Write the new test part first, run `stamp-red`, then port the code. Loop on that one part only.
+4. Run the inherited `## Verification` rows once at the end, each to a log, and read only the `::error::` lines. A
+   part or suite outside `## Verification` that trips is `NEEDS_CONTEXT`.
 
-Expected on this spec only: the wave was claimed by the old script, so your own `close-story` can exit 2 with `no
-claim head recorded` or `no approved record`. That is the gate working. Return `NEEDS_CONTEXT` with that line; the
-Queen relaunches the driver and its `advance --claim` writes the records. Do not write a record by hand.
+Private input: the matching section of `~/.vulyk/audits/framework-audit-2026-11-13/FINAL.md`. Comments, test labels
+and the ADR say what the gate does now, never what used to pass.
+
+Expected on this spec only: the wave may have been claimed by the old script, so your own `close-story` can exit 2
+with `no claim head recorded` or `no approved record`. That is the gate working. Return `NEEDS_CONTEXT` with that
+line; the Queen relaunches the driver and its `advance --claim` writes the records. Do not write a record by hand.
 
 ## Requirements
 > 8. The scope check also catches edits outside `## Files` that were committed before `close-story`, counting from the head recorded at claim. A subagent cannot `git commit` or `git add` while a DRIVER holds the spec, and worker prompts say never to commit.
-> 9. A story's approved version is bound to a commit that `cycle.sh` itself made, not to a commit subject.
-> 10. Only files `cycle.sh` writes count as paperwork. A hand edit of `brief.md` or `plan.md` stales the round and is reported, and paperwork commits stage the named files, not the spec folder.
 
 ## Files
 - scripts/cycle.sh
 - scripts/lib.sh
 - scripts/scope-check.sh
-- .claude/commands/vulyk-build.md
-- .claude/commands/vulyk-plan.md
-- docs/cycle.md
-- docs/adr/032-*.md
 - tests/cycle.test.sh
 - tests/council.test.sh
 - tests/solo.test.sh
 - tests/e2e.test.sh
 
 ## Non-goals
-- Do not touch `git-guard.sh` (story 07 closes `revise` and the other Queen verbs to subagents), `install.sh`,
-  `settings.json`, `human-check.sh` or `ship-check.sh`: `verdict_stale` changes through `lib.sh` alone.
-- `VERSION`, `CHANGELOG.md`, `CITATION.cff`, `memory/stats/*.jsonl`, `journal.md` and `council/` stay paperwork.
-- `close-story` and `stamp-red` never seed a record and never read a commit subject: a missing record at Tier 3-4
-  is exit 2. Seeding is `claim`'s and `branch`'s, once, with a journal line.
-- No ledger of commits, no trailer, no new committed file: the records live in the cycle's run state beside the
-  verify records.
-- Do not change the driver (`vulyk-cycle.js`), the verdict rule or the red-receipt checks.
-- In `tests/solo.test.sh` and `tests/e2e.test.sh` change fixture lines only (a helper that makes a Tier 3-4
-  fixture claim or branch first). Fix the fixture, never the gate. A fourth suite that trips is `NEEDS_CONTEXT`.
+- Do not touch `git-guard.sh`, `install.sh`, `settings.json`, `human-check.sh`, `ship-check.sh` or the driver.
+- Fix a fixture, never the gate. In `tests/solo.test.sh` and `tests/e2e.test.sh` change fixture lines only (a helper that makes a Tier 3-4 fixture claim or branch first).
 - Finish every test-file edit before `stamp-red`: the sealed tests are not edited after the receipt.
-- In the two commands change only the sentences about committing a revised story or plan.
-
-## Map slice
-`memory/map/cycle.md` → Files one writer each, Verbs (Story trust from git, close-story, Cycle-owned run state,
-`claim`), Staleness, Repair; `memory/map/scripts.md` → Entry points (`lib.sh`, `scope-check.sh`), Key contracts,
-Gotchas; `memory/map/agents-and-commands.md` → Commands (0.50 command changes).
+- Approval records (story 13) and the paperwork rule (story 14) are not this story's.
 
 ## Acceptance criteria
-- [ ] Scope, original case: a Tier 3 story, claimed; a file outside `## Files` is edited and committed before the
-  close; `close-story --commit` exits 4 `edited outside ## Files` naming the file (label contains `an edit
-  committed before the close is out of scope`). Neighbour: the same edit staged only, and one committed two
-  commits back, both refuse. A same-wave sibling's close commit and a paperwork commit in the range do not.
-- [ ] A Tier 3 close with no claim record exits 2 `no claim head recorded for wave <W>`; a Tier 1 close passes
-  with the stderr note. A second `claim` of the same wave keeps the first head.
-- [ ] Approval, original case: after `branch` recorded a story, a commit not made by `cycle.sh` that changes the
-  story's `## Verification`, `## Files` or `red:`, whatever its subject, leaves the approved version where it was:
-  the close exits 4 `story blocks differ from the approved version`. Neighbour: the same change through
-  `cycle.sh revise <story>` is approved and closes.
-- [ ] `branch` on a spec with an untracked or modified story exits 2 `commit the plan first`; `repair` records its
-  story; a Tier 3 story with no record exits 2 `no approved record for <story>` in `close-story` and `stamp-red`.
-- [ ] Seeding: a spec with stories committed before this release and no record gets one from `claim`, with a
-  journal line; a record missing after that line makes `claim` exit 2 naming `cycle.sh revise`.
-- [ ] Paperwork, original case: a `## Asks` line of `brief.md` or the `**Tier:**` line of `plan.md` changed by
-  hand: dirty at close is exit 4 naming the file; committed after `ROUND.head` makes the round stale, and
-  `status` names the file and the commit. Neighbour: a `## Stories` line of `plan.md`. A commit holding only
-  marker lines or `reopen`'s `## Answers` lines keeps the round current; a `revise` commit of `plan.md` before the
-  round is accepted by the wave's closes.
-- [ ] A `--commit` verb run with a stray file inside the spec folder commits its named files and leaves the stray
-  one out.
-- [ ] `docs/cycle.md` describes the three records and `revise`; ADR-032 has a dated amendment stating the rule.
-  `bash scripts/prompt-check.sh --touched scripts/cycle.sh .claude/commands/vulyk-build.md
-  .claude/commands/vulyk-plan.md` has no error.
-- [ ] Every part of `tests/cycle.test.sh` and `tests/council.test.sh` is green, and the notes list each fixture
-  site that moved.
+- [ ] Original case: a Tier 3 story, claimed; a file outside `## Files` is edited and committed before the close; `close-story --commit` exits 4 `edited outside ## Files` naming the file (label contains `an edit committed before the close is out of scope`). Neighbour: the same edit staged only, and one committed two commits back, both refuse. A same-wave sibling's close commit and a paperwork commit in the range do not.
+- [ ] A Tier 3 close with no claim record exits 2 `no claim head recorded for wave <W>`; a Tier 1 close passes with the stderr note. A second `claim` of the same wave keeps the first head.
+- [ ] The notes list each fixture site that moved.
 
 ## Verification
+`bash tests/cycle.test.sh --part scope`
 `bash tests/cycle.test.sh --part gates`
 `bash tests/cycle.test.sh --part close`
-`bash tests/cycle.test.sh --part hooklog`
+`bash tests/cycle.test.sh --part close2`
 `bash tests/council.test.sh --part verbs`
 `bash tests/council.test.sh --part close`
+`bash tests/solo.test.sh`
+`bash tests/e2e.test.sh`
 
 ## Implementation notes
-<!-- appended by the builder: files changed, decisions, surprises - 1-2 lines each. End with one `CHANGELOG:` line
-per ask (8, 9, 10) that says what the gate does now. -->
+<!-- files changed, decisions, surprises - 1-2 lines each; end with one `CHANGELOG:` line for the ask. -->
+- scripts/lib.sh: `cycle_state_dir` and `state_get` read the run state's claim record. The approved-record helpers in the partial patch belong to story 13 and were left out.
+- scripts/cycle.sh: `state_put` and `record_claim_head` (writes once per wave); `claim` records the head (both on a fresh claim and on a re-claim by the holder); `advance` records it on `build:<W>` when a DRIVER is held.
+- scripts/cycle.sh close-story: at Tier 3-4 with no record (or a record that is not a commit) it exits 2 `no claim head recorded for wave <W>`. It then passes `--since <head>`; an out-of-scope path changed between the head and HEAD gets exit 4 at once, whichever wave-mates are still open. Tier 1-2 or no tier: one stderr note, and the check is the same as before.
+- scripts/scope-check.sh: `--since <sha>` counts the diff from the head to the working tree plus untracked files; a done same-wave story's paths and story file are excluded in that mode. The P1 plan/brief `doc_base` from the patch was left out (story 14).
+- Fixture sites moved: tests/cycle.test.sh close2 `trust_story` now puts every trust story in wave 1 and claims and releases once after `vulyk(trust): plan`; tests/council.test.sh `nr_red` (verbs2) claims and releases after `repair`. tests/solo.test.sh (Tier 1-2) and tests/e2e.test.sh (the driver's `advance --claim` records the head) needed no change.
+- tests/cycle.test.sh: new part `scope` added to `PARTS`.
+- Surprise: the git-guard hook refuses a Bash heredoc with unbalanced quotes, so edits went through Edit.
+CHANGELOG: close-story at Tier 3-4 now counts scope from the head `claim` recorded for the wave, so an edit outside `## Files` committed before the close is refused. A Tier 3-4 close with no claim record exits 2.
 
 ## Findings
+- close-story exit 2: `no claim head recorded for wave 3`. This is the expected case the Goal names: the wave was claimed by the old script, so no claim head was recorded. The Queen needs to relaunch the driver so `advance --claim` writes the record. No record was written by hand. All eight `## Verification` rows passed when run one by one before the close (scope, gates, close, close2, council verbs and close, solo, e2e).
+
+## Red receipt
+- command: bash tests/cycle.test.sh --part scope
+- exit: 1
+- tests: 19a72a60640311331bcae9c20f434e9c7617069e8caf09229511021569e451cb (tests/council.test.sh, tests/cycle.test.sh, tests/e2e.test.sh, tests/solo.test.sh)
+- impl: 3c3f290c49ca622bcb153dcbb554640dbfc4359e4fde19294c85abc5b5e9b1a4
+- stamped: 2026-11-14T01:01:11Z
+
+```
+::error::an edit committed before the close is out of scope - exit=4 out=scope-check: sone-01 - declared 1, changed 5, out of scope 4
+{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"edited outside ## Files: docs/specs/sone/sone-03.md, docs/specs/sonet/sonet-01.md, sone-c.txt, sone-x.txt, sonet-a.txt","now":1794617727}
+::error::the clean close refused - exit=4 out=scope-check: sone-01 - declared 1, changed 5, out of scope 4
+  ! docs/specs/sone/sone-03.md
+  ! docs/specs/sonet/sonet-01.md
+  ! sone-c.txt
+  ! sonet-a.txt
+  -> Law 3: these files were touched but never named. Either the story was wrong
+     or the worker went wide. Both are worth knowing; neither is decided here.
+cycle: close-story - edited outside ## Files: docs/specs/sone/sone-03.md, docs/specs/sonet/sonet-01.md, sone-c.txt, sonet-a.txt - undo your own edits to them (a closed wave-mate's may be among them); if none are yours, return NEEDS_CONTEXT naming them
+{"ok":false,"verb":"close-story","exit":4,"next":"repair","error":"edited outside ## Files: docs/specs/sone/sone-03.md, docs/specs/sonet/sonet-01.md, sone-c.txt, sonet-a.txt","now":1794617728}
+```

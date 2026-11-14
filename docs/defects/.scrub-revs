@@ -1,0 +1,2 @@
+# Commits that only masked paths or names in card text: git blame skips them, so a quote they changed keeps its date.
+d7bc24899ef274ece4c39da6252d6921fd15553a # audit-fixes-1113-04: host paths masked in card quotes

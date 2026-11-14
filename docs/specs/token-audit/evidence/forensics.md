@@ -2,7 +2,7 @@
 
 Date: 2026-09-26 · Author: forensics agent (study work, no code changed) · Window: recent = 2026-09-13 .. 2026-09-26 (VULYK v0.12+), older = before 2026-09-13.
 
-All scripts and intermediate data: `C:\Users\Andrei\AppData\Local\Temp\claude\E--Projects-vulyk\ab3ad363-426f-4070-af5d-43b2737db097\scratchpad\forensics\` (called `F\` below). Every number in this file names the script that produced it.
+All scripts and intermediate data: `<scratchpad>\forensics\` (called `F\` below). Every number in this file names the script that produced it.
 
 ## Key numbers (details and scripts in the sections below)
 

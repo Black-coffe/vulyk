@@ -19,7 +19,7 @@ and the `/vulyk-update` step 4 advice "little hand-written text outside the two 
   leaves the owner to "merge by hand" (step 6).
 - Host constitutions on this machine: YouTube_AI 14.6 KB, katan 16.3 KB (sidecar `CLAUDE.vulyk.md`), client
   35.4 KB, mmorpg 12.1 KB (sidecar); VULYK's own is 7.2 KB. 24 hives carry `.claude/vulyk-version` (0.11.0-0.25.0).
-- The original case: `E:/Projects/AI` was replaced at 0.19 - `CLAUDE.md` 16 360 B -> 8 151 B; `CLAUDE.pre-0.19.md`
+- The original case: `<hive>` was replaced at 0.19 - `CLAUDE.md` 16 360 B -> 8 151 B; `CLAUDE.pre-0.19.md`
   holds 129 non-blank lines the current file lacks, among them the project's own sections "Complexity routing",
   "Evolution", "Memory protocol".
 - `scripts/vulyk-update.sh` keeps a clone of the origin with all `v*` tags (`~/.vulyk/src`, 44 tags here), so every
@@ -37,7 +37,7 @@ and the `/vulyk-update` step 4 advice "little hand-written text outside the two 
    словами: «ваше правило» и «что предлагает VULYK». Если вы молчите, остаётся правило проекта.
 3. Что делаем со старой кнопкой «заменить конституцию целиком» (--constitution replace)? — Убрать совсем; удаление
    записываем поправкой в ADR-005.
-4. В E:/Projects/AI уже сработал replace (0.19). Возвращаем потерянное? — Да, слияние читает бэкап: если рядом лежит
+4. В <hive> уже сработал replace (0.19). Возвращаем потерянное? — Да, слияние читает бэкап: если рядом лежит
    CLAUDE.pre-*.md, слияние при ближайшем обновлении находит в нём правила проекта, которых нет в текущем файле, и
    предлагает вернуть их в той же сводке. Старый текст самого VULYK при этом не возвращается.
 5. Требования подтверждены; план показать и дождаться слова владельца.

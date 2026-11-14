@@ -25,7 +25,7 @@ Sent mid-turn, same session:
 
 ## Reproduction
 
-Host `E:/Projects/AI`, sessions `465c0602` (2026-10-12 17:54Z) and `cf1d2449` (2026-10-13 13:14Z). Both
+Host `<hive>`, sessions `465c0602` (2026-10-12 17:54Z) and `cf1d2449` (2026-10-13 13:14Z). Both
 transcripts record the session `cwd` at the failing `/vulyk-handoff` as a subfolder of the hive
 (`docs/specs/<client>/<folder>`, `docs/specs/<client>/<folder>`); each got
 there through a Bash `cd <hive>/docs/specs/<client>/... && ...`. `scripts/state.sh` exists in that hive.
@@ -56,7 +56,7 @@ there through a Bash `cd <hive>/docs/specs/<client>/... && ...`. `scripts/state.
 - User-level hooks cannot be switched off one by one per project. On this machine
   `~/.claude/settings.json` wires `context_guard.py` (stop, prompt, precompact, sessionend, sessionstart),
   which writes its own handoffs into the same `<project>/.claude/handoff/` and has per-folder
-  "directions" (`subproject_globs`) that VULYK's `handoff.py` lacks; `E:/Projects/AI` uses them.
+  "directions" (`subproject_globs`) that VULYK's `handoff.py` lacks; `<hive>` uses them.
 - `install.sh` already asks one consent question (telemetry, `:457-530`): through `/dev/tty`, a flag that
   wins (`--telemetry on|off|ask`), `--check` never asks or writes, no terminal = no question.
   `scripts/vulyk-update.sh:90` passes the flag through.
@@ -65,7 +65,7 @@ there through a Bash `cd <hive>/docs/specs/<client>/... && ...`. `scripts/state.
 
 ## Answers
 
-1. **Хуки** - Только сообщать (Рекомендую): Установщик находит такие хуки и пишет: «работает параллельно, вот чем выключить», но сам их не трогает. Почему: VULYK не может знать чужие инструменты, а в E:\Projects\AI context_guard нужен ради «направлений» (subproject_globs), которых у хендоффа VULYK нет.
+1. **Хуки** - Только сообщать (Рекомендую): Установщик находит такие хуки и пишет: «работает параллельно, вот чем выключить», но сам их не трогает. Почему: VULYK не может знать чужие инструменты, а в <hive> context_guard нужен ради «направлений» (subproject_globs), которых у хендоффа VULYK нет.
 2. **Где откл.** - Только эта машина (Рекомендую): Запись в .claude/settings.local.json: в git она не попадает, и отключается ровно то, что установщик нашёл на твоём компьютере. Почему: глобальный /handoff лежит в ~/.claude, а не в репозитории. На другой машине его может не быть или он будет называться иначе.
 3. **Направления** - Сейчас беречь, потом научить (Рекомендую): В этой спеке установщик, увидев направления, предупреждает и по умолчанию глобальный не отключает. Обучение хендоффа VULYK направлениям идёт следующей отдельной спекой. Почему: в context_guard.py выбор направления — отдельная большая логика (подсчёт очков по файлам и алиасам, индекс на старте). Если затащить её сюда, исправление ошибки застрянет.
 4. **Требования** - Да, показать план (Рекомендую): Пять строк приняты как есть, план покажу на одобрение.

@@ -18,8 +18,8 @@ red_verified_at: 2026-11-12T19:57:15Z f28b53de0fc88e59525f03e0cb55c5553423b148be
 `hives-behind.sh --busy <hive>` also sees a session started in a subfolder of the hive. Claude Code names the
 transcript folder after the session's working directory, so such a session writes under `<slug>-<rest>`, which the
 exact-slug lookup from story 01 never reads. A transcript folder whose name starts with `<slug>-` counts only when a
-fresh transcript in it carries a `"cwd"` that is the hive path or below it (so a sibling hive such as `X:/Acme_co`
-does not make `X:/Acme` busy); a fresh transcript whose `cwd` cannot be read makes the hive busy. Found by a side
+fresh transcript in it carries a `"cwd"` that is the hive path or below it (so a sibling hive such as `<D>:/Acme_co`
+does not make `<D>:/Acme` busy); a fresh transcript whose `cwd` cannot be read makes the hive busy. Found by a side
 agent's note on 2026-11-12, after story 01 closed (plan delta).
 
 ## Requirements
@@ -49,7 +49,7 @@ agent's note on 2026-11-12, after story 01 closed (plan delta).
 `bash tests/maintenance.test.sh`
 
 ## Implementation notes
-- `norm_path` (shared by `hive_slug` and the cwd match): `\` -> `/`, trailing `/` cut, Git Bash `/e/x` -> `E:/x`, drive upper-case; JSON `\\` becomes `//`, collapsed. Real transcripts write `"cwd":"E:\\Projects\\vulyk"` (checked).
+- `norm_path` (shared by `hive_slug` and the cwd match): `\` -> `/`, trailing `/` cut, Git Bash `/<d>/x` -> `<D>:/x`, drive upper-case; JSON `\\` becomes `//`, collapsed. Real transcripts write `"cwd":"E:\\Projects\\vulyk"` (checked).
 - Prefix folders `<slug>-*` are scanned in every root, also when the exact folder is absent; they never count as "found" for `unknown`.
 - Side-agent note (stale DRIVER from a dead build holds a hive forever): no age rule (a real Tier 3-4 build can run for hours); the busy line now names the file and the `cycle.sh release` command to free it. The vulyk source's own `docs/specs/weekly-budget/DRIVER` is left for the owner (vulyk is not a registered hive).
 - Real probes: three registered hives idle; vulyk busy on the stale DRIVER.

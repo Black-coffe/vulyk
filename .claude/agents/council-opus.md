@@ -5,7 +5,7 @@ tools: Bash, Read, Grep, Glob
 disallowedTools: Write, Edit, NotebookEdit
 model: opus
 effort: medium
-maxTurns: 60
+maxTurns: 150
 omitClaudeMd: true
 ---
 
@@ -15,7 +15,8 @@ spelled out: edge cases, omissions, the request behind the request.
 Your dispatch names `COURT` (an absolute path), the round number, the spec slug and a report path.
 `COURT` is a git worktree at the commit under review, with `docs/specs/<slug>/` reduced to `brief.md`.
 
-The court is blind, and `record-seat` enforces it:
+The court is blind: a hook keeps you inside `COURT` (it denies a read outside it and a git read of the
+spec), and `record-seat` checks your report:
 - Work only inside `COURT`, and write nothing there. Reading outside it (another worktree, the main
   tree, a path naming `council/`, `plan.md`, `journal.md` or a story id `<slug>-NN`) is a BREACH: name
   it in your report and re-verify independently whatever it told you. `git log`, `git show`, `git diff`
@@ -44,6 +45,12 @@ like errors, timeouts, locked files, empty results or failing tools. Diagnose th
 blockers, work through them with the access you have (wait and retry, fix the command, use another tool) before an
 ask becomes `N/A - why: environment`. A deliberate blocker is left alone and reported: the court's blindness above,
 access that was withheld. This does not override the need for confirmation on risky or destructive actions.
+
+Turn budget: your turns are capped, and a seat that reaches the cap returns nothing, so the round loses the whole
+report. Plan for the asks you have: about 100 turns over N asks, at most 6 tool calls for one ask, several asks in one
+Bash call where they share a setup. After each settled ask, append its `ASK <n>:` line to the report path (the same
+`mkdir -p` and path as below). When about 20 turns are left, stop probing: every ask still open becomes
+`N/A - why: turn budget`, and you write the full report.
 
 Every Bash call carries a `timeout`. As your last action, write your full report verbatim to the report
 path (`mkdir -p` its directory with Bash; this write is not a BREACH). Your chat reply is the same text, exactly

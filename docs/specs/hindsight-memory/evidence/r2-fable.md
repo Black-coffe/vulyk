@@ -1,6 +1,6 @@
 # Board R2 — Fable 5.1: cross-grill and vote
 
-Status: complete (2026-09-29). Read-only everywhere except this file; `defects-check.sh` run once in D:/YouTube_AI (audit mode, log under /tmp), `redact.sh` run on stdin only.
+Status: complete (2026-09-29). Read-only everywhere except this file; `defects-check.sh` run once in <hive> (audit mode, log under /tmp), `redact.sh` run on stdin only.
 
 ## 1. Checks
 
@@ -9,7 +9,7 @@ Status: complete (2026-09-29). Read-only everywhere except this file; `defects-c
 | 1 | 9 litopys journals, 110 `## user` blocks, 61 are `<task-notification>`, 7 of 9 journals affected | Opus | **Holds exactly** (110 / 61 / 7 of 9) | python over `E:/Projects/vulyk/.litopys/raw/*.md`, split on `^## `, count `user` blocks containing `<task-notification` |
 | 2 | `hooks/raw-journal.sh` l.98 writes `.user_input // .prompt` verbatim | Opus | Holds | litopys repo, `raw-journal.sh:98`: `jq -r '.user_input // .prompt // empty'` |
 | 3 | `agents/distiller.md` has no rule separating human text from harness notices; body has four sections | Opus | Holds | grep: sections `## Decisions / Problems / Brainstorm / Links`; 0 hits for `notice|task-notification|system-reminder` |
-| 4 | YouTube_AI: 22 cards, 113 keys, 3 ambiguous pairs (`не дышит` ×2; `пустота`⊂`где пустота`; `неполно`⊂`неполноценно`) | Opus | **Holds exactly** | script over `D:/YouTube_AI/docs/defects/*.md` frontmatter: 22 cards, 113 keys, equal-or-substring scan found exactly those 3 pairs |
+| 4 | YouTube_AI: 22 cards, 113 keys, 3 ambiguous pairs (`не дышит` ×2; `пустота`⊂`где пустота`; `неполно`⊂`неполноценно`) | Opus | **Holds exactly** | script over `<hive>/docs/defects/*.md` frontmatter: 22 cards, 113 keys, equal-or-substring scan found exactly those 3 pairs |
 | 5 | `shoot-step-guesswork`: `text`, 7 owner quotes 09-10…09-25 | Opus | Holds | 7 lines under `## Цитаты владельца`; `defects-check.sh` audit also says "7 quotes" |
 | 6 | README index hand-kept, 21 of 22 listed, `review-take-uncut` missing | Opus | Holds | table at `docs/defects/README.md:21-`; per-card grep: only `review-take-uncut` absent |
 | 7 | VULYK's own `docs/defects/` has zero cards | Opus, Sonnet | Holds | `ls E:/Projects/vulyk/docs/defects/` → `README.md` only |

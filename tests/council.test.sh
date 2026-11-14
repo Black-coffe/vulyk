@@ -688,6 +688,7 @@ nr_red() { # nr_red <slug> <review-report> - a Tier 3 spec with stories on app/x
   printf '%b' "$2" | council record-seat "docs/specs/$1" 1 review >/dev/null 2>&1
   council judge "docs/specs/$1" --commit >/dev/null 2>&1
   council repair "docs/specs/$1" --commit >/dev/null 2>&1
+  council claim "docs/specs/$1" nr >/dev/null 2>&1; council release "docs/specs/$1" nr >/dev/null 2>&1   # S1: the repair wave's claim head
   NR_RS="docs/specs/$1/$1-04-repair-round-1.md"; NR_REC=".vulyk/state/$1/narrow.round-2"
 }
 nr_round2() { # nr_round2 <slug> - the repair story marked done with a code change, round 2 opened; open-round's stderr into NR_ERR
@@ -1245,14 +1246,19 @@ out="$(council status docs/specs/pwseat1 --json)"
 printf '%s' "$out" | jq -e '.stale == false' >/dev/null 2>&1 && echo "  ok    status --json stale:false after a paperwork-only commit" \
   || { echo "::error::status: $out"; fail=1; }
 
-echo "record-seat: still NOT stale after a commit touching only skills.json + memory/learnings/*.md (C2)"
+echo "record-seat: still NOT stale after a commit touching only memory/learnings/*.md (C2); a skills.json commit stales it (audit-fixes-1113-03: no paperwork any more)"
 mkdir -p memory/learnings
-echo '{"x":1}' > memory/stats/skills.json
 echo 'note' > memory/learnings/2026-09-15-pwseat1.md
-git add -- memory/stats/skills.json memory/learnings/2026-09-15-pwseat1.md && git commit -qm "hook writes: skills.json, learnings" >/dev/null
+git add -- memory/learnings/2026-09-15-pwseat1.md && git commit -qm "hook writes: learnings" >/dev/null
 out="$(council status docs/specs/pwseat1 --json)"
-printf '%s' "$out" | jq -e '.stale == false' >/dev/null 2>&1 && echo "  ok    status --json stale:false after a skills.json + learnings-only commit" \
+printf '%s' "$out" | jq -e '.stale == false' >/dev/null 2>&1 && echo "  ok    status --json stale:false after a learnings-only commit" \
   || { echo "::error::status: $out"; fail=1; }
+echo '{"x":1}' > memory/stats/skills.json
+git add -f -- memory/stats/skills.json && git commit -qm "an old hive commits skills.json" >/dev/null
+out="$(council status docs/specs/pwseat1 --json)"
+printf '%s' "$out" | jq -e '.stale == true' >/dev/null 2>&1 && echo "  ok    status --json stale:true after a skills.json commit (it is not paperwork)" \
+  || { echo "::error::a skills.json commit kept the round fresh: $out"; fail=1; }
+git rm -q -- memory/stats/skills.json && git commit -qm "drop skills.json again: the net diff is paperwork only" >/dev/null
 
 echo "record-seat: stale (exit 5) once a real non-paperwork file lands on top"
 echo "real code change" > pwseat1-code.txt
@@ -2374,14 +2380,19 @@ git rm -q --cached memory/learnings/2026-09-15-pwseat1.md >/dev/null 2>&1
 rm -f memory/learnings/2026-09-15-pwseat1.md
 git commit -qm "untrack the learnings fixture (C2 addendum)" >/dev/null
 mkdir -p memory/learnings
-echo '{}' > memory/stats/skills.json
 echo 'note' > memory/learnings/2026-09-15-x.md
 out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
 { [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qiF 'tier' \
   && ! printf '%s' "$out" | grep -qF 'working tree not clean' \
   && ! printf '%s' "$out" | grep -qF "outside the cycle's own paperwork"; } \
-  && echo "  ok    skills.json + an untracked memory/learnings/*.md in an otherwise untracked dir do not trip 'working tree not clean' (Minor 12)" \
+  && echo "  ok    an untracked memory/learnings/*.md in an otherwise untracked dir does not trip 'working tree not clean' (Minor 12)" \
   || { echo "::error::exit=$ex out=$out"; fail=1; }
+echo '{}' > memory/stats/skills.json
+out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
+{ [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'working tree not clean' && printf '%s' "$out" | grep -qF 'memory/stats/skills.json'; } \
+  && echo "  ok    a dirty skills.json is refused as unclean (audit-fixes-1113-03: no paperwork any more)" \
+  || { echo "::error::a dirty skills.json passed open-round's clean-tree check - exit=$ex out=$out"; fail=1; }
+rm -f memory/stats/skills.json
 mkdir -p memory/learnings/sub
 echo 'note' > memory/learnings/sub/x.md
 out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
@@ -2400,8 +2411,8 @@ set_tier oround1 4
 echo "open-round: a ## Descoped entry the brief never took in -> exit 2, naming it (a hive lost three rounds to a plan-only descope)"
 sed_inplace 's/^\*(empty)\*$/- ask 3 narrowed to the happy path - owner: "only the happy path for now"/' docs/specs/oround1/plan.md
 out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
-[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"descope not in the brief: - ask 3 narrowed' \
-  && echo "  ok    an uncommitted plan-only descope refuses the round" || { echo "::error::exit=$ex out=$out"; fail=1; }
+[ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF '"error":"working tree not clean"' && printf '%s' "$out" | grep -qF 'M docs/specs/oround1/plan.md' \
+  && echo "  ok    an uncommitted plan-only descope refuses the round: a hand edit of plan.md is no paperwork (P1)" || { echo "::error::exit=$ex out=$out"; fail=1; }
 git add -A && git commit -qm "oround1: descope in plan.md only" >/dev/null
 out="$(council open-round docs/specs/oround1 2>&1)"; ex=$?
 [ "$ex" -eq 2 ] && printf '%s' "$out" | grep -qF 'strike or narrow the ask' \
