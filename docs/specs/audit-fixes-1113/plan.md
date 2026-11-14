@@ -314,10 +314,10 @@ is missing or unparsable.
 **Council:** STALE round 2, 2026-11-14, at 11ab8fe3, pack b1039f68f2f5
 **Council:** RED round 3, 2026-11-14, at 0b2de955, pack b1039f68f2f5
 **Council:** ESCALATE round 4, 2026-11-14, at 85a09311, pack c204ad9ef3c7 - red: 5
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 
 ## Needs a human
 - reason: ceiling · round 4 · 2026-11-14
 - ask 5: RED - see docs/specs/audit-fixes-1113/council/round-4/*.md for evidence
 - seats: docs/specs/audit-fixes-1113/council/round-4/
 **Checked:** ACCEPTED by Andrei, 2026-11-14, at bfe5f895 - Принимаю, выкатка поэтапно (Рекомендую)
+**Shipped:** 0.53.0-dev.1, 2026-11-14, at 1348f5c0 - merged to main (local, no branch CI: owner «Сливать без CI ветки (Рекомендую)»), canaries skervik+koshty upgraded and green, 13 hives held for the staged rollout, publish pending
