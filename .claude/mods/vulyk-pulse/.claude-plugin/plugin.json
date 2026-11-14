@@ -1,6 +1,6 @@
 {
   "name": "vulyk-pulse",
-  "version": "0.52.0",
+  "version": "0.53.0-dev.1",
   "description": "VULYK pulse: a live swarm row with the task timer and the tokens of every agent",
   "author": {
     "name": "VULYK"
@@ -11,7 +11,11 @@
       "type": "string",
       "title": "Motion",
       "description": "How the pulse row animates: on, slow, or off (a static glyph)",
-      "options": ["on", "slow", "off"],
+      "options": [
+        "on",
+        "slow",
+        "off"
+      ],
       "default": "on"
     }
   }
