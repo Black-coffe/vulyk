@@ -17,3 +17,5 @@
 - 2026-11-14T01:38:28Z · 03-building · needs_context on audit-fixes-1113-11 · next: hook bits set by the Queen (plan step 4); rerun close-story
 - 2026-11-14T01:40:46Z · 03-building · claim head of wave 4 moved by the Queen · next: from 7713358b to 9ca063ca43a95ef222810b667a2e57d7d8752142: the Queen's hook-bit commit b0721b25 sat between two driver runs and read as story 11's edit; reanchor verb added to story 13
 - 2026-11-14T02:23:32Z · 03-building · needs_context on audit-fixes-1113-13 · next: expected: no approved record before the new claim seeds it; git-guard checked: reanchor and revise denied to a subagent; relaunch
+- 2026-11-14T02:23:42Z · 03-building · approved records seeded from commit subjects: 14 stories (claim) · next: build
+- 2026-11-14T03:11:51Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/audit-fixes-1113/round-1 · next: dispatch:opus,review
