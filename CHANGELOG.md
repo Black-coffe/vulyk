@@ -4,7 +4,10 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
-Guards, gates and installer fixes from a framework audit (spec `audit-fixes-1113`). The guards stop an agent's
+## [0.53.0] - 2026-11-15
+
+Guards, gates and installer fixes from a framework audit (spec `audit-fixes-1113`), and the owner's check committed by
+`human-check.sh --commit` (spec `owner-guard-commit-fp`). The guards stop an agent's
 ordinary slips past the process; they read command text, so they are a seatbelt, not a complete barrier (each
 hook's header names the forms it leaves open).
 
