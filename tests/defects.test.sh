@@ -769,6 +769,12 @@ ok "owner guard: human-check --commit with a note that quotes nobody is denied -
   "$([ "$(og rel.jsonl Bash '{"command":"bash scripts/human-check.sh --commit docs/specs/acme-demo ACCEPTED \"looks fine to the agent\""}')" = deny ]; echo $?)"
 ok "owner guard: human-check --commit inside bash -c is still read - subagent" \
   "$([ "$(og rel.jsonl Bash '{"command":"bash -c \"scripts/human-check.sh --commit docs/specs/acme-demo ACCEPTED ok\""}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: human-check inside backticks inside bash -c is read - subagent (release review 2026-11-15)" \
+  "$([ "$(og rel.jsonl Bash '{"command":"bash -c \"`scripts/human-check.sh docs/specs/acme-demo ACCEPTED ok`\""}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: briefed --go inside backticks inside bash -c is read - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"bash -c \"`scripts/cycle.sh briefed docs/specs/acme-demo --go`\""}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: the backticked form quoting the owner passes - main session" \
+  "$([ "$(og rel.jsonl Bash '{"command":"bash -c \"`scripts/human-check.sh docs/specs/acme-demo ACCEPTED the Acme login works on a new account`\""}')" = allow ]; echo $?)"
 ok "owner guard: git add -u of the stats folder with a verdict-free message passes" \
   "$([ "$(og rel.jsonl Bash '{"command":"git add -u memory/stats && git commit -m \"stats\""}' "$SUB")" = allow ]; echo $?)"
 ok "owner guard: reading the record with no verdict word passes" \

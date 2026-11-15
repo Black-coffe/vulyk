@@ -378,14 +378,14 @@ def command_actions(cmd, powershell, cwd):
             if base(w) == 'cycle.sh' and len(seg) > k + 1 and seg[k + 1] == 'briefed' and '--go' in seg[k + 2:]:
                 acts.append(('go', None, '', 'cycle.sh briefed --go'))
     # A form the words above missed (`bash -c "..."`, an unreadable command), read from the raw text: the
-    # script path must not follow a backtick or a word character (prose names it in backticks) and the spec
-    # must not be a `<spec>` placeholder.
-    lead = r'(?<![\w`./\\~:-])(?:[\w.~:-]*[/\\])?'
+    # script path must not follow a word character and the spec must not be a `<spec>` placeholder. A backtick
+    # before it counts (a command substitution runs it), so prose naming the command in backticks is guarded too.
+    lead = r'(?<![\w./\\~:-])(?:[\w.~:-]*[/\\])?'
     if not any(a[0] == 'release' for a in acts):
         m = re.search(lead + r'human-check(?:\.sh)?[\'"]?\s+[\'"]?([^\s\'"<`][^\s\'"`]*)[\'"]?\s+[\'"]?(ACCEPTED|REJECTED)\b[\'"]?(.*)',
                       re.sub(r'(?<!\S)[\'"]?--commit[\'"]?(?!\S)', ' ', cmd), re.S | re.I)
         if m:
-            acts.append(('release', spec_of(m.group(1), cwd), m.group(3).strip(' \'"'), 'human-check.sh %s' % m.group(2).upper()))
+            acts.append(('release', spec_of(m.group(1), cwd), m.group(3).strip(' \'"`'), 'human-check.sh %s' % m.group(2).upper()))
     if not any(a[0] == 'go' for a in acts) and \
             re.search(lead + r'cycle\.sh[\'"]?\s+[\'"]?briefed\b[^\n`]*?(?<![\w-])--go(?![\w-])', cmd):
         acts.append(('go', None, '', 'cycle.sh briefed --go'))
