@@ -806,8 +806,9 @@ for c in 'echo ACCEPTED > \"memory/stats/\"human.jsonl' \
   ok "owner guard: a found bypass form is denied - subagent: $c" \
     "$([ "$(og rel.jsonl Bash "{\"command\":\"$c\"}" "$SUB")" = deny ]; echo $?)"
 done
-ok "owner guard: a redirect into the record is still denied - main session without a quote" \
-  "$([ "$(og rel.jsonl Bash '{"command":"echo {\\\"spec\\\":\\\"acme-demo\\\",\\\"verdict\\\":\\\"ACCEPTED\\\"} >> memory/stats/human.jsonl"}')" = deny ]; echo $?)"
+og_got="$(og rel.jsonl Bash '{"command":"echo {\\\"spec\\\":\\\"acme-demo\\\",\\\"verdict\\\":\\\"ACCEPTED\\\"} >> memory/stats/human.jsonl"}')"
+ok "owner guard: a redirect into the record is still denied - main session without a quote" "$([ "$og_got" = deny ]; echo $?)"
+[ "$og_got" = deny ] || { echo "  (debug) got $og_got; hook said:"; head -c 600 "$OD/why"; echo; }
 hit=1; case "$(tr -d '\r' < "$OG" | tr '\n' ' ' | tr -s ' #' ' ')" in *'a record name the command never spells'*) hit=0 ;; esac
 ok "owner guard: the header names the record forms left open on purpose" "$hit"
 ok "owner guard: the brief's real text in a quoted heredoc is denied (it names the record beside a verdict)" \

@@ -44,9 +44,14 @@ export VULYK_LONG_SPEC="docs/specs/$LONG"
   }
   for n in 1 2 3 4 5 6 7 8; do story "$n" todo ''; done
   git add -A && git commit -qm init
+  # the court path in a line is absolute: the temp root is shown as <T>, so the 400-character check measures what
+  # cycle.sh adds and not how long this runner's temp folder is (macOS /private/var/folders/... is ~50 chars longer)
+  TW="$(cd "$T" && { pwd -W 2>/dev/null || pwd; })"; TP="$(cd "$T" && pwd -P)"
   line() { # line <name> <cycle.sh args...> - the verb's last stdout line, recorded under <name>
-    local name="$1"; shift
-    printf '%s\t%s\n' "$name" "$(bash scripts/cycle.sh "$@" 2>/dev/null | tail -n 1)" >> "$VULYK_SHORT_LINES"
+    local name="$1" out; shift
+    out="$(bash scripts/cycle.sh "$@" 2>/dev/null | tail -n 1)"
+    out="${out//"$TW"/<T>}"; out="${out//"$TP"/<T>}"; out="${out//"$T"/<T>}"
+    printf '%s\t%s\n' "$name" "$out" >> "$VULYK_SHORT_LINES"
   }
   line claim-build advance "$SP" --stamp $S --claim --short
   line release-build release "$SP" $S --short

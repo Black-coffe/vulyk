@@ -118,9 +118,9 @@ SED_ARGS=( -E
   # Credentials in command arguments: curl / lftp -u user:pw (an all-digit uid:gid is not one, and docker -u
   # name:group is a user and a group), a glued mysql -p<pw>, sshpass / docker login -p <pw>, --password <pw>.
   -e "s#(^|[^A-Za-z0-9_.-])((curl|lftp)[^;&|]*[[:space:]](-u|--user)[[:space:]]+[\"']?[^\"'[:space:]:]+:)[^\"'[:space:]]*[^0-9\"'[:space:]][^\"'[:space:]]*#\1\2$MASK#g"
-  -e "s#((mysql|mariadb)[a-z]*$NOT_P[[:space:]]+-p)(\"[^\"]+\"|'[^']+'|[^\"'[:space:]]+)#\1$MASK#g"
-  -e "s#((docker|podman)[[:space:]]+login$NOT_P[[:space:]]+-p[[:space:]]*)$ARG_VALUE#\1$MASK#g"
-  -e "s#(sshpass$SSHPASS_OPTS[[:space:]]+-p[[:space:]]*)$ARG_VALUE#\1$MASK#g"
+  -e "s#((mysql|mariadb)[a-z]*${NOT_P}[[:space:]]+-p)(\"[^\"]+\"|'[^']+'|[^\"'[:space:]]+)#\1$MASK#g"
+  -e "s#((docker|podman)[[:space:]]+login${NOT_P}[[:space:]]+-p[[:space:]]*)$ARG_VALUE#\1$MASK#g"
+  -e "s#(sshpass${SSHPASS_OPTS}[[:space:]]+-p[[:space:]]*)$ARG_VALUE#\1$MASK#g"
   -e "s#(^|[[:space:]])(--password|--passwd)([[:space:]]+|=)$ARG_VALUE#\1\2\3$MASK#g"
 )
 

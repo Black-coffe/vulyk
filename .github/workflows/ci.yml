@@ -249,9 +249,12 @@ jobs:
           grep -q 'top-model-brief.sh' "$target/.claude/settings.json" || { echo "::error::top-model hook not wired"; exit 1; }
           # wire_permissions must have added both allow rules the clerk needs, each exactly
           # once, or every cycle-clerk dispatch stalls on a prompt nobody is watching (R22).
-          jq -e --arg r1 'Bash(bash scripts/cycle.sh:*)' --arg r2 'Bash(bash scripts/journal.sh:*)' \
-            '([.permissions.allow[] | select(. == $r1)] | length == 1) and
-             ([.permissions.allow[] | select(. == $r2)] | length == 1)' \
+          # 0.53.0: six cycle.sh verb rules (the broad cycle.sh rule is gone) and journal.sh, each exactly once
+          jq -e '.permissions.allow as $a
+            | ((["advance","status","release","suite","stamp-red","close-story"]
+                | map("Bash(bash scripts/cycle.sh " + . + ":*)")) + ["Bash(bash scripts/journal.sh:*)"])
+            | all(.[]; . as $r | ([$a[] | select(. == $r)] | length) == 1)
+              and ([$a[] | select(. == "Bash(bash scripts/cycle.sh:*)")] | length) == 0' \
             "$target/.claude/settings.json" >/dev/null \
             || { echo "::error::permissions.allow does not contain both cycle.sh and journal.sh allow rules exactly once"; exit 1; }
           # 0.29.0: Claude Code's built-in "You should know" mod is offered (ysk-offer.sh), never switched on
@@ -388,9 +391,12 @@ jobs:
           grep -qx "$(cat VERSION)" "$target/.claude/vulyk-version" || { echo "::error::--upgrade vulyk-version is not install.sh's own stamp"; exit 1; }
           # the allow rules must still be exactly-once after an upgrade, not duplicated or
           # dropped by a re-run of wire_permissions against an already-wired file (R22).
-          jq -e --arg r1 'Bash(bash scripts/cycle.sh:*)' --arg r2 'Bash(bash scripts/journal.sh:*)' \
-            '([.permissions.allow[] | select(. == $r1)] | length == 1) and
-             ([.permissions.allow[] | select(. == $r2)] | length == 1)' \
+          # 0.53.0: six cycle.sh verb rules (the broad cycle.sh rule is gone) and journal.sh, each exactly once
+          jq -e '.permissions.allow as $a
+            | ((["advance","status","release","suite","stamp-red","close-story"]
+                | map("Bash(bash scripts/cycle.sh " + . + ":*)")) + ["Bash(bash scripts/journal.sh:*)"])
+            | all(.[]; . as $r | ([$a[] | select(. == $r)] | length) == 1)
+              and ([$a[] | select(. == "Bash(bash scripts/cycle.sh:*)")] | length) == 0' \
             "$target/.claude/settings.json" >/dev/null \
             || { echo "::error::--upgrade left permissions.allow without both cycle.sh and journal.sh allow rules exactly once"; exit 1; }
 

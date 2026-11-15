@@ -211,8 +211,14 @@ def main():
              'run only commands the hook can check.' + TAIL)
 
     def allowed(tok, p):
-        return not outside(p) or under(p, reports) or tok.replace('\\', '/').startswith(SYSTEM) or \
-            tok in ('/dev/null', '/tmp', 'NUL', '$null') or \
+        if not outside(p) or under(p, reports):
+            return True
+        # a system location is judged as typed, but never one that climbs back out with `..`, and never a path
+        # inside this project outside the court (on Linux and macOS a project may itself live under /tmp)
+        slash = tok.replace('\\', '/')
+        if under(p, project) or '..' in slash.split('/'):
+            return False
+        return slash.startswith(SYSTEM) or tok in ('/dev/null', '/tmp', 'NUL', '$null') or \
             re.match(r'^[A-Za-z]:[/\\](windows|program files)', tok, re.I) is not None
 
     def check_path(tok, here, operand):
