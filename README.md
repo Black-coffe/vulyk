@@ -227,6 +227,11 @@ Claude Code hooks receive no token counter — `handoff.py` recovers it from the
 
 A sample `scripts/git-hooks/post-merge` flags the map as stale after merges so `/vulyk-status` reminds you to re-map.
 
+The PreToolUse guards (`git-guard.sh`, `owner-guard.sh`, `court-guard.sh`) stop an agent's ordinary slips past the
+process: discarding work it did not make, recording the owner's verdict without his words, a blind seat reading
+outside its court. They read the command text they are given, so they are a seatbelt, not a complete barrier: a
+command can be spelled in ways a text reader does not follow, and each hook's header names the forms it leaves open.
+
 ## What is measured, and what is not
 
 Most agent frameworks — this one included, until now — ship claims nobody checked. Here is the honest split.

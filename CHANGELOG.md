@@ -4,7 +4,9 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
-Guards, gates and installer fixes from a framework audit (spec `audit-fixes-1113`).
+Guards, gates and installer fixes from a framework audit (spec `audit-fixes-1113`). The guards stop an agent's
+ordinary slips past the process; they read command text, so they are a seatbelt, not a complete barrier (each
+hook's header names the forms it leaves open).
 
 ### Changed
 - `vulyk-update.sh` and the update check share one version order: a release is newer than its dev builds and
@@ -27,8 +29,8 @@ Guards, gates and installer fixes from a framework audit (spec `audit-fixes-1113
   credentials passed as command arguments, more service-token and webhook shapes and bare cloud secret keys; when
   redaction cannot run, the text is withheld and `redact_degraded` is recorded.
 - `close-story` counts a story's scope from the head `claim` recorded for its wave, so an edit outside `## Files`
-  committed before the close is out of scope; a subagent cannot `git commit` or `git add` while a DRIVER holds a
-  spec, and the worker prompts say never to commit.
+  committed before the close is out of scope; `git-guard.sh` denies a subagent's `git commit` and `git add` while a
+  DRIVER holds a spec, and the worker prompts say never to commit.
 - A story's approved version is the commit `cycle.sh` itself made (`branch`, `revise`, `repair`), kept in the run
   state; `close-story` and `stamp-red` compare the story with it, and a subagent cannot run the verbs that make it.
 - Paperwork is what `cycle.sh` writes: a hand edit of `brief.md` or `plan.md` stales the round and is named, a
@@ -38,8 +40,8 @@ Guards, gates and installer fixes from a framework audit (spec `audit-fixes-1113
   broad `cycle.sh` rule an older installer wrote, logs `narrowed allow: cycle.sh`, and keeps the hive's own rules.
 - Defect cards reach PowerShell commands as they reach Bash ones: the inject matcher includes PowerShell, and an
   upgrade moves the old shipped matcher.
-- A new PreToolUse hook, `court-guard.sh`, keeps a blind council seat inside its court: no reads outside it and no
-  git reads of the spec. `install.sh` wires it and `owner-guard.sh` once, by the release that ships them, and
+- A new PreToolUse hook, `court-guard.sh`, denies a blind council seat the reads outside its court and the git
+  reads of the spec that it can tell from the command text. `install.sh` wires it and `owner-guard.sh` once, by the release that ships them, and
   the three guards fail closed (`"onFailure": "block"`).
 - `leak-check.sh` flags any absolute path outside the VULYK root, Claude temp-folder paths and the hive roots of
   the private registry; the docs use stand-ins.
