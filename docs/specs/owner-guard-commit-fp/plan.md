@@ -90,7 +90,6 @@ is missing or unparsable.
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
 **Briefed:** via mini-brief, Andrei, 2026-11-14
 **Branch:** vulyk/owner-guard-commit-fp
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
 **Council:** ESCALATE round 1, 2026-11-14, at db39ef68, pack 3a8a9b920fb6
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 
@@ -98,3 +97,4 @@ is missing or unparsable.
 - reason: ceiling · round 1 · 2026-11-14
 - ask 1: BLOCK by the reviewer - see docs/specs/owner-guard-commit-fp/council/round-1/review.md
 - seats: docs/specs/owner-guard-commit-fp/council/round-1/
+**Checked:** ACCEPTED by Andrei, 2026-11-15, at 03b3cbbe - owner picked «Принимаю owner-guard-commit-fp (Рекомендую)» after the diff in the reply
