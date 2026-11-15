@@ -914,7 +914,7 @@ HSLUG="$("$PYBIN" -c 'import re, sys; print(re.sub(r"[^A-Za-z0-9]", "-", sys.arg
 mkdir -p "$TH/.claude/projects/$HSLUG"
 printf '%s\n' '{"type":"assistant","message":{"role":"assistant","model":"claude-test","content":[],"usage":{"input_tokens":777,"output_tokens":0}},"timestamp":"2026-10-13T11:00:00Z"}' \
   > "$TH/.claude/projects/$HSLUG/decoy-session.jsonl"
-dump_from_deep() { ( cd "$H/sub/deep" && env -u CLAUDE_PROJECT_DIR HOME="$(W "$TH")" USERPROFILE="$(W "$TH")" \
+dump_from_deep() { ( cd "$H/sub/deep" && env -u CLAUDE_PROJECT_DIR -u CLAUDE_CONFIG_DIR HOME="$(W "$TH")" USERPROFILE="$(W "$TH")" \
   bash "$H/.claude/hooks/handoff.sh" dump "$@" 2>&1 ) ; }
 dump_from_deep "$SID" > "$T/dump-sid"
 echo "files=$(ls "$H/.claude/handoff/"*.md 2>/dev/null | wc -l | tr -d ' ')" > "$T/dump-files"
