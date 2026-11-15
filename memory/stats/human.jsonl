@@ -30,3 +30,4 @@
 {"ts":"2026-11-14T15:26:35Z","spec":"audit-fixes-1113","verdict":"ACCEPTED","by":"Andrei","head":"bfe5f895","pack":"b77681633627","note":"Принимаю, выкатка поэтапно (Рекомендую)"}
 {"ts":"2026-11-15T09:30:05Z","spec":"owner-guard-commit-fp","verdict":"ACCEPTED","by":"Andrei","head":"03b3cbbe","pack":"3a8a9b920fb6","note":"owner picked «Принимаю owner-guard-commit-fp (Рекомендую)» after the diff in the reply"}
 {"ts":"2026-11-15T10:05:53Z","spec":"owner-guard-commit-fp","verdict":"ACCEPTED","by":"Andrei","head":"df5377ae","pack":"3a8a9b920fb6","note":"owner picked «Принимаю починку b92c6f53 (Рекомендую)» for the backtick fix after the diff in the reply"}
+{"ts":"2026-11-15T11:41:49Z","spec":"owner-guard-commit-fp","verdict":"ACCEPTED","by":"Andrei","head":"0f2c3ed8","pack":"3a8a9b920fb6","note":"owner picked «Принимаю правки CI 0f2c3ed8 (Рекомендую)» after the diff in the reply"}

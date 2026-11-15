@@ -99,3 +99,4 @@ is missing or unparsable.
 **Checked:** ACCEPTED by Andrei, 2026-11-15, at 03b3cbbe - owner picked «Принимаю owner-guard-commit-fp (Рекомендую)» after the diff in the reply
 **Shipped:** 0.53.0-dev.2, 2026-11-15, at 2bb733de - merged to main, publish pending; no branch CI (public origin): CI runs on the release-candidate branch before the tag, owner: «Сборка на канарейке параллельно с CI (Рекомендую)»
 **Checked:** ACCEPTED by Andrei, 2026-11-15, at df5377ae - owner picked «Принимаю починку b92c6f53 (Рекомендую)» for the backtick fix after the diff in the reply
+**Checked:** ACCEPTED by Andrei, 2026-11-15, at 0f2c3ed8 - owner picked «Принимаю правки CI 0f2c3ed8 (Рекомендую)» after the diff in the reply
