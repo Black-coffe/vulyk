@@ -48,6 +48,6 @@ branch). Every call below that runs `advance` carries `timeout: 600000`.
    - `build:<W>`: the round was RED and the repair story is written; it is built through `/vulyk-build`,
      never by hand in this command.
    - `escalated`: print `## Needs a human` from plan.md verbatim. The owner chooses: `human-check.sh
-     ACCEPTED`, `cycle.sh reopen "<decision>"`, or leaving the spec open.
+     <spec> ACCEPTED "<his words>" --commit`, `cycle.sh reopen "<decision>"`, or leaving the spec open.
 
 The council's verdict is what this command produces; there is no stop for the owner inside it.

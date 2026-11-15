@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # VULYK human check - stage 05 of the cycle, the one no agent may take.
 #
-#   Usage: scripts/human-check.sh <spec-dir> <ACCEPTED|REJECTED> [where you looked / note]
-#          scripts/human-check.sh docs/specs/oauth ACCEPTED "staging, logged in as a new user, logout works"
+#   Usage: scripts/human-check.sh <spec-dir> <ACCEPTED|REJECTED> [where you looked / note] [--commit]
+#          scripts/human-check.sh docs/specs/oauth ACCEPTED "staging, logged in as a new user, logout works" --commit
 #          scripts/human-check.sh --check <spec-dir>       # is the newest check still about THIS pack at THIS commit?
 #          scripts/human-check.sh --show <spec-dir>        # the pack's change as text, for the reply before ACCEPTED
 #
@@ -104,9 +104,17 @@ if [ "${1:-}" = "--check" ]; then
   exit 0
 fi
 
-SPEC="${1:-}"
-VERDICT="${2:-}"
-NOTE="${3:-}"
+# `--commit`, anywhere among the arguments: commit the plan.md line and the record row this run writes, and only
+# those two paths. owner-guard denies any agent command naming the record beside a verdict word, a git commit of
+# it included, so this is the way the record is committed.
+COMMIT=0
+ARGS=()
+for a in "$@"; do
+  if [ "$a" = "--commit" ]; then COMMIT=1; else ARGS+=("$a"); fi
+done
+SPEC="${ARGS[0]:-}"
+VERDICT="${ARGS[1]:-}"
+NOTE="${ARGS[2]:-}"
 
 if [ -z "$SPEC" ] || [ ! -d "$SPEC" ] || [ -z "$VERDICT" ]; then
   echo "human-check: usage: $0 <spec-dir> <ACCEPTED|REJECTED> [note]" >&2
@@ -169,8 +177,21 @@ printf '{"ts":"%s","spec":"%s","verdict":"%s","by":"%s","head":"%s","pack":"%s",
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$SPEC")" "$VERDICT" "$BY_ESC" "$HEAD_SHA" "$PACK" "$ESCAPED" >> "$STATS"
 
 echo "human-check: $(basename "$SPEC") - $VERDICT by $OWNER at $HEAD_SHA (pack $PACK)"
-echo "  recorded in $PLAN and memory/stats/human.jsonl. Commit the record; any CODE commit after it makes it stale;"
-echo "  '$0 --check $SPEC' says whether it still describes what ships."
+if [ "$COMMIT" = 1 ]; then
+  # `git commit -- <paths>` commits those paths only: anything else staged stays staged and uncommitted
+  if git -C "$ROOT" add -- "$(cd "$SPEC" && pwd)/plan.md" "$STATS" &&
+     git -C "$ROOT" commit -q -m "vulyk($(basename "$SPEC")): human check $VERDICT" -- \
+       "$(cd "$SPEC" && pwd)/plan.md" "$STATS"; then
+    echo "  recorded in $PLAN and memory/stats/human.jsonl and committed ($(git -C "$ROOT" rev-parse --short HEAD))."
+  else
+    echo "human-check: the record is written but the commit failed (git said why above); commit $PLAN and memory/stats/human.jsonl yourself, or ask the owner to." >&2
+    exit 1
+  fi
+else
+  echo "  recorded in $PLAN and memory/stats/human.jsonl. Commit it with --commit next time; an agent's own"
+  echo "  git commit naming the record beside the verdict is refused by owner-guard."
+fi
+echo "  Any CODE commit after it makes it stale; '$0 --check $SPEC' says whether it still describes what ships."
 if [ "$VERDICT" = REJECTED ]; then
   echo "  ! The owner said no. Each thing they named becomes a fix story in this spec, through"
   echo "    /vulyk-build - never a hand patch - and both gates run again before the next look."

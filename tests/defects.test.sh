@@ -747,67 +747,87 @@ done
 hit=0; case "$OGH" in *'sed or awk -i): the hook cannot read'*) hit=1 ;; esac
 ok "owner guard: the header no longer says every plan.md rewrite is denied to everyone" "$hit"
 
-echo "--- owner guard: a record row is written only by a command that writes the file (owner-guard-commit-fp)"
-# original case, 2026-11-14: committing the row human-check had just written, with ACCEPTED in the message
+echo "--- owner guard: the record is committed by human-check --commit; a command naming it beside a verdict is a row write (owner-guard-commit-fp)"
+# original case, 2026-11-14: committing the row human-check had just written, with ACCEPTED in the message. The owner
+# chose «Строгое правило + коммит внутри скрипта (Рекомендую)» (2026-11-15): the agent's own commit stays refused, and
+# human-check.sh --commit makes it instead.
 CM='{"command":"git add docs/specs/acme-demo/plan.md memory/stats/human.jsonl && git commit -m \"vulyk(acme-demo): human check ACCEPTED\""}'
-ok "owner guard: a git commit that only names the record file passes - subagent" \
-  "$([ "$(og rel.jsonl Bash "$CM" "$SUB")" = allow ]; echo $?)"
-ok "owner guard: a git commit that only names the record file passes - main session" \
-  "$([ "$(og rel.jsonl Bash "$CM")" = allow ]; echo $?)"
-ok "owner guard: git add -u memory/stats passes" \
-  "$([ "$(og rel.jsonl Bash '{"command":"git add -u memory/stats && git commit -m \"human check ACCEPTED\""}' "$SUB")" = allow ]; echo $?)"
-ok "owner guard: reading the record file passes" \
-  "$([ "$(og rel.jsonl Bash '{"command":"grep ACCEPTED memory/stats/human.jsonl"}' "$SUB")" = allow ]; echo $?)"
-ok "owner guard: a heredoc in a command naming the record counts as a write (text goes through the Write tool)" \
+ok "owner guard: an agent's own commit of the record with ACCEPTED in the message is denied - subagent" \
+  "$([ "$(og rel.jsonl Bash "$CM" "$SUB")" = deny ]; echo $?)"
+ok "owner guard: an agent's own commit of the record with ACCEPTED in the message is denied - main session" \
+  "$([ "$(og rel.jsonl Bash "$CM")" = deny ]; echo $?)"
+ok "owner guard: the refusal names human-check.sh --commit as the way" \
+  "$(grep -q 'human-check.sh <spec> <verdict> \\"<note>\\" --commit' "$OD/why"; echo $?)"
+HCC='{"command":"bash scripts/human-check.sh docs/specs/acme-demo ACCEPTED \"the Acme login works on a new account\" --commit"}'
+ok "owner guard: human-check --commit after the note, quoting the owner, passes - main session" \
+  "$([ "$(og rel.jsonl Bash "$HCC")" = allow ]; echo $?)"
+ok "owner guard: human-check --commit is still denied to a subagent" \
+  "$([ "$(og rel.jsonl Bash "$HCC" "$SUB")" = deny ]; echo $?)"
+ok "owner guard: human-check --commit before the spec, quoting the owner, passes - main session" \
+  "$([ "$(og rel.jsonl Bash '{"command":"bash scripts/human-check.sh --commit docs/specs/acme-demo ACCEPTED \"the Acme login works on a new account\""}')" = allow ]; echo $?)"
+ok "owner guard: human-check --commit with a note that quotes nobody is denied - main session" \
+  "$([ "$(og rel.jsonl Bash '{"command":"bash scripts/human-check.sh --commit docs/specs/acme-demo ACCEPTED \"looks fine to the agent\""}')" = deny ]; echo $?)"
+ok "owner guard: human-check --commit inside bash -c is still read - subagent" \
+  "$([ "$(og rel.jsonl Bash '{"command":"bash -c \"scripts/human-check.sh --commit docs/specs/acme-demo ACCEPTED ok\""}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: git add -u of the stats folder with a verdict-free message passes" \
+  "$([ "$(og rel.jsonl Bash '{"command":"git add -u memory/stats && git commit -m \"stats\""}' "$SUB")" = allow ]; echo $?)"
+ok "owner guard: reading the record with no verdict word passes" \
+  "$([ "$(og rel.jsonl Bash '{"command":"tail -1 memory/stats/human.jsonl"}' "$SUB")" = allow ]; echo $?)"
+ok "owner guard: a grep of the record for a verdict word counts as a write (strict, the known cost)" \
+  "$([ "$(og rel.jsonl Bash '{"command":"grep ACCEPTED memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a heredoc naming the record and ACCEPTED counts as a write (text goes through the Write tool)" \
   "$([ "$(og rel.jsonl Bash '{"command":"cat > /tmp/acme-brief.md <<X\nnote: memory/stats/human.jsonl holds ACCEPTED rows\nX"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: a redirect into the record by a quoted path is denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"echo x > \"memory/stats/\"human.jsonl"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: echo naming the record passes (text, no redirect into it)" \
-  "$([ "$(og rel.jsonl Bash '{"command":"echo see memory/stats/human.jsonl for ACCEPTED rows"}' "$SUB")" = allow ]; echo $?)"
-ok "owner guard: a redirect into the record is still denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"echo {\\\"spec\\\":\\\"acme-demo\\\",\\\"verdict\\\":\\\"ACCEPTED\\\"} >> memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: tee into the record is still denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"printf x | tee -a memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: an interpreter writing the record is still denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"python -c \"open(\\\"memory/stats/human.jsonl\\\",\\\"a\\\").write(\\\"x\\\")\""}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: a write into the record by its bare name after a cd is still denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"cd memory/stats && echo x >> human.jsonl"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: tee into the record by its bare name is still denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"cd memory/stats; printf x | tee -a human.jsonl"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: a redirect into a variable in a command naming the record is still denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"f=memory/stats/human.jsonl; echo x >> \"$f\""}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: a writer aimed at a variable in a command naming the record is still denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"f=memory/stats/human.jsonl; cp /tmp/row \"$f\""}' "$SUB")" = deny ]; echo $?)"
-hit=1; case "$(tr -d '\r' < "$OG" | tr '\n' ' ' | tr -s ' #' ' ')" in *'a record name the command never spells'*) hit=0 ;; esac
-ok "owner guard: the header names the record forms left open on purpose" "$hit"
-ok "owner guard: the brief's real text in a quoted heredoc is denied too (no heredoc in a command naming the record)" \
-  "$([ "$(og rel.jsonl Bash "$(bash "$SRC/scripts/py.sh" -c 'import json,sys; print(json.dumps({"command": "cat > /tmp/acme-brief.md <<'"'"'X'"'"'\n" + open(sys.argv[1], encoding="utf-8").read() + "X"}))' "$SRC/docs/specs/owner-guard-commit-fp/brief.md")" "$SUB")" = deny ]; echo $?)"
-ok "owner guard: the same text under an unquoted delimiter is denied (bash would run its backticks) - subagent" \
-  "$([ "$(og rel.jsonl Bash "$(bash "$SRC/scripts/py.sh" -c 'import json,sys; print(json.dumps({"command": "cat > /tmp/acme-brief.md <<X\n" + open(sys.argv[1], encoding="utf-8").read() + "X"}))' "$SRC/docs/specs/owner-guard-commit-fp/brief.md")" "$SUB")" = deny ]; echo $?)"
-ok "owner guard: a delimiter word bash reads longer than the tag does not hide a write - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"cat > /tmp/n <<X'"'"'Y'"'"'\nnote\nXY\necho x >> memory/stats/human.jsonl\nX"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: a read of the record redirected into a variable path passes" \
-  "$([ "$(og rel.jsonl Bash '{"command":"tail -1 memory/stats/human.jsonl > \"$TMP/last.json\""}' "$SUB")" = allow ]; echo $?)"
-ok "owner guard: an interpreter fed by a heredoc that writes the record is denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"python3 <<PY\nf = open(\"memory/stats/human.jsonl\", \"a\")\nf.write(\"ACCEPTED\")\nPY"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: tee behind a prefix word into the record is denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"printf x | sudo tee -a memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: a clobber redirect into the record is denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"echo ACCEPTED >| memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: patch on the record is denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"patch memory/stats/human.jsonl <<P\n+row\nP"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: a substitution inside a safe command naming the record is denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"cat $(python -c 1) memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: git -c config naming the record is denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"git -c core.pager=x log memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: git diff --output naming the record is denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"git diff --output=memory/stats/human.jsonl"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: a <<- heredoc ends at its tab-indented terminator, so a write after it is denied - subagent" \
-  "$([ "$(og rel.jsonl Bash '{"command":"cat > /tmp/n <<-X\nnote\n\tX\necho x >> memory/stats/human.jsonl\nX"}' "$SUB")" = deny ]; echo $?)"
-ok "owner guard: git add of the record by its bare name passes" \
-  "$([ "$(og rel.jsonl Bash '{"command":"cd memory/stats && git add human.jsonl"}' "$SUB")" = allow ]; echo $?)"
+# the bypass forms the re-checks found against the parsing versions (2026-11-14/15), each carrying a verdict word
+for c in 'echo ACCEPTED > \"memory/stats/\"human.jsonl' \
+         'echo {\\\"spec\\\":\\\"acme-demo\\\",\\\"verdict\\\":\\\"ACCEPTED\\\"} >> memory/stats/human.jsonl' \
+         'printf ACCEPTED | tee -a memory/stats/human.jsonl' \
+         'python -c \"open(\\\"memory/stats/human.jsonl\\\",\\\"a\\\").write(\\\"ACCEPTED\\\")\"' \
+         'cd memory/stats && echo ACCEPTED >> human.jsonl' \
+         'f=memory/stats/human.jsonl; echo ACCEPTED >> \"$f\"' \
+         'f=memory/stats/human.jsonl; cp /tmp/ACCEPTED \"$f\"' \
+         'cat > /tmp/n <<X'"'"'Y'"'"'\nnote\nXY\necho ACCEPTED >> memory/stats/human.jsonl\nX' \
+         'python3 <<PY\nf = open(\"memory/stats/human.jsonl\", \"a\")\nf.write(\"ACCEPTED\")\nPY' \
+         'printf ACCEPTED | sudo tee -a memory/stats/human.jsonl' \
+         'echo ACCEPTED >| memory/stats/human.jsonl' \
+         'patch memory/stats/human.jsonl <<P\n+ACCEPTED\nP' \
+         'cat $(python -c 1) memory/stats/human.jsonl # ACCEPTED' \
+         'git -c core.pager=x log --grep ACCEPTED memory/stats/human.jsonl' \
+         'git diff --output=memory/stats/human.jsonl # ACCEPTED' \
+         'echo ACCEPTED # comment\\\n>> memory/stats/human.jsonl' \
+         'echo ACCEPTED >> memory\\\\stats\\\\human.jsonl' \
+         'echo ACCEPTED 1>> memory/stats/human.jsonl' \
+         'git --git-dir .git -C . add memory/stats/human.jsonl && git commit -m ACCEPTED'; do
+  ok "owner guard: a found bypass form is denied - subagent: $c" \
+    "$([ "$(og rel.jsonl Bash "{\"command\":\"$c\"}" "$SUB")" = deny ]; echo $?)"
+done
 ok "owner guard: a redirect into the record is still denied - main session without a quote" \
   "$([ "$(og rel.jsonl Bash '{"command":"echo {\\\"spec\\\":\\\"acme-demo\\\",\\\"verdict\\\":\\\"ACCEPTED\\\"} >> memory/stats/human.jsonl"}')" = deny ]; echo $?)"
+hit=1; case "$(tr -d '\r' < "$OG" | tr '\n' ' ' | tr -s ' #' ' ')" in *'a record name the command never spells'*) hit=0 ;; esac
+ok "owner guard: the header names the record forms left open on purpose" "$hit"
+ok "owner guard: the brief's real text in a quoted heredoc is denied (it names the record beside a verdict)" \
+  "$([ "$(og rel.jsonl Bash "$(bash "$SRC/scripts/py.sh" -c 'import json,sys; print(json.dumps({"command": "cat > /tmp/acme-brief.md <<'"'"'X'"'"'\n" + open(sys.argv[1], encoding="utf-8").read() + "X"}))' "$SRC/docs/specs/owner-guard-commit-fp/brief.md")" "$SUB")" = deny ]; echo $?)"
+# human-check.sh --commit commits its own two paths and nothing else that is staged
+HCR="$OD/hc"; mkdir -p "$HCR/docs/specs/acme-demo" "$HCR/memory/stats"
+hc_ok=1; hc_msg=1; hc_left=1
+(
+  cd "$HCR" || exit 1
+  git init -q -b main . && git config user.name t && git config user.email t@t && git config core.autocrlf false
+  printf '# Acme plan\n\n**Checked:** <written by human-check>\n' > docs/specs/acme-demo/plan.md
+  printf 'x\n' > other.txt; : > memory/stats/human.jsonl
+  git add -A && git commit -q -m 'vulyk(acme-demo): plan'
+  printf 'y\n' >> other.txt && git add other.txt
+  bash "$SRC/scripts/human-check.sh" docs/specs/acme-demo ACCEPTED "the Acme login works" --commit >/dev/null 2>&1
+) && {
+  files="$(git -C "$HCR" show --name-only --format= HEAD | sort | tr '\n' ' ')"
+  [ "$files" = "docs/specs/acme-demo/plan.md memory/stats/human.jsonl " ] && hc_ok=0
+  [ "$(git -C "$HCR" log -1 --format=%s)" = "vulyk(acme-demo): human check ACCEPTED" ] && hc_msg=0
+  [ "$(git -C "$HCR" diff --cached --name-only)" = "other.txt" ] && hc_left=0
+}
+ok "human-check --commit commits exactly its plan.md line and record row" "$hc_ok"
+ok "human-check --commit names the spec and the verdict in the message" "$hc_msg"
+ok "human-check --commit leaves another staged file staged and uncommitted" "$hc_left"
+ok "human-check --commit records the note without the flag" \
+  "$(grep -q '"note":"the Acme login works"' "$HCR/memory/stats/human.jsonl" && grep -q 'ACCEPTED by t, .* - the Acme login works$' "$HCR/docs/specs/acme-demo/plan.md"; echo $?)"
 
 echo "--- this tree's library: green, one info line per .scrub-revs commit (audit-fixes-1113-12)"
 run

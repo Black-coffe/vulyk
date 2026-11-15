@@ -157,7 +157,7 @@ Then go on. A refusal on the redispatch is the existing stop: an absent seat, a 
 - `escalated`: print plan.md's `## Needs a human` verbatim (a `suite-timeout` reason carries its `- suite:
   <N> s, budget <B> s` line: cut the part that ran long, then reopen), then the output of `bash
   scripts/human-check.sh --show docs/specs/<slug>` as a fenced block in the reply text. The owner chooses: `bash
-  scripts/human-check.sh docs/specs/<slug> ACCEPTED "<note>"` (the note is the owner's own words, never yours), `bash scripts/cycle.sh reopen
+  scripts/human-check.sh docs/specs/<slug> ACCEPTED "<note>" --commit` (the note is the owner's own words, never yours; `--commit` commits the record, which owner-guard refuses to any other command), `bash scripts/cycle.sh reopen
   docs/specs/<slug> "<decision>"`, or leaving it open.
 - `paused`: stop; `/vulyk-resume <slug>` continues. `shipped`: nothing to build. `briefed`: point at
   `/vulyk-plan`.

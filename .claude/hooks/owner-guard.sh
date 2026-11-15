@@ -4,18 +4,16 @@
 # card docs/defects/owner-words-by-builder.md).
 #
 # Guarded calls:
-#   - a command running `human-check.sh <spec> ACCEPTED|REJECTED [note]` (release acceptance);
+#   - a command running `human-check.sh <spec> ACCEPTED|REJECTED [note] [--commit]` (release acceptance; the
+#     `--commit` word is no part of the spec or the note);
 #   - a command running `cycle.sh briefed <spec> ... --go`;
 #   - an Edit, MultiEdit, Write or shell command that adds or changes a `**Approved:**` or `**Checked:**` line
 #     of a `docs/specs/<slug>/plan.md` (a line still holding the template placeholder `<...>` is no record),
-#     and any shell command naming `human.jsonl` (by file name, any path or none) unless every simple command in
-#     it is a known safe form - cd, a reader (cat, grep, head, tail, wc, ls, stat), echo or printf, git add /
-#     commit / diff / log / show / status - and no redirect leads into the record (quotes removed first); any
-#     heredoc or here-string counts as a write, so text naming the record goes through the Write tool (with no
-#     Python the bash fallback denies every command naming it). Left open on
-#     purpose: a record name the command never spells (built from quotes, globs, braces or variables assembled
-#     elsewhere, a script file that writes it); the hook reads the text it is given and does not expand a shell.
-#     An Edit or MultiEdit is
+#     and one that adds an ACCEPTED or REJECTED row to `memory/stats/human.jsonl`: any shell command naming
+#     `human.jsonl` beside the word ACCEPTED or REJECTED counts as one, a `git add` / `git commit` of the record
+#     included, so `human-check.sh ... --commit` commits its own plan.md line and row. Left open on purpose: a
+#     record name the command never spells (built from quotes, globs, braces or variables, a script file that
+#     writes it) and a verdict word it never spells; the hook reads the text it is given. An Edit or MultiEdit is
 #     judged on the file as it stands after it, so one that replaces only the text after the marker counts;
 #   - a shell command that may rewrite a plan.md holding such a line without spelling the marker (a redirect
 #     into it; tee, cp, mv, a script interpreter; sed or awk -i) and that names it by its `docs/specs/<slug>/plan.md`
@@ -374,8 +372,9 @@ def command_actions(cmd, powershell, cwd):
     segs = split_segments(cmd, powershell)
     for seg in segs or []:
         for k, w in enumerate(seg):
-            if base(w) == 'human-check.sh' and len(seg) > k + 2 and seg[k + 2].upper() in ('ACCEPTED', 'REJECTED'):
-                acts.append(('release', spec_of(seg[k + 1], cwd), ' '.join(seg[k + 3:]), 'human-check.sh %s' % seg[k + 2].upper()))
+            rest = [x for x in seg[k + 1:] if x != '--commit']   # the flag is no part of the spec or the note
+            if base(w) == 'human-check.sh' and len(rest) > 1 and rest[1].upper() in ('ACCEPTED', 'REJECTED'):
+                acts.append(('release', spec_of(rest[0], cwd), ' '.join(rest[2:]), 'human-check.sh %s' % rest[1].upper()))
             if base(w) == 'cycle.sh' and len(seg) > k + 1 and seg[k + 1] == 'briefed' and '--go' in seg[k + 2:]:
                 acts.append(('go', None, '', 'cycle.sh briefed --go'))
     # A form the words above missed (`bash -c "..."`, an unreadable command), read from the raw text: the
@@ -384,7 +383,7 @@ def command_actions(cmd, powershell, cwd):
     lead = r'(?<![\w`./\\~:-])(?:[\w.~:-]*[/\\])?'
     if not any(a[0] == 'release' for a in acts):
         m = re.search(lead + r'human-check(?:\.sh)?[\'"]?\s+[\'"]?([^\s\'"<`][^\s\'"`]*)[\'"]?\s+[\'"]?(ACCEPTED|REJECTED)\b[\'"]?(.*)',
-                      cmd, re.S | re.I)
+                      re.sub(r'(?<!\S)[\'"]?--commit[\'"]?(?!\S)', ' ', cmd), re.S | re.I)
         if m:
             acts.append(('release', spec_of(m.group(1), cwd), m.group(3).strip(' \'"'), 'human-check.sh %s' % m.group(2).upper()))
     if not any(a[0] == 'go' for a in acts) and \
@@ -414,13 +413,14 @@ def command_actions(cmd, powershell, cwd):
                 held = False
             if held:
                 acts.append(('rewrite', os.path.dirname(full), '', 'a command that rewrites %s' % target))
-    # a human.jsonl row counts as written only by a command that writes the file (a redirect into it, a writer
-    # naming it, sed/awk -i): a git add or commit, a read, or text that merely names the path is no row
-    if 'human.jsonl' in cmd and writes_record(cmd, powershell) and \
-            not any(a[0] == 'release' for a in acts):
+    # strict on purpose (owner-guard-commit-fp): reading shell text for "does it write the file" never converged,
+    # so a command naming the record beside a verdict word is a row write, a git add / commit included;
+    # `human-check.sh ... --commit` records and commits the row, and no other command needs to say both
+    if 'human.jsonl' in cmd and re.search(r'ACCEPTED|REJECTED', cmd) and not any(a[0] == 'release' for a in acts):
         m = re.search(r'"spec\\?"\s*:\s*\\?"([^"\\]+)', cmd)
         acts.append(('release', spec_of('docs/specs/' + m.group(1), cwd) if m else None, cmd,
-                     'a human.jsonl row written by a command'))
+                     'a command naming human.jsonl beside ACCEPTED or REJECTED (record and commit a check only '
+                     'with `human-check.sh <spec> <verdict> "<note>" --commit`)'))
     return acts
 
 
@@ -450,61 +450,15 @@ WRITERS = ('tee', 'cp', 'mv', 'install', 'dd', 'truncate', 'set-content', 'add-c
            'move-item', 'python', 'python3', 'py', 'node', 'perl', 'ruby')
 
 
-PLAN_PATH = r'docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md'
-RECORD = r'(?<![\w.-])human\.jsonl'   # the file name with any path or none (`cd memory/stats` first counts too)
-
-
-SAFE_LEADS = ('cd', 'cat', 'grep', 'head', 'tail', 'wc', 'ls', 'stat', 'echo', 'printf', 'git')
-SAFE_GIT = ('add', 'commit', 'diff', 'log', 'show', 'status')
-GIT_BAD_GLOBAL = ('-c', '--config-env', '--exec-path', '--git-dir', '--work-tree', '--namespace')
-GIT_BAD_ARG = re.compile(r'^(-o|--output|--ext-diff|--textconv|--exec|--upload-pack|--receive-pack)')
-
-
-def writes_record(cmd, powershell):
-    """True unless a command naming human.jsonl is one of the known safe forms: deny by default. Safe: every
-    simple command is cd, a reader (cat, grep, head, tail, wc, ls, stat), echo or printf, or git add / commit /
-    diff / log / show / status, and no redirect leads into the record. Any heredoc or here-string counts as a write
-    (text naming the record goes through the Write tool). Anything else (a writer, an interpreter, a prefix word,
-    an assignment, a patch, a PowerShell call) counts as a write."""
-    text = cmd.replace('\r', '')
-    if '<<' in text:
-        return True
-    unquoted = re.sub(r'["\'\\]', '', text)          # `> "memory/stats/"human.jsonl` is the record too
-    if re.search(r'(?<![0-9&])>[>|]?\s*[^\s;&|<>]*' + RECORD, unquoted):
-        return True
-    if re.search(r'\$\(|`|<\(|>\(', text):            # a substitution runs a command the hook does not read
-        return True
-    segs = split_segments(text, powershell)
-    if segs is None:
-        return True
-    for seg in segs:
-        lead = base(seg[0]).lower() if seg else ''
-        lead = lead[:-4] if lead.endswith('.exe') else lead
-        if lead not in SAFE_LEADS:
-            return True
-        if lead == 'git':
-            words, i = seg[1:], 0
-            while i < len(words) and words[i].startswith('-'):
-                if words[i].split('=', 1)[0] in GIT_BAD_GLOBAL:
-                    return True
-                i += 2 if words[i] == '-C' else 1
-            if i >= len(words) or words[i] not in SAFE_GIT:
-                return True
-            if any(GIT_BAD_ARG.match(w) for w in words[i + 1:]):
-                return True
-    return False
-
-
-def rewrites_plan(cmd, powershell, depth=0, target=PLAN_PATH):
-    """The first path matching target (default: a docs/specs/<slug>/plan.md) a command may rewrite, else None: a
-    redirect into it; a simple command naming it run by one of WRITERS (cp, mv, install, Copy-Item, Move-Item only
-    as the last word), or by sed or awk with an in-place flag; a word holding a whole command (`bash -c "..."`) is
-    read the same way. With target=RECORD it answers whether a command writes memory/stats/human.jsonl."""
-    m = re.search(r'(?<![0-9&])>{1,2}\s*[\'"]?([^\s\'";&|<>]*' + target + r')\b', cmd)
+def rewrites_plan(cmd, powershell, depth=0):
+    """The first docs/specs/<slug>/plan.md path a command may rewrite, else None: a redirect into it; a simple
+    command naming it run by one of WRITERS (cp, mv, install, Copy-Item, Move-Item only as the last word), or by
+    sed or awk with an in-place flag; a word holding a whole command (`bash -c "..."`) is read the same way."""
+    m = re.search(r'(?<![0-9&])>{1,2}\s*[\'"]?([^\s\'";&|<>]*docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md)\b', cmd)
     if m:
         return m.group(1)
     for seg in split_segments(cmd, powershell) or []:
-        hits = [w for w in seg if re.search(target, w)]
+        hits = [w for w in seg if re.search(r'docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md', w)]
         if not hits:
             continue
         lead = base(seg[0]).lower()
@@ -513,12 +467,12 @@ def rewrites_plan(cmd, powershell, depth=0, target=PLAN_PATH):
             hits = hits if seg[-1] in hits else []
         if (hits and lead in WRITERS) or (lead in ('sed', 'gsed', 'awk', 'gawk') and any(
                 re.match(r'^(-[a-zA-Z]*i\S*|--in-place\S*)$', w) for w in seg[1:])):
-            m = re.search(r'[^\s\'"]*' + target, hits[0])
+            m = re.search(r'[^\s\'"]*docs[/\\]specs[/\\][^/\\\s\'"]+[/\\]plan\.md', hits[0])
             return m.group(0)
         if depth < 2:
             for w in hits:
                 if re.search(r'\s', w):
-                    found = rewrites_plan(w, powershell, depth + 1, target)
+                    found = rewrites_plan(w, powershell, depth + 1)
                     if found:
                         return found
     return None
