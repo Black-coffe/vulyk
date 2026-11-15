@@ -14,4 +14,6 @@ name.` The same refusal met a heredoc that only wrote this brief's text to a tem
 anywhere (a commit message, a heredoc body) as writing a row.
 
 ## Asks
-1. owner-guard counts a shell command as writing a `human.jsonl` row only when it writes to that file (a redirect into it, `tee`, `cp`/`mv` onto it, an interpreter or `sed -i` naming it); a `git add`, `git commit`, a read, or text that only names the path passes, whatever its message says.
+1. owner-guard keeps the strict record rule: a shell command naming `human.jsonl` beside ACCEPTED or REJECTED is a row write, a `git add` / `git commit` included; `scripts/human-check.sh --commit` commits its own `plan.md` line and record row with `git commit -- <those paths>`, so no agent command has to name the record beside a verdict, and the callers use `--commit`.
+
+Ask 1 was rewritten on 2026-11-15 after the re-check BLOCK at 56ec89b7: the owner picked «Строгое правило + коммит внутри скрипта (Рекомендую)» (an option label, the agent's wording). The earlier ask (a row counts only when the command writes the file) was dropped: every shell-text parser built for it let writes through or refused real commits.

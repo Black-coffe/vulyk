@@ -4,11 +4,16 @@
 # card docs/defects/owner-words-by-builder.md).
 #
 # Guarded calls:
-#   - a command running `human-check.sh <spec> ACCEPTED|REJECTED [note]` (release acceptance);
+#   - a command running `human-check.sh <spec> ACCEPTED|REJECTED [note] [--commit]` (release acceptance; the
+#     `--commit` word is no part of the spec or the note);
 #   - a command running `cycle.sh briefed <spec> ... --go`;
 #   - an Edit, MultiEdit, Write or shell command that adds or changes a `**Approved:**` or `**Checked:**` line
 #     of a `docs/specs/<slug>/plan.md` (a line still holding the template placeholder `<...>` is no record),
-#     and one that adds an ACCEPTED or REJECTED row to `memory/stats/human.jsonl`. An Edit or MultiEdit is
+#     and one that adds an ACCEPTED or REJECTED row to `memory/stats/human.jsonl`: any shell command naming
+#     `human.jsonl` beside the word ACCEPTED or REJECTED counts as one, a `git add` / `git commit` of the record
+#     included, so `human-check.sh ... --commit` commits its own plan.md line and row. Left open on purpose: a
+#     record name the command never spells (built from quotes, globs, braces or variables, a script file that
+#     writes it) and a verdict word it never spells; the hook reads the text it is given. An Edit or MultiEdit is
 #     judged on the file as it stands after it, so one that replaces only the text after the marker counts;
 #   - a shell command that may rewrite a plan.md holding such a line without spelling the marker (a redirect
 #     into it; tee, cp, mv, a script interpreter; sed or awk -i) and that names it by its `docs/specs/<slug>/plan.md`
@@ -367,8 +372,9 @@ def command_actions(cmd, powershell, cwd):
     segs = split_segments(cmd, powershell)
     for seg in segs or []:
         for k, w in enumerate(seg):
-            if base(w) == 'human-check.sh' and len(seg) > k + 2 and seg[k + 2].upper() in ('ACCEPTED', 'REJECTED'):
-                acts.append(('release', spec_of(seg[k + 1], cwd), ' '.join(seg[k + 3:]), 'human-check.sh %s' % seg[k + 2].upper()))
+            rest = [x for x in seg[k + 1:] if x != '--commit']   # the flag is no part of the spec or the note
+            if base(w) == 'human-check.sh' and len(rest) > 1 and rest[1].upper() in ('ACCEPTED', 'REJECTED'):
+                acts.append(('release', spec_of(rest[0], cwd), ' '.join(rest[2:]), 'human-check.sh %s' % rest[1].upper()))
             if base(w) == 'cycle.sh' and len(seg) > k + 1 and seg[k + 1] == 'briefed' and '--go' in seg[k + 2:]:
                 acts.append(('go', None, '', 'cycle.sh briefed --go'))
     # A form the words above missed (`bash -c "..."`, an unreadable command), read from the raw text: the
@@ -377,7 +383,7 @@ def command_actions(cmd, powershell, cwd):
     lead = r'(?<![\w`./\\~:-])(?:[\w.~:-]*[/\\])?'
     if not any(a[0] == 'release' for a in acts):
         m = re.search(lead + r'human-check(?:\.sh)?[\'"]?\s+[\'"]?([^\s\'"<`][^\s\'"`]*)[\'"]?\s+[\'"]?(ACCEPTED|REJECTED)\b[\'"]?(.*)',
-                      cmd, re.S | re.I)
+                      re.sub(r'(?<!\S)[\'"]?--commit[\'"]?(?!\S)', ' ', cmd), re.S | re.I)
         if m:
             acts.append(('release', spec_of(m.group(1), cwd), m.group(3).strip(' \'"'), 'human-check.sh %s' % m.group(2).upper()))
     if not any(a[0] == 'go' for a in acts) and \
@@ -407,10 +413,14 @@ def command_actions(cmd, powershell, cwd):
                 held = False
             if held:
                 acts.append(('rewrite', os.path.dirname(full), '', 'a command that rewrites %s' % target))
+    # strict on purpose (owner-guard-commit-fp): reading shell text for "does it write the file" never converged,
+    # so a command naming the record beside a verdict word is a row write, a git add / commit included;
+    # `human-check.sh ... --commit` records and commits the row, and no other command needs to say both
     if 'human.jsonl' in cmd and re.search(r'ACCEPTED|REJECTED', cmd) and not any(a[0] == 'release' for a in acts):
         m = re.search(r'"spec\\?"\s*:\s*\\?"([^"\\]+)', cmd)
         acts.append(('release', spec_of('docs/specs/' + m.group(1), cwd) if m else None, cmd,
-                     'a human.jsonl row written by a command'))
+                     'a command naming human.jsonl beside ACCEPTED or REJECTED (record and commit a check only '
+                     'with `human-check.sh <spec> <verdict> "<note>" --commit`)'))
     return acts
 
 

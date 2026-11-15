@@ -50,6 +50,24 @@ strikes or narrows the ask in brief.md's ## Asks: the blind seats read only the 
 *(empty)*
 
 ## Plan deltas
+
+- 2026-11-14/15, after the round-1 BLOCK and four automated security scans: the detect-a-write rule missed write
+  forms, so the rule is deny by default with a short safe-form list. Regex parsing of heredoc bodies kept opening
+  parser gaps, so any heredoc or here-string in a command naming the record counts as a write: ask 1's "text that
+  only names the path passes" holds for echo, printf and commit messages, not for heredocs (that text goes through
+  the Write tool). The owner chose a review-only re-check of the diff, then his acceptance.
+- 2026-11-15, review-only re-check at 56ec89b7: BLOCK (.vulyk/reports/owner-guard-commit-fp/recheck/review.md):
+  the allowlist still refused real commits (multi-line messages with a trailer, `2>&1`, `|| true`, quoted `>`) and
+  let some writes through; details (moved to a private file before publishing).
+  Shell-text parsing does not converge. Owner decision (option label, the agent's wording; cross-checked with
+  Fable): «Строгое правило + коммит внутри скрипта (Рекомендую)». Next, in a fresh session:
+  1. `owner-guard.sh`: restore the record rule of bc962e77 (a command naming the record and holding a verdict
+     word is a write); keep `writes_record`'s found bypasses as deny fixtures in `tests/defects.test.sh`.
+  2. `scripts/human-check.sh --commit`: the script commits its own `plan.md` line and record row with
+     `git commit -- <those paths>` only, so no agent command ever names the record with a verdict word.
+  3. Callers (`/vulyk-build`, `/vulyk-ship`, docs) use `--commit`; the brief's ask 1 is rewritten to this
+     design with the owner's words; integrity of a row is checked where it is read, in a later spec.
+
 <!--
 One entry per change to the plan after approval - a new story, expanded story files, a changed
 contract - written from a return report, never from a diff: date, trigger, decision, what was
@@ -71,7 +89,12 @@ is missing or unparsable.
 -->
 **Approved:** <owner, date - stage 02, the unconditional gate. /vulyk-build refuses without this line.>
 **Briefed:** via mini-brief, Andrei, 2026-11-14
-**Branch:** <written by /vulyk-build before wave 1 - stage 03: the branch every story commit lives on>
-**Checked:** <written by scripts/human-check.sh after the owner has looked - stage 05, and the override for stage 04+05. /vulyk-ship refuses without either this or a GREEN **Council:** line.>
-**Council:** <written by scripts/cycle.sh judge/escalate - stages 04+05: "<GREEN|RED|ESCALATE|STALE> round <N>, <date>, at <sha7>, pack <fp12>[ - red: 2,5]", appended once per round.>
+**Branch:** vulyk/owner-guard-commit-fp
+**Council:** ESCALATE round 1, 2026-11-14, at db39ef68, pack 3a8a9b920fb6
 **Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
+
+## Needs a human
+- reason: ceiling · round 1 · 2026-11-14
+- ask 1: BLOCK by the reviewer - see docs/specs/owner-guard-commit-fp/council/round-1/review.md
+- seats: docs/specs/owner-guard-commit-fp/council/round-1/
+**Checked:** ACCEPTED by Andrei, 2026-11-15, at 03b3cbbe - owner picked «Принимаю owner-guard-commit-fp (Рекомендую)» after the diff in the reply

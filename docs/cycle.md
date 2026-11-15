@@ -104,7 +104,8 @@ emergency exit, not the routine path.
 The owner is never locked out: `/vulyk-pause` hands the tree back at any stage, and
 `scripts/human-check.sh` still writes `**Checked:** ACCEPTED` or `REJECTED`, which outranks
 the council's verdict whichever way it points — `scripts/human-check.sh docs/specs/<slug>
-ACCEPTED "<where you looked>"` writes one line in two places. `/vulyk-ship` refuses without
+ACCEPTED "<where you looked>" --commit` writes one line in two places and commits those two paths only (an
+agent's own commit of the record beside a verdict word is refused by owner-guard). `/vulyk-ship` refuses without
 either a GREEN `**Council:**` row or a `**Checked:**` line, exactly as it refused without a
 human look before.
 
