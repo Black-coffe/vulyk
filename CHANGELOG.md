@@ -72,7 +72,8 @@ hook's header names the forms it leaves open).
   `human-check.sh` / `acceptance-log.sh` refuse instead of writing a note when redaction fails.
 - `human-check.sh --commit` records and commits the owner's check (its plan.md line and record row only, refused
   when either file already holds an uncommitted change); owner-guard keeps refusing any other command that names
-  the record beside a verdict word, an agent's own `git commit` of it included (spec `owner-guard-commit-fp`).
+  the record beside a verdict word, an agent's own `git commit` of it included (spec `owner-guard-commit-fp`); it
+  also reads a guarded command run through a command substitution.
 
 ## [0.52.0] - 2026-11-13
 
