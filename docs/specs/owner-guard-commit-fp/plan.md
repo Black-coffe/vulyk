@@ -98,3 +98,4 @@ is missing or unparsable.
 - seats: docs/specs/owner-guard-commit-fp/council/round-1/
 **Checked:** ACCEPTED by Andrei, 2026-11-15, at 03b3cbbe - owner picked «Принимаю owner-guard-commit-fp (Рекомендую)» after the diff in the reply
 **Shipped:** 0.53.0-dev.2, 2026-11-15, at 2bb733de - merged to main, publish pending; no branch CI (public origin): CI runs on the release-candidate branch before the tag, owner: «Сборка на канарейке параллельно с CI (Рекомендую)»
+**Checked:** ACCEPTED by Andrei, 2026-11-15, at df5377ae - owner picked «Принимаю починку b92c6f53 (Рекомендую)» for the backtick fix after the diff in the reply
