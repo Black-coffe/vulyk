@@ -65,6 +65,9 @@ Guards, gates and installer fixes from a framework audit (spec `audit-fixes-1113
 - `council-opus` gets 150 turns and a turn budget, so a large spec still gets its report.
 - `redact.sh` leaves ordinary text alone (every brief and journal of the repo passes byte-identical), and
   `human-check.sh` / `acceptance-log.sh` refuse instead of writing a note when redaction fails.
+- `human-check.sh --commit` records and commits the owner's check (its plan.md line and record row only, refused
+  when either file already holds an uncommitted change); owner-guard keeps refusing any other command that names
+  the record beside a verdict word, an agent's own `git commit` of it included (spec `owner-guard-commit-fp`).
 
 ## [0.52.0] - 2026-11-13
 
