@@ -56,6 +56,17 @@ strikes or narrows the ask in brief.md's ## Asks: the blind seats read only the 
   parser gaps, so any heredoc or here-string in a command naming the record counts as a write: ask 1's "text that
   only names the path passes" holds for echo, printf and commit messages, not for heredocs (that text goes through
   the Write tool). The owner chose a review-only re-check of the diff, then his acceptance.
+- 2026-11-15, review-only re-check at 56ec89b7: BLOCK (.vulyk/reports/owner-guard-commit-fp/recheck/review.md):
+  the allowlist still refused real commits (multi-line messages with a trailer, `2>&1`, `|| true`, quoted `>`) and
+  let some writes through; details (moved to a private file before publishing).
+  Shell-text parsing does not converge. Owner decision (option label, the agent's wording; cross-checked with
+  Fable): «Строгое правило + коммит внутри скрипта (Рекомендую)». Next, in a fresh session:
+  1. `owner-guard.sh`: restore the record rule of bc962e77 (a command naming the record and holding a verdict
+     word is a write); keep `writes_record`'s found bypasses as deny fixtures in `tests/defects.test.sh`.
+  2. `scripts/human-check.sh --commit`: the script commits its own `plan.md` line and record row with
+     `git commit -- <those paths>` only, so no agent command ever names the record with a verdict word.
+  3. Callers (`/vulyk-build`, `/vulyk-ship`, docs) use `--commit`; the brief's ask 1 is rewritten to this
+     design with the owner's words; integrity of a row is checked where it is read, in a later spec.
 
 <!--
 One entry per change to the plan after approval - a new story, expanded story files, a changed
