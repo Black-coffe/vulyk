@@ -828,6 +828,11 @@ ok "human-check --commit names the spec and the verdict in the message" "$hc_msg
 ok "human-check --commit leaves another staged file staged and uncommitted" "$hc_left"
 ok "human-check --commit records the note without the flag" \
   "$(grep -q '"note":"the Acme login works"' "$HCR/memory/stats/human.jsonl" && grep -q 'ACCEPTED by t, .* - the Acme login works$' "$HCR/docs/specs/acme-demo/plan.md"; echo $?)"
+hc_head="$(git -C "$HCR" rev-parse HEAD)"; printf 'an uncommitted line\n' >> "$HCR/docs/specs/acme-demo/plan.md"
+hc_rc="$(cd "$HCR" && bash "$SRC/scripts/human-check.sh" docs/specs/acme-demo ACCEPTED "again" --commit >/dev/null 2>&1; echo $?)"
+ok "human-check --commit refuses when the plan already holds an uncommitted change, and records nothing" \
+  "$([ "$hc_rc" = 1 ] && [ "$(git -C "$HCR" rev-parse HEAD)" = "$hc_head" ] && \
+     [ "$(wc -l < "$HCR/memory/stats/human.jsonl" | tr -d ' ')" = 1 ] && ! grep -q 'again' "$HCR/docs/specs/acme-demo/plan.md"; echo $?)"
 
 echo "--- this tree's library: green, one info line per .scrub-revs commit (audit-fixes-1113-12)"
 run

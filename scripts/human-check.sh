@@ -137,6 +137,18 @@ PLAN="$SPEC/plan.md"
   exit 0
 }
 
+# `--commit` commits the two paths whole, so they must hold nothing but what this run appends: an uncommitted
+# change already in either would ride into the commit under the owner's verdict. Refuse before writing anything.
+if [ "$COMMIT" = 1 ]; then
+  for p in "$PLAN" "$ROOT/memory/stats/human.jsonl"; do
+    [ -e "$p" ] || continue
+    if [ -n "$(git -C "$ROOT" status --porcelain -- "$p" 2>/dev/null)" ]; then
+      echo "human-check: REFUSED --commit - $p has uncommitted changes; they would be committed under this verdict. Commit or drop them first; nothing is recorded." >&2
+      exit 1
+    fi
+  done
+fi
+
 # Who looked: the committer identity is the closest thing to a signature git has. Never
 # invent a name - an unnamed check is still a check, an attributed one nobody made is not.
 OWNER="$(git -C "$ROOT" config user.name 2>/dev/null || true)"
