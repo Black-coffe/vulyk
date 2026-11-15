@@ -91,10 +91,10 @@ is missing or unparsable.
 **Briefed:** via mini-brief, Andrei, 2026-11-14
 **Branch:** vulyk/owner-guard-commit-fp
 **Council:** ESCALATE round 1, 2026-11-14, at db39ef68, pack 3a8a9b920fb6
-**Shipped:** <written by scripts/ship-check.sh --record - stage 06: the published version, and where>
 
 ## Needs a human
 - reason: ceiling · round 1 · 2026-11-14
 - ask 1: BLOCK by the reviewer - see docs/specs/owner-guard-commit-fp/council/round-1/review.md
 - seats: docs/specs/owner-guard-commit-fp/council/round-1/
 **Checked:** ACCEPTED by Andrei, 2026-11-15, at 03b3cbbe - owner picked «Принимаю owner-guard-commit-fp (Рекомендую)» after the diff in the reply
+**Shipped:** 0.53.0-dev.2, 2026-11-15, at 2bb733de - merged to main, publish pending; no branch CI (public origin): CI runs on the release-candidate branch before the tag, owner: «Сборка на канарейке параллельно с CI (Рекомендую)»
