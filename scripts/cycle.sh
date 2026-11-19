@@ -13,17 +13,18 @@
 # Exit codes: 0 ok · 1 usage · 2 precondition (stderr names it) · 3 paused ·
 #             4 malformed report / red council verdict · 5 stale · 6 escalate.
 #
-# autonomous-cycle-01 implemented `status`, `judge` and `escalate`. autonomous-cycle-03
-# added `record-seat` (the D3 report contract: labels, ASK coverage, evidence, taint, the
-# two-attempt re-ask), `briefed`, `branch`, `pause`/`resume` and the `PAUSE` guard on every
-# mutating verb. autonomous-cycle-04 (this story) adds `close-story` (scope-check + the
-# story's `## Verification` x `repeat:`, then `status: done` and a `story(<id>): <title>`
-# commit), `open-round` (preconditions, the court worktree, D1's crash/idempotency rules)
-# and `reopen` (ceiling + the tier's own ceiling after ESCALATE, convergent-judge); `judge` gains only the court removal - the
-# verdict rule and the row schema are unchanged from story 01/03.
+# The verbs today: status, judge, escalate, briefed, branch, record-seat, pause, resume, claim, release,
+# manual-done, stamp-red, close-story, revise, reanchor, open-round, suite, reopen, repair, advance;
+# `--short` swaps a verb's last line for the flat line the Workflow driver reads (short_line).
+# History: autonomous-cycle-01 wrote `status`, `judge` and `escalate`; -03 `record-seat` (the D3 report
+# contract: labels, ASK coverage, evidence, taint, the two-attempt re-ask), `briefed`, `branch`,
+# `pause`/`resume` and the `PAUSE` guard on every mutating verb; -04 `close-story` (scope-check + the
+# story's `## Verification` x `repeat:`, then `status: done` and a `story(<id>): <title>` commit),
+# `open-round` (preconditions, the court worktree, D1's crash/idempotency rules) and `reopen`.
 #
 # 0.18 (docs/adr/013-light-vulyk.md): the roster is `review` at Tier 1-2 and `opus review` at
-# Tier 3-4, plus `haiku` when the constitution's Client path is filled (D1); `open-round`
+# Tier 3-4, with `haiku` in place of `opus` when the constitution's Client path is filled
+# (required_seats_for_tier); `open-round`
 # freezes it as `seats=` in ROUND, with `since=` for round n>1, builds no court when no blind
 # seat is required, and carries round n-1's GREEN/N/A blind seats forward (D3). `advance` runs
 # claim, seat ingestion and every branch/open-round/judge/repair step in one call (D2);
@@ -41,6 +42,12 @@ shopt -s nullglob 2>/dev/null || true
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/lib.sh
 . "$HERE/lib.sh"
+
+# The one fence rule of every story-section reader (narrow-repair-1115-06; the same line in wave-check.sh,
+# scope-check.sh and trace-check.sh, the rule symbol-map.py's fence_step mirrors): a line of 3+ ` or ~ (any
+# indent) opens a fence, a backtick one with no ` in its info string; only a line of the same character, at least
+# as long, with nothing after it closes it. `fence_line($0) || fence_n { next }` skips the fence lines and all inside.
+FENCE_AWK='function fence_line(s,  t, c, n, r) { t = s; sub(/^[ \t]+/, "", t); c = substr(t, 1, 1); if (c != "`" && c != "~") return 0; n = 0; while (substr(t, n + 1, 1) == c) n++; if (n < 3) return 0; r = substr(t, n + 1); if (fence_n) { if (c == fence_c && n >= fence_n && r ~ /^[ \t\r]*$/) { fence_n = 0; return 1 } return 0 } if (c == "`" && index(r, "`")) return 0; fence_c = c; fence_n = n; return 1 }'
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "cycle: CANNOT RUN - not a git repo, so there is no state to derive or record." >&2
@@ -227,6 +234,19 @@ default_branch() { # default_branch -> origin's HEAD branch, else main, else mas
   [ -n "$d" ] || { git show-ref --verify --quiet refs/heads/main && d=main; }
   [ -n "$d" ] || { git show-ref --verify --quiet refs/heads/master && d=master; }
   printf '%s' "$d"
+}
+
+solo_gate_on() { # solo_gate_on -> 0 iff the default branch holds a root `.vulyk-solo-gate` saying exactly `merge-only`
+  # (solo-gate-1118, opt-in): then a Tier 1-2 round's gate runs no step and the merge run is the one full run. Read
+  # from the default branch, so a spec branch cannot switch its own gate off; missing, empty or other text: off.
+  local db v; db="$(default_branch)"; [ -n "$db" ] || return 1
+  v="$(git show "$db:.vulyk-solo-gate" 2>/dev/null | tr -d '\r')" || return 1
+  [ "$v" = merge-only ]
+}
+
+solo_tier() { # solo_tier <spec> <round-dir> -> 0 iff the round's frozen tier is 1 or 2
+  case "$(round_tier "$1" "$2")" in 1|2) return 0 ;; esac
+  return 1
 }
 
 [ -n "$VERB" ] || usage
@@ -2135,10 +2155,12 @@ cmd_record_seat() { # cmd_record_seat <spec> <N> <seat> [--model <id>] [--stamp 
 # --- close-story / open-round / reopen (autonomous-cycle-04: rounds in git) ------------------
 
 verify_of() { # verify_of <story-file> - the `## Verification` block, comments and backticks
-  # stripped. Verbatim mirror of wave-check.sh:89-97 (the Map slice's "reuse the same parse") -
+  # stripped; a line inside a fence (FENCE_AWK) is never read, heading or not (narrow-repair-1115-03: a red
+  # receipt's captured output added a fixture's `## Verification` to the story). Verbatim mirror of wave-check.sh's verify_of (the Map slice's "reuse the same parse") -
   # duplicated rather than sourced because wave-check.sh is a standalone report script, not a
-  # library, and Non-goals forbids touching it.
-  awk '
+  # library.
+  awk "$FENCE_AWK"'
+    fence_line($0) || fence_n                  { next }
     /^##[[:space:]]+Verification[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/                           { inblock=0 }
     inblock && /^<!--/                         { incomment=1 }
@@ -2147,9 +2169,10 @@ verify_of() { # verify_of <story-file> - the `## Verification` block, comments a
   ' "$1"
 }
 
-files_of() { # files_of <story-file> - the `## Files` block, comments skipped. Mirrors
+files_of() { # files_of <story-file> - the `## Files` block, comments and fenced lines skipped. Mirrors
   # scope-check.sh's own files_of() (also duplicated there, not sourced - same reason).
-  awk '
+  awk "$FENCE_AWK"'
+    fence_line($0) || fence_n           { next }
     /^##[[:space:]]+Files[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/                    { inblock=0 }
     inblock && /^<!--/                  { incomment=1 }
@@ -2380,11 +2403,44 @@ verify_rec_new() { # verify_rec_new <record> <files-hash> <stamp> <verify-hash> 
     [ -z "${5:-}" ] || printf 'outd=%s\n' "$5"; } > "$1"
 }
 
-verify_rec_drop() { # verify_rec_drop <record> - remove the record and its results directory; the directory
-  # only when it is one stamp-red made (vulyk-sr.*), a real directory the caller owns, never through a symlink
+sr_root() { local r="${TMPDIR:-/tmp}"; printf '%s' "${r%/}"; } # sr_root -> the temp root stamp-red's stored output lives in
+
+outd_why() { # outd_why <path> -> why a recorded stored-output path is not stamp-red's own, or nothing when it
+  # is (R1): a real directory (no link) directly under the temp root, named vulyk-sr.<x>, owned by the caller
+  local p="$1"
+  if [ -z "$p" ]; then echo "no results directory in the record"
+  elif [ "${p%/*}" != "$(sr_root)" ]; then echo "results directory $p is not directly under the temp root $(sr_root)"
+  elif case "${p##*/}" in vulyk-sr.?*) false ;; *) true ;; esac; then echo "results directory $p lacks the vulyk-sr. prefix"
+  elif [ -L "$p" ]; then echo "results directory $p is a symlink"
+  elif [ ! -d "$p" ]; then echo "results directory $p is not a directory"
+  elif [ ! -O "$p" ]; then echo "results directory $p is not owned by the caller"
+  fi
+}
+
+sr_sweep() { # sr_sweep - removes stamp-red's own stored-output directories (outd_why's rule) older than a day
+  local root d; root="$(sr_root)"
+  find "$root/" -mindepth 1 -maxdepth 1 -type d -name 'vulyk-sr.?*' -mmin +1440 2>/dev/null | while IFS= read -r d; do
+    d="$root/${d##*/}"
+    [ -z "$(outd_why "$d")" ] && rm -rf -- "$d"
+  done
+  return 0
+}
+
+verify_rec_drop() { # verify_rec_drop <record> - remove the record, and its results directory only when outd_why
+  # vouches for it; any other recorded path is neither read nor removed
   local od; od="$(verify_rec_get "$1" outd)"
-  case "${od##*/}" in vulyk-sr.*) [ -d "$od" ] && [ ! -L "$od" ] && [ -O "$od" ] && rm -rf -- "$od" ;; esac
+  [ -n "$od" ] && [ -z "$(outd_why "$od")" ] && rm -rf -- "$od"
   rm -f -- "$1"
+}
+
+red_rec() { verify_rec "$1" stamp-red.receipt; } # red_rec <story-file> -> the path of stamp-red's receipt record (D1)
+
+red_rec_put() { # red_rec_put <story-file> <tests-hash> <impl-hash> <stamped> - the receipt record stamp-red keeps
+  # after a finished run: tests=, impl=, stamped=, written whole (a re-stamp replaces it)
+  local rec dir top; rec="$(red_rec "$1")"; dir="$(dirname "$rec")"; top="$(dirname "$dir")"
+  mkdir -p "$dir" || return 1
+  [ -f "$top/.gitignore" ] || printf '*\n' > "$top/.gitignore"
+  printf 'tests=%s\nimpl=%s\nstamped=%s\n' "$2" "$3" "$4" > "$rec"
 }
 
 verify_nth_line() { # verify_nth_line <cmd-list> <reps> <k> -> the k-th line verify_run runs (counted across reps)
@@ -2407,10 +2463,10 @@ verify_resume_start() { # verify_resume_start <verb> <record> <files-hash> <stam
   # is honoured only when head (equal to HEAD, or only paperwork commits since: lib.sh paperwork_only),
   # stamp (`-` for none), the ## Files hash and the ## Verification hash all equal this call's, and every
   # skipped line j has a line=j entry for its current text: close-story needs that entry's exit 0;
-  # stamp-red needs outd= to be a directory, not a symlink, owned by the caller ([ -d ] [ ! -L ] [ -O ]),
-  # holding j.code / j.line equal to the entry and j.out whose sha256 is the entry's fourth field (the
-  # output this chain wrote, upgrade-findings-07). Anything else: VR_START=1, the record and its directory
-  # dropped, one stderr line saying why. No record at all is the silent strict path.
+  # stamp-red needs outd= to pass outd_why (directly under the temp root, vulyk-sr. prefix, a real
+  # directory, not a symlink, owned by the caller), holding j.code / j.line equal to the entry and j.out whose sha256 is the entry's fourth field (the
+  # output this chain wrote, upgrade-findings-07). Anything else: VR_START=1, the record dropped (its
+  # directory only when outd_why vouches for it), one stderr line saying why. No record at all is the silent strict path.
   local verb="$1" rec="$2" why="" h nx j e lt lrc eh oh od=""
   VR_START=1; VR_OUTD=""
   [ -e "$rec" ] || [ -L "$rec" ] || return 0
@@ -2427,11 +2483,7 @@ verify_resume_start() { # verify_resume_start <verb> <record> <files-hash> <stam
   fi
   if [ -z "$why" ] && [ "$verb" = stamp-red ]; then
     od="$(verify_rec_get "$rec" outd)"
-    if [ -z "$od" ]; then why="no results directory in the record"
-    elif [ -L "$od" ]; then why="results directory $od is a symlink"
-    elif [ ! -d "$od" ]; then why="results directory $od is not a directory"
-    elif [ ! -O "$od" ]; then why="results directory $od is not owned by the caller"
-    fi
+    why="$(outd_why "$od")"
   fi
   j=1
   while [ -z "$why" ] && [ "$j" -lt "$nx" ]; do
@@ -2636,32 +2688,6 @@ finding_paths() { # finding_paths <findings> -> the path each finding starts wit
   done <<< "$1"
 }
 
-verify_lines_hitting() { # verify_lines_hitting <verification-lines> <paths> -> the lines with a path token
-  # overlapping one of <paths>, in order; none when <paths> is empty
-  local line tok p
-  [ -n "$2" ] || return 0
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    while IFS= read -r tok; do
-      while IFS= read -r p; do
-        [ -n "$p" ] || continue
-        if path_overlap "$tok" "$p"; then printf '%s\n' "$line"; continue 3; fi
-      done <<< "$2"
-    done <<< "$(verify_path_tokens "$line")"
-  done <<< "$1"
-}
-
-repair_verification() { # repair_verification <verifs> <findings> <files> -> the repair's ## Verification lines,
-  # deduped: those covering a path the findings name; else those covering ## Files; else all of them
-  local all fp hit
-  all="$(printf '%s' "$1" | awk 'NF && !seen[$0]++')"
-  fp="$(finding_paths "$2")"
-  hit="$(verify_lines_hitting "$all" "$fp")"
-  [ -n "$hit" ] || hit="$(verify_lines_hitting "$all" "$3")"
-  [ -n "$hit" ] || hit="$all"
-  printf '%s\n' "$hit"
-}
-
 repair_unmarks() { # repair_unmarks <findings> <union-paths> <marked-paths> - exit 0 only when every
   # finding line names a path of the union and none names a marked story's path; no findings: exit 1
   local line p named
@@ -2725,10 +2751,13 @@ EOF
 }
 
 red_gate() { # red_gate <story-file> - close-story's refusals for a marked story (exit 4); returns
-  # when the receipt stands. A missing receipt line or section is a refusal, never a pass.
-  local story="$1" rva th ih now msg=""
+  # when the receipt stands. A missing receipt line or section is a refusal, never a pass. The receipt
+  # stands only when stamp-red's own record (red_rec, guards-1115-03 D1) holds the same tests and impl
+  # hashes; no record, or other hashes, is a refusal naming stamp-red.
+  local story="$1" rva th ih now msg="" rec
   rva="$(fm_raw "$story" red_verified_at)"
-  ih="$(awk '/^## Red receipt[[:space:]]*$/ { in_r=1; next } in_r && /^##[[:space:]]/ { exit }
+  ih="$(awk "$FENCE_AWK"' fence_line($0) || fence_n { next }
+    /^## Red receipt[[:space:]]*$/ { in_r=1; next } in_r && /^##[[:space:]]/ { exit }
     in_r && /^- impl: / { sub(/^- impl: /, ""); sub(/[[:space:]]+$/, ""); print; exit }' "$story")"
   th="${rva##* }"
   if [ -z "$rva" ] || [ "$th" = "$rva" ] || [ -z "$ih" ] || ! grep -q '^## Red receipt[[:space:]]*$' "$story"; then
@@ -2740,7 +2769,12 @@ red_gate() { # red_gate <story-file> - close-story's refusals for a marked story
     }
     red_sets "$story"
     now="$(red_hash "$RED_SEALED")"
-    if [ "$now" != "$th" ]; then msg="test changed after red receipt: re-run stamp-red"
+    rec="$(red_rec "$story")"
+    if [ ! -f "$rec" ] || [ -L "$rec" ] || [ -z "$(verify_rec_get "$rec" tests)" ]; then
+      msg="red receipt has no stamp-red record: run cycle.sh stamp-red $story"
+    elif [ "$(verify_rec_get "$rec" tests)" != "$th" ] || [ "$(verify_rec_get "$rec" impl)" != "$ih" ]; then
+      msg="red receipt differs from its stamp-red record: run cycle.sh stamp-red $story"
+    elif [ "$now" != "$th" ]; then msg="test changed after red receipt: re-run stamp-red"
     elif [ "$(red_hash "$RED_IMPL")" = "$ih" ]; then msg="no implementation change since red receipt"
     fi
   fi
@@ -2761,7 +2795,12 @@ block_card_gate() { # block_card_gate <story-file> - ADR-032 D3: when a defect c
 $(files_of "$story")
 EOF
   [ "${#specs[@]}" -gt 0 ] || return 0
-  while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && files+=("$f"); done <<EOF
+  # The library's own fixtures and terms files (and its fixtures/ folder) are red by design: never checked.
+  while IFS= read -r f; do
+    [ -n "$f" ] && [ -f "$f" ] || continue
+    case "${f#./}" in "${dir%/}"/*.fixture|"${dir%/}"/*.terms|"${dir%/}"/fixtures/*|"${dir%/}"/*/fixtures/*) continue ;; esac
+    files+=("$f")
+  done <<EOF
 $(git -c core.quotePath=false ls-files -co --exclude-standard -- ${specs[@]+"${specs[@]}"} 2>/dev/null | LC_ALL=C sort -u)
 EOF
   [ "${#files[@]}" -gt 0 ] || return 0
@@ -2821,6 +2860,13 @@ $RED_IMPL
 EOF
 }
 
+sr_exit() { # sr_exit - stamp-red's EXIT trap: the stored output in SR_OUTD removed (a pause empties it
+  # first), then red_baseline_restore
+  [ -z "${SR_OUTD:-}" ] || rm -rf -- "$SR_OUTD"
+  SR_OUTD=""
+  red_baseline_restore
+}
+
 red_baseline_restore() { # red_baseline_restore - the EXIT trap of red_baseline_swap: each file back byte for
   # byte (cp -p of the copy), a file that was absent removed again; then the copies are dropped
   local i flag p
@@ -2837,6 +2883,21 @@ red_baseline_restore() { # red_baseline_restore - the EXIT trap of red_baseline_
   rm -rf "$RB_DIR"; RB_DIR=""
 }
 
+red_lines() { # red_lines <file> - its lines but the passing ones (first word `ok`), the lines stamp-red reads red_reason in
+  grep -Ev '^[[:space:]]*ok([[:space:]]|$)' "$1"
+}
+
+story_path_rel() { # story_path_rel <verb> - sets STORY repo-relative (an absolute path in either spelling of the
+  # root is taken as the relative one, tails-1115-01 T2); a path outside the repo is refused, exit 2
+  local rel
+  rel="$(story_rel "$ROOT" "$STORY")" || {
+    echo "cycle: $1 - story file outside the repo: $STORY" >&2
+    emit false "$1" 2 error "story file outside the repo: $STORY"
+    exit 2
+  }
+  STORY="$rel"
+}
+
 cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] [<baseline 0|1>] - red-receipt: run the story's
   # ## Verification once, the close-story way, and write the receipt only for a red for the
   # declared reason - never a launch failure, a timeout, or a green. Commits nothing. With
@@ -2848,6 +2909,7 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] [<baseline 0|1>] - red-
     emit false stamp-red 1 error "usage"
     exit 1
   }
+  story_path_rel stamp-red # tails-1115-01 (T2): before anything reads it
   local SPECDIR; SPECDIR="$(dirname "$STORY")"
   pause_guard "$SPECDIR" stamp-red
   driver_guard "$SPECDIR" stamp-red "$STAMP"
@@ -2882,14 +2944,19 @@ cmd_stamp_red() { # cmd_stamp_red <story-file> [<stamp>] [<baseline 0|1>] - red-
   local VH VL VREC OUTD; VH="$(verify_files_hash "$STORY")"; VL="$(verify_text_hash "1
 $CMD_LIST")"
   VREC="$(verify_rec "$STORY" stamp-red)"
+  sr_sweep   # guards-1115-03 (S14): stored output an unresumed pause left a day ago or more goes first
   verify_resume_start stamp-red "$VREC" "$VH" "$STAMP" "$VL" "$CMD_LIST" 1
   OUTD="$VR_OUTD"
   if [ "$VR_START" -eq 1 ]; then
-    OUTD="$(mktemp -d "${TMPDIR:-/tmp}/vulyk-sr.XXXXXX")" || { emit false stamp-red 2 error "mktemp -d failed"; exit 2; }
+    OUTD="$(mktemp -d "$(sr_root)/vulyk-sr.XXXXXX")" || { emit false stamp-red 2 error "mktemp -d failed"; exit 2; }
     verify_rec_new "$VREC" "$VH" "$STAMP" "$VL" "$OUTD" || { rm -rf "$OUTD"; emit false stamp-red 2 error "could not write $VREC"; exit 2; }
   fi
+  # guards-1115-03 (S14): from here every way out removes the stored output (and puts a --baseline working
+  # copy back); only a pause clears SR_OUTD first and keeps it for the resumed call
+  SR_OUTD="$OUTD"
+  trap sr_exit EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
   VR_REC="$VREC" verify_run "$CMD_LIST" 1 "$OUTD"
-  if [ "$VR_PAUSE" -gt 0 ]; then verify_pause stamp-red "$VREC" "$VR_PAUSE"; fi
+  if [ "$VR_PAUSE" -gt 0 ]; then SR_OUTD=""; verify_pause stamp-red "$VREC" "$VR_PAUSE"; fi
   # audit-fixes-1113-03: a later line can rewrite an earlier line's <k>.out after its hash was recorded; each
   # stored output is re-hashed against its line= entry before the verdict reads it again.
   local k oh
@@ -2903,18 +2970,22 @@ $CMD_LIST")"
   if [ "$VR_RC" -eq 124 ] && [ "$VR_TIMEOUT_OK" -eq 1 ]; then
     rm -rf "$OUTD"; red_refuse "not red: timed out after ${VR_VT}s"
   fi
-  local k HIT="" FIRSTFAIL=""
+  local k HIT="" FIRSTFAIL="" OKONLY=""
   for k in "${!VR_CODES[@]}"; do
     case "${VR_CODES[$k]}" in
       126|127) rm -rf "$OUTD"; red_refuse "not red: ${VR_LINES[$k]} exits ${VR_CODES[$k]} (launch failure)" ;;
     esac
   done
+  # tails-1115-01 (T23): red_reason counts only in lines that are not passing lines (first word `ok`), so a
+  # reason that is also a passing check's label is no red
   for k in "${!VR_CODES[@]}"; do
     [ "${VR_CODES[$k]}" -ne 0 ] || continue
     [ -n "$FIRSTFAIL" ] || FIRSTFAIL="$k"
-    grep -qF -- "$REASON" "$OUTD/$k.out" && { HIT="$k"; break; }
+    red_lines "$OUTD/$k.out" | grep -qF -- "$REASON" && { HIT="$k"; break; }
+    [ -n "$OKONLY" ] || ! grep -qF -- "$REASON" "$OUTD/$k.out" || OKONLY="$k"
   done
   [ -n "$FIRSTFAIL" ] || { rm -rf "$OUTD"; red_refuse "not red: every verification line exits 0"; }
+  [ -n "$HIT" ] || [ -z "$OKONLY" ] || { rm -rf "$OUTD"; red_refuse "red for another reason: red_reason only in passing (ok) lines of ${VR_LINES[$OKONLY]}"; }
   [ -n "$HIT" ] || { rm -rf "$OUTD"; red_refuse "red for another reason: red_reason not in the output of ${VR_LINES[$FIRSTFAIL]}"; }
 
   local TS TH IH TAIL PATHS
@@ -2923,30 +2994,38 @@ $CMD_LIST")"
   IH="$(red_hash "$RED_IMPL")"
   # The lines carrying red_reason (at most 3) lead the tail, so the receipt shows the failing check even
   # when ten passing lines follow it (post-046-tails).
-  TAIL="$( { grep -F -- "$REASON" "$OUTD/$HIT.out" | head -n 3; tail -n 10 "$OUTD/$HIT.out"; } | tr -d '\r' | bash "$HERE/redact.sh")"
+  TAIL="$( { red_lines "$OUTD/$HIT.out" | grep -F -- "$REASON" | head -n 3; tail -n 10 "$OUTD/$HIT.out"; } | tr -d '\r' | bash "$HERE/redact.sh")"
   rm -rf "$OUTD"
+  # guards-1115-03 (D1): the receipt's hashes go into the cycle's own record first; close-story's red gate
+  # accepts the story's receipt only when it carries the same ones. A failed re-stamp leaves the last one.
+  red_rec_put "$STORY" "$TH" "$IH" "$TS" || { emit false stamp-red 2 error "could not write $(red_rec "$STORY")"; exit 2; }
   PATHS="$(printf '%s\n' "$RED_SEALED" | sed '/^$/d' | paste -sd, - | sed 's/,/, /g')"
 
   # Frontmatter: red_verified_at replaced, or added right after red_reason:. Body: an old
-  # ## Red receipt block (heading to the next ## heading or EOF) dropped, trailing blank lines cut
-  # so a re-stamp never grows the file, the new block appended.
+  # ## Red receipt block (heading to the next ## heading outside a fence, or EOF) dropped, trailing blank
+  # lines cut so a re-stamp never grows the file, the new block appended.
   local TMP; TMP="$(mktemp)"
-  awk -v line="red_verified_at: $TS $TH" '
+  awk -v line="red_verified_at: $TS $TH" "$FENCE_AWK"'
     NR == 1 && /^---[[:space:]]*$/ { infm=1; print; next }
     infm && /^---[[:space:]]*$/    { infm=0; print; next }
     infm && /^red_verified_at:/    { next }
     infm && /^red_reason:/         { print; print line; next }
     infm                           { print; next }
-    /^## Red receipt[[:space:]]*$/ { skip=1; next }
-    skip && /^##[[:space:]]/       { skip=0 }
+    { fz = fence_line($0) || fence_n }
+    !fz && /^## Red receipt[[:space:]]*$/ { skip=1; next }
+    skip && !fz && /^##[[:space:]]/ { skip=0 }
     skip                           { next }
     { a[++n] = $0 }
     END { while (n > 0 && a[n] ~ /^[[:space:]]*$/) n--; for (i = 1; i <= n; i++) print a[i] }
   ' "$STORY" > "$TMP"
+  # narrow-repair-1115-06 (ask 8): the captured output is inert - its fence is one backtick longer than the
+  # longest backtick run opening any of its lines (at least 3), so no output line closes it (FENCE_AWK)
+  local RFENCE; RFENCE="$(printf '%s\n' "$TAIL" | awk 'BEGIN { m = 2 } { t = $0; sub(/^[ \t]+/, "", t); n = 0; while (substr(t, n + 1, 1) == "`") n++; if (n > m) m = n }
+    END { s = ""; for (i = 0; i <= m; i++) s = s "`"; print s }')"
   {
     cat "$TMP"
-    printf '\n## Red receipt\n- command: %s\n- exit: %s\n- tests: %s (%s)\n- impl: %s\n- stamped: %s\n\n```\n%s\n```\n' \
-      "${VR_LINES[$HIT]}" "${VR_CODES[$HIT]}" "$TH" "$PATHS" "$IH" "$TS" "$TAIL"
+    printf '\n## Red receipt\n- command: %s\n- exit: %s\n- tests: %s (%s)\n- impl: %s\n- stamped: %s\n\n%s\n%s\n%s\n' \
+      "${VR_LINES[$HIT]}" "${VR_CODES[$HIT]}" "$TH" "$PATHS" "$IH" "$TS" "$RFENCE" "$TAIL" "$RFENCE"
   } > "$STORY"
   rm -f "$TMP"
 
@@ -2975,6 +3054,7 @@ cmd_close_story() { # cmd_close_story <story-file> <commit:0|1> [<stamp>]
     emit false close-story 1 error "usage"
     exit 1
   }
+  story_path_rel close-story # tails-1115-01 (T2): before anything reads it
   local SPECDIR; SPECDIR="$(dirname "$STORY")"
   pause_guard "$SPECDIR" close-story
   driver_guard "$SPECDIR" close-story "$STAMP"
@@ -3201,7 +3281,9 @@ $CMD_LIST")"
     # in-progress story must not ride along in this commit.
     local ID TITLE f
     ID="$(fm_field "$STORY" story)"
-    TITLE="$(grep -m1 '^# ' "$STORY" | sed 's/^#[[:space:]]*//; s/`//g')"
+    # tails-1115-01 (T3): the title is the first `# ` line after the frontmatter, never a commented frontmatter line
+    TITLE="$(awk 'NR == 1 && /^---[[:space:]]*$/ { fm = 1; next } fm { if (/^---[[:space:]]*$/) fm = 0; next } /^# / { print; exit }' "$STORY" \
+      | sed 's/^#[[:space:]]*//; s/`//g')"
     # G6: every add is checked; a failed one unstages what this close staged, puts status: back and
     # exits 2 - never a commit missing a declared file. An entry that names nothing git lists (never
     # created, or ignored) has nothing to stage and is skipped, as before.
@@ -3249,16 +3331,32 @@ EOF
     while IFS= read -r -d '' p; do OWN+=("$p"); done < <(git -c core.quotePath=false diff --cached \
       --name-only -z --no-renames -- ${SPECS[@]+"${SPECS[@]}"} 2>/dev/null)
     local commit_err="nothing of this story is staged"
+    # tails-1115-01 (T17): the commit is built in a temporary index, HEAD plus this story's staged entries copied
+    # from the real index, mode included; not by `--only`, which re-reads the working tree and, under
+    # core.fileMode=false, keeps HEAD's mode, so an index-only chmod was lost. Whatever else is staged stays out.
+    local CIDX; CIDX="$(git rev-parse --git-path vulyk-close-index)"; rm -f "$CIDX"
+    close_index() { # close_index - CIDX = HEAD + the real index's entries for OWN (a path absent there is removed)
+      GIT_INDEX_FILE="$CIDX" git read-tree HEAD 2>&1 || return 1
+      [ "${#OWN[@]}" -gt 0 ] || return 0
+      local q
+      GIT_LITERAL_PATHSPECS=1 git ls-files -s -z -- ${OWN[@]+"${OWN[@]}"} | GIT_INDEX_FILE="$CIDX" git update-index -z --index-info 2>&1 || return 1
+      for q in ${OWN[@]+"${OWN[@]}"}; do
+        [ -n "$(GIT_LITERAL_PATHSPECS=1 git ls-files -- "$q")" ] || GIT_INDEX_FILE="$CIDX" git update-index --force-remove -- "$q" 2>&1 || return 1
+      done
+    }
     if { [ "${#OWN[@]}" -eq 0 ] && [ "${#ALLOW[@]}" -eq 0 ]; } \
-      || ! commit_err="$(GIT_LITERAL_PATHSPECS=1 git commit -q ${ALLOW[@]+"${ALLOW[@]}"} -m "$(commit_subject "story($ID): $TITLE")" --only -- ${OWN[@]+"${OWN[@]}"} 2>&1)"; then
+      || ! commit_err="$(close_index)" \
+      || ! commit_err="$(GIT_INDEX_FILE="$CIDX" git commit -q ${ALLOW[@]+"${ALLOW[@]}"} -m "$(commit_subject "story($ID): $TITLE")" 2>&1)"; then
+      rm -f "$CIDX"
       [ "${#OWN[@]}" -eq 0 ] || GIT_LITERAL_PATHSPECS=1 git reset -q -- ${OWN[@]+"${OWN[@]}"} >/dev/null 2>&1
       set_story_status "$STORY" done "$ST"
       echo "cycle: close-story - git commit failed: $commit_err" >&2
       emit false close-story 2 error "git commit failed"
       exit 2
     fi
-    # `--only` commits through a temporary index: a hook that rewrote and re-added a file
+    # The commit went through a temporary index: a hook that rewrote and re-added a file
     # (lint-staged, a formatter) changed the commit but not the real index. Sync it to HEAD.
+    rm -f "$CIDX"
     GIT_LITERAL_PATHSPECS=1 git reset -q -- ${OWN[@]+"${OWN[@]}"} >/dev/null 2>&1
   else
     set_story_status "$STORY" '[^[:space:]#]+' done
@@ -3346,6 +3444,23 @@ build_court() { # build_court <spec> <slug> <n> <head> <round-dir> - the blind s
   run_court_setup "$slug" "$n" "$court_abs" "$rd"
 }
 
+court_round_asks() { # court_round_asks <spec> <slug> <n> <court-abs> <round-dir> <asks> - narrow-repair-1115-03 (plan
+  # R2): a narrow round's ask list beside the court's brief, <court>/<spec>/round-asks, one ask number per line,
+  # committed inside the court like its reduction (a clean `git status` there). The seat judges only those
+  # asks; with no file it judges every ask. A failure removes the court and exits 2, as build_court does.
+  local spec="$1" slug="$2" n="$3" court_abs="$4" rd="$5" asks="$6" err
+  mkdir -p "$court_abs/$spec" && printf '%s\n' ${asks//,/ } > "$court_abs/$spec/round-asks" \
+    && git -C "$court_abs" -c core.longpaths=true add -- "$spec/round-asks" >/dev/null 2>&1 \
+    && err="$(git -C "$court_abs" -c core.longpaths=true -c user.name=VULYK -c user.email=vulyk@localhost \
+      -c commit.gpgsign=false commit --no-verify -q -m "vulyk: the round's ask list" 2>&1)" && return 0
+  echo "cycle: open-round - could not write the court's round-asks: ${err:-write failed}" >&2
+  remove_worktree_path "$court_abs"
+  git worktree prune >/dev/null 2>&1 || true
+  rmdir "$rd" 2>/dev/null || true
+  emit false open-round 2 error "court round-asks failed"
+  exit 2
+}
+
 run_court_setup() { # run_court_setup <slug> <n> <court-abs> <round-dir> - the hive's own
   # .claude/vulyk-setup (never shipped by the installer), read from the working copy and run
   # inside the court so a seat's probe finds node_modules or a venv. A failure or a timeout
@@ -3382,7 +3497,8 @@ repair_story_of_round() { # repair_story_of_round <spec> <n> -> the repair story
 
 repair_touched_asks() { # repair_touched_asks <story> -> " n n " - the asks a repair story touches (C4):
   # a `> N. ` line under ## Requirements, or an `[ask N]` tag under ## Findings
-  tr -d '\r' < "$1" | awk '/^## / { sec = $0; next }
+  tr -d '\r' < "$1" | awk "$FENCE_AWK"' fence_line($0) || fence_n { next }
+    /^## / { sec = $0; next }
     sec == "## Requirements" && /^> [0-9]+\. / { n = $2; sub(/\.$/, "", n); print n + 0 }
     sec == "## Findings" { s = $0; while (match(s, /\[ask [0-9]+\]/)) { print substr(s, RSTART + 5, RLENGTH - 6) + 0; s = substr(s, RSTART + RLENGTH) } }' \
     | awk 'BEGIN { printf " " } !seen[$0]++ { printf "%s ", $0 }'
@@ -3434,15 +3550,44 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   # C15/ADR-013 D3: the tier and the roster are derived once, here, and frozen into the round
   # (tier=, seats=) - a plan.md or Profile edit mid-round (or a stale re-stamp) never changes
   # what this round already requires.
-  local tier required narrow="" second=""
+  local tier required narrow="" second="" repair_id="" full="" asks="" rerun="" prd="" rs scope
   tier="$(tier_of "$spec")"
   required="$(required_seats_for_tier "$tier")"
-  # ab-run-fixes C5: the round after a narrow repair is review-only: seats=review, narrow=1 - no blind
-  # seat, no court, no second reviewer, and `suite` runs no step. upgrade-findings-05 (A3): narrow only
-  # by the record `repair` wrote, re-checked here (narrow_round_holds); the story's `narrow:` line is
-  # never read. Every other round is a full one.
-  if [ "$n" -gt 1 ] && narrow_round_holds "$spec" "$n"; then
-    narrow=1; required="review"
+  local since="" carried=""
+  [ "$n" -gt 1 ] && { prd="$spec/council/round-$((n-1))"; since="$(round_field "$prd" head)"; }
+  # narrow-repair-1115-03 (plan R1): the round after a repair (round n-1's repair story) is scoped from
+  # committed records by round_scope - `narrow`: narrow=1, asks= the asks to re-judge (round_asks), rerun=
+  # the gate steps to run again (round_rerun), no second reviewer; the tier's roster only when asks= is not
+  # empty, else review only (no court). `full design|norecord`: the tier's whole round, full=<why>. A round
+  # that replaces a STALE one keeps that round's scope. No story's `narrow:` line is read. A round that
+  # follows no repair opens as before.
+  # narrow-repair-1115-04 (plan F1): the owner's full check (open_round_full) is the tier's whole round,
+  # full=asked, since= the branch base, no carried seat, every gate step; a repair before it is only named.
+  if [ -n "$OPEN_FULL" ]; then
+    full=asked; since="$OPEN_FULL"
+    [ -n "$prd" ] && rs="$(repair_story_of_round "$spec" "$((n-1))")" && [ -n "$rs" ] && repair_id="$(story_id_of "$rs")"
+  elif [ -n "$prd" ] && [ -n "$(round_field "$prd" repair)" ] && [ "$(json_field "$(round_row "$slug" "$((n-1))")" verdict)" = STALE ]; then
+    repair_id="$(round_field "$prd" repair)"; full="$(round_field "$prd" full)"
+    if [ "$(round_field "$prd" narrow)" = 1 ]; then
+      narrow=1; asks="$(round_field "$prd" asks)"; rerun="$(round_field "$prd" rerun)"; second=none
+      required="$(round_field "$prd" seats)"; [ -n "$required" ] || required=review
+    fi
+  elif [ -n "$prd" ]; then
+    rs="$(repair_story_of_round "$spec" "$((n-1))")"
+    if [ -n "$rs" ]; then
+      repair_id="$(story_id_of "$rs")"
+      scope="$(round_scope "$spec" "$((n-1))")"
+      case "$scope" in
+        narrow)
+          narrow=1; second=none
+          asks="$(round_asks "$spec" "$((n-1))" "$since" "$head")"
+          rerun="$(round_rerun "$spec" "$((n-1))")"
+          [ -n "$asks" ] || required="review" ;;
+        *)
+          full="${scope#full }"
+          [ "$full" = norecord ] && echo "cycle: open-round - $slug round $n: round $((n-1))'s committed verdict row cannot be read (full=norecord): a full round" >&2 ;;
+      esac
+    fi
   fi
 
   # No blind seat, no court (D3): the reviewer never enters one, so a review-only round would
@@ -3451,14 +3596,12 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   case " $required " in
     *" haiku "*|*" sonnet "*|*" opus "*)
       build_court "$spec" "$slug" "$n" "$head" "$rd"
-      court_abs="$ROOT/.vulyk/court/$slug/round-$n" ;;
+      court_abs="$ROOT/.vulyk/court/$slug/round-$n"
+      [ -n "$narrow" ] && court_round_asks "$spec" "$slug" "$n" "$court_abs" "$rd" "$asks" ;;
   esac
 
-  local since="" carried=""
-  if [ "$n" -gt 1 ]; then
-    since="$(round_field "$spec/council/round-$((n-1))" head)"
-    [ -n "$narrow" ] || carried="$(carry_seats "$rd" "$spec/council/round-$((n-1))" "$((n-1))" "$spec")"
-  fi
+  # A narrow round carries nothing: its blind seat re-judges the listed asks afresh.
+  [ -n "$prd" ] && [ -z "$narrow" ] && [ -z "$OPEN_FULL" ] && carried="$(carry_seats "$rd" "$prd" "$((n-1))" "$spec")"
   # ab-run-fixes C2/C3: a Tier 4 round freezes whether its reviewed range touches the risk set
   if [ "$tier" = 4 ]; then
     if [ -n "$narrow" ]; then second=none; else second="$(round_second "$spec" "$n" "$head" "$since")"; fi
@@ -3474,7 +3617,9 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
     printf 'seats=%s\n' "$required"
     [ -n "$since" ] && printf 'since=%s\n' "$since"
     [ -n "$second" ] && printf 'second=%s\n' "$second"
-    [ -n "$narrow" ] && printf 'narrow=1\n'
+    [ -n "$repair_id" ] && printf 'repair=%s\n' "$repair_id"
+    [ -n "$narrow" ] && printf 'narrow=1\nasks=%s\nrerun=%s\n' "$asks" "$rerun"
+    [ -n "$full" ] && printf 'full=%s\n' "$full"
   } > "$rd/ROUND"
 
   local missing dispatch_val
@@ -3482,7 +3627,12 @@ build_round() { # build_round <spec> <slug> <n> <head> <pack> <ceiling> <commit:
   dispatch_val="judge"; [ -n "$missing" ] && dispatch_val="dispatch:$(printf '%s' "$missing" | tr ' ' ',')"
   local where="court at $court_abs"; [ -n "$court_abs" ] || where="no court (no blind seat required)"
   local note="round $n opened, $where"
-  [ -n "$narrow" ] && note="$note, narrow repair round (review only)"
+  if [ -n "$narrow" ]; then
+    if [ -n "$asks" ]; then note="$note, narrow repair round (asks ${asks//,/, }; steps ${rerun:-none})"
+    else note="$note, narrow repair round (review only; steps ${rerun:-none})"; fi
+  fi
+  if [ "$full" = asked ]; then note="$note, the full check on the owner's word (full=asked, since the branch base $since)"
+  elif [ -n "$full" ]; then note="$note, full round after a repair ($full)"; fi
   [ "$second" = risk ] && note="$note, second reviewer: a risk path in the range"
   [ -n "$carried" ] && note="$note, carried from round $((n-1)): $(printf '%s' "$carried" | sed 's/ /, /g')"
   bash "$HERE/journal.sh" "$spec" "04-council:open" "$note" "$dispatch_val" >/dev/null
@@ -3540,16 +3690,46 @@ write_stale_row() { # write_stale_row <spec> <slug> <round-dir> <n> <a> - a STAL
   journal_line_exists "$spec" "$n" "STALE" || bash "$HERE/journal.sh" "$spec" "04-council:STALE" "round $n stale, code moved after dispatch" "open-round" >/dev/null
 }
 
+OPEN_FULL="" # the branch base while open_round_full opens the owner's full check; empty for every other round
+
+open_round_full() { # open_round_full <spec> <commit:0|1> [<stamp>] - plan F1, `open-round <spec> --full`: the full check
+  # of the whole project, run only on the owner's word (no code path calls it): the tier's whole roster with no
+  # carried seat, full=asked, since= the branch base (the reviewer reads the whole branch), no round-asks, every
+  # gate step. Refuses (exit 2) while another round is open, or when the branch base cannot be named; then
+  # everything else is cmd_open_round's.
+  local spec="$1" slug rd db base
+  if [ -n "$spec" ] && [ -d "$spec" ]; then
+    pause_guard "$spec" open-round
+    driver_guard "$spec" open-round "${3:-}"
+    slug="$(slug_of "$spec")"; rd="$(current_round_dir "$spec")"
+    if [ -n "$rd" ] && [ -f "$rd/ROUND" ] && ! row_exists "$slug" "${rd##*/round-}" && [ "$(round_field "$rd" full)" != asked ]; then
+      echo "cycle: open-round --full - $slug round ${rd##*/round-} is open; judge it first, then open the full check" >&2
+      emit false open-round 2 error "round ${rd##*/round-} is open"
+      exit 2
+    fi
+    db="$(default_branch)"
+    [ -n "$db" ] && base="$(git merge-base "$db" HEAD 2>/dev/null)" && base="$(git rev-parse --short "$base" 2>/dev/null)"
+    [ -n "${base:-}" ] || {
+      echo "cycle: open-round --full - cannot name the branch base (no default branch, or no merge-base with ${db:-it})" >&2
+      emit false open-round 2 error "no branch base"
+      exit 2
+    }
+    OPEN_FULL="$base"
+  fi
+  cmd_open_round "$@"
+}
+
 cmd_open_round() { # cmd_open_round <spec> <commit:0|1> [<stamp>]
   local SPEC="$1" DOCOMMIT="$2" STAMP="${3:-}"
   [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
-    echo "cycle: usage: $0 open-round <spec-dir> [--commit]" >&2
+    echo "cycle: usage: $0 open-round <spec-dir> [--full] [--commit] [--stamp <s>]" >&2
     emit false open-round 1 error "usage"
     exit 1
   }
   pause_guard "$SPEC" open-round
   driver_guard "$SPEC" open-round "$STAMP"
   branch_guard "$SPEC" open-round
+  sr_sweep   # guards-1115-03 (S14): stamp-red stored output a day old or more
 
   local SLUG PLAN; SLUG="$(slug_of "$SPEC")"; PLAN="$SPEC/plan.md"
 
@@ -3762,13 +3942,61 @@ suite_load() { # suite_load <start|end> [<cap secs>] -> one `LOAD: ...` line, al
   return 0
 }
 
-suite_emit() { # suite_emit <spec> <step> <steps> <done:true|false> <suite> - the verb's exit-0 line
-  local st rc next tail=""
+suite_emit() { # suite_emit <spec> <step> <steps> <done:true|false> <suite> [<merge:0|1>] - the verb's exit-0 line;
+  # a merge run (plan M1) carries "merge":true after the verb
+  local st rc next tail="" mk=""
   st="$(cmd_status "$1")"; rc=$?
   next="$(json_field "$st" next)"
   [ "$rc" -eq 0 ] && [ -n "$st" ] && ! printf '%s' "$st" | grep -q '"ok":false' && tail=",\"status\":$st"
-  printf '{"ok":true,"verb":"suite","exit":0,"next":"%s","step":%s,"steps":%s,"done":%s,"suite":"%s"%s}\n' \
-    "$(json_escape "$next")" "$2" "$3" "$4" "$5" "$tail"
+  [ "${6:-0}" = 1 ] && mk=',"merge":true'
+  printf '{"ok":true,"verb":"suite"%s,"exit":0,"next":"%s","step":%s,"steps":%s,"done":%s,"suite":"%s"%s}\n' \
+    "$mk" "$(json_escape "$next")" "$2" "$3" "$4" "$5" "$tail"
+}
+
+suite_rows() { # suite_rows -> SR_ROWS, SR_NROWS, SR_ROW, SR_PURPOSE, SR_CMD, SR_WHY, SR_STEPPED: the constitution's
+  # round-only full-suite rows and how the first one runs. Several rows (gate-split-08): each row is one step,
+  # run as one capped part, and a `steps` marker is read only on a single row. One row keeps the stepped /
+  # plain split.
+  SR_ROWS="$(full_suite_row "$(constitution_file "$ROOT")")"; SR_NROWS=0; SR_STEPPED=0
+  [ -n "$SR_ROWS" ] && SR_NROWS="$(printf '%s\n' "$SR_ROWS" | grep -c .)"
+  SR_ROW="$(printf '%s\n' "$SR_ROWS" | sed -n 1p)"
+  SR_PURPOSE="${SR_ROW%%$'\t'*}"; SR_CMD="${SR_ROW#*$'\t'}"
+  SR_WHY="no command in its row"; case "$SR_CMD" in $'\t'several) SR_CMD=""; SR_WHY="several backticked commands in one cell" ;; esac
+  [ "$SR_NROWS" -le 1 ] && [ -n "$SR_CMD" ] && case " $(printf '%s' "$SR_PURPOSE" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' ' ') " in *" steps "*) SR_STEPPED=1 ;; esac
+  return 0
+}
+
+suite_step_count() { # suite_step_count -> the number of steps the round gate has now: 0 with no row, the row count,
+  # or a stepped row's `--steps` answer (capped at 60 s); nothing when that answer is not a count
+  local out n
+  suite_rows
+  [ "$SR_NROWS" -gt 0 ] || { printf '0'; return 0; }
+  [ "$SR_STEPPED" = 1 ] || { printf '%s' "$SR_NROWS"; return 0; }
+  out="$(run_capped 60 bash -c "$SR_CMD --steps" 2>/dev/null)"
+  n="$(printf '%s\n' "$out" | tr -d '\r' | awk 'NF { l = $1 } END { print l }')"
+  case "$n" in ''|*[!0-9]*|0) return 0 ;; esac
+  printf '%s' "$n"
+}
+
+suite_narrow_verdict() { # suite_narrow_verdict <suite-verdict> <rerun> <steps> <round-dir> -> the SUITE: line of a
+  # narrow repair round (plan R3): `SUITE: ok|FAIL <N>s - narrow repair round, steps <list|all> of <S>`, for
+  # `all` the reason after ` - `, for a FAIL its parts after `: `
+  local v="$1" rerun="$2" s="$3" rd="$4" st secs why="" allwhy="" spec id f m sold
+  st="$(printf '%s' "$v" | awk '{ print $2 }')"; secs="$(printf '%s' "$v" | awk '{ print $3 }')"
+  case "$v" in *" - "*) why="${v#* - }" ;; esac
+  if [ "$rerun" = all ]; then
+    spec="${rd%/council/round-*}"; id="$(round_field "$rd" repair)"; m=""
+    for f in "$spec"/*-repair-round-*.md; do
+      [ -f "$f" ] && [ "$(story_id_of "$f")" = "$id" ] && { m="${f##*-repair-round-}"; m="${m%.md}"; break; }
+    done
+    [ -n "$m" ] && { m="$(gate_log_round "$spec" "$m")"; m="${m##*/round-}"; } # the last round that ran steps
+    if [ -n "$m" ] && [ -n "$(suite_log_line "$spec/council/round-$m")" ]; then
+      sold="$(head -1 "$spec/council/round-$m/suite.log" | tr -d '\r' | sed -n 's/.* steps=\([0-9][0-9]*\).*/\1/p')"
+      if [ "$sold" = "$s" ]; then allwhy=" - the step count could not be read at open-round"
+      else allwhy=" - the step count changed (round $m: ${sold:-?}, now $s)"; fi
+    else allwhy=" - round ${m:-?} has no finished gate log"; fi
+  fi
+  printf 'SUITE: %s %s - narrow repair round, steps %s of %s%s%s' "$st" "$secs" "$rerun" "$s" "$allwhy" "${why:+: $why}"
 }
 
 cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
@@ -3806,35 +4034,103 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
     exit 0
   fi
 
-  # Several round-only full-suite rows (gate-split-08): each row is one step, run as one capped part,
-  # and a `steps` marker is read only on a single row. One row keeps the stepped / plain split.
-  local rows row purpose cmd why stepped=0 nrows=0
-  rows="$(full_suite_row "$(constitution_file "$ROOT")")"
-  [ -n "$rows" ] && nrows="$(printf '%s\n' "$rows" | grep -c .)"
-  row="$(printf '%s\n' "$rows" | sed -n 1p)"
-  purpose="${row%%$'\t'*}"; cmd="${row#*$'\t'}"
-  why="no command in its row"; case "$cmd" in $'\t'several) cmd=""; why="several backticked commands in one cell" ;; esac
-  [ "$nrows" -le 1 ] && [ -n "$cmd" ] && case " $(printf '%s' "$purpose" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' ' ') " in *" steps "*) stepped=1 ;; esac
+  # narrow-repair-1115-03 (plan R3): a narrow repair round runs only the steps its ROUND lists in rerun=
+  # (`all`: every step); an empty rerun=, or an old narrow ROUND with no rerun= line, runs none.
+  local NRUN=""
+  if [ "$(round_field "$RD" narrow)" = 1 ]; then NRUN="$(round_field "$RD" rerun)"; [ -n "$NRUN" ] || NRUN=none; fi
+
+  # solo-gate-1118: with the opt-in on, a full (not narrow) Tier 1-2 round runs no gate step: the stories' checks ran at
+  # close-story and the merge run is the one full run. The owner's --full round (full=asked, full=design) still runs.
+  if [ -z "$NRUN" ] && [ ! -f "$LOG" ] && solo_tier "$SPEC" "$RD" && solo_gate_on; then
+    case "$(round_field "$RD" full)" in asked|design) ;; *)
+      printf 'head=%s steps=0\nSUITE: none - Tier 1-2: the stories'"'"' checks ran at close-story; the full suite runs once before merge\n' "$RHEAD" > "$LOG"
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N none (Tier 1-2)" "$LOG"
+      echo "cycle: $SLUG - round $N: Tier 1-2 with .vulyk-solo-gate merge-only, SUITE: none, no step run"
+      suite_emit "$SPEC" 0 0 true none 0
+      exit 0 ;;
+    esac
+  fi
 
   # A log keyed to another head (an earlier code state) is discarded, never resumed.
   local lh=""; [ -f "$LOG" ] && lh="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/^head=\([^ ]*\).*/\1/p')"
   [ -f "$LOG" ] && [ "$lh" != "$RHEAD" ] && rm -f "$LOG"
 
+  suite_run "$SPEC" "$LOG" "$RHEAD" "$DOCOMMIT" "round $N" "$NRUN" "$RD" 0
+}
+
+suite_merge() { # suite_merge <spec> <commit:0|1> [<stamp>] - plan M1, `suite <spec> --merge`: every step of the round
+  # gate's rows, one step per call (same caps, same resume), into <spec>/council/merge-suite.log (paperwork), keyed
+  # `head=<HEAD> steps=<S>`: the full suite once, with no agent, before a local merge. Exit 2 while a round is
+  # open or the tree is dirty outside paperwork; a finished log for HEAD (or for a commit with only paperwork
+  # after it) is a no-op, green or red; a log keyed to a head with code after it is replaced and run whole.
+  local SPEC="$1" DOCOMMIT="$2" STAMP="${3:-}"
+  [ -n "$SPEC" ] && [ -d "$SPEC" ] || {
+    echo "cycle: usage: $0 suite <spec-dir> --merge [--commit] [--stamp <s>]" >&2
+    emit false suite 1 error "usage"
+    exit 1
+  }
+  pause_guard "$SPEC" suite
+  driver_guard "$SPEC" suite "$STAMP"
+  branch_guard "$SPEC" suite
+
+  local SLUG RD; SLUG="$(slug_of "$SPEC")"; RD="$(current_round_dir "$SPEC")"
+  if [ -n "$RD" ] && [ -f "$RD/ROUND" ] && ! row_exists "$SLUG" "${RD##*/round-}"; then
+    echo "cycle: suite --merge - $SLUG round ${RD##*/round-} is open: judge it first; the merge run never runs a step beside a round" >&2
+    emit false suite 2 error "round ${RD##*/round-} is open"
+    exit 2
+  fi
+  local dirty; dirty="$(dirty_outside_paperwork)"
+  [ -z "$dirty" ] || {
+    echo "cycle: suite --merge - working tree has changes outside the cycle's own paperwork, so the run would not be about HEAD:" >&2
+    printf '%s\n' "$dirty" | sed 's/^/  /' >&2
+    emit false suite 2 error "working tree not clean"
+    exit 2
+  }
+
+  local HEADS LOG lh key last S
+  HEADS="$(git rev-parse --short HEAD 2>/dev/null)"
+  mkdir -p "$SPEC/council"; LOG="$SPEC/council/merge-suite.log"
+  lh=""; [ -f "$LOG" ] && lh="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/^head=\([^ ]*\).*/\1/p')"
+  if [ -n "$lh" ] && paperwork_only "$ROOT" "$lh" "$HEADS"; then key="$lh"
+  else rm -f "$LOG"; key="$HEADS"; fi
+  if [ -f "$LOG" ]; then
+    last="$(tail -1 "$LOG" | tr -d '\r')"
+    case "$last" in "SUITE: "*)
+      S="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/.* steps=\([0-9][0-9]*\).*/\1/p')"; S="${S:-0}"
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite merge" "$LOG"
+      echo "cycle: $SLUG - merge suite already finished at $key: $last"
+      suite_emit "$SPEC" "$S" "$S" true "$(printf '%s' "$last" | awk '{ print $2 }')" 1
+      exit 0 ;;
+    esac
+  fi
+  suite_run "$SPEC" "$LOG" "$key" "$DOCOMMIT" merge "" "" 1
+}
+
+suite_run() { # suite_run <spec> <log> <head> <commit:0|1> <label> <narrow-rerun> <round-dir> <merge:0|1> - one step of
+  # a gate into <log>, keyed to <head>: the round's (cmd_suite) or the merge run's (suite_merge). <label> names it in
+  # messages and commit subjects; <narrow-rerun> is a narrow round's rerun= (none|all|a list), empty for every step.
+  # Always terminates the process (exit 0).
+  local SPEC="$1" LOG="$2" RHEAD="$3" DOCOMMIT="$4" LABEL="$5" NRUN="$6" RD="$7" MERGE="$8" SLUG S K RUNS=""
+  SLUG="$(slug_of "$SPEC")"
+  case "$NRUN" in ''|none|all) ;; *) RUNS="${NRUN//,/ }" ;; esac
+  local rows row purpose cmd why stepped nrows
+  suite_rows; rows="$SR_ROWS"; nrows="$SR_NROWS"; row="$SR_ROW"; purpose="$SR_PURPOSE"; cmd="$SR_CMD"; why="$SR_WHY"; stepped="$SR_STEPPED"
+
   if [ ! -f "$LOG" ]; then
-    # ab-run-fixes C5: a narrow repair round runs no gate step - the finished log keyed to the round
-    # head says so, and record-seat takes the review against it.
-    if [ "$(round_field "$RD" narrow)" = 1 ]; then
+    # ab-run-fixes C5: a narrow repair round with no step to re-run runs none - the finished log keyed to
+    # the round head says so, and record-seat takes the review against it.
+    if [ "$NRUN" = none ] || { [ -n "$NRUN" ] && [ -z "$row" ]; }; then
       printf 'head=%s steps=0\nSUITE: none - narrow repair round\n' "$RHEAD" > "$LOG"
-      [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N none (narrow)" "$LOG"
-      echo "cycle: $SLUG - round $N: narrow repair round, SUITE: none, no step run"
-      suite_emit "$SPEC" 0 0 true none
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite $LABEL none (narrow)" "$LOG"
+      echo "cycle: $SLUG - $LABEL: narrow repair round, SUITE: none, no step run"
+      suite_emit "$SPEC" 0 0 true none "$MERGE"
       exit 0
     fi
     if [ -z "$row" ]; then
       printf 'head=%s steps=0\nSUITE: none\n' "$RHEAD" > "$LOG"
-      [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N none" "$LOG"
-      echo "cycle: $SLUG - round $N: no round-only full-suite row, SUITE: none"
-      suite_emit "$SPEC" 0 0 true none
+      [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite $LABEL none" "$LOG"
+      echo "cycle: $SLUG - $LABEL: no round-only full-suite row, SUITE: none"
+      suite_emit "$SPEC" 0 0 true none "$MERGE"
       exit 0
     fi
     S=1; [ "$nrows" -gt 1 ] && S="$nrows"
@@ -3844,9 +4140,9 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
       S="$(printf '%s\n' "$sout" | tr -d '\r' | awk 'NF { l = $1 } END { print l }')"
       case "$S" in ''|*[!0-9]*|0)
         printf 'head=%s steps=0\nSUITE: FAIL 0s - %s --steps gave no step count (exit %s)\n' "$RHEAD" "$cmd" "$src" > "$LOG"
-        [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite round $N FAIL" "$LOG"
-        echo "cycle: $SLUG - round $N: $cmd --steps gave no step count (exit $src)" >&2
-        suite_emit "$SPEC" 0 0 true FAIL
+        [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite $LABEL FAIL" "$LOG"
+        echo "cycle: $SLUG - $LABEL: $cmd --steps gave no step count (exit $src)" >&2
+        suite_emit "$SPEC" 0 0 true FAIL "$MERGE"
         exit 0 ;;
       esac
     fi
@@ -3854,6 +4150,12 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
   fi
   S="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/.* steps=\([0-9][0-9]*\).*/\1/p')"; S="${S:-1}"
   K=$(( $(tr -d '\r' < "$LOG" | grep -c '^STEP ') + 1 ))
+  # A narrow round's call I runs the I-th step of rerun=; it finishes on the last one (LASTI).
+  local I="$K" LASTI="$S"
+  if [ -n "$RUNS" ]; then
+    LASTI="$(printf '%s\n' $RUNS | grep -c .)"
+    K="$(printf '%s\n' $RUNS | sed -n "${I}p")"; K="${K:-$S}"
+  fi
   # Step K runs row K; a K past the rows (the log's steps= outgrew the table) has no row to run, and
   # neither has a row with an empty command cell: both are a red step below, never `ok` from `bash -c ""`.
   if [ "$stepped" != 1 ]; then
@@ -3913,7 +4215,7 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
       else parts="PART $pname $pres ${secs}s cap ${cap}s"; fi
     fi
   fi
-  tmp="$RD/.suite-step.tmp"
+  tmp="$(dirname "$LOG")/.suite-step.tmp"
   printf '%s\n' "$parts" > "$tmp"
   { [ "$rc" -ne 0 ] || ! bash "$HERE/suite-parts-check.sh" "$tmp" >/dev/null 2>&1; } && sres=FAIL
   rm -f "$tmp"
@@ -3931,16 +4233,17 @@ cmd_suite() { # cmd_suite <spec> <commit:0|1> [<stamp>]
     [ -n "$loads" ] && printf '%s\n' "$loads"
   } >> "$LOG"
   local sv=pending is_done=false
-  if [ "$K" -ge "$S" ]; then
+  if [ "$I" -ge "$LASTI" ]; then
     local verdict; verdict="$(suite_verdict "$LOG")"
+    [ -n "$NRUN" ] && verdict="$(suite_narrow_verdict "$verdict" "$NRUN" "$S" "$RD")"
     printf '%s\n' "$verdict" >> "$LOG"
     sv="$(printf '%s' "$verdict" | awk '{ print $2 }')"; is_done=true
   fi
   # ab-run-fixes C8: one commit per suite, on the call that finishes it; a middle step leaves the log
   # written and uncommitted (paperwork: the round stays fresh, the next call resumes from it).
-  [ "$DOCOMMIT" = "1" ] && [ "$is_done" = true ] && commit_paperwork suite "vulyk($SLUG): suite round $N $sv" "$LOG"
-  echo "cycle: $SLUG - round $N suite step $K/$S: $sres ${secs}s"
-  suite_emit "$SPEC" "$K" "$S" "$is_done" "$sv"
+  [ "$DOCOMMIT" = "1" ] && [ "$is_done" = true ] && commit_paperwork suite "vulyk($SLUG): suite $LABEL $sv" "$LOG"
+  echo "cycle: $SLUG - $LABEL suite step $K/$S: $sres ${secs}s"
+  suite_emit "$SPEC" "$K" "$S" "$is_done" "$sv" "$MERGE"
   exit 0
 }
 
@@ -3963,10 +4266,12 @@ append_after_answers() { # append_after_answers <brief.md> <block> - inserts bef
   ' "$brief" > "$brief.tmp.$$" && mv "$brief.tmp.$$" "$brief"
 }
 
-cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
-  local SPEC="$1" DECISION="$2" DOCOMMIT="$3"
+cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1> [<full:0|1>]
+  # tails-1115-13 (ADR-040 D1 amendment): --full is the owner's word that the escalation is a design
+  # fault - the round's REOPEN line carries full=1 and round_scope answers `full design` for any reason.
+  local SPEC="$1" DECISION="$2" DOCOMMIT="$3" FULLW="${4:-0}"
   [ -n "$SPEC" ] && [ -d "$SPEC" ] && [ -n "$DECISION" ] || {
-    echo "cycle: usage: $0 reopen <spec-dir> \"<decision>\" [--commit]" >&2
+    echo "cycle: usage: $0 reopen <spec-dir> \"<decision>\" [--full] [--commit]" >&2
     emit false reopen 1 error "usage"
     exit 1
   }
@@ -4021,9 +4326,15 @@ cmd_reopen() { # cmd_reopen <spec> <decision> <commit:0|1>
 
   # R7/M-4/C4: council/REOPEN names every round `reopen` has cleared, so `status` can tell an
   # ESCALATE row a human already reopened from one still waiting - one line per round, never
-  # rewritten (mkdir -p: a spec can be reopened before any round dir of its own exists).
+  # rewritten (mkdir -p: a spec can be reopened before any round dir of its own exists). The one
+  # exception (tails-1115-13): a later --full turns that round's full=0 into full=1, never back.
   mkdir -p "$SPEC/council"
-  reopen_names_round "$SPEC" "$N" || printf 'round=%s \xc2\xb7 %s\n' "$N" "$(now_ts)" >> "$SPEC/council/REOPEN"
+  if ! reopen_names_round "$SPEC" "$N"; then
+    printf 'round=%s full=%s \xc2\xb7 %s\n' "$N" "$FULLW" "$(now_ts)" >> "$SPEC/council/REOPEN"
+  elif [ "$FULLW" = 1 ] && ! grep -qE "^round=${N} full=1[[:space:]]" "$SPEC/council/REOPEN"; then
+    awk -v n="$N" '$1 == "round=" n { if ($2 ~ /^full=/) $2 = "full=1"; else $1 = $1 " full=1" } { print }' \
+      "$SPEC/council/REOPEN" > "$SPEC/council/REOPEN.tmp.$$" && mv "$SPEC/council/REOPEN.tmp.$$" "$SPEC/council/REOPEN"
+  fi
 
   local -a SPATHS=(); named_spec_paths "$SPEC" brief journal council
   [ "$DOCOMMIT" = "1" ] && commit_paperwork reopen "vulyk($SLUG): reopen after round $N" ${SPATHS[@]+"${SPATHS[@]}"}
@@ -4425,60 +4736,209 @@ repair_findings() { # repair_findings <spec> <round-dir> -> the round's findings
   return 0
 }
 
-narrow_file() { # narrow_file <asks> <findings> <files> -> the one file a narrow repair reaches, or nothing.
-  # ab-run-fixes C5: narrow - exactly one RED item (one ask, or one [regression] / gate / owner
-  # finding) whose reach (the paths its findings name) is one non-test file that exists in the tree.
-  # Findings naming no such path (none, a dotted word, a file not yet there) are a full round
-  # (beta-fixes-1113 ask 1). The one rule `repair` decides by and `open-round` re-checks by
-  # (upgrade-findings-05, A3). <files> is kept for the callers' signature; the reach no longer falls back to it.
-  local reach items
-  items=$(( $(printf '%s\n' $1 | grep -c .) + $(printf '%s\n' "$2" | grep -cE '\[regression\]|^- owner REJECTED') ))
-  [ "$items" -eq 1 ] || return 0
-  reach="$(finding_paths "$2" | awk 'NF && !seen[$0]++')"
-  [ -n "$reach" ] || return 0
-  [ "$(printf '%s\n' "$reach" | grep -c .)" -eq 1 ] || return 0
-  case "$reach" in *[*?[]*|*/) return 0 ;; esac
-  [ -f "$ROOT/$reach" ] || return 0
-  is_test_path "$reach" || printf '%s' "$reach"
-  return 0
+round_scope() { # round_scope <spec> <n> -> the scope of the round after round n's repair (narrow-repair-1115-01,
+  # plan S1): `full design` when round n's committed row is an ESCALATE the owner reopened as `half`, or
+  # reopened with --full (its REOPEN line's full=1, any reason: tails-1115-13, ADR-040 D1 amendment),
+  # `full norecord` when no committed row for round n can be read, else `narrow` - a reopened
+  # `no-progress` too: its narrow round re-judges every repeated red ask. A REOPEN line with no full
+  # field (written before tails-1115-13) reads as full=0.
+  # Committed records only (HEAD's council.jsonl and council/REOPEN): no story frontmatter, no run state.
+  local spec="$1" n="$2" slug rel row line
+  slug="$(slug_of "$spec")"
+  row="$(git show HEAD:memory/stats/council.jsonl 2>/dev/null | grep -F "\"spec\":\"$slug\"" | grep -F "\"round\":$n," | tail -1)"
+  [ -n "$row" ] || { echo "full norecord"; return 0; }
+  if [ "$(json_field "$row" verdict)" = ESCALATE ]; then
+    rel="${spec#./}"; rel="${rel#"$ROOT"/}"
+    line="$(git show "HEAD:$rel/council/REOPEN" 2>/dev/null | grep -E "^round=${n}[[:space:]]" | tail -1)"
+    if [ -n "$line" ]; then
+      case " $line " in *" full=1 "*) echo "full design"; return 0 ;; esac
+      [ "$(json_field "$row" escalate)" = half ] && { echo "full design"; return 0; }
+    fi
+  fi
+  echo narrow
 }
 
-narrow_rec() { # narrow_rec <spec> <n> -> the narrow record's path for round n (upgrade-findings-05, A3):
-  # .vulyk/state/<slug>/narrow.round-<n>, written by `repair` for round n-1, keys story=, file=, from=
-  printf '%s/.vulyk/state/%s/narrow.round-%s' "$ROOT" "$(slug_of "$1")" "$2"
+story_req_lines() { # story_req_lines <story-file> -> its ## Requirements lines, `> ` and a leading `N. ` dropped,
+  # whitespace normalised, fenced lines skipped (plan S1: the text a story serves an ask by)
+  awk "$FENCE_AWK"' fence_line($0) || fence_n { next }
+    /^##[[:space:]]+Requirements[[:space:]]*$/ { on = 1; next } /^##[[:space:]]/ { on = 0 }
+    on { sub(/\r$/, ""); sub(/^>[[:space:]]*/, ""); sub(/^[0-9]+\.[[:space:]]+/, ""); gsub(/[[:space:]]+/, " "); sub(/^ /, ""); sub(/ $/, ""); if ($0 != "") print }' "$1"
 }
 
-narrow_round_holds() { # narrow_round_holds <spec> <n> -> 0 iff round n opens narrow: its record names
-  # round n-1's repair story and narrow_file, recomputed from round n-1's records, still names its file.
-  # Otherwise 1, with one stderr line saying which (only when round n-1 has a repair story).
-  local spec="$1" n="$2" rs rec id rid rfile slug files="" sf now
-  rs="$(repair_story_of_round "$spec" "$((n-1))")"
-  [ -n "$rs" ] || return 1
-  slug="$(slug_of "$spec")"; rec="$(narrow_rec "$spec" "$n")"
-  id="$(fm_field "$rs" story)"; [ -n "$id" ] || id="$(basename "$rs" .md)"
-  if [ ! -f "$rec" ]; then
-    echo "cycle: open-round - $slug round $n: the narrow record ${rec#"$ROOT"/} is missing: a full round" >&2
-    return 1
+ask_items() { # ask_items <spec> -> "n<TAB>text" per brief `## Asks` item, whitespace normalised, numbered as
+  # ask_item numbers them (its own `N.`, else its place)
+  brief_asks "$1/brief.md" | awk '{ n = $0; if (n ~ /^[0-9]+\.[[:space:]]/) sub(/\..*$/, "", n); else n = NR
+    t = $0; gsub(/[[:space:]]+/, " ", t); printf "%d\t%s\n", n + 0, t }'
+}
+
+story_served_asks() { # story_served_asks <ask-items> <story-file> -> each ask number the story serves, one per
+  # line: one of its ## Requirements lines is found inside that ask's text (plan S1)
+  local reqs line n t req
+  reqs="$(story_req_lines "$2")"
+  [ -n "$reqs" ] || return 0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    n="${line%%$'\t'*}"; t="${line#*$'\t'}"
+    while IFS= read -r req; do
+      [ -n "$req" ] || continue
+      case "$t" in *"$req"*) printf '%s\n' "$n"; break ;; esac
+    done <<< "$reqs"
+  done <<< "$1"
+}
+
+round_asks() { # round_asks <spec> <n> <since> <head> -> the asks the narrow round after round n's repair re-judges
+  # (narrow-repair-1115-03, plan R1), ascending, comma-separated, maybe empty. Every ask when no round up to n
+  # holds a blind seat's report; else the asks RED in round n (seat or review, repair_asks) and the asks served
+  # by a done story whose ## Files match a path of the repair's diff (<since>..<head>). A touched story that
+  # serves no ask adds none and is named on stderr (a repair story is not); a range git cannot read re-judges
+  # every ask, with a stderr line.
+  local spec="$1" n="$2" since="$3" head="$4" slug A k seat seen=0 out names sf e p tied served items
+  slug="$(slug_of "$spec")"; A="$(asks_count "$spec")"; case "$A" in ''|*[!0-9]*) A=0 ;; esac
+  k=1
+  while [ "$k" -le "$n" ]; do
+    for seat in haiku sonnet opus; do [ -f "$spec/council/round-$k/$seat.md" ] && seen=1; done
+    k=$((k+1))
+  done
+  if [ "$seen" = 1 ] && { [ -z "$since" ] || ! names="$(git diff --no-renames --name-only "$since" "$head" 2>/dev/null)"; }; then
+    echo "cycle: open-round - $slug: the repair's range ${since:-<none>}..$head cannot be read: every ask is re-judged" >&2
+    seen=0
   fi
-  rid="$(verify_rec_get "$rec" story)"; rfile="$(verify_rec_get "$rec" file)"
-  if [ "$rid" != "$id" ]; then
-    echo "cycle: open-round - $slug round $n: the narrow record names story '$rid', not $id: a full round" >&2
-    return 1
+  if [ "$seen" = 0 ]; then
+    k=1; out=""
+    while [ "$k" -le "$A" ]; do out="$out${out:+,}$k"; k=$((k+1)); done
+    printf '%s' "$out"; return 0
   fi
+  out="$(repair_asks "$spec/council/round-$n" "$(round_row "$slug" "$n")")"
+  items="$(ask_items "$spec")"
   for sf in "$spec"/*.md; do
-    is_story_file "$sf" && [ "$sf" != "$rs" ] || continue
-    [ "$(fm_field "$sf" status)" = done ] || continue
-    files="$files$(files_of "$sf")
+    is_story_file "$sf" && [ "$(fm_field "$sf" status)" = done ] || continue
+    tied=0
+    while IFS= read -r e; do
+      [ -n "$e" ] || continue
+      while IFS= read -r p; do
+        [ -n "$p" ] && path_overlap "$e" "$p" && { tied=1; break 2; }
+      done <<< "$names"
+    done <<< "$(files_of "$sf")"
+    [ "$tied" = 1 ] || continue
+    served="$(story_served_asks "$items" "$sf")"
+    if [ -n "$served" ]; then out="$out $served"
+    else
+      case "$sf" in
+        *-repair-round-*.md) ;;
+        *) echo "cycle: open-round - $slug: the repair touches $(basename "$sf"), whose ## Requirements quote no ## Asks item: it adds no ask" >&2 ;;
+      esac
+    fi
+  done
+  printf '%s\n' $out | awk 'NF' | sort -n | uniq | paste -sd, -
+}
+
+gate_log_round() { # gate_log_round <spec> <n> -> the round dir whose gate log stands for round n's gate: round n,
+  # or, while that round's finished log is `SUITE: none - narrow repair round` (a narrow round that ran no step,
+  # so nothing changed since the round before it), the round before it; round-0 (no log) when even round 1 ran none
+  local k="$2"
+  while [ "$k" -gt 0 ] && [ "$(suite_log_line "$1/council/round-$k")" = "SUITE: none - narrow repair round" ]; do k=$((k-1)); done
+  printf '%s' "$1/council/round-$k"
+}
+
+round_rerun() { # round_rerun <spec> <n> -> the gate steps the narrow round after round n's repair re-runs (plan R3):
+  # the steps `FAIL` in round n's finished suite.log, comma-separated, empty when none failed or no row runs now;
+  # `all` when the step count now differs from that log's, or round n has no finished log, or the count cannot
+  # be read (a missing input re-runs everything, never nothing). A round n whose narrow gate ran no step
+  # (`SUITE: none - narrow repair round`, its log `steps=0`) is read through gate_log_round: the last round
+  # that ran steps (narrow-repair-1115-06, round 1 finding 1)
+  local rd snow sold
+  # solo-gate-1118: with the opt-in on, the narrow round after a Tier 1-2 repair re-runs no step (its round n ran none)
+  solo_tier "$1" "$1/council/round-$2" && solo_gate_on && return 0
+  rd="$(gate_log_round "$1" "$2")"
+  snow="$(suite_step_count)"
+  [ "$snow" = 0 ] && return 0
+  if [ -z "$snow" ] || [ -z "$(suite_log_line "$rd")" ]; then printf 'all'; return 0; fi
+  sold="$(head -1 "$rd/suite.log" | tr -d '\r' | sed -n 's/.* steps=\([0-9][0-9]*\).*/\1/p')"
+  [ "$sold" = "$snow" ] || { printf 'all'; return 0; }
+  tr -d '\r' < "$rd/suite.log" | awk '$1 == "STEP" && $3 == "FAIL" { k = $2; sub(/\/.*/, "", k); print k + 0 }' | sort -n | uniq | paste -sd, -
+}
+
+repair_ask_stories() { # repair_ask_stories <spec> <asks> <findings> -> the done stories serving each RED ask
+  # whose findings (`[ask N]` items, `ASK N:` seat lines) name no existing path, one file per line. A story
+  # serves ask N when one of its ## Requirements lines, `> ` and a leading `N. ` dropped, whitespace
+  # normalised, is found inside ask N's text (plan S1).
+  local spec="$1" x fl p hit item sf req
+  for x in $2; do
+    fl="$(printf '%s\n' "$3" | grep -E "\[ask $x\]|^ASK $x:")"
+    hit=0
+    while IFS= read -r p; do
+      [ -n "$p" ] && [ -e "$ROOT/$p" ] && { hit=1; break; }
+    done <<< "$(finding_paths "$fl")"
+    [ "$hit" = 0 ] || continue
+    item="$(ask_item "$spec" "$x" | tr -s '[:space:]' ' ')"
+    for sf in "$spec"/*.md; do
+      is_story_file "$sf" && [ "$(fm_field "$sf" status)" = done ] || continue
+      while IFS= read -r req; do
+        [ -n "$req" ] || continue
+        case "$item" in *"$req"*) printf '%s\n' "$sf"; break ;; esac
+      done <<< "$(story_req_lines "$sf")"
+    done
+  done | awk 'NF && !seen[$0]++'
+}
+
+repair_scope_paths() { # repair_scope_paths <spec> <asks> <findings> -> a repair story's ## Files, one per line
+  # (plan S1): each existing path the findings name (finding_paths), each path's `exact` tests
+  # (symbol-map.sh --exact), the ## Files of the done stories serving a pathless RED ask
+  # (repair_ask_stories), then docs/defects/*. Exit 0. When no item yields a path: the union of
+  # every done story's ## Files, one stderr line saying so, exit 1.
+  local spec="$1" p sf out=""
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    case "$p" in *[*?[]*) continue ;; esac
+    [ -e "$ROOT/$p" ] || continue
+    out="$out$p
+"
+    [ -f "$HERE/symbol-map.sh" ] && out="$out$(bash "$HERE/symbol-map.sh" --exact "$p" 2>/dev/null \
+      | awk '/^[^ ]/ { on = ($0 == "tests:"); next } on && $1 == "exact" { print $2 }')
+"
+  done <<< "$(finding_paths "$3" | awk 'NF && !seen[$0]++')"
+  while IFS= read -r sf; do
+    [ -n "$sf" ] && out="$out$(files_of "$sf")
+"
+  done <<< "$(repair_ask_stories "$spec" "$2" "$3")"
+  if [ -n "$(printf '%s' "$out" | tr -d '[:space:]')" ]; then
+    printf '%sdocs/defects/*\n' "$out" | awk 'NF && !seen[$0]++'
+    return 0
+  fi
+  echo "cycle: repair - $(slug_of "$spec"): no finding names a path in the tree and no story serves a RED ask: the union of every done story's ## Files" >&2
+  for sf in "$spec"/*.md; do
+    is_story_file "$sf" && [ "$(fm_field "$sf" status)" = done ] || continue
+    files_of "$sf"
+  done | awk 'NF && !seen[$0]++'
+  return 1
+}
+
+repair_scope_rows() { # repair_scope_rows <spec> <asks> <findings> <paths> -> a repair story's ## Verification
+  # lines (plan S1), deduplicated, `repeat:` dropped: those of the done stories whose ## Files match one of
+  # <paths> (docs/defects/* aside) and of the stories serving a pathless RED ask; none tied (or <paths>
+  # empty, the union case): `none — reviewed by lead-review`.
+  local spec="$1" sf e p tied serving out=""
+  serving="$(repair_ask_stories "$spec" "$2" "$3")"
+  for sf in "$spec"/*.md; do
+    is_story_file "$sf" && [ "$(fm_field "$sf" status)" = done ] || continue
+    tied=0
+    printf '%s\n' "$serving" | grep -qxF -- "$sf" && tied=1
+    if [ "$tied" = 0 ] && [ -n "$4" ]; then
+      while IFS= read -r e; do
+        [ -n "$e" ] || continue
+        while IFS= read -r p; do
+          [ -n "$p" ] && [ "$p" != 'docs/defects/*' ] && path_overlap "$e" "$p" && { tied=1; break 2; }
+        done <<< "$4"
+      done <<< "$(files_of "$sf")"
+    fi
+    [ "$tied" = 1 ] && out="$out$(verify_of "$sf" | grep -vE '^repeat[[:space:]]*:')
 "
   done
-  local rd="$spec/council/round-$((n-1))" asks
-  asks="$(repair_asks "$rd" "$(round_row "$slug" "$((n-1))")")"
-  now="$(narrow_file "$asks" "$(repair_findings "$spec" "$rd")" "$files")"
-  if [ -z "$now" ] || [ "$now" != "$rfile" ]; then
-    echo "cycle: open-round - $slug round $n: the narrow re-check on round $((n-1))'s records does not hold (${now:-not one item in one non-test file}, record: $rfile): a full round" >&2
-    return 1
+  if [ -n "$(printf '%s' "$out" | tr -d '[:space:]')" ]; then
+    printf '%s' "$out" | awk 'NF && !seen[$0]++'
+  else
+    echo 'none — reviewed by lead-review'
   fi
-  return 0
 }
 
 cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
@@ -4525,7 +4985,7 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   local RD="$SPEC/council/round-$N" x asks
   asks="$(repair_asks "$RD" "$NEWEST")"
 
-  local maxn=0 maxw=0 sf n w files="" verifs="" marked=0 mfiles=""
+  local maxn=0 maxw=0 sf n w files="" marked=0 mfiles=""
   for sf in "$SPEC"/*.md; do
     is_story_file "$sf" || continue
     n="$(story_number "$sf" "$SLUG")"; [ "$n" -gt "$maxn" ] && maxn="$n"
@@ -4539,8 +4999,6 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
     fi
     files="$files$(files_of "$sf")
 "
-    verifs="$verifs$(verify_of "$sf" | grep -vE '^repeat[[:space:]]*:')
-"
   done
   local NN; NN="$(printf '%02d' $((maxn+1)))"
   local WAVE=$((maxw+1))
@@ -4553,38 +5011,18 @@ cmd_repair() { # cmd_repair <spec> <commit:0|1> [<stamp>]
   # ## Files and none names a marked story's; a finding that names no file keeps it (fail closed).
   [ "$marked" = 1 ] && repair_unmarks "$findings" "$files" "$mfiles" && marked=0
 
-  # ab-run-fixes C5: narrow (narrow_file). Its story names that file, its exact tests and the defect
-  # cards; the record (upgrade-findings-05, A3) is what makes the next round review-only.
-  local NARROW="" nfile
-  nfile="$(narrow_file "$asks" "$findings" "$files")"
-  [ -n "$nfile" ] && NARROW=1
-  local nfiles="" nverifs=""
-  if [ -n "$NARROW" ]; then
-    nfiles="$nfile
-"
-    [ -f "$HERE/symbol-map.sh" ] && nfiles="$nfiles$(bash "$HERE/symbol-map.sh" --exact "$nfile" 2>/dev/null \
-      | awk '/^[^ ]/ { on = ($0 == "tests:"); next } on && $1 == "exact" { print $2 }')
-"
-    nfiles="${nfiles}docs/defects/*
-"
-    local e named
-    for sf in "$SPEC"/*.md; do
-      is_story_file "$sf" || continue
-      [ "$(fm_field "$sf" status)" = done ] || continue
-      named=0
-      while IFS= read -r e; do
-        [ -n "$e" ] && path_overlap "$e" "$nfile" && { named=1; break; }
-      done <<EOF
-$(files_of "$sf")
-EOF
-      [ "$named" = 1 ] && nverifs="$nverifs$(verify_of "$sf" | grep -vE '^repeat[[:space:]]*:')
-"
-    done
-  fi
+  # narrow-repair-1115-01 (plan S1): ## Files and ## Verification hold the findings' scope, whatever
+  # its size; `narrow: true` says what round_scope answers for the round after. The line is information:
+  # open-round decides the next round from the committed records alone (narrow-repair-1115-03).
+  local SCOPE SPATHS SUNION=0 SROWS
+  SCOPE="$(round_scope "$SPEC" "$N")"
+  SPATHS="$(repair_scope_paths "$SPEC" "$asks" "$findings")" || SUNION=1
+  if [ "$SUNION" = 1 ]; then SROWS="$(repair_scope_rows "$SPEC" "" "" "")"
+  else SROWS="$(repair_scope_rows "$SPEC" "$asks" "$findings" "$SPATHS")"; fi
 
   {
     printf -- '---\nstory: %s-%s\nstatus: todo\nreturned:\nworker: worker-code\nmodel: opus\nwave: %s\nblocked_by: []\n' "$SLUG" "$NN" "$WAVE"
-    [ -n "$NARROW" ] && printf 'narrow: true\n'
+    [ "$SCOPE" = narrow ] && printf 'narrow: true\n'
     # red-receipt: a repair that keeps the mark gets an empty red_reason for its builder to write.
     [ "$marked" = 1 ] && printf 'red: required\nred_reason:\n'
     printf -- '---\n\n'
@@ -4601,38 +5039,22 @@ EOF
     fi
     printf '\n## Findings\n'
     [ -n "$findings" ] && printf '%s\n' "$findings"
-    if [ -n "$NARROW" ]; then
+    if [ "$SUNION" = 0 ]; then
       printf '\n## Acceptance criteria\n'
       printf -- '- [ ] The class card under docs/defects/ (its quote, Never line or check:) is added or updated in the same commit as the fix.\n'
-      printf '\n## Files\n'
-      printf '%s' "$nfiles" | awk 'NF && !seen[$0]++ { print "- " $0 }'
-      printf '\n## Verification\n'
-      if [ -n "$(printf '%s' "$nverifs" | tr -d '[:space:]')" ]; then
-        printf '%s' "$nverifs" | awk 'NF && !seen[$0]++ { print "`" $0 "`" }'
-      else
-        repair_verification "$verifs" "$findings" "$files" | awk 'NF { print "`" $0 "`" }'
-      fi
-    else
-      printf '\n## Files\n'
-      printf '%s' "$files" | awk 'NF && !seen[$0]++ { print "- " $0 }'
-      printf '\n## Verification\n'
-      repair_verification "$verifs" "$findings" "$files" | awk 'NF { print "`" $0 "`" }'
     fi
+    printf '\n## Files\n'
+    printf '%s\n' "$SPATHS" | awk 'NF { print "- " $0 }'
+    printf '\n## Verification\n'
+    printf '%s\n' "$SROWS" | awk 'NF { print "`" $0 "`" }'
   } > "$STORY"
-  # upgrade-findings-05 (A3): the round after is narrow only by this record, never by the story's line
-  if [ -n "$NARROW" ]; then
-    local nrec ndir; nrec="$(narrow_rec "$SPEC" "$((N+1))")"; ndir="$(dirname "$nrec")"
-    mkdir -p "$ndir" && { [ -f "$(dirname "$ndir")/.gitignore" ] || printf '*\n' > "$(dirname "$ndir")/.gitignore"; }
-    printf 'story=%s-%s\nfile=%s\nfrom=%s\n' "$SLUG" "$NN" "$nfile" "$N" > "$nrec"
-  fi
-
   bash "$HERE/journal.sh" "$SPEC" "03-building" "repair round $N: $(basename "$STORY")" "build:$WAVE" >/dev/null
   if [ "$DOCOMMIT" = "1" ]; then
     commit_paperwork repair "vulyk($SLUG): repair round $N" "$STORY" "$SPEC/journal.md"
     record_approved "$STORY" "$(git rev-parse HEAD)" || { emit false repair 2 error "could not write the approved record"; exit 2; } # A1
   fi
 
-  echo "cycle: $SLUG - repair story for round $N: $STORY${NARROW:+ (narrow: $nfile, the next round is review-only)}"
+  echo "cycle: $SLUG - repair story for round $N: $STORY (the next round: $SCOPE)"
   emit_status repair "$SPEC"
   exit 0
 }
@@ -4849,7 +5271,7 @@ short_line() { # short_line <line> - the line a verb run with `--short` prints i
   # clerk echoes it whole. One flat JSON object of the keys vulyk-cycle.js reads: ok, verb, exit, next, error,
   # failed, steps, done and now of the verb; stage, tier and round of the status it carries (or is); on build:<W>
   # `wave`, each story as [id, worker] plus its model when it has one; on dispatch:<seats> head, since, branch,
-  # court (its absolute path, the blind seats' COURT, or null) and seat_attempt; advance's rejected and
+  # court (its path relative to the repo root, the blind seats' COURT, or null) and seat_attempt; advance's rejected and
   # leftover. A key with nothing in it (since null, steps or rejected empty) is left out: the driver reads it as
   # empty. A story is its id, `-NN` when the id is `<slug>-NN`; an error is cut at SHORT_CUT characters.
   # A line that is no JSON object passes unchanged. The full line stays the verb's own, without the flag.
@@ -4892,7 +5314,10 @@ short_line() { # short_line <line> - the line a verb run with `--short` prints i
         short_jv "$st" head "$QS"; [ -z "$JV" ] || out="$out,\"head\":$JV"
         short_jv "$st" since "$QS"; [ -z "$JV" ] || out="$out,\"since\":$JV"
         short_jv "$st" branch "$QS|null"; [ -z "$JV" ] || out="$out,\"branch\":$JV"
-        short_jv "$st" court "$QS|null"; [ -z "$JV" ] || out="$out,\"court\":$JV"
+        # tails-1115-01 (T8): the court relative to the repo root, so the line's length does not grow with the root
+        short_jv "$st" court "$QS|null"; json_escape_to "$ROOT"
+        case "$JV" in "\"$JE/"*) JV="\"${JV#"\"$JE/"}" ;; esac
+        [ -z "$JV" ] || out="$out,\"court\":$JV"
         short_jv "$st" seat_attempt '\{[^}]*\}'; [ -z "$JV" ] || out="$out,\"seat_attempt\":$JV" ;;
     esac
   fi
@@ -5043,30 +5468,32 @@ case "$VERB" in
     cmd_reanchor "$SPEC" "$REASON" "$COMMIT"
     ;;
   open-round)
-    COMMIT=0; STAMP=""
+    COMMIT=0; STAMP=""; FULL=0
     prevarg=""
     for a in "$@"; do
       [ "$a" = "--commit" ] && COMMIT=1
+      [ "$a" = "--full" ] && FULL=1
       [ "$prevarg" = "--stamp" ] && STAMP="$a"
       prevarg="$a"
     done
-    cmd_open_round "$SPEC" "$COMMIT" "$STAMP"
+    if [ "$FULL" = 1 ]; then open_round_full "$SPEC" "$COMMIT" "$STAMP"; else cmd_open_round "$SPEC" "$COMMIT" "$STAMP"; fi
     ;;
   suite)
-    COMMIT=0; STAMP=""
+    COMMIT=0; STAMP=""; MERGE=0
     prevarg=""
     for a in "$@"; do
       [ "$a" = "--commit" ] && COMMIT=1
+      [ "$a" = "--merge" ] && MERGE=1
       [ "$prevarg" = "--stamp" ] && STAMP="$a"
       prevarg="$a"
     done
-    cmd_suite "$SPEC" "$COMMIT" "$STAMP"
+    if [ "$MERGE" = 1 ]; then suite_merge "$SPEC" "$COMMIT" "$STAMP"; else cmd_suite "$SPEC" "$COMMIT" "$STAMP"; fi
     ;;
   reopen)
     DECISION="${3:-}"
-    COMMIT=0
-    for a in "$@"; do [ "$a" = "--commit" ] && COMMIT=1; done
-    cmd_reopen "$SPEC" "$DECISION" "$COMMIT"
+    COMMIT=0; FULL=0
+    for a in "$@"; do [ "$a" = "--commit" ] && COMMIT=1; [ "$a" = "--full" ] && FULL=1; done
+    cmd_reopen "$SPEC" "$DECISION" "$COMMIT" "$FULL"
     ;;
   repair)
     COMMIT=0; STAMP=""

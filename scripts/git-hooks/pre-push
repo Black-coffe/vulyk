@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# git pre-push hook: refuses a push carrying a `-dev.N` tag or more than one version tag (scripts/tag-push-check.sh).
+# Install: /vulyk-ship step 2a copies it to "$(git rev-parse --git-path hooks)/pre-push" where it makes the local tag.
+# Off: `git push --no-verify`, or a clone the hook was never copied into. A missing check script refuses the push.
+set -u
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || ROOT="."
+CHECK="$ROOT/scripts/tag-push-check.sh"
+[ -f "$CHECK" ] || { echo "pre-push: refused - $CHECK not found, so the tag rule cannot be checked" >&2; exit 1; }
+bash "$CHECK"
+exit $?

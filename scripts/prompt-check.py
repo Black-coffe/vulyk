@@ -17,6 +17,7 @@ SCRIPT_TOK = re.compile(r"^[\w./-]*?([\w.-]+\.(?:sh|py))$")
 FLAG_RE = re.compile(r"(?<![\w-])(--[a-z][a-z0-9-]*)")
 VERB_RE = re.compile(r"^[a-z][a-z-]*$")
 SPLIT_RE = re.compile(r"&&|\|\||\||;")
+SPAWN_TOOLS = ("Agent", "Task")  # the subagent-spawning tool and its pre-2.1.63 name (cc-facts F4)
 
 findings = []  # (file, line, rule, message, involves, hive_warn)
 
@@ -152,6 +153,11 @@ def main(argv):
             add(f, 1, "frontmatter", f"maxTurns '{fm.get('maxTurns', '')}' is not a positive integer", [])
         if not fm.get("tools"):
             add(f, 1, "frontmatter", "tools is missing or empty", [])
+        # An agent given the spawning tool nests subagents of its own (cc-facts F4: `Agent`, `Task` its old name).
+        spawn = [t for t in (x.strip().split("(")[0].strip() for x in fm.get("tools", "").strip("[]").split(","))
+                 if t in SPAWN_TOOLS]
+        if spawn:
+            add(f, 1, "tools", f"tools lists {spawn[0]}, the subagent-spawning tool: the agent would nest subagents of its own", [])
         omit = fm.get("omitClaudeMd")
         if omit is not None and omit not in ("true", "false"):
             add(f, 1, "omit-claude-md", f"omitClaudeMd '{omit}' is not true or false", [])

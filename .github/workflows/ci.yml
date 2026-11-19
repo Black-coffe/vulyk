@@ -14,7 +14,9 @@ jobs:
     name: Shell lint & syntax
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0   # the defect gate dates owner quotes by git blame (new debt vs old)
 
       - name: shellcheck (real bugs only)
         uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
@@ -40,11 +42,14 @@ jobs:
       - name: portability-check (bash 3.2, BSD tools, no bare python - card shell-needs-gnu-or-bash4)
         run: bash scripts/portability-check.sh
 
+      - name: defect gate (the repo-wide audit of docs/defects; red on new debt, a blind fixture or a stale index)
+        run: bash scripts/defects-check.sh
+
   top-model:
     name: top-model.sh resolves every plan shape
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: synthetic profiles -> expected alias
         run: |
@@ -119,7 +124,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90   # a hang ends here, not at the 6 h default; the suite's own cap below names it first
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0   # council parts read history
 
@@ -144,7 +149,8 @@ jobs:
           [ "$rc" -eq 0 ] && printf '%s\n' "$line" | grep -Eq '^cpu [0-9]+% top: ' \
             || { echo "::error::load_sample gave no 'cpu <N>% top:' line on macOS (exit $rc)"; exit 1; }
 
-      - uses: actions/setup-node@v4   # driver and e2e run the real Workflow driver
+      # driver and e2e run the real Workflow driver
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -161,7 +167,7 @@ jobs:
     name: handoff.py resolves the context window
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: synthetic windows -> right denominator, right silence
         run: python3 tests/handoff-window.test.py .claude/hooks/handoff.py
@@ -170,7 +176,7 @@ jobs:
     name: check every telemetry inbox bundle
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: check every telemetry/inbox bundle (green with none present)
         run: |
@@ -187,11 +193,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    # Git Bash on Windows: the shell an owner's Windows machine runs install.sh in
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
+      # Windows: a stock Git for Windows checkout (core.autocrlf=true), so text files arrive with CRLF the way an
+      # owner's clone has them; .gitattributes keeps *.sh / *.py / *.json LF.
+      - name: Windows - the stock line-ending setting before checkout
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf true
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # tails-1115-02 (T51): the line-ending step's byte check (tests/telemetry.test.sh part install-xp) runs where
+      # the defect lived - Git Bash, whose grep never matched a CR - not only on Linux and macOS.
+      - name: Windows - the LF step strips real CR bytes and logs the true count
+        if: runner.os == 'Windows'
+        run: |
+          command -v jq >/dev/null 2>&1 || choco install -y jq
+          bash tests/telemetry.test.sh --part install-xp
 
       - name: macOS - pin the stock /bin/bash 3.2 and assert the BSD userland
         if: runner.os == 'macOS'

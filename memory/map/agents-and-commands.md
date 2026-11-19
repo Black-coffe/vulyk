@@ -32,7 +32,10 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   Bash/Read + browser MCPs) - black-box seat on the Profile's *Client path*. Both are fenced to the court by
   `court-guard.sh` (`scripts-hooks.md`) and (0.50.3) carry a "Finishing work" paragraph after step 3: ordinary
   obstacles (errors, timeouts, locked files) are worked through before an ask becomes `N/A - why: environment`;
-  deliberate blockers (court blindness, withheld access) are left alone.
+  deliberate blockers (court blindness, withheld access) are left alone. 0.54: in a narrow round they read
+  `COURT/docs/specs/<slug>/round-asks` (both begin each Bash call with `cd <COURT> &&`, give every Bash call a
+  `timeout`, and write the report last) (one ask number per line) and judge only those asks, writing `N/A - why: not
+  re-judged this round` for the rest; no file = judge every ask.
 - **cycle-clerk** (`haiku`, `low`, `maxTurns:5`; Bash only) - runs the one `cycle.sh` command given (the driver adds
   `--short`), returns its last stdout line. The Workflow driver's only shell. `haiku` is at the floor only on Claude Code >=
   2.1.293.
@@ -58,7 +61,8 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   money/security/data-write handling; its test is in its own `## Files` and `## Verification`, no later-wave
   `worker-test` story for it. `## Files` lists every reached path; the brief's `symbol-map --exact` output is a
   source (`exact` lines in when reached; `textual <N> not shown` is a recon question for `drone-scout`). Same-wave
-  `## Files` must be disjoint, and two stories changing one type/schema/config key/public API never share a wave.
+  `## Files` must be disjoint (the Queen's step 7 `symbol-map.sh --fill-tests` adds every `exact` test), and two
+  stories changing one type/schema/config key/public API never share a wave.
   A migration adds the new shape beside the old, keeps every story green, and removes the old in the last story.
 - **lead-architect** (`opus`, `high`, `maxTurns:30`) - T4 planning and after a story's second miss; every decision
   an ADR. Dispatched with `model: <top_model>`.
@@ -69,8 +73,6 @@ drone-horizon, librarian; the rest (`queen-planner`, `worker-code`, `worker-test
   `memory/learnings/`; lists `Delete:` files. Entry filter: drops inferred entries, deletes ones newer evidence
   contradicts, writes facts not orders.
 - **drone-horizon** (ADR-022; `sonnet`, `medium`, `maxTurns:20`; Read/Grep/Glob/WebSearch/WebFetch only) - one
-  `lens:` per dispatch (altitude|depth|range); the two Profile rows come from the dispatch. ≤ 3 proposals
-  (`what/why/cost/check/sources/status/kind/ask line`), `DROPPED:`; writes nothing. Two dated sources else
-  `не подтверждено`; WebFetch ≤ 2; reply ≤ 60 lines.
+  `lens:` per dispatch (altitude|depth|range); ≤ 3 proposals, `DROPPED:`; writes nothing; WebFetch ≤ 2; reply ≤ 60 lines.
 
-last-verified: 2026-11-14 (0.53.0-dev.1 audit-fixes-1113; ADR-013, 015, 020, 022, 025, 029, 032)
+last-verified: 2026-11-17 (guards-1115: council seats and worker close re-read; ADR-013, 015, 020, 022, 025, 029, 032, 040)

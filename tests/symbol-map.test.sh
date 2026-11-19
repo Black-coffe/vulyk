@@ -11,7 +11,7 @@
 # into a temp dir and made a git repo there; the cap cases add generated files to their own copy.
 set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
-. "$SRC/scripts/lib.sh"   # vulyk_python, for now_ms
+. "$SRC/scripts/lib.sh"   # vulyk_python, for the trace-autopsy step count
 FIX="$SRC/tests/fixtures/symbol-map"
 SM="$SRC/scripts/symbol-map.sh"
 T="$(mktemp -d)"
@@ -196,6 +196,223 @@ expect_eq "the replay ends with hits, misses and the fixture's noise" "replay: h
 "$RPY" "$SRC/docs/specs/symbol-map/replay.py" "$(winpath "$T/cases-norepo.json")" > /dev/null 2>&1; RC=$?
 expect_eq "a story outside any git repo exits 2" "2" "$RC"
 
+# --fill-tests (docs/specs/narrow-repair-1115/plan.md T1): a spec's todo stories get the tests that mention
+# their files as an `exact` hit, and a ## Commands row for each listed test. Original case: the audit-fixes-1113
+# shape, a story's script pinned by a suite the story did not name. Neighbours: a parted suite, a glob line, a
+# story that already lists the test; a done story and a repair story are never touched.
+echo "--- fill-tests"
+FT="$T/ft"; mkdir -p "$FT/scripts" "$FT/tests" "$FT/docs/specs/demo"
+printf '#!/usr/bin/env bash\ntails() { echo t; }\n' > "$FT/scripts/tails.sh"
+printf '#!/usr/bin/env bash\nparted() { echo p; }\n' > "$FT/scripts/parted.sh"
+printf '#!/usr/bin/env bash\nSRC=.\n. "$SRC/scripts/tails.sh"\ntails\n' > "$FT/tests/ship.test.sh"
+printf '#!/usr/bin/env bash\necho "the tails word, never a source"\n' > "$FT/tests/words.test.sh"
+printf '#!/usr/bin/env bash\nSRC=.\n. "$SRC/scripts/parted.sh"\nparted\n' > "$FT/tests/cycle.test.sh"
+cat > "$FT/CLAUDE.md" <<'EOF'
+# c
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Shell | `git ls-files '*.sh' \| xargs -n1 bash -n` |
+| Ship (round-only) | `bash tests/ship.test.sh --all` |
+| Ship | `bash tests/ship.test.sh` |
+| Cycle | `bash tests/cycle.test.sh --part <topic>` |
+| Words | `bash tests/words.test.sh` |
+EOF
+ftstory() { # ftstory <file> <id> <status> <title> <files lines> <verification lines>
+  printf -- '---\nstory: %s\nstatus: %s\nreturned:\nwave: 1\n---\n\n# %s\n\n## Goal\nx\n\n## Files\n%b\n## Non-goals\n- scripts/tails.sh is named here only\n\n## Verification\n%b\n## Implementation notes\n<!-- n -->\n' \
+    "$2" "$3" "$4" "$5" "$6" > "$FT/docs/specs/demo/$1"
+}
+SHELLROW="\`git ls-files '*.sh' | xargs -n1 bash -n\`\n"
+ftstory demo-01.md demo-01 todo "Tails" '- scripts/tails.sh\n' "$SHELLROW"
+ftstory demo-02.md demo-02 todo "Parted" '- scripts/parted.sh\n' "$SHELLROW"
+ftstory demo-03.md demo-03 todo "Listed" '- scripts/tails.sh\n- `docs/*.md`\n- tests/ship.test.sh\n' '`bash tests/ship.test.sh`\n'
+ftstory demo-04.md demo-04 done "Done" '- scripts/tails.sh\n' "$SHELLROW"
+ftstory demo-05.md demo-05 todo "Repair round 1" '- scripts/tails.sh\n' "$SHELLROW"
+(cd "$FT" && git init -q && git -c core.autocrlf=false add -A) || { echo "::error::cannot init $FT"; exit 1; }
+for s in 01 02 03 04 05; do cp "$FT/docs/specs/demo/demo-$s.md" "$T/ft-before-$s.md"; done
+(cd "$FT" && bash "$SM" --fill-tests docs/specs/demo) > "$T/ft1.out" 2>&1; RC=$?
+D1="$FT/docs/specs/demo/demo-01.md"
+sect() { awk -v s="## $2" '$0==s{on=1;next} /^## /{on=0} on' "$1"; } # sect <story> <heading> - the section's lines
+sect "$D1" Files > "$T/ft-f1"; sect "$D1" Verification > "$T/ft-v1"
+expect "a test that mentions a story file joins its lists (## Files)" "- tests/ship.test.sh" "$T/ft-f1"
+expect "a test that mentions a story file joins its lists (## Verification row)" '`bash tests/ship.test.sh`' "$T/ft-v1"
+expect_absent "fill-tests: a round-only cell is never the row" "--all" "$D1"
+expect_absent "fill-tests: a textual hit is never added" "tests/words.test.sh" "$D1"
+got="$(diff "$T/ft-before-01.md" "$D1" | grep '^[<>]' | tr '\n' '|')"
+expect_eq "fill-tests: only the two lines are added, nothing else moves" '> - tests/ship.test.sh|> `bash tests/ship.test.sh`|' "$got"
+expect_eq "fill-tests: a parted suite left unsettled exits 1" "1" "$RC"
+expect "fill-tests: a parted suite prints a pick line" "symbol-map: demo-02: pick a row for tests/cycle.test.sh (bash tests/cycle.test.sh --part <topic>)" "$T/ft1.out"
+sect "$FT/docs/specs/demo/demo-02.md" Files > "$T/ft-f2"
+expect "fill-tests: the parted suite still joins ## Files" "- tests/cycle.test.sh" "$T/ft-f2"
+expect_absent "fill-tests: a part is never guessed" "--part" "$FT/docs/specs/demo/demo-02.md"
+for s in 03 04 05; do
+  if cmp -s "$T/ft-before-$s.md" "$FT/docs/specs/demo/demo-$s.md"; then ok "fill-tests: demo-$s is unchanged"
+  else bad "fill-tests: demo-$s changed:"; diff "$T/ft-before-$s.md" "$FT/docs/specs/demo/demo-$s.md" | sed 's/^/        /'; fi
+done
+for s in 01 02 03 04 05; do cp "$FT/docs/specs/demo/demo-$s.md" "$T/ft-mid-$s.md"; done
+(cd "$FT" && bash "$SM" --fill-tests docs/specs/demo) > "$T/ft2.out" 2>&1; RC=$?
+same=1; for s in 01 02 03 04 05; do cmp -s "$T/ft-mid-$s.md" "$FT/docs/specs/demo/demo-$s.md" || same=0; done
+expect_eq "fill-tests: a second run changes no byte" "1" "$same"
+expect_eq "fill-tests: and still exits 1 on the pick" "1" "$RC"
+printf '`bash tests/cycle.test.sh --part parted`\n' > "$T/ft-row"
+awk -v r="$(cat "$T/ft-row")" '{print} $0=="## Verification"{print r}' "$FT/docs/specs/demo/demo-02.md" > "$T/ft-02" \
+  && cp "$T/ft-02" "$FT/docs/specs/demo/demo-02.md"
+(cd "$FT" && bash "$SM" --fill-tests docs/specs/demo) > "$T/ft3.out" 2>&1; RC=$?
+expect_eq "fill-tests: every listed test with a row exits 0" "0" "$RC"
+expect_absent "fill-tests: a settled pick prints no pick line" "pick a row" "$T/ft3.out"
+FV="$T/ftv"; cp -r "$FT" "$FV"
+for s in 01 02 03 04 05; do cp "$T/ft-before-$s.md" "$FV/docs/specs/demo/demo-$s.md"; done
+sed 's/`bash tests\/ship.test.sh`/`bash tests\/ship.test.sh --fast`/' "$FT/CLAUDE.md" > "$FV/CLAUDE.vulyk.md"
+(cd "$FV" && bash "$SM" --fill-tests "$FV/docs/specs/demo") > /dev/null 2>&1
+expect "fill-tests: CLAUDE.vulyk.md is the constitution when present" '`bash tests/ship.test.sh --fast`' "$FV/docs/specs/demo/demo-01.md"
+(cd "$FT" && bash "$SM" --fill-tests) > /dev/null 2>&1; RC=$?
+expect_eq "fill-tests: no spec dir exits 2" "2" "$RC"
+(cd "$FT" && bash "$SM" --fill-tests docs/specs/nope) > /dev/null 2>&1; RC=$?
+expect_eq "fill-tests: a missing spec dir exits 2" "2" "$RC"
+awk '/^7\. Check\./{on=1} /^8\. /{on=0} on' "$SRC/.claude/commands/vulyk-plan.md" | tr -d '\r' > "$T/ft-step7.md"
+expect "fill-tests: /vulyk-plan step 7 runs it" "bash scripts/symbol-map.sh --fill-tests docs/specs/<slug>" "$T/ft-step7.md"
+fl="$(grep -n -- '--fill-tests' "$T/ft-step7.md" | head -n1 | cut -d: -f1)"; wl="$(grep -n 'wave-check.sh' "$T/ft-step7.md" | head -n1 | cut -d: -f1)"
+if [ -n "$fl" ] && [ -n "$wl" ] && [ "$fl" -le "$wl" ]; then ok "fill-tests: step 7 runs it before wave-check.sh"
+else bad "fill-tests: step 7 runs it before wave-check.sh (fill at '${fl}', wave-check at '${wl}')"; fi
+expect "fill-tests: queen-planner names the step" "--fill-tests" "$SRC/.claude/agents/queen-planner.md"
+
+# narrow-repair-1115-06 (round 1, ask 5): a test that runs a script (`bash <path>`, the copy-and-run form this repo's
+# suites use) is an `exact` hit, and one that runs its bash wrapper is exact for the .py the wrapper runs; a test
+# that only reads the path stays textual. (Ask 8) A fenced `## Files` is never read by --story or --fill-tests.
+echo "--- bash-run scripts, fenced sections"
+RS="$T/rs"; mkdir -p "$RS/scripts" "$RS/tests" "$RS/docs/specs/demo"
+printf '#!/usr/bin/env bash\necho tool\n' > "$RS/scripts/tool.sh"
+printf '#!/usr/bin/env bash\nexec python3 "$(dirname "$0")/core.py" "$@"\n' > "$RS/scripts/wrap.sh"
+printf 'print("core")\n' > "$RS/scripts/core.py"
+printf '#!/usr/bin/env bash\nSRC="$(cd "$(dirname "$0")/.." && pwd)"\nT="$(mktemp -d)"; cd "$T" || exit 1\nmkdir scripts && cp "$SRC"/scripts/tool.sh scripts/\nrun() { bash scripts/tool.sh; }\nrun\n' > "$RS/tests/tool.test.sh"
+printf '#!/usr/bin/env bash\ngrep -q tool scripts/tool.sh && cat scripts/tool.sh\n' > "$RS/tests/peek.test.sh"
+printf '#!/usr/bin/env bash\nSRC="$(cd "$(dirname "$0")/.." && pwd)"\nbash "$SRC/scripts/wrap.sh"\n' > "$RS/tests/wrap.test.sh"
+cat > "$RS/CLAUDE.md" <<'EOF'
+# c
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Tool | `bash tests/tool.test.sh` |
+| Wrap | `bash tests/wrap.test.sh` |
+EOF
+printf -- '---\nstory: demo-01\nstatus: todo\nreturned:\nwave: 1\n---\n\n# Fenced\n\n## Goal\nAn example story, quoted:\n```\n## Files\n- scripts/wrap.sh\n```\n\n## Files\n- scripts/tool.sh\n\n## Verification\n`true`\n\n## Implementation notes\n````\n```\n## Files\n- scripts/core.py\n```\n````\n' > "$RS/docs/specs/demo/demo-01.md"
+(cd "$RS" && git init -q && git -c core.autocrlf=false add -A) || { echo "::error::cannot init $RS"; exit 1; }
+(cd "$RS" && bash "$SM" --exact scripts/tool.sh) > "$T/rs-tool.out" 2>&1
+expect_in "a test that copies and runs a script is exact" "$T/rs-tool.out" tests "  exact    tests/tool.test.sh"
+expect_absent "a test that only reads the path is never exact" "exact    tests/peek.test.sh" "$T/rs-tool.out"
+(cd "$RS" && bash "$SM" scripts/core.py) > "$T/rs-core.out" 2>&1
+expect_in "a test running the bash wrapper of a .py is exact for the .py, via named" "$T/rs-core.out" tests "  exact    tests/wrap.test.sh (via scripts/wrap.sh)"
+(cd "$RS" && bash "$SM" --story docs/specs/demo/demo-01.md) > "$T/rs-story.out" 2>&1
+expect_eq "--story reads only the ## Files outside fences" "## scripts/tool.sh" "$(grep '^## ' "$T/rs-story.out" | tr '\n' '|' | sed 's/|$//')"
+cp "$RS/docs/specs/demo/demo-01.md" "$T/rs-before.md"
+(cd "$RS" && bash "$SM" --fill-tests docs/specs/demo) > "$T/rs-fill.out" 2>&1
+got="$(diff "$T/rs-before.md" "$RS/docs/specs/demo/demo-01.md" | grep '^[<>]' | tr '\n' '|')"
+expect_eq "fill-tests: a copy-and-run test joins the real ## Files and ## Verification, no fenced line moves" \
+  '> - tests/tool.test.sh|> `bash tests/tool.test.sh`|' "$got"
+
+# tails-1115-12 (narrow-repair-1115 round 2, ask 5 and the review minors): a direct call written inside a quoted
+# command substitution is exact (the original case, `out="$(bash scripts/trace-check.sh x)"`); neighbours: backticks
+# are exact, a single-quoted command is data and stays textual, a variable path keeps its answer. A test that only
+# sources lib.sh is not an exact test of every script lib.sh runs; one that calls the wrapping function, or runs the
+# script itself, is.
+echo "--- quoted command substitution, sourced wrappers"
+QS="$T/qs"; mkdir -p "$QS/scripts" "$QS/tests" "$QS/docs/specs/demo"
+printf '#!/usr/bin/env bash\necho tc\n' > "$QS/scripts/tc.sh"
+cat > "$QS/tests/dq.test.sh" <<'EOF'
+#!/usr/bin/env bash
+out="$(bash scripts/tc.sh x)"
+EOF
+cat > "$QS/tests/bt.test.sh" <<'EOF'
+#!/usr/bin/env bash
+out=`bash scripts/tc.sh x`
+EOF
+cat > "$QS/tests/sq.test.sh" <<'EOF'
+#!/usr/bin/env bash
+cmd='bash scripts/tc.sh x'; echo "$cmd"
+EOF
+cat > "$QS/tests/var.test.sh" <<'EOF'
+#!/usr/bin/env bash
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+bash "$HERE/scripts/tc.sh"
+EOF
+cat > "$QS/scripts/lib.sh" <<'EOF'
+#!/usr/bin/env bash
+cap() { # cap <secs> <cmd>... - the wrapper of cap.py
+  python3 "$(dirname "${BASH_SOURCE[0]}")/cap.py" "$@"
+}
+outer() { cap "$@"; }
+other() { echo other; }
+EOF
+printf 'print("cap")\n' > "$QS/scripts/cap.py"
+cat > "$QS/tests/src.test.sh" <<'EOF'
+#!/usr/bin/env bash
+SRC="$(cd "$(dirname "$0")/.." && pwd)"
+. "$SRC/scripts/lib.sh"
+other
+EOF
+cat > "$QS/tests/call.test.sh" <<'EOF'
+#!/usr/bin/env bash
+SRC="$(cd "$(dirname "$0")/.." && pwd)"
+. "$SRC/scripts/lib.sh"
+( cap 1 true )
+EOF
+cat > "$QS/tests/outer.test.sh" <<'EOF'
+#!/usr/bin/env bash
+SRC="$(cd "$(dirname "$0")/.." && pwd)"
+. "$SRC/scripts/lib.sh"
+out="$(outer 1 true)"
+EOF
+cat > "$QS/tests/runpy.test.sh" <<'EOF'
+#!/usr/bin/env bash
+python3 scripts/cap.py 1 true
+EOF
+cat > "$QS/CLAUDE.md" <<'EOF'
+# c
+
+## Commands
+
+| Purpose | Command |
+|---|---|
+| Dq | `bash tests/dq.test.sh` |
+| Bt | `bash tests/bt.test.sh` |
+| Sq | `bash tests/sq.test.sh` |
+| Var | `bash tests/var.test.sh` |
+EOF
+printf -- '---\nstory: demo-01\nstatus: todo\nreturned:\nwave: 1\n---\n\n# Subst\n\n## Goal\nx\n\n## Files\n- scripts/tc.sh\n\n## Verification\n`true`\n\n## Implementation notes\n<!-- n -->\n' > "$QS/docs/specs/demo/demo-01.md"
+(cd "$QS" && git init -q && git -c core.autocrlf=false add -A) || { echo "::error::cannot init $QS"; exit 1; }
+(cd "$QS" && bash "$SM" --exact scripts/tc.sh) > "$T/qs-tc.out" 2>&1
+got="$(grep '^  exact ' "$T/qs-tc.out" | tr -s ' ' | tr '\n' '|')"
+expect_eq "a direct call inside a quoted command substitution is exact (backticks too, a variable path kept, a single-quoted command never)" \
+  ' exact tests/bt.test.sh| exact tests/dq.test.sh| exact tests/var.test.sh|' "$got"
+(cd "$QS" && bash "$SM" scripts/tc.sh) > "$T/qs-tc-all.out" 2>&1
+expect_in "a single-quoted command is data: textual" "$T/qs-tc-all.out" tests "  textual  tests/sq.test.sh"
+(cd "$QS" && bash "$SM" --exact scripts/cap.py) > "$T/qs-cap.out" 2>&1
+got="$(sed -n '/^tests:$/,/^[a-z][a-z ]*:$/p' "$T/qs-cap.out" | grep '^  exact ' | tr -s ' ' | tr '\n' '|')"
+expect_eq "only sourcing lib.sh is not a call of what lib.sh runs; calling its wrapping function, or the script, is" \
+  ' exact tests/call.test.sh (via scripts/lib.sh)| exact tests/outer.test.sh (via scripts/lib.sh)| exact tests/runpy.test.sh|' "$got"
+cp "$QS/docs/specs/demo/demo-01.md" "$T/qs-before.md"
+(cd "$QS" && bash "$SM" --fill-tests docs/specs/demo) > "$T/qs-fill.out" 2>&1
+got="$(diff "$T/qs-before.md" "$QS/docs/specs/demo/demo-01.md" | grep '^[<>]' | tr '\n' '|')"
+expect_eq "fill-tests: a direct call inside a quoted command substitution is exact, its test and row join the story" \
+  '> - tests/bt.test.sh|> - tests/dq.test.sh|> - tests/var.test.sh|> `bash tests/bt.test.sh`|> `bash tests/dq.test.sh`|> `bash tests/var.test.sh`|' "$got"
+# this repo: the three scripts a test runs only inside "$(...)" each have an exact test; run-capped.py's exact tests
+# all call it (run_capped, capped_by or the .py itself)
+for s in scripts/trace-check.sh scripts/defects-check.sh scripts/suite-parts-check.sh; do
+  n="$(cd "$SRC" && bash "$SM" --exact "$s" 2>/dev/null | sed -n '/^tests:$/,/^[a-z][a-z ]*:$/p' | grep -c '^  exact ')"
+  if [ "$n" -ge 1 ]; then ok "this repo: $s has $n exact tests"
+  else bad "this repo: a direct call inside a quoted command substitution is exact - $s has no exact test"; fi
+done
+(cd "$SRC" && bash "$SM" --exact scripts/run-capped.py) 2>/dev/null | sed -n '/^tests:$/,/^[a-z][a-z ]*:$/p' \
+  | sed -n 's/^  exact    \([^ ]*\).*/\1/p' > "$T/rc-tests"
+nocall=""; while IFS= read -r q; do
+  grep -qE '(^|[^A-Za-z0-9_])(run_capped|run_capped_as|capped_by)([^A-Za-z0-9_]|$)|run-capped\.py' "$SRC/$q" || nocall="$nocall $q"
+done < "$T/rc-tests"
+expect_eq "this repo: every exact test of scripts/run-capped.py calls it ($(grep -c . "$T/rc-tests") listed)" "" "$nocall"
+
 # trace-autopsy.sh (docs/specs/trace-autopsy/plan.md ## Contracts), the step-2 sibling of symbol-map.sh: a fixture repo
 # built here, with two authors so the newest commit on a line is told from the first one.
 echo "--- trace-autopsy"
@@ -221,16 +438,24 @@ Traceback (most recent call last):
     return a / b
 ZeroDivisionError: division by zero
 EOF
-vulyk_python || true   # now_ms falls back to Python where bash has no EPOCHREALTIME
-now_ms() { if [ -n "${EPOCHREALTIME:-}" ]; then local t="${EPOCHREALTIME//[.,]/}"; echo $(( t / 1000 ))
-  else "$VULYK_PY" -c 'import time; print(int(time.time() * 1000))'; fi; }
-ms=""  # the best of three runs: a loaded box slows one run, not all three (post-043-tails)
-for _ in 1 2 3; do
-  t0="$(now_ms)"
-  bash "$TA" "$R/docs/specs/py/brief.md" > "$T/ta-py.out" 2>&1; RC=$?
-  t=$(( $(now_ms) - t0 ))
-  { [ -z "$ms" ] || [ "$t" -lt "$ms" ]; } && ms="$t"
-done
+# tails-1115-09 (T29): the speed check counts steps, not time - a loaded box slows a run, it adds no step. A shim
+# counts every process trace-autopsy.py starts (each git call goes through subprocess.run), then runs it unchanged.
+vulyk_python || true
+ta_counted() { # ta_counted <brief> -> runs trace-autopsy.py through the counting shim; the count lands in $T/ta-steps
+  PYTHONIOENCODING=utf-8 "$VULYK_PY" -c 'import runpy, subprocess, sys
+n = [0]; real = subprocess.run
+def counted(*a, **k):
+    n[0] += 1
+    return real(*a, **k)
+subprocess.run = counted
+steps = sys.argv[2]
+sys.argv = [sys.argv[1], sys.argv[3]]
+try:
+    runpy.run_path(sys.argv[0], run_name="__main__")
+finally:
+    open(steps, "w").write(str(n[0]))' "$SRC/scripts/trace-autopsy.py" "$T/ta-steps" "$1"
+}
+bash "$TA" "$R/docs/specs/py/brief.md" > "$T/ta-py.out" 2>&1; RC=$?
 A="$R/docs/specs/py/autopsy.md"
 expect_eq "trace-autopsy: a Python traceback exits 0" "0" "$RC"
 if [ -f "$A" ]; then ok "trace-autopsy: a Python traceback writes autopsy.md"
@@ -246,7 +471,13 @@ expect_absent "trace-autopsy: never says сломал" "сломал" "$A"
 inner="$(grep -n 'src/app/core.py:3' "$A" | head -n1 | cut -d: -f1)"; outer="$(grep -n 'src/app/main.py:2' "$A" | head -n1 | cut -d: -f1)"
 if [ -n "$inner" ] && [ -n "$outer" ] && [ "$inner" -lt "$outer" ]; then ok "trace-autopsy: innermost Python frame first"
 else bad "trace-autopsy: innermost Python frame first (core at '${inner}', main at '${outer}')"; fi
-if [ "$ms" -lt 1000 ]; then ok "trace-autopsy: the best of three runs takes ${ms} ms (< 1000)"; else bad "trace-autopsy: the best of three runs takes ${ms} ms (>= 1000)"; fi
+# The bound: three setup steps (toplevel, ls-files, HEAD) and two per resolved frame (the code line, its log);
+# one more step per frame than that is red. Two frames resolve here: at most 7.
+rm -f "$T/ta-steps"; ta_counted "$R/docs/specs/py/brief.md" > "$T/ta-count.out" 2>&1
+steps="$(tr -d '\r' < "$T/ta-steps" 2>/dev/null)"
+if [ -n "$steps" ] && [ "$steps" -le $(( 3 + 2 * 2 )) ] && cmp -s "$T/ta-count.out" "$T/ta-py.out"; then
+  ok "trace-autopsy: a two-frame trace takes $steps process starts (<= 3 + 2 per frame), no clock read"
+else bad "trace-autopsy: a two-frame trace takes '${steps}' process starts (> 3 + 2 per frame) or its output changed"; fi
 
 # A traceback followed by plain path:N refs: only the traceback's frames turn innermost-first (post-043-tails).
 brief pymix <<'EOF2'

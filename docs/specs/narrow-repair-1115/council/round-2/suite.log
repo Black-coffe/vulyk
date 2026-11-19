@@ -1,0 +1,15 @@
+head=970c53f8 steps=10
+STEP 2/10: ok 180s
+PART council:replays3 ok 45s cap 300s
+PART council:walks3 ok 45s cap 300s
+PART council:roster2 ok 50s cap 300s
+PART council:walks2 ok 57s cap 300s
+PART council:replays2 ok 75s cap 300s
+PART council:walks ok 75s cap 300s
+PART council:replays ok 80s cap 300s
+PART council:ceilings2 ok 88s cap 300s
+PART council:suite ok 113s cap 300s
+PART council:driver ok 127s cap 300s
+PART council:roster ok 163s cap 300s
+PART council:advance ok 178s cap 300s
+SUITE: ok 180s - narrow repair round, steps 2 of 10

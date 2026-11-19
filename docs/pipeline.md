@@ -68,10 +68,8 @@ that shipped with nine, and a repair round sent against a collision check nobody
 
 At Tier 3-4, `lead-review` and the blind seats are dispatched in one message because they are
 independent *in information* — one sees the diff, the rest only the brief and what a client or
-a probe would see. They are not independent in **machine resources**, and only one of them runs
-the whole suite: `lead-review` runs the constitution's full-suite command once per round, under
-`timeout 540` (changed in 0.18.0, ADR-013: `council-sonnet`, which used to run it, is retired, and
-a story's verification runs once, inside `close-story`). `council-haiku` walks the *Client path*
+a probe would see. They are not independent in **machine resources**. The suite ran before dispatch, and `lead-review` reads its `suite.log`; `council-sonnet`, which used to run the suite, is retired (0.18.0, ADR-013), and
+a story's verification runs once, inside `close-story`. `council-haiku` walks the *Client path*
 instead, and `council-opus` probes ad hoc.
 
 That pairing is therefore safe as long as the probes stay small. What is not safe is judging

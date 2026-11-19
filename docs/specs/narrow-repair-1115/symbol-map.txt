@@ -1,0 +1,27 @@
+## scripts/cycle.sh
+tests:
+  exact    tests/council.test.sh
+  textual  12 not shown
+importers:
+  textual  20 not shown
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  329 not shown
+## .claude/workflows/vulyk-cycle.js
+  ! imports not parsed for .js: search callers yourself
+tests:
+  textual  2 not shown
+guard tests:
+  textual  4 not shown
+path mentions:
+  textual  127 not shown
+## scripts/wave-check.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  3 not shown
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  45 not shown

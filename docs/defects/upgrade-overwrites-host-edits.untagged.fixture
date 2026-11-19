@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Fixture, card upgrade-overwrites-host-edits, a neighbour form (contract B1, tails-1115): the base is right while the
+# installed version has a tag, but a hive installed from an untagged commit gets the nearest tag below its stamped
+# commit as the base, not that commit. A file equal to that older tag's blob is taken for a release copy and replaced,
+# and a file equal to the stamped commit's blob conflicts and is parked.
+# Run as `install.sh <hive> --upgrade`; scripts/upgrade-base-check.sh must exit non-zero on it.
+set -eu
+SRC="$(cd "$(dirname "$0")" && pwd)"; DEST="$1"
+OWNED=".claude/agents"
+PREV="$(tr -d '[:space:]' < "$DEST/.claude/vulyk-version")"
+if git -C "$SRC" rev-parse -q --verify "refs/tags/v$PREV" >/dev/null; then base="v$PREV"
+else base="$(git -C "$SRC" describe --tags --abbrev=0 "$(tr -d '[:space:]' < "$DEST/.claude/vulyk-commit")")"; fi
+for f in $(cd "$SRC" && find $OWNED -type f); do
+  if [ ! -e "$DEST/$f" ]; then cp "$SRC/$f" "$DEST/$f"; continue; fi
+  cmp -s "$SRC/$f" "$DEST/$f" && continue
+  git -C "$SRC" show "$base:$f" > "$DEST/$f.base"
+  if cmp -s "$DEST/$f" "$DEST/$f.base"; then cp "$SRC/$f" "$DEST/$f"
+  elif ! git merge-file -q "$DEST/$f" "$DEST/$f.base" "$SRC/$f"; then cp "$SRC/$f" "$DEST/$f.vulyk-new"; fi
+  rm -f "$DEST/$f.base"
+done

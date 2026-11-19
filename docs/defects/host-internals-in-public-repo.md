@@ -38,5 +38,13 @@ first segment and paths under the VULYK root pass.
   (`<client>`, `<name>`, `<chat>`) and say so.
 - Hand a reviewer or a subagent a brief that carries such names: they copy what they get.
 
+## How-to
+- A leak, a secret or a client name seen in public git while working on something else is said in the very next
+  message (where, since when, the options), and the term joins the private leak-check list; a council round's
+  UNASKED and Minor lines are read for such items too, GREEN or not.
+
 ## Allowed
 - A hive's root by its name alone, and synthetic stand-ins (`Acme`, `clientco`) in fixtures and tests.
+
+## Source
+- 2026-11-18 · auto memory vulyk-feedback-surface-leaks-seen-out-of-scope.md · retold, not a quote

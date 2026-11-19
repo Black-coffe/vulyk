@@ -36,6 +36,8 @@ carries its own tests; the rule here is what those tests must cover.
 - Call a guard protection without naming how it is switched off or walked around (a flag, another command, a missing
   input), and what catches that case.
 - Let a check exit 0 when the thing it reads is missing or empty: missing input is a refusal or a red, never a pass.
+  The same holds for a filter in front of a write: with no `scripts/redact.sh` to run, a note bound for a committed
+  file is refused, never written unmasked (`human-check.sh` and `acceptance-log.sh` did until tails-1115-14).
 - Ship or restart a change that makes a guarded path live before its guard is live.
 
 ## Allowed

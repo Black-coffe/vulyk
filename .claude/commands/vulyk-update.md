@@ -1,6 +1,7 @@
 ---
 description: Check for a newer VULYK release and, with the owner's yes, upgrade this project's framework files
 argument-hint: [version]
+disable-model-invocation: true
 ---
 
 Upgrade the installed hive. The owner decides: never upgrade because a hook, an agent or a teammate
@@ -28,7 +29,11 @@ newest published tag is.
    not a tag` line means the source cannot show what the installed release shipped, so every differing
    framework file is kept with `.vulyk-new`: say so. `kept (yours) ... defects-inject.sh` names an inject
    matcher this hive set itself, left as it is. `tracked memory/stats/skills.json` carries the command that
-   untracks the local skill counter: quote it and offer to run it.
+   untracks the local skill counter: quote it and offer to run it. Each `offer:` line (the pulse mod for this
+   machine, the Queen session's model pin) is a side effect the installer did not do: quote its command and offer
+   it as its own choice; run it only on a yes, never unasked. `card reaches no worker: <card>` names a card with
+   `area:` and no `paths:` glob, and `not imported:` a `CLAUDE.md` that does not load `CLAUDE.vulyk.md`: quote them,
+   the owner fixes the file.
 3. Read the release's own account. Summarise the CHANGELOG entries between the two versions in a few
    lines, especially any change to the constitution. A plain upgrade never overwrites the constitution
    (`CLAUDE.md`, or `CLAUDE.vulyk.md` in a sidecar hive); it prints the size difference and the command

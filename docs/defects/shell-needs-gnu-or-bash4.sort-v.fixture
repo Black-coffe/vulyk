@@ -1,0 +1,3 @@
+# original case - .claude/commands/vulyk-evolve.md:21 before tails-1115-05: the cached litopys copies ordered
+# newest first by sort -V (scripts/version-order.sh: stock macOS sort has none)
+done < <(command -v litopys; ls -d "$HOME"/.claude/plugins/cache/litopys/litopys/*/bin/litopys 2>/dev/null | sort -rV)

@@ -1,6 +1,6 @@
 # ADR-037: A `.scrub-revs` commit keeps an owner quote's date only for a masked-only change
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-11-14
 - Spec: docs/specs/audit-fixes-1113 (asks 14, story 06 and story 12)
 

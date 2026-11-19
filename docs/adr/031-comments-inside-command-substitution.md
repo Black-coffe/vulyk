@@ -1,6 +1,6 @@
 # ADR-031: A portability hit outside a story's files is repaired at its root in the named file, never by loosening the gate
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-11-09
 - Spec: docs/specs/ab-run-fixes (story 06 missed twice; consultation `council/architect-06.md`)
 

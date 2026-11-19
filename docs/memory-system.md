@@ -9,15 +9,14 @@
 | Pointer index | `memory/memory.md` (<=60 lines) | task start | drone-docs, librarian |
 | Codebase map | `memory/map/<module>.md` (~80 lines each) | per relevant slice | drone-scout via /vulyk-map |
 | LLM wiki | `docs/wiki/*` | on pointer follow | drone-docs |
-| Learnings | `memory/learnings/*` | by /vulyk-evolve | a session or the owner, by hand -> librarian consolidates |
+| Learnings (retired) | `memory/learnings/*` | nothing; the files stay | a session or the owner, by hand |
 | Specs & ADRs | `docs/specs/*`, `docs/adr/*` | per task | queen-planner, lead-architect |
 
 ## Protocols that make it safe
 - **Hint, not truth.** Every consumer verifies pointers against real code before acting. Maps drift; the protocol assumes it.
-- **Single consolidator.** Workers append only to their own story files; `drone-docs` updates map/wiki from diffs; `librarian` alone merges learnings. No concurrent-write races by construction.
 - **No automatic learnings.** The `SessionEnd` hook that wrote a learnings stub per session was removed in 0.18.0 (ADR-013 D7): it wrote empty stubs. A learning is now a file someone chose to write; a session history, if you want one, is the Chronicle plugin's job.
 - **Freshness tracking.** `last-verified` dates on map files; git-hook staleness flag after merges; `/vulyk-status` cross-checks dates against git churn.
-- **Compaction insurance.** The PreCompact hook snapshots the index and spec statuses, so `/compact` can never silently destroy orchestration state.
+- **Compaction insurance.** The PreCompact snapshot of the index and spec statuses is retired (nothing read it): orchestration state lives in committed story files, and the handoff dump below covers compaction. Snapshot files already in a hive stay; nothing deletes them.
 - **Session continuity.** `/clear` is mandatory hygiene under the token economy — the handoff layer makes it cheap. `handoff.py` dumps session state (git, todos, touched files, recent prompts) to `.claude/handoff/` on `/clear`/exit/compaction, `/vulyk-handoff` adds a model-written summary (decisions, dead ends, next step), and SessionStart restores the freshest handoff after a `/clear` or a compaction. Deliberately **not** in git: handoffs are per-machine session state, unlike the layers above. See [hooks-reference.md](hooks-reference.md).
 
 ## Claude Code's own auto memory

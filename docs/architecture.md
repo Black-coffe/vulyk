@@ -1,11 +1,11 @@
 # Architecture
 
-## One constraint shapes everything
-In Claude Code, **subagents cannot spawn subagents** (no `Task` tool inside a subagent). VULYK does not fight this - it builds on it:
+## One choice shapes everything
+Claude Code lets a subagent spawn subagents of its own (the `Agent` tool, named `Task` before Claude Code 2.1.63; up to three layers below the main conversation by default). VULYK does not use that: none of its agents lists the `Agent` tool, and `scripts/prompt-check.py` refuses an agent whose `tools:` does. Fan-out stays where it can be seen:
 
 - All fan-out happens from the **main session (Queen)** or, at Tier 3-4, from the **Workflow driver** running the same loop unattended. Below Tier 3 there is no fan-out to speak of: the Queen builds the stories herself and dispatches one reviewer per round (changed in 0.18.0, ADR-013). Commands (`/vulyk-plan`, `/vulyk-build`, `/vulyk-review`, `/vulyk-ship`) encode the orchestration logic.
 - Every subagent is **single-purpose**: it receives a complete brief, works in its own clean context window, returns a structured result. No nested delegation, no context bleed.
-- With the experimental **Agent Teams** flag, teammates additionally coordinate peer-to-peer - VULYK treats this as an upgrade path for collaborative Tier 3-4 work, not a requirement.
+- Claude Code's experimental **Agent Teams** (off by default) let teammates coordinate peer-to-peer. VULYK neither needs nor uses them; switched on, they change how named agents launch, so leave them off during a build.
 
 ## The castes
 | Caste | Members | Model | Contract |
@@ -28,11 +28,11 @@ each closed by a file on disk. This is the machinery inside it:
 ```text
 goal -> Queen names the deliverable: a document ends at report.md (study, ADR-008); code gets a tier
      -> brief.md: the request verbatim, through redact.sh (Tier 2+)
-     -> drone-scouts (opus low, capped: 1 at Tier 1-2, 2 at Tier 3, 4 at Tier 4) -- reports --+
+     -> drone-scouts (sonnet low, capped: 1 at Tier 1-2, 2 at Tier 3, 4 at Tier 4) -- reports --+
      -> memory/map + wiki pointers --------------------------+-> queen-planner (opus Tier 3, TOP_MODEL Tier 4)
      -> new ground only (no hit on the capability in memory, map or source; ADR-022): drone-horizon x3
         (altitude, depth, range; sonnet, web as data) -> the Queen cuts to <= 3 -> horizon.md
-     -> the grill (templates/grill.md): one round, one question at a time, recommended option
+     -> the grill (templates/grill.md): one round, questions in batches of up to 4, recommended option
         first with a recon-grounded reason (horizon proposals asked inside the same cap, adopted only
         by the owner's words), closing into brief.md's ## Asks - the first of the
         two human stops (the second is the plan approval below, stage 01+02, **Approved:**)
@@ -45,9 +45,10 @@ goal -> Queen names the deliverable: a document ends at report.md (study, ADR-00
 /vulyk-build launches the Workflow driver (Tier 3-4; Tier 1-2 run the same loop solo, below)
      -> advance --claim: claims the spec (refused on a tree dirty outside paperwork), puts it on
         its own branch, vulyk/<slug>, and records it (stage 03)
-     -> build:<wave>: opus workers in parallel, one message per wave, disjoint files; each
-        worker closes its own story with cycle.sh close-story --commit: scope-check, the
-        story's verification run once under a 540 s timeout, its own commit (stage 04);
+     -> build:<wave>: workers in parallel (sonnet; the model profile may name opus), one
+        message per wave, disjoint files; each worker closes its own story with cycle.sh close-story --commit: scope-check, the
+        story's verification run once, 300 s per line inside a 540 s call (a longer run
+        pauses and resumes), its own commit (stage 04);
         a story still todo after its wave is retried once on the gate model (ADR-012)
      -> advance: every story done -> cycle.sh open-round freezes the tier's seats into ROUND
         and, when a blind seat is required, opens a reduced git worktree - the court - at the

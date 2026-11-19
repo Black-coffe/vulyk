@@ -32,7 +32,9 @@ mechanically by `cycle.sh repair`.
   source for it: `exact` lines plus a `textual <N> not shown` count per section. An `exact` line goes into
   `## Files` when the change reaches it; an importer that keeps working unchanged stays out. A non-zero
   count under `tests` or `importers` is a recon question for `drone-scout` when the story's change could
-  reach an unnamed caller, never a guess.
+  reach an unnamed caller, never a guess. The Queen's step 7 (`symbol-map.sh --fill-tests`) adds every
+  test that mentions a story's files as an `exact` hit, with its row: two stories whose files share such a
+  test do not share a wave.
 - A story that adds a branch, a loop, a parser, or handling of money, security or data writes is marked
   `red: required` in its frontmatter (you mark it; the builder does not). It names the test that fails
   when that logic breaks as a test file in its own `## Files`, and that path appears in its

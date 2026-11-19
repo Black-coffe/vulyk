@@ -20,7 +20,7 @@ n = [0]
 
 def case(name, tokens, expect_silent, expect_needle=None,
          window=None, foreign=False, no_statusbar=False,
-         config=None, env=None, per_session=False):
+         config=None, env=None, per_session=False, model="claude-opus-5"):
     n[0] += 1
     sid = "0000000-session-%02d" % n[0]
     home = os.path.join(ROOT, "home%02d" % n[0])
@@ -35,7 +35,7 @@ def case(name, tokens, expect_silent, expect_needle=None,
     entry = {
         "type": "assistant", "isSidechain": False,
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "message": {"model": "claude-opus-5", "usage": {
+        "message": {"model": model, "usage": {
             "input_tokens": 2, "cache_read_input_tokens": tokens - 2,
             "cache_creation_input_tokens": 0, "output_tokens": 0}},
     }
@@ -107,8 +107,10 @@ case("200k window, 150k -> nags with the right denominator", 150000, False,
 # --- the statusbar cannot answer for this session --------------------------
 case("foreign session in cache -> stays quiet rather than guess", 150000, True,
      foreign=True)
-case("no statusbar at all -> legacy 200k behaviour preserved", 150000, False,
-     "(75% of 200k)", no_statusbar=True)
+case("no statusbar at all, a model the family table does not know -> legacy 200k behaviour preserved",
+     150000, False, "(75% of 200k)", no_statusbar=True, model="claude-sonnet-4-6")
+case("no statusbar at all, claude-opus-5 -> the family table gives 1M, silent", 150000, True,
+     no_statusbar=True)
 case("no statusbar, 300k measured -> treated as 1M, silent", 300000, True,
      no_statusbar=True)
 

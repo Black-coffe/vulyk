@@ -242,11 +242,11 @@ o="$(run "$HIVE" "$(bashcall s6 "python \\\"$W/pipeline/voiceover.py\\\" --check
 printf '%s' "$o" | ctx | expect "Bash: a quoted absolute path token is made repo-relative" "voice-text"
 # P10-15: a quoted path with a space was split into pieces no glob matched.
 printf -- '---\nid: notes-space\ntitle: Notes with a space\nstatus: text\npaths: ["My Notes/*.md"]\n---\n\n## Never\n- SPACENEVER edit notes blind.\n' > "$D/notes-space.md"
-run "$HIVE" "$(bashcall s6q 'cat \"My Notes/a.md\" | wc -l')" | ctx | expect "P10-15: a double-quoted path with a space matches its glob" "✗ SPACENEVER"
-run "$HIVE" "$(bashcall s6r "sed -n 1p 'My Notes/b.md'")" | ctx | expect "P10-15: a single-quoted path with a space matches too" "✗ SPACENEVER"
+run "$HIVE" "$(bashcall s6q 'python \"My Notes/a.md\" | wc -l')" | ctx | expect "P10-15: a double-quoted path with a space matches its glob" "✗ SPACENEVER"
+run "$HIVE" "$(bashcall s6r "sed -i.bak 1d 'My Notes/b.md'")" | ctx | expect "P10-15: a single-quoted path with a space matches too" "✗ SPACENEVER"
 run "$HIVE" "$(bashcall s6s "python \\\"$W/My Notes/c.md\\\"")" | ctx | expect "P10-15: a quoted absolute path with a space is made repo-relative" "✗ SPACENEVER"
-run "$HIVE" "$(bashcall s6t 'echo \"a\" \"My Notes/d.md\"')" | ctx | expect "P10-15: quotes pair left to right across tokens" "✗ SPACENEVER"
-run "$HIVE" "$(bashcall s6u 'cat My Notes/a.md')" | expect_silent "P10-15 neighbour: the unquoted words are two arguments, no match"
+run "$HIVE" "$(bashcall s6t 'touch \"a\" \"My Notes/d.md\"')" | ctx | expect "P10-15: quotes pair left to right across tokens" "✗ SPACENEVER"
+run "$HIVE" "$(bashcall s6u 'touch My Notes/a.md')" | expect_silent "P10-15 neighbour: the unquoted words are two arguments, no match"
 rm -f "$D/notes-space.md"
 run "$HIVE" "$(bashcall s3 'ls -la docs && git status')" | expect_silent "an unrelated Bash command is silent"
 # audit-fixes-1113-04: a PowerShell command line is read as a Bash one, for cmd: entries and for paths.
@@ -256,9 +256,25 @@ printf '%s' "$cps" | expect "a PowerShell command gets the card its cmd: entry n
 if [ -n "$cb" ] && [ "$cps" = "$cb" ]; then ok "a PowerShell command gets the card text the same command gets under Bash"
 else bad "a PowerShell command gets the card text the same command gets under Bash - Bash:"
   printf '%s\n' "$cb" | sed 's/^/        /'; echo "      PowerShell:"; printf '%s\n' "$cps" | sed 's/^/        /'; fi
-run "$HIVE" "$(pscall ps2 'Get-Content -Path .\\pipeline\\voiceover.py | Select-Object -First 3')" | ctx \
+run "$HIVE" "$(pscall ps2 'Get-Content -Path .\\pipeline\\voiceover.py | Set-Content x.txt')" | ctx \
   | expect "a PowerShell command naming a file inside a card's glob gets that card" "voice-text — Voice text rule"
 run "$HIVE" "$(pscall ps3 'Get-ChildItem docs; git status')" | expect_silent "an unrelated PowerShell command is silent"
+# J1 (tails-1115-07, T78): a command that only reads (search, print, list, count, compare; no redirect to a file, no
+# in-place flag) gets no card; one that writes, any git command (lead-review's cards come from one `git diff`) and
+# one the hook cannot read get them as before.
+printf -- '---\nid: lib-card\ntitle: Lib rule\nstatus: text\npaths: ["scripts/**"]\n---\n\n## Never\n- LIBNEVER edit lib blind.\n' > "$D/lib-card.md"
+run "$HIVE" "$(bashcall j1a 'grep -n x scripts/lib.sh')" | expect_silent "J1: a read-only command gets no card (grep -n x scripts/lib.sh)"
+run "$HIVE" "$(pscall j1b 'Get-Content scripts/lib.sh | Select-String -Pattern x')" \
+  | expect_silent "J1: a read-only command gets no card (a PowerShell read: Get-Content | Select-String)"
+run "$HIVE" "$(bashcall j1c 'cat scripts/lib.sh | wc -l 2>/dev/null; ls scripts && diff scripts/lib.sh scripts/a.sh')" \
+  | expect_silent "J1: a read-only command gets no card (a pipe, a list, a /dev/null redirect, a compare)"
+run "$HIVE" "$(bashcall j1d 'grep -n x scripts/lib.sh | tee out.txt')" | ctx | expect "J1 neighbour: a read piped into a writer gets the card" "✗ LIBNEVER"
+run "$HIVE" "$(bashcall j1e 'grep -n x scripts/lib.sh > out.txt')" | ctx | expect "J1 neighbour: a read redirected to a file gets the card" "✗ LIBNEVER"
+run "$HIVE" "$(bashcall j1f 'sed -i.bak s/x/y/ scripts/lib.sh')" | ctx | expect "J1 neighbour: sed -i.bak gets the card" "✗ LIBNEVER"
+run "$HIVE" "$(bashcall j1g 'git diff HEAD~1..HEAD -- scripts/lib.sh')" | ctx | expect "J1 neighbour: git diff <range> -- <path> gets the card" "✗ LIBNEVER"
+run "$HIVE" "$(bashcall j1h 'cat $(echo scripts/lib.sh)')" | ctx | expect "J1 neighbour: a command the hook cannot read gets the card" "✗ LIBNEVER"
+run "$HIVE" "$(pscall j1i 'Get-Content scripts/lib.sh > out.txt')" | ctx | expect "J1 neighbour: a PowerShell read redirected to a file gets the card" "✗ LIBNEVER"
+rm -f "$D/lib-card.md"
 
 # --- reset on SessionStart --------------------------------------------------------------------
 echo "--- reset"
@@ -487,6 +503,29 @@ printf '%s' "$o" | ctx | expect "eight big cards on a story Read fold the rest" 
 o="$(run "$HIVE" "$(edit r3 "$W/big/x.py" f1)")"
 printf '%s' "$o" | ctx | expect "a card folded on a story Read arrives in full at the first Edit" "✗ BIG08 long line"
 printf '%s' "$o" | ctx | expect_absent "a card shown in full on the story Read is not repeated at the Edit" "BIG01"
+# Ask 12 (tails-1115-07): `## Files` is read outside fenced code blocks only, with the fence rule of FENCE_AWK in
+# scripts/cycle.sh (3+ ` or ~ opens; only the same character, as long or longer, with nothing after it, closes).
+mkdir -p "$HIVE/docs/specs/fence"
+fstory() { # fstory <file> <fence open> <fence close>   -> a story whose ## Red receipt fence holds a ## Files
+  printf -- '---\nstory: %s\n---\n\n## Red receipt\n%s\n## Files\n- big/fenced.py\n%s\n\n## Files\n- pipeline/voiceover.py\n' \
+    "$(basename "$1" .md)" "$2" "$3" > "$HIVE/docs/specs/fence/$1"
+}
+fstory f-01.md '```' '```'
+o="$(run "$HIVE" "$(readcall fr1 "$W/docs/specs/fence/f-01.md")" | ctx)"
+printf '%s' "$o" | expect_absent "a fenced section adds no path: a ## Files inside a fence above the real one" "big-0"
+printf '%s' "$o" | expect "a fenced section adds no path: ... and the real ## Files still delivers" "voice-text — Voice text rule"
+fstory f-02.md '````' "$(printf '```\n- big/inner.py\n````')"
+o="$(run "$HIVE" "$(readcall fr2 "$W/docs/specs/fence/f-02.md")" | ctx)"
+printf '%s' "$o" | expect_absent "a fenced section adds no path: a 4-backtick fence holding a 3-backtick one" "big-0"
+printf '%s' "$o" | expect "a fenced section adds no path: ... the 4-backtick story still reads the real ## Files" "voice-text"
+fstory f-03.md '~~~' '~~~'
+o="$(run "$HIVE" "$(readcall fr3 "$W/docs/specs/fence/f-03.md")" | ctx)"
+printf '%s' "$o" | expect_absent "a fenced section adds no path: a ~~~ fence" "big-0"
+printf '%s' "$o" | expect "a fenced section adds no path: ... the ~~~ story still reads the real ## Files" "voice-text"
+printf -- '---\nstory: f-04\n---\n\n## Files\n- big/x.py\n- pipeline/voiceover.py\n' > "$HIVE/docs/specs/fence/f-04.md"
+o="$(run "$HIVE" "$(readcall fr4 "$W/docs/specs/fence/f-04.md")" | ctx)"
+printf '%s' "$o" | expect "a fenced section adds no path, neighbour: a story with no fence reads as today" "big-01"
+printf '%s' "$o" | expect "a fenced section adds no path, neighbour: ... both of its paths" "voice-text"
 # --- court guard (audit-fixes-1113-08, contract C1): a blind council seat stays inside its court ---------
 echo "--- court guard"
 CG="$SRC/.claude/hooks/court-guard.sh"
@@ -529,8 +568,6 @@ expect_eq "court guard: git show <rev>:docs/specs/... is denied" deny \
   "$(cg council-opus "$CRW" Bash '{"command":"git show HEAD~2:docs/specs/acme/plan.md"}')"
 expect_eq "court guard: git diff with a pathspec under docs/specs/ is denied" deny \
   "$(cg council-opus "$CRW" Bash '{"command":"git diff HEAD~1 -- docs/specs/acme"}')"
-expect_eq "court guard: git log whose every pathspec lies elsewhere passes" allow \
-  "$(cg council-opus "$CRW" Bash '{"command":"git log --oneline -- src"}')"
 expect_eq "court guard: git status passes" allow "$(cg council-haiku "$CRW" Bash '{"command":"git status --short"}')"
 expect_eq "court guard: another agent's git log passes" allow "$(cg worker-code "$CPW" Bash '{"command":"git log --oneline"}')"
 # Round 1 (audit-fixes-1113-15): a command's non-path words were read as paths and starved the blind seat.
@@ -549,6 +586,326 @@ for c in "cat $CPW/docs/specs/acme/plan.md" "ls ../../../../docs/specs" "sed -n 
   p="{\"command\":\"$c\"}"
   expect_eq "court guard: a real read outside the court is still denied: $c" deny "$(cg council-opus "$CRW" Bash "$p")"
 done
+# guards-1115-04 (contract C2): git by an allowlist, resolved paths, glued options, the seat's own court, the temp folder.
+for c in "git log --oneline -- src" "git -c alias.v=show v HEAD:src/a.md" "git unpack-file 0123abcd" \
+         "git cat-file -p HEAD:src/a.md" "git lg -- src" "git rev-parse HEAD:docs/specs/acme/plan.md" \
+         "git ls-files HEAD~1:docs/specs/acme" "git -c core.pager=cat status" "GIT_DIR=$CPW/.git git status" \
+         "env GIT_WORK_TREE=$CPW git status"; do
+  p="{\"command\":\"$c\"}"
+  expect_eq "court guard: a seat git read outside the allowlist is denied: $c" deny "$(cg council-opus "$CRW" Bash "$p")"
+done
+for c in "git status" "git status --short -- src" "git --no-pager status -sb" "git -C src status --short" \
+         "git rev-parse --show-toplevel" "git rev-parse --abbrev-ref HEAD" "git ls-files src" \
+         "git ls-files --others --exclude-standard" "git --version" "git version"; do
+  p="{\"command\":\"$c\"}"
+  expect_eq "court guard: an allowlisted git form passes in the court: $c" allow "$(cg council-opus "$CRW" Bash "$p")"
+done
+# S7: a path is judged by its resolved form; /proc and a link in the court point back into the project.
+rm -rf "$CR/peek"; ln -s "$CP/docs/specs" "$CR/peek" 2>/dev/null
+if [ ! -L "$CR/peek" ] && command -v cygpath >/dev/null 2>&1; then   # Git Bash without symlinks: a junction
+  rm -rf "$CR/peek"; cmd //c mklink //J "$(cygpath -w "$CR/peek")" "$(cygpath -w "$CP/docs/specs")" >/dev/null 2>&1
+fi
+[ -e "$CR/peek/acme/plan.md" ] && ok "court guard: the link fixture points into the project" ||
+  bad "court guard: could not make a link in the court for the resolved-path case"
+for c in "cat /proc/1234/cwd/docs/specs/acme/plan.md" "cat /proc/self/root$CP/docs/specs/acme/plan.md" \
+         "cat $CP/docs/specs/acme/plan.md" "cat peek/acme/plan.md" \
+         "sed --expression=p ../../../../docs/specs/*/plan.md" "sed -ep ../../../../docs/specs/*/plan.md" \
+         "grep --regexp=plan ../../../../docs/specs/a*/plan.md" "awk -f$CPW/docs/specs/acme/plan.md CLAUDE.md" \
+         "grep -f pats.txt ../../../../docs/specs/*/plan.md" \
+         "cat /tmp/claude/x/plan-copy.md" "cat /tmp/claude-1000/x/plan-copy.md"; do
+  p="{\"command\":\"$c\"}"
+  expect_eq "court guard: a resolved, glued or temp-folder read outside the court is denied: $c" deny \
+    "$(cg council-opus "$CRW" Bash "$p")"
+done
+p="{\"file_path\":\"$CRW/peek/acme/plan.md\"}"
+expect_eq "court guard: a seat's Read through a link out of the court is denied" deny "$(cg council-opus "$CRW" Read "$p")"
+for c in "cat docs/specs/acme/brief.md" "sed --expression=p CLAUDE.md" "sed -ep CLAUDE.md" \
+         "grep --regexp=Profile CLAUDE.md" "awk -fprog.awk CLAUDE.md" "cat /dev/null" "ls /usr/bin" \
+         "cat /tmp/other/x.md" "ls /tmp" "python3 -c 'print(1)'"; do
+  p="{\"command\":\"$c\"}"
+  expect_eq "court guard: its plain twin passes: $c" allow "$(cg council-opus "$CRW" Bash "$p")"
+done
+p='{"command":"cat /tmp/claude/x/plan-copy.md"}'
+expect_eq "court guard: the main session's read of its temp folder passes" allow "$(cg - "$CPW" Bash "$p")"
+expect_eq "court guard: a worker's read of the temp folder passes" allow "$(cg worker-code "$CPW" Bash "$p")"
+# S10: one court on disk - a court path passes from any directory; a second court - only the one the call stands in.
+p="{\"file_path\":\"$CRW/docs/specs/acme/brief.md\"}"
+expect_eq "court guard: one court, a Read by absolute path from the project root passes" allow "$(cg council-opus "$CPW" Read "$p")"
+TW="$(cd "$T" && { pwd -W 2>/dev/null || pwd; })"
+expect_eq "court guard: one court, a Read by absolute path from another directory passes" allow "$(cg council-opus "$TW" Read "$p")"
+CO="$CP/.vulyk/court/other/round-1"; COW="$CPW/.vulyk/court/other/round-1"
+mkdir -p "$CO/docs/specs/other"; printf '# other brief\n' > "$CO/docs/specs/other/brief.md"
+expect_eq "court guard: two courts, a Read of the seat's own court from inside it passes" allow "$(cg council-opus "$CRW" Read "$p")"
+expect_eq "court guard: two courts, a Read into a court from no court is denied" deny "$(cg council-opus "$CPW" Read "$p")"
+out="$(printf '{"session_id":"c","tool_name":"Read","tool_input":%s,"cwd":"%s","agent_id":"c1","agent_type":"council-opus"}' \
+  "$p" "$CPW" | CLAUDE_PROJECT_DIR="$CPW" bash "$CG")"
+printf '%s' "$out" | expect "court guard: two courts, the refusal says to work from inside the court" "work from inside your court"
+p="{\"command\":\"cat $CRW/CLAUDE.md\"}"
+expect_eq "court guard: two courts, a Bash read into a court from no court is denied" deny "$(cg council-opus "$CPW" Bash "$p")"
+p="{\"command\":\"cd $CRW && cat CLAUDE.md && ls $CPW/.vulyk/reports\"}"
+expect_eq "court guard: two courts, a cd into the court then a read there passes" allow "$(cg council-opus "$CPW" Bash "$p")"
+p="{\"file_path\":\"$COW/docs/specs/other/brief.md\"}"
+expect_eq "court guard: a Read of another round's court is denied" deny "$(cg council-opus "$CRW" Read "$p")"
+for c in "cat ../../other/round-1/docs/specs/other/brief.md" "cd ../../other/round-1 && cat CLAUDE.md" "ls .." \
+         "cd $CRW && cat $COW/docs/specs/other/brief.md"; do
+  p="{\"command\":\"$c\"}"
+  expect_eq "court guard: another round's court is denied: $c" deny "$(cg council-opus "$CRW" Bash "$p")"
+done
+# guards-1115-07 (repair of round 2, by class): git found in every command position, a path judged in every form
+# the shell reads it in, a cd judged by what the shell really does; each class with its original form and a
+# neighbour, and the seat's own flows that must still pass.
+cgb() { # cgb <want> <cwd> <command text>: a council-opus Bash call, the text JSON-encoded
+  local p; p="$("$PYBIN" -c 'import json,sys; print(json.dumps({"command": sys.argv[1]}))' "$3")"
+  expect_eq "court guard r2: $1 from $(basename "$2"): $3" "$1" "$(cg council-opus "$2" Bash "$p")"
+}
+mkdir -p "$CR/docs/specs/acme/deep"
+PL='../../../../docs/specs/acme/plan.md'
+while IFS= read -r c; do cgb deny "$CRW" "$c"; done <<EOF
+! git show HEAD~1:docs/specs/acme/plan.md
+if true; then git log -p; fi
+for i in 1; do git log -p; done
+true; while false; do :; done; until true; do git log -p; done
+2>/dev/null git log -p
+time -p git log -p
+command -p git log -p
+exec -a x git log -p
+env -i git log -p
+env -u X git log -p
+timeout 5 git log -p
+nice -n 5 git log -p
+nohup git log -p
+echo HEAD | xargs git show
+echo show | xargs git
+eval git log -p
+eval 'git show HEAD~1:docs/specs/acme/plan.md'
+bash -c 'git log -p'
+sh -ec 'git log -p'
+echo "\$(git log -p)"
+echo "\`git log -p\`"
+g=git; \$g log -p
+"\$G" log -p
+{git,} log -p
+p=$PL; cat "\$p"
+p=$CPW/docs/specs/acme/plan.md && cat \${p}
+echo "\$(cat $PL)"
+x="\$(<$PL)"; echo ok
+curl -s file:///$CPW/docs/specs/acme/plan.md
+curl -s FILE://localhost/$CPW/docs/specs/acme/plan.md
+cat ./$PL
+cat ./../../../../docs/specs/acme/plan.m?
+cat src/../../../../../docs/specs/acm?/plan.md
+cat .?/../../../../docs/specs/acme/plan.md
+cat<$PL
+grep -n x<$PL
+while read -r l; do echo "\$l"; done<$PL
+exec 3<$PL; cat <&3
+cd docs/specs/acme/nope; cat $PL
+(cd docs/specs/acme/deep); cat $PL
+true || cd docs/specs/acme/deep; cat $PL
+cd docs/specs/acme/deep extra; cat $PL
+CDPATH=../.. cd other/round-1 && cat CLAUDE.md
+tar -tf$PL
+sort -o$PL CLAUDE.md
+diff --from-file=$PL CLAUDE.md
+cat '.\\..\\..\\..\\..\\docs\\specs\\acme\\plan.md'
+EOF
+cgb deny "$CRW" "$(printf 'cat <<EOF.\nnote\nEOF.\ncat %s' "$PL")"
+cgb deny "$CRW" "$(printf 'cat <<"E-1"\nnote\nE-1\ncat %s' "$PL")"
+cgb deny "$CRW" "$(printf 'echo $((1<<X))\ncat %s\nX' "$PL")"
+cgb deny "$CRW" "$(printf '(( 1<<X ))\ncat %s\nX' "$PL")"
+while IFS= read -r c; do cgb allow "$CRW" "$c"; done <<'EOF'
+python3 -c "print(6 * 7)"
+python3 -c "print(2 ** 10)"
+sed -i '$d' CLAUDE.md
+echo x > "$OUT"
+git ls-files '*.md' | xargs sed -n 1p
+sed 's/</\&lt;/g' CLAUDE.md
+grep -n '<b>' CLAUDE.md
+awk -F/ '{print $1}' CLAUDE.md
+echo $((1<<2))
+git status 2>&1 | head -5
+cat CLAUDE.md>/dev/null
+cat 2>/dev/null CLAUDE.md
+cd src && cat ../CLAUDE.md
+cd docs/specs/acme/deep && cat ../brief.md
+for f in docs/specs/acme/*.md; do cat "$f"; done
+timeout 5 git status
+env -i git status
+nice git rev-parse --show-toplevel
+bash -c 'cat CLAUDE.md'
+eval 'cat CLAUDE.md'
+grep -n git CLAUDE.md
+echo "$(git status --short)"
+p=docs/specs/acme/brief.md; cat "$p"
+echo see file:docs/specs/acme/brief.md
+curl -s https://example.com/../x
+EOF
+cgb allow "$CRW" "$(printf 'cat > ../../../reports/acme/round-1/opus.md <<EOF\n* a $name **b `x` ../../../../docs\nEOF')"
+cgb allow "$CRW" "$(printf 'python3 - <<PY\nprint(6 * 7)\nPY')"
+# guards-1115-09 (round 3, ask 7): a substitution runs where its command stands, so one after `cd COURT &&` reads
+# the court; one before the cd, or after a cd that ends with its subshell, is still judged where the call stood.
+# guards-1115-13 (revert after round 6): the reverted parser denies the first group again
+cgo() { # cgo <cwd> <command text>: a council-opus Bash call the reverted parser over-denies (0.55.0 re-opens it)
+  local p; p="$("$PYBIN" -c 'import json,sys; print(json.dumps({"command": sys.argv[1]}))' "$2")"
+  expect_eq "court guard: known over-deny, 0.55.0: denied from $(basename "$1"): $2" deny "$(cg council-opus "$1" Bash "$p")"
+}
+printf 'x\n' > "$CR/src/main.py"; printf 'x\n' > "$CP/src/main.py"
+while IFS= read -r c; do cgo "$CPW" "$c"; done <<'EOF'
+cd .vulyk/court/acme/round-1 && echo "$(cat src/main.py)"
+cd .vulyk/court/acme/round-1 && wc -l $(ls src/main.py)
+cd .vulyk/court/acme/round-1 && x="$(< src/main.py)"; echo "$x"
+cd .vulyk/court/acme/round-1 && test "$(wc -l < src/main.py)" -gt 0 && echo `cat src/main.py`
+EOF
+while IFS= read -r c; do cgb deny "$CPW" "$c"; done <<'EOF'
+echo "$(cat src/main.py)"; cd .vulyk/court/acme/round-1
+cd .vulyk/court/acme/round-1 && echo "$(cat ../../../../src/main.py)"
+(cd .vulyk/court/acme/round-1); echo "$(cat src/main.py)"
+EOF
+# guards-1115-09 (round 3, finding 2): an unquoted arithmetic expansion holding a substitution, and a case arm whose
+# pattern is a wildcard, are ordinary shell; a command inside either is still judged.
+# guards-1115-13 (revert after round 6): the reverted parser denies these ordinary forms again
+while IFS= read -r c; do cgo "$CRW" "$c"; done <<'EOF'
+s=$(date +%s); echo took $(( $(date +%s) - s ))s
+echo $(( $(date +%s) - 5 ))
+case x in a) echo a;; *) echo b;; esac
+case "$1" in -h|--help) echo h;; *) cat src/main.py;; esac
+EOF
+cgo "$CRW" "$(printf 'case x in\n  a) echo a ;;\n  *) echo b ;;\nesac')"
+while IFS= read -r c; do cgb deny "$CRW" "$c"; done <<EOF
+case x in *) cat $PL;; esac
+echo \$(( \$(wc -l < $PL) + 1 ))
+case x in a) echo a;; *) git log -p;; esac
+EOF
+# guards-1115-11 (round 4, finding 1): `$((` is arithmetic only when its first unmatched `)` is followed by another;
+# a body that opens and closes with a parenthesised group is a command substitution, and its commands are judged
+while IFS= read -r c; do cgb deny "$CRW" "$c"; done <<EOF
+echo \$((cat $PL) && (true))
+echo \$((git log -p) | (head -1))
+x=\$((cat $PL); (echo)); echo ok
+wc -l \$((cat $PL) || (git show HEAD:docs/specs/acme/plan.md))
+EOF
+cgb allow "$CRW" 'echo $((cat src/main.py) && (true))'
+# guards-1115-13 (revert after round 6): arithmetic holding a parenthesised group is denied again
+while IFS= read -r c; do cgo "$CRW" "$c"; done <<'EOF'
+echo $(( (1 + 2) * 3 ))
+echo $(( $(wc -l < src/main.py) + (2) ))
+EOF
+# guards-1115-11 (round 4, finding 2): the redirects on `esac` are judged; pattern mode starts only at an unquoted
+# `case` word and ends at its `esac` in the same simple command too (a case with no arm)
+while IFS= read -r c; do cgb deny "$CRW" "$c"; done <<EOF
+case x in *) echo a;; esac > $PL
+case x in *) cat;; esac < $PL
+case x in *) cat;; esac <$PL
+case x in a) echo a;; esac 2>> $PL
+case x in esac > $PL
+case x in esac; cat $PL; (true)
+case x in esac; cd ../../../..; (true)
+case x in esac; git log -p; (true)
+'case' x; cat $PL; (true)
+\\case x; git log -p; (true)
+"case" y; cd ../../../..; (true)
+ca\\se x; cat $PL; (true)
+EOF
+while IFS= read -r c; do cgb allow "$CRW" "$c"; done <<'EOF'
+case x in *) echo a;; esac > out.txt
+case x in *) cat;; esac < src/main.py
+case x in esac; cat src/main.py; (true)
+'case' x; cat src/main.py; (true)
+echo case esac; cat src/main.py
+EOF
+# guards-1115-12 (round 5, finding 1): the scan that tells `$((` arithmetic passes over an escaped or quoted `)`,
+# as bash does, so a substitution whose body holds one is still read as commands
+while IFS= read -r c; do cgb deny "$CRW" "$c"; done <<EOF
+echo \$((cat $PL; echo \\)) )
+echo \$((cat $PL; echo ')') )
+echo \$((cat $PL; echo ")") )
+echo \$((git log -p; echo \\)) )
+x=\$((cd ../../../..; echo \\)) ); echo ok
+EOF
+while IFS= read -r c; do cgb allow "$CRW" "$c"; done <<'EOF'
+echo $((cat src/main.py; echo \)) )
+echo $(( 2 * 3 ))
+EOF
+# guards-1115-12 (round 5, finding 2): `case` opens pattern mode only where bash reads it as the keyword: not behind
+# a redirect or a quoted or escaped keyword word, and never in PowerShell
+while IFS= read -r c; do cgb deny "$CRW" "$c"; done <<EOF
+>/dev/null case x; cat $PL; (true)
+2>&1 case x; git log -p; (true)
+<src/main.py case x; cd ../../../..; (true)
+>out.txt case y in; cat $PL; (true)
+'if' case x; cat $PL; (true)
+"then" case x; git log -p; (true)
+\\do case x; cd ../../../..; (true)
+'!' case x; cat $PL; (true)
+"while" case x; cat $PL; (true)
+'until' case x; cat $PL; (true)
+\\else case x; cat $PL; (true)
+'elif' case x; cat $PL; (true)
+"coproc" case x; cat $PL; (true)
+echo \$(>/dev/null case x; cat $PL; (true))
+bash -c "'if' case x; cat $PL; (true)"
+EOF
+while IFS= read -r c; do cgb allow "$CRW" "$c"; done <<'EOF'
+>/dev/null case x; cat src/main.py; (true)
+'if' case x; cat src/main.py; (true)
+if case x in a) false;; esac; then cat src/main.py; fi
+! case x in a) true;; esac
+EOF
+cgp() { # cgp <want> <command text>: a council-opus PowerShell call from the court, the text JSON-encoded
+  local p; p="$("$PYBIN" -c 'import json,sys; print(json.dumps({"command": sys.argv[1]}))' "$2")"
+  expect_eq "court guard r5: $1 PowerShell: $2" "$1" "$(cg council-opus "$CRW" PowerShell "$p")"
+}
+for c in "case x; cat $PL; (1)" "case x; cd ../../../..; (1)" "case x; git log -p; (1)" "case x in *) cat $PL; (1)" \
+         "case x; Get-Content $PL; (1)"; do cgp deny "$c"; done
+cgp allow 'case x; Get-Content src/main.py; (1)'
+# guards-1115-12 (round 5, finding 3): a line continuation inside or right after `esac` is joined before the word
+# is read, so the case closes there and what follows (its redirects too) is judged
+for c in "case x in *) echo a;; es\\\\\nac; cat %s; (true)" "case x in *) echo a;; esa\\\\\nc; git log -p; (true)" \
+         "case x in *) echo a;; e\\\\\nsac; cd ../../../..; (true)" "case x in *) echo a;; esac\\\\\n; cat %s; (true)" \
+         "case x in *) cat;; es\\\\\nac < %s" "case x in *) echo a;; esac\\\\\n> %s" "case x in es\\\\\nac; cat %s; (true)" \
+         "case x in esac\\\\\n> %s"; do
+  cgb deny "$CRW" "$(printf "$c" "$PL")"
+done
+cgb allow "$CRW" "$(printf 'case x in *) echo a;; es\\\nac; cat src/main.py; (true)')"
+cgb allow "$CRW" "$(printf 'case x in *) echo a;; esac\\\n> out.txt')"
+# guards-1115-13 (round 6, findings 1 and 5, by the revert): a word the tokenizer turns into a separator or a
+# parenthesis before `case`, and a quoted or escaped arm separator inside an arm, open no pattern mode: the
+# commands after them are judged (original forms first, then neighbours)
+cg6() { # cg6 <command text>: a council-opus Bash call from the court that must be denied
+  local p; p="$("$PYBIN" -c 'import json,sys; print(json.dumps({"command": sys.argv[1]}))' "$1")"
+  expect_eq "court guard r6: round-6 regression forms are denied again: $1" deny "$(cg council-opus "$CRW" Bash "$p")"
+}
+while IFS= read -r c; do cg6 "$c"; done <<EOF
+echo ';' case x; cat $PL; (true)
+echo { case x; cd ../../../..; (true)
+echo \\; case x; git log -p; (true)
+a=(1) case x; cat $PL; (true)
+echo \${x:-(} case x; git log -p; (true)
+echo \$(echo ';' case x; cat $PL; (true))
+case x in *) echo ';;'; cat $PL; (true);; esac
+case x in *) echo \\;\\; ; git log -p; (true);; esac
+EOF
+# The seat's own flows when the hook input carries the court in the Git Bash spelling, and a court path in
+# another letter case (Windows folds case; elsewhere another case is another file).
+cgb allow "$CR" 'echo x > ../../../reports/acme/round-1/opus.md'
+cgb allow "$CR" 'cat docs/specs/acme/brief.md'
+cgb deny "$CR" "cat $PL"
+p='{"file_path":"docs/specs/acme/brief.md"}'
+expect_eq "court guard r2: a relative Read in the court from a Git Bash cwd passes" allow "$(cg council-opus "$CR" Read "$p")"
+p="{\"file_path\":\"$PL\"}"
+expect_eq "court guard r2: a relative Read out of the court from a Git Bash cwd is denied" deny "$(cg council-opus "$CR" Read "$p")"
+p="{\"pattern\":\"src/../../../../../docs/specs/**/plan.md\"}"
+expect_eq "court guard r2: a Glob whose pattern climbs out behind a folder is denied" deny "$(cg council-opus "$CRW" Glob "$p")"
+if command -v cygpath >/dev/null 2>&1; then
+  UP="$(printf '%s' "$CR" | tr '[:lower:]' '[:upper:]')"
+  p="{\"file_path\":\"$UP/DOCS/SPECS/ACME/BRIEF.MD\"}"
+  expect_eq "court guard r2: a Read of the seat's own court in another letter case passes" allow "$(cg council-opus "$CRW" Read "$p")"
+  UPW="$(printf '%s' "$CRW" | tr '[:lower:]' '[:upper:]')"
+  p="{\"file_path\":\"$UPW/DOCS/SPECS/ACME/BRIEF.MD\"}"
+  expect_eq "court guard r2: a Read of the seat's own court in another letter case passes (drive form)" allow "$(cg council-opus "$CR" Read "$p")"
+  p="{\"file_path\":\"$(printf '%s' "$CP" | tr '[:lower:]' '[:upper:]')/DOCS/SPECS/ACME/PLAN.MD\"}"
+  expect_eq "court guard r2: a Read of the main tree in another letter case is denied" deny "$(cg council-opus "$CRW" Read "$p")"
+fi
 fi # part functional
 
 if part latency; then # --- part latency: the two 200 ms medians, on the fixture library above

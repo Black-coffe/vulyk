@@ -33,11 +33,15 @@ SRC="$(cd "$(dirname "$0")/.." && pwd)"
 PARTS="telemetry
 scan
 install
+install2
 install-xp
 install-xp2
+install-xp3
+install-xp4
 terminal
 wiring
 wiring2
+wiring3
 ledger
 constitution
 constitution2
@@ -53,13 +57,16 @@ mods
 mods2
 watcher
 upgrade
+upgrade2
 crlf
 crlf2
 wrapper
 wrapper2
 wrapper3
 launchers
-edits"
+edits
+edits2
+edits3"
 PART=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -849,15 +856,16 @@ echo "--- scan: context_high"
 : > "$LOG"
 CTX="$T/ctx-main.jsonl"
 cat > "$CTX" <<'EOF'
-{"type":"assistant","isSidechain":false,"message":{"model":"claude-fable-5-1","usage":{"input_tokens":100000,"cache_read_input_tokens":40000,"cache_creation_input_tokens":10000,"output_tokens":5000}}}
+{"type":"assistant","isSidechain":false,"message":{"model":"claude-sonnet-4-6","usage":{"input_tokens":100000,"cache_read_input_tokens":40000,"cache_creation_input_tokens":10000,"output_tokens":5000}}}
 EOF
+# A model the family table in handoff.py (cc-facts F7) does not know keeps the stock 200k guess.
 # Each scan gets its own HOME: measure now asks this machine's statusLine copies for the window.
 CTXHOME="$T/ctx-home-empty"; mkdir -p "$CTXHOME"
 telhome() { (cd "$HIVE" && HOME="$1" USERPROFILE="$1" VULYK_HIVE="$HIVE" bash scripts/telemetry.sh scan --transcript "$2"); }
 telhome "$CTXHOME" "$CTX" >/dev/null 2>&1
 expect_eq "scan records one context_high row above the absolute threshold" "1" \
   "$(grep -c '"code":"context_high"' "$LOG")"
-expect_eq "context_high maps claude-fable-5-1 to fable" "fable" \
+expect_eq "context_high maps claude-sonnet-4-6 to sonnet" "sonnet" \
   "$(grep '"code":"context_high"' "$LOG" | jq -r '.model')"
 expect_eq "context_high carries an empty agent" "" \
   "$(grep '"code":"context_high"' "$LOG" | jq -r '.agent')"
@@ -865,10 +873,16 @@ expect_eq "context_high carries an empty agent" "" \
 # 1M report for the same model (from another session). 15% of 1M is no anomaly; 70% of 200k was.
 : > "$LOG"
 CTXHOME1M="$T/ctx-home-1m"; mkdir -p "$CTXHOME1M/.cache/claude-statusbar"
-printf '{"session_id":"other","model":{"id":"claude-fable-5-1"},"context_window":{"context_window_size":1000000}}\n' \
+printf '{"session_id":"other","model":{"id":"claude-sonnet-4-6"},"context_window":{"context_window_size":1000000}}\n' \
   > "$CTXHOME1M/.cache/claude-statusbar/last_stdin.json"
 telhome "$CTXHOME1M" "$CTX" >/dev/null 2>&1
 expect_eq "no context_high row when this machine reports a 1M window for the model" "0" \
+  "$(grep -c '"code":"context_high"' "$LOG" || true)"
+# T69 (tails-1115-07): a Fable session at the same 150k, nothing on the machine: the family table gives 1M.
+: > "$LOG"
+sed 's/claude-sonnet-4-6/claude-fable-5-1/' "$CTX" > "$T/ctx-fable.jsonl"
+telhome "$CTXHOME" "$T/ctx-fable.jsonl" >/dev/null 2>&1
+expect_eq "no context_high row for a Fable session at 150k with no report: the family table gives 1M" "0" \
   "$(grep -c '"code":"context_high"' "$LOG" || true)"
 
 # --- case 11b: the model floor (0.20.0, ADR-015) ---------------------------------------------------
@@ -1323,6 +1337,8 @@ expect_eq "fresh install: the scan is wired on SessionEnd only" "0 1" \
 cat "$T/ownset.out" | expect "an owner's settings.json gets the scan on SessionEnd" "wire           .claude/settings.json -> SessionEnd: anomaly-scan.sh"
 cat "$T/ownset.out" | expect_absent "and no Stop scan wiring" "-> Stop: anomaly-scan.sh"
 expect_eq "and no learnings hook" "0" "$(grep -c 'session-end-learnings' "$OWNSET/.claude/settings.json")"
+fi # install, first block
+if part_on install install2; then # the allow-list readers parts install and install2 share
 
 # audit-fixes-1113-10 (W1, ask 11): the allow list names the six verbs the clerk and the workers run, one rule each;
 # no rule lets an owner-only verb run unprompted. allow_hits reads a rule as Claude Code does: `Bash(<p>:*)` runs
@@ -1345,6 +1361,8 @@ bash scripts/cycle.sh reopen demo
 bash scripts/cycle.sh manual-done demo-01
 bash scripts/cycle.sh escalate demo
 bash scripts/human-check.sh demo ACCEPTED'
+fi # install install2
+if part_on install; then
 for s in "$SRC" "$TGT" "$OWNSET"; do
   expect_eq "install ($(basename "$s")): the allow list holds exactly the six cycle.sh verbs" "$CYC6" "$(cyc_rules "$s/.claude/settings.json")"
   while IFS= read -r c; do
@@ -1354,12 +1372,9 @@ for s in "$SRC" "$TGT" "$OWNSET"; do
     "$(allow_hits "$s/.claude/settings.json" 'bash scripts/cycle.sh close-story x.md --commit' | grep -c .) $(allow_hits "$s/.claude/settings.json" 'bash scripts/journal.sh demo note' | grep -c .)"
 done
 expect_eq "install over an owner's settings.json: the owner's own rule stays" "1" "$(grep -cF '"Bash(ls:*)"' "$OWNSET/.claude/settings.json")"
-# Neighbour (on the upgrades of $TGT below, which cost no extra run): a hive holding the broad rule an older installer
-# wrote is narrowed by --upgrade, once; its own rules (an unrelated one, a non-ASCII one, one naming an owner-only
-# script) stay byte for byte, the last one named; --check says it would narrow and writes nothing.
-NAS="$TGT/.claude/settings.json"
-jq '.permissions.allow = ["Bash(ls:*)", "Bash(bash scripts/cycle.sh:*)", "Bash(bash scripts/journal.sh:*)", "Bash(echo привет:*)", "Bash(bash scripts/human-check.sh:*)"]' \
-  "$NAS" | tr -d '\r' > "$T/na.before" && cat "$T/na.before" > "$NAS"
+# OWNSET is a real install over an owner's settings.json: the cached one the other parts copy must equal it
+install_cache "$ICACHE-ownset" ownset
+expect_eq "the cached owner-settings install equals a real one (diff -r)" "" "$(diff -r "$OWNSET" "$ICACHE-ownset/tree" 2>&1)"
 
 # mass-audit-fixes-11 (S7-shell): VULYK's own map never ships into a hive, only the skeleton README.
 expect_eq "fresh install: the manifest's only memory/map/ entry is its README" "memory/map/README.md" \
@@ -1396,6 +1411,100 @@ expect_eq "one-pass copy: a fresh install's copy lines are the manifest, line fo
   "$(diff "$T/o1-copy.want" "$T/o1-copy.got" 2>&1)"
 expect_eq "one-pass copy: every manifest path was copied" "0" \
   "$(tr -d '\r' < "$TGT/.claude/vulyk-manifest" | while IFS= read -r f; do [ -f "$TGT/$f" ] || echo "$f"; done | wc -l | tr -d ' ')"
+
+# tails-1115-02 (T15, T55): small sources - the installer, VERSION, the constitution, AGENTS.md, lib.sh, one agent -
+# install in a second or two.
+mini_src() { # mini_src <dir> - a ZIP-shaped source (no .git)
+  mkdir -p "$1/scripts" "$1/.claude/agents"
+  cp "$SRC/install.sh" "$SRC/VERSION" "$SRC/CLAUDE.md" "$SRC/AGENTS.md" "$1/" && cp "$SRC/scripts/lib.sh" "$1/scripts/"
+  printf -- '---\nname: mini\n---\nA mini agent.\n' > "$1/.claude/agents/mini.md"
+}
+has() { [ -e "$1" ] && echo 1 || echo 0; }
+echo "--- install.sh: a git source ships its tracked files only"
+MG="$T/mini-git"; mini_src "$MG"; printf 'scripts/ignored-x.sh\n' > "$MG/.gitignore"
+git -C "$MG" init -q && git -C "$MG" config core.autocrlf false && git -C "$MG" add -A \
+  && git -C "$MG" -c user.name=t -c user.email=t@t commit -qm mini
+printf 'echo untracked\n' > "$MG/scripts/untracked-x.sh"; printf 'echo ignored\n' > "$MG/scripts/ignored-x.sh"
+MGH="$T/hive-mini-git"; mkdir -p "$MGH"; bash "$MG/install.sh" "$MGH" --telemetry off > "$T/mini-git.out" 2>&1
+expect_eq "a git source: an untracked and an ignored file under scripts/ do not reach the hive, a tracked one does" "0 0 1" \
+  "$(has "$MGH/scripts/untracked-x.sh") $(has "$MGH/scripts/ignored-x.sh") $(has "$MGH/scripts/lib.sh")"
+expect_eq "... nor its manifest" "0" "$(tr -d '\r' < "$MGH/.claude/vulyk-manifest" 2>/dev/null | grep -c -- '-x\.sh$')"
+expect_eq "... and the install stamps the source HEAD in .claude/vulyk-commit" "$(git -C "$MG" rev-parse HEAD)" \
+  "$(tr -d '\r' < "$MGH/.claude/vulyk-commit" 2>/dev/null)"
+MZ="$T/mini-zip"; mini_src "$MZ"; printf 'echo untracked\n' > "$MZ/scripts/untracked-x.sh"
+MZH="$T/hive-mini-zip"; mkdir -p "$MZH"; bash "$MZ/install.sh" "$MZH" --telemetry off > "$T/mini-zip.out" 2>&1
+expect_eq "a ZIP-shaped source (no .git) ships every file under scripts/, as before, and stamps no commit" "1 1 0" \
+  "$(has "$MZH/scripts/untracked-x.sh") $(has "$MZH/scripts/lib.sh") $(has "$MZH/.claude/vulyk-commit")"
+echo "--- install.sh: a project with AGENTS.md and no CLAUDE.md"
+MA="$T/hive-mini-agents"; mkdir -p "$MA"; printf '# Our agents\nUse tabs.\n' > "$MA/AGENTS.md"; cp "$MA/AGENTS.md" "$T/mini-agents.md"
+bash "$MZ/install.sh" "$MA" --telemetry off > "$T/mini-agents.out" 2>&1
+expect_eq "AGENTS.md and no CLAUDE.md: CLAUDE.md is two import lines, AGENTS.md and the sidecar" \
+  "$(printf '@AGENTS.md\n@CLAUDE.vulyk.md')" "$(tr -d '\r' < "$MA/CLAUDE.md" 2>/dev/null)"
+expect_eq "... the sidecar is the VULYK constitution with the Telemetry row, AGENTS.md untouched" "1 off 1" \
+  "$(head -1 "$MA/CLAUDE.vulyk.md" 2>/dev/null | grep -c '^# VULYK Constitution') $(rowval "$MA/CLAUDE.vulyk.md") $(same "$T/mini-agents.md" "$MA/AGENTS.md")"
+MB="$T/hive-mini-both"; mkdir -p "$MB"; printf '# Our agents\n' > "$MB/AGENTS.md"; printf '# Our rules\n' > "$MB/CLAUDE.md"
+cp "$MB/AGENTS.md" "$T/mini-both-a.md"; cp "$MB/CLAUDE.md" "$T/mini-both-c.md"
+bash "$MZ/install.sh" "$MB" --telemetry off > "$T/mini-both.out" 2>&1
+expect_eq "both AGENTS.md and CLAUDE.md: both untouched, the sidecar written (as before)" "1 1 1" \
+  "$(same "$T/mini-both-a.md" "$MB/AGENTS.md") $(same "$T/mini-both-c.md" "$MB/CLAUDE.md") $(has "$MB/CLAUDE.vulyk.md")"
+expect_eq "neither file: the full constitution as CLAUDE.md and the bridge AGENTS.md (as before)" "1 1 0" \
+  "$(head -1 "$MZH/CLAUDE.md" | grep -c '^# VULYK Constitution') $(same "$SRC/AGENTS.md" "$MZH/AGENTS.md") $(has "$MZH/CLAUDE.vulyk.md")"
+
+# tails-1115-06 (T52, contract I1): the user-scope mod and the model pin are each done only on their flag; without
+# it the install makes no `claude plugin` call, writes no pin, and prints one offer line for each with its command.
+echo "--- install.sh: side effects are offered, never done unasked (T52)"
+MO="$T/hive-mini-offer"; mkdir -p "$MO"; : > "$T/cc.log"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$MZ/install.sh" "$MO" --telemetry off > "$T/mini-offer.out" 2>&1
+expect_eq "a fresh install with no flag: the installer installs no mod unasked (claude plugin calls, counting stub)" "0" \
+  "$(grep -c 'plugin' "$T/cc.log")"
+cat "$T/mini-offer.out" | expect "... its output offers the mod with the exact command" \
+  "offer: the VULYK pulse mod (user scope, this machine), not installed by this run - to install it: claude plugin marketplace add Black-coffe/vulyk && claude plugin install vulyk-pulse@vulyk --scope user"
+expect_eq "a fresh install with no flag writes no model pin" "unset" \
+  "$( { jq -r '.model // "unset"' "$TGT/.claude/settings.local.json" 2>/dev/null || echo unset; } | tr -d '\r')"
+cat "$T/install.out" | expect "... and offers the pin with the exact command" \
+  "offer: pin this hive's Queen session to opus, not pinned by this run - to pin it: cd "
+expect_eq "... one offer line for each, the mod and the pin" "1 1" \
+  "$(grep -c '^  offer: the VULYK pulse mod' "$T/install.out") $(grep -c "^  offer: pin this hive's Queen session" "$T/install.out")"
+# tails-1115-06 (T22): a card with an area: label and no paths: glob reaches no worker; --check and --upgrade name it.
+echo "--- install.sh: a card with area: and no paths: glob is named (T22)"
+AC="$T/hive-mini-cards"; mkdir -p "$AC/docs/defects/pay"
+ac_card() { printf -- '---\nid: %s\ntitle: A card\nstatus: text\n%s---\n\n# A card\n' "$2" "$3" > "$AC/docs/defects/$1"; }
+ac_card pay/area-only.md area-only $'area: pay\n'
+ac_card both.md both $'area: pay\npaths: ["src/*.py"]\n'
+ac_card paths-only.md paths-only $'paths: ["src/*.py"]\n'
+printf '# The format\narea: pay\n' > "$AC/docs/defects/README.md"
+bash "$MZ/install.sh" "$AC" --check --telemetry off > "$T/cards-check.out" 2>&1
+bash "$MZ/install.sh" "$AC" --telemetry off > /dev/null 2>&1
+bash "$MZ/install.sh" "$AC" --upgrade --telemetry off > "$T/cards-up.out" 2>&1
+expect_eq "--check and --upgrade: one line each for the card with area: and no paths: glob" "1 1" \
+  "$(grep -c 'card reaches no worker: ' "$T/cards-check.out") $(grep -c 'card reaches no worker: ' "$T/cards-up.out")"
+cat "$T/cards-up.out" | expect "... naming it" "card reaches no worker: docs/defects/pay/area-only.md has area: pay and no paths: glob"
+cat "$T/cards-up.out" | expect_absent "... a card with both area: and paths: is not named" "docs/defects/both.md"
+cat "$T/cards-up.out" | expect_absent "... nor one with paths: only" "docs/defects/paths-only.md"
+# tails-1115-06 (T54): a sidecar hive whose CLAUDE.md does not import the sidecar is told so; nothing is written.
+echo "--- install.sh --upgrade: a CLAUDE.md that does not import the sidecar constitution (T54)"
+cp "$MB/CLAUDE.md" "$T/mb-claude.before"
+bash "$MZ/install.sh" "$MB" --upgrade --telemetry off > "$T/mb-up.out" 2>&1
+bash "$MZ/install.sh" "$MB" --upgrade --check --telemetry off > "$T/mb-chk.out" 2>&1
+expect_eq "a sidecar hive whose CLAUDE.md lacks the import: one line on --upgrade and on --check" "1 1" \
+  "$(grep -c 'not imported: CLAUDE.md does not import ' "$T/mb-up.out") $(grep -c 'not imported: CLAUDE.md does not import ' "$T/mb-chk.out")"
+expect_eq "... and CLAUDE.md is not written" "1" "$(same "$T/mb-claude.before" "$MB/CLAUDE.md")"
+printf '# Our rules\n@CLAUDE.vulyk.md\n' > "$MB/CLAUDE.md"
+bash "$MZ/install.sh" "$MB" --upgrade --telemetry off > "$T/mb-up2.out" 2>&1
+bash "$MZ/install.sh" "$MZH" --upgrade --telemetry off > "$T/mzh-up.out" 2>&1
+expect_eq "with the import present, and in a hive with no sidecar: no such line" "0 0" \
+  "$(grep -c 'not imported: ' "$T/mb-up2.out") $(grep -c 'not imported: ' "$T/mzh-up.out")"
+fi # install
+
+if part_on install2; then # guards-1115-09: install, second half - the upgrades of $TGT (split for time)
+echo "--- install.sh: the upgrades of a fresh hive"
+install_fixtures tgt
+# Neighbour (on the upgrades of $TGT below, which cost no extra run): a hive holding the broad rule an older installer
+# wrote is narrowed by --upgrade, once; its own rules (an unrelated one, a non-ASCII one, one naming an owner-only
+# script) stay byte for byte, the last one named; --check says it would narrow and writes nothing.
+NAS="$TGT/.claude/settings.json"
+jq '.permissions.allow = ["Bash(ls:*)", "Bash(bash scripts/cycle.sh:*)", "Bash(bash scripts/journal.sh:*)", "Bash(echo привет:*)", "Bash(bash scripts/human-check.sh:*)"]' \
+  "$NAS" | tr -d '\r' > "$T/na.before" && cat "$T/na.before" > "$NAS"
 # O5 + S6-shell: a counting git shim and the claude stub listing the mod at an older version than the release.
 REALGIT="$(command -v git)"; GSHIM="$T/git-shim"; mkdir -p "$GSHIM"
 printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$T/git.log" "$REALGIT" > "$GSHIM/git"; chmod +x "$GSHIM/git"
@@ -1460,9 +1569,6 @@ bash "$SRC/install.sh" "$NOMARK" --telemetry off > "$T/nomark-install.out" 2>&1
 # NOMARK is a real plain fresh install: the cached one every fresh_install copies must equal it
 install_cache
 expect_eq "the cached install equals a real install (diff -r)" "" "$(diff -r "$NOMARK" "$ICACHE/tree" 2>&1)"
-# OWNSET is a real install over an owner's settings.json: the cached one the other parts copy must equal it
-install_cache "$ICACHE-ownset" ownset
-expect_eq "the cached owner-settings install equals a real one (diff -r)" "" "$(diff -r "$OWNSET" "$ICACHE-ownset/tree" 2>&1)"
 sed_inplace '/VULYK:PROFILE:START/d; /VULYK:PROFILE:END/d' "$NOMARK/CLAUDE.md"
 NOMARK_BEFORE="$(cat "$NOMARK/CLAUDE.md")"
 VULYK_TELEMETRY=on bash "$SRC/install.sh" "$NOMARK" --upgrade > "$T/nomark-upgrade.out" 2>&1
@@ -1490,7 +1596,7 @@ else
   echo "  skip  bare-install terminal case: no util-linux \`script\` on PATH to drive a pseudo-terminal"
 fi
 
-fi # install
+fi # install2
 
 if part_on install-xp; then
 # --- cross-platform-02: install.sh sources scripts/lib.sh and edits settings.json through vulyk_python
@@ -1671,6 +1777,35 @@ ucache "$((UNOW - 7 * 3600)) 0.10.0 2026-01-02T03:04Z"
 ucheck6 env VULYK_UPDATE_INTERVAL_HOURS=24 | expect "VULYK_UPDATE_INTERVAL_HOURS=24 restores the old window" "latest v0.10.0"
 expect_eq "... with no call to the origin" "0" "$(ucalls)"
 
+# tails-1115-02 (T51, T53): small ZIP-shaped sources - the installer, VERSION, the constitution, AGENTS.md, lib.sh
+# (LF), one agent. The CR count is read by bytes (tr), never by grep: Git Bash's grep drops a CR before it matches.
+xp_src() { # xp_src <dir>
+  mkdir -p "$1/scripts" "$1/.claude/agents"
+  cp "$SRC/install.sh" "$SRC/VERSION" "$SRC/CLAUDE.md" "$SRC/AGENTS.md" "$1/" && tr -d '\r' < "$SRC/scripts/lib.sh" > "$1/scripts/lib.sh"
+  printf -- '---\nname: mini\n---\nA mini agent.\n' > "$1/.claude/agents/mini.md"
+}
+crs() { tr -cd '\r' < "$1" | wc -c | tr -d ' '; }
+echo "--- install.sh: the LF step counts and strips real CR bytes; the missing-tools line"
+XL="$T/xp-lf-src"; xp_src "$XL"; printf 'echo one\r\necho two\r\n' > "$XL/scripts/crlf-x.sh"
+XLH="$T/hive-xp-lf"; mkdir -p "$XLH"; bash "$XL/install.sh" "$XLH" --telemetry off > "$T/xp-lf.out" 2>&1
+expect_eq "the LF step: a CRLF script in the hive is LF, by bytes, its lines kept" "0 2" \
+  "$(crs "$XLH/scripts/crlf-x.sh") $(grep -c '^echo ' "$XLH/scripts/crlf-x.sh")"
+expect_eq "... and the log names the real count (one script)" "1" \
+  "$(grep -cx '  gitattributes  normalized 1 shipped script(s) to LF' "$T/xp-lf.out")"
+XN="$T/xp-nocr-src"; xp_src "$XN"; printf 'echo one\n' > "$XN/scripts/lf-x.sh"
+XNH="$T/hive-xp-nocr"; mkdir -p "$XNH"; bash "$XN/install.sh" "$XNH" --telemetry off > "$T/xp-nocr.out" 2>&1
+expect_eq "a tree with no CR logs no normalisation" "0" "$(grep -c 'normalized' "$T/xp-nocr.out")"
+expect_eq "with Python 3, jq and git all present, no missing-tools line" "0" "$(grep -c 'not found on this machine' "$T/xp-nocr.out")"
+XT="$T/xp-nojq"; mkdir -p "$XT"; printf '#!/bin/sh\nexit 127\n' > "$XT/jq"; chmod +x "$XT/jq"
+XTH="$T/hive-xp-nojq"; mkdir -p "$XTH"; PATH="$XT:$PATH" bash "$XN/install.sh" "$XTH" --telemetry off > "$T/xp-nojq.out" 2>&1
+expect_eq "jq stubbed away: the last line names it, once" "1 1" \
+  "$(tail -n 1 "$T/xp-nojq.out" | grep -c '^Tools not found on this machine: jq (') $(grep -c 'not found on this machine' "$T/xp-nojq.out")"
+expect_eq "... and names no tool that is there" "0 0" \
+  "$(tail -n 1 "$T/xp-nojq.out" | grep -c 'Python 3') $(tail -n 1 "$T/xp-nojq.out" | grep -c 'git (')"
+fi # install-xp
+
+if part_on install-xp3; then # guards-1115-09: install-xp, second half - upgrades that keep a hive's own (split for time)
+echo "--- install.sh --upgrade: the hive's own cells, manifest lines and model pin"
 # Ask 9, upgrade half: a hive's own filled ## Commands block - the old bare-python cell included - is the host's,
 # carried byte for byte through --upgrade.
 A9="$T/hive-xp-cells"; fresh_install "$A9"
@@ -1686,9 +1821,16 @@ bash "$SRC/install.sh" "$A9" --upgrade --telemetry off > "$T/xp-cells.out" 2>&1
 cmdblock "$A9/CLAUDE.md" > "$T/xp-cells.after"
 expect_eq "install.sh --upgrade keeps the hive's ## Commands block (old python cell included) byte-identical" "0" \
   "$(cmp -s "$T/xp-cells.before" "$T/xp-cells.after"; echo $?)"
-expect_eq "a hive with no model pin gets it on --upgrade, as before" "opus" \
+# tails-1115-06 (T52): no pin without its flag - an offer line with the command instead; --model-pin on pins, as before.
+expect_eq "a hive with no model pin gets none on --upgrade without the flag" "unset" \
   "$(jq -r '.model // "unset"' "$A9/.claude/settings.local.json" | tr -d '\r')"
-cat "$T/xp-cells.out" | expect "... and the log says so" "pinned: model = opus"
+cat "$T/xp-cells.out" | expect "... the log offers it with the command" \
+  "offer: pin this hive's Queen session to opus, not pinned by this run - to pin it: cd "
+cat "$T/xp-cells.out" | expect_absent "... and pins nothing" "pinned: model ="
+bash "$SRC/install.sh" "$A9" --upgrade --model-pin on --telemetry off > "$T/xp-cells-pin.out" 2>&1
+expect_eq "--upgrade --model-pin on: a hive with no model pin gets it, as before" "opus" \
+  "$(jq -r '.model // "unset"' "$A9/.claude/settings.local.json" | tr -d '\r')"
+cat "$T/xp-cells-pin.out" | expect "... and the log says so" "pinned: model = opus"
 
 # mass-audit-fixes-11 (S1-shell): the removal loop trusts no manifest line with a `..` segment, a leading `/`
 # or a backslash; a normal retired path still leaves. (S4-shell): an owner's own session model survives.
@@ -1736,7 +1878,7 @@ git -C "$UREL" -c user.name=t -c user.email=t@t commit -qam side
 cp "$UREL/.claude/agents/u1-branch.md" "$UH/.claude/agents/u1-branch.md"
 git -C "$UREL" checkout -q main
 u1_set "$UREL" 'model: haiku' 'model: opus' 'tail three'; u1_rel v0.3.0 0.3.0
-UH2="$T/hive-xp-u1-notag"; cp -a "$UH" "$UH2"
+UH2="$T/hive-xp-u1-notag"; cp -a "$UH" "$UH2"; rm -f "$UH2/.claude/vulyk-commit"
 U1SHIM="$T/xp-u1-shim"; mkdir -p "$U1SHIM"; : > "$T/xp-u1-git.log"
 printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$T/xp-u1-git.log" "$(command -v git)" > "$U1SHIM/git"
 chmod +x "$U1SHIM/git"
@@ -1773,7 +1915,7 @@ expect_eq "... nothing is replaced or merged" "0" "$(grep -cE '^  (update|merged
 expect_eq "... the release copy too stays byte for byte" "tail one" "$(sed -n 12p "$UH2/.claude/agents/u1-copy.md")"
 expect_eq "... and one NOTE line says why" "1" "$(grep -c 'NOTE: v0.2.0 is not a tag in ' "$T/xp-u1-notag.out")"
 
-fi # install-xp
+fi # install-xp3
 
 if part_on install-xp2; then # mass-audit-fixes-18 repair 1: install-xp, second half - the unwired shipped hooks (Ask 18)
 # mass-audit-fixes-17 (Ask 18): a hive that lost hooks to the pre-0.50 wiring. The previous release (pinned at
@@ -1781,7 +1923,7 @@ if part_on install-xp2; then # mass-audit-fixes-18 repair 1: install-xp, second 
 # removal and never wires it; it names each one with the command that wires only that hook.
 UW="$T/hive-xp-lost"; fresh_install "$UW"; printf '0.49.0\n' > "$UW/.claude/vulyk-version"
 UWS="$UW/.claude/settings.json"
-jq '.hooks.PreCompact[0].hooks |= map(select(.command | contains("context-guard.sh") | not))
+jq '.hooks.PreCompact[0].hooks |= map(select(.command | contains("handoff.sh precompact") | not))
     | .hooks.Stop[0].hooks |= map(select(.command | contains("handoff.sh stop") | not))
     | .hooks.SessionStart[0].hooks |= map(if (.command | contains("session-start-brief.sh"))
         then .command = "bash -c '"'"'\"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start-brief.sh\"'"'"'" else . end)' \
@@ -1793,27 +1935,35 @@ printf '0.49.0
 bash "$SRC/install.sh" "$UW" --upgrade --check --telemetry off > "$T/xp-unwired-chk.out" 2>&1
 expect_eq "an unwired shipped hook is not named on upgrade: two unwired lines on --upgrade and on --check" "2 2" \
   "$(grep -c '^  unwired ' "$T/xp-unwired-up.out") $(grep -c '^  unwired ' "$T/xp-unwired-chk.out")"
-cat "$T/xp-unwired-up.out" | expect "... --upgrade names PreCompact: context-guard.sh" "unwired PreCompact: context-guard.sh - to wire it: "
+cat "$T/xp-unwired-up.out" | expect "... --upgrade names PreCompact: handoff.sh" "unwired PreCompact: handoff.sh - to wire it: "
 cat "$T/xp-unwired-up.out" | expect "... --upgrade names Stop: handoff.sh" "unwired Stop: handoff.sh - to wire it: "
-cat "$T/xp-unwired-chk.out" | expect "... --check names PreCompact: context-guard.sh" "unwired PreCompact: context-guard.sh - to wire it: "
+cat "$T/xp-unwired-chk.out" | expect "... --check names PreCompact: handoff.sh" "unwired PreCompact: handoff.sh - to wire it: "
+# tails-1115-06 (T97): the hook this case used to remove, context-guard.sh, is retired; a 0.49 hive without it is not
+# told to wire it back.
+cat "$T/xp-unwired-up.out" | expect_absent "... the retired PreCompact snapshot is not named as unwired" "unwired PreCompact: context-guard.sh"
 cat "$T/xp-unwired-up.out" | expect_absent "... a hook wired in the bash -c \${CLAUDE_PROJECT_DIR} form counts as wired" \
   "unwired SessionStart: session-start-brief.sh"
 expect_eq "... and settings.json is unchanged after both" "0" "$(cmp -s "$T/xp-unwired.before" "$UWS"; echo $?)"
 # The printed command wires that one hook and nothing else; a second --upgrade no longer names it.
-UWCMD="$(grep -m1 'unwired PreCompact: context-guard.sh' "$T/xp-unwired-up.out" | sed 's/.* - to wire it: //')"
+UWCMD="$(grep -m1 'unwired PreCompact: handoff.sh' "$T/xp-unwired-up.out" | sed 's/.* - to wire it: //')"
 uwcount() { jq '[.hooks[][].hooks[]] | length' "$UWS"; }
 UWN="$(uwcount)"
 UW_RC=0; eval "$UWCMD" > "$T/xp-unwired-wire.out" 2>&1 || UW_RC=$?
 expect_eq "the printed command exits 0" "0" "$UW_RC"
 expect_eq "... and adds exactly one hook entry" "$((UWN + 1))" "$(uwcount)"
-expect_eq "... which is PreCompact: context-guard.sh" "1" \
-  "$(jq '[.hooks.PreCompact[].hooks[] | select(.command | contains("context-guard.sh"))] | length' "$UWS")"
+# The hive's bash -c form is followed (py_wire's template): `.../handoff.sh" precompact'`, the quote before the arg.
+expect_eq "... which is PreCompact: handoff.sh precompact" "1" \
+  "$(jq '[.hooks.PreCompact[].hooks[] | select(.command | test("handoff[.]sh\"? precompact"))] | length' "$UWS" | tr -d '\r')"
 bash "$SRC/install.sh" "$UW" --upgrade --telemetry off > "$T/xp-unwired-up2.out" 2>&1
-cat "$T/xp-unwired-up2.out" | expect_absent "a second --upgrade prints no line for the wired hook" "unwired PreCompact: context-guard.sh"
+cat "$T/xp-unwired-up2.out" | expect_absent "a second --upgrade prints no line for the wired hook" "unwired PreCompact: handoff.sh"
 cat "$T/xp-unwired-up2.out" | expect "... and still names the one left unwired" "unwired Stop: handoff.sh"
 # Neighbour form: a hive that wires every shipped hook prints no unwired line.
 UWF="$T/hive-xp-allwired"; fresh_install "$UWF"; printf '0.49.0\n' > "$UWF/.claude/vulyk-version"
 bash "$SRC/install.sh" "$UWF" --upgrade --telemetry off 2>&1 | expect_absent "a hive that wires every shipped hook: no unwired line" "unwired "
+fi # install-xp2
+
+if part_on install-xp4; then # guards-1115-09: install-xp2, second half - an owner's removal of the six entries (split for time)
+echo "--- install.sh --upgrade: an owner's removal of a shipped entry is kept"
 # mass-audit-fixes-18 repair 1 (Ask 18): the six entries --upgrade used to wire unconditionally (anomaly-scan, defect-intake
 # x2, defects-inject x2, ysk-offer) honour an owner's removal as git-guard.sh does: v0.49.0 wired each, so a missing one
 # is named with its --wire command and never put back, on --upgrade and on --check.
@@ -1869,19 +2019,20 @@ git -C "$SRC" ls-files | tar -C "$SRC" -cf - -T - | tar -C "$NT" -xf -
 git -C "$NT" init -q
 UN="$T/hive-xp-notag"; fresh_install "$UN"; printf '0.49.0\n' > "$UN/.claude/vulyk-version"
 UNS="$UN/.claude/settings.json"
-jq 'del(.hooks[][].hooks[] | select(.command | test("ysk-offer[.]sh|context-guard[.]sh|git-guard[.]sh")))' "$UNS" > "$T/xp-notag.json" \
+jq 'del(.hooks[][].hooks[] | select(.command | test("ysk-offer[.]sh|handoff[.]sh precompact|git-guard[.]sh")))' "$UNS" > "$T/xp-notag.json" \
   && cat "$T/xp-notag.json" > "$UNS"
 bash "$NT/install.sh" "$UN" --upgrade --telemetry off > "$T/xp-notag.out" 2>&1
 cat "$T/xp-notag.out" | expect "a source without the v0.49.0 tag says why it wires nothing back" \
   "note: v0.49.0 is not a tag in"
-expect_eq "... it names the removed ysk-offer, context-guard and git-guard entries as unwired" \
-  "PreCompact: context-guard.sh
+expect_eq "... it names the removed ysk-offer, PreCompact handoff and git-guard entries as unwired" \
+  "PreCompact: handoff.sh
 PreToolUse: git-guard.sh
 SessionStart: ysk-offer.sh" \
-  "$(sed -n 's/^  unwired \([A-Za-z]*: [a-z-]*\.sh\) - to wire it: .*/\1/p' "$T/xp-notag.out" | grep -E 'ysk|context-guard|git-guard' | LC_ALL=C sort)"
+  "$(sed -n 's/^  unwired \([A-Za-z]*: [a-z-]*\.sh\) - to wire it: .*/\1/p' "$T/xp-notag.out" | grep -E 'ysk|handoff|git-guard' | LC_ALL=C sort)"
 expect_eq "... and wires none of them back" "0" \
-  "$(jq '[.hooks[][].hooks[] | select(.command | test("ysk-offer|context-guard|git-guard"))] | length' "$UNS" | tr -d '\r')"
-fi # install-xp2
+  "$(jq '[.hooks[][].hooks[] | select(.command | test("ysk-offer|handoff.sh precompact|git-guard"))] | length' "$UNS" | tr -d '\r')"
+cat "$T/xp-notag.out" | expect_absent "... the retired context-guard.sh is not named (tails-1115-06, T97)" "unwired PreCompact: context-guard.sh"
+fi # install-xp4
 
 if part_on terminal; then
 # The hive's own updater, then the Telemetry question with and without a terminal. The question
@@ -2021,7 +2172,7 @@ space_run "install into an owner's settings.json" "$EH/.claude/settings.json"
 # Every entry is in the old unquoted form, SessionEnd has no timeout, and the owner keeps a Cyrillic rule.
 SET="$TGT/.claude/settings.json"
 jq '(.hooks[][].hooks[].command) |= sub("^\"\\$CLAUDE_PROJECT_DIR\"/"; "$CLAUDE_PROJECT_DIR/")
-    | .permissions.allow = ["Bash(echo привет:*)"]
+    | .permissions.allow = ["Bash(echo привет:*)"] | .switchModelsOnFlag = true
     | .hooks.Stop = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh stop"},{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/anomaly-scan.sh"}]}]
     | .hooks.SessionEnd = [{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/session-end-learnings.sh"},{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/handoff.sh sessionend"}]}]' \
   "$SET" > "$T/set.json" && mv "$T/set.json" "$SET"
@@ -2044,6 +2195,9 @@ cat "$T/wire.out" | expect "--upgrade gives a SessionEnd entry its timeout, and 
   "timeout        .claude/settings.json -> SessionEnd: handoff.sh sessionend (30 s)"
 expect_eq "--upgrade: every SessionEnd entry has a timeout >= 10" "0" "$(short_se "$SET")"
 expect_eq "the owner's Cyrillic rule stays readable" "1" "$(grep -cF 'Bash(echo привет:*)' "$SET")"
+# tails-1115-06 (T63, F1): an owner's own switchModelsOnFlag is kept and named.
+expect_eq "an owner's own switchModelsOnFlag value is kept on --upgrade" "true" "$(jq -r '.switchModelsOnFlag | tostring' "$SET" | tr -d '\r')"
+cat "$T/wire.out" | expect "... and named" "kept (yours)   .claude/settings.json -> switchModelsOnFlag = true"
 expect_eq "settings.json has no CR bytes" "0" "$(tr -cd '\r' < "$SET" | wc -c | tr -d ' ')"
 expect_eq "settings.json ends with a single LF" "7d0a" "$(tail -c 2 "$SET" | od -An -tx1 | tr -d ' \n\r')"
 cat "$T/wire.out" | expect "unwire_hook reports Stop" "unwire         .claude/settings.json -> Stop: anomaly-scan.sh"
@@ -2101,7 +2255,79 @@ for u in 4 tab; do
   cat "$T/indent-$u.out" | expect_absent "indent $u: the note claims no re-indent" "re-indented"
   expect_eq "indent $u: the backup is the file as it was" "1" "$(same "$T/indent-$u.before" "$IS.vulyk-bak")"
 done
+
+# solo-gate-1118: $SET is this part's hive after two upgrades (the rest of the UserPromptExpansion checks: wiring3)
+expect_eq "two upgrades of a fresh hive: UserPromptExpansion still wired once" "1" \
+  "$(jq '[.hooks.UserPromptExpansion[]?.hooks[] | select(.command | test("skill-usage-counter[.]sh"))] | length' "$SET" | tr -d '\r')"
 fi # wiring
+
+if part_on wiring3; then # solo-gate-1118: wiring, third part - the snapshot retired, typed commands counted, a flagged request paused (split for time)
+install_cache   # $ICACHE/tree is read below before any fresh_install builds it
+# tails-1115-06 (T97, T72, T63; contract W1): the PreCompact snapshot is retired, typed vulyk-* commands are counted
+# through UserPromptExpansion (cc-facts F9), and switchModelsOnFlag false keeps a flagged request on its model (F1).
+echo "--- settings: the snapshot retired, typed commands counted, a flagged request paused"
+FS="$ICACHE/tree/.claude/settings.json"
+upe_count() { jq '[.hooks.UserPromptExpansion[]?.hooks[] | select(.command | test("skill-usage-counter[.]sh"))] | length' "$1" | tr -d '\r'; }
+expect_eq "fresh install: no snapshot entry on PreCompact, the handoff entry stays" "0 1" \
+  "$(jq '[.hooks.PreCompact[]?.hooks[] | select(.command | test("context-guard"))] | length' "$FS" | tr -d '\r') $(jq '[.hooks.PreCompact[]?.hooks[] | select(.command | endswith("handoff.sh precompact"))] | length' "$FS" | tr -d '\r')"
+expect_eq "fresh install: no context-guard.sh ships" "0" "$([ -e "$ICACHE/tree/.claude/hooks/context-guard.sh" ] && echo 1 || echo 0)"
+expect_eq "fresh install: UserPromptExpansion runs the skill counter, once" "1" "$(upe_count "$FS")"
+expect_eq "fresh install: switchModelsOnFlag is false" "false" "$(jq -r '.switchModelsOnFlag | tostring' "$FS" | tr -d '\r')"
+# A 0.49 hive: the release's snapshot entry and script, an owner's own snapshot entry, the snapshot folders it wrote,
+# no UserPromptExpansion entry and no switchModelsOnFlag key yet.
+RH="$T/hive-retire-snapshot"; fresh_install "$RH"; printf '0.49.0\n' > "$RH/.claude/vulyk-version"; RHS="$RH/.claude/settings.json"
+git -C "$SRC" show v0.49.0:.claude/hooks/context-guard.sh > "$RH/.claude/hooks/context-guard.sh"
+printf '.claude/hooks/context-guard.sh\n' >> "$RH/.claude/vulyk-manifest"
+CGQ='"$CLAUDE_PROJECT_DIR"/.claude/hooks/context-guard.sh'
+# MSYS2_ARG_CONV_EXCL: Git Bash would rewrite the path-shaped command in --arg for a Windows jq (the fixture then held a
+# mangled command that only matched an installer mangling it the same way); the file goes in on stdin, no path argument.
+MSYS2_ARG_CONV_EXCL="*" jq --arg c "$CGQ" 'del(.switchModelsOnFlag) | del(.hooks.UserPromptExpansion)
+    | .hooks.PreCompact[0].hooks = [{"type":"command","command":$c}] + .hooks.PreCompact[0].hooks
+    | .hooks.PreCompact += [{"matcher":"manual","hooks":[{"type":"command","command":($c + " --keep 7")}]}]
+    | .hooks.PreCompact += [{"matcher":"auto","hooks":[{"type":"command","command":$w}]}]' \
+  --arg w '"C:\Program Files\Git\bin\bash.exe" -c '"'"'"$CLAUDE_PROJECT_DIR/.claude/hooks/context-guard.sh"'"'"'' \
+  < "$RHS" > "$T/rh.json" && cat "$T/rh.json" > "$RHS"
+mkdir -p "$RH/memory/snapshots/2026-01-02_101010" "$RH/memory/snapshots/2026-01-03_090000"
+printf '# index\n' > "$RH/memory/snapshots/2026-01-02_101010/memory.md"
+printf 'docs/specs/a/a-01.md:3:status: done\n' > "$RH/memory/snapshots/2026-01-03_090000/spec-statuses.txt"
+SNAP_BEFORE="$(treesum "$RH/memory/snapshots")"
+bash "$SRC/install.sh" "$RH" --upgrade --telemetry off > "$T/rh.out" 2>&1
+cat "$T/rh.out" | expect "an upgrade unwires the release's snapshot entry" "unwire         .claude/settings.json -> PreCompact: context-guard.sh"
+expect_eq "... it is gone; the owner's changed entry and the handoff entry stay" "0 1 1" \
+  "$(MSYS2_ARG_CONV_EXCL="*" jq --arg c "$CGQ" '[.hooks.PreCompact[]?.hooks[] | select(.command == $c)] | length' < "$RHS" | tr -d '\r') $(MSYS2_ARG_CONV_EXCL="*" jq --arg c "$CGQ --keep 7" '[.hooks.PreCompact[]?.hooks[] | select(.command == $c)] | length' < "$RHS" | tr -d '\r') $(jq '[.hooks.PreCompact[]?.hooks[] | select(.command | endswith("handoff.sh precompact"))] | length' "$RHS" | tr -d '\r')"
+cat "$T/rh.out" | expect "... the owner's changed entry is named" "kept (yours)   .claude/settings.json -> PreCompact: context-guard.sh"
+# 0.54.0-dev.4 canaries: an entry that only runs the retired script through a bash.exe wrapper cannot work without it.
+cat "$T/rh.out" | expect "... an entry that only wraps the retired script is unwired and named" \
+  "unwire         .claude/settings.json -> PreCompact: context-guard.sh through a wrapper"
+expect_eq "... and is gone" "0" "$(jq '[.hooks.PreCompact[]?.hooks[] | select(.command | test("bash.exe"))] | length' < "$RHS" | tr -d '\r')"
+cat "$T/rh.out" | expect "... the release copy of the script is removed" "remove         .claude/hooks/context-guard.sh"
+expect_eq "... and is gone from disk" "0" "$([ -e "$RH/.claude/hooks/context-guard.sh" ] && echo 1 || echo 0)"
+# 0.54.0-dev.3 canary: Git Bash rewrote a path-shaped UNWIRE_EXACT on its way to a Windows python, so a hive's
+# release entry was kept as the owner's. The flag carries no path; a value with a slash is the old, broken form.
+expect_eq "install.sh passes UNWIRE_EXACT as a flag, never as a path" "0" \
+  "$(grep -cE "UNWIRE_EXACT=['\"]?[^1 ]|UNWIRE_EXACT=['\"]?\\\$|UNWIRE_EXACT=.*/" "$SRC/install.sh" | tr -d '\r')"
+expect_eq "... and py_unwire builds both release forms itself" "1" \
+  "$(grep -cF "if os.environ.get('UNWIRE_EXACT') == '1'" "$SRC/install.sh" | tr -d '\r')"
+expect_eq "the hive's snapshot folders are byte-identical after the upgrade" "$SNAP_BEFORE" "$(treesum "$RH/memory/snapshots")"
+cat "$T/rh.out" | expect_absent "... and none is listed for deletion" "memory/snapshots/2026"
+cat "$T/rh.out" | expect "an upgrade from a release without it wires UserPromptExpansion" \
+  "wire           .claude/settings.json -> UserPromptExpansion: skill-usage-counter.sh"
+expect_eq "... once" "1" "$(upe_count "$RHS")"
+cat "$T/rh.out" | expect "an upgrade adds switchModelsOnFlag when absent, and says so" \
+  "set            .claude/settings.json -> switchModelsOnFlag = false"
+expect_eq "... as false" "false" "$(jq -r '.switchModelsOnFlag | tostring' "$RHS" | tr -d '\r')"
+# The counter, fed UserPromptExpansion: a typed vulyk-* command is counted; any other typed command writes nothing.
+UC="$T/upe-counter"; mkdir -p "$UC/.claude/skills/own-skill" "$UC/.claude/commands" "$UC/memory/stats"
+echo x > "$UC/.claude/commands/vulyk-plan.md"; echo x > "$UC/.claude/commands/other-cmd.md"; echo x > "$UC/.claude/skills/own-skill/SKILL.md"
+upe() { printf '{"hook_event_name":"UserPromptExpansion","expansion_type":"slash_command","command_name":"%s","command_args":"x","command_source":"project","prompt":"/%s x"}' "$1" "$1" |
+  CLAUDE_PROJECT_DIR="$UC" bash "$SRC/.claude/hooks/skill-usage-counter.sh"; }
+upe vulyk-plan
+expect_eq "the counter, fed UserPromptExpansion for a typed vulyk-* command, counts it" "1" \
+  "$(jq -r '.["vulyk-plan"].count // 0' "$UC/memory/stats/skills.json" 2>/dev/null | tr -d '\r')"
+cp "$UC/memory/stats/skills.json" "$T/upe.before"
+upe other-cmd; upe own-skill; upe some-plugin:vulyk-plan
+expect_eq "... any other typed command writes nothing" "1" "$(same "$T/upe.before" "$UC/memory/stats/skills.json")"
+fi # wiring3
 
 if part_on wiring2; then # audit-fixes-1113-16: wiring, second half - the M1 matcher and the W1 guards
 # audit-fixes-1113-06 (M1, ask 12): the inject entry's matcher carries PowerShell. A fresh install has it; an upgrade
@@ -2438,6 +2664,12 @@ cat "$T/rh2.out" | expect "an edited learnings hook is kept" "keep (edited)  .cl
 expect_eq "and stays wired" "1" "$(grep -c 'session-end-learnings' "$RH2/.claude/settings.json")"
 cat "$T/rh2.out" | expect "the unedited retired agent beside it goes" "remove         .claude/agents/council-sonnet.md"
 
+cat "$T/rh.out" | expect_absent "a clean Commands table gets no commands line" "commands: row '"
+cat "$T/rh.out" | expect "a hive with no measured round says so" \
+  "gate split (ADR-029): no measured full suite in this hive's council logs"
+fi # upgrade
+
+if part_on upgrade2; then # solo-gate-1118: upgrade, second part - the dry run's hive reports (split for time)
 # --- install.sh: the dry run's hive reports (upgrade-findings-04, asks 7 and 8; C1, B1) ------------
 # A measured full suite over 210 s is named with its round, then the suite-parts-check pointer once;
 # odd `## Commands` cells are named through lib.sh commands_lint. Nothing is written for either.
@@ -2465,9 +2697,6 @@ cat "$T/ms.out" | expect "the real upgrade names the measured suite too" \
 expect_eq "the real upgrade: exactly the two commands lines" "2" "$(grep -c "commands: row '" "$T/ms.out")"
 expect_eq "the hive's constitution is byte-identical afterwards" "1" "$(same "$T/ms.before" "$MS/CLAUDE.md")"
 expect_eq "the council log is untouched" "SUITE: ok 378s" "$(tail -1 "$MS/docs/specs/demo/council/round-1/suite.log")"
-cat "$T/rh.out" | expect_absent "a clean Commands table gets no commands line" "commands: row '"
-cat "$T/rh.out" | expect "a hive with no measured round says so" \
-  "gate split (ADR-029): no measured full suite in this hive's council logs"
 
 eval "$(sed -n '/^report_measured_suite() {/,/^}/p' "$SRC/install.sh")"
 MP="$T/hive-measured-parts"; mkdir -p "$MP"
@@ -2500,7 +2729,7 @@ bash "$SRC/install.sh" "$NR" --upgrade > "$T/nr.out" 2>&1; nrx=$?
 expect_eq "upgrade over a round with no ROUND file exits 0" "0" "$nrx"
 cat "$T/nr.out" | expect "upgrade over a round with no ROUND file still names the measured suite" \
   "full suite measured 378s in round demo/round-1: cut before taking this release"
-fi # upgrade
+fi # upgrade2
 
 if part_on library; then
 install_fixtures
@@ -2623,7 +2852,9 @@ printf '#!/bin/sh\necho Linux\n' > "$RGLIN/uname"
 cp "$RGWIN/uname" "$RGNONE/uname"
 printf '#!/bin/sh\nexit 0\n' > "$RGWIN/rg"; cp "$RGWIN/rg" "$RGLIN/rg"
 chmod +x "$RGWIN/uname" "$RGLIN/uname" "$RGNONE/uname" "$RGWIN/rg" "$RGLIN/rg"
-rg_val() { jq -r '.env.USE_BUILTIN_RIPGREP | tostring' "$1" 2>/dev/null | tr -d '\r'; }
+# A file that is not there reads `absent`: since tails-1115-06 install.sh only offers the model pin, so a run that
+# wires nothing leaves no settings.local.json at all (the pin used to create one, and the key read `null`).
+rg_val() { [ -f "$1" ] || { echo absent; return 0; }; jq -r '.env.USE_BUILTIN_RIPGREP | tostring' "$1" 2>/dev/null | tr -d '\r'; }
 RGLBL="wire           .claude/settings.local.json -> env: USE_BUILTIN_RIPGREP"
 fi # the stubs rg and rg2 share
 
@@ -2649,11 +2880,11 @@ if part_on rg2; then # post-046-tails: rg, second half - the hive's own value, o
 RG3="$T/hive-rg-set"; mkdir -p "$RG3/.claude"
 printf '{"env":{"USE_BUILTIN_RIPGREP":"1"}}\n' > "$RG3/.claude/settings.json"
 PATH="$RGWIN:$PATH" bash "$SRC/install.sh" "$RG3" --telemetry off > "$T/rg-set.out" 2>&1
-expect_eq "the hive's own value in settings.json stands, and none is added locally" "1 null" \
+expect_eq "the hive's own value in settings.json stands, and none is added locally" "1 absent" \
   "$(rg_val "$RG3/.claude/settings.json") $(rg_val "$RG3/.claude/settings.local.json")"
 RG4="$T/hive-rg-lin"; mkdir -p "$RG4"
 PATH="$RGLIN:$PATH" bash "$SRC/install.sh" "$RG4" --telemetry off > "$T/rg-lin.out" 2>&1
-expect_eq "off Windows nothing is written, rg or not" "null 0" \
+expect_eq "off Windows nothing is written, rg or not" "absent 0" \
   "$(rg_val "$RG4/.claude/settings.local.json") $(grep -c 'USE_BUILTIN_RIPGREP' "$T/rg-lin.out")"
 # No rg: drop every PATH directory that holds one (a box with rg beside bash cannot run this case).
 NORGPATH="$RGNONE"
@@ -2662,7 +2893,7 @@ if PATH="$NORGPATH" type -P bash cp jq >/dev/null 2>&1 && ! PATH="$NORGPATH" typ
   RG5="$T/hive-rg-none"; mkdir -p "$RG5"
   PATH="$NORGPATH" bash "$SRC/install.sh" "$RG5" --telemetry off > "$T/rg-none.out" 2>&1
   cat "$T/rg-none.out" | expect "Windows without rg: a NOTE names the install" "winget install BurntSushi.ripgrep.MSVC"
-  expect_eq "... and nothing is written" "null" "$(rg_val "$RG5/.claude/settings.local.json")"
+  expect_eq "... and nothing is written" "absent" "$(rg_val "$RG5/.claude/settings.local.json")"
 else
   echo "  skip  Windows without rg: rg shares a PATH directory with bash here"
 fi
@@ -2690,16 +2921,18 @@ expect_eq "a fresh hive gets no pulse key" "null null" "$(pid_keys "$TGT/.claude
 expect_eq "... nor does an owner's settings.json" "null null" "$(pid_keys "$OWNSET/.claude/settings.json")"
 expect_eq "... the mod tree still ships" "1" "$([ -f "$TGT/.claude/mods/vulyk-pulse/hooks/hooks.json" ] && echo 1 || echo 0)"
 expect_eq "OWNED lists the pulse tree" "1" "$(grep -c '^OWNED=.*\.claude/mods/vulyk-pulse' "$SRC/install.sh")"
-cat "$T/install.out" | expect "no claude on PATH: a NOTE says so, the install goes on" "NOTE: claude is not on PATH"
-cat "$T/install.out" | expect "... and names the marketplace command" "$PADD"
-cat "$T/install.out" | expect "... and the install command" "$PINST"
+# tails-1115-06 (T52): with no flag nothing is installed and claude is not even looked for: one offer line names both
+# commands; --pulse on does what a bare install did before.
+cat "$T/install.out" | expect "no flag: one offer line names the marketplace command" "offer: the VULYK pulse mod (user scope, this machine), not installed by this run - to install it: $PADD"
+cat "$T/install.out" | expect "... and the install command" "&& $PINST"
+cat "$T/install.out" | expect_absent "... and no NOTE about claude: it was never looked for" "NOTE: claude is not on PATH"
 : > "$T/cc.log"
-VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --telemetry off --check > "$T/pi-check.out" 2>&1
-cat "$T/pi-check.out" | expect "--check names what it would install" "would install  $PID (user scope"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --telemetry off --pulse on --check > "$T/pi-check.out" 2>&1
+cat "$T/pi-check.out" | expect "--pulse on --check names what it would install" "would install  $PID (user scope"
 expect_eq "... and the dry run adds and installs nothing" "0" "$(grep -c 'plugin marketplace add\|plugin install' "$T/cc.log")"
 : > "$T/cc.log"
-VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --telemetry off > "$T/pi.out" 2>&1
-cat "$T/pi.out" | expect "a fresh install installs the mod for this machine" "install        $PID (user scope, marketplace Black-coffe/vulyk)"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --telemetry off --pulse on > "$T/pi.out" 2>&1
+cat "$T/pi.out" | expect "a fresh install with --pulse on installs the mod for this machine" "install        $PID (user scope, marketplace Black-coffe/vulyk)"
 cat "$T/pi.out" | expect "... with the off switch" "\"$PID\": false in that hive's .claude/settings.local.json"
 expect_eq "... the marketplace is added, then the plugin installed at user scope" \
   "plugin marketplace add Black-coffe/vulyk|plugin install $PID --scope user" \
@@ -2715,6 +2948,13 @@ cat "$T/pi-again.out" | expect "... and says so" "update         $PID (user scop
 VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade --check > "$T/pi-upd-check.out" 2>&1
 cat "$T/pi-upd-check.out" | expect "--check on a machine that has it names the update" "would update   $PID (user scope"
 expect_eq "... and the dry run updates nothing" "0" "$(grep -c 'plugin marketplace update\|plugin update' "$T/cc.log")"
+# tails-1115-06 (T52) neighbour: --upgrade with no flag on a machine without the mod offers it and installs nothing.
+rm -f "$T/cc-list"; : > "$T/cc.log"
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade --telemetry off > "$T/pi-absent.out" 2>&1
+expect_eq "--upgrade, no flag, the mod absent: nothing added, installed or updated" "0" \
+  "$(grep -c 'plugin marketplace add\|plugin install\|plugin update\|plugin marketplace update' "$T/cc.log")"
+cat "$T/pi-absent.out" | expect "... and one offer line names the commands" "offer: the VULYK pulse mod (user scope, this machine), not installed by this run - to install it: $PADD && $PINST"
+cat "$T/pi-upd-check.out" | expect_absent "... the machine that has it gets no offer" "offer: the VULYK pulse mod"
 fi # mods
 
 if part_on mods2; then # post-046-tails: mods, second half - PI rebuilt as mods leaves it (installed, the mod listed)
@@ -2732,7 +2972,7 @@ VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade > "$T/pi-of
 cat "$T/pi-off.out" | expect "an owner's false for the pulse is kept, and said so" "kept           .claude/settings.local.json -> enabledPlugins: $PID is false"
 expect_eq "... and stays false" "false" "$(jq -r --arg k "$PID" '.enabledPlugins[$k] | tostring' "$PI/.claude/settings.local.json" | tr -d '\r\n')"
 rm -f "$T/cc-list"; : > "$T/cc-fail"; : > "$T/cc.log"
-VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade > "$T/pi-fail.out" 2>&1; rc=$?
+VULYK_CLAUDE="$CCSTUB/claude" bash "$SRC/install.sh" "$PI" --upgrade --pulse on > "$T/pi-fail.out" 2>&1; rc=$?
 expect_eq "a marketplace already added is not added again; the mod tries its install" "0 1" \
   "$(grep -c 'plugin marketplace add' "$T/cc.log") $(grep -c 'plugin install' "$T/cc.log")"
 expect_eq "a failed plugin install never fails the install" "0" "$rc"
@@ -3258,7 +3498,7 @@ else bad "check rejected a bundle row naming the retired council-sonnet:"
 grep -v '^[[:space:]]*#' "$SRC/scripts/telemetry.sh"   | expect_absent "no code line in telemetry.sh reads .claude/agents" ".claude/agents"
 fi # telemetry
 
-if part_on edits; then
+if part_on edits edits2 edits3; then # the release clone parts edits, edits2 and edits3 share
 # --- case 21: upgrade keeps a hive's edits and deletions (card upgrade-overwrites-host-edits) -------------------------------------------
 # A release clone with two tags: v9.0.0 installs the hive, v9.0.1 changes three agents. The hive
 # raised one agent's maxTurns (merged onto the release's other change), raised another on the very
@@ -3284,6 +3524,8 @@ for n in fixture-fm fixture-fm-clash fixture-fm-body fixture-fm-keys; do
   fm_agent "$n" 40 'a synthetic agent' 'Body line one.' > "$REL/.claude/agents/$n.md"
 done
 git -C "$REL" add -A >/dev/null 2>&1 && git -C "$REL" commit -qm v9.0.0 && git -C "$REL" tag v9.0.0
+fi # edits edits2 edits3
+if part_on edits; then
 git -C "$HIVE" init -q
 bash "$REL/install.sh" "$HIVE" --telemetry off > "$T/edits-install.out" 2>&1
 A="$HIVE/.claude/agents"
@@ -3375,7 +3617,60 @@ bash "$ZIP/install.sh" "$HIVE" --upgrade --check --telemetry off > "$T/edits-zip
 [ "$(grep -c 'NOTE: v9.0.1 is not a tag in ' "$T/edits-zip.out")" = 1 ] && grep -q 'would keep + new .claude/agents/lead-review.md' "$T/edits-zip.out" \
   && ! grep -q 'would update   .claude/agents/lead-review.md' "$T/edits-zip.out" \
   && ok "a source with no v* tag says so in one NOTE line and keeps the differing file with .vulyk-new" || { bad "no-history source:"; grep -E 'NOTE|lead-review|keep' "$T/edits-zip.out"; }
+# tails-1115-02 (T7, contract B1): every install and upgrade from a git source stamps its HEAD in .claude/vulyk-commit.
+# With the tag v$PREV there, that tag is the base and no commit is read.
+expect_eq "a tagged install and its upgrades stamp the source HEAD; the tagged upgrade reads no commit" \
+  "$(git -C "$REL" rev-parse HEAD) 0" \
+  "$(tr -d '\r' < "$HIVE/.claude/vulyk-commit" 2>/dev/null) $(grep -c 'stamped commit' "$T/edits-up.out")"
+fi # edits
 
+if part_on edits3; then # docs-1115 merge run: edits, third part - the untagged install (split for time; it reads only the shared clone at v9.0.0)
+# A build installed from an untagged commit (9.0.2), upgraded from a source where 9.0.2 still has no tag (9.0.3): the
+# stamped commit is the base, so a release copy is replaced and an edit is merged. Neighbours on --check: a stamp
+# naming a commit the source lacks, and no stamp at all (a hive installed before this release), take the NOTE path.
+echo "--- upgrade: an untagged install upgrades against its stamped commit"
+UREL="$T/rel-untagged"; git -c core.autocrlf=false clone -q "$REL" "$UREL"
+UR="$UREL/.claude/agents"
+printf '9.0.2\n' > "$UREL/VERSION"
+for f in drone-docs worker-code; do sed_inplace '3s/$/ (v9.0.2)/' "$UR/$f.md"; done
+git -C "$UREL" -c user.name=t -c user.email=t@t commit -qam 9.0.2
+U902="$(git -C "$UREL" rev-parse HEAD)"
+UH="$T/edits-untagged"; mkdir -p "$UH"; git -C "$UH" init -q
+bash "$UREL/install.sh" "$UH" --telemetry off > "$T/untagged-install.out" 2>&1
+expect_eq "an untagged install stamps the source commit in .claude/vulyk-commit" "$U902" \
+  "$(tr -d '\r' < "$UH/.claude/vulyk-commit" 2>/dev/null)"
+sed_inplace 's/^maxTurns: .*/maxTurns: 140/' "$UH/.claude/agents/worker-code.md"   # an edit the next build does not touch
+cp -a "$UH" "$T/edits-nostamp"; rm -f "$T/edits-nostamp/.claude/vulyk-commit"
+cp -a "$UH" "$T/edits-badstamp"; printf '0123456789abcdef0123456789abcdef01234567\n' > "$T/edits-badstamp/.claude/vulyk-commit"
+printf '9.0.3\n' > "$UREL/VERSION"
+for f in drone-docs worker-code; do sed_inplace '3s/ (v9.0.2)$/ (v9.0.3)/' "$UR/$f.md"; done
+git -C "$UREL" -c user.name=t -c user.email=t@t commit -qam 9.0.3
+bash "$UREL/install.sh" "$UH" --upgrade --telemetry off > "$T/untagged-up.out" 2>&1
+grep -q '  update         .claude/agents/drone-docs.md' "$T/untagged-up.out" && grep -q '(v9.0.3)$' "$UH/.claude/agents/drone-docs.md" \
+  && [ ! -e "$UH/.claude/agents/drone-docs.md.vulyk-new" ] \
+  && ok "an untagged install upgrades against its stamped commit: a file equal to its blob is replaced" \
+  || { bad "an untagged install upgrades against its stamped commit: a file equal to its blob is replaced"; grep -E 'NOTE|base|drone-docs' "$T/untagged-up.out"; }
+grep -q '  merged edit    .claude/agents/worker-code.md' "$T/untagged-up.out" && grep -q '^maxTurns: 140' "$UH/.claude/agents/worker-code.md" \
+  && grep -q '(v9.0.3)$' "$UH/.claude/agents/worker-code.md" \
+  && ok "... a file the hive edited is merged onto the new build, the stamped blob the base" \
+  || { bad "... a file the hive edited is merged onto the new build:"; grep -E 'NOTE|base|worker-code' "$T/untagged-up.out"; }
+expect_eq "... one line names the stamped commit as the base, and no NOTE" "1 0" \
+  "$(grep -c "stamped commit ${U902:0:7}" "$T/untagged-up.out") $(grep -c 'NOTE: v9.0.2 is not a tag' "$T/untagged-up.out")"
+expect_eq "... and the upgrade stamps the new commit" "$(git -C "$UREL" rev-parse HEAD)" "$(tr -d '\r' < "$UH/.claude/vulyk-commit" 2>/dev/null)"
+bash "$UREL/install.sh" "$T/edits-badstamp" --upgrade --check --telemetry off > "$T/untagged-bad.out" 2>&1
+[ "$(grep -c 'NOTE: v9.0.2 is not a tag in .*, nor is the stamped commit 0123456 in it' "$T/untagged-bad.out")" = 1 ] \
+  && grep -q 'would keep + new .claude/agents/drone-docs.md' "$T/untagged-bad.out" \
+  && ok "a stamp naming a commit the source lacks: one NOTE line, the differing file kept with .vulyk-new" \
+  || { bad "a stamp naming a commit the source lacks:"; grep -E 'NOTE|drone-docs' "$T/untagged-bad.out"; }
+bash "$UREL/install.sh" "$T/edits-nostamp" --upgrade --check --telemetry off > "$T/untagged-none.out" 2>&1
+[ "$(grep -c 'NOTE: v9.0.2 is not a tag in .* and no source commit is stamped in .claude/vulyk-commit' "$T/untagged-none.out")" = 1 ] \
+  && grep -q 'would keep + new .claude/agents/drone-docs.md' "$T/untagged-none.out" \
+  && ok "a hive with no stamp (installed before this release): one NOTE line, the differing file kept with .vulyk-new" \
+  || { bad "a hive with no stamp:"; grep -E 'NOTE|drone-docs' "$T/untagged-none.out"; }
+
+fi # edits3
+
+if part_on edits2; then # guards-1115-09: edits, second half - the example rule (split for time)
 # --- case 22: the example rule ships as a template, never into .claude/rules ------------------------------------------------------------
 # Releases up to 0.28 shipped .claude/rules/example-api.md, and 6 hives deleted it after every install.
 # .claude/rules is the hive's own: an upgrade neither puts the example back nor removes a kept copy.
@@ -3395,7 +3690,7 @@ bash "$REL/install.sh" "$EXH" --upgrade --telemetry off > "$T/example-up.out" 2>
 bash "$REL/install.sh" "$EXK" --upgrade --telemetry off > "$T/example-kept.out" 2>&1
 cmp -s "$EXK/.claude/rules/example-api.md" "$T/example-kept.md" && grep -q 'leave (yours)  .claude/rules/example-api.md' "$T/example-kept.out" \
   && ok "an upgrade leaves a kept example rule alone (the hive's own)" || { bad "the kept example rule was touched:"; grep example "$T/example-kept.out"; }
-fi # edits
+fi # edits2
 
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"

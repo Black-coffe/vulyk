@@ -2,8 +2,8 @@
 # Model profile checks (model-profiles-01): scripts/model-profile.sh storage, roles, --set/--chosen/--recommend/--explain;
 # top-model.sh --plan and its profile-aware gate and second reviewer; the profile at the end of top-model-brief.sh's
 # line; the CLAUDE.md row. Every run gets a temp HOME, a temp config folder and a plan fixture, never the real ones.
-#   Usage: bash tests/model-profile.test.sh [--part defaults|set|edges] [--list-parts]
-PARTS="defaults set edges"
+#   Usage: bash tests/model-profile.test.sh [--part defaults|set|edges|floor] [--list-parts]
+PARTS="defaults set edges floor"
 PART=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -52,7 +52,7 @@ PLANFILE="$T/max.json"
 
 run() { # run <hive> <script> [args]... - with a clean env, the temp HOME and config folder, the plan fixture
   local hive="$1" s="$2"; shift 2
-  (cd "$hive" && env -u VULYK_TOP_MODEL -u ANTHROPIC_API_KEY \
+  (cd "$hive" && env -u VULYK_TOP_MODEL -u ANTHROPIC_API_KEY -u CLAUDE_CODE_EFFORT_LEVEL \
     HOME="$H" USERPROFILE="$H" CLAUDE_CONFIG_DIR="$CFG" VULYK_CLAUDE_CONFIG="$PLANFILE" CLAUDE_PROJECT_DIR="$hive" \
     ${EXTRA_ENV:-} bash "$s" "$@")
 }
@@ -226,6 +226,80 @@ if git -C "$SRC" show baa5219:CLAUDE.md > "$T/claude.base" 2>/dev/null; then
   [ "$NOW" -le "$WAS" ] && ok "CLAUDE.md is no bigger than at baa5219 ($NOW <= $WAS B)" \
     || bad "CLAUDE.md grew: $NOW B > $WAS B at baa5219"
 else ok "the CLAUDE.md size comparison skipped: baa5219 not in this clone"; fi
+fi
+
+if part floor; then
+PLANFILE="$T/max.json"
+rm -f "$CFG/vulyk-model-profile"
+echo "--- the model floor follows the newest version (tails-1115-04)"
+# fl <model> [VAR=value]... - model_below_floor in a clean env: its line, or ok
+fl() { local m="$1"; shift; env -u VULYK_MODEL_FLOOR -u CLAUDE_CODE_VERSION "$@" \
+  bash -c '. "$1/scripts/lib.sh"; model_below_floor "$2"' _ "$SRC" "$m" 2>/dev/null || echo ok; }
+# tmf [VAR=value]... - top-model.sh --floor in the hive with no model variable from this shell
+tmf() { (cd "$HIVE" && env -u VULYK_TOP_MODEL -u ANTHROPIC_API_KEY -u ANTHROPIC_MODEL -u ANTHROPIC_DEFAULT_FABLE_MODEL \
+  -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL \
+  -u CLAUDE_CODE_SUBAGENT_MODEL -u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_VERTEX -u CLAUDE_CODE_USE_FOUNDRY \
+  -u VULYK_MODEL_FLOOR HOME="$H" USERPROFILE="$H" CLAUDE_CONFIG_DIR="$CFG" VULYK_CLAUDE_CONFIG="$PLANFILE" \
+  CLAUDE_PROJECT_DIR="$HIVE" CLAUDE_CODE_VERSION=2.1.325 "$@" bash scripts/top-model.sh --floor 2>&1); }
+expect_eq "a model one version behind the newest is below the floor: claude-fable-5-1 against fable 5.2" \
+  "fable 5.1 5.2" "$(fl claude-fable-5-1)"
+expect_eq "the newest fable, claude-fable-5-2, sits on the floor" "ok" "$(fl claude-fable-5-2)"
+OUT="$(tmf VULYK_TOP_MODEL=claude-fable-5-1)"; RC=$?
+expect_eq "a model one version behind the newest is below the floor: --floor exits 1 on a gate pin to claude-fable-5-1" "1" "$RC"
+printf '%s\n' "$OUT" | expect "a model one version behind the newest is below the floor: --floor names the gate pin" \
+  "below floor: gate model (env) = claude-fable-5-1 is fable 5.1, floor 5.2"
+OUT="$(tmf VULYK_TOP_MODEL=claude-fable-5-2)"; RC=$?
+expect_eq "--floor exits 0 on a gate pin to the newest fable" "0" "$RC"
+printf '%s\n' "$OUT" | expect "--floor prints the fable 5.2 floor" "fable>=5.2"
+# Neighbour: one other family, opus, one version behind its newest (5.5).
+expect_eq "claude-opus-5, one version behind the newest opus, is below the floor" "opus 5.0 5.5" "$(fl claude-opus-5)"
+expect_eq "the newest opus, claude-opus-5-5, sits on the floor" "ok" "$(fl claude-opus-5-5)"
+OUT="$(tmf ANTHROPIC_DEFAULT_OPUS_MODEL=claude-opus-5)"; RC=$?
+expect_eq "--floor exits 1 on an opus pin one version behind" "1" "$RC"
+printf '%s\n' "$OUT" | expect "--floor names the opus pin" "env ANTHROPIC_DEFAULT_OPUS_MODEL = claude-opus-5 is opus 5.0, floor 5.5"
+# Fails closed on what it cannot read; VULYK_MODEL_FLOOR still wins.
+expect_eq "an override line it cannot read keeps the fable 5.2 floor" "fable 5.1 5.2" \
+  "$(fl claude-fable-5-1 VULYK_MODEL_FLOOR='fable x.y')"
+expect_eq "a malformed cc>= line still fails closed" "haiku cc 5.5 2.1.325 2.1.x" \
+  "$(fl haiku VULYK_MODEL_FLOOR='haiku 5.5 cc>=2.1.x' CLAUDE_CODE_VERSION=2.1.325)"
+expect_eq "VULYK_MODEL_FLOOR still wins: fable 5.1 admits claude-fable-5-1" "ok" \
+  "$(fl claude-fable-5-1 VULYK_MODEL_FLOOR='fable 5.1')"
+OUT="$(tmf VULYK_TOP_MODEL=claude-fable-5-1 VULYK_MODEL_FLOOR='fable 5.1')"; RC=$?
+expect_eq "--floor exits 0 on claude-fable-5-1 under VULYK_MODEL_FLOOR='fable 5.1'" "0" "$RC"
+
+echo "--- model_version reads every family name (cc-facts F2)"
+mv_of() { bash -c '. "$1/scripts/lib.sh"; model_version "$2"' _ "$SRC" "$1"; }
+expect_eq "model_version reads fable"  "fable 5.2"  "$(mv_of claude-fable-5-2)"
+expect_eq "model_version reads opus"   "opus 5.5"   "$(mv_of claude-opus-5-5)"
+expect_eq "model_version reads sonnet" "sonnet 5.5" "$(mv_of claude-sonnet-5-5)"
+expect_eq "model_version reads haiku"  "haiku 4.5"  "$(mv_of claude-haiku-4-5-20251001)"
+expect_eq "model_version reads mythos" "mythos 5.2" "$(mv_of claude-mythos-5-2)"
+expect_eq "an alias is still no version" "" "$(mv_of mythos)"
+
+echo "--- CLAUDE_CODE_EFFORT_LEVEL wins the effort cascade (cc-facts F3)"
+EXTRA_ENV="CLAUDE_CODE_EFFORT_LEVEL=high" tm --explain | expect "--explain says a set CLAUDE_CODE_EFFORT_LEVEL wins" \
+  "effort    : CLAUDE_CODE_EFFORT_LEVEL=high is set and wins over --effort"
+expect_eq "unset, --explain carries no effort line" "" "$(tm --explain | grep '^effort ')"
+expect_eq "auto sends no level, so --explain carries no effort line" "" \
+  "$(EXTRA_ENV="CLAUDE_CODE_EFFORT_LEVEL=auto" tm --explain | grep '^effort ')"
+
+echo "--- every plan has a branch (cc-facts F12)"
+printf '{"oauthAccount":{"organizationType":"claude_ultra"}}\n' > "$T/ultra-org.json"
+printf '{"oauthAccount":{"organizationType":"claude_team","seatTier":"standard"}}\n' > "$T/team.json"
+printf '{"oauthAccount":{"organizationType":"claude_enterprise","seatTier":"premium"}}\n' > "$T/enterprise.json"
+printf '{"oauthAccount":{"organizationType":"claude_galaxy"}}\n' > "$T/galaxy.json"
+printf '{"oauthAccount":{"organizationType":"claude_max","organizationRateLimitTier":"default_claude_ultra"}}\n' > "$T/ultra.json"
+PLANFILE="$T/pro.json";        expect_eq "plan Pro"        "pro standard"           "$(tm --plan)"
+PLANFILE="$T/max.json";        expect_eq "plan Max"        "max premium"            "$(tm --plan)"
+PLANFILE="$T/ultra-org.json";  expect_eq "plan Ultra"      "ultra premium"          "$(tm --plan)"
+expect_eq "Ultra hands the gate to fable" "fable" "$(tm)"
+tm --explain | expect "--explain names Ultra" "plan      : ultra (Ultra)"
+PLANFILE="$T/ultra.json";      tm --explain | expect "a Max account on an Ultra rate tier reads as Ultra" "plan      : max (Ultra)"
+PLANFILE="$T/team.json";       expect_eq "plan Team"       "standard-seat standard" "$(tm --plan)"
+PLANFILE="$T/enterprise.json"; expect_eq "plan Enterprise" "premium-seat premium"   "$(tm --plan)"
+PLANFILE="$T/galaxy.json";     expect_eq "an unknown plan still reads as unknown" "unknown standard" "$(tm --plan)"
+tm --explain | expect "and says so" "unrecognised organizationType 'claude_galaxy'"
+PLANFILE="$T/max.json"
 fi
 
 N="$(wc -l < "$LEDGER" | tr -d ' ')"; F="$(wc -l < "$FAILS" | tr -d ' ')"

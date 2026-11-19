@@ -1,6 +1,6 @@
 # ADR-038: A story that edits `close-story` or `claim` in `scripts/cycle.sh` runs alone in its wave
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-11-14
 - Spec: docs/specs/audit-fixes-1113 (story 09, cut into 09, 13 and 14)
 

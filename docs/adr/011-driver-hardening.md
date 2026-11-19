@@ -1,6 +1,6 @@
 # ADR-011: Driver hardening - clerk retry, paperwork whitelist, self-marked close, story-file taint, verb-carried status
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-09-15
 - Spec: docs/specs/driver-hardening
 

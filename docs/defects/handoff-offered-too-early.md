@@ -35,6 +35,6 @@ stale same-model copy of a 1M window, a 650k session on a known 1M window (both 
   (`context_limit`, `thresholds_pct` in `.claude/handoff.config.json`) still wins.
 
 ## Allowed
-- The stock 200k guess when nothing on the machine knows the model's window.
+- The stock 200k guess when nothing on the machine and no family in the table knows the model's window; a new 1M family is added to the table (`_FAMILY_1M` in `handoff.py`), and a model it does not know keeps the stock guess.
 
 ## Revoked

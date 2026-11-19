@@ -1,0 +1,88 @@
+# Journal: tails-1115
+
+- 2026-11-15T18:34:20Z · 02-approved · approved by Andrei «Утверждаю все три, тесты exact (Рекомендую)» · next: branch
+- 2026-11-17T08:32:50Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/tails-1115; to edit, run /vulyk-pause tails-1115
+- 2026-11-17T08:33:05Z · 03-building · branch vulyk/tails-1115 created · next: build:1
+- 2026-11-17T08:33:05Z · 03-building · approved records written by branch: 13 stories · next: build:1
+- 2026-11-17T08:36:37Z · 03-building · revised tails-1115-01 · next: build
+- 2026-11-17T08:36:38Z · 03-building · needs_context on tails-1115-01 · next: yes: one expected line in part gates may change; --part gates added to Verification
+- 2026-11-17T08:58:36Z · 03-building · revised tails-1115-01 · next: build
+- 2026-11-17T08:58:43Z · 03-building · needs_context on tails-1115-01 · next: (b): one driver fixture at a 150-character root on every platform
+- 2026-11-17T09:23:52Z · 03-building · revised tails-1115-01 · next: build
+- 2026-11-17T09:23:53Z · 03-building · needs_context on tails-1115-01 · next: yes: tests/e2e.test.sh joins Files for the fake seat's court regex/join only; --part red joins Verification
+- 2026-11-17T09:24:27Z · 03-building · revised tails-1115-01 · next: build
+- 2026-11-17T09:24:28Z · 03-building · advance refused: e2e --part red is not a Commands row · next: Verification uses the E2E row bash tests/e2e.test.sh
+- 2026-11-17T09:34:55Z · 03-building · needs_context on tails-1115-01 · next: e2e fake-seat edit after the receipt: re-stamped from base (stamp-red --baseline)
+- 2026-11-17T10:36:30Z · 03-building · revised tails-1115-02 · next: build
+- 2026-11-17T10:36:32Z · 03-building · revised tails-1115-03 · next: build
+- 2026-11-17T10:36:34Z · 03-building · needs_context on tails-1115-02, -03 · next: 02: one install-xp3 line + Verification row; 03: split maintenance into parts, CLAUDE.md row first, then Verification
+- 2026-11-17T10:39:43Z · 03-building · revised tails-1115-03 · next: build
+- 2026-11-17T10:39:46Z · 03-building · revised tails-1115-05 · next: build
+- 2026-11-17T10:39:48Z · 03-building · revised tails-1115-08 · next: build
+- 2026-11-17T10:39:50Z · 03-building · revised tails-1115-10 · next: build
+- 2026-11-17T10:39:52Z · 03-building · revised tails-1115-11 · next: build
+- 2026-11-17T10:39:53Z · 03-building · story 03 made the Maintenance part row · next: Verification of 03, 05, 08, 10, 11 now runs maintenance as parts upkeep, redact, guards
+- 2026-11-17T10:49:28Z · 03-building · needs_context on tails-1115-02 · next: re-stamped from base after the approved install-xp3 line
+- 2026-11-17T10:50:33Z · 03-building · driver stop: clerk ran the claim twice (unreadable result) · next: released the claim, relaunching
+- 2026-11-17T10:52:41Z · 03-building · driver stop again: clerk paraphrased the claim line; proof re-claim denied by git-guard · next: released, relaunching
+- 2026-11-17T11:52:15Z · 03-building · revised tails-1115-06 · next: build
+- 2026-11-17T11:52:18Z · 03-building · revised tails-1115-07 · next: build
+- 2026-11-17T11:52:20Z · 03-building · revised tails-1115-12 · next: build
+- 2026-11-17T11:55:05Z · 03-building · needs_context on tails-1115-06, -07, -12 · next: 06: owns the broken T97/T52 cases (+maintenance H1 lines, parts in Verification); 07: T69 table kept with handoff-window case and card line, T75 guard case; 12: option (b)
+- 2026-11-17T12:03:41Z · paused · owner to answer the Queen decisions on stories 07 and 12 before they close · next: paused
+- 2026-11-17T12:05:08Z · resumed · resumed · next: status
+- 2026-11-17T12:05:11Z · 03-building · revised tails-1115-07 · next: build
+- 2026-11-17T12:05:14Z · 03-building · revised tails-1115-12 · next: build
+- 2026-11-17T12:06:09Z · 03-building · revised tails-1115-06 · next: build
+- 2026-11-17T12:06:12Z · 03-building · revised tails-1115-07 · next: build
+- 2026-11-17T12:06:15Z · 03-building · revised tails-1115-12 · next: build
+- 2026-11-17T12:08:29Z · 03-building · owner answered 07 and 12; needs_context on 06, 07, 12 · next: 06: mods2 in Verification; 07: telemetry case 11 joins, moved to wave 4 after 06; 12: acceptance reworded to three, re-stamped from base
+- 2026-11-17T13:32:30Z · 03-building · checkpoint after 80 min at build:4; Queen step 2 done (map slices wrapped, cycle and cycle-state split) · next: relaunching with a fresh stamp
+- 2026-11-17T14:09:14Z · 03-building · claim head of wave 4 moved from 8bdd6ac0eb77e1ad4ed15d1972dd89ae23a943b3 to 4658299b82f5ce02926959bf5ba9538d3109a3d9 by reanchor: Queen map-caps commit 4658299b (plan step 2 before wave 4) after the wave-4 claim head; range holds only that commit · next: build:4
+- 2026-11-17T14:09:36Z · 03-building · revised tails-1115-07 · next: build
+- 2026-11-17T14:09:40Z · 03-building · revised tails-1115-11 · next: build
+- 2026-11-17T14:10:58Z · 03-building · needs_context on -08, -09, -10, -13 (scope: Queen map commit); WALL on -07 (Defect hooks line >300 s under load) · next: reanchored past 4658299b; 07 to wave 5 alone, 11 to wave 6
+- 2026-11-17T14:11:07Z · 03-building · claim head of wave 4 moved from 4658299b82f5ce02926959bf5ba9538d3109a3d9 to 97a51d60f4f671bd16d547a6bab799c92bf9f0d9 by reanchor: Queen revise of stories 07 and 11 (wave moves) after the reanchor; range holds only Queen commits · next: build:4
+- 2026-11-17T14:11:54Z · 03-building · revised tails-1115-07 · next: build
+- 2026-11-17T14:11:57Z · 03-building · revised tails-1115-11 · next: build
+- 2026-11-17T14:17:49Z · 03-building · revised tails-1115-07 · next: build
+- 2026-11-17T14:17:54Z · 03-building · claim head of wave 4 moved from 97a51d60f4f671bd16d547a6bab799c92bf9f0d9 to 80a129250535bea51555397b8c411079a5e3a54e by reanchor: Queen revises of stories 07 and 11 (wave move undone, 07 waits for 08); range holds only Queen commits · next: build:4
+- 2026-11-17T14:17:57Z · 03-building · claim refused 07's leftovers outside its wave; 07 back in wave 4 · next: Defect hooks line 306 s idle: split after 08 closes CLAUDE.md; reanchored
+- 2026-11-17T14:43:39Z · 03-building · needs_context on -08 (wave-mate test bug), -10 (test fix after receipt), -07 (waiting) · next: 10 re-stamped from base; 08 reruns close-story
+- 2026-11-17T14:56:36Z · 03-building · revised tails-1115-07 · next: build
+- 2026-11-17T14:56:42Z · 03-building · claim head of wave 4 moved from 80a129250535bea51555397b8c411079a5e3a54e to 4da63509d3edfc586cada4fe9effd479149227eb by reanchor: Queen revise of story 07 (deadlock fix order); range holds only Queen commits · next: build:4
+- 2026-11-17T14:57:49Z · 03-building · 07's inject.test.sh fixture strings made portable (manual dispatch) · next: relaunch: 08 and 10 close; 07 waits for 08
+- 2026-11-17T15:14:26Z · 03-building · revised tails-1115-07 · next: build
+- 2026-11-17T15:14:28Z · 03-building · revised tails-1115-10 · next: build
+- 2026-11-17T15:14:32Z · 03-building · claim head of wave 4 moved from 4da63509d3edfc586cada4fe9effd479149227eb to 2110b77c9b7925f516aa01974b67a87d3a59387b by reanchor: Queen revises of stories 07 and 10 after 08 closed; range holds only Queen commits and story 08's close · next: build:4
+- 2026-11-17T15:14:41Z · 03-building · 08 closed; 07 does the Defect hooks row split first; 10 waits for 07 · next: reanchored; relaunch
+- 2026-11-17T15:20:34Z · 03-building · revised tails-1115-07 · next: build
+- 2026-11-17T15:20:38Z · 03-building · claim head of wave 4 moved from 2110b77c9b7925f516aa01974b67a87d3a59387b to 70ee8eda105a48cb67f7a7c1a54dd2fbd5f8b6e6 by reanchor: Queen revise of story 07 (owner wording answer, split verification); range holds only Queen commits · next: build:4
+- 2026-11-17T15:20:40Z · 03-building · owner on 07's CLAUDE.md diff: «Вернуть only (Рекомендую)» · next: 07 verification split into Defect hooks + Inject rows; relaunch
+- 2026-11-17T15:54:00Z · 03-building · 07 closed (CLAUDE.md as the owner chose); 10 can close · next: relaunch
+- 2026-11-17T15:58:27Z · 03-building · revised tails-1115-10 · next: build
+- 2026-11-17T15:58:30Z · 03-building · claim head of wave 4 moved from 70ee8eda105a48cb67f7a7c1a54dd2fbd5f8b6e6 to d63b8def40573f14742cace9086fc6582e307297 by reanchor: Queen revise of story 10 (CLAUDE.md label to fit the baa5219 size); range holds only Queen commits and story 07's close · next: build:4
+- 2026-11-17T15:58:32Z · 03-building · needs_context on -10: CLAUDE.md 5 B over its baa5219 size · next: 10 shortens the Defect hooks label to Defects
+- 2026-11-17T16:08:40Z · 03-building · revised tails-1115-11 · next: build
+- 2026-11-17T16:08:43Z · 03-building · wave 4 done; Queen step 3 (story 09 scripts +x, aa31f98e); needs_context on -11 · next: 11 takes the docs/ and seat-file DOCS lines; memory/map and vulyk-bootstrap lines to drone-docs at ship
+- 2026-11-17T16:22:27Z · 03-building · claim head of wave 5 moved from 82adac7673ec2ae3a6df687d4e4afc17ac903d00 to 974ff2a85ec403e6733e73fb7442ced89b005040 by reanchor: Queen chmod commit aa31f98e (plan step 3) and the revise of story 11; range holds only Queen commits · next: build:5
+- 2026-11-17T16:22:29Z · 03-building · needs_context on -11: scope saw the Queen's chmod commit · next: reanchored; relaunch to close 11
+- 2026-11-17T16:29:43Z · 03-building · revised tails-1115-12 · next: build
+- 2026-11-17T16:29:52Z · 03-building · all 13 stories done; open-round refused the story-12 descope until the brief took it · next: brief ask 11 narrowed with the owner's words, story 12 quote follows; relaunch to open round 1
+- 2026-11-17T16:30:08Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/tails-1115/round-1 · next: dispatch:opus,review
+- 2026-11-17T17:39:45Z · 04-council:RED · round 1 verdict RED at 690d0ab9 pack 2d6f016f0a85 · next: repair
+- 2026-11-17T17:39:54Z · 03-building · repair round 1: tails-1115-14-repair-round-1.md · next: build:6
+- 2026-11-17T17:40:50Z · 03-building · revised tails-1115-14 · next: build
+- 2026-11-17T17:40:52Z · 03-building · round 1 RED (asks 4, 6; review BLOCK); repair 14 refused: an inherited verification line no longer in ## Commands · next: dropped the pre-split Defect hooks line from story 14; relaunch
+- 2026-11-17T17:43:03Z · 03-building · revised tails-1115-14 · next: build
+- 2026-11-17T17:43:05Z · 03-building · needs_context on -14: asks 4, 6 need files outside · next: widened: 7 paths join Files; one repair story
+- 2026-11-17T17:44:07Z · 03-building · revised tails-1115-14 · next: build
+- 2026-11-17T18:13:03Z · paused · owner: stop and fix the speed of building and testing VULYK in this repo first · next: paused
+- 2026-11-17T18:20:27Z · resumed · resumed · next: status
+- 2026-11-17T18:20:29Z · 03-building · revised tails-1115-14 · next: build
+- 2026-11-17T18:20:31Z · 03-building · owner rule for this repo (2026-11-17): max two rounds, checks sized to the change, no Sonnet/Haiku · next: repair 14 verification cut to 8 lines; built by one Opus worker dispatched by the Queen (no driver: its clerk is Haiku); ask 4 in, minors to 0.55
+- 2026-11-17T18:52:09Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/tails-1115/round-2, narrow repair round (asks 1, 2, 4, 5, 6, 9, 10, 12, 13; steps 3,8) · next: dispatch:opus,review
+- 2026-11-17T19:28:26Z · 04-council:RED · round 2 verdict RED at 5c1c3a01 pack 7ceba8b59898 · next: repair
+- 2026-11-17T19:28:35Z · 03-building · repair round 2: tails-1115-15-repair-round-2.md · next: build:7
+- 2026-11-17T21:39:43Z · 03-building · revised tails-1115-15 · next: build
+- 2026-11-17T21:39:45Z · 03-building · round 2 RED (ask 10 + review critical); owner: «Чиню сам, без раунда 3 (Рекомендую)», minors «Всё на 0.55 (Рекомендую)» · next: repair 15 cut to two test files, no red mark; one Opus worker by hand; no round 3: full suite, then the owner's acceptance

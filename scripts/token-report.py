@@ -15,7 +15,10 @@ Counting - the method of docs/specs/token-audit/evidence/forensics.md section 0:
   * one API response is written as several lines sharing message.id: kept once, max of each field;
   * raw      = input + cache write + cache read + output;
   * weighted = input + 1.25 x write(5m) + 2 x write(1h) + r x read + output, where r is the read
-               price of the call's model (READ_RATE: 0.05 Opus 5.5, 0.025 Fable/Mythos 5.1, else 0.1);
+               price of the call's model, by family and version (READ_RATES, cc-facts F13: 0.025 Fable 5.1-5.2
+               and Mythos, 0.05 Opus 5.5, 0.1 Fable 5, Opus 5 and 4.8, Sonnet and Haiku); a version the
+               table does not name takes its family's nearest version below it (the newest above them all,
+               the oldest below them all); an unknown family reads at 0.1 and is listed as unpriced;
                a cache write without the 5m/1h split counts as 5m, and the report says so;
   * the Workflow's totalTokens is never used: it is the sum of each agent's final context size.
 Attribution to a spec slug:
@@ -50,11 +53,24 @@ NONE = '(none)'
 # A call is [ts, input, cache write, write 5m, write 1h, cache read, output, no-split flag,
 # read weighted by its model's price, sidechain].
 IN, CW, CW5, CW1H, CR, OUT, NOSPLIT, CRW, SIDE = range(1, 10)
-# A cache read's price as a share of the model's input price (platform.claude.com prompt-caching
-# pricing, 2026-09-30). A model not listed here reads at the standard 0.1.
-READ_RATE = (('opus-5-5', 0.05), ('fable-5-1', 0.025), ('mythos-5-1', 0.025))
+# A cache read's price as a share of the model's input price, by family: (major, minor, share), newest first
+# (docs/specs/tails-1115/cc-facts.md F13, platform.claude.com pricing read 2026-11-16: Fable 5.2 $0.20 of $8,
+# Fable 5.1 $0.25 of $10, Fable 5 $1 of $10, Opus 5.5 $0.20 of $4, Opus 5 and 4.8 $0.50 of $5; Mythos 5.2 is
+# priced as Fable 5.2). Sonnet and Haiku read at the standard 0.1 (F13 names 0.05 for Sonnet 5.5; the pulse
+# weights pin in core.test.ts still holds 0.1). Pinned to .claude/mods/vulyk-pulse/hooks/core.ts READ_RATES.
+READ_RATES = {
+    'fable': ((5, 2, 0.025), (5, 1, 0.025), (5, 0, 0.1)),
+    'mythos': ((5, 2, 0.025),),
+    'opus': ((5, 5, 0.05), (5, 0, 0.1), (4, 8, 0.1)),
+    'sonnet': ((0, 0, 0.1),),
+    'haiku': ((0, 0, 0.1),),
+}
+STANDARD_READ = 0.1
+FAMILY_RE = re.compile(r'claude-(fable|mythos|opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?!\d)')
+LEGACY_RE = re.compile(r'claude-(\d+)(?:-(\d{1,2}))?-(fable|mythos|opus|sonnet|haiku)')
+UNPRICED = set()  # model names of an unknown family met in the calls read
 NOTE = ("weighted ≈ cost at API cache prices: input + 1.25×write(5m) + 2×write(1h) + r×read + output, "
-        "r = 0.05 on Opus 5.5, 0.025 on Fable/Mythos 5.1, 0.1 otherwise.",
+        "r = 0.025 on Fable 5.1+ and Mythos, 0.05 on Opus 5.5+, 0.1 otherwise.",
         "The Workflow's printed totalTokens is not spend: it adds up each agent's final context, "
         "not the tokens processed.")
 
@@ -148,9 +164,26 @@ def text_of(content):
     return ''
 
 
+def family_version(model):
+    """(family, major, minor) of a model ID, or None: claude-fable-5-2, claude-opus-6, claude-3-5-sonnet-...."""
+    m = model.lower() if isinstance(model, str) else ''
+    x = FAMILY_RE.search(m)
+    if x:
+        return x.group(1), int(x.group(2)), int(x.group(3) or 0)
+    x = LEGACY_RE.search(m)
+    if x:
+        return x.group(3), int(x.group(1)), int(x.group(2) or 0)
+    return None
+
+
 def read_rate(model):
-    m = model if isinstance(model, str) else ''
-    return next((r for k, r in READ_RATE if k in m), 0.1)
+    fv = family_version(model)
+    if fv is None:
+        if isinstance(model, str) and model:
+            UNPRICED.add(model)
+        return STANDARD_READ
+    rows = READ_RATES[fv[0]]
+    return next((r for mj, mn, r in rows if (mj, mn) <= fv[1:]), rows[-1][2])
 
 
 def usage_of(u, model=None):
@@ -439,7 +472,7 @@ def report(project, tdir, since, since_ts, spec):
     return {'project': project, 'since': since, 'transcripts': tdir,
             'scanned': {'sessions': scanned[0], 'subagent_transcripts': scanned[1]},
             'specs': rows, 'total': row(None, total, sum(r['rounds'] for r in rows)),
-            'note': ' '.join(NOTE)}
+            'unpriced': sorted(UNPRICED), 'note': ' '.join(NOTE)}
 
 
 def tok(n):
@@ -494,6 +527,9 @@ def print_human(rep):
         print(fmt(x))
     for n in NOTE:
         print(n)
+    if rep['unpriced']:
+        print('unpriced: %s - an unknown model family, its cache reads weighed at the standard 0.1.'
+              % ', '.join(rep['unpriced']))
     ns = rep['total']['writes_without_split']
     if ns:
         print('cache writes without the 5m/1h split on %d API call(s): counted as 5m.' % ns)

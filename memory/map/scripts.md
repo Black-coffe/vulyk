@@ -31,11 +31,15 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
   GitHub `origin`, else `ci: not checked`; `gh run list --commit` for HEAD or the newest commit with only
   paperwork after; only the newest run per `workflowName` (by `createdAt`) is judged (0.47), so a re-run or
   dispatch clears a red; all `success` = ok, failed/pending/none = NOT READY, no/failing `gh` = `cannot confirm
-  CI`); `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`; `human-check.sh --show <spec-dir>` (0.48; writes nothing;
-  `git diff --stat` then the diff, 300 lines max; base = merge-base with the default branch off it, else parent of
+  CI`); 0.54 `suite:` line (`suite_check`, ADR-040 D5): ready only with a finished `SUITE: ok` keyed to HEAD (or
+  paperwork after it) in `council/merge-suite.log` or the newest non-narrow round's `suite.log`; no `round-only`
+  full-suite row = `suite: none`; else NOT READY with the `cycle.sh suite <spec> --merge` cure;
+  `human-check.sh <spec-dir> <ACCEPTED|REJECTED>`; `human-check.sh --show <spec-dir>` (0.48; writes nothing;
+  `git diff --stat` then the diff: code first, `docs/specs/` after (tails-1115), one `SHOW_CAP` 300-line cap over
+  both, then a `... more lines cut` line; base = merge-base with the default branch off it, else parent of
   the commit that added `<spec>/plan.md`, else the empty tree; exit 2 no dir/repo; the Queen pastes it in her reply
-  before asking); `scope-check.sh <story-file> [range | --since <claim-head>]` runs in `close-story` (`  ! ` paths -> `--commit`
-  exit 4). `human-check.sh`/`acceptance-log.sh` refuse (nothing recorded) when `redact.sh` fails (0.53).
+  before asking); `scope-check.sh <story-file> [range | --since <claim-head>]` runs in `close-story` (`  ! ` paths
+  -> `--commit` exit 4). `human-check.sh`/`acceptance-log.sh` refuse (nothing recorded) when `redact.sh` fails (0.53).
 - `py.sh <python-args>` (0.44.0) - `exec "$VULYK_PY" "$@"` via `vulyk_python`; none: exit 2. The spelling for
   Python in `CLAUDE.md` and the commands. `run-capped.py <secs> <cmd>` - the cap `run_capped` falls back to
   (own process group, SIGTERM, 10 s grace, SIGKILL; Windows `taskkill /T`; exit 124).
@@ -47,8 +51,8 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `model-profile.sh` (ADR-020) - `opus-builds|sonnet-builds|economy`; only `--set` writes; unknown =
   `sonnet-builds`; `--recommend` prints `sonnet-builds <plan>` on every plan (0.49). `top-model.sh`: `--floor` exit
   1 prints `below floor`.
-- `hives-behind.sh [--check|--canaries|--busy <hive>|--slug]` (registry, canaries, holds, busy test): `scripts-hives.md`.
-  Caller: `/vulyk-ship` step 2a.
+- `hives-behind.sh [--check|--canaries|--busy <hive>|--slug]` (registry, canaries, holds, busy test):
+  `scripts-hives.md`. Caller: `/vulyk-ship` step 2a.
 
 ## Key contracts
 - `cycle.sh`: last stdout line is one JSON object; exits 0 ok · 1 usage · 2 precondition · 3 paused ·
@@ -57,7 +61,8 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - `is_paperwork_path` whitelist: spec `journal.md`, `council/*`; `memory/stats/{human,acceptance,ship,council,scope,
   anomalies,evolve}.jsonl`; top-level `memory/learnings/*.md`; `VERSION`, `CHANGELOG.md`, `CITATION.cff`; the hive's
   `.claude/vulyk-paperwork` globs. 0.53: `plan.md`/`brief.md` are paperwork only for the lines a cycle script writes
-  (`spec_doc_strip`, `cycle.md`); `memory/stats/skills.json` is no paperwork (local, gitignored, not exempt in ship-check).
+  (`spec_doc_strip`, `cycle.md`); `memory/stats/skills.json` is no paperwork (local, gitignored, not exempt in
+  ship-check).
 
 ## Gotchas
 - `close-story`'s `## Commands` match, `record-seat`'s taint and `is_paperwork_path` are security-relevant string
@@ -66,4 +71,5 @@ Deterministic (model-free) gates and helpers: the cycle state machine (`cycle.sh
 - Scripts target bash 3.2 + BSD userland (macOS CI jobs `full-suite`, `install-smoke` pin `/bin/bash` 3.2, BSD sed,
   no `timeout`): no bare `sed -i`/`python`/`timeout`/`date -d`; run the gate after editing any `.sh`.
 
-last-verified: 2026-11-14 (cycle scripts; 0.53.0-dev.1 audit-fixes-1113: paperwork set, state_get/cycle_state_dir, --since)
+last-verified: 2026-11-18 (tails-1115 human-check --show order; narrow-repair-1115 ship-check `suite:`,
+  FENCE_AWK in scope-check)

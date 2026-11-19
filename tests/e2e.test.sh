@@ -10,8 +10,8 @@
 #          bash tests/e2e.test.sh --list-parts    # the part names, one per line
 #
 # Two runs: a Tier 3 spec that goes green in one round, and one whose first review BLOCKs on
-# an anchored ask - the mechanical repair story, its worker, and a second round that carries
-# the green intent seat forward and reviews only the repair diff.
+# an anchored ask - the mechanical repair story, its worker, and a narrow second round: the intent
+# seat re-judges the one red ask (round-asks in the court), the reviewer reads only the repair diff.
 set -u
 PARTS="green red"
 PART=""
@@ -156,7 +156,11 @@ const agent = async (prompt, opts) => {
     return r.status === 0 ? 'DONE' : 'close-story failed: ' + r.stdout.split('\n').filter(Boolean).pop();
   }
   if (type === 'council-opus') {
-    const text = ['COUNCIL: demo round 1 seat opus', 'MODEL: opus', 'COURT: the court', 'VERDICT: GREEN',
+    // the ask list a narrow round leaves beside the court's brief (narrow-repair-1115 R2), or "all" when none
+    const court = (prompt.match(/Work only inside COURT: ([^,]+),/) || [])[1];
+    const ra = court && path.join(FIX, court, 'docs/specs/demo/round-asks');
+    trace.roundAsks = (trace.roundAsks || []).concat([ra && fs.existsSync(ra) ? fs.readFileSync(ra, 'utf8').trim() : 'all']);
+    const text =['COUNCIL: demo round 1 seat opus', 'MODEL: opus', 'COURT: the court', 'VERDICT: GREEN',
       'ASSUMED CONFIG: single file', 'RAN: grep', 'PATH: app.txt', 'UNASKED: none', 'BREACH: none',
       'ASK 1: GREEN - app.txt says fixed - run: grep fixed app.txt - saw: fixed'].join('\n') + '\n';
     write(reportPath(prompt), text);
@@ -223,8 +227,10 @@ OUT="$(run_driver "$TMP/red" red)"
 expect "red: the run ends green after one repair" "$([ "$(jqr '.result.next')" = green ]; echo $?)"
 expect "red: two workers - the story and its repair" \
   "$([ "$(jqr '[.trace.agents[] | select(.type=="worker-code")] | length')" = 2 ]; echo $?)"
-expect "red: the intent seat runs once - round 2 is review-only" \
-  "$([ "$(jqr '[.trace.agents[] | select(.type=="council-opus")] | length')" = 1 ]; echo $?)"
+expect "red: the intent seat runs twice - round 2 re-judges the red ask" \
+  "$([ "$(jqr '[.trace.agents[] | select(.type=="council-opus")] | length')" = 2 ]; echo $?)"
+expect "red: round 1's seat judges every ask, round 2's finds round-asks beside the brief: ask 1" \
+  "$([ "$(jqr '.trace.roundAsks | join(",")')" = "all,1" ]; echo $?)"
 expect "red: the reviewer runs twice" \
   "$([ "$(jqr '[.trace.agents[] | select(.type=="lead-review")] | length')" = 2 ]; echo $?)"
 expect "red: the second review is scoped to the repair diff and the previous round" \
@@ -237,11 +243,13 @@ expect "red: the repair story carries the anchored finding" \
   "$(grep -q '\[ask 1\] app.txt must say it is really fixed' docs/specs/demo/demo-02-repair-round-1.md 2>/dev/null; echo $?)"
 expect "red: round 1 RED, round 2 GREEN in the ledger" \
   "$(grep -q '"round":1,"verdict":"RED"' memory/stats/council.jsonl && grep -q '"round":2,"verdict":"GREEN"' memory/stats/council.jsonl; echo $?)"
-# ab-run-fixes C5: one ask, one file - a narrow repair, so round 2 is review-only: no intent seat, no gate step
+# narrow-repair-1115 R1: ask 1 was red, so round 2 is narrow on it - the intent seat re-judges ask 1, the review re-runs, no gate step
 expect "red: the repair story is marked narrow" "$(grep -qx 'narrow: true' docs/specs/demo/demo-02-repair-round-1.md 2>/dev/null; echo $?)"
-expect "red: round 2 is review-only (seats=review, narrow=1)" \
-  "$(grep -qx 'seats=review' docs/specs/demo/council/round-2/ROUND && grep -qx 'narrow=1' docs/specs/demo/council/round-2/ROUND; echo $?)"
-expect "red: round 2 has no intent seat, carried or run" "$([ ! -e docs/specs/demo/council/round-2/opus.md ]; echo $?)"
+expect "red: round 2 is narrow on ask 1 (seats=opus review, narrow=1, asks=1, repair=demo-02)" \
+  "$(grep -qx 'seats=opus review' docs/specs/demo/council/round-2/ROUND && grep -qx 'narrow=1' docs/specs/demo/council/round-2/ROUND \
+     && grep -qx 'asks=1' docs/specs/demo/council/round-2/ROUND && grep -qx 'repair=demo-02' docs/specs/demo/council/round-2/ROUND; echo $?)"
+expect "red: round 2's intent seat ran, nothing carried" \
+  "$([ -f docs/specs/demo/council/round-2/opus.md ] && ! head -1 docs/specs/demo/council/round-2/opus.md | grep -qF 'carried:'; echo $?)"
 expect "red: round 2's gate ran no step" "$(grep -q 'SUITE: none - narrow repair round' docs/specs/demo/council/round-2/suite.log; echo $?)"
 expect "red: the DRIVER lock is released" "$([ ! -f docs/specs/demo/DRIVER ]; echo $?)"
 cd "$SRC" || exit 1

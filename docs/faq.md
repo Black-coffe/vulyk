@@ -17,19 +17,19 @@ whichever model your plan carries inside its limits. `scripts/top-model.sh` read
 Replace `auto` in the `TOP_MODEL = auto` line of CLAUDE.md with the alias you want; the pin beats the plan. `VULYK_TOP_MODEL=<alias>` does the same for one shell. The cascade is model-agnostic everywhere else.
 
 **The brief says a model is below the floor.**
-VULYK routes by family alias (`opus`, `sonnet`), and an alias brings the newest model on the Anthropic API. It does not on every provider: on Bedrock, Google Cloud and Foundry `sonnet` still resolves to 4.5, and six env vars can remap any alias. Nor on every Claude Code: the alias table ships inside it, and before 2.1.293 `haiku` still ran Haiku 4.5 (fix: `claude update`). The floor (`fable 5.1 · opus 5.5 · sonnet 5.5 · haiku 5.5`, in `scripts/lib.sh`) catches that. `bash scripts/top-model.sh --floor` names the pin or provider responsible; set the family's `ANTHROPIC_DEFAULT_*_MODEL` to your provider's ID for the newest model. To run lower on purpose, set `VULYK_MODEL_FLOOR`. Details in [model-cascade.md](model-cascade.md#the-model-floor).
+VULYK routes by family alias (`opus`, `sonnet`), and an alias brings the newest model on the Anthropic API. It does not on every provider: on Bedrock, Google Cloud and Foundry `sonnet` still resolves to 4.5, and six env vars can remap any alias. Nor on every Claude Code: the alias table ships inside it, and before 2.1.293 `haiku` still ran Haiku 4.5 (fix: `claude update`). The floor (`fable 5.2 · opus 5.5 · sonnet 5.5 · haiku 5.5`, in `scripts/lib.sh`) catches that. `bash scripts/top-model.sh --floor` names the pin or provider responsible; set the family's `ANTHROPIC_DEFAULT_*_MODEL` to your provider's ID for the newest model. To run lower on purpose, set `VULYK_MODEL_FLOOR`. Details in [model-cascade.md](model-cascade.md#the-model-floor).
 
 **The brief says my session is "not pinned".**
 The Queen's own session starts on the account default (Opus 5.5 since Claude Code 2.1.280) unless something pins it. `bash scripts/top-model.sh --apply` writes `"model": "opus"` into the gitignored `.claude/settings.local.json` and the next launch starts there; `/model <alias>` on the first turn does it for the current session, free, because the cache is still cold.
 
-**Why can't my lead-build agent spawn workers?**
-Claude Code subagents cannot use the Task tool - a platform constraint. VULYK's answer: fan-out lives in the main session's commands and in the Workflow driver; subagents stay single-purpose. See [architecture.md](architecture.md).
+**Why don't VULYK's agents spawn workers of their own?**
+Claude Code allows it (the `Agent` tool, `Task` before 2.1.63, nested up to three layers by default), but VULYK keeps fan-out in the main session's commands and in the Workflow driver, so every dispatch is visible and every agent stays single-purpose: no agent lists the `Agent` tool, and `scripts/prompt-check.py` refuses one that does. See [architecture.md](architecture.md).
 
 **Why does the Queen build Tier 1-2 herself? Law 5 used to forbid it.**
 Since v0.18.0 (ADR-013) Law 5 binds from Tier 3. The token audit found three near-equal thirds of spend - the Queen, the workers, the review machinery - and Anthropic's current guidance calls separate plan/build/review agents for a small task over-verification. Below Tier 3 one session builds, `close-story` runs the verification once, and one fresh-context `lead-review` judges each round. Workers in waves remain for cross-cutting work, where parallelism earns them.
 
 **Do I need Agent Teams?**
-No. Subagent fan-out covers Tiers 0-3 well. Teams (experimental env flag) add peer coordination for collaborative Tier 3-4 work - debugging with competing hypotheses, cross-layer features.
+No. VULYK neither needs nor uses them: fan-out comes from the main session and, at Tier 3-4, the Workflow driver. They are experimental and off by default (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in the shell or in `settings.json` under `env` turns them on); switched on, they change how named agents launch, so leave them off during a build.
 
 **How is this different from BMAD / Ruflo / Gas Town?**
 BMAD is a spec-driven methodology (VULYK borrows the stories-as-truth idea, with a lighter ceremony and a model cascade). Ruflo is a swarm platform with its own runtime (powerful, but parts of it require API billing post-April-4). Gas Town orchestrates 20-30 full Claude Code processes (brilliant, expensive, built for a different scale of operator). VULYK is the subscription-safe, native-only middle: cascade + memory + evolution with zero runtime.

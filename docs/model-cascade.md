@@ -124,9 +124,10 @@ own context window with its own cache; dispatching to `model: sonnet` leaves the
 cached prefix untouched. Typing `/model sonnet` in the main session does the opposite: the model is
 part of the cache key, so the entire conversation re-prefills at full input price on the next turn,
 and every subsequent turn runs on the wrong model until you switch back — paying the re-prefill a
-second time. The same holds for the first fast-mode turn, and for `/effort` on models other than
-Opus 5.5, Sonnet 5.5 and Fable 5.1 (on those three, an effort change keeps the cache, except on
-Bedrock, Vertex and gateways).
+second time. The same holds for the first fast-mode turn, and for `/effort` on most models; with an
+API key or a subscription an effort change keeps the cache on Fable 5.1 and later, Opus 5.5,
+Sonnet 5.5 and Haiku 5.5 (not on Amazon Bedrock, Google Cloud's Agent Platform or a Claude apps
+gateway).
 
 This is what makes the Tier 4 "second reviewer on a different model" affordable: it is a second
 subagent, not a session-level switch. See [token-economy.md](token-economy.md).
@@ -271,7 +272,7 @@ Six env vars can also remap an alias to any ID, from the shell or from a setting
 - `CLAUDE_CODE_SUBAGENT_MODEL`.
 
 **The floor is a few lines of data:** `model_floor` in `scripts/lib.sh`, today
-`fable 5.1 · opus 5.5 · sonnet 5.5 · haiku 5.5 cc>=2.1.293`. It ships with every upgrade, so a hive
+`fable 5.2 · opus 5.5 · sonnet 5.5 · haiku 5.5 cc>=2.1.293`. It ships with every upgrade, so a hive
 never keeps a stale copy. When a model ships, raising its line is a one-line diff and a CHANGELOG
 line. A line may carry one flag:
 - `unreleased`: no model of the family meets the floor yet, so the bare alias is itself below it
@@ -393,8 +394,9 @@ Session levels for the Queen herself:
 
 The step from `high` to `max` on Opus 5.5 costs about **5× the output tokens for 4 index points**
 (Artificial Analysis: 53M → 260M, 54 → 58). Simon Willison's `max` runs hit the 128K output cap
-while still reasoning. On Opus 5.5, Sonnet 5.5 and Fable 5.1 an effort change keeps the cached
-prefix; on other models it drops it, so there set the session level once at the start.
+while still reasoning. With an API key or a subscription, on Fable 5.1 and later, Opus 5.5, Sonnet 5.5
+and Haiku 5.5 an effort change keeps the cached prefix; on other models and providers it drops it, so
+there set the session level once at the start.
 
 ## Anti-patterns the cascade exists to kill
 - Opus reading 40 files to "understand the project" (that is a scout's job).

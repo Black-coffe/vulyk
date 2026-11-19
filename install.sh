@@ -26,9 +26,18 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Whitespace stripped: a Windows checkout (core.autocrlf) gives VERSION a CR, which would ride
 # into the stamp, the messages and the `v$PREV` tag lookup below.
 VER="$(cat "$SRC/VERSION" 2>/dev/null | tr -d '[:space:]' || true)"; VER="${VER:-unknown}"
+# A git checkout as the source (contract B1, tails-1115): its HEAD is stamped into .claude/vulyk-commit and only its
+# tracked files ship. A ZIP source, or no git on PATH, leaves SRC_HEAD empty.
+SRC_HEAD=""
+if [ -e "$SRC/.git" ]; then SRC_HEAD="$(git -C "$SRC" rev-parse -q --verify 'HEAD^{commit}' 2>/dev/null || true)"; fi
+SRC_GIT=""; [ -z "$SRC_HEAD" ] || SRC_GIT=1
 
-USAGE="Usage: $0 /path/to/your/project [--upgrade] [--check] [--telemetry on|off|ask] [--constitution replace] [--wire <event>:<script>]"
+USAGE="Usage: $0 /path/to/your/project [--upgrade] [--check] [--telemetry on|off|ask] [--pulse on|off] [--model-pin on|off] [--constitution replace] [--wire <event>:<script>]"
 WIRE_ONE=""; DEST=""; CHECK=""; UPGRADE=""; BLOCK_INSERTED=""; CONST_MODE=""; CONST_REPLACED=""
+# tails-1115 (T52, contract I1): the two side effects outside the hive's own files - the pulse mod installed for this
+# machine (user scope) and the Queen session's model pin - are done only on their flag; off (the default) prints one
+# offer line with the exact command and does nothing.
+PULSE_MODE="off"; PIN_MODE="off"
 # Telemetry consent (docs/telemetry.md): the flag wins over the env var, both are optional.
 # With neither, nothing is asked and a missing row is written as off; `ask` is the only way to
 # get the question, and it asks even a hive that already answered it once.
@@ -39,6 +48,10 @@ while [ $# -gt 0 ]; do
     --upgrade)   UPGRADE=1 ;;
     --wire)      shift; WIRE_ONE="${1:-}"; [ -n "$WIRE_ONE" ] || { echo "error: --wire needs <event>:<script>"; exit 1; } ;;
     --telemetry) shift; TEL_MODE="${1:-}"; [ -n "$TEL_MODE" ] || { echo "error: --telemetry needs a value (on|off|ask)"; exit 1; } ;;
+    --pulse)     shift; PULSE_MODE="${1:-}"
+                 case "$PULSE_MODE" in on|off) ;; *) echo "error: --pulse takes on or off (got '$PULSE_MODE')"; exit 1 ;; esac ;;
+    --model-pin) shift; PIN_MODE="${1:-}"
+                 case "$PIN_MODE" in on|off) ;; *) echo "error: --model-pin takes on or off (got '$PIN_MODE')"; exit 1 ;; esac ;;
     --constitution) shift; CONST_MODE="${1:-}"
                  [ "$CONST_MODE" = "replace" ] || { echo "error: --constitution takes one value: replace (got '$CONST_MODE')"; exit 1; } ;;
     -*)          echo "error: unknown flag $1"; echo "$USAGE"; exit 1 ;;
@@ -96,7 +109,7 @@ shippable() { # shippable <rel-file> - 0 (true) to ship; 1 = vulyk's own dev con
     .claude/state/*)              return 2 ;;   # hook state (defect dedup keys): runtime, per-machine
     .claude/settings.local.json|.claude/settings.json.vulyk-bak)
                                    return 2 ;;
-    .claude/state.json|.claude/.vulyk-update-cache|.claude/vulyk-version|.claude/vulyk-manifest)
+    .claude/state.json|.claude/.vulyk-update-cache|.claude/vulyk-version|.claude/vulyk-commit|.claude/vulyk-manifest)
                                    return 2 ;;
     .claude/handoff/*|memory/map/.stale|CLAUDE.local.md)
                                    return 2 ;;
@@ -122,27 +135,43 @@ replace_file() { # replace_file <src> <dest> - copy beside, then rename over. An
 }
 
 # An upgrade replaces a framework-owned file only when the hive's copy is a release copy: it equals
-# (line endings ignored) the blob of that path in tag v$PREV, the release the hive is installed at
-# (contract U1, audit-fixes-1113). No other tag, commit or branch counts: an owner who went back to an
-# older release's line made an edit. Anything else is the hive's decision (a tuned maxTurns, a patched
-# hook): merged three-way onto the new release, base = that same blob, or kept byte for byte with the
-# new release beside it as <f>.vulyk-new on a conflict or with no base. A path the last install shipped
-# that the hive no longer has stays deleted. (ADR-005 amendment 2026-10-16; card upgrade-overwrites-host-edits.)
-PREV_TAG_SEEN=""; PREV_TAG_OK=""
+# (line endings ignored) the blob of that path in the base: tag v$PREV, the release the hive is installed at
+# (contract U1, audit-fixes-1113), or, when the source has no such tag, the commit the last install stamped in
+# .claude/vulyk-commit, if the source has it (contract B1, tails-1115: a build installed from an untagged
+# commit). No other tag, commit or branch counts: an owner who went back to an older release's line made an
+# edit. Anything else is the hive's decision (a tuned maxTurns, a patched hook): merged three-way onto the new
+# release, base = that same blob, or kept byte for byte with the new release beside it as <f>.vulyk-new on a
+# conflict or with no base. A path the last install shipped that the hive no longer has stays deleted.
+# (ADR-005 amendment 2026-10-16; card upgrade-overwrites-host-edits.)
+PREV_TAG_SEEN=""; BASE=""
 prev_tag() { # once per run, in the main shell, on the first release_copy (an up-to-date hive never pays
-  # for it): is v$PREV a tag in $SRC? Without it (a downloaded ZIP, a clone without tags, a pre-0.5.0 hive)
-  # nothing tells a release copy from an edit, so no file is one, and one NOTE line says so.
+  # for it): sets BASE to v$PREV when it is a tag in $SRC, else to the stamped commit when $SRC has it. With
+  # neither (a downloaded ZIP, a clone without tags, a hive installed before the stamp) nothing tells a release
+  # copy from an edit, so no file is one, and one NOTE line says so.
+  local stamp=""
   PREV_TAG_SEEN=1
-  if git -C "$SRC" rev-parse -q --verify "refs/tags/v$PREV^{commit}" >/dev/null 2>&1; then PREV_TAG_OK=1; return 0; fi
-  echo "  NOTE: v$PREV is not a tag in $SRC - no file counts as a release copy; each differing framework file is kept, the new release beside it (.vulyk-new)"
+  if git -C "$SRC" rev-parse -q --verify "refs/tags/v$PREV^{commit}" >/dev/null 2>&1; then BASE="v$PREV"; return 0; fi
+  [ -f "$DEST/.claude/vulyk-commit" ] && stamp="$(tr -d '[:space:]' < "$DEST/.claude/vulyk-commit" 2>/dev/null || true)"
+  case "$stamp" in *[!0-9a-f]*) stamp="" ;; esac
+  [ "${#stamp}" -eq 40 ] || stamp=""
+  if [ -n "$stamp" ] && git -C "$SRC" cat-file -e "$stamp^{commit}" 2>/dev/null; then
+    BASE="$stamp"
+    echo "  base           v$PREV is not a tag in $SRC: release copies are judged against the stamped commit ${stamp:0:7} (.claude/vulyk-commit)"
+    return 0
+  fi
+  if [ -n "$stamp" ]; then
+    echo "  NOTE: v$PREV is not a tag in $SRC, nor is the stamped commit ${stamp:0:7} in it - no file counts as a release copy; each differing framework file is kept, the new release beside it (.vulyk-new)"
+  else
+    echo "  NOTE: v$PREV is not a tag in $SRC and no source commit is stamped in .claude/vulyk-commit - no file counts as a release copy; each differing framework file is kept, the new release beside it (.vulyk-new)"
+  fi
 }
-release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte what v$PREV shipped at <rel>
+release_copy() { # release_copy <rel> - 0 = the hive's copy is byte-for-byte what the base (prev_tag) holds at <rel>
   [ -n "$PREV_TAG_SEEN" ] || prev_tag
-  [ -n "$PREV_TAG_OK" ] || return 1
-  git -C "$SRC" cat-file -e "v$PREV:$1" 2>/dev/null || return 1
+  [ -n "$BASE" ] || return 1
+  git -C "$SRC" cat-file -e "$BASE:$1" 2>/dev/null || return 1
   local h b
   h="$(tr -d '\r' < "$DEST/$1" | git hash-object --stdin 2>/dev/null)" || return 1
-  b="$(git -C "$SRC" show "v$PREV:$1" 2>/dev/null | tr -d '\r' | git hash-object --stdin 2>/dev/null)" || return 1
+  b="$(git -C "$SRC" show "$BASE:$1" 2>/dev/null | tr -d '\r' | git hash-object --stdin 2>/dev/null)" || return 1
   [ -n "$h" ] && [ "$h" = "$b" ]
 }
 # After a git merge-file conflict: a hive edit that touched only the frontmatter (its body is the body v$PREV
@@ -188,9 +217,9 @@ fm_merge() { # fm_merge <base> <ours> <theirs> - 0: merged (key lines on stdout,
 upgrade_edited() { # upgrade_edited <rel> - a hive edit of a framework file: merge, or keep + .vulyk-new
   local f="$1" base ours theirs out rc fm="" frc=0
   if [ "$CHECK" = "--check" ]; then
-    if git -C "$SRC" cat-file -e "v$PREV:$f" 2>/dev/null; then
+    if [ -n "$BASE" ] && git -C "$SRC" cat-file -e "$BASE:$f" 2>/dev/null; then
       base="$(mktemp)"; ours="$(mktemp)"; theirs="$(mktemp)"
-      git -C "$SRC" show "v$PREV:$f" | tr -d '\r' > "$base"; tr -d '\r' < "$DEST/$f" > "$ours"; tr -d '\r' < "$SRC/$f" > "$theirs"
+      git -C "$SRC" show "$BASE:$f" | tr -d '\r' > "$base"; tr -d '\r' < "$DEST/$f" > "$ours"; tr -d '\r' < "$SRC/$f" > "$theirs"
       if cmp -s "$base" "$theirs"; then echo "  would keep (edited) $f"
       elif git merge-file -q -p "$ours" "$base" "$theirs" > /dev/null 2>&1; then echo "  would merge edit $f"
       else
@@ -207,9 +236,9 @@ upgrade_edited() { # upgrade_edited <rel> - a hive edit of a framework file: mer
     fi
     return 0
   fi
-  if git -C "$SRC" cat-file -e "v$PREV:$f" 2>/dev/null; then
+  if [ -n "$BASE" ] && git -C "$SRC" cat-file -e "$BASE:$f" 2>/dev/null; then
     base="$(mktemp)"; ours="$(mktemp)"; theirs="$(mktemp)"; out="$(mktemp)"
-    git -C "$SRC" show "v$PREV:$f" | tr -d '\r' > "$base"; tr -d '\r' < "$DEST/$f" > "$ours"; tr -d '\r' < "$SRC/$f" > "$theirs"
+    git -C "$SRC" show "$BASE:$f" | tr -d '\r' > "$base"; tr -d '\r' < "$DEST/$f" > "$ours"; tr -d '\r' < "$SRC/$f" > "$theirs"
     if cmp -s "$base" "$theirs"; then   # the release left it alone: nothing to merge, and a pending .vulyk-new stays
       echo "  keep (edited)  $f"
       rm -f "$base" "$ours" "$theirs" "$out"; return 0
@@ -238,7 +267,16 @@ copy_tree() { # copy_tree <rel> - skip existing, unless upgrading a framework-ow
   # then go over in one tar pass, and one awk prints the copy/skip lines, in find order, after any update line.
   local rel="$1" sc f list plan
   list="$(mktemp)"; plan="$(mktemp)"
-  ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' ) > "$list"
+  # A git checkout ships its tracked files only (tails-1115, T15): an untracked or ignored file in the source -
+  # a maintainer's scratch, a log - never reaches a hive. A ZIP source (no .git) keeps the walk.
+  if [ -n "$SRC_GIT" ]; then
+    git -C "$SRC" -c core.quotepath=off ls-files -- "$rel" | while IFS= read -r f; do
+      case "$f" in .gitkeep|*/.gitkeep) continue ;; esac
+      if [ -f "$SRC/$f" ] && [ ! -L "$SRC/$f" ]; then printf '%s\n' "$f"; fi
+    done > "$list"
+  else
+    ( cd "$SRC" && find "$rel" -type f ! -name '.gitkeep' ) > "$list"
+  fi
   while IFS= read -r f <&3; do
     shippable "$f" && sc=0 || sc=$?
     if [ "$sc" -ne 0 ]; then
@@ -1099,9 +1137,9 @@ SessionStart handoff.sh - sessionstart
 SessionEnd handoff.sh - sessionend
 UserPromptSubmit handoff.sh - prompt
 Stop handoff.sh - stop
-PreCompact context-guard.sh - -
 PreCompact handoff.sh - precompact
 PostToolUse skill-usage-counter.sh Skill -
+UserPromptExpansion skill-usage-counter.sh - -
 PreToolUse git-guard.sh Bash|PowerShell -
 PreToolUse owner-guard.sh Bash|PowerShell|Edit|Write|MultiEdit -
 PreToolUse court-guard.sh Read|Grep|Glob|Bash|PowerShell -
@@ -1142,7 +1180,7 @@ fi
 # exactly that script go; a group left empty goes with them, an event left empty too.
 py_unwire() { # py_unwire <settings.json> <script> <event> [--dry]   (exit 3 = not wired there)
   "$PYBIN" - "$@" <<'PYUNWIRE'
-import json, re, sys
+import json, os, re, sys
 path, script, event = sys.argv[1], sys.argv[2], sys.argv[3]
 dry = '--dry' in sys.argv[4:]
 try:
@@ -1160,8 +1198,32 @@ groups = hooks.get(event) if isinstance(hooks, dict) else None
 if not isinstance(groups, list):
     sys.exit(3)
 runs = re.compile(r'(^|[\s"\'/\\])' + re.escape(script) + r'($|[\s"\'])')
+# UNWIRE_EXACT=1 (tails-1115, T97): only an entry whose command is one of the two forms a release wrote goes; any
+# other entry running the script is the owner's, kept and named. The forms are built here, not passed in: Git Bash
+# rewrites a path-shaped environment value on its way to a Windows python, so a passed form never matched.
+exact = (['"$CLAUDE_PROJECT_DIR"/.claude/hooks/' + script, '$CLAUDE_PROJECT_DIR/.claude/hooks/' + script]
+         if os.environ.get('UNWIRE_EXACT') == '1' else [])
+# An entry that only runs the retired script through a shell wrapper (`"C:\...\bash.exe" "$CLAUDE_PROJECT_DIR/..."`,
+# `bash -c '"$CLAUDE_PROJECT_DIR/..."'`) cannot work once the script is gone: it goes too, and is named (owner,
+# 2026-11-17: «Снимать такие записи»). One with arguments or other commands beside the script is the owner's work: kept.
+solo = re.compile(r'^\s*(?:(?:"[^"]*sh(?:\.exe)?"|[^\s"\']*sh(?:\.exe)?)\s+(?:-c\s+)?)?[\'"]*\$\{?CLAUDE_PROJECT_DIR\}?'
+                  r'[\'"]*/\.claude/hooks/' + re.escape(script) + r'[\'"]*\s*$')
+def wrapped(hook):
+    c = str(hook.get('command', '')) if isinstance(hook, dict) else ''
+    return bool(exact) and c.strip() not in exact and bool(solo.match(c))
 def named(hook):
-    return isinstance(hook, dict) and bool(runs.search(str(hook.get('command', ''))))
+    if not (isinstance(hook, dict) and runs.search(str(hook.get('command', '')))):
+        return False
+    return not exact or str(hook.get('command', '')).strip() in exact or wrapped(hook)
+if exact:
+    for group in groups:
+        for h in (group.get('hooks') if isinstance(group, dict) and isinstance(group.get('hooks'), list) else []):
+            if isinstance(h, dict) and runs.search(str(h.get('command', ''))) and not named(h):
+                print('  kept (yours)   .claude/settings.json -> %s: %s - your own entry; this release no longer ships'
+                      ' the script' % (event, script))
+            elif wrapped(h) and not dry:
+                print('  unwire         .claude/settings.json -> %s: %s through a wrapper - it only ran the retired'
+                      ' script' % (event, script))
 found, kept = False, []
 for group in groups:
     if isinstance(group, dict) and isinstance(group.get('hooks'), list):
@@ -1514,6 +1576,56 @@ PYRG
   echo "      $byhand"
 }
 
+# tails-1115 (T63, cc-facts F1): `switchModelsOnFlag: false` - a request the safeguards flag pauses (interactive) or
+# ends as an error (-p) instead of moving to another model, so no request runs below the model floor. A fresh hive
+# gets it with ours; an owner's settings.json without the key gets it; a value the owner set is kept and named.
+wire_flag_switch() {
+  local file="$DEST/.claude/settings.json" py="" rc=0 took="" have="" out=""
+  local lbl=".claude/settings.json -> switchModelsOnFlag = false"
+  [ -f "$file" ] || return 0
+  vulyk_python || true; py="$VULYK_PY"
+  if [ -z "$py" ]; then
+    grep -qF '"switchModelsOnFlag"' "$file" 2>/dev/null && return 0
+    echo ""
+    echo "  NOTE: no python on PATH to edit .claude/settings.json safely. Add by hand: \"switchModelsOnFlag\": false"
+    return 0
+  fi
+  [ "$CHECK" = "--check" ] || { settings_backup "$file" && took=1; }
+  out="$(mktemp)"
+  "$py" - "$file" "$CHECK" > "$out" <<'PYFLAG' || rc=$?
+import json, re, sys
+path, dry = sys.argv[1], sys.argv[2] == '--check'
+try:
+    with open(path, encoding='utf-8') as fh:
+        raw = fh.read()
+    data = json.loads(raw)
+    lead = re.search(r'^([ \t]+)\S', raw, re.M)  # the file's indent unit, from its first indented line
+    IND = ('\t' if lead.group(1)[0] == '\t' else len(lead.group(1))) if lead else 2
+except Exception:
+    sys.exit(4)                                  # unparseable: leave it entirely alone
+if not isinstance(data, dict):
+    sys.exit(4)
+if 'switchModelsOnFlag' in data:
+    sys.stdout.write(json.dumps(data['switchModelsOnFlag']))
+    sys.exit(3)                                  # the hive's own value, whatever it is
+if dry:
+    sys.exit(0)
+data['switchModelsOnFlag'] = False
+with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+    json.dump(data, fh, indent=IND, ensure_ascii=False)
+    fh.write('\n')
+PYFLAG
+  have="$(tr -d '\r\n' < "$out" 2>/dev/null)"; rm -f "$out"
+  case "$rc" in
+    0) if [ "$CHECK" = "--check" ]; then echo "  would set      $lbl"; else echo "  set            $lbl"; fi ;;
+    3) [ -z "$took" ] || settings_backup_drop "$file"
+       [ "$have" = false ] || echo "  kept (yours)   .claude/settings.json -> switchModelsOnFlag = $have" ;;
+    *) [ -z "$took" ] || settings_backup_drop "$file"
+       echo ""
+       echo "  NOTE: .claude/settings.json could not be parsed as JSON - left untouched. Add by hand: \"switchModelsOnFlag\": false" ;;
+  esac
+}
+
 # VULYK's own mods (spec vulyk-watcher, then vulyk-pulse): a project-scope directory marketplace never
 # loads (measured on 2.1.300: "marketplace not registered"), so a mod is installed once per MACHINE,
 # user scope, from VULYK's GitHub marketplace; outside a VULYK hive it stays silent by itself.
@@ -1527,6 +1639,18 @@ install_mod() {
     grep -Eq "\"$id\"[[:space:]]*:[[:space:]]*false" "$DEST/.claude/$f" 2>/dev/null &&
       echo "  kept           .claude/$f -> enabledPlugins: $id is false (the owner's choice)"
   done
+  # T52 (contract I1): without --pulse on nothing is installed. An upgrade still keeps a mod already on this machine
+  # current (below, and says so); a fresh install asks claude nothing. Anything else: one offer line, the command.
+  local listed="" asked=""
+  if [ "$PULSE_MODE" != on ]; then
+    if [ -n "$UPGRADE" ] && command -v "$cc" >/dev/null 2>&1; then
+      listed="$("$cc" plugin list 2>/dev/null || true)"; asked=1
+    fi
+    if ! grep -qF "$id" <<< "$listed"; then
+      echo "  offer: the VULYK pulse mod (user scope, this machine), not installed by this run - to install it: $add && $inst"
+      return 0
+    fi
+  fi
   if ! command -v "$cc" >/dev/null 2>&1; then
     if [ -z "${MOD_NOTE:-}" ]; then
       MOD_NOTE=1
@@ -1538,7 +1662,7 @@ install_mod() {
     echo "      $inst"
     return 0
   fi
-  local listed; listed="$("$cc" plugin list 2>/dev/null || true)"
+  [ -n "$asked" ] || listed="$("$cc" plugin list 2>/dev/null || true)"
   if grep -qF "$id" <<< "$listed"; then
     # Already on this machine: a user-scope GitHub install never refreshes itself, so each run
     # brings it up to the release's mod (plugin.json version follows VERSION) - unless the user-scope
@@ -1674,12 +1798,18 @@ ensure_gitattributes() {
   # The bytes copy_tree just wrote came from the source checkout, and on Windows that checkout
   # may itself be CRLF (git does not re-smudge an unchanged file when only .gitattributes moved
   # between tags). So the rule alone is not enough: strip CR from every shipped script, every run.
+  # The CR count is read by bytes (tr), never by grep: Git Bash's grep drops a CR before matching, so a grep test
+  # and a sed `s/\r$//` there counted every script and stripped by accident (tails-1115, T51). The new bytes go
+  # beside the file (cp -p keeps its mode) and are renamed over it, as replace_file does.
   [ "$CHECK" = "--check" ] && return 0
+  local tmp
   while IFS= read -r f; do
     case "$f" in *.sh|*.py|.claude/workflows/*.js) ;; *) continue ;; esac
     f="$DEST/$f"
     [ -f "$f" ] || continue
-    if grep -q $'' "$f"; then sed_inplace 's/$//' "$f"; n=$((n + 1)); fi
+    [ "$(tr -cd '\r' < "$f" | wc -c | tr -d ' ')" -gt 0 ] || continue
+    tmp="$f.vulyk-lf.$$"
+    if cp -p "$f" "$tmp" && tr -d '\r' < "$f" > "$tmp" && mv -f "$tmp" "$f"; then n=$((n + 1)); else rm -f "$tmp"; fi
   done < "$NEW_MANIFEST"
   [ "$n" -gt 0 ] && echo "  gitattributes  normalized $n shipped script(s) to LF"
   return 0
@@ -1908,14 +2038,30 @@ wire_shipped SessionStart handoff.sh '' sessionstart
 wire_shipped SessionEnd handoff.sh '' sessionend
 wire_shipped UserPromptSubmit handoff.sh '' prompt
 wire_shipped Stop handoff.sh '' stop
-wire_shipped PreCompact context-guard.sh
 wire_shipped PreCompact handoff.sh '' precompact
 wire_shipped PostToolUse skill-usage-counter.sh Skill
+# tails-1115 (T72, cc-facts F9): a typed command (`/vulyk-plan`) never runs the Skill tool, so the counter also hears
+# UserPromptExpansion. Wired by the release that brings the entry, once; after that a missing entry is the owner's.
+if [ -n "$PREV_UNKNOWN" ] || git -C "$SRC" show "v$PREV:.claude/settings.json" 2>/dev/null | grep -qF '"UserPromptExpansion"'; then
+  report_unwired UserPromptExpansion skill-usage-counter.sh
+else
+  wire_hook UserPromptExpansion skill-usage-counter.sh
+fi
+# tails-1115 (T97): the PreCompact snapshot (context-guard.sh) is retired: written, never read. An upgrade takes out
+# only the entry a release wrote (either command form); an entry the owner changed stays and is named. The script
+# leaves through the manifest like any retired file; the snapshot folders already in the hive are never touched.
+if [ -n "$UPGRADE" ]; then
+  export UNWIRE_EXACT=1   # a flag: py_unwire builds the two release forms itself (no path in the environment)
+  unwire_hook PreCompact context-guard.sh
+  unset UNWIRE_EXACT
+fi
 fix_hooks
 unwire_ysk
 wire_permissions
 wire_ripgrep
-retire_mod vulyk-watcher@vulyk
+wire_flag_switch
+# A fresh install has no older mod to retire, and asks claude nothing (T52): the retired watcher leaves on upgrade.
+[ -z "$UPGRADE" ] || retire_mod vulyk-watcher@vulyk
 install_mod vulyk-pulse@vulyk
 # The empty trees a fresh hive needs. Guarded like every other write: a dry run that
 # creates directories is not a dry run, and this one had been leaving seven of them in
@@ -1986,6 +2132,11 @@ if [ -f "$DEST/CLAUDE.md" ]; then
     report_fill_status "$DEST/CLAUDE.vulyk.md" "VULYK:COMMANDS" "commands"
     report_full_suite_row "$DEST/CLAUDE.vulyk.md"
     report_commands_lint "$DEST/CLAUDE.vulyk.md"
+    # tails-1115 (T54): Claude Code loads the sidecar only through an `@CLAUDE.vulyk.md` line in CLAUDE.md. Said, never
+    # written: CLAUDE.md is the owner's.
+    if ! tr -d '\r' < "$DEST/CLAUDE.md" | grep -Eq '^[[:space:]]*@(\./)?CLAUDE\.vulyk\.md([[:space:]]|$)'; then
+      echo "  not imported: CLAUDE.md does not import CLAUDE.vulyk.md, so the VULYK constitution never loads - add the line @CLAUDE.vulyk.md to CLAUDE.md"
+    fi
   else
     if [ "$CHECK" != "--check" ]; then
       cp -p "$SRC/CLAUDE.md" "$DEST/CLAUDE.vulyk.md"
@@ -1997,6 +2148,22 @@ if [ -f "$DEST/CLAUDE.md" ]; then
     echo "  CLAUDE.md exists - wrote CLAUDE.vulyk.md instead."
     echo "  Add this line to your CLAUDE.md to activate VULYK:"
     echo "      @CLAUDE.vulyk.md"
+  fi
+elif [ -f "$DEST/AGENTS.md" ]; then
+  # tails-1115 (T55): AGENTS.md and no CLAUDE.md. Claude Code reads AGENTS.md only while no CLAUDE.md exists, and a
+  # CLAUDE.md reads it only through `@AGENTS.md` (cc-facts.md F14): so the constitution goes to the sidecar and
+  # CLAUDE.md is two import lines. AGENTS.md is never written; an existing sidecar is kept.
+  if [ "$CHECK" = "--check" ]; then
+    [ -e "$DEST/CLAUDE.vulyk.md" ] || reset_commands_table "$SRC/CLAUDE.md"   # dry run: inspect the source, touch nothing
+    echo "  would write    CLAUDE.md = @AGENTS.md + @CLAUDE.vulyk.md (AGENTS.md is yours, left as it is)"
+  else
+    if [ ! -e "$DEST/CLAUDE.vulyk.md" ]; then
+      cp -p "$SRC/CLAUDE.md" "$DEST/CLAUDE.vulyk.md"
+      reset_commands_table "$DEST/CLAUDE.vulyk.md"
+      echo "  copy           CLAUDE.vulyk.md"
+    fi
+    printf '@AGENTS.md\n@CLAUDE.vulyk.md\n' > "$DEST/CLAUDE.md"
+    echo "  write          CLAUDE.md = @AGENTS.md + @CLAUDE.vulyk.md (AGENTS.md is yours, left as it is)"
   fi
 else
   if [ "$CHECK" = "--check" ]; then
@@ -2031,6 +2198,15 @@ else
   printf '%s\n' "$VER" > "$DEST/.claude/vulyk-version"
   echo "  stamp          .claude/vulyk-version = $VER"
 fi
+# The source commit beside it (contract B1): the base of the next upgrade when that release has no tag. A ZIP source
+# writes none and drops an older stamp, which names a commit this hive's files no longer come from.
+if [ -n "$SRC_HEAD" ]; then
+  if [ "$CHECK" = "--check" ]; then echo "  would stamp    .claude/vulyk-commit = ${SRC_HEAD:0:7}"
+  else printf '%s\n' "$SRC_HEAD" > "$DEST/.claude/vulyk-commit"; echo "  stamp          .claude/vulyk-commit = ${SRC_HEAD:0:7}"; fi
+elif [ -f "$DEST/.claude/vulyk-commit" ]; then
+  if [ "$CHECK" = "--check" ]; then echo "  would remove   .claude/vulyk-commit (this source is no git checkout)"
+  else rm -f "$DEST/.claude/vulyk-commit"; echo "  remove         .claude/vulyk-commit (this source is no git checkout)"; fi
+fi
 
 # Manifest - the whole ship set of this run (ADR-005 D2), written beside the stamp for the
 # same reason: it is installer state, not shipped content, and is never gitignored (a hive
@@ -2044,6 +2220,23 @@ else
   echo "  write          .claude/vulyk-manifest ($MANIFEST_COUNT paths)"
 fi
 
+# tails-1115 (T22): a defect card with an `area:` label and no `paths:` glob is shown to no worker (the hook matches
+# `paths:` only; docs/defects/README.md, "Undeliverable"). --upgrade and --check name each one; nothing is written.
+report_blind_cards() {
+  local lib="$DEST/docs/defects" f
+  [ -d "$lib" ] || return 0
+  while IFS= read -r f; do
+    case "${f##*/}" in README.md|INDEX.md) continue ;; esac
+    tr -d '\r' < "$f" | REL="${f#"$DEST"/}" awk '
+      NR == 1 { if ($0 != "---") exit; fm = 1; next }
+      fm && $0 == "---" { fm = 0; exit }
+      fm && /^area:/ { a = $0; sub(/^area:[[:space:]]*/, "", a); sub(/[[:space:]]+$/, "", a) }
+      fm && /^paths:/ { p = $0; sub(/^paths:[[:space:]]*/, "", p); gsub(/[][[:space:]"]/, "", p) }
+      END { if (!fm && a != "" && p == "") print "  card reaches no worker: " ENVIRON["REL"] " has area: " a " and no paths: glob - give it paths: globs (docs/defects/README.md)" }'
+  done < <(find "$lib" -name '*.md' -type f ! -path '*/fixtures/*' 2>/dev/null | LC_ALL=C sort)
+}
+if [ -n "$UPGRADE" ] || [ "$CHECK" = "--check" ]; then report_blind_cards; fi
+
 # Pin the target's own Queen session to opus (ADR-012: the Queen is not the gate). A resolver that
 # ships but is never applied is a session that starts on the account default forever - the
 # same reasoning as wire_session_hook, aimed at a decision instead of a hook entry. Skipped
@@ -2056,8 +2249,11 @@ if [ -n "$UPGRADE" ] && [ -f "$DEST/.claude/settings.local.json" ]; then
   OWN_MODEL="$(tr -d '\r' < "$DEST/.claude/settings.local.json" \
     | sed -n '/"model"[[:space:]]*:/{s/.*"model"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p;q;}')"
 fi
+# T52 (contract I1): the pin is applied only on --model-pin on; without it, one offer line with the command.
 if [ -n "$OWN_MODEL" ]; then
   echo "  kept: model = $OWN_MODEL (yours)"
+elif [ "$PIN_MODE" != on ]; then
+  printf "  offer: pin this hive's Queen session to opus, not pinned by this run - to pin it: cd %q && bash scripts/top-model.sh --apply\n" "$DEST"
 elif [ "$CHECK" = "--check" ]; then
   echo "  would pin      Queen session to opus (scripts/top-model.sh --apply)"
 elif [ -f "$DEST/scripts/top-model.sh" ]; then
@@ -2097,3 +2293,10 @@ else
   echo "Done. Next: cd $DEST && claude  ->  /vulyk-bootstrap"
   echo "Optional: cp scripts/git-hooks/post-merge .git/hooks/post-merge && chmod +x .git/hooks/post-merge"
 fi
+# tails-1115 (T53): the last line names each tool this machine lacks and what is limited without it, once. Each is
+# run, not looked up: a stub on PATH (the Windows python3 alias) is no tool.
+MISSING=""
+vulyk_python || MISSING="Python 3 (hooks are not wired into an existing .claude/settings.json; the defect hooks do nothing)"
+jq --version >/dev/null 2>&1 || MISSING="${MISSING:+$MISSING, }jq (the skill-usage counter and the anomaly scan stay off)"
+git --version >/dev/null 2>&1 || MISSING="${MISSING:+$MISSING, }git (no commit stamp, no release copies told from edits on upgrade; the cycle scripts need it)"
+[ -z "$MISSING" ] || echo "Tools not found on this machine: $MISSING"

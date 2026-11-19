@@ -11,6 +11,7 @@
       "Bash(bash scripts/journal.sh:*)"
     ]
   },
+  "switchModelsOnFlag": false,
   "hooks": {
     "SessionStart": [
       {
@@ -87,10 +88,16 @@
         ]
       }
     ],
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/skill-usage-counter.sh" }
+        ]
+      }
+    ],
     "PreCompact": [
       {
         "hooks": [
-          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/context-guard.sh" },
           { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/handoff.sh precompact" }
         ]
       }

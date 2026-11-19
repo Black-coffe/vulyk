@@ -117,7 +117,10 @@ def story_files(fp, root):
     if lines[0].strip() != '---' or not end or not any(re.match(r'story:\s*\S', x) for x in lines[1:end]):
         return []
     out, inside, comment = [], False, False
-    for x in lines[end + 1:]:
+    body = lines[end + 1:]
+    for x, fenced in zip(body, fence_mask(body)):
+        if fenced:  # Ask 12: a fence (a red receipt's captured output) adds no heading and no path
+            continue
         if x.startswith('## '):
             if inside:
                 break
@@ -131,6 +134,83 @@ def story_files(fp, root):
             if p:
                 out.append(p)
     return out
+
+
+def fence_mask(lines):
+    # True for a fence line or a line inside a fence: the FENCE_AWK rule of scripts/cycle.sh (fence_mask in
+    # scripts/symbol-map.py). 3+ ` or ~ (any indent) open, a ` one with no ` in its info string; only the same
+    # character, at least as long, with nothing after it, closes.
+    out, fc, fn = [], '', 0
+    for ln in lines:
+        t = ln.lstrip(' \t')
+        c, hit = t[:1], False
+        if c in ('`', '~'):
+            n = len(t) - len(t.lstrip(c))
+            r = t[n:]
+            if n >= 3:
+                if fn:
+                    if c == fc and n >= fn and not r.strip(' \t\r'):
+                        fn, hit = 0, True
+                elif not (c == '`' and '`' in r):
+                    fc, fn, hit = c, n, True
+        out.append(hit or fn > 0)
+    return out
+
+
+# J1 (tails-1115 contracts): a command whose every command word is on this list (search, print, list, count,
+# compare), with no redirect to a file and no in-place flag, only reads: it gets no card. `git` is never on it
+# (lead-review gets its cards from one `git diff`). Lower case: PowerShell names match in any case.
+READ_ONLY = frozenset((
+    'grep egrep fgrep rg cat head tail sed wc ls diff cmp nl jq echo printf pwd file stat tree '
+    'get-content gc type select-string sls get-childitem gci dir select-object measure-object get-item '
+    'test-path compare-object where-object format-list format-table write-output').split())
+NULL_SINKS = ('/dev/null', 'nul', '$null')
+PUNCT = set(';&|<>()')
+
+
+def read_only(cmd):
+    # True only when the line surely just reads; a substitution, a subshell, a heredoc, unbalanced quotes or any
+    # word off the list -> False, and the cards are delivered as before.
+    if not cmd.strip() or re.search(r'`|\$\(|<\(|>\(|<<|[\r\n]', cmd):
+        return False
+    import shlex
+    try:
+        lex = shlex.shlex(cmd.replace('\\', '/'), posix=True, punctuation_chars=';&|<>()')
+        lex.whitespace_split = True
+        toks = list(lex)
+    except ValueError:
+        return False
+    first, redirect, words = True, '', []
+    for t in toks:
+        if t and set(t) <= PUNCT:
+            if '(' in t or ')' in t:
+                return False
+            if '>' in t:
+                redirect = t
+            elif '<' not in t:
+                first = True  # ; & && | || start a new command
+            continue
+        if redirect:  # the target of a redirect: only a null sink, or an fd (2>&1)
+            ok = t.lower() in NULL_SINKS or ('&' in redirect and t.isdigit())
+            redirect = ''
+            if not ok:
+                return False
+            continue
+        if first:
+            if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*=.*', t):
+                continue  # an env assignment before the command word
+            words.append([t.lower()])
+            first = False
+        elif words:
+            words[-1].append(t)
+    if redirect or not words:
+        return False
+    for w in words:
+        if w[0] not in READ_ONLY:
+            return False
+        if w[0] == 'sed' and any(re.match(r'-[A-Za-z]*i|--in-place', a) for a in w[1:]):
+            return False
+    return True
 
 
 def overlaps(a, b):
@@ -187,7 +267,7 @@ def main():
     cmd, paths = '', []
     if tool in ('Bash', 'PowerShell'):  # a PowerShell command line is read as a Bash one
         cmd = ti.get('command') or ''
-        if not isinstance(cmd, str):
+        if not isinstance(cmd, str) or read_only(cmd):
             return
         # A quoted string with a space in it is one more token, whole: the split alone cut
         # "docs/My Notes/a.md" into pieces no glob matches (P10-15).

@@ -1,6 +1,6 @@
 ---
 name: insight-harvester
-description: Mines raw session learnings and /insights output into evidenced friction patterns and concrete config-diff proposals. Used by /vulyk-evolve. Trigger when asked to analyze learnings, find friction patterns, or prepare an evolution changeset.
+description: Mines /insights output and story walls into evidenced friction patterns and concrete config-diff proposals. Used by /vulyk-evolve. Trigger when asked to analyze session friction, find friction patterns, or prepare an evolution changeset.
 ---
 
 # Insight Harvester
@@ -8,7 +8,6 @@ description: Mines raw session learnings and /insights output into evidenced fri
 Turn raw observations into configuration improvements with evidence.
 
 ## Inputs
-- `memory/learnings/*.md` (raw, per-session) and `memory/learnings/CONSOLIDATED.md`
 - Pasted output of the built-in `/insights` command, when available
 - Recent `docs/specs/*/` story files with `## Findings` walls
 

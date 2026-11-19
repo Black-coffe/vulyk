@@ -20,7 +20,7 @@ task. A no is recorded as the Profile row `| Bootstrap | declined <date> |`, whi
      that pays for itself is *Configurations that exist today*, with what is deferred and until when: a
      reviewer that does not know it demands guarantees for deployments nobody has. *Client path* is how
      a person reaches the running thing (a URL and a test login, a CLI entry point, a browser runner's
-     quiet command), or `none: library only`; a filled row adds the black-box seat at Tier 3-4.
+     quiet command), or `none: library only`; a filled row swaps the Tier 3-4 blind seat `opus` for `haiku`.
      *Release / deploy* names the default branch, how a version is published and who presses the
      button; `/vulyk-ship` prints it and never presses it. *Owner language* is the one reports and
      questions to the owner come in (`--quick`: the language the owner writes in), `en` when unsure.

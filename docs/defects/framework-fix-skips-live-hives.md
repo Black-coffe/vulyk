@@ -25,6 +25,11 @@ defect today, and what removes it there now".
 - Close a framework fix found in a hive without also removing the defect in every live hive the survey shows it in
   (the smallest local change: the one triggering line, or the release delta), or naming why a hive is left.
 - Count on `/vulyk-update` to carry a fix to a hive that is on an old version or in the middle of a build.
+- Leave a framework edit uncommitted in a hive's tree: a build there takes it for a foreign edit. Commit it on the
+  hive's branch when no build runs there, or leave the hive to its next upgrade.
 
 ## Allowed
 - Leaving a hive alone when the owner says so, or when the defect cannot fire there; say which and why.
+
+## Source
+- 2026-11-18 · auto memory vulyk-feedback-no-uncommitted-hive-edits.md · retold, not a quote

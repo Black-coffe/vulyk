@@ -132,6 +132,17 @@ grep -qF 'Simplest never drops trust-boundary validation, data-loss handling or 
 # a hive's /vulyk-update read a stamp an uncommitted upgrade had written and said "nothing to do"
 grep -qF 'git show HEAD:.claude/vulyk-version' "$SRC/.claude/commands/vulyk-update.md" \
   && ok "/vulyk-update compares the committed stamp, not only the one on disk" || bad "/vulyk-update reads only the stamp on disk"
+# /vulyk-update is the owner's to run: its frontmatter keeps the model from invoking it (tails-1115)
+owner_only() { # owner_only <command.md> - 0 when its frontmatter holds disable-model-invocation: true
+  tr -d '\r' < "$1" | sed -n '1{/^---$/!q;d;};/^---$/q;p' | grep -qx 'disable-model-invocation: true'
+}
+owner_only "$SRC/.claude/commands/vulyk-update.md" \
+  && ok "/vulyk-update is owner-only: its frontmatter has disable-model-invocation: true" \
+  || bad "/vulyk-update lost disable-model-invocation: true from its frontmatter"
+tr -d '\r' < "$SRC/.claude/commands/vulyk-update.md" | grep -vx 'disable-model-invocation: true' > "$T/update-open.md"
+owner_only "$T/update-open.md" \
+  && bad "the neighbour form (/vulyk-update without disable-model-invocation) passed the owner-only check" \
+  || ok "the neighbour form (/vulyk-update without disable-model-invocation) fails the owner-only check"
 desc="$(cat "$SRC"/.claude/agents/*.md "$SRC"/.claude/commands/*.md | tr -d '\r' | grep '^description:' | wc -c | tr -d ' ')"
 if [ "$desc" -le "$DESCRIPTIONS_MAX_BYTES" ]; then ok "agent + command descriptions within $DESCRIPTIONS_MAX_BYTES B ($desc B)"
 else bad "agent + command descriptions $desc B > $DESCRIPTIONS_MAX_BYTES B"; fi
@@ -175,15 +186,30 @@ council_row() { printf '{"ts":"%s","spec":"s","round":1,"verdict":"GREEN"}\n' "$
 run_row()     { printf '{"ts":"%s","kind":"run","proposals":0}\n' "$2" >> "$1/memory/stats/evolve.jsonl"; }
 
 if part_on upkeep; then
-echo "--- due maintenance: gc"
-H="$(hive gc-stub)"; stub "$H/memory/learnings/2026-09-14_090058.md"
-brief_of "$H" | expect "a stub learning makes gc due" "gc (1 stub, 0 raw learnings)"
-H="$(hive gc-nine)"; for i in 1 2 3 4 5 6 7 8 9; do echo "- real $i" > "$H/memory/learnings/l$i.md"; done
-brief_of "$H" | expect_absent "9 real learnings: gc not due" "maintenance due"
-echo "- real 10" > "$H/memory/learnings/l10.md"
-brief_of "$H" | expect "10 real learnings: gc due" "gc (0 stub, 10 raw learnings)"
+echo "--- the learnings chain is retired (tails-1115-10, T96): the brief reads nothing in memory/learnings/"
+H="$(hive gc-retired)"; stub "$H/memory/learnings/2026-09-14_090058.md"
+for i in 1 2 3 4 5 6 7 8 9 10; do echo "- real $i" > "$H/memory/learnings/l$i.md"; done
 echo "- merged" > "$H/memory/learnings/CONSOLIDATED.md"
-brief_of "$H" | expect "CONSOLIDATED.md is not counted as raw" "gc (0 stub, 10 raw learnings)"
+before="$(cd "$H/memory/learnings" && cksum ./*.md)"
+out="$(brief_of "$H")"
+printf '%s' "$out" | expect_absent "a stub and 10 raw learnings: no gc line (the chain is retired)" "learnings"
+printf '%s' "$out" | expect_absent "a stub and 10 raw learnings: nothing due" "maintenance due"
+[ "$(cd "$H/memory/learnings" && cksum ./*.md)" = "$before" ] && ok "the learnings files are byte-identical after a brief run" \
+  || bad "a brief run changed memory/learnings/"
+for p in .claude/agents/librarian.md .claude/commands/vulyk-gc.md .claude/commands/vulyk-evolve.md; do
+  grep -n 'memory/learnings\|CONSOLIDATED' "$SRC/$p" | expect_absent "$p names no step that reads, consolidates or deletes memory/learnings/" ":"
+done
+LIB_PROMPT="$(tr -d '\r' < "$SRC/.claude/agents/librarian.md")"
+printf '%s' "$LIB_PROMPT" | expect_absent "librarian (no shell) is not told to compare file modification times" "modification time"
+printf '%s' "$LIB_PROMPT" | expect_absent "librarian (no shell) is not told to delete" "you have no shell, so"
+sed -n '/^## GC pass/,/^## ADR harvest/p' "$SRC/.claude/agents/librarian.md" | tr '\n' ' ' \
+  | expect "librarian: the stale-map list comes from its caller" "from your dispatch"
+tr '\n' ' ' < "$SRC/.claude/commands/vulyk-gc.md" | expect "vulyk-gc hands the librarian the map dates it cannot read" "git log -1 --format=%cs"
+EVO="$(tr -d '\r' < "$SRC/.claude/commands/vulyk-evolve.md" | tr '\n' ' ')"
+for s in insight-harvester skill-gardener; do
+  printf '%s' "$EVO" | expect "vulyk-evolve reads the meta-skill $s by path (T70)" "Read \`.claude/skills/_meta/$s/SKILL.md\`"
+  [ -f "$SRC/.claude/skills/_meta/$s/SKILL.md" ] && ok "the path vulyk-evolve names for $s exists" || bad "no .claude/skills/_meta/$s/SKILL.md"
+done
 
 echo "--- due maintenance: evolve"
 H="$(hive ev-never)"; council_row "$H" "$(iso_ago 3)"
@@ -392,7 +418,7 @@ h1_run() { # h1_run <command> <payload> -> stdout in $T/h1.out, exit code in $T/
       H1_CURL_LOG="$H1L" PATH="$H1B:$PATH" bash -c "$1" > "$T/h1.out" 2>/dev/null; echo "$?" > "$T/h1.rc" )
 }
 SUB='"agent_id":"a1b2c3d4","agent_type":"worker-code"'
-if [ "$(grep -c '^SessionStart' "$T/h1-cmds")" -ge 6 ] && [ "$(grep -c '^PreCompact' "$T/h1-cmds")" -ge 2 ]; then
+if [ "$(grep -c '^SessionStart' "$T/h1-cmds")" -ge 6 ] && [ "$(grep -c '^PreCompact' "$T/h1-cmds")" -ge 1 ]; then
   ok "H1: the SessionStart and PreCompact commands come from .claude/settings.json ($(grep -c . "$T/h1-cmds"))"
 else bad "H1: too few SessionStart/PreCompact commands read from .claude/settings.json:"; sed 's/^/        /' "$T/h1-cmds"; fi
 h1_tree > "$T/h1-before"; : > "$H1L"
@@ -437,8 +463,11 @@ h1_run "$(printf '%s\n' "$SS" | grep 'defects-inject.sh reset')" "$pl_main"
   || bad "H1: the main session's reset left a 9-day-old inject file"
 h1_run "$(printf '%s\n' "$SS" | grep 'handoff.sh')" '{"session_id":"h1-m","hook_event_name":"SessionStart","source":"clear"}'
 expect "H1: without agent_id a /clear still restores the pending handoff" "H1-SEED" < "$T/h1.out"
-h1_run "$(printf '%s\n' "$PC" | grep 'context-guard.sh')" '{"session_id":"h1-s","hook_event_name":"PreCompact","trigger":"auto"}'
-expect "H1: without agent_id the PreCompact snapshot is still taken" "context-guard: snapshot saved" < "$T/h1.out"
+# tails-1115-06 (T97): the PreCompact snapshot is retired - no command runs context-guard.sh; the handoff dump stays.
+[ "$(printf '%s\n' "$PC" | grep -c 'context-guard.sh')" = 0 ] && ok "H1: no PreCompact command runs the retired snapshot (context-guard.sh)" \
+  || bad "H1: a PreCompact command still runs the retired snapshot: $(printf '%s\n' "$PC" | grep 'context-guard.sh')"
+[ "$(printf '%s\n' "$PC" | grep -c 'handoff.sh precompact')" = 1 ] && ok "H1: the PreCompact handoff entry stays, once" \
+  || bad "H1: expected one PreCompact handoff.sh precompact command, got: $PC"
 
 # --- the brief: no Python 3, a GitHub template copy, the skill counter (audit-fixes-1113-05, asks 6, 18, 2) -----
 echo "--- brief: one line when no Python 3 answers"
@@ -532,6 +561,65 @@ led run --proposals 0
 grep -q '"kind":"run"' "$H/memory/stats/evolve.jsonl" && ok "the script writes compact JSON the brief can grep" \
   || bad "run row not compact: $(tail -1 "$H/memory/stats/evolve.jsonl")"
 brief_of "$H" | expect_absent "after the script's run row: evolve not due" "evolve ("
+
+# --- tails-1115-10: a sidecar hive's constitution, control bytes, the map offer (T56, T27, T54, T59) ---------
+echo "--- telemetry consent and the brief read the sidecar constitution (T56)"
+sidecar() { # sidecar <hive> <CLAUDE.md text> <CLAUDE.vulyk.md row> - a hive whose VULYK constitution is the sidecar
+  printf '%s\n' "$2" > "$1/CLAUDE.md"
+  printf '# VULYK Constitution\n\n| Field | Value |\n|---|---|\n%s\n' "$3" > "$1/CLAUDE.vulyk.md"
+}
+consent_of() { VULYK_HIVE="$1" bash "$SRC/scripts/telemetry.sh" consent 2>&1; }
+H="$(hive tel-sidecar)"; sidecar "$H" '@CLAUDE.vulyk.md' '| Telemetry | on - anonymized weekly bundle |'
+[ "$(consent_of "$H")" = on ] && ok "telemetry consent: the consent line is read from the sidecar constitution" \
+  || bad "telemetry consent: the consent line is read from the sidecar constitution - got '$(consent_of "$H")'"
+H="$(hive tel-plain)"; printf '| Telemetry | on - x |\n' > "$H/CLAUDE.md"
+[ "$(consent_of "$H")" = on ] && ok "telemetry consent: a plain hive's CLAUDE.md row still reads on" \
+  || bad "telemetry consent: a plain hive's CLAUDE.md row - got '$(consent_of "$H")'"
+H="$(hive tel-none)"
+[ "$(consent_of "$H")" = off ] && ok "telemetry consent: no constitution at all reads off" \
+  || bad "telemetry consent: no constitution - got '$(consent_of "$H")'"
+H="$(hive lit-sidecar)"; sidecar "$H" '@CLAUDE.vulyk.md' '| Chronicle | none (declined 2026-11-01) |'
+brief_of "$H" | expect_absent "brief: a litopys decline in the sidecar constitution is honoured (T59)" "litopys (session chronicle plugin)"
+H="$(hive lit-plain-declined)"; printf '| Chronicle | none (declined 2026-11-01) |\n' > "$H/CLAUDE.md"
+brief_of "$H" | expect_absent "brief: a litopys decline in a plain hive's CLAUDE.md still silences it" "litopys (session chronicle plugin)"
+H="$(hive lit-sidecar-open)"; sidecar "$H" '@CLAUDE.vulyk.md' '| Stack | bash |'
+brief_of "$H" | expect "brief: a sidecar hive with no decline still gets the litopys offer" "litopys (session chronicle plugin)"
+
+echo "--- brief: a sidecar hive whose CLAUDE.md does not import it (T54)"
+IMP="does not import CLAUDE.vulyk.md"
+H="$(hive imp-missing)"; sidecar "$H" '# my project' '| Stack | bash |'
+n="$(brief_of "$H" | grep -c "$IMP")"
+[ "$n" = 1 ] && ok "brief: a sidecar without the import gets one line" || bad "brief: a sidecar without the import got $n lines naming '$IMP'"
+H="$(hive imp-nofile)"; sidecar "$H" '' '| Stack | bash |'; rm -f "$H/CLAUDE.md"
+n="$(brief_of "$H" | grep -c "$IMP")"
+[ "$n" = 1 ] && ok "brief: a sidecar with no CLAUDE.md at all gets the line" || bad "brief: a sidecar with no CLAUDE.md got $n lines"
+H="$(hive imp-ok)"; sidecar "$H" "$(printf '# my project\r\n@CLAUDE.vulyk.md\r')" '| Stack | bash |'
+brief_of "$H" | expect_absent "brief: a sidecar imported by CLAUDE.md (CRLF) gets no import line" "$IMP"
+H="$(hive imp-plain)"; printf '# VULYK Constitution\n' > "$H/CLAUDE.md"
+brief_of "$H" | expect_absent "brief: a plain hive gets no import line" "$IMP"
+
+echo "--- brief: no map yet when memory/map/ holds no slice (T59)"
+H="$(hive map-readme)"; printf '# Map\n' > "$H/memory/map/README.md"
+brief_of "$H" | expect "brief: a map folder with only a README is no map" "no map yet"
+printf -- '- a slice\n' > "$H/memory/map/module.md"
+brief_of "$H" | expect_absent "brief: one slice silences the no-map line" "no map yet"
+brief_of "$H" | expect "brief: the slice is named, not the README" "newest map slice: module.md"
+
+echo "--- telemetry record: every control byte is dropped from --spec, --story, --ref (T27)"
+H="$(hive tel-ctl)"; TL="$H/memory/stats/anomalies.jsonl"
+rec() { VULYK_HIVE="$H" bash "$SRC/scripts/telemetry.sh" record scope_breach 1 0 "$@" >/dev/null 2>&1; tail -n 1 "$TL" 2>/dev/null; }
+fields() { printf '%s' "$1" | jq -r '[.spec, .story, .ref] | join("|")' 2>/dev/null | tr -d '\r'; }
+line="$(rec --spec "a$(printf '\001')b" --story "c$(printf '\037')d" --ref "e$(printf '\033')f")"
+if printf '%s' "$line" | jq -e . >/dev/null 2>&1; then ok "telemetry record: control bytes 0x01, 0x1f, 0x1b leave a JSON line"
+else bad "telemetry record: a control byte broke the line: $(printf '%s' "$line" | od -c | head -3 | tr '\n' ' ')"; fi
+[ "$(fields "$line")" = "ab|cd|ef" ] && ok "telemetry record: the control bytes are dropped, the rest kept" \
+  || bad "telemetry record: control-byte fields are '$(fields "$line")', expected 'ab|cd|ef'"
+line="$(rec --spec "$(printf 'g\th')" --story "$(printf 'i\rj')" --ref "$(printf 'k\nl')")"
+[ "$(fields "$line")" = "gh|ij|kl" ] && ok "telemetry record: tab, CR and LF are still dropped" \
+  || bad "telemetry record: tab/CR/LF fields are '$(fields "$line")', expected 'gh|ij|kl'"
+line="$(rec --spec "tails-1115" --story "tails-1115-10" --ref "scope:x y")"
+[ "$(fields "$line")" = "tails-1115|tails-1115-10|scope:x y" ] && ok "telemetry record: ordinary text is unchanged" \
+  || bad "telemetry record: ordinary text became '$(fields "$line")'"
 
 # --- a green build asks to ship (next-circle-0-22-02) ---------------------------------------------
 echo "--- green terminal asks «Выпускаем?» and ships on yes"
@@ -856,6 +944,24 @@ for tool in human-check acceptance-log; do
     && ok "$tool.sh writes no record when redact.sh fails" || bad "$tool.sh wrote a record with a failing redact.sh"
   grep -q 'redact' "$T/rf-out" && ok "$tool.sh names redact.sh in its refusal" || bad "$tool.sh refusal does not name redact.sh: $(cat "$T/rf-out")"
 done
+# tails-1115-14 (ask 4): no redact.sh to run - the original case, the file missing; the neighbour, a directory in its
+# place - refuses the same way: no record, the secret in the note written nowhere (journal.sh and ship-check.sh agree).
+mv "$RF/scripts/redact.sh" "$T/rf-redact-stub"
+for form in missing directory; do
+  [ "$form" = directory ] && mkdir "$RF/scripts/redact.sh"
+  for tool in human-check acceptance-log; do
+    ( cd "$RF" && bash "scripts/$tool.sh" docs/specs/demo ACCEPTED "looked at it secret=$val" ) >"$T/rf-out" 2>&1; rc=$?
+    [ "$rc" -ne 0 ] && ok "$tool.sh refuses with no redact.sh ($form, exit $rc)" || bad "$tool.sh exit 0 with no redact.sh ($form)"
+    cmp -s "$RF/docs/specs/demo/plan.md" "$T/rf-plan" && ! ls "$RF/memory/stats/"*.jsonl >/dev/null 2>&1 \
+      && ! grep -rqF -- "$val" "$RF/docs" "$RF/memory" 2>/dev/null \
+      && ok "$tool.sh writes no record with no redact.sh ($form)" || bad "$tool.sh wrote a record with no redact.sh ($form)"
+    grep -q 'redact' "$T/rf-out" && ok "$tool.sh names redact.sh when it is missing ($form)" \
+      || bad "$tool.sh refusal does not name redact.sh ($form): $(cat "$T/rf-out")"
+    cmp -s "$RF/docs/specs/demo/plan.md" "$T/rf-plan" || cp "$T/rf-plan" "$RF/docs/specs/demo/plan.md"
+    rm -rf "$RF/memory"
+  done
+done
+rmdir "$RF/scripts/redact.sh"; mv "$T/rf-redact-stub" "$RF/scripts/redact.sh"
 sed -n '/^redact_note() {/,/^}/p' "$SRC/scripts/cycle.sh" > "$T/redact-note.sh"
 note_out="$(HERE="$RF/scripts"; . "$T/redact-note.sh"; redact_note "secret=$val" 2>/dev/null)"
 [ -s "$T/redact-note.sh" ] && case "$note_out" in *REDACT-FAILED*|*"$val"*) false ;; *) true ;; esac \
@@ -864,37 +970,119 @@ note_out="$(HERE="$RF/scripts"; . "$T/redact-note.sh"; redact_note "secret=$val"
 grep -q 'redact.sh always exits 0' "$SRC/scripts/cycle.sh" && bad "cycle.sh still says redact.sh always exits 0" \
   || ok "cycle.sh no longer says redact.sh always exits 0"
 
-# --- /vulyk-gc refuses a gutted CONSOLIDATED.md (hindsight-harvest-03) --------------------------------
-echo "--- /vulyk-gc commit line refuses to commit a CONSOLIDATED.md that lost more than half"
-GC_LINE="$(tr -d '\r' < "$SRC/.claude/commands/vulyk-gc.md" | sed -n 's/^`\(f=memory\/learnings\/CONSOLIDATED\.md;.*\)`$/\1/p')"
-[ -n "$GC_LINE" ] && ok "vulyk-gc.md carries the guarded commit line" || bad "no guarded commit line in vulyk-gc.md"
-entries() { local i; printf '# Consolidated learnings\n\n## Topic\n'; for i in $(seq 1 "$1"); do printf '%s. lesson number %s, with a reason\n' "$i" "$i"; done; }
-gc_case() { # gc_case <dir> <entries at HEAD, or new> <entries now> [index name] - runs the line, prints its output
-  local g="$T/$1" idx="memory/${4:-memory.md}"; mkdir -p "$g/memory/learnings" && cd "$g" || return 1
+# --- redact.sh tails-1115-03: long flags, inflected ru/uk keywords, a Cyrillic value, -u/-a user:pass; parity --
+echo "--- redact.sh tails-1115-03: argument flags, inflected keywords, non-ASCII values, more user:pass commands"
+R15=(
+  "masks a long token flag with a spaced value|curl --token $val https://x|curl --token $M https://x"
+  "masks a long api-key flag|tool --api-key $val run|tool --api-key $M run"
+  "masks a long client-secret flag|tool --client-secret $val|tool --client-secret $M"
+  "masks a long secret flag|tool --secret $val --x|tool --secret $M --x"
+  "masks a long auth-token flag|tool --auth-token $val|tool --auth-token $M"
+  "masks a long access-token flag|tool --access-token '$val' x|tool --access-token $M x"
+  "masks a long key flag|tool --key $val|tool --key $M"
+  "leaves a long flag with no value alone|gh auth login --token --hostname x.io; tool --token \$TOKEN|gh auth login --token --hostname x.io; tool --token \$TOKEN"
+  "leaves look-alike long flags alone|tool --token-file ./tok.txt --keyboard us-international-layout --keep-alive 1234567890123456|tool --token-file ./tok.txt --keyboard us-international-layout --keep-alive 1234567890123456"
+  "leaves a short long-flag value and a key path alone|tool --key abc123 --secret short1 && curl --key /etc/ssl/private/client.key x|tool --key abc123 --secret short1 && curl --key /etc/ssl/private/client.key x"
+  "masks an inflected Russian keyword in prose|нет пароля hunter2x тут|нет пароля $M тут"
+  "masks an instrumental keyword in prose|вход паролем hunter2x|вход паролем $M"
+  "masks an inflected keyword with a colon|токена: $val|токена: $M"
+  "masks an inflected Ukrainian keyword with a colon|значення гасла: $val|значення гасла: $M"
+  "leaves inflected keywords in prose alone|нет пароля, вход паролем из хранилища, токена нет, токенов 8 штук|нет пароля, вход паролем из хранилища, токена нет, токенов 8 штук"
+  "leaves a keyword before an ordinary word alone|пароль сменили вчера, гасло змінено, токен устарел|пароль сменили вчера, гасло змінено, токен устарел"
+  "masks a Cyrillic value with digits|пароль: Сонце2024|пароль: $M"
+  "masks a Ukrainian Cyrillic value with digits|гасло: Київ2024x|гасло: $M"
+  "leaves a Cyrillic word or a count after a keyword alone|пароль: Сонце, гасло: від адміна, токен: 8 символов|пароль: Сонце, гасло: від адміна, токен: 8 символов"
+  "masks an ftp -u password|ftp -u admin:$val host|ftp -u admin:$M host"
+  "masks an httpie -a password|httpie -a admin:$val GET x.io|httpie -a admin:$M GET x.io"
+  "masks an http -a password|http -a admin:$val x.io|http -a admin:$M x.io"
+  "leaves rsync -a host:path, ftp -u uid:gid and a prompting http -a alone|rsync -a backup:data/ /srv && ftp -u 1000:1000 h && http -a alice x.io|rsync -a backup:data/ /srv && ftp -u 1000:1000 h && http -a alice x.io"
+)
+: > "$T/r15-in"
+for row in ${R15[@]+"${R15[@]}"}; do
+  IFS='|' read -r label input want <<EOF
+$row
+EOF
+  redact_is "$label" "$input" "$want"
+  printf '%s\n' "$input" >> "$T/r15-in"
+done
+# Parity both ways: through redact_text (redact.sh, then the built-in pass) and the built-in pass alone.
+bash "$SRC/scripts/redact.sh" < "$T/r15-in" > "$T/r15-sh"
+PYTHONIOENCODING=utf-8 "$PYBIN" - "$SRC/.claude/hooks/handoff.py" "$T/r15-in" "$T" <<'PY' > "$T/r15-py"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('handoff', sys.argv[1]); h = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(h)
+for line in open(sys.argv[2], encoding='utf-8').read().splitlines():
+    print(h.redact_text(sys.argv[3], line) + '\t' + h.redact_builtin(line))
+PY
+i=0
+for row in ${R15[@]+"${R15[@]}"}; do
+  i=$((i + 1)); label="${row%%|*}"
+  sh_out="$(sed -n "${i}p" "$T/r15-sh" | tr -d '\r')"; py_line="$(sed -n "${i}p" "$T/r15-py" | tr -d '\r')"
+  py_text="${py_line%%	*}"; py_bi="${py_line#*	}"
+  [ "$sh_out" = "$py_text" ] && ok "handoff.py redact_text agrees with redact.sh: $label" \
+    || bad "handoff.py redact_text differs from redact.sh ($label): py '$py_text', sh '$sh_out'"
+  [ "$sh_out" = "$py_bi" ] && ok "handoff.py built-in pass agrees with redact.sh: $label" \
+    || bad "handoff.py built-in pass differs from redact.sh ($label): py '$py_bi', sh '$sh_out'"
+done
+# Writers: with redact.sh missing or failing, journal.sh and ship-check.sh --record write nothing and exit non-zero.
+JR="$T/journal-refuse"
+for st in missing failing working; do
+  mkdir -p "$JR/$st/scripts" "$JR/$st/spec"; cp "$SRC/scripts/journal.sh" "$JR/$st/scripts/"
+  printf '# Journal: spec\n\n- earlier line\n' > "$JR/$st/spec/journal.md"
+done
+cp "$RF/scripts/redact.sh" "$JR/failing/scripts/redact.sh"; cp "$SRC/scripts/redact.sh" "$JR/working/scripts/redact.sh"
+for st in missing failing; do
+  cp "$JR/$st/spec/journal.md" "$T/jr-before"
+  bash "$JR/$st/scripts/journal.sh" "$JR/$st/spec" 03-building "note secret=$val" next >"$T/jr-out" 2>&1; rc=$?
+  [ "$rc" -ne 0 ] && cmp -s "$JR/$st/spec/journal.md" "$T/jr-before" && ! grep -q "$val" "$T/jr-out" \
+    && ok "a journal line is refused when masking cannot run (redact.sh $st, exit $rc)" \
+    || bad "a journal line is refused when masking cannot run (redact.sh $st): exit $rc, journal $(tail -n 1 "$JR/$st/spec/journal.md")"
+done
+bash "$JR/working/scripts/journal.sh" "$JR/working/spec" 03-building "note secret=$val" next >"$T/jr-out" 2>&1; rc=$?
+[ "$rc" = 0 ] && tail -n 1 "$JR/working/spec/journal.md" | grep -qF "note secret=$M · next: next" \
+  && ok "journal.sh with a working redact.sh writes the masked line" \
+  || bad "journal.sh with a working redact.sh: exit $rc, last line $(tail -n 1 "$JR/working/spec/journal.md")"
+SR="$T/ship-refuse"; mkdir -p "$SR/scripts" "$SR/docs/specs/demo"
+cp "$SRC/scripts/lib.sh" "$SRC/scripts/ship-check.sh" "$SR/scripts/"
+cp "$SRC/templates/plan.md" "$SR/docs/specs/demo/plan.md"
+( cd "$SR" && git init -q . && git config user.email t@t && git config user.name "Test Owner" && git config core.autocrlf false \
+  && git add -A && git commit -qm init ) >/dev/null 2>&1
+cp "$SR/docs/specs/demo/plan.md" "$T/sr-plan"
+for st in missing failing; do
+  rm -f "$SR/scripts/redact.sh"; [ "$st" = failing ] && cp "$RF/scripts/redact.sh" "$SR/scripts/redact.sh"
+  ( cd "$SR" && bash scripts/ship-check.sh --record docs/specs/demo v9.9.9 "note secret=$val" ) >"$T/sr-out" 2>&1; rc=$?
+  [ "$rc" -ne 0 ] && cmp -s "$SR/docs/specs/demo/plan.md" "$T/sr-plan" && [ ! -e "$SR/memory/stats/ship.jsonl" ] \
+    && ok "ship-check.sh --record refuses when masking cannot run (redact.sh $st, exit $rc)" \
+    || bad "ship-check.sh --record with redact.sh $st: exit $rc, plan $(tail -n 1 "$SR/docs/specs/demo/plan.md")"
+done
+cp "$SRC/scripts/redact.sh" "$SR/scripts/redact.sh"; cp "$T/sr-plan" "$SR/docs/specs/demo/plan.md"
+( cd "$SR" && bash scripts/ship-check.sh --record docs/specs/demo v9.9.9 "note secret=$val" ) >"$T/sr-out" 2>&1; rc=$?
+[ "$rc" = 0 ] && grep -qF "**Shipped:** v9.9.9" "$SR/docs/specs/demo/plan.md" && grep -qF "note secret=$M" "$SR/docs/specs/demo/plan.md" \
+  && ! grep -q "$val" "$SR/docs/specs/demo/plan.md" && ok "ship-check.sh --record with a working redact.sh writes the masked line" \
+  || bad "ship-check.sh --record with a working redact.sh: exit $rc, $(cat "$T/sr-out")"
+
+# --- /vulyk-gc commits the index alone (hindsight-harvest-03; tails-1115-10: the learnings chain is retired) ------
+echo "--- /vulyk-gc commit line commits the memory index, nothing in memory/learnings/"
+GC_LINE="$(tr -d '\r' < "$SRC/.claude/commands/vulyk-gc.md" | sed -n "s/^\`\(git add ':(icase)memory\/memory\.md'.*\)\`$/\1/p")"
+[ -n "$GC_LINE" ] && ok "vulyk-gc.md carries the index commit line" || bad "no index commit line in vulyk-gc.md"
+gc_case() { # gc_case <dir> [index name] - runs the line in a repo with a changed index and a changed learning
+  local g="$T/$1" idx="memory/${2:-memory.md}"; mkdir -p "$g/memory/learnings" && cd "$g" || return 1
   git init -q -b main . && git config user.name t && git config user.email t@t && git config core.autocrlf false
-  printf '# index\n' > "$idx"
-  if [ "$2" != new ]; then entries "$2" > memory/learnings/CONSOLIDATED.md; fi
+  printf '# index\n' > "$idx"; printf -- '- an old lesson\n' > memory/learnings/CONSOLIDATED.md
   git add -A && git commit -q -m base
-  entries "$3" > memory/learnings/CONSOLIDATED.md
-  printf -- '- a pointer gc added\n' >> "$idx"
-  bash -c "$GC_LINE" 2>&1; echo "commits=$(git rev-list --count HEAD)"
+  printf -- '- a pointer gc added\n' >> "$idx"; printf -- '- an edit nobody asked gc for\n' >> memory/learnings/CONSOLIDATED.md
+  bash -c "$GC_LINE" >/dev/null 2>&1; echo "commits=$(git rev-list --count HEAD)"
   echo "committed: $(git diff --name-only HEAD~1 HEAD 2>/dev/null | paste -sd' ' -)"
+  echo "left: $(git diff --name-only | paste -sd' ' -)"
   cd "$SRC" || return 1
 }
-gc_case cut 10 4 > "$T/gc-cut"
-expect "10 entries -> 4: refused" "gc: refused - CONSOLIDATED.md lost more than half" < "$T/gc-cut"
-expect "a refusal commits nothing" "commits=1" < "$T/gc-cut"
-expect "the counts are printed" "CONSOLIDATED.md: entries 10→4" < "$T/gc-cut"
-gc_case trim 10 7 > "$T/gc-trim"
-expect_absent "10 entries -> 7: not refused" "refused" < "$T/gc-trim"
-expect "10 entries -> 7: committed" "commits=2" < "$T/gc-trim"
-gc_case fresh new 3 > "$T/gc-fresh"
-expect "a file new at HEAD: committed" "commits=2" < "$T/gc-fresh"
-expect "a file new at HEAD prints 0 as the old count" "CONSOLIDATED.md: entries 0→3" < "$T/gc-fresh"
-expect "the index is committed with the learnings" "committed: memory/learnings/CONSOLIDATED.md memory/memory.md" < "$T/gc-trim"
-gc_case upper 10 7 MEMORY.md > "$T/gc-upper"   # a hive whose index is memory/MEMORY.md failed every gc run
-expect "an index named MEMORY.md: committed" "commits=2" < "$T/gc-upper"
-expect "an index named MEMORY.md: committed with the learnings" "committed: memory/MEMORY.md memory/learnings/CONSOLIDATED.md" < "$T/gc-upper"
+gc_case gc-lower > "$T/gc-lower.out"
+expect "the index memory.md is committed" "commits=2" < "$T/gc-lower.out"
+expect "only the index is committed" "committed: memory/memory.md" < "$T/gc-lower.out"
+expect "a learnings file is left as it is" "left: memory/learnings/CONSOLIDATED.md" < "$T/gc-lower.out"
+gc_case gc-upper MEMORY.md > "$T/gc-upper.out"   # a hive whose index is memory/MEMORY.md failed every gc run
+expect "an index named MEMORY.md: committed" "commits=2" < "$T/gc-upper.out"
+expect "an index named MEMORY.md: committed alone" "committed: memory/MEMORY.md" < "$T/gc-upper.out"
 
 echo "--- /vulyk-handoff runs from any folder of the hive (handoff-cwd)"
 # Claude Code keeps a Bash `cd` that stays inside the project, so `dump` can run from any subfolder,
@@ -1053,6 +1241,44 @@ pc_case noverbs; sed_inplace 's/^case "\$VERB" in/case "$CMD" in/' "$PCD/scripts
 expect "prompt-check: a cycle.sh without a verb dispatcher exits 0" "exit=0;" < "$T/pc-out"
 grep -c '^prompt-check: warn scripts/cycle.sh:1: verb: ' "$T/pc-out" > "$T/pc-nv" 2>&1
 expect "prompt-check: a cycle.sh without a verb dispatcher is one warn line, not a silent skip" "1" < "$T/pc-nv"
+# tails-1115-05 (T65, cc-facts F4 confirmed): an agent that may spawn subagents nests them; the tool is Agent, Task its old name
+for spawn in 'Read, Agent' 'Task, Read' 'Read, Agent(worker-code)' '[Read, Task]'; do
+  pc_case spawn; sed_inplace "s/^tools: .*/tools: $spawn/" "$PCD/.claude/agents/drone-scout.md"; pc_run
+  pc_bites "an agent whose tools hold the spawning tool ($spawn)" tools
+done
+pc_case nospawn; sed_inplace 's/^tools: .*/tools: Read, TaskList, AgentOutput/' "$PCD/.claude/agents/drone-scout.md"; pc_run
+expect "prompt-check: tool names that only start with Agent or Task exit 0" "exit=0;" < "$T/pc-out"
+
+echo "--- human-check.sh --show: code paths first, spec paperwork after, inside the one cap (tails-1115-05, T16)"
+(
+  mkdir -p "$T/hshow" && cd "$T/hshow" || exit 1
+  git init -q -b main . && git config user.email t@t && git config user.name t && git config core.autocrlf false
+  mkdir -p scripts docs/specs/s src && cp "$SRC"/scripts/lib.sh "$SRC"/scripts/human-check.sh "$SRC"/scripts/redact.sh scripts/
+  printf 'v1\n' > src/app.txt && printf 'plan\n' > docs/specs/s/plan.md && git add -A && git commit -qm base
+  git checkout -q -b vulyk/s
+  i=0; while [ "$i" -lt 400 ]; do i=$((i + 1)); echo "paper $i"; done > docs/specs/s/notes.md
+  git add -A && git commit -qm paper
+  git checkout -q -b vulyk/paper-only   # the neighbour: only paperwork changed
+  bash scripts/human-check.sh --show docs/specs/s > "$T/hshow-paper"
+  base="$(git merge-base main HEAD)"
+  { echo "human-check: s - the change from $(printf '%s' "$base" | cut -c1-7) to HEAD"
+    git -c core.quotePath=false diff --stat "$base" HEAD
+    git -c core.quotePath=false diff "$base" HEAD | head -n 300
+    echo "... $(( $(git diff "$base" HEAD | wc -l) - 300 )) more lines cut; the rest: git diff $(printf '%s' "$base" | cut -c1-7) HEAD"
+  } > "$T/hshow-today"
+  git checkout -q vulyk/s
+  i=0; while [ "$i" -lt 20 ]; do i=$((i + 1)); echo "code $i"; done > src/app.txt
+  git add -A && git commit -qm code
+  bash scripts/human-check.sh --show docs/specs/s > "$T/hshow-out"
+)
+expect "human-check --show: 400 paperwork lines leave the 20-line code diff whole" "+code 20" < "$T/hshow-out"
+awk '/^\+code 1$/ { c = NR } /^\+paper 1$/ { p = NR } END { exit !(c && p && c < p) }' "$T/hshow-out" \
+  && ok "human-check --show: the code diff comes before the paperwork" || bad "human-check --show: the code diff comes before the paperwork"
+expect "human-check --show: paperwork past the cap is cut" "more lines cut; the rest: git diff" < "$T/hshow-out"
+nb="$(awk '/^diff --git / { on = 1 } on && !/^\.\.\. / { n++ } END { print n + 0 }' "$T/hshow-out")"
+[ "$nb" -eq 300 ] && ok "human-check --show: code and paperwork share the 300-line cap" || bad "human-check --show: $nb diff lines, want 300 inside the cap"
+cmp -s "$T/hshow-paper" "$T/hshow-today" && ok "human-check --show: only paperwork changed prints as today" \
+  || bad "human-check --show: only paperwork changed prints as today - diff: $(diff "$T/hshow-today" "$T/hshow-paper" | head -n 5)"
 
 echo "--- handoff.sh: a python3 that is a stub (the Windows Store alias, exit 49) is passed over (post-043-tails)"
 FB="$T/fakepy"; mkdir -p "$FB"
@@ -1132,7 +1358,38 @@ ok - paste -s -d, list.txt
 ok - x="$(case "$b" in (plan.md|brief.md) echo y ;; esac)"
 ok - case "$b" in plan.md|brief.md) continue ;; esac
 ok - x="$(f "$b")"; case "$x" in a) echo y ;; esac
+hit sort-V ls -d "$HOME"/c/*/bin/x 2>/dev/null | sort -rV
+hit sort-V v="$(printf '%s\n' "$a" "$b" | sort -t. --version-sort | tail -n 1)"
+ok - printf '%s\n' "$a" | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1
+ok - echo "the newest without sort -V"
 CASES
+echo "--- portability-check.sh: every hit line ends with its rule's fix (tails-1115-05, T6, T90)"
+bash "$PG" --rules < /dev/null > "$T/pg-rules" 2>&1; echo "exit=$?;" >> "$T/pg-rules"
+expect "portability-check --rules exits 0" "exit=0;" < "$T/pg-rules"
+nr=0; nf=0
+while IFS= read -r rl; do
+  case "$rl" in exit=*) continue ;; esac
+  nr=$((nr + 1)); fx="${rl#*: }"
+  if [ "$fx" = "$rl" ] || [ -z "$(printf '%s' "$fx" | tr -d '[:space:]')" ]; then nf=$((nf + 1)); bad "portability-check: rule '${rl%%:*}' has no fix text"; fi
+done < "$T/pg-rules"
+[ "$nr" -ge 17 ] && ok "portability-check --rules lists every rule ($nr)" || bad "portability-check --rules lists $nr rules, want 17 or more"
+[ "$nf" -eq 0 ] && ok "portability-check: every rule has a fix text" || bad "portability-check: $nf rule(s) without a fix text"
+grep -qx 'sort-V: .*scripts/version-order.sh.*' "$T/pg-rules" && ok "portability-check: the sort-V rule names scripts/version-order.sh" \
+  || bad "portability-check: the sort-V rule names scripts/version-order.sh"
+pg_run "$SRC/docs/defects/shell-needs-gnu-or-bash4.sed-i.fixture"
+expect "portability-check: the card's sed-i fixture is a sed-i hit" ": sed-i: " < "$T/pg-out"
+grep -q ': sed-i: .* - fix: .*sed_inplace' "$T/pg-out" && ok "portability-check: the sed-i hit line ends with the sed_inplace fix" \
+  || bad "portability-check: the sed-i hit line ends with the sed_inplace fix - got: $(cat "$T/pg-out")"
+printf '#!/usr/bin/env bash\ntimeout 30 bash x.sh\n' > "$T/pg-to.sh"; pg_run "$T/pg-to.sh"
+grep -q ': timeout: .* - fix: .*run_capped' "$T/pg-out" && ok "portability-check: a bare timeout hit line ends with the run_capped fix" \
+  || bad "portability-check: a bare timeout hit line ends with the run_capped fix - got: $(cat "$T/pg-out")"
+n_hit="$(grep -c '^portability-check: .*:[0-9]*: ' "$T/pg-out")"; n_fix="$(grep -c ' - fix: ' "$T/pg-out")"
+[ "$n_hit" -gt 0 ] && [ "$n_hit" = "$n_fix" ] && ok "portability-check: each hit line carries a fix" \
+  || bad "portability-check: $n_hit hit line(s), $n_fix with a fix"
+for fx in sort-v sort-v-neighbour; do
+  pg_run "$SRC/docs/defects/shell-needs-gnu-or-bash4.$fx.fixture"
+  expect "portability-check: the card's $fx fixture is a sort-V hit" ": sort-V: " < "$T/pg-out"
+done
 cat > "$T/pg-case.sh" <<'EOF'
 #!/usr/bin/env bash
 ALL_QUOTES="$(for story in "$SPEC"/*.md; do
@@ -1427,13 +1684,28 @@ done
 [ $? -eq 1 ] && ok "git-guard: --check fails on the shell fixture (a heredoc fed to a shell)" \
   || bad "git-guard: --check passed the shell fixture"
 # audit-fixes-1113-17: the shell-indirection forms the guard cannot enumerate are named in its left-open list
-GH="$(sed -n '/^# Not covered, on purpose:/,/^# Agents get no env off-switch/p' "$GUARD" | tr -d '\r' | sed 's/^# *//' | tr '\n' ' ')"
-for n in 'command text piped into a shell' 'a here-string fed to a shell' 'PowerShell `Invoke-Expression`'; do
+# guards-1115-01 (O2): the list is the header's last block, up to the first line of code, and the card's
+# ## Check carries it word for word
+GH="$(sed -n '/^# Left open/,/^[^#]/p' "$GUARD" | sed '1d;$d' | tr -d '\r' | sed 's/^# *//' | tr '\n' ' ' | tr -s ' ')"
+CK="$(sed -n '/^Left open/,/^## /p' "$SRC/docs/defects/work-discarded-by-git-verb.md" | sed '1d;$d' | tr -d '\r' \
+  | sed 's/^ *//' | tr '\n' ' ' | tr -s ' ')"
+for n in 'command text piped into a shell' 'a here-string fed to a shell'; do
   case "$GH" in *"$n"*) ok "git-guard: the header's left-open list names $n" ;;
     *) bad "git-guard: the header's left-open list does not name $n" ;; esac
 done
 case "$GH" in *'reset --merge'*|*'merge --abort'*) bad "git-guard: the left-open list still names the reset --merge / merge --abort pair" ;;
   *) ok "git-guard: reset --merge and merge --abort are no longer left open" ;; esac
+for n in 'Invoke-Expression' 'iex' 'tag -f' 'push --force' 'stage' 'cherry-pick' 'a redirection' 'a comment'; do
+  case "$GH" in *"$n"*) bad "git-guard: the header's left-open list still names $n, closed by guards-1115-01" ;;
+    *) ok "git-guard: the header's left-open list no longer names $n" ;; esac
+done
+for n in 'a shell option that takes a value before the script' 'xargs among them' \
+         'a shell or a whole command held in a variable' 'a script word made by a pattern or a variable behind a wrapper'; do
+  case "$GH" in *"$n"*) bad "git-guard: a cycle.sh verb outside the six is refused under every listed spelling, yet the header's left-open list still names $n" ;;
+    *) ok "git-guard: the header's left-open list no longer names $n, closed by guards-1115-10" ;; esac
+done
+if [ -n "$GH" ] && [ "$GH" = "$CK" ]; then ok "git-guard: the card's ## Check list of open forms equals the header's"
+else bad "git-guard: the card's open list differs from the header's - header: $GH / card: $CK"; fi
 
 echo "--- git guard: a subagent under a DRIVER, cycle.sh verbs (audit-fixes-1113-07)"
 mkdir -p "$GG/docs/specs/dv"; : > "$GG/docs/specs/dv/DRIVER"
@@ -1516,6 +1788,277 @@ out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | VULYK_
 mkdir -p "$T/badmod"; printf 'class shlex:\n    def __init__(self, *a, **k):\n        raise RuntimeError("broken")\n' > "$T/badmod/shlex.py"
 out="$(printf '%s' "$SUBPAY" | PYTHONPATH="$(cd "$T/badmod" && (pwd -W 2>/dev/null || pwd))" VULYK_PY="$PYBIN" bash "$GUARD" 2>&1)"
 printf '%s' "$out" | expect "git-guard: an error inside the Python half on a git command denies" "the guard failed"
+
+echo "--- git guard: run state, script word, history verbs, forced forms, parser, fallback (guards-1115-01)"
+cat > "$T/guard-batch.py" <<'PY'
+import json, sys
+tool, aid, cwd, porc, out = sys.argv[1:6]
+for n, c in enumerate(sys.argv[6:], 1):
+    d = {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": tool, "tool_input": {"command": c}, "cwd": cwd}
+    if aid:
+        d["agent_id"] = aid; d["agent_type"] = "worker-code"
+    if porc:
+        d["porcelain"] = json.loads(porc)
+    with open("%s.%d.json" % (out, n), "w", encoding="utf-8") as f:
+        f.write(json.dumps(d))
+PY
+GGW="$(cd "$GG" && (pwd -W 2>/dev/null || pwd))"; TW="$(cd "$T" && (pwd -W 2>/dev/null || pwd))"   # native paths: no MSYS conversion below
+gbatch() { # gbatch <exit> <tool> <agent_id> <porcelain JSON> <label> <command>... - `--check` each command in $GG
+  local want="$1" tool="$2" aid="$3" porc="$4" label="$5" n=0 c rc; shift 5
+  MSYS2_ARG_CONV_EXCL='*' "$PYBIN" "$TW/guard-batch.py" "$tool" "$aid" "$GGW" "$porc" "$TW/gb" "$@"
+  for c in "$@"; do
+    n=$((n + 1))
+    bash "$GUARD" --check "$T/gb.$n.json" > "$T/gb.out" 2>&1; rc=$?   # the input names the cwd: no cd, no fork
+    if [ "$rc" = "$want" ]; then ok "$label: $c"; else bad "$label: $c - expected exit $want, got $rc: $(cat "$T/gb.out")"; fi
+  done
+}
+nopyb() { # nopyb <exit> <agent_id> <label> <command>... - gbatch with no Python launcher on PATH
+  local want="$1" aid="$2" label="$3" n=0 c rc; shift 3
+  MSYS2_ARG_CONV_EXCL='*' "$PYBIN" "$TW/guard-batch.py" Bash "$aid" "$GGW" "" "$TW/nb" "$@"
+  for c in "$@"; do
+    n=$((n + 1))
+    VULYK_PY='' PATH="$T/nopy" "$BASH" "$GUARD" --check "$T/nb.$n.json" > "$T/gb.out" 2>&1; rc=$?
+    if [ "$rc" = "$want" ]; then ok "$label: $c"; else bad "$label: $c - expected exit $want, got $rc: $(cat "$T/gb.out")"; fi
+  done
+}
+mkdir -p "$GG/.vulyk/state/dv" "$GG/docs/specs/dv" && echo 'wave.1=abc' > "$GG/.vulyk/state/dv/claim"
+: > "$GG/docs/specs/dv/DRIVER"
+SCR="$T/scr"; mkdir -p "$SCR" && git -C "$SCR" init -q; SCRW="$(cd "$SCR" && (pwd -W 2>/dev/null || pwd))"
+# R1 (S1): a subagent's shell call on the run state; the original first, the reason names the Read tool
+gbatch 1 Bash a1 "" "git-guard: a subagent shell call on the run state is denied" \
+  'echo wave.1=abc >> .vulyk/state/dv/claim' 'cat .vulyk/state/dv/claim' 'cp x .vulyk/state/dv/approved' \
+  'cd .vulyk/state && ls' 'cd .vulyk && cat state/dv/claim' 'cat .VULYK/State/dv/claim' \
+  'cat docs/../.vulyk/state/dv/claim' 'rm -rf .vulyk/*/dv' 'sort < .vulyk/state/dv/claim' 'tee -a .vulyk/state/dv/x < f' \
+  'python -c "open(\".vulyk/state/dv/claim\", \"w\")"' 'bash -c "echo x > .vulyk/state/dv/claim"' \
+  "$(printf "python3 - <<'X'\nopen('.vulyk/state/dv/claim', 'w')\nX")" 'node -e "require(\"fs\").rmSync(\".vulyk/state\")"' \
+  'x=.vulyk/state/dv/claim; cat $x' 'bash scripts/cycle.sh status dv && cat .vulyk/state/dv/claim'
+gbatch 1 PowerShell a1 "" "git-guard: a subagent shell call on the run state is denied (PowerShell)" \
+  'Set-Content .vulyk/state/dv/claim x' 'Get-Content .vulyk\state\dv\claim'
+out="$(chk Bash 'cat .vulyk/state/dv/claim' a1)"
+printf '%s' "$out" | expect "git-guard: the run-state refusal names the Read tool" "Read tool"
+gbatch 0 Bash "" "" "git-guard: main-session run-state command passes as before" \
+  'echo wave.1=abc >> .vulyk/state/dv/claim' 'cat .vulyk/state/dv/claim' 'bash -c "echo x > .vulyk/state/dv/claim"'
+# N1 (S2): the cycle.sh rule however the script or the verb is written
+gbatch 1 Bash a1 "" "git-guard: a subagent's cycle.sh call spelled another way is denied" \
+  'c=scripts/cycle.sh; bash $c reopen dv' "bash scripts/cy''cle.sh reopen dv" 'bash scripts/cyc*.sh reopen dv' \
+  'v=reopen; bash scripts/cycle.sh $v dv' 'for s in scripts/cycle.sh; do bash "$s" revise x; done' \
+  'export C=scripts/cycle.sh; bash "$C" branch dv' 'bash "$UNSET" reopen dv' '"$UNSET" reopen dv' \
+  'bash $(echo scripts/cycle.sh) reopen dv' 'ls scripts | xargs -n1 bash' \
+  'bash scripts/cycle.sh stamp-red docs/specs/dv/dv-01.md "$F"' \
+  'b=--baseline; bash scripts/cycle.sh stamp-red docs/specs/dv/dv-01.md $b' "bash 'scripts/cycle.sh' \"reopen\" dv"
+gbatch 1 PowerShell a1 "" "git-guard: a subagent's cycle.sh call spelled another way is denied (PowerShell)" \
+  '$c = "scripts/cycle.sh"; bash $c reopen dv' '$c = "scripts/cycle.sh"; & $c claim dv s1'
+gbatch 0 Bash "" "" "git-guard: main-session cycle.sh call passes as before" \
+  'c=scripts/cycle.sh; bash $c reopen dv' "bash scripts/cy''cle.sh reopen dv" 'bash scripts/cyc*.sh revise dv'
+# L1: the flows a subagent keeps, a DRIVER held
+gbatch 0 Bash a1 "" "git-guard: a subagent's own flow passes under a DRIVER" \
+  "git ls-files '*.sh' | xargs -n1 bash -n" 'bash scripts/py.sh -m py_compile .claude/hooks/*.py' \
+  "git ls-files '*.json' | xargs -n1 jq -e . > /dev/null" 'bash tests/cycle.test.sh --part red' \
+  'bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh' 'bash tests/full-suite.test.sh' \
+  'bash scripts/defects-check.sh docs/defects/x.md' 'bash scripts/wave-check.sh dv' 'bash scripts/trace-check.sh dv' \
+  'bash scripts/scope-check.sh docs/specs/dv/dv-01.md' 'bash scripts/symbol-map.sh .claude/hooks/git-guard.sh --story dv-01' \
+  'bash scripts/prompt-check.sh .claude/agents/worker-code.md' 'bash scripts/portability-check.sh .claude/hooks/git-guard.sh' \
+  'bash scripts/cycle.sh close-story docs/specs/dv/dv-01.md --commit --stamp s1' \
+  'bash scripts/cycle.sh stamp-red docs/specs/dv/dv-01.md --stamp s1' 'bash scripts/cycle.sh advance dv --stamp s1' \
+  'bash scripts/cycle.sh status dv --json' 'bash scripts/cycle.sh release dv s1' 'bash scripts/cycle.sh suite dv --commit --stamp s1' \
+  'for t in tests/*.test.sh; do bash "$t"; done' 'for f in a.sh b.sh; do bash -n "$f"; done' \
+  'git status --porcelain' 'git log --oneline -5' 'git diff HEAD -- scripts' 'git show HEAD:scripts/lib.sh' \
+  'git branch --show-current' 'git rev-parse HEAD' 'git update-index --chmod=+x f' \
+  'cat docs/specs/dv/plan.md' 'grep -n Tier docs/specs/dv/plan.md' "grep -rn '.vulyk/state' scripts/" \
+  "$(printf "cat > notes.md <<'EOF'\nThe run state .vulyk/state/dv/claim is cycle.sh's; plan.md, ACCEPTED, scripts/cycle.sh reopen\nEOF")" \
+  'echo "see .vulyk/state/dv/claim" >> notes.md' 'printf "%s\n" .vulyk/state/dv > notes.md' 'echo git stash' 'ls -la' \
+  'if [ -n "$X" ]; then echo y; fi 2>&1'
+# G2 (S3, T14): history verbs, where the git command acts
+gbatch 0 Bash a1 "" "git-guard: T14 original - a subagent's commit in an unrelated scratch repository passes under a DRIVER" \
+  "cd $SCRW && git commit -m x" "git -C $SCRW add -A" "cd $SCRW && git rebase main"
+gbatch 1 Bash a1 "" "git-guard: a subagent's history verb under a DRIVER is denied" \
+  "git stage f" "git cherry-pick abc123" "git merge other" "git am x.patch" "git apply --cached x.patch" "git revert HEAD" \
+  "git rebase main" "git pull" "git update-index --add f" 'git commit-tree HEAD^{tree} -m x' "git reset --soft HEAD~1" \
+  "git reset HEAD f" "git checkout main" "git switch main" "git mv a b" "git rm --cached f" "git restore --staged f" \
+  "git branch x" "git branch -m x y" "git symbolic-ref HEAD refs/heads/x" "git push origin x" "git notes add -m x" \
+  "git fetch origin main:main" "git worktree add -b x ../w" "cd $SCRW && cd $GGW && git commit -m x" \
+  "git -C $GGW commit -m x" "git --git-dir=$GGW/.git commit -m x" "GIT_DIR=$GGW/.git git commit -m x" \
+  "cd $SCRW && git --work-tree=$GGW --git-dir=$GGW/.git add f" 'cd "$X" && git commit -m x' 'git -C "$X" commit -m x' \
+  'git --git-dir="$X" commit -m x' "git -C $GGW/no-such commit -m x" "export GIT_DIR=$GGW/.git; cd $SCRW && git commit -m x"
+gbatch 0 Bash "" "" "git-guard: main-session history verb under a DRIVER passes as before" \
+  "git stage f" "git cherry-pick abc123" "git rebase main" "git reset --soft HEAD~1" "git -C $GGW commit -m x"
+rm -f "$GG/docs/specs/dv/DRIVER"
+gbatch 0 Bash a1 "" "git-guard: a subagent's history verb with no DRIVER passes" \
+  "git stage f" "git cherry-pick abc123" "git rebase main" 'git commit-tree HEAD^{tree} -m x' "git reset --soft HEAD~1" \
+  "git push origin main" "git tag v1"
+# S6: the forms closed on the owner's answer, for a subagent at any time
+gbatch 1 Bash a1 "" "git-guard: a subagent's forced tag or push is denied" \
+  "git tag -f v1" "git tag --force v1 HEAD" "git tag -fa v1 -m x" "git push --force" "git push -f origin main" \
+  "git push --force-with-lease origin main" "git push origin +main" 'bash -c "git push --force"'
+gbatch 1 PowerShell a1 "" "git-guard: a subagent's PowerShell evaluate-a-string command is denied" \
+  "Invoke-Expression 'git status'" "'git status' | iex" 'iex $cmd' 'invoke-expression -Command "ls"'
+chk Bash 'pwsh -Command "iex ls"' a1 | expect "git-guard: iex handed to pwsh -Command is denied" "exit=1"
+# guards-1115-09 (round 3, ask 6): the owner's "forms no agent needs" are closed for the main session too
+gbatch 1 Bash "" "" "git-guard r3: a main-session forced tag or push is denied" "git tag -f v1" "git push --force" \
+  "git push origin +main" 'bash -c "git tag --force v1"'
+# guards-1115-11 (owner, 2026-11-16: «Push/tag нельзя, iex можно»): the main session may evaluate a string again;
+# a discarding verb inside the string it hands over is still read
+gbatch 0 PowerShell "" "" "git-guard r4: a main-session evaluate-a-string command passes" "Invoke-Expression 'git status'" \
+  "'ls' | iex" 'iex $cmd'
+gbatch 1 PowerShell "" "$DIRTY" "git-guard r4: a discarding verb inside a main-session evaluated string over a dirty tree is denied" \
+  "Invoke-Expression 'git stash'" "iex 'git checkout .'"
+gbatch 0 Bash "" "" "git-guard r3: a main-session unforced tag or push passes" "git tag v1" "git push origin main"
+# S4: the verb behind a comment, a redirection or a keyword's option, for every caller
+S4="$(printf 'echo hi # x\ngit reset --hard')"
+set -- "$S4" "$(printf 'ls #c\ngit stash')" "$(printf 'echo hi # <<EOF\ngit reset --hard')" 'git 2>/dev/null reset --hard' \
+  'git 2> /dev/null reset --hard' 'git >/dev/null 2>&1 stash' '2>/dev/null git checkout .' 'time -p git reset --hard' \
+  'command -p git stash' 'exec -a foo git reset --hard' 'time -p command -p git clean -fd'
+gbatch 1 Bash a1 "" "git-guard: a subagent's verb behind a comment, a redirection or a keyword option is denied" "$@"
+gbatch 1 Bash "" "$DIRTY" "git-guard: a main-session verb behind a comment, a redirection or a keyword option over a dirty tree is denied" "$@"
+gbatch 0 Bash "" '""' "git-guard: a main-session S4 form on a clean tree passes" "$S4" 'git 2>/dev/null reset --hard'
+gbatch 1 Bash a1 "" "git-guard: a # or a 2>&1 inside a string stays text (holds as on HEAD)" \
+  'echo "a #b"; git reset --hard' "$(printf 'echo "a\n#b"; git reset --hard')" 'echo "2>&1"; git stash'
+# F1 (S5): no Python - the alias-function form for any caller, the subagent rules by text
+nopyb 1 "" "git-guard: no Python, an alias that defines a shell function is denied" \
+  "git -c 'alias.x=!r() { git reset --hard; }; r' x" "git -c 'alias.y=!f() { git stash; }; f' y"
+nopyb 1 a1 "git-guard: no Python, a subagent's run-state or cycle.sh command is denied" \
+  "git -c 'alias.x=!r() { git reset --hard; }; r' x" 'cat .vulyk/state/dv/claim' 'echo x >> .vulyk/state/dv/claim' \
+  "bash scripts/cycle.sh reopen dv" "bash scripts/cy''cle.sh revise x" 'bash scripts/cyc*.sh branch dv' \
+  "bash scripts/cycle.sh stamp-red docs/specs/dv/dv-01.md --baseline" 'c=scripts/cycle.sh; bash $c reopen dv'
+nopyb 0 a1 "git-guard: no Python, a subagent's history verb with no DRIVER passes" "git commit -m x" "git cherry-pick abc"
+: > "$GG/docs/specs/dv/DRIVER"
+nopyb 1 a1 "git-guard: no Python, a subagent's history verb under a DRIVER is denied" \
+  "git commit -m x" "git add ." "git cherry-pick abc" "git rebase main" 'bash -c "git commit -m x"' "git update-index --add f"
+nopyb 0 a1 "git-guard: no Python, a subagent's read or own flow passes under a DRIVER" \
+  "git status" "git log --oneline" "git update-index --chmod=+x f" "git ls-files '*.sh' | xargs -n1 bash -n" \
+  "bash scripts/cycle.sh close-story docs/specs/dv/dv-01.md --commit --stamp s1" "bash tests/maintenance.test.sh"
+nopyb 0 "" "git-guard: no Python, main-session commit under a DRIVER passes as before" "git commit -m x"
+rm -rf "$GG/docs/specs" "$GG/.vulyk"
+
+echo "--- git guard: classes left open by round 2, each with its neighbour (guards-1115-05)"
+mkdir -p "$GG/docs/specs/dv" && : > "$GG/docs/specs/dv/DRIVER"
+# a cd that does not take effect (a subshell, after ||, in a pipeline or in the background, a failing cd) leaves the
+# build-lock lookup where the shell stands; a cd that does take effect moves it, inside its own subshell too
+gbatch 1 Bash a1 "" "git-guard r2: a subagent's commit after a cd that does not take effect is denied under a DRIVER" \
+  "(cd $SCRW); git commit -m x" "true || cd $SCRW; git commit -m x" "cd $SCRW 2>/dev/null extra; git commit -m x" \
+  "cd $SCRW | true; git commit -m x" "cd $SCRW & git commit -m x" "(cd $SCRW); (git commit -m x)"
+gbatch 0 Bash a1 "" "git-guard r2: a subagent's commit after a cd that takes effect passes" \
+  "cd $SCRW && git commit -m x" "cd $SCRW; git commit -m x" "(cd $SCRW && git commit -m x)" \
+  "(cd $GGW); cd $SCRW && git commit -m x"
+# guards-1115-09 (round 3, finding 4): a cd inside a command string handed to a child shell moves only that child
+gbatch 1 Bash a1 "" "git-guard r3: a subagent's commit after a cd inside a child shell's command string is denied under a DRIVER" \
+  "bash -c 'cd $SCRW'; git commit -m x" "sh -c \"cd $SCRW\" && git commit -m x" "git -c 'alias.g=!cd $SCRW' g; git commit -m x"
+gbatch 0 Bash a1 "" "git-guard r3: a subagent's commit inside the child shell that moved, or after an eval that moved, passes" \
+  "bash -c 'cd $SCRW && git commit -m x'" "eval 'cd $SCRW'; git commit -m x"
+# a command word holding an unresolved variable that names no guarded thing passes; one that may name cycle.sh, or
+# whose name is the variable itself, is still refused
+gbatch 0 Bash a1 "" "git-guard r2: a subagent's command word with an unresolved variable naming no guarded thing passes" \
+  'bash "$CLAUDE_PROJECT_DIR/scripts/x.sh"' '$HOME/.local/bin/tool --version' '"${PYTHON:-python3}" -m pytest -q' \
+  'echo x > "$OUT"' 'bash "$CLAUDE_PROJECT_DIR/scripts/cycle.sh" status dv'
+gbatch 1 Bash a1 "" "git-guard r2: a subagent's unresolved command word that may name a guarded thing is denied" \
+  'bash "$CLAUDE_PROJECT_DIR/scripts/cycle.sh" reopen dv' '"$D/cycle.sh" judge dv' \
+  '"${X:-scripts/cycle.sh}" reopen dv' '$G reset --hard' 'bash "$UNSET" reopen dv'
+rm -rf "$GG/docs/specs"
+sed -n '1,/^GUARD_VERBS=/p' "$GUARD" | grep -qi 'cooperative agent, not an adversary' \
+  && ok "git-guard r2: the header says the guard stops a cooperative agent, not an adversary" \
+  || bad "git-guard r2: the header does not say the guard stops a cooperative agent, not an adversary"
+
+echo "--- git guard: a command word whose default or resolved value names git (guards-1115-08)"
+gbatch 1 Bash a1 "" "git-guard: a defaulted variable that names git is judged as git - a subagent's discarding verb is denied" \
+  '${X:-git} reset --hard' '${X:-/usr/bin/git} reset --hard' '"${GIT:-git}" checkout -- .' \
+  '${X-git.exe} clean -fd' '${X:-C:/Git/cmd/git.exe} reset --hard' 'G=git; $G reset --hard'
+gbatch 0 Bash a1 "" "git-guard: a defaulted variable that names git is judged as git - a harmless verb or program passes" \
+  '${X:-git} status' '${PAGER:-less} README.md' '"${PYTHON:-python3}" -m pytest -q' \
+  'bash "$CLAUDE_PROJECT_DIR/scripts/x.sh"' '$HOME/.local/bin/tool --version'
+# guards-1115-09 (round 3, finding 1): a default that names a shell, a wrapper or eval, and a value the command
+# sets beside another default, are judged as the program they name
+gbatch 1 Bash a1 "" "git-guard r3: a command word whose default or value names a program the hook reads through is judged as it" \
+  '${S:-bash} -c "git reset --hard"' '"${SH:-sh}" -c "git stash"' '${E:-eval} git reset --hard' \
+  '${W:-env} git clean -fd' '${W:-timeout} 5 git checkout -- .' 'G=git; ${G:-ls} reset --hard' \
+  '${S:-bash} scripts/cycle.sh reopen dv' 'C=scripts/cycle.sh; ${C:-true} judge dv' \
+  "\${S:-bash} -c 'd=.vulyk; echo x > \$d/state/dv/claim'"
+gbatch 0 Bash a1 "" "git-guard r3: the same spellings running a harmless command pass" \
+  '${S:-bash} -c "git status"' '${E:-eval} git log --oneline' '${W:-env} git status' 'G=git; ${G:-ls} status' \
+  '${S:-bash} scripts/cycle.sh status dv' 'C=scripts/cycle.sh; ${C:-true} status dv'
+
+echo "--- git guard: a cycle.sh verb outside the six under every listed spelling (guards-1115-10)"
+# council round 3, finding 3: per class the original form, then its neighbour: a shell option that carries a value
+# before the script; a verb, script or command string handed in by xargs; a shell or a whole command held in a
+# variable; a globbed or variable script word behind a wrapper
+gbatch 1 Bash a1 "" "git-guard: a cycle.sh verb outside the six is refused under every listed spelling" \
+  'bash -eo pipefail scripts/cycle.sh revise dv' 'bash --rcfile r scripts/cycle.sh judge dv' \
+  'sh -euo pipefail -c "bash scripts/cycle.sh revise dv"' 'bash -c -e "bash scripts/cycle.sh reopen dv"' \
+  'echo revise dv | xargs bash scripts/cycle.sh' 'echo judge dv | xargs -n2 scripts/cycle.sh' \
+  'echo scripts/cycle.sh | xargs -I{} bash {} revise dv' 'echo "bash scripts/cycle.sh revise dv" | xargs -0 sh -c' \
+  'echo revise | xargs -I status bash scripts/cycle.sh status dv' \
+  'echo --baseline | xargs bash scripts/cycle.sh stamp-red docs/specs/dv/dv-01.md' \
+  'C="bash scripts/cycle.sh revise dv"; $C' 'C="scripts/cycle.sh judge"; bash $C dv' \
+  'C="bash scripts/cycle.sh revise dv"; eval $C' 'S="timeout 60 bash"; $S scripts/cycle.sh reopen dv' \
+  'b="docs/specs/dv/dv-01.md --baseline"; bash scripts/cycle.sh stamp-red $b' \
+  'timeout 60 scripts/cyc*.sh revise dv' 'nice -n 5 scripts/cycle.s? judge dv' \
+  'timeout 60 "$C" revise dv' 'c=scripts/cycle.sh; timeout -k 5 60 $c reopen dv'
+gbatch 0 Bash a1 "" "git-guard: the six cycle.sh verbs pass under the same spellings" \
+  'bash -eo pipefail scripts/cycle.sh status dv' 'bash --rcfile r scripts/cycle.sh advance dv' \
+  'sh -euo pipefail -c "bash scripts/cycle.sh suite dv"' 'bash -c -e "bash scripts/cycle.sh release dv s1"' \
+  'echo docs/specs/dv/dv-01.md | xargs bash scripts/cycle.sh close-story' 'echo dv | xargs -n1 scripts/cycle.sh status' \
+  'echo dv | xargs -I{} bash scripts/cycle.sh advance {}' \
+  'C="bash scripts/cycle.sh status dv"; $C' 'C="scripts/cycle.sh advance"; bash $C dv' \
+  'C="bash scripts/cycle.sh stamp-red docs/specs/dv/dv-01.md --stamp s1"; eval $C' \
+  'S="timeout 60 bash"; $S scripts/cycle.sh suite dv' 'b="docs/specs/dv/dv-01.md --stamp s1"; bash scripts/cycle.sh stamp-red $b' \
+  'timeout 60 scripts/cyc*.sh status dv' 'nice -n 5 scripts/cycle.s? advance dv' \
+  'c=scripts/cycle.sh; timeout -k 5 60 $c close-story docs/specs/dv/dv-01.md --commit' \
+  "git ls-files '*.sh' | xargs -n1 bash -n" 'timeout 300 bash tests/cycle.test.sh --part red' \
+  "find . -name '*.md' | xargs -I{} grep -l foo {}" 'bash -eo pipefail tests/maintenance.test.sh'
+
+echo "--- git guard: a wrapper's option held in a variable, a defaulted script word, an unset program behind a wrapper (guards-1115-11)"
+# council round 4, finding 3: an option or its value held in a variable behind a wrapper does not end the search
+# for the git, shell or cycle.sh word after it - the original form (the command sets the variable), then its neighbours
+mkdir -p "$GG/docs/specs/dv" && : > "$GG/docs/specs/dv/DRIVER"
+gbatch 1 Bash a1 "" "git-guard r4: a subagent's guarded word behind a wrapper option held in a variable is denied" \
+  'O=-i; env $O git reset --hard' 'env $O git stash' 'O=-n; timeout 5 $O git checkout -- .' 'nice $N git clean -fd' \
+  'O=-i; env $O git commit -m x' 'O=-i; env $O bash -c "git reset --hard"' 'O=-i; env $O bash scripts/cycle.sh reopen dv' \
+  'O=-i; env $O bash ${S:-scripts/cycle.sh} judge dv' 'U=me; sudo -u $U $O git stash'
+gbatch 1 Bash "" "$DIRTY" "git-guard r4: a main-session discarding verb behind a wrapper option held in a variable over a dirty tree is denied" \
+  'O=-i; env $O git checkout .' 'env $O git stash' 'O=-n; timeout 5 $O git reset --hard' 'nice $N git clean -fd' \
+  'O=-i; env $O git stash -u'
+gbatch 0 Bash "" '""' "git-guard r4: the same main-session forms on a clean tree pass" 'O=-i; env $O git checkout .' 'env $O git stash'
+gbatch 0 Bash a1 "" "git-guard r4: a subagent's harmless command behind a wrapper option held in a variable passes" \
+  'O=-i; env $O git status' 'O=-i; env $O bash scripts/cycle.sh status dv' 'env $O bash -c "git log --oneline"'
+# council round 4, ask 2: a shell's script word written as a variable with a default is read as its default (and as
+# each value the command gives it), under every operator and quoting, also behind a wrapper
+gbatch 1 Bash a1 "" "git-guard r4: a subagent's defaulted script word naming cycle.sh with an owner-only verb is denied" \
+  'bash ${S:-scripts/cycle.sh} judge dv' 'bash "${S-scripts/cycle.sh}" approve dv' 'bash ${S:=scripts/cycle.sh} revise dv' \
+  'sh "${S=scripts/cycle.sh}" reopen dv' 'timeout 60 bash ${S:-scripts/cycle.sh} judge dv' \
+  'S=scripts/cycle.sh; bash ${S:-x.sh} revise dv' 'bash ${S:-scripts/cyc*.sh} reopen dv'
+gbatch 0 Bash a1 "" "git-guard r4: the same defaulted script word with a worker verb, or naming another script, passes" \
+  'bash ${S:-scripts/cycle.sh} status dv' 'bash "${S-scripts/cycle.sh}" advance dv' 'timeout 60 bash ${S:=scripts/cycle.sh} suite dv' \
+  'bash ${T:-tests/maintenance.test.sh}' 'bash "${S:-scripts/x.sh}" judge'
+# council round 4, minor 4 (over-deny): behind a wrapper a program held in a variable the command does not set is an
+# ordinary call; it is still refused when its words read as an owner-only cycle.sh verb or a discarding git verb
+gbatch 0 Bash a1 "" "git-guard r4: a subagent's unset program variable behind a wrapper passes" \
+  'timeout 60 $PY scripts/x.py' 'timeout 300 "$PYTHON" -m pytest -q' 'nice -n 5 ${RUNNER} tests/x.sh' 'env $NODE x.js'
+gbatch 1 Bash a1 "" "git-guard r4: an unset program variable behind a wrapper whose words read as a guarded verb is denied" \
+  'timeout 60 "$C" revise dv' 'timeout 60 $X judge dv' 'nice $G reset --hard' 'env $G stash'
+# guards-1115-12 (round 5, finding 4): behind a wrapper a program word held in a variable the command sets is judged
+# as that program also when a later word of the line names git, a shell, a wrapper or cycle.sh.
+# guards-1115-13 (revert after round 6): the deny cases are dropped; 0.53 passes them too, and the hook header and
+# the card name the class open
+gbatch 0 Bash a1 "" "git-guard r5: the same held program with a worker verb or a read passes" \
+  'C=scripts/cycle.sh; timeout 60 "$C" status dv git' 'G=git; timeout 60 $G status bash' 'timeout 60 $PY x.py git'
+rm -rf "$GG/docs/specs"
+# guards-1115-12 (round 5, ask 4): a subagent's program word held in a variable the command does not set (or sets from
+# a substitution), with words naming no guarded thing, is an ordinary call, with or without a DRIVER; it is still
+# denied when its words read as an owner-only cycle.sh verb or a discarding git verb.
+# guards-1115-13 (revert after round 6): the reverted hook denies the R5OK forms again
+R5OK=('"$PYBIN" tests/x.py --quick' '$VULYK_PY -m py_compile src/x.py' '$EDITOR src/a.txt' \
+  'PY=$(command -v python3); "$PY" tests/x.py' 'PY="$(command -v python3)"; ${PY} -c 1')
+R5NO=('"$C" revise dv' '$X judge dv' '$G reset --hard' '${G} stash' 'PY=$(command -v x); "$PY" reopen dv')
+gbatch 1 Bash a1 "" "git-guard: known over-deny, 0.55.0: a subagent's unset program variable is denied (no DRIVER)" ${R5OK[@]+"${R5OK[@]}"}
+gbatch 1 Bash a1 "" "git-guard r5: a subagent's unset program variable with a guarded verb is denied (no DRIVER)" ${R5NO[@]+"${R5NO[@]}"}
+mkdir -p "$GG/docs/specs/dv" && : > "$GG/docs/specs/dv/DRIVER"
+gbatch 1 Bash a1 "" "git-guard: known over-deny, 0.55.0: a subagent's unset program variable is denied (a DRIVER)" ${R5OK[@]+"${R5OK[@]}"}
+gbatch 1 Bash a1 "" "git-guard r5: a subagent's unset program variable with a guarded verb is denied (a DRIVER)" ${R5NO[@]+"${R5NO[@]}"}
+# guards-1115-13 (round 6, finding 2, by the revert): behind a wrapper a variable word that may expand to nothing or
+# to an option, followed by a plain word, leaves a later git, shell or cycle.sh word the command word (original first)
+gbatch 1 Bash a1 "" "git-guard r6: round-6 regression forms are denied again" \
+  'env $X A=1 bash scripts/cycle.sh judge dv' 'env $X A=1 git reset --hard' 'nice $N 5 git reset --hard' \
+  'nice $N -n 5 git stash -u' 'env $X A=1 git rebase -i HEAD~2'
+rm -rf "$GG/docs/specs"
 
 echo "--- git guard: worker prompts never commit (audit-fixes-1113-07)"
 for w in worker-code worker-test; do
@@ -1667,6 +2210,27 @@ printf '{"type":"mode"}\n' > "$Z1/projects/$zslug-x/s.jsonl"
 hbz "$Z1 $Z2" "$ZH" | expect "hives-behind --busy: a fresh prefix-folder transcript with no cwd is busy" "busy"
 rm -rf "$Z1/projects/$zslug-x"
 
+echo "--- hives-behind --busy: a cwd-less Workflow journal takes the cwd of its session's top transcript (tails-1115-05, T5)"
+Z3="$BZ/root3"; AH="$BZ/Acme"; mkdir -p "$AH" "$BZ/Acme_two"
+aslug="$(bash "$HB" --slug "$AH")"; a2="$Z3/projects/$aslug-two"
+mkdir -p "$Z3/projects/$aslug" "$a2/sid/subagents/workflows/wf"
+: > "$Z3/projects/$aslug/old.jsonl"; touch -t 202601010000 "$Z3/projects/$aslug/old.jsonl"
+printf '{"type":"workflow","x":1}\n' > "$a2/sid/subagents/workflows/wf/agent-a.jsonl"   # fresh, no cwd
+top_cwd() { printf '{"type":"user","cwd":"%s"}\n' "$1" > "$a2/sid.jsonl"; touch -t 202601010000 "$a2/sid.jsonl"; }
+top_cwd "$BZ/Acme_two"
+out="$(hbz "$Z3" "$AH")"
+printf '%s' "$out" | expect "hives-behind --busy: a neighbour hive's cwd-less journal, its top transcript in the neighbour, is idle" "idle"
+printf '%s' "$out" | expect "hives-behind --busy: that idle exits 0" "[exit=0]"
+top_cwd "$AH"
+hbz "$Z3" "$AH" | expect "hives-behind --busy: a cwd-less journal whose top transcript names the hive is busy" "busy"
+top_cwd "$AH/sub"
+hbz "$Z3" "$AH" | expect "hives-behind --busy: a cwd-less journal whose top transcript names a folder below the hive is busy" "busy"
+printf '{"type":"mode"}\n' > "$a2/sid.jsonl"; touch -t 202601010000 "$a2/sid.jsonl"
+hbz "$Z3" "$AH" | expect "hives-behind --busy: a cwd-less journal whose top transcript has no cwd is busy" "busy"
+rm -f "$a2/sid.jsonl"
+hbz "$Z3" "$AH" | expect "hives-behind --busy: a cwd-less journal with no top transcript is busy" "busy"
+rm -rf "$Z3" "$AH" "$BZ/Acme_two"
+
 echo "--- hives-behind --busy: no transcript folder is idle once the registry proves the naming rule (busy-no-transcripts-01)"
 NH="$BZ/Never_opened"; NH2="$BZ/Also_never"; mkdir -p "$NH" "$NH2"   # no session ever ran in either
 hbr() { VULYK_HIVES_FILE="$1" VULYK_SESSION_ROOTS="$Z1 $Z2" bash "$HB" --busy "$2" 2>&1; echo "[exit=$?]"; }
@@ -1690,14 +2254,30 @@ printf '{"cwd":"%s/sub"}\n' "$NH" > "$Z1/projects/$nslug-sub/s.jsonl"
 hbr "$BZ/reg-ok" "$NH" | expect "hives-behind --busy: a fresh subfolder session still makes it busy" "busy a session in a subfolder"
 rm -rf "$Z1/projects/$nslug-sub"
 
-echo "--- map: the scripts slices stay within the ~80-line cap (post-052-tails-02)"
-n_sl=0
-for f in "$SRC"/memory/map/scripts*.md; do
-  [ -f "$f" ] || continue; n_sl=$((n_sl + 1)); n="$(wc -l < "$f" | tr -d ' ')"
-  [ "$n" -le 80 ] && ok "map: ${f##*/} is $n lines, within 80" || bad "map: ${f##*/} is $n lines, over the 80-line cap - split it, do not cut facts"
-  w="$(awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }' "$f")"   # joined bullets would dodge the line cap
-  [ "$w" -le 130 ] && ok "map: ${f##*/} lines are within 130 chars" || bad "map: ${f##*/} has a $w-char line - wrap it, the 80-line cap counts wrapped lines"
-done
+echo "--- map: every slice stays within the ~80-line cap and 130 chars (post-052-tails-02; tails-1115-10, T92)"
+map_over() { # map_over <map dir> - one line per memory/map/*.md over 80 lines or with a line over 130 chars
+  local f n w
+  for f in "$1"/*.md; do
+    [ -f "$f" ] || continue; n="$(tr -d '\r' < "$f" | wc -l | tr -d ' ')"
+    [ "$n" -le 80 ] || echo "${f##*/} is $n lines, over the 80-line cap - split it, do not cut facts"
+    w="$(tr -d '\r' < "$f" | awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }')"   # joined bullets would dodge the line cap
+    [ "$w" -le 130 ] || echo "${f##*/} has a $w-char line - wrap it, the 80-line cap counts wrapped lines"
+  done
+  return 0
+}
+MO="$T/map-over"; mkdir -p "$MO"; awk 'BEGIN { for (i = 0; i < 81; i++) print "- fact " i }' > "$MO/cycle.md"
+awk 'BEGIN { s = sprintf("%131s", ""); gsub(/ /, "m", s); print s }' > "$MO/agents.md"
+awk 'BEGIN { s = sprintf("%130s", ""); gsub(/ /, "m", s); for (i = 0; i < 80; i++) print s }' > "$MO/scripts-ok.md"
+got="$(map_over "$MO")"
+case "$got" in *"agents.md has a 131-char line"*) ok "map: a 131-char line fails the check in a slice not named scripts*" ;;
+  *) bad "map: a 131-char line in agents.md passed: '$got'" ;; esac
+case "$got" in *"cycle.md is 81 lines"*) ok "map: an 81-line slice not named scripts* fails the check" ;;
+  *) bad "map: an 81-line cycle.md passed: '$got'" ;; esac
+case "$got" in *scripts-ok.md*) bad "map: 80 lines of 130 chars was flagged: '$got'" ;;
+  *) ok "map: 80 lines of 130 chars is within the cap" ;; esac
+over="$(map_over "$SRC/memory/map")"
+[ -z "$over" ] && ok "map: every memory/map/*.md is within 80 lines and 130 chars" || bad "map: $over"
+n_sl="$(ls "$SRC"/memory/map/scripts*.md 2>/dev/null | wc -l | tr -d ' ')"
 [ "$n_sl" -ge 4 ] && ok "map: the scripts map is split into $n_sl slices" || bad "map: the scripts map is one slice ($n_sl) - split it by sub-area"
 
 echo "--- commands: ship description, status line, busy guard (post-052-tails-01)"

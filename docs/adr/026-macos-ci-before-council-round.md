@@ -1,6 +1,6 @@
 # ADR-026: Cross-platform code meets macOS CI before a council round, and before ship
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-10-29
 - Spec: docs/specs/cross-platform (plan deltas of 2026-10-29)
 

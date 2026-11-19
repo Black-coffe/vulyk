@@ -12,7 +12,10 @@ Other slices: `agents-and-commands.md` (agents), `commands.md` (plan, build, rev
   row '<Purpose>'` (a note beside the backticked command, or several commands); step 4 recommends replace-or-merge
   from the `constitution: <N> lines only in the backup` list; step 6 carries the measured-suite lines (over 210 s,
   cut before taking the release) and a cutting recipe. The command only quotes them; the owner fixes the rows.
-- **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses). On `ci: no CI run for <sha>` it asks where `origin` points
+- **`/vulyk-ship`** - `ship-check.sh` (NOT READY refuses). Its `suite:` line is the merge gate (0.54): on `suite: no
+  full run at <sha>` it runs `cycle.sh suite <spec> --merge --commit` itself, one Bash call per step until `"done":true`,
+  then rechecks; `suite: FAIL` = fix, commit, run again, never a council round. It offers the owner's full check
+  (`/vulyk-review <slug> --full`) only at a major bump, never unasked. On `ci: no CI run for <sha>` it asks where `origin` points
   (above); on a private one pushes the spec branch, runs `gh workflow run <file> --ref <branch>`, waits, rechecks; a red
   run is a refusal; only the newest run of each workflow on that commit counts, so a green re-run clears an older red
   (0.47). Stage 03 runs `git merge-tree --write-tree` (0 clean, 1
@@ -50,4 +53,4 @@ Other slices: `agents-and-commands.md` (agents), `commands.md` (plan, build, rev
 - **`/vulyk-map`**, **`/vulyk-handoff`**: `!` injections go through `${CLAUDE_PROJECT_DIR}`, never a relative
   script path (`injection-check.sh`); `handoff.sh dump "${CLAUDE_SESSION_ID}"`.
 
-last-verified: 2026-11-14 (0.53.0-dev.1 audit-fixes-1113; split from agents-and-commands.md; ADR-020, 023)
+last-verified: 2026-11-16 (0.54.0-dev.1 narrow-repair-1115; ADR-020, 023, 040)

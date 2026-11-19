@@ -127,15 +127,16 @@ fi
 # absence is guarded too. Then keep it JSON-safe the blunt way: double quotes become
 # apostrophes, backslashes and newlines are dropped. Losing a character beats emitting a
 # broken line, and a note is a hint sitting beside the numbers, not data anything parses.
-if [ -f "$ROOT/scripts/redact.sh" ]; then
-  # redact.sh exits 1 when it cannot mask; its stdout is then a marker, not the note. Nothing is recorded.
-  SAFE_NOTE="$(printf '%s' "$NOTE" | bash "$ROOT/scripts/redact.sh")" || {
-    echo "acceptance-log: REFUSED - scripts/redact.sh failed (its stderr says why), so the note cannot be masked; nothing is recorded. Fix it and run this again." >&2
-    exit 1
-  }
-else
-  SAFE_NOTE="$NOTE"
-fi
+# No redact.sh to run (missing, or not a file) refuses the same way, as journal.sh and ship-check.sh do.
+[ -f "$ROOT/scripts/redact.sh" ] || {
+  echo "acceptance-log: REFUSED - scripts/redact.sh is missing, so the note cannot be masked; nothing is recorded. Restore it and run this again." >&2
+  exit 1
+}
+# redact.sh exits 1 when it cannot mask; its stdout is then a marker, not the note. Nothing is recorded.
+SAFE_NOTE="$(printf '%s' "$NOTE" | bash "$ROOT/scripts/redact.sh")" || {
+  echo "acceptance-log: REFUSED - scripts/redact.sh failed (its stderr says why), so the note cannot be masked; nothing is recorded. Fix it and run this again." >&2
+  exit 1
+}
 ESCAPED="$(printf '%s' "$SAFE_NOTE" | tr -d '\n' | tr -d '\\' | tr '"' "'")"
 
 mkdir -p "$ROOT/memory/stats"

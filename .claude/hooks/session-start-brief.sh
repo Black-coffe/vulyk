@@ -10,12 +10,26 @@ ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 MEM="$ROOT/memory"
 [ -d "$MEM" ] || exit 0
 
-newest_map=$(ls -t "$MEM/map"/*.md 2>/dev/null | head -1)
+# The constitution through lib.sh constitution_file (tails-1115 T56): a sidecar hive keeps it in CLAUDE.vulyk.md.
+# A hive without scripts/lib.sh falls back to CLAUDE.md.
+LIB="$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib.sh"
+[ -f "$LIB" ] && . "$LIB" 2>/dev/null
+const="$(constitution_file "$ROOT" 2>/dev/null)" || const="$ROOT/CLAUDE.md"
+[ -n "$const" ] || const="$ROOT/CLAUDE.md"
+
+# A README in memory/map/ is no slice (T59).
+newest_map=$(ls -t "$MEM/map"/*.md 2>/dev/null | grep -v '/README\.md$' | head -1)
 map_age="no map yet - run /vulyk-bootstrap or /vulyk-map"
 if [ -n "${newest_map:-}" ]; then
   map_age="newest map slice: $(basename "$newest_map"), modified $(date -r "$newest_map" +%Y-%m-%d 2>/dev/null || stat -c %y "$newest_map" 2>/dev/null | cut -d' ' -f1)"
 fi
 echo "[VULYK] $map_age | start at memory/memory.md"
+
+# T54: Claude Code loads the sidecar only through an `@CLAUDE.vulyk.md` line in CLAUDE.md (install.sh's own test).
+if [ -f "$ROOT/CLAUDE.vulyk.md" ] &&
+   ! tr -d '\r' < "$ROOT/CLAUDE.md" 2>/dev/null | grep -Eq '^[[:space:]]*@(\./)?CLAUDE\.vulyk\.md([[:space:]]|$)'; then
+  echo "[VULYK] CLAUDE.md does not import CLAUDE.vulyk.md, so the VULYK constitution never loads. Tell the owner once: add the line @CLAUDE.vulyk.md to CLAUDE.md."
+fi
 
 # No Python 3 in the hooks' launcher order (audit-fixes-1113, ask 6): each name must run, since the Windows Store
 # alias resolves and then fails every call. One line; nothing when one answers.
@@ -37,7 +51,6 @@ fi
 # bootstrap (0.22): offered once, before the first task, while the Profile block still holds a
 # `<fill in` row. Never in VULYK itself (telemetry/inbox/: its Profile is the template); a
 # `| Bootstrap | declined ... |` row in the constitution silences it for good.
-const="$ROOT/CLAUDE.md"; [ -f "$ROOT/CLAUDE.vulyk.md" ] && const="$ROOT/CLAUDE.vulyk.md"
 if [ ! -d "$ROOT/telemetry/inbox" ] && [ -f "$const" ] &&
    sed -n '/<!-- VULYK:PROFILE:START -->/,/<!-- VULYK:PROFILE:END -->/p' "$const" | grep -q '<fill in' &&
    ! grep -qE '^\|[[:space:]]*Bootstrap[[:space:]]*\|[[:space:]]*`?declined' "$const"; then
@@ -59,13 +72,7 @@ first_ts() { awk 'match($0, /"ts":"[^"]*"/) { print substr($0, RSTART+6, RLENGTH
 items=""; skills=""
 due() { items="${items:+$items · }$1"; skills="${skills:+$skills, }$2"; }
 
-# gc: stubs left by the pre-0.18 SessionEnd hook, or a raw buffer past /vulyk-status's threshold.
-if [ -d "$MEM/learnings" ]; then
-  stubs=$(grep -l "Stub captured by VULYK" "$MEM/learnings"/*.md 2>/dev/null | wc -l | tr -d ' ')
-  raw=$(find "$MEM/learnings" -maxdepth 1 -name '*.md' ! -name README.md ! -name CONSOLIDATED.md 2>/dev/null | wc -l | tr -d ' ')
-  real=$((raw - stubs))
-  if [ "$stubs" -gt 0 ] || [ "$real" -ge 10 ]; then due "gc ($stubs stub, $real raw learnings)" vulyk-gc; fi
-fi
+# memory/learnings/ is not read (tails-1115 T96): nothing writes it since 0.18, its files stay where they are.
 
 # evolve: never run, or 7+ days since the last run - and only when a council round was recorded since.
 # A changeset still on its branch is waiting for the owner, not due.
@@ -147,7 +154,7 @@ fi
 # settings file; declined = a Profile row `| Chronicle | none ... |` in the constitution. Either one
 # silences the line for good.
 if ! grep -qsE '"litopys@[^"]*"[[:space:]]*:' "$conf/settings.json" "$ROOT/.claude/settings.json" "$ROOT/.claude/settings.local.json" &&
-   ! grep -qsE '^\|[[:space:]]*Chronicle[[:space:]]*\|[[:space:]]*`?none' "$ROOT/CLAUDE.md"; then
+   ! grep -qsE '^\|[[:space:]]*Chronicle[[:space:]]*\|[[:space:]]*`?none' "$const" "$ROOT/CLAUDE.md"; then
   echo "[VULYK] litopys (session chronicle plugin) is not installed here. Ask the owner once: install (\`claude plugin marketplace add Black-coffe/litopys --scope project\` then \`claude plugin install litopys@litopys --scope project\`) or decline (then add Profile row \`| Chronicle | none (declined <date>) |\`)."
 fi
 exit 0

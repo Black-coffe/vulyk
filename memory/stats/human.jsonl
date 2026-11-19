@@ -31,3 +31,8 @@
 {"ts":"2026-11-15T09:30:05Z","spec":"owner-guard-commit-fp","verdict":"ACCEPTED","by":"Andrei","head":"03b3cbbe","pack":"3a8a9b920fb6","note":"owner picked «Принимаю owner-guard-commit-fp (Рекомендую)» after the diff in the reply"}
 {"ts":"2026-11-15T10:05:53Z","spec":"owner-guard-commit-fp","verdict":"ACCEPTED","by":"Andrei","head":"df5377ae","pack":"3a8a9b920fb6","note":"owner picked «Принимаю починку b92c6f53 (Рекомендую)» for the backtick fix after the diff in the reply"}
 {"ts":"2026-11-15T11:41:49Z","spec":"owner-guard-commit-fp","verdict":"ACCEPTED","by":"Andrei","head":"0f2c3ed8","pack":"3a8a9b920fb6","note":"owner picked «Принимаю правки CI 0f2c3ed8 (Рекомендую)» after the diff in the reply"}
+{"ts":"2026-11-16T05:20:59Z","spec":"narrow-repair-1115","verdict":"ACCEPTED","by":"Andrei","head":"b48d2b06","pack":"e76871907df7","note":"«Принять, доделать в tails (Рекомендую)»"}
+{"ts":"2026-11-16T06:38:05Z","spec":"narrow-repair-1115","verdict":"ACCEPTED","by":"Andrei","head":"c73bebb2","pack":"e76871907df7","note":"«Принимаю (Рекомендую)»"}
+{"ts":"2026-11-17T08:20:58Z","spec":"guards-1115","verdict":"ACCEPTED","by":"Andrei","head":"6fb2b7da","pack":"5c274204762b","note":"«Принимаю (Рекомендую)»"}
+{"ts":"2026-11-17T22:19:57Z","spec":"tails-1115","verdict":"ACCEPTED","by":"Andrei","head":"db7bb811","pack":"4fed35c4fbe7","note":"«Принимаю (Рекомендую)»"}
+{"ts":"2026-11-18T17:32:41Z","spec":"docs-1115","verdict":"ACCEPTED","by":"Andrei","head":"206bc402","pack":"a0a57248c420","note":"Принимаю (Рекомендую)"}

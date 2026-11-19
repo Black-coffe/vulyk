@@ -20,6 +20,17 @@ Other slices: `cycle.md` (files, verbs, gates), `cycle-state.md` (run state, adv
   2 s left of 580: `LOAD: unavailable - end: no time left in this call`). `suite_load` always exits 0; failure =
   `LOAD: unavailable - <when>: <why>`. `lib.sh load_sample` is the sampler; `VULYK_LOAD_SAMPLER` (a `bash -c`
   command) replaces it (tests' seam). Evidence, never a verdict.
+- **Narrow round (0.54, ADR-040 D4):** `cmd_suite` reads ROUND `narrow=1`: only the steps in `rerun=` run (`all` =
+  every step; empty or missing = none, log `steps=0` + `SUITE: none - narrow repair round`); the verdict reads
+  `SUITE: ok|FAIL <N>s - narrow repair round, steps <list|all> of <S>` (`suite_narrow_verdict`).
+- **Solo gate (0.54, solo-gate-1118, opt-in):** `solo_gate_on` = the default branch's root `.vulyk-solo-gate` reads
+  exactly `merge-only` (read via `git show`, so a spec branch cannot switch it off). Then `cmd_suite` on a non-narrow
+  Tier 1-2 round (`solo_tier`, frozen tier) with no log runs no step: log `steps=0` + `SUITE: none - Tier 1-2: ...`,
+  unless ROUND `full=asked|design` (those still run); `round_rerun` returns empty for such a round (no step re-runs).
+- **`suite <spec> --merge [--commit]` (0.54, ADR-040 D5, `suite_merge` -> `suite_run`):** every step, no agent, into
+  `council/merge-suite.log` (paperwork; head line = HEAD, kept when only paperwork follows it, else the log is replaced).
+  Exit 2 while a round is open or the tree is dirty outside paperwork; a finished log is a no-op (green or red); the
+  last line carries `"merge":true`. `ship-check.sh` `suite:` accepts it or the newest non-narrow round's `suite.log`.
 - **Full-suite line (0.36; ADR-023, ADR-029):** a finished suite.log keyed to the round head overrides the
   `review` report: `record-seat` drops every reported `SUITE:` line and writes the log's under the VERDICT line.
   **0.46:** `record-seat` of a `review` with a `round-only` row and no finished log for the round head exits 2
@@ -50,4 +61,4 @@ parallel (Tier 4 review = two `lead-review`), then `advance --ingest`. `release`
 - Tests: `cycle|council|telemetry.test.sh --part <topic>` / `--list-parts` (cycle parts incl. `close`/`close2`,
   `red`/`red2`; council `verbs`/`verbs2`/`verbs3`); full set once per round (scripts.md).
 
-last-verified: 2026-11-14 (0.53.0-dev.1; split from cycle.md; ADR-023, 029)
+last-verified: 2026-11-18 (solo-gate-1118 solo gate; 0.54.0-dev.1 narrow-repair-1115; ADR-023, 029, 040)

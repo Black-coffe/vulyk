@@ -10,11 +10,11 @@ Skills are living things: they are born from repetition, earn their place throug
 ## Inputs
 - `memory/stats/skills.json` (per-skill invocation counters, maintained by the skill-usage-counter hook)
 - `.claude/skills/` inventory and `.claude/rules/` inventory
-- `memory/learnings/CONSOLIDATED.md` for repetition signals
+- Recent `docs/specs/*/` story files (`## Findings`, `## Implementation notes`) for repetition signals
 
 ## Method
 1. **Retirement review.** Zero invocations for 3+ weeks -> archive candidate. EXCEPTION: severity-justified skills (incident response, security checklists) stay regardless of frequency - mark them `keep: severity` so they are not re-flagged every cycle.
-2. **Promotion review.** A pattern executed manually 3+ times (from learnings) -> draft a new skill: name, trigger description, method skeleton. The draft goes in the changeset for human review, never silently installed.
+2. **Promotion review.** A pattern executed manually 3+ times (from those story files) -> draft a new skill: name, trigger description, method skeleton. The draft goes in the changeset for human review, never silently installed.
 3. **Hygiene.** Flag skills whose description no longer matches their body, overlapping skills that should merge, and skills above ~150 lines (split or tighten).
 4. **Retire with dignity.** Archive = move to `.claude/skills/_graveyard/<name>/` + add `RETIRED.md` (date, reason, evidence, how to resurrect). History is never deleted.
 

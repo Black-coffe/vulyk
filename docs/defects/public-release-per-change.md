@@ -30,6 +30,7 @@ When to publish is the owner's call, not a property of the code. Whether the loc
 `bash scripts/hives-behind.sh` reads the private registry (`~/.vulyk/hives`) and each hive's `.claude/vulyk-version`,
 and is red on a hive that lags with no live hold. `--check <state>` judges a state file; the fixtures are the original
 case (a hive left on the previous dev build) and a neighbour (a hold that ran out). `/vulyk-ship` step 2a runs it.
+The tag half of the push is checked at the push: `scripts/git-hooks/pre-push`, copied by `/vulyk-ship` step 2a, runs `scripts/tag-push-check.sh` (tests/cycle.test.sh part `ship`); `git push --no-verify` and a clone without the hook switch it off, and nothing catches those, so the Never line on tags still holds.
 
 ## Never
 - Push VULYK's main, push a tag, or create a GitHub release without the owner's explicit word for that publish, in

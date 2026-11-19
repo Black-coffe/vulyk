@@ -60,12 +60,13 @@ the three branches, each under an English, Russian or Ukrainian heading (the fir
 | Branch | Headings | Lines |
 |---|---|---|
 | Never | `## Never`, `## Нельзя`, `## Не можна` | `- ` one forbidden action per bullet |
-| Allowed | `## Allowed`, `## Можно`, `## Можна` | `- YYYY-MM-DD · «owner words»`, dated, verbatim |
+| Allowed | `## Allowed`, `## Можно`, `## Можна` | `- ` one allowed form per bullet; a line may open with a date (`- YYYY-MM-DD · `) |
 | How-to | `## How-to`, `## Как надо`, `## Як треба` | `- ` one way of doing it right per bullet |
 
 A bullet continues on indented lines. A card with a Never or How-to line is **prohibitive**; a card with Allowed
-lines only is **permissive**: a standalone record with its own `paths:` and the owner's dated words, which overrides
-a Never card only through its `exception:` key. A **quote line** starts `- YYYY-MM-DD · ` and gives the date,
+lines only is **permissive**: a standalone record with its own `paths:` and its allowed forms, which overrides
+a Never card only through its `exception:` key. An Allowed line is not a quote: the owner's own words, dated and
+verbatim, live under `## Owner quotes`; only dated Allowed lines count as repeats. A **quote line** starts `- YYYY-MM-DD · ` and gives the date,
 the material and the place, then the words in «». One line per remark; a repeat is a new line, never an edit.
 
 ## Statuses

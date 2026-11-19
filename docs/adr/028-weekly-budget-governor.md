@@ -1,6 +1,6 @@
 # ADR-028: The weekly-budget governor - one script, one journal per account, a ladder routing reads
 
-- Status: proposed
+- Status: deferred (2026-11-15: spec weekly-budget parked at ESCALATE round 2, branch vulyk/weekly-budget kept; owner chose «Принять все 15 (Рекомендую)», which named 028 deferred)
 - Date: 2026-11-02
 - Spec: docs/specs/weekly-budget (brief `## Asks` 1-9 are decided and bind this ADR; this ADR settles only *where*
   and *how*, not *whether*)

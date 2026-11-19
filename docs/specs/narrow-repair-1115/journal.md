@@ -1,0 +1,35 @@
+# Journal: narrow-repair-1115
+
+- 2026-11-15T18:33:59Z · 03-building · revised narrow-repair-1115-02 · next: build
+- 2026-11-15T18:34:20Z · 02-approved · approved by Andrei «Утверждаю все три, тесты exact (Рекомендую)» · next: branch
+- 2026-11-15T18:34:38Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/narrow-repair-1115; to edit, run /vulyk-pause narrow-repair-1115
+- 2026-11-15T18:34:49Z · 03-building · branch vulyk/narrow-repair-1115 created · next: build:1
+- 2026-11-15T18:34:49Z · 03-building · approved records written by branch: 5 stories · next: build:1
+- 2026-11-15T18:42:30Z · 03-building · revised narrow-repair-1115-01 · next: build
+- 2026-11-15T18:42:43Z · 03-building · needs_context on narrow-repair-1115-01 · next: tests/cycle.test.sh + row --part red2 added to its Files/Verification; update redrq and the listed council cases in this story
+- 2026-11-15T18:48:21Z · paused · revise story 04: a red merge gate gets a narrow repair, not a full round (owner's 11-14 words; side-agent note) · next: paused
+- 2026-11-15T19:11:43Z · resumed · resumed · next: status
+- 2026-11-15T19:11:44Z · 03-building · revised narrow-repair-1115-04 · next: build
+- 2026-11-15T19:11:45Z · 03-building · revised narrow-repair-1115-04 while paused · next: a red merge gate gets a narrow repair (re-run red steps only), never a full round; relaunch
+- 2026-11-15T19:22:04Z · paused · revise story 04 again: after a fix the merge gate re-runs the whole suite (owner «Весь набор ещё раз (Рекомендую)») · next: paused
+- 2026-11-15T19:29:15Z · resumed · resumed · next: status
+- 2026-11-15T19:29:17Z · 03-building · revised narrow-repair-1115-04 · next: build
+- 2026-11-15T19:29:18Z · 03-building · revised narrow-repair-1115-04 again · next: owner: after a fix the merge gate re-runs the whole suite; relaunch
+- 2026-11-15T19:31:11Z · 03-building · revised narrow-repair-1115-03 · next: build
+- 2026-11-15T19:31:27Z · 03-building · framework defect mid-build: a red receipt's fenced output opened a ## Verification section (advance exit 2 on story 01) · next: data fixed in story 01's receipt (heading lines indented); root fix = ask 8 folded into story 03 (wave 2)
+- 2026-11-15T19:36:42Z · 03-building · revised narrow-repair-1115-03 · next: build
+- 2026-11-15T19:36:54Z · 03-building · needs_context on narrow-repair-1115-03 · next: tests/e2e.test.sh + row added; its round-2 checks move to the new contract
+- 2026-11-15T20:14:58Z · paused · re-stamp story 03 from base (sealed test changed after the red receipt) · next: paused
+- 2026-11-15T20:15:03Z · resumed · resumed · next: status
+- 2026-11-15T20:22:03Z · 03-building · needs_context on narrow-repair-1115-03 · next: re-stamped from base (stamp-red --baseline); relaunch to close
+- 2026-11-15T21:04:51Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/narrow-repair-1115/round-1 · next: dispatch:opus,review
+- 2026-11-15T21:14:12Z · 03-building · checkpoint after 51 min at dispatch:opus,review · next: relaunching with a fresh stamp
+- 2026-11-15T21:55:52Z · 04-council:RED · round 1 verdict RED at 264201f4 pack 4f58805c826e · next: repair
+- 2026-11-15T21:56:04Z · 03-building · repair round 1: narrow-repair-1115-06-repair-round-1.md · next: build:4
+- 2026-11-15T21:58:45Z · 03-building · revised narrow-repair-1115-06 · next: build
+- 2026-11-15T21:58:47Z · 03-building · needs_context on narrow-repair-1115-06 (repair round 1) · next: scope-check.sh, wave-check.sh + roster row added; full ask 8 reading
+- 2026-11-15T21:59:20Z · 03-building · revised narrow-repair-1115-06 · next: build
+- 2026-11-15T22:41:22Z · 03-building · revised narrow-repair-1115-06 · next: build
+- 2026-11-15T22:41:35Z · 03-building · framework defect mid-build: block_card_gate ran the leak card on the library's own .terms file (repair story 06 refused) · next: ask 9 folded into repair story 06: the gate skips the library's fixtures and terms
+- 2026-11-15T23:21:27Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/narrow-repair-1115/round-2, narrow repair round (asks 1, 2, 3, 4, 5, 6, 7, 8, 9; steps 2) · next: dispatch:opus,review
+- 2026-11-15T23:40:44Z · 04-council:ESCALATE · round 2 verdict ESCALATE at 970c53f8 pack e76871907df7 · next: escalated

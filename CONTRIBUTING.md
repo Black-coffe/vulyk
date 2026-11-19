@@ -19,7 +19,7 @@ Fork -> branch -> change -> verify -> PR with a clear before/after. The verifica
 
 ```bash
 git ls-files '*.sh' | xargs -n1 bash -n          # shell syntax
-python -m py_compile .claude/hooks/*.py          # hook syntax (writes gitignored __pycache__)
+bash scripts/py.sh -m py_compile .claude/hooks/*.py   # hook syntax (writes gitignored __pycache__)
 git ls-files '*.json' | xargs -n1 jq -e . > /dev/null
 ./install.sh /tmp/testproj --check               # installer dry run
 ```

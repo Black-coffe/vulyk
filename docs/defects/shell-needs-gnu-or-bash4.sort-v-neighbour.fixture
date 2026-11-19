@@ -1,0 +1,2 @@
+# neighbour form - the long flag inside a $( ), the newest tag picked with tail
+latest="$(git tag -l 'v*' | sort -t. --version-sort | tail -n 1)"

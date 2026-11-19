@@ -147,7 +147,7 @@ Source: `docs/specs/fast-verification/plan.md` `## Assumptions` and `## Contract
 
 ### Amendment (2026-10-26) - proposed - spec `fast-verification`, the budget contract
 
-Status: proposed (ADR harvest; only the owner writes `accepted`). The 2026-10-26 amendment above
+Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»). The 2026-10-26 amendment above
 names `## Assumptions` and `## Contracts` as its source, but both say 540 s and `+ 30`; the 590 s
 default and the `+ 5` came from the plan deltas and the ship ruling, quoted verbatim:
 

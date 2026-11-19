@@ -313,6 +313,32 @@ def model_window(model):
     return None
 
 
+# cc-facts F7 (tails-1115): the families whose context is 1M by default, no `[1m]` needed: Fable, Sonnet 5 and later,
+# Opus 4.7 and later, Haiku 5.5 and later. Opus / Sonnet 4.6 and older reach 1M only through `[1m]`, which the
+# transcript never records: they get no entry, so they keep the stock guess. A new 1M family is added here; a model
+# this table does not parse keeps the stock 200k guess (card handoff-offered-too-early, Allowed).
+_FAMILY_1M = {"fable": (0, 0), "sonnet": (5, 0), "opus": (4, 7), "haiku": (5, 5)}
+_FAMILY_RE = re.compile(r"^claude-(fable|sonnet|opus|haiku)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$")
+
+
+def family_window(model):
+    """LARGE_CONTEXT_WINDOW for a model of a family that is 1M by default (_FAMILY_1M), else None."""
+    m = _FAMILY_RE.match(_model_key(model))
+    if not m:
+        return None
+    major, minor = int(m.group(2)), int(m.group(3) or 0)
+    return LARGE_CONTEXT_WINDOW if (major, minor) >= _FAMILY_1M[m.group(1)] else None
+
+
+def window_count(raw):
+    """A token count as CLAUDE_CODE_AUTO_COMPACT_WINDOW takes it (F7): `400000`, `400k`, `1M`. None otherwise."""
+    m = re.match(r"^(\d+(?:\.\d+)?)\s*([kKmM]?)$", str(raw or "").strip())
+    if not m:
+        return None
+    scale = {"": 1, "k": 1000, "m": 1000000}[m.group(2).lower()]
+    return positive_int(int(round(float(m.group(1)) * scale)))
+
+
 def _cached_window_size(data):
     if not isinstance(data, dict):
         return None
@@ -334,14 +360,9 @@ def detect_window(cfg, payload):
     if pinned:
         return pinned, "config"
 
-    raw = str(os.environ.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW") or "").strip()
-    if raw:
-        try:
-            forced = positive_int(int(raw))
-        except ValueError:
-            forced = None
-        if forced:
-            return forced, "env"
+    forced = window_count(os.environ.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW"))
+    if forced:
+        return forced, "env"
 
     if env_truthy(os.environ.get("CLAUDE_CODE_DISABLE_1M_CONTEXT")):
         return STOCK_CONTEXT_WINDOW, "env"
@@ -368,10 +389,16 @@ def resolve_window(cfg, tokens=0, remembered=None, model=None):
     limit = positive_int(remembered)
     if limit:
         return limit, "remembered"
+    past_stock = tokens > STOCK_CONTEXT_WINDOW * 0.98
     limit = model_window(model)
-    if limit:
+    # T20: a window borrowed from another session of the model, no larger than stock, is disproved by a
+    # session that has already outgrown stock: the measured proof wins then.
+    if limit and not (past_stock and limit <= STOCK_CONTEXT_WINDOW):
         return limit, "model"
-    if tokens > STOCK_CONTEXT_WINDOW * 0.98:
+    limit = family_window(model)
+    if limit:
+        return limit, "family"
+    if past_stock:
         return LARGE_CONTEXT_WINDOW, "measured"
     return STOCK_CONTEXT_WINDOW, "default"
 
@@ -585,6 +612,21 @@ def remember_window(root, session_id, state, limit, source):
     save_state(root, session_id, state)
 
 
+def track_window(root, session_id, state, limit):
+    """Forget the levels offered on another window (T69): 75% of 200k is not a level of 1M.
+
+    Written at once, so the Stop and the prompt modes, which each read the state, both see the reset.
+    """
+    seen = state.get("level_window")
+    if seen == limit:
+        return
+    state["level_window"] = limit
+    if seen is not None:
+        state.pop("stop_level", None)
+        state.pop("prompt_level", None)
+    save_state(root, session_id, state)
+
+
 def level_for(tokens, thresholds):
     lvl = 0
     for i, t in enumerate(thresholds, start=1):
@@ -629,6 +671,9 @@ def block_text(content):
 def harvest(entries, cfg):
     """Pull prompts, touched files, todos and the last reply out of transcript entries."""
     prompts, touched, todos, last_reply = [], {}, None, ""
+    # T74 (cc-facts F10): newer models keep the task list through TaskCreate / TaskUpdate, not TodoWrite. A task's
+    # id comes from its TaskCreate result (toolUseResult.task.id), else from the creation order.
+    tasks, created = [], {}
     for entry in entries:
         if entry.get("isSidechain"):
             continue
@@ -640,6 +685,12 @@ def harvest(entries, cfg):
             if isinstance(content, list) and any(
                 isinstance(b, dict) and b.get("type") == "tool_result" for b in content
             ):
+                res = entry.get("toolUseResult")
+                task = res.get("task") if isinstance(res, dict) else None
+                for b in content:
+                    item = created.get(b.get("tool_use_id")) if isinstance(b, dict) else None
+                    if item is not None and isinstance(task, dict) and task.get("id") is not None:
+                        item["id"] = str(task["id"])
                 continue
             text = block_text(content).strip()
             if text and not text.startswith("<"):
@@ -661,7 +712,24 @@ def harvest(entries, cfg):
                 elif name == "TodoWrite":
                     items = args.get("todos")
                     if isinstance(items, list) and items:
-                        todos = items
+                        todos, tasks = items, []
+                elif name == "TaskCreate" and isinstance(args, dict):
+                    item = {"id": str(len(created) + 1), "content": args.get("subject") or "",
+                            "activeForm": args.get("activeForm") or "", "status": "pending"}
+                    created[b.get("id")] = item
+                    tasks.append(item)
+                    todos = tasks
+                elif name == "TaskUpdate" and isinstance(args, dict):
+                    tid = str(args.get("taskId") or "")
+                    for item in [t for t in tasks if t["id"] == tid]:
+                        if args.get("status") == "deleted":
+                            tasks.remove(item)
+                            continue
+                        if args.get("status"):
+                            item["status"] = args["status"]
+                        if args.get("subject"):
+                            item["content"] = args["subject"]
+                    todos = tasks
 
     return {
         "prompts": prompts[-cfg["max_user_prompts"]:],
@@ -678,6 +746,22 @@ def harvest(entries, cfg):
 # has one, is kept in front of the mask.
 _VALUE = r"(?:\"[^\"\n]+\"|'[^'\n]+'|[\"']?[^\"'\s:][^\"'\s]{5,}[\"']?)"  # redact.sh's VALUE
 _NOT_P = r"(?:[^\S\n]+(?:[^-\s;&|][^\s;&|]*|-[^p\s;&|][^\s;&|]*))*"  # redact.sh's NOT_P
+
+
+def _infl(stems, endings):
+    """redact.sh's infl: every stem with every ending, as one alternation."""
+    return "|".join(s + e for s in stems.split() for e in endings.split())
+
+
+# redact.sh's PAROL_INFL, PAROL_FORMS, the inflected CYR_KEYWORDS and CYR_DIGIT_VALUE.
+_PAROL_INFL = (_infl("Парол парол", "я ю ем е и ей ям ями ях і ів") + "|"
+               + _infl("Гасл гасл", "а у ом і ам ами ах") + "|Гасел|гасел")
+_PAROL_FORMS = "Пароль|пароль|Гасло|гасло|" + _PAROL_INFL
+_CYR_INFL = _PAROL_INFL + "|" + _infl("Токен токен", "а у ом е ы ов ам ами ах и ів і ові")
+_CYR_DIGIT_VALUE = r"[А-ЯЁІЇЄҐа-яёіїєґ][^\"'\s]*[0-9][^\"'\s]*"
+_PROSE_VALUE = (r"(?:\"[^\"\n]+\"|'[^'\n]+'"
+                r"|[^\"'\s]{5,}[0-9!@$%^&*][^\"'\s]*|[^\"'\s]{4}[0-9!@$%^&*][^\"'\s]+|[^\"'\s]{3}[0-9!@$%^&*][^\"'\s]{2,}"
+                r"|[^\"'\s]{2}[0-9!@$%^&*][^\"'\s]{3,}|[^\"'\s][0-9!@$%^&*][^\"'\s]{4,}|[0-9!@$%^&*][^\"'\s]{5,})")
 _REDACT_FALLBACK = [
     re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"),
     re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
@@ -743,22 +827,26 @@ _REDACT_FALLBACK = [
                r"[\"']?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
     # A Russian / Ukrainian keyword: its unquoted value is ASCII, 6+ chars, so a Cyrillic word stays prose.
     re.compile(r"((?:Секретный ключ|секретный ключ|СЕКРЕТНЫЙ КЛЮЧ|Секретний ключ|секретний ключ|СЕКРЕТНИЙ КЛЮЧ"
-               r"|Пароль|пароль|ПАРОЛЬ|Гасло|гасло|ГАСЛО|Токен|токен|ТОКЕН|Секрет|секрет|СЕКРЕТ)"
-               r"[^\S\n]*[=:][^\S\n]*)(?:\"[^\"\n]+\"|'[^'\n]+'|[A-Za-z0-9._~+/=!@$%^&*-]{6,})"),
+               r"|Пароль|пароль|ПАРОЛЬ|Гасло|гасло|ГАСЛО|Токен|токен|ТОКЕН|Секрет|секрет|СЕКРЕТ|" + _CYR_INFL + r")"
+               r"[^\S\n]*[=:][^\S\n]*)(?:\"[^\"\n]+\"|'[^'\n]+'|[A-Za-z0-9._~+/=!@$%^&*-]{6,}|" + _CYR_DIGIT_VALUE + r")"),
     # A password said in prose holds a digit or a symbol and is 6+ chars (`the password is required` and
     # `the password is 8 chars` stay).
     re.compile(r"((?:password|Password|PASSWORD|passphrase|Passphrase|secret|Secret|token|Token)"
                r"[^\S\n]+(?:is|was)[^\S\n]+)(?:\"[^\"\n]+\"|'[^'\n]+'"
                r"|[^\"'\s]{5,}[0-9!@$%^&*][^\"'\s]*|[^\"'\s]{4}[0-9!@$%^&*][^\"'\s]+|[^\"'\s]{3}[0-9!@$%^&*][^\"'\s]{2,}"
                r"|[^\"'\s]{2}[0-9!@$%^&*][^\"'\s]{3,}|[^\"'\s][0-9!@$%^&*][^\"'\s]{4,}|[0-9!@$%^&*][^\"'\s]{5,})"),
+    # A Russian / Ukrainian password said in prose, no ':' (нет пароля x, вход паролем x): the value as in English.
+    re.compile(r"(?<![A-Za-z0-9_-])((?:" + _PAROL_FORMS + r")[^\S\n]+)(?:" + _PROSE_VALUE + "|"
+               + _CYR_DIGIT_VALUE + r")"),
     # A bare key or auth name with a key-shaped value; a lower-case pwd (PWD is the shell's folder).
     re.compile(r"(?<![A-Za-z0-9_.-])([\"']?(?:AUTH|auth|Auth|KEY|key|Key)[\"']?[^\S\n]*[=:][^\S\n]*)"
                r"[\"']?(?:base64:)?[A-Za-z0-9._~+/=-]{16,}[\"']?"),
     re.compile(r"(?<![A-Za-z0-9_-])([\"']?(?:pwd|Pwd)[\"']?[^\S\n]*[=:][^\S\n]*)" + _VALUE),
-    # Credentials in command arguments: curl / lftp -u user:pw (an all-digit uid:gid is not one, and docker -u
-    # name:group is a user and a group), a glued mysql -p<pw>, sshpass / docker login -p <pw>, --password <pw>.
-    # Between a command and its -p only words and flags that are not a -p, so a later command's -p stays.
-    re.compile(r"(?<![A-Za-z0-9_.-])((?:curl|lftp)[^;&|\n]*[^\S\n](?:-u|--user)[^\S\n]+[\"']?[^\"'\s:]+:)"
+    # Credentials in command arguments: curl / lftp / ftp -u and httpie / xh -a user:pw (an all-digit uid:gid is
+    # not one, and docker -u name:group is a user and a group), a glued mysql -p<pw>, sshpass / docker login -p <pw>,
+    # --password <pw>. Between a command and its -p only words and flags that are not a -p, so a later command's -p stays.
+    re.compile(r"(?<![A-Za-z0-9_.-])((?:curl|lftp|ftp|httpie|https?|xh)[^;&|\n]*[^\S\n](?:-u|--user|-a|--auth)"
+               r"[^\S\n]+[\"']?[^\"'\s:]+:)"
                r"[^\"'\s]*[^0-9\"'\s][^\"'\s]*"),
     re.compile(r"((?:mysql|mariadb)[a-z]*" + _NOT_P + r"[^\S\n]+-p)(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s]+)"),
     re.compile(r"((?:docker|podman)[^\S\n]+login" + _NOT_P + r"[^\S\n]+-p[^\S\n]*)"
@@ -766,6 +854,9 @@ _REDACT_FALLBACK = [
     re.compile(r"(sshpass(?:[^\S\n]+(?:-[fdP][^\S\n]+[^\s;&|]+|-[^p\s;&|][^\s;&|]*))*[^\S\n]+-p[^\S\n]*)"
                r"(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s-][^\"'\s]*)"),
     re.compile(r"(?<!\S)((?:--password|--passwd)(?:[^\S\n]+|=))(?:\"[^\"\n]+\"|'[^'\n]+'|[^\"'\s-][^\"'\s]*)"),
+    # A long secret flag with a key-shaped value, spaced or after '=': --token <v>, --api-key <v>, --key <v>, not a path.
+    re.compile(r"(?<!\S)(--(?:token|api-key|client-secret|secret|auth-token|access-token|key)(?:[^\S\n]+|=))"
+               r"[\"']?[A-Za-z0-9_+=][A-Za-z0-9._~+/=-]{15,}[\"']?"),
     # A bare cloud secret key: exactly 40 of [A-Za-z0-9/+] with an upper-case letter (a git SHA has none), a
     # lower-case letter and a digit (an identifier has none), no / at either end (an absolute path), no
     # .<letter> after it (a file name).
@@ -939,7 +1030,7 @@ def write_handoff(payload, cfg, reason):
             lines += ["_working tree clean_", ""]
 
     if data["todos"]:
-        lines += ["## Tasks (last TodoWrite)", ""]
+        lines += ["## Tasks (last task list)", ""]
         for item in data["todos"]:
             if not isinstance(item, dict):
                 continue
@@ -1027,6 +1118,7 @@ def mode_stop(payload, cfg, root):
         # rendered last. A wrong denominator is worse than one quiet turn:
         # that is the bug this guard exists to prevent.
         emit(None)
+    track_window(root, session_id, state, limit)
     level = level_for(tokens, thresholds_for(cfg, limit))
     if level == 0:
         emit(None)
@@ -1046,6 +1138,7 @@ def mode_prompt(payload, cfg, root):
     remember_window(root, session_id, state, limit, source)
     if source == "default" and statusbar_available():
         emit(None)  # see mode_stop: never nag against a guessed window
+    track_window(root, session_id, state, limit)
     level = level_for(tokens, thresholds_for(cfg, limit))
     if level < 1:
         emit(None)

@@ -1,0 +1,22 @@
+# council/round-2/ROUND and suite.log of a Tier 2 spec: round 1 was RED on one gate step, the repair was
+# narrow and froze rerun=2, and the round's gate still ran every step
+head=4e7a2c9
+pack=9d03b61f5a4e
+opened=2026-11-15T10:12:40Z
+court=
+ceiling=2
+tier=2
+seats=review
+since=b81f0d3
+repair=demo-03-repair-round-1
+narrow=1
+asks=
+rerun=2
+head=4e7a2c9 steps=3
+STEP 1/3: ok 88s
+PART cycle:ship ok 88s cap 300s
+STEP 2/3: ok 121s
+PART cycle:gates ok 121s cap 300s
+STEP 3/3: ok 64s
+PART telemetry:rg ok 64s cap 300s
+SUITE: ok 273s

@@ -1,6 +1,6 @@
 ---
 description: One council round on demand - advance opens it, the required seats are dispatched, advance --ingest records and judges
-argument-hint: [spec slug; defaults to the spec on the current branch]
+argument-hint: [spec slug; defaults to the spec on the current branch] [--full: the owner's full check]
 ---
 
 Run one council round on: "$ARGUMENTS" (default: the spec whose `**Branch:**` matches the current
@@ -14,13 +14,18 @@ branch). Every call below that runs `advance` carries `timeout: 600000`.
    - `green`: the newest round is green and current. If the owner still wants a round, run `bash
      scripts/cycle.sh open-round docs/specs/<slug> --commit --stamp $stamp` (the tier's ceiling still
      counts it; exit 6 means it is reached), then `advance --stamp $stamp` again.
+   - With `--full` in the arguments (the owner's word only: a major version, about once a month, bugs or
+     feedback), and no round open: `bash scripts/cycle.sh open-round docs/specs/<slug> --full --commit --stamp $stamp`
+     opens the full check of the whole project (every seat over every ask, no carried seat, the reviewer from the
+     branch base, every gate step), then `advance --stamp $stamp` again and go to step 2. Never without that word.
    - `build:<W>`: stories are open, or the last round was RED and `advance` has cut the repair story.
      Release and point at `/vulyk-build`.
    - `escalated`, `paused`, `shipped`, `briefed`, or any `ok:false`: release and report it as
      `/vulyk-build`'s Terminal section does.
 2. First the round's test gate: `bash scripts/cycle.sh suite docs/specs/<slug> --commit --stamp $stamp`, one Bash
    call per step with `timeout: 600000`, repeated until the last line says `"done":true` (`ok:false`: print its
-   `error`, release and stop). Then dispatch exactly the seats `next` names, in one message, as `/vulyk-build` describes: each writes to
+   `error`, release and stop; with `.vulyk-solo-gate` = `merge-only` on the default branch a Tier 1-2 round runs no step).
+   Then dispatch exactly the seats `next` names, in one message, as `/vulyk-build` describes: each writes to
    `.vulyk/reports/<slug>/round-<round>/<seat>.attempt-<k>.md` with k from `status.seat_attempt`;
    blind seats get slug, round, `court` and the report path only, never `round_dir`; `lead-review` gets
    the spec, branch, head, report path, and from round 2 `since` and the previous round's directory,
@@ -42,12 +47,18 @@ branch). Every call below that runs `advance` carries `timeout: 600000`.
    `--ingest` again.
 4. Release, whatever happened: `bash scripts/cycle.sh release docs/specs/<slug> $stamp`. Print the
    newest `**Council:**` line of plan.md and act on `next`:
-   - `green`: ask the owner once with `AskUserQuestion`, in the owner's language: «<slug>: council
+   - `green`: first `bash scripts/ship-check.sh docs/specs/<slug>`; when its `suite:` line asks for the merge
+     run (`suite: no full run at <sha>`), run `bash scripts/cycle.sh suite docs/specs/<slug> --merge --commit` step by step until `"done":true`, before «Выпускаем?»
+     (one Bash call per step, `timeout: 600000`, no agent). A `suite: FAIL` line is a repair: fix the parts it
+     names, commit, run the merge run again. Then ask the owner once with `AskUserQuestion`, in the owner's language: «<slug>: council
      GREEN, round <n>. Выпускаем?», yes first and recommended. Yes: run `vulyk-ship` with the Skill
      tool (args `<slug>`). No, or no `AskUserQuestion` (`claude -p`): recommend `/vulyk-ship` in one line.
    - `build:<W>`: the round was RED and the repair story is written; it is built through `/vulyk-build`,
-     never by hand in this command.
+     never by hand in this command. A RED round is followed by a repair and a narrow round: one reviewer reads
+     the repair's diff, the blind seat re-judges only the asks to re-judge, the gate re-runs only the steps that
+     were red; a full round follows a repair only after a design fault.
    - `escalated`: print `## Needs a human` from plan.md verbatim. The owner chooses: `human-check.sh
-     <spec> ACCEPTED "<his words>" --commit`, `cycle.sh reopen "<decision>"`, or leaving the spec open.
+     <spec> ACCEPTED "<his words>" --commit`, `cycle.sh reopen "<decision>"` (add `--full` only on his word that
+     it is a design fault, never without it), or leaving the spec open.
 
 The council's verdict is what this command produces; there is no stop for the owner inside it.

@@ -1,0 +1,28 @@
+head=5c1c3a01 steps=11
+STEP 3/11: ok 189s
+PART cycle:hooklog ok 39s cap 300s
+PART council:hardening ok 46s cap 300s
+PART cycle:paperwork ok 53s cap 300s
+PART council:round-scope4 ok 71s cap 300s
+PART council:suite2 ok 133s cap 300s
+PART council:round-scope3 ok 139s cap 300s
+PART council:suite ok 140s cap 300s
+PART council:repair-scope ok 153s cap 300s
+PART council:suite3 ok 162s cap 300s
+PART cycle:ship ok 184s cap 300s
+PART council:round-scope ok 187s cap 300s
+PART council:round-scope2 ok 187s cap 300s
+STEP 8/11: ok 182s
+PART telemetry:ysk-hook ok 5s cap 300s
+PART telemetry:ysk ok 27s cap 300s
+PART telemetry:rg2 ok 50s cap 300s
+PART telemetry:rg ok 57s cap 300s
+PART telemetry:ysk3 ok 65s cap 300s
+PART telemetry:ysk2 ok 83s cap 300s
+PART telemetry:mods2 ok 89s cap 300s
+PART telemetry:library ok 93s cap 300s
+PART telemetry:watcher ok 106s cap 300s
+PART telemetry:mods ok 109s cap 300s
+PART telemetry:crlf ok 130s cap 300s
+PART telemetry:upgrade ok 180s cap 300s
+SUITE: ok 371s - narrow repair round, steps 3,8 of 11

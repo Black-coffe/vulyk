@@ -1,0 +1,121 @@
+head=690d0ab9 steps=11
+STEP 1/11: ok 178s
+PART council:seats3 ok 52s cap 300s
+PART council:seats2 ok 64s cap 300s
+PART council:judge2 ok 72s cap 300s
+PART council:ceilings ok 76s cap 300s
+PART council:judge ok 82s cap 300s
+PART council:verbs2 ok 83s cap 300s
+PART council:close ok 83s cap 300s
+PART council:escalate ok 88s cap 300s
+PART council:escalate2 ok 88s cap 300s
+PART council:verbs ok 108s cap 300s
+PART council:seats ok 138s cap 300s
+PART council:verbs3 ok 176s cap 300s
+STEP 2/11: ok 206s
+PART council:replays3 ok 62s cap 300s
+PART council:walks3 ok 61s cap 300s
+PART council:roster2 ok 68s cap 300s
+PART council:walks2 ok 77s cap 300s
+PART council:replays2 ok 102s cap 300s
+PART council:walks ok 101s cap 300s
+PART council:replays ok 108s cap 300s
+PART council:advance2 ok 107s cap 300s
+PART council:ceilings2 ok 122s cap 300s
+PART council:advance ok 149s cap 300s
+PART council:driver ok 161s cap 300s
+PART council:roster ok 204s cap 300s
+STEP 3/11: FAIL 284s
+PART cycle:manual ok 30s cap 300s
+PART cycle:hooklog ok 40s cap 300s
+PART council:hardening ok 46s cap 300s
+PART cycle:gates ok 53s cap 300s
+PART cycle:paperwork ok 54s cap 300s
+PART council:suite2 ok 139s cap 300s
+PART council:suite ok 144s cap 300s
+PART council:repair-scope ok 159s cap 300s
+PART council:suite3 ok 165s cap 300s
+PART cycle:ship ok 188s cap 300s
+PART council:round-scope2 ok 234s cap 300s
+PART council:round-scope ok 282s cap 300s
+LOAD: start cpu 1% top: dllhost#1 9%, msedge#2 4%, claude#2 4%, msedgewebview2#15 0%, msedgewebview2#20 0%; named like the sampler: WmiPrvSE#3 9%
+LOAD: end cpu 2% top: dllhost#1 19%, chrome#85 14%, MsMpEng 9%, chrome 4%, msedgewebview2#18 0%; named like the sampler: WmiPrvSE 71%, WmiPrvSE#3 4%
+STEP 4/11: ok 189s
+PART cycle:scope ok 50s cap 300s
+PART cycle:approved ok 68s cap 300s
+PART cycle:safety ok 73s cap 300s
+PART cycle:bsd ok 106s cap 300s
+PART cycle:red2 ok 108s cap 300s
+PART cycle:red3 ok 120s cap 300s
+PART cycle:merge-gate ok 129s cap 300s
+PART cycle:close2 ok 130s cap 300s
+PART cycle:runstate ok 141s cap 300s
+PART cycle:red ok 161s cap 300s
+PART cycle:close ok 164s cap 300s
+PART defects ok 187s cap 300s
+STEP 5/11: ok 174s
+PART handoff ok 15s cap 300s
+PART model-profile:defaults ok 21s cap 300s
+PART model-profile:set ok 32s cap 300s
+PART e2e:green ok 37s cap 300s
+PART driver ok 53s cap 300s
+PART e2e:red ok 67s cap 300s
+PART full-suite ok 80s cap 300s
+PART maintenance:upkeep ok 88s cap 300s
+PART inject:functional ok 101s cap 300s
+PART intake:functional ok 124s cap 300s
+PART maintenance:redact ok 128s cap 300s
+PART maintenance:guards ok 173s cap 300s
+STEP 6/11: ok 144s
+PART mods ok 6s cap 300s
+PART model-profile:floor ok 15s cap 300s
+PART solo:green ok 24s cap 300s
+PART model-profile:edges ok 25s cap 300s
+PART solo:rejected ok 30s cap 300s
+PART symbol-map ok 30s cap 300s
+PART solo:block ok 48s cap 300s
+PART telemetry:telemetry ok 57s cap 300s
+PART telemetry:install ok 112s cap 300s
+PART telemetry:scan ok 113s cap 300s
+PART telemetry:install2 ok 123s cap 300s
+PART telemetry:install-xp ok 142s cap 300s
+STEP 7/11: ok 159s
+PART telemetry:ysk ok 23s cap 300s
+PART telemetry:constitution2 ok 39s cap 300s
+PART telemetry:library ok 93s cap 300s
+PART telemetry:terminal ok 100s cap 300s
+PART telemetry:install-xp2 ok 107s cap 300s
+PART telemetry:install-xp3 ok 107s cap 300s
+PART telemetry:constitution3 ok 107s cap 300s
+PART telemetry:ledger ok 113s cap 300s
+PART telemetry:install-xp4 ok 123s cap 300s
+PART telemetry:constitution ok 146s cap 300s
+PART telemetry:wiring ok 158s cap 300s
+PART telemetry:wiring2 ok 157s cap 300s
+STEP 8/11: FAIL 158s
+PART telemetry:ysk-hook ok 5s cap 300s
+PART telemetry:rg2 FAIL 50s cap 300s
+PART telemetry:rg ok 56s cap 300s
+PART telemetry:ysk3 ok 65s cap 300s
+PART telemetry:wrapper ok 66s cap 300s
+PART telemetry:crlf2 ok 74s cap 300s
+PART telemetry:ysk2 ok 81s cap 300s
+PART telemetry:mods2 ok 87s cap 300s
+PART telemetry:watcher ok 105s cap 300s
+PART telemetry:mods ok 107s cap 300s
+PART telemetry:crlf ok 126s cap 300s
+PART telemetry:upgrade ok 156s cap 300s
+LOAD: start cpu 2% top: claude#2 4%, vmmemWSL 4%, System 4%, msedgewebview2#18 0%, msedgewebview2#19 0%; named like the sampler: WmiPrvSE 14%, WmiPrvSE#3 14%
+LOAD: end cpu 1% top: vmmemWSL 56%, dllhost#1 9%, pythonw#1 4%, svchost#24 4%, System 4%; named like the sampler: WmiPrvSE 37%, WmiPrvSE#3 4%
+STEP 9/11: ok 176s
+PART token-report ok 6s cap 300s
+PART telemetry:wrapper2 ok 51s cap 300s
+PART telemetry:edits2 ok 63s cap 300s
+PART telemetry:wrapper3 ok 83s cap 300s
+PART telemetry:launchers ok 87s cap 300s
+PART telemetry:edits ok 174s cap 300s
+STEP 10/11: ok 14s
+PART inject:latency ok 12s cap 300s
+STEP 11/11: ok 6s
+PART intake:latency ok 5s cap 300s
+SUITE: FAIL 1688s - cut part council:round-scope2, cut part council:round-scope, part telemetry:rg2 failed

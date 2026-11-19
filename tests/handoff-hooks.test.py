@@ -63,7 +63,8 @@ def write_transcript(path, tokens, prompts=(), reply=""):
     rows = [{"type": "user", "message": {"role": "user", "content": p}} for p in prompts]
     rows.append({
         "type": "assistant", "isSidechain": False, "timestamp": ts,
-        "message": {"model": "claude-opus-5", "content": [{"type": "text", "text": reply or "done"}],
+        # a model the family table (cc-facts F7) does not know: the stock 200k guess, so 150k speaks
+        "message": {"model": "claude-sonnet-4-6", "content": [{"type": "text", "text": reply or "done"}],
                     "usage": {"input_tokens": 2, "cache_read_input_tokens": tokens - 2,
                               "cache_creation_input_tokens": 0, "output_tokens": 0}},
     })
@@ -349,7 +350,7 @@ tp = os.path.join(ROOT, "h1m", "tr", "s-h1m.jsonl")
 write_transcript(tp, 151000)
 with open(tp, "r", encoding="utf-8") as fh:
     row = json.loads(fh.readline())
-row["message"]["model"] = "claude-opus-5-5"
+row["message"]["model"] = "claude-sonnet-4-6"  # not in the family table: only a copy could lend it a window
 with open(tp, "w", encoding="utf-8") as fh:
     fh.write(json.dumps(row) + "\n")
 sb = os.path.join(home, ".cache", "claude-statusbar", "last_stdin.json")
@@ -397,6 +398,172 @@ rc, out, err = run("precompact", env_for(home, proj),
                    dict({"session_id": "s-h1", "transcript_path": tp, "cwd": proj, "trigger": "auto"}, **SUB))
 check("H1 a subagent's PreCompact writes no dump", rc == 0 and out == "" and handoffs(proj) == [] and tree(proj) == before,
       "rc=%d out=%r docs=%r" % (rc, out[:120], handoffs(proj)))
+
+
+# --- tails-1115-07: the window the session really has (T20, T69), the task list (T74), PreCompact (T75) ---
+def write_rows(path, rows):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        for r in rows:
+            fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+    return path
+
+
+def turn(tokens, model, content=None):
+    ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return {"type": "assistant", "isSidechain": False, "timestamp": ts,
+            "message": {"model": model, "content": content or [{"type": "text", "text": "done"}],
+                        "usage": {"input_tokens": 2, "cache_read_input_tokens": tokens - 2,
+                                  "cache_creation_input_tokens": 0, "output_tokens": 0}}}
+
+
+def copy_for(home, model, window, session="other", age_s=8 * 3600, own=None):
+    """A statusLine copy claude-statusbar left: the global one (another session's, aged), or this session's own."""
+    d = os.path.join(home, ".cache", "claude-statusbar")
+    path = os.path.join(d, "sessions", own, "last_stdin.json") if own else os.path.join(d, "last_stdin.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"session_id": own or session, "model": {"id": model},
+                   "context_window": {"context_window_size": window}}, fh)
+    if age_s and not own:
+        t = time.time() - age_s
+        os.utime(path, (t, t))
+
+
+def speak(tag, tokens, model, borrowed=None, env=None):
+    """(stop stdout, prompt stdout) of one fresh session."""
+    home, proj = fresh(tag)
+    tp = write_rows(os.path.join(ROOT, tag, "tr", "s-%s.jsonl" % tag), [turn(tokens, model)])
+    if borrowed:
+        copy_for(home, model, borrowed)
+    pl = {"session_id": "s-" + tag, "transcript_path": tp, "cwd": proj}
+    return run("stop", env_for(home, proj, env), pl)[1], run("prompt", env_for(home, proj, env), pl)[1]
+
+
+print("--- T20 a measured window outranks a borrowed one at stock")
+s, p = speak("t20a", 250000, "claude-sonnet-4-6", borrowed=200000)
+check("T20 past 98% of stock with a borrowed window equal to stock: judged against the measured 1M, no offer",
+      s == "" and p == "", repr((s[:120], p[:120])))
+s, p = speak("t20b", 400000, "claude-sonnet-4-6", borrowed=500000)
+check("T20 neighbour: a borrowed window above stock still wins", "(80% of 500k)" in p, repr(p[:200]))
+s, p = speak("t20c", 150000, "claude-sonnet-4-6", borrowed=200000)
+check("T20 neighbour: a session below stock behaves as today (75% of the borrowed 200k)", "(75% of 200k)" in p,
+      repr(p[:200]))
+
+print("--- T69 the family table, the compaction-window variable, levels per window")
+for model in ("claude-fable-5-2", "claude-opus-5-5", "claude-opus-4-7", "claude-sonnet-5", "claude-haiku-5-5"):
+    s, p = speak("t69-" + model, 150000, model)
+    check("T69 no copy and no report: %s gets its family's 1M from the table, 150k is silent" % model,
+          s == "" and p == "", repr((s[:120], p[:120])))
+for model in ("claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5"):
+    s, p = speak("t69-" + model, 150000, model)
+    check("T69 neighbour: %s (200k without [1m]) keeps the stock 200k" % model, "(75% of 200k)" in p, repr(p[:200]))
+s, p = speak("t69-off", 150000, "claude-opus-5-5", env={"CLAUDE_CODE_DISABLE_1M_CONTEXT": "1"})
+check("T69 neighbour: CLAUDE_CODE_DISABLE_1M_CONTEXT=1 still forces 200k over the table", "(75% of 200k)" in p,
+      repr(p[:200]))
+s, p = speak("t69-env", 300000, "claude-sonnet-4-6", env={"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "400k"})
+check("T69 CLAUDE_CODE_AUTO_COMPACT_WINDOW=400k sets the window (75% of 400k), not ignored", "(75% of 400k)" in p,
+      repr(p[:200]))
+s, p = speak("t69-env1m", 750000, "claude-sonnet-4-6", env={"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "1M"})
+check("T69 CLAUDE_CODE_AUTO_COMPACT_WINDOW=1M sets the window too", "(75% of 1.00M)" in p, repr(p[:200]))
+s, p = speak("t69-envint", 300000, "claude-sonnet-4-6", env={"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "400000"})
+check("T69 neighbour: a plain token count still sets it", "(75% of 400k)" in p, repr(p[:200]))
+home, proj = fresh("t69-reset")
+sid = "s-t69-reset"
+tp = os.path.join(ROOT, "t69-reset", "tr", sid + ".jsonl")
+pl = {"session_id": sid, "transcript_path": tp, "cwd": proj}
+write_rows(tp, [turn(150000, "claude-sonnet-4-6")])
+copy_for(home, "claude-sonnet-4-6", 200000, own=sid)
+s1, p1 = run("stop", env_for(home, proj), pl)[1], run("prompt", env_for(home, proj), pl)[1]
+write_rows(tp, [turn(750000, "claude-sonnet-4-6")])
+copy_for(home, "claude-sonnet-4-6", 1000000, own=sid)
+s2, p2 = run("stop", env_for(home, proj), pl)[1], run("prompt", env_for(home, proj), pl)[1]
+s3, p3 = run("stop", env_for(home, proj), pl)[1], run("prompt", env_for(home, proj), pl)[1]
+check("T69 baseline: level 1 is offered on the 200k window", "/ 200k" in s1 and "(75% of 200k)" in p1,
+      repr((s1[:120], p1[:120])))
+check("T69 after the window changes to 1M, level 1 is offered again on the new window (Stop banner)",
+      "/ 1.00M" in s2, repr(s2[:160]))
+check("T69 ... and the prompt nudge", "(75% of 1.00M)" in p2, repr(p2[:160]))
+check("T69 neighbour: on the same window a level is still offered once", s3 == "" and p3 == "", repr((s3[:120], p3[:120])))
+
+print("--- T74 the task list from the Task tools, beside TodoWrite")
+
+
+def task_lines(doc):
+    out, inside = [], False
+    for ln in doc.split("\n"):
+        if ln.startswith("## Tasks"):
+            inside = True
+        elif inside and not ln.strip():
+            if out:
+                break
+        elif inside:
+            out.append(ln)
+    return out
+
+
+def tool(name, args, uid):
+    return {"type": "tool_use", "id": uid, "name": name, "input": args}
+
+
+def result(uid, extra=None):
+    row = {"type": "user", "message": {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": uid, "content": "ok"}]}}
+    if extra is not None:
+        row["toolUseResult"] = extra
+    return row
+
+
+M = "claude-opus-5-5"
+old_rows = [turn(30000, M, [tool("TodoWrite", {"todos": [
+    {"content": "Write the parser", "status": "completed", "activeForm": "Writing the parser"},
+    {"content": "Run the suite", "status": "in_progress", "activeForm": "Running the suite"},
+    {"content": "Ship it", "status": "pending", "activeForm": "Shipping it"}]}, "tw1")])]
+
+
+def new_rows(with_ids):
+    rows = []
+    for n, subj in enumerate(("Write the parser", "Run the suite", "Ship it", "Dropped idea"), start=1):
+        uid = "tc%d" % n
+        rows.append(turn(30000, M, [tool("TaskCreate", {"subject": subj, "description": subj + ".",
+                                                        "activeForm": subj + "ing"}, uid)]))
+        rows.append(result(uid, {"task": {"id": str(n), "subject": subj}} if with_ids else None))
+    for n, (tid, st) in enumerate((("1", "in_progress"), ("1", "completed"), ("2", "in_progress"), ("4", "deleted")), 1):
+        uid = "tu%d" % n
+        rows.append(turn(30000, M, [tool("TaskUpdate", {"taskId": tid, "status": st}, uid)]))
+        rows.append(result(uid, {"success": True, "taskId": tid, "updatedFields": ["status"]}))
+    rows.append(turn(30000, M))
+    return rows
+
+
+def dump_tasks(tag, rows):
+    home, proj = fresh(tag)
+    tp = write_rows(os.path.join(ROOT, tag, "tr", "s-%s.jsonl" % tag), rows)
+    rc, out, err = run("precompact", env_for(home, proj), {"session_id": "s-" + tag, "transcript_path": tp,
+                                                           "cwd": proj, "trigger": "auto"})
+    docs = handoffs(proj)
+    return task_lines(read(docs[0])) if docs else ["(no dump: rc=%d err=%r)" % (rc, err[:120])], out
+
+
+old, _ = dump_tasks("t74-old", old_rows)
+new, _ = dump_tasks("t74-new", new_rows(True))
+seq, _ = dump_tasks("t74-seq", new_rows(False))
+check("T74 baseline: TodoWrite gives three task lines", len(old) == 3 and old[0] == "- [x] Write the parser", repr(old))
+check("T74 a transcript listing tasks only through TaskCreate/TaskUpdate gives the same task lines as TodoWrite",
+      new == old, repr((new, old)))
+check("T74 neighbour: without the result's task id the creation order numbers the tasks, same lines", seq == old,
+      repr((seq, old)))
+
+print("--- T75 PreCompact: the note goes in systemMessage, nothing on plain stdout")
+_, out = dump_tasks("t75", old_rows)
+try:
+    obj = json.loads(out)
+except ValueError:
+    obj = None
+check("T75 the PreCompact output is one JSON object whose systemMessage carries the note, no plain text "
+      "(F11: plain stdout would become summary instructions; passes on HEAD, a regression guard)",
+      isinstance(obj, dict) and "handoff" in str(obj.get("systemMessage")) and out.strip().startswith("{"),
+      repr(out[:200]))
 
 
 shutil.rmtree(os.path.dirname(ROOT), ignore_errors=True)

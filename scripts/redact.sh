@@ -53,7 +53,15 @@ VALUE="(\"[^\"]+\"|'[^']+'|[\"']?[^\"'[:space:]:][^\"'[:space:]]{5,}[\"']?)"
 # A Russian / Ukrainian keyword (spelled out per case, as above): its unquoted value is ASCII, 6+ chars, so a
 # Cyrillic word after it stays prose. A password said in prose (`the password is x`) holds a digit or a symbol.
 CYR_KEYWORDS='Секретный ключ|секретный ключ|СЕКРЕТНЫЙ КЛЮЧ|Секретний ключ|секретний ключ|СЕКРЕТНИЙ КЛЮЧ|Пароль|пароль|ПАРОЛЬ|Гасло|гасло|ГАСЛО|Токен|токен|ТОКЕН|Секрет|секрет|СЕКРЕТ'
-CYR_VALUE="(\"[^\"]+\"|'[^']+'|[A-Za-z0-9._~+/=!@\$%^&*-]{6,})"
+# Their inflected forms too (нет пароля, токена:, гасла:), spelled out as words so the expression is the same
+# bytes in any locale; a Cyrillic value holding a digit (Сонце2024) is a password, a Cyrillic word is prose.
+infl() { local out="" s e; for s in $1; do for e in $2; do out="$out|$s$e"; done; done; printf '%s' "${out#|}"; }
+PAROL_INFL="$(infl 'Парол парол' 'я ю ем е и ей ям ями ях і ів')|$(infl 'Гасл гасл' 'а у ом і ам ами ах')|Гасел|гасел"
+PAROL_FORMS="Пароль|пароль|Гасло|гасло|$PAROL_INFL"
+CYR_KEYWORDS="$CYR_KEYWORDS|$PAROL_INFL|$(infl 'Токен токен' 'а у ом е ы ов ам ами ах и ів і ові')"
+CYR_LETTER='(А|Б|В|Г|Ґ|Д|Е|Є|Ё|Ж|З|И|І|Ї|Й|К|Л|М|Н|О|П|Р|С|Т|У|Ф|Х|Ц|Ч|Ш|Щ|Ъ|Ы|Ь|Э|Ю|Я|а|б|в|г|ґ|д|е|є|ё|ж|з|и|і|ї|й|к|л|м|н|о|п|р|с|т|у|ф|х|ц|ч|ш|щ|ъ|ы|ь|э|ю|я)'
+CYR_DIGIT_VALUE="$CYR_LETTER[^\"'[:space:]]*[0-9][^\"'[:space:]]*"
+CYR_VALUE="(\"[^\"]+\"|'[^']+'|[A-Za-z0-9._~+/=!@\$%^&*-]{6,}|$CYR_DIGIT_VALUE)"
 PROSE_KEY='(password|Password|PASSWORD|passphrase|Passphrase|secret|Secret|token|Token)[[:space:]]+(is|was)[[:space:]]+'
 # Its unquoted value is 6+ chars (one alternative per place of the digit or symbol), so a length or a count
 # stays prose: `the password is 8 chars`.
@@ -112,16 +120,20 @@ SED_ARGS=( -E
   -e "s#([\"']?${TOKEN_KEY}[\"']?[[:space:]]*[=:][[:space:]]*)$TOKEN_VALUE#\1$MASK#g"
   -e "s#(($CYR_KEYWORDS)[[:space:]]*[=:][[:space:]]*)$CYR_VALUE#\1$MASK#g"
   -e "s#($PROSE_KEY)$PROSE_VALUE#\1$MASK#g"
+  # A Russian / Ukrainian password said in prose, no ':' (нет пароля x, вход паролем x): the value as in English.
+  -e "s#(^|[^A-Za-z0-9_-])(($PAROL_FORMS)[[:space:]]+)($PROSE_VALUE|$CYR_DIGIT_VALUE)#\1\2$MASK#g"
   # A bare key or auth name (key=, AUTH=) with a key-shaped value; a lower-case pwd (PWD is the shell's folder).
   -e "s#(^|[^A-Za-z0-9_.-])([\"']?(AUTH|auth|Auth|KEY|key|Key)[\"']?[[:space:]]*[=:][[:space:]]*)$KEY_VALUE#\1\2$MASK#g"
   -e "s#(^|[^A-Za-z0-9_-])([\"']?(pwd|Pwd)[\"']?[[:space:]]*[=:][[:space:]]*)$VALUE#\1\2$MASK#g"
-  # Credentials in command arguments: curl / lftp -u user:pw (an all-digit uid:gid is not one, and docker -u
+  # Credentials in command arguments: curl / lftp / ftp -u and httpie / xh -a user:pw (an all-digit uid:gid is not one, and docker -u
   # name:group is a user and a group), a glued mysql -p<pw>, sshpass / docker login -p <pw>, --password <pw>.
-  -e "s#(^|[^A-Za-z0-9_.-])((curl|lftp)[^;&|]*[[:space:]](-u|--user)[[:space:]]+[\"']?[^\"'[:space:]:]+:)[^\"'[:space:]]*[^0-9\"'[:space:]][^\"'[:space:]]*#\1\2$MASK#g"
+  -e "s#(^|[^A-Za-z0-9_.-])((curl|lftp|ftp|httpie|https?|xh)[^;&|]*[[:space:]](-u|--user|-a|--auth)[[:space:]]+[\"']?[^\"'[:space:]:]+:)[^\"'[:space:]]*[^0-9\"'[:space:]][^\"'[:space:]]*#\1\2$MASK#g"
   -e "s#((mysql|mariadb)[a-z]*${NOT_P}[[:space:]]+-p)(\"[^\"]+\"|'[^']+'|[^\"'[:space:]]+)#\1$MASK#g"
   -e "s#((docker|podman)[[:space:]]+login${NOT_P}[[:space:]]+-p[[:space:]]*)$ARG_VALUE#\1$MASK#g"
   -e "s#(sshpass${SSHPASS_OPTS}[[:space:]]+-p[[:space:]]*)$ARG_VALUE#\1$MASK#g"
   -e "s#(^|[[:space:]])(--password|--passwd)([[:space:]]+|=)$ARG_VALUE#\1\2\3$MASK#g"
+  # A long secret flag with a key-shaped value, spaced or after '=': --token <v>, --api-key <v>, --key <v>, not a path.
+  -e "s#(^|[[:space:]])(--(token|api-key|client-secret|secret|auth-token|access-token|key)([[:space:]]+|=))[\"']?[A-Za-z0-9_+=][A-Za-z0-9._~+/=-]{15,}[\"']?#\1\2$MASK#g"
 )
 
 degrade() { # degrade <why> - withhold the text, say why, record it; the text never passes unmasked

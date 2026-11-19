@@ -3,7 +3,7 @@ id: upgrade-overwrites-host-edits
 title: An upgrade overwrites a hive's own edits and deletions in framework files
 status: block
 check: bash scripts/upgrade-base-check.sh <arg>
-fixtures: [docs/defects/upgrade-overwrites-host-edits.original.fixture, docs/defects/upgrade-overwrites-host-edits.neighbour.fixture]
+fixtures: [docs/defects/upgrade-overwrites-host-edits.original.fixture, docs/defects/upgrade-overwrites-host-edits.neighbour.fixture, docs/defects/upgrade-overwrites-host-edits.untagged.fixture]
 keys: [местные правки, заменяет местные, maxTurns]
 paths: ["install.sh", "scripts/vulyk-update.sh", ".claude/commands/vulyk-update.md"]
 ---
@@ -30,6 +30,13 @@ keeps the hive's file with `<file>.vulyk-new` beside it. No other tag and no bra
 missing from the source no file is a release copy, and one NOTE line says so. `scripts/upgrade-base-check.sh`
 upgrades a throwaway hive from 0.2.0 to 0.3.0 with the installer it is given and fails when the older release's
 line or the branch's is lost.
+
+Since tails-1115 (contract B1) every install and upgrade from a git checkout stamps the source HEAD in
+`.claude/vulyk-commit` (a ZIP source writes none). When the source has no tag `v<.claude/vulyk-version>` (a build
+installed from an untagged commit), the base is that stamped commit, if the source has it; no tag below it counts.
+With neither the tag nor the stamped commit, no file is a release copy and one NOTE line says which is missing. The
+check upgrades a second throwaway hive, stamped at an untagged commit, and fails when a file equal to an older tag's
+blob is replaced or one equal to the stamped commit's blob is not.
 
 ## Never
 - Replace a framework file in a hive without first telling a release copy from a project edit.

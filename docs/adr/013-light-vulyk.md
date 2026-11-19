@@ -207,6 +207,10 @@ implements the repair story like any other.
   - 540 s keeps the verb inside the Bash tool's 10-minute cap, so a slow suite reports instead of
     dying silently.
   - The budget is per run, not per command, because a repair story unions every story's lines.
+  - Amended by gate-split (0.45.0): each line now runs under its own cap, `VULYK_VERIFY_TIMEOUT`
+    (default 300, never above 300), and 540 s is the budget of one call, `VULYK_VERIFY_CALL`; a line
+    starts only while its cap still fits, otherwise the verb pauses with exit 7 and the same command
+    resumes it.
 - `claim` refuses a working tree dirty outside paperwork, with the same predicate `open-round`
   uses (factored into one function) and `error: "working tree not clean"`. An owner's stray file
   now stops a run before the build, not after it.
@@ -298,6 +302,16 @@ contexts. `/vulyk-status` and `/vulyk-evolve` show its per-spec lines.
   named it, the card line). A worker still builds it. The next round freezes `seats=review` and
   `narrow=1`, `cycle.sh suite` runs no step, and `judge` decides on the review alone. Two files or
   two items still get a full round.
+
+### Amendment (2026-11-15) - spec `narrow-repair-1115`: D3 carry, D4 repair, C4 and C5
+
+Superseded in part by [ADR-040](040-repair-rechecks-what-it-repaired.md). D4's union of every done story's
+`## Files` and `## Verification` is gone: a repair story carries its findings' paths, their exact tests, the cards
+and only the rows of the stories that named those paths. C5's one-item, one-file limit and its local narrow record
+are gone: the round after any repair is narrow (`repair=`, `narrow=1`, `asks=`, `rerun=`), computed from
+committed records, and full only for `full=design|asked|norecord`. A narrow round carries no seat (D3, C4): its
+blind seat, when `asks=` lists an ask, judges those asks afresh. Everything else in D3, D4 and the 2026-11-08
+amendment stands.
 
 ## Consequences
 

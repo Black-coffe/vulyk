@@ -42,7 +42,9 @@ silently for a subagent (input carries a non-empty `agent_id`; `handoff.py` `mod
   credentials passed as command arguments, more service-token/webhook shapes, bare cloud secret keys; ordinary text
   passes byte-identical). When it cannot mask (sed/awk missing, dialect rejected, a filter fails) it withholds: stdout is
   `[VULYK:REDACT-FAILED]`, stderr `redact: degraded: <why>`, `telemetry.sh record redact_degraded` runs, exit 1.
-  `human-check.sh` and `acceptance-log.sh` then refuse (`REFUSED`) and record nothing.
+  `human-check.sh` and `acceptance-log.sh` then refuse (`REFUSED`) and record nothing. `human-check.sh ... --commit`
+  (0.53) commits only its own plan.md line and record row; it refuses (exit 1, nothing written) when either path
+  already holds an uncommitted change, and exits 1 if the commit fails after the write.
   `telemetry.sh` - `enum`, `agents`, `consent`, `record`, `scan`, `bundle`, `check`,
   `publish`, `inbox`; `vulyk_version`: `.claude/vulyk-version`, else `VERSION` beside `install.sh`, else `0.0.0`.
   `ENUM`/`AGENTS` are append-only (removed agents go to `RETIRED_AGENTS`; `ENUM` ends `model_below_floor`,
@@ -55,4 +57,4 @@ silently for a subagent (input carries a non-empty `agent_id`; `handoff.py` `mod
 - A hook's missing Python is not uniform: git-guard/owner-guard/court-guard fail closed (`scripts-guards.md`); the update check,
   session brief and handoff fail open (no Python = the feature is off, the brief says so).
 
-last-verified: 2026-11-14 (0.53.0-dev.1 audit-fixes-1113; guards split out to scripts-guards.md)
+last-verified: 2026-11-15 (0.53.0 owner-guard-commit-fp; guards split out to scripts-guards.md)

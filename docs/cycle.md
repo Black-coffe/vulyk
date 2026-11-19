@@ -24,9 +24,9 @@ that opens the next stage refuses when the previous stage's artifact is missing.
 | 01 | **Spec** — what and why: the message, the error report, the user's ask | human writes, Queen records | the spec text, verbatim | `docs/specs/<slug>/brief.md` (+ `## Answers`) | `/vulyk-plan` |
 | 02 | **Plan** — who does what in which files; the plan can be handed to an agent whole | Queen / `queen-planner` | the list of steps, committed before the stop, and the brief's `## Asks` with it, approved by the owner in one word (default; at Tier 3-4 the approval starts `/vulyk-build`) or briefed straight through (`--go`, Tier 1) | `plan.md` + story files; `**Approved:**` or `**Briefed:**` line | `/vulyk-plan`, stop for approval |
 | 03 | **Code** — changes live in their own branch | the Queen at Tier 1-2; workers in waves at Tier 3-4 | the branch, one commit per story | `**Branch:**` line in plan.md; git | `/vulyk-build` |
-| 04 | **Tests** — automatic: each story's own `## Verification` command, run once inside `cycle.sh close-story` (under a 540 s timeout) and repeated as the story asks; a `red: required` story first proves its test red with `cycle.sh stamp-red` (receipt in the story file), then closes as today | whoever built the story closes it: the Queen, or the worker itself | every story's verification green; on a `red: required` story, a red receipt | story `## Verification` greens; `## Red receipt` section | `/vulyk-build` |
-| 05 | **Council** — `lead-review` judges the diff against the brief's `## Asks`; at Tier 3-4 one blind seat judges the same asks from a court that cannot see the hive's stories; a narrow repair round is review-only | `lead-review` (+ at Tier 3-4 one blind seat: `council-haiku` when the Client path is filled, else `council-opus`; at Tier 4 a second reviewer, `review2`, on a risk path or after a BLOCK) | every required seat GREEN or N/A and the review PASS | `**Council:**` line in plan.md; `memory/stats/council.jsonl` | `/vulyk-build` or `/vulyk-review` (one round) |
-| 06 | **Ship** — history fixed, branch merged locally, publish command printed and never pressed, next circle opened | a green build or review asks «Выпускаем?» once and a yes runs `/vulyk-ship`; Queen merges and prints; human presses when ready | the local merge, recorded | `**Shipped:**` line in plan.md; git (local merge) | `/vulyk-ship` |
+| 04 | **Tests** — automatic: each story's own `## Verification` command, run once inside `cycle.sh close-story` (each line under a 300 s cap, inside a 540 s call that pauses with exit 7 and resumes when the run is longer) and repeated as the story asks; a `red: required` story first proves its test red with `cycle.sh stamp-red` (receipt in the story file, its hashes in the run state), then closes as today | whoever built the story closes it: the Queen, or the worker itself | every story's verification green; on a `red: required` story, a red receipt | story `## Verification` greens; `## Red receipt` section | `/vulyk-build` |
+| 05 | **Council** — `lead-review` judges the diff against the brief's `## Asks`; at Tier 3-4 one blind seat judges the same asks from a court that cannot see the hive's stories; the round after a repair is narrow: a review of the repair's diff, the blind seat only over the asks it lists, only the gate steps that were red | `lead-review` (+ at Tier 3-4 one blind seat: `council-haiku` when the Client path is filled, else `council-opus`; at Tier 4 a second reviewer, `review2`, on a risk path or after a BLOCK) | every required seat GREEN or N/A and the review PASS | `**Council:**` line in plan.md; `memory/stats/council.jsonl` | `/vulyk-build` or `/vulyk-review` (one round) |
+| 06 | **Ship** — history fixed, every suite step run once green on the branch head with no agent (`cycle.sh suite <spec> --merge` unless the newest round already ran them all), branch merged locally, publish command printed and never pressed, next circle opened | a green build or review asks «Выпускаем?» once and a yes runs `/vulyk-ship`; Queen merges and prints; human presses when ready | the local merge, recorded; `ship-check.sh` `suite:` ready | `**Shipped:**` line in plan.md; git (local merge) | `/vulyk-ship` |
 
 ## Why 05 is red
 
@@ -71,28 +71,52 @@ With `second=risk` the first dispatch is `review`, `review2` and the blind seat 
 both bodies kept, so the second reviewer's findings join the one repair story) and judges
 `review` alone otherwise. The driver dispatches exactly the seats `next` names.
 
-The council converges rather than starting over each round. A blind seat that was `GREEN` or
+The council converges rather than starting over each round. In a round that is not a narrow repair
+round (a full round, or the round after a hand fix on a GREEN spec), a blind seat that was `GREEN` or
 `N/A` in round n-1 is carried into round n, unless round n-1's repair story touched an ask the
 seat's report judged with an `ASK <n>:` line (a `> N. ` line under its `## Requirements`, or
-`[ask N]` under its `## Findings`; C4) - in practice only a repair of regressions alone carries
-one. From round 2 `lead-review` reads only `since..head` against the previous round's findings. A `BLOCK` needs a finding anchored to an
+`[ask N]` under its `## Findings`; C4). From round 2 `lead-review` reads only `since..head` against the previous round's findings. A `BLOCK` needs a finding anchored to an
 ask (`[ask N]`) or a `[regression]`. A RED round becomes a repair story written by
-`cycle.sh repair`: the RED asks quoted, the anchored findings verbatim, no planner in between.
-A RED round with exactly one RED item (one ask, or one `[regression]`, gate or owner finding) whose
-reach - the paths its findings name, else the `## Files` union - is one non-test file is **narrow**
-(C5): its repair story says `narrow: true`, names that file, its `exact` tests (`symbol-map.sh
---exact`) and `docs/defects/*`, takes the `## Verification` of the stories that named the file, and
-asks for the class card in the same commit; a worker still builds it on `opus`. `repair` also writes
-the narrow record `.vulyk/state/<slug>/narrow.round-<n+1>` (`story=`, `file=`, `from=`), and that
-record, not the story's frontmatter, is where the flag comes from. `open-round` recomputes the narrow
-rule from round n's committed records by the same function and freezes `seats=review` and
-`narrow=1` only when the record names the newest repair story and the rule still holds; a missing
-record (a fresh clone has none), a record naming another story, or a rule that no longer holds is a
-full round, with one stderr line saying which. `close-story` compares the repair story's `narrow:`
-line with its approved version beside `## Verification`, `## Files` and `red:`. A narrow round has
-no blind seat, no second reviewer, and `cycle.sh suite`
-writes `SUITE: none - narrow repair round` without running a step. It counts against the ceiling
-like any RED round. Two files or two items is a full round, as before.
+`cycle.sh repair`: the RED asks quoted, the anchored findings verbatim, no planner in between. Its
+`## Files` are the paths the findings name, their `exact` tests (`symbol-map.sh --exact`) and
+`docs/defects/*`; its `## Verification` is the rows of the done stories that named one of those
+paths, never the union of every story's rows. A RED ask whose findings name no path takes the files
+and rows of the stories that serve it (a story's `## Requirements` line found inside the ask's text);
+nothing tied is `none — reviewed by lead-review`. A worker builds it on `opus`.
+
+The round after a repair is **narrow**, whatever the number of files or RED items (narrow-repair-1115,
+ADR-040). `open-round` computes its scope from committed records only (`round_scope`: HEAD's
+`memory/stats/council.jsonl` and `council/REOPEN`) and freezes it into `ROUND`: `repair=<story>`,
+`narrow=1`, `asks=` (the asks RED in the repaired round, the asks served by a done story whose
+`## Files` the repair's diff `since..head` touched, and every ask when no earlier round holds the
+blind seat's report), `rerun=` (the gate steps `FAIL` in the repaired round's `suite.log`; `all` when
+the step count changed) and `second=none`. With `asks=` empty the round is `seats=review`: no court,
+no dispatch, no empty report. Otherwise the tier's blind seat is dispatched without a carry, reads
+`<court>/docs/specs/<slug>/round-asks`, judges only those asks and writes `N/A - why: not re-judged
+this round` for the others. A narrow round has no second reviewer, and `cycle.sh suite` runs only the
+`rerun=` steps (`SUITE: ok|FAIL <N>s - narrow repair round, steps <list> of <S>`; with none,
+`SUITE: none - narrow repair round`). The files the repair touched are covered by its own rows at
+`close-story`. A `ROUND` opened before 0.54 with `narrow=1` and no `asks=` or `rerun=` reads as
+review-only with no step. A narrow round counts against the ceiling like any RED round.
+
+The round after a repair is **full** (`full=<why>`: the tier's whole roster, every gate step) only
+when the repaired round escalated as `half` and the owner reopened it, or the owner reopened it with `--full` (`full=design`:
+the plan was wrong, not the patch), when the owner asked for it (`cycle.sh open-round <spec> --full`,
+`full=asked`: no carried seat, `since=` the branch base, no `round-asks`), or when the committed
+records cannot be read (`full=norecord`, one stderr line: a missing input is never a pass). `full=asked`
+is the **full check of the whole project**: every seat over every ask plus every suite step. It
+runs on the owner's word only - a major version (0.5x to 0.6x; 0.51 to 0.52 is minor), about once a
+month, bugs or feedback; a minor release, public or not, never opens it, and `/vulyk-ship` only
+offers it at a major bump.
+
+Before a local merge every suite step runs once, green, on the branch head, with no agent (ADR-040
+D5). `ship-check.sh` is ready on its `suite:` line only with a finished `SUITE: ok` over every step
+keyed to the branch head, or to a commit with only paperwork after it: the newest round's `suite.log`
+when that round was not narrow, else `council/merge-suite.log`, which `cycle.sh suite <spec> --merge`
+writes one step per call, with the round's caps and resume, and never while a round is open. A red
+merge run is cured by fixing what failed and running the whole suite once more with `--merge`, never
+by a council round. A constitution with no `round-only` row reads `suite: none`, ready.
+
 A round with an evidenced RED on
 half the asks or more escalates immediately rather than burning further rounds on a plan
 that is wrong; a round that finds the same ask RED as the round before escalates at once
@@ -121,7 +145,10 @@ something else — same rule as every gate in [pipeline.md](pipeline.md).
 | A code commit lands after a round already judged GREEN | that `**Council:**` row | `ship-check.sh` reads it as `STALE (commit)` unless only paperwork landed since (`paperwork_only`; `VERSION` and `CHANGELOG.md` count as paperwork, and so does any path matching a glob in the hive's own `.claude/vulyk-paperwork` - one per line, `#` comments, `*` crosses `/`, a trailing `dir/` covers everything beneath it; such a path also passes `ship-check` stage 03 uncommitted; the installer never ships or touches it); a fresh round opens, carries the green blind seats and re-reviews only the new diff; a GREEN round never counts against the ceiling |
 | A round is RED for half the asks or more, holds an ask RED that round N-1 also held RED (`no-progress`), or the tier's ceiling (1 / 2 / 3 rounds that ended RED for Tier 1 / 2 / 3–4, `+` the same per `reopen`; a GREEN or `STALE` round never counts) is reached | 05 | `ESCALATE` — `cycle.sh escalate` writes `## Needs a human` into `plan.md`; the loop stops instead of opening a round nobody asked for |
 | The owner pauses, at any stage | any | `PAUSE` semaphore — the loop stops at its next safe point; `/vulyk-resume` clears it and relaunches fresh, never resuming a cached run |
-| An `ESCALATE` is on the record | 05 | three exits, all on the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen "<decision>"` (another tier's worth of rounds, starting with a repair story; with a fresh round instead when the escalation was `env` or the round is stale), or leaving the spec open |
+| An `ESCALATE` is on the record | 05 | three exits, all on the record: `human-check.sh ACCEPTED` (ship over the council), `cycle.sh reopen "<decision>"` [`--full`] (another tier's worth of rounds, starting with a repair story whose round is `full=design` after a `half` escalation or with `--full`, and narrow after a `no-progress` or `ceiling` one; with a fresh round instead when the escalation was `env` or the round is stale), or leaving the spec open |
+| A round ends RED and its repair story closes | 05 | the RED verdict — the next round is narrow (`repair=`, `narrow=1`, `asks=`, `rerun=`, `second=none`): review of the repair's diff, the blind seat only over `asks=`, only the `rerun=` steps; it is full only with `full=design`, `full=asked` (the owner's `open-round --full`) or `full=norecord` (ADR-040 D1-D4) |
+| A code commit lands after the last full suite run on the branch (a narrow round's partial gate never counts as one) | 06 | `ship-check.sh` `suite:` — NOT READY, `suite: no full run at <sha7> - run bash scripts/cycle.sh suite <spec> --merge`; paperwork after the run keeps it; cure: the merge run, every step once, no agent (ADR-040 D5) |
+| The merge run ends with a red part | 06 | `ship-check.sh` `suite:` — NOT READY, naming the red parts; cure: fix them and run the whole suite once more with `cycle.sh suite <spec> --merge` on the new head; never a council round |
 | The owner records `**Checked:** REJECTED` after a GREEN council row | 05, then 03–04 via repair | the council verdict — treated as RED regardless of what the seats said; the repair story goes through `/vulyk-build`, then a fresh round |
 | A sealed test of a `red: required` story is edited after its red receipt | 04 | `red_verified_at` — close-story refuses (`test changed after red receipt`); cure: re-run `cycle.sh stamp-red`; with the implementation already written, the Queen runs `cycle.sh stamp-red <story> --baseline` after `/vulyk-pause` (it stamps against HEAD's implementation and puts the working copy back itself; ADR-032 D5) |
 | A story's `## Verification`, `## Files` or `red:` differs from its approved version (the story file in the commit `cycle.sh` itself made and recorded for it in `.vulyk/state/<slug>/approved`: `branch`, `revise`, `repair`; no commit subject is read) | 04 | the story's gate blocks — `close-story` and `stamp-red` refuse, exit 4 (`story blocks differ from the approved version (<sha7>): <blocks>`); at Tier 3-4 a story with no record refuses, exit 2 (`no approved record for <story>: run bash scripts/cycle.sh revise <story>`); cure: the Queen runs `cycle.sh revise <story>`, or the worker puts the blocks back (ADR-032 D1, amended 2026-11-14) |
@@ -131,7 +158,7 @@ something else — same rule as every gate in [pipeline.md](pipeline.md).
 | A Tier 2-4 plan has neither `**Approved:**` nor a `**Briefed:**` line that records `--go` | 02 | `**Briefed:**` — `cycle.sh briefed` and `cycle.sh branch` refuse, exit 2 (`Tier <N> plan needs **Approved:** or an explicit --go`); ship-check stage 02 fails (`plan: Tier <N> was briefed without approval or --go`) unless `**Shipped:**` is set; cure: the owner's `**Approved:**`, or, when the owner opted out, `cycle.sh briefed <spec> --go --commit` (journal `briefed --go recorded`; ADR-032 D4) |
 
 `scripts/ship-check.sh docs/specs/<slug>` reads all of it at once and says which stage is
-open. It is what `/vulyk-ship` runs first, and it is free.
+open. It is what `/vulyk-ship` runs first, and it is free. Its defect line is the repo-wide defect gate: a red gate, or one that cannot run (no Python), is NOT READY.
 
 **Run state in `.vulyk/state/`.** When `close-story` or `stamp-red` pauses at exit 7, the point
 to resume from is kept in a record under `.vulyk/state/<slug>/` (`verify.<story-id>.<verb>`),
@@ -139,8 +166,14 @@ not in the story file. Only `cycle.sh` writes it. It holds the HEAD, the `--stam
 `## Files` and `## Verification` hashes, and the exit of each line run since line 1. For
 `stamp-red` it also names the results directory, which `mktemp -d` made. A rerun resumes only
 when every key still matches: paperwork-only commits since the pause are allowed. `close-story`
-also needs a recorded exit 0 for every line it skips. Otherwise the run starts again at line 1
-and stderr says why. The verb that finishes removes its record and results directory. The
+also needs a recorded exit 0 for every line it skips. `stamp-red` uses a results directory only
+when it is a real directory directly under the temp root, named `vulyk-sr.*`, owned by the
+caller; any other recorded path is neither read nor removed. Otherwise the run starts again at
+line 1 and stderr says why. The verb that finishes removes its record. `stamp-red` removes its
+results directory on every way out except a pause, and the next `stamp-red` or `open-round`
+removes `vulyk-sr.*` directories older than a day. A finished `stamp-red` keeps one record,
+`verify.<story-id>.stamp-red.receipt`, with the receipt's tests and impl hashes: `close-story`'s
+red gate reads it and refuses a receipt it does not match, or one with no record. The
 directory is local to the checkout and ignored: it writes its own `.gitignore`. A missing or
 unreadable record always means the strict path, line 1. A `verify_resume:` line in a story,
 from an older release, is not read.
@@ -160,7 +193,9 @@ from plan.md's `**Tier:**` line and freezes the seats that tier requires into th
 | 3 | workers in waves (Workflow driver) | `review` plus one blind seat: `haiku` when *Client path* is filled, else `opus` | 3 | 2 seats + 1 clerk call to record them |
 | 4 | workers in waves + `lead-architect` | as Tier 3, plus `review2` on a risk path or after a `review` BLOCK, folded with `review` | 3 | as Tier 3; one reviewer more only when `review2` is called |
 
-A narrow repair round (C5) at any tier is `review` alone: one `lead-review`, no court, no gate step.
+The round after a repair is narrow at any tier: one `lead-review` over the repair's diff, the blind seat
+only when `asks=` lists an ask (judging only those), no `review2`, and only the `rerun=` gate steps.
+Only `full=design`, `full=asked` or `full=norecord` opens the whole row above.
 
 Solo means no driver, no clerk and no court: the Queen runs `cycle.sh advance` from her own
 Bash. It performs every mechanical step (branch, open-round, judge, repair) and stops at the
@@ -220,7 +255,10 @@ without it does not open the build there (ADR-032 D4).
 
 The round's test gate keeps its step barrier on purpose: each `cycle.sh suite --step K` is one
 capped call, so a step waits for its slowest part. That cost is measured and accepted
-([hooks-reference.md](hooks-reference.md#accepted-costs)).
+([hooks-reference.md](hooks-reference.md#accepted-costs)). Opt-in, for a repo whose default branch holds
+`.vulyk-solo-gate` = `merge-only` (VULYK's own repo; the installer never ships it): a Tier 1-2 round's gate runs no step
+and writes `SUITE: none - Tier 1-2: ...`, the narrow round after its repair re-runs none either, and the merge run is
+the one full run; Tier 3-4 and the owner's `--full` round run the gate as above.
 
 What still shrinks below that floor is the size of the record — a one-line `## Asks` instead
 of a grill's 3-7, one story instead of many — never whether the reviewer runs.

@@ -56,12 +56,23 @@ case "$SINCE" in -*) echo "scope-check: --since needs a commit" >&2; exit 0 ;; e
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "scope-check: not a git repo" >&2; exit 0; }
 cd "$ROOT" || exit 0
+# tails-1115-01 (T2): an absolute story path becomes repo-relative before anything reads it, so the story's own
+# file and its wave-mates' story files match the diff's repo-relative names
+STORY_IN="$STORY"
+STORY="$(story_rel "$ROOT" "$STORY_IN")" || { echo "scope-check: story file outside the repo: $STORY_IN" >&2; exit 0; }
 
 # --- what the story declared -------------------------------------------------
 # The `## Files` block: lines starting with "- " until the next "## " heading.
-# HTML comments are skipped so the template's own guidance never counts as a path.
+# HTML comments are skipped so the template's own guidance never counts as a path, and so is a line
+# inside a fence (a notes block or a red receipt quoting a `## Files` heading).
+# The one fence rule of every story-section reader (narrow-repair-1115-06): the FENCE_AWK line of cycle.sh,
+# byte for byte (tests/council.test.sh round-scope2 compares them). `fence_line($0) || fence_n { next }` skips a
+# fence: 3+ ` or ~ opens it (a ` one with no ` in its info string), only the same character, as long or longer,
+# with nothing after it, closes it.
+FENCE_AWK='function fence_line(s,  t, c, n, r) { t = s; sub(/^[ \t]+/, "", t); c = substr(t, 1, 1); if (c != "`" && c != "~") return 0; n = 0; while (substr(t, n + 1, 1) == c) n++; if (n < 3) return 0; r = substr(t, n + 1); if (fence_n) { if (c == fence_c && n >= fence_n && r ~ /^[ \t\r]*$/) { fence_n = 0; return 1 } return 0 } if (c == "`" && index(r, "`")) return 0; fence_c = c; fence_n = n; return 1 }'
 files_of() {
-  awk '
+  awk "$FENCE_AWK"'
+    fence_line($0) || fence_n           { next }
     /^##[[:space:]]+Files[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/                    { inblock=0 }
     inblock && /^<!--/                  { incomment=1 }

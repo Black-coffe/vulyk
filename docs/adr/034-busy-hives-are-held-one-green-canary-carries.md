@@ -1,6 +1,6 @@
 # ADR-034: A busy hive is held, never upgraded; one green canary carries the rollout
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-11-12
 - Spec: docs/specs/post-052-tails
 - Amends: ADR-033, invariant "Canaries are upgraded and green before any other hive is upgraded; a red canary is

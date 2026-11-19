@@ -12,6 +12,7 @@
 #   - an absolute path that leaves the VULYK root, whatever the drive or folder layout: a drive path
 #     (<letter>:/<segment> or <letter>:\<segment>), a Git Bash or WSL drive path (/<letter>/<segment>,
 #     /mnt/<letter>/<segment>), a home path (/home/<user>/..., /Users/<user>/...);
+#   - a share path on another machine (\\<host>\<share>\..., //<host>/<share>/...), never the `//` of a URL;
 #   - a Claude temp-folder path (.../AppData/Local/Temp/claude..., /tmp/claude...);
 #   - the transcript slug of a place inside another project (<D>--Projects-<name>-docs-..., -src-, -files-, ...);
 #   - every hive root in the private registry ${VULYK_HIVES_FILE:-$HOME/.vulyk/hives} (one `<path>[ | ...]` per
@@ -80,6 +81,10 @@ DRIVE = re.compile(r"(?<![A-Za-z0-9_$%{}<>~.-])[A-Za-z]:" + SEP + r"(?!" + SYSTE
 GITBASH = re.compile(r"(?<![\w.~/$:%{}<>-])/(?:mnt/)?[A-Za-z]/" + SEG + r"(?:/" + SEG + r")*/?")
 HOME = re.compile(r"(?<![\w.~/$:%{}<>-])/(?:home|Users)/" + SEG + r"(?:/" + SEG + r")*/?")
 TEMP = re.compile(r"(?:AppData" + SEP + r"Local" + SEP + r"Temp|(?<![\w.~/$:%{}<>-])/tmp)" + SEP + r"claude[^\\/" + STOP + r"]*", re.I)
+# A share on another machine, either spelling: \\<host>\<share> or //<host>/<share> - never after a `:` (a URL),
+# a word character or another slash; the host opens with a letter or a digit (a <placeholder> or $VAR passes).
+UNC = re.compile(r"(?<![\w\\/:.$%{}<>~-])(?:\\\\[A-Za-z0-9][A-Za-z0-9._-]*\\|//[A-Za-z0-9][A-Za-z0-9._-]*/)" + SEG
+                 + r"(?:" + SEP + SEG + r")*")
 SLUG = re.compile(r"\b[A-Za-z]--Projects-(?!vulyk-)[A-Za-z0-9_-]+?-(?:docs|src|specs|files|raw|memory|claude)-[A-Za-z0-9_-]*", re.I)
 CYR = re.compile(r"[А-Яа-яЁёІіЇїЄєҐґ]")
 ENDINGS = "аяйьеиоуыюёіїєАЯЙЬЕИОУЫЮЁІЇЄ"
@@ -127,6 +132,8 @@ for n, line in enumerate(text.splitlines(), 1):
             if re.fullmatch(r"[.…]+", first) or under_root(m.group(0)):
                 continue
             hits.append((n, why, m.group(0)))
+    for m in UNC.finditer(line):
+        hits.append((n, "a share path on another machine", m.group(0)))
     for m in TEMP.finditer(line):
         hits.append((n, "a Claude temp-folder path", m.group(0)))
     for m in SLUG.finditer(line):

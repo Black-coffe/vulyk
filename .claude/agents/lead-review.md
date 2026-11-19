@@ -53,7 +53,9 @@ chasing them costs rounds and buys nothing.
 
 The round's tests already ran before you were dispatched (`cycle.sh suite`, in steps): read
 `<spec>/council/round-<N>/suite.log` and copy its last line, the `SUITE:` line, to line 3 of your report
-unchanged. Never run the whole suite yourself. To look at a red part, rerun that one part in the foreground
+unchanged. `SUITE: none - Tier 1-2: ...` is expected where the repo opts in (`.vulyk-solo-gate`): the stories'
+checks ran at close-story and the full suite runs once before merge; copy it, it is no finding. Never run the
+whole suite yourself. To look at a red part, rerun that one part in the foreground
 (`bash tests/<suite>.test.sh --part <topic>`, or one hive row) as `bash -c '. scripts/lib.sh && run_capped 300 <command>'`
 with `timeout: 600000` on the Bash call, and report what you saw. A `FAIL` in the log (or a part it names red)
 is `VERDICT: BLOCK` with a `## Critical` `[regression]` line naming the suite and the failing check (red on

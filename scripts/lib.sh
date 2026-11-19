@@ -6,11 +6,13 @@
 # Extracted (autonomous-cycle ADR-001, story 01) from the four scripts that each carried a
 # verbatim copy - ship-check.sh, human-check.sh, acceptance-log.sh, release-check.sh - so
 # `paperwork_only()`'s whitelist ("every file the cycle writes") is one list that must agree
-# with itself, instead of four that must agree by hand. This file only defines functions and
-# sets no state, so sourcing it twice - or from two scripts in the same process - is harmless.
-#
-# Consumers migrate to this file in story 02; it is created here and used here (by cycle.sh)
-# only. Not a script in its own right: nothing below runs on its own, so there is no `exit`.
+# with itself, instead of four that must agree by hand. Since then it holds what the gate scripts share:
+# the paperwork list, spec-doc and story-section readers, the `## Commands` cell rules (commands_rows,
+# commands_lint, command_cells), the model floor, the story path rule (story_rel) and the portability
+# wrappers (sed_inplace, date_epoch, run_capped); cycle.sh, scope-check.sh, wave-check.sh and the other
+# gates source it. It defines functions and sets no state but one: sourcing it turns on `set -u` in the
+# sourcing shell (the line below), so an unset variable there is an error from then on. Sourcing it twice
+# is harmless. Not a script in its own right: nothing below runs on its own, so there is no `exit`.
 set -u
 
 is_story_file() { # is_story_file <file> -> 0 iff some line starts with `story:` - the same
@@ -275,9 +277,30 @@ commands_lint() { # commands_lint <constitution> -> one line per `## Commands` r
   # `several` (B1 wording), nothing for the rest or a missing / empty table; always exit 0
   commands_rows "$1" | awk -F '\t' '
     $2 == "noted"   { printf "commands: row '\''%s'\'': text outside the backticked command is read as a note\n", $1 }
-    $2 == "several" { printf "commands: row '\''%s'\'': %s backticked commands in one cell (the round gate refuses it as a full-suite row; split it)\n", $1, $3 }
+    $2 == "several" {
+      # tails-1115-01 (T25): the round gate reads only the full-suite row (the test of cycle.sh full_suite_row)
+      p = tolower($1)
+      if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) why = "the round gate refuses it as a full-suite row"
+      else why = "close-story runs one command per cell"
+      printf "commands: row '\''%s'\'': %s backticked commands in one cell (%s; split it)\n", $1, $3, why
+    }
   '
   return 0
+}
+
+story_rel() { # story_rel <root> <story-file> -> the story path relative to <root>, `./` dropped (tails-1115-01 T2);
+  # an absolute path in either Git Bash spelling (/e/... or E:/...) is resolved physically; exit 1, nothing
+  # printed, when it lies outside <root>. A relative path is taken as relative to <root> already.
+  local root="$1" s="$2" d r
+  case "$s" in
+    /*|[A-Za-z]:/*|[A-Za-z]:\\*) ;;
+    *) printf '%s\n' "${s#./}"; return 0 ;;
+  esac
+  d="$(cd "$(dirname "$s")" 2>/dev/null && pwd -P)" || return 1
+  r="$(cd "$root" 2>/dev/null && pwd -P)" || return 1
+  case "$d/" in "$r"/*) ;; *) return 1 ;; esac
+  d="${d#"$r"}"; d="${d#/}"
+  printf '%s\n' "${d:+$d/}${s##*/}"
 }
 
 command_cells() { # command_cells <constitution> -> each command a `## Commands` row offers, one per
@@ -498,7 +521,7 @@ client_path_filled() { # client_path_filled <constitution> -> 0 iff the Profile'
 # hive that runs lower on purpose; a family it does not name keeps the default line, and so does a
 # line with no `<major>[.<minor>]` version (`opus`, `opus x`): an empty floor would admit every model.
 model_floor() { # model_floor -> "<family> <major.minor> [unreleased|cc>=<x.y.z>]" lines
-  local defaults='fable 5.1
+  local defaults='fable 5.2
 opus 5.5
 sonnet 5.5
 haiku 5.5 cc>=2.1.293'
@@ -515,12 +538,13 @@ haiku 5.5 cc>=2.1.293'
 
 model_version() { # model_version <model id> -> "<family> <major.minor>"; empty for an alias or an unknown shape
   # claude-sonnet-5-5 -> sonnet 5.5, claude-haiku-4-5-20251001 -> haiku 4.5, claude-opus-5 -> opus 5.0,
-  # anthropic.claude-opus-5-5 / claude-opus-4-6@... likewise, claude-3-5-sonnet-20241022 -> sonnet 3.5.
+  # anthropic.claude-opus-5-5 / claude-opus-4-6@... likewise, claude-3-5-sonnet-20241022 -> sonnet 3.5,
+  # claude-mythos-5-2 -> mythos 5.2 (Claude Code's alias families, cc-facts F2; mythos has no floor line).
   local id
   id="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
-  if [[ "$id" =~ claude-(fable|opus|sonnet|haiku)-([0-9]+)(-([0-9]{1,2}))?([^0-9]|$) ]]; then
+  if [[ "$id" =~ claude-(fable|mythos|opus|sonnet|haiku)-([0-9]+)(-([0-9]{1,2}))?([^0-9]|$) ]]; then
     printf '%s %s.%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[4]:-0}"
-  elif [[ "$id" =~ claude-([0-9]+)(-([0-9]{1,2}))?-(fable|opus|sonnet|haiku) ]]; then
+  elif [[ "$id" =~ claude-([0-9]+)(-([0-9]{1,2}))?-(fable|mythos|opus|sonnet|haiku) ]]; then
     printf '%s %s.%s\n' "${BASH_REMATCH[4]}" "${BASH_REMATCH[1]}" "${BASH_REMATCH[3]:-0}"
   fi
 }

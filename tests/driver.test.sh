@@ -20,15 +20,22 @@ export VULYK_DRIVER_PATH="$SRC/.claude/workflows/vulyk-cycle.js"
 
 # --- audit-fixes-1113-17 (the clerk line): the real lines cycle.sh prints under --short, the only form the driver
 # asks for, on a spec with a long path and a wave of eight; one `<name><TAB><line>` per line in $VULYK_SHORT_LINES
+# tails-1115-01 (T8): the fixture repo's root is 150 characters long (the longest Git for Windows still opens a court at), in the spelling git reports it (a drive letter on
+# Git Bash), so a line that carried the root would show it; the line is measured as printed
 T="$(mktemp -d)"
-trap 'git -C "$T/r" worktree remove --force "$T/r/.vulyk/court/$LONG/round-1" >/dev/null 2>&1; rm -rf "$T"' EXIT
+TB="$(cd "$T" && { pwd -W 2>/dev/null || pwd -P; })"
+R="$T/$(printf '%*s' $((150 - ${#TB} - 1)) '' | tr ' ' r)"
+trap 'git -C "$R" worktree remove --force "$R/.vulyk/court/$LONG/round-1" >/dev/null 2>&1; rm -rf "$T"' EXIT
 export VULYK_SHORT_LINES="$T/lines"
+export VULYK_ROOT_FILE="$T/root"
 LONG=a-long-spec-slug-for-the-clerk-line-check
 export VULYK_LONG_SPEC="docs/specs/$LONG"
 (
   set -e
-  mkdir -p "$T/r" && cd "$T/r"
+  mkdir -p "$R" && cd "$R"
   git init -q -b main . && git config user.email t@t && git config user.name t && git config core.autocrlf false
+  git config core.longpaths true   # the story files sit past 260 characters under this root
+  git rev-parse --show-toplevel > "$VULYK_ROOT_FILE"
   cp -R "$SRC/scripts" scripts
   printf '.vulyk/\ndocs/specs/*/DRIVER\n' > .gitignore
   SP="docs/specs/$LONG"; S=0123456789abcdef
@@ -44,13 +51,9 @@ export VULYK_LONG_SPEC="docs/specs/$LONG"
   }
   for n in 1 2 3 4 5 6 7 8; do story "$n" todo ''; done
   git add -A && git commit -qm init
-  # the court path in a line is absolute: the temp root is shown as <T>, so the 400-character check measures what
-  # cycle.sh adds and not how long this runner's temp folder is (macOS /private/var/folders/... is ~50 chars longer)
-  TW="$(cd "$T" && { pwd -W 2>/dev/null || pwd; })"; TP="$(cd "$T" && pwd -P)"
-  line() { # line <name> <cycle.sh args...> - the verb's last stdout line, recorded under <name>
+  line() { # line <name> <cycle.sh args...> - the verb's last stdout line, recorded under <name> as printed
     local name="$1" out; shift
     out="$(bash scripts/cycle.sh "$@" 2>/dev/null | tail -n 1)"
-    out="${out//"$TW"/<T>}"; out="${out//"$TP"/<T>}"; out="${out//"$T"/<T>}"
     printf '%s\t%s\n' "$name" "$out" >> "$VULYK_SHORT_LINES"
   }
   line claim-build advance "$SP" --stamp $S --claim --short
@@ -893,9 +896,11 @@ const blindPromptsClean = (r) => r.dispatches
     const names = ['claim-build', 'release-build', 'claim-leftover', 'status-build', 'reclaim', 'close-story', 'advance-dispatch', 'suite', 'status-dispatch', 'release'];
     const parsed = {};
     for (const n of names) { try { parsed[n] = JSON.parse(lines[n]); } catch { parsed[n] = null; } }
+    let root = '';
+    try { root = fs.readFileSync(process.env.VULYK_ROOT_FILE, 'utf8').trim(); } catch { root = ''; }
     const long = names.filter((n) => !lines[n] || lines[n].length > 400);
-    check(long.length === 0, `${L}: every driver line from a long spec with eight wave stories is at most 400 characters`,
-      names.map((n) => `${n}=${lines[n] ? lines[n].length : 'missing'}`));
+    check(root.length === 150 && long.length === 0, `${L}: with a repo root 150 characters long, every driver line from a long spec with eight wave stories is at most 400 characters`,
+      { root: root.length, lines: names.map((n) => `${n}=${lines[n] ? lines[n].length : 'missing'}`) });
     check(names.every((n) => parsed[n] && typeof parsed[n] === 'object'), `${L}: every such line is one JSON object`, lines);
     check(names.every((n) => lines[n] && !/\.md"|"status":\{|"wave_stories"/.test(lines[n])),
       `${L}: flat, no story file path`, lines);
@@ -923,9 +928,23 @@ const blindPromptsClean = (r) => r.dispatches
     const rev = r.dispatches.find((d) => d.agentType === 'lead-review');
     const head = parsed['advance-dispatch'] && parsed['advance-dispatch'].head;
     const court = parsed['advance-dispatch'] && parsed['advance-dispatch'].court;
-    check(!!opus && typeof court === 'string' && court.endsWith(`/.vulyk/court/${slug}/round-1`) && opus.prompt.includes(`COURT: ${court}.`) && opus.prompt.includes(`.vulyk/reports/${slug}/round-1/opus.attempt-1.md`)
+    check(court === `.vulyk/court/${slug}/round-1` && names.every((n) => !lines[n] || !root || !lines[n].includes(root)),
+      `${L}: the dispatch line carries the court relative to the repo root, and no line carries the root`, { court, root });
+    check(!!opus && typeof court === 'string' && opus.prompt.includes(`COURT: ${court}, a path relative to the project root: resolve it against the project root.`)
+      && opus.prompt.includes(`.vulyk/reports/${slug}/round-1/opus.attempt-1.md`)
       && !!rev && !!head && rev.prompt.includes(`Branch vulyk/${slug} at ${head}`) && rev.prompt.includes('review the whole branch'),
-      `${L}: the dispatch line gives the seat its court and the reviewer its branch and head`, { opus: opus && opus.prompt, rev: rev && rev.prompt });
+      `${L}: the dispatch line gives the seat its court with the rule to resolve it against the project root, and the reviewer its branch and head`, { opus: opus && opus.prompt, rev: rev && rev.prompt });
+    // a narrow round (round 2, a since, the review seat alone) carries no court, and no prompt names one
+    const rn = await run(LA, {
+      clerk: [
+        [`${la} --claim`, adv(round('review', { round: 2, since: 'h0', head: 'h1', court: null }))],
+        [`${la} --ingest`, adv(green())],
+        [`release ${SP} ${S}`, lines.release || ''],
+      ],
+    });
+    check(rn.mismatches.length === 0 && rn.dispatches.length === 1 && rn.dispatches.every((d) => !/COURT|\.vulyk\/court/.test(d.prompt))
+      && rn.result && rn.result.next === 'green',
+      `${L}: a narrow round carries no court and its review prompt names none`, { seq: seq(rn), d: rn.dispatches.map((d) => d.prompt) });
     check(r.mismatches.length === 0 && r.suiteCmds.length === 1 && r.result && r.result.next === 'green',
       `${L}: the run walks claim, wave, gate, seats to green on the real lines`, { seq: seq(r), mm: r.mismatches, result: r.result });
     // a garbled claim: the real re-claim and status lines carry the run on

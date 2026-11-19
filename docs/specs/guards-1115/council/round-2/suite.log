@@ -1,0 +1,115 @@
+head=b5b1466e steps=10
+STEP 1/10: ok 186s
+PART council:seats3 ok 66s cap 300s
+PART council:seats2 ok 81s cap 300s
+PART council:judge2 ok 86s cap 300s
+PART council:ceilings ok 89s cap 300s
+PART council:close ok 92s cap 300s
+PART council:judge ok 94s cap 300s
+PART council:verbs2 ok 94s cap 300s
+PART council:escalate ok 98s cap 300s
+PART council:escalate2 ok 99s cap 300s
+PART council:verbs ok 118s cap 300s
+PART council:seats ok 148s cap 300s
+PART council:verbs3 ok 183s cap 300s
+STEP 2/10: ok 210s
+PART council:replays3 ok 58s cap 300s
+PART council:walks3 ok 58s cap 300s
+PART council:roster2 ok 62s cap 300s
+PART council:walks2 ok 72s cap 300s
+PART council:replays2 ok 93s cap 300s
+PART council:walks ok 94s cap 300s
+PART council:replays ok 100s cap 300s
+PART council:ceilings2 ok 109s cap 300s
+PART council:suite ok 135s cap 300s
+PART council:driver ok 148s cap 300s
+PART council:roster ok 191s cap 300s
+PART council:advance ok 207s cap 300s
+STEP 3/10: ok 184s
+PART cycle:manual ok 31s cap 300s
+PART cycle:hooklog ok 39s cap 300s
+PART council:hardening ok 45s cap 300s
+PART cycle:gates ok 48s cap 300s
+PART cycle:paperwork ok 52s cap 300s
+PART cycle:close ok 112s cap 300s
+PART council:suite2 ok 129s cap 300s
+PART council:repair-scope ok 148s cap 300s
+PART council:suite3 ok 157s cap 300s
+PART cycle:ship ok 162s cap 300s
+PART council:round-scope ok 181s cap 300s
+PART council:round-scope2 ok 182s cap 300s
+STEP 4/10: FAIL 215s
+PART e2e:green ok 42s cap 300s
+PART cycle:scope ok 48s cap 300s
+PART driver ok 62s cap 300s
+PART cycle:approved ok 65s cap 300s
+PART cycle:safety ok 72s cap 300s
+PART cycle:red2 ok 102s cap 300s
+PART cycle:bsd ok 108s cap 300s
+PART cycle:close2 ok 121s cap 300s
+PART cycle:merge-gate ok 124s cap 300s
+PART cycle:runstate ok 134s cap 300s
+PART defects ok 148s cap 300s
+PART cycle:red ok 213s cap 300s
+LOAD: start cpu 0% top: claude#2 4%, chrome#10 4%, msedgewebview2#22 0%, msedgewebview2#21 0%, msedgewebview2#16 0%; named like the sampler: WmiPrvSE 65%
+LOAD: end cpu 1% top: Viber 14%, Zoom 4%, svchost#23 4%, explorer#1 4%, pythonw#1 4%; named like the sampler: WmiPrvSE 14%, WmiPrvSE#3 4%
+STEP 5/10: ok 151s
+PART mods ok 6s cap 300s
+PART handoff ok 11s cap 300s
+PART model-profile:defaults ok 21s cap 300s
+PART model-profile:edges ok 28s cap 300s
+PART model-profile:set ok 31s cap 300s
+PART inject:functional ok 49s cap 300s
+PART e2e:red ok 65s cap 300s
+PART full-suite ok 79s cap 300s
+PART maintenance:upkeep ok 82s cap 300s
+PART maintenance:redact ok 108s cap 300s
+PART intake:functional ok 123s cap 300s
+PART maintenance:guards ok 149s cap 300s
+STEP 6/10: FAIL 213s
+PART solo:green ok 23s cap 300s
+PART solo:rejected ok 30s cap 300s
+PART symbol-map ok 36s cap 300s
+PART solo:block ok 54s cap 300s
+PART telemetry:telemetry ok 68s cap 300s
+PART telemetry:terminal ok 104s cap 300s
+PART telemetry:scan ok 135s cap 300s
+PART telemetry:wiring ok 139s cap 300s
+PART telemetry:wiring2 ok 166s cap 300s
+PART telemetry:install-xp ok 205s cap 300s
+PART telemetry:install ok 210s cap 300s
+PART telemetry:install-xp2 ok 212s cap 300s
+LOAD: start cpu 0% top: chrome#50 14%, FortiESNAC 14%, warp 9%, dllhost#1 4%, msedgewebview2#22 0%; named like the sampler: WmiPrvSE 51%
+LOAD: end cpu 0% top: MsMpEng 28%, audiodg 4%, dwm 4%, dllhost#1 4%, msedgewebview2#23 0%; named like the sampler: WmiPrvSE 84%, WmiPrvSE#3 9%
+STEP 7/10: ok 153s
+PART telemetry:ysk-hook ok 4s cap 300s
+PART telemetry:ysk ok 30s cap 300s
+PART telemetry:constitution2 ok 45s cap 300s
+PART telemetry:rg2 ok 57s cap 300s
+PART telemetry:rg ok 62s cap 300s
+PART telemetry:ysk3 ok 68s cap 300s
+PART telemetry:ysk2 ok 87s cap 300s
+PART telemetry:mods ok 95s cap 300s
+PART telemetry:library ok 99s cap 300s
+PART telemetry:constitution3 ok 112s cap 300s
+PART telemetry:ledger ok 118s cap 300s
+PART telemetry:constitution ok 152s cap 300s
+STEP 8/10: FAIL 214s
+PART token-report ok 7s cap 300s
+PART telemetry:wrapper ok 75s cap 300s
+PART telemetry:wrapper2 ok 75s cap 300s
+PART telemetry:crlf2 ok 84s cap 300s
+PART telemetry:mods2 ok 101s cap 300s
+PART telemetry:wrapper3 ok 120s cap 300s
+PART telemetry:watcher ok 123s cap 300s
+PART telemetry:launchers ok 125s cap 300s
+PART telemetry:crlf ok 142s cap 300s
+PART telemetry:upgrade ok 182s cap 300s
+PART telemetry:edits ok 213s cap 300s
+LOAD: start cpu 1% top: msedgewebview2#18 0%, msedgewebview2#19 0%, msedgewebview2#21 0%, msedgewebview2#20 0%, msedgewebview2#14 0%; named like the sampler: WmiPrvSE 14%, WmiPrvSE#3 4%
+LOAD: end cpu 1% top: svchost#60 4%, WhatsApp.Root 4%, msedgewebview2#19 0%, msedgewebview2#17 0%, msedgewebview2#18 0%; named like the sampler: WmiPrvSE 14%
+STEP 9/10: ok 14s
+PART inject:latency ok 13s cap 300s
+STEP 10/10: ok 8s
+PART intake:latency ok 6s cap 300s
+SUITE: FAIL 1548s - cut part cycle:red, cut part telemetry:install-xp2, cut part telemetry:edits

@@ -1,6 +1,6 @@
 # ADR-006: A worker's outcome travels in its story file, and `close-story` reads it there
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-09-13
 - Spec: docs/specs/v0-12-0-remainders (ask 1, round-3 major 3)
 

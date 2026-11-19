@@ -13,7 +13,7 @@ export const meta = {
 // boundary costs one cycle-clerk call - `advance --claim` at the start, `advance` after a wave,
 // `advance --ingest` after a council dispatch - and `release` closes the run. Every verb is asked with
 // `--short` (audit-fixes-1113-17): one flat line of only the keys read here, a story by its id (`-NN`
-// when the `<slug>` before it is left out), the court as its absolute path, so a clerk echoes it whole.
+// when the `<slug>` before it is left out), the court relative to the project root, so a clerk echoes it whole.
 // Every state the loop acts on is the last `advance` line; `status` itself is asked only
 // to recover a clerk line that cannot be read, never re-running a verb that may have acted.
 // What the driver remembers is per run and bounds re-dispatch only: misses per story id (two
@@ -263,7 +263,7 @@ const build = async (st) => {
 
 // A blind seat gets slug, round and COURT only: no spec dir, no round dir (the taint rule), no stamp.
 const seatPrompt = (seat, st) =>
-  `Council round ${st.round} for ${slug}, seat ${seat}. Work only inside COURT: ${st.court}. Judge COURT/brief.md's ## Asks per your seat contract.`
+  `Council round ${st.round} for ${slug}, seat ${seat}. Work only inside COURT: ${st.court}, a path relative to the project root: resolve it against the project root. Judge COURT/brief.md's ## Asks per your seat contract.`
 // Round 1 reviews the branch; a later round reviews only what changed since the last one.
 const reviewPrompt = (st) => {
   const scope = st.since

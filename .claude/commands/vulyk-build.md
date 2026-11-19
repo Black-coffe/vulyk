@@ -45,7 +45,8 @@ No driver, no clerk, no court. Loop:
    is built the same way; its `## Findings` are the conditions to meet. Back to 1.
 3. `dispatch:review`: first the round's test gate: `bash scripts/cycle.sh suite docs/specs/<slug> --commit`, one Bash
    call per step with `timeout: 600000`, repeated until the last line says `"done":true` (`ok:false`: print its
-   `error` and stop). Then dispatch `lead-review` with the Agent tool, with `model: <r>` from
+   `error` and stop); in a repo whose default branch holds `.vulyk-solo-gate` = `merge-only` a Tier 1-2 round's gate
+   ends at once with `SUITE: none - Tier 1-2: ...` (no step: the merge run is the one full run). Then dispatch `lead-review` with the Agent tool, with `model: <r>` from
    `r="$(bash scripts/model-profile.sh --role review)"` only when the profile (`bash scripts/model-profile.sh`)
    is not `sonnet-builds`, else no model parameter:
    `Review <slug>, round <round>. Spec: <spec>. Branch <branch> at <head>. Report: .vulyk/reports/<slug>/round-<round>/review.attempt-<k>.md`
@@ -148,7 +149,13 @@ Then go on. A refusal on the redispatch is the existing stop: an absent seat, a 
 
 ## Terminal
 
-- `green`: print the round count, the newest `**Council:**` line and the output of `bash scripts/human-check.sh
+- `green`: first `bash scripts/ship-check.sh docs/specs/<slug>`; when its `suite:` line asks for the merge run
+  (`suite: no full run at <sha>`), run `bash scripts/cycle.sh suite docs/specs/<slug> --merge --commit` step by step until `"done":true`, before «Выпускаем?»
+  (one Bash call per step, `timeout: 600000`, no agent). A `suite: FAIL` line is a repair, not a question: fix the
+  parts it names, commit, and run the merge run again, the whole suite once more. A RED round is followed by a repair and a narrow round:
+  one reviewer reads the repair's diff, the blind seat re-judges only the asks to re-judge, the gate re-runs only
+  the steps that were red; a full round follows a repair only after a design fault. Then
+  print the round count, the newest `**Council:**` line and the output of `bash scripts/human-check.sh
   --show docs/specs/<slug>` as a fenced block in the reply text (tool output is collapsed), then ask the owner once with
   `AskUserQuestion`, in the owner's language: «<slug>: council GREEN, round <n>. Выпускаем?», the yes
   option first and marked recommended. Yes: run `vulyk-ship` with the Skill tool (args `<slug>`) in
@@ -158,7 +165,8 @@ Then go on. A refusal on the redispatch is the existing stop: an absent seat, a 
   <N> s, budget <B> s` line: cut the part that ran long, then reopen), then the output of `bash
   scripts/human-check.sh --show docs/specs/<slug>` as a fenced block in the reply text. The owner chooses: `bash
   scripts/human-check.sh docs/specs/<slug> ACCEPTED "<note>" --commit` (the note is the owner's own words, never yours; `--commit` commits the record, which owner-guard refuses to any other command), `bash scripts/cycle.sh reopen
-  docs/specs/<slug> "<decision>"`, or leaving it open.
+  docs/specs/<slug> "<decision>"` (the next round re-checks the repair; `--full` only when the owner says it is a
+  design fault, never added without his word), or leaving it open.
 - `paused`: stop; `/vulyk-resume <slug>` continues. `shipped`: nothing to build. `briefed`: point at
   `/vulyk-plan`.
 - `manual:<ids>` (or a driver `stop.verb` `manual`): a story waits on a hand step. Do it (or ask the

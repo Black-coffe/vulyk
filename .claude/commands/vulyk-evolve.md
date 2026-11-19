@@ -1,15 +1,15 @@
 ---
-description: Weekly self-evolution cycle - mine learnings, usage stats and token spend, check the council's weekly numbers, propose config diffs as a reviewable changeset
+description: Weekly self-evolution cycle - mine usage stats and token spend, check the council's weekly numbers, propose config diffs as a reviewable changeset
 argument-hint: [--dry-run to report without writing the changeset]
 ---
 
-Run the evolution cycle. Use the `insight-harvester` and `skill-gardener` skills - they define the method. "$ARGUMENTS"
+Run the evolution cycle. "$ARGUMENTS" First Read `.claude/skills/_meta/insight-harvester/SKILL.md` and Read `.claude/skills/_meta/skill-gardener/SKILL.md`: they define the method, and sit two folders deep, where skill discovery does not reach.
 
 Nobody has to remember this command: the SessionStart brief says `maintenance due: ... evolve (...)` when it never ran, or ran 7+ days ago with a council round since, and the Queen runs it after the owner's task, on the default branch with a clean tree.
 
 0. Ledger (`memory/stats/evolve.jsonl`, owned by `scripts/evolve-ledger.py`). Run `bash scripts/py.sh scripts/evolve-ledger.py . resolve` - it records the owner's verdict on earlier changesets from git (merged = accepted, branch deleted unmerged = rejected; add `--reason-for <branch>=<text>` when the owner gave one) - then `bash scripts/py.sh scripts/evolve-ledger.py . window` and read it before anything else. A hypothesis it shows rejected is not proposed again unless this run's evidence is newer than the rejection. If `bash scripts/py.sh scripts/evolve-ledger.py . pending` names a branch, stop: tell the owner in one line that `<branch>` waits for review (merge to accept, delete the branch to reject) and propose nothing new.
 
-1. Harvest. Read `memory/learnings/` (raw + CONSOLIDATED), `memory/stats/skills.json`, and - if the user can paste it - the output of the built-in `/insights` command (ask once; proceed without it if unavailable).
+1. Harvest. Read `memory/stats/skills.json` and - if the user can paste it - the output of the built-in `/insights` command (ask once; proceed without it if unavailable).
    Then the week's spend: `bash scripts/py.sh scripts/token-report.py . --since "$(date -u -d '-7 days' +%Y-%m-%d 2>/dev/null || date -u -v-7d +%Y-%m-%d)"`, printed as-is - one line per spec with raw and weighted tokens, dispatches and rounds. That report is the spend; the `totalTokens` a Workflow run prints is a sum of final contexts and never counts as spend. A spec whose dispatches or rounds stand out is evidence for step 3's friction list.
    Then the owner's corrections of the week and how many reached `docs/defects/`. The lexicon is the intake hook's own
    (`--lexicon`), and the reader is litopys 0.4.0+ `corrections`. Run the block as written. It prints one line and blocks nothing:
@@ -18,7 +18,8 @@ Nobody has to remember this command: the SessionStart brief says `maintenance du
    while IFS= read -r c; do   # PATH's copy first, then cached copies newest first: the first with the verb wins
      [ -f "$c" ] || continue; seen=1
      if OUT="$(bash "$c" corrections --since "$(date -u -d '-7 days' +%Y-%m-%d 2>/dev/null || date -u -v-7d +%Y-%m-%d)" --lexicon "$X" 2>/dev/null)"; then L="$c"; break; fi
-   done < <(command -v litopys; ls -d "$HOME"/.claude/plugins/cache/litopys/litopys/*/bin/litopys 2>/dev/null | sort -rV)
+   done < <(command -v litopys; . scripts/version-order.sh; C="$HOME/.claude/plugins/cache/litopys/litopys"; V="$(ls "$C" 2>/dev/null)"
+     while b="$(printf '%s\n' "$V" | version_newest)"; [ -n "$b" ]; do echo "$C/$b/bin/litopys"; V="$(printf '%s\n' "$V" | grep -vxF -- "$b")"; done)
    if [ -n "$L" ]; then   # a quote opening with ">" is a relayed side-agent note: model text, not the owner's
      r=$(printf '%s\n' "$OUT" | grep -c ' · «> '); OUT="$(printf '%s\n' "$OUT" | grep -v ' · «> ')"
      n=$(printf '%s\n' "$OUT" | grep -c ' · lexicon · '); m=$(printf '%s\n' "$OUT" | grep -c ' · record · '); u=0

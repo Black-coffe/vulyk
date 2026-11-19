@@ -6,14 +6,12 @@ Facts first (`/vulyk-bootstrap` step 1): answer each question from the repo - ma
 1. What does this project do, in one sentence?
 2. Stack and versions? (language, framework, package manager - confirm what manifests show)
 3. Approximate size? (files / LOC / age) - counted from the repo, never asked; it sizes the unmapped list in `memory/memory.md`
-4. Solo or team? Any conventions imposed from outside (org style guides, CI gates)?
 5. Which language should reports and questions reach you in? (`ru`, `uk`, ... - goes in the *Owner language* row; `en` is the default. File names, commands and flags stay as they are.)
 
 ## Batch 2 - Conventions & safety
 6. Exact verification commands, in their quiet form: build, test, lint, typecheck, and the full suite. (These go into the constitution's `## Commands` table verbatim; a story's `## Verification` may only name commands from it.) In a docker stack each row is `docker compose exec -u <user> <service> <cmd>`, `<user>` from the service's compose `user:` or the Dockerfile `USER`; ask only when the repo names neither.
 7. Does a fresh checkout need an install step before those tests run? (`npm ci`, `uv sync`, a venv - or a link to the main checkout's `node_modules`/`.venv` through `$VULYK_ROOT`.) The answer becomes `.claude/vulyk-setup`, which `open-round` runs in the council's court before each Tier 3-4 round, so a blind seat's probe does not end in `N/A` on a missing dependency; "none" writes no file
 8. Code conventions worth enforcing as rules? (error handling shape, naming, layering)
-9. No-go zones: paths agents must never touch (generated code, vendored deps, migrations history)?
 10. Branch & commit discipline? (conventional commits, default branch, who merges; `/vulyk-build` puts every spec on `vulyk/<slug>` unless you name another scheme)
 11. How does a person reach the running thing? (URL + a test login, a CLI entry point, a browser runner such as Playwright - its quiet command goes in the Profile's *Client path* row; "none: library only" is an answer)
 12. Should the council's black-box seat (required at Tier 3-4 only when *Client path* is filled) drive a real browser for the *Client path*? `chrome-devtools` / `claude-in-chrome` / `none` - goes in the *Browser MCP* row, because only that one seat needs a live browser to prove the Client path from outside, not read about it; `none` is recommended unless a separate, signed-out test profile already exists for it (read-only, never a personal account)
@@ -22,11 +20,8 @@ Facts first (`/vulyk-bootstrap` step 1): answer each question from the repo - ma
 > Not a question - report it: telemetry is `off` unless the installer was told otherwise. Show the current value (`bash scripts/telemetry.sh consent`, from the `| Telemetry |` Profile row) and say it changes with `install.sh --telemetry ask` or by editing that row; `docs/telemetry.md` says what a bundle holds.
 
 ## Batch 3 - Posture
-14. Token budget posture: FRUGAL (cap 2 parallel workers) / BALANCED (cap 4) / THROUGHPUT (cap 4+, Teams allowed)? It governs Tier 3-4 waves; Tier 1-2 build solo in the Queen's session whatever the posture.
 15. Gate model policy: `scripts/top-model.sh --explain` has already read the plan - Fable holds the gate where the subscription carries it inside its limits (Max, premium seats), Opus where it would bill to credits (Pro, standard seats, API). The Queen and the reviewer run on Opus and the workers on Sonnet either way; the gate model is passed only for the Tier 4 review and plan, `lead-architect`, and a missed story's retry (ADR-013). Confirm, or pin deliberately (sets TOP_MODEL; `auto` is the default and the right answer for almost everyone).
-16. Risk tolerance: may agents commit to feature branches themselves, or stage-only?
 17. Test reality: is there a runner worth keeping worker-test for? (If no - prune it and say so.)
-18. Anything the previous AI setup kept getting wrong here? (seed for memory/learnings/)
 
 ## After the interview
 Apply the answers as /vulyk-bootstrap steps 2-7 specify. Quote each answer back in the bootstrap

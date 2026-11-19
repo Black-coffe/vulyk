@@ -40,7 +40,7 @@ Set `motion` with `claude plugin configure vulyk-pulse` (values go in through `-
 ## What `≈tok` counts, and what it misses
 
 Weighted tokens of every agent together (the Queen, subagents, workflow agents), summed live from each response's usage:
-input + 1.25 x every cache write + the per-model rate x cache read + output. The cache-read rate is the one in
+input + 1.25 x every cache write + the cache-read weight x cache read + output. Cache reads are weighed by family and version (0.025 Fable 5.1+, 0.05 Opus 5.5+, 0.1 otherwise); the rates are the ones in
 `scripts/token-report.py`.
 
 It misses:

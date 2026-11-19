@@ -34,7 +34,7 @@ in the request changes:
 | Event | Effect |
 |---|---|
 | `/model` mid-session | Each model has its own cache — the whole conversation re-prefills at full price |
-| `/effort` mid-session | Keeps the cache on Opus 5.5, Sonnet 5.5 and Fable 5.1 (a per-message effort change); on other models, and on Bedrock/Vertex/gateways, a full re-prefill |
+| `/effort` mid-session | Keeps the cache on Fable 5.1 and later, Opus 5.5, Sonnet 5.5 and Haiku 5.5 (a per-message effort change); on other models, and on Bedrock/Vertex/gateways, a full re-prefill |
 | Fast mode toggled | Part of the cache key: the *first* fast-mode turn of a conversation re-prefills; later toggles keep the cache |
 | `/compact` | The conversation is replaced, so nothing matches (the system prompt survives) |
 | Time, main session | Subscription: **1 h**. API key or usage credits: **5 min**, unless `ENABLE_PROMPT_CACHING_1H=1` |
@@ -47,7 +47,7 @@ stays cached. Prefer it over `/compact` when you only need to undo the last few 
 Three operational consequences:
 
 - **Set `/model` once, at the start of a session.** Toggling it mid-flight can cost more than the
-  switch saves. `/effort` is free to change on Opus 5.5 and Fable 5.1, not elsewhere.
+  switch saves. `/effort` is free to change on Fable 5.1 and later, Opus 5.5, Sonnet 5.5 and Haiku 5.5, not elsewhere.
 - **Checkpoint while the cache is still warm.** `/compact` and `/vulyk-handoff` both re-read the
   conversation; inside the 1 h window that read is a cache hit, after it, full price. If you are
   going for lunch, compact *before* you go, not after. The audit counted 58 full re-writes of the
@@ -57,7 +57,7 @@ Three operational consequences:
   dispatch longer than ~55 min still lets her cache lapse.
 - **A subagent that waits more than five minutes pays for its whole context again.** A worker or
   reviewer idle on a ten-minute suite re-writes its cache on its next request. That is one
-  reason `close-story` runs verification once, under a 540 s timeout, instead of the worker
+  reason `close-story` runs verification once (300 s per line, inside a 540 s call), instead of the worker
   running the suite and then `close-story` running it again. cache-economy gave `worker-code`,
   `worker-test` and later `lead-review` `experimental: {cacheTtl: 1h}` (in 10 days of transcripts
   workers lost their prefix 23 times behind a suite). ab-run-fixes reverses that choice on the A/B
@@ -109,7 +109,7 @@ Two things answer it (changed in 0.18.0, ADR-013 D7):
 
 - **`omitClaudeMd: true`** (Claude Code ≥ 2.1.271) on the agents that take everything from their
   dispatch prompt: `cycle-clerk`, `council-opus`, `council-haiku`, `drone-scout`,
-  `drone-coverage`, `drone-docs`, `librarian`. Workers, `lead-review`, `queen-planner` and
+  `drone-horizon`, `drone-coverage`, `drone-docs`, `librarian`. Workers, `lead-review`, `queen-planner` and
   `lead-architect` keep the constitution, because they need the host's conventions.
 - **A 7 KB constitution.** Laws, routing, models, Secrets, Profile and Commands only (was 16 KB,
   and 15–31 KB in hives with a sidecar `CLAUDE.vulyk.md`). The ladder, the cycle and this page
@@ -141,13 +141,16 @@ instead of once per verb. Each extra wave or round adds one or two calls. Rounds
 well: a green blind seat is carried forward, and from round 2 `lead-review` reads only the diff
 since the last round. The estimate is −40…55% on a median task.
 
-Since ab-run-fixes a narrow repair round (one RED item in one file) is a single `lead-review`
-dispatch: no blind seat, no second reviewer, no gate step. A blind seat is not carried over an ask
-the repair touched, so that round dispatches it again.
+Since 0.54.0 the round after a repair is narrow, whatever the number of files or red items: one
+`lead-review` over the repair's diff, the blind seat only over the asks the repair lists, and only
+the gate steps that were red. A full round follows a repair only when the owner names a design
+fault at reopen (`--full`), reopens a round that escalated as `half`, asks for one, or the records
+the scope is read from are missing. A repo whose default branch holds `.vulyk-solo-gate` = `merge-only` (VULYK's
+own repo; no hive gets the file) runs no gate step in a Tier 1-2 round at all: the full suite runs once, at the merge run.
 
 **Measure it, do not trust the printed figure.** The `totalTokens` a Workflow run prints is the
 sum of each agent's *final* context, not what was processed — about 29 times too low on the median
-task. `python scripts/token-report.py . --spec <slug>` reads the transcripts and prints raw and
+task. `bash scripts/py.sh scripts/token-report.py . --spec <slug>` reads the transcripts and prints raw and
 weighted tokens, dispatches by agent type and rounds per spec; `/vulyk-status` and `/vulyk-evolve`
 print its lines.
 
@@ -208,7 +211,8 @@ conversation.
   never lose: tier, story statuses, decisions with reasons, walls.
 
 VULYK measures the first of these for you. `handoff.py` reads the real context size out of the
-transcript on every turn and warns at 110k / 140k / 165k tokens, alongside how long the cached
+transcript on every turn and warns at 70% / 80% / 90% of the session's real context window (700k /
+800k / 900k on a 1M window), alongside how long the cached
 prefix has left. See [hooks-reference.md](hooks-reference.md).
 
 ## The levers, in order of how much they cost

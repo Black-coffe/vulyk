@@ -2,7 +2,7 @@
 
 ## Prerequisites
 - Claude Code 2.x signed in (Pro, Max, Team, or API). VULYK uses native primitives only, so subscription plans are fully supported.
-- `git`. Optional but recommended: `jq` (enables the skill-usage counter hook).
+- `git`. Optional but recommended: `jq` (enables the skill-usage counter hook), and Python 3 (hook wiring into an existing `settings.json`, the defect hooks). The installer's last line names any of the three it did not find.
 
 ## Install
 
@@ -14,6 +14,8 @@ git clone https://github.com/Black-coffe/vulyk /tmp/vulyk
 
 **Started from the GitHub template?** Such a copy holds VULYK's own repository: its `docs/specs/`, `docs/adr/`, `tests/`, `CHANGELOG.md` and `install.sh` are VULYK's, not your project's, and it has no version stamp. Run `install.sh` from a VULYK clone on it (`/tmp/vulyk/install.sh /path/to/your/project`): that gives the repo its version stamp (`.claude/vulyk-version`), permissions and hook wiring.
 The installer copies `.claude/`, `memory/`, `docs/wiki/`, `templates/`, `bootstrap/`, and the constitution. It never overwrites an existing `CLAUDE.md` - it writes `CLAUDE.vulyk.md` and prints the one-line import to add.
+
+A project with `AGENTS.md` and no `CLAUDE.md` gets `CLAUDE.vulyk.md` (the constitution) and a two-line `CLAUDE.md` that imports both (`@AGENTS.md`, `@CLAUDE.vulyk.md`); `AGENTS.md` is left alone.
 
 **Upgrading** (`install.sh <project> --upgrade`, or `/vulyk-update` from inside the project) replaces changed framework files and removes retired ones you did not edit. It never touches your constitution on its own. When the constitution changed, it prints the size difference and the command that replaces it with your Profile and Commands blocks carried over, the old file kept as `<name>.pre-0.18.md`: `install.sh <project> --upgrade --constitution replace`. Hives upgrading from 0.17 or earlier get the 0.18 prefix saving only after that replace.
 
@@ -39,12 +41,12 @@ overhead — and keep `CLAUDE.md` to standing instructions, pushing anything wor
 `.claude/rules/` or a skill: the constitution is loaded by the main session and by every
 subagent that does not omit it. Set `/model` at the start of a session rather than mid-flight: it
 is part of the prompt-cache key, and changing it re-prefills the whole conversation (`/effort` is
-free to change on Opus 5.5 and Fable 5.1). The reasoning is in [token-economy.md](token-economy.md).
+free to change on Opus 5.5 and Fable 5.2). The reasoning is in [token-economy.md](token-economy.md).
 
 ## The working loop
 ```text
 /vulyk-plan "add CSV export to the reports module"
-  -> tier announced, scouts dispatched, the grill asks 3-7 questions one at a time (recommended
+  -> tier announced, scouts dispatched, the grill asks 3-7 questions in batches of up to 4 (recommended
      option first and labelled, a free-text Other, silence always safe), stories cut into waves,
      wave-check + trace-check, blind coverage check at Tier 3-4 (brief + plan, never the stories) -
      then the plan is shown to you and waits for one word; `--go` builds straight through, and
@@ -96,8 +98,6 @@ that is one person's pick, not a rule for your project.
 
 ## Recommended extras
 ```bash
-# Agent Teams (experimental) for collaborative Tier 3-4 work:
-echo "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1" >> ~/.claude/.env
 # Map staleness flag after merges:
 cp scripts/git-hooks/post-merge .git/hooks/post-merge && chmod +x .git/hooks/post-merge
 ```

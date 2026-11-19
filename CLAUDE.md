@@ -1,7 +1,7 @@
 # VULYK Constitution
 
 This project runs on VULYK. The main session is the Queen: she plans, builds small work herself, dispatches
-agents for large work and integrates. Procedures live in the `/vulyk-*` commands.
+agents for large work and integrates. Procedures: the `/vulyk-*` commands.
 
 ## Laws
 
@@ -18,22 +18,23 @@ an agent to verify itself.
 
 ## Routing
 
-A request whose result is a document (audit, report, research, "make me a plan") is study work: `/vulyk-plan` step 0, no story, no council. Changed code gets a tier:
+A request for a document (audit, report, research, a plan) is study work: `/vulyk-plan` step 0, no story, no council. Changed code gets a tier:
 
 | Tier | Signal | Who builds | Council seats | Rounds | Driver |
 |---|---|---|---|---|---|
 | 0 | trivial, one file | the Queen, no paperwork | none | - | none |
 | 1 | one module, clear task | the Queen, solo | `review` | 1 | none |
 | 2 | feature within a module | the Queen, solo, fresh session after approval | `review` | 2 | none |
-| 3 | cross-cutting, multi-module | workers in waves | `opus`, `review`; `haiku` if *Client path* is filled | 3 | Workflow |
+| 3 | cross-cutting, multi-module | workers in waves | one blind seat: `opus`, or `haiku` if *Client path* is filled; `review` | 3 | Workflow |
 | 4 | architecture, migration | workers + `lead-architect` | as Tier 3; `review` folds a second reviewer | 3 | Workflow |
 
 Tier 2-4 plans stop for the owner's approval (`**Approved:**`) unless `/vulyk-plan --go`; Tier 1 runs straight through.
+A repair is re-checked narrowly; the full suite runs once, no agents, before local merge; a full check is the owner's call (major bump, about monthly, bugs, feedback).
 
 ## Models and effort
 
 Route by family, never by version: Sonnet executes (workers, scout, docs drone), Opus orchestrates and judges (the Queen, planner, reviewers, council, coverage, librarian), Fable holds the gate, Haiku the clerk. The family that builds never judges; recorded gaps: solo Tier 1-2, repair stories, a retry with no family left, the Tier 4 second reviewer. A repair story after a RED round climbs to Opus.
-Model floor: no dispatch below `lib.sh` `model_floor`; always the newest of each family. `top-model.sh --floor` checks the config, telemetry `model_below_floor` what ran. `TOP_MODEL = auto` lets `top-model.sh` name the gate model; an alias pins it.
+Model floor: no dispatch below `lib.sh` `model_floor`; always the newest of each family. `TOP_MODEL = auto` lets `top-model.sh` name the gate model; an alias pins it.
 In `sonnet-builds` (default) pass it as `model:` only on `lead-architect`, the Tier 4 review and `queen-planner`, a missed story's retry; other profiles: `model-profile.sh --explain`.
 Effort: agent frontmatter. Details: ADR-015, `docs/{model-cascade,cycle,token-economy}.md`.
 
@@ -46,7 +47,7 @@ A secret that reaches git is rotated, not deleted.
 ## Profile
 
 What this project is; `/vulyk-bootstrap` fills it. Write to the owner in *Owner language*. A reviewer demands nothing beyond *Configurations that exist today*.
-A filled *Client path* adds the black-box seat, the only reader of *Browser MCP*. `/vulyk-ship` prints *Release / deploy*.
+A filled *Client path* swaps the blind seat `opus` for `haiku`, the only reader of *Browser MCP*. `/vulyk-ship` prints *Release / deploy*.
 
 <!-- VULYK:PROFILE:START -->
 | Field | Value |
@@ -66,7 +67,7 @@ A filled *Client path* adds the black-box seat, the only reader of *Browser MCP*
 
 ## Commands
 
-Quiet variants only: output is resent each turn. A story's `## Verification` names one, never a `round-only` row: wave-check flags it, close-story refuses it.
+Quiet variants only: output resent per turn. `## Verification` uses one, not round-only.
 
 <!-- VULYK:COMMANDS:START -->
 
@@ -85,8 +86,9 @@ Quiet variants only: output is resent each turn. A story's `## Verification` nam
 | Anomaly telemetry contract tests (round-only) | `bash tests/telemetry.test.sh` |
 | Telemetry part | `bash tests/telemetry.test.sh --part <topic>` |
 | Defect gate | `bash scripts/defects-check.sh [<arg>]` |
-| Defect hooks | `bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh` |
-| Maintenance | `bash tests/maintenance.test.sh` |
+| Defects | `bash tests/defects.test.sh && bash tests/intake.test.sh` |
+| Inject | `bash tests/inject.test.sh` |
+| Maintenance part | `bash tests/maintenance.test.sh --part <topic>` |
 | Mods | `bash tests/mods.test.sh` |
 | Models | `bash tests/model-profile.test.sh` |
 | Symbol map | `bash tests/symbol-map.test.sh` |
@@ -99,12 +101,12 @@ Never commit `__pycache__/`.
 
 ## Compact instructions
 
-Keep: the deliverable, tier and goal; the spec slug and each story's `status:`; decisions with reasons and rejected options;
-walls hit; open questions to the owner. Drop file contents, diffs, command output and scout reports: on disk.
+Keep: deliverable, tier and goal; spec slug and each story's `status:`; decisions with reasons and rejected options;
+walls hit; open questions to the owner. Drop file contents, diffs, output, scout reports: on disk.
 
 ## Where things live
 
 Specs, stories, study reports: `docs/specs/<slug>/` · decisions: `docs/adr/` · domain notes: `docs/wiki/` · path rules: `.claude/rules/`.
-`memory/memory.md` indexes the map: a hint to verify, written only by `drone-docs` and `librarian` (`docs/memory-system.md`).
+`memory/memory.md` indexes the map: a hint to verify, written only by `drone-docs` and `librarian`.
 Weekly tuning: `/vulyk-evolve`, a reviewable changeset (`docs/self-evolution.md`).
 A lesson about this project's code or process is a card in `docs/defects/`; auto-memory keeps only the personal.

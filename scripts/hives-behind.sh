@@ -12,7 +12,8 @@
 # --busy (ship step 2a asks it before every hive upgrade and again before the hive commit): busy on a
 # docs/specs/*/DRIVER file or on a session transcript (*.jsonl, any depth) written in the last 60 minutes under
 # <root>/projects/<slug>/, or under <slug>-* when the transcript's cwd is the hive or below it (a session opened in a
-# subfolder). Roots: $VULYK_SESSION_ROOTS (space-separated) when set, else ${CLAUDE_CONFIG_DIR:-~/.claude} and every
+# subfolder; a transcript with no cwd, such as a Workflow journal, takes the cwd of its session's top transcript
+# <slug>-*/<sid>.jsonl, and with none readable there either it is busy). Roots: $VULYK_SESSION_ROOTS (space-separated) when set, else ${CLAUDE_CONFIG_DIR:-~/.claude} and every
 # ~/.claude* dir with a projects/ folder (a second account). No transcript folder under any root is `idle` (no
 # session ever ran there) only when some registered hive does resolve to its folder, which proves the naming rule;
 # otherwise it is `unknown`, never idle: what cannot be seen is not taken as free. An open session that has written
@@ -122,11 +123,16 @@ same_case() { # same_case <path> -> lower-cased where the file system ignores ca
 }
 
 sub_session() { # sub_session <dir> <normalized hive> -> a busy line, exit 0, when a fresh transcript there ran in the hive
-  local f c                                              # or below it, or carries no readable cwd; else exit 1
+  local f c rel top                                      # or below it, or carries no readable cwd; else exit 1
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     c="$(grep -o -m1 '"cwd":"[^"]*"' "$f" 2>/dev/null | head -1)"
-    [ -n "$c" ] || { echo "busy a fresh transcript in ${1##*/} has no readable cwd ($f)"; return 0; }
+    if [ -z "$c" ]; then   # a Workflow journal writes no cwd: its session's top transcript <dir>/<sid>.jsonl does
+      rel="${f#"$1"/}"; top=""
+      case "$rel" in */*) top="$1/${rel%%/*}.jsonl" ;; esac
+      [ -n "$top" ] && c="$(grep -o -m1 '"cwd":"[^"]*"' "$top" 2>/dev/null | head -1)"
+    fi
+    [ -n "$c" ] || { echo "busy a fresh transcript in ${1##*/} has no readable cwd, nor has its session's top transcript ($f)"; return 0; }
     c="${c#\"cwd\":\"}"; c="$(norm_path "${c%\"}")"   # JSON's \\ is two backslashes: both become /, then collapse
     c="$(same_case "$(printf '%s' "$c" | sed 's#//*#/#g')")"
     case "$c" in "$(same_case "$2")"|"$(same_case "$2")"/*) echo "busy a session in a subfolder of the hive ($c) wrote in the last 60 minutes ($f)"; return 0 ;; esac

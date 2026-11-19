@@ -102,8 +102,9 @@ json_array() { jq -Rsc 'split("\n") | map(select(length > 0))'; }
 need_jq() { command -v jq >/dev/null 2>&1 || die "jq is required for this verb"; }
 
 # Strings that reach a local row are stripped of everything that could break the line or the
-# JSON: quotes, backslashes, control characters. Bundle rows never carry free strings at all.
-sanitize() { printf '%s' "${1:-}" | tr -d '"\\\r\n\t'; }
+# JSON: quotes, backslashes and every control byte below 0x20 (tails-1115 T27). Bundle rows never carry free
+# strings at all.
+sanitize() { printf '%s' "${1:-}" | tr -d '"\\\000-\037'; }
 
 is_number() { case "${1:-}" in ''|*[!0-9.-]*) return 1 ;; *) return 0 ;; esac; }
 
@@ -175,12 +176,13 @@ cmd_enum() { printf '%s\n' "$ENUM"; }
 
 cmd_agents() { agent_set; }
 
-# The consent row is `| Telemetry | on ... |` in the root CLAUDE.md Profile table (story 05
-# installs it). Only the value cell's FIRST token is read, backticks tolerated; anything that
-# is not exactly `on` - including a missing row - is `off`.
+# The consent row is `| Telemetry | on ... |` in the constitution's Profile table (story 05 installs it),
+# read through lib.sh constitution_file: CLAUDE.vulyk.md in a sidecar hive, else CLAUDE.md (tails-1115 T56).
+# Only the value cell's FIRST token is read, backticks tolerated; anything that is not exactly `on` - including a
+# missing row - is `off`.
 cmd_consent() {
   local row value=""
-  row="$(grep -m1 '^|[[:space:]]*Telemetry[[:space:]]*|' "$ROOT/CLAUDE.md" 2>/dev/null || true)"
+  row="$(grep -m1 '^|[[:space:]]*Telemetry[[:space:]]*|' "$(constitution_file "$ROOT")" 2>/dev/null || true)"
   if [ -n "$row" ]; then
     value="$(printf '%s' "$row" | awk -F'|' '{print $3}' | tr -d '`' | awk '{print $1}')"
   fi

@@ -1,6 +1,6 @@
 # Scout report: the cycle - run state, claim, advance, verdict, repair (split from cycle.md)
 
-Other slices: `cycle.md` (files, verbs, gates), `cycle-suite.md` (suite gate, Workflow driver).
+Other slices: `cycle.md` (files, verbs, gates), `cycle-repair.md` (repair), `cycle-suite.md` (suite, Workflow driver).
 
 ## Cycle-owned run state
 - **Run state (0.51; docs/cycle.md "Run state"):** `.vulyk/state/<slug>/` (local; `cycle.sh` writes its own `*`
@@ -8,13 +8,14 @@ Other slices: `cycle.md` (files, verbs, gates), `cycle-suite.md` (suite gate, Wo
   `approved` (story id → approved sha, 0.53), `claim` (`wave.<W>` → the head `claim` saw when that wave's build began,
   0.53), `verify.<story-id>.<verb>` (`verify_rec`, `verify_rec_new`): `head`, `stamp` (`-` none), `files`, `verify`
   hashes, `next=<k>`, `line=<k> <rc> <hash>` per line run (stamp-red adds the stored-output hash and `outd=`, its
-  `mktemp -d` dir). `verify_resume_start` honours `next` only if every key matches (head = HEAD or only paperwork
-  since) and each skipped line has its entry (close-story: exit 0; stamp-red: dir is real, not a symlink, owned,
-  output hash equal); else line 1, record dropped, a stderr reason. A `verify_resume:` story line is never read
-  or written. Narrow record `narrow.round-<n>` (`story=`, `file=`, `from=`) written by `repair`; `open-round` freezes
-  `narrow=1` only via `narrow_round_holds` (record names round n-1's repair story and `narrow_file` recomputed from
-  its committed records still gives that file); else a full round with a stderr reason. The story's `narrow:` line
-  is information and joins the blocks compared with the approved version (`... differ ...: narrow:`).
+  `mktemp -d` dir). `verify.<story-id>.stamp-red.receipt` (`red_rec`, guards-1115) holds `tests=`/`impl=`/`stamped=` of
+  the last finished stamp-red; `red_gate` needs it. Subagents cannot write this folder (git-guard/owner-guard
+  deny shell and Edit/Write paths under `.vulyk/state/`). `verify_resume_start` honours `next` only if every key
+  matches (head = HEAD or only paperwork since) and each skipped line has its entry (close-story: exit 0; stamp-red:
+  dir is real, not a symlink, owned, output hash equal); else line 1, record dropped, a stderr reason.
+  A `verify_resume:` story line is never read or written. No narrow record is kept (0.54: `narrow_file`,
+  `narrow_round_holds`, `narrow.round-<n>` are gone). A story's `narrow:` line is information only; it still joins the blocks
+  compared with the approved version (`... differ ...: narrow:`, `story_blocks_guard`).
 - **`## Commands` cells (0.51):** a cell runs its backticked span, the rest is a note (`lib.sh` cell helpers,
   scripts.md); `suite` marks a `several`-span full-suite row a red part. Tier 4 risk check (`round_second`) diffs with
   `--no-renames`, so both sides of a rename count.
@@ -47,7 +48,8 @@ stale → `open-round`, missing seat → `dispatch:<csv>`, else `judge` → `esc
 `client_path_filled`, else `opus` (`sonnet` in no roster; `record-seat` still accepts it). Tier 4 `review2` is not frozen:
 `review2_called` = Tier 4, not a narrow round, and ROUND `second=risk` or the recorded `review` is BLOCK;
 `record-seat review2` otherwise exits 2. With review2 recorded, judge folds both (BLOCK if either). A narrow round
-(ROUND `narrow=1`): `seats=review`, `second=none`, no court, `suite` writes `SUITE: none - narrow repair round`.
+(ROUND `narrow=1`, `asks=`, `rerun=`): `second=none`; `seats=review` and no court when `asks=` is empty, else the
+tier's blind seat with no carry (see Repair).
 `tier_ceiling` 1/2/3/3; `CEILING` wins. Verdict, first match: human REJECTED newer than the round → RED; required
 seat ABSENT with no RED/BLOCK → ESCALATE `env`; (`suite-timeout` only on old rows); evidenced
 RED ≥ max(2, ceil(A/2)) → `half`; anchored review BLOCK or any RED → `no-progress` (same ask RED in n-1),
@@ -59,14 +61,6 @@ exits 3. Blind seat report: `COUNCIL/MODEL/COURT/VERDICT/ASSUMED CONFIG/RAN/PATH
 `BREACH:`; malformed → exit 4, re-asked once, then ABSENT. Court = `git worktree add --detach`, removed by `judge`;
 `court-guard.sh` keeps the blind seat inside it (`scripts-hooks.md`).
 
-## Repair (ADR-013 D4)
-`cmd_repair` runs only when `next == repair`. Narrow (`narrow_file`, 0.52): exactly one RED item whose findings
-name exactly one non-test path that exists in the tree (`finding_paths` drops `- `, a leading `N. `, `[tag]`s;
-no path, a glob, a dir or a missing file = full round; `## Files` no longer a fallback) → the story
-has `narrow: true` (information only) and `## Files` = that file, its tests, `docs/defects/*`; `repair` also writes
-the `narrow.round-<n+1>` record, and the next `open-round` is review-only only when it re-checks.
-Writes `<slug>-NN-repair-round-<n>.md` and records its commit as the story's approved version:
-`worker: worker-code`, **`model: opus` on purpose** (ADR-015), `wave: <max+1>`, `red: required` kept unless
-`repair_unmarks`. `## Requirements`/`## Findings` = RED asks, anchored review lines, red suite PART lines; `## Files` = union.
+Repair (`cmd_repair`, repair scope, next-round scope) is in `cycle-repair.md`.
 
-last-verified: 2026-11-14 (0.53.0-dev.1 audit-fixes-1113; split from cycle.md; ADR-001, 013, 015, 032)
+last-verified: 2026-11-17 (guards-1115 red_rec; ADR-001, 013, 015, 032, 040)

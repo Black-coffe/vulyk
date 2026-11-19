@@ -93,7 +93,10 @@ Plan: "$ARGUMENTS"
    its `## Verification` and is test-shaped (`tests/`, `*_test.*`, `*Test.*`: `stamp-red` seals those and the program the line runs), with `red_reason:` prefilled when the assertion is
    known. A marked story gets no `worker-test` story in a later wave; its test is in the same story.
    One such test, not coverage, and a trivial change names none.
-7. Check. `bash scripts/wave-check.sh docs/specs/<slug>` and `bash scripts/trace-check.sh
+7. Check. First `bash scripts/symbol-map.sh --fill-tests docs/specs/<slug>`: every todo story gets the
+   tests that mention its files (`exact` hits: a test that sources, imports or runs one, a copied script
+   run by `bash` included) and a row for each. Settle each `pick` line with a row naming the part, and split or sequence each new same-wave overlap it makes. Then
+   `bash scripts/wave-check.sh docs/specs/<slug>` and `bash scripts/trace-check.sh
    docs/specs/<slug>`. Fix what they report in the story files now, including any `## Verification`
    segment that is not a `## Commands` cell.
 8. Coverage, Tier 3-4. Dispatch `drone-coverage` with exactly two paths, brief.md and plan.md. An absent

@@ -1,6 +1,6 @@
 # ADR-005: The installer's upgrade contract - ship set, manifest, constitution blocks
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-09-13
 - Spec: docs/specs/v0-12-0-remainders (asks 5, 6, 7)
 

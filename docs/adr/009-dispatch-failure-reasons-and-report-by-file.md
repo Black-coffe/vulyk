@@ -1,6 +1,6 @@
 # ADR-009: Dispatch failure reasons come from verb exit codes; seat reports travel by file path
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-09-14
 - Spec: docs/specs/fable-review-remainders
 

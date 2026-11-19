@@ -24,7 +24,7 @@ A model-cascade, memory-first, self-evolving framework for running multi-agent c
 - **Workers** — Sonnet subagents that implement one story each at Tier 3–4, in parallel waves, and close it themselves. The family that builds never judges.
 - **Drones** — cheap subagents (Sonnet at low effort for recon and docs, Opus for memory upkeep and the coverage check).
 
-Routing names families, never versions: every alias brings the newest model, and a floor (`fable 5.1 · opus 5.5 · sonnet 5.5 · haiku 5.5`) is checked before and after each session so nothing silently runs older.
+Routing names families, never versions: every alias brings the newest model, and a floor (`fable 5.2 · opus 5.5 · sonnet 5.5 · haiku 5.5`) is checked before and after each session so nothing silently runs older.
 
 The result: more parallel agents, larger codebases, and — the point of the whole exercise — **a strong model that stays inside the task it was given**. Every story names the files it may touch, and a deterministic gate reports the ones it touched anyway.
 
@@ -76,6 +76,8 @@ claude
 
 **Started from the GitHub template?** Such a copy holds VULYK's own repository: its `docs/specs/`, `docs/adr/`, `tests/`, `CHANGELOG.md` and `install.sh` are VULYK's, not your project's, and it has no version stamp. Run `install.sh` from a VULYK clone on it (`/tmp/vulyk/install.sh /path/to/your/project`): that gives the repo its version stamp (`.claude/vulyk-version`), permissions and hook wiring.
 
+The installer does neither of two side effects unless told: `--pulse on|off` (the pulse mod, user scope) and `--model-pin on|off` (pins the Queen's session to `opus`). Otherwise it prints one `offer:` line with the command that does it; an upgrade keeps a pulse mod already on the machine current.
+
 **Upgrading an existing install**
 
 ```bash
@@ -92,9 +94,6 @@ git -C /tmp/vulyk pull
 /vulyk-build                                          # Tier 1-2: the Queen builds; Tier 3-4: workers in parallel waves
 /vulyk-ship                                           # after a green council: merge locally, print the publish command
 ```
-
-> **Tip:** enable Anthropic's experimental Agent Teams for collaborative Tier 3–4 work:
-> `echo "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1" >> ~/.claude/.env`
 
 ## The model cascade
 
@@ -130,7 +129,7 @@ On Sonnet 5.5 launch day (2026-09-28), Anthropic's own table had Sonnet 5.5 ahea
 
 **Three profiles (v0.30, ADR-020).** The ladder above is the `sonnet-builds` profile, the default. `opus-builds` ("Opus writes, Fable judges") has Opus write, Fable plan big tasks and judge all code, and Haiku take routine stories. `economy` uses no Fable: Sonnet writes, Haiku takes routine stories, Opus judges. The choice is one word in one file per machine that upgrades never touch. Run `/vulyk-models` (or say "change model distribution", "model profile", «поменяй распределение моделей») to choose; it can be changed any time.
 
-**Aliases, and a floor under them.** `fable`, `opus`, `sonnet` and `haiku` resolve to the newest model in each family, so a new generation arrives without an edit. An alias is not a guarantee: on Bedrock, Google Cloud and Foundry it resolves lower, six env vars can remap it, and the alias table ships inside Claude Code (2.1.292 still ran `haiku` as Haiku 4.5; 2.1.293 runs 5.5). So VULYK keeps a floor, one line in `scripts/lib.sh` (`fable 5.1 · opus 5.5 · sonnet 5.5 · haiku 5.5`, the haiku line marked `cc>=2.1.293`). `bash scripts/top-model.sh --floor` checks env, settings, provider, frontmatter and the running Claude Code's version before the fact. The telemetry code `model_below_floor` records any transcript that actually ran below it. Pin a full ID only to freeze behaviour deliberately.
+**Aliases, and a floor under them.** `fable`, `opus`, `sonnet` and `haiku` resolve to the newest model in each family, so a new generation arrives without an edit. An alias is not a guarantee: on Bedrock, Google Cloud and Foundry it resolves lower, six env vars can remap it, and the alias table ships inside Claude Code (2.1.292 still ran `haiku` as Haiku 4.5; 2.1.293 runs 5.5). So VULYK keeps a floor, one line in `scripts/lib.sh` (`fable 5.2 · opus 5.5 · sonnet 5.5 · haiku 5.5`, the haiku line marked `cc>=2.1.293`). `bash scripts/top-model.sh --floor` checks env, settings, provider, frontmatter and the running Claude Code's version before the fact. The telemetry code `model_below_floor` records any transcript that actually ran below it. Pin a full ID only to freeze behaviour deliberately.
 
 **Effort is set per agent.** Since Claude Code 2.1.280, `effort:` in agent frontmatter overrides the session level. In July 2026 it was silently ignored; both results were measured. Drones and the clerk run at `low`, workers and the intent seat at `medium` (on Sonnet that is Anthropic's advice for well-specified agentic coding), the planner and the reviewer at `high`. A top-level effort level in `settings.json` does not apply to Opus 5.5, so VULYK sets none. [docs/model-cascade.md](docs/model-cascade.md) has the numbers and the escalation table.
 
@@ -153,7 +152,7 @@ Routing happens **before** any work starts — and the first question is not the
 Since v0.5.0, the middle of the pipeline — where the tokens are spent and where parallel agents historically eat each other's work — runs under rules absorbed from [Autopilot](https://github.com/nick-vels/skills) (MIT, © Nick Vels), re-grounded in VULYK's deterministic-gates philosophy:
 
 - **Waves.** Every story carries `wave:` and `blocked_by:` frontmatter. One wave = one message, all its workers genuinely concurrent. Stories in a wave must declare **disjoint `## Files`** — `scripts/wave-check.sh` verifies that (plus blocker order and dangling references) before anything is dispatched. Zero tokens, zero model: two concurrent workers on one file silently overwrite each other, and this is the check that makes it impossible to miss.
-- **One story, one commit.** Whoever built a story — the Queen at Tier 1–2, the worker at Tier 3–4 — closes it with `cycle.sh close-story`: scope gate → the story's quiet verification, run once, under a 540 s timeout → its own commit. That gives every story a rollback point, and it fixes the scope metric itself — the diff being measured is now exactly that story's, not the pileup of everything before it.
+- **One story, one commit.** Whoever built a story — the Queen at Tier 1–2, the worker at Tier 3–4 — closes it with `cycle.sh close-story`: scope gate → the story's quiet verification, run once, each line under a 300 s cap inside a 540 s call (a longer run pauses and resumes) → its own commit. That gives every story a rollback point, and it fixes the scope metric itself — the diff being measured is now exactly that story's, not the pileup of everything before it.
 - **Bounded returns.** A worker's final message is a ≤25-line report (`STATUS` / `FILES` / `TESTS` / `INTERFACES` / `CONCERNS` / `BLOCKERS`) — never a diff, never raw test output. Worker returns live in the Queen's context until the end of the run; this contract is what keeps a 12-story build from drowning the one context that is never refreshed.
 - **Repair with a ceiling.** `NEEDS_CONTEXT` means the *story* was defective — fix the plan, not the worker. A worker that misses its story gets one retry on the gate model; a second miss stops the run, and the story goes `blocked` and back to planning. A RED council round becomes one repair story, written mechanically by `cycle.sh repair` from the RED asks and the anchored findings — no planner in between.
 - **The Queen's hands stay off Tier 3–4 story code** (Law 5). From the moment a Tier 3–4 story file exists, every edit to its files travels through a worker. Below Tier 3 the Queen builds herself. Descoping mid-build is recorded in `## Descoped`, never silent.
@@ -174,8 +173,8 @@ What changed with Opus 5 is the *reason* for the bookend, not its shape. The bin
 | `/vulyk-resume <slug>` | Clear the pause and relaunch the driver fresh - never a replayed run |
 | `/vulyk-ship [slug]` | Stage 06: refuses without a current, GREEN council verdict, then version + CHANGELOG, a local merge, the publish command printed for a human to press, recorded - and the next circle's draft handed over |
 | `/vulyk-map [path]` | (Re)build the codebase map for a path using parallel scout batches |
-| `/vulyk-evolve` | Weekly self-evolution: mine learnings, usage stats and the week's token spend → propose config diffs as a reviewable changeset |
-| `/vulyk-gc` | Memory garbage collection: consolidate learnings, prune stale map entries, archive dead skills |
+| `/vulyk-evolve` | Weekly self-evolution: mine usage stats and the week's token spend → propose config diffs as a reviewable changeset |
+| `/vulyk-gc` | Memory garbage collection: flag stale map slices, verify the pointer index |
 | `/vulyk-handoff` | Save an enriched session handoff to `.claude/handoff/` before `/clear` or a restart — the next session resumes from it automatically |
 | `/vulyk-status` | Council numbers, token spend per spec (`scripts/token-report.py`), open stories, memory freshness, skill usage stats, budget posture |
 | `/vulyk-update [version]` | Show what a newer release would replace or remove, ask, then upgrade the framework files — never your memory or specs; the constitution only when you choose `--constitution replace` |
@@ -189,13 +188,12 @@ Nothing important lives only in a context window. VULYK keeps five layers in git
 ```text
 CLAUDE.md            constitution: laws, routing, models, Profile, Commands   (~7 KB, < 120 lines, always loaded)
 .claude/rules/       path-scoped rules, loaded only where relevant
-memory/memory.md     pointer index (≤ 60 lines, always loaded) → links to everything below
+memory/memory.md     pointer index (≤ 60 lines, read at task start; a hint to verify) → links below
 memory/map/          one file per module: purpose, entry points, key types, gotchas, last-verified
 docs/wiki/           LLM wiki: one note per domain/invariant, densely linked, Obsidian-compatible
-memory/learnings/    session learnings, written when something was worth keeping → fuel for /vulyk-evolve
 ```
 
-Two protocols make this safe at scale: **memory is a hint, not truth** (agents verify pointers against real code before acting), and **only the librarian consolidates** (workers append, one drone merges — no concurrent-write races). Hooks snapshot state before every context compaction, so nothing is lost to `/compact`.
+Two protocols make this safe at scale: **memory is a hint, not truth** (agents verify pointers against real code before acting), and **only drone-docs and the librarian write the memory index** (no concurrent-write races). The handoff hook dumps session state before a context compaction, so nothing is lost to `/compact`.
 
 Deep dive: [docs/memory-system.md](docs/memory-system.md)
 
@@ -203,7 +201,7 @@ Deep dive: [docs/memory-system.md](docs/memory-system.md)
 
 `/vulyk-evolve` closes the loop most setups leave open:
 
-1. **Harvest** — `insight-harvester` reads `memory/learnings/*` and your `/insights` output; `skill-gardener` reads per-skill usage counters collected by a hook; `scripts/token-report.py` prints the week's spend per spec.
+1. **Harvest** — `insight-harvester` reads your `/insights` output; `skill-gardener` reads per-skill usage counters collected by a hook; `scripts/token-report.py` prints the week's spend per spec.
 2. **Diagnose** — top friction patterns, unused skills (archive candidates), repeated manual patterns (new-skill candidates).
 3. **Propose** — a changeset against `.claude/` itself: diffs to rules, agents, skills, plus a `CHANGELOG` entry justifying each change.
 4. **Human gate** — nothing self-applies. You review the changeset like any PR.
@@ -218,9 +216,14 @@ Each cycle is a ratchet: the colony clicks forward and never slips back.
 | `session-start-brief.sh` | SessionStart | Injects memory freshness, and a `maintenance due` line when gc, evolve or a map refresh is due - the Queen runs them herself |
 | `top-model-brief.sh` | SessionStart | Announces the gate model the plan resolved to (`fable` on Max, `opus` on Pro), the Tier 4 pairing, and whether your session is pinned to `opus` — reads only, never writes |
 | `anomaly-scan.sh` | SessionEnd | Runs the anomaly detectors once per session into `memory/stats/anomalies.jsonl` — local, silent, fail-open ([docs/telemetry.md](docs/telemetry.md)) |
-| `skill-usage-counter.sh` | PostToolUse (Skill) | Increments per-skill counters → fuel for `skill-gardener` |
-| `context-guard.sh` | PreCompact | Snapshots memory & task state before compaction |
+| `skill-usage-counter.sh` | PostToolUse (Skill), UserPromptExpansion | Increments per-skill counters, a typed `/vulyk-*` command included → fuel for `skill-gardener` |
 | `vulyk-update-check.sh` | SessionStart | Compares `.claude/vulyk-version` against the newest tag on the origin (at most every 6 hours, cached), names when that answer was checked, and asks the model to raise an upgrade with you — never to apply one |
+| `ysk-offer.sh` | SessionStart | Offers Claude Code's built-in "You should know" mod at most three times per machine, never switches it on; its counter lives in the Claude config folder |
+| `defect-intake.sh` | UserPromptSubmit, PostToolUse (AskUserQuestion) | Hears the owner's corrections and tells the session to file them, verbatim, as cards in `docs/defects/` |
+| `defects-inject.sh` | SessionStart, PreToolUse | Shows the lines of the defect cards whose scope matches the next tool call, narrowest first |
+| `git-guard.sh` | PreToolUse (Bash, PowerShell) | Denies git verbs that throw away uncommitted work or commits; for agents, also the cycle's run state and history moves during a build; fails closed |
+| `owner-guard.sh` | PreToolUse (Bash, PowerShell, Edit, Write) | Only the owner's own words, from this session's transcript, record an acceptance, an approval or a `--go`; fails closed |
+| `court-guard.sh` | PreToolUse (Read, Grep, Glob, Bash, PowerShell) | Keeps a blind council seat inside its court; fails closed |
 | `handoff.sh` → `handoff.py` | Stop, UserPromptSubmit, PreCompact, SessionEnd, SessionStart | Context-budget guard + session handoff: measures real context size from the transcript, warns at thresholds, dumps session state to `.claude/handoff/` on `/clear`/exit/compaction, restores it (≤ 4 000 characters) in the session that follows a `/clear` or a compaction |
 
 Claude Code hooks receive no token counter — `handoff.py` recovers it from the transcript JSONL (`message.usage` of the last non-sidechain assistant entry), which is what makes proactive warnings and pre-`/clear` dumps possible at all. The same entry's `timestamp` gives the age of the prompt cache, so the warning also tells you how long checkpointing stays cheap: re-reading the conversation is a cache hit inside the TTL and a full-price re-prefill after it. Needs Python 3 on PATH; fails open without it. Details: [docs/hooks-reference.md](docs/hooks-reference.md)
@@ -248,7 +251,7 @@ Most agent frameworks — this one included, until now — ship claims nobody ch
 
 **Reported for every file a plan names, by `scripts/symbol-map.sh`.** Per file: its tests, importers, imported files, guard tests and path mentions, each line marked `exact` (a parsed import or `source`) or `textual` (a name or path match); `--exact` keeps the `exact` lines and counts the rest, the form the planner receives. Zero tokens, model-free; it reports and never gates.
 
-**Recorded by `scripts/acceptance-log.sh`** — the pre-council path, still live for any spec recorded before v0.12.0's council replaced it. The verdict of `drone-acceptance` — which read the human's brief and the repository, never the plan or the stories — next to what the stories claimed about themselves, appended to `memory/stats/acceptance.jsonl`. The number worth having is the disagreement: every story `done` while the blind gate did not accept. It is the only series in this framework capable of contradicting the framework's own account of itself. It starts empty on a fresh install; the first real entries are in, and what they showed is below. Each entry names the commit and a fingerprint of the pack it judged, because a verdict is about the stories that existed when the drone ran — let review carve out repair stories afterwards and the old verdict is about work that never shipped. `acceptance-log.sh --check <spec-dir>` answers whether the newest verdict still describes the spec: `CURRENT`, `STALE`, or `NO VERDICT RECORDED`. Read `drift` for what it is — evidence about delivery, never about proof. The two are independent: on the first real run the blind gate accepted a pack `lead-review` then blocked twice, and both were right.
+**Recorded by `scripts/acceptance-log.sh`** — the pre-council path, kept only for the specs recorded before v0.12.0's council replaced it; its blind gate, `drone-acceptance`, is retired and no longer in the roster, so no new entry is written. The verdict of `drone-acceptance` — which read the human's brief and the repository, never the plan or the stories — next to what the stories claimed about themselves, appended to `memory/stats/acceptance.jsonl`. The number worth having is the disagreement: every story `done` while the blind gate did not accept. It is the only series in this framework capable of contradicting the framework's own account of itself. It starts empty on a fresh install; the first real entries are in, and what they showed is below. Each entry names the commit and a fingerprint of the pack it judged, because a verdict is about the stories that existed when the drone ran — let review carve out repair stories afterwards and the old verdict is about work that never shipped. `acceptance-log.sh --check <spec-dir>` answers whether the newest verdict still describes the spec: `CURRENT`, `STALE`, or `NO VERDICT RECORDED`. Read `drift` for what it is — evidence about delivery, never about proof. The two are independent: on the first real run the blind gate accepted a pack `lead-review` then blocked twice, and both were right.
 
 **Measured once: an A/B run on an open-source Laravel app.** VULYK 0.47.0 against plain Claude Code on one task, so n=1. Quality came out equal on the acceptance checklist and on the tests. VULYK spent 1.8x the weighted tokens and stopped 18 times against 4. The workers ran on Opus, so the model cascade was not measured. Fixes for what the run found followed, and a measurement across several tasks is planned. One task proves nothing in general, either way.
 
@@ -263,7 +266,7 @@ contribute an anonymized weekly bundle back to this project if you opt in. **Off
 A bundle row has exactly 10 keys — `v code value threshold vulyk tier model agent week hive` —
 codes and numbers only: `code` is one of `context_high agent_prefix_high agent_empty
 council_rounds_high stage_long driver_refused driver_relaunched scope_breach
-sessionend_llm`
+sessionend_llm model_below_floor fable_limit_fallback redact_degraded`
 (`bash scripts/telemetry.sh enum`), `agent` is a framework agent name from a fixed list shipped
 in `scripts/telemetry.sh` (`bash scripts/telemetry.sh agents`) - any other agent is reported as
 `other`. **Never included:** file paths, story/spec slugs, dispatch names, emails,
@@ -283,9 +286,9 @@ ship with the next release. Full contract: [docs/telemetry.md](docs/telemetry.md
 
 **Does this work on a Pro/Max subscription?** Yes — that is the design constraint. Everything runs inside the official Claude Code client. (Running many parallel sessions still consumes your limits faster; the cascade exists precisely to keep that affordable.)
 
-**Do I need Agent Teams?** No. Default orchestration uses subagent fan-out from the main session. Agent Teams (experimental flag) adds peer-to-peer coordination for Tier 3–4 collaborative work.
+**Do I need Agent Teams?** No. VULYK neither needs nor uses them: fan-out comes from the main session and, at Tier 3-4, the Workflow driver. They are experimental and off by default (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in the shell or in `settings.json` under `env` turns them on); switched on, they change how named agents launch, so leave them off during a build.
 
-**Can subagents spawn subagents?** No — a deliberate Claude Code constraint. VULYK's design respects it: all fan-out happens from the Queen (main session) or, at Tier 3–4, the Workflow driver; leads and workers are single-purpose.
+**Can subagents spawn subagents?** In Claude Code, yes (the `Agent` tool, up to three layers below the main conversation by default). VULYK does not use it: all fan-out happens from the Queen (main session) or, at Tier 3–4, the Workflow driver; no VULYK agent lists the `Agent` tool, and `scripts/prompt-check.py` refuses one that does.
 
 **My repo already has a CLAUDE.md.** `install.sh` never overwrites it — it writes `CLAUDE.vulyk.md` and prints a one-line `@import` to add.
 
@@ -314,7 +317,8 @@ VULYK is absorbing the best of [Autopilot](https://github.com/nick-vels/skills) 
 - [x] **v0.11.0 — the cycle closes with a person.** The pipeline had four of the six stages a delivery loop needs and stopped at *merge*: no branch per spec, no named walk down the client's path, no stage where the owner looks, no publish, no next circle. Now [the cycle](docs/cycle.md) is named, each stage has a confirmation artifact on disk, and the two that were missing are the two an agent cannot take - the owner's own look (`scripts/human-check.sh`, pinned to the commit; `/vulyk-ship` refuses without it) and the publish (`/vulyk-ship` prints it, a human presses it, `ship-check.sh --record` writes it down). `ship-check.sh` reads all six confirmations at once and says which stage is open, deterministically and for free.
 - [x] **v0.20.0 — Sonnet executes, Opus judges, and nothing runs below the floor.** Sonnet 5.5 shipped, and the ladder was re-cut by kind of work rather than by budget: the workers, the scout, the docs drone and the clerk moved to Sonnet; everything that plans or judges stays on Opus; Fable keeps the Tier 4 gate. The family that builds never judges, and a missed story's retry now climbs to a different family on every plan. Routing names families only. A floor in `scripts/lib.sh` is checked before a session (`top-model.sh --floor`: env, settings, provider, frontmatter) and after it (telemetry `model_below_floor`, read off the model each transcript actually ran on) — because on Bedrock, Google Cloud and Foundry the `sonnet` alias still resolves to 4.5 ([ADR-015](docs/adr/015-sonnet-execution-rung-and-model-floor.md)).
 - [x] **v0.21.0 / v0.21.1 — maintenance runs itself.** `/vulyk-gc`, `/vulyk-evolve` and `/vulyk-map` had never run in this repo: 36 of 41 learnings were empty stubs and no evolve branch had ever existed. The SessionStart brief now names what is due, and the Queen runs it through the Skill tool once the owner's task is done; evolve keeps a hypothesis ledger whose verdicts are read from git (merged = accepted, deleted unmerged = rejected), so a rejected idea returns only with newer evidence. 0.21.1 let the ship gate pass the hook-written skill counter — maintenance itself dirties it — and made `tests/cycle.test.sh` able to fail again: its piped checks had lost every failure in a subshell and exited 0.
-- [ ] **1.0.0** when: ten real Tier 2–4 specs with clean scope/trace/acceptance series (**3 of 10**, counted by [`scripts/release-check.sh`](scripts/release-check.sh) rather than recalled — this one closes by using the framework, not by building it), `--upgrade` proven across two minors (done, four), zero unverified claims in the docs (audited 2026-08-18), zero known silent-loss paths (two closed 2026-08-18: the acceptance note reaching git unredacted, and a repair round dispatched against a stale collision check).
+- Later releases, v0.22.0 onward: [CHANGELOG.md](CHANGELOG.md).
+- [ ] **1.0.0** when: ten real Tier 2–4 specs with clean scope/trace/acceptance series (**0 of 10** today, counted by [`scripts/release-check.sh`](scripts/release-check.sh) rather than recalled; its acceptance series is the retired `drone-acceptance` journal, which no spec after v0.12.0 writes, so the count cannot rise until that criterion is recounted — this one closes by using the framework, not by building it), `--upgrade` proven across two minors (done, four), zero unverified claims in the docs (audited 2026-08-18), zero known silent-loss paths (two closed 2026-08-18: the acceptance note reaching git unredacted, and a repair round dispatched against a stale collision check).
 - [ ] After 1.0.0: plugin-marketplace packaging, worktree fan-out preset, public eval harness.
 
 ## Contributing

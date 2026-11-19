@@ -26,7 +26,8 @@ Format contract: `docs/defects/README.md`. Mechanics per script: `memory/map/scr
   mcp__.*`) shows at most `DEFECTS_INJECT_LINES` (default 12) lines per action and lists the overflow in one line.
   A Read of a story file matches by the story's `## Files` (0.41), so a builder sees the cards before its first edit;
   any other Read leaves in bash. `SubagentStart` was weighed and not used: its input carries no prompt.
-  Block-with-check and revoked cards are not injected.
+  Every card but a revoked one is injected as text, a `block` card included: its `check:` is also the gate
+  `close-story` runs on the story's files.
 - **Capture.** `defect-intake.sh` hears an explicit "внеси в запрет / правило / разрешение" anywhere (pastes
   included), files typed corrections at once with a report line and "отмени", asks first for a correction inside a
   paste (unless it starts with `$VULYK_DICTATION_TAG`), never counts a side-agent note, and (`answer` mode, PostToolUse

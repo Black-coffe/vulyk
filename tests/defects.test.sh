@@ -539,6 +539,19 @@ RW="$(cd "$SRC" && { pwd -W 2>/dev/null || pwd; })"
 } > "$LK/pass.txt"
 ok "leak-check: only passing forms -> exit 0" "$([ "$(leak "$LK/reg" "$LK/pass.txt")" = 0 ]; echo $?)"
 [ "$(cat "$LK/out")" = "" ] || sed 's/^/        /' "$LK/out"
+# A share path on another machine, either spelling; the names are synthetic and built from variables.
+UH=fileserver
+printf 'The report sits at \\\\%s\\clients\\acme\\report.docx today.\n' "$UH" > "$LK/unc-back.txt"
+printf 'The report sits at //%s/clients/acme/report.docx today.\n' "$UH" > "$LK/unc-fwd.txt"
+for fx in unc-back unc-fwd; do
+  ok "leak-check: a share path ($fx) -> exit 1" "$([ "$(leak "$LK/noreg" "$LK/$fx.txt")" = 1 ]; echo $?)"
+done
+{ echo 'See https://fileserver/clients/acme and file://server/share/x.md for the docs.'
+  echo '// a code comment, and an escaped "a\\nb" or a regex \\d+\\s* in a string.'
+  echo 'A share is written \\<host>\<share> or //<host>/<share>.'
+} > "$LK/unc-pass.txt"
+ok "leak-check: share-path look-alikes only -> exit 0" "$([ "$(leak "$LK/reg" "$LK/unc-pass.txt")" = 0 ]; echo $?)"
+[ "$(cat "$LK/out")" = "" ] || sed 's/^/        /' "$LK/out"
 
 echo "--- owner guard: only the owner's quoted words record an acceptance (audit-fixes-1113-08, contract O1)"
 # Synthetic transcripts and a throwaway spec repo; the hook reads both as it reads a live session's.
@@ -736,14 +749,8 @@ ok "owner guard: the card is block, the hook its check, its ## Check names what 
   "$(grep -q '^status: block$' "$OGC.md" && grep -qF 'check: bash .claude/hooks/owner-guard.sh --check <arg>' "$OGC.md" &&
      sed -n '/^## Check/,/^## Never/p' "$OGC.md" | grep -q 'Left open on purpose'; echo $?)"
 ok "owner guard: the defect index is current" "$(bash scripts/defects-index.sh --check >/dev/null 2>&1; echo $?)"
-# audit-fixes-1113-17 (round 2 review, Major 1): the header names every shell form the plan.md rewrite check leaves open
-OGH="$(sed -n '1,/^# The Python half lives/p' "$OG" | tr -d '\r' | sed 's/^# *//' | tr '\n' ' ' | tr -s ' ')"
-for n in 'a bare `plan.md` after a `cd`' 'from a cwd inside the spec folder' 'a glob (`docs/specs/*/plan.md`)' \
-         'a variable or a substitution' 'a writer outside its list' 'command text a shell reads from a file' \
-         'with no Python, every shell rewrite'; do
-  hit=1; case "$OGH" in *"$n"*) hit=0 ;; esac
-  ok "owner guard: the header names the open plan.md rewrite form: $n" "$hit"
-done
+# audit-fixes-1113-17 (round 2 review, Major 1); the open forms themselves are pinned by the list checks below
+OGH="$(sed -n '1,/^if \[ "\${1:-}" = "--check" \]/p' "$OG" | tr -d '\r' | sed 's/^# *//' | tr '\n' ' ' | tr -s ' ')"
 hit=0; case "$OGH" in *'sed or awk -i): the hook cannot read'*) hit=1 ;; esac
 ok "owner guard: the header no longer says every plan.md rewrite is denied to everyone" "$hit"
 
@@ -775,8 +782,8 @@ ok "owner guard: briefed --go inside backticks inside bash -c is read - subagent
   "$([ "$(og rel.jsonl Bash '{"command":"bash -c \"`scripts/cycle.sh briefed docs/specs/acme-demo --go`\""}' "$SUB")" = deny ]; echo $?)"
 ok "owner guard: the backticked form quoting the owner passes - main session" \
   "$([ "$(og rel.jsonl Bash '{"command":"bash -c \"`scripts/human-check.sh docs/specs/acme-demo ACCEPTED the Acme login works on a new account`\""}')" = allow ]; echo $?)"
-ok "owner guard: git add -u of the stats folder with a verdict-free message passes" \
-  "$([ "$(og rel.jsonl Bash '{"command":"git add -u memory/stats && git commit -m \"stats\""}' "$SUB")" = allow ]; echo $?)"
+ok "owner guard: git add -u of the stats folder with a verdict-free message passes - main session" \
+  "$([ "$(og rel.jsonl Bash '{"command":"git add -u memory/stats && git commit -m \"stats\""}')" = allow ]; echo $?)"
 ok "owner guard: reading the record with no verdict word passes" \
   "$([ "$(og rel.jsonl Bash '{"command":"tail -1 memory/stats/human.jsonl"}' "$SUB")" = allow ]; echo $?)"
 ok "owner guard: a grep of the record for a verdict word counts as a write (strict, the known cost)" \
@@ -809,12 +816,12 @@ done
 og_got="$(og rel.jsonl Bash '{"command":"echo {\\\"spec\\\":\\\"acme-demo\\\",\\\"verdict\\\":\\\"ACCEPTED\\\"} >> memory/stats/human.jsonl"}')"
 ok "owner guard: a redirect into the record is still denied - main session without a quote" "$([ "$og_got" = deny ]; echo $?)"
 [ "$og_got" = deny ] || { echo "  (debug) got $og_got; hook said:"; head -c 600 "$OD/why"; echo; }
-hit=1; case "$(tr -d '\r' < "$OG" | tr '\n' ' ' | tr -s ' #' ' ')" in *'a record name the command never spells'*) hit=0 ;; esac
-ok "owner guard: the header names the record forms left open on purpose" "$hit"
 ok "owner guard: the brief's real text in a quoted heredoc is denied (it names the record beside a verdict)" \
   "$([ "$(og rel.jsonl Bash "$(bash "$SRC/scripts/py.sh" -c 'import json,sys; print(json.dumps({"command": "cat > /tmp/acme-brief.md <<'"'"'X'"'"'\n" + open(sys.argv[1], encoding="utf-8").read() + "X"}))' "$SRC/docs/specs/owner-guard-commit-fp/brief.md")" "$SUB")" = deny ]; echo $?)"
 # human-check.sh --commit commits its own two paths and nothing else that is staged
-HCR="$OD/hc"; mkdir -p "$HCR/docs/specs/acme-demo" "$HCR/memory/stats"
+HCR="$OD/hc"; mkdir -p "$HCR/docs/specs/acme-demo" "$HCR/memory/stats" "$HCR/scripts"
+# the repo it runs in must hold scripts/redact.sh: without one it refuses (tails-1115-14)
+cp "$SRC/scripts/redact.sh" "$HCR/scripts/redact.sh"
 hc_ok=1; hc_msg=1; hc_left=1
 (
   cd "$HCR" || exit 1
@@ -840,6 +847,326 @@ hc_rc="$(cd "$HCR" && bash "$SRC/scripts/human-check.sh" docs/specs/acme-demo AC
 ok "human-check --commit refuses when the plan already holds an uncommitted change, and records nothing" \
   "$([ "$hc_rc" = 1 ] && [ "$(git -C "$HCR" rev-parse HEAD)" = "$hc_head" ] && \
      [ "$(wc -l < "$HCR/memory/stats/human.jsonl" | tr -d ' ')" = 1 ] && ! grep -q 'again' "$HCR/docs/specs/acme-demo/plan.md"; echo $?)"
+
+echo "--- owner guard: a subagent's run-state writes and the owner's records under any spelling (guards-1115-02)"
+cd "$OD/repo" || exit 1
+mkdir -p .vulyk/state/acme-demo .vulyk/reports
+wfp() { printf '{"file_path":"%s","content":"x\\n"}' "$1"; }
+efp() { printf '{"file_path":"%s","old_string":"a","new_string":"b"}' "$1"; }
+ok "owner guard: a subagent cannot write a run-state record - Write" \
+  "$([ "$(og rel.jsonl Write "$(wfp "$OW/.vulyk/state/acme-demo/approved")" "$SUB")" = deny ] &&
+     grep -q 'a subagent cannot write a run-state record' "$OD/why"; echo $?)"
+ok "owner guard: a subagent cannot write a run-state record - Edit" \
+  "$([ "$(og rel.jsonl Edit "$(efp "$OW/.vulyk/state/acme-demo/claim")" "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a subagent cannot write a run-state record - MultiEdit, a relative path" \
+  "$([ "$(og rel.jsonl MultiEdit '{"file_path":".vulyk/state/acme-demo/verify.acme-demo-01.stamp-red","edits":[{"old_string":"a","new_string":"b"}]}' "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a subagent cannot write a run-state record - reached through .." \
+  "$([ "$(og rel.jsonl Write "$(wfp "$OW/src/../.vulyk/state/acme-demo/claim")" "$SUB")" = deny ]; echo $?)"
+ok "owner guard: a subagent cannot write a run-state record - another letter case" \
+  "$([ "$(og rel.jsonl Write "$(wfp "$OW/.VULYK/State/acme-demo/approved")" "$SUB")" = deny ]; echo $?)"
+if { MSYS=winsymlinks:nativestrict ln -s "$OD/repo/.vulyk/state" "$OD/repo/st" 2>/dev/null ||
+     { command -v cygpath >/dev/null 2>&1 && cmd //c "mklink /J $(cygpath -w "$OD/repo/st") $(cygpath -w "$OD/repo/.vulyk/state")" >/dev/null 2>&1; }; } &&
+   [ -L "$OD/repo/st" ]; then # Git Bash: a junction reads as -L
+  ok "owner guard: a subagent cannot write a run-state record - reached through a link" \
+    "$([ "$(og rel.jsonl Write "$(wfp "$OW/st/acme-demo/approved")" "$SUB")" = deny ]; echo $?)"
+else
+  echo "  skip  owner guard: the run state through a link - this shell cannot make a link"
+fi
+ok "owner guard: a subagent's Write of a report under .vulyk/reports/ passes" \
+  "$([ "$(og rel.jsonl Write "$(wfp "$OW/.vulyk/reports/acme-review.md")" "$SUB")" = allow ]; echo $?)"
+ok "owner guard: a subagent's Write and Edit of a story file pass" \
+  "$([ "$(og rel.jsonl Write "$(wfp "$OW/docs/specs/acme-demo/acme-demo-01-login.md")" "$SUB")" = allow ] &&
+     [ "$(og rel.jsonl Edit "$(efp "$OW/docs/specs/acme-demo/acme-demo-01-login.md")" "$SUB")" = allow ]; echo $?)"
+ok "owner guard: a main-session Write to the run state passes" \
+  "$([ "$(og rel.jsonl Write "$(wfp "$OW/.vulyk/state/acme-demo/approved")")" = allow ]; echo $?)"
+# the script word, the verdict and the flag under other spellings (S2 forms first, then neighbours)
+sa() { og rel.jsonl Bash "{\"command\":\"$1\"}" "$SUB"; } # sa <command, JSON-escaped> -> a subagent's shell call
+for c in "bash scripts/hu''man-check.sh docs/specs/acme-demo ACCEPTED ok" \
+         'bash scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok' \
+         'h=scripts/human-check.sh; bash $h docs/specs/acme-demo ACCEPTED ok' \
+         'v=ACCEPT; bash scripts/human-check.sh docs/specs/acme-demo ${v}ED ok' \
+         'bash scripts/human-check.sh docs/specs/acme-demo \"$1\" ok' \
+         'for s in scripts/human-check.sh; do bash \"$s\" docs/specs/acme-demo REJECTED ok; done' \
+         '$X docs/specs/acme-demo ACCEPTED ok' \
+         'bash scripts/cyc*.sh briefed docs/specs/acme-demo --go' \
+         "bash scripts/cycle.sh brief''ed docs/specs/acme-demo -''-go" \
+         'c=scripts/cycle.sh; bash $c briefed docs/specs/acme-demo --go' \
+         'bash scripts/cycle.sh briefed docs/specs/acme-demo $f'; do
+  ok "owner guard: a subagent's guarded call under another spelling is denied: $c" "$([ "$(sa "$c")" = deny ]; echo $?)"
+done
+# guards-1115-09 (round 3, ask 2): the main session, with no owner words for the call, is denied the same
+# spellings - split quotes, a pattern, a variable for the script, the verdict or the flag (original forms first)
+ma() { og nogo.jsonl Bash "{\"command\":\"$1\"}"; } # ma <command, JSON-escaped> -> a main-session shell call
+for c in "bash scripts/hu''man-check.sh docs/specs/acme-demo ACCEPTED ok" \
+         'bash scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok' \
+         'h=scripts/human-check.sh; bash $h docs/specs/acme-demo ACCEPTED ok' \
+         'v=ACCEPT; bash scripts/human-check.sh docs/specs/acme-demo ${v}ED ok' \
+         'bash scripts/cyc*.sh briefed docs/specs/acme-demo --go' \
+         'f=--go; bash scripts/cycle.sh briefed docs/specs/acme-demo $f' \
+         "bash scripts/cycle.sh brief''ed docs/specs/acme-demo -''-go" \
+         'c=scripts/cycle.sh; bash $c briefed docs/specs/acme-demo --go' \
+         'for v in REJECTED; do bash scripts/h?man-check.sh docs/specs/acme-demo $v ok; done' \
+         'bash -c \"g=--go; bash scripts/cycle.sh briefed docs/specs/acme-demo \\$g\"'; do
+  ok "owner guard: a main-session guarded call under another spelling is denied: $c" "$([ "$(ma "$c")" = deny ]; echo $?)"
+done
+for c in 'bash scripts/cycle.sh status acme-demo' 'h=scripts/human-check.sh; bash $h --show docs/specs/acme-demo' \
+         'v=ACCEPTED; echo $v' 'bash scripts/cycle.sh briefed docs/specs/acme-demo' 'ls scripts/*.sh' \
+         'for s in docs/specs/*/; do bash scripts/cycle.sh status \"$s\"; done' 'bash -c \"$CMD\"' \
+         'grep -c Approved docs/specs/acme-demo/plan.md'; do
+  ok "owner guard: a main-session call that runs no guarded form passes: $c" "$([ "$(ma "$c")" = allow ]; echo $?)"
+done
+# a plan.md written by a name the command does not spell as its docs/specs path (S11 forms first)
+SEDI_CD="cd docs/specs/acme-demo && sed -i 's/<the owner word>/yes/' plan.md" # portable: hook input text, never run
+SEDI_GLOB="sed -i 's/<the owner word>/yes/' docs/specs/acme-d*/plan.md" # portable: hook input text, never run
+for c in "$SEDI_CD" \
+         "$SEDI_GLOB" \
+         'cd docs/specs/acme-demo; echo yes > plan.md' \
+         'd=docs/specs/acme-demo; printf yes >> \"$d/plan.md\"' \
+         'cp /tmp/p.md docs/specs/*/plan.*' \
+         'bash -c \"cd docs/specs/acme-demo && tee plan.md < /tmp/p\"'; do
+  ok "owner guard: a subagent's shell write of a plan.md is denied: $c" "$([ "$(sa "$c")" = deny ]; echo $?)"
+done
+# the acceptance record committed through a folder, and a verdict word in a commit message (S12 form first)
+for c in 'git add -u memory/stats && git commit -m \"vulyk(acme-demo): human check ACCEPTED\"' \
+         'git add -u memory/stats && git commit -m stats' \
+         'git add -A && git commit -m wip' \
+         'cd memory && git add stats' \
+         'git add \"memory/st*\"' \
+         'git commit -am wip' \
+         "git commit -m ACCEPT''ED -- src/a.py" \
+         'v=REJECT; git commit -m \"${v}ED\" -- src/a.py'; do
+  ok "owner guard: a subagent's git add or commit of the record or a verdict is denied: $c" "$([ "$(sa "$c")" = deny ]; echo $?)"
+done
+# contract L1: the flows a subagent keeps
+REPORT='cat > .vulyk/reports/acme-review.md <<'"'"'X'"'"'\nThe guard reads plan.md, the word ACCEPTED and scripts/human-check.sh by name.\nit'"'"'s fine\nX'
+for c in 'cat docs/specs/acme-demo/plan.md' 'cd docs/specs/acme-demo && grep -n Approved plan.md' "$REPORT" \
+         'echo \"see plan.md and ACCEPTED\" > .vulyk/reports/acme-note.md' \
+         'for t in tests/*.test.sh; do bash \"$t\"; done' \
+         'for f in scripts/*.sh; do bash -n \"$f\"; done' \
+         "git ls-files '*.sh' | xargs -n1 bash -n" \
+         'bash scripts/cycle.sh close-story docs/specs/acme-demo/acme-demo-01-login.md --commit --stamp e8' \
+         'bash scripts/human-check.sh --check docs/specs/acme-demo' \
+         'bash tests/defects.test.sh && bash tests/intake.test.sh && bash tests/inject.test.sh' \
+         'git add src/a.py && git commit -m \"feat: acme login\" -- src/a.py' \
+         'git status --porcelain && git log -1 --format=%s' 'git update-index --chmod=+x scripts/x.sh' \
+         'git diff -- memory/stats'; do
+  ok "owner guard: a subagent's legitimate call passes: $c" "$([ "$(sa "$c")" = allow ]; echo $?)"
+done
+# guards-1115-12 (round 5, ask 7): a seat's report or a worker's note that quotes a guarded call as text (a heredoc
+# fed to cat, an echo or printf word) records nothing - the original forms first, then neighbours.
+# guards-1115-13 (revert after round 6): the reverted hook refuses such text again
+for c in 'cat > .vulyk/reports/acme-review.md <<'"'"'X'"'"'\nASK 1: GREEN - human-check.sh acme-demo ACCEPTED is refused\nX' \
+         'cat > .vulyk/reports/acme-review.md <<X\nran: bash scripts/human-check.sh docs/specs/acme-demo REJECTED note\nX' \
+         'cat <<'"'"'X'"'"' > .vulyk/reports/acme-review.md\ncycle.sh briefed docs/specs/acme-demo --go was denied\nX' \
+         'cat > .vulyk/reports/acme-review.md <<'"'"'X'"'"'\nfinding: echo yes > docs/specs/acme-demo/plan.md is denied\nX' \
+         'echo '"'"'human-check.sh docs/specs/acme-demo ACCEPTED is refused'"'"' > /tmp/notes.txt' \
+         'cat > /tmp/notes.txt <<'"'"'X'"'"'\nbash scripts/human-check.sh docs/specs/acme-demo ACCEPTED was refused\nX' \
+         'printf '"'"'%s\\n'"'"' '"'"'bash scripts/cycle.sh briefed docs/specs/acme-demo --go'"'"' > /tmp/n.txt'; do
+  ok "owner guard: known over-deny, 0.55.0: a subagent's text quoting a guarded call is denied: $c" "$([ "$(sa "$c")" = deny ]; echo $?)"
+done
+for c in 'bash <<'"'"'X'"'"'\nbash scripts/human-check.sh docs/specs/acme-demo ACCEPTED ok\nX' \
+         'cat <<'"'"'X'"'"' | bash\nbash scripts/human-check.sh docs/specs/acme-demo ACCEPTED ok\nX' \
+         'echo hi; bash scripts/human-check.sh docs/specs/acme-demo REJECTED ok' \
+         'bash -c \"bash scripts/cycle.sh briefed docs/specs/acme-demo --go\"' \
+         'cat > docs/specs/acme-demo/plan.md <<'"'"'X'"'"'\n**Approved:** yes\nX' \
+         'echo '"'"'**Approved:** yes'"'"' >> docs/specs/acme-demo/plan.md'; do
+  ok "owner guard r5: a subagent's guarded call beside such text is still denied: $c" "$([ "$(sa "$c")" = deny ]; echo $?)"
+done
+# guards-1115-13 (round 6, finding 4, by the revert): a subagent's guarded call or plan-file rewrite is judged wherever
+# a shell or an interpreter runs its text (piped in, a process substitution, a here-string sourced, a substitution in
+# an unquoted heredoc body, inline code) - the original form first, then neighbours
+sa6() { og rel.jsonl Bash "$("$PYBIN" -c 'import json,sys; print(json.dumps({"command": sys.argv[1]}))' "$1")" "$SUB"; }
+while IFS= read -r c; do
+  ok "owner guard r6: round-6 regression forms are denied again: $c" "$([ "$(sa6 "$c")" = deny ]; echo $?)"
+done <<'EOF'
+echo 'bash scripts/human-check.sh docs/specs/acme-demo ACCEPTED ok' | bash
+bash <(echo 'bash scripts/cycle.sh briefed docs/specs/acme-demo --go')
+source /dev/stdin <<< 'bash scripts/human-check.sh docs/specs/acme-demo ACCEPTED ok'
+python3 -c 'import os; os.system("bash scripts/human-check.sh docs/specs/acme-demo ACCEPTED ok")'
+echo 'echo yes > docs/specs/acme-demo/plan.md' | sh
+python3 -c 'open("docs/specs/acme-demo/plan.md","w").write("x")'
+EOF
+c="$(printf 'cat <<X\n$(bash scripts/human-check.sh docs/specs/acme-demo ACCEPTED ok)\nX')"
+ok "owner guard r6: round-6 regression forms are denied again: $c" "$([ "$(sa6 "$c")" = deny ]; echo $?)"
+ok "owner guard: the planner's Write of a plan.md whose markers hold the placeholder passes" \
+  "$([ "$(og rel.jsonl Write "{\"file_path\":\"$OW/docs/specs/acme-demo/plan.md\",\"content\":\"# Acme plan\\n\\n$AP\\n$CK\\n\"}" "$SUB")" = allow ]; echo $?)"
+# guards-1115-06 (repair round 2): the guarded program found in every command position, the target resolved
+# (the original forms of the round's findings first, then a neighbour of each); the exact forms stay private
+for c in 'command -p bash scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok' \
+         'time -p bash scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok' \
+         'exec -a x bash scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok' \
+         'setsid bash scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok' \
+         'busybox sh scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok' \
+         'env -S \"bash scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok\"' \
+         "find scripts -name 'human-ch*' -exec bash {} docs/specs/acme-demo ACCEPTED ok \\\\;" \
+         'b=bash; $b scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok' \
+         "c='bash scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok'; \$c" \
+         '(( 1<<x ))\nbash scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok\nx' \
+         'bash \\\n<<X\nbash scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok\nX' \
+         'nohup -- bash scripts/cyc*.sh briefed docs/specs/acme-demo --go' \
+         'time -p bash scripts/cyc*.sh briefed docs/specs/acme-demo --go'; do
+  ok "owner guard r2: a guarded script behind any word before it is denied - subagent: $c" "$([ "$(sa "$c")" = deny ]; echo $?)"
+done
+SEDT="time -p sed -i 's/<the owner word>/yes/' docs/specs/acme-demo/plan.md" # portable: hook input text, never run
+SEDI_CMDP="command -p sed -i 's/a/yes/' docs/specs/acme-demo/plan.md" # portable: hook input text, never run
+SEDI_SETSID="setsid sed -i 's/a/yes/' docs/specs/acme-demo/plan.md" # portable: hook input text, never run
+SEDI_BUSYBOX="busybox sed -i 's/a/yes/' docs/specs/acme-demo/plan.md" # portable: hook input text, never run
+SEDI_FINDNAME="find docs/specs/acme-demo -name plan.md -exec sed -i 's/a/yes/' {} +" # portable: hook input text, never run
+SEDI_FINDTYPE="find docs/specs -type f -exec sed -i 's/a/yes/' {} +" # portable: hook input text, never run
+SEDI_FINDMD="find docs/specs -name '*.md' -exec sed -i 's/a/yes/' {} +" # portable: hook input text, never run
+SEDI_STAR="sed -i 's/a/b/' docs/specs/acme-demo/*" # portable: hook input text, never run
+SEDI_CDSTAR="cd docs/specs/acme-demo && sed -i 's/a/b/' *" # portable: hook input text, never run
+SEDI_XARGS="ls docs/specs/acme-demo/plan.md | xargs sed -i 's/a/b/'" # portable: hook input text, never run
+SEDI_SUBST='f=$(ls docs/specs/*/plan.md); sed -i s/a/b/ \"$f\"' # portable: hook input text, never run
+for c in "$SEDT" \
+         "$SEDI_CMDP" \
+         "$SEDI_SETSID" \
+         "$SEDI_BUSYBOX" \
+         "s=sed; \$s -i 's/a/yes/' docs/specs/acme-demo/plan.md" \
+         "$SEDI_FINDNAME" \
+         "$SEDI_FINDTYPE" \
+         "$SEDI_FINDMD" \
+         'sort -o docs/specs/acme-demo/plan.md /tmp/forged.md' \
+         'curl -s -o docs/specs/acme-demo/plan.md https://example.invalid/p' \
+         "vim -es -c '%s/a/b/' -c wq docs/specs/acme-demo/plan.md" \
+         'tar -xf /tmp/p.tar -C docs/specs/acme-demo' \
+         'cd docs/specs/acme-demo && ln plan.md p.md' \
+         "$SEDI_STAR" \
+         "$SEDI_CDSTAR" \
+         "$SEDI_XARGS" \
+         "$SEDI_SUBST" \
+         'echo yes > docs/specs/acme-demo/PLAN.MD' \
+         'echo yes > docs/specs/acme-demo/plan.md.'; do
+  ok "owner guard r2: a shell write of a plan.md by any writer or position is denied - subagent: $c" "$([ "$(sa "$c")" = deny ]; echo $?)"
+done
+for c in 'g=git; $g add -A' \
+         'git -c alias.a=add -c alias.b=a b memory/stats' \
+         'time -p git add memory/stats' \
+         'command -p git add -A' \
+         "printf '{\\\"spec\\\":\\\"acme-demo\\\",\\\"verdict\\\":\\\"ACC%s\\\"}' EPTED >> memory/stats/hum*.jsonl" \
+         'echo x >> memory/stats/human.jsonl'; do
+  ok "owner guard r2: a git add or shell write of the record by any spelling is denied - subagent: $c" "$([ "$(sa "$c")" = deny ]; echo $?)"
+done
+# an Edit, MultiEdit or Write judged by the resolved path (letter case, a trailing dot or space, a link)
+rp() { printf '{"file_path":"%s","old_string":"<the owner word>","new_string":"yes, ship it"}' "$1"; }
+rw() { printf '{"file_path":"%s","content":"# Acme plan\\n\\n**Approved:** yes, ship it\\n"}' "$1"; }
+for p in docs/specs/acme-demo/PLAN.MD Docs/Specs/acme-demo/plan.md docs/specs/acme-demo/Plan.md; do
+  ok "owner guard r2: a subagent's Edit of a plan.md record line by another spelling is denied: $p" \
+    "$([ "$(og plan.jsonl Edit "$(rp "$OW/$p")" "$SUB")" = deny ]; echo $?)"
+done
+for p in 'docs/specs/acme-demo/plan.md.' 'docs/specs/acme-demo/plan.md ' 'docs/specs/acme-demo/PLAN.md'; do
+  ok "owner guard r2: a subagent's Write of a plan.md record line by another spelling is denied: [$p]" \
+    "$([ "$(og plan.jsonl Write "$(rw "$OW/$p")" "$SUB")" = deny ]; echo $?)"
+done
+ok "owner guard r2: a subagent's MultiEdit of a plan.md record line in another letter case is denied" \
+  "$([ "$(og rel.jsonl MultiEdit "{\"file_path\":\"$OW/docs/specs/acme-demo/PLAN.MD\",\"edits\":[{\"old_string\":\"<written by human-check>\",\"new_string\":\"ACCEPTED by t - looks fine\"}]}" "$SUB")" = deny ]; echo $?)"
+ROW='{\"spec\":\"acme-demo\",\"verdict\":\"ACCEPTED\",\"note\":\"looks fine\"}'
+for p in memory/stats/HUMAN.jsonl Memory/Stats/human.jsonl memory/stats/human.jsonl.; do
+  ok "owner guard r2: a subagent's Write of an acceptance row by another spelling is denied: $p" \
+    "$([ "$(og rel.jsonl Write "{\"file_path\":\"$OW/$p\",\"content\":\"$ROW\\n\"}" "$SUB")" = deny ]; echo $?)"
+done
+printf '{"ts":"2025-12-01T10:00:00Z","spec":"acme-old","verdict":"ACCEPTED","note":"old"}\n' > memory/stats/human.jsonl
+ok "owner guard r2: a subagent's Edit moving an acceptance row to another spec is denied (judged on the file after it)" \
+  "$([ "$(og rel.jsonl Edit "{\"file_path\":\"$OW/memory/stats/human.jsonl\",\"old_string\":\"\\\"spec\\\":\\\"acme-old\\\"\",\"new_string\":\"\\\"spec\\\":\\\"acme-demo\\\"\"}" "$SUB")" = deny ]; echo $?)"
+rm -f memory/stats/human.jsonl
+if { MSYS=winsymlinks:nativestrict ln -s "$OD/repo/docs/specs/acme-demo" "$OD/repo/sp" 2>/dev/null ||
+     { command -v cygpath >/dev/null 2>&1 && cmd //c "mklink /J $(cygpath -w "$OD/repo/sp") $(cygpath -w "$OD/repo/docs/specs/acme-demo")" >/dev/null 2>&1; }; } &&
+   [ -L "$OD/repo/sp" ]; then # Git Bash: a junction reads as -L
+  ok "owner guard r2: a subagent's Edit of a plan.md record line through a link is denied" \
+    "$([ "$(og plan.jsonl Edit "$(rp "$OW/sp/plan.md")" "$SUB")" = deny ]; echo $?)"
+  rm -f "$OD/repo/sp" 2>/dev/null; rmdir "$OD/repo/sp" 2>/dev/null
+else
+  echo "  skip  owner guard r2: a plan.md through a link - this shell cannot make a link"
+fi
+# the calls a subagent keeps: interpreter text and write targets that name no plan.md or record
+PYHD="python3 - <<'PY'\nfrom os.path import *\nprint(6 * 7, '\$HOME', glob('docs/*.md'))\nPY"
+SEDI_LAST="sed -i '\$d' src/a.py" # portable: hook input text, never run
+SEDI_SRC="sed -i 's/a/b/' src/*" # portable: hook input text, never run
+SEDI_DOCS="sed -i 's/a/b/' docs/*.md" # portable: hook input text, never run
+SEDI_LSXARGS="git ls-files '*.sh' | xargs sed -i 's/a/b/'" # portable: hook input text, never run
+SEDI_LOOP='ls tests | while read -r f; do sed -i s/a/b/ \"$f\"; done' # portable: hook input text, never run
+SEDI_FINDSRC="find src -name '*.py' -exec sed -i 's/a/b/' {} +" # portable: hook input text, never run
+for c in 'python3 -c \"print(6 * 7)\"' 'python3 -c \"print(2 ** 10)\"' "node -e 'console.log(6 * 7)'" "$PYHD" \
+         'python3 -m pytest tests/*' 'python3 scripts/tool.py \"$1\"' \
+         "$SEDI_LAST" 'echo x > \"$OUT\"' 'bash tests/a.test.sh 2> \"$ERR\"' 'echo x | tee \"$LOG\"' \
+         'touch \"$marker\"' 'cp src/a.py \"$dest\"' 'mv build/* dist/' "$SEDI_SRC" \
+         "$SEDI_DOCS" "$SEDI_LSXARGS" \
+         "$SEDI_LOOP" \
+         'bash \"$CLAUDE_PROJECT_DIR/scripts/x.sh\" docs/specs/acme-demo' '\"${PYTHON:-python3}\" -m pytest -q' \
+         "$SEDI_FINDSRC" 'git -C src log --oneline -1' \
+         'sort -o /tmp/sorted.txt src/a.py' 'tar -xf /tmp/p.tar -C /tmp/out'; do
+  ok "owner guard r2: a subagent's ordinary call passes: $c" "$([ "$(sa "$c")" = allow ]; echo $?)"
+done
+OGHDR="$(sed -n '1,/^if \[ "\${1:-}" = "--check" \]/p' "$OG" | tr -d '\r' | sed 's/^# *//' | tr '\n' ' ' | tr -s ' ')"
+ok "owner guard r2: the header says the guard stops accidents and shortcuts of a cooperative agent, not an adversary" \
+  "$(printf '%s' "$OGHDR" | grep -q 'accidents and shortcuts of a cooperative agent, not an adversary'; echo $?)"
+# guards-1115-08: an alias still unexpanded after the walk (a longer chain, or a cycle) is refused, naming the chain
+LONG='git'; for n in 1 2 3 4 5 6 7 8 9 10; do LONG="$LONG -c alias.a$n=a$((n + 1))"; done
+LONG="$LONG -c alias.a11=add a1 memory/stats/human.jsonl"
+for c in "$LONG" 'git -c alias.a=b -c alias.b=a a memory/stats'; do
+  r="$(sa "$c")"
+  ok "owner guard: a git add of the record through an alias chain the walk cannot finish is denied, naming the chain - subagent: $c" \
+    "$([ "$r" = deny ] && grep -q 'alias chain' "$OD/why"; echo $?)"
+done
+ok "owner guard: a two-step alias chain to a git add of the record is denied as before - subagent" \
+  "$([ "$(sa 'git -c alias.a=add -c alias.b=a b memory/stats')" = deny ]; echo $?)"
+for c in 'git -c alias.s=st -c alias.st=status s' 'git -c alias.l=lg -c alias.lg=log l --oneline -1'; do
+  ok "owner guard: an alias chain ending in a harmless verb passes - subagent: $c" "$([ "$(sa "$c")" = allow ]; echo $?)"
+done
+# no Python: the subagent's wider text filter
+nopy_sub() { # nopy_sub <tool> <tool_input JSON> -> the hook's stdout for a subagent, python3 / python / py stubbed away
+  printf '{"session_id":"s","transcript_path":"%s/rel.jsonl","cwd":"%s","tool_name":"%s","tool_input":%s,"agent_id":"a1","agent_type":"worker-code"}' \
+    "$ODW" "$OW" "$1" "$2" | env -u VULYK_PY -u CLAUDE_PROJECT_DIR PATH="$OD/stubs:$PATH" bash "$OG"
+}
+o="$(nopy_sub Bash "$(hc ACCEPTED 'the Acme login works on a new account')")"
+ok "owner guard: with no Python a subagent's spelled guarded call is denied, naming the missing Python" \
+  "$(printf '%s' "$o" | grep -q '"deny".*no Python 3'; echo $?)"
+o="$(nopy_sub Bash "{\"command\":\"bash scripts/hu''man-check.sh docs/specs/acme-demo ACCEPTED ok\"}")"
+ok "owner guard: with no Python a subagent's disguised form the text filter sees is denied" \
+  "$(printf '%s' "$o" | grep -q '"deny".*no Python 3'; echo $?)"
+o="$(nopy_sub Write "$(wfp "$OW/.vulyk/state/acme-demo/approved")")"
+ok "owner guard: with no Python a subagent's Write of a run-state record is denied" \
+  "$(printf '%s' "$o" | grep -q '"deny".*no Python 3'; echo $?)"
+o="$(nopy_sub Bash '{"command":"ls src"}')$(nopy_sub Edit "$EDSRC")"
+ok "owner guard: with no Python an unrelated subagent call passes" "$([ -z "$o" ]; echo $?)"
+# the header's last block lists what stays open, and the card's ## Check list equals it (contract O2)
+cd "$SRC" || exit 1
+OGLIST="$("$PYBIN" -c '
+import re, sys
+def items(lines):
+    out = []
+    for l in lines:
+        l = l.strip()
+        if l.startswith("- "):
+            out.append(l[2:])
+        elif out and l:
+            out[-1] += " " + l
+    return [re.sub(r"\s+", " ", i).strip() for i in out]
+h = []
+for l in open(sys.argv[1], encoding="utf-8").read().splitlines()[1:]:
+    if not l.startswith("#"):
+        break
+    h.append(l[1:])
+k = [i for i, l in enumerate(h) if l.strip().startswith("Left open on purpose")]
+hl = items(h[k[-1] + 1:]) if k else []
+c = open(sys.argv[2], encoding="utf-8").read().split("\n## Check", 1)[1].split("\n## ", 1)[0].splitlines()
+j = [i for i, l in enumerate(c) if l.strip().startswith("Left open on purpose")]
+cl = items(c[j[-1] + 1:]) if j else []
+print("same" if hl and hl == cl else "differ")
+for i in hl:
+    print(i)
+' "$OG" "$OGC.md")"
+ok "owner guard: the header ends with the open list and the card's ## Check list equals it" \
+  "$([ "$(printf '%s\n' "$OGLIST" | head -1)" = same ]; echo $?)"
+OGOPEN="$(printf '%s\n' "$OGLIST" | tail -n +2)"
+ok "owner guard: the open list names the main session's text prefilter" \
+  "$(printf '%s\n' "$OGOPEN" | grep -q "main session's.*prefilter"; echo $?)"
+ok "owner guard: the open list names the tools the hook is not wired on" \
+  "$(printf '%s\n' "$OGOPEN" | grep -q 'not wired on'; echo $?)"
+ok "owner guard: the open list names a spelling form (glob, variable, changed directory) only for the main session or no Python" \
+  "$(printf '%s\n' "$OGOPEN" | grep -E 'glob|variable|changed directory|pathspec' | grep -v -e 'main session' -e 'no Python' | grep -q .; [ $? = 1 ]; echo $?)"
+ok "owner guard: the header is clean for portability-check" \
+  "$(bash scripts/portability-check.sh "$OG" >/dev/null 2>&1; echo $?)"
 
 echo "--- this tree's library: green, one info line per .scrub-revs commit (audit-fixes-1113-12)"
 run

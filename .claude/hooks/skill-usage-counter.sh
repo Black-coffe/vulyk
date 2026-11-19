@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostToolUse(Skill) hook: increment per-skill invocation counters for skill-gardener.
+# PostToolUse(Skill) and UserPromptExpansion hook: increment per-skill invocation counters for skill-gardener.
 # Counts only VULYK's own: a skill whose folder is under the project's .claude/skills/ and a vulyk-* command
 # (.claude/commands/vulyk-*.md). Any other name is not written, and a key already in the file that fails the
 # rule is dropped on the next write. memory/stats/skills.json is local and gitignored (audit-fixes-1113, ask 2).
@@ -11,7 +11,11 @@ STATS="$ROOT/memory/stats/skills.json"
 
 payload=$(cat 2>/dev/null || true)
 [ -n "$payload" ] || exit 0
-skill=$(printf '%s' "$payload" | jq -r '.tool_input.skill_name // .tool_input.skill // .tool_input.name // empty' 2>/dev/null | tr -d '\r')
+# UserPromptExpansion (tails-1115, T72; cc-facts F9): a typed command never runs the Skill tool; its command_name is
+# counted only for a vulyk-* command.
+skill=$(printf '%s' "$payload" | jq -r 'if .hook_event_name == "UserPromptExpansion"
+  then (.command_name // "" | if startswith("vulyk-") then . else "" end)
+  else (.tool_input.skill_name // .tool_input.skill // .tool_input.name // empty) end' 2>/dev/null | tr -d '\r')
 ours() { # ours <name> - 0 for a project skill folder or a vulyk-* command file; no path characters either way
   case "$1" in ''|*[!A-Za-z0-9._-]*|.*) return 1 ;; esac
   [ -d "$ROOT/.claude/skills/$1" ] && return 0

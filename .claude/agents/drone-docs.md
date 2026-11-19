@@ -17,9 +17,9 @@ and a wrong map is worse than none because it is consulted with confidence.
 
 1. Read the changed files as they are now, and the map slices that cover them.
 2. Update each affected `memory/map/<module>.md`: entry points, types, gotchas that changed, and its
-   `last-verified` date. A slice stays under ~80 lines: it is an index, not documentation. When an
-   update would push it past that, cut the least load-bearing entries instead of exceeding it, and cut
-   a slice that is already over.
+   `last-verified` date. A slice stays under ~80 lines: it is an index, not documentation. At the cap,
+   wrap a line longer than 130 characters, and split a slice that would outgrow its line cap into a new
+   slice, leaving a one-line pointer to it in the old one. Never drop an entry to fit.
 3. If the change created or altered a domain rule or invariant, update or create the `docs/wiki/` note
    from `templates/wiki-note.md`, linking related notes.
 4. Retire what the change falsified: grep the map, the wiki and `docs/adr/` for the rule, column, status

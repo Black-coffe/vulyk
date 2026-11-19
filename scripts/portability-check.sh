@@ -4,10 +4,11 @@
 #   Usage: bash scripts/portability-check.sh              # the tree: git ls-files '*.sh', the constitution,
 #                                                         # .claude/commands/*.md, .claude/agents/*.md
 #          bash scripts/portability-check.sh <file>...    # those files only (the card's `check: ... <arg>`)
+#          bash scripts/portability-check.sh --rules      # each rule and its fix, `<rule>: <fix>`
 #
 # A grep gate for shell that runs on Linux only: a stock macOS has /bin/bash 3.2 and BSD sed, date,
 # stat, grep, readlink, find and xargs, no `timeout`, and Windows' python3 may be the Store stub.
-# Rules (each hit prints `portability-check: <file>:<line>: <rule>: <text>`):
+# Rules (each hit prints `portability-check: <file>:<line>: <rule>: <text> - fix: <fix>`, the rule's FIX):
 #   bash4        declare -A, ${v,,} ${v^^}, mapfile, readarray, |&, &>>
 #   sed-i        a bare `sed -i` (sed_inplace, or an attached suffix: sed -i.bak)
 #   sed-bre      \| \+ \? in a sed without -E / -r
@@ -25,6 +26,8 @@
 #   heredoc-in-subst  a << heredoc opened inside a $( ) whose body holds a quote, a backtick or `(`
 #                (bash 3.2 reads the body as part of the substitution): put the heredoc in a function
 #                and call it in $( )
+#   sort-V       sort -V / --version-sort in command position (stock macOS sort has none):
+#                version_newest / version_newer from scripts/version-order.sh
 # Not read: comments, heredoc bodies (Python, file contents), and in an .md file everything but
 # inline code spans and shell fences. The one bypass is a same-line `# portable: <reason>`, counted
 # in the summary line. No warn mode, no rule switch.
@@ -35,7 +38,7 @@ set -u
 # shellcheck source=scripts/lib.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 vulyk_python || { echo "portability-check: needs python 3 (python3, python or py)" >&2; exit 2; }
-case "${1:-}" in -h|--help) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; esac
+case "${1:-}" in -h|--help) sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; esac
 
 PYTHONIOENCODING=utf-8 "$VULYK_PY" - "$@" <<'PY'
 import os, re, subprocess, sys
@@ -50,7 +53,10 @@ def crash(kind, value, tb):  # a broken gate is a usage failure (2), never a hit
 sys.excepthook = crash
 
 args = sys.argv[1:]
-if args:
+RULES_ONLY = args == ["--rules"]
+if RULES_ONLY:
+    files = []
+elif args:
     missing = [a for a in args if not os.path.isfile(a)]
     if missing:
         for a in missing:
@@ -74,7 +80,7 @@ else:
             extra += sorted("%s/%s" % (d, f) for f in os.listdir(p) if f.endswith(".md"))
     rels = [r for r in listed + extra if not r.startswith("tests/fixtures/")]
     files = [(r, os.path.join(root, r)) for r in dict.fromkeys(rels) if os.path.isfile(os.path.join(root, r))]
-if not files:
+if not files and not RULES_ONLY:
     print("portability-check: nothing to scan", file=sys.stderr)
     sys.exit(2)
 
@@ -98,11 +104,43 @@ WORDS = [  # judged only where the word <w> is code, not quoted text: "(python3 
     ("timeout", re.compile(CP + r"(?P<w>g?timeout)" + END)),
     ("python", re.compile(CP + r"(?P<w>python3?|py)" + END
                           + r"|\b(?:command\s+-v|which|type(?:\s+-\w+)*|hash)\s+(?P<o>python3?|py)" + END)),
+    ("sort-V", re.compile(CP + r"(?P<w>sort)(?:\s+-\S+)*?\s+(?:-[A-Za-z]*V\b|--version-sort\b)")),
 ]
 FALLBACK = [  # a GNU form after a same-line `||` fallback is not a hit
     ("date-d", re.compile(r"\bdate\s+(?:-\S+\s+)*?(?:-[A-Za-z]*d\b|--date\b|-I)")),
     ("stat-c", re.compile(r"\bstat\s+" + FLAGS + r"(?:-[A-Za-z]*c\b|--format\b|--printf\b)")),
 ]
+OTHER = ["paste-s", "sed-bre", "array", "case-in-subst", "heredoc-in-subst"]  # judged by code below, not a table
+FIX = {  # every rule's fix, printed at the end of its hit line (tails-1115-05, T6)
+    "bash4": "bash 3.2 forms: a case or a loop for declare -A / mapfile, tr for ${v,,}, 2>&1 | for |&, >>f 2>&1 for &>>",
+    "sed-i": "sed_inplace from scripts/lib.sh, or an attached suffix: sed -i.bak",
+    "sed-bre": "sed -E with ERE (| + ? unescaped)",
+    "grep-P": "grep -E, or a vulyk_python step",
+    "pct-n": "date +%s, or a vulyk_python clock for sub-second time",
+    "readlink-f": 'cd "$(dirname "$p")" && pwd -P',
+    "find-printf": "find ... -exec, or a vulyk_python step",
+    "xargs-r": "test the list is not empty before xargs",
+    "timeout": "run_capped from scripts/lib.sh",
+    "python": "vulyk_python from scripts/lib.sh, or bash scripts/py.sh",
+    "sort-V": "version_newest / version_newer from scripts/version-order.sh",
+    "date-d": "date_epoch / date_shift from scripts/lib.sh, or a same-line || BSD fallback",
+    "stat-c": "a same-line || BSD fallback (stat -f), or wc -c for a size",
+    "array": '${a[@]+"${a[@]}"}',
+    "paste-s": "name stdin as the file operand: paste -sd, -",
+    "case-in-subst": "open the pattern with a (: (pat)",
+    "heredoc-in-subst": "put the heredoc in a function and call it in $( )",
+}
+ALL_RULES = list(dict.fromkeys([r for r, _ in RULES + WORDS + FALLBACK] + OTHER))
+if RULES_ONLY:
+    for r in ALL_RULES:
+        print("%s: %s" % (r, FIX.get(r, "")))
+    sys.exit(0)
+
+
+def fixed(r):
+    return " - fix: %s" % FIX.get(r, "")
+
+
 SED = re.compile(r"\bsed(?:_inplace)?\b(.*)")
 BRE = re.compile(r"(?<!\\)(?:\\\\)*\\[|+?]")   # an odd run of backslashes: \\| is a literal backslash, then a bar
 ARRAY = re.compile(r'"\$\{(' + NAME + r')\[([@*])\]\}"')
@@ -289,7 +327,7 @@ for shown, path in files:
                 if opener[2]:
                     allowed += 1
                 else:
-                    found.append("portability-check: %s:%d: heredoc-in-subst: %s" % (shown, opener[0], opener[1]))
+                    found.append("portability-check: %s:%d: heredoc-in-subst: %s%s" % (shown, opener[0], opener[1], fixed("heredoc-in-subst")))
             continue
         code, comment, is_code, case_hit = scan(ln, stack)
         in_sub = any(isinstance(f, list) for f in stack)  # a heredoc's body comes before the `)`
@@ -304,7 +342,7 @@ for shown, path in files:
             allowed += 1
             continue
         for r in dict.fromkeys(rules):
-            found.append("portability-check: %s:%d: %s: %s" % (shown, n, r, ln.strip()))
+            found.append("portability-check: %s:%d: %s: %s%s" % (shown, n, r, ln.strip(), fixed(r)))
 
 
 for f in found:

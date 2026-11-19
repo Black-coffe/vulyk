@@ -33,7 +33,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # --- `--show`: the pack's change, for the Queen to paste into her reply before the owner answers ----
 # Base: the merge-base with the default branch while on the spec's branch; otherwise (on the default
 # branch, after a merge) the parent of the commit that added <spec>/plan.md, or the empty tree. Prints
-# `git diff --stat`, then the diff capped at SHOW_CAP lines and a line naming the cut and the command
+# `git diff --stat`, then the diff (code first, docs/specs/ after) capped at SHOW_CAP lines and a line naming the cut and the command
 # for the rest. Writes nothing. A missing spec dir or no git repo exits 2: never a silent pass.
 SHOW_CAP=300
 if [ "${1:-}" = "--show" ]; then
@@ -57,8 +57,11 @@ if [ "${1:-}" = "--show" ]; then
   SB7="$(printf '%s' "$SBASE" | cut -c1-7)"
   echo "human-check: $(basename "$SSPEC") - the change from $SB7 to HEAD"
   git -c core.quotePath=false diff --stat "$SBASE" HEAD
+  # Code first, spec paperwork (docs/specs/) after, one cap over both: paperwork sorts first in git's
+  # order and filled the cap before a line of code showed (tails-1115-05, T16).
   STOTAL="$(git diff "$SBASE" HEAD | wc -l | tr -d ' ')"
-  git -c core.quotePath=false diff "$SBASE" HEAD | head -n "$SHOW_CAP"
+  { git -c core.quotePath=false diff "$SBASE" HEAD -- ':(top)' ':(top,exclude)docs/specs/'
+    git -c core.quotePath=false diff "$SBASE" HEAD -- ':(top)docs/specs/'; } | head -n "$SHOW_CAP"
   if [ "$STOTAL" -gt "$SHOW_CAP" ]; then
     echo "... $((STOTAL - SHOW_CAP)) more lines cut; the rest: git diff $SB7 HEAD"
   fi
@@ -159,15 +162,16 @@ PACK="$(pack_fingerprint "$SPEC")"
 
 # The note is the owner's own words about what they saw, and it lands in two committed
 # files - same exposure as an acceptance note, same filter first.
-if [ -f "$ROOT/scripts/redact.sh" ]; then
-  # redact.sh exits 1 when it cannot mask; its stdout is then a marker, not the note. Nothing is recorded.
-  SAFE_NOTE="$(printf '%s' "$NOTE" | bash "$ROOT/scripts/redact.sh")" || {
-    echo "human-check: REFUSED - scripts/redact.sh failed (its stderr says why), so the note cannot be masked; nothing is recorded. Fix it and run this again." >&2
-    exit 1
-  }
-else
-  SAFE_NOTE="$NOTE"
-fi
+# No redact.sh to run (missing, or not a file) refuses the same way, as journal.sh and ship-check.sh do.
+[ -f "$ROOT/scripts/redact.sh" ] || {
+  echo "human-check: REFUSED - scripts/redact.sh is missing, so the note cannot be masked; nothing is recorded. Restore it and run this again." >&2
+  exit 1
+}
+# redact.sh exits 1 when it cannot mask; its stdout is then a marker, not the note. Nothing is recorded.
+SAFE_NOTE="$(printf '%s' "$NOTE" | bash "$ROOT/scripts/redact.sh")" || {
+  echo "human-check: REFUSED - scripts/redact.sh failed (its stderr says why), so the note cannot be masked; nothing is recorded. Fix it and run this again." >&2
+  exit 1
+}
 ONE_LINE="$(printf '%s' "$SAFE_NOTE" | tr -d '\n' | tr -d '\r')"
 ESCAPED="$(printf '%s' "$ONE_LINE" | tr -d '\\' | tr '"' "'")"
 

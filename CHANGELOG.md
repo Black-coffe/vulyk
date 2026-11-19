@@ -4,6 +4,113 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-11-19
+
+A repair re-checks what it repaired, not the whole spec (spec `narrow-repair-1115`, ADR-040).
+
+### Changed
+- `cycle.sh suite`: a repo whose default branch holds `.vulyk-solo-gate` = `merge-only` runs no gate step in a Tier 1-2
+  round (`SUITE: none - Tier 1-2: ...`), nor in the narrow round after its repair; the merge run is the one full run, and
+  Tier 3-4 and the owner's `--full` round run the gate as before. Opt-in: VULYK's own repo carries the file, the installer
+  never ships it, hives keep today's gate (spec `solo-gate-1118`).
+- `cycle.sh repair` scopes every repair story to its findings' files, their exact tests and only the rows of the
+  stories that named them, and writes `narrow: true` from the new `round_scope`.
+- A round after a repair re-judges only red or touched asks (the blind seat only when there are some, `round-asks`
+  in the court) and re-runs only the red gate steps; the one-file narrow rule and its local record are gone.
+- `cycle.sh suite <spec> --merge` runs the whole gate once, with no agent, before a local merge, and `ship-check.sh`
+  refuses a merge without it (`suite:` line); `cycle.sh open-round <spec> --full` (`/vulyk-review <slug> --full`)
+  opens the owner's full check, which runs only on his word (a major version, about monthly, bugs or feedback).
+- `symbol-map.sh --fill-tests <spec-dir>` adds to each todo story the tests that call its files (`exact` hits) and a
+  `## Commands` row for each, printing a `pick` line for a parted suite; `/vulyk-plan` step 7 runs it before
+  wave-check.
+- Card `full-round-for-a-narrow-fix` carries the owner's 2026-11-14 words and checks a round's `ROUND`/`suite.log`
+  against the policy; `CLAUDE.md`, `docs/cycle.md`, ADR-040 and an ADR-013 amendment state it.
+- install.sh ends with one line naming Python 3, jq or git when the machine lacks it, and what is limited without it (T53).
+- a project with AGENTS.md and no CLAUDE.md gets CLAUDE.vulyk.md and a two-line CLAUDE.md importing both; AGENTS.md is left alone (T55).
+- journal.sh, ship-check.sh --record, human-check.sh and acceptance-log.sh refuse to write when masking cannot run.
+- portability-check prints the fix at the end of every hit line and lists rules with --rules.
+- prompt-check refuses an agent whose tools list Agent or Task.
+- human-check --show prints code first and spec paperwork after, inside the 300-line cap.
+- T52 - the installer no longer installs the pulse mod or pins the Queen model unasked: `--pulse on` and `--model-pin on` do it; otherwise one `offer:` line with the command.
+- T22 - `--upgrade` and `--check` name each defect card with `area:` and no `paths:` glob (it reaches no worker).
+- T97 - the PreCompact snapshot hook (context-guard.sh) is retired; an upgrade unwires the shipped entry and removes the release copy; existing snapshot folders stay, and `/vulyk-gc` no longer deletes them.
+- T63 - settings ship `switchModelsOnFlag: false`: a flagged request pauses instead of moving to another model; an owner's value is kept.
+- The handoff hook knows the 1M model families with no statusLine copy, honours `CLAUDE_CODE_AUTO_COMPACT_WINDOW=400k`/`1M`, re-offers a level after the window changes, and trusts a session past 196k over a borrowed 200k window.
+- The defect-card hook skips Bash and PowerShell commands that only read (search, print, list, count, compare); `git` and anything it cannot read still get cards.
+- T4 - the constitution says Tier 3-4 has one blind seat, `haiku` instead of `opus` when *Client path* is filled.
+- T24 - worker prompts name the driver's dispatch prompt and the constitution as instruction sources.
+- T71 - `/vulyk-update` sets `disable-model-invocation: true`: only the owner invokes it.
+- T98 - the bootstrap interview drops five questions nothing read (4, 9, 14, 16, 18).
+- every GitHub Action in CI is pinned by full commit SHA with its version in a comment (S18).
+- the install smoke job also runs on Windows under Git Bash, including the installer's CR byte check (T51).
+- CI runs the repo-wide defect gate, and ship-check says NOT READY when the gate is red or cannot run (T100).
+- a push carrying a `-dev.N` tag, or more than one version tag, is refused by a pre-push hook that /vulyk-ship puts in place where it makes the local tag (T26).
+- the memory/learnings chain is retired from the brief, /vulyk-gc, /vulyk-evolve and librarian; files stay.
+- `cycle.sh reopen --full` records the owner's design-fault word; a reopened `no-progress` escalation now gets a narrow round over every repeated red ask, not a full one (ADR-040 D1 amendment).
+
+### Fixed
+- A story's sections are read outside fenced code blocks only (one shared fence rule in `cycle.sh`, `wave-check.sh`,
+  `scope-check.sh`, `trace-check.sh` and `symbol-map.py`), so a red receipt's captured output cannot add a line.
+- The defect gate of `close-story` no longer runs a card's check on the card library's own fixtures and terms files.
+- The guard hooks close more of an agent's slips past the process (spec `guards-1115`): owner-guard and git-guard
+  keep a subagent off the cycle's run state (`.vulyk/state/`) and off the owner-only records under other spellings;
+  under a build lock git-guard denies a subagent the verbs that write history; git-guard finds the git verb past
+  more global options and command positions and keeps its subagent rules without Python; court-guard keeps a blind
+  seat inside its court for more path and command shapes; forced tag and forced push are denied to every caller,
+  the evaluate-a-string command to subagents. `close-story` accepts a red receipt only from stamp-red's own record,
+  and stamp-red cleans up its raw test output. Each hook's header says it stops a cooperative agent's accidents and
+  shortcuts, not an adversary, and lists in general words what it leaves open, including a few ordinary calls it
+  still refuses.
+- close-story, stamp-red and scope-check take an absolute story path as the repo-relative one; one outside the repo is refused by close-story and stamp-red (exit 2), and scope-check names it and checks nothing.
+- the close commit's subject is the first `# ` line after the frontmatter, not a commented frontmatter line.
+- close-story keeps a mode change staged only in the index (core.fileMode=false).
+- stamp-red no longer counts red_reason in passing (`ok`) lines.
+- the `--short` line carries the court relative to the repo root; the driver tells seats to resolve it against the project root.
+- commands_lint names the round gate only for the full-suite row; other several-command rows are told close-story runs one command per cell.
+- the cycle.sh and lib.sh headers say what the files hold today; lib.sh says sourcing it turns on `set -u`.
+- install.sh stamps the source commit in `.claude/vulyk-commit`; when the installed version has no tag, `--upgrade` judges release copies against that commit (T7).
+- install.sh ships only the tracked files of a git source; an untracked or ignored file in the source no longer reaches a hive (T15).
+- install.sh's line-ending step counts and strips real CR bytes on Git Bash, and logs the true count (T51).
+- T54 - the installer says when a sidecar hive's CLAUDE.md does not import CLAUDE.vulyk.md.
+- redact.sh and the handoff fallback mask more secret shapes: long secret flags, inflected Russian/Ukrainian keywords, Cyrillic values, user:pass arguments of more commands.
+- leak-check.sh flags one more path form.
+- The model floor follows the newest Fable: `fable 5.2`, so a pin to Fable 5.1 reads as below the floor (T61).
+- token-report and the pulse price cache reads by model family and version from the published prices, so Fable 5.2 is no longer costed at the uncached rate, and an unknown family is listed as unpriced (T62).
+- `model_version` reads Mythos IDs; `top-model.sh --explain` names a set `CLAUDE_CODE_EFFORT_LEVEL` as the effort that wins (T64).
+- `top-model.sh` knows the Ultra plan, so it no longer reads as unknown and hands the gate to Fable (T76).
+- wave-check no longer reports verify-gap for a test the story creates (a `## Files` entry names it).
+- hives-behind --busy reads a cwd-less Workflow journal's cwd from its session's top transcript, so a neighbour hive's build no longer reads as busy.
+- portability-check rule sort-V; /vulyk-evolve orders litopys copies with scripts/version-order.sh.
+- T72 - typed `/vulyk-*` commands are counted through the UserPromptExpansion hook.
+- The handoff dump lists the task list from TaskCreate/TaskUpdate as well as TodoWrite.
+- The defect-card hook reads a story's `## Files` outside fenced code blocks only.
+- T80 - council-opus says the suite ran before dispatch and is read from `suite.log`.
+- T85 - the seat prompts say "the judging family" instead of naming a model true in one profile.
+- T92 - drone-docs wraps or splits a map slice at its cap and never drops content.
+- T77 - always.md and the rules README say an `omitClaudeMd` agent may not load them (undocumented).
+- T29 - the trace-autopsy speed test bounds the git calls per frame instead of reading the clock.
+- telemetry consent and the session brief's litopys decline read the sidecar constitution (CLAUDE.vulyk.md).
+- telemetry record drops every control byte below 0x20 from --spec, --story and --ref.
+- the session brief names a sidecar CLAUDE.vulyk.md that CLAUDE.md does not import.
+- "no map yet" fires when memory/map/ holds only a README; a recorded litopys decline is honoured in a sidecar hive.
+- librarian gets the map-slice dates from its caller instead of comparing file times without a shell.
+- /vulyk-evolve reads insight-harvester and skill-gardener by path.
+- the map width and line test covers every memory/map/*.md.
+- symbol-map: a script run inside a quoted command substitution or backticks is an exact test target; sourcing a wrapper is a call only of what its top level or a called function runs.
+- docs (spec `docs-1115`): README, architecture, FAQ, getting-started, command-reference, cycle, hooks-reference,
+  model-cascade, token-economy, pipeline, the defects README, the rules-tree wiki note and the map slices now say what
+  the code does: subagents may nest in Claude Code (VULYK keeps fan-out in the main session), Agent Teams are not used,
+  the close-story caps (300 s a line inside a 540 s call), the narrow round after a repair, the guard and offer hooks,
+  `/vulyk-bootstrap --quick` (asks nothing), `/vulyk-models` (`sonnet-builds` recommended), the 70/80/90% context warnings.
+- the gate parts telemetry `edits`, council `round-scope` and `round-scope2`, cycle `ship` crossed the 70% growth line
+  and are split (`edits3`, `round-scope5`, `round-scope6`, `ship2`), each test block moved as it was.
+- the council gates `roster` and `round-scope2`, telemetry `upgrade` and `wiring` are split too (`roster3`, `round-scope7`,
+  `upgrade2`, `wiring3`).
+
+### Known
+- The court guard can deny a blind council seat's command that 0.53 allowed: a command substitution after `cd` into
+  the court, and a multi-line quoted argument. Both fail closed; the seat runs the step another way. Next spec.
+
 ## [0.53.0] - 2026-11-15
 
 Guards, gates and installer fixes from a framework audit (spec `audit-fixes-1113`), and the owner's check committed by

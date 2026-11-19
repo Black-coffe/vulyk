@@ -1,0 +1,24 @@
+# council/round-2/ROUND and suite.log, audit-fixes-1113: round 1 went RED, repair story 15 closed, and round 2
+# opened as a whole round with no reason for it - every seat, no narrow=1, no full=<why>, all ten gate steps.
+# The repair= line is the one open-round writes since narrow-repair-1115; the rest is the round's record.
+head=11ab8fe3
+pack=b1039f68f2f5
+opened=2026-11-14T05:33:39Z
+court=/repo/.vulyk/court/audit-fixes-1113/round-2
+ceiling=3
+tier=3
+seats=opus review
+since=d974e00c
+repair=audit-fixes-1113-15-repair-round-1
+head=11ab8fe3 steps=10
+STEP 1/10: ok 136s
+STEP 2/10: ok 170s
+STEP 3/10: ok 127s
+STEP 4/10: ok 155s
+STEP 5/10: ok 102s
+STEP 6/10: ok 201s
+STEP 7/10: ok 136s
+STEP 8/10: ok 146s
+STEP 9/10: ok 13s
+STEP 10/10: ok 6s
+SUITE: ok 1192s

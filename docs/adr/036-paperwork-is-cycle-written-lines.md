@@ -1,6 +1,6 @@
 # ADR-036: In `brief.md` and `plan.md`, paperwork is only the lines a cycle script writes
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-11-14
 - Spec: docs/specs/audit-fixes-1113 (ask 10, story 14; contract P1)
 

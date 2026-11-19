@@ -1,0 +1,81 @@
+## .claude/hooks/git-guard.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  3 not shown
+guard tests:
+  textual  2 not shown
+path mentions:
+  textual  17 not shown
+## .claude/hooks/owner-guard.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  2 not shown
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  15 not shown
+## .claude/hooks/court-guard.sh
+tests:
+  textual  2 not shown
+importers:
+  textual  1 not shown
+guard tests:
+  textual  3 not shown
+path mentions:
+  textual  6 not shown
+## scripts/cycle.sh
+tests:
+  exact    tests/council.test.sh
+  textual  12 not shown
+importers:
+  textual  20 not shown
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  329 not shown
+## scripts/lib.sh
+tests:
+  exact    tests/council.test.sh
+  exact    tests/cycle.test.sh
+  exact    tests/defects.test.sh
+  exact    tests/full-suite.sh
+  exact    tests/full-suite.test.sh
+  exact    tests/handoff.test.sh
+  exact    tests/inject.test.sh
+  exact    tests/intake.test.sh
+  exact    tests/maintenance.test.sh
+  exact    tests/mods.test.sh
+  exact    tests/solo.test.sh
+  exact    tests/symbol-map.test.sh
+  exact    tests/telemetry.test.sh
+  exact    tests/token-report.test.sh
+  textual  1 not shown
+importers:
+  exact    install.sh
+  exact    scripts/acceptance-log.sh
+  exact    scripts/cycle.sh
+  exact    scripts/human-check.sh
+  exact    scripts/injection-check.sh
+  exact    scripts/leak-check.sh
+  exact    scripts/portability-check.sh
+  exact    scripts/prompt-check.sh
+  exact    scripts/py.sh
+  exact    scripts/release-check.sh
+  exact    scripts/scope-check.sh
+  exact    scripts/ship-check.sh
+  exact    scripts/state.sh
+  exact    scripts/symbol-map.sh
+  exact    scripts/telemetry.sh
+  exact    scripts/top-model.sh
+  exact    scripts/trace-autopsy.sh
+  exact    scripts/trace-check.sh
+  exact    scripts/wave-check.sh
+  textual  9 not shown
+imported:
+  exact    scripts/run-capped.py
+guard tests:
+  textual  1 not shown
+path mentions:
+  textual  129 not shown

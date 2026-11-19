@@ -1,11 +1,13 @@
 """VULYK symbol map: the repo paths linked to a file that lie outside a story's scope (stdlib only).
 
 Usage: bash scripts/symbol-map.sh [--exact] [--story <story.md>] [--scope <path>]... <file>...
+       bash scripts/symbol-map.sh --fill-tests <spec-dir>
 
 For each input prints a block `## <path>` with the sections tests, importers, imported, guard tests,
 path mentions (an empty one omitted). Every line is `exact` (a Python `ast` import, a bash
-`source`/`.` or a bash-run `.py` resolved to the file) or `textual` (the stem as a whole word, the path
-as a substring). Path mentions rank code, docs/adr, other docs, then the root CHANGELOG/CLAUDE/README.
+`source`/`.`, a bash-run `.py`, or a script run by `bash`/`sh`/`exec` - a literal path or a variable set to
+one - resolved to the file; a .py's runners include who runs its bash wrapper, via named) or `textual` (the
+stem as a whole word, the path as a substring). A story's sections are read outside fenced blocks only. Path mentions rank code, docs/adr, other docs, then the root CHANGELOG/CLAUDE/README.
 The scope set (inputs, every --scope, the `## Files` lines of --story, globs by fnmatch) never appears,
 nor does a path with a `fixtures` segment after a `tests`/`test` segment.
 Python and bash get importers/imported; any other file gets tests, guard tests and path mentions only.
@@ -14,6 +16,11 @@ A missing input's block comes first. The whole stdout stays at or under 1536 byt
 final `... N more` line.
 Exit: 0 done, 1 an input is missing (every input is still reported), 2 usage or not inside a git repo.
 The script reports; it blocks nothing.
+--fill-tests: each `status: todo` story of the spec that is not a repair story gets, appended to its
+`## Files`, every test an `exact` hit links to one of its files (never a `textual` one), and, appended to its
+`## Verification`, the first non-`round-only` `## Commands` cell with no placeholder that names a listed test
+no line names yet; a cell with a placeholder prints `symbol-map: <story>: pick a row for <test> (<cell>)`.
+Its listing is uncapped. Exit 0 every listed test has a row, 1 a pick line, 2 usage or not inside a git repo.
 """
 # Speed on a bash input (post-037-tails, profiled with cProfile; warm OS file cache, one Windows box,
 # median of 3 `time` runs). Before: `bash scripts/symbol-map.sh scripts/lib.sh` 1.55 s, a .py 0.34 s;
@@ -80,6 +87,27 @@ def parse_args(argv):
     return story, scope, files, exact
 
 
+def fence_mask(lines):
+    """True for each line that is a fence line or inside a fence: the FENCE_AWK rule of cycle.sh, wave-check.sh,
+    scope-check.sh and trace-check.sh (narrow-repair-1115-06). 3+ ` or ~ (any indent) open a fence, a ` one with
+    no ` in its info string; only the same character, at least as long, with nothing after it, closes it."""
+    out, fc, fn = [], '', 0
+    for ln in lines:
+        t = ln.lstrip(' \t')
+        c, hit = t[:1], False
+        if c in ('`', '~'):
+            n = len(t) - len(t.lstrip(c))
+            r = t[n:]
+            if n >= 3:
+                if fn:
+                    if c == fc and n >= fn and not r.strip(' \t\r'):
+                        fn, hit = 0, True
+                elif not (c == '`' and '`' in r):
+                    fc, fn, hit = c, n, True
+        out.append(hit or fn > 0)
+    return out
+
+
 def story_files(path):
     try:
         with open(native(path), encoding='utf-8') as f:
@@ -88,7 +116,9 @@ def story_files(path):
         print('symbol-map: cannot read story %s' % path, file=sys.stderr)
         sys.exit(2)
     out, inside = [], False
-    for line in lines:
+    for line, fenced in zip(lines, fence_mask(lines)):
+        if fenced:
+            continue
         if line.startswith('## '):
             inside = line.strip() == '## Files'
             continue
@@ -148,6 +178,8 @@ class Repo:
         for p in files:
             self.basenames.setdefault(posixpath.basename(p), []).append(p)
         self._edges = None
+        self._detail = {}  # shell file -> [(line, files it sources or runs)]
+        self._sourced_only = {}  # shell file -> files it sources and never runs
 
     def text(self, p):
         if p not in self._text:
@@ -270,6 +302,9 @@ class Repo:
         return same[0] if len(same) == 1 else None
 
     RUNNER = re.compile(r'^(?:python3?|exec|\$\{?\w+\}?)$')
+    SH_RUNNER = re.compile(r'^(?:bash|sh|exec)$')
+    ASSIGN = re.compile(r'^\s*(?:export\s+|local\s+|readonly\s+)?([A-Za-z_]\w*)=(\S+)\s*$')
+    VAR = re.compile(r'^\$\{?([A-Za-z_]\w*)\}?$')
 
     def sh_words(self, code):
         """(word, previous word) for each shell word of a line, quotes kept."""
@@ -286,30 +321,147 @@ class Repo:
             prev = w
             i += len(w)
 
+    @staticmethod
+    def subst_bodies(code):
+        """(tails-1115-12) The body of each $( ) and backtick command substitution of a line that is not inside
+        single quotes, nested ones too: a command run there (`out="$(bash scripts/x.sh)"`) is a direct call."""
+        out, i, sq, dq = [], 0, False, False
+        while i < len(code):
+            c = code[i]
+            if sq:
+                if c == "'":
+                    sq = False
+            elif c == '\\':
+                i += 1
+            elif c == "'" and not dq:
+                sq = True
+            elif c == '"':
+                dq = not dq
+            elif c == '`':
+                j = code.find('`', i + 1)
+                if j < 0:
+                    break
+                out.append(code[i + 1:j])
+                out.extend(Repo.subst_bodies(code[i + 1:j]))
+                i = j
+            elif code.startswith('$(', i):
+                j, depth, q = i + 2, 1, None
+                while j < len(code):
+                    d = code[j]
+                    if q:
+                        if d == q:
+                            q = None
+                    elif d in '"\'':
+                        q = d
+                    elif d == '(':
+                        depth += 1
+                    elif d == ')':
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    j += 1
+                out.append(code[i + 2:j])
+                out.extend(Repo.subst_bodies(code[i + 2:j]))
+                i = j
+            i += 1
+        return out
+
+    def segments(self, line):
+        """The line itself, then each command substitution body in it."""
+        return [line] + (self.subst_bodies(line) if '$(' in line or '`' in line else [])
+
+    FUNC_RE = re.compile(r'^(\s*)(?:function\s+)?([A-Za-z_][\w:-]*)\s*\(\)\s*\{')
+
+    def sh_reach(self, via, p):
+        """(tails-1115-12) (runs p at the top level?, the functions of via that run p, or call one that does):
+        a file that only sources via calls p only through one of these."""
+        top, owner, body, cur, indent = False, [], {}, None, ''
+        detail = self._detail.get(via, [])
+        for ln, targets in detail:
+            if cur is None:
+                m = self.FUNC_RE.match(ln)
+                if m:
+                    name = m.group(2)
+                    body.setdefault(name, [])
+                    if not re.search(r'[;\s]\}(?:\s|;|$)', ln[m.end():]):
+                        cur, indent = name, m.group(1)
+                    body[name].append((ln, targets))
+                    continue
+                if p in targets:
+                    top = True
+            else:
+                body[cur].append((ln, targets))
+                if re.match(re.escape(indent) + r'\}', ln):
+                    cur = None
+        reach = {f for f, lns in body.items() if any(p in tg for _, tg in lns)}
+        grew = True
+        while grew:
+            grew = False
+            for f, lns in body.items():
+                if f not in reach and any(self.call_words(ln) & reach for ln, _ in lns):
+                    reach.add(f)
+                    grew = True
+        return top, reach
+
+    def call_words(self, code):
+        """The unquoted shell words of a line and of its command substitutions."""
+        return {w for seg in self.segments(code) for w, _ in self.sh_words(seg) if '"' not in w and "'" not in w}
+
+    def calls_any(self, q, names):
+        t = self.text(q)
+        if not t or not names:
+            return False
+        return any(self.call_words(ln) & names for ln in t.splitlines() if not ln.lstrip().startswith('#'))
+
     def sh_edges(self, p):
         t = self.text(p)
         out = set()
         if not t:
             return out
-        for line in t.splitlines():
-            if line.lstrip().startswith('#'):
-                continue
+        lines = [ln for ln in t.splitlines() if not ln.lstrip().startswith('#')]
+        detail, sourced, ran = [], set(), set()
+        # narrow-repair-1115-06: a variable set once to a script path (`SM="$SRC/scripts/symbol-map.sh"`) stands
+        # for that path when a runner runs it (`bash "$SM"`, `"$PY" "$EL"`)
+        paths = {}
+        for line in lines:
+            m = self.ASSIGN.match(line)
+            if m and m.group(2).replace('"', '').replace("'", '').endswith(SHELL_EXT + ('.py',)):
+                paths[m.group(1)] = m.group(2)
+
+        def expand(w):
+            v = self.VAR.match(w.replace('"', '').replace("'", ''))
+            return paths.get(v.group(1), w) if v else w
+        for line in lines:
+            targets = set()
             if 'source' in line or '.' in line:
                 for m in self.SOURCE_RE.finditer(line):
                     r = self.sh_resolve(self.word_at(line, m.end()), p)
                     if r:
-                        out.add(r)
-            if '.py' in line:
-                # a bash-run python file: "$(dirname "$0")/x.py", "$DIR/x.py", or a literal path after a runner
-                for w, prev in self.sh_words(line):
-                    s = w.replace('"', '').replace("'", '')
-                    if not s.endswith('.py'):
-                        continue
-                    if '$' not in s and not self.RUNNER.match(prev.replace('"', '').replace("'", '')):
-                        continue
-                    r = self.sh_resolve(w, p)
-                    if r:
-                        out.add(r)
+                        sourced.add(r)
+                        targets.add(r)
+            if '.py' in line or '.sh' in line or '.bash' in line or (paths and '$' in line):
+                # a bash-run python file: "$(dirname "$0")/x.py", "$DIR/x.py", or a literal path after a runner;
+                # (narrow-repair-1115-06) a bash-run script: `bash <path>.sh`, `sh <path>`, `exec <path>`, as the
+                # suites run a script they copied (`cp "$SRC"/scripts/x.sh scripts/` then `bash scripts/x.sh`);
+                # (tails-1115-12) the same inside a command substitution: `out="$(bash scripts/x.sh)"`, backticks
+                for seg in self.segments(line):
+                    for w, prev in self.sh_words(seg):
+                        w = expand(w)
+                        s = w.replace('"', '').replace("'", '')
+                        pv = prev.replace('"', '').replace("'", '')
+                        if s.endswith('.py'):
+                            if '$' not in s and not self.RUNNER.match(pv):
+                                continue
+                        elif not (s.endswith(SHELL_EXT) and self.SH_RUNNER.match(pv)):
+                            continue
+                        r = self.sh_resolve(w, p)
+                        if r:
+                            ran.add(r)
+                            targets.add(r)
+            detail.append((line, targets))
+            out |= targets
+        self._detail[p] = detail
+        self._sourced_only[p] = sourced - ran
         out.discard(p)
         return out
 
@@ -384,6 +536,32 @@ def line(label, path):
     return '  %-7s  %s' % (label, path)
 
 
+def exact_importers(repo, edges, p, lang):
+    """path -> '' or ' (via <__init__>)' for every file that imports, sources or runs p (an `exact` hit)."""
+    exact_imp = {}
+    if lang:
+        for q, (e, _) in edges.items():
+            if p in e:
+                exact_imp[q] = ''
+        if lang == 'py':
+            # a re-exporting __init__, and (narrow-repair-1115-06) a bash wrapper that runs p: who imports or
+            # runs the wrapper imports p, via the wrapper
+            vias = [q for q in exact_imp if q.endswith('__init__.py') or not (q.endswith('.py') or is_test(q))]
+            for via in vias:
+                reach = None
+                for q, (e, _) in edges.items():
+                    if via in e and q not in exact_imp and q != p:
+                        # (tails-1115-12) sourcing a wrapper is a call of p only when the wrapper runs p at its
+                        # top level or q calls a function of it that runs p
+                        if via in repo._sourced_only.get(q, ()):
+                            if reach is None:
+                                reach = repo.sh_reach(via, p)
+                            if not reach[0] and not repo.calls_any(q, reach[1]):
+                                continue
+                        exact_imp[q] = ' (via %s)' % via
+    return exact_imp
+
+
 def block(repo, p, scope, exact=False):
     out = ['## ' + p]
     if p not in repo.fileset and not os.path.isfile(os.path.join(repo.root, p)):
@@ -405,16 +583,7 @@ def block(repo, p, scope, exact=False):
     word = re.compile(r'(?<![\w])' + re.escape(stem) + r'(?![\w])') if stem else None
     sections = []
 
-    exact_imp = {}
-    if lang:
-        for q, (e, _) in edges.items():
-            if p in e:
-                exact_imp[q] = ''
-        if lang == 'py':
-            for init in [q for q in exact_imp if q.endswith('__init__.py')]:
-                for q, (e, _) in edges.items():
-                    if init in e and q not in exact_imp and q != p:
-                        exact_imp[q] = ' (via %s)' % init
+    exact_imp = exact_importers(repo, edges, p, lang)
 
     def textual_hits(cands):
         hits = []
@@ -488,9 +657,169 @@ def capped(rows):
     return rows[:SECTION_CAP] + ['    ... %d more' % (len(rows) - SECTION_CAP)]
 
 
+# --- --fill-tests <spec-dir> (narrow-repair-1115 T1) ---------------------------------------------
+PLACEHOLDER = re.compile(r'<[^<> ]+>')
+FILL_USAGE = 'usage: bash scripts/symbol-map.sh --fill-tests <spec-dir>'
+
+
+def is_glob(x):
+    return any(c in x for c in '*?[') or x.endswith('/')
+
+
+def commands_cells(path):
+    """(purpose, command) for each command a `## Commands` row offers, as lib.sh command_cells reads it:
+    the second cell of each table row, `\\|` unescaped, every backticked span of it."""
+    try:
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+    except (OSError, UnicodeDecodeError):
+        return []
+    out, inside = [], False
+    for ln in text.splitlines():
+        if re.match(r'^## Commands\s*$', ln):
+            inside = True
+            continue
+        if re.match(r'^##\s', ln):
+            if inside:
+                break
+            continue
+        if not inside or not ln.startswith('|'):
+            continue
+        cells = ln.replace('\\|', '\x01').split('|')
+        purpose = cells[1].replace('\x01', '|').strip()
+        c = cells[2].replace('\x01', '|').strip() if len(cells) >= 3 else ''
+        out.extend((purpose, span.strip()) for span in re.findall(r'`([^`]*)`', c))
+    return out
+
+
+def names(path, text):
+    """Does text name path as a whole path (not inside a longer one)?"""
+    return re.search(r'(?<![\w./-])' + re.escape(path) + r'(?![\w./-])', text) is not None
+
+
+def section(bare, heading, mask):
+    """(heading index, index of the next `## ` line or the end), or None; a fenced line (mask) is never read."""
+    for i, ln in enumerate(bare):
+        if not mask[i] and ln.strip() == heading:
+            j = i + 1
+            while j < len(bare) and (mask[j] or not bare[j].startswith('## ')):
+                j += 1
+            return i, j
+    return None
+
+
+def insert_after(lines, at, new, eol):
+    """Insert new lines after lines[at]; a last line with no line end gets one first."""
+    if not new:
+        return
+    if not lines[at].endswith(('\n', '\r')):
+        lines[at] += eol
+    lines[at + 1:at + 1] = [x + eol for x in new]
+
+
+def fill_story(repo, path, cells):
+    """Fill one todo, non-repair story in place; returns (pick lines, report lines)."""
+    with open(path, 'rb') as f:
+        text = f.read().decode('utf-8')
+    lines = text.splitlines(True)
+    eol = '\r\n' if '\r\n' in text else '\n'
+    bare = [ln.rstrip('\r\n') for ln in lines]
+    marks = [i for i, b in enumerate(bare) if b.strip() == '---']
+    if not marks or marks[0] != 0 or len(marks) < 2:
+        return [], []
+    front = {}
+    for b in bare[1:marks[1]]:
+        if ':' in b:
+            k, v = b.split(':', 1)
+            front.setdefault(k.strip(), v.strip())
+    sid = front.get('story', '')
+    title = next((b for b in bare[marks[1] + 1:] if b.startswith('# ')), '')
+    if not sid or front.get('status') != 'todo' or re.match(r'^# Repair round \d+', title):
+        return [], []
+    mask = fence_mask(bare)
+    fs = section(bare, '## Files', mask)
+    if not fs:
+        return [], []
+    listed, last_item = [], fs[0]
+    for i in range(fs[0] + 1, fs[1]):
+        if not mask[i] and bare[i].startswith('- '):
+            last_item = i
+            item = bare[i][2:].strip().split()[0].strip('`') if bare[i][2:].strip() else ''
+            if item:
+                listed.append(item)
+    scope = set(listed) | {rel_to_root(repo.root, path)}
+    added = []
+    for p in listed:
+        if is_glob(p) or is_test(p) or not os.path.isfile(os.path.join(repo.root, p)):
+            continue
+        lang = 'py' if p.endswith('.py') else ('sh' if repo.is_shell(p) else None)
+        edges = repo.edges({'py': ('py', 'sh'), 'sh': ('sh',), None: ()}[lang])
+        for q in sorted(exact_importers(repo, edges, p, lang)):
+            if is_test(q) and not is_fixture(q) and not in_scope(q, scope) and q not in added:
+                added.append(q)
+    insert_after(lines, last_item, ['- ' + q for q in added], eol)
+    report = ['symbol-map: %s: + %s' % (sid, q) for q in added]
+    bare = [ln.rstrip('\r\n') for ln in lines]
+    mask = fence_mask(bare)
+    vs = section(bare, '## Verification', mask)
+    vtext = '\n'.join(bare[i] for i in range(vs[0] + 1, vs[1]) if not mask[i]) if vs else ''
+    picks, rows = [], []
+    for t in [x for x in listed + added if not is_glob(x) and is_test(x) and not is_fixture(x)]:
+        if names(t, vtext) or any(names(t, r) for r in rows):
+            continue
+        if not vs:
+            picks.append('symbol-map: %s: no ## Verification section for %s' % (sid, t))
+            continue
+        cand = [c for purpose, c in cells if 'round-only' not in purpose and names(t, c)]
+        free = [c for c in cand if not PLACEHOLDER.search(c)]
+        if free:
+            rows.append(free[0])
+        elif cand:
+            picks.extend('symbol-map: %s: pick a row for %s (%s)' % (sid, t, c) for c in cand)
+        else:
+            picks.append('symbol-map: %s: pick a row for %s (no ## Commands cell names it)' % (sid, t))
+    if rows:
+        at = max([i for i in range(vs[0] + 1, vs[1]) if bare[i].strip() and not mask[i]] or [vs[0]])
+        insert_after(lines, at, ['`%s`' % r for r in rows], eol)
+        report += ['symbol-map: %s: + row %s' % (sid, r) for r in rows]
+    if added or rows:
+        with open(path, 'wb') as f:
+            f.write(''.join(lines).encode('utf-8'))
+    return picks, report
+
+
+def fill_tests(argv):
+    """--fill-tests <spec-dir>: exit 0 every listed test has a row, 1 a pick line, 2 usage / not a repo."""
+    if len(argv) != 2 or argv[0] != '--fill-tests' or not argv[1] or argv[1].startswith('-'):
+        print(FILL_USAGE, file=sys.stderr)
+        sys.exit(2)
+    spec = os.path.abspath(native(argv[1]))
+    if not os.path.isdir(spec):
+        print('symbol-map: not a spec directory: %s' % argv[1], file=sys.stderr)
+        sys.exit(2)
+    root = git_root(spec)
+    if not root:
+        print('symbol-map: not inside a git repository: %s' % spec, file=sys.stderr)
+        sys.exit(2)
+    con = os.path.join(root, 'CLAUDE.vulyk.md')
+    cells = commands_cells(con if os.path.isfile(con) else os.path.join(root, 'CLAUDE.md'))
+    repo = Repo(root, tracked(root))
+    picks = []
+    for name in sorted(os.listdir(spec)):
+        path = os.path.join(spec, name)
+        if name.endswith('.md') and os.path.isfile(path):
+            p, r = fill_story(repo, path, cells)
+            for x in r + p:
+                print(x)
+            picks += p
+    sys.exit(1 if picks else 0)
+
+
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', newline='\n')
+    if '--fill-tests' in sys.argv[1:]:
+        fill_tests(sys.argv[1:])
     story, scope_args, files, exact = parse_args(sys.argv[1:])
     listed = story_files(story) if story else []
     if files:

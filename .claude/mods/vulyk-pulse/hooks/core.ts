@@ -37,18 +37,39 @@ export const NARROW_BELOW = 60
 
 // --- weights -------------------------------------------------------------------------------------------------
 
-// Pinned to scripts/token-report.py: lines 18-19 (the formula and the read rates) and line 57 (READ_RATE).
-// weighted = input + 1.25 x every cache write + r x read + output; r = 0.05 Opus 5.5, 0.025 Fable/Mythos 5.1, else 0.1.
-// ModelUsage does not split 5m from 1h writes, so every write counts 1.25 here.
-const READ_RATE: readonly (readonly [string, number])[] = [
-  ['opus-5-5', 0.05],
-  ['fable-5-1', 0.025],
-  ['mythos-5-1', 0.025],
-]
+// Pinned to scripts/token-report.py: its docstring (the formula and the read rates), READ_RATES and read_rate().
+// weighted = input + 1.25 x every cache write + r x read + output; r is the cache-read share of the model's input price
+// by family and version (docs/specs/tails-1115/cc-facts.md F13): (major, minor, share), newest first. A version the
+// table does not name takes its family's nearest version below it (the newest above them all, the oldest below them
+// all); an unknown family reads at the standard 0.1. ModelUsage does not split 5m from 1h writes, so every write
+// counts 1.25 here.
+const READ_RATES: Readonly<Record<string, readonly (readonly [number, number, number])[]>> = {
+  fable: [[5, 2, 0.025], [5, 1, 0.025], [5, 0, 0.1]],
+  mythos: [[5, 2, 0.025]],
+  opus: [[5, 5, 0.05], [5, 0, 0.1], [4, 8, 0.1]],
+  sonnet: [[0, 0, 0.1]],
+  haiku: [[0, 0, 0.1]],
+}
+const STANDARD_READ = 0.1
+const FAMILY_RE = /claude-(fable|mythos|opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?!\d)/
+const LEGACY_RE = /claude-(\d+)(?:-(\d{1,2}))?-(fable|mythos|opus|sonnet|haiku)/
+
+/** The cache-read share of a model's input price, as token-report.py's read_rate() gives it. */
+const readRate = (model: string): number => {
+  const m = model.toLowerCase()
+  const x = FAMILY_RE.exec(m)
+  const y = x === null ? LEGACY_RE.exec(m) : null
+  const fam = x !== null ? x[1]! : y !== null ? y[3]! : ''
+  const rows = READ_RATES[fam]
+  if (rows === undefined) return STANDARD_READ
+  const major = Number(x !== null ? x[2] : y![1])
+  const minor = Number((x !== null ? x[3] : y![2]) ?? 0)
+  const hit = rows.find(([mj, mn]) => mj < major || (mj === major && mn <= minor))
+  return (hit ?? rows[rows.length - 1]!)[2]
+}
 
 export const weigh = (u: Usage): number => {
-  const model = typeof u.model === 'string' ? u.model : ''
-  const rate = READ_RATE.find(([key]) => model.includes(key))?.[1] ?? 0.1
+  const rate = readRate(typeof u.model === 'string' ? u.model : '')
   return u.input_tokens + 1.25 * u.cache_creation_input_tokens + rate * u.cache_read_input_tokens + u.output_tokens
 }
 

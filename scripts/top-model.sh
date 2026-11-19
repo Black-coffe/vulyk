@@ -103,10 +103,12 @@ if [ -f "$PROFILE" ] && grep -q '"oauthAccount"' "$PROFILE" 2>/dev/null; then
     *max*)
       PLAN="max"
       case "$TIER" in
+        *ultra*) DETAIL="Ultra" ;;
         *20x*) DETAIL="Max 20x" ;;
         *5x*)  DETAIL="Max 5x" ;;
         *)     DETAIL="Max" ;;
       esac ;;
+    *ultra*) PLAN="ultra"; DETAIL="Ultra" ;; # a plan name in the docs (cc-facts F12); its organizationType is a guess
     *pro*)   PLAN="pro";  DETAIL="Pro" ;;
     *team*|*enterprise*)
       # Premium seats carry Fable inside the plan; standard seats bill it to credits.
@@ -160,7 +162,7 @@ else
   else
     SOURCE="plan"
     case "$PLAN" in
-      max|premium-seat)
+      max|ultra|premium-seat)
         MODEL="fable"; REASON="$DETAIL - Fable is inside the plan (up to half the weekly limit at no extra cost)" ;;
       pro|standard-seat)
         MODEL="opus";  REASON="$DETAIL - Fable bills to usage credits on top of the subscription; Opus is the frontier model the plan includes" ;;
@@ -191,7 +193,7 @@ second_reviewer() {
   if [ "$MPROFILE" != "sonnet-builds" ] && [ "$1" != "sonnet" ]; then echo "sonnet"; return; fi
   case "$1" in
     fable) echo "opus" ;;
-    opus)  case "$PLAN" in max|premium-seat) echo "fable" ;; *) echo "sonnet" ;; esac ;;
+    opus)  case "$PLAN" in max|ultra|premium-seat) echo "fable" ;; *) echo "sonnet" ;; esac ;;
     *)     echo "opus" ;;
   esac
 }
@@ -217,6 +219,12 @@ explain_lines() { # the --explain lines; --brief prints them before the floor li
     *)           echo "dispatched for: the Tier 4 lead-review (beside the second reviewer), lead-architect, a Tier 4 queen-planner, a missed story's retry; lead-review at Tier 1-3 runs on its frontmatter (opus)" ;;
   esac
   echo "$GATE_HINT"
+  # The effort cascade (cc-facts F3): the env var comes first, above /effort, --effort, settings and an agent's
+  # `effort:` frontmatter; `auto` and `unset` send no level.
+  case "${CLAUDE_CODE_EFFORT_LEVEL:-}" in
+    ''|auto|unset) ;;
+    *) echo "effort    : CLAUDE_CODE_EFFORT_LEVEL=$CLAUDE_CODE_EFFORT_LEVEL is set and wins over --effort, /effort, settings and every agent's effort: frontmatter - unset it for the cascade to apply" ;;
+  esac
   P="$(pinned_model)"
   if [ -z "$P" ]; then
     echo "queen session: not pinned - the session starts on the account default (Opus since Claude Code 2.1.280). Run: bash scripts/top-model.sh --apply"
@@ -234,7 +242,7 @@ case "$MODE" in
     printf '%s\n' "$MODEL" ;;
 
   plan)
-    case "$PLAN" in max|premium-seat) echo "$PLAN premium" ;; *) echo "$PLAN standard" ;; esac ;;
+    case "$PLAN" in max|ultra|premium-seat) echo "$PLAN premium" ;; *) echo "$PLAN standard" ;; esac ;;
 
   explain)
     explain_lines ;;

@@ -1,6 +1,6 @@
 # ADR-035: A story's scope is counted from its wave's claim head; the head moves only through `reanchor`
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-11-14
 - Spec: docs/specs/audit-fixes-1113 (ask 8, stories 09 and 13; contract S1)
 

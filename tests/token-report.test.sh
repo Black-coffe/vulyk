@@ -152,6 +152,36 @@ run "$T/nowhere" --json > "$T/none.out" 2>&1; RC=$?
 expect_eq "a project with no transcripts exits 1" "1" "$RC"
 expect "and says where it looked" "no transcripts for" < "$T/none.out"
 
+echo "--- prices by family (tails-1115-04, cc-facts F13)"
+# One project per model, one main session with one call: in, a 5m write, cache reads, output.
+# F13: a cache read costs 0.025 of input on Fable 5.2 ($0.20 of $8), 0.05 on Opus 5.5 ($0.20 of $4).
+PR="$T/price-root"
+price_of() { # price_of <model> <in> <cw> <cr> <out> -> the project's --json report path
+  local p="$T/price-$1" enc
+  mkdir -p "$p"
+  enc="$(native "$p" | sed 's/[^A-Za-z0-9]/-/g')"
+  mkdir -p "$PR/$enc"
+  printf '{"type":"assistant","timestamp":"2026-11-16T10:00:00.000Z","message":{"id":"m-%s","model":"%s","usage":{"input_tokens":%s,"cache_creation_input_tokens":%s,"cache_creation":{"ephemeral_5m_input_tokens":%s,"ephemeral_1h_input_tokens":0},"cache_read_input_tokens":%s,"output_tokens":%s}}}\n' \
+    "$1" "$1" "$2" "$3" "$3" "$4" "$5" > "$PR/$enc/bbbbbbbb-0000-4000-8000-000000000001.jsonl"
+  "$PY" "$TR" "$(native "$p")" --json --projects-root "$(native "$PR")" > "$T/price-$1.json"
+  printf '%s' "$T/price-$1.json"
+}
+# 500 + 1.25x1000 + 0.025x80000 + 300 = 4050 (at the uncached 0.1 it would be 10050)
+expect_eq "the newest Fable, claude-fable-5-2, reads at F13's 0.025" "4050" \
+  "$(jget "$(price_of claude-fable-5-2 500 1000 80000 300)" 'd["total"]["weighted"]')"
+expect_eq "a Fable version the table has never seen, claude-fable-5-3, takes the family's 0.025" "4050" \
+  "$(jget "$(price_of claude-fable-5-3 500 1000 80000 300)" 'd["total"]["weighted"]')"
+# 1000 + 1.25x2000 + 0.05x40000 + 500 = 6000
+expect_eq "an Opus version the table has never seen, claude-opus-6, takes the family's 0.05" "6000" \
+  "$(jget "$(price_of claude-opus-6 1000 2000 40000 500)" 'd["total"]["weighted"]')"
+expect_eq "Fable 5, an older version F13 prices at 0.1, keeps it" "10050" \
+  "$(jget "$(price_of claude-fable-5 500 1000 80000 300)" 'd["total"]["weighted"]')"
+J="$(price_of claude-nova-1 100 0 1000 10)"
+expect_eq "an unknown family is reported as unpriced" "['claude-nova-1']" "$(jget "$J" 'd.get("unpriced")')"
+expect_eq "... and its tokens are not weighed as zero" "210" "$(jget "$J" 'd["total"]["weighted"]')"
+expect_eq "a known family is not unpriced" "[]" "$(jget "$T/price-claude-fable-5-2.json" 'd.get("unpriced")')"
+"$PY" "$TR" "$(native "$T/price-claude-nova-1")" --projects-root "$(native "$PR")" | expect "the table names the unpriced model" "unpriced: claude-nova-1"
+
 CHECKS="$(grep -c . "$LEDGER" || true)"
 FAILED="$(grep -c . "$FAILS" || true)"
 [ "$FAILED" -eq 0 ] || fail=1

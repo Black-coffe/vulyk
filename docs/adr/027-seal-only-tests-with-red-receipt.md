@@ -1,6 +1,6 @@
 # ADR-027: The red receipt seals tests only, never a product file
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-10-29
 - Spec: docs/specs/cross-platform (plan delta, story 09)
 - Amends: ADR-025 (D2/D3 sealed set)

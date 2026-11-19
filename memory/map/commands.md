@@ -3,12 +3,18 @@
 Other slices: `agents-and-commands.md` (agents), `commands-ship.md` (ship, update, status, gc and the rest).
 
 ## Per-release command changes
+- **0.54 (narrow-repair-1115, ADR-040):** `/vulyk-plan` step 7 runs `symbol-map.sh --fill-tests docs/specs/<slug>`
+  first. `/vulyk-build` at `green` runs `ship-check.sh`; on `suite: no full run at <sha>` it runs `cycle.sh suite <spec>
+  --merge --commit` step by step (one Bash call, `timeout: 600000`, no agent) before «Выпускаем?»; `suite: FAIL` is a
+  repair, not a question. `/vulyk-review [--full]`: `--full` (owner's word, no round open) runs `open-round --full`.
+  A RED round is followed by a repair and a narrow round.
 - **0.53 (audit-fixes-1113):** a story the Queen changes after `NEEDS_CONTEXT` (`## Files`, `## Verification`, `red:`) is
   committed with `bash scripts/cycle.sh revise <story>` before its worker reruns (`/vulyk-build`; `/vulyk-plan` step 9
   likewise); it commits story + `plan.md` + `brief.md` + journal and records that commit as the approved version; a
   hand commit approves nothing. `/vulyk-plan` `--go` comes only from the owner's own words, never added by the Queen.
   `owner-guard.sh` refuses `human-check.sh ACCEPTED|REJECTED`, `briefed --go` and new `**Approved:**`/`**Checked:**`
-  lines unless the main session quotes the owner (`scripts-hooks.md`). The workers never commit.
+  lines unless the main session quotes the owner (`scripts-guards.md`). The Queen records and commits the owner's check
+  with `human-check.sh <spec> <verdict> "<note>" --commit` (`/vulyk-build`, `/vulyk-review`). The workers never commit.
 - **0.52 (beta-fixes-1113):** `/vulyk-resume` switches a clean tree to the spec branch (`"switched"`, cycle-state.md);
   `/vulyk-build` handles the driver's `needs_context` return (the Queen reads the story's `## Findings`).
 - **0.50 (ADR-032):** `/vulyk-build` at Tier 2-4 opens only on `**Approved:**` or a Briefed line with `--go`.
@@ -51,4 +57,4 @@ Other slices: `agents-and-commands.md` (agents), `commands-ship.md` (ship, updat
 - **`/vulyk-review`** - claim + `advance --claim`; dispatch the seats `next` names; `advance --ingest`; release.
   `build:W` = RED → repair story, `/vulyk-build`.
 
-last-verified: 2026-11-14 (0.53.0-dev.1 audit-fixes-1113; split from agents-and-commands.md; ADR-015, 020, 022, 032)
+last-verified: 2026-11-16 (0.54.0-dev.1 narrow-repair-1115; ADR-015, 020, 022, 032, 040)

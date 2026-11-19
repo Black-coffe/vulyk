@@ -15,7 +15,8 @@
 # `**Shipped:**` line in plan.md and a row in memory/stats/ship.jsonl. The publishing
 # itself is never done here and never by an agent.
 #
-# Exit status is always 0: this reports, it does not block. The refusing is the command's.
+# Exit status is always 0: this reports, it does not block. The refusing is the command's. The one
+# exception: `--record` exits 1, writing nothing, when its note cannot be masked by redact.sh.
 set -u
 
 # pack_fingerprint(), paperwork_only() and marker() now live in scripts/lib.sh, shared with
@@ -37,9 +38,11 @@ if [ "${1:-}" = "--record" ]; then
     echo "ship-check: usage: $0 --record <spec-dir> <version> [note]" >&2; exit 0; }
   RPLAN="$RSPEC/plan.md"
   [ -f "$RPLAN" ] || { echo "ship-check: CANNOT RUN - $RPLAN does not exist." >&2; exit 0; }
-  if [ -f "$ROOT/scripts/redact.sh" ]; then
-    RNOTE="$(printf '%s' "$RNOTE" | bash "$ROOT/scripts/redact.sh")"
-  fi
+  # The note is masked or the record is refused: no redact.sh, or a failing one, writes nothing (exit 1).
+  [ -f "$ROOT/scripts/redact.sh" ] || {
+    echo "ship-check: refused - no scripts/redact.sh, so the note cannot be masked; nothing recorded." >&2; exit 1; }
+  RNOTE="$(printf '%s' "$RNOTE" | bash "$ROOT/scripts/redact.sh" 2>/dev/null)" || {
+    echo "ship-check: refused - redact.sh failed to mask the note; nothing recorded." >&2; exit 1; }
   RNOTE="$(printf '%s' "$RNOTE" | tr -d '\n' | tr -d '\r')"
   RHEAD="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
   RDATE="$(date -u +%Y-%m-%d)"
@@ -226,6 +229,63 @@ ci_check() {
   fail ci "ci: no CI run for $(git rev-parse --short HEAD) (or a commit with only paperwork after it) - push the branch and run its workflow"
 }
 ci_check
+
+# defects - the repo-wide defect gate (tails-1115-09, T100): a red library, or a gate that cannot run (exit 2: no
+# Python, no parser, no library), is NOT READY; a repo with no scripts/defects-check.sh has no gate to run.
+defects_check() {
+  local out rc=0 last
+  [ -f "$ROOT/scripts/defects-check.sh" ] || { ok defects "defects: not checked - no scripts/defects-check.sh in this repo"; return; }
+  # no bytecode: a check that reads the tree leaves nothing in it (stage 03 judges a clean tree)
+  out="$(PYTHONDONTWRITEBYTECODE=1 bash "$ROOT/scripts/defects-check.sh" 2>&1)" || rc=$?
+  last="$(printf '%s\n' "$out" | tr -d '\r' | grep -v '^[[:space:]]*$' | tail -1)"
+  case "$rc" in
+    0) ok defects "defects: the defect gate is green - $last" ;;
+    1) fail defects "defects: the defect gate is RED - $last - run bash scripts/defects-check.sh and fix what it names" ;;
+    *) fail defects "defects: cannot confirm the defect gate - defects-check.sh exit $rc: $last" ;;
+  esac
+}
+defects_check
+
+# suite - the full suite once, green, on what merges (narrow-repair-1115-04, plan M2). A narrow repair round re-runs
+# only its red steps, so before a local merge every step of the round gate must have run green, with no agent, on
+# the branch head or on a commit with only paperwork after it: the newest round's suite.log when that round was not
+# narrow, else council/merge-suite.log (`cycle.sh suite <spec> --merge`). It holds for a GREEN council and for a
+# **Checked:** ACCEPTED alike. A red run is cured by a fix and the whole suite once more, never by a council round.
+# No round-only full-suite row in the constitution (the rule cycle.sh full_suite_row reads): nothing to run.
+suite_log_ok() { # suite_log_ok <log> -> 0 iff the log is finished and keyed to HEAD or to a commit with only
+  # paperwork after it; SL_HEAD, SL_LAST: its head= and its closing SUITE: line
+  SL_HEAD=""; SL_LAST=""
+  [ -f "$1" ] || return 1
+  SL_HEAD="$(head -1 "$1" | tr -d '\r' | sed -n 's/^head=\([^ ]*\).*/\1/p')"
+  SL_LAST="$(tail -1 "$1" | tr -d '\r')"
+  case "$SL_LAST" in "SUITE: "*) ;; *) return 1 ;; esac
+  [ -n "$SL_HEAD" ] && paperwork_only "$ROOT" "$SL_HEAD" HEAD
+}
+suite_check() {
+  local h7 n rlog="" log src why=""
+  if ! commands_rows "$(constitution_file "$ROOT")" | awk -F '\t' '
+    { p = tolower($1); if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) {
+        lc = tolower($4); if ($2 == "several" || (lc !~ /^<fill in/ && lc !~ /^none([^[:alnum:]_-]|$)/)) f = 1 } }
+    END { exit !f }'; then
+    ok suite "suite: none - no round-only full-suite row in the constitution"; return
+  fi
+  h7="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  n="$(for d in "$SPEC"/council/round-*/; do d="${d%/}"; printf '%s\n' "${d##*/round-}"; done | grep -x '[0-9][0-9]*' | sort -n | tail -1)"
+  [ -n "$n" ] && [ -f "$SPEC/council/round-$n/ROUND" ] && ! tr -d '\r' < "$SPEC/council/round-$n/ROUND" | grep -qx 'narrow=1' \
+    && rlog="$SPEC/council/round-$n/suite.log"
+  for log in "$SPEC/council/merge-suite.log" "$rlog"; do
+    [ -n "$log" ] && suite_log_ok "$log" || continue
+    src="the merge run"; [ "$log" = "$rlog" ] && src="round $n's gate"
+    if printf '%s' "$SL_LAST" | grep -qx 'SUITE: ok [0-9]*s'; then ok suite "suite: full run green at $SL_HEAD ($src)"; return; fi
+    case "$SL_LAST" in "SUITE: FAIL "*) [ -n "$why" ] || why="${SL_LAST#* - }" ;; esac
+  done
+  if [ -n "$why" ]; then
+    fail suite "suite: FAIL at $h7 - $why - fix it, commit, then run bash scripts/cycle.sh suite $SPEC --merge again: the whole suite once more on the new head, no agents"
+  else
+    fail suite "suite: no full run at $h7 - run bash scripts/cycle.sh suite $SPEC --merge (every step, no agents; one Bash call per step until \"done\":true)"
+  fi
+}
+suite_check
 
 # 04+05 Tests + Human - the council's verdict now closes both stages at once (ADR-001 D4):
 # a GREEN council row for the current pack, at HEAD or only paperwork since, is enough on

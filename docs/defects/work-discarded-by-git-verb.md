@@ -32,15 +32,48 @@ a subagent, and for the main session when `git status --porcelain` shows the pat
 (the forms that lose a stash or commits, not tree files, are denied to subagents only). It reads the same verbs
 handed to a shell (`bash -c`, `sh -c`, `pwsh -Command`), in a heredoc fed to a shell (`bash <<X`, `cat <<X | sh`),
 and through a `git -c alias.<name>=` given on the command line. With no Python a bash fallback denies every listed
-verb to any caller; a Python that starts and exits other than 0 or 1 on a git command denies it. A subagent is also
+verb to any caller; a Python that starts and exits other than 0 or 1 on a git command denies it. Every caller is
+denied a forced tag and a forced push (forms no agent needs); a subagent also PowerShell's Invoke-Expression,
+which the main session may run, its string read as commands. A subagent is also
 denied `git commit` and `git add` while a `docs/specs/*/DRIVER` exists, and every `cycle.sh` verb but `advance`,
-`status`, `release`, `suite`, `stamp-red` (never `--baseline`) and `close-story`.
+`status`, `release`, `suite`, `stamp-red` (never `--baseline`) and `close-story`, past a shell option that carries
+a value, a verb or script that xargs hands in, a command held in a variable, a wrapper before a pattern or a
+variable script word, a wrapper option held in a variable, and a shell's script word held in a variable with a
+default (read as its default).
 `--check <file>` runs it on a fixture (hook input JSON; a `porcelain` field stands in for `git status`) and exits 1
-on a deny. Not covered, on purpose: `rm` / `Remove-Item`; a script file run by a shell and any other interpreter
-that runs git (Python, Node); `pwsh -EncodedCommand` and a PowerShell here-string; an alias defined in git
-config; a variable or substitution after the verb; `env` with options; a ref checkout over an untracked file;
-`tag -f`, `push --force`, `rebase`, `commit --amend`, `reflog expire`, `gc --prune`, `filter-branch`; and a mod that
-answers `tool.check`.
+on a deny. A cd moves the place a subagent's commit is judged in only where it takes effect (not in another
+subshell, a child shell's command string, a pipeline, the background, or with two folder words; after `||` the
+place counts as held), a command word with a variable only in its folder part is judged by its literal file name,
+and one whose default or value from the command names git, cycle.sh, a shell, a wrapper or eval as that program.
+The guards stop accidents and shortcuts of a cooperative agent, not an adversary.
+
+Left open (the hook header carries this list word for word):
+- rm and Remove-Item, and a ref checkout over an untracked file;
+- a script file run by a shell, and any other interpreter that runs git;
+- command text piped into a shell, a here-string fed to a shell, an encoded PowerShell command, a PowerShell
+  here-string fed to a shell, and wrapper commands the hook does not know (a shell function or alias of the
+  session among them);
+- an alias defined in git config rather than on the command line;
+- a variable or substitution in an argument after the git verb;
+- the run state reached by a name the command never spells (a parent folder walked by a recursive tool, a
+  folder reached by a cd the hook cannot follow), a redirect glued to the word before it, a target holding an
+  unresolved part beside the run state, and a move, copy, unpack or delete of a folder that holds it;
+- while a DRIVER holds the repository, a subagent's git verbs off the history list above (tags, plumbing,
+  imports, config and remote edits, an alias set in git config), and command positions and global options the
+  parser does not know (a git word made by a substitution among them);
+- for a subagent, a cycle.sh verb or script handed in by a program other than xargs, a program word behind a
+  wrapper option the hook does not know to take a value or behind a command string a wrapper runs, a program
+  behind a wrapper held in a variable the command does not set whose words read as no guarded verb, or one
+  followed on its line by a git, shell or cycle.sh word, and a command line after a heredoc whose end word the
+  hook reads short;
+- refused although harmless (known over-denies, 0.55.0): for a subagent, a program word held in a variable the
+  command does not set, or sets from a substitution, whatever its words name;
+- history rewrites other than a forced tag or push (rebase, amend, reflog expiry, gc pruning, history
+  filtering, the other remote forms) by the main session, and by a subagent while no DRIVER holds the repository;
+- with no Python: a variable command word, a cd it does not follow (the cwd's DRIVER counts), a forced tag or
+  push, PowerShell's evaluate-a-string command, and a cycle.sh verb or script that xargs hands in;
+- a mod that answers tool.check (on a personal login it can approve a call this hook denied: the SessionStart
+  brief names such a mod).
 
 ## Never
 - Run `git stash`, `git checkout -- <path>` / `.` / `-f`, `git restore`, `git reset --hard`, `git clean -f`,

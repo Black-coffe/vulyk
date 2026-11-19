@@ -2,12 +2,15 @@
 # VULYK symbol map - the repo paths linked to a file that lie outside the story's scope (no model, no cache).
 #
 #   Usage: bash scripts/symbol-map.sh [--exact] [--story <story.md>] [--scope <path>]... <file>...
+#          bash scripts/symbol-map.sh --fill-tests <spec-dir>
 #          bash scripts/symbol-map.sh --help
 #
 # One block per input: tests, importers, imported, guard tests, path mentions; each line `exact` or `textual`.
 # --exact keeps the `exact` lines and folds each section's textual ones into a count (the planner hand-off).
-# Python (ast) and bash (source/., a run .py) get importers/imported; other files get the language-independent sections
+# Python (ast) and bash (source/., a run .py, a script run by bash/sh/exec) get importers/imported; other files get the language-independent sections
 # and a `! imports not parsed` line. The whole stdout stays at or under 1536 bytes. Reports only, blocks nothing.
+# --fill-tests writes the spec's todo stories: the `exact` tests of their files into `## Files`, a `## Commands`
+# row for each listed test into `## Verification`, a `pick` line (exit 1) where the cell has a placeholder.
 # Exit: 0 done, 1 an input is missing (every input is still reported), 2 usage / no python / not in a git repo.
 set -u
 

@@ -26,6 +26,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/lib.sh
 . "$HERE/lib.sh"   # brief_asks(), the one ## Asks parser, shared with cycle.sh
 
+# The one fence rule of every story-section reader (narrow-repair-1115-06): the FENCE_AWK line of cycle.sh,
+# byte for byte (tests/council.test.sh round-scope2 compares them). `fence_line($0) || fence_n { next }` skips a
+# fence: 3+ ` or ~ opens it (a ` one with no ` in its info string), only the same character, as long or longer,
+# with nothing after it, closes it.
+FENCE_AWK='function fence_line(s,  t, c, n, r) { t = s; sub(/^[ \t]+/, "", t); c = substr(t, 1, 1); if (c != "`" && c != "~") return 0; n = 0; while (substr(t, n + 1, 1) == c) n++; if (n < 3) return 0; r = substr(t, n + 1); if (fence_n) { if (c == fence_c && n >= fence_n && r ~ /^[ \t\r]*$/) { fence_n = 0; return 1 } return 0 } if (c == "`" && index(r, "`")) return 0; fence_c = c; fence_n = n; return 1 }'
+
 SPEC="${1:-}"
 if [ -z "$SPEC" ] || [ ! -d "$SPEC" ]; then
   echo "trace-check: usage: $0 <spec-dir>   (e.g. docs/specs/oauth)" >&2
@@ -72,7 +78,8 @@ for story in "$SPEC"/*.md; do
   grep -q '^story:' "$story" 2>/dev/null || continue
   STORIES_N=$((STORIES_N+1))
 
-  QUOTES="$(awk '
+  QUOTES="$(awk "$FENCE_AWK"'
+    fence_line($0) || fence_n                  { next }
     /^##[[:space:]]+Requirements[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/                           { inblock=0 }
     inblock && /^<!--/                         { inc=1 }
@@ -115,7 +122,8 @@ UNCOVERED=0
 ALL_QUOTES="$(for story in "$SPEC"/*.md; do
   base="$(basename "$story")"
   case "$base" in (plan.md|brief.md) continue ;; esac
-  awk '
+  awk "$FENCE_AWK"'
+    fence_line($0) || fence_n                  { next }
     /^##[[:space:]]+Requirements[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/                           { inblock=0 }
     inblock && /^<!--/                         { inc=1 }

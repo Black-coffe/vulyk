@@ -43,7 +43,8 @@
 # Limits, stated rather than hidden: a verification command that names NO path (a whole
 # suite) cannot be judged here, and a path that resolves but is simply the wrong file
 # passes. `missing` is a question about existence, never about correctness. A command
-# token counts as a path only when the tree agrees - it exists, or it is a glob - so a
+# token counts as a path only when the tree or the story agrees - it exists, it is a glob, or
+# a `## Files` entry names it (a test the story creates) - so a
 # package name like `@scope/pkg`, a branch name or a URL is not mistaken for one.
 #
 # Overlap matching mirrors scope-check.sh: exact path, glob, and directory prefix
@@ -60,6 +61,12 @@ shopt -s nullglob globstar 2>/dev/null || true
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/lib.sh
 . "$HERE/lib.sh"
+
+# The one fence rule of every story-section reader (narrow-repair-1115-06): the FENCE_AWK line of cycle.sh,
+# byte for byte (tests/council.test.sh round-scope2 compares them). `fence_line($0) || fence_n { next }` skips a
+# fence: 3+ ` or ~ opens it (a ` one with no ` in its info string), only the same character, as long or longer,
+# with nothing after it, closes it.
+FENCE_AWK='function fence_line(s,  t, c, n, r) { t = s; sub(/^[ \t]+/, "", t); c = substr(t, 1, 1); if (c != "`" && c != "~") return 0; n = 0; while (substr(t, n + 1, 1) == c) n++; if (n < 3) return 0; r = substr(t, n + 1); if (fence_n) { if (c == fence_c && n >= fence_n && r ~ /^[ \t\r]*$/) { fence_n = 0; return 1 } return 0 } if (c == "`" && index(r, "`")) return 0; fence_c = c; fence_n = n; return 1 }'
 
 SPEC="${1:-}"
 if [ -z "$SPEC" ] || [ ! -d "$SPEC" ]; then
@@ -102,8 +109,9 @@ blockers_of() { # blockers_of <file> - the `blocked_by:` entries, one per line. 
     | sed 's/^ *//; s/ *$//' | grep -v '^$' || true
 }
 
-files_of() { # the `## Files` block, comments skipped (same parser as scope-check.sh)
-  awk '
+files_of() { # the `## Files` block, comments and fenced lines skipped (same parser as scope-check.sh)
+  awk "$FENCE_AWK"'
+    fence_line($0) || fence_n                  { next }
     /^##[[:space:]]+Files[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/                    { inblock=0 }
     inblock && /^<!--/                  { incomment=1 }
@@ -112,8 +120,9 @@ files_of() { # the `## Files` block, comments skipped (same parser as scope-chec
   ' "$1"
 }
 
-verify_of() { # the `## Verification` block, comments and backticks stripped
-  awk '
+verify_of() { # the `## Verification` block, comments, fenced lines and backticks stripped
+  awk "$FENCE_AWK"'
+    fence_line($0) || fence_n                  { next }
     /^##[[:space:]]+Verification[[:space:]]*$/ { inblock=1; next }
     /^##[[:space:]]/                           { inblock=0 }
     inblock && /^<!--/                         { incomment=1 }
@@ -197,14 +206,24 @@ PATHS_EOF
       # pnpm/npm monorepo as a verify-gap (found by the S2.6.5a battle test, 2026-08-18).
       # Read line by line, never `for tok in $(...)`: under nullglob/globstar (set above) a glob
       # token that matches nothing vanished there, and with it the verify-gap.
+      # A token a `## Files` entry names (or a glob there matches) is a path too, on disk or not: the test
+      # the story itself creates (tails-1115-05, T1).
       cmd_paths=""
       while IFS= read -r tok; do
         [ -n "$tok" ] || continue
         case "$tok" in
           *[*?[]*) cmd_paths="${cmd_paths}${tok}
 " ;;
-          *) [ -e "$tok" ] && cmd_paths="${cmd_paths}${tok}
-" ;;
+          *) if [ -e "$tok" ]; then cmd_paths="${cmd_paths}${tok}
+"
+             else
+               while IFS= read -r dp; do
+                 [ -n "$dp" ] && overlap "$tok" "$dp" && { cmd_paths="${cmd_paths}${tok}
+"; break; }
+               done <<DECLT_EOF
+$declared
+DECLT_EOF
+             fi ;;
         esac
       done <<TOKS_EOF
 $(verify_path_tokens "$verify" | grep '/')

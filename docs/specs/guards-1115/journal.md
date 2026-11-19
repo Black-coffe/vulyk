@@ -1,0 +1,90 @@
+# Journal: guards-1115
+
+- 2026-11-15T18:34:20Z · 02-approved · approved by Andrei «Утверждаю все три, тесты exact (Рекомендую)» · next: branch
+- 2026-11-16T07:07:30Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/guards-1115; to edit, run /vulyk-pause guards-1115
+- 2026-11-16T07:07:42Z · 03-building · branch vulyk/guards-1115 created · next: build:1
+- 2026-11-16T07:07:42Z · 03-building · approved records written by branch: 4 stories · next: build:1
+- 2026-11-16T08:00:18Z · 03-building · revised guards-1115-01 · next: build
+- 2026-11-16T08:00:19Z · 03-building · revised guards-1115-02 · next: build
+- 2026-11-16T08:00:21Z · 03-building · needs_context on guards-1115-01, guards-1115-02 · next: 02 moves the two sed -i hook-input strings of defects.test.sh:883-884 into variables with # portable:; 01 reruns close-story after 02 closes
+- 2026-11-16T08:07:41Z · 03-building · needs_context on guards-1115-02 · next: re-stamped from base (stamp-red --baseline) after the portable fix; relaunch to close
+- 2026-11-16T09:03:31Z · 04-council:open · round 1 opened, court at E:/Projects/vulyk/.vulyk/court/guards-1115/round-1 · next: dispatch:opus,review
+- 2026-11-16T09:03:58Z · 03-building · checkpoint after 55 min at dispatch:opus,review · next: relaunching with a fresh stamp
+- 2026-11-16T10:02:01Z · 04-council:ESCALATE · round 1 verdict ESCALATE at 4cda5d6f pack 72574cf5ee95 · next: escalated
+- 2026-11-16T10:27:51Z · 03-building · revised guards-1115-01 · next: build
+- 2026-11-16T10:27:52Z · 03-building · revised guards-1115-02 · next: build
+- 2026-11-16T10:27:54Z · 03-building · revised guards-1115-03 · next: build
+- 2026-11-16T10:27:56Z · 03-building · revised guards-1115-04 · next: build
+- 2026-11-16T10:28:03Z · 04-council:ESCALATE · reopened after round 1, ceiling now 6 · next: open-round
+- 2026-11-16T10:29:31Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/guards-1115; to edit, run /vulyk-pause guards-1115
+- 2026-11-16T10:29:49Z · 04-council:open · round 2 opened, court at E:/Projects/vulyk/.vulyk/court/guards-1115/round-2 · next: dispatch:opus,review
+- 2026-11-16T11:16:02Z · 04-council:ESCALATE · round 2 verdict ESCALATE at b5b1466e pack 72574cf5ee95 · next: escalated
+- 2026-11-16T11:27:17Z · 04-council:ESCALATE · reopened after round 2, ceiling now 9 · next: repair
+- 2026-11-16T11:27:37Z · 03-building · repair round 2: guards-1115-05-repair-round-2.md · next: build:4
+- 2026-11-16T11:28:51Z · 03-building · revised guards-1115-05 · next: build
+- 2026-11-16T11:28:54Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/guards-1115; to edit, run /vulyk-pause guards-1115
+- 2026-11-16T11:36:12Z · 03-building · revised guards-1115-05 · next: build
+- 2026-11-16T11:36:14Z · 03-building · revised guards-1115-06 · next: build
+- 2026-11-16T11:36:16Z · 03-building · revised guards-1115-07 · next: build
+- 2026-11-16T11:36:27Z · 03-building · needs_context on guards-1115-05 · next: split by hook: 05 git-guard, 06 owner-guard (wave 4), 07 court-guard (wave 5)
+- 2026-11-16T12:03:34Z · 03-building · revised guards-1115-05 · next: build
+- 2026-11-16T12:03:36Z · 03-building · revised guards-1115-06 · next: build
+- 2026-11-16T12:03:44Z · 03-building · needs_context on guards-1115-05, guards-1115-06 · next: 05 resumes from its receipt one class per step; 06 marks the sed -i cases portable, then the Queen re-stamps from base
+- 2026-11-16T12:17:51Z · 03-building · revised guards-1115-01 · next: build
+- 2026-11-16T12:17:53Z · 03-building · revised guards-1115-02 · next: build
+- 2026-11-16T12:17:55Z · 03-building · revised guards-1115-03 · next: build
+- 2026-11-16T12:17:57Z · 03-building · revised guards-1115-05 · next: build
+- 2026-11-16T12:18:05Z · 03-building · needs_context on guards-1115-05, guards-1115-06 · next: 05 cut to the minimum (owner «Минимум для git-guard»); 06 re-stamped from base, closes
+- 2026-11-16T12:29:45Z · 03-building · claim head of wave 4 moved from 701fee894f108093fc949471456579a537addee2 to 5d782709eca63a1c09d3ed91cae312943aad2071 by reanchor: the Queen's own revise commits of stories 01-03 and 05-07 and journal lines since 701fee89 (asks narrowed by the owner's «Минимум для git-guard»); no worker commit in the range · next: build:4
+- 2026-11-16T12:34:39Z · 03-building · needs_context on guards-1115-05, guards-1115-06 · next: reanchored wave 4 past the Queen's revise commits; 05 re-stamped from base; both close
+- 2026-11-16T12:42:20Z · 03-building · revised guards-1115-07 · next: build
+- 2026-11-16T12:42:22Z · 03-building · needs_context on guards-1115-07 · next: no card edit: safeguard-bypassable-or-late holds the class; the criterion becomes the header open list
+- 2026-11-16T12:45:08Z · paused · story 05's over-deny fix let a defaulted variable naming git through (probe: refused before, passes now); add story 08 before round 3 · next: paused
+- 2026-11-16T12:51:01Z · resumed · resumed · next: status
+- 2026-11-16T12:51:02Z · 03-building · revised guards-1115-08 · next: build
+- 2026-11-16T12:51:16Z · 03-building · claim head of wave 5 moved from 379c8e23f97fb697a5f87ad98036b264dc91771b to 2ba6a08f7206082678094925ecc42330bec008f8 by reanchor: the Queen's revise commits of stories 07 and 08 and a journal line since 379c8e23; no worker commit in the range · next: build:5
+- 2026-11-16T12:51:18Z · 03-building · resumed after pause · next: story 08 added (wave 6); 07 resumes from its written test: stamp-red first, then court-guard.sh
+- 2026-11-16T13:40:19Z · 04-council:open · round 3 opened, court at E:/Projects/vulyk/.vulyk/court/guards-1115/round-3, full round after a repair (design) · next: dispatch:opus,review
+- 2026-11-16T13:43:52Z · 03-building · checkpoint after 52 min at dispatch:opus,review · next: relaunching with a fresh stamp
+- 2026-11-16T14:26:39Z · 04-council:RED · round 3 verdict RED at af4665d6 pack 83cb58389a3f · next: repair
+- 2026-11-16T14:26:48Z · 03-building · repair round 3: guards-1115-09-repair-round-3.md · next: build:7
+- 2026-11-16T14:32:49Z · 03-building · revised guards-1115-01 · next: build
+- 2026-11-16T14:32:51Z · 03-building · revised guards-1115-02 · next: build
+- 2026-11-16T14:32:53Z · 03-building · revised guards-1115-04 · next: build
+- 2026-11-16T14:32:55Z · 03-building · revised guards-1115-05 · next: build
+- 2026-11-16T14:32:56Z · 03-building · revised guards-1115-06 · next: build
+- 2026-11-16T14:32:58Z · 03-building · revised guards-1115-08 · next: build
+- 2026-11-16T14:33:00Z · 03-building · revised guards-1115-09 · next: build
+- 2026-11-16T14:33:10Z · 03-building · claim head of wave 7 moved from 120cdfd4cac59daf51d1aca705b309431daf9747 to d5270ca1df62d1cb39d41f56a8a779d20f787d7d by reanchor: the Queen's revise commits since 120cdfd4: ask 2 narrowed for git-guard (owner «Минимум для git-guard»), story 09 answers, leak masks in receipt tails of 04 and 05; no worker commit in the range · next: build:7
+- 2026-11-16T14:33:12Z · 03-building · needs_context on guards-1115-09 · next: split the long suite parts (telemetry.test.sh added to Files); cycle.sh spellings in git-guard go to 0.55.0 (ask 2 narrowed); main session denied forced tag/push/iex
+- 2026-11-16T15:47:16Z · 04-council:open · round 4 opened, court at E:/Projects/vulyk/.vulyk/court/guards-1115/round-4, narrow repair round (asks 1, 2, 3, 4, 5, 6, 7, 8; steps all) · next: dispatch:opus,review
+- 2026-11-16T17:19:26Z · 03-building · revised guards-1115-01 · next: build
+- 2026-11-16T17:19:29Z · 03-building · revised guards-1115-02 · next: build
+- 2026-11-16T17:19:31Z · 03-building · revised guards-1115-06 · next: build
+- 2026-11-16T17:19:33Z · 03-building · revised guards-1115-08 · next: build
+- 2026-11-16T17:19:36Z · 03-building · revised guards-1115-09 · next: build
+- 2026-11-16T17:19:38Z · 03-building · revised guards-1115-10 · next: build
+- 2026-11-16T17:19:47Z · 03-building · checkpoint after 74 min at dispatch:opus,review; story 10 added · next: owner «Чинить сейчас (Рекомендую)»: the Queen's ask 2 narrowing undone, git-guard cycle.sh spellings built in wave 8 before round 4's seats
+- 2026-11-16T17:45:21Z · 04-council:open · round 4 opened, court at E:/Projects/vulyk/.vulyk/court/guards-1115/round-4, narrow repair round (asks 1, 2, 3, 4, 5, 6, 7, 8; steps all) · next: dispatch:opus,review
+- 2026-11-16T18:29:09Z · 04-council:ESCALATE · round 4 verdict ESCALATE at 941d06c4 pack 502e211a5247 · next: escalated
+- 2026-11-16T20:34:27Z · 04-council:ESCALATE · reopened after round 4, ceiling now 12 · next: repair
+- 2026-11-16T20:34:44Z · 03-building · repair round 4: guards-1115-11-repair-round-4.md · next: build:9
+- 2026-11-16T20:36:33Z · 03-building · revised guards-1115-11 · next: build
+- 2026-11-16T20:36:35Z · 03-building · reopened after round 4, repair 11 cut · next: owner: «Ремонт: регрессии + вопрос 2 (Рекомендую)»; main session: «Push/tag нельзя, iex можно (Рекомендую)»
+- 2026-11-16T21:37:12Z · 04-council:open · round 5 opened, court at E:/Projects/vulyk/.vulyk/court/guards-1115/round-5, full round after a repair (design) · next: dispatch:opus,review
+- 2026-11-16T21:37:33Z · 03-building · checkpoint after 60 min at dispatch:opus,review · next: relaunching with a fresh stamp
+- 2026-11-16T22:19:37Z · 04-council:RED · round 5 verdict RED at b32347d7 pack 1d79e1a6be10 · next: repair
+- 2026-11-16T22:19:46Z · 03-building · repair round 5: guards-1115-12-repair-round-5.md · next: build:10
+- 2026-11-16T23:11:45Z · paused · round 5 RED; owner decides before round 6 · next: paused
+- 2026-11-17T02:50:48Z · resumed · resumed · next: status
+- 2026-11-17T02:50:49Z · 03-building · owner after round 5 RED: «Закрыть ремонт, узкий раунд 6 (Рекомендую)» · next: close repair 12, narrow round 6; if RED again, no round 7: default is reverting court-guard's parser to its pre-round-4 version
+- 2026-11-17T02:50:49Z · 03-building · launching the hive · next: the loop holds the working tree of vulyk/guards-1115; to edit, run /vulyk-pause guards-1115
+- 2026-11-17T02:52:41Z · paused · re-stamp story 12 from base after a portability fix to its sealed test · next: paused
+- 2026-11-17T02:52:47Z · resumed · resumed · next: status
+- 2026-11-17T03:10:05Z · 03-building · needs_context on guards-1115-12 · next: sealed test fixed for portability (empty-array form only); re-stamped from base (stamp-red --baseline), relaunching
+- 2026-11-17T03:31:38Z · 04-council:open · round 6 opened, court at E:/Projects/vulyk/.vulyk/court/guards-1115/round-6, narrow repair round (asks 1, 2, 3, 4, 5, 6, 7; steps none) · next: dispatch:opus,review
+- 2026-11-17T03:49:23Z · 04-council:ESCALATE · round 6 verdict ESCALATE at 5cd993e4 pack 6b4519ee4bea · next: escalated
+- 2026-11-17T06:50:34Z · 04-council:ESCALATE · reopened after round 6, ceiling now 15 · next: repair
+- 2026-11-17T06:50:42Z · 03-building · repair round 6: guards-1115-13-repair-round-6.md · next: build:11
+- 2026-11-17T06:59:30Z · 03-building · revised guards-1115-13 · next: build
+- 2026-11-17T06:59:37Z · 03-building · owner after round 6: «Откат к версиям без регрессий (Рекомендую)»; story 13 revised (revert) · next: the Queen runs story 13's worker without the driver (no round after it)

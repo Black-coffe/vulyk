@@ -1,6 +1,6 @@
 # ADR-030: CI on the branch head before ship - the Queen dispatches branch CI, no branch-push trigger, never a silent pass
 
-- Status: proposed
+- Status: accepted (2026-11-15, owner: Andrei, «Принять все 15 (Рекомендую)»)
 - Date: 2026-11-03
 - Spec: docs/specs/post-045-tails
 - Relates to: ADR-026 (CI before ship). The archivist could not re-read ADR-026 in this harvest (no directory listing

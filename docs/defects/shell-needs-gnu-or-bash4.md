@@ -3,7 +3,7 @@ id: shell-needs-gnu-or-bash4
 title: Shell that runs only on Linux - bash 4+, GNU-only flags, a bare python
 status: block
 check: bash scripts/portability-check.sh <arg>
-fixtures: [docs/defects/shell-needs-gnu-or-bash4.sed-bre.fixture, docs/defects/shell-needs-gnu-or-bash4.sed-i.fixture, docs/defects/shell-needs-gnu-or-bash4.array.fixture, docs/defects/shell-needs-gnu-or-bash4.python.fixture, docs/defects/shell-needs-gnu-or-bash4.paste-s.fixture, docs/defects/shell-needs-gnu-or-bash4.case-in-subst.fixture, docs/defects/shell-needs-gnu-or-bash4.heredoc-in-subst.fixture]
+fixtures: [docs/defects/shell-needs-gnu-or-bash4.sed-bre.fixture, docs/defects/shell-needs-gnu-or-bash4.sed-i.fixture, docs/defects/shell-needs-gnu-or-bash4.array.fixture, docs/defects/shell-needs-gnu-or-bash4.python.fixture, docs/defects/shell-needs-gnu-or-bash4.paste-s.fixture, docs/defects/shell-needs-gnu-or-bash4.case-in-subst.fixture, docs/defects/shell-needs-gnu-or-bash4.heredoc-in-subst.fixture, docs/defects/shell-needs-gnu-or-bash4.sort-v.fixture, docs/defects/shell-needs-gnu-or-bash4.sort-v-neighbour.fixture]
 keys: [macOS, bash 3.2, BSD sed, GNU-only]
 paths: ["**/*.sh", "CLAUDE.md", ".claude/commands/*.md", ".claude/agents/*.md"]
 ---
@@ -32,6 +32,8 @@ spread unseen (docs/specs/cross-platform/report.md).
   inside a `$( )` (bash 3.2 reads it as the end of the substitution): write `paste -sd, -` and `(pat)`.
 - Open a `<<` heredoc inside a `$( )` when its body holds a quote or `(` (bash 3.2 parses the body as part of
   the substitution): put the heredoc in a function and call it, `plan="$(read_cards)"`.
+- Order versions with `sort -V` / `--version-sort` (stock macOS sort has none): use `version_newest` /
+  `version_newer` from `scripts/version-order.sh`.
 
 ## How-to
 - Pass a value that can hold a newline to awk through the environment (`name="$val" awk '... ENVIRON["name"] ...'`),
