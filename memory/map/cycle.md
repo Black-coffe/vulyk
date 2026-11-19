@@ -66,4 +66,5 @@ Last stdout line is one JSON object (`emit`); mutating verbs on exit 0 carry the
   (`wave.<W>` in the `claim` state record) to HEAD with a journal line; exit 2 no open wave.
 - Gates after `red_gate` (`block_card_gate`, prompt-check, `close-story` scope and verify runner) are in `cycle-close.md`.
 
-last-verified: 2026-11-18 (solo-gate-1118 solo gate; tails-1115 short court; guards-1115 red_gate/red_rec; ADR-001, 013, 025, 029, 032, 040)
+last-verified: 2026-11-18 (solo-gate-1118 solo gate; tails-1115 short court; guards-1115 red_gate/red_rec;
+  ADR-001, 013, 025, 029, 032, 040)

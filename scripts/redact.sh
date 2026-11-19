@@ -60,7 +60,7 @@ PAROL_INFL="$(infl 'Парол парол' 'я ю ем е и ей ям ями я
 PAROL_FORMS="Пароль|пароль|Гасло|гасло|$PAROL_INFL"
 CYR_KEYWORDS="$CYR_KEYWORDS|$PAROL_INFL|$(infl 'Токен токен' 'а у ом е ы ов ам ами ах и ів і ові')"
 CYR_LETTER='(А|Б|В|Г|Ґ|Д|Е|Є|Ё|Ж|З|И|І|Ї|Й|К|Л|М|Н|О|П|Р|С|Т|У|Ф|Х|Ц|Ч|Ш|Щ|Ъ|Ы|Ь|Э|Ю|Я|а|б|в|г|ґ|д|е|є|ё|ж|з|и|і|ї|й|к|л|м|н|о|п|р|с|т|у|ф|х|ц|ч|ш|щ|ъ|ы|ь|э|ю|я)'
-CYR_DIGIT_VALUE="$CYR_LETTER[^\"'[:space:]]*[0-9][^\"'[:space:]]*"
+CYR_DIGIT_VALUE="${CYR_LETTER}[^\"'[:space:]]*[0-9][^\"'[:space:]]*"
 CYR_VALUE="(\"[^\"]+\"|'[^']+'|[A-Za-z0-9._~+/=!@\$%^&*-]{6,}|$CYR_DIGIT_VALUE)"
 PROSE_KEY='(password|Password|PASSWORD|passphrase|Passphrase|secret|Secret|token|Token)[[:space:]]+(is|was)[[:space:]]+'
 # Its unquoted value is 6+ chars (one alternative per place of the digit or symbol), so a length or a count

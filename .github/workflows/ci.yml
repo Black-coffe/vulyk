@@ -256,8 +256,9 @@ jobs:
           for needle in ".claude/commands/vulyk-plan.md" ".claude/agents/queen-planner.md"; do
             echo "$out" | grep -q "$needle" || { echo "::error::--check did not plan to copy $needle"; exit 1; }
           done
-          # and must show it would skip the maintainer's own runtime artifacts, not ship them
-          echo "$out" | grep -q "would skip (runtime) .claude/settings.local.json" || { echo "::error::--check did not report skipping settings.local.json"; exit 1; }
+          # and must not plan to ship the maintainer's own runtime artifacts: a git source lists tracked files only
+          # (0.54.0), so an untracked settings.local.json is never even considered
+          echo "$out" | grep -q "would copy.*settings.local.json" && { echo "::error::--check planned to copy settings.local.json"; exit 1; }
           # ADR-005 D4.1: vulyk's own ADRs/wiki are never planned to ship
           echo "$out" | grep -q "would copy.*docs/adr/" && { echo "::error::--check planned to copy docs/adr/"; exit 1; }
           echo "$out" | grep -q "would copy.*docs/wiki/" && { echo "::error::--check planned to copy docs/wiki/"; exit 1; }

@@ -988,8 +988,9 @@ python3 -c 'open("docs/specs/acme-demo/plan.md","w").write("x")'
 EOF
 c="$(printf 'cat <<X\n$(bash scripts/human-check.sh docs/specs/acme-demo ACCEPTED ok)\nX')"
 ok "owner guard r6: round-6 regression forms are denied again: $c" "$([ "$(sa6 "$c")" = deny ]; echo $?)"
+p="{\"file_path\":\"$OW/docs/specs/acme-demo/plan.md\",\"content\":\"# Acme plan\\n\\n$AP\\n$CK\\n\"}"
 ok "owner guard: the planner's Write of a plan.md whose markers hold the placeholder passes" \
-  "$([ "$(og rel.jsonl Write "{\"file_path\":\"$OW/docs/specs/acme-demo/plan.md\",\"content\":\"# Acme plan\\n\\n$AP\\n$CK\\n\"}" "$SUB")" = allow ]; echo $?)"
+  "$([ "$(og rel.jsonl Write "$p" "$SUB")" = allow ]; echo $?)"
 # guards-1115-06 (repair round 2): the guarded program found in every command position, the target resolved
 # (the original forms of the round's findings first, then a neighbour of each); the exact forms stay private
 for c in 'command -p bash scripts/human-ch*.sh docs/specs/acme-demo ACCEPTED ok' \
@@ -1050,7 +1051,11 @@ done
 # an Edit, MultiEdit or Write judged by the resolved path (letter case, a trailing dot or space, a link)
 rp() { printf '{"file_path":"%s","old_string":"<the owner word>","new_string":"yes, ship it"}' "$1"; }
 rw() { printf '{"file_path":"%s","content":"# Acme plan\\n\\n**Approved:** yes, ship it\\n"}' "$1"; }
-for p in docs/specs/acme-demo/PLAN.MD Docs/Specs/acme-demo/plan.md docs/specs/acme-demo/Plan.md; do
+# Letter case names the same file only where the file system folds case (Windows, macOS); on Linux PLAN.MD is
+# another file, so an Edit of it touches no record and these cases do not apply.
+: > "$OW/.vulyk-case-probe"; CASEFOLD=''; [ -e "$OW/.VULYK-CASE-PROBE" ] && CASEFOLD=1; rm -f "$OW/.vulyk-case-probe"
+[ -n "$CASEFOLD" ] || echo "  skip  owner guard r2: letter-case spellings (this file system tells case apart)"
+[ -z "$CASEFOLD" ] || for p in docs/specs/acme-demo/PLAN.MD Docs/Specs/acme-demo/plan.md docs/specs/acme-demo/Plan.md; do
   ok "owner guard r2: a subagent's Edit of a plan.md record line by another spelling is denied: $p" \
     "$([ "$(og plan.jsonl Edit "$(rp "$OW/$p")" "$SUB")" = deny ]; echo $?)"
 done
@@ -1058,16 +1063,19 @@ for p in 'docs/specs/acme-demo/plan.md.' 'docs/specs/acme-demo/plan.md ' 'docs/s
   ok "owner guard r2: a subagent's Write of a plan.md record line by another spelling is denied: [$p]" \
     "$([ "$(og plan.jsonl Write "$(rw "$OW/$p")" "$SUB")" = deny ]; echo $?)"
 done
-ok "owner guard r2: a subagent's MultiEdit of a plan.md record line in another letter case is denied" \
-  "$([ "$(og rel.jsonl MultiEdit "{\"file_path\":\"$OW/docs/specs/acme-demo/PLAN.MD\",\"edits\":[{\"old_string\":\"<written by human-check>\",\"new_string\":\"ACCEPTED by t - looks fine\"}]}" "$SUB")" = deny ]; echo $?)"
+p="{\"file_path\":\"$OW/docs/specs/acme-demo/PLAN.MD\",\"edits\":[{\"old_string\":\"<written by human-check>\",\"new_string\":\"ACCEPTED by t - looks fine\"}]}"
+[ -z "$CASEFOLD" ] || ok "owner guard r2: a subagent's MultiEdit of a plan.md record line in another letter case is denied" \
+  "$([ "$(og rel.jsonl MultiEdit "$p" "$SUB")" = deny ]; echo $?)"
 ROW='{\"spec\":\"acme-demo\",\"verdict\":\"ACCEPTED\",\"note\":\"looks fine\"}'
 for p in memory/stats/HUMAN.jsonl Memory/Stats/human.jsonl memory/stats/human.jsonl.; do
+  w="{\"file_path\":\"$OW/$p\",\"content\":\"$ROW\\n\"}"
   ok "owner guard r2: a subagent's Write of an acceptance row by another spelling is denied: $p" \
-    "$([ "$(og rel.jsonl Write "{\"file_path\":\"$OW/$p\",\"content\":\"$ROW\\n\"}" "$SUB")" = deny ]; echo $?)"
+    "$([ "$(og rel.jsonl Write "$w" "$SUB")" = deny ]; echo $?)"
 done
 printf '{"ts":"2025-12-01T10:00:00Z","spec":"acme-old","verdict":"ACCEPTED","note":"old"}\n' > memory/stats/human.jsonl
+p="{\"file_path\":\"$OW/memory/stats/human.jsonl\",\"old_string\":\"\\\"spec\\\":\\\"acme-old\\\"\",\"new_string\":\"\\\"spec\\\":\\\"acme-demo\\\"\"}"
 ok "owner guard r2: a subagent's Edit moving an acceptance row to another spec is denied (judged on the file after it)" \
-  "$([ "$(og rel.jsonl Edit "{\"file_path\":\"$OW/memory/stats/human.jsonl\",\"old_string\":\"\\\"spec\\\":\\\"acme-old\\\"\",\"new_string\":\"\\\"spec\\\":\\\"acme-demo\\\"\"}" "$SUB")" = deny ]; echo $?)"
+  "$([ "$(og rel.jsonl Edit "$p" "$SUB")" = deny ]; echo $?)"
 rm -f memory/stats/human.jsonl
 if { MSYS=winsymlinks:nativestrict ln -s "$OD/repo/docs/specs/acme-demo" "$OD/repo/sp" 2>/dev/null ||
      { command -v cygpath >/dev/null 2>&1 && cmd //c "mklink /J $(cygpath -w "$OD/repo/sp") $(cygpath -w "$OD/repo/docs/specs/acme-demo")" >/dev/null 2>&1; }; } &&
