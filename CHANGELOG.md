@@ -49,6 +49,8 @@ A repair re-checks what it repaired, not the whole spec (spec `narrow-repair-111
 - `cycle.sh reopen --full` records the owner's design-fault word; a reopened `no-progress` escalation now gets a narrow round over every repeated red ask, not a full one (ADR-040 D1 amendment).
 
 ### Fixed
+- owner-guard reads a project reached through a link (macOS `/var` -> `/private/var`) as the repository git names, so
+  a subagent's `find -exec` over `docs/specs` is denied there as it is elsewhere.
 - A story's sections are read outside fenced code blocks only (one shared fence rule in `cycle.sh`, `wave-check.sh`,
   `scope-check.sh`, `trace-check.sh` and `symbol-map.py`), so a red receipt's captured output cannot add a line.
 - The defect gate of `close-story` no longer runs a card's check on the card library's own fixtures and terms files.

@@ -1040,6 +1040,20 @@ for c in "$SEDT" \
          'echo yes > docs/specs/acme-demo/plan.md.'; do
   ok "owner guard r2: a shell write of a plan.md by any writer or position is denied - subagent: $c" "$([ "$(sa "$c")" = deny ]; echo $?)"
 done
+# 0.54.0 CI on macOS: the project reached through a link (/var -> /private/var), git naming the resolved root - a
+# find -exec over docs/specs is still read as standing in the repository. Original: SEDI_FINDTYPE; neighbour: -name.
+if { MSYS=winsymlinks:nativestrict ln -s "$OD/repo" "$OD/repolink" 2>/dev/null ||
+     { command -v cygpath >/dev/null 2>&1 && cmd //c "mklink /J $(cygpath -w "$OD/repolink") $(cygpath -w "$OD/repo")" >/dev/null 2>&1; }; } &&
+   [ -d "$OD/repolink/docs" ]; then
+  OW_REAL="$OW"; OW="$(cd "$OD/repolink" && { pwd -W 2>/dev/null || pwd; })"
+  for c in "$SEDI_FINDTYPE" "$SEDI_FINDMD"; do
+    ok "owner guard: a find -exec over docs/specs from the project reached through a link is denied: $c" \
+      "$([ "$(sa "$c")" = deny ]; echo $?)"
+  done
+  OW="$OW_REAL"; rm -f "$OD/repolink" 2>/dev/null || cmd //c "rmdir $(cygpath -w "$OD/repolink")" >/dev/null 2>&1
+else
+  echo "  skip  owner guard: the project through a link (no link could be made here)"
+fi
 for c in 'g=git; $g add -A' \
          'git -c alias.a=add -c alias.b=a b memory/stats' \
          'time -p git add memory/stats' \

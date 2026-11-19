@@ -941,14 +941,24 @@ class Where:
         return os.path.normpath(os.path.join(d, c[0]))
 
     def rel(self, d):
-        """The directory as a path under the repository root (posix, any case), None when outside or unknown."""
+        """The directory as a path under the repository root (posix, any case), None when outside or unknown.
+        git names the root with links resolved (/var -> /private/var on macOS), so a directory reached through a
+        link is also tried resolved."""
         r = self.root()
         if d is None or r is None:
             return None
-        p = d.replace('\\', '/').rstrip('/').casefold()
-        if p == r:
-            return ''
-        return p[len(r) + 1:] if p.startswith(r + '/') else None
+        forms = [d]
+        try:
+            forms.append(os.path.realpath(d))
+        except (OSError, ValueError):
+            pass
+        for q in forms:
+            p = q.replace('\\', '/').rstrip('/').casefold()
+            if p == r:
+                return ''
+            if p.startswith(r + '/'):
+                return p[len(r) + 1:]
+        return None
 
 
 def strip_wrappers(seg):
