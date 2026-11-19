@@ -18,8 +18,7 @@ Report-only story/prompt/portability/defect checks, the symbol map, and the test
   `version_newest`/`version_newer` (`scripts/version-order.sh`). Exit 0 / 1 hits / 2 usage; CI `shell` job.
 - `trace-autopsy.sh <brief.md>` (0.42.0) - `vulyk_python` wrapper (none: exit 2) over `trace-autopsy.py`. Reads
   the brief's `> ` frames, resolves against `git ls-files`, writes `autopsy.md` beside the brief, <= 15 lines
-  (3 frames): code line at HEAD + `git log -L` as `last touched:`. Trace text is data. Exit 0 / 2. Caller:
-  `/vulyk-plan` step 2.
+  (3 frames): code line at HEAD + `git log -L` as `last touched:`. Trace text is data. Exit 0 / 2. Caller: `/vulyk-plan` step 2.
 - `prompt-check.sh [--touched <path>...]` (0.43.0) - `vulyk_python` wrapper over `prompt-check.py`; no model.
   Root = the script's parent. Over `.claude/agents|commands/*.md` and `templates/*.md`: agent frontmatter,
   `omitClaudeMd` vs `docs/architecture.md`, backticked `scripts/` paths, `cycle.sh <verb>` vs the dispatcher
@@ -77,5 +76,5 @@ Report-only story/prompt/portability/defect checks, the symbol map, and the test
 ## Gotchas
 - `evolve-ledger.py`: merge the changeset branch, never squash (reads as rejected).
 - `trace-autopsy.py` reads code via `git show HEAD:`, so an uncommitted file reads `not at HEAD`.
-
-last-verified: 2026-11-18 (tails-1115 fix:/--rules/sort-V/tools; narrow-repair-1115 FENCE_AWK, --fill-tests, parts; solo-gate-1118 parts)
+last-verified: 2026-11-18 (tails-1115 fix:/--rules/sort-V/tools;
+  narrow-repair-1115 FENCE_AWK, --fill-tests, parts; solo-gate-1118 parts)
