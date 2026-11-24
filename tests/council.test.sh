@@ -5004,6 +5004,9 @@ p1="$(grep '^PART ' "$rd/suite.log" | sed -n 1p | awk '{ print $2 }')"; p2="$(gr
 sx_open sxbeyond
 rd="docs/specs/sxbeyond/council/round-1"; rh="$(sed -n 's/^head=//p' "$rd/ROUND")"
 printf 'head=%s steps=3\nSTEP 1/3: ok 0s\nSTEP 2/3: ok 0s\n' "$rh" > "$rd/suite.log"
+# a log the cycle left mid-run carries its seal (lib.sh suite_sealed); without one the suite restarts from step 1
+mkdir -p .vulyk/state/sxbeyond
+printf '%s=%s\n' "$(suite_seal_key docs/specs/sxbeyond "$rd/suite.log")" "$(suite_log_hash "$rd/suite.log")" >> .vulyk/state/sxbeyond/suite-seal
 out="$(council suite docs/specs/sxbeyond 2>&1)"; ex=$?
 [ "$ex" -eq 0 ] && sx_last "$out" | jq -e '.step == 3 and .steps == 3 and .done == true and .suite == "FAIL"' >/dev/null 2>&1 \
   && grep -qE '^STEP 3/3: FAIL ' "$rd/suite.log" && grep -qE '^PART step-3-no-row FAIL 0s cap 300s - no command in its row$' "$rd/suite.log" \

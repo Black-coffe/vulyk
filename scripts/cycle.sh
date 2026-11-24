@@ -4093,6 +4093,11 @@ suite_merge() { # suite_merge <spec> <commit:0|1> [<stamp>] - plan M1, `suite <s
   lh=""; [ -f "$LOG" ] && lh="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/^head=\([^ ]*\).*/\1/p')"
   if [ -n "$lh" ] && paperwork_only "$ROOT" "$lh" "$HEADS"; then key="$lh"
   else rm -f "$LOG"; key="$HEADS"; fi
+  # a finished log with no matching seal in the run state was not written by this cycle: run it whole again
+  if [ -f "$LOG" ] && tail -1 "$LOG" | tr -d '\r' | grep -q '^SUITE: ' && ! suite_sealed "$ROOT" "$SPEC" "$LOG"; then
+    echo "cycle: $SLUG - merge-suite.log has no matching seal in the run state: running the suite whole" >&2
+    rm -f "$LOG"; key="$HEADS"
+  fi
   if [ -f "$LOG" ]; then
     last="$(tail -1 "$LOG" | tr -d '\r')"
     case "$last" in "SUITE: "*)
@@ -4116,11 +4121,18 @@ suite_run() { # suite_run <spec> <log> <head> <commit:0|1> <label> <narrow-rerun
   local rows row purpose cmd why stepped nrows
   suite_rows; rows="$SR_ROWS"; nrows="$SR_NROWS"; row="$SR_ROW"; purpose="$SR_PURPOSE"; cmd="$SR_CMD"; why="$SR_WHY"; stepped="$SR_STEPPED"
 
+  # Suite seal: every write below re-seals the log in the run state, so a log resumed here is the one this
+  # cycle left; a STEP line written by anyone else breaks the seal and the suite runs from step 1.
+  if [ -f "$LOG" ] && ! suite_sealed "$ROOT" "$SPEC" "$LOG"; then
+    echo "cycle: $SLUG - $LABEL: ${LOG##*/} has no matching seal in the run state: running the suite from step 1" >&2
+    rm -f "$LOG"
+  fi
   if [ ! -f "$LOG" ]; then
     # ab-run-fixes C5: a narrow repair round with no step to re-run runs none - the finished log keyed to
     # the round head says so, and record-seat takes the review against it.
     if [ "$NRUN" = none ] || { [ -n "$NRUN" ] && [ -z "$row" ]; }; then
       printf 'head=%s steps=0\nSUITE: none - narrow repair round\n' "$RHEAD" > "$LOG"
+      suite_seal "$SPEC" "$LOG"
       [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite $LABEL none (narrow)" "$LOG"
       echo "cycle: $SLUG - $LABEL: narrow repair round, SUITE: none, no step run"
       suite_emit "$SPEC" 0 0 true none "$MERGE"
@@ -4128,6 +4140,7 @@ suite_run() { # suite_run <spec> <log> <head> <commit:0|1> <label> <narrow-rerun
     fi
     if [ -z "$row" ]; then
       printf 'head=%s steps=0\nSUITE: none\n' "$RHEAD" > "$LOG"
+      suite_seal "$SPEC" "$LOG"
       [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite $LABEL none" "$LOG"
       echo "cycle: $SLUG - $LABEL: no round-only full-suite row, SUITE: none"
       suite_emit "$SPEC" 0 0 true none "$MERGE"
@@ -4140,6 +4153,7 @@ suite_run() { # suite_run <spec> <log> <head> <commit:0|1> <label> <narrow-rerun
       S="$(printf '%s\n' "$sout" | tr -d '\r' | awk 'NF { l = $1 } END { print l }')"
       case "$S" in ''|*[!0-9]*|0)
         printf 'head=%s steps=0\nSUITE: FAIL 0s - %s --steps gave no step count (exit %s)\n' "$RHEAD" "$cmd" "$src" > "$LOG"
+        suite_seal "$SPEC" "$LOG"
         [ "$DOCOMMIT" = "1" ] && commit_paperwork suite "vulyk($SLUG): suite $LABEL FAIL" "$LOG"
         echo "cycle: $SLUG - $LABEL: $cmd --steps gave no step count (exit $src)" >&2
         suite_emit "$SPEC" 0 0 true FAIL "$MERGE"
@@ -4147,6 +4161,7 @@ suite_run() { # suite_run <spec> <log> <head> <commit:0|1> <label> <narrow-rerun
       esac
     fi
     printf 'head=%s steps=%s\n' "$RHEAD" "$S" > "$LOG"
+    suite_seal "$SPEC" "$LOG"
   fi
   S="$(head -1 "$LOG" | tr -d '\r' | sed -n 's/.* steps=\([0-9][0-9]*\).*/\1/p')"; S="${S:-1}"
   K=$(( $(tr -d '\r' < "$LOG" | grep -c '^STEP ') + 1 ))
@@ -4232,11 +4247,13 @@ suite_run() { # suite_run <spec> <log> <head> <commit:0|1> <label> <narrow-rerun
     [ -n "$parts" ] && printf '%s\n' "$parts"
     [ -n "$loads" ] && printf '%s\n' "$loads"
   } >> "$LOG"
+  suite_seal "$SPEC" "$LOG"
   local sv=pending is_done=false
   if [ "$I" -ge "$LASTI" ]; then
     local verdict; verdict="$(suite_verdict "$LOG")"
     [ -n "$NRUN" ] && verdict="$(suite_narrow_verdict "$verdict" "$NRUN" "$S" "$RD")"
     printf '%s\n' "$verdict" >> "$LOG"
+    suite_seal "$SPEC" "$LOG"
     sv="$(printf '%s' "$verdict" | awk '{ print $2 }')"; is_done=true
   fi
   # ab-run-fixes C8: one commit per suite, on the call that finishes it; a middle step leaves the log
@@ -4518,6 +4535,11 @@ state_put() { # state_put <spec> <record> <key> <value> - appends one `key=value
   mkdir -p "$dir" || return 1
   [ -f "$top/.gitignore" ] || printf '*\n' > "$top/.gitignore"
   printf '%s=%s\n' "$3" "$4" >> "$dir/$2"
+}
+
+suite_seal() { # suite_seal <spec> <log> - records the finished log's hash in the run state (lib.sh suite_sealed)
+  local h; h="$(suite_log_hash "$2")" || return 0
+  state_put "$1" suite-seal "$(suite_seal_key "$1" "$2")" "$h"
 }
 
 claim_wave() { # claim_wave <spec> -> the wave the build is on: status's `wave`, else the lowest wave of a

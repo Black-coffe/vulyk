@@ -259,10 +259,12 @@ suite_log_ok() { # suite_log_ok <log> -> 0 iff the log is finished and keyed to 
   SL_HEAD="$(head -1 "$1" | tr -d '\r' | sed -n 's/^head=\([^ ]*\).*/\1/p')"
   SL_LAST="$(tail -1 "$1" | tr -d '\r')"
   case "$SL_LAST" in "SUITE: "*) ;; *) return 1 ;; esac
+  # the log sits where a subagent can write: only a log cycle.sh sealed in the run state counts (lib.sh suite_sealed)
+  suite_sealed "$ROOT" "$SPEC" "$1" || { SL_UNSEALED="$1"; return 1; }
   [ -n "$SL_HEAD" ] && paperwork_only "$ROOT" "$SL_HEAD" HEAD
 }
 suite_check() {
-  local h7 n rlog="" log src why=""
+  local h7 n rlog="" log src why=""; SL_UNSEALED=""
   if ! commands_rows "$(constitution_file "$ROOT")" | awk -F '\t' '
     { p = tolower($1); if (p ~ /full suite/ && p ~ /(^|[^[:alnum:]_-])round-only($|[^[:alnum:]_-])/) {
         lc = tolower($4); if ($2 == "several" || (lc !~ /^<fill in/ && lc !~ /^none([^[:alnum:]_-]|$)/)) f = 1 } }
@@ -282,7 +284,7 @@ suite_check() {
   if [ -n "$why" ]; then
     fail suite "suite: FAIL at $h7 - $why - fix it, commit, then run bash scripts/cycle.sh suite $SPEC --merge again: the whole suite once more on the new head, no agents"
   else
-    fail suite "suite: no full run at $h7 - run bash scripts/cycle.sh suite $SPEC --merge (every step, no agents; one Bash call per step until \"done\":true)"
+    fail suite "suite: no full run at $h7${SL_UNSEALED:+ (${SL_UNSEALED##*/} has no matching seal in the run state)} - run bash scripts/cycle.sh suite $SPEC --merge (every step, no agents; one Bash call per step until \"done\":true)"
   fi
 }
 suite_check
