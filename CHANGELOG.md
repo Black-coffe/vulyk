@@ -11,10 +11,14 @@ nothing. Models got stronger, so its heavy machinery (councils, the cycle state 
 its cost. The successor is VULYK thin, a small Claude Code plugin that runs the same loop (plan, owner approval, build,
 independent review, local merge): https://github.com/Black-coffe/vulyk-thin.
 
+You do not need to upgrade to this release to move on: to switch, install VULYK thin directly (`claude plugin
+marketplace add Black-coffe/vulyk-thin`, `claude plugin install vulyk@vulyk-thin --scope project`, then `/vulyk:go`);
+its setup moves a project off the old VULYK (tested on 0.53.x projects). Upgrading an older project (below 0.54.0) to
+0.54.1 brings every framework change up to 0.54 with it, so upgrade only if you want to stay on the old VULYK.
+
 ### Changed
 - README opens with the notice; `install.sh` ends both an upgrade and a fresh install with a farewell block the model
-  relays to the owner in the project's *Owner language*: why, where, and how to move (`claude plugin marketplace add
-  Black-coffe/vulyk-thin`, `claude plugin install vulyk@vulyk-thin --scope project`, then `/vulyk:go`).
+  relays to the owner in the project's *Owner language*: why, where, and how to move.
 - `vulyk-update-check.sh` prints one `[VULYK]` line at session start naming the successor; the update check itself is
   unchanged.
 

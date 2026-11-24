@@ -2305,9 +2305,13 @@ lives there; English when it is not filled). Do not act on it unasked.
     worth its cost. A thin plugin runs the same loop: plan -> owner approval -> build -> independent review ->
     local merge.
   - Where: VULYK thin, https://github.com/Black-coffe/vulyk-thin
-  - How to move a project: run `claude plugin marketplace add Black-coffe/vulyk-thin`, then
-    `claude plugin install vulyk@vulyk-thin --scope project`, then `/vulyk:go` in the project. Its setup shows
-    every change, removes the old framework files and makes one commit the owner can revert.
+  - How to move a project: no upgrade to this release is needed first. Install VULYK thin directly: run
+    `claude plugin marketplace add Black-coffe/vulyk-thin`, then
+    `claude plugin install vulyk@vulyk-thin --scope project`, then `/vulyk:go` in the project. Its setup moves
+    the project off the old VULYK (tested on 0.53.x projects): it shows every change, removes the old framework
+    files and makes one commit the owner can revert.
+  - Upgrading an older project (below 0.54.0) to 0.54.1 brings every framework change up to 0.54 with it, so
+    upgrade only to stay on the old VULYK.
   - In a team repository decide together: the move changes everyone's tooling.
   - New projects can start on VULYK thin directly.
 EOF

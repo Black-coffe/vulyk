@@ -1,8 +1,13 @@
 > [!IMPORTANT]
 > **This VULYK is frozen.** 0.54.1 is its last release: it keeps working and staying on it breaks nothing, but it gets
 > no further development. Its successor is **VULYK thin**, a small Claude Code plugin running the same loop (plan,
-> owner approval, build, independent review, local merge): **https://github.com/Black-coffe/vulyk-thin**. Existing
-> projects can move to it when they choose; new projects can start on it directly.
+> owner approval, build, independent review, local merge): **https://github.com/Black-coffe/vulyk-thin**.
+>
+> **You do not need to upgrade to this release to move on.** To switch, install VULYK thin directly in the project:
+> `claude plugin marketplace add Black-coffe/vulyk-thin`, then `claude plugin install vulyk@vulyk-thin --scope project`,
+> then `/vulyk:go`. Its setup moves the project off the old VULYK (tested on 0.53.x projects). Upgrading an older
+> project (below 0.54.0) to 0.54.1 brings every framework change up to 0.54 with it, so upgrade only if you want to stay
+> on the old VULYK. New projects can start on VULYK thin directly.
 
 <p align="center">
   <img src="assets/banner.svg" alt="VULYK — hive orchestration framework for Claude Code" width="100%" />
