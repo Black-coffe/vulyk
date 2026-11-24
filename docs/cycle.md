@@ -120,7 +120,8 @@ Both logs sit in the spec's `council/`, which a subagent can write, so a `SUITE:
 nothing alone: each write `cycle.sh` makes to a suite log re-seals it in the run state
 (`.vulyk/state/<slug>/suite-seal`, the log's sha256), which the guards deny to subagents. `ship-check.sh`
 counts only a log whose seal matches; a log resumed or reused without a matching seal (a forged
-step or verdict, an edit after the seal) runs from step 1.
+step or verdict, an edit after the seal) runs from step 1. A step appends to a verified run-state copy
+and seals that copy, so a log edited while a step runs is dropped (exit 2), never sealed.
 
 A round with an evidenced RED on
 half the asks or more escalates immediately rather than burning further rounds on a plan

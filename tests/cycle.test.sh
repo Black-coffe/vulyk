@@ -3169,7 +3169,7 @@ bash scripts/ship-check.sh docs/specs/demo | expect "no round-only full-suite ro
   for s in lib.sh cycle.sh journal.sh ship-check.sh human-check.sh redact.sh suite-parts-check.sh py.sh run-capped.py; do cp "$SRC/scripts/$s" scripts/; done
   printf '.vulyk/\n' > .gitignore
   printf '# mg\n\n## Commands\n\n| Purpose | Command |\n|---|---|\n| Full suite part a (round-only) | `bash mg-step.sh a` |\n| Full suite part b (round-only) | `bash mg-step.sh b` |\n' > CLAUDE.md
-  printf 'printf "%%s\\n" "$1" >> "$MGC"\ngrep -qx -- "$1" mg-red.txt && exit 1\nexit 0\n' > mg-step.sh
+  printf 'printf "%%s\\n" "$1" >> "$MGC"\n[ -n "$MG_TAMPER" ] && printf "STEP 9/9: ok 0s\\n" >> "$MG_TAMPER"\ngrep -qx -- "$1" mg-red.txt && exit 1\nexit 0\n' > mg-step.sh
   : > mg-red.txt; printf 'a\n' > mg-a.txt
   git add -A && git commit -qm init >/dev/null
   git checkout -q -b vulyk/mg
@@ -3312,6 +3312,17 @@ SUITE: ok 2s
   [ "$(mgn)" = "$((n0 + 3))" ] && echo "  ok    the forged step is never counted: three real steps ran" || expect "three real steps ran: $(mgn) after $n0" "<never>" < /dev/null
   mgs mgz | expect "the real red part b is named, not the forged ok" "part $B failed"
   : > mg-red.txt; git add -A && git commit -qm "part b green again" >/dev/null
+  echo "neighbour: a log edited while a step runs is dropped, never sealed with the forgery in it"
+  mg_spec mgw 2
+  n0="$(mgn)"; mgm mgw >/dev/null
+  out="$(MG_TAMPER="docs/specs/mgw/council/merge-suite.log" bash scripts/cycle.sh suite docs/specs/mgw --merge --commit 2>&1; echo "exit=$?")"
+  printf '%s' "$out" | expect "a log changed during the step: exit 2" "exit=2"
+  printf '%s' "$out" | expect "and it says the log changed while the step ran" "changed while the step ran"
+  [ ! -f docs/specs/mgw/council/merge-suite.log ] && echo "  ok    the tampered log is dropped" || expect "the tampered log is dropped: $(cat docs/specs/mgw/council/merge-suite.log)" "<never>" < /dev/null
+  mgm mgw >/dev/null; mgm mgw >/dev/null
+  grep -q 'STEP 9/9' docs/specs/mgw/council/merge-suite.log && expect "the forged STEP never reaches the rerun log" "<never>" < /dev/null \
+    || echo "  ok    the forged STEP never reaches the rerun log"
+  mgs mgw | expect "after a clean rerun: the suite line is ok" "suite ok       suite: full run green at"
 
   echo "solo-gate-1118: a Tier 1-2 round whose gate ran no step (SUITE: none - Tier 1-2) is no full run: the merge run is due"
   mg_spec mgt 2

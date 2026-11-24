@@ -11,7 +11,10 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
   (`.vulyk/state/<slug>/suite-seal`, sha256 with CR stripped; lib.sh `suite_log_hash`, `suite_sealed`), which
   owner-guard (Write/Edit) and git-guard (shell) already deny to subagents. `ship-check.sh` counts only a sealed
   log and says `has no matching seal in the run state`; `suite_run` and `suite --merge` run an unsealed log from
-  step 1. Logs written before this release carry no seal: the first merge after upgrading runs the suite once.
+  step 1. A step appends to a verified run-state copy of the log (`suite_base`, `suite_append`), the seal is the
+  hash of that copy and the verdict is read from it, so a log edited in `council/` while a step runs is dropped
+  (exit 2, `changed while the step ran`) instead of sealed with the edit in it.
+  Logs written before this release carry no seal: the first merge after upgrading runs the suite once.
   Found by a security review in a hive (YouTube_AI, 2026-11-24); tests in `cycle.test.sh --part merge-gate`.
 
 ## [0.54.0] - 2026-11-19

@@ -4242,18 +4242,19 @@ suite_run() { # suite_run <spec> <log> <head> <commit:0|1> <label> <narrow-rerun
     if [ "$left" -ge 2 ]; then loads="$loads"$'\n'"$(suite_load end "$left")"
     else loads="$loads"$'\n'"LOAD: unavailable - end: no time left in this call"; fi
   fi
-  {
+  local base block; suite_base "$SPEC" "$LOG"; base="$SB_COPY"
+  block="$(
     printf 'STEP %s/%s: %s %ss%s\n' "$K" "$S" "$sres" "$secs" "$note"
     [ -n "$parts" ] && printf '%s\n' "$parts"
     [ -n "$loads" ] && printf '%s\n' "$loads"
-  } >> "$LOG"
-  suite_seal "$SPEC" "$LOG"
+  )"
+  suite_append "$SPEC" "$LOG" "$base" "$block"$'\n'
   local sv=pending is_done=false
   if [ "$I" -ge "$LASTI" ]; then
-    local verdict; verdict="$(suite_verdict "$LOG")"
+    # the verdict is read from the verified run-state copy, never from council/ (writable by a subagent)
+    local verdict; verdict="$(suite_verdict "$base")"
     [ -n "$NRUN" ] && verdict="$(suite_narrow_verdict "$verdict" "$NRUN" "$S" "$RD")"
-    printf '%s\n' "$verdict" >> "$LOG"
-    suite_seal "$SPEC" "$LOG"
+    suite_append "$SPEC" "$LOG" "$base" "$verdict"$'\n'
     sv="$(printf '%s' "$verdict" | awk '{ print $2 }')"; is_done=true
   fi
   # ab-run-fixes C8: one commit per suite, on the call that finishes it; a middle step leaves the log
@@ -4540,6 +4541,32 @@ state_put() { # state_put <spec> <record> <key> <value> - appends one `key=value
 suite_seal() { # suite_seal <spec> <log> - records the finished log's hash in the run state (lib.sh suite_sealed)
   local h; h="$(suite_log_hash "$2")" || return 0
   state_put "$1" suite-seal "$(suite_seal_key "$1" "$2")" "$h"
+}
+
+suite_base() { # suite_base <spec> <log> - SB_COPY: a run-state copy of the log that matches its seal; a log changed
+  # since the last seal (a step runs for minutes while council/ stays writable) is dropped and the call ends exit 2.
+  # Call it directly, never in $( ): it ends the process.
+  local dir copy want have; SB_COPY=""
+  dir="$(cycle_state_dir "$ROOT" "$(slug_of "$1")")"; mkdir -p "$dir" || return 1
+  copy="$dir/suite-base.$(suite_seal_key "$1" "$2" | tr ':' '_')"
+  cp "$2" "$copy" 2>/dev/null || : > "$copy"
+  want="$(state_get "$ROOT" "$(slug_of "$1")" "$(suite_seal_key "$1" "$2")" suite-seal)"
+  have="$(suite_log_hash "$copy")"
+  if [ -z "$want" ] || [ "$have" != "$want" ]; then
+    rm -f "$2" "$copy"
+    echo "cycle: $(slug_of "$1") - ${2##*/} changed while the step ran (no matching seal): dropped; run the suite again from step 1" >&2
+    emit false suite 2 error "suite log changed outside the cycle"
+    exit 2
+  fi
+  SB_COPY="$copy"
+}
+
+suite_append() { # suite_append <spec> <log> <base> <text> - writes the log as the verified base plus text, then seals
+  local tmp="$3.new"
+  { cat "$3"; printf '%s' "$4"; } > "$tmp" || return 1
+  cp -f "$tmp" "$3" && mv -f "$tmp" "$2"
+  # the seal is the hash of what the cycle wrote (the run-state copy), not of the file in council/
+  state_put "$1" suite-seal "$(suite_seal_key "$1" "$2")" "$(suite_log_hash "$3")"
 }
 
 claim_wave() { # claim_wave <spec> -> the wave the build is on: status's `wave`, else the lowest wave of a
