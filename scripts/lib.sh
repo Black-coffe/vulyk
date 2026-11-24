@@ -619,6 +619,26 @@ cycle_state_dir() { printf '%s/.vulyk/state/%s' "$1" "$2"; } # cycle_state_dir <
 state_get() { sed -n "s/^${3//./\\.}=//p" "$(cycle_state_dir "$1" "$2")/$4" 2>/dev/null | tail -n 1; } # state_get <root> <slug> <key> <record>
 approved_shas() { sed -n 's/^[^=]*=//p' "$(cycle_state_dir "$1" "$2")/approved" 2>/dev/null; return 0; } # approved_shas <root> <slug> -> every recorded sha
 
+# Suite seal (security review of 0.54.0 ship-check): a suite log lives in the spec's
+# council/ folder, which a subagent can write, so its `SUITE: ok` line alone proves nothing. When cycle.sh writes
+# a log's closing SUITE: line it records the log's sha256 (CR stripped) in the run state `suite-seal` record,
+# keyed by the log's path relative to the spec; the owner guard denies subagents every write under .vulyk/state/.
+# ship-check and `suite --merge` trust a finished log only when its seal matches.
+suite_log_hash() { # suite_log_hash <log> -> 64 hex chars of the log with CR stripped; exit 1 with no tool
+  local tool h; tool="$(sha256_tool)" || return 1
+  h="$(tr -d '\r' < "$1" | $tool)" || return 1; printf '%s' "${h%% *}"
+}
+suite_seal_key() { # suite_seal_key <spec-dir> <log> -> the log's path under the spec, `/` as `:` (state_get's sed)
+  local rel="${2#"$1"/}"; printf '%s' "${rel//\//:}"
+}
+suite_sealed() { # suite_sealed <root> <spec-dir> <log> -> 0 iff the run state holds this log's current hash
+  local rel want have; rel="$(suite_seal_key "$2" "$3")"
+  want="$(state_get "$1" "$(slug_of "$2")" "$rel" suite-seal)"
+  [ -n "$want" ] && [ -f "$3" ] || return 1
+  have="$(suite_log_hash "$3")" || return 1
+  [ "$have" = "$want" ]
+}
+
 # --- portability helpers (cross-platform) ----------------------------------------------------
 # One spelling each for what GNU, BSD (macOS) and Git Bash disagree on: which Python, `sed -i`,
 # `date -d`, and a time cap. Callers use these instead of their own probes.

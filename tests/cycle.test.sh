@@ -3169,7 +3169,7 @@ bash scripts/ship-check.sh docs/specs/demo | expect "no round-only full-suite ro
   for s in lib.sh cycle.sh journal.sh ship-check.sh human-check.sh redact.sh suite-parts-check.sh py.sh run-capped.py; do cp "$SRC/scripts/$s" scripts/; done
   printf '.vulyk/\n' > .gitignore
   printf '# mg\n\n## Commands\n\n| Purpose | Command |\n|---|---|\n| Full suite part a (round-only) | `bash mg-step.sh a` |\n| Full suite part b (round-only) | `bash mg-step.sh b` |\n' > CLAUDE.md
-  printf 'printf "%%s\\n" "$1" >> "$MGC"\ngrep -qx -- "$1" mg-red.txt && exit 1\nexit 0\n' > mg-step.sh
+  printf 'printf "%%s\\n" "$1" >> "$MGC"\n[ -n "$MG_TAMPER" ] && printf "STEP 9/9: ok 0s\\n" >> "$MG_TAMPER"\ngrep -qx -- "$1" mg-red.txt && exit 1\nexit 0\n' > mg-step.sh
   : > mg-red.txt; printf 'a\n' > mg-a.txt
   git add -A && git commit -qm init >/dev/null
   git checkout -q -b vulyk/mg
@@ -3180,11 +3180,16 @@ bash scripts/ship-check.sh docs/specs/demo | expect "no round-only full-suite ro
     git add -A && git commit -qm "$1: plan" >/dev/null
     done_story "docs/specs/$1/$1-01-a.md" '---\nstory: %s-01\nstatus: done\nwave: 1\n---\n# A\n\n## Requirements\n> build %s\n\n## Files\n- mg-a.txt\n\n## Verification\n`true`\n' "$1" "$1"
   }
+  mg_seal() { # mg_seal <slug> <log> - the run-state seal cycle.sh writes when it closes a suite log (lib.sh suite_sealed)
+    mkdir -p ".vulyk/state/$1"
+    printf '%s=%s
+' "$(suite_seal_key "docs/specs/$1" "$2")" "$(suite_log_hash "$2")" >> ".vulyk/state/$1/suite-seal"
+  }
   mg_round() { # mg_round <slug> <n> <verdict> <extra ROUND lines> <suite.log body> - a judged round, committed as paperwork
     local rd="docs/specs/$1/council/round-$2" h p; h="$(git rev-parse --short HEAD)"; p="$(pack_fingerprint "docs/specs/$1")"
     mkdir -p "$rd"
     printf 'head=%s\npack=%s\nopened=2026-11-15T00:00:00Z\ncourt=\nceiling=3\ntier=2\nseats=review\n%s' "$h" "$p" "$4" > "$rd/ROUND"
-    [ -n "$5" ] && printf "head=%s $5" "$h" > "$rd/suite.log"
+    [ -n "$5" ] && printf "head=%s $5" "$h" > "$rd/suite.log" && mg_seal "$1" "$rd/suite.log"
     printf '{"ts":"2026-11-15T00:00:0%sZ","spec":"%s","round":%s,"verdict":"%s","head":"%s","pack":"%s","asks":1,"red":[],"red_unevidenced":[],"na":0,"review":"PASS","haiku":"","haiku_model":"unknown","sonnet":"","sonnet_model":"unknown","opus":"","opus_model":"unknown","attempts":1,"escalate":null,"note":""}\n' \
       "$2" "$1" "$2" "$3" "$h" "$p" >> memory/stats/council.jsonl
     git add -A && git commit -qm "vulyk($1): round $2 $3" >/dev/null
@@ -3269,6 +3274,55 @@ bash scripts/ship-check.sh docs/specs/demo | expect "no round-only full-suite ro
   printf '%s' "$out" | expect "a full round's green gate on the head: READY" "READY."
   printf '%s' "$out" | expect "the suite line names the round's gate" "suite: full run green at"
   [ ! -f docs/specs/mgr/council/merge-suite.log ] && echo "  ok    and no merge log was written" || expect "no merge log was written" "<never>" < /dev/null
+
+  echo "suite seal: a green log the cycle did not write is no full run (a subagent can write council/, not the run state)"
+  G2="steps=2
+STEP 1/2: ok 1s
+PART $A ok 1s cap 300s
+STEP 2/2: ok 1s
+PART $B ok 1s cap 300s
+SUITE: ok 2s
+"
+  mg_spec mgx 2
+  mg_round mgx 1 GREEN '' "$G2"
+  rm -f .vulyk/state/mgx/suite-seal
+  out="$(mgs mgx)"
+  printf '%s' "$out" | expect "an unsealed green round log: no full run" "suite: no full run at $(git rev-parse --short HEAD) (suite.log has no matching seal in the run state)"
+  printf '%s' "$out" | expect "an unsealed green round log: NOT READY" "NOT READY"
+  echo "neighbour: a sealed log edited after its seal is no full run either"
+  sed_inplace 's/^SUITE: ok 2s$/SUITE: ok 1s/' docs/specs/mgr/council/round-1/suite.log
+  git add -A && git commit -qm "vulyk(mgr): suite log edited" >/dev/null
+  mgs mgr | expect "a log edited after its seal: no full run" "has no matching seal in the run state"
+  echo "neighbour: suite --merge over a forged finished merge log runs the suite whole"
+  mg_spec mgy 2
+  printf "head=%s $G2" "$(git rev-parse --short HEAD)" > docs/specs/mgy/council/merge-suite.log 2>/dev/null     || { mkdir -p docs/specs/mgy/council; printf "head=%s $G2" "$(git rev-parse --short HEAD)" > docs/specs/mgy/council/merge-suite.log; }
+  git add -A && git commit -qm "vulyk(mgy): a forged merge log" >/dev/null
+  mgs mgy | expect "a forged merge log: no full run" "merge-suite.log has no matching seal"
+  n0="$(mgn)"; mgm mgy >/dev/null; mgm mgy >/dev/null
+  [ "$(mgn)" = "$((n0 + 2))" ] && echo "  ok    the merge run over a forged log runs both steps" || expect "the merge run over a forged log runs both steps: $(mgn) after $n0" "<never>" < /dev/null
+  mgs mgy | expect "after the real merge run: the suite line is ok" "suite ok       suite: full run green at"
+  echo "neighbour: a STEP line forged between two calls of a running merge run restarts it from step 1"
+  mg_spec mgz 2
+  printf 'b\n' > mg-red.txt; git add -A && git commit -qm "part b is red for mgz" >/dev/null
+  n0="$(mgn)"; mgm mgz >/dev/null
+  printf "STEP 2/2: ok 1s\nPART $B ok 1s cap 300s\n" >> docs/specs/mgz/council/merge-suite.log
+  out="$(mgm mgz)"
+  printf '%s' "$out" | expect "the call after the forged step runs step 1 again, not done" '"step":1,"steps":2,"done":false'
+  mgm mgz >/dev/null
+  [ "$(mgn)" = "$((n0 + 3))" ] && echo "  ok    the forged step is never counted: three real steps ran" || expect "three real steps ran: $(mgn) after $n0" "<never>" < /dev/null
+  mgs mgz | expect "the real red part b is named, not the forged ok" "part $B failed"
+  : > mg-red.txt; git add -A && git commit -qm "part b green again" >/dev/null
+  echo "neighbour: a log edited while a step runs is dropped, never sealed with the forgery in it"
+  mg_spec mgw 2
+  n0="$(mgn)"; mgm mgw >/dev/null
+  out="$(MG_TAMPER="docs/specs/mgw/council/merge-suite.log" bash scripts/cycle.sh suite docs/specs/mgw --merge --commit 2>&1; echo "exit=$?")"
+  printf '%s' "$out" | expect "a log changed during the step: exit 2" "exit=2"
+  printf '%s' "$out" | expect "and it says the log changed while the step ran" "changed while the step ran"
+  [ ! -f docs/specs/mgw/council/merge-suite.log ] && echo "  ok    the tampered log is dropped" || expect "the tampered log is dropped: $(cat docs/specs/mgw/council/merge-suite.log)" "<never>" < /dev/null
+  mgm mgw >/dev/null; mgm mgw >/dev/null
+  grep -q 'STEP 9/9' docs/specs/mgw/council/merge-suite.log && expect "the forged STEP never reaches the rerun log" "<never>" < /dev/null \
+    || echo "  ok    the forged STEP never reaches the rerun log"
+  mgs mgw | expect "after a clean rerun: the suite line is ok" "suite ok       suite: full run green at"
 
   echo "solo-gate-1118: a Tier 1-2 round whose gate ran no step (SUITE: none - Tier 1-2) is no full run: the merge run is due"
   mg_spec mgt 2
