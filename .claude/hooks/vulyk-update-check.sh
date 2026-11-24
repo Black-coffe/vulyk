@@ -5,9 +5,11 @@
 # available one is the newest semver tag on the origin repository. When they differ the
 # hook prints one `[VULYK]` line into context instructing the model to ASK THE OWNER before
 # upgrading - the whole point is that a framework never rewrites itself behind your back.
+# Since 0.54.1, the last release, it also prints one `[VULYK] retired` line naming the successor
+# whenever a stamp exists, network or not, once per session (not on resume, /clear or compaction).
 #
 # Fails open, always. No network, no curl, no version stamp, a rate-limited API, a corrupt
-# cache - every one of them exits 0 in silence. A hook that costs you a session is worse
+# cache - every one of them exits 0 with no update line (the retired line aside). A hook that costs you a session is worse
 # than a hook that misses a release.
 #
 #   VULYK_UPDATE_CHECK=0            disable entirely
@@ -33,7 +35,7 @@ INSTALLED="$(tr -d '[:space:]' < "$STAMP" 2>/dev/null)"
 
 # 0.54.1: this framework is retired. One line per session: a resume, a /clear or a compaction repeats nothing.
 re_again='"source"[[:space:]]*:[[:space:]]*"(resume|clear|compact)"'
-[[ $IN =~ $re_again ]] || echo "[VULYK] retired: this VULYK is frozen (keeps working, no further development); its successor is VULYK thin, https://github.com/Black-coffe/vulyk-thin. Tell the owner once, in their Owner language (Profile in CLAUDE.vulyk.md or CLAUDE.md; default English), and do not raise it again this session."
+[[ $IN =~ $re_again ]] || echo "[VULYK] retired: this VULYK is frozen (keeps working, no further development); its successor is VULYK thin, https://github.com/Black-coffe/vulyk-thin. Tell the owner once, in their Owner language (Profile in CLAUDE.vulyk.md or CLAUDE.md; unfilled: the language the owner writes in, English if unknown), and do not raise it again this session. An owner staying on this VULYK can silence this line and the update check with VULYK_UPDATE_CHECK=0 in the environment."
 
 command -v curl >/dev/null 2>&1 || exit 0
 

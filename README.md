@@ -1,6 +1,7 @@
 > [!IMPORTANT]
 > **This VULYK is frozen.** 0.54.1 is its last release: it keeps working and staying on it breaks nothing, but it gets
-> no further development. Its successor is **VULYK thin**, a small Claude Code plugin running the same loop (plan,
+> no further development, because models got stronger and its heavy machinery no longer pays for itself. Its
+> successor is **VULYK thin**, a small Claude Code plugin running the same loop (plan,
 > owner approval, build, independent review, local merge): **https://github.com/Black-coffe/vulyk-thin**.
 >
 > **You do not need to upgrade to this release to move on.** To switch, install VULYK thin directly in the project:
@@ -291,7 +292,7 @@ push the PR into `telemetry/inbox/` yourself. Weekly, `/vulyk-evolve` in the VUL
 `scripts/telemetry.sh inbox`: the merged bundles are distilled into per-week, per-code counts
 that land in that run's CHANGELOG entry, and the emptied week directories are staged for
 deletion in the same changeset — which a maintainer reviews and commits, so the improvements
-ship with the next release. Full contract: [docs/telemetry.md](docs/telemetry.md).
+shipped with the next release, until the freeze at 0.54.1. Full contract: [docs/telemetry.md](docs/telemetry.md).
 
 ## FAQ
 
@@ -310,6 +311,8 @@ ship with the next release. Full contract: [docs/telemetry.md](docs/telemetry.md
 [Getting started](docs/getting-started.md) · [The cycle](docs/cycle.md) · [Architecture](docs/architecture.md) · [The gates](docs/pipeline.md) · [Model cascade](docs/model-cascade.md) · [Token economy](docs/token-economy.md) · [Memory system](docs/memory-system.md) · [Self-evolution](docs/self-evolution.md) · [Command reference](docs/command-reference.md) · [Hooks reference](docs/hooks-reference.md) · [FAQ](docs/faq.md)
 
 ## Roadmap — the road to 1.0.0
+
+> History: VULYK froze at 0.54.1 (see the banner at the top); the open items below will not ship.
 
 VULYK is absorbing the best of [Autopilot](https://github.com/nick-vels/skills) — the discipline that a user's request survives, verbatim and traceable, from idea to running code. The full 40-agent analysis behind this plan lives in [`docs/specs/autopilot-merge/`](docs/specs/autopilot-merge/plan.md). Each minor is battle-tested on real projects before the next ships:
 
@@ -334,7 +337,7 @@ VULYK is absorbing the best of [Autopilot](https://github.com/nick-vels/skills) 
 
 ## Contributing
 
-PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The most valuable contributions right now: real-world routing-matrix tuning, memory-plane patterns from 200k+ LOC repos, and `/vulyk-evolve` heuristics.
+This repository is frozen at 0.54.1 (see the banner): new work goes to [VULYK thin](https://github.com/Black-coffe/vulyk-thin). [CONTRIBUTING.md](CONTRIBUTING.md) stays for reference.
 
 ## License
 

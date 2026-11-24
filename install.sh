@@ -2293,12 +2293,14 @@ else
   echo "Done. Next: cd $DEST && claude  ->  /vulyk-bootstrap"
   echo "Optional: cp scripts/git-hooks/post-merge .git/hooks/post-merge && chmod +x .git/hooks/post-merge"
 fi
-# 0.54.1: the farewell, on an upgrade and on a fresh install alike. Read by the model running the installer.
-cat <<'EOF'
+# 0.54.1: the farewell, on an upgrade and on a fresh install alike, never on the dry run (--check: /vulyk-update
+# runs it before the upgrade, which would print it twice). Read by the model running the installer.
+[ "$CHECK" = "--check" ] || cat <<'EOF'
 
 VULYK farewell (0.54.1). To the model running this: relay the points below to the owner, once, in the project's
 Owner language (the `Owner language` row of the Profile in CLAUDE.vulyk.md, or in CLAUDE.md when the constitution
-lives there; English when it is not filled). Do not act on it unasked.
+lives there; when it is not filled, the language the owner writes in, English if unknown). Do not act on it
+unasked.
   - This is the last release of the old VULYK. It stays frozen and keeps working: staying on it breaks nothing,
     but it gets no further development.
   - Why: models got stronger, so the heavy machinery (councils, the cycle state machine, many hooks) is no longer
