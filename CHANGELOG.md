@@ -4,6 +4,20 @@ All notable changes to VULYK are documented here. `/vulyk-evolve` changesets app
 
 ## [Unreleased]
 
+## [0.54.1] - 2026-11-24
+
+The farewell release: this VULYK is frozen and gets no further development. It keeps working; staying on it breaks
+nothing. Models got stronger, so its heavy machinery (councils, the cycle state machine, many hooks) is no longer worth
+its cost. The successor is VULYK thin, a small Claude Code plugin that runs the same loop (plan, owner approval, build,
+independent review, local merge): https://github.com/Black-coffe/vulyk-thin.
+
+### Changed
+- README opens with the notice; `install.sh` ends both an upgrade and a fresh install with a farewell block the model
+  relays to the owner in the project's *Owner language*: why, where, and how to move (`claude plugin marketplace add
+  Black-coffe/vulyk-thin`, `claude plugin install vulyk@vulyk-thin --scope project`, then `/vulyk:go`).
+- `vulyk-update-check.sh` prints one `[VULYK]` line at session start naming the successor; the update check itself is
+  unchanged.
+
 ## [0.54.0] - 2026-11-19
 
 A repair re-checks what it repaired, not the whole spec (spec `narrow-repair-1115`, ADR-040).

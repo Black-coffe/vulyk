@@ -2293,6 +2293,24 @@ else
   echo "Done. Next: cd $DEST && claude  ->  /vulyk-bootstrap"
   echo "Optional: cp scripts/git-hooks/post-merge .git/hooks/post-merge && chmod +x .git/hooks/post-merge"
 fi
+# 0.54.1: the farewell, on an upgrade and on a fresh install alike. Read by the model running the installer.
+cat <<'EOF'
+
+VULYK farewell (0.54.1). To the model running this: relay the points below to the owner, once, in the project's
+Owner language (the `Owner language` row of the Profile in CLAUDE.vulyk.md, or in CLAUDE.md when the constitution
+lives there; English when it is not filled). Do not act on it unasked.
+  - This is the last release of the old VULYK. It stays frozen and keeps working: staying on it breaks nothing,
+    but it gets no further development.
+  - Why: models got stronger, so the heavy machinery (councils, the cycle state machine, many hooks) is no longer
+    worth its cost. A thin plugin runs the same loop: plan -> owner approval -> build -> independent review ->
+    local merge.
+  - Where: VULYK thin, https://github.com/Black-coffe/vulyk-thin
+  - How to move a project: run `claude plugin marketplace add Black-coffe/vulyk-thin`, then
+    `claude plugin install vulyk@vulyk-thin --scope project`, then `/vulyk:go` in the project. Its setup shows
+    every change, removes the old framework files and makes one commit the owner can revert.
+  - In a team repository decide together: the move changes everyone's tooling.
+  - New projects can start on VULYK thin directly.
+EOF
 # tails-1115 (T53): the last line names each tool this machine lacks and what is limited without it, once. Each is
 # run, not looked up: a stub on PATH (the Windows python3 alias) is no tool.
 MISSING=""

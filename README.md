@@ -1,3 +1,9 @@
+> [!IMPORTANT]
+> **This VULYK is frozen.** 0.54.1 is its last release: it keeps working and staying on it breaks nothing, but it gets
+> no further development. Its successor is **VULYK thin**, a small Claude Code plugin running the same loop (plan,
+> owner approval, build, independent review, local merge): **https://github.com/Black-coffe/vulyk-thin**. Existing
+> projects can move to it when they choose; new projects can start on it directly.
+
 <p align="center">
   <img src="assets/banner.svg" alt="VULYK — hive orchestration framework for Claude Code" width="100%" />
 </p>

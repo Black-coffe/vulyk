@@ -31,6 +31,10 @@ STAMP="$ROOT/.claude/vulyk-version"
 INSTALLED="$(tr -d '[:space:]' < "$STAMP" 2>/dev/null)"
 [ -n "$INSTALLED" ] || exit 0
 
+# 0.54.1: this framework is retired. One line per session: a resume, a /clear or a compaction repeats nothing.
+re_again='"source"[[:space:]]*:[[:space:]]*"(resume|clear|compact)"'
+[[ $IN =~ $re_again ]] || echo "[VULYK] retired: this VULYK is frozen (keeps working, no further development); its successor is VULYK thin, https://github.com/Black-coffe/vulyk-thin. Tell the owner once, in their Owner language (Profile in CLAUDE.vulyk.md or CLAUDE.md; default English), and do not raise it again this session."
+
 command -v curl >/dev/null 2>&1 || exit 0
 
 REPO="${VULYK_REPO:-}"
